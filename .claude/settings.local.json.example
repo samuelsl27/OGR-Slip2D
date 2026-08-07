@@ -1,0 +1,14 @@
+{
+  "$comment": [
+    "Copia este archivo a .claude/settings.local.json y ajústalo.",
+    "additionalDirectories da al agente acceso de LECTURA a carpetas",
+    "fuera del repositorio: es como se le da la documentación de",
+    "referencia sin meterla en el control de versiones.",
+    "Usa rutas ABSOLUTAS y ajústalas a tu máquina."
+  ],
+  "permissions": {
+    "additionalDirectories": [
+      "../ogr-referencias/"
+    ]
+  }
+}

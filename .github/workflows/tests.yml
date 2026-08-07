@@ -1,0 +1,84 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+name: tests
+
+on:
+  push:
+    branches: [main, master, "dev/**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Test suite (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+
+      - name: Install system libraries for Qt
+        # PySide6 needs these even in offscreen mode: the GUI tests build
+        # real widgets, they just never reach a display.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libegl1 libgl1 libxkbcommon-x11-0 libdbus-1-3 \
+            libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+            libxcb-randr0 libxcb-render-util0 libxcb-shape0 \
+            libxcb-xinerama0 libxcb-cursor0
+
+      - name: Install the project
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Run the test suite
+        # QT_QPA_PLATFORM=offscreen is what lets the widget tests run on a
+        # headless runner; the runner exits non-zero when anything fails.
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python tests/_runner.py
+
+  licence:
+    name: Licence consistency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check SPDX headers and packaging metadata
+        # Runs standalone: it only reads files, so it needs no
+        # dependencies and gives fast feedback on a licence slip.
+        # The block scalar (`|`) is not cosmetic: with a plain scalar YAML
+        # folds every line into one, the heredoc never meets its `PY`
+        # terminator and the step dies before running a single check.
+        run: |
+          python - <<'PY'
+          import sys
+          sys.path.insert(0, "tests")
+          import test_license_v143 as t
+          failed = 0
+          for name in dir(t):
+              if not name.startswith("Test"):
+                  continue
+              inst = getattr(t, name)()
+              for m in dir(inst):
+                  if m.startswith("test_"):
+                      try:
+                          getattr(inst, m)()
+                      except Exception as exc:
+                          failed += 1
+                          print(f"FAIL {name}.{m}: {exc}")
+          print("licence checks failed:", failed)
+          sys.exit(1 if failed else 0)
+          PY

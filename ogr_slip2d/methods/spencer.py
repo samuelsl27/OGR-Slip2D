@@ -1,0 +1,261 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Samuel Sáez López — Universidad Politécnica de Cartagena
+"""
+Spencer's Method of Slices.
+
+Reference: Spencer, E. (1967). "A method of analysis of the stability
+of embankments assuming parallel inter-slice forces." Géotechnique
+17(1), 11-26.
+
+Implementation follows the Fredlund-Krahn (1977) "General Limit
+Equilibrium" formulation specialised to f(x) ≡ 1 (constant inter-
+slice force ratio):
+
+    Force equilibrium (horizontal direction):
+                                F_f
+        Σ Q_i =  0    where    Q_i = ──────────────────────────────
+                                     m_α(F_f) · cos(α − θ)
+
+        with Q_i = c'·l·cos α + (W − u·b)·tan φ' · cos α
+                   − [W·sin α − kh·W·cos α] · m_α
+                   − N_int_i  (inter-slice net horizontal contribution)
+
+    Moment equilibrium about the centre of rotation:
+        F_m = Σ [c'·l + (N − u·l)·tan φ'] · R
+              ─────────────────────────────────
+              Σ W · R · sin α  +  Σ kh·W·y_arm
+
+    Inter-slice force ratio:
+        X_i / E_i = λ        (constant for Spencer)
+
+The simultaneous equations F_m(λ) = F_f(λ) = F yield Spencer's FoS.
+
+Practical implementation:
+    - Outer Newton iteration on λ to drive g(λ) = F_f − F_m → 0
+    - Inner fixed-point iteration on F at each λ
+    - For circular surfaces R cancels in F_m
+
+Author: Samuel Sáez López (UPCT)
+"""
+from __future__ import annotations
+
+import math
+from typing import Tuple
+
+from ogr_core.project import Project
+
+from ..slicer import Slices
+from ..surface import SlipCircle, SurfaceProtocol
+from .base import LEMMethod, LEMResult, register_method
+from .bishop import BishopSimplified
+
+
+@register_method
+class Spencer(LEMMethod):
+    METHOD_ID = "spencer"
+    DISPLAY_NAME = "Spencer"
+    SATISFIES_FORCE = True
+    SATISFIES_MOMENT = True
+
+    # ------------------------------------------------------------------
+    def compute_fos(
+        self, project: Project, surface: SurfaceProtocol, slices: Slices,
+    ) -> LEMResult:
+        kh = project.seismic.kh if project.seismic.enabled else 0.0
+        kv = project.seismic.kv if project.seismic.enabled else 0.0
+
+        driving_raw = sum(
+            s.weight * (1.0 - kv) * math.sin(s.base_angle) for s in slices
+        )
+        slide_sign = 1.0 if driving_raw >= 0 else -1.0
+
+        # Geometry — only used for the moment expression
+        circle_R = surface.radius if isinstance(surface, SlipCircle) else None
+        circle_yc = surface.centre_y if isinstance(surface, SlipCircle) else None
+
+        # Outer loop: bracket λ (= tan θ) and use bisection / secant
+        # to drive g(λ) = F_f − F_m to zero.
+        # Wider grid: λ may need to reach ±1.5 for some slope geometries.
+        lam_grid = [-1.5, -1.0, -0.6, -0.4, -0.2, -0.1, 0.0,
+                    0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 1.5]
+        samples: list[Tuple[float, float, float, float]] = []  # (lam, g, ff, fm)
+        for lam in lam_grid:
+            ff, fm = self._inner_solve(
+                slices, lam, kh, kv, slide_sign, circle_R, circle_yc,
+            )
+            if (math.isfinite(ff) and math.isfinite(fm)
+                    and ff > 0.05 and fm > 0.05 and ff < 50 and fm < 50):
+                samples.append((lam, ff - fm, ff, fm))
+
+        if not samples:
+            return LEMResult(
+                fos=math.nan, converged=False, iterations=0,
+                method_id=self.METHOD_ID, surface=surface, slices=slices,
+                error_message="Spencer: all sampled λ diverged",
+            )
+
+        # Find a bracket (sign change in g)
+        bracket = None
+        for i in range(len(samples) - 1):
+            if samples[i][1] * samples[i + 1][1] < 0:
+                bracket = (samples[i], samples[i + 1])
+                break
+
+        if bracket is None:
+            # No bracket → return the sample with smallest |g| (closest
+            # to F_f = F_m). Often happens for very stable slopes.
+            best = min(samples, key=lambda r: abs(r[1]))
+            lam_star, _, ff, fm = best
+            return LEMResult(
+                fos=0.5 * (ff + fm),
+                converged=abs(best[1]) < 0.02,
+                iterations=len(samples),
+                method_id=self.METHOD_ID, surface=surface, slices=slices,
+                error_message=("Spencer: no λ-bracket; using nearest F_f≈F_m"
+                               if abs(best[1]) >= 0.02 else None),
+            )
+
+        (lam_lo, g_lo, ff_lo, fm_lo), (lam_hi, g_hi, ff_hi, fm_hi) = bracket
+        iterations = len(samples)
+        converged = False
+
+        # Bisection-secant hybrid: secant when stable, fallback to
+        # bisection if g moves the wrong way.
+        for _ in range(self.max_iterations):
+            iterations += 1
+            if abs(g_hi - g_lo) < 1e-12:
+                break
+            # Secant step
+            lam_new = lam_hi - g_hi * (lam_hi - lam_lo) / (g_hi - g_lo)
+            # If secant step is outside the bracket, fall back to bisection
+            if not (min(lam_lo, lam_hi) <= lam_new <= max(lam_lo, lam_hi)):
+                lam_new = 0.5 * (lam_lo + lam_hi)
+
+            ff, fm = self._inner_solve(
+                slices, lam_new, kh, kv, slide_sign, circle_R, circle_yc,
+            )
+            if not (math.isfinite(ff) and math.isfinite(fm) and ff > 0 and fm > 0):
+                lam_new = 0.5 * (lam_lo + lam_hi)
+                ff, fm = self._inner_solve(
+                    slices, lam_new, kh, kv, slide_sign, circle_R, circle_yc,
+                )
+                if not (math.isfinite(ff) and math.isfinite(fm)):
+                    break
+            g_new = ff - fm
+            if abs(g_new) < self.tolerance:
+                lam_lo = lam_new
+                g_lo = g_new
+                ff_lo, fm_lo = ff, fm
+                converged = True
+                break
+            # Maintain bracket
+            if g_lo * g_new < 0:
+                lam_hi, g_hi, ff_hi, fm_hi = lam_new, g_new, ff, fm
+            else:
+                lam_lo, g_lo, ff_lo, fm_lo = lam_new, g_new, ff, fm
+
+        # Final FoS at converged λ
+        ff_final, fm_final = self._inner_solve(
+            slices, lam_lo, kh, kv, slide_sign, circle_R, circle_yc,
+        )
+        if not (math.isfinite(ff_final) and math.isfinite(fm_final)):
+            return LEMResult(
+                fos=math.nan, converged=False, iterations=iterations,
+                method_id=self.METHOD_ID, surface=surface, slices=slices,
+                error_message="Spencer: divergent at final λ",
+            )
+        return LEMResult(
+            fos=0.5 * (ff_final + fm_final),
+            converged=converged,
+            iterations=iterations,
+            method_id=self.METHOD_ID, surface=surface, slices=slices,
+            details={
+                "lambda": lam_lo,
+                "slide_sign": slide_sign,
+                # Constant interslice ratio at every boundary (Spencer).
+                "boundary_ratios": [lam_lo] * (len(slices.slices) + 1),
+            },
+        )
+
+    # ==================================================================
+    # Inner solver — fixed-point iteration on F at fixed λ
+    # ==================================================================
+    def _inner_solve(
+        self, slices: Slices, lam: float,
+        kh: float, kv: float, slide_sign: float,
+        circle_R, circle_yc,
+    ) -> Tuple[float, float]:
+        """Return (F_f, F_m) at the given inter-slice ratio λ.
+
+        Convention: alpha_local = slide_sign * s.base_angle so that
+        the up-slope side is consistently positive. The driving terms
+        in the denominator are then ALWAYS positive (we slide in the
+        +α_local direction).
+        """
+        F = max(0.5, self.initial_fos)
+
+        ff_last = math.nan
+        fm_last = math.nan
+
+        for _ in range(80):
+            num_m = 0.0
+            den_m = 0.0
+            num_f = 0.0
+            den_f = 0.0
+
+            for s in slices:
+                W_eff = s.weight * (1.0 - kv)
+                H_eq = kh * W_eff
+                # Flip α according to detected sliding direction so the
+                # driving terms are positive. After this flip, slope
+                # rises towards +x.
+                alpha = slide_sign * s.base_angle
+                l = s.base_length
+                b = s.width
+                u = s.pore_pressure
+
+                sigma_est = max(0.0, W_eff * math.cos(alpha) - u * l) / max(l, 1e-9)
+                c_loc, tan_phi = BishopSimplified._local_c_phi(
+                    s, s.material, sigma_est
+                )
+
+                m_alpha = math.cos(alpha) + math.sin(alpha) * tan_phi / F
+                if abs(m_alpha) < 1e-6:
+                    return math.nan, math.nan
+
+                S_term = (c_loc * b + (W_eff - u * b) * tan_phi) / m_alpha
+
+                # --- Moment equilibrium (driving = + Σ W·sin α) ----
+                num_m += S_term
+                den_m += W_eff * math.sin(alpha)
+                if kh > 0 and circle_R is not None:
+                    y_cg = 0.5 * (
+                        0.5 * (s.top_y_left + s.top_y_right)
+                        + 0.5 * (s.base_y_left + s.base_y_right)
+                    )
+                    arm = (circle_yc - y_cg) / circle_R
+                    den_m += kh * W_eff * arm
+
+                # --- Force equilibrium horizontal -----------------
+                # Numerator includes λ-modulation of the resultant
+                num_f += S_term * math.cos(alpha)
+                num_f += lam * S_term * math.sin(alpha)
+                den_f += W_eff * math.tan(alpha) + H_eq
+
+            if abs(den_m) < 1e-9 or abs(den_f) < 1e-9:
+                return math.nan, math.nan
+
+            new_fm = num_m / den_m
+            new_ff = num_f / den_f
+            if not (math.isfinite(new_fm) and math.isfinite(new_ff)):
+                return math.nan, math.nan
+            if new_fm <= 0 or new_ff <= 0:
+                return math.nan, math.nan
+
+            new_F = 0.5 * (new_fm + new_ff)
+            ff_last, fm_last = new_ff, new_fm
+            if abs(new_F - F) < self.tolerance:
+                return new_ff, new_fm
+            F = max(0.2, min(new_F, 10.0))
+
+        return ff_last, fm_last

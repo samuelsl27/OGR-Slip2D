@@ -1,0 +1,8 @@
+{
+  "id": "000-plantilla",
+  "fuente": "Autor (año), título, página",
+  "tipo_referencia": "publicado",
+  "tolerancia_relativa": 0.01,
+  "fos": {},
+  "notas": "Plantilla: el test la ignora porque no tiene modelo.ogr."
+}

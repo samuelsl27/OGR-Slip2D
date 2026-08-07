@@ -1,0 +1,59 @@
+# Byte-compiled / optimized
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+pip-wheel-metadata/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# IDE / editor
+# The three shared VSCode files DO travel: docs/EMPEZAR_EN_VSCODE.md promises
+# the "Tests: suite completa" task and the recommended extensions, and that
+# promise only holds if they reach whoever clones the repository.
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+.idea/
+*.swp
+*.swo
+*.sublime-*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project outputs / user files
+*.ogr
+*.h5
+!examples/*.ogr
+!examples/*.h5
+quick_slope_results.h5
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Logs
+*.log
+.claude/settings.local.json
+docs/reference/

@@ -1,0 +1,32 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  "python.analysis.extraPaths": ["${workspaceFolder}"],
+  "python.terminal.activateEnvironment": true,
+
+  "// Qt sin pantalla": "los tests construyen widgets reales; sin esto fallan al arrancar",
+  "terminal.integrated.env.linux": { "QT_QPA_PLATFORM": "offscreen" },
+  "terminal.integrated.env.osx": { "QT_QPA_PLATFORM": "offscreen" },
+  "terminal.integrated.env.windows": { "QT_QPA_PLATFORM": "offscreen" },
+
+  "editor.rulers": [79],
+  "editor.trimAutoWhitespace": true,
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+  "files.encoding": "utf8",
+  "files.eol": "\n",
+
+  "[python]": {
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true,
+    "editor.formatOnSave": false
+  },
+  "[markdown]": { "editor.wordWrap": "bounded", "editor.wordWrapColumn": 79 },
+
+  "search.exclude": {
+    "**/docs/changelog": true,
+    "**/docs/reference": true,
+    "**/__pycache__": true,
+    "**/.venv": true
+  },
+  "files.watcherExclude": { "**/docs/reference/**": true }
+}

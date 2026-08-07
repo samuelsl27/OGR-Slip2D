@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Line endings are pinned to LF, in the repository and in the working tree.
+#
+# Without this, Git on Windows (core.autocrlf=true by default) checks the
+# files out as CRLF, which contradicts `files.eol: "\n"` in
+# .vscode/settings.json and makes a diff between a Windows and a Linux
+# contributor show every line as changed. Pinning it here settles the
+# question once for everyone instead of once per machine.
+* text=auto eol=lf
+
+# Binary: never touched, never diffed as text.
+*.png binary
+*.jpg binary
+*.h5  binary
+*.dxf binary

@@ -1,0 +1,36 @@
+{
+  "$comment": [
+    "Configuración compartida del proyecto (se versiona).",
+    "Los ajustes personales van en .claude/settings.local.json, que está",
+    "en .gitignore: así cada persona ajusta lo suyo sin tocar el repo."
+  ],
+  "permissions": {
+    "allow": [
+      "Bash(python tests/_runner.py)",
+      "Bash(QT_QPA_PLATFORM=offscreen python tests/_runner.py)",
+      "Bash(python -m ogr_cli:*)",
+      "Bash(git status)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(grep:*)",
+      "Bash(rg:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)"
+    ],
+    "ask": [
+      "Bash(pip install:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(rm:*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Bash(git push --force:*)",
+      "Bash(git reset --hard:*)"
+    ]
+  },
+  "env": {
+    "QT_QPA_PLATFORM": "offscreen"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "$comment": [
+    "Servidores MCP del proyecto. Context7 da documentación actualizada",
+    "de librerías, que reduce el código escrito contra APIs que ya no",
+    "existen. Requiere una API key: ponla en la variable de entorno",
+    "CONTEXT7_API_KEY, nunca en este archivo, que sí se versiona."
+  ],
+  "mcpServers": {
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp", "--api-key", "${CONTEXT7_API_KEY}"]
+    }
+  }
+}
