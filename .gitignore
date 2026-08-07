@@ -56,4 +56,11 @@ quick_slope_results.h5
 # Logs
 *.log
 .claude/settings.local.json
-docs/reference/
+# Material de terceros: no se redistribuye. El patrón lleva `/*` y no
+# `/` final a propósito — con la barra final Git no desciende al
+# directorio y la excepción de abajo sería inalcanzable.
+docs/reference/*
+# El README sí se publica: es texto propio y explica al que clone por qué
+# la carpeta llega vacía. Un test lo comprueba, y sin versionarlo ese test
+# solo podía pasar en la máquina del autor.
+!docs/reference/README.md
