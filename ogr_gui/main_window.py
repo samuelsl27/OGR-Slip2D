@@ -317,7 +317,7 @@ class _ComputeWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.65"
+    VERSION = "0.1.66"
 
     def __init__(self) -> None:
         super().__init__()

@@ -65,10 +65,29 @@ def _eval_ref_circle(**kw):
 
 class TestMAlphaCheck:
     def test_flags_the_degenerate_surface(self):
+        """v0.1.66 — the assertion used to be ``len(bad) >= 5``, a count
+        captured from the slicing of the day. It is now ``bad`` is
+        non-empty, because the count legitimately changed and the count
+        was never the invariant.
+
+        This wedge crosses ej1's material boundaries three times. Until
+        v0.1.66 the slice edges were a uniform division, so the slices
+        spanning those crossings took the friction angle of whichever
+        layer their midpoint fell in and applied it to a base that lay
+        partly in the other. Cutting at the crossings changed the factor
+        of safety of this surface from 0.683 to 0.797 and the number of
+        slices with m_alpha < 0.2 from eight to two — with the sequence of
+        base materials unchanged and no sliver slices (widths 2.64 to
+        2.93 m), which is what says the difference is the fix rather than
+        a new artefact.
+
+        What must hold is the diagnosis: this surface is flagged and the
+        healthy one below is not.
+        """
         r = _eval_poly(_DEGENERATE)
         ok, bad = m_alpha_check(r)
         assert not ok
-        assert len(bad) >= 5, bad
+        assert bad, bad
         assert min(base_m_alphas(r)) < 0.2
 
     def test_healthy_surface_passes(self):

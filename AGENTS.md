@@ -208,10 +208,40 @@ lista funciones añadidas ha desperdiciado la mitad de su valor.
 
 ## Coste de los tests
 
-La suite ronda los **290 s**. Al añadir tests, vigila el coste: los caros
-son los que mallan y resuelven filtración. Un archivo de tests que tardaba
-48 s bajó a 12 s compartiendo la superficie de partida entre casos, sin
-perder ninguno.
+La suite entera tarda **entre 5 y 7½ minutos**, y esa horquilla es lo
+honesto: el mismo código, sin tocar nada, ha dado 5:55, 6:19, 6:41 y 7:22
+en la misma máquina. **El reloj total no es una medida**, es una
+comprobación de que la suite termina.
+
+Que el tiempo suba no es un problema por sí solo. Lo que sí importa es no
+meter un test caro sin darse cuenta: los caros son los que mallan y
+resuelven filtración. Un archivo que tardaba 48 s bajó a 12 s compartiendo
+la superficie de partida entre casos, sin perder ninguno.
+
+### Cómo medir el coste de un cambio
+
+Dos formas de medir ya han engañado a este proyecto, y las dos parecían
+razonables:
+
+1. **El cronómetro de la suite** varía ±40 s entre corridas idénticas. Para
+   diferencias por debajo del 10 % no distingue nada. (Parte de ese ruido
+   fue autoinfligido: lanzar tests dirigidos mientras una suite completa
+   corría de fondo, dos procesos peleándose por los mismos núcleos.)
+2. **Los bucles calientes entre sesiones tampoco valen.** `_column_weight`
+   midió 32.5 µs un día y 40 µs otro **sin que se tocara el código**: la
+   máquina deriva.
+
+Lo único fiable es un **A/B en el mismo proceso, espalda con espalda**:
+la versión nueva, la vieja monkey-patcheada, y otra vez la nueva como
+control. Si las dos corridas de control difieren entre sí tanto como el
+efecto que buscas, la medida no resuelve nada — y entonces **manda el
+razonamiento sobre cuánto trabajo se ha añadido**, no el número.
+
+Ejemplo de las dos cosas, en v0.1.65: el A/B daba +8.7 % con los controles
+difiriendo un 5 % entre sí (no concluyente), mientras que contar el trabajo
+añadido —una consulta de atributo por dovela, ~0.2 µs sobre 2.5 ms— daba
+~0.2 %. Ganó el razonamiento. En la misma medición apareció una mejora real
+y comprobable: 0.819 → 0.390 µs, un 2.1×, que sí se distinguía del ruido.
 
 ---
 

@@ -293,6 +293,171 @@ def _polyline_crossings_at_x(polyline: Polyline, x: float) -> list[float]:
     return out
 
 
+def _surface_crossings(
+    surface: SurfaceProtocol,
+    polyline: Polyline,
+    x_l: float,
+    x_r: float,
+) -> list[float]:
+    """Abscissas where the slip surface crosses ``polyline``.
+
+    Both the slip surface and a boundary segment are single-valued in x,
+    so the crossing is a sign change of ``g(x) = base_y(x) − line_y(x)``.
+    Each boundary SEGMENT is scanned in a few sub-intervals rather than
+    the whole range in many: a circular arc can cut one straight segment
+    twice, and the sub-intervals separate the two roots, but a boundary
+    has few segments so the total number of evaluations stays small.
+
+    Sampling the whole range densely would have been simpler and much
+    more expensive — this runs for every trial surface of a search.
+    """
+    pts = polyline.vertices
+    if len(pts) < 2:
+        return []
+    out: list[float] = []
+    sub = 8  # sub-intervals per boundary segment
+
+    def g(x: float, p1, p2) -> Optional[float]:
+        by = surface.base_y_at(x)
+        if by is None:
+            return None
+        t = (x - p1.x) / (p2.x - p1.x)
+        return by - (p1.y + t * (p2.y - p1.y))
+
+    for p1, p2 in zip(pts[:-1], pts[1:]):
+        if abs(p2.x - p1.x) < 1e-12:
+            continue  # vertical segment: no single-valued crossing
+        lo = max(x_l, min(p1.x, p2.x))
+        hi = min(x_r, max(p1.x, p2.x))
+        if hi - lo <= 0.0:
+            continue
+        step = (hi - lo) / sub
+        prev_x, prev_g = None, None
+        for k in range(sub + 1):
+            x = lo + step * k
+            gx = g(x, p1, p2)
+            if gx is None:
+                prev_x, prev_g = None, None
+                continue
+            if prev_g is not None and prev_g * gx < 0.0:
+                a, b, ga = prev_x, x, prev_g
+                for _ in range(50):
+                    m = 0.5 * (a + b)
+                    gm = g(m, p1, p2)
+                    if gm is None:
+                        break
+                    if ga * gm <= 0.0:
+                        b = m
+                    else:
+                        a, ga = m, gm
+                out.append(0.5 * (a + b))
+            elif gx == 0.0:
+                out.append(x)
+            prev_x, prev_g = x, gx
+    return out
+
+
+def _slice_boundaries(
+    project: Project,
+    surface: SurfaceProtocol,
+    x_l: float,
+    x_r: float,
+    num_slices: int,
+) -> Optional[list[float]]:
+    """Abscissas delimiting the slices, cuts at layer crossings included.
+
+    v0.1.66 — until now this was a uniform division of the failure width
+    and nothing else, so a slice could straddle a material boundary and
+    have to pick ONE material for its base. Where the slip surface enters
+    a different layer is a mandatory cut: the base of a slice belongs to
+    one material or to another, never to a blend.
+
+    The requested ``num_slices`` is shared among the resulting segments in
+    proportion to their width, with at least one slice each. Returns None
+    if there are more mandatory cuts than slices to spend on them, which
+    is a real modelling error and not something to paper over: the answer
+    is to ask for more slices.
+    """
+    width = x_r - x_l
+    if width <= 0.0:
+        return None
+
+    # The y-range the slip surface spans. For a circle the lower arc is
+    # convex, so its extremes are the lowest point and the two ends —
+    # exact, and three evaluations. Used to throw away whole boundaries
+    # before scanning them: a layer that runs well below the failure mass
+    # cannot cut it, and checking that costs two comparisons instead of
+    # eight evaluations per segment. Without it, this search ran in full
+    # for every trial surface of a grid search and cost 20 %.
+    y_ends = [surface.base_y_at(x_l), surface.base_y_at(x_r)]
+    y_ends = [v for v in y_ends if v is not None]
+    if isinstance(surface, SlipCircle) and x_l <= surface.centre_x <= x_r:
+        v = surface.base_y_at(surface.centre_x)
+        if v is not None:
+            y_ends.append(v)
+    if not y_ends:
+        return None
+    s_lo, s_hi = min(y_ends), max(y_ends)
+    if not isinstance(surface, SlipCircle):
+        # A polyline surface is not convex: its interior vertices can sit
+        # outside the envelope of the two ends.
+        for v in getattr(getattr(surface, "polyline", None), "vertices", ()):
+            if x_l <= v.x <= x_r:
+                s_lo = min(s_lo, v.y)
+                s_hi = max(s_hi, v.y)
+
+    cuts: set = set()
+    for b in project.boundaries:
+        if b.btype not in (BoundaryType.MATERIAL, BoundaryType.WATER_TABLE):
+            continue
+        bx0, by0, bx1, by1 = b.bounding_box()
+        if bx1 < x_l or bx0 > x_r or by1 < s_lo or by0 > s_hi:
+            continue
+        for x in _surface_crossings(surface, b.polyline, x_l, x_r):
+            # Ignore a crossing that merely grazes an end: it would make a
+            # sliver slice without separating anything.
+            if x_l + 1e-9 < x < x_r - 1e-9:
+                cuts.add(x)
+
+    if not cuts:
+        step = width / num_slices
+        return [x_l + step * i for i in range(num_slices + 1)]
+
+    marks = sorted(cuts)
+    # Merge cuts closer together than a thousandth of the failure width:
+    # two layers pinching out at nearly the same point are one cut, and
+    # the tolerance is RELATIVE so it behaves the same in mm and in m.
+    tol = 1e-3 * width
+    merged = [marks[0]]
+    for x in marks[1:]:
+        if x - merged[-1] > tol:
+            merged.append(x)
+    segments = list(zip([x_l] + merged, merged + [x_r]))
+    if len(segments) > num_slices:
+        return None
+
+    # Largest-remainder apportionment, so the slice count is exactly the
+    # one asked for and the widths stay as even as the cuts allow.
+    raw = [num_slices * (b - a) / width for a, b in segments]
+    counts = [max(1, int(r)) for r in raw]
+    while sum(counts) > num_slices:
+        i = max(range(len(counts)),
+                key=lambda k: (counts[k] - raw[k], counts[k]))
+        if counts[i] <= 1:
+            break
+        counts[i] -= 1
+    while sum(counts) < num_slices:
+        i = max(range(len(counts)), key=lambda k: raw[k] - counts[k])
+        counts[i] += 1
+
+    bounds = [x_l]
+    for (a, b), n in zip(segments, counts):
+        step = (b - a) / n
+        bounds.extend(a + step * k for k in range(1, n + 1))
+    bounds[-1] = x_r
+    return bounds
+
+
 def _column_weight(
     project: Project,
     x: float,
@@ -448,12 +613,24 @@ def slice_surface(
     if x_l is None or x_r is None or x_r - x_l < 1e-6:
         return None
 
-    dx = (x_r - x_l) / num_slices
+    bounds = _slice_boundaries(project, surface, x_l, x_r, num_slices)
+    if bounds is None:
+        # More mandatory cuts than slices to spend: the reference reports
+        # this as an error and asks for more slices, and so do we, rather
+        # than silently dropping layer crossings.
+        return None
+    # A mean slice narrower than a ten-thousandth of the model is a
+    # numerical hazard, not a finer answer. Relative to the failure width,
+    # so the check reads the same whatever the units of the model.
+    if (x_r - x_l) / max(len(bounds) - 1, 1) < 1e-4 * (x_r - x_l):
+        return None
+
     result = Slices()
 
-    for i in range(num_slices):
-        xl = x_l + i * dx
-        xr = x_l + (i + 1) * dx
+    for i, (xl, xr) in enumerate(zip(bounds[:-1], bounds[1:])):
+        dx = xr - xl
+        if dx <= 0.0:
+            continue
         xc = 0.5 * (xl + xr)
 
         y_base_l = surface.base_y_at(xl)
