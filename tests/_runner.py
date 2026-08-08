@@ -16,6 +16,7 @@ that allows verifying the suite in air-gapped CI environments.
 """
 from __future__ import annotations
 
+import ast
 import importlib.util
 import inspect
 import math
@@ -75,6 +76,38 @@ def _load_module(path: Path):
     return mod
 
 
+def _count_tests(tests_dir: Path) -> int:
+    """Total number of test methods, WITHOUT importing anything.
+
+    The runner discovers tests as it goes, so it cannot know the total
+    until the end. Importing every module up front to count them would
+    execute the module-level code of the whole suite before the first
+    test runs — exactly the kind of state leak rule 5 exists to prevent.
+    Parsing the source answers the question with no execution at all:
+    81 files in about 230 ms, 0.06 % of a run, and nothing during it.
+
+    Returns 0 if anything cannot be parsed, in which case the caller
+    falls back to a plain counter. A progress display must never be the
+    reason a test run fails.
+    """
+    total = 0
+    for f in sorted(tests_dir.glob("test_*.py")):
+        try:
+            tree = ast.parse(f.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError, ValueError):
+            return 0
+        for node in tree.body:
+            if not (isinstance(node, ast.ClassDef)
+                    and node.name.startswith("Test")):
+                continue
+            total += sum(
+                1 for m in node.body
+                if isinstance(m, ast.FunctionDef)
+                and m.name.startswith("test_")
+            )
+    return total
+
+
 def _run_method(instance, method):
     # Bind the unbound function to the instance so `self` is provided
     bound = method.__get__(instance, type(instance))
@@ -102,8 +135,20 @@ def main(tests_dir: Path) -> int:
     fail_details: list[tuple[str, str]] = []
 
     test_files = sorted(p for p in tests_dir.glob("test_*.py"))
-    for f in test_files:
-        print(f"\n=== {f.name} ===")
+    total_tests = _count_tests(tests_dir)
+    n_files = len(test_files)
+    # Fixed width, so the pass/fail marks stay in one column and the
+    # output is still readable when it scrolls.
+    w = len(str(total_tests)) if total_tests else 4
+
+    def _tag() -> str:
+        done = passed + failed
+        if not total_tests:
+            return f"[{done:>{w}}]"
+        return f"[{done:>{w}}/{total_tests} {100.0 * done / total_tests:3.0f}%]"
+
+    for i_file, f in enumerate(test_files, 1):
+        print(f"\n=== {f.name} ===  ({i_file}/{n_files})")
         try:
             mod = _load_module(f)
         except Exception as e:  # noqa: BLE001
@@ -124,16 +169,16 @@ def main(tests_dir: Path) -> int:
                 try:
                     instance = cls()
                     _run_method(instance, m)
-                    print(f"    ✓ {m_name}")
                     passed += 1
+                    print(f"    {_tag()} ✓ {m_name}")
                 except AssertionError as e:
-                    print(f"    ✗ {m_name}: {e}")
-                    fail_details.append((f"{name}.{m_name}", traceback.format_exc()))
                     failed += 1
+                    print(f"    {_tag()} ✗ {m_name}: {e}")
+                    fail_details.append((f"{name}.{m_name}", traceback.format_exc()))
                 except Exception as e:  # noqa: BLE001
-                    print(f"    ✗ {m_name}: {type(e).__name__}: {e}")
-                    fail_details.append((f"{name}.{m_name}", traceback.format_exc()))
                     failed += 1
+                    print(f"    {_tag()} ✗ {m_name}: {type(e).__name__}: {e}")
+                    fail_details.append((f"{name}.{m_name}", traceback.format_exc()))
 
     print("\n" + "=" * 60)
     print(f"Total: {passed + failed}    Passed: {passed}    Failed: {failed}")

@@ -111,7 +111,11 @@ def base_effective_stresses(result) -> list[float]:
         alpha = s.base_angle
         l = max(s.base_length, 1e-12)
         u = s.pore_pressure
-        W = s.weight
+        # v0.1.67 — the base has to carry the ponded water standing on the
+        # slice as well as the soil. Leaving it out made this check judge
+        # a reservoir-loaded slope with about a third of the real normal
+        # force, which is the difference between "in tension" and not.
+        W = s.weight + getattr(s, "water_weight", 0.0)
         sigma_est = max(0.0, W * math.cos(alpha) - u * l) / l
         c_loc, tan_phi = BishopSimplified._local_c_phi(s, s.material,
                                                        sigma_est)

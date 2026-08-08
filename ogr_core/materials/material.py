@@ -30,6 +30,34 @@ class PorePressureType(Enum):
     FEM_SEEPAGE = "fem"  # coupled from OGR FEM2D result
 
 
+def _envelope_to_dict(env) -> Optional[dict]:
+    """Serialise a drawdown envelope, tagged by which of the two it is."""
+    if env is None:
+        return None
+    from .drawdown_envelopes import Kc1Envelope, REnvelope
+
+    if isinstance(env, REnvelope):
+        return {"kind": "r", "c_r": env.c_r, "phi_r_deg": env.phi_r_deg}
+    if isinstance(env, Kc1Envelope):
+        return {"kind": "kc1", "d": env.d, "psi_deg": env.psi_deg}
+    return None
+
+
+def _envelope_from_dict(d) -> Optional[object]:
+    if not d:
+        return None
+    from .drawdown_envelopes import Kc1Envelope, REnvelope
+
+    kind = d.get("kind")
+    if kind == "r":
+        return REnvelope(c_r=float(d.get("c_r", 0.0)),
+                         phi_r_deg=float(d.get("phi_r_deg", 0.0)))
+    if kind == "kc1":
+        return Kc1Envelope(d=float(d.get("d", 0.0)),
+                           psi_deg=float(d.get("psi_deg", 0.0)))
+    return None
+
+
 @dataclass
 class Material:
     """A geotechnical material.
@@ -106,6 +134,14 @@ class Material:
     # by ``Project.from_dict`` so that reopening one cannot change its FoS.
     undrained_behaviour: bool = False
     b_bar: float = 0.0
+    # v0.1.67 — undrained envelope for the multi-stage rapid-drawdown
+    # procedures, from IC-U triaxial tests. Deliberately NOT a
+    # ``StrengthModel`` in the registry: those are selectable as the
+    # material's main envelope, and neither of these two is usable as a
+    # drained one. A material keeps its effective ``strength`` and gains
+    # this alongside it. ``REnvelope`` or ``Kc1Envelope``; either is
+    # converted to whichever the chosen procedure needs.
+    drawdown_envelope: Optional[object] = None
     id: str = field(default_factory=lambda: str(uuid4()))
 
     # ------------------------------------------------------------------
@@ -145,6 +181,7 @@ class Material:
             "auto_hu": self.auto_hu,
             "undrained_behaviour": self.undrained_behaviour,
             "b_bar": self.b_bar,
+            "drawdown_envelope": _envelope_to_dict(self.drawdown_envelope),
         }
 
     @classmethod
@@ -174,6 +211,8 @@ class Material:
             auto_hu=bool(data.get("auto_hu", False)),
             undrained_behaviour=bool(data.get("undrained_behaviour", False)),
             b_bar=float(data.get("b_bar", 0.0)),
+            drawdown_envelope=_envelope_from_dict(
+                data.get("drawdown_envelope")),
         )
         if "id" in data:
             m.id = data["id"]

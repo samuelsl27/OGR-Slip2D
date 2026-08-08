@@ -338,27 +338,49 @@ class BishopSimplified(LEMMethod):
         normals: list[float] = []
         shears: list[float] = []
         strengths: list[float] = []
+        # v0.1.67 — this block reports what the iteration computed, so it
+        # has to use the SAME load. Until now it used ``s.weight``, the
+        # soil alone, while the iteration above uses ``w_total``, soil
+        # plus the ponded water standing on the slice. With a reservoir
+        # over the slope the reported base normal came out about a THIRD
+        # of the one the factor of safety was built from, and that number
+        # is what the tensile-stress admissibility check judges.
+        #
+        # Second correction in the same block: the effective normal stress
+        # on the base is ``N/l − u``, with l the BASE LENGTH. It was
+        # computed as ``N/b − u`` with b the slice width, which differs by
+        # a factor cos α — and disagreed with ``checks.base_effective_
+        # stresses``, which had it right. Note that the ``u·b`` inside
+        # Bishop's FoS numerator is NOT the same quantity and is correct
+        # as it stands: it comes from the equilibrium algebra, not from a
+        # stress definition.
         for s in slices:
-            W_eff = s.weight * (1.0 - kv)
-            b = s.width
-            N_est = W_eff * math.cos(s.base_angle)
-            N_eff_est = max(0.0, N_est - s.pore_pressure * s.base_length)
-            sigma_n_eff = N_eff_est / max(s.base_length, 1e-9)
+            f = slice_forces(s, kh, kv)
+            W_eff = f.w_total
+            l = max(s.base_length, 1e-9)
+            alpha = s.base_angle
+            N_est = W_eff * math.cos(alpha)
+            N_eff_est = max(0.0, N_est - s.pore_pressure * l)
+            sigma_n_eff = N_eff_est / l
             c, tan_phi = self._local_c_phi(s, s.material, sigma_n_eff)
-            m_alpha = math.cos(s.base_angle) + (
-                slide_sign * math.sin(s.base_angle) * tan_phi / fos
+            m_alpha = math.cos(alpha) + (
+                slide_sign * math.sin(alpha) * tan_phi / fos
             )
-            # Bishop's expression for N (with sin α sign):
+            # Bishop's expression for N, rearranged from the vertical
+            # equilibrium of the slice:
+            #     N·cos α + slide_sign·S·sin α = W
+            # with S = [c·l + (N − u·l)·tan φ] / F the mobilised base
+            # shear. A test pins that identity on the values reported.
             N = (W_eff
-                 - (c * b * math.sin(s.base_angle)) / fos
-                 + (s.pore_pressure * b * tan_phi
-                    * math.sin(s.base_angle)) / fos
-                ) / max(abs(m_alpha), 1e-6)
-            sigma_eff = max(0.0, N - s.pore_pressure * b) / max(b, 1e-9)
+                 - slide_sign * (c * l * math.sin(alpha)) / fos
+                 + slide_sign * (s.pore_pressure * l * tan_phi
+                                 * math.sin(alpha)) / fos
+                 ) / max(abs(m_alpha), 1e-6)
+            sigma_eff = max(0.0, N / l - s.pore_pressure)
             tau = self._shear_strength(s.material, sigma_eff)
             normals.append(N)
-            shears.append(slide_sign * W_eff * math.sin(s.base_angle))
-            strengths.append(tau * s.base_length)
+            shears.append(slide_sign * W_eff * math.sin(alpha))
+            strengths.append(tau * l)
 
         return LEMResult(
             fos=fos,
