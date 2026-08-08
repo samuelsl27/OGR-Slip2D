@@ -40,6 +40,7 @@ from typing import Optional
 from ogr_core.materials import Material
 from ogr_core.project import Project
 
+from ..external_forces import slice_forces
 from ..slicer import Slice, Slices
 from ..surface import SurfaceProtocol
 from .base import LEMMethod, LEMResult, register_method
@@ -65,16 +66,22 @@ class JanbuSimplified(LEMMethod):
 
         # Sliding direction
         driving_raw = sum(
-            s.weight * (1.0 - kv) * math.tan(s.base_angle) for s in slices
+            slice_forces(s, kh, kv).w_total * math.tan(s.base_angle)
+            for s in slices
         )
         slide_sign = 1.0 if driving_raw >= 0 else -1.0
 
         # Driving force horizontal: Σ W·(1−kv)·tan α + Σ kh·W
         denominator = 0.0
         for s in slices:
-            W_eff = s.weight * (1.0 - kv)
-            denominator += slide_sign * W_eff * math.tan(s.base_angle)
-            denominator += kh * W_eff  # horizontal seismic adds directly
+            f = slice_forces(s, kh, kv)
+            denominator += slide_sign * f.w_total * math.tan(s.base_angle)
+            denominator += f.h_seismic  # horizontal seismic adds directly
+            # v0.1.61 — external water thrust. The driving force is
+            # measured positive along the sliding direction, whose x
+            # component is −slide_sign (slide_sign = +1 means the mass
+            # moves towards −x); h_water is signed in +x.
+            denominator += -slide_sign * f.h_water
 
         if abs(denominator) < 1e-9:
             return LEMResult(
@@ -95,7 +102,9 @@ class JanbuSimplified(LEMMethod):
             numerator = 0.0
 
             for s in slices:
-                W_eff = s.weight * (1.0 - kv)
+                # v0.1.61 — the base normal carries the ponded-water
+                # weight; the horizontal thrust belongs on the driving side
+                W_eff = slice_forces(s, kh, kv).w_total
                 b = s.width
 
                 # Estimate σ'ₙ

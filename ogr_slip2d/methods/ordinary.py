@@ -30,8 +30,9 @@ import math
 
 from ogr_core.project import Project
 
+from ..external_forces import slice_forces
 from ..slicer import Slices
-from ..surface import SurfaceProtocol
+from ..surface import SlipCircle, SurfaceProtocol
 from .base import LEMMethod, LEMResult, register_method
 
 
@@ -65,11 +66,27 @@ class OrdinaryFellenius(LEMMethod):
         )
         slide_sign = 1.0 if driving_raw >= 0 else -1.0
 
+        # v0.1.61 — the horizontal water forces act on the TOP of the
+        # slice, not on its base, so they enter the driving side through
+        # their MOMENT about the centre of rotation — the same normalised
+        # form Bishop uses — and not as a tangential component at the base.
+        # Ordinary/Fellenius is a moment method, so R cancels here too.
+        circle_R = surface.radius if isinstance(surface, SlipCircle) else None
+        circle_yc = (surface.centre_y
+                     if isinstance(surface, SlipCircle) else None)
+
         for s in slices:
-            W = s.weight * (1.0 - kv)
+            f = slice_forces(s, kh, kv)
+            W = f.w_total
             H = s.weight * kh * slide_sign
+            # A horizontal force resolved on the base: the inward normal
+            # is (−sin α, cos α), so it adds ``+F_h·sin α`` to the base
+            # reaction.
+            Hw = f.h_water
             # Base-normal effective stress
-            N = W * math.cos(s.base_angle) - H * math.sin(s.base_angle)
+            N = (W * math.cos(s.base_angle)
+                 - H * math.sin(s.base_angle)
+                 + Hw * math.sin(s.base_angle))
             N_eff = N - s.pore_pressure * s.base_length
             sigma_n_eff = max(0.0, N_eff) / max(s.base_length, 1e-9)
 
@@ -80,6 +97,10 @@ class OrdinaryFellenius(LEMMethod):
                 slide_sign * W * math.sin(s.base_angle)
                 + H * math.cos(s.base_angle)
             )
+            if circle_R is not None:
+                driving += (
+                    -slide_sign * f.water_moment_about(circle_yc) / circle_R
+                )
 
             numerator += strength
             denominator += driving

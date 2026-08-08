@@ -36,6 +36,7 @@ from typing import Optional
 from ogr_core.materials import Material
 from ogr_core.project import Project
 
+from ..external_forces import slice_forces
 from ..slicer import Slice, Slices
 from ..surface import SlipCircle, SurfaceProtocol
 from .base import LEMMethod, LEMResult, register_method
@@ -176,15 +177,28 @@ class BishopSimplified(LEMMethod):
             circle_R = surface.radius
             circle_yc = surface.centre_y
         for s in slices:
-            W_eff = s.weight * (1.0 - kv)
-            denominator += slide_sign * W_eff * math.sin(s.base_angle)
+            f = slice_forces(s, kh, kv)
+            # v0.1.61 — the gravity driving term uses the TOTAL vertical
+            # load (soil + ponded water); both act at the slice's x, so
+            # they share the moment arm R·sin α.
+            denominator += slide_sign * f.w_total * math.sin(s.base_angle)
             if kh > 0 and circle_R is not None:
                 y_cg = 0.5 * (
                     0.5 * (s.top_y_left + s.top_y_right)
                     + 0.5 * (s.base_y_left + s.base_y_right)
                 )
                 arm = (circle_yc - y_cg) / circle_R
-                denominator += kh * W_eff * arm
+                denominator += f.h_seismic * arm
+            if circle_R is not None:
+                # v0.1.61 — horizontal water forces (ponded water on the
+                # slope, water in a tension crack). A force F_h at
+                # elevation y has CCW moment (y_c − y)·F_h about the
+                # centre; the driving moment is measured as −slide_sign·M/R
+                # in the same normalised units as Σ W sin α, which is what
+                # makes the seismic term above take the form it has.
+                denominator += (
+                    -slide_sign * f.water_moment_about(circle_yc) / circle_R
+                )
 
         # v0.1.15 — both Active and Passive support contributions are
         # added to the resisting moment (numerator). This matches the
@@ -225,7 +239,11 @@ class BishopSimplified(LEMMethod):
             numerator = 0.0
 
             for s in slices:
-                W_eff = s.weight * (1.0 - kv)
+                # v0.1.61 — the base normal follows from the VERTICAL
+                # equilibrium of the slice, so it carries the ponded-water
+                # weight but not the horizontal thrust, exactly as the
+                # horizontal seismic force is absent from this side too.
+                W_eff = slice_forces(s, kh, kv).w_total
                 b = s.width
 
                 N_est = W_eff * math.cos(s.base_angle)

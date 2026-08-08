@@ -128,12 +128,21 @@ def pore_pressure_at(
         if ground_surface_y is None:
             return 0.0
         depth = max(0.0, ground_surface_y - point.y)
-        # u = ru · γ · z, where γ is the total unit weight of the
-        # overburden. v0.1.60 — this goes through ``gamma_at`` rather than
-        # reading ``sat_unit_weight`` directly so that a material which has
-        # NOT opted into a saturated unit weight cannot have that unused
-        # number change its pore pressure through a back door.
-        return material.ru * material.gamma_at(True) * depth
+        # u = ru · σ_v, with σ_v the vertical earth pressure over the
+        # point. v0.1.60 — the soil term goes through ``gamma_at`` rather
+        # than reading ``sat_unit_weight`` directly so that a material
+        # which has NOT opted into a saturated unit weight cannot have
+        # that unused number change its pore pressure through a back door.
+        sigma_v = material.gamma_at(True) * depth
+        # v0.1.61 — the vertical earth pressure INCLUDES the weight of any
+        # ponded water standing above the point, as the reference states
+        # for this model. It does NOT include external loads (line,
+        # distributed or seismic), which is why the surcharge is absent.
+        from .ponded_water import ponded_depth_at
+
+        sigma_v += gamma_w * ponded_depth_at(project, point.x,
+                                             ground_surface_y)
+        return material.ru * sigma_v
 
     if ppt in (PorePressureType.WATER_TABLE, PorePressureType.PIEZO_LINE):
         # Find the referenced water surface

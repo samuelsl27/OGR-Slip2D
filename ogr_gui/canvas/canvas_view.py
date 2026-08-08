@@ -390,7 +390,14 @@ class CanvasView(QGraphicsView):
                 continue
             self._draw_tension_crack_pattern(scene, tc)
 
-        # v0.1.9 — letters W / P / D on water surfaces (Slide-style)
+        # v0.1.61 — ponded water: the region between the ground and a
+        # water surface drawn ABOVE it. The three display flags below have
+        # existed since v0.1.23 and were read by nobody, so the checkbox
+        # in Display Options did nothing at all.
+        if getattr(opts, "show_ponded_water", True):
+            self._draw_ponded_water(scene, opts)
+
+        # v0.1.9 — letters W / P / D on water surfaces
         for b in self.project.boundaries:
             if not b.visible or not self._type_visible(b.btype):
                 continue
@@ -1853,7 +1860,13 @@ class CanvasView(QGraphicsView):
         so it stays a fixed size regardless of zoom.
         """
         from PySide6.QtGui import QFont
-        from PySide6.QtWidgets import QGraphicsTextItem, QGraphicsEllipseItem
+        # v0.1.61 — QGraphicsItem was used below without ever being
+        # imported, in this module or any other, so drawing the W / P / D
+        # letter raised NameError and took the whole canvas repaint down
+        # with it. Any project with a water surface hit it; it survived
+        # because no test drew one.
+        from PySide6.QtWidgets import (QGraphicsEllipseItem, QGraphicsItem,
+                                       QGraphicsTextItem)
         verts = boundary.polyline.vertices
         if len(verts) < 2:
             return
@@ -2004,6 +2017,110 @@ class CanvasView(QGraphicsView):
     # ==================================================================
     # v0.1.7 — Tension Crack zone visualisation
     # ==================================================================
+    def _ground_polyline(self):
+        """Upper envelope of the external boundary, or None."""
+        external = self.project.external_boundary()
+        if external is None:
+            return None
+        ext_verts = list(external.polyline.vertices)
+        if not ext_verts:
+            return None
+        ymin = min(v.y for v in ext_verts)
+        ymax = max(v.y for v in ext_verts)
+        y_mid = 0.5 * (ymin + ymax)
+        gv = sorted([v for v in ext_verts if v.y >= y_mid], key=lambda v: v.x)
+        if len(gv) < 2:
+            gv = sorted(ext_verts, key=lambda v: v.x)
+        from ogr_core.geometry import Polyline as _PL
+        return _PL(vertices=gv, closed=False)
+
+    def _draw_ponded_water(self, scene, opts) -> None:
+        """Fill and/or hatch the ponded-water region.
+
+        Ponded water is what a water table (or a drawdown line) defines
+        when it is drawn above the external boundary — the body of still
+        water resting on the slope. It is NOT created by a piezometric
+        line, which is why this only looks at the ponding boundary types.
+        """
+        from PySide6.QtGui import QBrush, QPen, QPolygonF
+        from PySide6.QtCore import QPointF
+        from PySide6.QtWidgets import QGraphicsLineItem, QGraphicsPolygonItem
+
+        from ogr_core.hydraulic.ponded_water import PONDING_BOUNDARY_TYPES
+        from ogr_core.hydraulic.pore_pressure import _interp_y_on_polyline
+
+        ground = self._ground_polyline()
+        if ground is None:
+            return
+        surfaces = [b for b in self.project.boundaries
+                    if b.btype in PONDING_BOUNDARY_TYPES
+                    and b.visible and self._type_visible(b.btype)]
+        if not surfaces:
+            return
+
+        gx = [v.x for v in ground.vertices]
+        x_min, x_max = min(gx), max(gx)
+        if x_max <= x_min:
+            return
+
+        blue = QColor(60, 130, 220)
+        pen = QPen(blue, 0.8)
+        pen.setCosmetic(True)
+        # Sample densely enough that the region outline follows both the
+        # ground breaks and the water surface.
+        n = max(60, int((x_max - x_min) / 1.0))
+        step = (x_max - x_min) / n
+
+        for wb in surfaces:
+            # Walk the sampled columns, collecting maximal runs where the
+            # water surface is above the ground; each run is one pond.
+            run: list[tuple[float, float, float]] = []
+            for i in range(n + 1):
+                x = x_min + step * i
+                y_g = _interp_y_on_polyline(ground, x)
+                y_w = _interp_y_on_polyline(wb.polyline, x)
+                wet = (y_g is not None and y_w is not None and y_w > y_g)
+                if wet:
+                    run.append((x, y_g, y_w))
+                    continue
+                self._emit_pond_run(scene, run, opts, blue, pen,
+                                    QPolygonF, QPointF, QBrush,
+                                    QGraphicsPolygonItem, QGraphicsLineItem)
+                run = []
+            self._emit_pond_run(scene, run, opts, blue, pen,
+                                QPolygonF, QPointF, QBrush,
+                                QGraphicsPolygonItem, QGraphicsLineItem)
+
+    @staticmethod
+    def _emit_pond_run(scene, run, opts, blue, pen, QPolygonF, QPointF,
+                       QBrush, QGraphicsPolygonItem, QGraphicsLineItem):
+        """Render one contiguous ponded stretch."""
+        if len(run) < 2:
+            return
+        if getattr(opts, "ponded_water_fill", False):
+            poly = QPolygonF([QPointF(x, yw) for x, _, yw in run]
+                             + [QPointF(x, yg) for x, yg, _ in reversed(run)])
+            item = QGraphicsPolygonItem(poly)
+            fill = QColor(blue)
+            fill.setAlpha(60)
+            item.setBrush(QBrush(fill))
+            item.setPen(QPen(Qt.NoPen))
+            item.setZValue(1)
+            scene.addItem(item)
+        if getattr(opts, "ponded_water_hatch", True):
+            # Same vertical-line idiom as the tension-crack pattern, so
+            # the two water regions read alike.
+            span = run[-1][0] - run[0][0]
+            n_lines = max(4, int(span / 2.0))
+            for k in range(n_lines + 1):
+                t = k / n_lines
+                idx = min(len(run) - 1, int(t * (len(run) - 1)))
+                x, y_g, y_w = run[idx]
+                line = QGraphicsLineItem(x, y_g, x, y_w)
+                line.setPen(pen)
+                line.setZValue(2)
+                scene.addItem(line)
+
     def _draw_tension_crack_pattern(self, scene, tc_boundary) -> None:
         """Draw the vertical-line pattern of the Tension Crack zone.
 

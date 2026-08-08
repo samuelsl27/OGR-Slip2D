@@ -84,7 +84,12 @@ class TestHydrostaticForce:
         from ogr_core.project import Project
         from ogr_slip2d import SlipCircle, slice_surface
 
-        # Create a 100 x 30 domain with a Tension Crack at y=25, x in [85..100]
+        # Create a 100 x 30 domain with a Tension Crack at y=25.
+        # v0.1.61 — the crack used to span x ∈ [85, 100], but the circle
+        # below daylights at x ≈ 84.6, so the slip surface never entered
+        # the crack zone and no force was ever produced. That is exactly
+        # what the vacuous ``if force > 0`` guard was hiding. Moved into
+        # the surface's span so the test exercises something.
         p = Project("TC test")
         ext = Polyline(vertices=[
             Vertex(0, 0), Vertex(100, 0),
@@ -95,7 +100,7 @@ class TestHydrostaticForce:
         # Crack lower boundary
         tc = Boundary(
             polyline=Polyline(
-                vertices=[Vertex(85, 25), Vertex(100, 25)], closed=False
+                vertices=[Vertex(75, 25), Vertex(84, 25)], closed=False
             ),
             btype=BoundaryType.TENSION_CRACK,
         )
@@ -114,11 +119,16 @@ class TestHydrostaticForce:
             return  # surface degenerate; skip
         # Crack height = 30 - 25 = 5 m → F = ½ * 9.81 * 5² ≈ 122.6 kN/m
         F_expected = 0.5 * 9.81 * 5.0 * 5.0
-        if sl.tension_crack_force > 0:
-            # The up-slope slice may not actually fall inside the crack
-            # x-range with this geometry; if it does, force should be
-            # in the right ball-park.
-            assert math.isclose(sl.tension_crack_force, F_expected, rel_tol=0.5)
+        # v0.1.61 — this used to be wrapped in ``if force > 0``, which
+        # made the assertion vacuous: the force was never applied to
+        # anything, so nothing here could fail. It is a real check now.
+        assert sl.tension_crack_force > 0
+        assert math.isclose(sl.tension_crack_force, F_expected, rel_tol=0.5)
+        # And it must actually reach a slice, which is where every LEM
+        # method reads it from. The per-slice value is SIGNED (+x), while
+        # ``tension_crack_force`` is a magnitude, so compare moduli.
+        assert math.isclose(abs(sum(s.water_force_h for s in sl.slices)),
+                            sl.tension_crack_force, rel_tol=1e-12)
 
     def test_dry_crack_no_force(self):
         from ogr_core.materials import Material, MohrCoulomb
@@ -132,9 +142,11 @@ class TestHydrostaticForce:
         ], closed=True)
         ext.ensure_ccw()
         p.add_boundary(Boundary(polyline=ext, btype=BoundaryType.EXTERNAL))
+        # Same crack position as the filled case, so "dry ⇒ no force" is
+        # a real statement about the water level and not about geometry.
         p.add_boundary(Boundary(
             polyline=Polyline(
-                vertices=[Vertex(85, 25), Vertex(100, 25)], closed=False),
+                vertices=[Vertex(75, 25), Vertex(84, 25)], closed=False),
             btype=BoundaryType.TENSION_CRACK,
         ))
         p.materials = [

@@ -29,6 +29,7 @@ from typing import Callable, Tuple
 
 from ogr_core.project import Project
 
+from ..external_forces import slice_forces
 from ..slicer import Slices
 from ..surface import SlipCircle, SurfaceProtocol
 from .base import LEMMethod, LEMResult, register_method
@@ -221,8 +222,13 @@ class GLEMorgensternPrice(LEMMethod):
             den_f = 0.0
 
             for s in slices:
-                W_eff = s.weight * (1.0 - kv)
-                H_eq = kh * W_eff
+                fx = slice_forces(s, kh, kv)
+                # v0.1.61 — soil + ponded water for the base normal;
+                # the water thrust resolved along the sliding direction,
+                # whose x component is −slide_sign.
+                W_eff = fx.w_total
+                H_eq = fx.h_seismic
+                H_water = -slide_sign * fx.h_water
                 # Flip α once according to detected sliding direction
                 alpha = slide_sign * s.base_angle
                 l = s.base_length
@@ -253,12 +259,17 @@ class GLEMorgensternPrice(LEMMethod):
                         + 0.5 * (s.base_y_left + s.base_y_right)
                     )
                     arm = (circle_yc - y_cg) / circle_R
-                    den_m += kh * W_eff * arm
+                    den_m += H_eq * arm
+                if circle_R is not None:
+                    den_m += (
+                        -slide_sign
+                        * fx.water_moment_about(circle_yc) / circle_R
+                    )
 
                 # Force side: λ·f_i modulates the numerator
                 num_f += S_term * math.cos(alpha)
                 num_f += lam_i * S_term * math.sin(alpha)
-                den_f += W_eff * math.tan(alpha) + H_eq
+                den_f += W_eff * math.tan(alpha) + H_eq + H_water
 
             if abs(den_m) < 1e-9 or abs(den_f) < 1e-9:
                 return math.nan, math.nan

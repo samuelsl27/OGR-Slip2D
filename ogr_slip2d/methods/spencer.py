@@ -44,6 +44,7 @@ from typing import Tuple
 
 from ogr_core.project import Project
 
+from ..external_forces import slice_forces
 from ..slicer import Slices
 from ..surface import SlipCircle, SurfaceProtocol
 from .base import LEMMethod, LEMResult, register_method
@@ -204,8 +205,14 @@ class Spencer(LEMMethod):
             den_f = 0.0
 
             for s in slices:
-                W_eff = s.weight * (1.0 - kv)
-                H_eq = kh * W_eff
+                fx = slice_forces(s, kh, kv)
+                # v0.1.61 — total vertical load (soil + ponded water) for
+                # everything that the base normal sees.
+                W_eff = fx.w_total
+                H_eq = fx.h_seismic
+                # External water thrust resolved along the sliding
+                # direction, whose x component is −slide_sign.
+                H_water = -slide_sign * fx.h_water
                 # Flip α according to detected sliding direction so the
                 # driving terms are positive. After this flip, slope
                 # rises towards +x.
@@ -234,13 +241,20 @@ class Spencer(LEMMethod):
                         + 0.5 * (s.base_y_left + s.base_y_right)
                     )
                     arm = (circle_yc - y_cg) / circle_R
-                    den_m += kh * W_eff * arm
+                    den_m += H_eq * arm
+                if circle_R is not None:
+                    # Moment of the horizontal water forces about the
+                    # centre, normalised by R like every other term here.
+                    den_m += (
+                        -slide_sign
+                        * fx.water_moment_about(circle_yc) / circle_R
+                    )
 
                 # --- Force equilibrium horizontal -----------------
                 # Numerator includes λ-modulation of the resultant
                 num_f += S_term * math.cos(alpha)
                 num_f += lam * S_term * math.sin(alpha)
-                den_f += W_eff * math.tan(alpha) + H_eq
+                den_f += W_eff * math.tan(alpha) + H_eq + H_water
 
             if abs(den_m) < 1e-9 or abs(den_f) < 1e-9:
                 return math.nan, math.nan

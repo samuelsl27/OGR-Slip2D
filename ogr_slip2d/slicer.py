@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from typing import Iterator, Optional
 
 from ogr_core.geometry import Boundary, BoundaryType, Polyline, Vertex
+from ogr_core.hydraulic.ponded_water import ponded_depth_at
 from ogr_core.hydraulic.pore_pressure import pore_pressure_at, _interp_y_on_polyline
 from ogr_core.materials import Material
 from ogr_core.project import Project
@@ -55,6 +56,23 @@ class Slice:
     suction_cohesion: float = 0.0
     raw_pore_pressure: float = 0.0   # u before the unsaturated policy
     surface_pressure: float = 0.0  # kPa (distributed load on the top)
+    # v0.1.61 — external water forces on the slice, kept OUTSIDE ``weight``
+    # on purpose. Water has no shear strength, so the pseudo-static seismic
+    # coefficients must not act on it; folding this into ``weight`` (as the
+    # distributed-load surcharge is folded) would make kh and kv multiply
+    # the water too.
+    #   water_weight         vertical resultant, downward positive [kN/m]
+    #   water_force_h        horizontal resultant, +x positive     [kN/m]
+    #   water_force_h_moment Σ F_h · y about y = 0                 [kN]
+    # The moment is stored about a FIXED reference rather than as an
+    # application height because several water forces with OPPOSITE signs
+    # can act on the same slice (ponded water pushing into the slope, water
+    # in a tension crack pushing out of it), and a force-weighted mean
+    # height is undefined in that case. About any centre y_c the moment is
+    # ``y_c · water_force_h − water_force_h_moment``.
+    water_weight: float = 0.0
+    water_force_h: float = 0.0
+    water_force_h_moment: float = 0.0
     material: Optional[Material] = None
 
     # ------------------------------------------------------------------
@@ -75,6 +93,20 @@ class Slice:
         """Simple static normal on the base (ignoring interslice forces)."""
         return self.weight * math.cos(self.base_angle)
 
+    def water_moment_about(self, y_c: float) -> float:
+        """Moment of the horizontal water forces about elevation ``y_c``.
+
+        Positive when the force tends to rotate the mass about a centre at
+        that elevation in the +x sense.
+        """
+        return y_c * self.water_force_h - self.water_force_h_moment
+
+    def add_water_force(self, f_h: float, y: float, f_v: float = 0.0) -> None:
+        """Accumulate an external water force applied at elevation ``y``."""
+        self.water_force_h += f_h
+        self.water_force_h_moment += f_h * y
+        self.water_weight += f_v
+
     def to_dict(self) -> dict:
         return {
             "index": self.index,
@@ -92,6 +124,8 @@ class Slice:
             "suction_cohesion": self.suction_cohesion,
             "raw_pore_pressure": self.raw_pore_pressure,
             "surface_pressure": self.surface_pressure,
+            "water_weight": self.water_weight,
+            "water_force_h": self.water_force_h,
             "material_id": self.material.id if self.material else None,
         }
 
@@ -166,6 +200,43 @@ def _ground_surface_from_external(external: Boundary) -> Polyline:
             buckets[key] = v.y
     xs = sorted(buckets.keys())
     return Polyline(vertices=[Vertex(x, buckets[x]) for x in xs])
+
+
+def _apply_ponded_water(project: Project, s: "Slice") -> None:
+    """Apply the ponded-water load to one slice, in place.
+
+    Still water resting on the ground exerts a pressure NORMAL to the
+    ground surface of magnitude ``p = γ_w · d``, with ``d`` the depth below
+    the free water surface (hydrostatics). For a slice of width ``dx``
+    whose top has slope ``m = dy/dx``, the top face is ``dl = dx·√(1+m²)``
+    long and its inward unit normal is ``(m, −1)/√(1+m²)``, so the
+    resultant is
+
+        F = p · dl · (m, −1)/√(1+m²) = γ_w · d · dx · (m, −1)
+
+    i.e. a downward component ``γ_w · d · dx`` — exactly the weight of the
+    water column standing on the slice — and a horizontal component
+    ``γ_w · d · dx · m``. The "weight of the water on the slope" and the
+    "horizontal hydrostatic force on the slope" are therefore the two
+    components of ONE normal pressure, not two separate actions. Summing
+    the horizontal components over the whole submerged face recovers the
+    classical ½·γ_w·h² thrust on its vertical projection.
+
+    The resultant is applied at the midpoint of the slice top, which shares
+    its x with the slice centre; the vertical component therefore has the
+    same moment arm as the slice weight.
+    """
+    top = s.top_y_mid
+    depth = ponded_depth_at(project, s.x_centre, top)
+    if depth <= 0.0:
+        return
+    gamma_w = project.settings.groundwater.pore_fluid_unit_weight
+    dx = s.width
+    if dx <= 0.0:
+        return
+    slope = (s.top_y_right - s.top_y_left) / dx
+    column = gamma_w * depth * dx        # kN/m, the water column weight
+    s.add_water_force(f_h=column * slope, y=top, f_v=column)
 
 
 def _material_at(project: Project, point: Vertex) -> Optional[Material]:
@@ -319,7 +390,10 @@ def slice_surface(
         mat = _material_at(project, Vertex(xc, base_y_mid + 0.01))
 
         # Unit weight: use saturated weight if a water table exists above
-        # the base midpoint, else dry/bulk.
+        # the base midpoint, else dry/bulk. Known simplification: the slice
+        # is classified WHOLE by the position of its base midpoint, so one
+        # straddling the water table gets a single γ over its full height
+        # instead of γ_sat on the wet part and γ on the dry part.
         below_water = False
         for wb in project.boundaries_of(BoundaryType.WATER_TABLE):
             wy = _interp_y_on_polyline(wb.polyline, xc)
@@ -346,27 +420,31 @@ def slice_surface(
         q = _surface_pressure_at(project, xc)
         weight += q * dx  # add the distributed-load surcharge
 
-        result.slices.append(
-            Slice(
-                index=i,
-                x_centre=xc,
-                width=dx,
-                base_x_left=xl,
-                base_x_right=xr,
-                base_y_left=y_base_l,
-                base_y_right=y_base_r,
-                base_angle=alpha,
-                base_length=base_len,
-                top_y_left=y_top_l,
-                top_y_right=y_top_r,
-                weight=weight,
-                pore_pressure=u,
-                raw_pore_pressure=u_raw,
-                suction_cohesion=c_suction,
-                surface_pressure=q,
-                material=mat,
-            )
+        sl = Slice(
+            index=i,
+            x_centre=xc,
+            width=dx,
+            base_x_left=xl,
+            base_x_right=xr,
+            base_y_left=y_base_l,
+            base_y_right=y_base_r,
+            base_angle=alpha,
+            base_length=base_len,
+            top_y_left=y_top_l,
+            top_y_right=y_top_r,
+            weight=weight,
+            pore_pressure=u,
+            raw_pore_pressure=u_raw,
+            suction_cohesion=c_suction,
+            surface_pressure=q,
+            material=mat,
         )
+        # v0.1.61 — free-standing water resting on this slice. Applied
+        # after the slice exists because it needs the finished top
+        # geometry, and kept out of ``weight`` so the seismic
+        # coefficients cannot reach it.
+        _apply_ponded_water(project, sl)
+        result.slices.append(sl)
 
     if len(result) < 3:
         return None
@@ -466,4 +544,19 @@ def _apply_tension_crack(project: Project, slices: Slices, tc_boundary):
 
     slices.tension_crack_force = F
     slices.tension_crack_arm = arm
+
+    # v0.1.61 — until now the force stopped here: it was computed, stored,
+    # and read by nobody, so water in a tension crack had NO effect on the
+    # factor of safety, which came out too high — on the unsafe side. Push
+    # it through the same per-slice channel as the ponded water so every
+    # LEM method sees it.
+    #
+    # Direction: the water fills the crack behind the sliding mass and
+    # pushes the mass away from the intact ground, i.e. from the crack
+    # towards the rest of the mass. Deriving the sense from the geometry
+    # avoids assuming which way the slope faces.
+    xs = [s.x_centre for s in slices.slices]
+    mass_centre = 0.5 * (min(xs) + max(xs))
+    push_sign = 1.0 if mass_centre > x else -1.0
+    upslope_slice.add_water_force(f_h=push_sign * F, y=arm)
     return slices
