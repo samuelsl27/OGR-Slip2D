@@ -126,8 +126,12 @@ class PropertiesTableDialog(QDialog):
             st = m.strength
             model = (getattr(st, "DISPLAY_NAME", None)
                      or getattr(st, "MODEL_ID", "")) if st else ""
-            row = [m.name, model, getattr(m, "unit_weight", None),
-                   getattr(m, "sat_unit_weight", None),
+            # v0.1.60 — leave the saturated column empty when the material
+            # does not use it: showing a number the analysis ignores reads
+            # as if it were in force.
+            sat = (getattr(m, "sat_unit_weight", None)
+                   if getattr(m, "use_sat_unit_weight", False) else None)
+            row = [m.name, model, getattr(m, "unit_weight", None), sat,
                    getattr(m, "pore_pressure", None)]
             row += [(getattr(st, "params", {}) or {}).get(p)
                     for p in params]

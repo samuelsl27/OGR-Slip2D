@@ -12,9 +12,12 @@ Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 
+import copy
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
+    QCheckBox,
     QColorDialog,
     QComboBox,
     QDialog,
@@ -259,15 +262,27 @@ class MaterialPropertiesDialog(QDialog):
         parent=None,
         units_obj=None,
         gw_method: str = "none",
+        has_water_table: bool = False,
     ) -> None:
         super().__init__(parent)
         # v0.1.29 — the unsaturated-strength fields are only meaningful
         # (and only shown) when the groundwater method is an FEA, since
         # only then can pore pressures be negative.
         self._gw_method = str(gw_method)
+        # v0.1.60 — a saturated unit weight can only mean something if a
+        # water table exists to separate the saturated zone from the rest.
+        self._has_water_table = bool(has_water_table)
         self.setWindowTitle(tr("Define Materials..."))
         self.resize(720, 500)
-        self.materials = list(materials)
+        # v0.1.60 — work on deep copies, so the user can move freely
+        # between materials and still have Cancel discard everything. A
+        # shallow ``list(materials)`` shared the Material instances with
+        # the project, which made Cancel a no-op for field edits.
+        # ``deepcopy`` rather than ``from_dict(to_dict())`` because it also
+        # preserves each material's ``id`` (region assignments key off it)
+        # and any attribute set outside the dataclass, such as ``b_bar``.
+        self.materials = [copy.deepcopy(m) for m in materials]
+        self._current_row = -1
         self._units_obj = units_obj  # ogr_core.project.units.Units
 
         layout = QHBoxLayout(self)
@@ -313,10 +328,36 @@ class MaterialPropertiesDialog(QDialog):
         self.dsp_gamma_sat = QDoubleSpinBox()
         self.dsp_gamma_sat.setRange(0.0, 1e6); self.dsp_gamma_sat.setDecimals(4)
         self.dsp_gamma_sat.setSuffix(f" {gamma_label}")
+        # v0.1.60 — the saturated unit weight is opt-in, and the option is
+        # only offered when a water table exists: without one there is no
+        # boundary between the saturated and unsaturated zones, so the
+        # value could not be applied anywhere.
+        self.chk_gamma_sat = QCheckBox(tr("Saturated Unit Weight") + ":")
+        self.chk_gamma_sat.setEnabled(self._has_water_table)
+        self.chk_gamma_sat.setToolTip(
+            tr("Different unit weights above and below the water table. "
+               "Requires a water table in the model.")
+            if not self._has_water_table else
+            tr("Saturated bulk unit weight, used below the water table. "
+               "It is not the submerged (buoyant) unit weight, so it "
+               "should be greater than the unit weight above.")
+        )
+        self.chk_gamma_sat.toggled.connect(self._on_gamma_sat_toggled)
+        # Non-modal warning: the saturated BULK unit weight must exceed the
+        # unsaturated one. The value is still accepted — this only says so.
+        self.lbl_gamma_sat_warn = QLabel(
+            tr("The saturated unit weight should be greater than the "
+               "unit weight above the water table."))
+        self.lbl_gamma_sat_warn.setStyleSheet("color: #b00020;")
+        self.lbl_gamma_sat_warn.setWordWrap(True)
+        self.lbl_gamma_sat_warn.setVisible(False)
+        self.dsp_gamma.valueChanged.connect(self._refresh_gamma_warning)
+        self.dsp_gamma_sat.valueChanged.connect(self._refresh_gamma_warning)
         gen_form.addRow(tr("Name") + ":", self.ed_name)
         gen_form.addRow(tr("Color") + ":", self.btn_color)
         gen_form.addRow(tr("Unit Weight") + ":", self.dsp_gamma)
-        gen_form.addRow(tr("Saturated Unit Weight") + ":", self.dsp_gamma_sat)
+        gen_form.addRow(self.chk_gamma_sat, self.dsp_gamma_sat)
+        gen_form.addRow("", self.lbl_gamma_sat_warn)
 
         # v0.1.29 — Unsaturated shear strength (extended Mohr-Coulomb).
         # The reference only exposes these when the groundwater method is
@@ -356,8 +397,7 @@ class MaterialPropertiesDialog(QDialog):
             self.cbo_strength.addItem(cls.DISPLAY_NAME, mid)
         self.cbo_strength.currentIndexChanged.connect(self._on_strength_changed)
         top_row.addWidget(self.cbo_strength)
-        # Formula label, shown next to the dropdown (Slide-style)
-        from PySide6.QtWidgets import QLabel
+        # Formula label, shown next to the dropdown
         self.lbl_strength_formula = QLabel("")
         self.lbl_strength_formula.setStyleSheet(
             "color: #444; font-style: italic; padding-left: 12px;"
@@ -394,11 +434,13 @@ class MaterialPropertiesDialog(QDialog):
         right.addStretch(1)
         layout.addLayout(right, 1)
 
-        # Buttons
-        self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel | QDialogButtonBox.Apply)
+        # Buttons — v0.1.60: no Apply. Edits are committed to the working
+        # copy as soon as the user moves to another material, so Apply had
+        # nothing left to do; OK confirms the whole list, Cancel drops it.
+        self.buttons = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         self.buttons.accepted.connect(self._ok)
         self.buttons.rejected.connect(self.reject)
-        self.buttons.button(QDialogButtonBox.Apply).clicked.connect(self._apply_current)
         right.addWidget(self.buttons)
 
         if self.materials:
@@ -414,10 +456,17 @@ class MaterialPropertiesDialog(QDialog):
         self.list.addItem(item)
 
     def _set_editor_enabled(self, on: bool) -> None:
-        for w in (self.ed_name, self.btn_color, self.dsp_gamma, self.dsp_gamma_sat,
+        for w in (self.ed_name, self.btn_color, self.dsp_gamma,
                   self.cbo_strength, self.cbo_pp, self.dsp_ru, self.dsp_u,
                   self.param_panel):
             w.setEnabled(on)
+        # γsat has its own gate on top of this one: the checkbox needs a
+        # water table, and the spinbox needs the checkbox.
+        self.chk_gamma_sat.setEnabled(on and self._has_water_table)
+        self.dsp_gamma_sat.setEnabled(
+            on and self._has_water_table and self.chk_gamma_sat.isChecked())
+        if not on:
+            self.lbl_gamma_sat_warn.setVisible(False)
 
     def _current_material(self) -> Material | None:
         row = self.list.currentRow()
@@ -427,16 +476,28 @@ class MaterialPropertiesDialog(QDialog):
 
     # ------------------------------------------------------------------
     def _on_select(self, row: int) -> None:
-        if not (0 <= row < len(self.materials)):
+        """Commit the material being left, then load the new one.
+
+        v0.1.60 — the commit half used to be missing, so any edit was
+        silently discarded unless the user pressed Apply before changing
+        the selection.
+        """
+        if self._current_row >= 0 and self._current_row != row:
+            self._store(self._current_row)
+        self._current_row = row if 0 <= row < len(self.materials) else -1
+        if self._current_row < 0:
             self._set_editor_enabled(False)
             return
         self._set_editor_enabled(True)
+        self._load(self._current_row)
+
+    def _load(self, row: int) -> None:
+        """Populate the editor widgets from ``self.materials[row]``."""
         m = self.materials[row]
         self.ed_name.setText(m.name)
         self._color_hex = m.color
         self._update_color_button()
-        self.dsp_gamma.setValue(m.unit_weight * self._gamma_factor)
-        self.dsp_gamma_sat.setValue(m.sat_unit_weight * self._gamma_factor)
+        self._populate_gamma(m)
         self.dsp_phi_b.setValue(getattr(m, "phi_b", 0.0) or 0.0)
         self.dsp_aev.setValue(getattr(m, "air_entry_value", 0.0) or 0.0)
 
@@ -501,18 +562,49 @@ class MaterialPropertiesDialog(QDialog):
             return "kN/m³", 1.0
 
     def _populate_gamma(self, mat) -> None:
-        """Set γ and γ_sat spinboxes from the material (stored in SI)."""
-        gamma_si = mat.unit_weight
-        gamma_sat_si = getattr(mat, "saturated_unit_weight", gamma_si) or gamma_si
-        self.dsp_gamma.setValue(gamma_si * self._gamma_factor)
-        self.dsp_gamma_sat.setValue(gamma_sat_si * self._gamma_factor)
+        """Set the γ / γ_sat controls from the material (stored in SI).
 
-    def _read_gamma(self) -> tuple[float, float]:
-        """Read γ and γ_sat from spinboxes and convert to SI."""
+        Signals are blocked while repopulating: the spinboxes drive the
+        γ_sat warning and the checkbox drives the spinbox's enabled state,
+        and neither should fire for values that are merely being loaded.
+        """
+        gamma_si = mat.unit_weight
+        gamma_sat_si = mat.sat_unit_weight
+        for wgt, value in ((self.dsp_gamma, gamma_si * self._gamma_factor),
+                           (self.dsp_gamma_sat,
+                            gamma_sat_si * self._gamma_factor)):
+            wgt.blockSignals(True)
+            wgt.setValue(value)
+            wgt.blockSignals(False)
+        self.chk_gamma_sat.blockSignals(True)
+        self.chk_gamma_sat.setChecked(bool(mat.use_sat_unit_weight))
+        self.chk_gamma_sat.blockSignals(False)
+        self.dsp_gamma_sat.setEnabled(
+            self._has_water_table and self.chk_gamma_sat.isChecked())
+        self._refresh_gamma_warning()
+
+    def _read_gamma(self) -> tuple[float, float, bool]:
+        """Read γ, γ_sat (converted to SI) and the γ_sat opt-in flag."""
         f = self._gamma_factor or 1.0
         gamma_si = self.dsp_gamma.value() / f
         gamma_sat_si = self.dsp_gamma_sat.value() / f
-        return gamma_si, gamma_sat_si
+        return gamma_si, gamma_sat_si, self.chk_gamma_sat.isChecked()
+
+    def _on_gamma_sat_toggled(self, checked: bool) -> None:
+        self.dsp_gamma_sat.setEnabled(self._has_water_table and checked)
+        self._refresh_gamma_warning()
+
+    def _refresh_gamma_warning(self) -> None:
+        """Warn, without blocking, when γ_sat ≤ γ.
+
+        γ_sat is the saturated BULK unit weight, not the submerged one, so
+        it must exceed the weight above the water table. The value is left
+        as typed — this only makes the inconsistency visible.
+        """
+        show = (self.chk_gamma_sat.isChecked()
+                and self._has_water_table
+                and self.dsp_gamma_sat.value() < self.dsp_gamma.value())
+        self.lbl_gamma_sat_warn.setVisible(show)
 
     def _on_strength_changed(self, _) -> None:
         mid = self.cbo_strength.currentData()
@@ -557,16 +649,16 @@ class MaterialPropertiesDialog(QDialog):
         self.btn_color.setText("")
 
     # ------------------------------------------------------------------
-    def _apply_current(self) -> None:
-        m = self._current_material()
-        if m is None:
+    def _store(self, row: int) -> None:
+        """Write the editor widgets back into ``self.materials[row]``."""
+        if not (0 <= row < len(self.materials)):
             return
+        m = self.materials[row]
         m.name = self.ed_name.text().strip() or m.name
         m.color = self._color_hex
         # γ and γ_sat: convert from displayed user-units back to SI (kN/m³)
-        f = self._gamma_factor or 1.0
-        m.unit_weight = self.dsp_gamma.value() / f
-        m.sat_unit_weight = self.dsp_gamma_sat.value() / f
+        m.unit_weight, m.sat_unit_weight, m.use_sat_unit_weight = \
+            self._read_gamma()
         m.phi_b = self.dsp_phi_b.value()
         m.air_entry_value = self.dsp_aev.value()
 
@@ -579,18 +671,21 @@ class MaterialPropertiesDialog(QDialog):
         m.constant_u = self.dsp_u.value()
 
         # Refresh list item
-        row = self.list.currentRow()
         item = self.list.item(row)
-        item.setText(m.name)
-        item.setForeground(QColor(m.color))
+        if item is not None:
+            item.setText(m.name)
+            item.setForeground(QColor(m.color))
 
     def _ok(self) -> None:
-        self._apply_current()
+        self._store(self._current_row)
         self.accept()
 
     # ------------------------------------------------------------------
     def _add_material(self) -> None:
         from ogr_core.materials import MohrCoulomb  # lazy
+        # Commit whatever is on screen first: adding a material moves the
+        # selection, which would otherwise drop the pending edits.
+        self._store(self._current_row)
         m = Material(
             name=f"Material {len(self.materials) + 1}",
             strength=MohrCoulomb(cohesion=10.0, friction_angle=25.0),
@@ -602,8 +697,11 @@ class MaterialPropertiesDialog(QDialog):
     def _remove_material(self) -> None:
         row = self.list.currentRow()
         if 0 <= row < len(self.materials):
+            # The row about to disappear must not be committed afterwards.
+            self._current_row = -1
             del self.materials[row]
             self.list.takeItem(row)
+            self._on_select(self.list.currentRow())
 
     # ------------------------------------------------------------------
     def result_materials(self) -> list[Material]:

@@ -39,6 +39,7 @@ class Material:
         strength:       constitutive model instance (plugin)
         unit_weight:    dry/bulk unit weight γ [kN/m³]
         sat_unit_weight: saturated unit weight γsat [kN/m³]
+        use_sat_unit_weight: whether γsat is used at all (see below)
         pore_pressure:  pore-pressure model
         ru:             Ru coefficient (if pore_pressure == RU_COEFFICIENT)
         constant_u:     constant pore pressure [kPa] (if CONSTANT)
@@ -72,16 +73,29 @@ class Material:
     # strength -- the conservative choice, and the reference default.
     phi_b: float = 0.0
     air_entry_value: float = 0.0
+    # v0.1.60 — Distinguishing the unit weight above and below the water
+    # table is an OPTION, not something always in force: it only means
+    # anything when a water table exists to separate the two zones. Kept
+    # last (before ``id``) so the positional order of the older fields is
+    # unchanged. Defaults to False for new materials; ``from_dict`` turns
+    # it on for legacy projects, which always wrote ``sat_unit_weight``,
+    # so that reopening an old file cannot change its factor of safety.
+    use_sat_unit_weight: bool = False
     id: str = field(default_factory=lambda: str(uuid4()))
 
     # ------------------------------------------------------------------
     def gamma_at(self, below_water: bool) -> float:
         """Return the unit weight to use at a given point.
 
-        Uses saturated unit weight if the slice base lies below the water
-        surface; otherwise uses bulk/dry weight.
+        Uses the saturated unit weight if the point lies below the water
+        surface AND the material opts into it; otherwise the bulk/dry
+        weight. Note that ``sat_unit_weight`` is the saturated BULK unit
+        weight, not the buoyant (submerged) one, so it should always be
+        greater than ``unit_weight``.
         """
-        return self.sat_unit_weight if below_water else self.unit_weight
+        if below_water and self.use_sat_unit_weight:
+            return self.sat_unit_weight
+        return self.unit_weight
 
     # ------------------------------------------------------------------
     def to_dict(self) -> dict:
@@ -91,6 +105,7 @@ class Material:
             "strength": self.strength.to_dict(),
             "unit_weight": self.unit_weight,
             "sat_unit_weight": self.sat_unit_weight,
+            "use_sat_unit_weight": self.use_sat_unit_weight,
             "pore_pressure": self.pore_pressure.value,
             "ru": self.ru,
             "constant_u": self.constant_u,
@@ -110,6 +125,14 @@ class Material:
             strength=StrengthModel.from_dict(data["strength"]),
             unit_weight=data.get("unit_weight", 20.0),
             sat_unit_weight=data.get("sat_unit_weight", 21.0),
+            # v0.1.60 — Files written before the option existed always
+            # carried a ``sat_unit_weight`` and always used it below the
+            # water table. Defaulting to True in that case keeps every
+            # saved project numerically identical when reopened; only
+            # files that predate the key AND lack a saturated weight fall
+            # back to the new (opt-in) default.
+            use_sat_unit_weight=bool(data.get(
+                "use_sat_unit_weight", "sat_unit_weight" in data)),
             pore_pressure=PorePressureType(data.get("pore_pressure", "none")),
             ru=data.get("ru", 0.0),
             constant_u=data.get("constant_u", 0.0),
@@ -140,8 +163,11 @@ class Material:
             f"<i>{self.strength.DISPLAY_NAME}</i>",
             "<hr>",
             f"γ = {self.unit_weight:g} kN/m³",
-            f"γ<sub>sat</sub> = {self.sat_unit_weight:g} kN/m³",
         ]
+        # Only show γsat when it can actually affect the analysis, so the
+        # tooltip never advertises a number the calculation ignores.
+        if self.use_sat_unit_weight:
+            rows.append(f"γ<sub>sat</sub> = {self.sat_unit_weight:g} kN/m³")
         for k, v in self.strength.params.items():
             unit = self.strength.PARAMETERS[k][1]
             rows.append(f"{k} = {v:g} {unit}")

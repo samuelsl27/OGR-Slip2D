@@ -92,6 +92,18 @@ class StrengthModel(ABC):
         from .registry import REGISTRY
 
         model_cls = REGISTRY.get(data["model_id"])
+        # v0.1.60 — Models whose state does not fit in the numeric
+        # PARAMETERS dict (the table-based ones, and the per-angle rules of
+        # Generalized Anisotropic) store it at the TOP level of the dict and
+        # override ``from_dict`` to read it back. Rebuilding them with
+        # ``model_cls(**params)`` silently dropped that state, so saving and
+        # reopening a project replaced the user's τ–σ'n table with the
+        # built-in demo table. Dispatch to the subclass when it defines its
+        # own ``from_dict``; ``__dict__`` is used deliberately, since an
+        # inherited one would recurse straight back into here.
+        own = model_cls.__dict__.get("from_dict")
+        if own is not None:
+            return own.__func__(model_cls, data)
         return model_cls(**data.get("params", {}))
 
     def __repr__(self) -> str:

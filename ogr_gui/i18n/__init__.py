@@ -910,6 +910,21 @@ _DICTS: dict[str, dict[str, str]] = {
         "Friction Angle": "Ángulo de rozamiento",
         "Unit Weight": "Peso específico",
         "Saturated Unit Weight": "Peso específico saturado",
+        # v0.1.60 — casilla de peso específico saturado
+        "Different unit weights above and below the water table. "
+        "Requires a water table in the model.":
+            "Pesos específicos distintos por encima y por debajo del nivel "
+            "freático. Requiere un nivel freático en el modelo.",
+        "Saturated bulk unit weight, used below the water table. "
+        "It is not the submerged (buoyant) unit weight, so it "
+        "should be greater than the unit weight above.":
+            "Peso específico aparente saturado, aplicado por debajo del "
+            "nivel freático. No es el peso específico sumergido, así que "
+            "debe ser mayor que el peso específico por encima.",
+        "The saturated unit weight should be greater than the "
+        "unit weight above the water table.":
+            "El peso específico saturado debería ser mayor que el peso "
+            "específico por encima del nivel freático.",
         "Strength Type": "Tipo de resistencia",
         "Pore Pressure": "Presión intersticial",
         "Water Surface": "Superficie de agua",

@@ -95,7 +95,8 @@ def info(
                 m.name,
                 type(m.strength).DISPLAY_NAME,
                 f"{m.unit_weight:g}",
-                f"{m.sat_unit_weight:g}",
+                # v0.1.60 — γsat only applies if the material opts into it
+                f"{m.sat_unit_weight:g}" if m.use_sat_unit_weight else "—",
                 f"[on {m.color}]   [/on {m.color}]",
             )
         console.print(mtbl)

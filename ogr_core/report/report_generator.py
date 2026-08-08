@@ -392,8 +392,11 @@ def _materials_table(project, body):
     rows.append(srow("Strength Type", strength_type))
     rows.append(srow("Unit Weight [kN/m³]",
                      lambda m: _fmt(getattr(m, "unit_weight", None), 1)))
+    # v0.1.60 — only report γsat for materials that actually use it, so the
+    # report never states a weight the analysis did not apply.
     rows.append(srow("Sat. Unit Weight [kN/m³]",
-                     lambda m: _fmt(getattr(m, "sat_unit_weight", None), 1)))
+                     lambda m: _fmt(getattr(m, "sat_unit_weight", None), 1)
+                     if getattr(m, "use_sat_unit_weight", False) else "—"))
     rows.append(srow("Cohesion [kPa]",
                      lambda m: _fmt(_param(m, "cohesion"), 1)))
     rows.append(srow("Friction Angle [deg]",

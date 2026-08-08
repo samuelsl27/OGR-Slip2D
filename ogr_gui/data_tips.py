@@ -93,7 +93,12 @@ def material_tip(material, mode: DataTipMode = DataTipMode.MAXIMUM,
             lines.append(f"strength: {model}")
         for key, value in (getattr(strength, "params", {}) or {}).items():
             lines.append("  " + _line(key, value))
-    for attr in ("unit_weight", "sat_unit_weight"):
+    attrs = ["unit_weight"]
+    # v0.1.60 — γsat only appears when the material opts into it; otherwise
+    # the tip would show a value the calculation never uses.
+    if getattr(material, "use_sat_unit_weight", False):
+        attrs.append("sat_unit_weight")
+    for attr in attrs:
         v = getattr(material, attr, None)
         if v:
             lines.append(_line(attr, v))

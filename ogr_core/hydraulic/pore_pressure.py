@@ -128,8 +128,12 @@ def pore_pressure_at(
         if ground_surface_y is None:
             return 0.0
         depth = max(0.0, ground_surface_y - point.y)
-        # Use saturated unit weight as an approximation of γ · z
-        return material.ru * material.sat_unit_weight * depth
+        # u = ru · γ · z, where γ is the total unit weight of the
+        # overburden. v0.1.60 — this goes through ``gamma_at`` rather than
+        # reading ``sat_unit_weight`` directly so that a material which has
+        # NOT opted into a saturated unit weight cannot have that unused
+        # number change its pore pressure through a back door.
+        return material.ru * material.gamma_at(True) * depth
 
     if ppt in (PorePressureType.WATER_TABLE, PorePressureType.PIEZO_LINE):
         # Find the referenced water surface

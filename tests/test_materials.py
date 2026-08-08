@@ -142,6 +142,9 @@ class TestMaterial:
             strength=MohrCoulomb(cohesion=10, friction_angle=20),
             unit_weight=19.0,
             sat_unit_weight=21.5,
+            # v0.1.60 — γsat is opt-in; without the flag the material has
+            # a single unit weight above and below the water table.
+            use_sat_unit_weight=True,
         )
         assert m.gamma_at(below_water=False) == 19.0
         assert m.gamma_at(below_water=True) == 21.5
@@ -157,6 +160,8 @@ class TestMaterial:
             name="Sand",
             strength=MohrCoulomb(cohesion=0.0, friction_angle=35.0),
             unit_weight=18.0,
+            sat_unit_weight=20.5,
+            use_sat_unit_weight=True,
             pore_pressure=PorePressureType.WATER_TABLE,
             color="#ff8800",
         )
@@ -164,6 +169,10 @@ class TestMaterial:
         m2 = Material.from_dict(data)
         assert m2.name == "Sand"
         assert m2.unit_weight == 18.0
+        # The saturated weight and its opt-in flag went untested before
+        # v0.1.60, which is how a serialization gap could have hidden.
+        assert m2.sat_unit_weight == 20.5
+        assert m2.use_sat_unit_weight is True
         assert m2.pore_pressure == PorePressureType.WATER_TABLE
         assert m2.color == "#ff8800"
         assert m2.id == m.id

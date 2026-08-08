@@ -317,7 +317,7 @@ class _ComputeWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.59"
+    VERSION = "0.1.60"
 
     def __init__(self) -> None:
         super().__init__()
@@ -2863,6 +2863,10 @@ class MainWindow(QMainWindow):
         dlg = MaterialPropertiesDialog(
             self.project.materials, self, units_obj=self.project.settings.units,
             gw_method=str(self.project.settings.groundwater.method),
+            # v0.1.60 — the saturated unit weight is only offered when a
+            # water table exists to separate the two zones.
+            has_water_table=bool(
+                self.project.boundaries_of(BoundaryType.WATER_TABLE)),
         )
         if dlg.exec():
             self.project.materials = dlg.result_materials()
