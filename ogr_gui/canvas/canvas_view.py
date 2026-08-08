@@ -2046,7 +2046,11 @@ class CanvasView(QGraphicsView):
         from PySide6.QtCore import QPointF
         from PySide6.QtWidgets import QGraphicsLineItem, QGraphicsPolygonItem
 
-        from ogr_core.hydraulic.ponded_water import PONDING_BOUNDARY_TYPES
+        from ogr_core.hydraulic.ponded_water import (
+            PONDING_BOUNDARY_TYPES,
+            _FEA_METHODS,
+            _fea_level_at,
+        )
         from ogr_core.hydraulic.pore_pressure import _interp_y_on_polyline
 
         ground = self._ground_polyline()
@@ -2055,7 +2059,17 @@ class CanvasView(QGraphicsView):
         surfaces = [b for b in self.project.boundaries
                     if b.btype in PONDING_BOUNDARY_TYPES
                     and b.visible and self._type_visible(b.btype)]
-        if not surfaces:
+        # v0.1.65 — a seepage analysis prescribes its reservoir through the
+        # boundary conditions instead of a drawn polyline. It loads the
+        # slope exactly like a drawn one, so it has to be visible like one:
+        # a load the user cannot see is a load the user cannot check.
+        levels = [(lambda x, wb=wb: _interp_y_on_polyline(wb.polyline, x))
+                  for wb in surfaces]
+        if self.project.settings.groundwater.method in _FEA_METHODS:
+            from ogr_core.hydraulic.ponded_water import _fea_ponding_polyline
+            if _fea_ponding_polyline(self.project):
+                levels.append(lambda x: _fea_level_at(self.project, x))
+        if not levels:
             return
 
         gx = [v.x for v in ground.vertices]
@@ -2071,14 +2085,14 @@ class CanvasView(QGraphicsView):
         n = max(60, int((x_max - x_min) / 1.0))
         step = (x_max - x_min) / n
 
-        for wb in surfaces:
+        for level_at in levels:
             # Walk the sampled columns, collecting maximal runs where the
             # water surface is above the ground; each run is one pond.
             run: list[tuple[float, float, float]] = []
             for i in range(n + 1):
                 x = x_min + step * i
                 y_g = _interp_y_on_polyline(ground, x)
-                y_w = _interp_y_on_polyline(wb.polyline, x)
+                y_w = level_at(x)
                 wet = (y_g is not None and y_w is not None and y_w > y_g)
                 if wet:
                     run.append((x, y_g, y_w))
