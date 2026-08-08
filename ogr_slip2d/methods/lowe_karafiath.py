@@ -81,8 +81,12 @@ class LoweKarafiath(LEMMethod):
         # ``interslice_water_thrust`` for what happens otherwise.
         face_thrust = interslice_water_thrust(project, slices)
 
+        # v0.1.64 — supports, as an external force on each slice.
+        from ..support_integration import resolve_support_terms
+        sup = resolve_support_terms(project, surface, slices, slide_sign)
+
         fos, converged, iters = self._force_balance(
-            slices, kh, kv, slide_sign, face_thrust,
+            slices, kh, kv, slide_sign, face_thrust, sup,
         )
 
         if not (math.isfinite(fos) and fos > 0):
@@ -120,7 +124,7 @@ class LoweKarafiath(LEMMethod):
 
     # ==================================================================
     def _z_end(self, slices_list, theta, alpha_n, kh, kv, F: float,
-               h_water=None) -> float:
+               h_water=None, v_support=None) -> float:
         """Inter-slice resultant ``Z`` left at the down-slope free end
         after marching the force-equilibrium recursion through every
         slice with the trial Factor of Safety ``F``.
@@ -150,14 +154,20 @@ class LoweKarafiath(LEMMethod):
         theta_prev = theta[0] if theta else 0.0
         if h_water is None:
             h_water = [0.0] * len(slices_list)
+        if v_support is None:
+            v_support = [0.0] * len(slices_list)
 
-        for s, alpha, th, hw in zip(slices_list, alpha_n, theta, h_water):
+        for s, alpha, th, hw, vs in zip(slices_list, alpha_n, theta,
+                                        h_water, v_support):
             # v0.1.61 — the ponded water rides in the vertical term (it is
             # a load the base has to carry) and its horizontal thrust joins
             # the seismic force in the horizontal slot. This is a
             # force-equilibrium method, so the point of application does
             # not enter: only the resultant does.
-            W_eff = slice_forces(s, kh, kv).w_total
+            # v0.1.64 — the support's vertical component joins the load
+            # the base carries (``f_v`` is +y, ``W_eff`` is +down), so the
+            # friction it mobilises comes out of the recursion itself.
+            W_eff = slice_forces(s, kh, kv).w_total - vs
             l = s.base_length
             u = s.pore_pressure
 
@@ -192,7 +202,7 @@ class LoweKarafiath(LEMMethod):
     # ==================================================================
     def _force_balance(
         self, slices: Slices, kh: float, kv: float, slide_sign: float,
-        face_thrust=None,
+        face_thrust=None, sup=None,
     ):
         """Root-find the Factor of Safety such that the inter-slice force
         recursion closes (``Z_n = 0``).
@@ -229,15 +239,23 @@ class LoweKarafiath(LEMMethod):
             # Each slice also receives the NET water thrust of its two
             # vertical faces: the left face pushes it towards +x, the
             # right face towards −x.
+            # v0.1.64 — the support's horizontal component is signed in
+            # the true +x direction, exactly like the water thrust, so it
+            # takes the same ``orient`` mirror.
+            has_sup = sup is not None and sup.present
             h_water = [
                 orient * (slice_forces(s, kh, kv).h_water
-                          + ft[i] - ft[i + 1])
+                          + ft[i] - ft[i + 1]
+                          + (sup.f_h[i] if has_sup else 0.0))
                 for i, s in enumerate(slist)
             ]
+            v_sup = [(sup.f_v[i] if has_sup else 0.0)
+                     for i in range(len(slist))]
 
-            def residual(F, alpha_n=alpha_n, theta=theta, hw=h_water):
+            def residual(F, alpha_n=alpha_n, theta=theta, hw=h_water,
+                         vs=v_sup):
                 return self._z_end(slist, theta, alpha_n, kh, kv, F,
-                                   h_water=hw)
+                                   h_water=hw, v_support=vs)
 
             samples = []
             for F in grid:

@@ -317,7 +317,7 @@ class _ComputeWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.61"
+    VERSION = "0.1.64"
 
     def __init__(self) -> None:
         super().__init__()
@@ -633,6 +633,9 @@ class MainWindow(QMainWindow):
         # v0.1.7
         self._mk("def_tension_crack", "Define Tension Crack...",
                  self.act_define_tension_crack, None)
+        # v0.1.62
+        self._mk("assign_water_surface", "Assign Water Surface...",
+                 self.act_assign_water_surface, None)
 
         # Tools
         from ogr_core.annotations import AnnotationKind as _AK
@@ -847,7 +850,9 @@ class MainWindow(QMainWindow):
         for k in ["def_materials", "def_support", "assign",
                   # v0.1.42 — the click-to-assign canvas tool was also
                   # unreachable from any menu, like the groundwater ones.
-                  "assign_material", "def_tension_crack"]:
+                  "assign_material", "def_tension_crack",
+                  # v0.1.62 — bulk assignment of a water surface.
+                  "assign_water_surface"]:
             m_prop.addAction(self._actions[k])
 
         # v0.1.42 — Groundwater and Statistics menus.
@@ -2826,9 +2831,10 @@ class MainWindow(QMainWindow):
                 f"open Interpret for full results)"
                 if n_methods > 1 else ""
             )
+            warn = self._ordinary_pore_pressure_warning(results)
             self.ogr_status.showMessage(
                 f"{tr('Critical FoS')} ({first_id}): "
-                f"{critical.fos:.3f}{extra}", 10000,
+                f"{critical.fos:.3f}{extra}{warn}", 10000,
             )
             if self.project.results_path:
                 try:
@@ -2838,6 +2844,33 @@ class MainWindow(QMainWindow):
                     pass
         else:
             self.ogr_status.showMessage("No valid failure surface found.", 6000)
+
+    @staticmethod
+    def _ordinary_pore_pressure_warning(results) -> str:
+        """Warn when Ordinary/Fellenius hit negative effective normals.
+
+        v0.1.62 — not a defect to fix but a property of the method: with
+        no interslice forces, a high pore pressure on a steep part of the
+        arc drives N' below zero, the clamp discards the deficit and the
+        factor of safety comes out low (Whitman and Bailey 1967 measured
+        up to 60 %; Bishop 1955 stays under 7 %). Saying so is the only
+        honest option — a reported number nobody questions is worse than
+        a reported number with its caveat attached.
+        """
+        res = results.get("ordinary_fellenius") if results else None
+        critical = getattr(res, "critical", None) if res else None
+        if critical is None:
+            return ""
+        details = getattr(critical, "details", None) or {}
+        n_bad = int(details.get("negative_effective_normal", 0) or 0)
+        if n_bad <= 0:
+            return ""
+        n_tot = int(details.get("num_slices", 0) or 0)
+        return "  — " + (
+            tr("Ordinary/Fellenius: %d of %d slices had a negative "
+               "effective normal force; its FoS is underestimated.")
+            % (n_bad, n_tot)
+        )
 
     def act_interpret(self) -> None:
         results = getattr(self, "last_search_results", None)
@@ -2867,10 +2900,69 @@ class MainWindow(QMainWindow):
             # water table exists to separate the two zones.
             has_water_table=bool(
                 self.project.boundaries_of(BoundaryType.WATER_TABLE)),
+            # v0.1.62 — the assignable water surfaces, already labelled and
+            # translated here so ogr_core stays free of the interface.
+            water_surfaces=self._water_surface_choices(),
+            rapid_drawdown=bool(
+                self.project.settings.groundwater.rapid_drawdown),
         )
         if dlg.exec():
             self.project.materials = dlg.result_materials()
             self.project._notify("materials_changed")
+
+    # ------------------------------------------------------------------
+    def _water_surface_choices(self) -> list[tuple[str, str]]:
+        """(boundary id, translated label) for every assignable surface.
+
+        Piezometric lines are identified by their number, which comes from
+        project order — so the label is built here, where ``tr()`` lives,
+        rather than in ``ogr_core``.
+        """
+        from ogr_core.hydraulic import water_surface_index, water_surfaces
+
+        out: list[tuple[str, str]] = []
+        for b in water_surfaces(self.project):
+            n = water_surface_index(self.project, b)
+            if b.btype == BoundaryType.WATER_TABLE:
+                total = len(self.project.boundaries_of(
+                    BoundaryType.WATER_TABLE))
+                label = (tr("Water Table") if total <= 1
+                         else "%s %d" % (tr("Water Table"), n))
+            else:
+                label = "%s %d" % (tr("Piezometric Line"), n)
+            out.append((b.id, label))
+        return out
+
+    def act_assign_water_surface(self) -> None:
+        """Assign one water surface to several materials at once."""
+        from ogr_gui.dialogs.assign_water_surface_dialog import (
+            AssignWaterSurfaceDialog,
+        )
+
+        choices = self._water_surface_choices()
+        if not choices:
+            self.statusBar().showMessage(
+                tr("Draw a water table or a piezometric line first."), 5000)
+            return
+        if not self.project.materials:
+            self.statusBar().showMessage(
+                tr("This project has no materials yet."), 5000)
+            return
+
+        mats = [(m.id, m.name, m.water_surface_id)
+                for m in self.project.materials]
+        dlg = AssignWaterSurfaceDialog(choices, mats, self)
+        if not dlg.exec():
+            return
+        wid = dlg.selected_surface_id()
+        picked = set(dlg.selected_material_ids())
+        cleared = set(dlg.cleared_material_ids())
+        for m in self.project.materials:
+            if m.id in picked:
+                m.water_surface_id = wid
+            elif m.id in cleared:
+                m.water_surface_id = None
+        self.project._notify("materials_changed")
 
     # ==================================================================
     # Support menu (v0.1.14)

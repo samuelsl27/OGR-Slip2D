@@ -883,6 +883,52 @@ _DICTS: dict[str, dict[str, str]] = {
         "Define Materials...": "Definir materiales...",
         "Define Support...": "Definir soporte...",
         "Assign Materials": "Asignar materiales",
+        # --- Water surfaces (v0.1.62) ---------------------------------
+        "Assign Water Surface...": "Asignar superficie de agua...",
+        "Assign Water Surface": "Asignar superficie de agua",
+        "Water Surface:": "Superficie de agua:",
+        "Water Table": "Nivel freático",
+        "Piezometric Line": "Línea piezométrica",
+        "(first of this type)": "(la primera de este tipo)",
+        "Apply to materials": "Aplicar a los materiales",
+        "This project has no materials yet.":
+            "Este proyecto todavía no tiene materiales.",
+        "Draw a water table or a piezometric line first.":
+            "Dibuja antes un nivel freático o una línea piezométrica.",
+        "Water surface this material takes its pore pressure from. "
+        "It must span every abscissa the material occupies.":
+            "Superficie de agua de la que este material toma su presión "
+            "intersticial. Debe estar definida en toda la abscisa que "
+            "ocupa el material.",
+        "Hu coefficient": "Coeficiente Hu",
+        "u = γw · Hu · h, with h the vertical distance up to the "
+        "water surface. Unchecked, the project default applies.":
+            "u = γw · Hu · h, siendo h la distancia vertical hasta la "
+            "superficie de agua. Sin marcar, se usa el valor por defecto "
+            "del proyecto.",
+        "Auto Hu (cos²α from the water-surface slope)":
+            "Hu automático (cos²α de la pendiente de la superficie)",
+        "Assumes the equipotential through the slice base is straight, "
+        "which is exact only for an infinite slope.":
+            "Supone que la equipotencial que pasa por la base de la dovela "
+            "es recta, lo que solo es exacto en talud infinito.",
+        "Ordinary/Fellenius: %d of %d slices had a negative "
+        "effective normal force; its FoS is underestimated.":
+            "Ordinary/Fellenius: %d de %d dovelas tuvieron fuerza normal "
+            "efectiva negativa; su FS está subestimado.",
+        # --- Rapid drawdown parameters (v0.1.62) ----------------------
+        "Rapid Drawdown Parameters": "Parámetros de descenso rápido",
+        "Undrained Behaviour": "Comportamiento no drenado",
+        "B-bar:": "B-barra:",
+        "Skempton's B̄: Δu = B̄ · Δσv. Only a material that behaves "
+        "undrained retains excess pore pressure after drawdown.":
+            "B̄ de Skempton: Δu = B̄ · Δσv. Solo un material de "
+            "comportamiento no drenado retiene exceso de presión "
+            "intersticial tras el desembalse.",
+        "Enable Rapid Drawdown analysis in Project Settings "
+        "→ Groundwater → Advanced first.":
+            "Activa antes el análisis de descenso rápido en Ajustes del "
+            "proyecto → Agua subterránea → Avanzado.",
         # --- Tools ----------------------------------------------------
         "Add Text": "Añadir texto",
         "Measure": "Medir",

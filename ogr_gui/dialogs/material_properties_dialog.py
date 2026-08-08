@@ -263,8 +263,16 @@ class MaterialPropertiesDialog(QDialog):
         units_obj=None,
         gw_method: str = "none",
         has_water_table: bool = False,
+        water_surfaces: list[tuple[str, str]] | None = None,
+        rapid_drawdown: bool = False,
     ) -> None:
         super().__init__(parent)
+        # v0.1.62 — (boundary id, translated label) for every water table
+        # and piezometric line in the project. Passed in rather than read
+        # from a Project so this dialog keeps knowing nothing about one,
+        # the same way ``has_water_table`` is a derived flag.
+        self._water_surfaces = list(water_surfaces or [])
+        self._rapid_drawdown = bool(rapid_drawdown)
         # v0.1.29 — the unsaturated-strength fields are only meaningful
         # (and only shown) when the groundwater method is an FEA, since
         # only then can pore pressures be negative.
@@ -426,10 +434,68 @@ class MaterialPropertiesDialog(QDialog):
             self.cbo_pp.addItem(t.value, t)
         self.dsp_ru = QDoubleSpinBox(); self.dsp_ru.setRange(0.0, 1.0); self.dsp_ru.setDecimals(3)
         self.dsp_u = QDoubleSpinBox(); self.dsp_u.setRange(0.0, 1e6); self.dsp_u.setDecimals(2); self.dsp_u.setSuffix(" kPa")
+
+        # v0.1.62 — which water surface this material takes its pore
+        # pressure from. The field existed and was honoured by the solver
+        # since v0.1.7, but nothing in the interface ever wrote it, so
+        # every project silently fell back to "the first one of that type"
+        # and a second piezometric line was unreachable.
+        self.cbo_water_surface = QComboBox()
+        self.cbo_water_surface.addItem(tr("(first of this type)"), None)
+        for wid, label in self._water_surfaces:
+            self.cbo_water_surface.addItem(label, wid)
+        self.cbo_water_surface.setToolTip(tr(
+            "Water surface this material takes its pore pressure from. "
+            "It must span every abscissa the material occupies."))
+
+        # Hu: unchecked means "use the project default", which is why this
+        # is a checkbox and not a spinbox with a magic value — the same
+        # pattern the saturated unit weight above already uses.
+        self.chk_hu = QCheckBox(tr("Hu coefficient") + ":")
+        self.dsp_hu = QDoubleSpinBox()
+        self.dsp_hu.setRange(0.0, 1.0); self.dsp_hu.setDecimals(3)
+        self.dsp_hu.setValue(1.0)
+        self.chk_hu.setToolTip(tr(
+            "u = γw · Hu · h, with h the vertical distance up to the "
+            "water surface. Unchecked, the project default applies."))
+        self.chk_auto_hu = QCheckBox(tr("Auto Hu (cos²α from the water-surface slope)"))
+        self.chk_auto_hu.setToolTip(tr(
+            "Assumes the equipotential through the slice base is straight, "
+            "which is exact only for an infinite slope."))
+
         pp_form.addRow(tr("Type:"), self.cbo_pp)
+        pp_form.addRow(tr("Water Surface:"), self.cbo_water_surface)
+        pp_form.addRow(self.chk_hu, self.dsp_hu)
+        pp_form.addRow("", self.chk_auto_hu)
         pp_form.addRow(tr("Ru coefficient:"), self.dsp_ru)
         pp_form.addRow(tr("Constant u:"), self.dsp_u)
         right.addWidget(pp_grp)
+
+        # v0.1.62 — Rapid drawdown parameters. B̄ used to be read off the
+        # material with getattr, defaulting to 1.0, which made EVERY
+        # material undrained without anyone choosing it.
+        rd_grp = QGroupBox(tr("Rapid Drawdown Parameters"))
+        rd_form = QFormLayout(rd_grp)
+        self.chk_undrained = QCheckBox(tr("Undrained Behaviour"))
+        self.dsp_b_bar = QDoubleSpinBox()
+        self.dsp_b_bar.setRange(0.0, 5.0); self.dsp_b_bar.setDecimals(3)
+        self.dsp_b_bar.setToolTip(tr(
+            "Skempton's B̄: Δu = B̄ · Δσv. Only a material that behaves "
+            "undrained retains excess pore pressure after drawdown."))
+        if not self._rapid_drawdown:
+            _rd_hint = tr(
+                "Enable Rapid Drawdown analysis in Project Settings "
+                "→ Groundwater → Advanced first.")
+            self.chk_undrained.setToolTip(_rd_hint)
+            rd_grp.setToolTip(_rd_hint)
+        rd_form.addRow("", self.chk_undrained)
+        rd_form.addRow(tr("B-bar:"), self.dsp_b_bar)
+        right.addWidget(rd_grp)
+
+        self.cbo_pp.currentIndexChanged.connect(self._refresh_pore_pressure)
+        self.chk_hu.toggled.connect(self._refresh_pore_pressure)
+        self.chk_auto_hu.toggled.connect(self._refresh_pore_pressure)
+        self.chk_undrained.toggled.connect(self._refresh_pore_pressure)
 
         right.addStretch(1)
         layout.addLayout(right, 1)
@@ -457,8 +523,7 @@ class MaterialPropertiesDialog(QDialog):
 
     def _set_editor_enabled(self, on: bool) -> None:
         for w in (self.ed_name, self.btn_color, self.dsp_gamma,
-                  self.cbo_strength, self.cbo_pp, self.dsp_ru, self.dsp_u,
-                  self.param_panel):
+                  self.cbo_strength, self.cbo_pp, self.param_panel):
             w.setEnabled(on)
         # γsat has its own gate on top of this one: the checkbox needs a
         # water table, and the spinbox needs the checkbox.
@@ -467,6 +532,35 @@ class MaterialPropertiesDialog(QDialog):
             on and self._has_water_table and self.chk_gamma_sat.isChecked())
         if not on:
             self.lbl_gamma_sat_warn.setVisible(False)
+        self._editor_on = on
+        self._refresh_pore_pressure()
+
+    # ------------------------------------------------------------------
+    def _refresh_pore_pressure(self, *_args) -> None:
+        """Enable only the water parameters the chosen model actually uses.
+
+        Rule 7 in miniature: a spinbox that the model ignores reads as if
+        the analysis respected it. Disabled rather than hidden, so the
+        capability stays discoverable.
+        """
+        on = getattr(self, "_editor_on", True)
+        ppt = self.cbo_pp.currentData()
+        uses_surface = ppt in (PorePressureType.WATER_TABLE,
+                               PorePressureType.PIEZO_LINE)
+        self.cbo_water_surface.setEnabled(on and uses_surface)
+        self.chk_auto_hu.setEnabled(on and uses_surface)
+        self.chk_hu.setEnabled(
+            on and uses_surface and not self.chk_auto_hu.isChecked())
+        self.dsp_hu.setEnabled(
+            on and uses_surface
+            and not self.chk_auto_hu.isChecked()
+            and self.chk_hu.isChecked())
+        self.dsp_ru.setEnabled(on and ppt == PorePressureType.RU_COEFFICIENT)
+        self.dsp_u.setEnabled(on and ppt == PorePressureType.CONSTANT)
+        # B̄ only reaches the calculation through a rapid-drawdown run.
+        self.chk_undrained.setEnabled(on and self._rapid_drawdown)
+        self.dsp_b_bar.setEnabled(
+            on and self._rapid_drawdown and self.chk_undrained.isChecked())
 
     def _current_material(self) -> Material | None:
         row = self.list.currentRow()
@@ -518,6 +612,24 @@ class MaterialPropertiesDialog(QDialog):
             self.cbo_pp.setCurrentIndex(idx)
         self.dsp_ru.setValue(m.ru)
         self.dsp_u.setValue(m.constant_u)
+
+        # v0.1.62 — water parameters. Signals are blocked while loading so
+        # that populating the widgets cannot write back into the material
+        # that is only being displayed.
+        for w in (self.cbo_water_surface, self.chk_hu, self.chk_auto_hu,
+                  self.chk_undrained):
+            w.blockSignals(True)
+        idx = self.cbo_water_surface.findData(m.water_surface_id)
+        self.cbo_water_surface.setCurrentIndex(max(0, idx))
+        self.chk_auto_hu.setChecked(bool(m.auto_hu))
+        self.chk_hu.setChecked(m.hu is not None)
+        self.dsp_hu.setValue(1.0 if m.hu is None else float(m.hu))
+        self.chk_undrained.setChecked(bool(m.undrained_behaviour))
+        self.dsp_b_bar.setValue(float(m.b_bar))
+        for w in (self.cbo_water_surface, self.chk_hu, self.chk_auto_hu,
+                  self.chk_undrained):
+            w.blockSignals(False)
+        self._refresh_pore_pressure()
 
     # Formula text shown next to each strength type — these mirror the
     # equations displayed in Slide's Strength Parameters PDF.
@@ -669,6 +781,13 @@ class MaterialPropertiesDialog(QDialog):
         m.pore_pressure = self.cbo_pp.currentData()
         m.ru = self.dsp_ru.value()
         m.constant_u = self.dsp_u.value()
+
+        # v0.1.62 — water parameters
+        m.water_surface_id = self.cbo_water_surface.currentData()
+        m.auto_hu = self.chk_auto_hu.isChecked()
+        m.hu = self.dsp_hu.value() if self.chk_hu.isChecked() else None
+        m.undrained_behaviour = self.chk_undrained.isChecked()
+        m.b_bar = self.dsp_b_bar.value()
 
         # Refresh list item
         item = self.list.item(row)

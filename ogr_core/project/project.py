@@ -420,6 +420,23 @@ class Project:
     def material_at(self, x: float, y: float):
         """Return the resolved ``Material`` at (x, y), or None."""
         regions = self.resolve_regions()
+        return self._material_in(regions, x, y)
+
+    def materials_at(self, points) -> list:
+        """Resolve several points against ONE lookup of the regions.
+
+        v0.1.63 — ``resolve_regions`` validates its cache by rebuilding a
+        signature over every vertex of every external and material
+        boundary, which costs more than the point-in-polygon scan it
+        guards. That was invisible while callers asked for one point at a
+        time; the slicer now asks once per band of a slice column, and
+        paying the signature per band made slicing measurably slower.
+        Callers with several points should use this instead.
+        """
+        regions = self.resolve_regions()
+        return [self._material_in(regions, x, y) for x, y in points]
+
+    def _material_in(self, regions, x: float, y: float):
         for r in regions:
             if _point_in_polygon_verts(x, y, r.polygon.vertices):
                 mid = getattr(r, "material_id", None)
@@ -553,6 +570,26 @@ class Project:
         proj.settings = ProjectSettings.from_dict(data.get("settings", {}))
         proj.boundaries = [Boundary.from_dict(b) for b in data.get("boundaries", [])]
         proj.materials = [Material.from_dict(m) for m in data.get("materials", [])]
+
+        # v0.1.62 — B̄ migration. Before this version the rapid-drawdown
+        # B-bar model read ``b_bar`` off the material with getattr and fell
+        # back to 1.0, so EVERY material behaved undrained with full
+        # transfer. The field now defaults to "freely draining" per the
+        # reference, which would silently lower the pore pressures — and
+        # therefore change the factor of safety — of a project saved
+        # earlier. Files written before the keys existed are given back
+        # the old implicit values, exactly as v0.1.60 did for
+        # ``use_sat_unit_weight``. Only projects created from v0.1.62 on
+        # start from the new default.
+        _mats_raw = data.get("materials", [])
+        _has_new_keys = any(
+            ("b_bar" in m or "undrained_behaviour" in m) for m in _mats_raw
+        )
+        if (proj.settings.groundwater.rapid_drawdown
+                and _mats_raw and not _has_new_keys):
+            for m in proj.materials:
+                m.undrained_behaviour = True
+                m.b_bar = 1.0
 
         from ..support import SupportInstance as _SI
         proj.supports = [_SI.from_dict(s) for s in data.get("supports", [])]

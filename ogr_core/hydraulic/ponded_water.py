@@ -26,13 +26,7 @@ from __future__ import annotations
 from typing import Optional
 
 from ..geometry import BoundaryType
-
-
-def _interp_y(polyline, x: float) -> Optional[float]:
-    # Imported lazily to avoid a circular import at module load time.
-    from .pore_pressure import _interp_y_on_polyline
-
-    return _interp_y_on_polyline(polyline, x)
+from .water_surfaces import interp_y_on_polyline as _interp_y
 
 
 # Boundary types whose polyline defines a free water surface. The

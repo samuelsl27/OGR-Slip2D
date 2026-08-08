@@ -71,6 +71,13 @@ class JanbuSimplified(LEMMethod):
         )
         slide_sign = 1.0 if driving_raw >= 0 else -1.0
 
+        # v0.1.64 — supports. Janbu balances HORIZONTAL forces, so the
+        # relevant projection is the horizontal one, not the tangential
+        # one a moment method uses.
+        from ..support_integration import resolve_support_terms
+        sup = resolve_support_terms(project, surface, slices, slide_sign)
+        s_list = slices.slices if hasattr(slices, "slices") else slices
+
         # Driving force horizontal: Σ W·(1−kv)·tan α + Σ kh·W
         denominator = 0.0
         for s in slices:
@@ -82,6 +89,27 @@ class JanbuSimplified(LEMMethod):
             # component is −slide_sign (slide_sign = +1 means the mass
             # moves towards −x); h_water is signed in +x.
             denominator += -slide_sign * f.h_water
+
+        driving_no_support = denominator
+        denominator -= sup.total_active_h()
+        active_ratio = (
+            sup.total_active_h() / driving_no_support
+            if sup.present and abs(driving_no_support) > 1e-9 else 0.0
+        )
+        if sup.present and denominator <= 0.0:
+            return LEMResult(
+                fos=math.inf,
+                converged=False,
+                iterations=0,
+                method_id=self.METHOD_ID,
+                surface=surface,
+                slices=slices,
+                admissible=False,
+                admissibility_note=(
+                    "Active support force exceeds the driving force; "
+                    "the factor of safety is undefined for this surface"
+                ),
+            )
 
         if abs(denominator) < 1e-9:
             return LEMResult(
@@ -101,7 +129,7 @@ class JanbuSimplified(LEMMethod):
             iterations = it
             numerator = 0.0
 
-            for s in slices:
+            for i_s, s in enumerate(s_list):
                 # v0.1.61 — the base normal carries the ponded-water
                 # weight; the horizontal thrust belongs on the driving side
                 W_eff = slice_forces(s, kh, kv).w_total
@@ -136,6 +164,14 @@ class JanbuSimplified(LEMMethod):
                     c * b + (W_eff - s.pore_pressure * b) * tan_phi
                 ) / n_alpha
 
+                # v0.1.64 — T_N·tanφ', the friction the support's normal
+                # component mobilises. Outside the n_α normalisation, as
+                # the reference writes it; see the note in ``bishop``.
+                if sup.present and sup.n_press[i_s]:
+                    numerator += sup.n_press[i_s] * tan_phi
+
+            numerator += sup.total_passive_h()
+
             new_fos = numerator / denominator
             if not math.isfinite(new_fos):
                 return LEMResult(
@@ -163,6 +199,7 @@ class JanbuSimplified(LEMMethod):
             method_id=self.METHOD_ID,
             surface=surface,
             slices=slices,
+            details={"active_support_ratio": active_ratio},
         )
 
 

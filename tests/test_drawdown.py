@@ -8,6 +8,13 @@ Verifies:
     - When ON with B̄=1, Δu = γw · (y_drawdown - y_wt) (full transfer)
     - When ON with B̄=0.5, half transfer
     - When the drawdown line is below the water table, no extra pressure
+
+v0.1.62 — B̄ used to be injected onto the Material at runtime, because it
+was not a field of the dataclass; this file was the only caller that did
+so, and the production code silently defaulted to B̄ = 1 for everyone
+else. It is now a declared field, gated by ``undrained_behaviour``: only
+a material that cannot drain retains excess pore pressure. The fixture
+sets both, and the last test checks the gate actually gates.
 """
 from __future__ import annotations
 
@@ -54,6 +61,7 @@ def _make_project(b_bar=None, drawdown_y=None, rapid=True):
     )
     if b_bar is not None:
         mat.b_bar = b_bar
+        mat.undrained_behaviour = True
     p.materials = [mat]
     return p, mat
 
@@ -101,5 +109,19 @@ class TestBBarDrawdown:
         from ogr_core.geometry import Vertex
         from ogr_core.hydraulic.pore_pressure import pore_pressure_at
         p, mat = _make_project(b_bar=1.0, drawdown_y=10.0, rapid=True)
+        u = pore_pressure_at(p, Vertex(25, 5), mat)
+        assert math.isclose(u, 9.81 * 10, rel_tol=0.01)
+
+    def test_a_freely_draining_material_retains_no_excess(self):
+        """v0.1.62 — rule 7 for the Undrained Behaviour checkbox.
+
+        Same geometry and same B̄ as the full-transfer case above; the
+        only difference is the flag. Before v0.1.62 there was no flag and
+        every material behaved as if it were ticked.
+        """
+        from ogr_core.geometry import Vertex
+        from ogr_core.hydraulic.pore_pressure import pore_pressure_at
+        p, mat = _make_project(b_bar=1.0, drawdown_y=25.0, rapid=True)
+        mat.undrained_behaviour = False
         u = pore_pressure_at(p, Vertex(25, 5), mat)
         assert math.isclose(u, 9.81 * 10, rel_tol=0.01)

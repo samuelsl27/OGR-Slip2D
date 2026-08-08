@@ -10,6 +10,13 @@ Implements the different pore-pressure models used by the LEM solver:
     - RU_COEFFICIENT    → u = Ru · γ · z  (z = depth below surface)
     - CONSTANT          → u = constant
 
+A project-level pore-pressure grid overrides all of these except the two
+explicitly per-material ones (constant and Ru). When a water table is
+defined alongside the grid it clips the result: u = 0 above it, the
+interpolated value below. A piezometric line does not clip — that is the
+third of the three differences between the two, the other two living in
+``ponded_water``.
+
 All returns are in kPa.
 
 Author: Samuel Sáez López (UPCT)
@@ -23,28 +30,29 @@ from typing import Optional
 from ..geometry import Boundary, BoundaryType, Polyline, Vertex
 from ..materials import Material, PorePressureType
 from ..project import Project
+from ..project.settings import GroundwaterMethod
+from .water_surfaces import (
+    interp_y_on_polyline,
+    resolve_water_surface,
+    water_table_y_at,
+)
 
 GAMMA_WATER_DEFAULT = 9.81  # kN/m³
 
+# The grid methods, as stored in the settings. Kept as a module constant so
+# the guard below compares against the enum instead of loose string
+# literals, which is how a renamed method would have failed silently.
+_GRID_METHODS = (
+    GroundwaterMethod.GRID_TOTAL_HEAD.value,
+    GroundwaterMethod.GRID_PRESSURE_HEAD.value,
+    GroundwaterMethod.GRID_PORE_PRESSURE.value,
+)
+
 
 # ----------------------------------------------------------------------
-def _interp_y_on_polyline(polyline: Polyline, x: float) -> Optional[float]:
-    """Return y(x) by linear interpolation along a non-closed polyline.
-
-    Returns None if x is outside the x-range of the polyline or the
-    polyline is degenerate.
-    """
-    pts = polyline.vertices
-    if len(pts) < 2:
-        return None
-    # Assume roughly left-to-right ordering; handle both directions
-    for p1, p2 in zip(pts[:-1], pts[1:]):
-        if (p1.x <= x <= p2.x) or (p2.x <= x <= p1.x):
-            if abs(p2.x - p1.x) < 1e-12:
-                return (p1.y + p2.y) / 2.0
-            t = (x - p1.x) / (p2.x - p1.x)
-            return p1.y + t * (p2.y - p1.y)
-    return None
+# Moved to ``water_surfaces`` in v0.1.62 — four packages imported this
+# private name across package boundaries. Alias kept for those importers.
+_interp_y_on_polyline = interp_y_on_polyline
 
 
 def _auto_hu_at(polyline: Polyline, x: float) -> float:
@@ -106,17 +114,27 @@ def pore_pressure_at(
     # with an explicit per-material override (CONSTANT or RU) keep it.
     _gw_method = project.settings.groundwater.method
     if (
-        _gw_method in ("grid_total_head", "grid_pressure_head",
-                       "grid_pore_pressure")
+        _gw_method in _GRID_METHODS
         and getattr(project, "water_pressure_grid", None) is not None
         and ppt not in (PorePressureType.CONSTANT,
                         PorePressureType.RU_COEFFICIENT)
     ):
         u = project.water_pressure_grid.pore_pressure_at(
             point.x, point.y, gamma_w)
-        if u is not None:
-            return u
-        return 0.0
+        if u is None:
+            return 0.0
+        # v0.1.62 — the third documented difference between a water table
+        # and a piezometric line: a WATER TABLE drawn together with a grid
+        # forces u = 0 above itself. Below it the grid governs untouched;
+        # the water table only clips the top, which is what makes it
+        # useful next to an interpolated field that knows nothing about
+        # where the phreatic surface actually is. A piezometric line does
+        # NOT do this — it is a pressure measurement, not a free surface —
+        # so only WATER_TABLE boundaries are consulted here.
+        wt_y = water_table_y_at(project, point.x)
+        if wt_y is not None and point.y > wt_y:
+            return 0.0
+        return u
 
     if ppt == PorePressureType.NONE:
         return 0.0
@@ -145,32 +163,21 @@ def pore_pressure_at(
         return material.ru * sigma_v
 
     if ppt in (PorePressureType.WATER_TABLE, PorePressureType.PIEZO_LINE):
-        # Find the referenced water surface
-        wid = material.water_surface_id
+        # The surface the material was assigned to, falling back to the
+        # first of its type. See ``water_surfaces.resolve_water_surface``
+        # for why that fallback is a convenience and not a model decision.
         target_type = (
             BoundaryType.WATER_TABLE
             if ppt == PorePressureType.WATER_TABLE
             else BoundaryType.PIEZOMETRIC
         )
-        water_boundary: Optional[Boundary] = None
-
-        if wid:
-            for b in project.boundaries:
-                if b.id == wid and b.btype == target_type:
-                    water_boundary = b
-                    break
-
-        # Fallback: pick the first matching water surface in the project
-        if water_boundary is None:
-            for b in project.boundaries:
-                if b.btype == target_type:
-                    water_boundary = b
-                    break
+        water_boundary: Optional[Boundary] = resolve_water_surface(
+            project, material.water_surface_id, target_type)
 
         if water_boundary is None:
             return 0.0
 
-        water_y = _interp_y_on_polyline(water_boundary.polyline, point.x)
+        water_y = interp_y_on_polyline(water_boundary.polyline, point.x)
         if water_y is None:
             return 0.0
         h = water_y - point.y
@@ -183,13 +190,11 @@ def pore_pressure_at(
         # compute Hu = cos²(α), where α is the inclination of the
         # water-surface segment above the point.
         gw_settings = project.settings.groundwater
-        material_hu = getattr(material, "hu", None)
-        material_auto_hu = getattr(material, "auto_hu", False)
-        use_auto = material_auto_hu or gw_settings.auto_hu
+        use_auto = material.auto_hu or gw_settings.auto_hu
         if use_auto:
             hu = _auto_hu_at(water_boundary.polyline, point.x)
-        elif material_hu is not None:
-            hu = float(material_hu)
+        elif material.hu is not None:
+            hu = float(material.hu)
         else:
             hu = gw_settings.default_hu
 
@@ -202,20 +207,23 @@ def pore_pressure_at(
         #     Δu = B̄ · γ_w · (y_drawdown - y_wt)
         # added to u_steady. Only adds positive excess (drawdown
         # lowers the water → effective stress increases → +Δu).
+        # v0.1.62 — only a material that behaves undrained retains excess
+        # pore pressure; a freely draining one dissipates it as fast as the
+        # level moves. That used to be expressed as an implicit B̄ = 1 for
+        # every material, which silently made every soil undrained.
         if (gw_settings.rapid_drawdown
-                and gw_settings.rapid_drawdown_method == "b_bar"):
-            b_bar = getattr(material, "b_bar", None)
-            if b_bar is None:
-                b_bar = 1.0  # full transfer (conservative default)
+                and gw_settings.rapid_drawdown_method == "b_bar"
+                and material.undrained_behaviour
+                and material.b_bar > 0):
             drawdown = None
             for b in project.boundaries:
                 if b.btype == BoundaryType.DRAWDOWN:
                     drawdown = b
                     break
-            if drawdown is not None and b_bar > 0:
-                y_dd = _interp_y_on_polyline(drawdown.polyline, point.x)
+            if drawdown is not None:
+                y_dd = interp_y_on_polyline(drawdown.polyline, point.x)
                 if y_dd is not None and y_dd > water_y:
-                    delta_u = b_bar * gamma_w * (y_dd - water_y)
+                    delta_u = material.b_bar * gamma_w * (y_dd - water_y)
                     return u_steady + delta_u
 
         return u_steady

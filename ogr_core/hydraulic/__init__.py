@@ -5,6 +5,17 @@
 Populated progressively by future OGR FEM2D coupling.
 """
 from .water_pressure_grid import GridValueType, WaterPressureGrid  # noqa: F401
+from .water_surfaces import (  # noqa: F401
+    ASSIGNABLE_WATER_SURFACE_TYPES,
+    WATER_SURFACE_TYPES,
+    interp_y_on_polyline,
+    resolve_water_surface,
+    water_surface_index,
+    water_surface_label,
+    water_surface_y_at,
+    water_surfaces,
+    water_table_y_at,
+)
 from .ponded_water import (  # noqa: F401
     PONDING_BOUNDARY_TYPES,
     ponded_depth_at,

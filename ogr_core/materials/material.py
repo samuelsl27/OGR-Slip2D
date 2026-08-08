@@ -44,6 +44,10 @@ class Material:
         ru:             Ru coefficient (if pore_pressure == RU_COEFFICIENT)
         constant_u:     constant pore pressure [kPa] (if CONSTANT)
         water_surface_id: boundary id of associated water-table / piezo line
+        hu:             Hu coefficient (None → project default)
+        auto_hu:        derive Hu from the water-surface slope
+        undrained_behaviour: material develops excess pore pressure
+        b_bar:          Skempton's B̄ (only if undrained_behaviour)
         color:          hex color for canvas rendering
         hatch:          optional hatch-pattern identifier
     """
@@ -81,6 +85,27 @@ class Material:
     # it on for legacy projects, which always wrote ``sat_unit_weight``,
     # so that reopening an old file cannot change its factor of safety.
     use_sat_unit_weight: bool = False
+    # v0.1.62 — Water parameters that USED to be read with ``getattr`` from
+    # attributes no dataclass declared. They existed only if someone
+    # injected them at runtime and were silently dropped by ``to_dict``,
+    # so a project that set them lost them on save. Declaring them is the
+    # whole fix; see ``ogr_core.hydraulic.pore_pressure``.
+    #   hu      : Hu coefficient ∈ [0,1]; None → use the project default.
+    #             u = γw · Hu · h, with h the vertical distance up to the
+    #             assigned water surface.
+    #   auto_hu : compute Hu = cos²(α) from the water-surface slope
+    #             instead, α being its inclination above the point.
+    hu: Optional[float] = None
+    auto_hu: bool = False
+    # v0.1.62 — Rapid-drawdown / excess pore pressure parameters.
+    # ``b_bar`` is Skempton's B̄: Δu = B̄ · Δσv. It only applies to a
+    # material that behaves undrained, hence the explicit flag rather than
+    # a magic B̄ = 0. The pair defaults to "freely draining, no excess",
+    # which is the conservative reading and the reference default; the
+    # previous implicit default of B̄ = 1 is restored for legacy projects
+    # by ``Project.from_dict`` so that reopening one cannot change its FoS.
+    undrained_behaviour: bool = False
+    b_bar: float = 0.0
     id: str = field(default_factory=lambda: str(uuid4()))
 
     # ------------------------------------------------------------------
@@ -116,6 +141,10 @@ class Material:
                           if self.hydraulic is not None else None),
             "phi_b": self.phi_b,
             "air_entry_value": self.air_entry_value,
+            "hu": self.hu,
+            "auto_hu": self.auto_hu,
+            "undrained_behaviour": self.undrained_behaviour,
+            "b_bar": self.b_bar,
         }
 
     @classmethod
@@ -141,6 +170,10 @@ class Material:
             hatch=data.get("hatch"),
             phi_b=data.get("phi_b", 0.0),
             air_entry_value=data.get("air_entry_value", 0.0),
+            hu=data.get("hu"),
+            auto_hu=bool(data.get("auto_hu", False)),
+            undrained_behaviour=bool(data.get("undrained_behaviour", False)),
+            b_bar=float(data.get("b_bar", 0.0)),
         )
         if "id" in data:
             m.id = data["id"]

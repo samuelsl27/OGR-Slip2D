@@ -95,6 +95,10 @@ class GLEMorgensternPrice(LEMMethod):
         circle_R = surface.radius if isinstance(surface, SlipCircle) else None
         circle_yc = surface.centre_y if isinstance(surface, SlipCircle) else None
 
+        # v0.1.64 — supports, resolved once for every inner solve below.
+        from ..support_integration import resolve_support_terms
+        sup = resolve_support_terms(project, surface, slices, slide_sign)
+
         x0 = slices.slices[0].base_x_left
         x1 = slices.slices[-1].base_x_right
 
@@ -105,7 +109,7 @@ class GLEMorgensternPrice(LEMMethod):
         for lam in lam_grid:
             ff, fm = self._inner_solve(
                 slices, lam, kh, kv, slide_sign,
-                circle_R, circle_yc, x0, x1,
+                circle_R, circle_yc, x0, x1, sup,
             )
             if (math.isfinite(ff) and math.isfinite(fm)
                     and 0.05 < ff < 50 and 0.05 < fm < 50):
@@ -149,13 +153,13 @@ class GLEMorgensternPrice(LEMMethod):
                 lam_new = 0.5 * (lam_lo + lam_hi)
             ff, fm = self._inner_solve(
                 slices, lam_new, kh, kv, slide_sign,
-                circle_R, circle_yc, x0, x1,
+                circle_R, circle_yc, x0, x1, sup,
             )
             if not (math.isfinite(ff) and math.isfinite(fm) and ff > 0 and fm > 0):
                 lam_new = 0.5 * (lam_lo + lam_hi)
                 ff, fm = self._inner_solve(
                     slices, lam_new, kh, kv, slide_sign,
-                    circle_R, circle_yc, x0, x1,
+                    circle_R, circle_yc, x0, x1, sup,
                 )
                 if not (math.isfinite(ff) and math.isfinite(fm)):
                     break
@@ -173,7 +177,7 @@ class GLEMorgensternPrice(LEMMethod):
 
         ff_final, fm_final = self._inner_solve(
             slices, lam_lo, kh, kv, slide_sign,
-            circle_R, circle_yc, x0, x1,
+            circle_R, circle_yc, x0, x1, sup,
         )
         if not (math.isfinite(ff_final) and math.isfinite(fm_final)):
             return LEMResult(
@@ -209,9 +213,10 @@ class GLEMorgensternPrice(LEMMethod):
     def _inner_solve(
         self, slices: Slices, lam: float,
         kh: float, kv: float, slide_sign: float,
-        circle_R, circle_yc, x0: float, x1: float,
+        circle_R, circle_yc, x0: float, x1: float, sup=None,
     ) -> Tuple[float, float]:
         F = max(0.5, self.initial_fos)
+        s_list = slices.slices if hasattr(slices, "slices") else slices
         ff_last = math.nan
         fm_last = math.nan
 
@@ -221,7 +226,7 @@ class GLEMorgensternPrice(LEMMethod):
             num_f = 0.0
             den_f = 0.0
 
-            for s in slices:
+            for i_s, s in enumerate(s_list):
                 fx = slice_forces(s, kh, kv)
                 # v0.1.61 — soil + ponded water for the base normal;
                 # the water thrust resolved along the sliding direction,
@@ -229,6 +234,14 @@ class GLEMorgensternPrice(LEMMethod):
                 W_eff = fx.w_total
                 H_eq = fx.h_seismic
                 H_water = -slide_sign * fx.h_water
+                # v0.1.64 — the support as an external force on the slice,
+                # exactly as in Spencer: its vertical component joins the
+                # load the base normal carries, so T_N·tanφ' emerges from
+                # the equilibrium instead of being added to the ratio.
+                H_support = 0.0
+                if sup is not None and sup.present:
+                    W_eff -= sup.f_v[i_s]
+                    H_support = -slide_sign * sup.f_h[i_s]
                 # Flip α once according to detected sliding direction
                 alpha = slide_sign * s.base_angle
                 l = s.base_length
@@ -265,11 +278,18 @@ class GLEMorgensternPrice(LEMMethod):
                         -slide_sign
                         * fx.water_moment_about(circle_yc) / circle_R
                     )
+                    if sup is not None and sup.present and sup.f_h[i_s]:
+                        # The vertical component needs no term: folded
+                        # into W_eff, it already rides the R·sin α arm.
+                        den_m += (
+                            -slide_sign * sup.f_h[i_s]
+                            * (circle_yc - sup.y_app[i_s]) / circle_R
+                        )
 
                 # Force side: λ·f_i modulates the numerator
                 num_f += S_term * math.cos(alpha)
                 num_f += lam_i * S_term * math.sin(alpha)
-                den_f += W_eff * math.tan(alpha) + H_eq + H_water
+                den_f += W_eff * math.tan(alpha) + H_eq + H_water + H_support
 
             if abs(den_m) < 1e-9 or abs(den_f) < 1e-9:
                 return math.nan, math.nan

@@ -10,8 +10,16 @@ solver. Each slice carries all the scalars the solver needs:
     - physics:     weight W, pore pressure u, base cohesion/φ
     - loads:       surface distributed pressure q, line loads, seismic
 
-The slicer handles multi-layer materials by intersecting each slice with
-every material boundary and composing the weights accordingly.
+v0.1.63 — the weight of a slice is obtained by integrating its VERTICAL
+COLUMN: the column is cut at every material boundary and at the water
+table, and each band contributes ``γ_band · Δh · dx``. Until then the
+whole slice was classified by its base midpoint and given a single γ over
+its full height, so a slice spanning two layers weighed as if it were made
+entirely of the material under its base, and one straddling the water
+table got either γ or γsat for all of it.
+
+The slice BOUNDARIES are still a uniform division of the failure width;
+splitting them at the layer crossings is a separate change.
 
 Author: Samuel Sáez López (UPCT)
 """
@@ -24,6 +32,7 @@ from typing import Iterator, Optional
 from ogr_core.geometry import Boundary, BoundaryType, Polyline, Vertex
 from ogr_core.hydraulic.ponded_water import ponded_depth_at
 from ogr_core.hydraulic.pore_pressure import pore_pressure_at, _interp_y_on_polyline
+from ogr_core.hydraulic.water_surfaces import water_table_y_at
 from ogr_core.materials import Material
 from ogr_core.project import Project
 
@@ -255,6 +264,103 @@ def _material_at(project: Project, point: Vertex) -> Optional[Material]:
 
 
 # ----------------------------------------------------------------------
+def _polyline_crossings_at_x(polyline: Polyline, x: float) -> list[float]:
+    """Every y at which ``polyline`` crosses the vertical line at ``x``.
+
+    Unlike ``interp_y_on_polyline``, which stops at the first hit because
+    a water surface is single-valued in x, a material boundary may fold
+    back and cross the same column twice — a lens or a wedge does exactly
+    that, and taking only the first crossing would drop a band.
+    """
+    out: list[float] = []
+    pts = polyline.vertices
+    if len(pts) < 2:
+        return out
+    segments = list(zip(pts[:-1], pts[1:]))
+    if getattr(polyline, "closed", False):
+        segments.append((pts[-1], pts[0]))
+    for p1, p2 in segments:
+        lo, hi = (p1.x, p2.x) if p1.x <= p2.x else (p2.x, p1.x)
+        if not (lo <= x <= hi):
+            continue
+        if abs(p2.x - p1.x) < 1e-12:
+            # Vertical segment: it does not CUT the column, it lies along
+            # it. Contributing its endpoints would invent bands of zero
+            # thickness at best and a spurious cut at worst.
+            continue
+        t = (x - p1.x) / (p2.x - p1.x)
+        out.append(p1.y + t * (p2.y - p1.y))
+    return out
+
+
+def _column_weight(
+    project: Project,
+    x: float,
+    y_bottom: float,
+    y_top: float,
+    dx: float,
+) -> float:
+    """Weight per unit width of the soil column at ``x``, in kN/m.
+
+    The column is cut at every material boundary and at every water table
+    crossing it, and each band is weighed with the unit weight of the
+    material that occupies it, saturated or not according to whether it
+    sits below the free water surface.
+
+    With a single material and no water table crossing the column this
+    reduces to ``γ · (y_top − y_bottom) · dx``, which is what the previous
+    implementation computed — so a one-layer model keeps its factor of
+    safety to the last bit.
+    """
+    height = y_top - y_bottom
+    if height <= 0.0:
+        return 0.0
+
+    # Candidate cuts: where the material can change, and where saturation
+    # can change. Piezometric and drawdown lines are NOT included — they
+    # do not decide the unit weight (see ``ogr_core.hydraulic``).
+    cuts = {y_bottom, y_top}
+    for b in project.boundaries:
+        if b.btype not in (BoundaryType.MATERIAL, BoundaryType.WATER_TABLE):
+            continue
+        for y in _polyline_crossings_at_x(b.polyline, x):
+            if y_bottom < y < y_top:
+                cuts.add(y)
+
+    wt_y = water_table_y_at(project, x)
+    ys = sorted(cuts)
+
+    # A cut landing on top of another produces a zero-thickness band;
+    # skipping it is cheaper than de-duplicating with a tolerance that
+    # would have to scale with the model.
+    bands = [(lo, hi) for lo, hi in zip(ys[:-1], ys[1:]) if hi > lo]
+    if not bands:
+        return 0.0
+
+    mids = [(x, 0.5 * (lo + hi)) for lo, hi in bands]
+    if len(project.materials) == 1:
+        # With a single material every region resolves to it, and so does
+        # the no-region fallback, so the planar subdivision cannot change
+        # the answer. Worth special-casing because the region lookup is
+        # dominated by validating its own cache, not by the geometry.
+        mats = [project.materials[0]] * len(bands)
+    else:
+        # One regions lookup for the whole column, not one per band: the
+        # cache validation inside ``resolve_regions`` costs more than the
+        # point-in-polygon scan it protects.
+        mats = project.materials_at(mids)
+
+    total = 0.0
+    for (lo, hi), mat, (_mx, y_mid) in zip(bands, mats, mids):
+        if mat is None:
+            mat = project.materials[0] if project.materials else None
+        below_water = wt_y is not None and wt_y > y_mid
+        gamma = mat.gamma_at(below_water) if mat else 20.0
+        total += gamma * (hi - lo) * dx
+    return total
+
+
+# ----------------------------------------------------------------------
 def _surface_pressure_at(project: Project, x: float) -> float:
     """Sum of distributed-load pressures acting at x (vertical component)."""
     total = 0.0
@@ -382,34 +488,25 @@ def slice_surface(
         alpha = surface.base_angle_at(xc)
         base_len = dx / math.cos(alpha) if abs(math.cos(alpha)) > 1e-9 else dx
 
-        # Average height (trapezoidal) — for weight computation
-        h_mid = 0.5 * ((y_top_l - y_base_l) + (y_top_r - y_base_r))
-
-        # Material at the base midpoint
+        # Material at the base midpoint. This one stays a single query:
+        # the base is where the shear strength and the pore pressure are
+        # evaluated, and both belong to the material the base cuts.
         base_y_mid = 0.5 * (y_base_l + y_base_r)
+        top_y_mid = 0.5 * (y_top_l + y_top_r)
         mat = _material_at(project, Vertex(xc, base_y_mid + 0.01))
 
-        # Unit weight: use saturated weight if a water table exists above
-        # the base midpoint, else dry/bulk. Known simplification: the slice
-        # is classified WHOLE by the position of its base midpoint, so one
-        # straddling the water table gets a single γ over its full height
-        # instead of γ_sat on the wet part and γ on the dry part.
-        below_water = False
-        for wb in project.boundaries_of(BoundaryType.WATER_TABLE):
-            wy = _interp_y_on_polyline(wb.polyline, xc)
-            if wy is not None and wy > base_y_mid:
-                below_water = True
-                break
-
-        gamma = mat.gamma_at(below_water) if mat else 20.0
-        weight = gamma * h_mid * dx  # kN/m
+        # v0.1.63 — the weight comes from integrating the column, so a
+        # slice spanning several layers, or straddling the water table,
+        # is weighed band by band instead of being classified whole by
+        # its base midpoint.
+        weight = _column_weight(project, xc, base_y_mid, top_y_mid, dx)
 
         # Pore pressure at the midpoint of the base
         u = pore_pressure_at(
             project,
             Vertex(xc, base_y_mid),
             mat,
-            ground_surface_y=0.5 * (y_top_l + y_top_r),
+            ground_surface_y=top_y_mid,
         )
         # v0.1.28 — unsaturated policy (extended Mohr-Coulomb). Only a
         # seepage analysis can return u < 0; everything else already

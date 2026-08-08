@@ -155,18 +155,17 @@ class BishopSimplified(LEMMethod):
         kh = project.seismic.kh if project.seismic.enabled else 0.0
         kv = project.seismic.kv if project.seismic.enabled else 0.0
 
-        # v0.1.14 — pre-compute support effects on this slip surface
-        try:
-            from ..support_integration import compute_support_effects
-            support_effects = compute_support_effects(project, surface, slices)
-        except Exception:  # noqa: BLE001
-            support_effects = []
-
         # Detect sliding direction from the un-seismic driving moment
         driving_raw = sum(
             s.weight * (1.0 - kv) * math.sin(s.base_angle) for s in slices
         )
         slide_sign = 1.0 if driving_raw >= 0 else -1.0
+
+        # v0.1.64 — support terms, resolved with their SIGNS. The sliding
+        # sense has to be known first, which is why this moved below the
+        # detection above.
+        from ..support_integration import resolve_support_terms
+        sup = resolve_support_terms(project, surface, slices, slide_sign)
 
         # Driving moment (denominator of Bishop's FoS expression).
         # Σ W·(1 − kv)·sin α + Σ kh·W·(y_g − y_c)/R
@@ -200,23 +199,48 @@ class BishopSimplified(LEMMethod):
                     -slide_sign * f.water_moment_about(circle_yc) / circle_R
                 )
 
-        # v0.1.15 — both Active and Passive support contributions are
-        # added to the resisting moment (numerator). This matches the
-        # convention of Krahn (2003) / GeoStudio and is much more
-        # numerically stable than Slide's literal "Active subtracts
-        # from driving" form, which can produce FoS = 0 or negative
-        # values when the support force exceeds the driving moment.
-        #
-        # The mechanical interpretation: every support adds resisting
-        # force equal to the projection of its force onto the slip
-        # surface tangent. Active vs Passive only differs in whether
-        # the contribution is divided by F (Passive) or not (Active).
-        # We do NOT divide Passive by F either, matching Slide's
-        # documented behaviour and producing identical results to v0.1.14
-        # for the Active case (where Slide and our v0.1.15 implementation
-        # agree exactly when the support force is small relative to
-        # driving).
+        # v0.1.64 — Active supports subtract their resisting tangential
+        # component from the DRIVING side, per the reference:
+        #     F_act = (R + T_N·tanφ') / (D − T_S)
+        #     F_pas = (R + T_N·tanφ' + T_S) / D
+        # This replaces the v0.1.15 convention, which added abs(T_S) to
+        # the numerator for both kinds. That was numerically stable but
+        # it made the factor of safety symmetric under a 180° flip of the
+        # support: a bolt pushing the mass downhill improved it by exactly
+        # as much as one holding it back. The instability it was avoiding
+        # is real, and is handled below by marking the surface
+        # INADMISSIBLE rather than by discarding the sign.
         s_list = slices.slices if hasattr(slices, "slices") else slices
+        driving_no_support = denominator
+        denominator -= sup.total_active_t()
+        # How much of the driving moment the Active supports have taken
+        # away. Reported rather than judged: as T_S approaches D the
+        # factor of safety grows without bound, which is arithmetically
+        # right and physically meaningless, and no threshold separating
+        # the two is defensible enough to hard-code.
+        active_ratio = (
+            sup.total_active_t() / driving_no_support
+            if sup.present and abs(driving_no_support) > 1e-9 else 0.0
+        )
+
+        # The guard v0.1.15 worried about, made explicit. Reusing the
+        # admissibility channel of v0.1.32 keeps the surface in the
+        # evaluation list — search algorithms need the feedback — while
+        # excluding it from the choice of critical surface.
+        if sup.present and denominator <= 0.0:
+            return LEMResult(
+                fos=math.inf,
+                converged=False,
+                iterations=0,
+                method_id=self.METHOD_ID,
+                surface=surface,
+                slices=slices,
+                admissible=False,
+                admissibility_note=(
+                    "Active support force exceeds the driving moment; "
+                    "the factor of safety is undefined for this surface"
+                ),
+            )
 
         if abs(denominator) < 1e-9:
             return LEMResult(
@@ -238,7 +262,7 @@ class BishopSimplified(LEMMethod):
             iterations = it
             numerator = 0.0
 
-            for s in slices:
+            for i_s, s in enumerate(s_list):
                 # v0.1.61 — the base normal follows from the VERTICAL
                 # equilibrium of the slice, so it carries the ponded-water
                 # weight but not the horizontal thrust, exactly as the
@@ -274,20 +298,23 @@ class BishopSimplified(LEMMethod):
                     c * b + (W_eff - s.pore_pressure * b) * tan_phi
                 ) / m_alpha
 
-            # v0.1.15 — every support (Active OR Passive) adds its
-            # tangential projection to the resisting moment (numerator).
-            # This is the GeoStudio-style integration and matches Slide
-            # for typical conditions while remaining numerically stable
-            # even with heavy reinforcement.
-            for eff in support_effects:
-                if eff.slice_index < 0 or eff.slice_index >= len(s_list):
-                    continue
-                sl = s_list[eff.slice_index]
-                alpha = sl.base_angle * slide_sign
-                tx = -math.cos(alpha) if slide_sign > 0 else math.cos(alpha)
-                ty = -math.sin(alpha) if slide_sign > 0 else math.sin(alpha)
-                proj_tangent = eff.force_h * tx + eff.force_v * ty
-                numerator += abs(proj_tangent)
+                # v0.1.64 — frictional resistance mobilised by the NORMAL
+                # component of the support, T_N·tanφ'. Added outside the
+                # m_α normalisation, as the reference writes it: m_α comes
+                # from solving the slice's vertical equilibrium for N under
+                # its own weight, whereas the reference treats the support
+                # as a force applied directly to the base. Folding it into
+                # the vertical equilibrium instead would divide this term
+                # by m_α too; the difference is second-order for the usual
+                # near-horizontal bases, but it is a modelling choice and
+                # not a detail, so it is written down here.
+                if sup.present and sup.n_press[i_s]:
+                    numerator += sup.n_press[i_s] * tan_phi
+
+            # Passive supports add their resisting tangential component
+            # to the numerator; the Active ones already came off the
+            # denominator before the iteration started.
+            numerator += sup.total_passive_t()
 
             new_fos = numerator / denominator
             if not math.isfinite(new_fos):
@@ -343,4 +370,5 @@ class BishopSimplified(LEMMethod):
             base_normal=normals,
             base_shear_force=shears,
             base_shear_strength=strengths,
+            details={"active_support_ratio": active_ratio},
         )

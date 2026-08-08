@@ -33,6 +33,13 @@ Implementation follows Slide's convention:
     Passive support INCREASES the resisting moment / force by the
     same projection (divided by F in the iteration).
 
+v0.1.64 — ``resolve_support_terms`` below turns those raw effects into
+the two quantities the equilibrium equations actually need, T_S and T_N,
+with their SIGNS. Until then only Bishop consumed the effects, and it did
+so through ``abs(projection)``, which made a support that pushed the mass
+downhill improve the factor of safety exactly as much as one holding it
+back — see the header of ``tests/test_supports_all_methods_v164.py``.
+
 Author: Samuel Sáez López — UPCT
 """
 from __future__ import annotations
@@ -46,6 +53,162 @@ if TYPE_CHECKING:
     from ogr_core.support import SupportInstance, SupportType
 
     from .surface import SurfaceProtocol
+
+
+@dataclass(frozen=True)
+class SupportTerms:
+    """Support contributions resolved onto each slice base.
+
+    Every list is indexed by slice. Signs follow the slicer's conventions
+    (``+x`` right, ``+y`` up) and the sliding sense passed in:
+
+        t_active   resisting TANGENTIAL force from Active supports [kN/m].
+                   Positive opposes sliding. Enters the DRIVING side of
+                   the factor of safety as a subtraction.
+        t_passive  the same for Passive supports, but it enters the
+                   RESISTING side as an addition.
+        n_press    NORMAL force pressing the slice onto its base [kN/m].
+                   Positive presses, negative lifts. Multiplied by tan φ'
+                   it is the frictional resistance the support mobilises,
+                   which the previous implementation dropped entirely.
+        f_h, f_v   raw resultant per slice, +x and +y [kN/m], for the
+                   methods that solve equilibrium rather than a ratio.
+        y_app      elevation at which the resultant acts, for moments.
+
+    The distinction between Active and Passive is, as the reference
+    itself admits, partly arbitrary — it is a modelling choice about
+    whether a reinforcement is pre-tensioned. What is NOT arbitrary is
+    that both must be signed.
+    """
+
+    t_active: list
+    t_passive: list
+    n_press: list
+    f_h: list
+    f_v: list
+    y_app: list
+    present: bool = False
+    # Resisting HORIZONTAL component, for the methods whose equilibrium is
+    # a horizontal force balance rather than a moment balance. Janbu's
+    # driving side is Σ W·tan α + Σ kh·W, a sum of horizontal forces, so
+    # projecting the support onto the base tangent there would be mixing
+    # two different balances.
+    h_active: list = None
+    h_passive: list = None
+
+    def total_active_t(self) -> float:
+        return sum(self.t_active)
+
+    def total_passive_t(self) -> float:
+        return sum(self.t_passive)
+
+    def total_active_h(self) -> float:
+        return sum(self.h_active or ())
+
+    def total_passive_h(self) -> float:
+        return sum(self.h_passive or ())
+
+
+# Shared "there is no reinforcement here" answer. Immutable in practice:
+# every consumer guards on ``present`` before indexing, and the empty
+# lists make ``total_*`` return 0.0 without a special case.
+_EMPTY_TERMS = SupportTerms([], [], [], [], [], [], False, [], [])
+
+
+def resolve_support_terms(
+    project: "Project",
+    surface: "SurfaceProtocol",
+    slices,
+    slide_sign: float,
+) -> SupportTerms:
+    """Resolve every support onto the base of the slice it crosses.
+
+    ``slide_sign`` is the sense of sliding the caller derived from the
+    driving moment: the DOWNSLOPE unit tangent of a base at angle α is
+
+        t_d = −slide_sign · (cos α, sin α)
+
+    which is the vector that makes the weight ``(0, −W)`` produce the
+    driving term ``+slide_sign · W · sin α`` every method already uses.
+    A support force **F** then contributes ``F · t_d`` to driving, so its
+    RESISTING tangential component is ``−F · t_d``.
+
+    The inward base normal is ``n = (−sin α, cos α)``; a force presses the
+    slice onto its base by ``−F · n``. A nail perpendicular to the surface
+    and pointing into the slope therefore presses (positive), and one
+    pointing out of it lifts (negative) — which is the sign the previous
+    implementation had no way of expressing, since it kept only
+    ``abs`` of the tangential part.
+    """
+    # Every method calls this for every trial surface, so the no-support
+    # case — which is most models, and all of the validation suite — must
+    # cost nothing. Checking before allocating the eight per-slice lists
+    # is the difference between a free call and eight allocations per
+    # surface per method.
+    if not (getattr(project, "supports", None) or ()):
+        return _EMPTY_TERMS
+
+    s_list = slices.slices if hasattr(slices, "slices") else slices
+    n = len(s_list)
+    if n == 0:
+        return _EMPTY_TERMS
+    try:
+        effects = compute_support_effects(project, surface, slices)
+    except Exception:  # noqa: BLE001
+        return _EMPTY_TERMS
+    if not effects:
+        return _EMPTY_TERMS
+
+    from ogr_core.support import ForceApplication
+
+    t_active = [0.0] * n
+    t_passive = [0.0] * n
+    h_active = [0.0] * n
+    h_passive = [0.0] * n
+    n_press = [0.0] * n
+    f_h = [0.0] * n
+    f_v = [0.0] * n
+    y_app = [0.0] * n
+    w_h = [0.0] * n  # |F_h| weights for the application elevation
+
+    for eff in effects:
+        i = eff.slice_index
+        if i < 0 or i >= n:
+            continue
+        a = s_list[i].base_angle
+        ca, sa = math.cos(a), math.sin(a)
+        # Resisting tangential: −F·t_d  with  t_d = −slide_sign·(cos, sin)
+        t_r = slide_sign * (eff.force_h * ca + eff.force_v * sa)
+        # Pressing normal: −F·n  with  n = (−sin, cos)
+        t_n = eff.force_h * sa - eff.force_v * ca
+        # Resisting HORIZONTAL component. The sliding direction has x
+        # component −slide_sign (the sense in which the water thrust is
+        # already resolved by every force method), so a force resists by
+        # +slide_sign·F_h.
+        h_r = slide_sign * eff.force_h
+        if eff.is_active:
+            t_active[i] += t_r
+            h_active[i] += h_r
+        else:
+            t_passive[i] += t_r
+            h_passive[i] += h_r
+        n_press[i] += t_n
+        f_h[i] += eff.force_h
+        f_v[i] += eff.force_v
+        w = abs(eff.force_h)
+        y_app[i] += w * eff.intersection_y
+        w_h[i] += w
+
+    for i in range(n):
+        if w_h[i] > 0.0:
+            y_app[i] /= w_h[i]
+        else:
+            # No horizontal component to take a moment: the elevation is
+            # irrelevant, but the base is the honest place to report.
+            y_app[i] = 0.5 * (s_list[i].base_y_left + s_list[i].base_y_right)
+
+    return SupportTerms(t_active, t_passive, n_press, f_h, f_v, y_app, True,
+                        h_active, h_passive)
 
 
 @dataclass
