@@ -183,6 +183,15 @@ class _ComputeWorker(QThread):
                 method = method_map.get(mid)
                 if method is None:
                     continue
+                # v0.1.68 — a multi-stage rapid drawdown replaces what
+                # "the factor of safety of this surface" means, so it is
+                # applied at the ONE place methods are instantiated. A
+                # second place that forgot would silently report the
+                # ordinary factor of safety instead.
+                from ogr_slip2d.rapid_drawdown import wrap_for_drawdown
+                method = wrap_for_drawdown(
+                    method, self.project,
+                    num_slices=self.project.settings.methods.num_slices)
                 def _progress_cb(done, total, _i=i, _n=n_methods):
                     self.progress.emit(_i * total + done, _n * total)
 
@@ -317,7 +326,7 @@ class _ComputeWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.67"
+    VERSION = "0.1.68"
 
     def __init__(self) -> None:
         super().__init__()
@@ -2786,6 +2795,14 @@ class MainWindow(QMainWindow):
         if not self.project.boundaries:
             QMessageBox.warning(self, tr("Compute"),
                                 "No model to compute. Add an external boundary first.")
+            return
+        # v0.1.68 — a rapid drawdown that cannot run must say so instead
+        # of quietly reporting the ordinary factor of safety, which looks
+        # exactly like a successful analysis.
+        from ogr_slip2d.rapid_drawdown import check_drawdown_settings
+        _why = check_drawdown_settings(self.project)
+        if _why:
+            QMessageBox.warning(self, tr("Rapid Drawdown"), _why)
             return
         if not self.project.materials:
             QMessageBox.warning(self, tr("Compute"), "No materials defined.")

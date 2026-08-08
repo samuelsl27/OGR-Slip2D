@@ -488,9 +488,32 @@ class MaterialPropertiesDialog(QDialog):
                 "→ Groundwater → Advanced first.")
             self.chk_undrained.setToolTip(_rd_hint)
             rd_grp.setToolTip(_rd_hint)
+        # v0.1.68 — the undrained envelope the multi-stage procedures need.
+        # Either form is accepted and converted to whichever the chosen
+        # procedure wants; the conversion is exact, so nothing is lost.
+        self.cbo_env_kind = QComboBox()
+        self.cbo_env_kind.addItem(tr("(none)"), None)
+        self.cbo_env_kind.addItem(tr("Total Stress R Envelope"), "r")
+        self.cbo_env_kind.addItem(tr("Kc = 1 Envelope"), "kc1")
+        self.dsp_env_a = QDoubleSpinBox()
+        self.dsp_env_a.setRange(0.0, 1e6); self.dsp_env_a.setDecimals(3)
+        self.dsp_env_b = QDoubleSpinBox()
+        self.dsp_env_b.setRange(0.0, 89.0); self.dsp_env_b.setDecimals(3)
+        self.dsp_env_b.setSuffix(" °")
+        self.lbl_env_a = QLabel(tr("Cr:"))
+        self.lbl_env_b = QLabel(tr("Angle:"))
+        self.cbo_env_kind.setToolTip(tr(
+            "Undrained envelope from isotropically consolidated undrained "
+            "tests. Needed by the multi-stage drawdown procedures."))
+
         rd_form.addRow("", self.chk_undrained)
         rd_form.addRow(tr("B-bar:"), self.dsp_b_bar)
+        rd_form.addRow(tr("Undrained envelope:"), self.cbo_env_kind)
+        rd_form.addRow(self.lbl_env_a, self.dsp_env_a)
+        rd_form.addRow(self.lbl_env_b, self.dsp_env_b)
         right.addWidget(rd_grp)
+        self.cbo_env_kind.currentIndexChanged.connect(
+            self._refresh_pore_pressure)
 
         self.cbo_pp.currentIndexChanged.connect(self._refresh_pore_pressure)
         self.chk_hu.toggled.connect(self._refresh_pore_pressure)
@@ -561,6 +584,17 @@ class MaterialPropertiesDialog(QDialog):
         self.chk_undrained.setEnabled(on and self._rapid_drawdown)
         self.dsp_b_bar.setEnabled(
             on and self._rapid_drawdown and self.chk_undrained.isChecked())
+        # v0.1.68 — the envelope belongs to an undrained material and to
+        # nothing else, and its two fields are named after which form was
+        # chosen: Cr/φR for the R envelope, d/ψ for the Kc = 1 one.
+        env_on = on and self._rapid_drawdown and self.chk_undrained.isChecked()
+        kind = self.cbo_env_kind.currentData()
+        self.cbo_env_kind.setEnabled(env_on)
+        self.dsp_env_a.setEnabled(env_on and kind is not None)
+        self.dsp_env_b.setEnabled(env_on and kind is not None)
+        self.lbl_env_a.setText(tr("Cr:") if kind != "kc1" else tr("d:"))
+        self.lbl_env_b.setText(
+            tr("Angle:") if kind != "kc1" else tr("Psi:"))
 
     def _current_material(self) -> Material | None:
         row = self.list.currentRow()
@@ -626,6 +660,26 @@ class MaterialPropertiesDialog(QDialog):
         self.dsp_hu.setValue(1.0 if m.hu is None else float(m.hu))
         self.chk_undrained.setChecked(bool(m.undrained_behaviour))
         self.dsp_b_bar.setValue(float(m.b_bar))
+        self.cbo_env_kind.blockSignals(True)
+        env = getattr(m, "drawdown_envelope", None)
+        from ogr_core.materials.drawdown_envelopes import (
+            Kc1Envelope, REnvelope,
+        )
+        if isinstance(env, REnvelope):
+            self.cbo_env_kind.setCurrentIndex(
+                self.cbo_env_kind.findData("r"))
+            self.dsp_env_a.setValue(env.c_r)
+            self.dsp_env_b.setValue(env.phi_r_deg)
+        elif isinstance(env, Kc1Envelope):
+            self.cbo_env_kind.setCurrentIndex(
+                self.cbo_env_kind.findData("kc1"))
+            self.dsp_env_a.setValue(env.d)
+            self.dsp_env_b.setValue(env.psi_deg)
+        else:
+            self.cbo_env_kind.setCurrentIndex(0)
+            self.dsp_env_a.setValue(0.0)
+            self.dsp_env_b.setValue(0.0)
+        self.cbo_env_kind.blockSignals(False)
         for w in (self.cbo_water_surface, self.chk_hu, self.chk_auto_hu,
                   self.chk_undrained):
             w.blockSignals(False)
@@ -788,6 +842,20 @@ class MaterialPropertiesDialog(QDialog):
         m.hu = self.dsp_hu.value() if self.chk_hu.isChecked() else None
         m.undrained_behaviour = self.chk_undrained.isChecked()
         m.b_bar = self.dsp_b_bar.value()
+        from ogr_core.materials.drawdown_envelopes import (
+            Kc1Envelope, REnvelope,
+        )
+        kind = self.cbo_env_kind.currentData()
+        if kind == "r":
+            m.drawdown_envelope = REnvelope(
+                c_r=self.dsp_env_a.value(),
+                phi_r_deg=self.dsp_env_b.value())
+        elif kind == "kc1":
+            m.drawdown_envelope = Kc1Envelope(
+                d=self.dsp_env_a.value(),
+                psi_deg=self.dsp_env_b.value())
+        else:
+            m.drawdown_envelope = None
 
         # Refresh list item
         item = self.list.item(row)

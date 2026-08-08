@@ -916,6 +916,44 @@ _DICTS: dict[str, dict[str, str]] = {
         "effective normal force; its FoS is underestimated.":
             "Ordinary/Fellenius: %d de %d dovelas tuvieron fuerza normal "
             "efectiva negativa; su FS está subestimado.",
+        # --- Multi-stage rapid drawdown (v0.1.68) ---------------------
+        "Effective Stress using B-bar": "Tensiones efectivas con B-barra",
+        "Duncan, Wright, Wong 3 Stage (1990)":
+            "Duncan, Wright, Wong 3 etapas (1990)",
+        "Army Corp. Eng. 2 Stage (1970)":
+            "Cuerpo de Ingenieros 2 etapas (1970)",
+        "Lowe and Karafiath (1960)": "Lowe y Karafiath (1960)",
+        "Rapid Drawdown": "Descenso rápido",
+        "Undrained envelope:": "Envolvente no drenada:",
+        "Total Stress R Envelope": "Envolvente R en tensiones totales",
+        "Kc = 1 Envelope": "Envolvente Kc = 1",
+        "(none)": "(ninguna)",
+        "Cr:": "Cr:",
+        "Angle:": "Ángulo:",
+        "d:": "d:",
+        "Psi:": "Psi:",
+        "The three multi-stage procedures need an R or Kc=1 envelope "
+        "on every material marked as undrained, and require the "
+        "groundwater method to be Water Surfaces.":
+            "Los tres procedimientos multietapa necesitan una envolvente R "
+            "o Kc=1 en cada material marcado como no drenado, y exigen que "
+            "el método de agua sea superficies de agua.",
+        "Undrained envelope from isotropically consolidated undrained "
+        "tests. Needed by the multi-stage drawdown procedures.":
+            "Envolvente no drenada de ensayos consolidados isótropos no "
+            "drenados. La necesitan los procedimientos multietapa.",
+        "Excess pore pressure from loading, on materials marked as "
+        "undrained. This is a separate analysis from Rapid Drawdown, "
+        "not a prerequisite for it: the two are mutually exclusive.":
+            "Exceso de presión intersticial por carga, en materiales "
+            "marcados como no drenados. Es un análisis distinto del "
+            "descenso rápido, no un requisito: son excluyentes.",
+        "Enables the Drawdown Line tool and computes the factor of "
+        "safety after the drawdown. The water table is the INITIAL "
+        "level and the drawdown line the final, lower one.":
+            "Habilita la herramienta de línea de desembalse y calcula el "
+            "factor de seguridad tras el descenso. El nivel freático es el "
+            "nivel INICIAL y la línea de desembalse el final, más bajo.",
         # --- Rapid drawdown parameters (v0.1.62) ----------------------
         "Rapid Drawdown Parameters": "Parámetros de descenso rápido",
         "Undrained Behaviour": "Comportamiento no drenado",

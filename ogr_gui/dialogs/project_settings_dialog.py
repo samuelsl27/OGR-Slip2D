@@ -274,26 +274,35 @@ class _GroundwaterPage(QWidget):
 
         self.cb_excess = QCheckBox(tr("Calculate Excess Pore Pressure (B-bar method)"))
         self.cb_excess.setChecked(s.groundwater.excess_pore_pressure)
-        self.cb_excess.setToolTip(
-            "Enable B-bar method on undrained materials. Required for\n"
-            "Rapid Drawdown analysis using Effective Stress with B-bar."
-        )
+        self.cb_excess.setToolTip(tr(
+            "Excess pore pressure from loading, on materials marked as "
+            "undrained. This is a separate analysis from Rapid Drawdown, "
+            "not a prerequisite for it: the two are mutually exclusive."
+        ))
 
         self.cb_rapid = QCheckBox(tr("Rapid Drawdown analysis"))
         self.cb_rapid.setChecked(s.groundwater.rapid_drawdown)
-        self.cb_rapid.setToolTip(
-            "Enables the Drawdown Line boundary tool (Boundaries menu)\n"
-            "and computes the safety factor against rapid drawdown."
-        )
+        self.cb_rapid.setToolTip(tr(
+            "Enables the Drawdown Line tool and computes the factor of "
+            "safety after the drawdown. The water table is the INITIAL "
+            "level and the drawdown line the final, lower one."
+        ))
 
+        # v0.1.68 — the four labels and the tooltips below used to bypass
+        # tr() entirely (rule 2). The wording follows the usual naming of
+        # each procedure so it stays searchable against the literature.
         self.cbo_drawdown = QComboBox()
         for label, val in [
-            ("Effective Stress using B-bar", "b_bar"),
-            ("Duncan, Wright, Wong (1990) — 3-stage", "duncan_wright"),
-            ("Army Corps of Engineers (1970) — 2-stage", "corps_2"),
-            ("Lowe and Karafiath (1960)", "lowe_karafiath"),
+            (tr("Effective Stress using B-bar"), "b_bar"),
+            (tr("Duncan, Wright, Wong 3 Stage (1990)"), "duncan_wright"),
+            (tr("Army Corp. Eng. 2 Stage (1970)"), "corps_2"),
+            (tr("Lowe and Karafiath (1960)"), "lowe_karafiath"),
         ]:
             self.cbo_drawdown.addItem(label, val)
+        self.cbo_drawdown.setToolTip(tr(
+            "The three multi-stage procedures need an R or Kc=1 envelope "
+            "on every material marked as undrained, and require the "
+            "groundwater method to be Water Surfaces."))
         i = self.cbo_drawdown.findData(s.groundwater.rapid_drawdown_method)
         self.cbo_drawdown.setCurrentIndex(max(0, i))
 
@@ -313,8 +322,18 @@ class _GroundwaterPage(QWidget):
         self.s.groundwater.pore_fluid_unit_weight = self.dsp_gamma.value()
         self.s.groundwater.default_hu = self.dsp_hu.value()
         self.s.groundwater.auto_hu = self.cb_auto_hu.isChecked()
-        self.s.groundwater.excess_pore_pressure = self.cb_excess.isChecked()
-        self.s.groundwater.rapid_drawdown = self.cb_rapid.isChecked()
+        # v0.1.68 — go through set_advanced_option instead of writing the
+        # three flags by hand. The three advanced options are declared
+        # mutually exclusive, and this dialog was the one place able to
+        # leave two of them on at once.
+        if self.cb_rapid.isChecked():
+            self.s.groundwater.set_advanced_option("rapid_drawdown")
+        elif self.cb_excess.isChecked():
+            self.s.groundwater.set_advanced_option("excess_pore_pressure")
+        elif self.s.groundwater.transient:
+            self.s.groundwater.set_advanced_option("transient")
+        else:
+            self.s.groundwater.set_advanced_option(None)
         self.s.groundwater.rapid_drawdown_method = self.cbo_drawdown.currentData()
 
 
