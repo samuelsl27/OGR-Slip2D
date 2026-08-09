@@ -334,23 +334,123 @@ class TestWaterParametersSurviveASave:
 
 # ======================================================================
 class TestBBarMigration:
-    """Invariant 4 — an old project may not silently change its FoS."""
+    """Invariant 4 — what an old project is allowed to do on being read.
 
-    def _drawdown_project(self):
+    Two migrations meet here, and they answer to different rules.
+
+    v0.1.62 restored ``b_bar`` and ``undrained_behaviour`` to files
+    written before those keys existed, so the factor of safety would NOT
+    change: the defaults had moved and a saved project must not drift.
+
+    v0.1.69 does the opposite on purpose. Until then this model demanded
+    the drawdown line ABOVE the water table, the reverse of the reference
+    and of the other three procedures, and the factor of safety it
+    produced was the one from BEFORE the drawdown. Swapping the two
+    labels leaves the geometry untouched and makes the file mean what it
+    always meant; the number it yields changes, because the old number
+    was wrong. That is the one case where the drift is the repair.
+    """
+
+    def _drawdown_project(self, dd_above=True):
+        """The old convention by default: drawdown line ABOVE the table.
+
+        ``dd_above=False`` builds the same model the v0.1.69 way, which
+        is what a file saved from this version on will look like.
+        """
         from ogr_core.geometry import BoundaryType
         from ogr_core.materials import PorePressureType
         p = _slope_project("dd")
-        _add_level(p, BoundaryType.WATER_TABLE, 12.0)
-        _add_level(p, BoundaryType.DRAWDOWN, 22.0)
+        wt, dd = (12.0, 22.0) if dd_above else (22.0, 12.0)
+        _add_level(p, BoundaryType.WATER_TABLE, wt)
+        _add_level(p, BoundaryType.DRAWDOWN, dd)
         p.settings.groundwater.set_advanced_option("rapid_drawdown")
         p.settings.groundwater.rapid_drawdown_method = "b_bar"
         p.materials[0].pore_pressure = PorePressureType.WATER_TABLE
         return p
 
-    def test_legacy_file_keeps_the_old_implicit_b_bar(self):
+    def _levels(self, project):
+        from ogr_core.geometry import BoundaryType
+        from ogr_core.hydraulic.water_surfaces import interp_y_on_polyline
+        out = {}
+        for b in project.boundaries:
+            if b.btype in (BoundaryType.WATER_TABLE, BoundaryType.DRAWDOWN):
+                out[b.btype] = interp_y_on_polyline(b.polyline, 30.0)
+        return out
+
+    # -- v0.1.69, the convention swap --------------------------------
+    def test_an_inverted_file_has_its_two_levels_exchanged(self):
+        from ogr_core.geometry import BoundaryType
+        from ogr_core.project import Project
+
+        back = Project.from_dict(self._drawdown_project().to_dict())
+        lv = self._levels(back)
+        assert lv[BoundaryType.WATER_TABLE] == 22.0, "initial level"
+        assert lv[BoundaryType.DRAWDOWN] == 12.0, "final level"
+
+    def test_the_swap_leaves_the_geometry_alone(self):
+        """Only the two labels move; no vertex does."""
+        from ogr_core.geometry import BoundaryType
         from ogr_core.project import Project
 
         p = self._drawdown_project()
+        before = sorted(
+            (v.x, v.y) for b in p.boundaries
+            if b.btype in (BoundaryType.WATER_TABLE, BoundaryType.DRAWDOWN)
+            for v in b.polyline.vertices)
+        back = Project.from_dict(p.to_dict())
+        after = sorted(
+            (v.x, v.y) for b in back.boundaries
+            if b.btype in (BoundaryType.WATER_TABLE, BoundaryType.DRAWDOWN)
+            for v in b.polyline.vertices)
+        assert before == after
+
+    def test_a_file_already_in_the_new_convention_is_not_touched(self):
+        from ogr_core.geometry import BoundaryType
+        from ogr_core.project import Project
+
+        back = Project.from_dict(
+            self._drawdown_project(dd_above=False).to_dict())
+        lv = self._levels(back)
+        assert lv[BoundaryType.WATER_TABLE] == 22.0
+        assert lv[BoundaryType.DRAWDOWN] == 12.0
+
+    def test_a_multi_stage_file_is_refused_rather_than_repaired(self):
+        """The swap is gated on B-bar. A multi-stage project with an
+        inverted line was never valid, so it gets the explicit message
+        instead of a silent fix that would hide the modelling error."""
+        from ogr_core.geometry import BoundaryType
+        from ogr_core.project import Project
+        from ogr_slip2d.rapid_drawdown import check_drawdown_settings
+
+        p = self._drawdown_project()
+        p.settings.groundwater.rapid_drawdown_method = "duncan_wright"
+        p.materials[0].undrained_behaviour = True
+        back = Project.from_dict(p.to_dict())
+        assert self._levels(back)[BoundaryType.DRAWDOWN] == 22.0
+        msg = check_drawdown_settings(back)
+        assert msg is not None and "ABOVE" in msg
+
+    def test_a_material_keeps_pointing_at_the_level_it_meant(self):
+        """A material assigned to the old low water table must follow it
+        into its new role, not fall back to whatever comes first."""
+        from ogr_core.geometry import BoundaryType
+        from ogr_core.project import Project
+
+        p = self._drawdown_project()
+        low = next(b for b in p.boundaries
+                   if b.btype == BoundaryType.WATER_TABLE)
+        p.materials[0].water_surface_id = low.id
+        back = Project.from_dict(p.to_dict())
+        assert back.materials[0].water_surface_id != low.id
+        target = next(b for b in back.boundaries
+                      if b.id == back.materials[0].water_surface_id)
+        assert target.btype == BoundaryType.WATER_TABLE
+
+    # -- v0.1.62, the defaults ---------------------------------------
+    def test_legacy_file_keeps_the_old_implicit_b_bar(self):
+        from ogr_core.project import Project
+
+        p = self._drawdown_project(dd_above=False)
         data = p.to_dict()
         # Simulate a file written before the keys existed.
         for m in data["materials"]:
@@ -360,33 +460,30 @@ class TestBBarMigration:
         assert back.materials[0].undrained_behaviour is True
         assert back.materials[0].b_bar == 1.0
 
-        # And the number is the same: u = γw·h + 1.0·γw·(y_dd − y_wt).
-        u = _u(back, 30.0, 5.0, back.materials[0])
-        expected = GAMMA_W * 7.0 + 1.0 * GAMMA_W * 10.0
-        assert abs(u - expected) < 1e-9
-
     def test_a_file_that_carries_the_keys_is_left_alone(self):
         from ogr_core.project import Project
-        p = self._drawdown_project()
+        p = self._drawdown_project(dd_above=False)
         p.materials[0].undrained_behaviour = False
         p.materials[0].b_bar = 0.0
         back = Project.from_dict(p.to_dict())
         assert back.materials[0].undrained_behaviour is False
         assert back.materials[0].b_bar == 0.0
-        # Freely draining ⇒ no excess, just the steady head.
+        # Freely draining ⇒ no excess, just the steady head from the
+        # water table at 22: γw·(22 − 5).
         assert abs(_u(back, 30.0, 5.0, back.materials[0])
-                   - GAMMA_W * 7.0) < 1e-9
+                   - GAMMA_W * 17.0) < 1e-9
 
-    def test_a_drained_material_gets_no_excess(self):
-        """Rule 7 in the other direction: the new checkbox must matter."""
-        p = self._drawdown_project()
+    def test_the_pore_pressure_model_no_longer_knows_about_drawdown(self):
+        """v0.1.69 — rule 7 read backwards. ``pore_pressure_at`` must now
+        give the same steady head whatever the drawdown settings say,
+        because the excess is applied on the slices instead."""
+        p = self._drawdown_project(dd_above=False)
         m = p.materials[0]
-        m.undrained_behaviour = False
-        m.b_bar = 1.0            # set, but not undrained → ignored
-        assert abs(_u(p, 30.0, 5.0) - GAMMA_W * 7.0) < 1e-9
-        m.undrained_behaviour = True
-        assert abs(_u(p, 30.0, 5.0)
-                   - (GAMMA_W * 7.0 + GAMMA_W * 10.0)) < 1e-9
+        m.b_bar = 1.0
+        steady = GAMMA_W * 17.0
+        for undrained in (False, True):
+            m.undrained_behaviour = undrained
+            assert abs(_u(p, 30.0, 5.0) - steady) < 1e-9
 
 
 # ======================================================================

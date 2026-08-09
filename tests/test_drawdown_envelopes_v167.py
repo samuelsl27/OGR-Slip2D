@@ -178,31 +178,45 @@ class TestTheEnvelopeSurvivesASave:
 
 
 class TestCompositeEnvelope:
-    """Corps of Engineers (1970): the lower of R and effective."""
+    """Corps of Engineers (1970): the undrained strength, drained-capped.
+
+    v0.1.69 — this used to take both branches at the SAME stress, the
+    effective one from before the drawdown. The Corps' own worked example
+    in Appendix G says otherwise: at σ'_fc the drained branch collapses
+    wherever a deep reservoir has squeezed the effective stress towards
+    zero, and the example came out 9.6 % low. The cap now uses the
+    effective stress AFTER the drawdown, which is the state the negative
+    pore pressures it distrusts would belong to. See
+    ``test_drawdown_usace_v169`` for the two published numbers that
+    settle it and ``composite_strength`` for the derivation.
+    """
 
     def test_it_is_the_minimum_of_the_two(self):
-        REnvelope, _K, composite = _env()
-        r = REnvelope(c_r=60.0, phi_r_deg=23.0)
-        for sigma in (0.0, 50.0, 104.0, 500.0, 5000.0):
-            got = composite(sigma, r, c_eff=0.0, phi_eff_deg=45.0)
+        _R, _K, composite = _env()
+        for tau_u, sigma in ((1257.0, 199.0), (60.0, 50.0), (2521.0, 4606.0),
+                             (0.0, 0.0), (100.0, 100.0)):
+            got = composite(tau_u, sigma, c_eff=0.0, phi_eff_deg=45.0)
             drained = sigma * math.tan(math.radians(45.0))
-            assert abs(got - min(r.strength_at(sigma), drained)) < 1e-12
-            assert got <= r.strength_at(sigma) + 1e-12
+            assert abs(got - min(tau_u, drained)) < 1e-12
+            assert got <= tau_u + 1e-12
             assert got <= drained + 1e-12
 
-    def test_the_crossover_is_where_the_lines_meet(self):
-        """Pilarcitos: 60 + σ·tan23° = σ·tan45° gives σ ≈ 104 psf. Below
-        it the effective line governs and, with c' = 0, the strength near
-        the toe is very small — which is why this method reports ≈ 0.82
-        where the other two report ≈ 1.05."""
-        REnvelope, _K, composite = _env()
-        r = REnvelope(c_r=60.0, phi_r_deg=23.0)
-        sigma_i = 60.0 / (math.tan(math.radians(45.0))
-                          - math.tan(math.radians(23.0)))
-        assert 100.0 < sigma_i < 110.0, sigma_i
-        below = sigma_i - 10.0
-        above = sigma_i + 10.0
-        assert (composite(below, r, 0.0, 45.0)
-                < r.strength_at(below) - 1e-9)
-        assert (composite(above, r, 0.0, 45.0)
-                < above * math.tan(math.radians(45.0)) - 1e-9)
+    def test_the_cap_bites_only_below_the_crossover(self):
+        """Where the drained strength exceeds the undrained one, the
+        undrained value passes through untouched; below, it is replaced.
+        With c' = 0 and φ' = 45° the crossover for an undrained strength
+        of 1000 psf sits at exactly σ' = 1000 psf."""
+        _R, _K, composite = _env()
+        tau_u = 1000.0
+        assert composite(tau_u, 1500.0, 0.0, 45.0) == tau_u
+        assert abs(composite(tau_u, 500.0, 0.0, 45.0) - 500.0) < 1e-9
+        # At the crossover itself the two agree to within tan(45°) not
+        # being exactly 1 in binary, which is the only difference here.
+        assert abs(composite(tau_u, 1000.0, 0.0, 45.0) - tau_u) < 1e-9
+
+    def test_cohesion_lifts_the_drained_branch(self):
+        """c' > 0 is what stops the cap collapsing at low stress — and
+        its absence is exactly the case that exposed the old reading."""
+        _R, _K, composite = _env()
+        assert composite(1000.0, 0.0, c_eff=0.0, phi_eff_deg=30.0) == 0.0
+        assert composite(1000.0, 0.0, c_eff=800.0, phi_eff_deg=30.0) == 800.0

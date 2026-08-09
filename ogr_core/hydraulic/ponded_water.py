@@ -29,10 +29,17 @@ from ..geometry import BoundaryType
 from .water_surfaces import interp_y_on_polyline as _interp_y
 
 
-# Boundary types whose polyline defines a free water surface. The
-# drawdown line is the reservoir level BEFORE the drawdown, which was
-# genuinely loading the slope, so it ponds too.
-PONDING_BOUNDARY_TYPES = (BoundaryType.WATER_TABLE, BoundaryType.DRAWDOWN)
+# Boundary types whose polyline defines a free water surface.
+#
+# v0.1.69 — the drawdown line is NOT one of them, and it used to be. It
+# is the reservoir level AFTER the drawdown, so letting it pond alongside
+# the water table and keeping the highest of the two meant the
+# post-drawdown analysis carried the weight of the reservoir it had just
+# emptied. When the drawdown level does pond — and it does, whenever it
+# still stands above the slope — it is because
+# ``drawdown_levels.level_project`` has made it the water table for that
+# stage. One surface states the reservoir at a time.
+PONDING_BOUNDARY_TYPES = (BoundaryType.WATER_TABLE,)
 
 
 # Groundwater methods whose water level is defined by the seepage

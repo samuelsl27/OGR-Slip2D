@@ -591,6 +591,46 @@ class Project:
                 m.undrained_behaviour = True
                 m.b_bar = 1.0
 
+        # v0.1.69 — the drawdown convention was inverted for B-bar. Until
+        # this version that model required the Drawdown Line to sit ABOVE
+        # the water table, the opposite of the reference and of the
+        # multi-stage procedures. A file written under the old convention
+        # says the right thing with the two labels exchanged, so exchange
+        # them: no geometry moves and the model means what it always did.
+        #
+        # It is done silently. The factor of safety WILL change — that is
+        # the point, the old one was the pre-drawdown value — so the
+        # changelog carries the warning that this code cannot.
+        #
+        # Gated on B-bar because a multi-stage project with an inverted
+        # line was never valid; that one gets the explicit refusal from
+        # ``check_drawdown_settings`` instead of a silent repair.
+        _gw = proj.settings.groundwater
+        if (_gw.rapid_drawdown and _gw.rapid_drawdown_method == "b_bar"):
+            from ..hydraulic.drawdown_levels import drawdown_line_is_inverted
+
+            if drawdown_line_is_inverted(proj):
+                _was_wt, _was_dd = [], []
+                for b in proj.boundaries:
+                    if b.btype == BoundaryType.WATER_TABLE:
+                        _was_wt.append(b)
+                    elif b.btype == BoundaryType.DRAWDOWN:
+                        _was_dd.append(b)
+                for b in _was_wt:
+                    b.btype = BoundaryType.DRAWDOWN
+                for b in _was_dd:
+                    b.btype = BoundaryType.WATER_TABLE
+                # A material assigned to the old low water table would now
+                # resolve to nothing and silently fall back to the first
+                # water table. It happens to be the right one, but relying
+                # on that would make the assignment a decoration; re-point
+                # it at the surface it actually meant.
+                _new_wt = _was_dd[0].id if _was_dd else None
+                _old_ids = {b.id for b in _was_wt}
+                for m in proj.materials:
+                    if m.water_surface_id in _old_ids:
+                        m.water_surface_id = _new_wt
+
         from ..support import SupportInstance as _SI
         proj.supports = [_SI.from_dict(s) for s in data.get("supports", [])]
         # v0.1.14 — support type definitions

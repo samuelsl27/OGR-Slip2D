@@ -299,10 +299,14 @@ class _GroundwaterPage(QWidget):
             (tr("Lowe and Karafiath (1960)"), "lowe_karafiath"),
         ]:
             self.cbo_drawdown.addItem(label, val)
+        # v0.1.69 — B-bar used to be exempt from both requirements and
+        # from the convention, which is what let it return the factor of
+        # safety from before the drawdown. All four now share them.
         self.cbo_drawdown.setToolTip(tr(
-            "The three multi-stage procedures need an R or Kc=1 envelope "
-            "on every material marked as undrained, and require the "
-            "groundwater method to be Water Surfaces."))
+            "All four procedures require the groundwater method to be "
+            "Water Surfaces and at least one material marked as "
+            "undrained. The three multi-stage ones also need an R or "
+            "Kc=1 envelope on it; B-bar needs its B-bar coefficient."))
         i = self.cbo_drawdown.findData(s.groundwater.rapid_drawdown_method)
         self.cbo_drawdown.setCurrentIndex(max(0, i))
 

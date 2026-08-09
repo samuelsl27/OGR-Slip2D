@@ -126,22 +126,44 @@ class Kc1Envelope:
 
 
 def composite_strength(
-    sigma: float,
-    r_env: REnvelope,
+    tau_undrained: float,
+    sigma_eff: float,
     c_eff: float,
     phi_eff_deg: float,
 ) -> float:
     """Corps of Engineers (1970) composite envelope: ``min(R, effective)``.
 
-    The two-stage procedure takes the undrained strength as the LOWER of
-    the R envelope and the effective-stress envelope, evaluated at the
-    normal stress from BEFORE the drawdown. The stated purpose is to
-    avoid leaning on strengths that only exist because of negative pore
-    pressures; the price is that below the intersection of the two lines
-    the effective envelope governs, which for a soil with c' = 0 means
-    very little strength near the toe. That is why the method is the most
-    conservative of the three — on the Pilarcitos dam it gives ≈ 0.82
-    where the other two give ≈ 1.05.
+    The undrained strength, capped by the drained strength available at
+    ``sigma_eff``. The stated purpose of the cap is to avoid leaning on
+    strengths that can only be sustained by negative pore pressures.
+
+    **Which effective stress goes in, and why it is the one AFTER the
+    drawdown** (v0.1.69). Until this version both branches were evaluated
+    at the effective stress from before it, σ'_fc, and the Corps' own
+    worked example in Appendix G came out 9.6 % low — 1.220 against a
+    referee value of 1.35 on a fixed circle. The reason is visible slice
+    by slice: under a 100 ft reservoir the pre-drawdown effective stress
+    near the toe is almost nothing (σ'_fc ≈ 200 psf), so for a soil with
+    c' = 0 the drained branch collapses to ≈ 115 psf against 1257 psf
+    from the R envelope, and it governed 31 of 50 slices. Pilarcitos
+    could not have caught it: there the two lines cross at σ ≈ 104 psf,
+    so the cap never bites and the case reproduces either way.
+
+    Taking the drained strength at the POST-drawdown effective stress
+    reproduces both published cases — Appendix G 1.334 against 1.35
+    (−1.2 %), Pilarcitos 0.838 against 0.824 (+1.7 %) — and it is the
+    consistent reading: the negative pore pressures the cap exists to
+    distrust would arise after the drawdown, not during consolidation, so
+    comparing against the consolidation stress compares two states that
+    never coexist. It also leaves the Corps procedure differing from
+    Duncan-Wright-Wong in exactly one thing, the undrained envelope (R
+    directly against K_c = 1 interpolated by K_c), which is what the
+    reference says distinguishes them.
+
+    The cap is still what makes this the most conservative of the three
+    procedures: on Pilarcitos it gives ≈ 0.84 where the other two give
+    ≈ 1.05.
     """
-    drained = c_eff + max(0.0, sigma) * math.tan(math.radians(phi_eff_deg))
-    return min(r_env.strength_at(sigma), drained)
+    drained = c_eff + max(0.0, sigma_eff) * math.tan(
+        math.radians(phi_eff_deg))
+    return min(tau_undrained, drained)

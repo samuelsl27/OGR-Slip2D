@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 Samuel Sáez López — Universidad Politécnica de Cartagena
 """
-Multi-stage rapid drawdown: Lowe-Karafiath, Duncan-Wright-Wong and the
-Corps of Engineers two-stage procedure.
+Rapid drawdown: Lowe-Karafiath, Duncan-Wright-Wong, the Corps of
+Engineers two-stage procedure, and the effective-stress B-bar model.
 
 When a reservoir is emptied faster than the embankment can drain, a
 low-permeability zone keeps the pore pressures of the full-reservoir state
@@ -21,28 +21,48 @@ actually have afterwards — and differ only in how they get it.
               strength interpolated between the two physical extremes,
               and is analysed in total stresses (c = τ_ff, φ = 0, u = 0).
 
-    Stage 3   Only Duncan-Wright-Wong. If the DRAINED strength at the
+    Stage 3   The drained cap. If the DRAINED strength at the
               post-drawdown effective stress is smaller than the undrained
               one, the drained value is used instead and the analysis is
               rerun. An undrained strength above the drained one can only
               be sustained by negative pore pressures, which cavitation or
-              partial drainage may not allow.
+              partial drainage may not allow. Duncan-Wright-Wong call this
+              their third stage; for the Corps it is the other half of
+              the composite envelope (v0.1.69). Lowe-Karafiath skip it.
 
-Because stage 3 can only ever lower a strength, ``FS_DWW ≤ FS_LK`` holds
+So what actually separates the three is one thing each:
+
+    Lowe-Karafiath ....... K_c = 1 envelope interpolated by K_c, no cap
+    Duncan-Wright-Wong ... the same, capped
+    Corps of Engineers ... the R envelope directly, capped the same way
+
+Because the cap can only ever lower a strength, ``FS_DWW ≤ FS_LK`` holds
 for every model by construction — which is why the two share one function
 and a flag here instead of being two parallel implementations. A property
 test pins it.
+
+The fourth procedure, B-bar, is not multi-stage: it is a single
+effective-stress analysis at the drawn-down level in which the undrained
+materials carry the pore pressure of the initial state, less whatever
+Skempton's coefficient lets them shed as the water load comes off:
+
+    Δu = B̄ · Δσ_v,   Δσ_v = −γ_w·(h_ponded,initial − h_ponded,final)
+
+Δσ_v is the weight of the PONDED COLUMN removed above the point, capped
+by the ground surface — not the gap between the two water surfaces. The
+difference is the whole slope face, where the ground stands between the
+two levels, and that is exactly where the critical surface runs.
 
 Sign and level conventions
 --------------------------
 The **water table is the INITIAL (full reservoir) level and the drawdown
 line is the FINAL, lower one**, following the reference and the published
-cases (Pilarcitos: initial y = 72 ft, drawdown y = 37 ft). Note that the
-B-bar model in ``ogr_core.hydraulic.pore_pressure`` uses the OPPOSITE
-convention — it requires the drawdown line to sit ABOVE the water table —
-and that conflict is real, pre-existing and reported rather than silently
-resolved here; changing it would move the factor of safety of every saved
-project that uses B-bar.
+cases (Pilarcitos 72 → 37 ft, Morgenstern 100 → 50 ft, Appendix G
+103 → 24 ft). Until v0.1.69 the B-bar model demanded the opposite and
+three further defects cancelled against it, so that at B̄ = 1 the
+"drawdown" factor of safety came out equal to the one from before the
+drawdown. All four procedures now ask
+``ogr_core.hydraulic.drawdown_levels`` which line is which.
 
 References:
     Corps of Engineers (1970). *Stability of Earth and Rock Fill Dams*,
@@ -55,6 +75,11 @@ References:
     Lowe, J. y Karafiath, L. (1960). "Stability of Earth Dams upon
         Drawdown". 1st PanAmerican Conf. on Soil Mechanics and Foundation
         Engineering, Mexico D.F., vol. 2, pp. 537-552.
+    Morgenstern, N. (1963). "Stability charts for earth slopes during
+        rapid drawdown". Géotechnique 13(2), pp. 121-131. The published
+        case the B-bar model is validated against.
+    Skempton, A. W. (1954). "The pore-pressure coefficients A and B".
+        Géotechnique 4(4), pp. 143-147.
     Wright, S. G. y Duncan, J. M. (1987). *An Examination of Slope
         Stability Computation Procedures for Sudden Drawdown*. Misc.
         Paper GL-87-25, USACE WES.
@@ -68,7 +93,13 @@ import math
 from dataclasses import dataclass
 from typing import Optional
 
-from ogr_core.geometry import BoundaryType
+from ogr_core.geometry import Vertex
+from ogr_core.hydraulic.drawdown_levels import (
+    drawdown_line_is_inverted,
+    level_project,
+)
+from ogr_core.hydraulic.ponded_water import ponded_depth_at
+from ogr_core.hydraulic.pore_pressure import pore_pressure_at
 from ogr_core.materials import Material
 from ogr_core.materials.drawdown_envelopes import (
     Kc1Envelope,
@@ -228,34 +259,11 @@ def undrained_strength_dww(
 
 
 # ----------------------------------------------------------------------
-def _level_project(project, use_drawdown: bool):
-    """A copy of the project whose water table is one of the two levels.
-
-    The user's project is never touched: the procedure needs to analyse
-    the same geometry at two different reservoir levels, and both the pore
-    pressures and the ponding load follow the water table.
-    """
-    p = copy.copy(project)
-    p.boundaries = list(project.boundaries)
-    if not use_drawdown:
-        # Stage 1: the initial level. The drawdown line must not pond.
-        p.boundaries = [b for b in p.boundaries
-                        if b.btype != BoundaryType.DRAWDOWN]
-        return p
-
-    drawdown = next((b for b in project.boundaries
-                     if b.btype == BoundaryType.DRAWDOWN), None)
-    kept = [b for b in p.boundaries
-            if b.btype not in (BoundaryType.WATER_TABLE,
-                               BoundaryType.DRAWDOWN)]
-    if drawdown is not None:
-        moved = copy.copy(drawdown)
-        moved.btype = BoundaryType.WATER_TABLE
-        kept.append(moved)
-    # No drawdown line at all means TOTAL drawdown: no water left, which
-    # is the reference's convention for an undefined final level.
-    p.boundaries = kept
-    return p
+# v0.1.69 — the level projection moved to ``ogr_core.hydraulic`` so the
+# B-bar model, which lives on the other side of that boundary, asks the
+# same function which line is which. Kept under the old private name
+# because the call sites here read better for it.
+_level_project = level_project
 
 
 def _stage1_state(project, surface, slices, result):
@@ -343,15 +351,22 @@ def rapid_drawdown_fos(
     """Factor of safety after a rapid drawdown, by the chosen procedure.
 
     ``procedure`` is one of :data:`MULTISTAGE_METHODS`. Lowe-Karafiath and
-    Duncan-Wright-Wong run the same code with ``stage3`` on or off, which
-    is what makes ``FS_DWW ≤ FS_LK`` structural rather than hopeful.
+    Duncan-Wright-Wong run the same code with ``drained_cap`` on or off,
+    which is what makes ``FS_DWW ≤ FS_LK`` structural rather than hopeful.
+
+    The Corps takes that cap too (v0.1.69 — see ``composite_strength``),
+    so what actually separates the three is one thing each:
+
+        Lowe-Karafiath ... K_c = 1 envelope interpolated by K_c, no cap
+        Duncan-W-Wong .... the same, capped by the drained strength
+        Corps of Eng. .... the R envelope directly, capped the same way
     """
     from .slicer import slice_surface
 
     if procedure not in MULTISTAGE_METHODS:
         raise RapidDrawdownError(f"Unknown drawdown procedure: {procedure}")
-    stage3 = (procedure == DWW)
     corps = (procedure == CORPS_2)
+    drained_cap = procedure in (DWW, CORPS_2)
 
     # ---- Stage 1: full reservoir, effective stresses -----------------
     p1 = _level_project(project, use_drawdown=False)
@@ -395,11 +410,11 @@ def rapid_drawdown_fos(
         sigma_fc, tau_fc = sampled
         c_eff, phi_eff = _effective_c_phi(mat)
         if corps:
-            # Corps 1970: the composite envelope, evaluated at the
-            # effective stress from BEFORE the drawdown. Using the one
-            # after is precisely the refinement Duncan-Wright-Wong add.
-            tau_ff = composite_strength(
-                sigma_fc, _r_of(mat, phi_eff), c_eff, phi_eff)
+            # Corps 1970: the R envelope read directly at the effective
+            # consolidation stress. The other half of the composite — the
+            # drained cap — is applied below, with the stresses that
+            # exist after the drawdown.
+            tau_ff = _r_of(mat, phi_eff).strength_at(sigma_fc)
         else:
             tau_ff = undrained_strength_dww(
                 sigma_fc, tau_fc, c_eff, phi_eff,
@@ -415,10 +430,13 @@ def rapid_drawdown_fos(
         fos=r2.fos, method=procedure, fos_stage1=r1.fos, fos_stage2=r2.fos,
         n_undrained_slices=len(tau_by_index),
     )
-    if not stage3 or not tau_by_index:
+    if not drained_cap or not tau_by_index:
         return res
 
-    # ---- Stage 3: drained check (Duncan-Wright-Wong only) ------------
+    # ---- The drained cap: DWW's third stage, and the other half of
+    #      the Corps' composite envelope. One pass, because it is one
+    #      operation — min(undrained, drained at the stress that exists
+    #      after the drawdown).
     normals2 = list(getattr(r2, "base_normal", ()) or ())
     switched: dict = {}
     for i, tau_ff in tau_by_index.items():
@@ -428,9 +446,9 @@ def rapid_drawdown_fos(
         l = max(s.base_length, 1e-9)
         sigma_d = max(0.0, normals2[i]) / l                  # (9)
         c_eff, phi_eff = _effective_c_phi(sl2.slices[i].material)
-        tau_drained = c_eff + sigma_d * math.tan(math.radians(phi_eff))
-        if tau_drained < tau_ff:                             # (10)
-            switched[i] = tau_drained
+        capped = composite_strength(tau_ff, sigma_d, c_eff, phi_eff)  # (10)
+        if capped < tau_ff:
+            switched[i] = capped
     if not switched:
         res.fos_stage3 = r2.fos
         return res
@@ -440,7 +458,7 @@ def rapid_drawdown_fos(
     r3 = method.compute_fos(p2, surface, _undrained_slices(sl2, merged))
     res.fos_stage3 = r3.fos if math.isfinite(r3.fos) else r2.fos
     res.n_stage3_switched = len(switched)
-    # The procedure takes the LOWER of the two, which is what makes
+    # The cap takes the LOWER of the two, which is what makes
     # FS_DWW <= FS_LoweKarafiath hold for any model.
     res.fos = min(res.fos_stage2, res.fos_stage3)
     return res
@@ -505,8 +523,111 @@ class MultiStageDrawdownMethod:
         )
 
 
+# ----------------------------------------------------------------------
+def b_bar_pore_pressures(project, slices) -> int:
+    """Overwrite the pore pressure of every undrained slice, in place.
+
+    ``slices`` must have been built on the FINAL level — the copy that
+    :func:`level_project` returns with ``use_drawdown=True`` — so that the
+    ponding load, the saturated unit weights and the pore pressure of the
+    freely draining materials are all the post-drawdown ones already.
+    What is left is the excess the undrained materials keep::
+
+        u = u_initial + B̄ · Δσ_v,   Δσ_v = −γ_w·(h_ini − h_fin)
+
+    where ``h`` is the depth of ponded water standing on the ground
+    ABOVE the slice, so a point under the slope face — where the ground
+    lies between the two levels — sees only the column that was really
+    resting on it. Returns how many slices were changed.
+
+    Two details that are decisions, not accidents:
+
+    * the gate is ``undrained_behaviour`` alone, not ``b_bar > 0``. With
+      the coefficient as a second gate the model would be discontinuous
+      at zero: B̄ = 0.001 keeps essentially the whole initial pore
+      pressure while B̄ = 0 would drop to the final level, two very
+      different answers either side of nothing. The checkbox says whether
+      the soil can drain; B̄ says how much of the unloading its pore
+      water follows.
+    * the result is clamped at zero. Negative pore pressures here would
+      be suction the drawdown created, and leaning on them is precisely
+      what the Corps' composite envelope exists to avoid.
+    """
+    gamma_w = project.settings.groundwater.pore_fluid_unit_weight
+    initial = level_project(project, use_drawdown=False)
+    final = level_project(project, use_drawdown=True)
+    n = 0
+    for s in slices.slices:
+        mat = s.material
+        if mat is None or not getattr(mat, "undrained_behaviour", False):
+            continue
+        x = s.x_centre
+        y_ground = s.top_y_mid
+        u_ini = pore_pressure_at(
+            initial, Vertex(x, s.base_y_mid), mat,
+            ground_surface_y=y_ground)
+        delta_sigma_v = -gamma_w * (ponded_depth_at(initial, x, y_ground)
+                                    - ponded_depth_at(final, x, y_ground))
+        u = max(0.0, u_ini + float(getattr(mat, "b_bar", 0.0))
+                * delta_sigma_v)
+        s.pore_pressure = u
+        s.raw_pore_pressure = u
+        # The unsaturated policy already ran on the final-level pressure;
+        # this one is clamped non-negative, so there is no suction left
+        # for it to turn into cohesion.
+        s.suction_cohesion = 0.0
+        n += 1
+    return n
+
+
+class BBarDrawdownMethod:
+    """A LEM method whose pore pressures are the post-drawdown B-bar ones.
+
+    Same shape as :class:`MultiStageDrawdownMethod`, and for the same
+    reason: the search evaluates surfaces through ``compute_fos``, so the
+    only way for the choice made in the interface to reach the number is
+    to route it through that call. Until v0.1.69 B-bar instead patched
+    the pore-pressure model from inside, where neither the ground surface
+    nor the ponding load is visible.
+    """
+
+    def __init__(self, inner, num_slices: int = 25) -> None:
+        self.inner = inner
+        self.num_slices = num_slices
+
+    @property
+    def METHOD_ID(self) -> str:          # noqa: N802 (protocol name)
+        return getattr(self.inner, "METHOD_ID", "unknown")
+
+    @property
+    def DISPLAY_NAME(self) -> str:       # noqa: N802 (protocol name)
+        return getattr(self.inner, "DISPLAY_NAME", "?")
+
+    def compute_fos(self, project, surface, slices):
+        from .methods.base import LEMResult
+        from .slicer import slice_surface
+
+        p2 = level_project(project, use_drawdown=True)
+        sl2 = slice_surface(p2, surface, num_slices=self.num_slices)
+        if sl2 is None:
+            return LEMResult(
+                fos=math.nan, converged=False, iterations=0,
+                method_id=self.METHOD_ID, surface=surface, slices=slices,
+                error_message="The slip surface could not be sliced at "
+                              "the drawn-down level",
+            )
+        n = b_bar_pore_pressures(project, sl2)
+        res = self.inner.compute_fos(p2, surface, sl2)
+        details = dict(getattr(res, "details", None) or {})
+        details["drawdown_procedure"] = B_BAR
+        details["undrained_slices"] = n
+        res.details = details
+        return res
+
+
+# ----------------------------------------------------------------------
 def wrap_for_drawdown(method, project, num_slices: int = 25):
-    """Wrap ``method`` when the project asks for a multi-stage drawdown.
+    """Wrap ``method`` when the project asks for a rapid drawdown.
 
     Returns the method unchanged otherwise, so this can be applied
     unconditionally at the one place where methods are instantiated —
@@ -516,8 +637,10 @@ def wrap_for_drawdown(method, project, num_slices: int = 25):
     gw = project.settings.groundwater
     if not gw.rapid_drawdown:
         return method
+    if gw.rapid_drawdown_method == B_BAR:
+        return BBarDrawdownMethod(method, num_slices=num_slices)
     if gw.rapid_drawdown_method not in MULTISTAGE_METHODS:
-        return method        # B-bar works through the pore-pressure model
+        return method
     return MultiStageDrawdownMethod(
         method, gw.rapid_drawdown_method, num_slices=num_slices)
 
@@ -535,7 +658,7 @@ def check_drawdown_settings(project) -> Optional[str]:
     gw = project.settings.groundwater
     if not gw.rapid_drawdown:
         return None
-    if gw.rapid_drawdown_method not in MULTISTAGE_METHODS:
+    if gw.rapid_drawdown_method not in MULTISTAGE_METHODS + (B_BAR,):
         return None
     allowed = ("water_table", "piezo_line")
     if gw.method not in allowed:
@@ -550,5 +673,15 @@ def check_drawdown_settings(project) -> Optional[str]:
             "No material is marked as having undrained behaviour, so the "
             "drawdown would not change any strength. Tick Undrained "
             "Behaviour on the low-permeability materials."
+        )
+    # v0.1.69 — until this version the B-bar model REQUIRED this, and the
+    # multi-stage ones required the opposite. Now there is one convention
+    # and a line drawn on the wrong side of it is a modelling error with
+    # a message, not a silent nothing.
+    if drawdown_line_is_inverted(project):
+        return (
+            "The Drawdown Line lies ABOVE the Water Table. The water "
+            "table is the initial reservoir level and the drawdown line "
+            "the final, lower one; swap them."
         )
     return None

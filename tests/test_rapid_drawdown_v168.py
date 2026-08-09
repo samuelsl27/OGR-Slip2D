@@ -312,15 +312,45 @@ class TestTheChoiceReachesTheCalculation:
         # And the three do not all give the same answer either.
         assert len(set(round(v, 6) for v in seen.values())) == 3, seen
 
-    def test_b_bar_is_left_to_the_pore_pressure_model(self):
-        """B-bar acts through u, not through a multi-stage analysis, so
-        the wrapper must leave the method alone for it."""
+    def test_b_bar_goes_through_the_wrapper_too(self):
+        """v0.1.69 — B-bar used to be left to the pore-pressure model,
+        which could see neither the ground surface nor the ponded load,
+        and returned the pre-drawdown factor of safety. It is now the
+        fourth entry of the same mechanism, so the wrapper must NOT hand
+        the method back untouched for it."""
         from ogr_slip2d.methods.bishop import BishopSimplified
-        from ogr_slip2d.rapid_drawdown import wrap_for_drawdown
+        from ogr_slip2d.rapid_drawdown import (
+            BBarDrawdownMethod,
+            wrap_for_drawdown,
+        )
         p = _pilarcitos()
         p.settings.groundwater.rapid_drawdown_method = "b_bar"
+        p.materials[0].b_bar = 1.0
         plain = BishopSimplified()
-        assert wrap_for_drawdown(plain, p) is plain
+        wrapped = wrap_for_drawdown(plain, p)
+        assert isinstance(wrapped, BBarDrawdownMethod)
+        assert wrapped.inner is plain
+
+    def test_b_bar_lands_below_the_full_reservoir(self):
+        """The number, not just the plumbing. Pilarcitos with B̄ = 1
+        must come out below its own pre-drawdown value — before v0.1.69
+        it came out exactly equal to it."""
+        import math as _m
+
+        from ogr_slip2d.methods.bishop import BishopSimplified
+        from ogr_slip2d.rapid_drawdown import wrap_for_drawdown
+        from ogr_slip2d.slicer import slice_surface
+
+        p = _pilarcitos()
+        p.settings.groundwater.rapid_drawdown_method = "b_bar"
+        p.materials[0].b_bar = 1.0
+        plain = BishopSimplified()
+        sl = slice_surface(p, _circle(), num_slices=25)
+        full = plain.compute_fos(p, _circle(), sl).fos
+        after = wrap_for_drawdown(plain, p, num_slices=25).compute_fos(
+            p, _circle(), sl).fos
+        assert _m.isfinite(after)
+        assert after < full, (after, full)
 
     def test_without_rapid_drawdown_the_method_is_untouched(self):
         from ogr_slip2d.methods.bishop import BishopSimplified

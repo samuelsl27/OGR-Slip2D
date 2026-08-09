@@ -183,11 +183,13 @@ class _ComputeWorker(QThread):
                 method = method_map.get(mid)
                 if method is None:
                     continue
-                # v0.1.68 — a multi-stage rapid drawdown replaces what
-                # "the factor of safety of this surface" means, so it is
-                # applied at the ONE place methods are instantiated. A
-                # second place that forgot would silently report the
-                # ordinary factor of safety instead.
+                # v0.1.68 — a rapid drawdown replaces what "the factor
+                # of safety of this surface" means, so it is applied at
+                # the ONE place methods are instantiated. A second place
+                # that forgot would silently report the ordinary factor
+                # of safety instead. v0.1.69 — B-bar comes through here
+                # too; it used to be exempt, and reported exactly that
+                # ordinary factor of safety.
                 from ogr_slip2d.rapid_drawdown import wrap_for_drawdown
                 method = wrap_for_drawdown(
                     method, self.project,
@@ -326,7 +328,7 @@ class _ComputeWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.68"
+    VERSION = "0.1.69"
 
     def __init__(self) -> None:
         super().__init__()

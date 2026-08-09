@@ -932,12 +932,14 @@ _DICTS: dict[str, dict[str, str]] = {
         "Angle:": "Ángulo:",
         "d:": "d:",
         "Psi:": "Psi:",
-        "The three multi-stage procedures need an R or Kc=1 envelope "
-        "on every material marked as undrained, and require the "
-        "groundwater method to be Water Surfaces.":
-            "Los tres procedimientos multietapa necesitan una envolvente R "
-            "o Kc=1 en cada material marcado como no drenado, y exigen que "
-            "el método de agua sea superficies de agua.",
+        "All four procedures require the groundwater method to be "
+        "Water Surfaces and at least one material marked as "
+        "undrained. The three multi-stage ones also need an R or "
+        "Kc=1 envelope on it; B-bar needs its B-bar coefficient.":
+            "Los cuatro procedimientos exigen que el método de agua sea "
+            "superficies de agua y que al menos un material esté marcado "
+            "como no drenado. Los tres multietapa necesitan además una "
+            "envolvente R o Kc=1 en él; B-barra, su coeficiente B-barra.",
         "Undrained envelope from isotropically consolidated undrained "
         "tests. Needed by the multi-stage drawdown procedures.":
             "Envolvente no drenada de ensayos consolidados isótropos no "

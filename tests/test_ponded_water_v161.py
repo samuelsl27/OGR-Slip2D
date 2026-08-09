@@ -260,11 +260,35 @@ class TestOnlyWaterTablesPond:
         assert all(s.water_weight == 0.0 for s in sl.slices)
         assert all(s.water_force_h == 0.0 for s in sl.slices)
 
-    def test_drawdown_line_above_the_ground_does_pond(self):
-        """It is the reservoir level before the drawdown, which was
-        genuinely loading the slope."""
+    def test_a_drawdown_line_does_not_pond_by_itself(self):
+        """v0.1.69 — it used to, and that was the third of the four
+        defects that made the B-bar drawdown return the pre-drawdown
+        factor of safety.
+
+        The drawdown line is the reservoir level AFTER the drawdown, so
+        while it stood here alongside the water table under a
+        highest-wins rule, the post-drawdown analysis carried the weight
+        of the reservoir it had just emptied. When the final level does
+        pond — and it does, wherever it still stands above the slope —
+        it is because ``drawdown_levels.level_project`` has made it the
+        water table for that stage. The test below is the same geometry
+        run through that projection.
+        """
         sl = _slices(ponded(75.0, btype=BoundaryType.DRAWDOWN))
-        assert sum(s.water_weight for s in sl.slices) > 0.0
+        assert all(s.water_weight == 0.0 for s in sl.slices)
+        assert all(s.water_force_h == 0.0 for s in sl.slices)
+
+    def test_the_final_level_ponds_once_it_is_the_water_table(self):
+        """The other half: promoted by the level projection, it loads
+        the slope exactly as a water table at the same elevation."""
+        from ogr_core.hydraulic.drawdown_levels import level_project
+
+        projected = level_project(ponded(75.0, btype=BoundaryType.DRAWDOWN),
+                                  use_drawdown=True)
+        got = sum(s.water_weight for s in _slices(projected).slices)
+        expect = sum(s.water_weight for s in _slices(ponded(75.0)).slices)
+        assert got > 0.0
+        assert math.isclose(got, expect, rel_tol=1e-9)
 
     def test_water_surface_below_the_ground_does_not_pond(self):
         # The lowest ground the sliding mass touches is the toe at y = 15

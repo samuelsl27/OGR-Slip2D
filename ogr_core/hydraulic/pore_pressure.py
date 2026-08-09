@@ -199,34 +199,17 @@ def pore_pressure_at(
             hu = gw_settings.default_hu
 
         hu = max(0.0, min(1.0, hu))
-        u_steady = gamma_w * hu * h
-
-        # v0.1.8 — Rapid Drawdown excess pore pressure (B-bar method).
-        # If Rapid Drawdown is enabled in Project Settings and a
-        # Drawdown Line exists, compute:
-        #     Δu = B̄ · γ_w · (y_drawdown - y_wt)
-        # added to u_steady. Only adds positive excess (drawdown
-        # lowers the water → effective stress increases → +Δu).
-        # v0.1.62 — only a material that behaves undrained retains excess
-        # pore pressure; a freely draining one dissipates it as fast as the
-        # level moves. That used to be expressed as an implicit B̄ = 1 for
-        # every material, which silently made every soil undrained.
-        if (gw_settings.rapid_drawdown
-                and gw_settings.rapid_drawdown_method == "b_bar"
-                and material.undrained_behaviour
-                and material.b_bar > 0):
-            drawdown = None
-            for b in project.boundaries:
-                if b.btype == BoundaryType.DRAWDOWN:
-                    drawdown = b
-                    break
-            if drawdown is not None:
-                y_dd = interp_y_on_polyline(drawdown.polyline, point.x)
-                if y_dd is not None and y_dd > water_y:
-                    delta_u = material.b_bar * gamma_w * (y_dd - water_y)
-                    return u_steady + delta_u
-
-        return u_steady
+        # v0.1.69 — the B-bar drawdown excess used to be added here, and
+        # this was the wrong place for it in three separate ways. This
+        # function knows neither the ground surface above the point (so
+        # Δσ_v came out as the gap between the two water surfaces instead
+        # of the ponded column actually removed) nor the ponding load (so
+        # the reservoir kept loading the slope after being emptied); and
+        # the ``h <= 0`` short circuit above returns before ever reaching
+        # it, so no excess survived above the lower level. It now lives in
+        # ``ogr_slip2d.rapid_drawdown.BBarDrawdownMethod``, which has the
+        # slice — and therefore the ground surface — in hand.
+        return gamma_w * hu * h
 
     # v0.1.28 — FEM_SEEPAGE: interpolate the pore pressure from the
     # converged seepage field. The result is stored on the project by

@@ -21,6 +21,12 @@ from .ponded_water import (  # noqa: F401
     ponded_depth_at,
     ponded_water_level_at,
 )
+from .drawdown_levels import (  # noqa: F401
+    drawdown_boundary,
+    drawdown_line_is_inverted,
+    level_project,
+    levels_at,
+)
 from .hydraulic_properties import (  # noqa: F401
     HydraulicProperties,
     UnsaturatedModel,
