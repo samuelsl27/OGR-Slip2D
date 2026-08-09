@@ -38,6 +38,13 @@ from .sensitivity import (  # noqa: F401
     run_sensitivity,
 )
 
+from .drawdown_sweep import (  # noqa: F401
+    DrawdownSweepResult,
+    MethodSweep,
+    default_levels,
+    run_drawdown_sweep,
+)
+
 __all__ = [
     "SensitivityResult", "VariableSensitivity", "run_sensitivity",
     "ProbabilisticResult", "MethodProbabilisticResult",

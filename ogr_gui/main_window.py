@@ -327,8 +327,59 @@ class _ComputeWorker(QThread):
 
 
 # ======================================================================
+class _DrawdownSweepWorker(QThread):
+    """The drawdown level sweep, off the GUI thread.
+
+    v0.1.70 — a sweep is N full searches, so it cannot run the way
+    ``_compute_statistics`` does, synchronously on the GUI thread with no
+    progress: on a real model the window would simply stop responding for
+    minutes. It reuses ``_ComputeWorker.build_search`` so the sweep
+    honours exactly the search the user configured.
+    """
+
+    finished_result = Signal(object)
+    progress = Signal(int, int)
+    failed = Signal(str)
+
+    def __init__(self, project: Project, method_ids: list,
+                 n_levels: int, include_total: bool) -> None:
+        super().__init__()
+        self.project = project
+        self.method_ids = list(method_ids)
+        self.n_levels = int(n_levels)
+        self.include_total = bool(include_total)
+        self.result = None
+
+    def run(self) -> None:                       # noqa: D102
+        try:
+            from ogr_core.statistics import run_drawdown_sweep
+
+            helper = _ComputeWorker(self.project, self.method_ids)
+            searches = {mid: helper.build_search(mid)
+                        for mid in self.method_ids}
+            missing = [mid for mid, s in searches.items() if s is None]
+            if missing:
+                self.failed.emit(
+                    f"Could not build the search for: {', '.join(missing)}")
+                return
+
+            def factory(mid):
+                # A fresh search per level would rebuild the same object;
+                # the search holds no per-project state, so one is enough.
+                return searches[mid]
+
+            self.result = run_drawdown_sweep(
+                self.project, factory, self.method_ids,
+                n_levels=self.n_levels, include_total=self.include_total,
+                progress_cb=lambda d, t: self.progress.emit(d, t))
+            self.finished_result.emit(self.result)
+        except Exception as e:  # noqa: BLE001
+            self.failed.emit(f"{type(e).__name__}: {e}")
+
+
+# ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.69"
+    VERSION = "0.1.70"
 
     def __init__(self) -> None:
         super().__init__()
@@ -548,6 +599,10 @@ class MainWindow(QMainWindow):
                  self._compute_groundwater, None)
         self._mk("gw_interpret", "Interpret Groundwater",
                  self._interpret_groundwater, None)
+        # v0.1.70 — the drawdown level that is critical is not always the
+        # total one, and nothing in the interface used to suggest looking.
+        self._mk("drawdown_sweep", "Drawdown Level Sweep...",
+                 self._drawdown_sweep, None)
 
         self._mk("del_boundary", "Delete Boundary",
                  lambda: self._set_tool(ToolMode.DELETE_BOUNDARY), "boundary_delete")
@@ -888,6 +943,8 @@ class MainWindow(QMainWindow):
         m_gw.addAction(self._actions["gw_bcs"])
         m_gw.addSeparator()
         m_gw.addAction(self._actions["gw_transient"])
+        m_gw.addSeparator()
+        m_gw.addAction(self._actions["drawdown_sweep"])
         m_gw.addSeparator()
         m_gw.addAction(self._actions["gw_compute"])
         m_gw.addAction(self._actions["gw_interpret"])
@@ -1511,6 +1568,132 @@ class MainWindow(QMainWindow):
             f"{c.passive_force:.1f}; surface FoS without support "
             f"{c.unsupported_fos:.4f}, {res.surfaces_analysed} surfaces)",
             15000)
+
+    # ==================================================================
+    # Drawdown level sweep (v0.1.70)
+    # ==================================================================
+    def _drawdown_sweep(self) -> None:
+        """Search at a range of drawdown levels and report the worst.
+
+        The total drawdown is not always the critical case. The reference
+        documents both behaviours — a homogeneous slope is worst emptied
+        completely, a zoned dam with a freely draining shell can be worst
+        at an intermediate level, because the shell drains to zero pore
+        pressure only when the reservoir is gone entirely. On such a dam
+        the difference is around 12 % on the unsafe side.
+        """
+        from PySide6.QtWidgets import (
+            QCheckBox, QDialog, QDialogButtonBox, QFormLayout, QSpinBox,
+            QVBoxLayout,
+        )
+        from ogr_core.hydraulic.drawdown_levels import ground_elevation_span
+        from ogr_core.statistics import default_levels
+        from ogr_slip2d.rapid_drawdown import check_drawdown_settings
+
+        gw = self.project.settings.groundwater
+        if not gw.rapid_drawdown:
+            QMessageBox.warning(
+                self, tr("Drawdown Level Sweep"),
+                tr("Enable Rapid Drawdown analysis in Project Settings "
+                   "> Groundwater > Advanced first."))
+            return
+        why = check_drawdown_settings(self.project)
+        if why:
+            QMessageBox.warning(self, tr("Drawdown Level Sweep"), why)
+            return
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(tr("Drawdown Level Sweep"))
+        v = QVBoxLayout(dlg)
+        form = QFormLayout()
+        sp_n = QSpinBox()
+        sp_n.setRange(2, 101)
+        sp_n.setValue(11)
+        sp_n.setToolTip(tr(
+            "Reservoir levels between the initial water table and the "
+            "lowest ground in the model. Each one is a full search, so "
+            "this is the cost of the run."))
+        form.addRow(tr("Number of levels:"), sp_n)
+        chk_total = QCheckBox(tr("Include total drawdown"))
+        chk_total.setChecked(True)
+        form.addRow("", chk_total)
+        v.addLayout(form)
+        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        bb.accepted.connect(dlg.accept)
+        bb.rejected.connect(dlg.reject)
+        v.addWidget(bb)
+        if not dlg.exec():
+            return
+
+        method_ids = list(
+            self.project.settings.methods.enabled_methods) or [
+            "bishop_simplified"]
+        self.prog = ComputeProgressDialog(self)
+        self.sweep_worker = _DrawdownSweepWorker(
+            self.project, method_ids, sp_n.value(), chk_total.isChecked())
+        self.sweep_worker.progress.connect(self.prog.update_progress)
+        self.sweep_worker.finished_result.connect(self._on_drawdown_sweep_done)
+        self.sweep_worker.failed.connect(
+            lambda msg: QMessageBox.critical(self, "Error", msg))
+        self.sweep_worker.finished.connect(self.prog.accept)
+        self.sweep_worker.start()
+        self.prog.exec()
+
+    def _on_drawdown_sweep_done(self, result) -> None:
+        """Report the critical level and chart the sweep."""
+        self.last_drawdown_sweep = result
+        if result.notes.get("error"):
+            QMessageBox.warning(self, tr("Drawdown Level Sweep"),
+                                result.notes["error"])
+            return
+        worst = result.worst()
+        if worst is None:
+            QMessageBox.warning(
+                self, tr("Drawdown Level Sweep"),
+                tr("No level produced a valid factor of safety."))
+            return
+        mid, level, fos = worst
+        sweep = result.by_method[mid]
+        margin = sweep.unsafe_margin()
+        where = (tr("total drawdown") if level is None
+                 else f"y = {level:.2f}")
+        msg = (f"{tr('Critical drawdown level')} ({mid}): {where}, "
+               f"FS = {fos:.4f}")
+        if margin is not None and margin > 0.005:
+            msg += (f"  — {tr('the total drawdown alone would overstate '
+                              'it by')} {100 * margin:.1f} %")
+        self.statusBar().showMessage(msg, 20000)
+
+        xs, series = [], []
+        for m_id, sw in result.by_method.items():
+            valid = sw.valid
+            if not valid:
+                continue
+            # Total drawdown has no elevation; it plots at the lowest
+            # level swept so the curve stays a curve.
+            lows = [lv for lv, _f, _s in valid if lv is not None]
+            floor = min(lows) if lows else 0.0
+            xs = [floor if lv is None else lv for lv, _f, _s in valid]
+            series.append((m_id, [f for _lv, f, _s in valid]))
+        if not series:
+            return
+        try:
+            from .dialogs.chart_dialogs import MultiLineDialog
+            MultiLineDialog(
+                xs, series=series,
+                xlabel=tr("Drawdown level (y)"),
+                title=tr("Factor of safety vs drawdown level"),
+                parent=self,
+            ).exec()
+        except Exception:  # noqa: BLE001
+            html = f"<b>{tr('Factor of safety vs drawdown level')}</b><pre>"
+            for m_id, sw in result.by_method.items():
+                html += f"<br>{m_id}<br>"
+                for lv, f, _s in sw.valid:
+                    lab = "total" if lv is None else f"{lv:8.2f}"
+                    html += f"  {lab}   {f:.4f}<br>"
+            html += "</pre>"
+            self._info(html)
 
     # ==================================================================
     # Statistics (Phase P5)
@@ -3312,6 +3495,21 @@ class MainWindow(QMainWindow):
                 )
             else:
                 actions["add_drawdown"].setToolTip(tr("Add Drawdown Line"))
+
+        # v0.1.70 — the sweep needs the same analysis enabled, but NOT a
+        # drawn line: it supplies its own levels, and a project without a
+        # drawdown line is exactly the one whose user has only ever seen
+        # the total-drawdown answer.
+        if "drawdown_sweep" in actions:
+            actions["drawdown_sweep"].setEnabled(rapid_drawdown)
+            actions["drawdown_sweep"].setToolTip(
+                tr("Search at a range of reservoir levels. The total "
+                   "drawdown is not always the critical one.")
+                if rapid_drawdown else
+                "Drawdown Level Sweep is only available when\n"
+                "Project Settings → Groundwater → Advanced →\n"
+                "Rapid Drawdown is enabled."
+            )
 
         # v0.1.12 — Greying-out grid actions when the current search
         # method does NOT use a centre grid (Slope/Auto Refine/Block/

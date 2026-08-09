@@ -94,6 +94,78 @@ def levels_at(project, x: float) -> tuple[Optional[float], Optional[float]]:
     return initial, final
 
 
+def model_x_span(project) -> tuple[float, float]:
+    """(x_min, x_max) of the external boundary, padded a little.
+
+    The padding matters: a water surface that stops exactly at the model
+    edge leaves ``interp_y_on_polyline`` with nothing to return for the
+    outermost slice, and that slice silently loses its water.
+    """
+    ext = project.external_boundary()
+    xs = [v.x for v in ext.polyline.vertices] if ext is not None else []
+    if not xs:
+        return (-1.0, 1.0)
+    pad = max(1.0, 0.01 * (max(xs) - min(xs)))
+    return (min(xs) - pad, max(xs) + pad)
+
+
+def ground_elevation_span(project) -> tuple[float, float]:
+    """(y_min, y_max) of the external boundary."""
+    ext = project.external_boundary()
+    ys = [v.y for v in ext.polyline.vertices] if ext is not None else []
+    if not ys:
+        return (0.0, 1.0)
+    return (min(ys), max(ys))
+
+
+def project_at_level(project, y: Optional[float]):
+    """A copy of ``project`` whose drawdown line sits at elevation ``y``.
+
+    ``y = None`` means TOTAL drawdown, which is expressed the way the
+    reference expresses it: no drawdown line at all.
+
+    The line is translated **rigidly**, not flattened — a drawdown line
+    drawn with a slope keeps its shape and only its mean elevation moves.
+    That mirrors ``random_variables._shift_water_table``, which shifts the
+    water table the same way for a sensitivity sweep, and it is the only
+    reading that leaves a non-horizontal line meaning anything.
+
+    A project with no drawdown line drawn gets a horizontal one
+    synthesised across the model, so a level sweep does not require the
+    user to have drawn a line they are about to overwrite anyway.
+
+    The user's project is never touched; the boundaries that move are
+    copies. Used by the drawdown level sweep, which asks a different
+    question from :func:`level_project`: that one picks between the two
+    levels a model already has, this one invents the second level.
+    """
+    from ..geometry import Boundary, Polyline, Vertex
+
+    p = copy.copy(project)
+    p.boundaries = [b for b in project.boundaries
+                    if b.btype != BoundaryType.DRAWDOWN]
+    if y is None:
+        return p
+
+    existing = drawdown_boundary(project)
+    if existing is None:
+        x0, x1 = model_x_span(project)
+        line = Boundary(
+            polyline=Polyline(vertices=[Vertex(x0, y), Vertex(x1, y)],
+                              closed=False),
+            btype=BoundaryType.DRAWDOWN)
+    else:
+        line = copy.copy(existing)
+        vs = existing.polyline.vertices
+        mean_y = sum(v.y for v in vs) / len(vs) if vs else 0.0
+        shift = y - mean_y
+        line.polyline = Polyline(
+            vertices=[Vertex(v.x, v.y + shift) for v in vs],
+            closed=existing.polyline.closed)
+    p.boundaries.append(line)
+    return p
+
+
 def drawdown_line_is_inverted(project) -> bool:
     """True when the drawdown line sits above the water table.
 

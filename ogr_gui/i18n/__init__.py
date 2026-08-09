@@ -969,6 +969,34 @@ _DICTS: dict[str, dict[str, str]] = {
         "→ Groundwater → Advanced first.":
             "Activa antes el análisis de descenso rápido en Ajustes del "
             "proyecto → Agua subterránea → Avanzado.",
+        # --- Drawdown level sweep (v0.1.70) ---------------------------
+        "Drawdown Level Sweep...": "Barrido de niveles de desembalse...",
+        "Drawdown Level Sweep": "Barrido de niveles de desembalse",
+        "Number of levels:": "Número de niveles:",
+        "Include total drawdown": "Incluir desembalse total",
+        "Drawdown level (y)": "Nivel de desembalse (y)",
+        "Factor of safety vs drawdown level":
+            "Factor de seguridad frente al nivel de desembalse",
+        "Critical drawdown level": "Nivel de desembalse crítico",
+        "total drawdown": "desembalse total",
+        "the total drawdown alone would overstate it by":
+            "analizar solo el desembalse total lo sobrestimaría en un",
+        "No level produced a valid factor of safety.":
+            "Ningún nivel produjo un factor de seguridad válido.",
+        "Reservoir levels between the initial water table and the "
+        "lowest ground in the model. Each one is a full search, so "
+        "this is the cost of the run.":
+            "Niveles del embalse entre el nivel freático inicial y la cota "
+            "de terreno más baja del modelo. Cada uno es una búsqueda "
+            "completa, así que es lo que cuesta la corrida.",
+        "Search at a range of reservoir levels. The total "
+        "drawdown is not always the critical one.":
+            "Busca en un rango de niveles del embalse. El desembalse total "
+            "no siempre es el crítico.",
+        "Enable Rapid Drawdown analysis in Project Settings "
+        "> Groundwater > Advanced first.":
+            "Activa antes el análisis de descenso rápido en Ajustes del "
+            "proyecto > Agua subterránea > Avanzado.",
         # --- Tools ----------------------------------------------------
         "Add Text": "Añadir texto",
         "Measure": "Medir",

@@ -299,7 +299,14 @@ class MultiLineDialog(_ChartDialogBase):
         parent=None,
     ) -> None:
         super().__init__(parent=parent, title=title)
-        ax = self.fig.add_subplot(111)
+        # v0.1.70 — this read ``self.fig``, which the base class does not
+        # define; it is ``self.figure``, reached through ``ax()``. Every
+        # construction raised AttributeError, so "Show Values Along
+        # Surface" in the Interpret window had never worked. Its caller
+        # guarded only against ImportError, so the failure escaped.
+        ax = self.ax()
+        if ax is None:                       # matplotlib not installed
+            return
         ax.set_title(title)
         ax.set_xlabel(xlabel)
         for label, ys in series:

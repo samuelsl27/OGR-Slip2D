@@ -1845,8 +1845,12 @@ class InterpretWindow(QMainWindow):
                 title=f"Values along surface (FoS={target.fos:.3f})",
                 parent=self,
             ).exec()
-        except ImportError:
-            # Text fallback
+        except Exception:  # noqa: BLE001
+            # v0.1.70 — this caught only ImportError, so when the chart
+            # itself was broken the option raised out of the window
+            # instead of falling back. The fallback is the point: the
+            # numbers are what the user asked for, the chart is how they
+            # are shown.
             html = "<b>Values along critical surface</b><br><pre>"
             html += f"{'x':>8} {'σnef':>10} {'τavail':>10} {'u':>10} {'α°':>8}<br>"
             for i in range(len(xs)):

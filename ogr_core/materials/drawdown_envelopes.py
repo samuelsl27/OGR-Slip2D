@@ -163,6 +163,14 @@ def composite_strength(
     The cap is still what makes this the most conservative of the three
     procedures: on Pilarcitos it gives ≈ 0.84 where the other two give
     ≈ 1.05.
+
+    v0.1.70 — the caller iterates this to a fixed point. Capping a slice
+    lowers the factor of safety, which moves the normal it is read at,
+    which moves the cap; one pass leaves the answer depending on where
+    the iteration stopped. Converged, both Appendix G cases land within
+    0.2 % of their published values instead of 1 % below. See
+    ``ogr_slip2d.rapid_drawdown.CAP_RELAXATION`` for the measurement and
+    for what the reference says, which is a single substitution.
     """
     drained = c_eff + max(0.0, sigma_eff) * math.tan(
         math.radians(phi_eff_deg))

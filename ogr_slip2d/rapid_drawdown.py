@@ -29,6 +29,9 @@ actually have afterwards — and differ only in how they get it.
               partial drainage may not allow. Duncan-Wright-Wong call this
               their third stage; for the Corps it is the other half of
               the composite envelope (v0.1.69). Lowe-Karafiath skip it.
+              Since v0.1.70 it is iterated to a fixed point rather than
+              applied once, because the cap and the stresses it is read
+              at depend on each other — see ``CAP_RELAXATION``.
 
 So what actually separates the three is one thing each:
 
@@ -115,6 +118,30 @@ B_BAR = "b_bar"
 
 MULTISTAGE_METHODS = (DWW, LOWE_KARAFIATH, CORPS_2)
 
+# v0.1.70 — the drained cap is a fixed point, not a single substitution.
+# Capping a slice lowers the factor of safety, which moves the base
+# normals, which moves the cap; applied once, the answer depends on where
+# you happened to stop. Undamped the iteration OSCILLATES with decreasing
+# amplitude (Appendix G, Corps: 1.3335, 1.3638, 1.3412, 1.3548, ...), so
+# it is under-relaxed.
+#
+# ``CAP_RELAXATION`` was chosen by measurement, and the measurement that
+# matters is not the speed but that **the fixed point does not depend on
+# it** — which is what makes the converged value a property of the model
+# rather than of this constant:
+#
+#     omega   Appendix G Corps    Appendix G DWW    Pilarcitos Corps
+#     1.00    1.3493 (18 passes)  1.4455 (16)       0.8656 (40, unconverged)
+#     0.70    1.3494  (9)         1.4456  (8)       0.8658  (6)
+#     0.50    1.3495 (12)         1.4457 (11)       0.8658  (4)
+#     0.35    1.3496 (16)         1.4458 (14)       0.8658  (5)
+#
+# 0.70 converges fastest across the three. A property test pins the
+# independence; see ``test_rapid_drawdown_v168``.
+CAP_RELAXATION = 0.70
+CAP_TOL = 1e-4          # on the factor of safety, between passes
+CAP_MAX_PASSES = 20
+
 
 class RapidDrawdownError(RuntimeError):
     """A modelling error the user has to resolve, not a numerical hiccup."""
@@ -137,6 +164,10 @@ class DrawdownResult:
     fos_stage3: Optional[float] = None
     n_undrained_slices: int = 0
     n_stage3_switched: int = 0
+    # v0.1.70 — how many passes the drained cap needed to settle. Worth
+    # reporting: a run that hits CAP_MAX_PASSES has not converged, and
+    # the factor of safety is then wherever the iteration stopped.
+    n_cap_passes: int = 0
     note: str = ""
 
 
@@ -433,33 +464,54 @@ def rapid_drawdown_fos(
     if not drained_cap or not tau_by_index:
         return res
 
-    # ---- The drained cap: DWW's third stage, and the other half of
-    #      the Corps' composite envelope. One pass, because it is one
-    #      operation — min(undrained, drained at the stress that exists
-    #      after the drawdown).
-    normals2 = list(getattr(r2, "base_normal", ()) or ())
-    switched: dict = {}
-    for i, tau_ff in tau_by_index.items():
-        if i >= len(normals2):
-            continue
-        s = sl2u.slices[i]
-        l = max(s.base_length, 1e-9)
-        sigma_d = max(0.0, normals2[i]) / l                  # (9)
-        c_eff, phi_eff = _effective_c_phi(sl2.slices[i].material)
-        capped = composite_strength(tau_ff, sigma_d, c_eff, phi_eff)  # (10)
-        if capped < tau_ff:
-            switched[i] = capped
-    if not switched:
-        res.fos_stage3 = r2.fos
-        return res
+    # ---- The drained cap: DWW's third stage, and the other half of the
+    #      Corps' composite envelope. Iterated to a fixed point, because
+    #      capping a strength lowers the factor of safety, which moves the
+    #      base normals, which moves the cap. See CAP_RELAXATION.
+    cur = dict(tau_by_index)
+    prev_fos = r2.fos
+    last = r2
+    passes = 0
+    for _ in range(CAP_MAX_PASSES):
+        normals2 = list(getattr(last, "base_normal", ()) or ())
+        nxt: dict = {}
+        for i, tau_ff in tau_by_index.items():
+            if i >= len(normals2):
+                nxt[i] = cur[i]
+                continue
+            l = max(sl2.slices[i].base_length, 1e-9)
+            sigma_d = max(0.0, normals2[i]) / l               # (9)
+            c_eff, phi_eff = _effective_c_phi(sl2.slices[i].material)
+            # The cap is always taken against the ORIGINAL undrained
+            # strength, never against the already-capped value: feeding
+            # the capped one back would let it ratchet down without a
+            # floor instead of settling on min(undrained, drained).
+            target = composite_strength(                      # (10)
+                tau_ff, sigma_d, c_eff, phi_eff)
+            nxt[i] = (1.0 - CAP_RELAXATION) * cur[i] + CAP_RELAXATION * target
+        if all(abs(nxt[i] - cur[i]) < 1e-12 for i in nxt):
+            # Nothing moved, so re-solving would return the same factor
+            # of safety. On the first pass this is the surface where the
+            # cap never bites at all, and it must cost no extra solve —
+            # that was the whole of the pre-v0.1.70 fast path.
+            break
+        cur = nxt
+        r3 = method.compute_fos(p2, surface, _undrained_slices(sl2, cur))
+        if not math.isfinite(r3.fos):
+            break
+        last = r3
+        passes += 1
+        if abs(r3.fos - prev_fos) < CAP_TOL:
+            break
+        prev_fos = r3.fos
 
-    merged = dict(tau_by_index)
-    merged.update(switched)
-    r3 = method.compute_fos(p2, surface, _undrained_slices(sl2, merged))
-    res.fos_stage3 = r3.fos if math.isfinite(r3.fos) else r2.fos
-    res.n_stage3_switched = len(switched)
-    # The cap takes the LOWER of the two, which is what makes
-    # FS_DWW <= FS_LoweKarafiath hold for any model.
+    res.fos_stage3 = last.fos if math.isfinite(last.fos) else r2.fos
+    res.n_cap_passes = passes
+    res.n_stage3_switched = sum(
+        1 for i, tau_ff in tau_by_index.items() if cur[i] < tau_ff - 1e-12)
+    # Every iterate is a convex combination of the undrained strength and
+    # something no larger than it, so cur[i] <= tau_by_index[i] always —
+    # which is what keeps FS_DWW <= FS_LoweKarafiath structural.
     res.fos = min(res.fos_stage2, res.fos_stage3)
     return res
 
@@ -519,6 +571,10 @@ class MultiStageDrawdownMethod:
                 "fos_stage3": res.fos_stage3,
                 "undrained_slices": res.n_undrained_slices,
                 "stage3_switched": res.n_stage3_switched,
+                # v0.1.70 — reported so a surface whose drained cap did
+                # not settle is visible rather than silently taken at
+                # wherever the iteration stopped.
+                "cap_passes": res.n_cap_passes,
             },
         )
 

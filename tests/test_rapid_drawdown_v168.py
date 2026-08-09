@@ -210,6 +210,60 @@ class TestStageThreeCanOnlyLower:
             assert dww.fos <= dww.fos_stage2 + 1e-9
 
 
+class TestTheDrainedCapIsAFixedPoint:
+    """v0.1.70 — the cap is iterated, and this is what licenses that.
+
+    Capping a slice lowers the factor of safety, which moves the base
+    normals, which moves the cap. Applied once, the answer depends on
+    where you stopped; applied to convergence it is a property of the
+    model. Undamped it oscillates, so it is under-relaxed by
+    ``CAP_RELAXATION`` — and the test that matters is that **the answer
+    does not depend on that constant**. If it did, the number would be an
+    artefact of the damping and the whole change would be unjustified.
+
+    The reference documents a single substitution ("the analysis is
+    rerun", singular) and calls the method "3 stage". Converging is a
+    deliberate departure, taken because it reproduces both published
+    Appendix G cases better: on the fixed circle there, Corps goes from
+    1.3335 to 1.3494 against a referee 1.35, and Duncan-Wright-Wong from
+    1.4333 to 1.4456 against 1.44.
+    """
+
+    def _at(self, omega, procedure="duncan_wright"):
+        from ogr_slip2d import rapid_drawdown as rd
+
+        original = rd.CAP_RELAXATION
+        try:
+            rd.CAP_RELAXATION = omega
+            return _run(_pilarcitos(), procedure).fos
+        finally:
+            # Rule 5: a module-level constant is global state.
+            rd.CAP_RELAXATION = original
+
+    def test_the_answer_does_not_depend_on_the_relaxation(self):
+        for procedure in ("duncan_wright", "corps_2"):
+            got = [self._at(w, procedure) for w in (1.0, 0.7, 0.5, 0.35)]
+            assert max(got) - min(got) < 2e-3, (procedure, got)
+
+    def test_the_relaxation_is_restored(self):
+        """The guard on rule 5, since the test above patches a global."""
+        from ogr_slip2d import rapid_drawdown as rd
+        self._at(0.35)
+        assert rd.CAP_RELAXATION == 0.70
+
+    def test_it_converges_well_inside_the_pass_budget(self):
+        from ogr_slip2d.rapid_drawdown import CAP_MAX_PASSES
+
+        dww = _run(_pilarcitos(), "duncan_wright")
+        assert 0 < dww.n_cap_passes < CAP_MAX_PASSES, dww.n_cap_passes
+
+    def test_lowe_karafiath_never_pays_for_the_cap(self):
+        """It has no cap, so it must report no passes at all."""
+        lk = _run(_pilarcitos(), "lowe_karafiath")
+        assert lk.n_cap_passes == 0
+        assert lk.fos_stage3 is None
+
+
 class TestTheStagesAreWhatTheyClaim:
     def test_stage_one_is_much_safer_than_stage_two(self):
         """The whole point of the analysis: the reservoir was holding the
