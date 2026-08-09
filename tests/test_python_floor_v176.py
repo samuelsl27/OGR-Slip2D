@@ -169,6 +169,24 @@ def _fstring_defects(path: Path) -> list[str]:
     return defects
 
 
+def _mechanism(running: tuple[int, int], floor: tuple[int, int]) -> str:
+    """How to check the floor from ``running``: compile, scan or neither.
+
+    A pure decision so it can be tested as a table instead of by faking
+    interpreters, which is what hid the mistake it now encodes: an
+    earlier version treated "at or BELOW the floor" as authoritative.
+    Below the floor it is not — a 3.11 interpreter rejecting code that is
+    perfectly legal in a declared 3.12 floor says nothing about the code,
+    only about the interpreter — and running below the declared minimum
+    is an unsupported configuration in the first place.
+    """
+    if running == floor:
+        return "compile"        # we ARE the floor: it is the authority
+    if running > floor and floor < _PEP701:
+        return "scan"           # stand in for an interpreter we lack
+    return "skip"               # below the floor, or nothing left to say
+
+
 class TestPythonFloor:
     def test_every_source_parses_on_the_declared_minimum(self):
         """A file the floor interpreter cannot parse breaks on import.
@@ -178,19 +196,14 @@ class TestPythonFloor:
         line buried in a wall of noise.
         """
         floor = _floor()
-        if floor >= _PEP701 and sys.version_info[:2] > floor:
-            # The floor already accepts every construct the scan looks
-            # for, and this interpreter is above it, so there is nothing
-            # this test can honestly assert. Passing quietly beats
-            # inventing offenders out of legal code.
+        how = _mechanism(sys.version_info[:2], floor)
+        if how == "skip":
             return
         offenders: list[str] = []
         for p in _sources():
-            src = p.read_text(encoding="utf-8")
-            if sys.version_info[:2] <= floor:
-                # We ARE the floor: the interpreter is the authority.
+            if how == "compile":
                 try:
-                    compile(src, str(p), "exec")
+                    compile(p.read_text(encoding="utf-8"), str(p), "exec")
                 except SyntaxError as exc:
                     offenders.append(
                         f"{_label(p)}:{exc.lineno}: {exc.msg}")
@@ -265,7 +278,7 @@ class TestPythonFloor:
         )
         assert not _fstring_defects(ok)
 
-    def test_the_check_retires_when_the_floor_reaches_312(self, tmp_path):
+    def test_the_check_retires_when_the_floor_reaches_312(self):
         """Raising ``requires-python`` to 3.12 must switch this off.
 
         Not cosmetic. Every rule the scan enforces became legal in 3.12,
@@ -275,40 +288,35 @@ class TestPythonFloor:
         the first version of this file documented the behaviour without
         implementing it.
         """
-        import test_python_floor_v176 as mod
+        # Above a 3.12 floor there is nothing left for the scan to say.
+        for running in ((3, 13), (3, 14), (3, 20)):
+            assert _mechanism(running, (3, 12)) == "skip", running
+        # Retired, not disabled: an interpreter that IS the floor stays
+        # authoritative, and that check costs nothing and keeps working.
+        assert _mechanism((3, 12), (3, 12)) == "compile"
 
-        # Outside the repository on purpose: while it exists it would be
-        # a source file with no SPDX header, and the licence test scans
-        # every .py in the tree.
-        offender = Path(tmp_path) / "retire_probe.py"
-        saved_floor = mod._floor
-        saved_sources = mod._sources
-        offender.write_text(
-            "def f(tr, x):\n"
-            "    return f\"a {tr('first half '\n"
-            "                    'second half')} b {x}\"\n",
-            encoding="utf-8",
-        )
-        try:
-            mod._sources = lambda: iter([offender])
+    def test_the_mechanism_table_is_what_ci_relies_on(self):
+        """Every (running, floor) pair CI can produce, decided here.
 
-            mod._floor = lambda: (3, 11)
-            try:
-                self.test_every_source_parses_on_the_declared_minimum()
-                on_duty = False
-            except AssertionError:
-                on_duty = True
-
-            mod._floor = lambda: (3, 12)
-            self.test_every_source_parses_on_the_declared_minimum()
-        finally:
-            mod._floor = saved_floor
-            mod._sources = saved_sources
-            offender.unlink(missing_ok=True)
-
-        # Same file, same interpreter: an offence against a 3.11 floor,
-        # and nothing at all against a 3.12 one.
-        assert on_duty, "the scan did not fire against a 3.11 floor"
+        A table rather than faked interpreters. The first attempt at the
+        retirement test worked by monkeypatching the floor and re-running
+        the main test, and it passed on 3.14 and failed on 3.11 — because
+        the code being exercised treated "below the floor" as
+        authoritative. A pure function makes that case visible instead of
+        version-dependent.
+        """
+        floor = (3, 11)
+        # The three jobs in the matrix, against the declared floor.
+        assert _mechanism((3, 11), floor) == "compile"
+        assert _mechanism((3, 13), floor) == "scan"
+        assert _mechanism((3, 14), floor) == "scan"
+        # Below the declared floor: unsupported, and its rejection would
+        # say nothing about the floor. Silence, not a false accusation.
+        assert _mechanism((3, 10), floor) == "skip"
+        # If the floor rises past PEP 701 the scan has nothing to add,
+        # but the floor interpreter itself is still authoritative.
+        assert _mechanism((3, 12), (3, 12)) == "compile"
+        assert _mechanism((3, 14), (3, 12)) == "skip"
 
     def test_the_floor_comes_from_packaging_metadata(self):
         """The declared floor is what CI runs, so it is what we check."""

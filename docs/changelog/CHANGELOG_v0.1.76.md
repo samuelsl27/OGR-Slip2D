@@ -100,12 +100,27 @@ vez: subir el mínimo *para que el job deje de estar rojo* es ajustar el
 termómetro.
 
 El guardián sí soporta que la decisión cambie: en cuanto
-`requires-python` llegue a 3.12 se retira solo, y hay un test que lo
-comprueba falseando el mínimo y verificando que el mismo fichero es una
-infracción contra 3.11 y no lo es contra 3.12. Hizo falta escribirlo:
-la primera versión de este fichero **documentaba esa retirada sin
-implementarla**, así que con un mínimo de 3.12 habría marcado f-strings
-perfectamente legales como infracciones.
+`requires-python` llegue a 3.12, la exploración se retira sola. Hizo
+falta escribirlo, porque la primera versión de este fichero
+**documentaba esa retirada sin implementarla**: con un mínimo de 3.12
+habría marcado f-strings perfectamente legales como infracciones.
+
+Y hubo que escribirlo **dos veces**. El primer intento comprobaba la
+retirada falseando el mínimo y volviendo a ejecutar el test principal.
+Pasaba en 3.14 y fallaba en 3.11 — porque el código que ejercitaba
+trataba «en el mínimo o **por debajo**» como autoritativo, y por debajo
+no lo es: un 3.11 rechazando código legal contra un mínimo declarado de
+3.12 no dice nada del código, solo del intérprete. La decisión vive ahora
+en una función pura, `_mechanism(running, floor)`, que se prueba **como
+tabla** en lugar de simulando intérpretes:
+
+| Corriendo | Mínimo | Mecanismo |
+|---|---|---|
+| 3.10 | 3.11 | ninguno — por debajo del mínimo, configuración no soportada |
+| **3.11** | **3.11** | `compile()` — somos el mínimo, manda el intérprete |
+| 3.12, 3.13, 3.14 | 3.11 | exploración de tokens, en lugar del intérprete que no tenemos |
+| 3.12 | 3.12 | `compile()` — retirada no es lo mismo que apagada |
+| 3.14 | 3.12 | ninguno — el mínimo ya legaliza todo lo que se busca |
 
 ### La tercera pasada en falso, y la más vergonzosa
 
@@ -159,14 +174,15 @@ declarada.
 
 - **Corregido** `ogr_gui/main_window.py` — la f-string de
   `_on_drawdown_sweep_done` ya no usa sintaxis de Python 3.12.
-- **Nuevo** `tests/test_python_floor_v176.py` — seis tests: todo `.py`
+- **Nuevo** `tests/test_python_floor_v176.py` — siete tests: todo `.py`
   del repositorio se parsea con el Python mínimo declarado; el escáner
   reconoce el constructo exacto que causó esto (si nunca se le ha visto
   fallar, no es un guardián); la rama de respaldo anterior a 3.12
   devuelve los errores de sintaxis localizados; la comprobación se retira
-  sola cuando el mínimo llega a 3.12; una barra invertida en la parte
-  literal no se marca; y el mínimo declarado tiene un job de CI que lo
-  ejecuta.
+  sola cuando el mínimo llega a 3.12; la tabla de decisión completa; una
+  barra invertida en la parte literal no se marca; y el mínimo declarado
+  tiene un job de CI que lo ejecuta. Los siete son independientes de la
+  versión que los ejecute, que es lo que la primera entrega no cumplió.
 - **Nuevo** `tests/test_version_consistency_v176.py` — tres tests sobre
   la deriva de metadatos de versión.
 - **Modificado** `.github/workflows/tests.yml` — añadido Python 3.13 a la
