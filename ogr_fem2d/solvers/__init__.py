@@ -9,6 +9,8 @@ from .seepage import (  # noqa: F401
     SeepageSolver,
     SegmentBC,
     default_boundary_conditions,
+    hydraulic_props_of,
+    restore_derived,
     solve_project_seepage,
     UnsaturatedSeepageSolver,
     TransientSeepageSolver,
@@ -18,5 +20,6 @@ from .seepage import (  # noqa: F401
 __all__ = [
     "BCType", "NodeBC", "SegmentBC", "SeepageBoundaryConditions",
     "SeepageSolver", "SeepageResult", "default_boundary_conditions",
+    "hydraulic_props_of", "restore_derived",
     "solve_project_seepage", "UnsaturatedSeepageSolver", "TransientSeepageSolver", "TransientStage",
 ]

@@ -44,6 +44,7 @@ Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 
+import json
 import math
 from dataclasses import dataclass, field
 from enum import Enum
@@ -150,7 +151,14 @@ class SeepageBoundaryConditions:
 # ======================================================================
 @dataclass
 class SeepageResult:
-    """Nodal heads plus the derived fields the Interpret view needs."""
+    """Nodal heads plus the derived fields the Interpret view needs.
+
+    Only three of these are *data*: ``total_head`` (what the solve
+    produced), ``kr`` (what conductivity scaling it produced it with) and
+    ``gamma_w``. Everything else is a function of those plus the mesh and
+    the material properties — which is why ``to_dict`` writes the three
+    and ``restore_derived`` recomputes the rest. See ``to_dict``.
+    """
 
     total_head: list[float] = field(default_factory=list)
     pressure_head: list[float] = field(default_factory=list)
@@ -163,10 +171,114 @@ class SeepageResult:
     converged: bool = False
     iterations: int = 1
     notes: dict = field(default_factory=dict)
+    # Unit weight of the pore fluid the heads were converted with. Kept on
+    # the result because u = gamma_w * (H - y) cannot be rebuilt without
+    # it, and the project setting may have changed since the solve.
+    gamma_w: float = 9.81
+    # Per-element relative permeability actually used, or None for a
+    # saturated solve. Stored rather than recomputed from the final heads:
+    # the Picard loop scales conductivity with kr(H_k) and then solves for
+    # H_(k+1), so kr(H_final) is *close to* but not equal to the kr the
+    # velocities were computed with. Recomputing would make a reopened
+    # project draw slightly different flow vectors than the one that was
+    # saved, which is exactly the kind of silent discrepancy that is
+    # worse than the file being a little larger.
+    kr: Optional[list[float]] = None
 
     @property
     def ok(self) -> bool:
         return self.converged and bool(self.total_head)
+
+    # ------------------------------------------------------------------
+    # Serialisation
+    #
+    # v0.1.78. Until this version the field was not written to the .ogr at
+    # all: `fem_mesh` was saved and `seepage_result` was not, so reopening
+    # a project whose materials take u from a finite-element field and
+    # pressing Compute reported u = 0 everywhere — a dry slope, in
+    # silence. v0.1.77 detected that and refused to compute; this is the
+    # other half, which is to stop losing the field in the first place.
+    #
+    # What is written is only what cannot be derived:
+    #
+    #   pressure_head = H[i] - node[i].y        (exact, closed form)
+    #   pore_pressure = gamma_w * pressure_head (exact, closed form)
+    #   velocity, gradient = _element_fluxes(H, kr)  (deterministic)
+    #   reactions -> not written at all: its only consumers are the
+    #       solver's own seepage-face iteration and the transient step,
+    #       both of which recompute it. Nothing on the reload path reads
+    #       it, and it never survived a save before either.
+    #
+    # That is ~3N floats instead of ~10N. The alternative — writing every
+    # field verbatim — costs nothing in code but stores the same numbers
+    # up to four times over, and the .ogr is a text format a user is
+    # expected to be able to open.
+    # ------------------------------------------------------------------
+    SCHEMA = 1
+
+    @staticmethod
+    def _round(values, sig: int = 9):
+        """Trim the digits that carry no information.
+
+        Heads are metres and pressures kilopascals; nine significant
+        figures is already far below any physical meaning, and it is kept
+        that generous on purpose so the round-trip test can demand 1e-9
+        rather than negotiating with the tolerance.
+        """
+        return [float(f"%.{sig}g" % v) for v in values]
+
+    @staticmethod
+    def _json_safe(notes: dict) -> dict:
+        """Drop note entries JSON cannot represent.
+
+        Notes are diagnostics, not results — a key that cannot be written
+        is worth losing, but it must never make ``save()`` raise on a
+        project the user just spent minutes computing.
+        """
+        out = {}
+        for k, v in (notes or {}).items():
+            try:
+                json.dumps(v)
+            except (TypeError, ValueError):
+                continue
+            out[str(k)] = v
+        return out
+
+    def to_dict(self) -> dict:
+        d = {
+            "schema": self.SCHEMA,
+            "total_head": self._round(self.total_head),
+            "gamma_w": float(self.gamma_w),
+            "seepage_nodes": [int(i) for i in self.seepage_nodes],
+            "converged": bool(self.converged),
+            "iterations": int(self.iterations),
+            "notes": self._json_safe(self.notes),
+        }
+        if self.kr is not None:
+            d["kr"] = self._round(self.kr)
+        return d
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "SeepageResult":
+        """Restore the stored fields only.
+
+        The derived fields stay empty until :func:`restore_derived` is
+        given the mesh they refer to. A result whose ``pore_pressure`` is
+        empty already reads as "no field" everywhere it is consumed
+        (``pore_pressure.py`` returns 0.0, the Interpret overlay skips),
+        so a half-restored result degrades the way the old missing-field
+        case did rather than inventing numbers.
+        """
+        r = cls()
+        r.total_head = [float(v) for v in d.get("total_head", [])]
+        kr = d.get("kr")
+        r.kr = [float(v) for v in kr] if kr is not None else None
+        r.gamma_w = float(d.get("gamma_w", 9.81))
+        r.seepage_nodes = [int(i) for i in d.get("seepage_nodes", [])]
+        r.converged = bool(d.get("converged", False))
+        r.iterations = int(d.get("iterations", 1))
+        r.notes = dict(d.get("notes") or {})
+        return r
 
 
 # ======================================================================
@@ -323,6 +435,11 @@ class SeepageSolver:
         res.pressure_head = [H[i] - self.mesh.nodes[i].y for i in range(n)]
         res.pore_pressure = [self.gamma_w * ph for ph in res.pressure_head]
         res.velocity, res.gradient = self._element_fluxes(H, kr)
+        # Recorded so the derived fields can be rebuilt after a save.
+        # Every result that gets velocities passes through here, saturated
+        # or not, so this is the one place that needs to remember.
+        res.gamma_w = self.gamma_w
+        res.kr = list(kr) if kr is not None else None
         # Nodal reactions at Dirichlet nodes: Q = K.H - q_applied.
         # A negative reaction means water is being forced INTO the
         # domain at that node, which a seepage face cannot do.
@@ -505,6 +622,71 @@ def solve_project_seepage(project, bcs: Optional[
     if bcs is None:
         bcs = default_boundary_conditions(mesh, project)
     return solver.solve(bcs)
+
+
+# ----------------------------------------------------------------------
+def restore_derived(result: SeepageResult, mesh, props: Optional[dict]
+                    = None) -> SeepageResult:
+    """Rebuild the fields ``to_dict`` deliberately did not store.
+
+    Called after loading a project (see ``Project.from_dict``). Mutates
+    and returns ``result``.
+
+    ``pressure_head`` and ``pore_pressure`` are closed-form identities:
+
+        P_i = H_i - y_i          u_i = gamma_w * P_i
+
+    so they come back **exactly**, to the last digit written. The element
+    fluxes are recomputed with the stored ``kr``, which makes them exact
+    too — ``_element_fluxes`` is a deterministic function of the heads,
+    the conductivities and kr, and all three survive the save.
+
+    Args:
+        result: a result restored by :meth:`SeepageResult.from_dict`.
+        mesh: the ``Mesh`` the heads were computed on. Node ordering must
+            match; it does, because the mesh is stored in the same file
+            and is not regenerated on load.
+        props: ``material_id -> HydraulicProperties``. Without it the
+            velocities cannot be rebuilt, so they are left empty rather
+            than computed with a default conductivity that was never
+            used — a plausible-looking wrong flow field is worse than no
+            flow field. Heads and pore pressures are unaffected.
+    """
+    n = len(result.total_head)
+    if n == 0 or mesh is None:
+        return result
+    if len(mesh.nodes) != n:
+        # A mesh that does not match the field is not a field for this
+        # mesh. Say nothing and restore nothing: the analysis guard
+        # (`check_analysis_settings`) then reports it the same way it
+        # reports a project that was never solved.
+        result.notes["restore_error"] = (
+            f"mesh has {len(mesh.nodes)} nodes, field has {n}")
+        result.total_head = []
+        return result
+    H = result.total_head
+    result.pressure_head = [H[i] - mesh.nodes[i].y for i in range(n)]
+    result.pore_pressure = [result.gamma_w * p for p in result.pressure_head]
+    if props is None:
+        return result
+    solver = SeepageSolver(mesh, props, gamma_w=result.gamma_w)
+    result.velocity, result.gradient = solver._element_fluxes(H, result.kr)
+    return result
+
+
+def hydraulic_props_of(project) -> dict:
+    """``material_id -> HydraulicProperties`` for a project.
+
+    One helper because three call sites built the same mapping by hand
+    (the driver above, the interface's Compute Groundwater, and now the
+    project loader), and a mapping built three ways drifts three ways.
+    """
+    props: dict = {}
+    for m in getattr(project, "materials", []):
+        hyd = getattr(m, "hydraulic", None)
+        if hyd is not None:
+            props[m.id] = hyd
+    return props
 
 
 # ======================================================================
@@ -960,6 +1142,8 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
         res.pressure_head = [H[i] - self.mesh.nodes[i].y for i in range(n)]
         res.pore_pressure = [self.gamma_w * p for p in res.pressure_head]
         res.velocity, res.gradient = self._element_fluxes(H, kr)
+        res.gamma_w = self.gamma_w          # see SeepageResult.to_dict
+        res.kr = list(kr) if kr is not None else None
         KH = [0.0] * n
         for r, c, v in zip(rows0, cols0, vals0):
             KH[r] += v * H[c]
@@ -1026,7 +1210,8 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
                                      for i in range(len(H))]
                 res.pore_pressure = [self.gamma_w * p
                                      for p in res.pressure_head]
-                res.converged = True
+                res.gamma_w = self.gamma_w   # a zero-span stage still has
+                res.converged = True         # to survive a save
                 res.notes.update({"stage": k, "time": stage.time,
                                   "time_steps": 0})
                 results.append(res)

@@ -102,24 +102,28 @@ def check_analysis_settings(project) -> list[str]:
     if why:
         problems.append(why)
 
-    # v0.1.77 — the finite-element seepage field is NOT serialised into
-    # the .ogr (``Project.to_dict`` writes ``fem_mesh`` and not
-    # ``seepage_result``), while ``pore_pressure`` answers 0.0 when it is
-    # missing. So a saved FEM project reopened and computed without
-    # re-solving the seepage reports a dry slope. This affects the GUI
-    # too, not only the CLI: within one session the field is in memory,
-    # and the moment the file is reopened it is gone.
+    # v0.1.77 — ``pore_pressure`` answers 0.0 when the finite-element
+    # field is missing, so computing without one reports a dry slope in
+    # silence. The guard turns that into a refusal.
+    #
+    # v0.1.78 — the field is now written to the .ogr, so the common cause
+    # is gone: reopening a solved project no longer loses it. The guard
+    # stays because the remaining causes are real — a project saved by an
+    # older version, a mesh regenerated since (which clears the field,
+    # main_window.py), or a model where the groundwater analysis was
+    # simply never run. Only the wording changed: it used to blame the
+    # file format, which is no longer true.
     from ogr_core.materials import PorePressureType
     uses_fem = [m.name for m in project.materials
                 if getattr(m, "pore_pressure", None) == PorePressureType.FEM_SEEPAGE]
-    if uses_fem and getattr(project, "seepage_result", None) is None:
+    field = getattr(project, "seepage_result", None)
+    if uses_fem and (field is None or not field.pore_pressure):
         problems.append(
             "These materials take their pore pressure from a "
-            "finite-element seepage field, and no field is loaded: "
-            f"{', '.join(uses_fem)}. The field is not stored in the .ogr "
-            "file, so it has to be recomputed after opening the project. "
-            "Run the groundwater analysis first — computing now would "
-            "report u = 0 everywhere, which looks like a dry slope.")
+            "finite-element seepage field, and this project has no "
+            f"computed field: {', '.join(uses_fem)}. Run the groundwater "
+            "analysis first — computing now would report u = 0 "
+            "everywhere, which looks like a dry slope.")
 
     return problems
 

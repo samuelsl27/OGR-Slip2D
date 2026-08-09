@@ -206,7 +206,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.77"
+    VERSION = "0.1.78"
 
     def __init__(self) -> None:
         super().__init__()
@@ -1295,6 +1295,13 @@ class MainWindow(QMainWindow):
         self.project.fem_mesh = mesh
         self.project.seepage_bcs = None
         self.project.seepage_result = None
+        # v0.1.78 — the transient stages have to go with it. They were
+        # left behind here and in _reset_fem_mesh, which did not show
+        # while nothing was saved: a stale list only existed until the
+        # session ended. Now that the fields are written to the .ogr, a
+        # list of results indexed by the OLD mesh's nodes would be saved
+        # alongside the new mesh.
+        self.project.transient_results = []
         self.project.is_dirty = True
         self.canvas.refresh_scene()
         self._update_groundwater_actions()
@@ -1311,6 +1318,7 @@ class MainWindow(QMainWindow):
         self.project.fem_mesh = None
         self.project.seepage_bcs = None
         self.project.seepage_result = None
+        self.project.transient_results = []   # see act_generate_mesh
         self.project.is_dirty = True
         self.canvas.refresh_scene()
         self._update_groundwater_actions()
@@ -2818,8 +2826,11 @@ class MainWindow(QMainWindow):
         # of quietly reporting the ordinary factor of safety, which looks
         # exactly like a successful analysis. v0.1.77 — the same guard now
         # covers the finite-element seepage field, for the same reason:
-        # the field is not stored in the .ogr, so a reopened FEM project
-        # would report u = 0 everywhere and look like a dry slope.
+        # without a field, u = 0 everywhere and the result looks like a
+        # dry slope. v0.1.78 stores the field in the .ogr, so reopening a
+        # solved project no longer trips this; it still catches a project
+        # that was never solved, or whose mesh has been regenerated since
+        # (which clears the field — see act_generate_mesh/_reset_fem_mesh).
         from ogr_slip2d.analysis_runner import check_analysis_settings
         _why = check_analysis_settings(self.project)
         if _why:

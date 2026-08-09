@@ -4,6 +4,15 @@
 sus funciones, sino por los casos cuyo resultado correcto se conoce y
 reproduce.
 
+## Casos
+
+| Caso | Qué fija | Fuente |
+|---|---|---|
+| `001-acads-1a` | La **búsqueda**: el círculo crítico hay que encontrarlo | Giam & Donald (1989), problema ACADS 1(a) — media de 33 programas |
+
+Los casos que fijan un **método** —evaluando un círculo ya conocido— viven
+por ahora en `tests/test_slide_validation_ej1.py`.
+
 ## Qué va aquí y qué no
 
 | Va aquí (se versiona) | Se queda fuera (no se versiona) |
@@ -39,6 +48,16 @@ validacion/casos/NNN-nombre-corto/
   "notas": "Cualquier condición que el caso exija: número de dovelas, tipo de presión intersticial, etc."
 }
 ```
+
+El bloque `busqueda` decide **con qué se ejecuta** el caso, y admite `tipo`
+(cualquiera de las seis estrategias: `grid`, `slope`, `auto_refine`, `block`,
+`path`, `simulated_annealing`), `num_slices`, `num_surfaces` y `semilla`. Lo
+que no se declare sale del propio `modelo.ogr`, que es lo normal: así se
+valida el análisis que el proyecto describe.
+
+Hasta v0.1.78 el runner ignoraba `tipo` y ejecutaba siempre una rejilla con
+sus parámetros por defecto, de modo que un caso podía estar validando algo
+distinto de lo que decía.
 
 **La tolerancia va en el caso, no en el test**, porque depende de la
 calidad de la fuente: un valor leído de una figura no merece la misma

@@ -291,19 +291,25 @@ class _MethodsPage(QWidget):
         vbox = QVBoxLayout(grp)
         self.checkboxes: dict[str, QCheckBox] = {}
         enabled = set(s.methods.enabled_methods)
+        # Imported here, not at module scope: ogr_gui must stay importable
+        # without pulling the analysis engine in for a settings dialog.
+        from ogr_slip2d.methods import method_registry
+        registry = set(method_registry())
         for m, label in self.METHODS:
             cb = QCheckBox(label)
             cb.setChecked(m.value in enabled)
-            # v0.1.7: Spencer and GLE/Morgenstern-Price are implemented.
-            # Mark unimplemented Corps of Engineers and Lowe-Karafiath only.
-            implemented = m in (
-                LEM.BISHOP_SIMPLIFIED,
-                LEM.JANBU_SIMPLIFIED,
-                LEM.JANBU_CORRECTED,
-                LEM.ORDINARY_FELLENIUS,
-                LEM.SPENCER,
-                LEM.GLE_MORGENSTERN_PRICE,
-            )
+            # v0.1.78: ask the method registry, never a hand-written list.
+            # This used to be a tuple of six ids frozen at v0.1.7; v0.1.20
+            # added Lowe-Karafiath and nobody updated it, so a method that
+            # was registered AND validated (error < 1 % against the
+            # reference) stayed greyed out with "Not yet implemented" for
+            # four versions. It is the same failure `build_method` already
+            # documents for `janbu_corrected` (analysis_runner.py:160-164):
+            # a second list of methods can only ever drift from the first.
+            # Corps of Engineers #1/#2 are genuinely absent from the
+            # registry, so they stay disabled — and the day someone
+            # registers them, they light up on their own.
+            implemented = m.value in registry
             if not implemented:
                 cb.setEnabled(False)
                 cb.setToolTip(tr("Not yet implemented in OGR Slip2D"))

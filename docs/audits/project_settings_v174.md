@@ -55,7 +55,7 @@ Nueve de los diez están cableados en v0.1.74. El décimo,
 
 | Nuestro | Referencia | Estado |
 |---|---|---|
-| 9 casillas de método | 9 métodos | 6 implementados; Corps #1, Corps #2 y Lowe-Karafiath deshabilitados con tooltip |
+| 9 casillas de método | 9 métodos | **v0.1.78**: 7 implementados; solo Corps #1 y Corps #2 deshabilitados. Lowe-Karafiath estuvo gris desde v0.1.20 pese a estar registrado y validado, porque la lista de la GUI estaba escrita a mano; ahora se deriva de `method_registry()` |
 | Number of slices | igual | Cableado desde siempre |
 | Tolerance | igual | **Cableado en v0.1.74** |
 | Maximum iterations | igual | **Cableado en v0.1.74** |

@@ -537,6 +537,17 @@ class Project:
                          if self.fem_mesh is not None else None),
             "seepage_bcs": (self.seepage_bcs.to_dict()
                             if self.seepage_bcs is not None else None),
+            # v0.1.78 — the computed field itself. Until this version the
+            # mesh was saved and the field was not, so a project whose
+            # materials take u from the FE field reopened with no field:
+            # Compute then reported u = 0 everywhere, which looks exactly
+            # like a dry slope. v0.1.77 detected it and refused; this
+            # stops losing it. Only the irreducible data is written —
+            # see SeepageResult.to_dict.
+            "seepage_result": (self.seepage_result.to_dict()
+                               if self.seepage_result is not None else None),
+            "transient_results": [r.to_dict()
+                                  for r in (self.transient_results or [])],
             "random_variables": [rv.to_dict()
                                  for rv in self.random_variables],
             "annotations": self.annotations.to_list(),
@@ -689,6 +700,24 @@ class Project:
         if sb:
             from ogr_fem2d.solvers import SeepageBoundaryConditions as _SBC
             proj.seepage_bcs = _SBC.from_dict(sb)
+
+        # v0.1.78 — the seepage field, and its derived fields rebuilt.
+        # Done after the mesh and the materials are in place, because
+        # restore_derived needs both: the mesh for the node elevations
+        # (u = gamma_w * (H - y)) and the materials for the conductivity.
+        sr = data.get("seepage_result")
+        trs = data.get("transient_results") or []
+        if sr or trs:
+            from ogr_fem2d.solvers import (SeepageResult as _SR,
+                                           hydraulic_props_of, restore_derived)
+            props = hydraulic_props_of(proj)
+
+            def _restore(d):
+                return restore_derived(_SR.from_dict(d), proj.fem_mesh, props)
+
+            if sr:
+                proj.seepage_result = _restore(sr)
+            proj.transient_results = [_restore(d) for d in trs]
 
         if path:
             proj.file_path = path

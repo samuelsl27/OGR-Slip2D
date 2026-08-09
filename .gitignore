@@ -48,6 +48,13 @@ Thumbs.db
 *.h5
 !examples/*.ogr
 !examples/*.h5
+# v0.1.78 — validation case models ARE versioned. validacion/README.md has
+# said so since the directory was created ("Va aquí (se versiona): el modelo
+# .ogr"), but the blanket *.ogr rule above silently excluded them, and a
+# case without its model is SKIPPED rather than failed — so a fresh clone
+# would have gone quietly back to zero runnable cases.
+# The .h5 results next to them stay ignored: they are output, not input.
+!validacion/casos/**/*.ogr
 quick_slope_results.h5
 
 # Jupyter
