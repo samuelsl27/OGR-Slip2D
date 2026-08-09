@@ -751,9 +751,15 @@ def _apply_tension_crack(project: Project, slices: Slices, tc_boundary):
     if not slices.slices:
         return slices
 
-    # Determine failure direction (right vs left) — assume rightward
-    # since OGR Slip2D uses CCW external. The "uphill" end of the slip
-    # is on the right for a typical slope.
+    # v0.1.73 — which end of the crack zone is up-slope now comes from
+    # the project's Failure Direction instead of being assumed. The old
+    # comment said "assume rightward ... for a typical slope", and that
+    # assumption happens to match the DEFAULT (right to left, crest on
+    # the right), which is why nothing was visibly wrong; a left-to-right
+    # model, though, had the crack truncating the slice at the wrong end
+    # of the zone, and therefore applying the water thrust to the wrong
+    # slice. Only the CHOICE of slice is decided here — the sense of the
+    # thrust has been derived from the geometry since v0.1.61, below.
     # Find the column x where the tension crack meets the slip surface
     tc_verts = tc_boundary.polyline.vertices
     if len(tc_verts) < 2:
@@ -770,10 +776,14 @@ def _apply_tension_crack(project: Project, slices: Slices, tc_boundary):
 
     # Find the slice whose x_centre is at the up-slope side and within
     # the tension-crack-boundary's x range
+    from .failure_direction import crest_is_on_the_right
+
     tc_xs = sorted([v.x for v in tc_verts])
     tc_xmin, tc_xmax = tc_xs[0], tc_xs[-1]
     upslope_slice = None
-    for s in reversed(slices.slices):  # right side = up-slope
+    ordered = (reversed(slices.slices) if crest_is_on_the_right(project)
+               else iter(slices.slices))
+    for s in ordered:
         if tc_xmin - 1e-6 <= s.x_centre <= tc_xmax + 1e-6:
             upslope_slice = s
             break

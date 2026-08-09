@@ -956,6 +956,17 @@ _DICTS: dict[str, dict[str, str]] = {
             "Habilita la herramienta de línea de desembalse y calcula el "
             "factor de seguridad tras el descenso. El nivel freático es el "
             "nivel INICIAL y la línea de desembalse el final, más bajo.",
+        # --- Failure direction, with a picture of it (v0.1.73) ---------
+        "Right to Left": "De derecha a izquierda",
+        "Left to Right": "De izquierda a derecha",
+        "The sliding mass moves towards decreasing x: the crest is "
+        "on the right and the toe on the left.":
+            "La masa deslizante se mueve hacia x decreciente: la coronación "
+            "queda a la derecha y el pie a la izquierda.",
+        "The sliding mass moves towards increasing x: the crest is "
+        "on the left and the toe on the right.":
+            "La masa deslizante se mueve hacia x creciente: la coronación "
+            "queda a la izquierda y el pie a la derecha.",
         # --- Water parameters, where the reference puts them (v0.1.72) -
         "Water Parameters": "Parámetros de agua",
         "Use the water pressure grid": "Usar la rejilla de presiones",

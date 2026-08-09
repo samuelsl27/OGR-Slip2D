@@ -1496,17 +1496,43 @@ class PathSearch(BaseSearch):
 
         # Locate the slope face (steepest ground segment) → defines the
         # toe / crest and the Slope-Limits ranges.
-        steepest_i = 0
-        steepest = -1.0
+        #
+        # v0.1.73 — with a strict ``>`` the FIRST steepest segment won,
+        # so a symmetric embankment (two faces of equal inclination)
+        # always chose the LEFT one, by iteration order and nothing else.
+        # That is the one place in this search where the geometry really
+        # is ambiguous, and where the Failure Direction is the missing
+        # information rather than a second opinion on something already
+        # answered: everything below still derives the toe as the lower
+        # end of the chosen face, because the reference is explicit that
+        # Path Search starts at the toe regardless of the direction.
+        slopes = []
         for i in range(len(top) - 1):
             dx = top[i + 1].x - top[i].x
             dy = top[i + 1].y - top[i].y
             if abs(dx) < 1e-9:
                 continue
-            s = abs(dy / dx)
-            if s > steepest:
-                steepest = s
-                steepest_i = i
+            slopes.append((i, abs(dy / dx)))
+        steepest_i = 0
+        if slopes:
+            steepest = max(s for _, s in slopes)
+            # Near-ties only. A face that is genuinely the steepest keeps
+            # winning whatever the direction is set to, so an ordinary
+            # single-face slope cannot be changed by this setting.
+            tied = [i for i, s in slopes if s >= steepest * (1.0 - 1e-6)]
+            if len(tied) > 1:
+                from .failure_direction import crest_is_on_the_right
+                # The mass exits at the toe, so pick the face whose toe
+                # lies on the side it is declared to move towards: the
+                # left-hand face for a right-to-left failure.
+                def _toe_x(i):
+                    a, b = top[i], top[i + 1]
+                    return a.x if a.y <= b.y else b.x
+                steepest_i = (min(tied, key=_toe_x)
+                              if crest_is_on_the_right(project)
+                              else max(tied, key=_toe_x))
+            else:
+                steepest_i = tied[0]
         face_a = top[steepest_i]
         face_b = top[steepest_i + 1]
         # Slope angle β (magnitude) of the face

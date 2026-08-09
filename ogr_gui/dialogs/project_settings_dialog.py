@@ -52,6 +52,118 @@ from ogr_gui.i18n import tr
 
 
 # ----------------------------------------------------------------------
+class _FailureDirectionSelector(QWidget):
+    """Two options with a drawing of which way the mass is expected to go.
+
+    A drop-down of two items reads as a preference; the direction is a
+    statement about the model, and a picture of a slope with an arrow on
+    it says that in a way "R2L" does not.
+
+    Drawn with QPainter rather than shipped as an icon file: forty lines
+    of code weigh less than two PNGs, scale with the display's DPI
+    instead of blurring on a high-density screen, and take their colours
+    from the active palette, so the widget follows a dark theme without a
+    second set of assets.
+    """
+
+    _W, _H = 92, 46
+
+    def __init__(self, current: FailureDirection) -> None:
+        super().__init__()
+        from PySide6.QtWidgets import QRadioButton
+
+        row = QHBoxLayout(self)
+        row.setContentsMargins(0, 0, 0, 0)
+
+        self.rb_r2l = QRadioButton(tr("Right to Left"))
+        self.rb_l2r = QRadioButton(tr("Left to Right"))
+        self.rb_r2l.setToolTip(tr(
+            "The sliding mass moves towards decreasing x: the crest is "
+            "on the right and the toe on the left."))
+        self.rb_l2r.setToolTip(tr(
+            "The sliding mass moves towards increasing x: the crest is "
+            "on the left and the toe on the right."))
+        (self.rb_l2r if current == FailureDirection.LEFT_TO_RIGHT
+         else self.rb_r2l).setChecked(True)
+
+        self._sketch = _SlopeSketch(self)
+        self._sketch.setFixedSize(self._W, self._H)
+        self.rb_r2l.toggled.connect(self._sketch.update)
+
+        buttons = QVBoxLayout()
+        buttons.setContentsMargins(0, 0, 0, 0)
+        buttons.addWidget(self.rb_r2l)
+        buttons.addWidget(self.rb_l2r)
+        row.addLayout(buttons)
+        row.addWidget(self._sketch)
+        row.addStretch(1)
+
+    def value(self) -> FailureDirection:
+        return (FailureDirection.LEFT_TO_RIGHT if self.rb_l2r.isChecked()
+                else FailureDirection.RIGHT_TO_LEFT)
+
+    def set_value(self, direction: FailureDirection) -> None:
+        (self.rb_l2r if direction == FailureDirection.LEFT_TO_RIGHT
+         else self.rb_r2l).setChecked(True)
+
+
+class _SlopeSketch(QWidget):
+    """The slope-and-arrow drawing beside the two options.
+
+    Kept apart from the selector so ``paintEvent`` has nothing to do with
+    the radio buttons' state handling; it just asks the parent which way
+    the arrow points.
+    """
+
+    def __init__(self, selector: "_FailureDirectionSelector") -> None:
+        super().__init__(selector)
+        self._selector = selector
+
+    def paintEvent(self, event) -> None:  # noqa: N802 (Qt name)
+        from PySide6.QtGui import QPainter, QPainterPath, QPen, QPolygonF
+        from PySide6.QtCore import QPointF
+
+        l2r = self._selector.rb_l2r.isChecked()
+        w, h = self.width(), self.height()
+        pal = self.palette()
+        ground = pal.mid().color()
+        ink = pal.text().color()
+
+        # A profile drawn for a crest on the RIGHT, then mirrored about
+        # the vertical centre line when the crest is on the left. One
+        # shape, one transform: the two cases cannot drift apart.
+        pts = [(0.06, 0.86), (0.40, 0.86), (0.66, 0.24),
+               (0.94, 0.24), (0.94, 0.97), (0.06, 0.97)]
+        path = QPainterPath()
+        for i, (fx, fy) in enumerate(pts):
+            x = (1.0 - fx) if l2r else fx
+            point = QPointF(x * w, fy * h)
+            path.moveTo(point) if i == 0 else path.lineTo(point)
+        path.closeSubpath()
+
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing, True)
+        p.fillPath(path, ground)
+        p.setPen(QPen(ink, 1.0))
+        p.drawPath(path)
+
+        # The arrow points the way the mass moves: left for right-to-left.
+        y = 0.52 * h
+        x_from, x_to = (0.30 * w, 0.78 * w) if l2r else (0.70 * w, 0.22 * w)
+        p.setPen(QPen(ink, 1.6))
+        p.drawLine(QPointF(x_from, y), QPointF(x_to, y))
+        tip = -1.0 if x_to < x_from else 1.0
+        head = QPolygonF([
+            QPointF(x_to, y),
+            QPointF(x_to - tip * 0.09 * w, y - 0.10 * h),
+            QPointF(x_to - tip * 0.09 * w, y + 0.10 * h),
+        ])
+        p.setBrush(ink)
+        p.drawPolygon(head)
+        p.end()
+
+
+# ----------------------------------------------------------------------
 class _GeneralPage(QWidget):
     """General settings — units, max counts, failure direction.
 
@@ -117,12 +229,7 @@ class _GeneralPage(QWidget):
             list(PermeabilityUnit).index(s.units.permeability)
         )
 
-        self.cbo_dir = QComboBox()
-        for d in FailureDirection:
-            self.cbo_dir.addItem(d.value, d)
-        self.cbo_dir.setCurrentIndex(
-            list(FailureDirection).index(s.units.failure_direction)
-        )
+        self.sel_dir = _FailureDirectionSelector(s.units.failure_direction)
 
         self.spn_mats = QSpinBox()
         self.spn_mats.setRange(1, 500)
@@ -133,7 +240,7 @@ class _GeneralPage(QWidget):
 
         form.addRow(tr("Time Units:"), self.cbo_time)
         form.addRow(tr("Permeability Units:"), self.cbo_perm)
-        form.addRow(tr("Failure Direction:"), self.cbo_dir)
+        form.addRow(tr("Failure Direction:"), self.sel_dir)
         form.addRow(tr("Max Materials:"), self.spn_mats)
         form.addRow(tr("Max Supports:"), self.spn_sups)
         layout.addWidget(og)
@@ -156,7 +263,7 @@ class _GeneralPage(QWidget):
         )
         self.s.units.time = self.cbo_time.currentData()
         self.s.units.permeability = self.cbo_perm.currentData()
-        self.s.units.failure_direction = self.cbo_dir.currentData()
+        self.s.units.failure_direction = self.sel_dir.value()
         self.s.max_materials = self.spn_mats.value()
         self.s.max_supports = self.spn_sups.value()
 
