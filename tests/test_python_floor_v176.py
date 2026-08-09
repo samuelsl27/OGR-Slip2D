@@ -47,6 +47,12 @@ _ROOT = Path(__file__).resolve().parent.parent
 _BACKSLASH = chr(92)
 _NEWLINE = chr(10)
 
+#: The version that legalised everything ``_fstring_defects`` looks for.
+#: Once the declared floor reaches it, the scan has nothing left to say
+#: and must stop talking — a check that outlives its constraint turns
+#: into a source of false positives, which is how checks get deleted.
+_PEP701 = (3, 12)
+
 
 def _label(path: Path) -> str:
     """A short name for ``path``, which need not live under the repo.
@@ -101,6 +107,20 @@ def _fstring_defects(path: Path) -> list[str]:
     src = path.read_text(encoding="utf-8")
     lines = src.splitlines(keepends=True)
     defects: list[str] = []
+
+    # Below 3.12 there are no FSTRING_* tokens to walk — an f-string is a
+    # single STRING token — and none are needed: the running interpreter
+    # IS the floor, so it answers the question exactly. Discovered the
+    # hard way, on the very CI job this file was written to protect: the
+    # scanner's own unit tests called this helper unconditionally and
+    # died with AttributeError on 3.11.
+    if not hasattr(tokenize, "FSTRING_START"):
+        try:
+            compile(src, str(path), "exec")
+        except SyntaxError as exc:
+            return [f"{_label(path)}:{exc.lineno}: {exc.msg}"]
+        return []
+
     try:
         toks = list(tokenize.generate_tokens(io.StringIO(src).readline))
     except (tokenize.TokenError, SyntaxError, IndentationError) as exc:
@@ -158,6 +178,12 @@ class TestPythonFloor:
         line buried in a wall of noise.
         """
         floor = _floor()
+        if floor >= _PEP701 and sys.version_info[:2] > floor:
+            # The floor already accepts every construct the scan looks
+            # for, and this interpreter is above it, so there is nothing
+            # this test can honestly assert. Passing quietly beats
+            # inventing offenders out of legal code.
+            return
         offenders: list[str] = []
         for p in _sources():
             src = p.read_text(encoding="utf-8")
@@ -182,12 +208,13 @@ class TestPythonFloor:
         from a check that cannot fail. This reproduces the exact shape that
         broke CI — an implicitly concatenated literal split across lines
         inside a replacement field — and asserts it is caught.
+
+        Runs on every interpreter. Below 3.12 the defect is caught by
+        ``compile`` and reported as "unterminated string literal"; above,
+        by the token walk, as "spans lines". Either wording is the same
+        finding, and asserting only one of them is what left this test
+        dead on the one version it was written for.
         """
-        if sys.version_info[:2] <= _floor():
-            # Below 3.12 the file cannot even be written and re-read as
-            # source without the interpreter rejecting it, which is the
-            # point: there is nothing to approximate.
-            return
         bad = tmp_path / "regression.py"
         bad.write_text(
             "def f(tr, x):\n"
@@ -197,7 +224,31 @@ class TestPythonFloor:
         )
         found = _fstring_defects(bad)
         assert found, "the scanner missed the construct it exists to catch"
-        assert "spans lines" in found[0], found
+        assert ("spans lines" in found[0]
+                or "unterminated" in found[0].lower()), found
+
+    def test_the_pre_312_fallback_reports_a_syntax_error(self, tmp_path):
+        """Exercise the branch CI runs on the floor interpreter.
+
+        On 3.11 there are no FSTRING_* tokens, so ``_fstring_defects``
+        delegates to ``compile``. That branch cannot be tested here by
+        feeding it the PEP 701 construct — this interpreter's ``compile``
+        accepts it, which is precisely why the token walk exists above
+        3.12 — so it is fed a syntax error every version rejects, which
+        proves the plumbing: compile raises, and the failure comes back
+        as a located defect string rather than an exception.
+        """
+        broken = tmp_path / "broken.py"
+        broken.write_text("def f(:\n    pass\n", encoding="utf-8")
+        saved = getattr(tokenize, "FSTRING_START", None)
+        if saved is not None:
+            del tokenize.FSTRING_START
+        try:
+            found = _fstring_defects(broken)
+        finally:
+            if saved is not None:
+                tokenize.FSTRING_START = saved
+        assert found and "broken.py" in found[0], found
 
     def test_a_backslash_in_the_literal_part_is_not_flagged(self, tmp_path):
         """``f"{n}\\n"`` is legal in 3.11 and must stay unflagged.
@@ -213,6 +264,51 @@ class TestPythonFloor:
             encoding="utf-8",
         )
         assert not _fstring_defects(ok)
+
+    def test_the_check_retires_when_the_floor_reaches_312(self, tmp_path):
+        """Raising ``requires-python`` to 3.12 must switch this off.
+
+        Not cosmetic. Every rule the scan enforces became legal in 3.12,
+        so against a 3.12 floor it would report ordinary, correct code as
+        an offence — and a check that cries wolf gets deleted, taking the
+        real protection with it. Asserted rather than trusted, because
+        the first version of this file documented the behaviour without
+        implementing it.
+        """
+        import test_python_floor_v176 as mod
+
+        # Outside the repository on purpose: while it exists it would be
+        # a source file with no SPDX header, and the licence test scans
+        # every .py in the tree.
+        offender = Path(tmp_path) / "retire_probe.py"
+        saved_floor = mod._floor
+        saved_sources = mod._sources
+        offender.write_text(
+            "def f(tr, x):\n"
+            "    return f\"a {tr('first half '\n"
+            "                    'second half')} b {x}\"\n",
+            encoding="utf-8",
+        )
+        try:
+            mod._sources = lambda: iter([offender])
+
+            mod._floor = lambda: (3, 11)
+            try:
+                self.test_every_source_parses_on_the_declared_minimum()
+                on_duty = False
+            except AssertionError:
+                on_duty = True
+
+            mod._floor = lambda: (3, 12)
+            self.test_every_source_parses_on_the_declared_minimum()
+        finally:
+            mod._floor = saved_floor
+            mod._sources = saved_sources
+            offender.unlink(missing_ok=True)
+
+        # Same file, same interpreter: an offence against a 3.11 floor,
+        # and nothing at all against a 3.12 one.
+        assert on_duty, "the scan did not fire against a 3.11 floor"
 
     def test_the_floor_comes_from_packaging_metadata(self):
         """The declared floor is what CI runs, so it is what we check."""

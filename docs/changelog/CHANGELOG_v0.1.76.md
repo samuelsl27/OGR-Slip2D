@@ -77,6 +77,65 @@ El guardián lee el mínimo de `pyproject.toml` en vez de fijarlo, para que
 deje de disparar solo el día que el mínimo suba a 3.12, en lugar de
 sobrevivir a la restricción que protege.
 
+### Por qué 3.11 se queda
+
+Con el job en rojo, la salida barata era subir `requires-python` a 3.12 y
+borrar el problema. Se descartó, y conviene dejar escrito por qué para no
+volver a plantearlo cada vez que ese job moleste.
+
+- **No ahorraba trabajo.** El defecto ya estaba corregido; 3.11 pasaba
+  1655 de 1656 y el único fallo restante era del propio guardián.
+  Subir el mínimo solo habría quitado el job que lo encontró.
+- **3.11 es el Python de sistema de Debian 12**, con soporte de seguridad
+  de upstream hasta octubre de 2027. Este programa se instala en máquinas
+  de departamento y de laboratorio que el usuario no administra, y ahí el
+  intérprete no se elige.
+- **La asimetría manda**: subir el mínimo más adelante es una línea;
+  bajarlo no lo es, porque para entonces la sintaxis nueva se ha colado
+  sola. Que es exactamente cómo empezó esto — nadie decidió usar PEP 701
+  en v0.1.70.
+
+Y la razón que no vale, dicha en voz alta para reconocerla la próxima
+vez: subir el mínimo *para que el job deje de estar rojo* es ajustar el
+termómetro.
+
+El guardián sí soporta que la decisión cambie: en cuanto
+`requires-python` llegue a 3.12 se retira solo, y hay un test que lo
+comprueba falseando el mínimo y verificando que el mismo fichero es una
+infracción contra 3.11 y no lo es contra 3.12. Hizo falta escribirlo:
+la primera versión de este fichero **documentaba esa retirada sin
+implementarla**, así que con un mínimo de 3.12 habría marcado f-strings
+perfectamente legales como infracciones.
+
+### La tercera pasada en falso, y la más vergonzosa
+
+El primer empujón dejó el job de 3.11 rojo otra vez, con 1655 de 1656:
+
+```
+✗ test_a_backslash_in_the_literal_part_is_not_flagged:
+  AttributeError: module 'tokenize' has no attribute 'FSTRING_START'
+```
+
+**El guardián se caía en la única versión de Python para la que fue
+escrito.** La bifurcación estaba puesta en el test principal —
+`compile()` por debajo del mínimo, recorrido de tokens por encima — pero
+los dos tests unitarios del escáner llamaban al ayudante directamente, y
+`FSTRING_START` no existe antes de 3.12.
+
+La bifurcación se ha bajado al propio `_fstring_defects`, que es donde
+debía estar desde el principio: sin `FSTRING_START`, delega en
+`compile()`. Así el ayudante es correcto en cualquier intérprete y sus
+tests dejan de tener que saber en cuál corren.
+
+Con una limitación que conviene dejar escrita, porque no se puede tapar:
+**el constructo de PEP 701 no sirve para probar la rama de respaldo desde
+una máquina moderna.** El `compile()` de 3.14 lo acepta — que es
+exactamente la razón de que el recorrido de tokens exista — así que el
+test que la cubre le da un error de sintaxis que rechaza toda versión, y
+comprueba la fontanería: que `compile` levanta, y que el fallo vuelve
+como cadena localizada en vez de como excepción. Que el constructo real
+se detecte en 3.11 solo lo puede afirmar el job de 3.11.
+
 ## Un segundo hallazgo, del mismo tipo
 
 Al ir a subir el número de versión apareció que **AGENTS.md enumera
@@ -100,11 +159,14 @@ declarada.
 
 - **Corregido** `ogr_gui/main_window.py` — la f-string de
   `_on_drawdown_sweep_done` ya no usa sintaxis de Python 3.12.
-- **Nuevo** `tests/test_python_floor_v176.py` — cuatro tests: todo `.py`
+- **Nuevo** `tests/test_python_floor_v176.py` — seis tests: todo `.py`
   del repositorio se parsea con el Python mínimo declarado; el escáner
   reconoce el constructo exacto que causó esto (si nunca se le ha visto
-  fallar, no es un guardián); una barra invertida en la parte literal no
-  se marca; y el mínimo declarado tiene un job de CI que lo ejecuta.
+  fallar, no es un guardián); la rama de respaldo anterior a 3.12
+  devuelve los errores de sintaxis localizados; la comprobación se retira
+  sola cuando el mínimo llega a 3.12; una barra invertida en la parte
+  literal no se marca; y el mínimo declarado tiene un job de CI que lo
+  ejecuta.
 - **Nuevo** `tests/test_version_consistency_v176.py` — tres tests sobre
   la deriva de metadatos de versión.
 - **Modificado** `.github/workflows/tests.yml` — añadido Python 3.13 a la
