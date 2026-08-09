@@ -135,10 +135,25 @@ RS = range(60, 221, 20)
 # they do not each pay for a search.
 _FIXED = dict(centre_x=100.0, centre_y=200.0, radius=160.0)
 
+# v0.1.71 — a surface from the same grid on which the drained cap did NOT
+# converge before this version: a shallow circle whose last slice has a
+# base at 67 degrees and m_alpha = 0.68. Named so the tests that exist
+# because of it say what they are about.
+_OSCILLATING = dict(centre_x=120.0, centre_y=100.0, radius=80.0)
+
+# The shipped default, so a test can assert the constant was put back
+# without hard-coding the number in two places.
+CAP_RELAXATION_DEFAULT = 0.50
+
 
 def _circle():
     from ogr_slip2d.surface import SlipCircle
     return SlipCircle(**_FIXED)
+
+
+def _oscillating_circle():
+    from ogr_slip2d.surface import SlipCircle
+    return SlipCircle(**_OSCILLATING)
 
 
 def _run(project, procedure, surface=None, n=25):
@@ -245,11 +260,32 @@ class TestTheDrainedCapIsAFixedPoint:
             got = [self._at(w, procedure) for w in (1.0, 0.7, 0.5, 0.35)]
             assert max(got) - min(got) < 2e-3, (procedure, got)
 
+    def test_it_holds_on_a_surface_that_used_to_oscillate(self):
+        """v0.1.71 — the hole the test above left open.
+
+        It only ever looked at the critical surface, which converges in 4
+        passes on any relaxation. The surfaces that did NOT converge were
+        elsewhere on the grid, and that is exactly how v0.1.70 shipped a
+        relaxation chosen on a sample that excluded the hard cases.
+        """
+        from ogr_slip2d import rapid_drawdown as rd
+
+        surface = _oscillating_circle()
+        original = rd.CAP_RELAXATION
+        got = []
+        try:
+            for omega in (0.7, 0.5, 0.35, 0.2):
+                rd.CAP_RELAXATION = omega
+                got.append(_run(_pilarcitos(), "duncan_wright", surface).fos)
+        finally:
+            rd.CAP_RELAXATION = original
+        assert max(got) - min(got) < 2e-3, got
+
     def test_the_relaxation_is_restored(self):
-        """The guard on rule 5, since the test above patches a global."""
+        """The guard on rule 5, since the tests above patch a global."""
         from ogr_slip2d import rapid_drawdown as rd
         self._at(0.35)
-        assert rd.CAP_RELAXATION == 0.70
+        assert rd.CAP_RELAXATION == CAP_RELAXATION_DEFAULT
 
     def test_it_converges_well_inside_the_pass_budget(self):
         from ogr_slip2d.rapid_drawdown import CAP_MAX_PASSES
@@ -262,6 +298,101 @@ class TestTheDrainedCapIsAFixedPoint:
         lk = _run(_pilarcitos(), "lowe_karafiath")
         assert lk.n_cap_passes == 0
         assert lk.fos_stage3 is None
+
+
+# ======================================================================
+class TestTheCapCannotDependOnWhereItStopped:
+    """v0.1.71 — the defect the pass budget was hiding.
+
+    On a handful of surfaces the cap did not converge: one slice — always
+    the last, at the steep crest end — flipped between capped and
+    uncapped in a period-2 cycle whose amplitude slowly GREW, so there
+    was no fixed point to reach. The reported factor of safety then came
+    out of whichever half of the cycle the budget happened to land on:
+
+        CAP_MAX_PASSES   17       18       19       20       21
+        factor of safety 1.24865  1.25470  1.24862  1.25474  1.24858
+
+    A 0.50 % swing decided by 20 being even. None of those surfaces was
+    critical on Pilarcitos, which is why v0.1.70 shipped; nothing
+    guarantees that on another model.
+
+    Refining the slicing does not help — the same circle stays stuck from
+    25 to 150 slices, with the factor of safety wandering over 2.7 % — so
+    it is not a discretisation artefact. The mechanism is m-alpha: that
+    slice has a base at 67-74 degrees, and ``N = [W - c·l·sinα/F]/m_α``
+    amplifies dN/dF when m_α is small. Measured with ``base_m_alphas``,
+    the split is clean and has no overlap:
+
+        surfaces that oscillated ... min m_alpha 0.446 - 0.716
+        surfaces that converged .... min m_alpha 0.963 - 1.046
+
+    Well above the 0.2 rejection limit of Whitman and Bailey, so the
+    existing m-alpha check would not have caught them either.
+    """
+
+    def test_the_answer_does_not_depend_on_the_pass_budget(self):
+        """The sharpest statement, and the one that failed before."""
+        from ogr_slip2d import rapid_drawdown as rd
+
+        surface = _oscillating_circle()
+        original = rd.CAP_MAX_PASSES
+        got = []
+        try:
+            for budget in (17, 18, 19, 20, 21, 22):
+                rd.CAP_MAX_PASSES = budget
+                got.append(_run(_pilarcitos(), "duncan_wright", surface).fos)
+        finally:
+            rd.CAP_MAX_PASSES = original
+        assert max(got) - min(got) < 1e-3, (
+            f"the factor of safety still depends on the budget: {got}")
+
+    def test_the_pass_budget_is_restored(self):
+        from ogr_slip2d import rapid_drawdown as rd
+        assert rd.CAP_MAX_PASSES == 20
+
+    def test_no_surface_on_the_grid_exhausts_the_budget(self):
+        """It was 8 of 185 for DWW and 12 for the Corps."""
+        from ogr_slip2d.rapid_drawdown import CAP_MAX_PASSES
+        from ogr_slip2d.surface import SlipCircle
+
+        p = _pilarcitos()
+        for procedure in ("duncan_wright", "corps_2"):
+            stuck = []
+            for cx in XS:
+                for cy in YS:
+                    for r in RS:
+                        c = SlipCircle(centre_x=float(cx), centre_y=float(cy),
+                                       radius=float(r))
+                        try:
+                            res = _run(p, procedure, c)
+                        except Exception:  # noqa: BLE001
+                            continue
+                        if res.n_cap_passes >= CAP_MAX_PASSES:
+                            stuck.append((cx, cy, r))
+                        assert res.cap_converged or stuck, (cx, cy, r)
+            assert not stuck, (procedure, stuck)
+
+    def test_a_run_that_cannot_converge_says_so(self):
+        """Rule 7 for the flag: forced by starving the budget."""
+        from ogr_slip2d import rapid_drawdown as rd
+
+        original = rd.CAP_MAX_PASSES
+        try:
+            rd.CAP_MAX_PASSES = 1
+            res = _run(_pilarcitos(), "duncan_wright", _oscillating_circle())
+        finally:
+            rd.CAP_MAX_PASSES = original
+        assert res.cap_converged is False
+        assert res.n_cap_passes == 1
+        # And it reports WHY, with the diagnostic that identified it.
+        assert res.cap_min_m_alpha is not None
+        assert 0.0 < res.cap_min_m_alpha < 1.0
+
+    def test_a_run_that_converges_says_so_too(self):
+        res = _run(_pilarcitos(), "duncan_wright")
+        assert res.cap_converged is True
+        assert res.cap_min_m_alpha is None    # not paid for on the fast path
 
 
 class TestTheStagesAreWhatTheyClaim:

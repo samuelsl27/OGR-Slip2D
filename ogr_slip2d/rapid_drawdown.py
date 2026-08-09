@@ -121,14 +121,10 @@ MULTISTAGE_METHODS = (DWW, LOWE_KARAFIATH, CORPS_2)
 # v0.1.70 — the drained cap is a fixed point, not a single substitution.
 # Capping a slice lowers the factor of safety, which moves the base
 # normals, which moves the cap; applied once, the answer depends on where
-# you happened to stop. Undamped the iteration OSCILLATES with decreasing
-# amplitude (Appendix G, Corps: 1.3335, 1.3638, 1.3412, 1.3548, ...), so
-# it is under-relaxed.
-#
-# ``CAP_RELAXATION`` was chosen by measurement, and the measurement that
-# matters is not the speed but that **the fixed point does not depend on
-# it** — which is what makes the converged value a property of the model
-# rather than of this constant:
+# you happened to stop. Undamped the iteration oscillates, so it is
+# under-relaxed. The measurement that licenses the whole thing is not the
+# speed but that **the fixed point does not depend on the relaxation**,
+# which is what makes the converged value a property of the model:
 #
 #     omega   Appendix G Corps    Appendix G DWW    Pilarcitos Corps
 #     1.00    1.3493 (18 passes)  1.4455 (16)       0.8656 (40, unconverged)
@@ -136,10 +132,25 @@ MULTISTAGE_METHODS = (DWW, LOWE_KARAFIATH, CORPS_2)
 #     0.50    1.3495 (12)         1.4457 (11)       0.8658  (4)
 #     0.35    1.3496 (16)         1.4458 (14)       0.8658  (5)
 #
-# 0.70 converges fastest across the three. A property test pins the
-# independence; see ``test_rapid_drawdown_v168``.
-CAP_RELAXATION = 0.70
-CAP_TOL = 1e-4          # on the factor of safety, between passes
+# v0.1.71 — that table is why the default was 0.70, and it was the wrong
+# reading, because every column of it is the CRITICAL surface. Over the
+# whole Pilarcitos grid (729 candidates, 185 valid) the picture inverts:
+#
+#     omega   DWW passes  stuck   Corps passes  stuck   critical FoS
+#     0.70       515        8         613       12      1.0847 / 0.8383
+#     0.50       365        0         381        0      1.0847 / 0.8383
+#     0.35       453        0         441        1      1.0847 / 0.8383
+#
+# 0.50 wins on every axis — no surface left unconverged, the same
+# critical factors of safety, and 29-38 % less work, because a surface
+# that never converges burns the whole budget every time. Note it is NOT
+# monotone: 0.35 puts one back. A fixed relaxation is therefore fragile
+# by construction, which is why the loop also HALVES it whenever the
+# factor of safety reverses direction between passes — a period-2 cycle
+# is the failure mode, and halving is what breaks it.
+CAP_RELAXATION = 0.50
+CAP_RELAXATION_MIN = 0.05    # below this, damping is not the problem
+CAP_TOL = 1e-4               # on the factor of safety, between passes
 CAP_MAX_PASSES = 20
 
 
@@ -164,10 +175,14 @@ class DrawdownResult:
     fos_stage3: Optional[float] = None
     n_undrained_slices: int = 0
     n_stage3_switched: int = 0
-    # v0.1.70 — how many passes the drained cap needed to settle. Worth
-    # reporting: a run that hits CAP_MAX_PASSES has not converged, and
-    # the factor of safety is then wherever the iteration stopped.
+    # v0.1.70 — how many passes the drained cap needed to settle.
     n_cap_passes: int = 0
+    # v0.1.71 — and whether it actually settled. False means the factor
+    # of safety above is the CENTRE of a cycle the cap never left, not a
+    # converged value; ``cap_min_m_alpha`` then carries the diagnostic,
+    # because the slice that cycles is always one with a small m-alpha.
+    cap_converged: bool = True
+    cap_min_m_alpha: Optional[float] = None
     note: str = ""
 
 
@@ -469,9 +484,14 @@ def rapid_drawdown_fos(
     #      capping a strength lowers the factor of safety, which moves the
     #      base normals, which moves the cap. See CAP_RELAXATION.
     cur = dict(tau_by_index)
+    omega = CAP_RELAXATION      # local: a hard surface must not leak into
+                                # the next one through a module constant
     prev_fos = r2.fos
+    prev_delta = None
     last = r2
+    recent: list[float] = []    # factors of safety of the CAPPED passes
     passes = 0
+    converged = False
     for _ in range(CAP_MAX_PASSES):
         normals2 = list(getattr(last, "base_normal", ()) or ())
         nxt: dict = {}
@@ -488,25 +508,57 @@ def rapid_drawdown_fos(
             # floor instead of settling on min(undrained, drained).
             target = composite_strength(                      # (10)
                 tau_ff, sigma_d, c_eff, phi_eff)
-            nxt[i] = (1.0 - CAP_RELAXATION) * cur[i] + CAP_RELAXATION * target
+            nxt[i] = (1.0 - omega) * cur[i] + omega * target
         if all(abs(nxt[i] - cur[i]) < 1e-12 for i in nxt):
             # Nothing moved, so re-solving would return the same factor
             # of safety. On the first pass this is the surface where the
             # cap never bites at all, and it must cost no extra solve —
             # that was the whole of the pre-v0.1.70 fast path.
+            converged = True
             break
         cur = nxt
         r3 = method.compute_fos(p2, surface, _undrained_slices(sl2, cur))
         if not math.isfinite(r3.fos):
             break
         last = r3
+        recent.append(r3.fos)
         passes += 1
-        if abs(r3.fos - prev_fos) < CAP_TOL:
+        delta = r3.fos - prev_fos
+        if abs(delta) < CAP_TOL:
+            converged = True
             break
+        # v0.1.71 — a reversal is the signature of the period-2 cycle
+        # that used to leave surfaces unconverged. Halving on each
+        # reversal collapses it; a fixed relaxation only works until a
+        # model crosses whatever threshold that particular value sits on.
+        if prev_delta is not None and delta * prev_delta < 0.0:
+            omega = max(CAP_RELAXATION_MIN, 0.5 * omega)
+        prev_delta = delta
         prev_fos = r3.fos
 
-    res.fos_stage3 = last.fos if math.isfinite(last.fos) else r2.fos
+    if converged or len(recent) < 2:
+        res.fos_stage3 = recent[-1] if recent else r2.fos
+    else:
+        # v0.1.71 — NEVER the last iterate on its own. If the cap is
+        # still cycling, the last iterate is one horn of the cycle and
+        # the answer would depend on the parity of CAP_MAX_PASSES: the
+        # same surface gave 1.2486 at 19 passes and 1.2547 at 20. The
+        # midpoint is the cycle centre, and it does not care where the
+        # budget ran out.
+        res.fos_stage3 = 0.5 * (recent[-1] + recent[-2])
     res.n_cap_passes = passes
+    res.cap_converged = converged
+    if not converged:
+        # Report WHY, with the diagnostic that identified the mechanism:
+        # the cycling slice is always the steep one at the crest end,
+        # where a small m-alpha amplifies dN/dF and closes the loop.
+        # Measured on Pilarcitos, the split had no overlap — surfaces
+        # that cycled had min m-alpha 0.45-0.72, ones that converged
+        # 0.96-1.05. Only computed here, so the normal path pays nothing.
+        from .checks import base_m_alphas
+
+        vals = base_m_alphas(last)
+        res.cap_min_m_alpha = min(vals) if vals else None
     res.n_stage3_switched = sum(
         1 for i, tau_ff in tau_by_index.items() if cur[i] < tau_ff - 1e-12)
     # Every iterate is a convex combination of the undrained strength and
@@ -575,6 +627,8 @@ class MultiStageDrawdownMethod:
                 # not settle is visible rather than silently taken at
                 # wherever the iteration stopped.
                 "cap_passes": res.n_cap_passes,
+                "cap_converged": res.cap_converged,
+                "cap_min_m_alpha": res.cap_min_m_alpha,
             },
         )
 
