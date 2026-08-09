@@ -140,7 +140,13 @@ class TestTranslationCompleteness:
                    "Mark FoS = 1.0", "Hatch pattern", "Color", "Colour",
                    "no", "Monte Carlo", "Horizontal:", "Vertical:",
                    "   |   FS = %s", "%s — %s (%d)", "Error", "Color:",
-                   "Zoom", "Snap", "SNAP", "OSNAP", "ORTHO", "GRID"}
+                   "Zoom", "Snap", "SNAP", "OSNAP", "ORTHO", "GRID",
+                   # v0.1.72 — the drawdown envelope summaries. Notation
+                   # only: the same symbols name the same quantities in
+                   # both languages, so a "translation" that differed
+                   # would be wrong rather than more Spanish.
+                   "R: Cr = %.4g, φR = %.4g°",
+                   "Kc = 1: d = %.4g, ψ = %.4g°"}
         same = [k for k, v in _DICTS["es"].items()
                 if k == v and k not in allowed]
         assert len(same) < 12, same[:15]

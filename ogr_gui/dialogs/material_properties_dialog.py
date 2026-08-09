@@ -43,6 +43,8 @@ from ogr_core.materials import (
 )
 from ogr_gui.i18n import tr
 
+from .drawdown_strength_dialog import DrawdownStrengthDialog, envelope_summary
+
 
 # ----------------------------------------------------------------------
 class _StrengthParamPanel(QWidget):
@@ -265,6 +267,7 @@ class MaterialPropertiesDialog(QDialog):
         has_water_table: bool = False,
         water_surfaces: list[tuple[str, str]] | None = None,
         rapid_drawdown: bool = False,
+        drawdown_method: str = "b_bar",
     ) -> None:
         super().__init__(parent)
         # v0.1.62 — (boundary id, translated label) for every water table
@@ -273,6 +276,10 @@ class MaterialPropertiesDialog(QDialog):
         # the same way ``has_water_table`` is a derived flag.
         self._water_surfaces = list(water_surfaces or [])
         self._rapid_drawdown = bool(rapid_drawdown)
+        # v0.1.72 — which of the four procedures is configured. B̄ and the
+        # undrained envelope belong to different ones, so the dialog needs
+        # to know which before it can show only the relevant field.
+        self._drawdown_method = str(drawdown_method or "b_bar")
         # v0.1.29 — the unsaturated-strength fields are only meaningful
         # (and only shown) when the groundwater method is an FEA, since
         # only then can pore pressures be negative.
@@ -320,6 +327,7 @@ class MaterialPropertiesDialog(QDialog):
         # Identity group
         gen_grp = QGroupBox(tr("General"))
         gen_form = QFormLayout(gen_grp)
+        self._general_form = gen_form
         self.ed_name = QLineEdit()
         self.btn_color = QPushButton()
         self.btn_color.setFixedWidth(60)
@@ -426,9 +434,13 @@ class MaterialPropertiesDialog(QDialog):
         str_layout.addWidget(self.param_panel)
         right.addWidget(str_grp)
 
-        # Pore pressure
-        pp_grp = QGroupBox(tr("Pore Pressure"))
+        # Water parameters — named after what the reference calls this
+        # section. "Pore pressure" is the quantity; these are the inputs
+        # that determine it, and only some of them apply at a time.
+        pp_grp = QGroupBox(tr("Water Parameters"))
+        self.grp_water = pp_grp
         pp_form = QFormLayout(pp_grp)
+        self._water_form = pp_form
         self.cbo_pp = QComboBox()
         for t in PorePressureType:
             self.cbo_pp.addItem(t.value, t)
@@ -463,7 +475,17 @@ class MaterialPropertiesDialog(QDialog):
             "Assumes the equipotential through the slice base is straight, "
             "which is exact only for an infinite slope."))
 
+        # v0.1.72 — the per-material way out of a water pressure grid.
+        # Only shown when the project actually uses one, because that is
+        # the only time it decides anything.
+        self.chk_use_grid = QCheckBox(tr("Use the water pressure grid"))
+        self.chk_use_grid.setChecked(True)
+        self.chk_use_grid.setToolTip(tr(
+            "With the grid off, this material takes its pore pressure "
+            "from its own water parameters instead of the grid."))
+
         pp_form.addRow(tr("Type:"), self.cbo_pp)
+        pp_form.addRow("", self.chk_use_grid)
         pp_form.addRow(tr("Water Surface:"), self.cbo_water_surface)
         pp_form.addRow(self.chk_hu, self.dsp_hu)
         pp_form.addRow("", self.chk_auto_hu)
@@ -474,51 +496,50 @@ class MaterialPropertiesDialog(QDialog):
         # v0.1.62 — Rapid drawdown parameters. B̄ used to be read off the
         # material with getattr, defaulting to 1.0, which made EVERY
         # material undrained without anyone choosing it.
+        # v0.1.72 — the whole group is gone unless a rapid drawdown is
+        # configured. It used to be permanently on screen and merely
+        # greyed out, which cost every other user a quarter of the dialog
+        # for a parameter almost nobody sets. Hiding it is not losing it:
+        # the analysis that needs it is what brings it back, which is the
+        # same route the reference takes.
         rd_grp = QGroupBox(tr("Rapid Drawdown Parameters"))
+        self.grp_drawdown = rd_grp
         rd_form = QFormLayout(rd_grp)
+        self._drawdown_form = rd_form
         self.chk_undrained = QCheckBox(tr("Undrained Behaviour"))
         self.dsp_b_bar = QDoubleSpinBox()
         self.dsp_b_bar.setRange(0.0, 5.0); self.dsp_b_bar.setDecimals(3)
         self.dsp_b_bar.setToolTip(tr(
             "Skempton's B̄: Δu = B̄ · Δσv. Only a material that behaves "
             "undrained retains excess pore pressure after drawdown."))
-        if not self._rapid_drawdown:
-            _rd_hint = tr(
-                "Enable Rapid Drawdown analysis in Project Settings "
-                "→ Groundwater → Advanced first.")
-            self.chk_undrained.setToolTip(_rd_hint)
-            rd_grp.setToolTip(_rd_hint)
         # v0.1.68 — the undrained envelope the multi-stage procedures need.
-        # Either form is accepted and converted to whichever the chosen
-        # procedure wants; the conversion is exact, so nothing is lost.
-        self.cbo_env_kind = QComboBox()
-        self.cbo_env_kind.addItem(tr("(none)"), None)
-        self.cbo_env_kind.addItem(tr("Total Stress R Envelope"), "r")
-        self.cbo_env_kind.addItem(tr("Kc = 1 Envelope"), "kc1")
-        self.dsp_env_a = QDoubleSpinBox()
-        self.dsp_env_a.setRange(0.0, 1e6); self.dsp_env_a.setDecimals(3)
-        self.dsp_env_b = QDoubleSpinBox()
-        self.dsp_env_b.setRange(0.0, 89.0); self.dsp_env_b.setDecimals(3)
-        self.dsp_env_b.setSuffix(" °")
-        self.lbl_env_a = QLabel(tr("Cr:"))
-        self.lbl_env_b = QLabel(tr("Angle:"))
-        self.cbo_env_kind.setToolTip(tr(
+        # v0.1.72 — it moved behind this button, where the reference keeps
+        # it. The summary beside the button means the value is still
+        # readable without opening anything.
+        self.btn_envelope = QPushButton(tr("Define Strength..."))
+        self.btn_envelope.clicked.connect(self._open_drawdown_strength)
+        self.btn_envelope.setToolTip(tr(
             "Undrained envelope from isotropically consolidated undrained "
             "tests. Needed by the multi-stage drawdown procedures."))
+        self.lbl_envelope = QLabel("")
+        self.lbl_envelope.setStyleSheet("color: #555; font-style: italic;")
+        # The envelope being edited for the material on screen. Staged the
+        # same way ``_color_hex`` is: ``_load`` fills it, ``_store`` writes
+        # it back, so Cancel still discards everything.
+        self._envelope = None
 
         rd_form.addRow("", self.chk_undrained)
         rd_form.addRow(tr("B-bar:"), self.dsp_b_bar)
-        rd_form.addRow(tr("Undrained envelope:"), self.cbo_env_kind)
-        rd_form.addRow(self.lbl_env_a, self.dsp_env_a)
-        rd_form.addRow(self.lbl_env_b, self.dsp_env_b)
+        rd_form.addRow(self.btn_envelope, self.lbl_envelope)
         right.addWidget(rd_grp)
-        self.cbo_env_kind.currentIndexChanged.connect(
-            self._refresh_pore_pressure)
 
-        self.cbo_pp.currentIndexChanged.connect(self._refresh_pore_pressure)
-        self.chk_hu.toggled.connect(self._refresh_pore_pressure)
-        self.chk_auto_hu.toggled.connect(self._refresh_pore_pressure)
-        self.chk_undrained.toggled.connect(self._refresh_pore_pressure)
+        self.cbo_pp.currentIndexChanged.connect(self._refresh_water_parameters)
+        self.chk_use_grid.toggled.connect(self._refresh_water_parameters)
+        self.chk_hu.toggled.connect(self._refresh_water_parameters)
+        self.chk_auto_hu.toggled.connect(self._refresh_water_parameters)
+        self.chk_undrained.toggled.connect(self._refresh_water_parameters)
+        self.cbo_strength.currentIndexChanged.connect(
+            self._refresh_water_parameters)
 
         right.addStretch(1)
         layout.addLayout(right, 1)
@@ -556,45 +577,116 @@ class MaterialPropertiesDialog(QDialog):
         if not on:
             self.lbl_gamma_sat_warn.setVisible(False)
         self._editor_on = on
-        self._refresh_pore_pressure()
+        self._refresh_water_parameters()
 
     # ------------------------------------------------------------------
-    def _refresh_pore_pressure(self, *_args) -> None:
-        """Enable only the water parameters the chosen model actually uses.
+    # Strength models for which the reference disables water parameters
+    # outright: none of the three reads a pore pressure, so offering the
+    # inputs would suggest an influence that does not exist (rule 7).
+    _NO_WATER_STRENGTHS = ("undrained", "no_strength", "infinite_strength")
 
-        Rule 7 in miniature: a spinbox that the model ignores reads as if
-        the analysis respected it. Disabled rather than hidden, so the
-        capability stays discoverable.
+    @staticmethod
+    def _set_row_visible(form: QFormLayout, field: QWidget,
+                         visible: bool) -> None:
+        """Show or hide a form row, label included.
+
+        ``QFormLayout.setRowVisible`` only arrived in Qt 6.4, and
+        ``labelForField`` returns whatever was passed as the row's first
+        element — a QLabel for a string, or the widget itself when the row
+        was built from two widgets — so this works for both shapes.
+        """
+        label = form.labelForField(field)
+        if label is not None:
+            label.setVisible(visible)
+        field.setVisible(visible)
+
+    def _refresh_water_parameters(self, *_args) -> None:
+        """Show only the water parameters that decide something.
+
+        Two layers, and they are different on purpose. What the PROJECT
+        makes irrelevant is HIDDEN — a grid switch in a project with no
+        grid, or the whole group under a finite-element analysis, where
+        the reference replaces it with the unsaturated parameters. What
+        the MATERIAL's own choice makes irrelevant is merely DISABLED, so
+        that changing the type back shows the value that was there.
         """
         on = getattr(self, "_editor_on", True)
         ppt = self.cbo_pp.currentData()
         uses_surface = ppt in (PorePressureType.WATER_TABLE,
                                PorePressureType.PIEZO_LINE)
-        self.cbo_water_surface.setEnabled(on and uses_surface)
-        self.chk_auto_hu.setEnabled(on and uses_surface)
+
+        # A finite-element analysis supplies the pore pressures itself;
+        # the material contributes phi_b and the air entry value instead,
+        # which live in the General group and have their own gate.
+        fea = self._gw_method in ("fea_steady", "fea_transient")
+        self.grp_water.setVisible(not fea)
+
+        # The grid switch decides nothing unless the project uses a grid.
+        grid = self._gw_method in ("grid_total_head", "grid_pressure_head",
+                                   "grid_pore_pressure")
+        self._set_row_visible(self._water_form, self.chk_use_grid, grid)
+        self.chk_use_grid.setEnabled(on)
+        # With the grid governing, the material's own model is what
+        # applies only after switching the grid off.
+        own_model = on and (not grid or not self.chk_use_grid.isChecked())
+
+        # Rule of the reference: these three strength models read no pore
+        # pressure at all, so the whole group is greyed out.
+        mid = self.cbo_strength.currentData()
+        if mid in self._NO_WATER_STRENGTHS:
+            own_model = False
+        self.cbo_pp.setEnabled(own_model)
+
+        self.cbo_water_surface.setEnabled(own_model and uses_surface)
+        self.chk_auto_hu.setEnabled(own_model and uses_surface)
         self.chk_hu.setEnabled(
-            on and uses_surface and not self.chk_auto_hu.isChecked())
+            own_model and uses_surface and not self.chk_auto_hu.isChecked())
         self.dsp_hu.setEnabled(
-            on and uses_surface
+            own_model and uses_surface
             and not self.chk_auto_hu.isChecked()
             and self.chk_hu.isChecked())
-        self.dsp_ru.setEnabled(on and ppt == PorePressureType.RU_COEFFICIENT)
-        self.dsp_u.setEnabled(on and ppt == PorePressureType.CONSTANT)
-        # B̄ only reaches the calculation through a rapid-drawdown run.
-        self.chk_undrained.setEnabled(on and self._rapid_drawdown)
-        self.dsp_b_bar.setEnabled(
-            on and self._rapid_drawdown and self.chk_undrained.isChecked())
-        # v0.1.68 — the envelope belongs to an undrained material and to
-        # nothing else, and its two fields are named after which form was
-        # chosen: Cr/φR for the R envelope, d/ψ for the Kc = 1 one.
-        env_on = on and self._rapid_drawdown and self.chk_undrained.isChecked()
-        kind = self.cbo_env_kind.currentData()
-        self.cbo_env_kind.setEnabled(env_on)
-        self.dsp_env_a.setEnabled(env_on and kind is not None)
-        self.dsp_env_b.setEnabled(env_on and kind is not None)
-        self.lbl_env_a.setText(tr("Cr:") if kind != "kc1" else tr("d:"))
-        self.lbl_env_b.setText(
-            tr("Angle:") if kind != "kc1" else tr("Psi:"))
+        self.dsp_ru.setEnabled(
+            own_model and ppt == PorePressureType.RU_COEFFICIENT)
+        self.dsp_u.setEnabled(own_model and ppt == PorePressureType.CONSTANT)
+
+        self._refresh_drawdown_group()
+
+    def _refresh_drawdown_group(self) -> None:
+        """Show the drawdown parameters the chosen procedure asks for.
+
+        B̄ and the undrained envelope are alternatives, not companions:
+        the effective-stress procedure needs the first and the three
+        multi-stage ones need the second. Showing both at once was
+        showing every user at least one field their analysis ignores.
+        """
+        on = getattr(self, "_editor_on", True)
+        self.grp_drawdown.setVisible(self._rapid_drawdown)
+        if not self._rapid_drawdown:
+            # Hidden AND disabled. Hiding alone would be enough for the
+            # eye, but the guarantee being made is that B̄ cannot be set
+            # without a drawdown run, and that is a statement about the
+            # widgets, not about what happens to be on screen.
+            for wgt in (self.chk_undrained, self.dsp_b_bar,
+                        self.btn_envelope):
+                wgt.setEnabled(False)
+            return
+        undrained = self.chk_undrained.isChecked()
+        self.chk_undrained.setEnabled(on)
+        multistage = self._drawdown_method != "b_bar"
+        self._set_row_visible(self._drawdown_form, self.dsp_b_bar,
+                              not multistage)
+        self._set_row_visible(self._drawdown_form, self.lbl_envelope,
+                              multistage)
+        self.dsp_b_bar.setEnabled(on and undrained)
+        self.btn_envelope.setEnabled(on and undrained)
+        self.lbl_envelope.setText(envelope_summary(self._envelope))
+
+    def _open_drawdown_strength(self) -> None:
+        """Edit the undrained envelope of the material on screen."""
+        dlg = DrawdownStrengthDialog(self._envelope, self)
+        if dlg.exec():
+            self._envelope = dlg.envelope()
+            self._refresh_drawdown_group()
 
     def _current_material(self) -> Material | None:
         row = self.list.currentRow()
@@ -650,40 +742,24 @@ class MaterialPropertiesDialog(QDialog):
         # v0.1.62 — water parameters. Signals are blocked while loading so
         # that populating the widgets cannot write back into the material
         # that is only being displayed.
-        for w in (self.cbo_water_surface, self.chk_hu, self.chk_auto_hu,
-                  self.chk_undrained):
+        _blocked = (self.cbo_water_surface, self.chk_hu, self.chk_auto_hu,
+                    self.chk_undrained, self.chk_use_grid)
+        for w in _blocked:
             w.blockSignals(True)
         idx = self.cbo_water_surface.findData(m.water_surface_id)
         self.cbo_water_surface.setCurrentIndex(max(0, idx))
         self.chk_auto_hu.setChecked(bool(m.auto_hu))
         self.chk_hu.setChecked(m.hu is not None)
         self.dsp_hu.setValue(1.0 if m.hu is None else float(m.hu))
+        self.chk_use_grid.setChecked(bool(getattr(m, "use_grid", True)))
         self.chk_undrained.setChecked(bool(m.undrained_behaviour))
         self.dsp_b_bar.setValue(float(m.b_bar))
-        self.cbo_env_kind.blockSignals(True)
-        env = getattr(m, "drawdown_envelope", None)
-        from ogr_core.materials.drawdown_envelopes import (
-            Kc1Envelope, REnvelope,
-        )
-        if isinstance(env, REnvelope):
-            self.cbo_env_kind.setCurrentIndex(
-                self.cbo_env_kind.findData("r"))
-            self.dsp_env_a.setValue(env.c_r)
-            self.dsp_env_b.setValue(env.phi_r_deg)
-        elif isinstance(env, Kc1Envelope):
-            self.cbo_env_kind.setCurrentIndex(
-                self.cbo_env_kind.findData("kc1"))
-            self.dsp_env_a.setValue(env.d)
-            self.dsp_env_b.setValue(env.psi_deg)
-        else:
-            self.cbo_env_kind.setCurrentIndex(0)
-            self.dsp_env_a.setValue(0.0)
-            self.dsp_env_b.setValue(0.0)
-        self.cbo_env_kind.blockSignals(False)
-        for w in (self.cbo_water_surface, self.chk_hu, self.chk_auto_hu,
-                  self.chk_undrained):
+        # v0.1.72 — the envelope is staged rather than shown, because its
+        # editor is a dialog of its own now.
+        self._envelope = getattr(m, "drawdown_envelope", None)
+        for w in _blocked:
             w.blockSignals(False)
-        self._refresh_pore_pressure()
+        self._refresh_water_parameters()
 
     # Formula text shown next to each strength type — these mirror the
     # equations displayed in Slide's Strength Parameters PDF.
@@ -840,22 +916,10 @@ class MaterialPropertiesDialog(QDialog):
         m.water_surface_id = self.cbo_water_surface.currentData()
         m.auto_hu = self.chk_auto_hu.isChecked()
         m.hu = self.dsp_hu.value() if self.chk_hu.isChecked() else None
+        m.use_grid = self.chk_use_grid.isChecked()
         m.undrained_behaviour = self.chk_undrained.isChecked()
         m.b_bar = self.dsp_b_bar.value()
-        from ogr_core.materials.drawdown_envelopes import (
-            Kc1Envelope, REnvelope,
-        )
-        kind = self.cbo_env_kind.currentData()
-        if kind == "r":
-            m.drawdown_envelope = REnvelope(
-                c_r=self.dsp_env_a.value(),
-                phi_r_deg=self.dsp_env_b.value())
-        elif kind == "kc1":
-            m.drawdown_envelope = Kc1Envelope(
-                d=self.dsp_env_a.value(),
-                psi_deg=self.dsp_env_b.value())
-        else:
-            m.drawdown_envelope = None
+        m.drawdown_envelope = self._envelope
 
         # Refresh list item
         item = self.list.item(row)
@@ -897,12 +961,21 @@ class MaterialPropertiesDialog(QDialog):
     # ------------------------------------------------------------------
     def _apply_unsaturated_visibility(self) -> None:
         """Show the unsaturated-strength fields only when the groundwater
-        method is a finite-element analysis, as the reference does."""
+        method is a finite-element analysis, as the reference does.
+
+        v0.1.72 — the LABELS used to stay behind. The old code looked up
+        ``wgt.parentWidget()``, which is the group box rather than the
+        label, and then hid the spinbox again; the result was two captions
+        floating over nothing. The form layout knows where its labels are,
+        so it is the one asked.
+        """
         method = getattr(self, "_gw_method", "none")
         show = method in ("fea_steady", "fea_transient")
+        form = getattr(self, "_general_form", None)
         for wgt in getattr(self, "_unsat_widgets", []):
             wgt.setEnabled(show)
-            lbl = wgt.parentWidget()
-            if lbl is not None:
+            if form is not None:
+                self._set_row_visible(form, wgt, show)
+            else:
                 wgt.setVisible(show)
         return show

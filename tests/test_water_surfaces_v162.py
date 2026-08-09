@@ -614,3 +614,7 @@ class TestTheInterfaceWritesTheField:
         _WINDOWS.append(d)
         d.list.setCurrentRow(0)
         assert d.chk_undrained.isEnabled() is False
+        # v0.1.72 — the group is now hidden as well, since a project that
+        # runs no drawdown has no use for a quarter of the dialog. The
+        # guarantee under test is unchanged: B̄ stays out of reach.
+        assert d.grp_drawdown.isVisibleTo(d) is False

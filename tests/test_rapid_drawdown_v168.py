@@ -594,29 +594,52 @@ class TestTheSettingsGuard:
 class TestTheInterfaceCanDefineTheEnvelope:
     """Without a control the field is unreachable, which is how
     ``water_surface_id`` spent fifty versions being honoured by the solver
-    and written by nobody (v0.1.62)."""
+    and written by nobody (v0.1.62).
+
+    v0.1.72 — the envelope moved out of the material editor and into a
+    *Define Strength* dialog of its own, so these were rewritten against
+    the new location. The invariant they protect did not change: the
+    envelope must be reachable from the interface, must round-trip, and
+    its two fields must be named after the form chosen.
+    """
 
     _WINDOWS: list = []
 
-    def _dialog(self, m):
+    def _dialog(self, m, method="duncan_wright"):
         from PySide6.QtWidgets import QApplication
         from ogr_gui.dialogs.material_properties_dialog import (
             MaterialPropertiesDialog,
         )
         QApplication.instance() or QApplication([])
-        d = MaterialPropertiesDialog([m], None, rapid_drawdown=True)
+        d = MaterialPropertiesDialog([m], None, rapid_drawdown=True,
+                                     drawdown_method=method)
         self._WINDOWS.append(d)
         d.list.setCurrentRow(0)
         return d
+
+    def _strength_dialog(self, d):
+        """The secondary dialog, seeded the way the button seeds it.
+
+        Built directly rather than through ``_open_drawdown_strength``,
+        which would call ``exec()`` and block forever without a screen.
+        """
+        from ogr_gui.dialogs.drawdown_strength_dialog import (
+            DrawdownStrengthDialog,
+        )
+        sub = DrawdownStrengthDialog(d._envelope, None)
+        self._WINDOWS.append(sub)
+        return sub
 
     def test_an_r_envelope_round_trips_through_the_dialog(self):
         from ogr_core.materials.drawdown_envelopes import REnvelope
         p = _pilarcitos()
         d = self._dialog(p.materials[0])
-        assert d.cbo_env_kind.currentData() == "r"
-        assert abs(d.dsp_env_a.value() - 60.0) < 1e-9
-        assert abs(d.dsp_env_b.value() - 23.0) < 1e-9
-        d.dsp_env_a.setValue(75.0)
+        sub = self._strength_dialog(d)
+        assert sub.cbo_kind.currentData() == "r"
+        assert abs(sub.dsp_a.value() - 60.0) < 1e-9
+        assert abs(sub.dsp_b.value() - 23.0) < 1e-9
+        sub.dsp_a.setValue(75.0)
+        d._envelope = sub.envelope()
         d._store(0)
         env = d.materials[0].drawdown_envelope
         assert isinstance(env, REnvelope) and env.c_r == 75.0
@@ -625,21 +648,34 @@ class TestTheInterfaceCanDefineTheEnvelope:
         from ogr_core.materials.drawdown_envelopes import Kc1Envelope
         p = _pilarcitos()
         d = self._dialog(p.materials[0])
-        d.cbo_env_kind.setCurrentIndex(d.cbo_env_kind.findData("kc1"))
-        d.dsp_env_a.setValue(64.0)
-        d.dsp_env_b.setValue(24.4)
+        sub = self._strength_dialog(d)
+        sub.cbo_kind.setCurrentIndex(sub.cbo_kind.findData("kc1"))
+        sub.dsp_a.setValue(64.0)
+        sub.dsp_b.setValue(24.4)
+        d._envelope = sub.envelope()
         d._store(0)
         env = d.materials[0].drawdown_envelope
         assert isinstance(env, Kc1Envelope)
         assert env.d == 64.0 and env.psi_deg == 24.4
 
-    def test_the_fields_are_disabled_for_a_draining_material(self):
-        """Disabled, not hidden — the capability stays discoverable."""
+    def test_the_button_is_disabled_for_a_draining_material(self):
+        """Disabled, not hidden — the capability stays discoverable.
+
+        What the MATERIAL's own choice makes irrelevant is greyed; only
+        what the PROJECT makes irrelevant disappears.
+        """
         p = _pilarcitos(undrained=False)
         d = self._dialog(p.materials[0])
-        assert d.cbo_env_kind.isEnabled() is False
+        assert d.btn_envelope.isEnabled() is False
         d.chk_undrained.setChecked(True)
-        assert d.cbo_env_kind.isEnabled() is True
+        assert d.btn_envelope.isEnabled() is True
+
+    def test_the_summary_shows_the_envelope_without_opening_it(self):
+        """Moving the fields behind a button must not hide the value."""
+        p = _pilarcitos()
+        d = self._dialog(p.materials[0])
+        text = d.lbl_envelope.text()
+        assert "60" in text and "23" in text
 
     def test_the_labels_follow_the_chosen_form(self):
         """Cr and the angle for the R envelope; d and psi for Kc = 1.
@@ -653,11 +689,12 @@ class TestTheInterfaceCanDefineTheEnvelope:
             prev = current_language()
             set_language("en")
             d = self._dialog(p.materials[0])
-            d.cbo_env_kind.setCurrentIndex(d.cbo_env_kind.findData("r"))
-            assert d.lbl_env_a.text() == "Cr:"
-            d.cbo_env_kind.setCurrentIndex(d.cbo_env_kind.findData("kc1"))
-            assert d.lbl_env_a.text() == "d:"
-            assert d.lbl_env_b.text() == "Psi:"
+            sub = self._strength_dialog(d)
+            sub.cbo_kind.setCurrentIndex(sub.cbo_kind.findData("r"))
+            assert sub.lbl_a.text() == "Cr:"
+            sub.cbo_kind.setCurrentIndex(sub.cbo_kind.findData("kc1"))
+            assert sub.lbl_a.text() == "d:"
+            assert sub.lbl_b.text() == "Psi:"
         finally:
             if prev:
                 set_language(prev)

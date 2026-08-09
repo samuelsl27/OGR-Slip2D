@@ -956,6 +956,25 @@ _DICTS: dict[str, dict[str, str]] = {
             "Habilita la herramienta de línea de desembalse y calcula el "
             "factor de seguridad tras el descenso. El nivel freático es el "
             "nivel INICIAL y la línea de desembalse el final, más bajo.",
+        # --- Water parameters, where the reference puts them (v0.1.72) -
+        "Water Parameters": "Parámetros de agua",
+        "Use the water pressure grid": "Usar la rejilla de presiones",
+        "With the grid off, this material takes its pore pressure "
+        "from its own water parameters instead of the grid.":
+            "Con la rejilla desactivada, este material toma su presión "
+            "intersticial de sus propios parámetros de agua en lugar de "
+            "la rejilla.",
+        "Define Strength...": "Definir resistencia...",
+        "Define Strength": "Definir resistencia",
+        "Undrained envelope from isotropically consolidated undrained "
+        "tests. Either form is accepted: the conversion between them "
+        "is exact, and each procedure is given the one it needs.":
+            "Envolvente no drenada de ensayos consolidados isótropos no "
+            "drenados. Se admite cualquiera de las dos formas: la "
+            "conversión entre ellas es exacta, y a cada procedimiento se "
+            "le da la que necesita.",
+        "R: Cr = %.4g, φR = %.4g°": "R: Cr = %.4g, φR = %.4g°",
+        "Kc = 1: d = %.4g, ψ = %.4g°": "Kc = 1: d = %.4g, ψ = %.4g°",
         # --- Rapid drawdown parameters (v0.1.62) ----------------------
         "Rapid Drawdown Parameters": "Parámetros de descenso rápido",
         "Undrained Behaviour": "Comportamiento no drenado",

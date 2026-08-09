@@ -379,7 +379,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.71"
+    VERSION = "0.1.72"
 
     def __init__(self) -> None:
         super().__init__()
@@ -3107,6 +3107,12 @@ class MainWindow(QMainWindow):
             water_surfaces=self._water_surface_choices(),
             rapid_drawdown=bool(
                 self.project.settings.groundwater.rapid_drawdown),
+            # v0.1.72 — B̄ belongs to the effective-stress procedure and
+            # the undrained envelope to the three multi-stage ones, so the
+            # dialog needs to know which is configured to show only the
+            # one the analysis will actually read.
+            drawdown_method=str(
+                self.project.settings.groundwater.rapid_drawdown_method),
         )
         if dlg.exec():
             self.project.materials = dlg.result_materials()

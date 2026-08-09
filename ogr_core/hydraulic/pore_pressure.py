@@ -112,10 +112,18 @@ def pore_pressure_at(
     # default — mirroring the reference behaviour where selecting a
     # grid method makes the grid the global water source. Materials
     # with an explicit per-material override (CONSTANT or RU) keep it.
+    #
+    # v0.1.72 — ``use_grid`` is the documented way out of that default:
+    # switching the grid off for one material hands it back to its own
+    # water parameters, which is why this falls THROUGH to the chain below
+    # rather than returning zero. A material left at NONE still ends up at
+    # u = 0, so the reference behaviour is reproduced without a project
+    # that merely changed method losing the water surface it had assigned.
     _gw_method = project.settings.groundwater.method
     if (
         _gw_method in _GRID_METHODS
         and getattr(project, "water_pressure_grid", None) is not None
+        and getattr(material, "use_grid", True)
         and ppt not in (PorePressureType.CONSTANT,
                         PorePressureType.RU_COEFFICIENT)
     ):

@@ -15,6 +15,7 @@ from .boundary_dialogs import (
     SimplifyBoundaryDialog,
 )
 from .display_options_dialog import DisplayOptionsDialog
+from .drawdown_strength_dialog import DrawdownStrengthDialog
 from .material_properties_dialog import MaterialPropertiesDialog
 from .misc_dialogs import AboutDialog, ComputeProgressDialog
 from .preferences_dialog import PreferencesDialog
@@ -30,6 +31,7 @@ __all__ = [
     "ComputeProgressDialog",
     "ConvertBoundaryDialog",
     "DisplayOptionsDialog",
+    "DrawdownStrengthDialog",
     "EditCoordinatesDialog",
     "ExpandShrinkDialog",
     "GeometryCleanupDialog",

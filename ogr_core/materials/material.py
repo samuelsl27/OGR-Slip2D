@@ -76,6 +76,7 @@ class Material:
         auto_hu:        derive Hu from the water-surface slope
         undrained_behaviour: material develops excess pore pressure
         b_bar:          Skempton's B̄ (only if undrained_behaviour)
+        use_grid:       whether a water-pressure grid governs this material
         color:          hex color for canvas rendering
         hatch:          optional hatch-pattern identifier
     """
@@ -142,6 +143,13 @@ class Material:
     # this alongside it. ``REnvelope`` or ``Kc1Envelope``; either is
     # converted to whichever the chosen procedure needs.
     drawdown_envelope: Optional[object] = None
+    # v0.1.72 — Grid On/Off. When the project groundwater method is one of
+    # the water-pressure-grid ones, the grid governs every material by
+    # default; this is the per-material way out of that default, and the
+    # reference exposes it as exactly that — a switch in Water Parameters.
+    # Defaults to True so no existing project changes: a file written
+    # before the field existed behaves as it always did, with the grid on.
+    use_grid: bool = True
     id: str = field(default_factory=lambda: str(uuid4()))
 
     # ------------------------------------------------------------------
@@ -182,6 +190,7 @@ class Material:
             "undrained_behaviour": self.undrained_behaviour,
             "b_bar": self.b_bar,
             "drawdown_envelope": _envelope_to_dict(self.drawdown_envelope),
+            "use_grid": self.use_grid,
         }
 
     @classmethod
@@ -213,6 +222,10 @@ class Material:
             b_bar=float(data.get("b_bar", 0.0)),
             drawdown_envelope=_envelope_from_dict(
                 data.get("drawdown_envelope")),
+            # v0.1.72 — absent in files written before the switch existed,
+            # and those all behaved as "grid on"; True is the only default
+            # that leaves their pore pressures untouched.
+            use_grid=bool(data.get("use_grid", True)),
         )
         if "id" in data:
             m.id = data["id"]
