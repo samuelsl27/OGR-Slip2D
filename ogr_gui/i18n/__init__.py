@@ -956,6 +956,25 @@ _DICTS: dict[str, dict[str, str]] = {
             "Habilita la herramienta de línea de desembalse y calcula el "
             "factor de seguridad tras el descenso. El nivel freático es el "
             "nivel INICIAL y la línea de desembalse el final, más bajo.",
+        # --- Excess pore pressure, B-bar method (v0.1.75) -------------
+        "Excess Pore Pressure": "Exceso de presión intersticial",
+        "Material weight creates excess pore pressure":
+            "El peso del material genera exceso de presión intersticial",
+        "Skempton's B̄: Δu = B̄ · Δσv. Use 0 for a free-draining "
+        "material, which then develops no excess however much load "
+        "arrives.":
+            "B̄ de Skempton: Δu = B̄ · Δσv. Usa 0 para un material "
+            "drenante libre, que entonces no desarrolla exceso por mucha "
+            "carga que le llegue.",
+        "This material's weight loads the materials BENEATH it. It "
+        "is a separate question from whether this material develops "
+        "excess itself, which is its own B-bar: an embankment over a "
+        "clay foundation usually has this on and B-bar = 0.":
+            "El peso de este material carga a los materiales que tiene "
+            "DEBAJO. Es una pregunta distinta de si este material "
+            "desarrolla exceso él mismo, que es su propio B-barra: un "
+            "terraplén sobre cimiento arcilloso suele llevar esto "
+            "activado y B-barra = 0.",
         # --- Project Settings wiring (v0.1.74) -------------------------
         "Check m-alpha < 0.2": "Comprobar m-alfa < 0.2",
         "Rejects surfaces whose base normal denominator falls below "

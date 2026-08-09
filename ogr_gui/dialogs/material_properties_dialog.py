@@ -268,6 +268,7 @@ class MaterialPropertiesDialog(QDialog):
         water_surfaces: list[tuple[str, str]] | None = None,
         rapid_drawdown: bool = False,
         drawdown_method: str = "b_bar",
+        excess_pore_pressure: bool = False,
     ) -> None:
         super().__init__(parent)
         # v0.1.62 — (boundary id, translated label) for every water table
@@ -280,6 +281,10 @@ class MaterialPropertiesDialog(QDialog):
         # undrained envelope belong to different ones, so the dialog needs
         # to know which before it can show only the relevant field.
         self._drawdown_method = str(drawdown_method or "b_bar")
+        # v0.1.75 — the OTHER advanced groundwater option. Mutually
+        # exclusive with the drawdown, so at most one of the two
+        # groups is ever on screen.
+        self._excess_pore_pressure = bool(excess_pore_pressure)
         # v0.1.29 — the unsaturated-strength fields are only meaningful
         # (and only shown) when the groundwater method is an FEA, since
         # only then can pore pressures be negative.
@@ -533,6 +538,33 @@ class MaterialPropertiesDialog(QDialog):
         rd_form.addRow(self.btn_envelope, self.lbl_envelope)
         right.addWidget(rd_grp)
 
+        # v0.1.75 — Excess pore pressure from undrained LOADING, which is
+        # a different analysis from the drawdown above and exclusive with
+        # it, so it gets its own group with its own gate. Deliberately
+        # held back in v0.1.72, when its engine did not exist: an
+        # interface for a calculation nobody performs is the fault the
+        # partial factors had for five versions.
+        ex_grp = QGroupBox(tr("Excess Pore Pressure"))
+        self.grp_excess = ex_grp
+        ex_form = QFormLayout(ex_grp)
+        self.dsp_b_bar_excess = QDoubleSpinBox()
+        self.dsp_b_bar_excess.setRange(0.0, 5.0)
+        self.dsp_b_bar_excess.setDecimals(3)
+        self.dsp_b_bar_excess.setToolTip(tr(
+            "Skempton's B̄: Δu = B̄ · Δσv. Use 0 for a free-draining "
+            "material, which then develops no excess however much load "
+            "arrives."))
+        self.chk_weight_excess = QCheckBox(
+            tr("Material weight creates excess pore pressure"))
+        self.chk_weight_excess.setToolTip(tr(
+            "This material's weight loads the materials BENEATH it. It "
+            "is a separate question from whether this material develops "
+            "excess itself, which is its own B-bar: an embankment over a "
+            "clay foundation usually has this on and B-bar = 0."))
+        ex_form.addRow(tr("B-bar:"), self.dsp_b_bar_excess)
+        ex_form.addRow("", self.chk_weight_excess)
+        right.addWidget(ex_grp)
+
         self.cbo_pp.currentIndexChanged.connect(self._refresh_water_parameters)
         self.chk_use_grid.toggled.connect(self._refresh_water_parameters)
         self.chk_hu.toggled.connect(self._refresh_water_parameters)
@@ -650,6 +682,19 @@ class MaterialPropertiesDialog(QDialog):
         self.dsp_u.setEnabled(own_model and ppt == PorePressureType.CONSTANT)
 
         self._refresh_drawdown_group()
+        self._refresh_excess_group()
+
+    def _refresh_excess_group(self) -> None:
+        """Present only when the project runs the B-bar loading analysis.
+
+        The same rule the drawdown group follows, and for the same
+        reason: the analysis that needs these fields is what brings them
+        back, and it is switched on somewhere else entirely.
+        """
+        on = getattr(self, "_editor_on", True)
+        self.grp_excess.setVisible(self._excess_pore_pressure)
+        for wgt in (self.dsp_b_bar_excess, self.chk_weight_excess):
+            wgt.setEnabled(on and self._excess_pore_pressure)
 
     def _refresh_drawdown_group(self) -> None:
         """Show the drawdown parameters the chosen procedure asks for.
@@ -743,7 +788,8 @@ class MaterialPropertiesDialog(QDialog):
         # that populating the widgets cannot write back into the material
         # that is only being displayed.
         _blocked = (self.cbo_water_surface, self.chk_hu, self.chk_auto_hu,
-                    self.chk_undrained, self.chk_use_grid)
+                    self.chk_undrained, self.chk_use_grid,
+                    self.chk_weight_excess)
         for w in _blocked:
             w.blockSignals(True)
         idx = self.cbo_water_surface.findData(m.water_surface_id)
@@ -754,6 +800,10 @@ class MaterialPropertiesDialog(QDialog):
         self.chk_use_grid.setChecked(bool(getattr(m, "use_grid", True)))
         self.chk_undrained.setChecked(bool(m.undrained_behaviour))
         self.dsp_b_bar.setValue(float(m.b_bar))
+        # Same B̄ field, shown in whichever group is active.
+        self.dsp_b_bar_excess.setValue(float(m.b_bar))
+        self.chk_weight_excess.setChecked(
+            bool(getattr(m, "weight_creates_excess", False)))
         # v0.1.72 — the envelope is staged rather than shown, because its
         # editor is a dialog of its own now.
         self._envelope = getattr(m, "drawdown_envelope", None)
@@ -918,7 +968,13 @@ class MaterialPropertiesDialog(QDialog):
         m.hu = self.dsp_hu.value() if self.chk_hu.isChecked() else None
         m.use_grid = self.chk_use_grid.isChecked()
         m.undrained_behaviour = self.chk_undrained.isChecked()
-        m.b_bar = self.dsp_b_bar.value()
+        # B̄ is ONE property of the material, shown in the group the
+        # active analysis owns; whichever is on screen is the one
+        # that writes it.
+        m.b_bar = (self.dsp_b_bar_excess.value()
+                   if self._excess_pore_pressure
+                   else self.dsp_b_bar.value())
+        m.weight_creates_excess = self.chk_weight_excess.isChecked()
         m.drawdown_envelope = self._envelope
 
         # Refresh list item

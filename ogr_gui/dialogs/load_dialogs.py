@@ -112,7 +112,16 @@ class _BaseLoadDialog(QDialog):
 
         # Pre-fill with existing values
         if existing is not None:
-            self.sb_mag1.setValue(existing.magnitude_1)
+            # v0.1.75 — a DistributedLoad carries ``magnitude_1`` and a
+            # LineLoad carries ``magnitude``. This read the first
+            # unconditionally, so Modify Load on an existing LINE load
+            # raised AttributeError and the dialog never opened — since
+            # v0.1.59, the first public release. Found by the test that
+            # checks the excess-pore-pressure checkbox pre-fills.
+            self.sb_mag1.setValue(
+                getattr(existing, "magnitude_1", None)
+                if hasattr(existing, "magnitude_1")
+                else existing.magnitude)
             if self.cb_distribution is not None:
                 idx = self.cb_distribution.findData(existing.distribution)
                 self.cb_distribution.setCurrentIndex(max(0, idx))
@@ -123,7 +132,13 @@ class _BaseLoadDialog(QDialog):
                     self.cb_orientation.setCurrentIndex(i)
                     break
             self.sb_angle.setValue(existing.angle_deg)
-            self.cb_excess.setChecked(getattr(existing, "excess_pp", False))
+            # v0.1.75 — the field is ``creates_excess_pore_pressure``.
+            # This read ``excess_pp``, an attribute no load class ever
+            # had, so reopening a load whose checkbox was ticked showed
+            # it unticked — which nobody noticed, because the tick was
+            # never stored in the first place.
+            self.cb_excess.setChecked(
+                getattr(existing, "creates_excess_pore_pressure", False))
 
         # Reactive visibility
         self.cb_orientation.currentIndexChanged.connect(self._refresh)

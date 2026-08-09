@@ -30,6 +30,10 @@ from dataclasses import dataclass, field
 from typing import Iterator, Optional
 
 from ogr_core.geometry import Boundary, BoundaryType, Polyline, Vertex
+from ogr_core.hydraulic.excess_pore_pressure import (
+    excess_at,
+    is_enabled as excess_is_enabled,
+)
 from ogr_core.hydraulic.ponded_water import ponded_depth_at
 from ogr_core.hydraulic.pore_pressure import pore_pressure_at, _interp_y_on_polyline
 from ogr_core.hydraulic.water_surfaces import water_table_y_at
@@ -526,6 +530,41 @@ def _column_weight(
 
 
 # ----------------------------------------------------------------------
+def line_loads_on(project: Project, x_left: float, x_right: float):
+    """Line loads whose point of application falls in ``[x_left, x_right)``.
+
+    v0.1.75 — until this version the limit-equilibrium engine contained
+    **no reference at all** to line loads. They could be drawn, saved,
+    exported to DXF and factored by a design standard, and the analysis
+    never read them: a line load of 5000 kN/m moved the factor of safety
+    by exactly zero, on the unsafe side, because the user believes the
+    slope has been loaded.
+
+    The half-open interval matters. A load sitting exactly on a slice
+    boundary must be counted once, not twice or never, and the last
+    slice needs its right edge closed so a load at the very end of the
+    surface is not silently dropped.
+    """
+    out = []
+    loads = getattr(project, "line_loads", None) or []
+    for load in loads:
+        x = load.point.x
+        if x_left - 1e-12 <= x < x_right - 1e-12:
+            out.append(load)
+    return out
+
+
+def _line_load_components(load) -> tuple[float, float]:
+    """(downward, +x) components of a line load, in kN/m.
+
+    ``direction_vector`` points the way the load pushes, with -y meaning
+    downwards, so the vertical component is negated to give a downward
+    positive number — the same sign convention ``weight`` uses.
+    """
+    dx, dy = load.direction_vector()
+    return -load.magnitude * dy, load.magnitude * dx
+
+
 def _surface_pressure_at(project: Project, x: float) -> float:
     """Sum of distributed-load pressures acting at x (vertical component)."""
     total = 0.0
@@ -691,8 +730,32 @@ def slice_surface(
         u_raw = u
         u, c_suction = apply_unsaturated_policy(u, mat)
 
+        # v0.1.75 — excess pore pressure from undrained loading, added to
+        # the INITIAL pore pressure the groundwater method just produced,
+        # which is the order Skempton's formulation and the reference
+        # both state. After the unsaturated policy on purpose: the excess
+        # is a positive addition and cannot turn into suction cohesion,
+        # and running the policy on the sum would let a loaded slice
+        # silently lose the suction term it had earned.
+        if excess_is_enabled(project):
+            du = excess_at(project, mat, xc, base_y_mid, top_y_mid,
+                           slice_width=dx)
+            if du:
+                u += du
+
         q = _surface_pressure_at(project, xc)
         weight += q * dx  # add the distributed-load surcharge
+
+        # v0.1.75 — line loads. The vertical component joins ``weight``,
+        # which is exactly how the distributed surcharge above is
+        # treated, so the two kinds of load are consistent with each
+        # other: a line load of P kN/m and a distributed load whose
+        # integral is P produce the same slice weight. The horizontal
+        # component needs a moment arm and goes through the external
+        # force channel below, once the slice exists.
+        _lines = line_loads_on(project, xl, xr)
+        for _load in _lines:
+            weight += _line_load_components(_load)[0]
 
         sl = Slice(
             index=i,
@@ -718,6 +781,17 @@ def slice_surface(
         # geometry, and kept out of ``weight`` so the seismic
         # coefficients cannot reach it.
         _apply_ponded_water(project, sl)
+        # v0.1.75 — the horizontal component of any line load on this
+        # slice, applied at the elevation of its point of application.
+        # It shares the accumulator the water forces use because what
+        # that channel models is "a horizontal force at a height", which
+        # is precisely what this is; the accumulator stores the moment
+        # about a fixed reference, so forces of opposite sign on the same
+        # slice add up correctly.
+        for _load in _lines:
+            _fh = _line_load_components(_load)[1]
+            if _fh:
+                sl.add_water_force(f_h=_fh, y=_load.point.y)
         result.slices.append(sl)
 
     if len(result) < 3:

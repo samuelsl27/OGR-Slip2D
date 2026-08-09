@@ -76,6 +76,7 @@ class Material:
         auto_hu:        derive Hu from the water-surface slope
         undrained_behaviour: material develops excess pore pressure
         b_bar:          Skempton's B̄ (only if undrained_behaviour)
+        weight_creates_excess: this material's weight loads the ones below
         use_grid:       whether a water-pressure grid governs this material
         color:          hex color for canvas rendering
         hatch:          optional hatch-pattern identifier
@@ -135,6 +136,15 @@ class Material:
     # by ``Project.from_dict`` so that reopening one cannot change its FoS.
     undrained_behaviour: bool = False
     b_bar: float = 0.0
+    # v0.1.75 — whether this material's own weight counts towards the
+    # change in vertical stress that generates excess pore pressure in
+    # the materials BENEATH it. It says nothing about whether this
+    # material develops excess pore pressure itself: that is ``b_bar``.
+    # An embankment built over a clay foundation typically has this on
+    # and B̄ = 0 — it loads the clay without generating excess within
+    # itself, which is exactly the case the reference's tutorial walks
+    # through.
+    weight_creates_excess: bool = False
     # v0.1.67 — undrained envelope for the multi-stage rapid-drawdown
     # procedures, from IC-U triaxial tests. Deliberately NOT a
     # ``StrengthModel`` in the registry: those are selectable as the
@@ -191,6 +201,7 @@ class Material:
             "b_bar": self.b_bar,
             "drawdown_envelope": _envelope_to_dict(self.drawdown_envelope),
             "use_grid": self.use_grid,
+            "weight_creates_excess": self.weight_creates_excess,
         }
 
     @classmethod
@@ -226,6 +237,11 @@ class Material:
             # and those all behaved as "grid on"; True is the only default
             # that leaves their pore pressures untouched.
             use_grid=bool(data.get("use_grid", True)),
+            # v0.1.75 — absent in older files, and off is the
+            # conservative reading: a material that was never asked to
+            # load anything keeps not loading it.
+            weight_creates_excess=bool(
+                data.get("weight_creates_excess", False)),
         )
         if "id" in data:
             m.id = data["id"]

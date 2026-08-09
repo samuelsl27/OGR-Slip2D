@@ -422,7 +422,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.74"
+    VERSION = "0.1.75"
 
     def __init__(self) -> None:
         super().__init__()
@@ -3157,6 +3157,10 @@ class MainWindow(QMainWindow):
             # one the analysis will actually read.
             drawdown_method=str(
                 self.project.settings.groundwater.rapid_drawdown_method),
+            # v0.1.75 — the other advanced option, whose material
+            # fields waited for their engine.
+            excess_pore_pressure=bool(
+                self.project.settings.groundwater.excess_pore_pressure),
         )
         if dlg.exec():
             self.project.materials = dlg.result_materials()
@@ -3630,6 +3634,11 @@ class MainWindow(QMainWindow):
             "orientation": dlg.orientation(),
             "angle_deg": dlg.angle_deg(),
             "distribution": dlg.distribution(),
+            # v0.1.75 — the checkbox has been on this dialog since
+            # the load dialogs were written, and ``excess_pp()`` was
+            # never called by anyone: the model field did not exist,
+            # so the tick went nowhere.
+            "creates_excess_pore_pressure": dlg.excess_pp(),
         }
         # Disconnect anything previously connected, then connect once
         try:
@@ -3691,6 +3700,7 @@ class MainWindow(QMainWindow):
             "magnitude": dlg.magnitude_1(),
             "orientation": dlg.orientation(),
             "angle_deg": dlg.angle_deg(),
+            "creates_excess_pore_pressure": dlg.excess_pp(),
         }
         try:
             self.canvas.point_picked.disconnect(self._on_line_load_point_picked)
@@ -3824,6 +3834,7 @@ class MainWindow(QMainWindow):
                     load.orientation = dlg.orientation()
                     load.angle_deg = dlg.angle_deg()
                     load.distribution = dlg.distribution()
+                    load.creates_excess_pore_pressure = dlg.excess_pp()
                     self.project.is_dirty = True
                     self.project._notify("loads_changed")
                     self.canvas.refresh()
@@ -3835,6 +3846,7 @@ class MainWindow(QMainWindow):
                     load.magnitude = dlg.magnitude_1()
                     load.orientation = dlg.orientation()
                     load.angle_deg = dlg.angle_deg()
+                    load.creates_excess_pore_pressure = dlg.excess_pp()
                     self.project.is_dirty = True
                     self.project._notify("loads_changed")
                     self.canvas.refresh()

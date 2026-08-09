@@ -51,6 +51,11 @@ class DistributedLoad:
     orientation: LoadOrientation = LoadOrientation.NORMAL_TO_BOUNDARY
     angle_deg: float = 0.0
     distribution: LoadDistribution = LoadDistribution.CONSTANT
+    # v0.1.75 — whether this load's VERTICAL component contributes to the
+    # change in vertical stress that generates excess pore pressure in
+    # the materials beneath it. Off by default: a load that was never
+    # asked to generate excess keeps not generating it.
+    creates_excess_pore_pressure: bool = False
     id: str = field(default_factory=lambda: str(uuid4()))
     name: str = ""
 
@@ -98,6 +103,8 @@ class DistributedLoad:
             "orientation": self.orientation.value,
             "angle_deg": self.angle_deg,
             "distribution": self.distribution.value,
+            "creates_excess_pore_pressure":
+                self.creates_excess_pore_pressure,
         }
 
     @classmethod
@@ -112,6 +119,8 @@ class DistributedLoad:
             distribution=LoadDistribution(data.get("distribution", "constant")),
             id=data.get("id", str(uuid4())),
             name=data.get("name", ""),
+            creates_excess_pore_pressure=bool(
+                data.get("creates_excess_pore_pressure", False)),
         )
 
     def tooltip_html(self) -> str:
@@ -135,6 +144,11 @@ class LineLoad:
     magnitude: float = 0.0  # kN/m
     orientation: LoadOrientation = LoadOrientation.VERTICAL
     angle_deg: float = 0.0
+    # v0.1.75 — see DistributedLoad above. A line load is a concentrated
+    # force, so the vertical STRESS it produces depends on the width it
+    # is smeared over; see ``ogr_core.hydraulic.excess_pore_pressure``
+    # for what that means in practice.
+    creates_excess_pore_pressure: bool = False
     id: str = field(default_factory=lambda: str(uuid4()))
     name: str = ""
 
@@ -157,6 +171,8 @@ class LineLoad:
             "magnitude": self.magnitude,
             "orientation": self.orientation.value,
             "angle_deg": self.angle_deg,
+            "creates_excess_pore_pressure":
+                self.creates_excess_pore_pressure,
         }
 
     @classmethod
@@ -168,6 +184,8 @@ class LineLoad:
             angle_deg=data.get("angle_deg", 0.0),
             id=data.get("id", str(uuid4())),
             name=data.get("name", ""),
+            creates_excess_pore_pressure=bool(
+                data.get("creates_excess_pore_pressure", False)),
         )
 
     def tooltip_html(self) -> str:
@@ -194,9 +212,15 @@ class SeismicLoad:
     kh: float = 0.0
     kv: float = 0.0
     enabled: bool = False
+    # v0.1.75 — only the VERTICAL coefficient can generate excess pore
+    # pressure, because only it changes the vertical stress. The
+    # horizontal one never does, whatever this flag says.
+    creates_excess_pore_pressure: bool = False
 
     def to_dict(self) -> dict:
-        return {"kh": self.kh, "kv": self.kv, "enabled": self.enabled}
+        return {"kh": self.kh, "kv": self.kv, "enabled": self.enabled,
+                "creates_excess_pore_pressure":
+                    self.creates_excess_pore_pressure}
 
     @classmethod
     def from_dict(cls, data: dict) -> "SeismicLoad":
@@ -204,4 +228,6 @@ class SeismicLoad:
             kh=data.get("kh", 0.0),
             kv=data.get("kv", 0.0),
             enabled=data.get("enabled", False),
+            creates_excess_pore_pressure=bool(
+                data.get("creates_excess_pore_pressure", False)),
         )
