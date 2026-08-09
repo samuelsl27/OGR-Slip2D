@@ -1,0 +1,155 @@
+# OGR Slip2D v0.1.76 — una comilla que Python 3.12 perdona y 3.11 no
+
+## Qué se buscaba
+
+Que el job *Test suite (Python 3.11)* de GitHub Actions vuelva a verde.
+Llevaba **cinco versiones rojo** y nadie lo había mirado, porque el
+resumen del fallo parecía una avalancha de tests rotos.
+
+## Lo que era en realidad
+
+No era ningún test. Era un `SyntaxError` **al importar**
+`ogr_gui/main_window.py`, y arrastraba a todos los tests que tocan la
+interfaz. La línea, introducida en v0.1.70:
+
+```python
+msg += (f"  — {tr('the total drawdown alone would overstate '
+                  'it by')} {100 * margin:.1f} %")
+```
+
+Dentro del campo de sustitución de la f-string hay un literal
+implícitamente concatenado y **partido en dos líneas**. PEP 701 lo
+legalizó en Python 3.12; en 3.11 la f-string es un único token, así que
+el salto de línea termina el literal y el fichero no se parsea.
+
+Eso explica lo que en el panel de Actions parecía absurdo:
+
+| Job | Resultado |
+|---|---|
+| Test suite (Python 3.12) | verde |
+| Test suite (Python 3.11) | **rojo, `unterminated string literal`** |
+| Licence consistency | verde (usa 3.12) |
+
+Y explica también por qué el desarrollo local nunca lo vio: la máquina
+tiene Python 3.14, y `pyproject.toml` declara `requires-python = ">=3.11"`
+sin que nada comprobara esa promesa.
+
+La traducción no tenía nada que ver: la clave
+`"the total drawdown alone would overstate it by"` estaba correctamente
+registrada en `ogr_gui/i18n/__init__.py`. Solo la sintaxis estaba mal, y
+la corrección saca la llamada a `tr()` fuera de la f-string, dejando la
+misma clave.
+
+## El camino equivocado, que es la parte que merece recordarse
+
+La herramienta obvia para «parsea esto como lo haría un Python más
+viejo» es:
+
+```python
+ast.parse(src, feature_version=(3, 11))
+```
+
+**No sirve.** Se comprobó contra la revisión rota y parsea el fichero sin
+una queja. `feature_version` controla un puñado de comprobaciones
+semánticas y **no revierte el tokenizador** a la gramática anterior a PEP
+701. Un guardián construido sobre ella habría nacido en verde y no habría
+protegido nada.
+
+El guardián que sí funciona (`tests/test_python_floor_v176.py`) trabaja
+sobre tokens, y se bifurca según quién lo ejecuta:
+
+- **corriendo en el mínimo declarado o por debajo** — `compile()` es la
+  autoridad, no hay nada que aproximar;
+- **corriendo por encima** (3.12+, que es el caso del desarrollo) — se
+  recorre cada f-string de `FSTRING_START` a su `FSTRING_END`, contando
+  anidamiento, y se rechaza que una f-string de comilla simple abarque
+  más de una línea, que la comilla delimitadora reaparezca dentro de un
+  `{...}`, o que haya una barra invertida dentro de un `{...}`.
+
+Ese último matiz costó una pasada en falso: la primera versión marcaba
+cualquier barra invertida y devolvía **18 hits**. Diecisiete eran `\n` en
+la parte *literal* (`f"count: {n}\n"`), que Python 3.11 acepta desde
+siempre. Un guardián que los rechazara se habría desactivado en una
+semana. Restringida la regla al campo de sustitución, quedó **un solo
+hit** — el de verdad.
+
+El guardián lee el mínimo de `pyproject.toml` en vez de fijarlo, para que
+deje de disparar solo el día que el mínimo suba a 3.12, en lugar de
+sobrevivir a la restricción que protege.
+
+## Un segundo hallazgo, del mismo tipo
+
+Al ir a subir el número de versión apareció que **AGENTS.md enumera
+cuatro sitios donde subirlo y hay siete**. Los tres que faltaban llevaban
+congelados desde su propia versión:
+
+| Paquete | Antes | Ahora |
+|---|---|---|
+| `ogr_core.__version__` | 0.1.59 | 0.1.76 |
+| `ogr_gui.__version__` | 0.1.59 | 0.1.76 |
+| `ogr_cli.__version__` | 0.1.59 | 0.1.76 |
+
+Nada se rompía, que es justo el problema: `ogr_cli.__version__` decía
+0.1.59 dentro de una distribución 0.1.75, así que un informe de error que
+lo citara mandaba al lector dieciséis versiones al pasado.
+`tests/test_version_consistency_v176.py` convierte la omisión en un fallo
+de build, y comprueba de paso que existe el changelog de la versión
+declarada.
+
+## Cambios
+
+- **Corregido** `ogr_gui/main_window.py` — la f-string de
+  `_on_drawdown_sweep_done` ya no usa sintaxis de Python 3.12.
+- **Nuevo** `tests/test_python_floor_v176.py` — cuatro tests: todo `.py`
+  del repositorio se parsea con el Python mínimo declarado; el escáner
+  reconoce el constructo exacto que causó esto (si nunca se le ha visto
+  fallar, no es un guardián); una barra invertida en la parte literal no
+  se marca; y el mínimo declarado tiene un job de CI que lo ejecuta.
+- **Nuevo** `tests/test_version_consistency_v176.py` — tres tests sobre
+  la deriva de metadatos de versión.
+- **Modificado** `.github/workflows/tests.yml` — añadido Python 3.13 a la
+  matriz. **3.11 se queda**: era el único job que fallaba, y quitarlo
+  habría escondido el error en vez de arreglarlo.
+- **Subidas** las siete declaraciones de versión a 0.1.76.
+
+## Qué se probó
+
+- El guardián **contra el árbol roto**, antes de corregir nada: falla
+  señalando `ogr_gui/main_window.py:1706`, un solo constructo en los
+  ~200 ficheros del repositorio.
+- El guardián tras la corrección: los cuatro tests en verde.
+- Suite completa con `QT_QPA_PLATFORM=offscreen python tests/_runner.py`.
+
+## Qué falta por probar
+
+- **La prueba real de esta versión no la da la máquina de desarrollo**:
+  hay que ver el job *Test suite (Python 3.11)* verde en GitHub Actions.
+  Con Python 3.14 en local, el fallo es irreproducible por construcción.
+- El job de Python 3.13 se estrena aquí; si PySide6 diera problemas de
+  rueda en 3.13, es la matriz lo que hay que ajustar, no el mínimo.
+
+## Pendientes
+
+1. **`ogr_cli` sigue sin aplicar el descenso rápido** — anotado en
+   v0.1.72, v0.1.74 y v0.1.75. Es el objeto de v0.1.77, y la
+   investigación previa ya dice que el enunciado se queda corto: el
+   problema no es el descenso rápido, es que `ogr_cli.compute` no lee
+   `p.settings` en absoluto.
+2. **`Janbu Corrected` se puede marcar en Project Settings y no produce
+   nada.** El diálogo lo da por implementado
+   (`project_settings_dialog.py:302`), el `method_map` de
+   `_ComputeWorker` no tiene esa entrada, y `method_map.get(mid)` →
+   `None` → `continue`. El método desaparece de los resultados sin un
+   aviso. Regla 7. Reportado, no corregido: la decisión es del autor.
+3. **`Lowe-Karafiath` está gris con el tooltip «Not yet implemented»** y
+   sí está implementado y registrado (`lowe_karafiath.py:49`). El tooltip
+   miente.
+4. **El campo de filtración por elementos finitos se pierde al guardar.**
+   `fem_mesh` se serializa, `seepage_result` no, y
+   `pore_pressure.py:236` devuelve `0.0` cuando falta. Abrir un proyecto
+   FEM guardado y pulsar *Compute* sin volver a resolver la filtración da
+   u = 0 en toda la superficie, en silencio — y esto es la **interfaz**,
+   no solo el CLI.
+5. **Ningún camino de entrada llega a los siete métodos LEM del
+   registro.** La interfaz alcanza 5, el CLI 4, y son juegos distintos;
+   mientras tanto `ogr-slip2d-cli methods` lista los siete.

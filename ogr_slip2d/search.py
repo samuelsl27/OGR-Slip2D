@@ -417,8 +417,27 @@ class SlopeSearch(BaseSearch):
         initial_angle_upper_deg: Optional[float] = None,
         seed: Optional[int] = 42,
         progress_cb: Optional[Callable[[int, int], None]] = None,
+        **legacy_kwargs,
     ) -> None:
-        super().__init__(method, num_slices, min_area, progress_cb)
+        # v0.1.77 — the admissibility arguments are forwarded here for
+        # the same reason the other five searches forward them: the
+        # Tensile Stress and m-alpha checks are project settings, not
+        # per-search ones. Until this version SlopeSearch was the only
+        # search that did not accept them, and since the GUI passes them
+        # to every search, picking Slope Search raised a TypeError that
+        # the blanket ``except Exception`` in the compute worker turned
+        # into a generic "Error" dialog with no results — for every
+        # release since the first public one.
+        super().__init__(
+            method, num_slices, min_area, progress_cb,
+            reject_tensile=bool(legacy_kwargs.pop('reject_tensile', False)),
+            tensile_tolerance=float(
+                legacy_kwargs.pop('tensile_tolerance', 0.05)),
+            tensile_percent=float(
+                legacy_kwargs.pop('tensile_percent', 95.0)),
+            check_m_alpha=bool(
+                legacy_kwargs.pop('check_m_alpha', False)),
+        )
         self.num_surfaces = num_surfaces
         self.initial_angle_lower_deg = initial_angle_lower_deg
         self.initial_angle_upper_deg = initial_angle_upper_deg

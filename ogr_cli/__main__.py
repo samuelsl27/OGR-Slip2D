@@ -11,14 +11,24 @@ Commands:
     ogr-slip2d-cli strength-models
     ogr-slip2d-cli new-demo <output.ogr>
 
-The CLI uses the same numerical core as the GUI — guaranteed identical
-behaviour between interactive and automated runs.
+The CLI runs the analysis the PROJECT describes, through the same
+``ogr_slip2d.analysis_runner`` the graphical interface uses. Command-line
+options override individual project settings when given, and change
+nothing when omitted.
+
+v0.1.77 — that sentence used to read "guaranteed identical behaviour
+between interactive and automated runs", and it was false. ``compute``
+read nothing at all from ``project.settings``: it built its own search
+out of command-line defaults, so a terminal run silently skipped rapid
+drawdown, the design-standard partial factors, four of the six search
+strategies and every convergence setting. See CHANGELOG_v0.1.77.
 
 Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Optional
 
 import typer
 from rich.console import Console
@@ -27,15 +37,8 @@ from rich.table import Table
 from ogr_core.geometry import Boundary, BoundaryType, Polyline, Vertex
 from ogr_core.materials import REGISTRY, Material, MohrCoulomb, PorePressureType
 from ogr_core.project import Project, save_results
-from ogr_slip2d import (
-    BishopSimplified,
-    GridSearch,
-    JanbuCorrected,
-    JanbuSimplified,
-    OrdinaryFellenius,
-    SlopeSearch,
-    method_registry,
-)
+from ogr_slip2d import method_registry
+from ogr_slip2d.analysis_runner import check_analysis_settings, run_analysis
 
 app = typer.Typer(
     help="OGR Slip2D — limit-equilibrium slope stability analysis. "
@@ -45,16 +48,45 @@ app = typer.Typer(
 console = Console()
 
 
-METHOD_MAP = {
-    "bishop": BishopSimplified,
-    "bishop_simplified": BishopSimplified,
-    "janbu": JanbuSimplified,
-    "janbu_simplified": JanbuSimplified,
-    "janbu_corrected": JanbuCorrected,
-    "ordinary": OrdinaryFellenius,
-    "fellenius": OrdinaryFellenius,
-    "ordinary_fellenius": OrdinaryFellenius,
+@app.callback()
+def _main() -> None:
+    """Widen the output encoding before any command prints.
+
+    v0.1.77 — ``ogr-slip2d-cli methods`` crashed outright on a Windows
+    console: the ✓ and — in its table are not encodable in cp1252, which
+    is what Python picks there, so printing the table raised a
+    UnicodeEncodeError and the command produced a traceback instead of a
+    list. ``tests/_runner.py`` had already met and documented the same
+    trap; this is the same remedy, applied once for every command.
+    """
+    import sys
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):  # non-reconfigurable stream
+            pass
+
+
+# Short spellings accepted by ``--method`` on top of the registered ids.
+# The set of METHODS is not listed here: it comes from
+# ``method_registry()``. A hand-written table is what let ``methods``
+# advertise seven methods while ``compute`` accepted four of them.
+METHOD_ALIASES = {
+    "bishop": "bishop_simplified",
+    "janbu": "janbu_simplified",
+    "ordinary": "ordinary_fellenius",
+    "fellenius": "ordinary_fellenius",
+    "gle": "gle_morgenstern_price",
+    "morgenstern_price": "gle_morgenstern_price",
+    "lowe": "lowe_karafiath",
 }
+
+
+def _resolve_method(name: str) -> Optional[str]:
+    """The registered method id ``name`` refers to, or None."""
+    key = name.strip().lower().replace("-", "_").replace(" ", "_")
+    key = METHOD_ALIASES.get(key, key)
+    return key if key in method_registry() else None
 
 
 # ======================================================================
@@ -106,61 +138,126 @@ def info(
 @app.command()
 def compute(
     project: Path = typer.Argument(..., help="Path to the .ogr project file"),
-    method: str = typer.Option("bishop", help="LEM method: bishop, janbu, janbu_corrected, ordinary"),
-    slices: int = typer.Option(30, help="Number of slices per surface"),
-    nx: int = typer.Option(8, help="Grid divisions along X"),
-    ny: int = typer.Option(8, help="Grid divisions along Y"),
-    dr: float = typer.Option(1.5, help="Radius increment [m]"),
-    search: str = typer.Option("grid", help="Search strategy: grid | slope"),
-    samples: int = typer.Option(1000, help="Number of surfaces (slope search)"),
-    output: Path = typer.Option(None, help="HDF5 results output path"),
+    method: Optional[str] = typer.Option(
+        None, help="LEM method id or alias. Default: the methods enabled "
+                   "in the project. `methods` lists them all."),
+    slices: Optional[int] = typer.Option(
+        None, help="Number of slices per surface [project setting]"),
+    nx: Optional[int] = typer.Option(
+        None, help="Grid divisions along X [project setting]"),
+    ny: Optional[int] = typer.Option(
+        None, help="Grid divisions along Y [project setting]"),
+    dr: Optional[float] = typer.Option(
+        None, help="Radius increment, as a NUMBER OF INTERVALS "
+                   "[project setting]"),
+    search: Optional[str] = typer.Option(
+        None, help="Search strategy: grid | slope | auto_refine | block | "
+                   "path | simulated_annealing [project setting]"),
+    samples: Optional[int] = typer.Option(
+        None, help="Number of surfaces, random searches [project setting]"),
+    output: Optional[Path] = typer.Option(
+        None, help="HDF5 results output path"),
 ):
-    """Run a full surface-search and report the critical FoS."""
+    """Run the analysis the project describes and report the critical FoS.
+
+    Every option defaults to the value stored in the project, so a run
+    with no options reproduces what the graphical interface would do.
+    Passing an option overrides that one setting and nothing else.
+    """
     if not project.exists():
         console.print(f"[red]File not found:[/red] {project}")
         raise typer.Exit(1)
     p = Project.load(project)
 
-    mcls = METHOD_MAP.get(method.lower())
-    if mcls is None:
-        console.print(f"[red]Unknown method:[/red] {method}. "
-                      f"Available: {sorted(set(METHOD_MAP))}")
-        raise typer.Exit(2)
-    method_obj = mcls()
+    # v0.1.77 — overrides are written onto the loaded project, which is an
+    # in-memory copy; nothing is saved back, so the user's file is never
+    # modified by a calculation.
+    s = p.settings
+    if slices is not None:
+        s.methods.num_slices = int(slices)
+    if search is not None:
+        s.search.search_method = search.strip().lower()
+    if nx is not None:
+        s.search.grid_nx = int(nx)
+    if ny is not None:
+        s.search.grid_ny = int(ny)
+    if dr is not None:
+        s.search.radius_increment = dr
+    if samples is not None:
+        s.search.num_surfaces = int(samples)
+        s.search.block_num_surfaces = int(samples)
+        s.search.path_num_paths = int(samples)
 
-    with console.status(f"[bold green]Running {mcls.DISPLAY_NAME}..."):
-        if search == "grid":
-            engine = GridSearch(method=method_obj, grid_nx=nx, grid_ny=ny,
-                                radius_increment=dr, min_radius=3.0,
-                                num_slices=slices, min_area=1.0)
-        else:
-            engine = SlopeSearch(method=method_obj, num_surfaces=samples,
-                                 num_slices=slices, min_area=1.0)
-        result = engine.run(p)
-
-    tbl = Table(title=f"{mcls.DISPLAY_NAME} — {search} search")
-    tbl.add_column("Metric", style="cyan")
-    tbl.add_column("Value")
-    tbl.add_row("Surfaces evaluated", str(len(result.evaluations)))
-    tbl.add_row("Valid", str(result.valid_count))
-    tbl.add_row("Invalid", str(result.invalid_count))
-
-    critical = result.critical
-    if critical is not None:
-        sd = critical.surface.to_dict()
-        tbl.add_row("Critical FoS", f"[bold yellow]{critical.fos:.4f}[/bold yellow]")
-        tbl.add_row("Converged", str(critical.converged))
-        tbl.add_row("Iterations", str(critical.iterations))
-        if sd.get("type") == "circle":
-            tbl.add_row("Centre (x, y)", f"({sd['centre_x']:.3f}, {sd['centre_y']:.3f})")
-            tbl.add_row("Radius", f"{sd['radius']:.3f} m")
+    if method is not None:
+        mid = _resolve_method(method)
+        if mid is None:
+            console.print(f"[red]Unknown method:[/red] {method}. "
+                          f"Available: {sorted(method_registry())}")
+            raise typer.Exit(2)
+        method_ids = [mid]
     else:
-        tbl.add_row("Critical FoS", "[red]no valid surface[/red]")
+        method_ids = list(s.methods.enabled_methods) or ["bishop_simplified"]
+
+    # An analysis that cannot honour the settings it was given must say
+    # so. Reporting a plausible number computed from silently dropped
+    # settings is the failure mode this whole command was rewritten for.
+    problems = check_analysis_settings(p)
+    if problems:
+        for why in problems:
+            console.print(f"[red]Cannot compute:[/red] {why}")
+        raise typer.Exit(3)
+
+    gw = s.groundwater
+    banner = s.search.search_method
+    if gw.rapid_drawdown:
+        banner += f", rapid drawdown ({gw.rapid_drawdown_method})"
+    with console.status(f"[bold green]Running {banner}..."):
+        outcome = run_analysis(p, method_ids)
+
+    for note in outcome.warnings:
+        console.print(f"[yellow]Note:[/yellow] {note}")
+
+    # With a design standard active the result is not a factor of safety:
+    # the partial factors are applied to the INPUTS, so what comes out is
+    # an over-design factor, and it must be greater than 1.
+    factored = bool(getattr(outcome.factor_report, "applied", False))
+    label = "Over-design factor" if factored else "Critical FoS"
+    if factored:
+        console.print(f"[cyan]Design standard applied:[/cyan] "
+                      f"{outcome.factor_report.summary()} — the reported "
+                      f"value is an over-design factor, not a factor of "
+                      f"safety, and must exceed 1")
+
+    tbl = Table(title=f"{banner} — {len(outcome.results)} method(s)")
+    tbl.add_column("Method", style="cyan")
+    tbl.add_column(label)
+    tbl.add_column("Valid")
+    tbl.add_column("Invalid")
+    tbl.add_column("Converged")
+    for mid, result in outcome.results.items():
+        critical = result.critical
+        tbl.add_row(
+            mid,
+            (f"[bold yellow]{critical.fos:.4f}[/bold yellow]"
+             if critical is not None else "[red]no valid surface[/red]"),
+            str(result.valid_count),
+            str(result.invalid_count),
+            str(critical.converged) if critical is not None else "—",
+        )
     console.print(tbl)
 
-    out = output or project.with_suffix(".h5")
-    save_results(out, result, project_id=p.id)
-    console.print(f"[green]Results saved:[/green] {out}")
+    if not outcome.results:
+        raise typer.Exit(4)
+
+    base = output or project.with_suffix(".h5")
+    multi = len(outcome.results) > 1
+    for mid, result in outcome.results.items():
+        # save_results writes one SearchResult per file, so several
+        # methods need several files rather than a silently truncated one.
+        out = (base.with_name(f"{base.stem}_{mid}{base.suffix}")
+               if multi else base)
+        save_results(out, result, project_id=p.id)
+        console.print(f"[green]Results saved:[/green] {out}")
 
 
 # ======================================================================

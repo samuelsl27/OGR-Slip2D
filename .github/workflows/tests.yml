@@ -15,7 +15,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.11", "3.12"]
+        # 3.11 is the floor `pyproject.toml` declares, and it is the job
+        # that matters: from v0.1.70 to v0.1.75 it was the only one
+        # failing, on a PEP 701 f-string that 3.12 accepts and 3.11 does
+        # not. Dropping it would have hidden the bug, not fixed it.
+        # 3.13 was added in v0.1.76 so the ceiling is tested too.
+        python: ["3.11", "3.12", "3.13"]
 
     steps:
       - uses: actions/checkout@v4

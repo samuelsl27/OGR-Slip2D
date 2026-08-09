@@ -153,9 +153,13 @@ opción, añade también el test que demuestra que **mueve el número**.
   resultado posible aquí, porque parece que funciona.
 - **Sé escéptico con lo que te pido.** Si algo huele mal, dilo.
 - **Al terminar, lista qué probaste y qué falta por probar.**
-- Cada versión sube el número en `pyproject.toml`,
-  `ogr_gui/main_window.py`, `ogr_slip2d/__init__.py` y
-  `ogr_fem2d/__init__.py`, y añade un changelog en `docs/changelog/`.
+- Cada versión sube el número en **siete** sitios y añade un changelog en
+  `docs/changelog/`: `pyproject.toml`, `ogr_gui/main_window.py`
+  (`MainWindow.VERSION`) y el `__version__` de `ogr_core`, `ogr_slip2d`,
+  `ogr_fem2d`, `ogr_gui` y `ogr_cli`. Esta lista decía cuatro hasta
+  v0.1.76, y los tres que omitía llevaban congelados en 0.1.59 desde
+  v0.1.59. Hay un test que falla si discrepan, porque una lista en un
+  documento solo vale lo que valga la atención de quien la lee.
 
 ### Sobre los changelogs
 

@@ -59,8 +59,10 @@ from ogr_core.project.commands import (
     RemoveBoundaryCommand,
     ReplaceBoundaryCommand,
 )
-from ogr_slip2d import BishopSimplified, GridSearch, JanbuSimplified, OrdinaryFellenius
-from ogr_slip2d.methods import GLEMorgensternPrice, Spencer
+# v0.1.77 — the method classes and the search classes are no longer
+# imported here. The window does not build an analysis any more; it asks
+# ``ogr_slip2d.analysis_runner`` for one, which is what lets the CLI ask
+# for the same one.
 
 from .canvas import CanvasView, DisplayOptions, ToolMode
 from .dialogs import (
@@ -98,20 +100,20 @@ class _ComputeWorker(QThread):
     failed = Signal(str)
 
     def __init__(self, project: Project, method_ids: list) -> None:
-        # v0.1.57 (phase M6) — design-standard partial factors are applied
-        # HERE, once, by substituting a factored copy of the project.
-        # Every analysis path downstream then reads the factored values
-        # without knowing the feature exists, and the user's project is
-        # never modified.
-        from ogr_core.project import apply_design_factors
-        project, self.factor_report = apply_design_factors(project)
+        # v0.1.77 — the design-factor substitution, the method table, the
+        # rapid-drawdown wrapper and the six-way search dispatch all moved
+        # to ``ogr_slip2d.analysis_runner``, which contains no Qt. That is
+        # the point: the command line can now run a project exactly as
+        # configured instead of rebuilding a different analysis out of its
+        # own defaults, which is what it had been doing since v0.1.59.
+        # What is left in this class is the thread and the signals.
         super().__init__()
         self.project = project
-        # v0.1.9 — list of method ids to compute. The first one is the
-        # "primary" method used for the search (slicing happens once
-        # per surface and FoS is computed for every method).
-        self.method_ids = list(method_ids) if method_ids else ["bishop_simplified"]
+        self.method_ids = (list(method_ids) if method_ids
+                           else ["bishop_simplified"])
         self.results: dict = {}
+        self.warnings: list[str] = []
+        self.factor_report = None
 
     def build_search(self, method_id: str):
         """The configured search object for one method.
@@ -119,253 +121,35 @@ class _ComputeWorker(QThread):
         v0.1.38 — exposed so the Overall Slope probabilistic analysis can
         rebuild EXACTLY the same search (same method, same search
         settings) once per sample, instead of duplicating this dispatch.
-        Implemented by capturing the object that ``run`` builds, so there
-        is a single source of truth.
+        v0.1.77 — kept as a delegate: the dispatch it used to capture by
+        running a throwaway worker now lives in the shared runner, and
+        callers can reach it without constructing a QThread.
         """
-        captured = {}
-        original = self.project
-
-        class _Capture:
-            def __init__(self, inner):
-                self._inner = inner
-
-            def run(self, project):
-                captured["search"] = self._inner
-                # An empty result: we only want the configured object
-                from ogr_slip2d.search import SearchResult
-                return SearchResult(method_id=method_id)
-
-        worker = _ComputeWorker(original, [method_id])
-        worker._capture = _Capture
+        from ogr_slip2d.analysis_runner import build_search
         try:
-            worker.run()
+            return build_search(self.project, method_id)
         except Exception:  # noqa: BLE001
             return None
-        return captured.get("search")
 
     def run(self) -> None:
         try:
-            # v0.1.74 — the convergence settings finally reach the
-            # methods. Every one of them has accepted ``tolerance``,
-            # ``max_iterations`` and ``initial_fos`` since it was
-            # written, and every call site had instantiated them with no
-            # arguments at all, so three controls on two pages of Project
-            # Settings changed nothing. ``lem_kwargs`` is the single
-            # place that answers "what did the user configure", so a
-            # second call site cannot forget again.
-            from ogr_slip2d.methods.gle import interslice_function
-            _s = self.project.settings
-            _kw = _s.lem_kwargs()
-            _lam = {"min_lambda": _s.advanced.min_lambda,
-                    "max_lambda": _s.advanced.max_lambda}
-
-            def _seed_kw(method_name: str) -> dict:
-                """The project's seed, for the searches that draw at random.
-
-                v0.1.74 — the Random Numbers page promised that a
-                pseudo-random run "will give exactly the same results",
-                and no search had ever been told which seed to use: each
-                carried its own arbitrary default (42 here, 1234 there,
-                None in two more). Grid and Auto Refine are enumerations
-                with nothing to seed, so they are left alone rather than
-                given an argument they would have to ignore.
-                """
-                if method_name in ("grid", "auto_refine"):
-                    return {}
-                return {"seed": _s.analysis_seed()}
-            method_map = {
-                "bishop_simplified": BishopSimplified(**_kw),
-                "janbu_simplified": JanbuSimplified(**_kw),
-                "ordinary_fellenius": OrdinaryFellenius(**_kw),
-                "spencer": Spencer(**_kw, **_lam),
-                "gle_morgenstern_price": GLEMorgensternPrice(
-                    **_kw, **_lam,
-                    interslice_func=interslice_function(
-                        _s.methods.interslice_function)),
-            }
-            # v0.1.8: use user-defined grid if available
-            s_search = self.project.settings.search
-            grid_x = None
-            grid_y = None
-            if s_search.grid_x_min is not None and s_search.grid_x_max is not None:
-                grid_x = (s_search.grid_x_min, s_search.grid_x_max)
-            if s_search.grid_y_min is not None and s_search.grid_y_max is not None:
-                grid_y = (s_search.grid_y_min, s_search.grid_y_max)
-
-            # v0.1.9 — run one search per enabled method.
-            # Yes this is suboptimal (slicing repeats); v0.1.10 will
-            # compute all methods on the SAME slicing pass.
-            # v0.1.10 — dispatch on search_method
-            search_method = s_search.search_method
-            # v0.1.55 (phase M4) — explicit slope limits, when set. None
-            # means automatic: derived from the ground surface, which is
-            # what keeps a model portable between geometries.
-            slope_limits = None
-            if (s_search.slope_limit_left is not None
-                    and s_search.slope_limit_right is not None):
-                slope_limits = (s_search.slope_limit_left,
-                                s_search.slope_limit_right)
-            focus_objects = [f for f in
-                             getattr(self.project, "focus_objects", [])
-                             if f.enabled and f.valid]
-            results: dict[str, object] = {}
-            n_methods = len(self.method_ids)
-            for i, mid in enumerate(self.method_ids):
-                method = method_map.get(mid)
-                if method is None:
-                    continue
-                # v0.1.68 — a rapid drawdown replaces what "the factor
-                # of safety of this surface" means, so it is applied at
-                # the ONE place methods are instantiated. A second place
-                # that forgot would silently report the ordinary factor
-                # of safety instead. v0.1.69 — B-bar comes through here
-                # too; it used to be exempt, and reported exactly that
-                # ordinary factor of safety.
-                from ogr_slip2d.rapid_drawdown import wrap_for_drawdown
-                method = wrap_for_drawdown(
-                    method, self.project,
-                    num_slices=self.project.settings.methods.num_slices)
-                def _progress_cb(done, total, _i=i, _n=n_methods):
-                    self.progress.emit(_i * total + done, _n * total)
-
-                if search_method == "slope":
-                    from ogr_slip2d import SlopeSearch
-                    # v0.1.17 — Slide-style Slope Search. Initial Angle
-                    # at Toe window from the Slope Search settings.
-                    _lo = getattr(s_search,
-                                  "initial_angle_at_toe_lower_deg", -45.0)
-                    _up_en = getattr(s_search,
-                                     "initial_angle_at_toe_upper_enabled",
-                                     False)
-                    _up = (getattr(s_search,
-                                   "initial_angle_at_toe_upper_deg", None)
-                           if _up_en else None)
-                    search = SlopeSearch(
-                        slope_limits=slope_limits,
-                        method=method,
-                        num_surfaces=s_search.num_surfaces,
-                        num_slices=self.project.settings.methods.num_slices,
-                        **self.project.settings.admissibility_kwargs(),
-                        **_seed_kw(search_method),
-                        min_area=s_search.min_area or 1.0,
-                        initial_angle_lower_deg=_lo,
-                        initial_angle_upper_deg=_up,
-                        progress_cb=_progress_cb,
-                    )
-                elif search_method == "auto_refine":
-                    from ogr_slip2d import AutoRefineSearch
-                    # v0.1.17 — Slide-style Auto Refine. Map Surface
-                    # Options fields: divisions along slope, circles per
-                    # division, iterations, divisions-to-keep fraction.
-                    _cpd = getattr(s_search,
-                                   "auto_refine_circles_per_division", 10)
-                    _frac = getattr(s_search,
-                                    "auto_refine_divisions_to_use_pct",
-                                    50.0)
-                    _divs = getattr(s_search,
-                                    "auto_refine_divisions_along_slope",
-                                    s_search.auto_refine_divisions)
-                    search = AutoRefineSearch(
-                        method=method,
-                        divisions=_divs,
-                        circles_per_division=_cpd,
-                        iterations=s_search.auto_refine_iterations,
-                        next_iter_fraction=_frac,
-                        num_slices=self.project.settings.methods.num_slices,
-                        **self.project.settings.admissibility_kwargs(),
-                        **_seed_kw(search_method),
-                        min_area=s_search.min_area or 0.5,
-                        progress_cb=_progress_cb,
-                    )
-                elif search_method == "block":
-                    from ogr_slip2d import BlockSearch
-                    # v0.1.17 — Slide-style Block Search with Left/Right
-                    # Projection Angle ranges and Convex-Only option.
-                    search = BlockSearch(
-                        method=method,
-                        num_groups=s_search.block_num_groups,
-                        left_start_angle_deg=s_search.block_left_start_angle_deg,
-                        left_end_angle_deg=s_search.block_left_end_angle_deg,
-                        right_start_angle_deg=s_search.block_right_start_angle_deg,
-                        right_end_angle_deg=s_search.block_right_end_angle_deg,
-                        num_surfaces=s_search.block_num_surfaces,
-                        num_slices=self.project.settings.methods.num_slices,
-                        **self.project.settings.admissibility_kwargs(),
-                        **_seed_kw(search_method),
-                        min_area=s_search.min_area or 2.0,
-                        convex_only=s_search.block_convex_only,
-                        progress_cb=_progress_cb,
-                    )
-                elif search_method == "path":
-                    from ogr_slip2d import PathSearch
-                    # v0.1.17 — XSTABL-style Path Search. Map the Slide
-                    # Surface Options fields: segment length (0 → auto
-                    # 0.3H), initial-angle window, optimization.
-                    _seg = s_search.path_segment_length
-                    _opt = getattr(s_search, "path_optimize", True)
-                    _conv = getattr(s_search, "path_convex_only", False)
-                    search = PathSearch(
-                        method=method,
-                        segment_length=(_seg if _seg and _seg > 0 else None),
-                        initial_angle_lower_deg=s_search.path_min_angle_deg,
-                        initial_angle_upper_deg=(
-                            s_search.path_max_angle_deg
-                            if getattr(s_search,
-                                       "path_upper_angle_enabled", False)
-                            else None),
-                        num_paths=s_search.path_num_paths,
-                        num_slices=self.project.settings.methods.num_slices,
-                        **self.project.settings.admissibility_kwargs(),
-                        **_seed_kw(search_method),
-                        optimize=_opt,
-                        convex_only=_conv,
-                        progress_cb=_progress_cb,
-                    )
-                elif search_method == "simulated_annealing":
-                    from ogr_slip2d import SimulatedAnnealingSearch
-                    search = SimulatedAnnealingSearch(
-                        method=method,
-                        initial_vertices=s_search.sa_initial_vertices,
-                        generation_steps=s_search.sa_generation_steps,
-                        tolerance=s_search.sa_tolerance,
-                        temperature_factor=s_search.sa_temperature_factor,
-                        convex_only=s_search.sa_convex_only,
-                        num_slices=self.project.settings.methods.num_slices,
-                        **self.project.settings.admissibility_kwargs(),
-                        **_seed_kw(search_method),
-                        min_area=s_search.min_area or 1.0,
-                        progress_cb=_progress_cb,
-                    )
-                else:
-                    # Default = Grid Search
-                    search = GridSearch(
-                        slope_limits=slope_limits,
-                        focus_objects=focus_objects,
-                        method=method,
-                        grid_x=grid_x,
-                        grid_y=grid_y,
-                        grid_nx=s_search.grid_nx,
-                        grid_ny=s_search.grid_ny,
-                        radius_increment=s_search.radius_increment or 1.5,
-                        min_radius=3.0,
-                        num_slices=self.project.settings.methods.num_slices,
-                        **self.project.settings.admissibility_kwargs(),
-                        **_seed_kw(search_method),
-                        min_area=s_search.min_area or 1.0,
-                        progress_cb=_progress_cb,
-                    )
-                cap = getattr(self, "_capture", None)
-                if cap is not None:
-                    results[mid] = cap(search).run(self.project)
-                    continue
-                results[mid] = search.run(self.project)
+            from ogr_slip2d.analysis_runner import run_analysis
+            outcome = run_analysis(
+                self.project, self.method_ids,
+                progress_cb=lambda done, total: self.progress.emit(done, total))
             # v0.1.31 — keep the results on the instance so the same
             # search-building logic can be reused synchronously (the
-            # per-stage transient factors of safety do exactly that,
-            # instead of duplicating this dispatch).
-            self.results = results
-            self.finished_result.emit(results)
+            # per-stage transient factors of safety do exactly that).
+            self.results = outcome.results
+            self.warnings = outcome.warnings
+            self.factor_report = outcome.factor_report
+            self.finished_result.emit(outcome.results)
         except Exception as e:  # noqa: BLE001
+            # v0.1.74 found what this blanket handler costs: it catches a
+            # TypeError from a programming mistake exactly as it catches a
+            # bad model, so a broken call signature reads as "analysis
+            # failed". The type name is included for that reason — it is
+            # the only thing that distinguishes the two on screen.
             self.failed.emit(f"{type(e).__name__}: {e}")
 
 
@@ -422,7 +206,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.75"
+    VERSION = "0.1.77"
 
     def __init__(self) -> None:
         super().__init__()
@@ -1703,8 +1487,13 @@ class MainWindow(QMainWindow):
         msg = (f"{tr('Critical drawdown level')} ({mid}): {where}, "
                f"FS = {fos:.4f}")
         if margin is not None and margin > 0.005:
-            msg += (f"  — {tr('the total drawdown alone would overstate '
-                              'it by')} {100 * margin:.1f} %")
+            # v0.1.76 — the lookup stays OUTSIDE the f-string. Splitting an
+            # implicitly concatenated literal across lines inside a
+            # replacement field is PEP 701, i.e. Python 3.12 and later;
+            # on the 3.11 this project supports the literal ends at the
+            # line break and the module does not parse at all.
+            overstate = tr("the total drawdown alone would overstate it by")
+            msg += f"  — {overstate} {100 * margin:.1f} %"
         self.statusBar().showMessage(msg, 20000)
 
         xs, series = [], []
@@ -3027,11 +2816,14 @@ class MainWindow(QMainWindow):
             return
         # v0.1.68 — a rapid drawdown that cannot run must say so instead
         # of quietly reporting the ordinary factor of safety, which looks
-        # exactly like a successful analysis.
-        from ogr_slip2d.rapid_drawdown import check_drawdown_settings
-        _why = check_drawdown_settings(self.project)
+        # exactly like a successful analysis. v0.1.77 — the same guard now
+        # covers the finite-element seepage field, for the same reason:
+        # the field is not stored in the .ogr, so a reopened FEM project
+        # would report u = 0 everywhere and look like a dry slope.
+        from ogr_slip2d.analysis_runner import check_analysis_settings
+        _why = check_analysis_settings(self.project)
         if _why:
-            QMessageBox.warning(self, tr("Rapid Drawdown"), _why)
+            QMessageBox.warning(self, tr("Compute"), "\n\n".join(_why))
             return
         if not self.project.materials:
             QMessageBox.warning(self, tr("Compute"), "No materials defined.")
@@ -3059,6 +2851,15 @@ class MainWindow(QMainWindow):
         """
         # v0.1.9: results is a dict {method_id: SearchResult}
         self.last_search_results = results
+        # v0.1.77 — a method that could not run, or a setting the chosen
+        # search does not read, is now reported. Ticking "Janbu Corrected"
+        # used to remove it from the results with no trace of why. Not a
+        # dialog: this method runs inside the test suite, where a modal
+        # blocks forever without a display.
+        worker = getattr(self, "worker", None)
+        self.last_compute_warnings = list(getattr(worker, "warnings", []) or [])
+        if self.last_compute_warnings:
+            self.ogr_status.showMessage(self.last_compute_warnings[0], 15000)
         if not results:
             self.last_search_result = None
             self.ogr_status.showMessage("No methods produced results.", 6000)
