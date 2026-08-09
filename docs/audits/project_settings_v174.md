@@ -110,7 +110,7 @@ Cableado desde v0.1.57 y correcto. Faltan respecto de la referencia:
 | Steffensen | igual | **Cableado en v0.1.74** |
 | Initial factor of safety | igual | **Cableado y renombrado** en v0.1.74 |
 | Min / Max lambda | agrupados en *Iteration Parameters* | **Cableado en v0.1.74**, y los defectos corregidos (§4) |
-| `check_m_alpha` | ofrecido | **Excluido a propósito**: rechaza el círculo crítico validado contra la referencia, así que es un diagnóstico y no un criterio de validez. Vive en las opciones de búsqueda, y la página lo explica |
+| `check_m_alpha` | ofrecido, **marcado** por defecto | **Ofrecido y cableado en v0.1.74, pero APAGADO por defecto** — divergencia deliberada. Medido: en el círculo crítico validado el m-α mínimo es **−0.0100** y **5 de 25** dovelas caen bajo el límite, así que la comprobación rechaza la superficie que el proyecto valida contra un valor publicado. Es un diagnóstico, no un criterio de validez |
 | — | Apply support forces to interslice boundaries | **Nos falta** → backlog |
 | — | Discard surfaces with FS above / below | **Nos falta** → backlog |
 

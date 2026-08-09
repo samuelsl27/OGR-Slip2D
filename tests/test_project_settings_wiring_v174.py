@@ -333,6 +333,59 @@ class TestTheTensileCheckReachesTheSearch:
         assert AdvancedSettings().check_tensile_stresses is False
 
 
+class TestTheMAlphaCheckIsReachableButOff:
+    """The anomaly of rule 6, pinned as a test instead of as a comment.
+
+    The project has known since v0.1.32 that this check rejects the
+    reference-validated critical circle, and the response had been to
+    leave it out of the interface entirely. That is the wrong half of the
+    right worry: it must not be ON, but hiding a capability the engine
+    has is rule 3 in reverse. v0.1.74 offers it, off by default, with the
+    measurement below as the reason.
+    """
+
+    def _reference_result(self):
+        import sys
+        from pathlib import Path
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import _runner
+        val = _runner._load_module(
+            Path(__file__).resolve().parent / "test_slide_validation_ej1.py")
+        from ogr_slip2d import SlipCircle, slice_surface
+        from ogr_slip2d.methods import BishopSimplified
+        p = val._ej1_project()
+        circle = SlipCircle(centre_x=88.0, centre_y=70.5, radius=47.212)
+        sl = slice_surface(p, circle, num_slices=25)
+        return BishopSimplified().compute_fos(p, circle, sl)
+
+    def test_it_rejects_the_reference_validated_circle(self):
+        """The measurement, not the memory of it: the minimum m-alpha of
+        the validated critical circle is NEGATIVE, and a fifth of its
+        slices are below the 0.2 limit."""
+        from ogr_slip2d.checks import base_m_alphas, check_surface
+        res = self._reference_result()
+        values = base_m_alphas(res)
+        assert min(values) < 0.0, min(values)
+        assert sum(1 for v in values if v < 0.2) >= 5
+        ok, why = check_surface(res, m_alpha=True)
+        assert ok is False and "m_alpha" in why
+
+    def test_and_passes_it_with_the_check_off(self):
+        """Which is why off is the default, and why the published factor
+        of safety is still reproducible."""
+        from ogr_slip2d.checks import check_surface
+        ok, why = check_surface(self._reference_result(), m_alpha=False)
+        assert ok is True and why is None
+
+    def test_the_default_is_off_and_it_reaches_the_search(self):
+        from ogr_core.project import ProjectSettings
+        s = ProjectSettings()
+        assert s.advanced.check_m_alpha is False
+        assert s.admissibility_kwargs()["check_m_alpha"] is False
+        s.advanced.check_m_alpha = True
+        assert s.admissibility_kwargs()["check_m_alpha"] is True
+
+
 # ======================================================================
 # E. The interslice force function
 # ======================================================================

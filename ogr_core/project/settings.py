@@ -440,6 +440,15 @@ class AdvancedSettings:
     # Percentage of slices, counted FROM THE TOE, over which the tensile
     # check applies. The reference default is 95 %.
     tensile_percent: float = 95.0
+    # v0.1.74 — the m-alpha check (Whitman & Bailey 1967). Offered, so
+    # the user can reach it, but OFF by default, which is a deliberate
+    # divergence from the reference: measured on the Ej1 case, the
+    # reference-validated critical circle has a minimum m-alpha of
+    # **-0.0100** with 5 of its 25 slices below the 0.2 limit, so the
+    # check rejects the very surface the project validates against a
+    # published value. That makes it a diagnostic, not a validity
+    # criterion, and a diagnostic must not be on by default.
+    check_m_alpha: bool = False
     # First trial value of the factor of safety. Named ``min_initial_fs``
     # until v0.1.74, which was a misnomer: it is a starting point, not a
     # floor. ``from_dict`` still reads the old key.
@@ -547,6 +556,7 @@ class ProjectSettings:
         return {
             "reject_tensile": bool(self.advanced.check_tensile_stresses),
             "tensile_percent": float(self.advanced.tensile_percent),
+            "check_m_alpha": bool(self.advanced.check_m_alpha),
         }
 
     # ------------------------------------------------------------------

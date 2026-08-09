@@ -1061,13 +1061,26 @@ class _AdvancedPage(QWidget):
             "validation case needs lambda = 1.49."))
         form.addRow(tr("Maximum lambda:"), self.sp_lmax)
 
+        # v0.1.74 — offered, so it is reachable, but OFF by default. The
+        # note below is the whole reason it is not a plain checkbox with
+        # the reference's default, and it stays next to the control it
+        # explains: a warning kept in a changelog is a warning nobody
+        # reads at the moment they need it.
+        self.chk_m_alpha = QCheckBox(tr("Check m-alpha < 0.2"))
+        self.chk_m_alpha.setChecked(bool(self.s.check_m_alpha))
+        self.chk_m_alpha.setToolTip(tr(
+            "Rejects surfaces whose base normal denominator falls below "
+            "0.2 (Whitman and Bailey, 1967)."))
+        form.addRow("", self.chk_m_alpha)
+
         note = QLabel(tr(
-            "The m-alpha check is deliberately NOT offered here. It "
-            "rejects surfaces whose base normal denominator falls below "
-            "0.2, and measurement showed it also rejects the "
-            "reference-validated critical circle, so it is a diagnostic "
-            "rather than a validity criterion and stays with the search "
-            "options."))
+            "The m-alpha check is OFF by default, unlike in the "
+            "reference. Measured on the validation case, the "
+            "reference-validated critical circle has a minimum m-alpha "
+            "of −0.0100, with 5 of its 25 slices below the limit: the "
+            "check rejects the very surface this project validates "
+            "against a published value. Treat it as a diagnostic, not as "
+            "a validity criterion."))
         note.setWordWrap(True)
         form.addRow("", note)
         self._refresh()
@@ -1079,6 +1092,7 @@ class _AdvancedPage(QWidget):
     def apply(self) -> None:
         self.s.check_tensile_stresses = self.chk_tensile.isChecked()
         self.s.tensile_percent = self.sp_tensile_pct.value()
+        self.s.check_m_alpha = self.chk_m_alpha.isChecked()
         self.s.iterate_steffensen = self.chk_steffensen.isChecked()
         self.s.initial_fos = self.sp_initial.value()
         self.s.min_lambda = self.sp_lmin.value()

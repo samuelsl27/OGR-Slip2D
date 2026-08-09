@@ -354,16 +354,25 @@ class TestAdvancedPage:
         assert abs(adv.initial_fos - 1.5) < 1e-9
         assert abs(adv.max_lambda - 2.0) < 1e-9
 
-    def test_m_alpha_is_deliberately_absent(self):
-        """It rejects the reference-validated critical circle, so it is a
-        diagnostic rather than a validity criterion and stays with the
-        search options. The page says so."""
+    def test_m_alpha_is_offered_but_off_by_default(self):
+        """v0.1.74 — it used to be absent from the page entirely.
+
+        Absent was the wrong answer to a right worry: it rejects the
+        reference-validated critical circle, so it must not be ON, but
+        making it unreachable is rule 3 in reverse — a capability the
+        engine has and the interface hides. It is offered now, off by
+        default, with the reason next to it, which is a deliberate
+        divergence from the reference's own default.
+        """
         from PySide6.QtWidgets import QLabel
-        _p, d = _dialog()
+        p, d = _dialog()
         page = _pages(d)["Advanced"]
+        assert page.chk_m_alpha.isChecked() is False
+        assert p.settings.advanced.check_m_alpha is False
+        # The warning stays beside the control it explains.
         text = " ".join(" ".join(la.text().split())
                         for la in page.findChildren(QLabel))
         assert "m-alpha" in text
-        assert not any("m-alpha" in w.text().lower()
-                       for w in page.findChildren(
-                           type(page.chk_tensile)))
+        page.chk_m_alpha.setChecked(True)
+        page.apply()
+        assert p.settings.advanced.check_m_alpha is True

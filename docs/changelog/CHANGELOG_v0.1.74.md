@@ -166,6 +166,31 @@ Además, la página **Transient se deshabilita** mientras el análisis
 transitorio esté apagado, como la referencia: ofrecía una tolerancia de
 solver para un análisis que no iba a ejecutarse.
 
+### La comprobación de m-α: ofrecida, pero apagada
+
+Estaba **fuera de la página a propósito** desde v0.1.32, con una nota que
+explicaba por qué: rechaza el círculo crítico validado contra la
+referencia. La preocupación era correcta; la respuesta, solo a medias.
+Que no deba estar **activada** no significa que deba ser **inalcanzable**
+— eso es la regla 3 al revés: una capacidad que el motor tiene y la
+interfaz esconde.
+
+Se ofrece ahora, **apagada por defecto**, que es una divergencia
+deliberada respecto de la referencia (que la trae marcada). La medición
+que lo justifica, rehecha antes de decidir en lugar de heredada de la
+nota, y **peor de lo que la nota decía**:
+
+| Círculo de referencia validado (Ej1, Bishop, FoS = 0.883074) | |
+|---|---|
+| m-α mínimo | **−0.0100** (negativo) |
+| Dovelas por debajo del límite 0.2 | **5 de 25** |
+| Veredicto con la comprobación activa | **rechazado** |
+
+Así que es un **diagnóstico, no un criterio de validez**, y un
+diagnóstico no puede venir activado. El aviso vive junto al control que
+explica, no en este archivo: una advertencia en un changelog es una
+advertencia que nadie lee en el momento en que la necesita.
+
 ### Renombrado
 
 `min_initial_fs` → `initial_fos`. Era un nombre equivocado: es el primer

@@ -957,6 +957,25 @@ _DICTS: dict[str, dict[str, str]] = {
             "factor de seguridad tras el descenso. El nivel freático es el "
             "nivel INICIAL y la línea de desembalse el final, más bajo.",
         # --- Project Settings wiring (v0.1.74) -------------------------
+        "Check m-alpha < 0.2": "Comprobar m-alfa < 0.2",
+        "Rejects surfaces whose base normal denominator falls below "
+        "0.2 (Whitman and Bailey, 1967).":
+            "Rechaza las superficies cuyo denominador de la normal de "
+            "base baja de 0.2 (Whitman y Bailey, 1967).",
+        "The m-alpha check is OFF by default, unlike in the "
+        "reference. Measured on the validation case, the "
+        "reference-validated critical circle has a minimum m-alpha "
+        "of −0.0100, with 5 of its 25 slices below the limit: the "
+        "check rejects the very surface this project validates "
+        "against a published value. Treat it as a diagnostic, not as "
+        "a validity criterion.":
+            "La comprobación de m-alfa está DESACTIVADA por defecto, al "
+            "contrario que en la referencia. Medido sobre el caso de "
+            "validación, el círculo crítico validado tiene un m-alfa "
+            "mínimo de −0.0100, con 5 de sus 25 dovelas por debajo del "
+            "límite: la comprobación rechaza justamente la superficie que "
+            "este proyecto valida contra un valor publicado. Trátala como "
+            "un diagnóstico, no como un criterio de validez.",
         "Percentage of slices:": "Porcentaje de dovelas:",
         "Percentage of slices, counted from the toe, over which the "
         "tensile check applies.":
