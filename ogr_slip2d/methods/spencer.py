@@ -79,10 +79,10 @@ class Spencer(LEMMethod):
         sup = resolve_support_terms(project, surface, slices, slide_sign)
 
         # Outer loop: bracket λ (= tan θ) and use bisection / secant
-        # to drive g(λ) = F_f − F_m to zero.
-        # Wider grid: λ may need to reach ±1.5 for some slope geometries.
-        lam_grid = [-1.5, -1.0, -0.6, -0.4, -0.2, -0.1, 0.0,
-                    0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 1.5]
+        # to drive g(λ) = F_f − F_m to zero. The grid may need to reach
+        # ±1.5 for some slope geometries; v0.1.74 moved it to the base
+        # class so the range the user configures can clip it.
+        lam_grid = self.lambda_grid()
         samples: list[Tuple[float, float, float, float]] = []  # (lam, g, ff, fm)
         for lam in lam_grid:
             ff, fm = self._inner_solve(

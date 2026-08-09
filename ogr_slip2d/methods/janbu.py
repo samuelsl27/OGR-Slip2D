@@ -125,6 +125,7 @@ class JanbuSimplified(LEMMethod):
         fos = self.initial_fos
         converged = False
         iterations = 0
+        history: list[float] = []   # v0.1.74, for Steffensen
         for it in range(1, self.max_iterations + 1):
             iterations = it
             numerator = 0.0
@@ -188,6 +189,18 @@ class JanbuSimplified(LEMMethod):
                 converged = True
                 break
             fos = new_fos
+
+            # v0.1.74 — Steffensen, same shape as in Bishop. Applied to
+            # the UNCORRECTED factor of safety: the Janbu correction is a
+            # multiplier applied once at the end, so accelerating the
+            # sequence before it cannot interact with it.
+            if self.iterate_steffensen:
+                history.append(new_fos)
+                if len(history) >= 3:
+                    accelerated = self.aitken(*history[-3:])
+                    history.clear()
+                    if accelerated is not None:
+                        fos = accelerated
 
         if self._CORRECTION:
             fos *= _janbu_correction_factor(project, surface, slices)

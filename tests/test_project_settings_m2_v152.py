@@ -190,15 +190,27 @@ class TestTransientPage:
         assert "1 with" in page.lbl_stages.text()
 
     def test_enabling_is_exclusive(self):
-        """Advanced groundwater options are mutually exclusive."""
+        """Advanced groundwater options are mutually exclusive.
+
+        v0.1.74 — the switch moved to the Groundwater page, where the
+        other two already were, and became a radio group. It used to live
+        here as a third checkbox, and since ``_apply`` runs the pages in
+        order and Transient comes after Groundwater, choosing Rapid
+        Drawdown there and leaving this ticked silently gave you
+        Transient. The invariant under test is unchanged; what changed is
+        that one widget now answers the question.
+        """
         p = Project(name="x")
         p.settings.groundwater.set_advanced_option("rapid_drawdown")
         _p, d = _dialog(p)
-        page = _pages(d)["Transient"]
-        page.chk_enabled.setChecked(True)
+        page = _pages(d)["Groundwater"]
+        assert page.cb_rapid.isChecked() is True
+        page.rb_transient.setChecked(True)
         page.apply()
         assert p.settings.groundwater.transient is True
         assert p.settings.groundwater.rapid_drawdown is False
+        # And the radio group makes it impossible to ask for two.
+        assert page.cb_rapid.isChecked() is False
 
     def test_solver_options_written(self):
         p, d = _dialog()
@@ -337,7 +349,9 @@ class TestAdvancedPage:
         adv = p.settings.advanced
         assert adv.check_tensile_stresses is False
         assert adv.iterate_steffensen is False
-        assert abs(adv.min_initial_fs - 1.5) < 1e-9
+        # v0.1.74 — ``min_initial_fs`` was a misnomer: it is the first
+        # trial value, not a floor. Renamed once it started being used.
+        assert abs(adv.initial_fos - 1.5) < 1e-9
         assert abs(adv.max_lambda - 2.0) < 1e-9
 
     def test_m_alpha_is_deliberately_absent(self):

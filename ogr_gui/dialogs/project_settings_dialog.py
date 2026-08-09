@@ -319,7 +319,39 @@ class _MethodsPage(QWidget):
         form.addRow(tr("Number of slices:"), self.spn_slices)
         form.addRow(tr("Tolerance:"), self.dsp_tol)
         form.addRow(tr("Maximum iterations:"), self.spn_iter)
+
+        # v0.1.74 — the interslice force function. GLE / Morgenstern-Price
+        # has accepted one since it was written and nothing had ever
+        # passed a different one, so the half sine was not a default but
+        # the only reachable choice. The reference gates the control on
+        # GLE being enabled, which is also the only method that reads it.
+        self.cbo_f = QComboBox()
+        for label, value in (
+            (tr("Half Sine"), "half_sine"),
+            (tr("Constant"), "constant"),
+            (tr("Trapezoidal"), "trapezoidal"),
+            (tr("Clipped Sine"), "clipped_sine"),
+        ):
+            self.cbo_f.addItem(label, value)
+        i = self.cbo_f.findData(
+            getattr(s.methods, "interslice_function", "half_sine"))
+        self.cbo_f.setCurrentIndex(max(0, i))
+        self.cbo_f.setToolTip(tr(
+            "Shape of the interslice force function used by GLE / "
+            "Morgenstern-Price. Constant makes GLE equivalent to "
+            "Spencer. x runs from 0 at the LEFT end of the surface to 1 "
+            "at the right, whatever the failure direction."))
+        form.addRow(tr("Interslice force function:"), self.cbo_f)
         root.addWidget(conv)
+
+        gle = self.checkboxes.get(LEM.GLE_MORGENSTERN_PRICE.value)
+        if gle is not None:
+            gle.toggled.connect(self._refresh_interslice)
+        self._refresh_interslice()
+
+    def _refresh_interslice(self) -> None:
+        gle = self.checkboxes.get(LEM.GLE_MORGENSTERN_PRICE.value)
+        self.cbo_f.setEnabled(bool(gle is not None and gle.isChecked()))
 
     def apply(self) -> None:
         self.s.methods.enabled_methods = [
@@ -328,6 +360,7 @@ class _MethodsPage(QWidget):
         self.s.methods.num_slices = self.spn_slices.value()
         self.s.methods.tolerance = self.dsp_tol.value()
         self.s.methods.max_iterations = self.spn_iter.value()
+        self.s.methods.interslice_function = self.cbo_f.currentData()
 
 
 # ----------------------------------------------------------------------
@@ -379,16 +412,26 @@ class _GroundwaterPage(QWidget):
         adv = QGroupBox(tr("Advanced"))
         af = QFormLayout(adv)
 
-        self.cb_excess = QCheckBox(tr("Calculate Excess Pore Pressure (B-bar method)"))
-        self.cb_excess.setChecked(s.groundwater.excess_pore_pressure)
+        # v0.1.74 — radio buttons, not checkboxes. The model has declared
+        # the three advanced options mutually exclusive since v0.1.68
+        # (``set_advanced_option``), but the interface offered two
+        # independent checkboxes on this page and a third on the
+        # Transient page, so the user could tick two and ``apply`` would
+        # silently drop one. Radios make the exclusivity visible instead
+        # of enforcing it behind the user's back.
+        from PySide6.QtWidgets import QButtonGroup, QRadioButton
+        self.rb_adv_none = QRadioButton(tr("None"))
+        self.rb_transient = QRadioButton(tr("Transient groundwater"))
+        self._adv_group = QButtonGroup(self)
+        self.cb_excess = QRadioButton(
+            tr("Calculate Excess Pore Pressure (B-bar method)"))
         self.cb_excess.setToolTip(tr(
             "Excess pore pressure from loading, on materials marked as "
             "undrained. This is a separate analysis from Rapid Drawdown, "
             "not a prerequisite for it: the two are mutually exclusive."
         ))
 
-        self.cb_rapid = QCheckBox(tr("Rapid Drawdown analysis"))
-        self.cb_rapid.setChecked(s.groundwater.rapid_drawdown)
+        self.cb_rapid = QRadioButton(tr("Rapid Drawdown analysis"))
         self.cb_rapid.setToolTip(tr(
             "Enables the Drawdown Line tool and computes the factor of "
             "safety after the drawdown. The water table is the INITIAL "
@@ -417,6 +460,26 @@ class _GroundwaterPage(QWidget):
         i = self.cbo_drawdown.findData(s.groundwater.rapid_drawdown_method)
         self.cbo_drawdown.setCurrentIndex(max(0, i))
 
+        # The transient option lives here too, next to the two it is
+        # exclusive with. Its solver parameters stay on the Transient
+        # page; what moved is the CHOICE, which is what was being made
+        # in two places and applied in page order.
+        self.rb_transient.setToolTip(tr(
+            "Staged transient seepage. Its solver options are on the "
+            "Transient page, which this switch enables."))
+        for button in (self.rb_adv_none, self.rb_transient,
+                       self.cb_excess, self.cb_rapid):
+            self._adv_group.addButton(button)
+        option = s.groundwater.advanced_option()
+        {
+            None: self.rb_adv_none,
+            "transient": self.rb_transient,
+            "excess_pore_pressure": self.cb_excess,
+            "rapid_drawdown": self.cb_rapid,
+        }[option].setChecked(True)
+
+        af.addRow("", self.rb_adv_none)
+        af.addRow("", self.rb_transient)
         af.addRow("", self.cb_excess)
         af.addRow("", self.cb_rapid)
         af.addRow(tr("Drawdown method:"), self.cbo_drawdown)
@@ -434,15 +497,18 @@ class _GroundwaterPage(QWidget):
         self.s.groundwater.default_hu = self.dsp_hu.value()
         self.s.groundwater.auto_hu = self.cb_auto_hu.isChecked()
         # v0.1.68 — go through set_advanced_option instead of writing the
-        # three flags by hand. The three advanced options are declared
-        # mutually exclusive, and this dialog was the one place able to
-        # leave two of them on at once.
-        if self.cb_rapid.isChecked():
-            self.s.groundwater.set_advanced_option("rapid_drawdown")
-        elif self.cb_excess.isChecked():
-            self.s.groundwater.set_advanced_option("excess_pore_pressure")
-        elif self.s.groundwater.transient:
-            self.s.groundwater.set_advanced_option("transient")
+        # three flags by hand. v0.1.74 — and read it from a radio group,
+        # so "which of the three" has exactly one answer coming from
+        # exactly one widget. The Transient page no longer decides this;
+        # it only shows the solver options for the choice made here,
+        # which is what stopped it from overwriting this page's decision
+        # by virtue of being applied after it.
+        for button, option in ((self.cb_rapid, "rapid_drawdown"),
+                               (self.cb_excess, "excess_pore_pressure"),
+                               (self.rb_transient, "transient")):
+            if button.isChecked():
+                self.s.groundwater.set_advanced_option(option)
+                break
         else:
             self.s.groundwater.set_advanced_option(None)
         self.s.groundwater.rapid_drawdown_method = self.cbo_drawdown.currentData()
@@ -531,17 +597,7 @@ class ProjectSettingsDialog(QDialog):
         layout.addWidget(self.stack, 1)
 
         self.pages: list[QWidget] = []
-        self._add_page("General", _GeneralPage(settings))
-        self._add_page("Methods", _MethodsPage(settings))
-        self._add_page("Groundwater", _GroundwaterPage(settings))
-        self._add_page("Transient", _TransientPage(settings))
-        self._add_page("Statistics", _StatisticsPage(settings))
-        self._add_page("Random Numbers", _RandomNumbersPage(settings))
-        self._add_page("Design Standard", _DesignStandardPage(settings))
-        self._add_page("Advanced", _AdvancedPage(settings))
-        # v0.1.9 — Surface Search removed from Project Settings; it now
-        # lives in Surfaces → Surface Options (Slide convention).
-        self._add_page("Project Summary", _SummaryPage(settings))
+        self._build_pages()
 
         self.nav.currentRowChanged.connect(self.stack.setCurrentIndex)
         self.nav.setCurrentRow(0)
@@ -569,15 +625,63 @@ class ProjectSettingsDialog(QDialog):
         layout.addWidget(container, 1)
 
     # ------------------------------------------------------------------
+    # v0.1.74 — the nine pages, in one list. ``_defaults`` used to
+    # rebuild them from a SECOND, shorter hand-written sequence, so
+    # pressing Restore Defaults deleted five of the nine until the dialog
+    # was closed and reopened. Two lists of the same thing is one list
+    # too many.
+    _PAGES = (
+        # v0.1.9 — Surface Search is NOT here: it lives in
+        # Surfaces → Surface Options, following the reference.
+        ("General", "_GeneralPage"),
+        ("Methods", "_MethodsPage"),
+        ("Groundwater", "_GroundwaterPage"),
+        ("Transient", "_TransientPage"),
+        ("Statistics", "_StatisticsPage"),
+        ("Random Numbers", "_RandomNumbersPage"),
+        ("Design Standard", "_DesignStandardPage"),
+        ("Advanced", "_AdvancedPage"),
+        ("Project Summary", "_SummaryPage"),
+    )
+
+    def _build_pages(self) -> None:
+        for label, cls_name in self._PAGES:
+            self._add_page(label, globals()[cls_name](self.settings))
+        self._refresh_page_gates()
+
     def _add_page(self, label: str, widget: QWidget) -> None:
         self.nav.addItem(label)
         self.stack.addWidget(widget)
         self.pages.append(widget)
 
+    def _refresh_page_gates(self) -> None:
+        """Grey out the pages whose analysis is switched off.
+
+        The reference disables its Transient page until the transient
+        groundwater option is on, and says so on the page itself. Ours
+        offered a solver tolerance for an analysis that was not going to
+        run.
+        """
+        on = bool(self.settings.groundwater.transient)
+        for row, (label, _) in enumerate(self._PAGES):
+            if label == "Transient":
+                item = self.nav.item(row)
+                if item is not None:
+                    item.setFlags(
+                        item.flags() | Qt.ItemIsEnabled if on
+                        else item.flags() & ~Qt.ItemIsEnabled)
+                # The whole page, label included: since v0.1.74 it holds
+                # only solver options, and the switch that enables them
+                # lives on the Groundwater page.
+                page = self.pages[row]
+                for child in page.findChildren(QWidget):
+                    child.setEnabled(on)
+
     def _apply(self) -> None:
         for p in self.pages:
             if hasattr(p, "apply"):
                 p.apply()
+        self._refresh_page_gates()
 
     def _ok(self) -> None:
         self._apply()
@@ -588,18 +692,14 @@ class ProjectSettingsDialog(QDialog):
         fresh = ProjectSettings()
         for attr in vars(fresh):
             setattr(self.settings, attr, getattr(fresh, attr))
-        # Rebuild pages (cheap)
+        # Rebuild pages (cheap) — all nine of them, from the one list.
         self.nav.clear()
         while self.stack.count():
             w = self.stack.widget(0)
             self.stack.removeWidget(w)
             w.deleteLater()
         self.pages.clear()
-        self._add_page("General", _GeneralPage(self.settings))
-        self._add_page("Methods", _MethodsPage(self.settings))
-        self._add_page("Groundwater", _GroundwaterPage(self.settings))
-        # v0.1.9 — Surface Search now in Surfaces → Surface Options
-        self._add_page("Project Summary", _SummaryPage(self.settings))
+        self._build_pages()
         self.nav.setCurrentRow(0)
 
 
@@ -623,13 +723,15 @@ class _TransientPage(QWidget):
         self.s = settings.groundwater
         form = QFormLayout(self)
 
-        self.chk_enabled = QCheckBox(tr("Transient groundwater analysis"))
-        self.chk_enabled.setChecked(bool(self.s.transient))
-        self.chk_enabled.setToolTip(tr(
-            "Advanced groundwater options are mutually exclusive: "
-            "enabling this switches off Excess Pore Pressure and Rapid "
-            "Drawdown."))
-        form.addRow("", self.chk_enabled)
+        # v0.1.74 — a read-only statement, not a second switch. This page
+        # and the Groundwater page both used to write the advanced
+        # option, and ``_apply`` runs the pages in order, so whichever
+        # came later won: choosing Rapid Drawdown on Groundwater and
+        # leaving this ticked silently gave you Transient. The choice now
+        # has one home, and this is a label pointing at it.
+        self.lbl_enabled = QLabel("")
+        form.addRow(tr("Transient groundwater:"), self.lbl_enabled)
+        self._refresh_enabled_label()
 
         self.lbl_stages = QLabel("")
         self._refresh_stage_label()
@@ -670,11 +772,13 @@ class _TransientPage(QWidget):
         self.lbl_stages.setText(
             tr("%d stage(s), %d with a factor of safety") % (n, sf))
 
+    def _refresh_enabled_label(self) -> None:
+        self.lbl_enabled.setText(
+            tr("On") if self.s.transient else
+            tr("Off — switch it on under Groundwater → Advanced"))
+
     def apply(self) -> None:
-        if self.chk_enabled.isChecked():
-            self.s.set_advanced_option("transient")
-        elif self.s.transient:
-            self.s.set_advanced_option(None)
+        self._refresh_enabled_label()
         self.s.transient_tolerance = self.sp_tol.value()
         self.s.transient_max_iterations = self.sp_iter.value()
         self.s.transient_time_steps = self.sp_steps.value()
@@ -768,6 +872,18 @@ class _RandomNumbersPage(QWidget):
         self.sp_seed.setValue(int(self.s.seed))
         form.addRow(tr("Seed:"), self.sp_seed)
 
+        # v0.1.74 — the Latin Hypercube stratification switch, which the
+        # model has carried since the page was written and nothing read.
+        self.chk_lhs = QCheckBox(
+            tr("Share one Latin Hypercube stratification across variables"))
+        self.chk_lhs.setChecked(bool(self.s.lhs_correlate))
+        self.chk_lhs.setToolTip(tr(
+            "Sample i then sits in the same stratum of every variable, so "
+            "they move together. It answers a different question from the "
+            "independent case and usually widens the spread. No effect on "
+            "Monte Carlo, which has no strata to share."))
+        form.addRow("", self.chk_lhs)
+
         note = QLabel(tr(
             "A pseudo-random stream is reproducible: the same seed gives "
             "the same answer, which is what makes a probabilistic result "
@@ -777,6 +893,18 @@ class _RandomNumbersPage(QWidget):
             "artefact of one seed."))
         note.setWordWrap(True)
         form.addRow("", note)
+
+        # v0.1.74 — this page is now the one that decides. Until this
+        # version the model held TWO seeds: this one, which had a whole
+        # page and which nothing read, and one under Statistics with no
+        # widget at all, which is the one the analysis actually used.
+        scope = QLabel(tr(
+            "Applies to the probabilistic and sensitivity analyses and "
+            "to the random surface searches (Slope, Block, Path and "
+            "Simulated Annealing). Grid and Auto Refine enumerate their "
+            "surfaces, so nothing there is drawn at random."))
+        scope.setWordWrap(True)
+        form.addRow("", scope)
         self._on_method()
 
     def _on_method(self, *_a) -> None:
@@ -788,6 +916,7 @@ class _RandomNumbersPage(QWidget):
     def apply(self) -> None:
         self.s.method = self.cbo_method.currentData()
         self.s.seed = self.sp_seed.value()
+        self.s.lhs_correlate = self.chk_lhs.isChecked()
 
 
 class _DesignStandardPage(QWidget):
@@ -881,15 +1010,37 @@ class _AdvancedPage(QWidget):
             "slices measured from the toe."))
         form.addRow("", self.chk_tensile)
 
+        # v0.1.74 — the companion the page never had. The engine has
+        # accepted it since v0.1.32; without a control the 95 % default
+        # was the only reachable value.
+        self.sp_tensile_pct = QDoubleSpinBox()
+        self.sp_tensile_pct.setDecimals(1)
+        self.sp_tensile_pct.setRange(1.0, 100.0)
+        self.sp_tensile_pct.setSuffix(" %")
+        self.sp_tensile_pct.setValue(self.s.tensile_percent)
+        self.sp_tensile_pct.setToolTip(tr(
+            "Percentage of slices, counted from the toe, over which the "
+            "tensile check applies."))
+        form.addRow(tr("Percentage of slices:"), self.sp_tensile_pct)
+        self.chk_tensile.toggled.connect(self._refresh)
+
         self.chk_steffensen = QCheckBox(
             tr("Accelerate convergence (Steffensen)"))
         self.chk_steffensen.setChecked(bool(self.s.iterate_steffensen))
+        self.chk_steffensen.setToolTip(tr(
+            "Aitken extrapolation of the fixed-point iteration. It "
+            "converges to the same root: on the reference-validated "
+            "circle both agree to 1e-11, and it needs 7 passes instead "
+            "of 19."))
         form.addRow("", self.chk_steffensen)
 
         self.sp_initial = QDoubleSpinBox()
         self.sp_initial.setDecimals(3)
         self.sp_initial.setRange(0.001, 100.0)
-        self.sp_initial.setValue(self.s.min_initial_fs)
+        self.sp_initial.setValue(self.s.initial_fos)
+        self.sp_initial.setToolTip(tr(
+            "First trial value of the factor of safety. A starting "
+            "point, not a floor."))
         form.addRow(tr("Initial factor of safety:"), self.sp_initial)
 
         self.sp_lmin = QDoubleSpinBox()
@@ -904,7 +1055,10 @@ class _AdvancedPage(QWidget):
         self.sp_lmax.setValue(self.s.max_lambda)
         self.sp_lmax.setToolTip(tr(
             "Search range for the interslice force scaling factor used by "
-            "Spencer and GLE / Morgenstern-Price."))
+            "Spencer and GLE / Morgenstern-Price. It clips a calibrated "
+            "grid rather than replacing it; narrowing it below 1.5 can "
+            "exclude the solution, as the reference circle of the "
+            "validation case needs lambda = 1.49."))
         form.addRow(tr("Maximum lambda:"), self.sp_lmax)
 
         note = QLabel(tr(
@@ -916,10 +1070,16 @@ class _AdvancedPage(QWidget):
             "options."))
         note.setWordWrap(True)
         form.addRow("", note)
+        self._refresh()
+
+    def _refresh(self) -> None:
+        """The percentage decides nothing with the check switched off."""
+        self.sp_tensile_pct.setEnabled(self.chk_tensile.isChecked())
 
     def apply(self) -> None:
         self.s.check_tensile_stresses = self.chk_tensile.isChecked()
+        self.s.tensile_percent = self.sp_tensile_pct.value()
         self.s.iterate_steffensen = self.chk_steffensen.isChecked()
-        self.s.min_initial_fs = self.sp_initial.value()
+        self.s.initial_fos = self.sp_initial.value()
         self.s.min_lambda = self.sp_lmin.value()
         self.s.max_lambda = self.sp_lmax.value()

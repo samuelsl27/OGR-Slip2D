@@ -329,18 +329,34 @@ def uniform_samples(n: int, method: SamplingMethod,
 
 def sample_variables(distributions: dict, n: int,
                      method: SamplingMethod = SamplingMethod.MONTE_CARLO,
-                     seed: Optional[int] = None) -> dict:
+                     seed: Optional[int] = None,
+                     correlate: bool = False) -> dict:
     """Generate ``n`` samples for each distribution.
 
     ``distributions`` maps a key to a :class:`Distribution`; the result
     maps the same keys to lists of ``n`` sampled values. Each variable
     gets its OWN shuffled stratification, which is what makes the Latin
     Hypercube samples independent across variables.
+
+    v0.1.74 — ``correlate`` keeps the stratification IDENTICAL across
+    variables instead: sample *i* then sits in the same stratum of every
+    variable, so they move together. The reference exposes this as a
+    separate switch on its Random Numbers page because it is a modelling
+    choice, not a sampling detail — correlated strata answer "what if
+    everything is simultaneously unfavourable", which is a different
+    question from the independent case and gives a different, usually
+    wider, spread of factors of safety.
+
+    It has no meaning for Monte Carlo, which has no strata to share, and
+    is ignored there.
     """
     rng = random.Random(seed)
     out: dict = {}
+    shared = None
+    if correlate and method == SamplingMethod.LATIN_HYPERCUBE:
+        shared = uniform_samples(n, method, rng)
     for key, dist in distributions.items():
-        us = uniform_samples(n, method, rng)
+        us = shared if shared is not None else uniform_samples(n, method, rng)
         out[key] = dist.values_from_uniforms(us)
     return out
 

@@ -145,12 +145,43 @@ class _ComputeWorker(QThread):
 
     def run(self) -> None:
         try:
+            # v0.1.74 — the convergence settings finally reach the
+            # methods. Every one of them has accepted ``tolerance``,
+            # ``max_iterations`` and ``initial_fos`` since it was
+            # written, and every call site had instantiated them with no
+            # arguments at all, so three controls on two pages of Project
+            # Settings changed nothing. ``lem_kwargs`` is the single
+            # place that answers "what did the user configure", so a
+            # second call site cannot forget again.
+            from ogr_slip2d.methods.gle import interslice_function
+            _s = self.project.settings
+            _kw = _s.lem_kwargs()
+            _lam = {"min_lambda": _s.advanced.min_lambda,
+                    "max_lambda": _s.advanced.max_lambda}
+
+            def _seed_kw(method_name: str) -> dict:
+                """The project's seed, for the searches that draw at random.
+
+                v0.1.74 — the Random Numbers page promised that a
+                pseudo-random run "will give exactly the same results",
+                and no search had ever been told which seed to use: each
+                carried its own arbitrary default (42 here, 1234 there,
+                None in two more). Grid and Auto Refine are enumerations
+                with nothing to seed, so they are left alone rather than
+                given an argument they would have to ignore.
+                """
+                if method_name in ("grid", "auto_refine"):
+                    return {}
+                return {"seed": _s.analysis_seed()}
             method_map = {
-                "bishop_simplified": BishopSimplified(),
-                "janbu_simplified": JanbuSimplified(),
-                "ordinary_fellenius": OrdinaryFellenius(),
-                "spencer": Spencer(),
-                "gle_morgenstern_price": GLEMorgensternPrice(),
+                "bishop_simplified": BishopSimplified(**_kw),
+                "janbu_simplified": JanbuSimplified(**_kw),
+                "ordinary_fellenius": OrdinaryFellenius(**_kw),
+                "spencer": Spencer(**_kw, **_lam),
+                "gle_morgenstern_price": GLEMorgensternPrice(
+                    **_kw, **_lam,
+                    interslice_func=interslice_function(
+                        _s.methods.interslice_function)),
             }
             # v0.1.8: use user-defined grid if available
             s_search = self.project.settings.search
@@ -214,6 +245,8 @@ class _ComputeWorker(QThread):
                         method=method,
                         num_surfaces=s_search.num_surfaces,
                         num_slices=self.project.settings.methods.num_slices,
+                        **self.project.settings.admissibility_kwargs(),
+                        **_seed_kw(search_method),
                         min_area=s_search.min_area or 1.0,
                         initial_angle_lower_deg=_lo,
                         initial_angle_upper_deg=_up,
@@ -239,6 +272,8 @@ class _ComputeWorker(QThread):
                         iterations=s_search.auto_refine_iterations,
                         next_iter_fraction=_frac,
                         num_slices=self.project.settings.methods.num_slices,
+                        **self.project.settings.admissibility_kwargs(),
+                        **_seed_kw(search_method),
                         min_area=s_search.min_area or 0.5,
                         progress_cb=_progress_cb,
                     )
@@ -255,6 +290,8 @@ class _ComputeWorker(QThread):
                         right_end_angle_deg=s_search.block_right_end_angle_deg,
                         num_surfaces=s_search.block_num_surfaces,
                         num_slices=self.project.settings.methods.num_slices,
+                        **self.project.settings.admissibility_kwargs(),
+                        **_seed_kw(search_method),
                         min_area=s_search.min_area or 2.0,
                         convex_only=s_search.block_convex_only,
                         progress_cb=_progress_cb,
@@ -278,6 +315,8 @@ class _ComputeWorker(QThread):
                             else None),
                         num_paths=s_search.path_num_paths,
                         num_slices=self.project.settings.methods.num_slices,
+                        **self.project.settings.admissibility_kwargs(),
+                        **_seed_kw(search_method),
                         optimize=_opt,
                         convex_only=_conv,
                         progress_cb=_progress_cb,
@@ -292,6 +331,8 @@ class _ComputeWorker(QThread):
                         temperature_factor=s_search.sa_temperature_factor,
                         convex_only=s_search.sa_convex_only,
                         num_slices=self.project.settings.methods.num_slices,
+                        **self.project.settings.admissibility_kwargs(),
+                        **_seed_kw(search_method),
                         min_area=s_search.min_area or 1.0,
                         progress_cb=_progress_cb,
                     )
@@ -308,6 +349,8 @@ class _ComputeWorker(QThread):
                         radius_increment=s_search.radius_increment or 1.5,
                         min_radius=3.0,
                         num_slices=self.project.settings.methods.num_slices,
+                        **self.project.settings.admissibility_kwargs(),
+                        **_seed_kw(search_method),
                         min_area=s_search.min_area or 1.0,
                         progress_cb=_progress_cb,
                     )
@@ -379,7 +422,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.73"
+    VERSION = "0.1.74"
 
     def __init__(self) -> None:
         super().__init__()
@@ -1772,12 +1815,13 @@ class MainWindow(QMainWindow):
                 res = run_overall_slope(
                     self.project, _factory, variables, method_ids,
                     num_samples=st.num_samples, sampling=sampling,
-                    seed=st.seed, deterministic=det)
+                    seed=self.project.settings.analysis_seed(),
+                    deterministic=det)
             else:
                 res = run_global_minimum(
                     self.project, det, variables,
                     num_samples=st.num_samples, sampling=sampling,
-                    seed=st.seed,
+                    seed=self.project.settings.analysis_seed(),
                     num_slices=self.project.settings.methods.num_slices)
             if res.ok:
                 self._prob_result = res

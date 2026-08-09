@@ -956,6 +956,79 @@ _DICTS: dict[str, dict[str, str]] = {
             "Habilita la herramienta de línea de desembalse y calcula el "
             "factor de seguridad tras el descenso. El nivel freático es el "
             "nivel INICIAL y la línea de desembalse el final, más bajo.",
+        # --- Project Settings wiring (v0.1.74) -------------------------
+        "Percentage of slices:": "Porcentaje de dovelas:",
+        "Percentage of slices, counted from the toe, over which the "
+        "tensile check applies.":
+            "Porcentaje de dovelas, contado desde el pie, sobre el que se "
+            "aplica la comprobación de tracción.",
+        "Aitken extrapolation of the fixed-point iteration. It "
+        "converges to the same root: on the reference-validated "
+        "circle both agree to 1e-11, and it needs 7 passes instead "
+        "of 19.":
+            "Extrapolación de Aitken de la iteración de punto fijo. "
+            "Converge a la misma raíz: en el círculo validado contra la "
+            "referencia ambos coinciden hasta 1e-11, y necesita 7 pasadas "
+            "en lugar de 19.",
+        "First trial value of the factor of safety. A starting "
+        "point, not a floor.":
+            "Primer valor de tanteo del factor de seguridad. Un punto de "
+            "partida, no un mínimo.",
+        "Search range for the interslice force scaling factor used by "
+        "Spencer and GLE / Morgenstern-Price. It clips a calibrated "
+        "grid rather than replacing it; narrowing it below 1.5 can "
+        "exclude the solution, as the reference circle of the "
+        "validation case needs lambda = 1.49.":
+            "Rango de búsqueda del factor de escala de las fuerzas entre "
+            "dovelas que usan Spencer y GLE / Morgenstern-Price. Recorta "
+            "una rejilla calibrada en lugar de sustituirla; estrecharlo "
+            "por debajo de 1.5 puede excluir la solución, ya que el "
+            "círculo de referencia del caso de validación necesita "
+            "lambda = 1.49.",
+        "Interslice force function:": "Función de fuerzas entre dovelas:",
+        "Half Sine": "Medio seno",
+        "Constant": "Constante",
+        "Trapezoidal": "Trapezoidal",
+        "Clipped Sine": "Seno recortado",
+        "Shape of the interslice force function used by GLE / "
+        "Morgenstern-Price. Constant makes GLE equivalent to "
+        "Spencer. x runs from 0 at the LEFT end of the surface to 1 "
+        "at the right, whatever the failure direction.":
+            "Forma de la función de fuerzas entre dovelas que usa GLE / "
+            "Morgenstern-Price. Constante hace GLE equivalente a Spencer. "
+            "x va de 0 en el extremo IZQUIERDO de la superficie a 1 en el "
+            "derecho, sea cual sea la dirección de rotura.",
+        "None": "Ninguna",
+        "Transient groundwater": "Filtración transitoria",
+        "Staged transient seepage. Its solver options are on the "
+        "Transient page, which this switch enables.":
+            "Filtración transitoria por etapas. Sus opciones de solver "
+            "están en la página Transitorio, que este selector habilita.",
+        "Transient groundwater:": "Filtración transitoria:",
+        "On": "Activada",
+        "Off — switch it on under Groundwater → Advanced":
+            "Desactivada — actívala en Agua subterránea → Avanzado",
+        "Share one Latin Hypercube stratification across variables":
+            "Compartir una estratificación de hipercubo latino entre "
+            "variables",
+        "Sample i then sits in the same stratum of every variable, so "
+        "they move together. It answers a different question from the "
+        "independent case and usually widens the spread. No effect on "
+        "Monte Carlo, which has no strata to share.":
+            "La muestra i queda entonces en el mismo estrato de todas las "
+            "variables, así que se mueven juntas. Responde a una pregunta "
+            "distinta del caso independiente y suele ampliar la "
+            "dispersión. No afecta a Monte Carlo, que no tiene estratos "
+            "que compartir.",
+        "Applies to the probabilistic and sensitivity analyses and "
+        "to the random surface searches (Slope, Block, Path and "
+        "Simulated Annealing). Grid and Auto Refine enumerate their "
+        "surfaces, so nothing there is drawn at random.":
+            "Se aplica a los análisis probabilístico y de sensibilidad y "
+            "a las búsquedas aleatorias de superficies (talud, bloque, "
+            "trayectoria y recocido simulado). Rejilla y refinado "
+            "automático enumeran sus superficies, así que ahí no se "
+            "sortea nada.",
         # --- Failure direction, with a picture of it (v0.1.73) ---------
         "Right to Left": "De derecha a izquierda",
         "Left to Right": "De izquierda a derecha",

@@ -104,10 +104,73 @@ class LEMMethod(ABC):
         tolerance: float = 1e-3,
         max_iterations: int = 75,
         initial_fos: float = 1.0,
+        min_lambda: float = -1.5,
+        max_lambda: float = 1.5,
+        iterate_steffensen: bool = False,
     ) -> None:
         self.tolerance = tolerance
         self.max_iterations = max_iterations
         self.initial_fos = initial_fos
+        # v0.1.74 — the λ search range, for the two methods that have
+        # one. Kept on the base class so a caller can hand the same
+        # configuration to every method without knowing which of them
+        # will use it.
+        self.min_lambda = min_lambda
+        self.max_lambda = max_lambda
+        self.iterate_steffensen = iterate_steffensen
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def aitken(x0: float, x1: float, x2: float):
+        """Aitken Δ² extrapolation of three fixed-point iterates.
+
+        Applying it to every third iterate of ``x ← g(x)`` is Steffensen's
+        method in its practical form, and it is what the reference's
+        "Use Steffensen's Method" switch does: the same equation, reached
+        in fewer passes.
+
+        Returns None when the extrapolation is not usable — a vanishing
+        second difference (the sequence has already converged, so there
+        is nothing to accelerate and the formula would divide by nearly
+        zero) or a non-physical result. The caller then simply keeps the
+        plain iterate, which is why turning the option on cannot make a
+        surface fail that would otherwise have converged.
+        """
+        import math as _math
+        second_difference = x2 - 2.0 * x1 + x0
+        if abs(second_difference) < 1e-14:
+            return None
+        accelerated = x0 - (x1 - x0) ** 2 / second_difference
+        if not _math.isfinite(accelerated) or accelerated <= 0.0:
+            return None
+        return accelerated
+
+    # ------------------------------------------------------------------
+    # The λ sampling grid, shared by Spencer and GLE.
+    #
+    # The spacing is NOT uniform, and that is deliberate: it is dense
+    # near zero, where most surfaces converge, and reaches ±1.5 because
+    # some geometries genuinely need it — the reference-validated circle
+    # of the Ej1 case converges under GLE at λ = 1.4919. It is a
+    # calibrated list, so a user-supplied range CLIPS it rather than
+    # replacing it with a linear spacing: at the default ±1.5 the result
+    # is the identical list, so no stored project moves.
+    _LAMBDA_SHAPE = (-1.5, -1.0, -0.6, -0.4, -0.2, -0.1, 0.0,
+                     0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 1.5)
+
+    def lambda_grid(self) -> list:
+        """The λ values to sample, clipped to the configured range."""
+        lo = min(self.min_lambda, self.max_lambda)
+        hi = max(self.min_lambda, self.max_lambda)
+        grid = [v for v in self._LAMBDA_SHAPE if lo <= v <= hi]
+        # The endpoints always belong to the search: without them a
+        # narrowed range could lose the sign change that brackets the
+        # root and report "all sampled λ diverged" for a surface that has
+        # a perfectly good solution just outside the surviving samples.
+        for end in (lo, hi):
+            if not any(abs(v - end) < 1e-12 for v in grid):
+                grid.append(end)
+        return sorted(grid)
 
     # ------------------------------------------------------------------
     @abstractmethod

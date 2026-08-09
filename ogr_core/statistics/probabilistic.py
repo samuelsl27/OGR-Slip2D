@@ -184,7 +184,13 @@ def run_global_minimum(
         return result
 
     result.variables = [rv.key for rv in active]
-    samples = sample_project_variables(active, num_samples, sampling, seed)
+    samples = sample_project_variables(
+        active, num_samples, sampling, seed,
+        # v0.1.74 — the Latin Hypercube stratification switch from
+        # the Random Numbers page. Read off the project so both
+        # analysis types get it without a second argument to
+        # thread through every caller.
+        correlate=bool(project.settings.random_numbers.lhs_correlate))
     result.samples = samples
 
     registry = method_registry()
@@ -387,7 +393,13 @@ def run_overall_slope(
         return result
 
     result.variables = [rv.key for rv in active]
-    samples = sample_project_variables(active, num_samples, sampling, seed)
+    samples = sample_project_variables(
+        active, num_samples, sampling, seed,
+        # v0.1.74 — the Latin Hypercube stratification switch from
+        # the Random Numbers page. Read off the project so both
+        # analysis types get it without a second argument to
+        # thread through every caller.
+        correlate=bool(project.settings.random_numbers.lhs_correlate))
     result.samples = samples
 
     total = num_samples * len(method_ids)

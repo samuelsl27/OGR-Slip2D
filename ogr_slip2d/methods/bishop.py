@@ -257,6 +257,10 @@ class BishopSimplified(LEMMethod):
         fos = self.initial_fos
         converged = False
         iterations = 0
+        # v0.1.74 — the last iterates, for the optional Steffensen
+        # acceleration. Kept as a short list rather than three variables
+        # so the "clear after using them" step cannot half-happen.
+        history: list[float] = []
 
         for it in range(1, self.max_iterations + 1):
             iterations = it
@@ -333,6 +337,18 @@ class BishopSimplified(LEMMethod):
                 converged = True
                 break
             fos = new_fos
+
+            # Steffensen: extrapolate from every third iterate. The
+            # convergence test above is unchanged, so the option changes
+            # how fast the sequence gets there and not what it is
+            # converging to.
+            if self.iterate_steffensen:
+                history.append(new_fos)
+                if len(history) >= 3:
+                    accelerated = self.aitken(*history[-3:])
+                    history.clear()
+                    if accelerated is not None:
+                        fos = accelerated
 
         # ---- Post-processing per slice (diagnostics) ---------------
         normals: list[float] = []

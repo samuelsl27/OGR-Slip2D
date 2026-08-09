@@ -332,18 +332,24 @@ def apply_sample(project, variables: list, sample: dict) -> int:
     return applied
 
 
-def sample_project_variables(variables: list, n: int, method, seed=None):
+def sample_project_variables(variables: list, n: int, method, seed=None,
+                             correlate: bool = False):
     """Generate ``n`` samples for a list of random variables, honouring
     the declared correlations.
 
     Correlated pairs are post-processed with rank reordering, which
     preserves each marginal distribution exactly.
+
+    ``correlate`` is the project-wide Latin Hypercube option and is a
+    different thing from a declared correlation between two variables:
+    it shares one stratification across ALL of them. The per-pair rank
+    reordering below still runs on top of it.
     """
     from .distributions import correlate_pair, sample_variables
 
     active = [rv for rv in variables if rv.distribution.is_random]
     dists = {rv.key: rv.distribution for rv in active}
-    samples = sample_variables(dists, n, method, seed)
+    samples = sample_variables(dists, n, method, seed, correlate=correlate)
 
     by_key = {rv.key: rv for rv in active}
     for rv in active:

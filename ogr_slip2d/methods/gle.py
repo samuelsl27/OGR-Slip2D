@@ -58,6 +58,43 @@ def trapezoidal(x: float, x0: float, x1: float) -> float:
     return 1.0
 
 
+def clipped_sine(x: float, x0: float, x1: float) -> float:
+    """Half sine with its ends lifted off zero.
+
+    A function that reaches exactly zero at both ends forbids any
+    interslice shear there. The clipped form keeps a fraction of it,
+    which is what the reference offers when the end conditions matter.
+    """
+    if x1 <= x0:
+        return 1.0
+    t = (x - x0) / (x1 - x0)
+    end = 0.2
+    return end + (1.0 - end) * math.sin(math.pi * t)
+
+
+# v0.1.74 — named so the interface can offer them and a project can
+# store the choice. Until now GLE always used the half sine and the user
+# had no way to say otherwise, even though the constructor had accepted
+# a function since the method was written.
+#
+# The x coordinate is normalised over the slip surface, and x = 0 is
+# always the LEFT-hand end whatever the failure direction is: the
+# function is NOT mirrored when the direction is flipped. That is the
+# reference's convention, and following it is what keeps a stored value
+# meaning the same thing in both programs.
+INTERSLICE_FUNCTIONS = {
+    "half_sine": half_sine,
+    "constant": constant,
+    "trapezoidal": trapezoidal,
+    "clipped_sine": clipped_sine,
+}
+
+
+def interslice_function(name: str):
+    """Look a function up by its stored id, falling back to the half sine."""
+    return INTERSLICE_FUNCTIONS.get(str(name), half_sine)
+
+
 # ----------------------------------------------------------------------
 @register_method
 class GLEMorgensternPrice(LEMMethod):
@@ -72,8 +109,19 @@ class GLEMorgensternPrice(LEMMethod):
         max_iterations: int = 50,
         initial_fos: float = 1.0,
         interslice_func: Callable[[float, float, float], float] = half_sine,
+        min_lambda: float = -1.5,
+        max_lambda: float = 1.5,
+        iterate_steffensen: bool = False,
     ) -> None:
-        super().__init__(tolerance, max_iterations, initial_fos)
+        # v0.1.74 — this signature has to accept EVERY argument the base
+        # class does, because the caller hands the same configuration to
+        # all five methods at once. Overriding __init__ and forgetting
+        # one of them raised a TypeError while building the method map,
+        # which the compute worker caught and turned into an empty
+        # result — and an empty result reaches a modal QMessageBox that
+        # blocks forever without a screen. Cost: one hung test suite.
+        super().__init__(tolerance, max_iterations, initial_fos,
+                         min_lambda, max_lambda, iterate_steffensen)
         self.f_func = interslice_func
 
     def compute_fos(self, project: Project, surface, slices) -> LEMResult:
@@ -102,9 +150,11 @@ class GLEMorgensternPrice(LEMMethod):
         x0 = slices.slices[0].base_x_left
         x1 = slices.slices[-1].base_x_right
 
-        # Outer: bracket and refine λ. Wider grid for difficult slopes.
-        lam_grid = [-1.5, -1.0, -0.6, -0.4, -0.2, -0.1, 0.0,
-                    0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 1.5]
+        # Outer: bracket and refine λ. Wider grid for difficult slopes;
+        # v0.1.74 moved it to the base class so the configured range can
+        # clip it. This method is the reason the shape reaches ±1.5: the
+        # Ej1 reference circle converges here at λ = 1.4919.
+        lam_grid = self.lambda_grid()
         samples: list[Tuple[float, float, float, float]] = []
         for lam in lam_grid:
             ff, fm = self._inner_solve(

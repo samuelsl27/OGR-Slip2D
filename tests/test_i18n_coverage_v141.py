@@ -146,7 +146,11 @@ class TestTranslationCompleteness:
                    # both languages, so a "translation" that differed
                    # would be wrong rather than more Spanish.
                    "R: Cr = %.4g, φR = %.4g°",
-                   "Kc = 1: d = %.4g, ψ = %.4g°"}
+                   "Kc = 1: d = %.4g, ψ = %.4g°",
+                   # v0.1.74 — cognate, like Horizontal above: the
+                   # interslice force function shape is "Trapezoidal" in
+                   # both languages.
+                   "Trapezoidal"}
         same = [k for k, v in _DICTS["es"].items()
                 if k == v and k not in allowed]
         assert len(same) < 12, same[:15]

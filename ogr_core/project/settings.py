@@ -93,6 +93,12 @@ class MethodsSettings:
     num_slices: int = 25
     tolerance: float = 0.005
     max_iterations: int = 50
+    # v0.1.74 — the interslice force function GLE / Morgenstern-Price
+    # uses. The method has accepted one since it was written; nothing had
+    # ever passed a different one, so the half sine was not a default but
+    # the only possibility. Ids come from
+    # ``ogr_slip2d.methods.gle.INTERSLICE_FUNCTIONS``.
+    interslice_function: str = "half_sine"
 
 
 @dataclass
@@ -310,7 +316,15 @@ class StatisticsSettings:
     analysis_type: str = "global_minimum"
     # Sensitivity: number of equal intervals across each variable range
     sensitivity_intervals: int = 50
-    # Random seed for reproducible runs (None = non-deterministic)
+    # Random seed for reproducible runs (None = non-deterministic).
+    #
+    # v0.1.74 — this is NO LONGER the place the seed is chosen. There
+    # were two seeds in the model: this one, which the analysis used and
+    # which had no widget anywhere, and ``RandomNumberSettings.seed``,
+    # which had a whole page of the settings dialog and which nothing
+    # read. ``ProjectSettings.analysis_seed()`` is now the single answer,
+    # and the Random Numbers page is what feeds it. Kept here so files
+    # that set it keep working, and because an explicit value still wins.
     seed: Optional[int] = None
 
 
@@ -396,11 +410,71 @@ class BackAnalysisSettings:
 
 @dataclass
 class AdvancedSettings:
-    check_tensile_stresses: bool = True
-    min_initial_fs: float = 1.0
-    min_lambda: float = -1.25
-    max_lambda: float = 1.25
+    """Convergence and admissibility options for the limit-equilibrium run.
+
+    Every field here was stored, edited from the interface, and read by
+    nobody until v0.1.74. Wiring them turned up two defaults that were
+    wrong precisely BECAUSE they had never been applied, and both are
+    corrected below rather than carried forward:
+
+    * ``check_tensile_stresses`` defaulted to True while the reference
+      has the Tensile Stress Check **off** — tensile stresses are allowed
+      unless the user asks. Nobody noticed because switching it changed
+      nothing. Turning it on for every stored project as a side effect of
+      wiring it would have been a silent change of results, so the
+      default is now False and ``from_dict`` migrates the stored True.
+
+    * ``min_lambda`` / ``max_lambda`` were ±1.25, while the λ grid that
+      Spencer and GLE actually search is ±1.5. That is not a rounding
+      difference: on the reference-validated circle, GLE converges at
+      **λ = 1.4919**, outside ±1.25. Wiring the stored range would have
+      clipped the search below what a validated case needs.
+
+    ``tensile_percent`` is the companion the page never had, although the
+    engine has accepted it since v0.1.32.
+    """
+
+    # Off, as in the reference: tensile stresses are permitted unless the
+    # user asks for the check.
+    check_tensile_stresses: bool = False
+    # Percentage of slices, counted FROM THE TOE, over which the tensile
+    # check applies. The reference default is 95 %.
+    tensile_percent: float = 95.0
+    # First trial value of the factor of safety. Named ``min_initial_fs``
+    # until v0.1.74, which was a misnomer: it is a starting point, not a
+    # floor. ``from_dict`` still reads the old key.
+    initial_fos: float = 1.0
+    # Range searched for the interslice force scaling factor. See the
+    # note above for why these are ±1.5 and not ±1.25.
+    min_lambda: float = -1.5
+    max_lambda: float = 1.5
     iterate_steffensen: bool = True
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "AdvancedSettings":
+        """Read a stored block, migrating the two mistaken defaults.
+
+        A file written before v0.1.74 carries values that never reached a
+        calculation, so they express no intent to preserve — which is
+        exactly what makes rewriting them safe, and what would make
+        honouring them unsafe.
+        """
+        data = dict(data or {})
+        # ``min_initial_fs`` → ``initial_fos``
+        if "min_initial_fs" in data and "initial_fos" not in data:
+            data["initial_fos"] = data.pop("min_initial_fs")
+        data.pop("min_initial_fs", None)
+        # The two migrations. Both are conditional on the value being the
+        # old default: a user who deliberately typed something else keeps
+        # it, because from v0.1.74 on it means something.
+        if data.get("check_tensile_stresses") is True:
+            data["check_tensile_stresses"] = False
+        for key, old, new in (("min_lambda", -1.25, -1.5),
+                              ("max_lambda", 1.25, 1.5)):
+            if key in data and abs(float(data[key]) - old) < 1e-12:
+                data[key] = new
+        known = {f for f in cls.__dataclass_fields__}
+        return cls(**{k: v for k, v in data.items() if k in known})
 
 
 @dataclass
@@ -433,6 +507,47 @@ class ProjectSettings:
 
     max_materials: int = 20
     max_supports: int = 20
+
+    # ------------------------------------------------------------------
+    def analysis_seed(self):
+        """The seed every random-driven analysis takes, or None.
+
+        v0.1.74 — the single answer to a question the model used to give
+        two of. ``RandomNumberSettings`` is the page the user sees, so it
+        is the page that decides; ``statistics.seed`` stays as an
+        explicit override for files that set it, because honouring a
+        value someone deliberately wrote is cheaper than surprising them.
+
+        Applies to the probabilistic and sensitivity runs and to the
+        random surface searches (Slope, Block and Path), which is exactly
+        the scope the reference gives its Random Numbers page.
+        """
+        if self.statistics.seed is not None:
+            return int(self.statistics.seed)
+        return self.random_numbers.effective_seed()
+
+    def lem_kwargs(self) -> dict:
+        """Convergence arguments shared by every limit-equilibrium method.
+
+        One place, because the alternative is what v0.1.74 found: the
+        methods accepted ``tolerance``, ``max_iterations`` and
+        ``initial_fos`` from the start, and every call site instantiated
+        them with no arguments at all, so three settings on two pages
+        were decoration.
+        """
+        return {
+            "tolerance": float(self.methods.tolerance),
+            "max_iterations": int(self.methods.max_iterations),
+            "initial_fos": float(self.advanced.initial_fos),
+            "iterate_steffensen": bool(self.advanced.iterate_steffensen),
+        }
+
+    def admissibility_kwargs(self) -> dict:
+        """Post-analysis check arguments shared by every search object."""
+        return {
+            "reject_tensile": bool(self.advanced.check_tensile_stresses),
+            "tensile_percent": float(self.advanced.tensile_percent),
+        }
 
     # ------------------------------------------------------------------
     def to_dict(self) -> dict:
@@ -469,7 +584,7 @@ class ProjectSettings:
                 **{k: v for k, v in
                    (data.get("design_standard") or {}).items()
                    if k != "PRESETS"}),
-            advanced=AdvancedSettings(**data.get("advanced", {})),
+            advanced=AdvancedSettings.from_dict(data.get("advanced", {})),
             summary=ProjectSummary(**data.get("summary", {})),
             max_materials=data.get("max_materials", 20),
             max_supports=data.get("max_supports", 20),
