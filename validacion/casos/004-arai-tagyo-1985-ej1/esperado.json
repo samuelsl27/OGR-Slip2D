@@ -1,0 +1,14 @@
+{
+  "id": "004-arai-tagyo-1985-ej1",
+  "fuente": "Arai, K. & Tagyo, K. (1985), Determination of noncircular slip surface giving the minimum factor of safety in slope stability analysis, Soils and Foundations 25(1), pp. 43-51. Ejemplo 1: talud homogeneo sin presiones intersticiales; Bishop simplificado 1.451.",
+  "tipo_referencia": "publicado",
+  "tolerancia_relativa": 0.035,
+  "fos": {
+    "bishop_simplified": 1.451
+  },
+  "busqueda": {
+    "tipo": "grid",
+    "num_slices": 30
+  },
+  "notas": "Tolerancia ancha a proposito y con motivo: el valor de 1985 y todos los reanalisis modernos discrepan un 2.6-2.9 % entre si, asi que la resolucion del caso la fija la fuente y no el codigo. OGR da 1.4136, dentro del grupo moderno. Ver caso.md."
+}

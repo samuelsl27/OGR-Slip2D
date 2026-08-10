@@ -1,0 +1,14 @@
+{
+  "id": "005-arai-tagyo-1985-ej3",
+  "fuente": "Arai, K. & Tagyo, K. (1985), Determination of noncircular slip surface giving the minimum factor of safety in slope stability analysis, Soils and Foundations 25(1), pp. 43-51. Ejemplo 3: mismo talud que el ejemplo 1 con nivel freatico; Bishop simplificado 1.138.",
+  "tipo_referencia": "publicado",
+  "tolerancia_relativa": 0.025,
+  "fos": {
+    "bishop_simplified": 1.138
+  },
+  "busqueda": {
+    "tipo": "grid",
+    "num_slices": 30
+  },
+  "notas": "El primer caso de la carpeta CON AGUA: presion intersticial hidrostatica desde el nivel freatico, u = 0 por encima de el. Geometria y nivel freatico rotulados con coordenadas sobre la figura. Misma horquilla que el caso 004 entre el valor de 1985 y los reanalisis modernos, de ahi la tolerancia. Solo se declara Bishop: ver caso.md."
+}

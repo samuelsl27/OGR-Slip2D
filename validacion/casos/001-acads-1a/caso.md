@@ -78,6 +78,15 @@ sí. Exigir 0.5 % —lo que se le pide a un método LEM sobre un círculo dado�
 sería exigirle a la fuente una precisión que no tiene, y el caso fallaría por
 la calidad de la referencia y no por la del código.
 
+## Lo que este caso ya no valida
+
+`esperado.json` declaró Spencer y GLE hasta v0.1.79, y los dos pasaban con un
+0.4 % de error. Se han retirado igualmente: en **este** problema la referencia
+apenas los separa de Bishop (0.987 contra 0.986), así que acertarlos no
+demostraba nada — y sobre problemas donde sí se separan, no los acertamos. La
+evidencia está en `docs/audits/spencer_gle_interslice_v179.md`. Volverán
+cuando el fondo esté resuelto.
+
 ## Qué protege
 
 Los otros casos del proyecto fijan el **método** evaluando un círculo conocido.

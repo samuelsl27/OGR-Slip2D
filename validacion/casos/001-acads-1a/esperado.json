@@ -5,13 +5,11 @@
   "tolerancia_relativa": 0.02,
   "fos": {
     "bishop_simplified": 0.991,
-    "spencer": 0.991,
-    "gle_morgenstern_price": 0.991,
     "janbu_corrected": 0.991
   },
   "busqueda": {
     "tipo": "grid",
     "num_slices": 25
   },
-  "notas": "Analisis en tensiones totales, sin presiones intersticiales. La rejilla de centros del modelo es la del enunciado: 20 x 20 intervalos entre (22.8, 42.3) y (43.7, 62.6), 11 circulos por punto. La misma geometria se valida ademas con Slope Search en tests/test_acads_validation_v178.py."
+  "notas": "Analisis en tensiones totales, sin presiones intersticiales. La rejilla de centros del modelo es la del enunciado: 20 x 20 intervalos entre (22.8, 42.3) y (43.7, 62.6), 11 circulos por punto. La misma geometria se valida ademas con Slope Search en tests/test_acads_validation_v178.py. v0.1.79: spencer y gle_morgenstern_price se retiraron de esta lista (pasaban, con 0.4 % de error) mientras siga abierto docs/audits/spencer_gle_interslice_v179.md; en este problema los dos metodos apenas se separan de Bishop en la referencia, asi que acertarlos no demostraba nada."
 }

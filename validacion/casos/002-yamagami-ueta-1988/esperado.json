@@ -1,0 +1,15 @@
+{
+  "id": "002-yamagami-ueta-1988",
+  "fuente": "Yamagami, T. & Ueta, Y. (1988), Search for noncircular slip surfaces by the Morgenstern-Price method, Proc. 6th Int. Conf. on Numerical Methods in Geomechanics, Innsbruck, pp. 1219-1223. Talud homogeneo sin presiones intersticiales; Bishop simplificado 1.348 y Fellenius/Ordinario 1.282.",
+  "tipo_referencia": "publicado",
+  "tolerancia_relativa": 0.015,
+  "fos": {
+    "bishop_simplified": 1.348,
+    "ordinary_fellenius": 1.282
+  },
+  "busqueda": {
+    "tipo": "grid",
+    "num_slices": 30
+  },
+  "notas": "El caso mas exigente de la carpeta: dos metodos contra una referencia de revista, no contra la salida de un programa. Sin agua. La geometria esta rotulada con coordenadas sobre la propia figura del manual de verificacion, asi que no hay lectura de escala."
+}

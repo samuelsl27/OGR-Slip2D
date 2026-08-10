@@ -1,0 +1,14 @@
+{
+  "id": "003-acads-1c",
+  "fuente": "Giam & Donald (1989), ACADS survey problem 1(c) — talud no homogeneo de tres capas. Referee FoS = 1.39; media Bishop de 16 programas = 1.406; media de 31 programas = 1.381.",
+  "tipo_referencia": "publicado",
+  "tolerancia_relativa": 0.015,
+  "fos": {
+    "bishop_simplified": 1.406
+  },
+  "busqueda": {
+    "tipo": "grid",
+    "num_slices": 25
+  },
+  "notas": "La conectividad de las dos lineas de material se leyo de la figura del manual (las coordenadas si estan en el texto). La lectura esta confirmada de forma independiente: sobre el circulo critico publicado, centro (34.121, 43.254) y radio 18.781, el corte con el terreno cae en x = 29.703 y 50.991 frente a los 29.702 y 50.991 publicados, es decir 1 mm. Spencer y GLE no se declaran aqui: ver docs/audits/spencer_gle_interslice_v179.md."
+}

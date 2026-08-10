@@ -8,10 +8,19 @@ reproduce.
 
 | Caso | Qué fija | Fuente |
 |---|---|---|
-| `001-acads-1a` | La **búsqueda**: el círculo crítico hay que encontrarlo | Giam & Donald (1989), problema ACADS 1(a) — media de 33 programas |
+| `001-acads-1a` | La **búsqueda**: el círculo crítico hay que encontrarlo | Giam & Donald (1989), ACADS 1(a) — media de 33 programas |
+| `002-yamagami-ueta-1988` | **Dos métodos** a la vez, con la tolerancia más estrecha (1.5 %) | Yamagami & Ueta (1988), revista |
+| `003-acads-1c` | **Regiones y materiales**: talud de tres capas | Giam & Donald (1989), ACADS 1(c) — media Bishop de 16 programas |
+| `004-arai-tagyo-1985-ej1` | Un talud **alto y más inclinado** (20 m, 1:1.5) | Arai & Tagyo (1985), revista |
+| `005-arai-tagyo-1985-ej3` | El **agua**: mismo talud que el `004` con nivel freático | Arai & Tagyo (1985), revista |
 
 Los casos que fijan un **método** —evaluando un círculo ya conocido— viven
 por ahora en `tests/test_slide_validation_ej1.py`.
+
+Ninguno declara **Spencer ni GLE**, aunque las cuatro fuentes publican
+valores para ellos, mientras siga abierto
+`docs/audits/spencer_gle_interslice_v179.md`. Hay un test que lo comprueba,
+para que volver a añadirlos sea una decisión y no una limpieza.
 
 ## Qué va aquí y qué no
 
