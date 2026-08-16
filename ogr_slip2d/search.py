@@ -60,6 +60,22 @@ class SearchResult:
         return min(ok or valid, key=lambda r: r.fos)
 
     @property
+    def total_count(self) -> int:
+        """Every surface the search GENERATED, valid or not.
+
+        v0.1.83 — the honest denominator, and the reason it needs its own
+        name: ``len(evaluations)`` is not it. A surface that could not be
+        analysed has no ``LEMResult`` to store, so it never reaches that
+        list, yet it was generated and the reference counts it. On the
+        Ej_1 benchmark grid the two differ by 1697 of 4851.
+
+        The reference documents the population exactly — (X intervals + 1)
+        × (Y intervals + 1) × (Radius Increment + 1) — so this is a
+        checkable identity, not a bookkeeping preference.
+        """
+        return self.valid_count + self.invalid_count
+
+    @property
     def inadmissible_count(self) -> int:
         return sum(1 for r in self.evaluations
                    if r.is_valid and not getattr(r, "admissible", True))
@@ -368,15 +384,27 @@ class GridSearch(BaseSearch):
                             continue
                     circle = SlipCircle(centre_x=xc, centre_y=yc, radius=r)
                     res = self.evaluate_circle(project, circle)
-                    if res is not None:
-                        if res.is_valid and not (0.2 <= res.fos <= 100.0):
-                            result.invalid_count += 1
-                            continue
-                        result.evaluations.append(res)
-                        if res.is_valid:
-                            result.valid_count += 1
-                        else:
-                            result.invalid_count += 1
+                    # v0.1.83 — a circle that could not be analysed is
+                    # still a circle that was GENERATED, and it has to
+                    # appear in the totals. Until now ``res is None`` fell
+                    # through counting nothing at all, so 1697 of the 4851
+                    # circles of the reference grid simply vanished: the
+                    # window reported "2966 / 3154" for a population of
+                    # 4851. Worse, the denominator MOVED when a search
+                    # option changed (2633 with reverse curvature off),
+                    # which is the one thing a number a user compares
+                    # between runs must never do.
+                    if res is None:
+                        result.invalid_count += 1
+                        continue
+                    if res.is_valid and not (0.2 <= res.fos <= 100.0):
+                        result.invalid_count += 1
+                        continue
+                    result.evaluations.append(res)
+                    if res.is_valid:
+                        result.valid_count += 1
+                    else:
+                        result.invalid_count += 1
 
         return result
 

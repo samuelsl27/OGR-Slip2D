@@ -25,6 +25,8 @@ _DICTS: dict[str, dict[str, str]] = {
         # Terminología: «dovela» (slice), «superficie de rotura» (slip
         # surface), «grieta de tracción» (tension crack), «consulta»
         # (query), «línea de empujes» (line of thrust).
+        '%d more were discarded before slicing, so they carry no error code and cannot be displayed.': '%d más se descartaron antes del dovelado, así que no llevan código de error y no se pueden mostrar.',
+        '%d surface(s) rejected of %d generated:': '%d superficie(s) rechazada(s) de %d generadas:',
         'All data': 'Todos los datos',
         'Data to plot:': 'Datos a representar:',
         'Error code:': 'Código de error:',

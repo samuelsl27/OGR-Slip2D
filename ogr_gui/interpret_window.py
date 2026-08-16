@@ -171,7 +171,8 @@ class _SummaryDock(QDockWidget):
         # from the mapping it explains will always end up saying that.
         self.label.setText(
             f"Method: <b>{result.method_id}</b><br>"
-            f"Valid surfaces: <b>{result.valid_count}</b> / {len(result.evaluations)}<br>"
+            f"Valid surfaces: <b>{result.valid_count}</b> / "
+            f"{getattr(result, 'total_count', len(result.evaluations))}<br>"
             f"<br>"
             f"<b>Critical surface</b><br>"
             f"FoS = <span style='color:#c0392b; font-size:14pt;'>"
@@ -870,74 +871,33 @@ class InterpretWindow(QMainWindow):
         if getattr(self, "_query_pick_mode", False):
             self._hover_for_query(x, y)
             return
-        # Throttle: only redraw if the hovered cell changed
-        s_search = getattr(self.project.settings, "search", None)
-        if s_search is None or not s_search.uses_grid():
-            return  # only Grid Search has a centres grid
-
-        # Determine grid bounds
-        try:
-            xmin, xmax = s_search.grid_x_min, s_search.grid_x_max
-            ymin, ymax = s_search.grid_y_min, s_search.grid_y_max
-            nx, ny = s_search.grid_nx, s_search.grid_ny
-        except Exception:  # noqa: BLE001
-            return
-        if any(v is None for v in (xmin, xmax, ymin, ymax)) or nx <= 0 or ny <= 0:
-            return
-
-        # If outside the grid bbox, clear any preview and return
-        if not (xmin <= x <= xmax and ymin <= y <= ymax):
+        # v0.1.83 — one grid-cell lookup for the whole window. This used
+        # to be a second, hand-rolled copy that read the grid from
+        # ``project.settings.search`` instead of from the result, so after
+        # the user edited the grid without recomputing, a hover resolved
+        # against a grid none of the numbers on screen came from. The same
+        # copy existed again in the click handler below.
+        best = self._best_at_grid_centre(x, y)
+        if best is None:
             if self._hover_grid_idx is not None:
                 self._hover_grid_idx = None
                 self._refresh_canvas_with_highlights()
             return
 
-        # Snap (x, y) to the nearest centre cell
-        ix = int(round((x - xmin) / max((xmax - xmin), 1e-9) * (nx - 1)))
-        iy = int(round((y - ymin) / max((ymax - ymin), 1e-9) * (ny - 1)))
-        ix = max(0, min(nx - 1, ix))
-        iy = max(0, min(ny - 1, iy))
-        cell = (ix, iy)
+        sd = best.surface.to_dict()
+        # Throttle: only redraw when the hovered centre actually changed.
+        cell = (round(sd.get("centre_x", 0.0), 6),
+                round(sd.get("centre_y", 0.0), 6))
         if cell == self._hover_grid_idx:
-            return  # same cell as before, no redraw needed
+            return
         self._hover_grid_idx = cell
 
-        # Build the centre coordinates and find the best evaluation there
-        cx = xmin + ix * (xmax - xmin) / max(nx - 1, 1)
-        cy = ymin + iy * (ymax - ymin) / max(ny - 1, 1)
-        best = None
-        best_fos = float("inf")
-        # Scan evaluations whose centre is at (cx, cy) within tolerance
-        # The grid cell size sets a natural tolerance
-        tol = 0.5 * max(
-            (xmax - xmin) / max(nx - 1, 1),
-            (ymax - ymin) / max(ny - 1, 1),
-        )
-        for r in self.search_result.evaluations:
-            sd = r.surface.to_dict()
-            if sd.get("type") != "circle":
-                continue
-            ex, ey = sd.get("centre_x"), sd.get("centre_y")
-            if ex is None or ey is None:
-                continue
-            if abs(ex - cx) > tol or abs(ey - cy) > tol:
-                continue
-            if r.fos < best_fos:
-                best_fos = r.fos
-                best = r
-
-        if best is None:
-            self._hover_grid_idx = None
-            self._refresh_canvas_with_highlights()
-            return
-
-        sd = best.surface.to_dict()
         sd["_hover_fos"] = best.fos
         self._refresh_canvas_with_highlights(hover_id=sd.get("id"),
-                                            hover_surface_dict=sd)
+                                             hover_surface_dict=sd)
         self.statusBar().showMessage(
-            f"Centre ({cx:.2f}, {cy:.2f}) — best FoS at this centre = "
-            f"{best.fos:.3f}",
+            f"Centre ({cell[0]:.2f}, {cell[1]:.2f}) — best FoS at this "
+            f"centre = {best.fos:.3f}",
             2000,
         )
         self._refresh_legend()
@@ -1003,48 +963,16 @@ class InterpretWindow(QMainWindow):
             if res is not None:
                 self._commit_query(res)
             return
-        s_search = getattr(self.project.settings, "search", None)
-        if s_search is None or not s_search.uses_grid():
-            return
-        try:
-            xmin, xmax = s_search.grid_x_min, s_search.grid_x_max
-            ymin, ymax = s_search.grid_y_min, s_search.grid_y_max
-            nx, ny = s_search.grid_nx, s_search.grid_ny
-        except Exception:  # noqa: BLE001
-            return
-        if any(v is None for v in (xmin, xmax, ymin, ymax)):
-            return
-        if not (xmin <= x <= xmax and ymin <= y <= ymax):
-            return
-
-        ix = int(round((x - xmin) / max((xmax - xmin), 1e-9) * (nx - 1)))
-        iy = int(round((y - ymin) / max((ymax - ymin), 1e-9) * (ny - 1)))
-        ix = max(0, min(nx - 1, ix))
-        iy = max(0, min(ny - 1, iy))
-        cx = xmin + ix * (xmax - xmin) / max(nx - 1, 1)
-        cy = ymin + iy * (ymax - ymin) / max(ny - 1, 1)
-        tol = 0.5 * max(
-            (xmax - xmin) / max(nx - 1, 1),
-            (ymax - ymin) / max(ny - 1, 1),
-        )
-        best = None
-        best_fos = float("inf")
-        for r in self.search_result.evaluations:
-            sd = r.surface.to_dict()
-            if sd.get("type") != "circle":
-                continue
-            ex, ey = sd.get("centre_x"), sd.get("centre_y")
-            if ex is None or ey is None:
-                continue
-            if abs(ex - cx) > tol or abs(ey - cy) > tol:
-                continue
-            if r.fos < best_fos:
-                best_fos = r.fos
-                best = r
+        # v0.1.83 — the same lookup the hover uses, derived from the
+        # result rather than from the search settings (see the note in
+        # ``_centre_tolerance``). This was the second copy of it.
+        best = self._best_at_grid_centre(x, y)
         if best is None:
             return
 
         sd = best.surface.to_dict()
+        cx = sd.get("centre_x", 0.0)
+        cy = sd.get("centre_y", 0.0)
         self._selected_surface_id = sd.get("id")
         self._selected_result = best
         self._refresh_canvas_with_highlights()
@@ -1583,16 +1511,23 @@ class InterpretWindow(QMainWindow):
         if not reasons:
             self._info(tr("Every surface evaluated successfully."))
             return
-        total = sum(n for _why, n in reasons)
-        lines = [tr("%d surface(s) rejected of %d evaluated:")
-                 % (total, len(res.evaluations)), ""]
+        with_reason = sum(n for _why, n in reasons)
+        generated = getattr(res, "total_count", len(res.evaluations))
+        lines = [tr("%d surface(s) rejected of %d generated:")
+                 % (generated - res.valid_count, generated), ""]
         lines += [f"  {n} × {why}" for why, n in reasons]
-        # Honest about what this cannot count: a circle rejected before it
-        # was ever sliced (no two ground intersections, or reverse
-        # curvature with the option off) never enters ``evaluations``, so
-        # it is not in the totals above and cannot be drawn either.
-        lines += ["", tr("Surfaces discarded before slicing are not "
-                         "counted here.")]
+        # v0.1.83 — the two numbers rarely agree, and saying so is the
+        # point. A circle rejected BEFORE it was sliced — no two ground
+        # intersections, or reverse curvature with the option off — is
+        # counted in the total but has no LEMResult, hence no reason to
+        # group it under and no geometry to draw in "Surfaces with error
+        # code". Reporting only the ones with a reason would understate
+        # the rejections by two thirds on a typical grid.
+        silent = (generated - res.valid_count) - with_reason
+        if silent > 0:
+            lines += ["", tr("%d more were discarded before slicing, so "
+                             "they carry no error code and cannot be "
+                             "displayed.") % silent]
         self._info("\n".join(lines))
 
     # ---- Groundwater -------------------------------------------------
@@ -2147,8 +2082,16 @@ class InterpretWindow(QMainWindow):
         v0.1.12 — uses the SELECTED surface (or critical if none
         selected) instead of always showing the critical one.
         Updates when the user clicks another surface in the list.
+
+        v0.1.83 — and it CREATES the Query when there is none, which is
+        the reference's documented shortcut. Falling back to the critical
+        surface without creating it drew the right slices but left the
+        query list empty, so the surface was not marked as queried and
+        Delete Query answered "no queries to delete" straight after.
         """
         self._slices_visible = bool(on)
+        if self._slices_visible:
+            self._ensure_a_query()
         self._redraw_slices_for_selected()
 
     def _query_target(self):
@@ -2210,6 +2153,8 @@ class InterpretWindow(QMainWindow):
         # v0.1.82 — the same target the rest of the Query menu uses, so
         # Show Slices, Query Slice Data and the thrust line can never end
         # up interrogating three different surfaces.
+        # v0.1.83 — and it becomes a real Query, as the reference does.
+        self._ensure_a_query()
         target = self._query_target()
         if target is None or not target.slices:
             self._info("No slices available — run a compute first.")

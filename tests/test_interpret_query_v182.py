@@ -313,12 +313,56 @@ class TestQueryToggles:
         w._refresh_canvas_with_highlights()
         assert qid in {it.surface_dict.get("id") for it in _drawn(w)}
 
-    def test_show_slices_falls_back_to_the_global_minimum(self):
-        """The documented shortcut: Show Slices with no query created
-        makes one on the Global Minimum rather than drawing nothing."""
-        _p, _r, w = _interpret()
+    def test_show_slices_creates_the_global_minimum_query(self):
+        """v0.1.83 — the documented shortcut, and it has to CREATE the
+        Query, not merely fall back to the critical surface.
+
+        Drawing the right slices while leaving the query list empty looked
+        correct and was not: the surface was not marked as queried, and
+        Delete Query answered "no queries to delete" immediately after.
+        """
+        _p, r, w = _interpret()
         assert w._queries() == []
         w._act_show_slices.setChecked(True)
         lines = [it for it in w.canvas.scene().items()
                  if getattr(it, "_is_slice_line", False)]
         assert lines
+        assert len(w._queries()) == 1
+        assert w._queries()[0].fos == r.critical.fos
+
+    def test_query_slice_data_creates_it_too(self):
+        _p, r, w = _interpret()
+        assert w._queries() == []
+        w._query_slice()
+        assert len(w._queries()) == 1
+        assert w._queries()[0].fos == r.critical.fos
+
+
+# ======================================================================
+@_requires_qt
+class TestPickingDoesNotDependOnTheSearchSettings:
+    """v0.1.83 — the slip-centre grid used to resolve a click was read
+    from ``project.settings.search``, in two hand-rolled copies. Those
+    settings can have moved on since the analysis ran — the user edits the
+    grid and does not recompute — and the click would then be resolved
+    against a grid none of the numbers on screen came from."""
+
+    def test_editing_the_grid_afterwards_does_not_break_picking(self):
+        _p, r, w = _interpret()
+        sd = r.critical.surface.to_dict()
+        before = w._surface_at(sd["centre_x"], sd["centre_y"])
+        assert before is not None
+        s = w.project.settings.search
+        s.grid_x_min, s.grid_x_max = -500.0, -400.0
+        s.grid_y_min, s.grid_y_max = -500.0, -400.0
+        s.grid_nx = s.grid_ny = 2
+        after = w._surface_at(sd["centre_x"], sd["centre_y"])
+        assert after is not None
+        assert after.fos == before.fos
+
+    def test_hover_uses_the_same_lookup(self):
+        _p, r, w = _interpret()
+        sd = r.critical.surface.to_dict()
+        w._on_canvas_hover(sd["centre_x"], sd["centre_y"])
+        assert w._hover_grid_idx == (round(sd["centre_x"], 6),
+                                     round(sd["centre_y"], 6))

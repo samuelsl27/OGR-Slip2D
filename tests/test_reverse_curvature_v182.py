@@ -175,6 +175,63 @@ class TestTheSettingMovesTheNumber:
 
 
 # ======================================================================
+class TestTheCountAddsUp:
+    """v0.1.83 — every circle the search GENERATES has to appear in the
+    totals, valid or not.
+
+    ``GridSearch.run`` used to skip the counters entirely when a circle
+    could not be analysed, so 1697 of the 4851 circles of this grid simply
+    vanished: the window reported "2966 / 3154" for a population of 4851.
+    Worse, the denominator MOVED when a search option changed — 2633 with
+    reverse curvature switched off — which is the one thing a number the
+    user compares between runs must never do.
+
+    The reference documents the population as an exact identity (*Grid
+    Search*): (X intervals + 1) × (Y intervals + 1) × (Radius Increment +
+    1). That is what is asserted here — rule 1, an identity from the
+    reference, not a snapshot of what the code prints.
+    """
+
+    # 21 × 21 × 11, the reference's own arithmetic for this grid.
+    _GENERATED = 21 * 21 * 11          # = 4851
+
+    @staticmethod
+    def _run(project):
+        return GridSearch(method=BishopSimplified(), grid_x=(40, 120),
+                          grid_y=(30, 120), grid_nx=20, grid_ny=20,
+                          radius_increment=10, min_radius=2.0,
+                          num_slices=25, min_area=0.5).run(project)
+
+    def test_valid_plus_invalid_is_every_circle_generated(self):
+        p = _ej1_project()
+        r = self._run(p)
+        assert r.total_count == self._GENERATED, (
+            r.valid_count, r.invalid_count, r.total_count)
+
+    def test_the_denominator_does_not_move_with_the_setting(self):
+        """The property that makes the number comparable at all."""
+        p = _ej1_project()
+        p.settings.search.create_tension_crack_reverse_curvature = True
+        on = self._run(p)
+        p.settings.search.create_tension_crack_reverse_curvature = False
+        off = self._run(p)
+        assert on.total_count == off.total_count == self._GENERATED
+        # The split moves, which is the setting doing its job...
+        assert on.valid_count > off.valid_count
+        # ...and every surface it removes is accounted for on the other
+        # side rather than disappearing.
+        assert (off.invalid_count - on.invalid_count
+                == on.valid_count - off.valid_count)
+
+    def test_evaluations_is_not_the_denominator(self):
+        """Pins why ``total_count`` had to exist: a surface with no
+        LEMResult is still a surface that was generated."""
+        p = _ej1_project()
+        r = self._run(p)
+        assert len(r.evaluations) < r.total_count
+
+
+# ======================================================================
 class TestGlobalMinimumUnaffected:
     """The regression that matters: the reference critical circle enters
     the ground BELOW its own centre (45.470, 50.0 against y_c = 70.5), so
