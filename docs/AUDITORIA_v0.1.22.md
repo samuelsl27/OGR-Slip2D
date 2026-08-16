@@ -21,6 +21,16 @@
 > del azar para pasar el filtro de unimodalidad (probabilidad < 1 %).
 > Con ciertas semillas fallaban TODOS los métodos. Corregido construyendo
 > la superficie inicial admisible por construcción.
+>
+> **ACTUALIZACIÓN v0.1.82** — la justificación de A3 escrita arriba
+> («el círculo de referencia validado también lo incumple») **era falsa**,
+> y lo fue durante cincuenta versiones. `m_alpha` no es simétrica en α, así
+> que solo significa algo leída con el mismo sentido de deslizamiento que
+> usó el solver, y `checks.py` omitía ese factor. Sobre el círculo validado
+> el mínimo pasa de **−0,010 (5 dovelas por debajo del límite)** a **+0,928
+> (ninguna)**. El criterio nunca estuvo mal; se leía en el espejo. Sigue
+> desactivado por defecto, pero por la razón correcta: así lo trae la
+> referencia. Ver `CHANGELOG_v0.1.82.md`.
 
 **Autor:** Samuel Sáez López — UPCT
 **Fecha:** 7 de julio de 2026
