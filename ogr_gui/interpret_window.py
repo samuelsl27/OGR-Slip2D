@@ -42,19 +42,51 @@ from .resources import icon
 
 
 # ======================================================================
-class _SliceDataDock(QDockWidget):
-    """Dock panel: property-table for the currently highlighted slice.
+def _mc_param(slice_, name):
+    """A strength parameter of the material the slice base cuts.
 
-    v0.1.12 — extended to show the full Slide-style slice property set.
+    Reads ``strength.params``, which is where every registered model keeps
+    them; ``getattr(strength, "cohesion")`` returns None and looks like a
+    missing value rather than a wrong lookup.
+    """
+    mat = getattr(slice_, "material", None)
+    if mat is None or getattr(mat, "strength", None) is None:
+        return None
+    return mat.strength.params.get(name)
+
+
+def _per_slice(result, name, index):
+    """One entry of a LEMResult per-slice array, or None.
+
+    The four most interesting quantities on a slice — base normal, shear
+    force, shear strength — are NOT attributes of the Slice. They are
+    computed by the method and stored on the result, so a panel handed
+    only the slice can never show them, which is why this one displayed a
+    dash where the reference prints a number.
+    """
+    if result is None:
+        return None
+    arr = getattr(result, name, None)
+    if not arr or index is None or not (0 <= index < len(arr)):
+        return None
+    v = arr[index]
+    return v if isinstance(v, (int, float)) and math.isfinite(v) else None
+
+
+class _SliceDataDock(QDockWidget):
+    """Dock panel: property table for the currently selected slice.
+
+    v0.1.12 — extended to the full reference-style slice property set.
+    v0.1.87 — takes the RESULT as well as the slice, so the stresses it
+    used to show as dashes are actually available, and reports the same
+    quantities the reference's Slice Data table does.
+
+    Every getter takes ``(s, res)``. ``res`` may be None: the panel is
+    also used from paths that only have a slice.
     """
 
     @staticmethod
-    def _get(s, name, default="—"):
-        return getattr(s, name, default)
-
-    @staticmethod
-    def _round_or_dash(s, name, ndigits=3):
-        v = getattr(s, name, None)
+    def _r(v, ndigits=3):
         if v is None:
             return "—"
         try:
@@ -62,59 +94,100 @@ class _SliceDataDock(QDockWidget):
         except Exception:  # noqa: BLE001
             return v
 
+    # The reference reports STRESSES on the slice base, not forces, so the
+    # per-slice forces are divided by the base length here. Both are shown:
+    # the force is what the method solved for, the stress is what compares
+    # against a strength envelope.
+    @staticmethod
+    def _stress(res, name, s):
+        f = _per_slice(res, name, getattr(s, "index", None))
+        length = getattr(s, "base_length", 0.0) or 0.0
+        if f is None or length <= 0:
+            return None
+        return f / length
+
     FIELDS = [
         # --- Geometry --------------------------------------------------
-        ("─ Geometry ─", lambda s: ""),
-        ("Slice Number",     lambda s: s.index),
-        ("X centre (m)",     lambda s: round(s.x_centre, 3)),
-        ("Width b (m)",      lambda s: round(s.width, 3)),
-        ("Base length l (m)", lambda s: round(s.base_length, 3)),
-        ("Base angle α (°)", lambda s: round(s.to_dict()["base_angle_deg"], 2)),
-        ("Height h (m)",     lambda s: round(s.height, 3)),
-        ("Base y left (m)",  lambda s: round(s.base_y_left, 3)),
-        ("Base y right (m)", lambda s: round(s.base_y_right, 3)),
+        ("─ Geometry ─", lambda s, r: ""),
+        ("Slice Number",     lambda s, r: s.index),
+        ("X centre (m)",     lambda s, r: round(s.x_centre, 3)),
+        ("Width b (m)",      lambda s, r: round(s.width, 3)),
+        ("Base length l (m)", lambda s, r: round(s.base_length, 3)),
+        ("Base angle α (°)", lambda s, r: round(s.to_dict()["base_angle_deg"], 2)),
+        ("Height h (m)",     lambda s, r: round(s.height, 3)),
+        ("Base y left (m)",  lambda s, r: round(s.base_y_left, 3)),
+        ("Base y right (m)", lambda s, r: round(s.base_y_right, 3)),
         # --- Forces ----------------------------------------------------
-        ("─ Forces ─", lambda s: ""),
-        ("Weight W (kN)",    lambda s: round(s.weight, 2)),
-        ("Pore pressure u (kPa)",   lambda s: round(s.pore_pressure, 2)),
-        ("Surface load q (kPa)",    lambda s: round(s.surface_pressure, 2)),
+        ("─ Forces ─", lambda s, r: ""),
+        ("Weight W (kN)",    lambda s, r: round(s.weight, 2)),
+        ("Pore pressure u (kPa)",   lambda s, r: round(s.pore_pressure, 2)),
+        ("Surface load q (kPa)",    lambda s, r: round(s.surface_pressure, 2)),
         ("Base normal force N (kN)",
-         lambda s: _SliceDataDock._round_or_dash(s, "base_normal_force", 2)),
-        ("Base shear force T (kN)",
-         lambda s: _SliceDataDock._round_or_dash(s, "base_shear_force", 2)),
+         lambda s, r: _SliceDataDock._r(
+             _per_slice(r, "base_normal", getattr(s, "index", None)), 2)),
+        # W·sin(α) — what drives the slice, which is NOT the mobilised
+        # shear. They are different quantities and the difference is the
+        # whole point of a factor of safety; labelling this one "mobilised"
+        # was the first mistake this panel made when it was given real
+        # numbers instead of dashes.
+        ("Driving shear W·sinα (kN)",
+         lambda s, r: _SliceDataDock._r(
+             _per_slice(r, "base_shear_force", getattr(s, "index", None)), 2)),
         # --- Stresses --------------------------------------------------
-        ("─ Stresses ─", lambda s: ""),
+        ("─ Stresses ─", lambda s, r: ""),
+        ("Base normal stress σₙ (kPa)",
+         lambda s, r: _SliceDataDock._r(
+             _SliceDataDock._stress(r, "base_normal", s), 2)),
         ("Effective normal σ′ₙ (kPa)",
-         lambda s: _SliceDataDock._round_or_dash(s, "sigma_n_eff", 2)),
+         lambda s, r: _SliceDataDock._r(
+             None if _SliceDataDock._stress(r, "base_normal", s) is None
+             else _SliceDataDock._stress(r, "base_normal", s)
+             - (s.pore_pressure or 0.0), 2)),
         ("Shear strength τ_f (kPa)",
-         lambda s: _SliceDataDock._round_or_dash(s, "tau_strength", 2)),
-        ("Mobilised shear τ_m (kPa)",
-         lambda s: _SliceDataDock._round_or_dash(s, "tau_mobilized", 2)),
+         lambda s, r: _SliceDataDock._r(
+             _SliceDataDock._stress(r, "base_shear_strength", s), 2)),
+        # τ_f / F, which is what the reference's report calls "Shear
+        # Stress". Verified against its own table: slice 1 of the Ej_2
+        # global minimum has τ_f = 31.082 and F = 1.11442, and the report
+        # prints 27.8907 = 31.082 / 1.11442.
+        ("Mobilised shear τ_m = τ_f/F (kPa)",
+         lambda s, r: _SliceDataDock._r(
+             None if (_SliceDataDock._stress(r, "base_shear_strength", s)
+                      is None or not r or not r.fos)
+             else _SliceDataDock._stress(r, "base_shear_strength", s) / r.fos,
+             2)),
         # --- Material --------------------------------------------------
-        ("─ Material ─", lambda s: ""),
+        ("─ Material ─", lambda s, r: ""),
         ("Material",
-         lambda s: s.material.name if s.material else "—"),
+         lambda s, r: s.material.name if s.material else "—"),
         ("Strength model",
-         lambda s: (s.material.strength.DISPLAY_NAME
-                    if s.material else "—")),
+         lambda s, r: (s.material.strength.DISPLAY_NAME
+                       if s.material else "—")),
         ("Unit weight γ (kN/m³)",
-         lambda s: (round(s.material.unit_weight, 2)
-                    if s.material else "—")),
+         lambda s, r: (round(s.material.unit_weight, 2)
+                       if s.material else "—")),
+        # The two columns the reference's report carries and this panel
+        # did not: the strength parameters AT THE BASE, which is where the
+        # shear strength above is evaluated.
+        ("Base cohesion c (kPa)",
+         lambda s, r: _SliceDataDock._r(_mc_param(s, "cohesion"), 2)),
+        ("Base friction angle φ (°)",
+         lambda s, r: _SliceDataDock._r(_mc_param(s, "friction_angle"), 2)),
     ]
 
     def __init__(self, parent=None) -> None:
-        super().__init__("Slice Data", parent)
+        super().__init__(tr("Slice Data"), parent)
         self.setObjectName("SliceDataDock")
         container = QWidget()
         vbox = QVBoxLayout(container)
         self.table = QTableWidget(len(self.FIELDS), 2)
-        self.table.setHorizontalHeaderLabels(["Property", "Value"])
+        self.table.setHorizontalHeaderLabels([tr("Property"), tr("Value")])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.setAlternatingRowColors(True)
         for i, (label, _) in enumerate(self.FIELDS):
-            item_label = QTableWidgetItem(label)
+            item_label = QTableWidgetItem(tr(label))
             # Section headers (start with ─) drawn slightly bolder
             if label.startswith("─"):
                 from PySide6.QtGui import QFont
@@ -125,13 +198,17 @@ class _SliceDataDock(QDockWidget):
         vbox.addWidget(self.table)
         self.setWidget(container)
 
-    def show_slice(self, s) -> None:
+    def show_slice(self, s, result=None) -> None:
         for i, (_, getter) in enumerate(self.FIELDS):
             try:
-                value = getter(s)
+                value = getter(s, result)
             except Exception:  # noqa: BLE001
                 value = "—"
             self.table.item(i, 1).setText(str(value))
+
+    def clear_slice(self) -> None:
+        for i in range(len(self.FIELDS)):
+            self.table.item(i, 1).setText("—")
 
 
 # ======================================================================
@@ -2191,9 +2268,25 @@ class InterpretWindow(QMainWindow):
         res = self.search_result
         return res.critical if res is not None else None
 
+    def _slice_surfaces(self) -> list:
+        """Every surface whose slices Show Slices must draw.
+
+        v0.1.87 — all the Queries, not one of them. The reference is
+        explicit: "Show Slices operates on a per view basis, and applies
+        to ALL QUERIES IN THE CURRENT VIEW, if more than one Query exists
+        in a given view". Drawing only the last one made the option
+        contradict the feature it depends on, now that v0.1.86 lets a
+        user hold several.
+        """
+        out = list(self._queries())
+        if not out:
+            target = self._query_target()
+            if target is not None:
+                out = [target]
+        return [t for t in out if getattr(t, "slices", None)]
+
     def _redraw_slices_for_selected(self) -> None:
-        """Redraw the slice lines for the currently selected surface
-        (or the critical one if no selection)."""
+        """Redraw the slice lines for every queried surface."""
         from PySide6.QtGui import QColor, QPen
         from PySide6.QtWidgets import QGraphicsLineItem
 
@@ -2205,21 +2298,108 @@ class InterpretWindow(QMainWindow):
         if not self._slices_visible:
             return
 
-        target = self._query_target()
-        if target is None or not target.slices:
-            return
-
         pen = QPen(QColor("#e63946"), 0.8)
         pen.setCosmetic(True)
-        for s in target.slices:
-            top_y = s.top_y_left
-            bot_y = s.base_y_left
-            line = QGraphicsLineItem(s.base_x_left, bot_y,
-                                     s.base_x_left, top_y)
-            line.setPen(pen)
-            line._is_slice_line = True
-            line.setZValue(6.5)
-            scene.addItem(line)
+        for target in self._slice_surfaces():
+            for s in target.slices:
+                top_y = s.top_y_left
+                bot_y = s.base_y_left
+                line = QGraphicsLineItem(s.base_x_left, bot_y,
+                                         s.base_x_left, top_y)
+                line.setPen(pen)
+                line._is_slice_line = True
+                line.setZValue(6.5)
+                scene.addItem(line)
+
+    # ------------------------------------------------------------------
+    # v0.1.87 — the selected slice, drawn
+    #
+    # The reference: "Click on any slice, and the data for the slice will
+    # be displayed in the dialog. Force arrows will also be displayed on
+    # the slice, representing the various forces acting on the slice, such
+    # as slice weight, interslice forces and base forces."
+    #
+    # The arrows are scaled against the LARGEST force on this slice, not
+    # against an absolute length: a 9 kN slice at the toe and a 300 kN one
+    # mid-slope must both be readable, and only a relative scale does
+    # that. It is a diagram of directions and proportions, not a
+    # measurement — the numbers are in the panel beside it.
+    # ------------------------------------------------------------------
+    def _clear_slice_highlight(self) -> None:
+        scene = self.canvas.scene()
+        for item in list(scene.items()):
+            if getattr(item, "_is_slice_highlight", False):
+                scene.removeItem(item)
+
+    def _highlight_slice(self, s, result=None) -> None:
+        from PySide6.QtGui import QBrush, QColor, QPen, QPolygonF
+        from PySide6.QtCore import QPointF
+        from PySide6.QtWidgets import (
+            QGraphicsLineItem, QGraphicsPolygonItem,
+        )
+
+        self._clear_slice_highlight()
+        scene = self.canvas.scene()
+
+        poly = QPolygonF([
+            QPointF(s.base_x_left, s.base_y_left),
+            QPointF(s.base_x_right, s.base_y_right),
+            QPointF(s.base_x_right, s.top_y_right),
+            QPointF(s.base_x_left, s.top_y_left),
+        ])
+        body = QGraphicsPolygonItem(poly)
+        body.setBrush(QBrush(QColor(255, 200, 0, 90)))
+        pen = QPen(QColor("#e67e22"), 1.6); pen.setCosmetic(True)
+        body.setPen(pen)
+        body.setZValue(7.0)
+        body._is_slice_highlight = True
+        scene.addItem(body)
+
+        # Forces, as (dx, dy) from the point they act on.
+        idx = getattr(s, "index", None)
+        W = float(getattr(s, "weight", 0.0) or 0.0)
+        N = _per_slice(result, "base_normal", idx) or 0.0
+        T = _per_slice(result, "base_shear_force", idx) or 0.0
+        alpha = float(getattr(s, "base_angle", 0.0) or 0.0)
+        xc = 0.5 * (s.base_x_left + s.base_x_right)
+        y_base = 0.5 * (s.base_y_left + s.base_y_right)
+        y_top = 0.5 * (s.top_y_left + s.top_y_right)
+
+        biggest = max(abs(W), abs(N), abs(T), 1e-9)
+        span = max(s.width, abs(y_top - y_base), 1e-9)
+        unit = span / biggest      # scene units per kN
+
+        arrows = [
+            # Weight: from the centroid, straight down.
+            (xc, 0.5 * (y_base + y_top), 0.0, -W * unit, "#2c3e50"),
+            # Base normal: perpendicular to the base, into the mass.
+            (xc, y_base, -N * unit * math.sin(alpha),
+             N * unit * math.cos(alpha), "#2980b9"),
+            # Base shear: along the base, resisting the movement.
+            (xc, y_base, -T * unit * math.cos(alpha),
+             -T * unit * math.sin(alpha), "#c0392b"),
+        ]
+        for x0, y0, dx, dy, colour in arrows:
+            if abs(dx) < 1e-12 and abs(dy) < 1e-12:
+                continue
+            apen = QPen(QColor(colour), 1.4); apen.setCosmetic(True)
+            shaft = QGraphicsLineItem(x0, y0, x0 + dx, y0 + dy)
+            shaft.setPen(apen); shaft.setZValue(7.5)
+            shaft._is_slice_highlight = True
+            scene.addItem(shaft)
+            # Arrow head: two short strokes at the tip, 25° either side.
+            mag = math.hypot(dx, dy)
+            head = 0.18 * mag
+            ang = math.atan2(dy, dx)
+            for sgn in (+1, -1):
+                a = ang + math.pi + sgn * math.radians(25.0)
+                barb = QGraphicsLineItem(
+                    x0 + dx, y0 + dy,
+                    x0 + dx + head * math.cos(a),
+                    y0 + dy + head * math.sin(a))
+                barb.setPen(apen); barb.setZValue(7.5)
+                barb._is_slice_highlight = True
+                scene.addItem(barb)
 
     def _query_slice(self) -> None:
         """Activate click-to-pick mode for slice interrogation.
@@ -2249,36 +2429,59 @@ class InterpretWindow(QMainWindow):
         self.slice_dock.show()
         self.slice_dock.raise_()
         self.statusBar().showMessage(
-            "Click on any slice to view its properties (Esc to exit).",
+            tr("Click on any slice to view its properties (Esc to exit)."),
             8000,
         )
-        try:
-            self.canvas.scene_clicked.disconnect(self._on_canvas_click_for_query)
-        except (TypeError, RuntimeError, AttributeError):
-            pass
-        try:
-            self.canvas.scene_clicked.connect(self._on_canvas_click_for_query)
-        except AttributeError:
-            # Fallback: just show middle slice if signal not available
-            mid = len(target.slices) // 2
-            self.slice_dock.show_slice(target.slices[mid])
+        # v0.1.87 — connect ONCE. The old code disconnected first and let
+        # the failure pass, which printed a libpyside "Failed to
+        # disconnect" warning on every first use because there was nothing
+        # connected yet. A flag says what the try/except was trying to ask.
+        if not getattr(self, "_slice_pick_connected", False):
+            try:
+                self.canvas.scene_clicked.connect(
+                    self._on_canvas_click_for_query)
+                self._slice_pick_connected = True
+            except AttributeError:
+                # No signal (a stub canvas in a test): show a slice anyway
+                # rather than leaving the panel empty.
+                mid = len(target.slices) // 2
+                self.slice_dock.show_slice(target.slices[mid], target)
 
     def _on_canvas_click_for_query(self, x: float, y: float) -> None:
-        """Pick the slice containing the clicked x and show its data."""
+        """Pick the slice containing the clicked x and show its data.
+
+        v0.1.87 — searches every queried surface, not just the one Query
+        Slice Data was opened on, so with two Queries on screen the click
+        interrogates the slice the user actually pointed at. The vertical
+        distance decides between two surfaces that overlap in x.
+        """
+        candidates = self._slice_surfaces()
         target = getattr(self, "_query_slice_target", None)
-        if target is None or not target.slices:
+        if target is not None and target not in candidates:
+            candidates = [target] + candidates
+        best, best_d = None, float("inf")
+        for res in candidates:
+            for s in res.slices or []:
+                if not (s.base_x_left <= x <= s.base_x_right):
+                    continue
+                lo = min(s.base_y_left, s.base_y_right)
+                hi = max(s.top_y_left, s.top_y_right)
+                d = 0.0 if lo <= y <= hi else min(abs(y - lo), abs(y - hi))
+                if d < best_d:
+                    best, best_d = (s, res), d
+        if best is None:
+            self.statusBar().showMessage(
+                tr("Click was outside the slice range."), 3000)
             return
-        for s in target.slices:
-            if s.base_x_left <= x <= s.base_x_right:
-                self.slice_dock.show_slice(s)
-                self.slice_dock.raise_()
-                self.statusBar().showMessage(
-                    f"Slice at x∈[{s.base_x_left:.2f}, {s.base_x_right:.2f}].",
-                    4000,
-                )
-                return
+        s, res = best
+        self._query_slice_target = res
+        self.slice_dock.show_slice(s, res)
+        self.slice_dock.raise_()
+        self._highlight_slice(s, res)
         self.statusBar().showMessage(
-            "Click was outside the slice range.", 3000,
+            tr("Slice %d of %d — x from %.2f to %.2f")
+            % (s.index, len(res.slices), s.base_x_left, s.base_x_right),
+            4000,
         )
 
     def _show_values_along(self) -> None:

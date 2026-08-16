@@ -150,7 +150,15 @@ class TestTranslationCompleteness:
                    # v0.1.74 — cognate, like Horizontal above: the
                    # interslice force function shape is "Trapezoidal" in
                    # both languages.
-                   "Trapezoidal"}
+                   "Trapezoidal",
+                   # v0.1.87 — the slice-data panel names one of its rows
+                   # and one of its section headers after the material,
+                   # and "material" is the same word in Spanish. The
+                   # entries exist because the panel translates its labels
+                   # through a variable, so tr() has to find them in the
+                   # dictionary; they are identical because translating
+                   # them would be inventing a difference.
+                   "Material", "─ Material ─"}
         same = [k for k, v in _DICTS["es"].items()
                 if k == v and k not in allowed]
         assert len(same) < 12, same[:15]

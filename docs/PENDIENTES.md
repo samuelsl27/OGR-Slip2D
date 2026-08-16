@@ -93,7 +93,35 @@ que nadie ha pedido mover. Queda anotado para quien se lo encuentre.
 
 ---
 
-## 3 · Diagnóstico fuera del runner que no reproducía el fallo
+## 3 · Del punto 4 del informe, lo que no se hizo
+
+**Estado**: hecho lo esencial en v0.1.87; queda lo accesorio.
+
+El panel *Query Slice Data* ya se abre, se rellena sin guiones, coincide
+con la tabla de la referencia al 0,5 %, resalta la dovela y dibuja las
+flechas de fuerzas. La referencia describe además cuatro botones del
+diálogo que **no** se han implementado:
+
+- **Hide Geometry / Show Geometry** — oculta todo el modelo menos la
+  dovela seleccionada, para capturas.
+- **Zoom Slice** — lleva la dovela seleccionada al centro de la vista.
+- **Copy** — copia los datos de la dovela al portapapeles.
+- El «roll-up» del diálogo (plegarlo sin cerrarlo). Aquí el panel es un
+  dock, y un dock ya se pliega, así que probablemente no aplica.
+
+Ninguno cambia un número; son comodidades. Se dejan fuera porque el
+informe pedía que el panel **se abriera y mostrara las propiedades**, y eso
+está.
+
+Falta también la flecha de **fuerzas entre dovelas**: se dibujan peso,
+normal en la base y cortante en la base. Las interdovela solo existen como
+tales en los métodos que las resuelven (Spencer, GLE, Lowe-Karafiath), y
+dibujarlas para Bishop u Ordinary sería dibujar una hipótesis, que es el
+mismo error que v0.1.82 corrigió en la línea de empuje.
+
+---
+
+## 4 · Diagnóstico fuera del runner que no reproducía el fallo
 
 **Estado**: sin explicar.
 
