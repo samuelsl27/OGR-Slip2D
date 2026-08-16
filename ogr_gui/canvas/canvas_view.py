@@ -56,6 +56,10 @@ from .snap_engine import SnapEngine, SnapSettings, nice_step
 from .tool_mode import ToolMode
 from ogr_gui.i18n import tr  # noqa: E402
 
+# The sheet the canvas shows with nothing open. One definition, because
+# Zoom All and the scene rect both need it and they must not drift apart.
+EMPTY_VIEW_RECT = QRectF(-5, -5, 60, 40)
+
 
 # ----------------------------------------------------------------------
 # Helper — module-level distance function used by the hit-test methods
@@ -215,6 +219,14 @@ class CanvasView(QGraphicsView):
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.setMouseTracking(True)
         self.setBackgroundBrush(QBrush(QColor("#fafafa")))
+        # v0.1.85 — the ruler is painted in viewport coordinates on top of
+        # everything else. With the default MinimalViewportUpdate Qt
+        # scrolls the already-painted pixels and repaints only the newly
+        # exposed strip, so viewport-space text travels with the content
+        # and the old copies stay: the axis labels ended up in stacked,
+        # shifted columns across the middle of the drawing. Repainting the
+        # whole viewport is what makes an overlay an overlay.
+        self.setViewportUpdateMode(QGraphicsView.FullViewportUpdate)
 
         # Flip Y so positive Y is up (engineering convention)
         t = QTransform()
@@ -269,6 +281,82 @@ class CanvasView(QGraphicsView):
             self._did_initial_fit = True
             self.zoom_all()
             self.viewport().update()
+        self._grow_scene_rect()
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._grow_scene_rect()
+
+    # ------------------------------------------------------------------
+    # v0.1.85 — an unbounded canvas
+    #
+    # Panning moves the scroll bars, and the scroll bars can only travel
+    # inside the scene rect. The scene rect was the model bounding box
+    # plus half of itself, so at the zoom level that fits the model — the
+    # one the program opens at — both scroll ranges were exhausted and the
+    # drawing simply would not move. With no file open at all the rect was
+    # a fixed (-5, -5, 60, 40) box and both ranges were literally zero, so
+    # the very first thing a user does on a blank canvas, scroll to where
+    # they want to start drawing, did nothing.
+    #
+    # The fix is not a bigger constant. The scene rect grows to keep a
+    # full viewport of slack beyond the visible area in every direction,
+    # so there is always somewhere to scroll to and the reachable area is
+    # unbounded in practice. It only ever grows during navigation; Zoom
+    # All resets it, which is what keeps the scroll bars meaningful.
+    # ------------------------------------------------------------------
+    def _visible_scene_rect(self) -> QRectF:
+        """What the viewport currently shows, in scene coordinates."""
+        vp = self.viewport().rect()
+        if not vp.isValid() or vp.width() < 2 or vp.height() < 2:
+            return QRectF()
+        return self.mapToScene(vp).boundingRect()
+
+    def _base_scene_rect(self) -> QRectF:
+        """The scene rect to start from: the model, generously padded.
+
+        With nothing open it is the same sheet Zoom All frames, so the two
+        cannot drift apart.
+        """
+        if self.project is not None and self.project.boundaries:
+            try:
+                xmin, ymin, xmax, ymax = self.project.bounding_box()
+                pad = max((xmax - xmin) * 0.5, (ymax - ymin) * 0.5, 10.0)
+                return QRectF(xmin - pad, ymin - pad,
+                              (xmax - xmin) + 2 * pad,
+                              (ymax - ymin) + 2 * pad)
+            except Exception:  # noqa: BLE001
+                pass
+        return QRectF(EMPTY_VIEW_RECT)
+
+    # Both the scene rect and Zoom All use this when no project is open.
+    # It is a starting view, not a fence: _grow_scene_rect extends past it
+    # the moment the user scrolls.
+
+    def _grow_scene_rect(self) -> None:
+        """Keep a viewport of slack around what is on screen.
+
+        Sets the rect on the VIEW, not on the scene. The two are different
+        things and mixing them is a trap: once a view has its own scene
+        rect it ignores the scene's, so a later ``scene().setSceneRect``
+        looks like it works and changes nothing. That is exactly what made
+        the first version of this code refuse to shrink back on Zoom All.
+        """
+        vis = self._visible_scene_rect()
+        if vis.isEmpty():
+            return
+        need = vis.adjusted(-vis.width(), -vis.height(),
+                            vis.width(), vis.height())
+        cur = self.sceneRect()
+        if cur.isEmpty():
+            self.setSceneRect(need)
+        elif not cur.contains(need):
+            self.setSceneRect(cur.united(need))
+
+    def _reset_scene_rect(self) -> None:
+        """Shrink back to the model. Only Zoom All and a reload do this."""
+        self.setSceneRect(self._base_scene_rect())
+        self._grow_scene_rect()
 
     # ==================================================================
     # Public API
@@ -332,12 +420,14 @@ class CanvasView(QGraphicsView):
         if self.project is None:
             return
 
-        xmin, ymin, xmax, ymax = self.project.bounding_box()
-        pad = max((xmax - xmin) * 0.5, (ymax - ymin) * 0.5, 10.0)
-        scene.setSceneRect(
-            QRectF(xmin - pad, ymin - pad,
-                   (xmax - xmin) + 2 * pad, (ymax - ymin) + 2 * pad)
-        )
+        # v0.1.85 — the model rect is the FLOOR, not the ceiling: whatever
+        # the user has panned to stays reachable, so a redraw does not
+        # yank the view back over the model. Set on the VIEW; see
+        # _grow_scene_rect for why that distinction matters.
+        base = self._base_scene_rect()
+        cur = self.sceneRect()
+        self.setSceneRect(base if cur.isEmpty() else base.united(cur))
+        self._grow_scene_rect()
 
         opts = self.display_options
         lw = opts.line_width
@@ -1486,13 +1576,17 @@ class CanvasView(QGraphicsView):
             t = QTransform()
             t.scale(1.0, -1.0)
             self.setTransform(t)
-            default_rect = QRectF(-5, -5, 60, 40)
-            self.scene().setSceneRect(default_rect)
+            default_rect = QRectF(EMPTY_VIEW_RECT)
             self.fitInView(default_rect, Qt.KeepAspectRatio)
             tt = self.transform()
             if tt.m22() > 0:
                 tt.scale(1.0, -1.0)
                 self.setTransform(tt)
+            # v0.1.85 — the default area says where to LOOK; it must not
+            # say how far you may go. Without this the blank canvas the
+            # program opens on could not be scrolled at all, so a point at
+            # y = 200 could only be reached by typing coordinates.
+            self._reset_scene_rect()
             return
         xmin, ymin, xmax, ymax = self.project.bounding_box()
         pad = max((xmax - xmin) * 0.1, (ymax - ymin) * 0.1, 1.0)
@@ -1503,6 +1597,10 @@ class CanvasView(QGraphicsView):
         if t.m22() > 0:
             t.scale(1.0, -1.0)
             self.setTransform(t)
+        # Zoom All is also the way BACK: it is the one action that shrinks
+        # the scene rect to the model again, so the scroll bars stop
+        # describing wherever the user wandered to.
+        self._reset_scene_rect()
 
     def zoom_to_point(self, x: float, y: float,
                       half_width: Optional[float] = None) -> None:
@@ -1562,6 +1660,9 @@ class CanvasView(QGraphicsView):
         factor = 1.15 if angle > 0 else (1 / 1.15)
         scene_pt = self.mapToScene(event.position().toPoint())
         self.zoom_by(factor, center_scene=scene_pt)
+        # Zooming out shows more scene than the rect covers; grow so the
+        # next drag still has somewhere to go.
+        self._grow_scene_rect()
         event.accept()
 
     def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
@@ -1857,6 +1958,11 @@ class CanvasView(QGraphicsView):
         if self._panning:
             delta = event.position() - self._pan_last_pos
             self._pan_last_pos = event.position()
+            # v0.1.85 — make room BEFORE asking the scroll bars to move.
+            # They cannot travel outside the scene rect, so without this
+            # the drag stops dead at the edge of the model instead of
+            # carrying on, which is the whole complaint.
+            self._grow_scene_rect()
             self.horizontalScrollBar().setValue(
                 self.horizontalScrollBar().value() - int(delta.x())
             )
@@ -2131,14 +2237,18 @@ class CanvasView(QGraphicsView):
             0.7,
         )
         cross_pen.setCosmetic(True)
-        sz = 0.8  # cross half-size in scene units (cosmetic so always visible)
-        # Estimate scene cross size adaptively
+        # Cross half-size: a constant number of PIXELS, expressed in scene
+        # units. v0.1.85 — this used to be derived from the scene rect,
+        # which is now allowed to grow as the user pans; the crosses would
+        # have swollen with it. Pixels per unit is the quantity that was
+        # meant all along, and it does not depend on how far anyone has
+        # scrolled.
+        sz = 0.8
         try:
-            view_w = self.viewport().width() if self.viewport() else 600
-            scene_rect = self.sceneRect()
-            if scene_rect.width() > 0 and view_w > 0:
-                sz = max(0.5, scene_rect.width() / view_w * 4.0)
-        except Exception:
+            ppu = self._pixels_per_unit()
+            if ppu > 0:
+                sz = max(0.5, 4.0 / ppu)
+        except Exception:  # noqa: BLE001
             pass
 
         # v0.1.17 — grid_nx/grid_ny are the number of INTERVALS (Slide
@@ -2373,8 +2483,31 @@ class CanvasView(QGraphicsView):
         super().drawBackground(painter, rect)
         if self.display_options.show_grid:
             self._draw_grid(painter, rect)
-        if self.display_options.show_ruler:
-            self._draw_ruler(painter, rect)
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        """Scene first, then the ruler on top of it, in viewport space.
+
+        v0.1.85 — the ruler used to be drawn from ``drawBackground``, which
+        paints into the SCENE layer. It reset the transform and wrote its
+        labels at viewport coordinates, so the text belonged to the window
+        but lived in the layer Qt scrolls: pan the drawing and the labels
+        travelled with it, while the newly exposed strip got a fresh set
+        painted at the right place. The result was several shifted columns
+        of numbers stacked across the middle of the model — the
+        "coordinates doing strange things" of the report.
+
+        An overlay has to be painted after the scene, over the whole
+        viewport, every time. Hence here, and hence FullViewportUpdate in
+        the constructor.
+        """
+        super().paintEvent(event)
+        if not self.display_options.show_ruler:
+            return
+        painter = QPainter(self.viewport())
+        try:
+            self._draw_ruler(painter)
+        finally:
+            painter.end()
 
     # v0.1.3 — overlay: snap glyphs and OSNAP extension lines
     def drawForeground(self, painter: QPainter, rect: QRectF) -> None:  # noqa: N802
@@ -2519,40 +2652,49 @@ class CanvasView(QGraphicsView):
             painter.drawLine(QPointF(rect.left(), y), QPointF(rect.right(), y))
             y += step
 
-    def _draw_ruler(self, painter: QPainter, rect: QRectF) -> None:
+    def _draw_ruler(self, painter: QPainter) -> None:
+        """Axis labels along the bottom and left edges of the viewport.
+
+        Painted in viewport coordinates by :meth:`paintEvent`. It takes no
+        scene rect on purpose: the labels belong to the window, not to the
+        drawing, and passing one invited the mistake this used to make.
+        """
         scale = self._pixels_per_unit()
         if scale <= 0:
             return
-        if (not self.viewport().rect().isValid()
-                or self.viewport().width() < 2
-                or self.viewport().height() < 2):
+        vr = self.viewport().rect()
+        if not vr.isValid() or vr.width() < 2 or vr.height() < 2:
             return
         step = nice_step(120.0 / scale)
         if step <= 0:
             return
+
         painter.save()
-        painter.resetTransform()
         font = QFont(); font.setPointSize(8)
         painter.setFont(font)
         painter.setPen(QColor(100, 100, 100))
 
-        vr = self.viewport().rect()
         xmin_scene = self.mapToScene(vr.bottomLeft()).x()
         xmax_scene = self.mapToScene(vr.bottomRight()).x()
-        x = math.ceil(xmin_scene / step) * step
-        while x <= xmax_scene:
-            px = self.mapFromScene(QPointF(x, 0)).x()
-            painter.drawText(QPointF(px + 2, vr.bottom() - 2), f"{x:g}")
-            x += step
+        # A label every ``step`` model units, but never so many that they
+        # overlap into a smear: the guard is what kept the start-up
+        # glitch (viewport not yet sized, scale absurd) off the screen.
+        if (xmax_scene - xmin_scene) / step <= 2000:
+            x = math.ceil(xmin_scene / step) * step
+            while x <= xmax_scene:
+                px = self.mapFromScene(QPointF(x, 0)).x()
+                painter.drawText(QPointF(px + 2, vr.bottom() - 2), f"{x:g}")
+                x += step
 
         ymin_scene = self.mapToScene(vr.bottomLeft()).y()
         ymax_scene = self.mapToScene(vr.topLeft()).y()
         ylo, yhi = min(ymin_scene, ymax_scene), max(ymin_scene, ymax_scene)
-        y = math.ceil(ylo / step) * step
-        while y <= yhi:
-            py = self.mapFromScene(QPointF(0, y)).y()
-            painter.drawText(QPointF(4, py - 2), f"{y:g}")
-            y += step
+        if (yhi - ylo) / step <= 2000:
+            y = math.ceil(ylo / step) * step
+            while y <= yhi:
+                py = self.mapFromScene(QPointF(0, y)).y()
+                painter.drawText(QPointF(4, py - 2), f"{y:g}")
+                y += step
         painter.restore()
 
     # Backwards-compat helpers -----------------------------------------
