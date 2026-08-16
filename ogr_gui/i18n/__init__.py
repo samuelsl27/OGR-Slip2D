@@ -25,6 +25,18 @@ _DICTS: dict[str, dict[str, str]] = {
         # Terminología: «dovela» (slice), «superficie de rotura» (slip
         # surface), «grieta de tracción» (tension crack), «consulta»
         # (query), «línea de empujes» (line of thrust).
+        'All data': 'Todos los datos',
+        'Data to plot:': 'Datos a representar:',
+        'Error code:': 'Código de error:',
+        'Factor of Safety Along Slope': 'Factor de seguridad a lo largo del talud',
+        'Filter data:': 'Filtrar datos:',
+        'Left slope intercept': 'Punto de corte izquierdo con el talud',
+        'Minimum value in each bin': 'Valor mínimo en cada intervalo',
+        'Number of bins:': 'Número de intervalos:',
+        'Right slope intercept': 'Punto de corte derecho con el talud',
+        'Select at least one slope intercept.': 'Seleccione al menos un punto de corte con el talud.',
+        'Surfaces discarded before slicing are not counted here.': 'Las superficies descartadas antes del dovelado no se cuentan aquí.',
+        'Surfaces with error code': 'Superficies con código de error',
         '%d quer(y/ies)': '%d consulta(s)',
         '%d rows copied to the clipboard': '%d filas copiadas al portapapeles',
         '%d surfaces for method %s. A negative value in place of the factor of safety is an error code.': '%d superficies para el método %s. Un valor negativo en lugar del factor de seguridad es un código de error.',

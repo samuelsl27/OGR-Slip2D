@@ -223,11 +223,52 @@ Se abría el diálogo, se calculaba `self._fos_filter`, se anunciaba «filtro
 activo» en la barra de estado… y **ningún código leía el atributo**. Se
 seguían dibujando todas las superficies.
 
-Ahora filtra de las dos formas que documenta la referencia —rango de factor
-de seguridad, o las N más bajas—, se aplica a *Minimum* y a *All*, tiene
-*Apply* que refresca sin cerrar, y *Cancel* deshace lo que *Apply* hizo.
-**El mínimo global nunca se filtra**: un filtro es una forma de mirar el
-resultado, no de esconder su respuesta.
+Ahora filtra de las tres formas que documenta la referencia —rango de factor
+de seguridad, las N más bajas, y **«Surfaces with error code»**—, se aplica a
+*Minimum* y a *All*, tiene *Apply* que refresca sin cerrar, y *Cancel*
+deshace lo que *Apply* hizo. **El mínimo global nunca se filtra**: un filtro
+es una forma de mirar el resultado, no de esconder su respuesta.
+
+«Surfaces with error code» no es un filtro más sino una vista aparte: enseña
+**solo** las superficies no válidas del código elegido, en morado, con las
+válidas ocultas, porque la pregunta que se hace ahí es «qué ha fallado
+aquí», no «cómo se compara esto». Con un límite que conviene decir en voz
+alta: un círculo rechazado **antes** de dovelarse —sin dos cortes con el
+terreno, o curvatura inversa con la casilla quitada— no llega a
+`evaluations`, así que ni se cuenta ni se puede dibujar. El resumen lo
+advierte en lugar de dar un total que parece completo y no lo es.
+
+---
+
+## 6 bis · Graph SF Along Slope: era una línea horizontal
+
+Merece su apartado porque no era una opción incompleta, era una opción que
+respondía a otra pregunta. Usaba **solo la superficie crítica** y le daba a
+cada dovela el factor de seguridad global — con el comentario escrito en el
+código: *«very coarse: treat every slice with the global FoS»*. Lo que eso
+dibuja es una recta horizontal: un número, repetido.
+
+Para lo que sirve la opción, según la referencia, es para ver **en qué parte
+del talud afloran los factores bajos** y poder dirigir allí la búsqueda. Así
+que usa **todas** las superficies válidas y toma los **dos puntos de corte
+con el terreno** de cada una, representando su factor de seguridad en cada
+uno. Con las opciones documentadas: corte izquierdo y/o derecho, y «mínimo
+por intervalo» con número de intervalos frente a «todos los datos».
+
+El mínimo global sobrevive al agrupado por intervalos —hay un test que lo
+exige—, porque es justo el valor que se busca en esa gráfica.
+
+---
+
+## 7 bis · Había dos leyendas, y no decían lo mismo
+
+Se vio al renderizar la ventana para compararla con las capturas. El panel
+*Summary* llevaba desde v0.1.8 una tabla de colores escrita a mano —rojo
+≤ 1,00, naranja 1,00–1,25 … gris > 3,00— copiada de una función de color que
+el lienzo ya no usa. Dos leyendas para un mismo gráfico, contradiciéndose:
+la de verdad en el panel izquierdo, y ésta afirmando que el mapa de calor
+significaba otra cosa. Eliminada. Una leyenda que no se genera a partir del
+mapeo que explica acaba siempre diciendo eso.
 
 ---
 

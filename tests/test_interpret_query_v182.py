@@ -130,6 +130,103 @@ class TestFilterSurfacesActuallyFilters:
 
 # ======================================================================
 @_requires_qt
+class TestSurfacesWithErrorCode:
+    """The reference's third filtering mode, and it is a view of its own:
+    ONLY the invalid surfaces of one error code, in purple, with the valid
+    ones hidden. The question is "what failed here", not "how does this
+    compare"."""
+
+    def test_it_shows_only_that_error_code(self):
+        _p, r, w = _interpret()
+        reasons = w._invalid_reasons()
+        if not reasons:
+            return                      # nothing failed on this grid
+        why, count = reasons[0]
+        w._set_surface_mode("all")
+        w._error_filter = why
+        w._refresh_canvas_with_highlights()
+        drawn = _drawn(w)
+        assert drawn, why
+        assert len(drawn) <= count
+        ids = {it.surface_dict.get("id") for it in drawn}
+        for ev in r.evaluations:
+            if ev.surface.to_dict().get("id") in ids:
+                assert w.invalid_reason(ev) == why
+
+    def test_no_valid_surface_is_drawn(self):
+        _p, _r, w = _interpret()
+        reasons = w._invalid_reasons()
+        if not reasons:
+            return
+        w._error_filter = reasons[0][0]
+        w._refresh_canvas_with_highlights()
+        assert all(not it.is_critical for it in _drawn(w))
+
+    def test_clearing_it_restores_the_normal_view(self):
+        _p, _r, w = _interpret()
+        w._set_surface_mode("all")
+        normal = len(_drawn(w))
+        reasons = w._invalid_reasons()
+        if not reasons:
+            return
+        w._error_filter = reasons[0][0]
+        w._refresh_canvas_with_highlights()
+        w._error_filter = None
+        w._refresh_canvas_with_highlights()
+        assert len(_drawn(w)) == normal
+
+
+# ======================================================================
+@_requires_qt
+class TestGraphSFAlongSlope:
+    """v0.1.82 — this plotted the CRITICAL surface only, and gave every
+    slice the global factor of safety ("very coarse: treat every slice
+    with the global FoS"). What that draws is a horizontal line: one
+    number, repeated. The option exists to show WHERE on the slope the low
+    factors of safety daylight, so it has to use every valid surface and
+    its two slope intercepts."""
+
+    def test_it_uses_every_valid_surface_not_just_the_critical(self):
+        _p, r, w = _interpret()
+        xs, ys = w.sf_along_slope_series(bins=None)
+        assert len(xs) == 2 * len(list(r.valid())), (len(xs),
+                                                     len(list(r.valid())))
+
+    def test_it_is_not_a_horizontal_line(self):
+        """The defect, pinned: the old plot had a single distinct y."""
+        _p, _r, w = _interpret()
+        _xs, ys = w.sf_along_slope_series(bins=None)
+        assert len(set(round(y, 6) for y in ys)) > 1
+
+    def test_one_intercept_gives_half_the_points(self):
+        _p, _r, w = _interpret()
+        both = len(w.sf_along_slope_series(True, True, None)[0])
+        left = len(w.sf_along_slope_series(True, False, None)[0])
+        right = len(w.sf_along_slope_series(False, True, None)[0])
+        assert left + right == both
+        assert left > 0 and right > 0
+
+    def test_binning_takes_the_minimum_in_each_bin(self):
+        _p, _r, w = _interpret()
+        xs_all, ys_all = w.sf_along_slope_series(bins=None)
+        xs_b, ys_b = w.sf_along_slope_series(bins=8)
+        assert 0 < len(xs_b) <= 8
+        assert len(xs_b) < len(xs_all)
+        # Every binned value must be a value that actually occurs, and the
+        # overall minimum has to survive the binning — it is the whole
+        # point of the reading.
+        assert min(ys_b) == min(ys_all)
+        for y in ys_b:
+            assert y in ys_all
+
+    def test_bins_are_ordered_along_the_slope(self):
+        _p, _r, w = _interpret()
+        xs, _ys = w.sf_along_slope_series(bins=12)
+        assert xs == sorted(xs)
+
+
+# ======================================================================
+@_requires_qt
 class TestExportRawData:
     def test_one_row_per_surface_analysed(self):
         _p, r, w = _interpret()

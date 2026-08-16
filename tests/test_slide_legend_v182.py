@@ -207,6 +207,17 @@ class TestSurfacesCarryTheLegendColour:
         pm = QPixmap(120, 400)
         w.legend.render(pm)
 
+    def test_there_is_only_one_legend(self):
+        """The Summary dock used to carry a second, hard-coded colour
+        table (red ≤ 1.00 … grey > 3.00) copied from a colour function
+        the canvas no longer uses. Two legends for one plot, disagreeing
+        with each other, is worse than none."""
+        _p, _r, w = self._interpret()
+        html = w.summary_dock.label.text()
+        assert "heatmap legend" not in html.lower()
+        for stale in ("#dc1e1e", "#f06428", "#6e6e78"):
+            assert stale not in html.lower(), stale
+
     def test_switching_to_lines_mode_drops_the_bands(self):
         """The banded legend describes a banded plot; a smooth plot must
         not be explained with swatches it never draws."""

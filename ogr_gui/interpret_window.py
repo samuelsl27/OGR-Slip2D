@@ -162,20 +162,13 @@ class _SummaryDock(QDockWidget):
             )
             return
         sd = c.surface.to_dict()
-        # v0.1.8 — FoS legend (matches CanvasView._fos_to_color)
-        legend = (
-            "<br><br><b>FoS heatmap legend</b><br>"
-            "<table style='font-size:9pt;'>"
-            "<tr><td bgcolor='#dc1e1e' width='30'>&nbsp;</td><td>FoS ≤ 1.00</td></tr>"
-            "<tr><td bgcolor='#f06428'>&nbsp;</td><td>1.00 – 1.25</td></tr>"
-            "<tr><td bgcolor='#f5a03c'>&nbsp;</td><td>1.25 – 1.50</td></tr>"
-            "<tr><td bgcolor='#f5d750'>&nbsp;</td><td>1.50 – 1.75</td></tr>"
-            "<tr><td bgcolor='#c8dc64'>&nbsp;</td><td>1.75 – 2.00</td></tr>"
-            "<tr><td bgcolor='#8cc864'>&nbsp;</td><td>2.00 – 2.50</td></tr>"
-            "<tr><td bgcolor='#64a064'>&nbsp;</td><td>2.50 – 3.00</td></tr>"
-            "<tr><td bgcolor='#6e6e78'>&nbsp;</td><td>FoS &gt; 3.00</td></tr>"
-            "</table>"
-        )
+        # v0.1.82 — the hard-coded colour table that used to live here is
+        # gone. It listed eight bands (red ≤ 1.00 … grey > 3.00) copied
+        # from a colour function the canvas no longer uses, so the window
+        # carried TWO legends for one plot and they disagreed: the real
+        # scale in the dock on the left, and this table claiming the
+        # heatmap meant something else. A legend that is not generated
+        # from the mapping it explains will always end up saying that.
         self.label.setText(
             f"Method: <b>{result.method_id}</b><br>"
             f"Valid surfaces: <b>{result.valid_count}</b> / {len(result.evaluations)}<br>"
@@ -186,7 +179,6 @@ class _SummaryDock(QDockWidget):
             f"Iterations: {c.iterations}<br>"
             f"Centre: ({sd.get('centre_x', 0):.2f}, {sd.get('centre_y', 0):.2f})<br>"
             f"Radius: {sd.get('radius', 0):.2f} m"
-            + legend
         )
 
 
@@ -268,6 +260,7 @@ class InterpretWindow(QMainWindow):
         self._surface_mode = "global_min"
         self._selected_surface_id = None
         self._fos_filter = None
+        self._error_filter = None
         self._query_points: list = []
         self._refresh_canvas_with_highlights()
 
@@ -987,6 +980,8 @@ class InterpretWindow(QMainWindow):
             hover_surface_dict=hover_surface_dict,
             surface_mode=self._surface_mode,
             fos_filter=getattr(self, "_fos_filter", None),
+            error_filter=getattr(self, "_error_filter", None),
+            invalid_reason_fn=self.invalid_reason,
             query_ids=[q.surface.to_dict().get("id")
                        for q in self._queries()],
         )
@@ -1552,28 +1547,52 @@ class InterpretWindow(QMainWindow):
         self._refresh_canvas_with_highlights()
         self.statusBar().showMessage(tr("%d quer(y/ies)") % len(qs), 4000)
 
+    @staticmethod
+    def invalid_reason(ev) -> str | None:
+        """Why an evaluation was rejected, or None if it was not.
+
+        One definition, used by the summary, by the error-code filter and
+        by the hover read-out — three places that were each deciding it
+        for themselves.
+        """
+        if ev.is_valid and getattr(ev, "admissible", True):
+            return None
+        return (getattr(ev, "error_message", None)
+                or getattr(ev, "admissibility_note", None)
+                or tr("did not converge"))
+
+    def _invalid_reasons(self) -> list:
+        """``[(reason, count)]``, commonest first."""
+        res = self.search_result
+        if res is None:
+            return []
+        counts: dict = {}
+        for ev in res.evaluations:
+            why = self.invalid_reason(ev)
+            if why:
+                counts[why] = counts.get(why, 0) + 1
+        return sorted(counts.items(), key=lambda t: -t[1])
+
     def _query_invalid_summary(self) -> None:
         """Why surfaces were rejected — grouped, because a list of two
         hundred identical messages is not a diagnosis."""
         res = self.search_result
         if res is None:
             return
-        reasons: dict = {}
-        for ev in res.evaluations:
-            if ev.is_valid and getattr(ev, "admissible", True):
-                continue
-            key = (getattr(ev, "error_message", None)
-                   or getattr(ev, "admissibility_note", None)
-                   or tr("did not converge"))
-            reasons[key] = reasons.get(key, 0) + 1
+        reasons = self._invalid_reasons()
         if not reasons:
             self._info(tr("Every surface evaluated successfully."))
             return
-        total = sum(reasons.values())
+        total = sum(n for _why, n in reasons)
         lines = [tr("%d surface(s) rejected of %d evaluated:")
                  % (total, len(res.evaluations)), ""]
-        lines += [f"  {n} × {why}" for why, n in
-                  sorted(reasons.items(), key=lambda t: -t[1])]
+        lines += [f"  {n} × {why}" for why, n in reasons]
+        # Honest about what this cannot count: a circle rejected before it
+        # was ever sliced (no two ground intersections, or reverse
+        # curvature with the option off) never enters ``evaluations``, so
+        # it is not in the totals above and cannot be drawn either.
+        lines += ["", tr("Surfaces discarded before slicing are not "
+                         "counted here.")]
         self._info("\n".join(lines))
 
     # ---- Groundwater -------------------------------------------------
@@ -2318,8 +2337,8 @@ class InterpretWindow(QMainWindow):
             self._info(tr("No valid surfaces."))
             return
         from PySide6.QtWidgets import (
-            QCheckBox, QDialog, QDialogButtonBox, QDoubleSpinBox,
-            QFormLayout, QLabel, QSpinBox, QVBoxLayout,
+            QCheckBox, QComboBox, QDialog, QDialogButtonBox,
+            QDoubleSpinBox, QFormLayout, QLabel, QSpinBox, QVBoxLayout,
         )
         lo_all = min(r.fos for r in valid)
         hi_all = max(r.fos for r in valid)
@@ -2345,6 +2364,21 @@ class InterpretWindow(QMainWindow):
         sp_n.setRange(1, 100000)
         sp_n.setValue(min(10, len(valid)))
         form.addRow(tr("Number of surfaces:"), sp_n)
+        # The reference's "Surfaces With Error Code": show ONLY the
+        # invalid surfaces of one kind, drawn in purple, with the valid
+        # ones hidden. It is how a blank patch in the contoured grid gets
+        # diagnosed — which surfaces failed there, and why.
+        reasons = self._invalid_reasons()
+        chk_err = QCheckBox(tr("Surfaces with error code"))
+        chk_err.setEnabled(bool(reasons))
+        form.addRow("", chk_err)
+        cbo_err = QComboBox()
+        for why, n in reasons:
+            cbo_err.addItem(f"{why} ({n})", why)
+        cbo_err.setEnabled(bool(reasons))
+        if not reasons:
+            cbo_err.addItem(tr("Every surface evaluated successfully."))
+        form.addRow(tr("Error code:"), cbo_err)
         v.addLayout(form)
         info = QLabel()
         v.addWidget(info)
@@ -2356,8 +2390,13 @@ class InterpretWindow(QMainWindow):
             return None if (lo is None and hi is None and n is None) \
                 else (lo, hi, n)
 
+        def collect_err():
+            return (cbo_err.currentData()
+                    if (chk_err.isChecked() and reasons) else None)
+
         def apply_now():
             self._fos_filter = collect()
+            self._error_filter = collect_err()
             self._refresh_canvas_with_highlights()
             info.setText(tr("Showing %d of %d surfaces.") % (
                 getattr(self.canvas, "last_surface_count", 0), len(valid)))
@@ -2369,11 +2408,14 @@ class InterpretWindow(QMainWindow):
         bb.button(QDialogButtonBox.Apply).clicked.connect(apply_now)
 
         previous = getattr(self, "_fos_filter", None)
+        previous_err = getattr(self, "_error_filter", None)
 
         def reset_now():
             self._fos_filter = None
+            self._error_filter = None
             chk_range.setChecked(False)
             chk_n.setChecked(False)
+            chk_err.setChecked(False)
             self._refresh_canvas_with_highlights()
             info.setText(tr("Showing %d of %d surfaces.") % (
                 getattr(self.canvas, "last_surface_count", 0), len(valid)))
@@ -2384,9 +2426,11 @@ class InterpretWindow(QMainWindow):
         if dlg.exec() != QDialog.Accepted:
             # Cancel means cancel, including the effect of Apply.
             self._fos_filter = previous
+            self._error_filter = previous_err
             self._refresh_canvas_with_highlights()
             return
         self._fos_filter = collect()
+        self._error_filter = collect_err()
         self._refresh_canvas_with_highlights()
         shown = getattr(self.canvas, "last_surface_count", 0)
         self.statusBar().showMessage(
@@ -2663,18 +2707,113 @@ class InterpretWindow(QMainWindow):
         except ImportError:
             self._info("matplotlib not installed.")
 
+    # ------------------------------------------------------------------
+    # Graph SF Along Slope — v0.1.82
+    # ------------------------------------------------------------------
+    def sf_along_slope_series(self, use_left: bool = True,
+                              use_right: bool = True,
+                              bins: int | None = None):
+        """Factor of safety against position along the ground surface.
+
+        v0.1.82 — the previous version plotted the CRITICAL surface only,
+        and assigned it the global factor of safety slice by slice, with
+        the comment "very coarse: treat every slice with the global FoS".
+        What that draws is a horizontal line: one number, repeated. It
+        answered no question at all.
+
+        What the option is for, per the reference, is finding WHERE on the
+        slope the low factors of safety come from, so a search can be
+        aimed there. It therefore uses **every valid surface**, and takes
+        each one's two intersection points with the ground — the left and
+        right *slope intercepts* — plotting that surface's factor of
+        safety at each of them.
+
+        ``bins`` collapses the cloud to the MINIMUM within each of ``bins``
+        equal intervals along the slope, which is the reading that matters:
+        the lowest factor of safety that daylights at each position. Left
+        as None, every point is returned, which is a far more scattered
+        plot and is the reference's other documented choice.
+        """
+        res = self.search_result
+        if res is None:
+            return [], []
+        pts: list[tuple[float, float]] = []
+        for ev in res.valid():
+            try:
+                xl, xr = ev.surface.x_range()
+                sd = ev.surface.to_dict()
+                xl = sd.get("x_left", xl) or xl
+                xr = sd.get("x_right", xr) or xr
+            except Exception:  # noqa: BLE001
+                continue
+            if use_left and xl is not None:
+                pts.append((float(xl), ev.fos))
+            if use_right and xr is not None:
+                pts.append((float(xr), ev.fos))
+        if not pts:
+            return [], []
+        if not bins or bins < 1:
+            pts.sort()
+            return [p[0] for p in pts], [p[1] for p in pts]
+        x_lo = min(p[0] for p in pts)
+        x_hi = max(p[0] for p in pts)
+        width = (x_hi - x_lo) or 1.0
+        best: dict[int, tuple[float, float]] = {}
+        for x, f in pts:
+            i = min(bins - 1, int((x - x_lo) / width * bins))
+            if i not in best or f < best[i][1]:
+                best[i] = (x, f)
+        ordered = [best[i] for i in sorted(best)]
+        return [p[0] for p in ordered], [p[1] for p in ordered]
+
     def _graph_sf_along_slope(self) -> None:
-        if not self.search_result or not self.search_result.critical:
-            self._info("Need a computed critical surface first.")
+        """Factor of safety along the slope, from ALL valid surfaces."""
+        res = self.search_result
+        if res is None or not res.valid():
+            self._info(tr("No valid surfaces."))
             return
-        try:
-            from .dialogs.chart_dialogs import SFAlongSlopeDialog
-            SFAlongSlopeDialog(self.search_result.critical, self).exec()
-        except ImportError:
-            self._info(
-                "matplotlib not installed. Run <code>pip install matplotlib</code> "
-                "to enable plots."
-            )
+        from PySide6.QtWidgets import (
+            QCheckBox, QDialog, QDialogButtonBox, QFormLayout, QRadioButton,
+            QSpinBox,
+        )
+        dlg = QDialog(self)
+        dlg.setWindowTitle(tr("Factor of Safety Along Slope"))
+        form = QFormLayout(dlg)
+        chk_l = QCheckBox(tr("Left slope intercept"))
+        chk_r = QCheckBox(tr("Right slope intercept"))
+        chk_l.setChecked(True)
+        chk_r.setChecked(True)
+        form.addRow(tr("Data to plot:"), chk_l)
+        form.addRow("", chk_r)
+        rb_bin = QRadioButton(tr("Minimum value in each bin"))
+        rb_all = QRadioButton(tr("All data"))
+        rb_bin.setChecked(True)
+        sp_bins = QSpinBox()
+        sp_bins.setRange(2, 500)
+        sp_bins.setValue(50)
+        form.addRow(tr("Filter data:"), rb_bin)
+        form.addRow(tr("Number of bins:"), sp_bins)
+        form.addRow("", rb_all)
+        rb_all.toggled.connect(lambda on: sp_bins.setEnabled(not on))
+        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        bb.accepted.connect(dlg.accept)
+        bb.rejected.connect(dlg.reject)
+        form.addRow(bb)
+        if dlg.exec() != QDialog.Accepted:
+            return
+        if not (chk_l.isChecked() or chk_r.isChecked()):
+            self._info(tr("Select at least one slope intercept."))
+            return
+        xs, ys = self.sf_along_slope_series(
+            chk_l.isChecked(), chk_r.isChecked(),
+            sp_bins.value() if rb_bin.isChecked() else None)
+        if not xs:
+            self._info(tr("No valid surfaces."))
+            return
+        self._plot_xy(tr("Factor of Safety Along Slope"),
+                      [("", xs, ys)], tr("X coordinate"),
+                      tr("Factor of safety"),
+                      marker="o" if rb_bin.isChecked() else ".")
 
     def _scatter(self) -> None:
         """FoS vs Radius scatter over the full search population."""

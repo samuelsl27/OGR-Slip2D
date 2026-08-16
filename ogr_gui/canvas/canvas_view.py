@@ -512,6 +512,8 @@ class CanvasView(QGraphicsView):
         surface_mode: str = "minimum",
         fos_filter: tuple | None = None,
         query_ids=None,
+        error_filter: str | None = None,
+        invalid_reason_fn=None,
     ) -> None:
         """Render the search result on the canvas.
 
@@ -569,6 +571,17 @@ class CanvasView(QGraphicsView):
         if search_result.critical:
             critical_id = search_result.critical.surface.to_dict().get("id")
         colour_fn = getattr(self, "_contour_colour_fn", None)
+
+        # "Surfaces With Error Code" — a view of its own, not a filter on
+        # top of the normal one: the reference shows ONLY the invalid
+        # surfaces of the chosen kind, in purple, with the valid ones
+        # hidden, because the question being asked is "what failed here",
+        # not "how does this compare".
+        if error_filter is not None and invalid_reason_fn is not None:
+            self._draw_invalid_surfaces(scene, search_result, error_filter,
+                                        invalid_reason_fn)
+            self.viewport().update()
+            return
 
         # Choose the set of surfaces to render according to the mode.
         if surface_mode == "global_min":
@@ -659,6 +672,30 @@ class CanvasView(QGraphicsView):
         self.viewport().update()
 
     # ------------------------------------------------------------------
+    def _draw_invalid_surfaces(self, scene, search_result, reason,
+                               invalid_reason_fn) -> None:
+        """Draw the invalid surfaces of one error code, in purple."""
+        drawn = 0
+        for ev in search_result.evaluations:
+            if invalid_reason_fn(ev) != reason:
+                continue
+            sd = ev.surface.to_dict()
+            # A surface rejected before it was ever sliced has no
+            # endpoints, so there is nothing to draw for it.
+            if sd.get("type") == "circle" and (sd.get("x_left") is None
+                                               or sd.get("x_right") is None):
+                continue
+            item = SlipSurfaceItem(sd, ev.fos)
+            pen = item.pen()
+            pen.setColor(QColor("#7d3c98"))
+            pen.setWidthF(1.4)
+            item.setPen(pen)
+            item.setToolTip(f"{reason}")
+            scene.addItem(item)
+            self._result_items.append(item)
+            drawn += 1
+        self.last_surface_count = drawn
+
     @staticmethod
     def _minimum_per_centre(search_result) -> list:
         """The lowest-FoS surface at each slip-centre grid point.
