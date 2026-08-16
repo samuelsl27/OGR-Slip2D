@@ -23,9 +23,17 @@ jobs:
         python: ["3.11", "3.12", "3.13"]
 
     steps:
-      - uses: actions/checkout@v4
+      # v7 in both, and the major matters more than it looks: a JavaScript
+      # action declares its own Node runtime in its `action.yml`, and the
+      # workflow cannot override it. checkout@v4 and setup-python@v5
+      # declare `node20`, which left the runners in the autumn of 2026 —
+      # from June 2026 they were already being forced onto Node 24, which
+      # is what the deprecation annotation was saying. v5/v6 were the
+      # first majors on `node24`; v7 is chosen so the jump is not due
+      # again within the year.
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python }}
           cache: pip
@@ -57,8 +65,9 @@ jobs:
     name: Licence consistency
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      # Same majors as the test job, for the same reason; see above.
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Check SPDX headers and packaging metadata

@@ -11,7 +11,7 @@
 Slope stability, groundwater flow and rock mechanics — in Python, readable,
 tested and free.
 
-[![tests](https://img.shields.io/badge/tests-1724%20passing-brightgreen)](#tests)
+[![tests](https://img.shields.io/badge/tests-1729%20passing-brightgreen)](#tests)
 [![licence](https://img.shields.io/badge/licence-AGPL--3.0--or--later-blue)](LICENSE)
 [![python](https://img.shields.io/badge/python-3.11%2B-blue)](#installation)
 [![status](https://img.shields.io/badge/status-active%20development-orange)](#roadmap)
@@ -196,7 +196,7 @@ A pattern that matches nothing exits 2 rather than announcing an empty
 success, and a filtered run prints a `FILTERED RUN` warning around its
 totals — it is not evidence for a release.
 
-About **43,600 lines** of implementation and **23,300 of tests**, **1724 of
+About **43,600 lines** of implementation and **23,400 of tests**, **1729 of
 them passing**, with no known failures. The full suite takes between 5 and
 7½ minutes; the same code, unchanged, has taken 5:55, 6:19, 6:41 and 7:22 on
 the same machine.

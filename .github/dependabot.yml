@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Samuel Sáez López — Universidad Politécnica de Cartagena
+#
+# Why this file exists: the Node 20 deprecation sat in the CI as a yellow
+# annotation for two months and reached nobody, because a warning that
+# only appears on a tab you open when something is red is not a warning.
+# Dependabot turns the next one into an open pull request, which is
+# visible whether or not anything is failing.
+version: 2
+updates:
+  # GitHub Actions only, on purpose. Python dependencies are NOT watched
+  # from here: a NumPy or Shapely bump has to go through the published
+  # validation cases before it is believed, and an automatic PR would
+  # invite merging it on a green tick that proves less than it looks.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: ci
