@@ -25,6 +25,18 @@ from ogr_core.geometry import Polyline, Vertex
 
 
 # ----------------------------------------------------------------------
+def ground_y_at(ground: Polyline, x: float) -> Optional[float]:
+    """Elevation of a ground polyline at ``x``, or None outside its span."""
+    for q1, q2 in zip(ground.vertices[:-1], ground.vertices[1:]):
+        if (q1.x <= x <= q2.x) or (q2.x <= x <= q1.x):
+            if abs(q2.x - q1.x) < 1e-12:
+                return 0.5 * (q1.y + q2.y)
+            t = (x - q1.x) / (q2.x - q1.x)
+            return q1.y + t * (q2.y - q1.y)
+    return None
+
+
+# ----------------------------------------------------------------------
 class SurfaceProtocol(Protocol):
     """Minimum interface every slip geometry must satisfy."""
 
@@ -49,6 +61,10 @@ class SlipCircle:
     x_left: Optional[float] = None    # intersection with ground surface (left)
     x_right: Optional[float] = None   # intersection with ground surface (right)
     id: str = field(default_factory=lambda: str(uuid4()))
+    # v0.1.82 — reverse-curvature tension cracks. Empty unless
+    # ``apply_reverse_curvature`` has moved an endpoint to the vertical
+    # tangent; each entry is (x, y_bottom, y_top) of a vertical crack.
+    tension_cracks: list = field(default_factory=list)
 
     # ------------------------------------------------------------------
     def base_y_at(self, x: float) -> Optional[float]:
@@ -129,13 +145,7 @@ class SlipCircle:
         # exit x≈74.8); taking the extreme pair grossly overestimates
         # the sliding mass and the FoS.
         def _ground_y(xq: float):
-            for q1, q2 in zip(ground.vertices[:-1], ground.vertices[1:]):
-                if (q1.x <= xq <= q2.x) or (q2.x <= xq <= q1.x):
-                    if abs(q2.x - q1.x) < 1e-12:
-                        return 0.5 * (q1.y + q2.y)
-                    t = (xq - q1.x) / (q2.x - q1.x)
-                    return q1.y + t * (q2.y - q1.y)
-            return None
+            return ground_y_at(ground, xq)
 
         chosen = None
         for k in range(len(roots_sorted) - 1):
@@ -157,6 +167,87 @@ class SlipCircle:
 
         self.x_left, self.x_right = x_l, x_r
         return self.x_left, self.x_right
+
+    # ------------------------------------------------------------------
+    def apply_reverse_curvature(
+        self, ground: Polyline, mode: str = "tension_crack"
+    ) -> bool:
+        """Resolve a *reverse curvature* circle. Returns False to discard.
+
+        A circle whose ground entry (or exit) point lies **above its own
+        centre** has part of its arc above the centre elevation, so the
+        arc reverses direction: travelling along it from that point the
+        x-coordinate first DECREASES to ``x_c − R`` and then increases
+        again. Such a surface overhangs, and cannot exist.
+
+        The reference program (Grid Search documentation, "Reverse
+        Curvature Surfaces") offers exactly two treatments, and this
+        method implements both:
+
+        ``"tension_crack"``
+            A **vertical tension crack** is created where the surface
+            begins to reverse, i.e. where the surface elevation equals
+            the centre elevation. On a circle that is the point of
+            vertical tangency, ``x = x_c ∓ R`` — which is why the arc
+            appears to run all the way to the boundary at 90°. The
+            endpoint is moved there and the crack recorded.
+
+        ``"discard"``
+            The surface is rejected (returns False).
+
+        The crack created here is **always dry**: it is a geometric
+        consequence of the search, not a modelled feature, so no
+        hydrostatic thrust is applied to it. A crack the user wants to
+        fill with water is a Tension Crack *boundary*, handled by
+        :func:`ogr_slip2d.slicer._apply_tension_crack`.
+
+        Both ends are tested independently, so the treatment does not
+        depend on the declared failure direction: whichever end of the
+        chord daylights above ``centre_y`` is the one that reverses.
+        """
+        self.tension_cracks = []
+        if self.x_left is None or self.x_right is None:
+            return True
+        # Necessary condition from the reference: the centre must lie
+        # below the highest ground point, otherwise no part of the arc
+        # can be above it. Cheap, and it skips the common case.
+        try:
+            if self.centre_y >= max(v.y for v in ground.vertices):
+                return True
+        except ValueError:
+            return True
+
+        reversed_any = False
+        for end in ("left", "right"):
+            x_end = self.x_left if end == "left" else self.x_right
+            gy = ground_y_at(ground, x_end)
+            if gy is None or gy <= self.centre_y + 1e-9:
+                continue
+            reversed_any = True
+            if mode != "tension_crack":
+                return False
+            x_crack = (self.centre_x - self.radius if end == "left"
+                       else self.centre_x + self.radius)
+            top = ground_y_at(ground, x_crack)
+            if top is None or top <= self.centre_y + 1e-9:
+                # The vertical-tangency point is outside the ground
+                # profile (or below it): there is nowhere to put the
+                # crack, so the surface is not usable either way.
+                return False
+            if end == "left":
+                self.x_left = x_crack
+            else:
+                self.x_right = x_crack
+            self.tension_cracks.append((x_crack, self.centre_y, top))
+
+        if reversed_any and self.x_right - self.x_left < 1e-6:
+            return False
+        return True
+
+    @property
+    def reverse_curvature(self) -> bool:
+        """True when a reverse-curvature tension crack was created."""
+        return bool(self.tension_cracks)
 
     def _legacy_intersect_tail(self, ground, x_l, x_r):
         # (retained for reference; no longer used)
@@ -189,6 +280,10 @@ class SlipCircle:
             "radius": self.radius,
             "x_left": self.x_left,
             "x_right": self.x_right,
+            # v0.1.82 — the canvas needs the crack to draw the vertical
+            # segment, and Export Raw Data needs it to be honest about
+            # where the surface really starts.
+            "tension_cracks": [list(t) for t in self.tension_cracks],
         }
 
     @classmethod
@@ -200,6 +295,7 @@ class SlipCircle:
             x_left=data.get("x_left"),
             x_right=data.get("x_right"),
         )
+        c.tension_cracks = [tuple(t) for t in data.get("tension_cracks", [])]
         if "id" in data:
             c.id = data["id"]
         return c

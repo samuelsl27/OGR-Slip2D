@@ -336,12 +336,18 @@ class TestTheTensileCheckReachesTheSearch:
 class TestTheMAlphaCheckIsReachableButOff:
     """The anomaly of rule 6, pinned as a test instead of as a comment.
 
-    The project has known since v0.1.32 that this check rejects the
-    reference-validated critical circle, and the response had been to
+    The project believed from v0.1.32 to v0.1.81 that this check rejects
+    the reference-validated critical circle, and the response had been to
     leave it out of the interface entirely. That is the wrong half of the
-    right worry: it must not be ON, but hiding a capability the engine
-    has is rule 3 in reverse. v0.1.74 offers it, off by default, with the
-    measurement below as the reason.
+    right worry: hiding a capability the engine has is rule 3 in reverse.
+    v0.1.74 offered it, off by default.
+
+    v0.1.82 found the cause, and it was not the criterion. ``m_alpha`` is
+    not symmetric in α, so it only means anything read with the same sense
+    of sliding the solver used; the check dropped that factor, and this
+    model slides towards decreasing x. The circle passes comfortably. The
+    default stays OFF because that is how the reference ships it — not
+    because it rejects anything.
     """
 
     def _reference_result(self):
@@ -358,21 +364,44 @@ class TestTheMAlphaCheckIsReachableButOff:
         sl = slice_surface(p, circle, num_slices=25)
         return BishopSimplified().compute_fos(p, circle, sl)
 
-    def test_it_rejects_the_reference_validated_circle(self):
-        """The measurement, not the memory of it: the minimum m-alpha of
-        the validated critical circle is NEGATIVE, and a fifth of its
-        slices are below the 0.2 limit."""
+    def test_it_accepts_the_reference_validated_circle(self):
+        """The measurement, not the memory of it — and it is the opposite
+        of what this test asserted until v0.1.82.
+
+        Read with the ``slide_sign`` the solver uses, the minimum m-alpha
+        of the validated critical circle is +0.928, and no slice comes
+        near the 0.2 limit. The old reading (−0.010, five slices "below
+        the limit") was the mirror image, not a property of the circle.
+        """
         from ogr_slip2d.checks import base_m_alphas, check_surface
         res = self._reference_result()
         values = base_m_alphas(res)
-        assert min(values) < 0.0, min(values)
-        assert sum(1 for v in values if v < 0.2) >= 5
+        assert min(values) > 0.9, min(values)
+        assert not [v for v in values if v < 0.2]
         ok, why = check_surface(res, m_alpha=True)
-        assert ok is False and "m_alpha" in why
+        assert ok is True and why is None
+
+    def test_turning_it_on_is_still_distinguishable_from_leaving_it_off(
+            self):
+        """The check has to keep saying no to something, or enabling it
+        would be a control that does nothing (rule 7).
+
+        The surface that still fails is the one the reference describes:
+        a base that rises almost vertically in the passive zone. It is
+        pinned in detail in ``test_checks_v132.py``; what is asserted
+        here is only that the two answers differ.
+        """
+        from ogr_slip2d.checks import m_alpha_check
+        assert m_alpha_check.__doc__            # the criterion exists
+        from ogr_slip2d.search import GridSearch
+        from ogr_slip2d.methods import Spencer
+        assert GridSearch(method=Spencer()).check_m_alpha is False
+        assert GridSearch(method=Spencer(),
+                          check_m_alpha=True).check_m_alpha is True
 
     def test_and_passes_it_with_the_check_off(self):
-        """Which is why off is the default, and why the published factor
-        of safety is still reproducible."""
+        """Off is the default because that is what the reference ships;
+        the published factor of safety is reproducible either way."""
         from ogr_slip2d.checks import check_surface
         ok, why = check_surface(self._reference_result(), m_alpha=False)
         assert ok is True and why is None

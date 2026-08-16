@@ -47,6 +47,7 @@ from .graphics_items import (
     DistributedLoadItem,
     LineLoadItem,
     MaterialRegionItem,
+    SlipRadiiItem,
     SlipSurfaceItem,
     SupportItem,
     VertexHandleItem,
@@ -509,6 +510,8 @@ class CanvasView(QGraphicsView):
         hover_id: str | None = None,
         hover_surface_dict: dict | None = None,
         surface_mode: str = "minimum",
+        fos_filter: tuple | None = None,
+        query_ids=None,
     ) -> None:
         """Render the search result on the canvas.
 
@@ -523,13 +526,32 @@ class CanvasView(QGraphicsView):
         v0.1.20 — ``surface_mode`` selects how many surfaces are drawn,
         mirroring the Interpret "Data" menu:
             - ``"global_min"`` → heatmap + the critical surface only
-            - ``"minimum"``    → heatmap + the top-N lowest-FoS surfaces
-                                 (default; one representative per region)
-            - ``"all"``        → heatmap + every valid surface (capped for
-                                 responsiveness, drawn faint and thin)
+            - ``"minimum"``    → heatmap + the lowest-FoS surface AT EACH
+                                 slip-centre grid point
+            - ``"all"``        → heatmap + every valid surface
 
-        The default top-N rendering is preserved so the heatmap +
-        secondary surfaces stay visible.
+        v0.1.82 — three corrections, all of them to what the modes mean:
+
+        * *Minimum Surfaces* used to be ``top_n(30)``, the thirty lowest
+          factors of safety in the whole result. Those thirty come from a
+          handful of neighbouring centres, so the picture said nothing
+          about the rest of the grid. The documented meaning is one
+          surface per grid centre — the minimum AT that centre — which is
+          also what makes the surfaces and the contoured grid two views of
+          the same numbers.
+        * *All Surfaces* drew the lowest factors of safety FIRST, so every
+          later, higher-FoS surface painted over them: the one thing the
+          reader needs to see ended up underneath. Drawing runs from the
+          highest factor of safety down, so the lowest are drawn last and
+          stay visible.
+        * Surfaces are coloured by their factor of safety through
+          ``colour_fn`` instead of a single green, so the cloud carries
+          information rather than just extent.
+
+        ``fos_filter`` is the Filter Surfaces state: ``(lo, hi, limit)``,
+        applied to *minimum* and *all*. The critical surface is never
+        filtered away — losing the global minimum because a filter is
+        active is how a reader ends up reading the wrong number.
         """
         scene = self.scene()
         for item in self._result_items:
@@ -546,19 +568,34 @@ class CanvasView(QGraphicsView):
         critical_id = None
         if search_result.critical:
             critical_id = search_result.critical.surface.to_dict().get("id")
+        colour_fn = getattr(self, "_contour_colour_fn", None)
 
         # Choose the set of surfaces to render according to the mode.
         if surface_mode == "global_min":
             surfaces = [search_result.critical] if search_result.critical else []
         elif surface_mode == "all":
-            # Cap to keep the scene responsive; draw lowest-FoS first so
-            # the most relevant surfaces are always present.
-            ALL_CAP = 600
-            surfaces = sorted(
-                search_result.valid(), key=lambda r: r.fos
-            )[:ALL_CAP]
+            surfaces = list(search_result.valid())
         else:  # "minimum" (default)
-            surfaces = search_result.top_n(30)
+            surfaces = self._minimum_per_centre(search_result)
+
+        if surface_mode in ("minimum", "all"):
+            surfaces = self._apply_fos_filter(surfaces, fos_filter,
+                                              critical_id)
+
+        # A Query is something the user deliberately singled out, so it
+        # survives the display mode and the filter alike. Without this,
+        # switching to Global Minimum silently erased it.
+        query_ids = set(query_ids or ())
+        if query_ids:
+            shown = {r.surface.to_dict().get("id") for r in surfaces}
+            surfaces = surfaces + [
+                r for r in search_result.valid()
+                if r.surface.to_dict().get("id") in query_ids - shown]
+
+        # Highest factor of safety first, so the lowest are drawn LAST and
+        # remain visible under everything else.
+        surfaces = sorted(surfaces, key=lambda r: -r.fos)
+        self.last_surface_count = len(surfaces)
 
         faint = (surface_mode == "all")
         for r in surfaces:
@@ -566,6 +603,7 @@ class CanvasView(QGraphicsView):
             sid = sd.get("id")
             is_crit = (sid == critical_id)
             is_sel = (selected_id is not None and sid == selected_id)
+            is_qry = (sid in query_ids)
             is_hov = (
                 hover_id is not None
                 and sid == hover_id
@@ -577,17 +615,35 @@ class CanvasView(QGraphicsView):
                 is_critical=is_crit,
                 is_selected=is_sel,
                 is_hover=is_hov,
+                is_query=is_qry,
+                colour_fn=colour_fn,
             )
-            # In "all" mode keep the non-critical surfaces faint and thin
-            # so the cloud reads as context behind the critical surface.
-            if faint and not (is_crit or is_sel):
-                item.setOpacity(0.25)
+            # In "all" mode the cloud is context, so it is drawn thin and
+            # translucent — but it keeps its FoS colour, which is the
+            # information the mode exists to show.
+            if faint and not (is_crit or is_sel or is_qry):
+                item.setOpacity(0.45)
                 item.setZValue(1.0)
             scene.addItem(item)
             self._result_items.append(item)
 
+        # Radial lines: the reference draws them for the Global Minimum
+        # and for every Query. They locate the centre of rotation and give
+        # a Query something clickable when the arc is buried.
+        radii_for = list(query_ids)
+        if search_result.critical is not None and critical_id is not None:
+            radii_for.append(critical_id)
+        for r in surfaces:
+            sd = r.surface.to_dict()
+            if sd.get("id") not in radii_for:
+                continue
+            colour = "#e63946" if sd.get("id") == critical_id else "#000000"
+            radii = SlipRadiiItem(sd, colour=colour)
+            scene.addItem(radii)
+            self._result_items.append(radii)
+
         # Hover preview for an arbitrary surface (e.g. a grid centre
-        # whose circle is NOT in top_n)
+        # whose circle is NOT among those drawn)
         if hover_surface_dict is not None:
             fos_h = hover_surface_dict.get("_hover_fos", float("inf"))
             preview = SlipSurfaceItem(
@@ -596,8 +652,59 @@ class CanvasView(QGraphicsView):
             )
             scene.addItem(preview)
             self._result_items.append(preview)
+            radii = SlipRadiiItem(hover_surface_dict, colour="#505050")
+            scene.addItem(radii)
+            self._result_items.append(radii)
 
         self.viewport().update()
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _minimum_per_centre(search_result) -> list:
+        """The lowest-FoS surface at each slip-centre grid point.
+
+        Non-circular results have no centres grid, so they fall back to
+        every valid surface — which is what the reference does too: the
+        Minimum Surfaces option is documented as applying to a circular
+        Grid Search only.
+        """
+        best: dict = {}
+        loose: list = []
+        for r in search_result.valid():
+            sd = r.surface.to_dict()
+            cx = sd.get("centre_x")
+            cy = sd.get("centre_y")
+            if cx is None or cy is None:
+                loose.append(r)
+                continue
+            key = (round(cx, 6), round(cy, 6))
+            if key not in best or r.fos < best[key].fos:
+                best[key] = r
+        return list(best.values()) + loose
+
+    @staticmethod
+    def _apply_fos_filter(surfaces: list, fos_filter, critical_id) -> list:
+        """Filter by factor-of-safety range and/or by lowest-N.
+
+        The critical surface always survives: a filter is a way of looking
+        at the result, not a way of hiding its answer.
+        """
+        if not fos_filter:
+            return surfaces
+        lo, hi, limit = fos_filter
+        kept = [r for r in surfaces
+                if (lo is None or r.fos >= lo)
+                and (hi is None or r.fos <= hi)]
+        if limit:
+            kept = sorted(kept, key=lambda r: r.fos)[:int(limit)]
+        if critical_id is not None and not any(
+                r.surface.to_dict().get("id") == critical_id for r in kept):
+            crit = next((r for r in surfaces
+                         if r.surface.to_dict().get("id") == critical_id),
+                        None)
+            if crit is not None:
+                kept.append(crit)
+        return kept
 
     # ==================================================================
     # v0.1.8 — FoS heatmap on the search grid

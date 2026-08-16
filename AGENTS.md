@@ -145,7 +145,12 @@ evidencia** antes de cambiarlo. Dos de los hallazgos más instructivos del
 proyecto salieron de esa disciplina:
 
 - una comprobación de m-alpha que habría **rechazado el círculo crítico
-  validado contra la referencia** (por eso sigue desactivada por defecto);
+  validado contra la referencia**. Tardó cincuenta versiones en tener
+  diagnóstico (v0.1.82): `m_alpha` no es simétrica en α, así que solo
+  significa algo evaluada con el mismo sentido de deslizamiento que usó el
+  solver, y la comprobación omitía ese factor. Con el signo correcto el
+  círculo pasa (min m_alpha +0,93 en vez de −0,01). Sigue desactivada por
+  defecto porque así la trae la referencia, no porque rechace nada;
 - un arranque de Simulated Annealing que dependía de la suerte: 200
   rechazos consecutivos con semillas desafortunadas.
 

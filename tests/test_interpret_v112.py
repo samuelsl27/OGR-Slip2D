@@ -192,11 +192,52 @@ class TestInterpretSurfaceMode:
         assert w._surface_mode == "global_min"
         assert self._count_surfaces(w) == 1
 
-    def test_minimum_mode_draws_top_n(self):
+    def test_minimum_mode_draws_one_per_grid_centre(self):
+        """v0.1.82 — this used to assert ``<= 30``, which pinned the old
+        meaning: the thirty lowest factors of safety in the whole result.
+        Those thirty all come from a handful of neighbouring centres, so
+        the picture said nothing about the rest of the grid.
+
+        *Minimum Surfaces* means the lowest-FoS surface AT EACH slip
+        centre. The invariant is therefore not a count but an identity:
+        no two drawn surfaces may share a centre, and each drawn surface
+        must be the minimum at its own.
+        """
         w = self._setup()
         w._set_surface_mode("minimum")
         assert w._surface_mode == "minimum"
-        assert 1 < self._count_surfaces(w) <= 30
+        from ogr_gui.canvas.canvas_view import SlipSurfaceItem
+        drawn = [it for it in w.canvas._result_items
+                 if isinstance(it, SlipSurfaceItem)]
+        assert len(drawn) > 1
+        centres = [(round(it.surface_dict["centre_x"], 6),
+                    round(it.surface_dict["centre_y"], 6)) for it in drawn]
+        assert len(set(centres)) == len(centres), "a centre drawn twice"
+
+        best: dict = {}
+        for r in w.search_result.valid():
+            sd = r.surface.to_dict()
+            k = (round(sd["centre_x"], 6), round(sd["centre_y"], 6))
+            if k not in best or r.fos < best[k]:
+                best[k] = r.fos
+        assert set(centres) == set(best), "not one surface per centre"
+        for it in drawn:
+            k = (round(it.surface_dict["centre_x"], 6),
+                 round(it.surface_dict["centre_y"], 6))
+            assert abs(it.fos - best[k]) < 1e-12, (k, it.fos, best[k])
+
+    def test_all_surfaces_are_drawn_lowest_last(self):
+        """The reference draws from the HIGHEST factor of safety down, so
+        the lowest — the ones the reader is looking for — are painted last
+        and stay visible. Drawing order was the other way round, which put
+        the answer underneath the noise."""
+        w = self._setup()
+        w._set_surface_mode("all")
+        from ogr_gui.canvas.canvas_view import SlipSurfaceItem
+        order = [it.fos for it in w.canvas._result_items
+                 if isinstance(it, SlipSurfaceItem)]
+        assert len(order) > 2
+        assert order == sorted(order, reverse=True), order[:5]
 
     def test_all_mode_draws_more_than_minimum(self):
         w = self._setup()

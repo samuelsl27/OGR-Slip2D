@@ -500,9 +500,11 @@ class SlipSurfaceItem(QGraphicsPathItem):
 
     Visual states:
         - Critical (lowest FoS in the result set): bold red
-        - Selected (clicked in the surface list): bold orange
+        - Selected (clicked in the surface list): bold purple
+        - Queried (v0.1.82): black, as in the reference
         - Hover-preview: dashed grey (lower z-order, transient)
-        - Default: faint green
+        - Default: the legend colour of its factor of safety, or faint
+          green when no colour function is supplied
     """
 
     def __init__(
@@ -513,6 +515,8 @@ class SlipSurfaceItem(QGraphicsPathItem):
         is_selected: bool = False,
         is_hover: bool = False,
         parent: QGraphicsItem | None = None,
+        colour_fn=None,
+        is_query: bool = False,
     ) -> None:
         super().__init__(parent)
         self.surface_dict = surface_dict
@@ -520,6 +524,7 @@ class SlipSurfaceItem(QGraphicsPathItem):
         self.is_critical = is_critical
         self.is_selected = is_selected
         self.is_hover = is_hover
+        self.is_query = is_query
 
         path = QPainterPath()
         stype = surface_dict.get("type", "circle")
@@ -529,7 +534,17 @@ class SlipSurfaceItem(QGraphicsPathItem):
             r = surface_dict["radius"]
             xl = surface_dict.get("x_left")
             xr = surface_dict.get("x_right")
+            # v0.1.82 — reverse-curvature tension cracks. The arc is cut
+            # at the point of vertical tangency and a vertical segment
+            # rises from there to the ground surface; drawing only the arc
+            # left the surface visibly "stopping halfway" up the slope.
+            cracks = {round(float(c[0]), 9): (float(c[1]), float(c[2]))
+                      for c in surface_dict.get("tension_cracks", [])}
             if xl is not None and xr is not None:
+                left_crack = cracks.get(round(float(xl), 9))
+                if left_crack is not None:
+                    path.moveTo(xl, left_crack[1])
+                    path.lineTo(xl, left_crack[0])
                 n = 60
                 for i in range(n + 1):
                     x = xl + (xr - xl) * i / n
@@ -538,10 +553,13 @@ class SlipSurfaceItem(QGraphicsPathItem):
                     if disc < 0:
                         continue
                     y = yc - math.sqrt(disc)
-                    if i == 0:
+                    if i == 0 and left_crack is None:
                         path.moveTo(x, y)
                     else:
                         path.lineTo(x, y)
+                right_crack = cracks.get(round(float(xr), 9))
+                if right_crack is not None:
+                    path.lineTo(xr, right_crack[1])
         elif stype == "polyline":
             # v0.1.12 — non-circular surface (SlipSurface).
             # to_dict() returns {"type": "polyline", "polyline": {...}}
@@ -566,21 +584,40 @@ class SlipSurfaceItem(QGraphicsPathItem):
                         path.lineTo(x, y)
         self.setPath(path)
 
-        # Pen selection by visual state
+        # Pen selection by visual state.
+        #
+        # v0.1.82 — an ordinary surface is now drawn in the colour its
+        # FACTOR OF SAFETY has in the legend, not a fixed green. Without
+        # that, a screen full of Minimum Surfaces said only "here are some
+        # surfaces"; with it, the reader can see which parts of the slope
+        # the low factors of safety come from — which is the whole reason
+        # the mode exists. Critical, queried and selected keep their own
+        # identifying colours: those are answers to "which one is it?",
+        # a different question from "how bad is it?".
         if is_critical:
             pen = QPen(QColor("#e63946"), 2.5)
         elif is_selected:
             pen = QPen(QColor("#9d4edd"), 2.5)  # purple per Samuel's request
+        elif is_query:
+            pen = QPen(QColor("#000000"), 2.0)
         elif is_hover:
             pen = QPen(QColor(80, 80, 80, 200), 1.6)
             pen.setStyle(Qt.PenStyle.DashLine)
+        elif colour_fn is not None:
+            try:
+                colour = QColor(colour_fn(fos))
+            except Exception:  # noqa: BLE001
+                colour = QColor(0, 150, 0, 120)
+            pen = QPen(colour, 1.2)
         else:
             pen = QPen(QColor(0, 150, 0, 120), 1.2)
         pen.setCosmetic(True)
         self.setPen(pen)
-        # Z-order: hover < default < critical < selected (selected on top)
+        # Z-order: hover < default < critical < query < selected (top)
         if is_selected:
             self.setZValue(9.5)
+        elif is_query:
+            self.setZValue(9.2)
         elif is_critical:
             self.setZValue(9.0)
         elif is_hover:
@@ -588,3 +625,39 @@ class SlipSurfaceItem(QGraphicsPathItem):
         else:
             self.setZValue(8.5)
         self.setToolTip(f"Slip surface — FoS = {fos:.3f}")
+
+
+# ======================================================================
+class SlipRadiiItem(QGraphicsPathItem):
+    """The two radial lines joining a slip centre to the surface ends.
+
+    v0.1.82 — the reference draws these for the Global Minimum and for
+    every Query, and they are not decoration: they are the handle. They
+    show where the centre of rotation is relative to the mass, and they
+    are the part of a Query the user can click on when the arc itself is
+    buried under a hundred other surfaces.
+    """
+
+    def __init__(self, surface_dict: dict, colour: str = "#e63946",
+                 width: float = 1.0, parent: QGraphicsItem | None = None):
+        super().__init__(parent)
+        self.surface_dict = surface_dict
+        path = QPainterPath()
+        if surface_dict.get("type", "circle") == "circle":
+            xc = surface_dict["centre_x"]
+            yc = surface_dict["centre_y"]
+            r = surface_dict["radius"]
+            for key in ("x_left", "x_right"):
+                x = surface_dict.get(key)
+                if x is None:
+                    continue
+                disc = r * r - (x - xc) ** 2
+                if disc < 0:
+                    continue
+                path.moveTo(xc, yc)
+                path.lineTo(x, yc - math.sqrt(disc))
+        self.setPath(path)
+        pen = QPen(QColor(colour), width)
+        pen.setCosmetic(True)
+        self.setPen(pen)
+        self.setZValue(8.8)

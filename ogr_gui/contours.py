@@ -45,6 +45,23 @@ class ContourMode(Enum):
 # used by geotechnical software (red = unsafe), the rest are offered
 # because a report may need a colour-blind-safe or greyscale figure.
 PALETTES: dict[str, tuple[str, ...]] = {
+    # v0.1.82 — the reference program's default factor-of-safety legend,
+    # sampled pixel by pixel from a screenshot of the Ej_1 run supplied
+    # with the benchmark (`referencias/Ejemplos/Ej_1/`, Interpret view).
+    # These are MEASURED values, not a formula guessed from the look of
+    # it: 24 bands over a fixed 0–6 range, i.e. one band per 0.25, with
+    # the last band carrying everything at or above 6 ("6.000+").
+    #
+    # They happen to trace an HSV hue ramp from 0° (red) to 230° in 10°
+    # steps, with the final band snapped to a pure 240° blue — but the
+    # ramp is a description of the measurement, not its source, so the
+    # measurement is what is written down.
+    "Slide rainbow": (
+        "#ff0000", "#ff2a00", "#ff5500", "#ff7f00", "#ffaa00", "#ffd400",
+        "#feff00", "#d4ff00", "#a9ff00", "#7fff00", "#55ff00", "#2aff00",
+        "#00ff00", "#00ff2a", "#00ff54", "#00ff7f", "#00ffa9", "#00ffd4",
+        "#00ffff", "#00d4ff", "#00a9ff", "#007fff", "#0054ff", "#0000ff",
+    ),
     "Stability": ("#dc1e1e", "#f06428", "#f5a03c", "#f5d750",
                   "#c8dc64", "#8cc864", "#64a064", "#6e6e78"),
     "Hot to cold": ("#b2182b", "#ef8a62", "#fddbc7", "#f7f7f7",
@@ -61,7 +78,14 @@ PALETTES: dict[str, tuple[str, ...]] = {
                    "#DDCC77", "#CC6677", "#882255"),
 }
 
-DEFAULT_PALETTE = "Stability"
+DEFAULT_PALETTE = "Slide rainbow"
+
+# Palettes whose stops ARE the bands, one colour each, rather than a
+# continuous ramp to be sampled. When the interval count matches the stop
+# count the colour is taken straight from the list, which is the only way
+# to reproduce a reference legend exactly: sampling a 24-stop ramp at band
+# centres lands halfway between every pair of measured colours.
+DISCRETE_PALETTES = frozenset({"Slide rainbow"})
 
 
 def _hex_to_rgb(value: str):
@@ -95,13 +119,13 @@ class ContourSettings:
     mode: ContourMode = ContourMode.FILLED
     palette: str = DEFAULT_PALETTE
     vmin: float = 0.0
-    vmax: float = 3.0
-    intervals: int = 8
+    vmax: float = 6.0
+    intervals: int = 24
     reverse: bool = False
-    auto_range: bool = True
+    auto_range: bool = False
     field: str = "fos"           # which scalar is being contoured
     # Number formatting, shared with the legend
-    decimals: int = 2
+    decimals: int = 3
     scientific: bool = False
     opacity: float = 1.0
 
@@ -139,8 +163,28 @@ class ContourSettings:
         if self.mode == ContourMode.SMOOTH:
             return sample_palette(self.palette, self.normalised(value))
         n = max(1, self.intervals)
+        stops = PALETTES.get(self.palette)
+        if (self.palette in DISCRETE_PALETTES and stops
+                and len(stops) == n):
+            # One measured colour per band: index it, do not interpolate.
+            return stops[self.level_index(value)]
         centre = (self.level_index(value) + 0.5) / n
         return sample_palette(self.palette, centre)
+
+    # ------------------------------------------------------------------
+    def band_label(self, i: int) -> str:
+        """Label of band ``i``: its lower bound, or ``"6.000+"`` for the
+        last one.
+
+        The mapping saturates (``normalised`` clamps), so everything above
+        ``vmax`` shares the top band's colour. Labelling that band with a
+        plain number would claim a precision the plot does not have; the
+        reference writes it with a trailing ``+`` and so do we.
+        """
+        n = max(1, self.intervals)
+        v = self.vmin + self.span * min(i, n) / n
+        text = self.format_value(v)
+        return f"{text}+" if i >= n else text
 
     def levels(self) -> list:
         """Boundary values of the bands, ``intervals + 1`` of them."""
@@ -185,18 +229,36 @@ class ContourSettings:
                 "decimals": self.decimals, "scientific": self.scientific,
                 "opacity": self.opacity}
 
+    # ------------------------------------------------------------------
+    @classmethod
+    def for_field(cls, field: str) -> "ContourSettings":
+        """Sensible starting point for a given scalar.
+
+        The factor of safety gets the reference program's default legend:
+        a FIXED 0–6 range in 24 bands. Fixed is the point — auto-ranging a
+        factor of safety puts one deep-seated surface at 31 in the top of
+        the scale and squashes everything a reader cares about, 0.8 to
+        1.5, into the first band. The hydraulic fields keep the automatic
+        range, because a total head in metres does not live in 0–6 and no
+        fixed range would suit two models.
+        """
+        if field == "fos":
+            return cls(field="fos")          # the dataclass defaults
+        return cls(field=field, palette="Hot to cold", intervals=8,
+                   auto_range=True, decimals=2)
+
     @classmethod
     def from_dict(cls, d: dict) -> "ContourSettings":
         return cls(
             mode=ContourMode(d.get("mode", "filled")),
             palette=str(d.get("palette", DEFAULT_PALETTE)),
             vmin=float(d.get("vmin", 0.0)),
-            vmax=float(d.get("vmax", 3.0)),
-            intervals=int(d.get("intervals", 8)),
+            vmax=float(d.get("vmax", 6.0)),
+            intervals=int(d.get("intervals", 24)),
             reverse=bool(d.get("reverse", False)),
-            auto_range=bool(d.get("auto_range", True)),
+            auto_range=bool(d.get("auto_range", False)),
             field=str(d.get("field", "fos")),
-            decimals=int(d.get("decimals", 2)),
+            decimals=int(d.get("decimals", 3)),
             scientific=bool(d.get("scientific", False)),
             opacity=float(d.get("opacity", 1.0)),
         )

@@ -624,6 +624,19 @@ def apply_unsaturated_policy(u: float, material) -> tuple[float, float]:
     return -aev, max(0.0, extra_c)
 
 
+def _reverse_curvature_mode(project: Project) -> str:
+    """Which treatment the project asks for on reverse-curvature circles.
+
+    Defensive on purpose: a project built in a test without full settings
+    gets the documented default, which is to create the tension crack.
+    """
+    try:
+        on = project.settings.search.create_tension_crack_reverse_curvature
+    except AttributeError:
+        return "tension_crack"
+    return "tension_crack" if on else "discard"
+
+
 def slice_surface(
     project: Project,
     surface: SurfaceProtocol,
@@ -643,6 +656,19 @@ def slice_surface(
         ground = _ground_surface_from_external(external)
         if surface.x_left is None or surface.x_right is None:
             if surface.intersect_with_ground(ground) is None:
+                return None
+            # v0.1.82 — reverse curvature. Until now
+            # ``create_tension_crack_reverse_curvature`` was stored in the
+            # project, edited in the dialog and read by nobody, so a circle
+            # whose entry point sits above its own centre was sliced from
+            # the true ground crossing while its base was drawn on the
+            # LOWER arc, metres below the ground. On the reference model
+            # 522 of 4851 grid circles (16 %) were affected, and one of
+            # them came out 31 % high. Applied only on a fresh
+            # intersection so a cached (x_left, x_right) is never
+            # re-cracked.
+            if not surface.apply_reverse_curvature(
+                    ground, mode=_reverse_curvature_mode(project)):
                 return None
         x_l, x_r = surface.x_left, surface.x_right
     else:

@@ -14,9 +14,18 @@ Implements and pins down the reference's two documented checks:
 * **m-alpha Check** (Whitman & Bailey, 1967) — surfaces whose final
   iteration has m_alpha < 0.2 on any slice.
 
-Both are OFF by default, and the tests below show WHY that default is
-correct rather than merely conventional: the m-alpha check flags the
-reference-validated critical circle itself.
+Both are OFF by default, matching the reference, where tensile normal
+stresses are permitted unless the user opts in.
+
+v0.1.82 — the invariant these tests protect changed, because the checks
+were being evaluated in the wrong sign convention. ``m_alpha`` is not
+symmetric in ``alpha``, so it only means anything when read with the same
+``slide_sign`` the solver used, and both checks dropped that factor. The
+consequence was a check that got both answers backwards: it flagged the
+reference-validated critical circle (a false positive, and the reason the
+default was believed to be "correct rather than merely conventional")
+while missing the base tension on a genuinely degenerate wedge. The tests
+below now pin the corrected diagnosis in both directions.
 """
 from __future__ import annotations
 
@@ -96,17 +105,51 @@ class TestMAlphaCheck:
         assert ok
         assert min(base_m_alphas(r)) >= 0.2
 
-    def test_reference_circle_is_also_flagged(self):
-        """The decisive result: the reference-VALIDATED critical circle
-        (FoS 0.883, matching the reference to 0.02 %) itself has
-        m_alpha < 0.2 on several slices. The check therefore cannot be a
-        validity criterion — it is a diagnostic, which is exactly why the
-        reference ships it disabled."""
+    def test_reference_circle_passes_the_check(self):
+        """v0.1.82 — the decisive result, and it is the opposite of what
+        this test used to assert.
+
+        The reference-VALIDATED critical circle (FoS 0.883, matching the
+        reference to 0.02 %) was being "flagged" with min m_alpha =
+        −0.0100 on 5 slices. That was not a property of the circle: it
+        slides towards decreasing x, so ``slide_sign = −1``, and reading
+        ``cos α + sin α·tan φ/F`` without that factor evaluates the wrong
+        branch. With the sign the solver itself uses, min m_alpha =
+        +0.9282 and no slice is anywhere near the 0.2 limit.
+
+        The number is the evidence, so it is asserted, not just the
+        boolean: a future regression that half-restores the old sign
+        would still pass a bare ``assert ok``.
+        """
         r = _eval_ref_circle()
         assert abs(r.fos - 0.882889) / 0.882889 < 0.01
         ok, bad = m_alpha_check(r)
-        assert not ok
-        assert bad
+        assert ok, bad
+        assert not bad
+        assert min(base_m_alphas(r)) > 0.9, min(base_m_alphas(r))
+
+    def test_sign_convention_matches_the_solver(self):
+        """The identity that makes the check meaningful at all.
+
+        ``base_m_alphas`` must reproduce, slice by slice, the m_alpha the
+        method used inside its own iteration. Recomputing it here from
+        Bishop's published expression is the only way to keep the two from
+        drifting apart again.
+        """
+        import math as _m
+
+        from ogr_slip2d.methods.bishop import BishopSimplified as _B
+        r = _eval_ref_circle()
+        sgn = 1.0 if sum(s.weight * _m.sin(s.base_angle)
+                         for s in r.slices) >= 0 else -1.0
+        assert sgn == -1.0            # this model slides towards -x
+        for s, got in zip(r.slices, base_m_alphas(r)):
+            a = s.base_angle
+            l = max(s.base_length, 1e-12)
+            sig = max(0.0, s.weight * _m.cos(a) - s.pore_pressure * l) / l
+            _c, tan_phi = _B._local_c_phi(s, s.material, sig)
+            want = _m.cos(a) + sgn * _m.sin(a) * tan_phi / r.fos
+            assert abs(got - want) < 1e-12, (got, want)
 
 
 class TestTensileStressCheck:
@@ -119,13 +162,26 @@ class TestTensileStressCheck:
         assert isinstance(ok_all, bool)
         assert len(base_effective_stresses(r)) == n
 
-    def test_no_tension_on_these_surfaces(self):
-        """Neither surface is rejected by the tensile check: the
-        degenerate one fails on m_alpha, not on base tension. Recording
-        this keeps the two mechanisms from being confused."""
-        for pts in (_DEGENERATE, _HEALTHY):
-            ok, bad = tensile_stress_check(_eval_poly(pts))
-            assert ok, (pts[0], bad)
+    def test_tension_only_on_the_degenerate_surface(self):
+        """v0.1.82 — with the sign convention corrected, the two checks
+        agree on the same slice instead of contradicting each other.
+
+        Slice 14 of the degenerate wedge is the near-vertical RISING
+        segment (+73.8°) in the passive zone. Its m_alpha goes to −0.42,
+        which flips the sign of the base normal force and reports a base
+        effective stress of about −300 kPa. Both checks therefore point at
+        the same physical pathology — exactly the case the reference
+        describes for its error −112 ("deep seated slip surfaces with many
+        high negative base angle slices in the passive zone").
+
+        The healthy surface stays clean, which is what makes the
+        distinction a diagnosis and not a blanket rejection.
+        """
+        ok_bad, bad = tensile_stress_check(_eval_poly(_DEGENERATE))
+        assert not ok_bad
+        assert bad == [14], bad
+        ok_good, clean = tensile_stress_check(_eval_poly(_HEALTHY))
+        assert ok_good, clean
 
     def test_detects_tension_when_present(self):
         """Synthetic check of the criterion itself: an artificially large

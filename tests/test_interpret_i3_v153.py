@@ -177,30 +177,79 @@ class TestConditionalEnabling:
 
 @_requires_qt
 class TestQueryPoints:
+    """v0.1.82 — a Query is a SLIP SURFACE, not a typed coordinate pair.
+
+    These tests used to store ``(10.0, 20.0)`` tuples in the query list,
+    which is what the option actually did: it asked for coordinates in a
+    modal box and kept them. A pair of numbers cannot be drawn on the
+    canvas, sliced, or graphed, so every other option in the Query menu
+    — Show Slices, Query Slice Data, Graph Query, Line of Thrust — had
+    nothing to work with. What a Query has to identify is the surface.
+    """
+
     def test_queries_start_empty_and_accumulate(self):
-        """A list, not a one-shot inspection: several locations must be
-        comparable."""
-        _p, _r, w = _interpret()
+        _p, r, w = _interpret()
         assert w._queries() == []
-        w._queries().extend([(10.0, 20.0), (30.0, 40.0)])
+        picked = sorted(r.valid(), key=lambda e: e.fos)[:2]
+        for ev in picked:
+            w._commit_query(ev)
         assert len(w._queries()) == 2
+        assert all(hasattr(q, "surface") for q in w._queries())
 
-    def test_graph_query_needs_points(self):
-        """With no points the method must bail out through its guard
-        (which reports via a modal box, so only the guard is checked)."""
-        _p, _r, w = _interpret()
+    def test_the_same_surface_is_not_queried_twice(self):
+        _p, r, w = _interpret()
+        ev = r.critical
+        w._commit_query(ev)
+        w._commit_query(ev)
+        assert len(w._queries()) == 1
+
+    def test_graph_query_falls_back_to_the_global_minimum(self):
+        """The documented shortcut: an option that needs a Query and
+        finds none creates one on the Global Minimum instead of
+        refusing."""
+        _p, r, w = _interpret()
         assert w._queries() == []
+        w._graph_query_data("base_normal")      # must not raise
+        assert len(w._queries()) == 1
+        assert w._queries()[0].fos == r.critical.fos
 
-    def test_graph_query_with_points(self):
-        _p, _r, w = _interpret()
-        w._queries().append((85.0, 30.0))
-        w._graph_query()          # must not raise
+    def test_query_label_matches_the_reference_format(self):
+        """What the user reads while picking, and compares against the
+        other program's screen."""
+        _p, r, w = _interpret()
+        text = w._query_label_text(r.critical)
+        assert text.startswith("FS =")
+        assert " r =" in text and " c=(" in text
 
     def test_delete_query_removes_from_the_list(self):
-        _p, _r, w = _interpret()
-        w._queries().extend([(1.0, 2.0), (3.0, 4.0)])
+        _p, r, w = _interpret()
+        for ev in sorted(r.valid(), key=lambda e: e.fos)[:2]:
+            w._commit_query(ev)
         w._queries().pop(0)
-        assert w._queries() == [(3.0, 4.0)]
+        assert len(w._queries()) == 1
+
+    def test_picking_by_point_finds_a_surface(self):
+        """Add Query resolves a canvas position to a surface: over the
+        slip-centre grid the nearest centre decides, elsewhere the
+        nearest surface does."""
+        _p, r, w = _interpret()
+        sd = r.critical.surface.to_dict()
+        hit = w._surface_at(sd["centre_x"], sd["centre_y"])
+        assert hit is not None
+        assert abs(hit.fos - r.critical.fos) < 1e-9
+
+    def test_escape_leaves_pick_mode(self):
+        """A pick mode with no way out is a trap on a model where
+        nothing is close enough to click."""
+        from PySide6.QtCore import Qt
+        from PySide6.QtGui import QKeyEvent
+        from PySide6.QtCore import QEvent
+        _p, _r, w = _interpret()
+        w._add_query()
+        assert w._query_pick_mode is True
+        w.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_Escape,
+                                  Qt.NoModifier))
+        assert w._query_pick_mode is False
 
     def test_invalid_surfaces_are_grouped(self):
         """Grouped by reason: two hundred identical messages is not a

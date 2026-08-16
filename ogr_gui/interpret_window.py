@@ -266,8 +266,10 @@ class InterpretWindow(QMainWindow):
         # v0.1.20 — surface display mode (Data menu): the default is the
         # global minimum surface, matching the checked menu radio.
         self._surface_mode = "global_min"
-        self.canvas.display_search_result(
-            self.search_result, surface_mode=self._surface_mode)
+        self._selected_surface_id = None
+        self._fos_filter = None
+        self._query_points: list = []
+        self._refresh_canvas_with_highlights()
 
         # Docks
         self.summary_dock = _SummaryDock(self)
@@ -316,11 +318,17 @@ class InterpretWindow(QMainWindow):
         # v0.1.50 (phase I2) — contour settings drive both the canvas
         # colours and the legend, so the two are one source of truth.
         from ogr_gui.contours import ContourSettings
-        self.contours = ContourSettings()
+        self.contours = ContourSettings.for_field("fos")
         self._build_legend_dock()
         self._build_status_indicators()
         self._refresh_legend()
         self._refresh_algorithm_label()
+        # v0.1.82 — the first draw above happened before the contour
+        # settings existed, so the surfaces came up in the fallback green
+        # and only picked up their factor-of-safety colours the next time
+        # anything touched the canvas. Draw once more now that the colour
+        # function is installed.
+        self._refresh_canvas_with_highlights()
 
     # ==================================================================
     # Result context (phase I1)
@@ -377,7 +385,11 @@ class InterpretWindow(QMainWindow):
         crit = (res.critical.fos
                 if (self.contours.field == "fos" and res
                     and res.critical) else None)
-        from ogr_gui.contours import SCALAR_FIELDS
+        from ogr_gui.contours import SCALAR_FIELDS, ContourMode as _CMode
+        # v0.1.82 — a banded plot gets a banded legend, with the boundary
+        # labels the settings compute (so the top one reads "6.000+").
+        banded = self.contours.mode in (_CMode.FILLED,
+                                        _CMode.FILLED_LINES)
         legend.configure(
             self.contours.vmin, self.contours.vmax,
             self.contours.colour_for,
@@ -385,7 +397,11 @@ class InterpretWindow(QMainWindow):
                                        self.contours.field)),
             steps=self.contours.intervals,
             decimals=self.contours.decimals,
-            scientific=self.contours.scientific, mark=crit)
+            scientific=self.contours.scientific, mark=crit,
+            bands=(self.contours.band_colours() if banded else None),
+            labels=([self.contours.band_label(i)
+                     for i in range(self.contours.intervals + 1)]
+                    if banded else None))
         # And the canvas uses the same mapping
         if hasattr(self.canvas, "set_contour_colour_fn"):
             from ogr_gui.contours import ContourMode as _CM
@@ -409,9 +425,7 @@ class InterpretWindow(QMainWindow):
         self._refresh_legend()
         if hasattr(self.canvas, "refresh_scene"):
             self.canvas.refresh_scene()
-        self.canvas.display_search_result(
-            self.search_result, selected_id=self._selected_surface_id,
-            surface_mode=self._surface_mode)
+        self._refresh_canvas_with_highlights()
 
     def _build_status_indicators(self) -> None:
         """Coordinates plus the clickable SNAP / GRID / ORTHO / OSNAP and
@@ -500,13 +514,17 @@ class InterpretWindow(QMainWindow):
                 lambda _c=False, m=mode: setattr(self, "_data_tips_mode", m))
             m_tips.addAction(act)
 
-        m_data = mb.addMenu("Data")
+        m_data = mb.addMenu(tr("Data"))
         from PySide6.QtGui import QActionGroup
         self._surface_mode_group = QActionGroup(self)
         self._surface_mode_group.setExclusive(True)
-        act_gm = QAction("Global Minimum", self, checkable=True, checked=True)
-        act_min = QAction("Minimum Surfaces", self, checkable=True)
-        act_all = QAction("All Surfaces", self, checkable=True)
+        act_gm = QAction(tr("Global Minimum"), self, checkable=True,
+                         checked=True)
+        act_min = QAction(tr("Minimum Surfaces"), self, checkable=True)
+        act_all = QAction(tr("All Surfaces"), self, checkable=True)
+        act_min.setToolTip(tr(
+            "The lowest factor of safety at each slip-centre grid point."))
+        act_all.setToolTip(tr("Every valid slip surface analysed."))
         act_gm.triggered.connect(lambda: self._set_surface_mode("global_min"))
         act_min.triggered.connect(lambda: self._set_surface_mode("minimum"))
         act_all.triggered.connect(lambda: self._set_surface_mode("all"))
@@ -514,18 +532,22 @@ class InterpretWindow(QMainWindow):
             self._surface_mode_group.addAction(a)
             m_data.addAction(a)
         m_data.addSeparator()
-        m_data.addAction(QAction("Filter Surfaces...", self,
-                                  triggered=self._filter_surfaces))
-        m_data.addAction(QAction("Graph SF Along Slope...", self,
-                                  triggered=self._graph_sf_along_slope))
-        m_data.addAction(QAction("Export Raw Data...", self,
-                                  triggered=self._export_data_csv))
+        m_data.addAction(QAction(tr("Filter Surfaces..."), self,
+                                 triggered=self._filter_surfaces))
+        m_data.addAction(QAction(tr("Graph SF Along Slope..."), self,
+                                 triggered=self._graph_sf_along_slope))
+        m_data.addAction(QAction(tr("Export Raw Data..."), self,
+                                 triggered=self._export_raw_data))
+        m_data.addAction(QAction(tr("Export Slice Data (CSV)..."), self,
+                                 triggered=self._export_data_csv))
+        m_data.addAction(QAction(tr("Summary of Invalid Surfaces..."), self,
+                                 triggered=self._query_invalid_summary))
         # v0.1.53 (phase I3) — the remaining Data entries. Those that
         # depend on something the project may not have (a transient run,
         # supports) are DISABLED rather than hidden, so the user can see
         # the capability exists and what it needs.
         m_data.addSeparator()
-        self._act_sf_time = QAction("Graph SF with Time...", self,
+        self._act_sf_time = QAction(tr("Graph SF with Time..."), self,
                                     triggered=self._graph_sf_with_time)
         self._act_sf_time.setEnabled(bool(
             getattr(self.project, "transient_results", None)))
@@ -535,7 +557,7 @@ class InterpretWindow(QMainWindow):
         m_data.addAction(self._act_sf_time)
 
         self._act_support_force = QAction(
-            "Support Force Analysis...", self,
+            tr("Support Force Analysis..."), self,
             triggered=self._support_force_analysis)
         self._act_support_force.setEnabled(
             bool(getattr(self.project, "supports", [])))
@@ -543,9 +565,9 @@ class InterpretWindow(QMainWindow):
             "Requires at least one support in the model."))
         m_data.addAction(self._act_support_force)
 
-        m_data.addAction(QAction("Back Analysis...", self,
-                                  triggered=self._back_analysis_report))
-        self._act_supp_contours = QAction("Supplemental Contours", self,
+        m_data.addAction(QAction(tr("Back Analysis..."), self,
+                                 triggered=self._back_analysis_report))
+        self._act_supp_contours = QAction(tr("Supplemental Contours"), self,
                                           checkable=True)
         self._act_supp_contours.setToolTip(tr(
             "Overlay iso-lines of the contoured field on top of the "
@@ -555,40 +577,56 @@ class InterpretWindow(QMainWindow):
         m_data.addAction(self._act_supp_contours)
 
         # -- Query -----------------------------------------------------
-        m_query = mb.addMenu("Query")
-        m_query.addAction(QAction("Show Slices", self, checkable=True,
-                                   triggered=self._toggle_slices))
-        m_query.addAction(QAction("Query Slice Data...", self,
-                                   triggered=self._query_slice))
+        # v0.1.82 — ordered as the reference orders it: the three Query
+        # verbs first, then what a Query lets you look at.
+        m_query = mb.addMenu(tr("Query"))
+        m_query.addAction(QAction(tr("Add Query"), self,
+                                  triggered=self._add_query))
+        m_query.addAction(QAction(tr("Graph Query..."), self,
+                                  triggered=self._graph_query))
+        m_query.addAction(QAction(tr("Delete Query..."), self,
+                                  triggered=self._delete_query))
         m_query.addSeparator()
-        m_query.addAction(QAction("Show Values Along Surface...", self,
-                                   triggered=self._show_values_along))
-        # v0.1.15 — additional Slide-style queries
-        m_query.addAction(QAction("Free Body Diagram of Slice...", self,
-                                   triggered=self._free_body_diagram))
+        self._act_show_slices = QAction(tr("Show Slices"), self,
+                                        checkable=True)
+        self._act_show_slices.toggled.connect(self._toggle_slices)
+        m_query.addAction(self._act_show_slices)
+        m_query.addAction(QAction(tr("Query Slice Data..."), self,
+                                  triggered=self._query_slice))
         # v0.1.22 — line of thrust overlay (interslice resultants)
-        self._act_thrust = QAction("Line of Thrust", self, checkable=True)
+        self._act_thrust = QAction(tr("Show Line of Thrust"), self,
+                                   checkable=True)
         self._act_thrust.toggled.connect(self._toggle_thrust_line)
         m_query.addAction(self._act_thrust)
-        m_query.addAction(QAction("Surfaces Crossing Point...", self,
-                                   triggered=self._surfaces_through_point))
-        m_query.addAction(QAction("Add Result Table (sortable)...", self,
-                                   triggered=self._add_result_table))
-        # v0.1.53 — query points: a persistent list the user builds up,
-        # so several locations can be compared instead of inspected one
-        # at a time and forgotten.
         m_query.addSeparator()
-        m_query.addAction(QAction("Add Query...", self,
-                                   triggered=self._add_query))
-        m_query.addAction(QAction("Graph Query...", self,
-                                   triggered=self._graph_query))
-        m_query.addAction(QAction("Delete Query...", self,
-                                   triggered=self._delete_query))
+        m_query.addAction(QAction(tr("Show Values Along Surface..."), self,
+                                  triggered=self._show_values_along))
+        # v0.1.15 — additional Slide-style queries
+        m_query.addAction(QAction(tr("Free Body Diagram of Slice..."), self,
+                                  triggered=self._free_body_diagram))
+        m_query.addAction(QAction(tr("Surfaces Crossing Point..."), self,
+                                  triggered=self._surfaces_through_point))
+        m_query.addAction(QAction(tr("Add Result Table (sortable)..."), self,
+                                  triggered=self._add_result_table))
         m_query.addSeparator()
-        m_query.addAction(QAction("Query Invalid Surfaces...", self,
-                                   triggered=self._query_invalid))
-        self._act_query_text = QAction("Text during Query", self,
+        # Both of these used to be dead: "Query Invalid Surfaces" opened a
+        # summary (a Data-menu thing, still available there) and "Text
+        # during Query" was a checkbox connected to nothing at all. They
+        # are toggles that govern what Add Query shows, which is what the
+        # reference documents and what makes them worth having.
+        self._act_query_invalid = QAction(tr("Query Invalid Surfaces"), self,
+                                          checkable=True, checked=True)
+        self._act_query_invalid.setToolTip(tr(
+            "While picking a query, show the error code of centres where "
+            "no valid surface could be computed."))
+        m_query.addAction(self._act_query_invalid)
+        self._act_query_text = QAction(tr("Text during Query"), self,
                                        checkable=True, checked=True)
+        self._act_query_text.setToolTip(tr(
+            "Show the factor of safety, radius and centre in a floating "
+            "label while picking a query."))
+        self._act_query_text.toggled.connect(
+            lambda on: None if on else self._clear_query_label())
         m_query.addAction(self._act_query_text)
 
         # -- Groundwater ----------------------------------------------
@@ -749,6 +787,17 @@ class InterpretWindow(QMainWindow):
 
         self.addToolBar(Qt.TopToolBarArea, tb)
 
+    # Methods for which a line of thrust exists at all. The thrust line is
+    # the locus of the interslice-force resultants, so it is only defined
+    # for methods that RESOLVE those forces. Bishop, Janbu and Ordinary
+    # assume them away, and the reference lists them as unavailable for
+    # exactly that reason — offering the option there would invite the
+    # user to read a curve computed from an assumption.
+    _THRUST_METHODS = frozenset({
+        "spencer", "gle_morgenstern_price", "lowe_karafiath",
+        "corps_engineers_1", "corps_engineers_2",
+    })
+
     def _refresh_algorithm_label(self) -> None:
         lab = getattr(self, "lbl_algorithm", None)
         if lab is None:
@@ -757,6 +806,16 @@ class InterpretWindow(QMainWindow):
         fos = self.critical_label_text()
         lab.setText(tr("Method: %s") % mid
                     + (tr("   |   FS = %s") % fos if fos else ""))
+        act = getattr(self, "_act_thrust", None)
+        if act is not None:
+            available = mid in self._THRUST_METHODS
+            act.setEnabled(available)
+            act.setToolTip("" if available else tr(
+                "The line of thrust is only defined for methods that "
+                "resolve the interslice forces (Spencer, GLE/"
+                "Morgenstern-Price, Lowe-Karafiath, Corps of Engineers)."))
+            if not available and act.isChecked():
+                act.setChecked(False)
 
     def _on_method_changed(self, index: int) -> None:
         """Switch the displayed method's results."""
@@ -766,9 +825,7 @@ class InterpretWindow(QMainWindow):
         result = self.results_by_method[mid]
         self._current_method_id = mid
         self.search_result = result
-        self.canvas.display_search_result(
-            result, selected_id=self._selected_surface_id,
-            surface_mode=self._surface_mode)
+        self._refresh_canvas_with_highlights()
         self.summary_dock.show_result(result)
         self.results_dock.show_result(result)
         # v0.1.49 — the legend range and the algorithm read-out belong to
@@ -811,6 +868,14 @@ class InterpretWindow(QMainWindow):
         ``search_result.evaluations`` and draw a dashed grey arc.
         """
         if not self.search_result:
+            return
+        # v0.1.82 — while Add Query is active the hover means something
+        # different: it previews the surface a click would keep, anywhere
+        # in the model, and reads out its factor of safety, radius and
+        # centre. Handled first, and it returns, so the grid-cell preview
+        # below does not fight it for the canvas.
+        if getattr(self, "_query_pick_mode", False):
+            self._hover_for_query(x, y)
             return
         # Throttle: only redraw if the hovered cell changed
         s_search = getattr(self.project.settings, "search", None)
@@ -875,13 +940,8 @@ class InterpretWindow(QMainWindow):
 
         sd = best.surface.to_dict()
         sd["_hover_fos"] = best.fos
-        self.canvas.display_search_result(
-            self.search_result,
-            selected_id=self._selected_surface_id,
-            hover_id=sd.get("id"),
-            hover_surface_dict=sd,
-            surface_mode=self._surface_mode,
-        )
+        self._refresh_canvas_with_highlights(hover_id=sd.get("id"),
+                                            hover_surface_dict=sd)
         self.statusBar().showMessage(
             f"Centre ({cx:.2f}, {cy:.2f}) — best FoS at this centre = "
             f"{best.fos:.3f}",
@@ -890,12 +950,45 @@ class InterpretWindow(QMainWindow):
         self._refresh_legend()
         self._refresh_algorithm_label()
 
-    def _refresh_canvas_with_highlights(self) -> None:
-        """Re-render canvas using current selection / hover state."""
+    def _hover_for_query(self, x: float, y: float) -> None:
+        """Preview, while Add Query is active, the surface a click keeps."""
+        res = self._surface_at(x, y)
+        if res is None:
+            self._clear_query_label()
+            if self._act_query_invalid.isChecked():
+                note = self._invalid_note_at(x, y)
+                if note:
+                    # You cannot query an invalid surface — there is no
+                    # data — but the error is what the user came for.
+                    self._show_query_label(x, y, note)
+            self._refresh_canvas_with_highlights()
+            return
+        sd = res.surface.to_dict()
+        sd["_hover_fos"] = res.fos
+        self._refresh_canvas_with_highlights(hover_id=sd.get("id"),
+                                             hover_surface_dict=sd)
+        self._show_query_label(x, y, self._query_label_text(res))
+        self.statusBar().showMessage(self._query_label_text(res), 2000)
+
+    def _refresh_canvas_with_highlights(self, hover_id=None,
+                                        hover_surface_dict=None) -> None:
+        """Re-render the canvas from the window's current state.
+
+        v0.1.82 — the ONE place that draws the result. There were six call
+        sites passing four different subsets of the state, so every new
+        piece of state — the surface filter, the queries — had to be
+        threaded through all of them or it would silently apply in some
+        views and not others.
+        """
         self.canvas.display_search_result(
             self.search_result,
             selected_id=self._selected_surface_id,
+            hover_id=hover_id,
+            hover_surface_dict=hover_surface_dict,
             surface_mode=self._surface_mode,
+            fos_filter=getattr(self, "_fos_filter", None),
+            query_ids=[q.surface.to_dict().get("id")
+                       for q in self._queries()],
         )
 
     def _on_canvas_click_default(self, x: float, y: float) -> None:
@@ -907,6 +1000,13 @@ class InterpretWindow(QMainWindow):
         purple in the canvas and the slice dock updates.
         """
         if not self.search_result:
+            return
+        # v0.1.82 — a click during Add Query commits the previewed
+        # surface as a Query and leaves the mode, as the reference does.
+        if getattr(self, "_query_pick_mode", False):
+            res = self._surface_at(x, y)
+            if res is not None:
+                self._commit_query(res)
             return
         s_search = getattr(self.project.settings, "search", None)
         if s_search is None or not s_search.uses_grid():
@@ -952,11 +1052,7 @@ class InterpretWindow(QMainWindow):
         sd = best.surface.to_dict()
         self._selected_surface_id = sd.get("id")
         self._selected_result = best
-        self.canvas.display_search_result(
-            self.search_result,
-            selected_id=self._selected_surface_id,
-            surface_mode=self._surface_mode,
-        )
+        self._refresh_canvas_with_highlights()
         if best.slices:
             self.slice_dock.show_slice(best.slices[0])
         if self._slices_visible:
@@ -986,11 +1082,7 @@ class InterpretWindow(QMainWindow):
         self._selected_result = res
 
         # Re-render with selection highlight (full result still visible)
-        self.canvas.display_search_result(
-            self.search_result,
-            selected_id=self._selected_surface_id,
-            surface_mode=self._surface_mode,
-        )
+        self._refresh_canvas_with_highlights()
 
         # Show first slice in the slice-data dock
         if res.slices and len(res.slices) > 0:
@@ -1141,70 +1233,313 @@ class InterpretWindow(QMainWindow):
         self.contours.mode = (ContourMode.FILLED_LINES if on
                               else ContourMode.FILLED)
         self._refresh_legend()
-        self.canvas.display_search_result(
-            self.search_result, selected_id=self._selected_surface_id,
-            surface_mode=self._surface_mode)
+        self._refresh_canvas_with_highlights()
 
-    # ---- Query -------------------------------------------------------
+    # ==================================================================
+    # Query — v0.1.82
+    #
+    # A Query is a SLIP SURFACE the user has picked out for detailed
+    # inspection, which is what the reference means by the word and what
+    # every other option in the Query menu (Show Slices, Query Slice Data,
+    # Graph Query, Line of Thrust) actually needs.
+    #
+    # Until v0.1.81 a "query" here was a typed (x, y) pair: the user was
+    # asked for coordinates in a modal box, and the pair could not be
+    # shown on the canvas, sliced, or graphed against anything. The
+    # surface it was meant to designate was never identified.
+    # ==================================================================
     def _queries(self) -> list:
+        """The picked surfaces, in the order they were picked."""
         if not hasattr(self, "_query_points"):
             self._query_points = []
         return self._query_points
 
-    def _add_query(self) -> None:
-        """Add a query point, kept in a list so several locations can be
-        compared instead of inspected one at a time and forgotten."""
-        from PySide6.QtWidgets import QInputDialog
-        text, ok = QInputDialog.getText(
-            self, tr("Add Query"), tr("Point as x,y:"))
-        if not ok or not text:
-            return
-        try:
-            x, y = (float(v) for v in text.replace(";", ",").split(","))
-        except ValueError:
-            self._info(tr("Enter two numbers: x,y"))
-            return
-        self._queries().append((x, y))
-        self.statusBar().showMessage(
-            tr("%d query point(s)") % len(self._queries()), 4000)
+    def _query_label_text(self, res) -> str:
+        """The read-out the reference shows while picking.
 
-    def _graph_query(self) -> None:
-        """Factor of safety of the surfaces passing near each query."""
-        qs = self._queries()
-        if not qs:
-            self._info(tr("No query points. Use Add Query first."))
-            return
+        Format matched deliberately, spacing included: it is what the
+        user is comparing against on screen when they check one program's
+        answer with the other.
+        """
+        sd = res.surface.to_dict()
+        if sd.get("type") == "circle":
+            return (f"FS ={res.fos:.3f} r ={sd['radius']:.3f} "
+                    f"c=({sd['centre_x']:.3f},{sd['centre_y']:.3f})")
+        return f"FS ={res.fos:.3f}"
+
+    def _surface_at(self, x: float, y: float):
+        """The surface a click at (x, y) means, or None.
+
+        Two ways of pointing, both documented: over the slip-centre grid
+        the nearest CENTRE decides (and the answer is the minimum surface
+        at that centre); anywhere else the nearest SURFACE does.
+        """
         res = self.search_result
         if res is None:
+            return None
+        best = self._best_at_grid_centre(x, y)
+        if best is not None:
+            return best
+        nearest, nearest_d = None, float("inf")
+        for ev in res.valid():
+            d = self._distance_point_to_surface(x, y, ev.surface)
+            if d < nearest_d:
+                nearest, nearest_d = ev, d
+        # A pick has to land somewhere near a surface to mean anything.
+        try:
+            xmin, ymin, xmax, ymax = self.project.bounding_box()
+            tol = 0.03 * max(xmax - xmin, ymax - ymin)
+        except Exception:  # noqa: BLE001
+            tol = 5.0
+        return nearest if nearest_d <= tol else None
+
+    def _centre_tolerance(self) -> float:
+        """Half the spacing of the slip-centre grid, in model units.
+
+        Derived from the RESULT, not from the project's search settings.
+        The settings can have moved on since the analysis was run — the
+        user may have edited the grid and not recomputed — and picking
+        would then resolve clicks against a grid the numbers on screen
+        never came from.
+        """
+        res = self.search_result
+        if res is None:
+            return 0.0
+        cached = getattr(self, "_centre_tol_cache", None)
+        if cached is not None and cached[0] is res:
+            return cached[1]
+        xs, ys = set(), set()
+        for r in res.evaluations:
+            sd = r.surface.to_dict()
+            cx, cy = sd.get("centre_x"), sd.get("centre_y")
+            if cx is None or cy is None:
+                continue
+            xs.add(round(cx, 6))
+            ys.add(round(cy, 6))
+
+        def _spacing(vals):
+            vals = sorted(vals)
+            diffs = sorted(b - a for a, b in zip(vals, vals[1:]) if b > a)
+            return diffs[len(diffs) // 2] if diffs else 0.0
+
+        tol = 0.5 * max(_spacing(xs), _spacing(ys))
+        self._centre_tol_cache = (res, tol)
+        return tol
+
+    def _at_grid_centre(self, x: float, y: float) -> list:
+        """Every evaluation whose centre is the one nearest to (x, y)."""
+        res = self.search_result
+        tol = self._centre_tolerance()
+        if res is None or tol <= 0.0:
+            return []
+        hits = []
+        for r in res.evaluations:
+            sd = r.surface.to_dict()
+            if sd.get("type") != "circle":
+                continue
+            cx, cy = sd.get("centre_x"), sd.get("centre_y")
+            if cx is None or cy is None:
+                continue
+            if abs(cx - x) <= tol and abs(cy - y) <= tol:
+                hits.append(r)
+        return hits
+
+    def _best_at_grid_centre(self, x: float, y: float):
+        """Minimum VALID surface at the grid centre nearest to (x, y)."""
+        best, best_fos = None, float("inf")
+        for r in self._at_grid_centre(x, y):
+            if r.is_valid and r.fos < best_fos:
+                best, best_fos = r, r.fos
+        return best
+
+    def _invalid_note_at(self, x: float, y: float):
+        """Why no surface could be computed near (x, y), or None.
+
+        The reference shows this while Add Query is active so a blank
+        patch in the contoured grid can be diagnosed instead of guessed
+        at. You cannot query an invalid surface — there is no data — but
+        you can be told why.
+        """
+        hits = self._at_grid_centre(x, y)
+        if not hits or any(r.is_valid and getattr(r, "admissible", True)
+                           for r in hits):
+            return None
+        for r in hits:
+            note = (getattr(r, "error_message", None)
+                    or getattr(r, "admissibility_note", None))
+            if note:
+                return note
+        return tr("no valid slip surface at this centre")
+
+    # ------------------------------------------------------------------
+    def _add_query(self) -> None:
+        """Enter pick mode: hover to inspect, click to keep."""
+        if self.search_result is None:
             return
-        xs, ys = [], []
-        for i, (qx, qy) in enumerate(qs, 1):
-            best = None
-            for ev in res.evaluations:
-                if not ev.is_valid or not getattr(ev, "slices", None):
-                    continue
-                d = min(math.dist((s.base_x_left, s.base_y_left),
-                                  (qx, qy)) for s in ev.slices)
-                if best is None or d < best[0]:
-                    best = (d, ev.fos)
-            if best is not None:
-                xs.append(i)
-                ys.append(best[1])
-        if not xs:
-            self._info(tr("No surface passes near the query points."))
+        self._query_pick_mode = True
+        self.statusBar().showMessage(
+            tr("Pick the surface to query — Esc to cancel"))
+
+    def _clear_query_label(self) -> None:
+        item = getattr(self, "_query_label_item", None)
+        if item is not None and item.scene() is not None:
+            item.scene().removeItem(item)
+        self._query_label_item = None
+
+    def _show_query_label(self, x: float, y: float, text: str) -> None:
+        """The floating read-out shown while picking.
+
+        A scene item, not a dialog: modal boxes cannot follow a cursor,
+        and a project rule forbids them on any path a test may execute.
+        """
+        from PySide6.QtGui import QBrush, QColor, QFont
+        from PySide6.QtWidgets import QGraphicsSimpleTextItem
+
+        self._clear_query_label()
+        if not self._act_query_text.isChecked():
             return
-        self._plot_xy(tr("Factor of safety at query points"),
-                      [("", xs, ys)], tr("Query point"),
-                      tr("Factor of safety"))
+        item = QGraphicsSimpleTextItem(text)
+        font = QFont(); font.setPointSizeF(8.0)
+        item.setFont(font)
+        item.setBrush(QBrush(QColor("#101010")))
+        item.setFlag(item.GraphicsItemFlag.ItemIgnoresTransformations, True)
+        item.setPos(x, y)
+        item.setZValue(20.0)
+        self.canvas.scene().addItem(item)
+        self._query_label_item = item
+
+    def _commit_query(self, res) -> None:
+        qs = self._queries()
+        qid = res.surface.to_dict().get("id")
+        if not any(q.surface.to_dict().get("id") == qid for q in qs):
+            qs.append(res)
+        self._query_pick_mode = False
+        self._clear_query_label()
+        self._selected_result = res
+        self._selected_surface_id = qid
+        self._refresh_canvas_with_highlights()
+        if getattr(self, "_slices_visible", False):
+            self._redraw_slices_for_selected()
+        self.statusBar().showMessage(
+            tr("Query added — %s") % self._query_label_text(res), 6000)
+
+    def _ensure_a_query(self):
+        """The documented shortcut: options that need a Query and find
+        none create one on the Global Minimum rather than refusing."""
+        qs = self._queries()
+        if qs:
+            return qs[-1]
+        res = self.search_result
+        if res is None or res.critical is None:
+            return None
+        self._commit_query(res.critical)
+        return res.critical
+
+    # ------------------------------------------------------------------
+    def _graph_query(self) -> None:
+        """Plot a slice quantity along each queried surface."""
+        if self._ensure_a_query() is None:
+            self.statusBar().showMessage(tr("No results to query."), 4000)
+            return
+        from PySide6.QtWidgets import (
+            QComboBox, QDialog, QDialogButtonBox, QFormLayout,
+        )
+        fields = [
+            ("fos", tr("Factor of safety")),
+            ("weight", tr("Slice weight")),
+            ("base_normal", tr("Base normal stress")),
+            ("shear_strength", tr("Shear strength")),
+            ("shear_stress", tr("Mobilised shear stress")),
+            ("pore_pressure", tr("Pore pressure")),
+            ("base_angle", tr("Base inclination")),
+        ]
+        dlg = QDialog(self)
+        dlg.setWindowTitle(tr("Graph Query"))
+        form = QFormLayout(dlg)
+        cbo = QComboBox()
+        for key, label in fields:
+            cbo.addItem(label, key)
+        cbo.setCurrentIndex(2)
+        form.addRow(tr("Data:"), cbo)
+        cbo_x = QComboBox()
+        cbo_x.addItem(tr("Distance along surface"), "distance")
+        cbo_x.addItem(tr("Slice number"), "index")
+        cbo_x.addItem(tr("X coordinate"), "x")
+        form.addRow(tr("Horizontal axis:"), cbo_x)
+        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        bb.accepted.connect(dlg.accept); bb.rejected.connect(dlg.reject)
+        form.addRow(bb)
+        if dlg.exec() != QDialog.Accepted:
+            return
+        self._graph_query_data(cbo.currentData(), cbo_x.currentData(),
+                               dict(fields))
+
+    def _graph_query_data(self, key: str, xkey: str = "distance",
+                          labels: dict | None = None) -> None:
+        """Plot ``key`` along every queried surface.
+
+        Split from the dialog on purpose: choosing what to plot is a
+        modal question, plotting it is not, and a modal box cannot appear
+        on any path a test executes.
+        """
+        if self._ensure_a_query() is None:
+            return
+        series = []
+        for n, q in enumerate(self._queries(), 1):
+            xs, ys = [], []
+            dist = 0.0
+            for i, s in enumerate(q.slices or []):
+                dist += math.hypot(s.base_x_right - s.base_x_left,
+                                   s.base_y_right - s.base_y_left)
+                xs.append({"distance": dist, "index": i + 1,
+                           "x": s.x_centre}[xkey])
+                ys.append(self._slice_value(q, s, i, key))
+            if xs:
+                series.append((tr("Query %d") % n, xs, ys))
+        if not series:
+            self.statusBar().showMessage(
+                tr("The queried surface has no slice data."), 4000)
+            return
+        label = (labels or {}).get(key, key)
+        self._plot_xy(label, series,
+                      {"distance": tr("Distance along surface"),
+                       "index": tr("Slice number"),
+                       "x": tr("X coordinate")}[xkey], label)
+
+    @staticmethod
+    def _slice_value(result, s, i, key: str) -> float:
+        """One slice quantity, by name, for Graph Query."""
+        if key == "fos":
+            return result.fos
+        if key == "weight":
+            return s.weight
+        if key == "pore_pressure":
+            return s.pore_pressure
+        if key == "base_angle":
+            return math.degrees(s.base_angle)
+        # The per-slice arrays are FORCES; the plots want stresses, so
+        # they are divided by the base length of their own slice.
+        length = max(getattr(s, "base_length", 0.0), 1e-12)
+        if key == "base_normal":
+            vals = result.base_normal or []
+            return (vals[i] / length) if i < len(vals) else 0.0
+        if key == "shear_strength":
+            vals = result.base_shear_strength or []
+            return (vals[i] / length) if i < len(vals) else 0.0
+        if key == "shear_stress":
+            vals = result.base_shear_strength or []
+            f = result.fos if result.fos else 1.0
+            return (vals[i] / length / f) if i < len(vals) else 0.0
+        return 0.0
 
     def _delete_query(self) -> None:
         qs = self._queries()
         if not qs:
-            self._info(tr("No query points to delete."))
+            self._info(tr("No queries to delete."))
             return
         from PySide6.QtWidgets import QInputDialog
-        items = [f"{i}: ({x:.3f}, {y:.3f})"
-                 for i, (x, y) in enumerate(qs, 1)]
+        items = [f"{i}: {self._query_label_text(q)}"
+                 for i, q in enumerate(qs, 1)]
         items.append(tr("(all)"))
         choice, ok = QInputDialog.getItem(
             self, tr("Delete Query"), tr("Remove:"), items, 0, False)
@@ -1214,10 +1549,10 @@ class InterpretWindow(QMainWindow):
             qs.clear()
         else:
             qs.pop(int(choice.split(":")[0]) - 1)
-        self.statusBar().showMessage(
-            tr("%d query point(s)") % len(qs), 4000)
+        self._refresh_canvas_with_highlights()
+        self.statusBar().showMessage(tr("%d quer(y/ies)") % len(qs), 4000)
 
-    def _query_invalid(self) -> None:
+    def _query_invalid_summary(self) -> None:
         """Why surfaces were rejected — grouped, because a list of two
         hundred identical messages is not a diagnosis."""
         res = self.search_result
@@ -1257,7 +1592,11 @@ class InterpretWindow(QMainWindow):
             self._info(tr("Requires a computed groundwater analysis."))
             return
         if not hasattr(self, "gw_contours"):
-            self.gw_contours = ContourSettings(field="pore_pressure")
+            # v0.1.82 — ``for_field``, not the bare constructor: the
+            # dataclass defaults are now the factor-of-safety legend
+            # (fixed 0–6, 24 bands), and a pore pressure in kPa fitted
+            # into 0–6 would be one flat colour.
+            self.gw_contours = ContourSettings.for_field("pore_pressure")
         from ogr_gui.contours import available_fields
         from ogr_gui.dialogs.contour_options_dialog import (
             ContourOptionsDialog,
@@ -1602,6 +1941,97 @@ class InterpretWindow(QMainWindow):
             QMessageBox.critical(self, "Error", str(e))
 
     # ------------------------------------------------------------------
+    def _raw_data_rows(self) -> list:
+        """Every surface analysed, valid or not, for the active method.
+
+        v0.1.82 — the reference's *Export Raw Data* is a different thing
+        from the slice-data CSV this window already had: it is one row per
+        SURFACE — centre, radius, the two slope intersection points, and
+        the factor of safety **or a negative error code in its place**.
+        Dropping the invalid surfaces would throw away exactly the rows
+        that explain a blank patch in the contoured grid.
+        """
+        res = self.search_result
+        if res is None:
+            return []
+        rows = []
+        for r in res.evaluations:
+            sd = r.surface.to_dict()
+            if r.is_valid and getattr(r, "admissible", True):
+                fos = f"{r.fos:.6f}"
+            else:
+                # Negative codes, as the reference writes them: -111 for a
+                # factor of safety that did not converge, -112 for the
+                # m-alpha screen. Anything else is reported as -101.
+                note = (getattr(r, "admissibility_note", "") or
+                        getattr(r, "error_message", "") or "")
+                if "m_alpha" in note:
+                    fos = "-112"
+                elif not r.converged:
+                    fos = "-111"
+                else:
+                    fos = "-101"
+            rows.append([
+                f"{sd.get('centre_x', '')}", f"{sd.get('centre_y', '')}",
+                f"{sd.get('radius', '')}",
+                f"{sd.get('x_left', '')}", f"{sd.get('x_right', '')}",
+                fos,
+            ])
+        return rows
+
+    def _export_raw_data(self) -> None:
+        """Export the per-surface raw data, to a file or the clipboard."""
+        rows = self._raw_data_rows()
+        if not rows:
+            self._info(tr("No results to export."))
+            return
+        header = ["centre_x", "centre_y", "radius",
+                  "x_left", "x_right", "fos_or_error_code"]
+        text = "\n".join(["\t".join(header)]
+                         + ["\t".join(r) for r in rows])
+        from PySide6.QtWidgets import QDialog, QDialogButtonBox, QVBoxLayout
+        dlg = QDialog(self)
+        dlg.setWindowTitle(tr("Export Raw Data"))
+        v = QVBoxLayout(dlg)
+        from PySide6.QtWidgets import QLabel
+        v.addWidget(QLabel(
+            tr("%d surfaces for method %s. A negative value in place of "
+               "the factor of safety is an error code.")
+            % (len(rows), self.active_algorithm())))
+        bb = QDialogButtonBox()
+        b_copy = bb.addButton(tr("Copy"), QDialogButtonBox.ActionRole)
+        b_save = bb.addButton(tr("Save..."), QDialogButtonBox.ActionRole)
+        bb.addButton(QDialogButtonBox.Close)
+        bb.rejected.connect(dlg.reject)
+
+        def do_copy():
+            from PySide6.QtWidgets import QApplication
+            QApplication.clipboard().setText(text)
+            self.statusBar().showMessage(
+                tr("%d rows copied to the clipboard") % len(rows), 3000)
+
+        def do_save():
+            path, _ = QFileDialog.getSaveFileName(
+                dlg, tr("Export Raw Data"), "", "Text (*.txt);;CSV (*.csv)")
+            if not path:
+                return
+            body = text.replace("\t", ",") if path.lower().endswith(".csv") \
+                else text
+            try:
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(body + "\n")
+            except OSError as e:
+                QMessageBox.critical(dlg, "Error", str(e))
+                return
+            self.statusBar().showMessage(f"Saved {path}", 3000)
+            dlg.accept()
+
+        b_copy.clicked.connect(do_copy)
+        b_save.clicked.connect(do_save)
+        v.addWidget(bb)
+        dlg.exec()
+
+    # ------------------------------------------------------------------
     # v0.1.22 — Line of thrust overlay
     # ------------------------------------------------------------------
     def _toggle_thrust_line(self, on: bool) -> None:
@@ -1624,9 +2054,7 @@ class InterpretWindow(QMainWindow):
         if not getattr(self, "_thrust_visible", False):
             return
 
-        target = getattr(self, "_selected_result", None)
-        if target is None and self.search_result and self.search_result.critical:
-            target = self.search_result.critical
+        target = self._query_target()
         if target is None or not target.slices:
             return
 
@@ -1683,17 +2111,16 @@ class InterpretWindow(QMainWindow):
         if mode not in ("global_min", "minimum", "all"):
             return
         self._surface_mode = mode
-        self.canvas.display_search_result(
-            self.search_result,
-            selected_id=self._selected_surface_id,
-            surface_mode=self._surface_mode,
-        )
+        self._refresh_canvas_with_highlights()
+        shown = getattr(self.canvas, "last_surface_count", 0)
         labels = {
-            "global_min": "Global minimum surface",
-            "minimum": "Minimum surfaces (top 30)",
-            "all": "All valid surfaces",
+            "global_min": tr("Global minimum surface"),
+            "minimum": tr("Minimum surface at each grid centre — %d shown"),
+            "all": tr("All valid surfaces — %d shown"),
         }
-        self.statusBar().showMessage(labels[mode], 3000)
+        text = labels[mode]
+        self.statusBar().showMessage(
+            text if mode == "global_min" else text % shown, 4000)
 
     def _toggle_slices(self, on: bool) -> None:
         """Show/hide slice subdivision lines.
@@ -1704,6 +2131,22 @@ class InterpretWindow(QMainWindow):
         """
         self._slices_visible = bool(on)
         self._redraw_slices_for_selected()
+
+    def _query_target(self):
+        """The surface the Query options act on.
+
+        In order: what the user last clicked, then the most recent Query,
+        then the Global Minimum — the reference's documented fallback, so
+        an option never simply refuses to do anything.
+        """
+        target = getattr(self, "_selected_result", None)
+        if target is not None:
+            return target
+        qs = self._queries()
+        if qs:
+            return qs[-1]
+        res = self.search_result
+        return res.critical if res is not None else None
 
     def _redraw_slices_for_selected(self) -> None:
         """Redraw the slice lines for the currently selected surface
@@ -1719,9 +2162,7 @@ class InterpretWindow(QMainWindow):
         if not self._slices_visible:
             return
 
-        target = getattr(self, "_selected_result", None)
-        if target is None and self.search_result and self.search_result.critical:
-            target = self.search_result.critical
+        target = self._query_target()
         if target is None or not target.slices:
             return
 
@@ -1745,19 +2186,19 @@ class InterpretWindow(QMainWindow):
         shows that slice's full property set in the dock.
         """
         if not self.search_result:
-            self._info("No search result to interrogate.")
+            self._info(tr("No results to query."))
             return
-        target = getattr(self, "_selected_result", None)
-        if target is None and self.search_result.critical:
-            target = self.search_result.critical
+        # v0.1.82 — the same target the rest of the Query menu uses, so
+        # Show Slices, Query Slice Data and the thrust line can never end
+        # up interrogating three different surfaces.
+        target = self._query_target()
         if target is None or not target.slices:
             self._info("No slices available — run a compute first.")
             return
 
         # Make sure slices are visible so the user has something to click
         if not getattr(self, "_slices_visible", False):
-            self._slices_visible = True
-            self._redraw_slices_for_selected()
+            self._act_show_slices.setChecked(True)
 
         self._query_slice_target = target
         self.slice_dock.show()
@@ -1860,46 +2301,97 @@ class InterpretWindow(QMainWindow):
             self._info(html)
 
     def _filter_surfaces(self) -> None:
-        """Filter surfaces by FoS / area / depth, then refresh canvas.
-        v0.1.15 — real implementation."""
+        """Restrict which surfaces Minimum / All Surfaces draw.
+
+        v0.1.82 — until now this dialog computed ``self._fos_filter`` and
+        **nothing read it**: the user set a filter, was told it was
+        active, and the canvas went on drawing every surface. Both
+        documented forms of filtering are offered — a factor-of-safety
+        range, and the N lowest — and the *Apply* button refreshes without
+        closing, because choosing a threshold is something you do by
+        looking at the result.
+        """
         if not self.search_result:
             return
         valid = [r for r in self.search_result.evaluations if r.is_valid]
         if not valid:
-            self._info("No valid surfaces.")
+            self._info(tr("No valid surfaces."))
             return
         from PySide6.QtWidgets import (
-            QDialog, QVBoxLayout, QFormLayout, QDoubleSpinBox,
-            QDialogButtonBox, QLabel,
+            QCheckBox, QDialog, QDialogButtonBox, QDoubleSpinBox,
+            QFormLayout, QLabel, QSpinBox, QVBoxLayout,
         )
+        lo_all = min(r.fos for r in valid)
+        hi_all = max(r.fos for r in valid)
         dlg = QDialog(self)
         dlg.setWindowTitle(tr("Filter Surfaces"))
-        dlg.resize(360, 220)
+        dlg.resize(380, 280)
         v = QVBoxLayout(dlg)
         form = QFormLayout()
+        chk_range = QCheckBox(tr("By factor of safety"))
+        chk_range.setChecked(True)
+        form.addRow("", chk_range)
         fos_lo = QDoubleSpinBox()
-        fos_lo.setRange(0.0, 100.0); fos_lo.setDecimals(3)
-        fos_lo.setValue(min(r.fos for r in valid))
+        fos_lo.setRange(0.0, 1000.0); fos_lo.setDecimals(3)
+        fos_lo.setValue(lo_all)
         fos_hi = QDoubleSpinBox()
-        fos_hi.setRange(0.0, 100.0); fos_hi.setDecimals(3)
-        fos_hi.setValue(min(2.0, max(r.fos for r in valid)))
-        form.addRow(tr("FoS min:"), fos_lo)
-        form.addRow(tr("FoS max:"), fos_hi)
+        fos_hi.setRange(0.0, 1000.0); fos_hi.setDecimals(3)
+        fos_hi.setValue(hi_all)
+        form.addRow(tr("Minimum:"), fos_lo)
+        form.addRow(tr("Maximum:"), fos_hi)
+        chk_n = QCheckBox(tr("Only the N lowest"))
+        form.addRow("", chk_n)
+        sp_n = QSpinBox()
+        sp_n.setRange(1, 100000)
+        sp_n.setValue(min(10, len(valid)))
+        form.addRow(tr("Number of surfaces:"), sp_n)
         v.addLayout(form)
-        info = QLabel(f"Currently showing {len(valid)} surfaces.")
+        info = QLabel()
         v.addWidget(info)
-        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        bb.accepted.connect(dlg.accept); bb.rejected.connect(dlg.reject)
+
+        def collect():
+            lo = fos_lo.value() if chk_range.isChecked() else None
+            hi = fos_hi.value() if chk_range.isChecked() else None
+            n = sp_n.value() if chk_n.isChecked() else None
+            return None if (lo is None and hi is None and n is None) \
+                else (lo, hi, n)
+
+        def apply_now():
+            self._fos_filter = collect()
+            self._refresh_canvas_with_highlights()
+            info.setText(tr("Showing %d of %d surfaces.") % (
+                getattr(self.canvas, "last_surface_count", 0), len(valid)))
+
+        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel
+                              | QDialogButtonBox.Apply | QDialogButtonBox.Reset)
+        bb.accepted.connect(dlg.accept)
+        bb.rejected.connect(dlg.reject)
+        bb.button(QDialogButtonBox.Apply).clicked.connect(apply_now)
+
+        previous = getattr(self, "_fos_filter", None)
+
+        def reset_now():
+            self._fos_filter = None
+            chk_range.setChecked(False)
+            chk_n.setChecked(False)
+            self._refresh_canvas_with_highlights()
+            info.setText(tr("Showing %d of %d surfaces.") % (
+                getattr(self.canvas, "last_surface_count", 0), len(valid)))
+
+        bb.button(QDialogButtonBox.Reset).clicked.connect(reset_now)
         v.addWidget(bb)
+        apply_now()
         if dlg.exec() != QDialog.Accepted:
+            # Cancel means cancel, including the effect of Apply.
+            self._fos_filter = previous
+            self._refresh_canvas_with_highlights()
             return
-        lo, hi = fos_lo.value(), fos_hi.value()
-        # Apply filter as a stored attribute the canvas refresh respects
-        self._fos_filter = (lo, hi)
+        self._fos_filter = collect()
+        self._refresh_canvas_with_highlights()
+        shown = getattr(self.canvas, "last_surface_count", 0)
         self.statusBar().showMessage(
-            f"Filter active: FoS ∈ [{lo:.3f}, {hi:.3f}]. Use Data → All "
-            f"Surfaces to re-display the filtered set.", 6000,
-        )
+            tr("Filter active — %d of %d surfaces shown. The global "
+               "minimum is always kept.") % (shown, len(valid)), 6000)
 
     # v0.1.15 — additional Slide-style queries
     def _free_body_diagram(self) -> None:
@@ -2247,6 +2739,24 @@ class InterpretWindow(QMainWindow):
         QMessageBox.information(self, tr("Interpret"), html)
 
     # ==================================================================
+    def keyPressEvent(self, event) -> None:  # noqa: N802
+        """Esc leaves Add Query, as the prompt on the status bar says.
+
+        A pick mode with no way out but a successful pick is a trap: on a
+        model where nothing is close enough to click, the user would be
+        stuck in it.
+        """
+        from PySide6.QtCore import Qt as _Qt
+        if (event.key() == _Qt.Key_Escape
+                and getattr(self, "_query_pick_mode", False)):
+            self._query_pick_mode = False
+            self._clear_query_label()
+            self._refresh_canvas_with_highlights()
+            self.statusBar().showMessage(tr("Add Query cancelled"), 3000)
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
     def closeEvent(self, event) -> None:  # noqa: N802
         self.closed.emit()
         super().closeEvent(event)

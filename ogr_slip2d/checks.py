@@ -23,8 +23,9 @@ worst case, completely invalid". The check therefore:
 * invalidates the surface when the limit is exceeded (the reference
   writes error code -120 in place of the safety factor).
 
-**m-alpha Check.** ``m_alpha = cos(alpha) + sin(alpha)·tan(phi)/F`` is the
-denominator of the base normal force. Whitman & Bailey (1967) showed that
+**m-alpha Check.** ``m_alpha = cos(alpha) + s·sin(alpha)·tan(phi)/F``,
+where ``s`` is the sense of sliding, is the denominator of the base normal
+force. Whitman & Bailey (1967) showed that
 once it drops below about 0.2 the resulting safety factor becomes
 unreliable: a small positive value inflates the normal force and hence
 the shear resistance, and a negative value can produce negative
@@ -86,6 +87,30 @@ def _material_tensile_strength(material) -> float:
 
 
 # ----------------------------------------------------------------------
+def _slide_sign(result) -> float:
+    """The sense of sliding, derived exactly as the solvers derive it.
+
+    v0.1.82 — this was the bug. ``m_alpha`` is not symmetric in ``alpha``,
+    so it can only be evaluated in the same sign convention the method
+    used. Every solver takes the sense of sliding from ``sign(Σ W·sin α)``
+    (see :meth:`BishopSimplified.compute_fos`) and carries it into
+    ``m_alpha = cos α + slide_sign·sin α·tan φ / F``; these checks dropped
+    the factor, which flips the branch whenever the mass slides towards
+    decreasing x.
+
+    On the reference critical circle — Ej_1, centre (88, 70.5), R = 47.212,
+    ``slide_sign = −1`` — that turned min m_alpha = +0.928 into −0.010 and
+    "rejected" five perfectly ordinary slices. It is the anomaly recorded
+    in AGENTS.md: the criterion was never wrong, it was being read in the
+    mirror.
+    """
+    slices = getattr(result, "slices", None)
+    if not slices:
+        return 1.0
+    driving = sum(s.weight * math.sin(s.base_angle) for s in slices)
+    return 1.0 if driving >= 0 else -1.0
+
+
 def base_effective_stresses(result) -> list[float]:
     """Effective normal stress on each slice base at the converged FoS.
 
@@ -107,6 +132,7 @@ def base_effective_stresses(result) -> list[float]:
         return []
 
     out: list[float] = []
+    sgn = _slide_sign(result)
     for s in result.slices:
         alpha = s.base_angle
         l = max(s.base_length, 1e-12)
@@ -119,12 +145,12 @@ def base_effective_stresses(result) -> list[float]:
         sigma_est = max(0.0, W * math.cos(alpha) - u * l) / l
         c_loc, tan_phi = BishopSimplified._local_c_phi(s, s.material,
                                                        sigma_est)
-        m_alpha = math.cos(alpha) + math.sin(alpha) * tan_phi / F
+        m_alpha = math.cos(alpha) + sgn * math.sin(alpha) * tan_phi / F
         if abs(m_alpha) < 1e-9:
             out.append(float("-inf"))     # degenerate: treat as failing
             continue
-        N = (W - (c_loc * l * math.sin(alpha)
-                  - u * l * tan_phi * math.sin(alpha)) / F) / m_alpha
+        N = (W - sgn * (c_loc * l * math.sin(alpha)
+                        - u * l * tan_phi * math.sin(alpha)) / F) / m_alpha
         out.append(N / l - u)
     return out
 
@@ -139,6 +165,7 @@ def base_m_alphas(result) -> list[float]:
     if not (math.isfinite(F) and F > 0):
         return []
     out: list[float] = []
+    sgn = _slide_sign(result)
     for s in result.slices:
         alpha = s.base_angle
         l = max(s.base_length, 1e-12)
@@ -146,7 +173,7 @@ def base_m_alphas(result) -> list[float]:
         sigma_est = max(0.0, s.weight * math.cos(alpha) - u * l) / l
         _c, tan_phi = BishopSimplified._local_c_phi(s, s.material,
                                                     sigma_est)
-        out.append(math.cos(alpha) + math.sin(alpha) * tan_phi / F)
+        out.append(math.cos(alpha) + sgn * math.sin(alpha) * tan_phi / F)
     return out
 
 

@@ -13,10 +13,15 @@ Two choices worth stating:
   nothing; a strip of the actual colours does. The preview is drawn from
   the same sampling function the plot uses, so what is previewed is what
   will be drawn.
-* **Auto-range is a checkbox, not a button.** Left on, the range follows
-  the data as results change; switched off, the user's own bounds are
-  kept. A one-shot "fit" button would silently go stale the next time the
-  method changed.
+* **Auto-range is a checkbox, and there are one-shot buttons beside it.**
+  Left on, the range follows the data as results change; switched off,
+  the user's own bounds are kept. The buttons (*0 to 6*, *Fit to results*)
+  set the bounds once and turn the checkbox off, which is the honest way
+  to offer them: a "fit" that pretended to keep following the data would
+  silently go stale the next time the method changed.
+* **The range follows the scalar.** Switching field resets the bounds to
+  that field's defaults, because a 0–6 range means everything for a
+  factor of safety and nothing for a total head in metres.
 
 Author: Samuel Sáez López (UPCT)
 """
@@ -33,6 +38,7 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QGroupBox,
     QLabel,
+    QPushButton,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -92,6 +98,11 @@ class ContourOptionsDialog(QDialog):
         self.resize(460, 480)
         self._values = list(values or [])
         self.settings = ContourSettings.from_dict(settings.to_dict())
+        # The sample values belong to ONE field — the one that was active
+        # when the dialog opened. Fitting a range to them after the user
+        # picks a different scalar would fit metres of head to factors of
+        # safety, so the fit is only offered while the field matches.
+        self._values_field = self.settings.field
 
         v = QVBoxLayout(self)
 
@@ -131,6 +142,27 @@ class ContourOptionsDialog(QDialog):
         fr.addRow(tr("Number of intervals:"), self.sp_int)
         self.lbl_step = QLabel("")
         fr.addRow(tr("Interval size:"), self.lbl_step)
+        # v0.1.82 — the reference's two one-click ranges. "0 to 6" is the
+        # published default for a factor of safety and the range every
+        # comparison against the reference has to be read in; "Fit to
+        # results" is the one-shot version of the checkbox above, for
+        # when the user wants today's data but not a range that keeps
+        # moving under them.
+        row = QWidget()
+        hb = QVBoxLayout(row)
+        hb.setContentsMargins(0, 0, 0, 0)
+        self.btn_0to6 = QPushButton(tr("0 to 6"))
+        self.btn_0to6.setToolTip(tr(
+            "Restore the default factor-of-safety range: 0 to 6 in 24 "
+            "intervals of 0.25."))
+        self.btn_0to6.clicked.connect(self._range_0_to_6)
+        self.btn_fit = QPushButton(tr("Fit to results"))
+        self.btn_fit.setToolTip(tr(
+            "Set the range from the values actually present, once."))
+        self.btn_fit.clicked.connect(self._range_fit)
+        hb.addWidget(self.btn_0to6)
+        hb.addWidget(self.btn_fit)
+        fr.addRow("", row)
         v.addWidget(gb_r)
 
         gb_s = QGroupBox(tr("Appearance"))
@@ -167,8 +199,9 @@ class ContourOptionsDialog(QDialog):
 
         for w in (self.sp_min, self.sp_max, self.sp_int, self.sp_dec):
             w.valueChanged.connect(self._refresh)
-        for w in (self.cbo_mode, self.cbo_palette, self.cbo_field):
+        for w in (self.cbo_mode, self.cbo_palette):
             w.currentIndexChanged.connect(self._refresh)
+        self.cbo_field.currentIndexChanged.connect(self._on_field_changed)
         for w in (self.chk_rev, self.chk_sci):
             w.toggled.connect(self._refresh)
 
@@ -184,10 +217,16 @@ class ContourOptionsDialog(QDialog):
         self._refresh()
 
     # ------------------------------------------------------------------
+    def _fittable(self) -> bool:
+        """True when the sample values belong to the selected field."""
+        return bool(self._values) and (
+            (self.cbo_field.currentData() or "fos") == self._values_field)
+
     def _on_auto_toggled(self, on: bool) -> None:
         self.sp_min.setEnabled(not on)
         self.sp_max.setEnabled(not on)
-        if on and self._values:
+        self.btn_fit.setEnabled(self._fittable())
+        if on and self._fittable():
             probe = ContourSettings.from_dict(self.settings.to_dict())
             probe.fit_to(self._values)
             self.sp_min.blockSignals(True)
@@ -219,14 +258,37 @@ class ContourOptionsDialog(QDialog):
         step = s.span / max(1, s.intervals)
         self.lbl_step.setText(s.format_value(step))
 
+    def _on_field_changed(self, *_a) -> None:
+        """A different scalar needs a different range, not the last one."""
+        self._defaults()
+
+    def _range_0_to_6(self) -> None:
+        self.chk_auto.setChecked(False)
+        self.sp_min.setValue(0.0)
+        self.sp_max.setValue(6.0)
+        self.sp_int.setValue(24)
+        self._refresh()
+
+    def _range_fit(self) -> None:
+        if not self._fittable():
+            return
+        probe = self._collect()
+        probe.fit_to(self._values)
+        self.chk_auto.setChecked(False)
+        self.sp_min.setValue(probe.vmin)
+        self.sp_max.setValue(probe.vmax)
+        self._refresh()
+
     def _defaults(self) -> None:
-        fresh = ContourSettings()
-        if self._values:
+        fresh = ContourSettings.for_field(
+            self.cbo_field.currentData() or "fos")
+        if fresh.auto_range and self._fittable():
             fresh.fit_to(self._values)
         self.sp_min.setValue(fresh.vmin)
         self.sp_max.setValue(fresh.vmax)
         self.sp_int.setValue(fresh.intervals)
-        self.chk_auto.setChecked(True)
+        self.sp_dec.setValue(fresh.decimals)
+        self.chk_auto.setChecked(fresh.auto_range)
         self.chk_rev.setChecked(False)
         self.cbo_mode.setCurrentIndex(
             self.cbo_mode.findData(ContourMode.FILLED))

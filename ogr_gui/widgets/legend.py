@@ -47,21 +47,35 @@ class ColourScaleLegend(QWidget):
         self._decimals = 2
         self._scientific = False
         self._mark = None            # value to flag on the bar
+        # v0.1.82 — when the contour settings are banded, the legend
+        # draws the bands themselves instead of a gradient. A gradient
+        # invites the reader to interpolate a colour that the plot never
+        # produces; the reference legend is a stack of flat swatches for
+        # exactly that reason.
+        self._bands = None           # list of colours, low → high
+        self._labels = None          # len(bands) + 1 boundary labels
         self.setMinimumWidth(96)
         self.setMinimumHeight(180)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
 
     # ------------------------------------------------------------------
     def configure(self, vmin, vmax, colour_fn, title=None, steps=None,
-                  decimals=None, scientific=None, mark=None) -> None:
+                  decimals=None, scientific=None, mark=None,
+                  bands=None, labels=None) -> None:
         """Set the range and the colour function.
 
         ``colour_fn`` takes a value and returns anything QColor accepts.
+        ``bands`` (low → high) switches the bar to flat swatches, and
+        ``labels`` supplies the ``len(bands) + 1`` boundary texts — which
+        is how the top one can read "6.000+" rather than claiming the
+        scale stops there.
         """
         if vmax <= vmin:
             vmax = vmin + 1.0
         self._vmin, self._vmax = float(vmin), float(vmax)
         self._colour_fn = colour_fn
+        self._bands = list(bands) if bands else None
+        self._labels = list(labels) if labels else None
         if title is not None:
             self._title = title
         if steps is not None:
@@ -106,34 +120,62 @@ class ColourScaleLegend(QWidget):
             p.end()
             return
 
-        # A gradient sampled from the same function the canvas uses, so a
-        # non-linear colour map is reproduced faithfully instead of being
-        # approximated by two end colours.
-        grad = QLinearGradient(bar.left(), bar.bottom(),
-                               bar.left(), bar.top())
-        samples = 32
-        for i in range(samples + 1):
-            t = i / samples
-            value = self._vmin + t * (self._vmax - self._vmin)
-            try:
-                grad.setColorAt(t, QColor(self._colour_fn(value)))
-            except Exception:  # noqa: BLE001
-                grad.setColorAt(t, QColor("#888888"))
-        p.fillRect(bar, grad)
+        n_bands = len(self._bands) if self._bands else 0
+        if n_bands:
+            # Flat swatches, low at the bottom, each separated so the
+            # boundaries are countable.
+            for i, colour in enumerate(self._bands):
+                y0 = bar.bottom() - (i + 1) / n_bands * bar.height()
+                y1 = bar.bottom() - i / n_bands * bar.height()
+                try:
+                    p.fillRect(QRectF(bar.left(), y0, bar.width(), y1 - y0),
+                               QColor(colour))
+                except Exception:  # noqa: BLE001
+                    pass
+            p.setPen(QPen(QColor("#404040"), 1))
+            for i in range(1, n_bands):
+                y = bar.bottom() - i / n_bands * bar.height()
+                p.drawLine(int(bar.left()), int(y), int(bar.right()), int(y))
+        else:
+            # A gradient sampled from the same function the canvas uses,
+            # so a non-linear colour map is reproduced faithfully instead
+            # of being approximated by two end colours.
+            grad = QLinearGradient(bar.left(), bar.bottom(),
+                                   bar.left(), bar.top())
+            samples = 32
+            for i in range(samples + 1):
+                t = i / samples
+                value = self._vmin + t * (self._vmax - self._vmin)
+                try:
+                    grad.setColorAt(t, QColor(self._colour_fn(value)))
+                except Exception:  # noqa: BLE001
+                    grad.setColorAt(t, QColor("#888888"))
+            p.fillRect(bar, grad)
         p.setPen(QPen(QColor("#404040"), 1))
         p.drawRect(bar)
 
-        # Tick labels
-        for i in range(self._steps + 1):
-            t = i / self._steps
-            value = self._vmin + t * (self._vmax - self._vmin)
+        # Tick labels. With 24 bands every boundary would need a label and
+        # they would overprint each other, so labels are thinned until
+        # they fit — the reference legend does the same, labelling every
+        # second band.
+        p.setPen(QPen(self.palette().windowText().color()))
+        n_ticks = n_bands if n_bands else self._steps
+        stride = 1
+        while (n_ticks / stride) > max(bar.height() / (fm.height() + 2), 2):
+            stride += 1
+        for i in range(0, n_ticks + 1, stride):
+            t = i / n_ticks
             y = bar.bottom() - t * bar.height()
+            if self._labels and i < len(self._labels):
+                text = self._labels[i]
+            else:
+                text = self.format_value(
+                    self._vmin + t * (self._vmax - self._vmin))
             p.drawLine(int(bar.right()), int(y), int(bar.right()) + 4,
                        int(y))
             p.drawText(QRectF(bar.right() + 6, y - fm.height() / 2,
                               w - bar.right() - 8, fm.height()),
-                       Qt.AlignLeft | Qt.AlignVCenter,
-                       self.format_value(value))
+                       Qt.AlignLeft | Qt.AlignVCenter, text)
 
         # Marker for a value of interest (the critical factor of safety)
         if self._mark is not None and self._vmax > self._vmin:
