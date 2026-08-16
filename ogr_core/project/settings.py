@@ -440,15 +440,27 @@ class AdvancedSettings:
     # Percentage of slices, counted FROM THE TOE, over which the tensile
     # check applies. The reference default is 95 %.
     tensile_percent: float = 95.0
-    # v0.1.74 — the m-alpha check (Whitman & Bailey 1967). Offered, so
-    # the user can reach it, but OFF by default, which is a deliberate
-    # divergence from the reference: measured on the Ej1 case, the
-    # reference-validated critical circle has a minimum m-alpha of
-    # **-0.0100** with 5 of its 25 slices below the 0.2 limit, so the
-    # check rejects the very surface the project validates against a
-    # published value. That makes it a diagnostic, not a validity
-    # criterion, and a diagnostic must not be on by default.
-    check_m_alpha: bool = False
+    # The m-alpha check (Whitman & Bailey 1967).
+    #
+    # v0.1.74 turned it OFF by default and recorded the reason: on the
+    # Ej_1 case the reference-validated critical circle came out with a
+    # minimum m-alpha of -0.0100, so the check rejected the very surface
+    # the project validates against a published value.
+    #
+    # v0.1.82 found that measurement to be the bug, not the criterion.
+    # ``m_alpha`` is not symmetric in alpha, so it only means anything
+    # evaluated with the same sense of sliding the solver used; with the
+    # sign restored that circle's minimum m-alpha is **+0.928**.
+    #
+    # v0.1.84 turns it ON, because the justification for keeping it off
+    # was the other half of the same mistake. The reference's own reports
+    # for both worked examples screen surfaces with it by default and
+    # count them under error code -112: 97 surfaces in Ej_1 bishop, 225 in
+    # Ej_2 bishop, and likewise for janbu, spencer and GLE. It was never a
+    # divergence the reference asked for. Measured after the flip: the
+    # Ej_1 critical circle is untouched (0.884517, centre (88, 70.5)) and
+    # 64 surfaces are screened out, against the reference's 97.
+    check_m_alpha: bool = True
     # First trial value of the factor of safety. Named ``min_initial_fs``
     # until v0.1.74, which was a misnomer: it is a starting point, not a
     # floor. ``from_dict`` still reads the old key.

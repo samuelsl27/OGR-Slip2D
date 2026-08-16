@@ -29,7 +29,9 @@ import math
 from dataclasses import dataclass, field
 from typing import Iterator, Optional
 
-from ogr_core.geometry import Boundary, BoundaryType, Polyline, Vertex
+from ogr_core.geometry import (
+    Boundary, BoundaryType, Polyline, Vertex, ground_surface,
+)
 from ogr_core.hydraulic.excess_pore_pressure import (
     excess_at,
     is_enabled as excess_is_enabled,
@@ -196,23 +198,18 @@ def _point_in_polygon(x: float, y: float, polygon: Polyline) -> bool:
 
 
 def _ground_surface_from_external(external: Boundary) -> Polyline:
-    """Extract the upper envelope (ground surface) from the external boundary.
+    """Upper envelope (ground surface) of the external boundary.
 
-    We take the vertices with the highest y for each unique x — a simple
-    but robust heuristic for slope models where the external boundary is
-    a closed polygon.
+    v0.1.84 — delegates to :func:`ogr_core.geometry.ground_surface`, which
+    walks the polygon EDGES. This function used to bucket the boundary
+    VERTICES by x and keep the highest y of each bucket, which silently
+    published any bottom-edge vertex whose x no top vertex shared as if it
+    were ground. On the Ej_2 reference model the vertex ``(0, 0)`` on the
+    bottom edge turned the flat terrain at y = 30 into a 30 m ravine, and
+    the critical circle came out at FoS = 0.79 against a reference of
+    1.156 — daylighting on the floor of the model instead of on the slope.
     """
-    verts = external.polyline.vertices
-    if not verts:
-        return Polyline()
-    # Group by rounded x, keep the max y per bucket
-    buckets: dict[float, float] = {}
-    for v in verts:
-        key = round(v.x, 6)
-        if key not in buckets or v.y > buckets[key]:
-            buckets[key] = v.y
-    xs = sorted(buckets.keys())
-    return Polyline(vertices=[Vertex(x, buckets[x]) for x in xs])
+    return ground_surface(external)
 
 
 def _apply_ponded_water(project: Project, s: "Slice") -> None:

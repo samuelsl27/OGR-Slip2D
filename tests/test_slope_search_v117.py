@@ -13,6 +13,19 @@ import math
 
 
 def _slope():
+    """A 12 m slope on 10 m of foundation.
+
+    v0.1.84 — the foundation is new, and it is not decoration. The
+    boundary used to be
+    ``(0,0) (60,0) (60,H) (crest,H) (toe,0)``, whose last edge runs back
+    along the first: from x = 0 to the toe at x = 30 the ground and the
+    base of the model are the SAME line at y = 0, so that stretch encloses
+    no soil at all. Every circle daylighting there had its arc below the
+    base, weighing ground that does not exist, and v0.1.84 stopped
+    analysing surfaces that leave the soil region. Giving the model the
+    foundation it always needed makes the question well posed instead of
+    weakening the rule.
+    """
     from ogr_core.geometry import Boundary, BoundaryType, Polyline, Vertex
     from ogr_core.materials import Material
     from ogr_core.materials.builtin_models import MohrCoulomb
@@ -21,9 +34,10 @@ def _slope():
     beta = math.radians(30.96)
     toe = 30.0
     crest = toe + H / math.tan(beta)
+    base = -10.0
     ext = Polyline(vertices=[
-        Vertex(0, 0), Vertex(60, 0), Vertex(60, H),
-        Vertex(crest, H), Vertex(toe, 0),
+        Vertex(0, base), Vertex(60, base), Vertex(60, H),
+        Vertex(crest, H), Vertex(toe, 0), Vertex(0, 0),
     ], closed=True)
     ext.ensure_ccw()
     p = Project("slope")
@@ -46,13 +60,24 @@ class TestSlopeSearch:
 
     def test_agrees_with_grid_search(self):
         """Slope Search should find essentially the same critical FoS as
-        the Grid Search (within ~5%)."""
+        the Grid Search (within ~5%).
+
+        v0.1.84 — the reference grid here is 16×16 with 9 radii, not the
+        12×12 with 5 that the other cases use. The coarse grid does not
+        resolve this model well enough to be compared against: measured on
+        the same project, 12×12 lands on 1.157 and 16×16 on 1.121, against
+        the Slope Search's 1.103 — 4.7 % versus 1.6 %. The coarse version
+        used to fit inside the 5 % band only because its own minimum was a
+        surface that dipped below the base of the model, which v0.1.84 no
+        longer analyses. Comparing two searches means giving both enough
+        resolution to converge; it costs 0.9 s.
+        """
         from ogr_slip2d import BishopSimplified, GridSearch
         from ogr_slip2d.search import SlopeSearch
         p = _slope()
         grid = GridSearch(method=BishopSimplified(),
-            grid_x=(20, 60), grid_y=(15, 40), grid_nx=12, grid_ny=12,
-            radius_increment=4.0, min_radius=8.0, num_slices=25,
+            grid_x=(20, 60), grid_y=(15, 40), grid_nx=16, grid_ny=16,
+            radius_increment=8.0, min_radius=8.0, num_slices=25,
             min_area=0.5).run(p)
         slope = SlopeSearch(method=BishopSimplified(),
             num_surfaces=1500, num_slices=25, seed=42).run(p)

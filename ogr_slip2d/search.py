@@ -81,6 +81,22 @@ class SearchResult:
                    if r.is_valid and not getattr(r, "admissible", True))
 
     @property
+    def analysed_count(self) -> int:
+        """Surfaces that both converged AND survived the post-checks.
+
+        v0.1.84 — the number to report to the user, and the reason it is
+        not ``valid_count``: a surface screened out by the m-alpha or
+        tensile check has a converged factor of safety, so it counts as
+        valid, but it can never be the critical surface. With the m-alpha
+        check off by default that gap was always zero; with it on, as the
+        reference has it, the panel would have claimed 2966 valid
+        surfaces while 64 of them were barred from ever being the answer.
+        The reference makes the same choice: its report lists surfaces
+        screened by error code -112 under "Number of Invalid Surfaces".
+        """
+        return max(0, self.valid_count - self.inadmissible_count)
+
+    @property
     def min_fos(self) -> float:
         c = self.critical
         return c.fos if c else math.inf
@@ -189,16 +205,92 @@ class BaseSearch(ABC):
             if cy + R < ymin:
                 return None
 
-        slices = slice_surface(project, circle, num_slices=self.num_slices)
-        if slices is None or len(slices) < 3:
-            return None
-        # Filter by minimum "area" (here approximated as Σ w_i · h_i)
-        area = sum(s.width * max(s.height, 0.0) for s in slices)
-        if area < self.min_area:
-            return None
-        res = self.method.compute_fos(project, circle, slices)
-        self._is_admissible(res)     # marks res.admissible in place
-        return res
+        # v0.1.84 — a circle that crosses the ground more than twice
+        # defines several DISJOINT sliding masses, and the critical
+        # mechanism is the one with the lowest factor of safety. Until now
+        # the first mass from the left was taken and the rest discarded
+        # unseen; on the Ej_2 reference model that resolved Slide's own
+        # critical circle onto a 62 m² lens of level ground beyond the toe
+        # (driving moment ≈ 0, so no factor of safety at all) instead of
+        # the 184 m² slope failure at FoS = 1.155, and the true critical
+        # circle was thrown away as invalid.
+        best: Optional[LEMResult] = None
+        for trial in self._candidate_surfaces(project, circle):
+            slices = slice_surface(project, trial, num_slices=self.num_slices)
+            if slices is None or len(slices) < 3:
+                continue
+            # Filter by minimum "area" (here approximated as Σ w_i · h_i)
+            area = sum(s.width * max(s.height, 0.0) for s in slices)
+            if area < self.min_area:
+                continue
+            res = self.method.compute_fos(project, trial, slices)
+            self._is_admissible(res)     # marks res.admissible in place
+            if res is None:
+                continue
+            if best is None:
+                best = res
+            elif res.is_valid and (not best.is_valid or res.fos < best.fos):
+                best = res
+        if best is not None:
+            # The caller's circle must end up carrying the mass that was
+            # actually analysed, or the drawing and the number disagree.
+            circle.x_left = best.surface.x_left
+            circle.x_right = best.surface.x_right
+            circle.tension_cracks = list(
+                getattr(best.surface, "tension_cracks", []) or [])
+        return best
+
+    # ------------------------------------------------------------------
+    def _candidate_surfaces(self, project: Project, circle: SlipCircle):
+        """Yield every sliding mass of ``circle`` that is worth analysing.
+
+        Each is a fresh :class:`SlipCircle` with its endpoints already
+        resolved and its reverse curvature already treated, so the caller
+        only has to slice and solve.
+
+        Masses that leave the soil region are dropped, which is the
+        reference's documented behaviour for non-composite circular
+        surfaces and what its report counts as error −103. With Composite
+        Surfaces enabled the rule does not apply: that option exists
+        precisely so such a circle follows the boundary instead of being
+        rejected by it. Containment is judged on the surface as finally
+        analysed — after any reverse-curvature tension crack has moved an
+        endpoint — because that is the surface the factor of safety
+        belongs to.
+        """
+        from ogr_core.geometry import ground_surface
+        from .slicer import _reverse_curvature_mode
+        from .surface import leaves_soil_region
+
+        external = project.external_boundary()
+        if external is None:
+            return
+        if circle.x_left is not None and circle.x_right is not None:
+            yield circle           # already resolved by the caller
+            return
+
+        ground = ground_surface(external)
+        chords = circle.candidate_chords(ground)
+        if not chords:
+            return
+        mode = _reverse_curvature_mode(project)
+        try:
+            composite = bool(project.settings.search.composite_surfaces)
+        except AttributeError:
+            composite = False
+        ext_verts = list(external.polyline.vertices)
+
+        for x_l, x_r in chords:
+            trial = SlipCircle(centre_x=circle.centre_x,
+                               centre_y=circle.centre_y,
+                               radius=circle.radius)
+            trial.x_left, trial.x_right = x_l, x_r
+            if not trial.apply_reverse_curvature(ground, mode=mode):
+                continue
+            if not composite and leaves_soil_region(
+                    trial, ext_verts, trial.x_left, trial.x_right):
+                continue
+            yield trial
 
     # ------------------------------------------------------------------
     def evaluate_surface(
@@ -323,6 +415,32 @@ class GridSearch(BaseSearch):
         engulfing the entire model. We use the distance to the toe/crest
         ends of the slope surface, but cap it so the deepest circle's
         lowest point stays near the model floor rather than far below it.
+
+        v0.1.84 — this rule is KNOWN not to be the reference's, and the
+        attempt to replace it with the reference's was measured and
+        rejected. *Grid Search* says only that "suitable Minimum and
+        Maximum radii are determined, based on the distances from the slip
+        center to the slope surface"; its figure ``fig_gridsearch2.gif``
+        draws the minimum radius to the nearest point of the slope face
+        and the maximum radius to the far slope limit. Implementing that
+        literally — r_min = distance to the nearest point of the slope
+        POLYLINE instead of its nearest VERTEX, r_max = distance to the
+        farther end of the slope surface instead of the toe plus 8 % —
+        gives, against the two reference models:
+
+            bracket        Ej_1 (ref 0.882889)   Ej_2 (ref 1.155640)
+            shipped        0.88452  (+0.18 %)    1.16693  (+0.98 %)
+            per the figure 0.90049  (+1.99 %)    1.14910  (−0.57 %)
+
+        It is better on one model and twice as bad on the other, so the
+        figure is not being read the way the program implements it, and
+        neither reading reproduces the reference's own critical radii: at
+        the Ej_2 critical centre (−3.333, 87.632) no integer step of
+        either bracket lands on R = 60.257. Changing a validated result on
+        a guess is what rule 1 exists to prevent, so the shipped rule
+        stays until the sampling can be derived from data rather than
+        inferred from a drawing. The experiment that would settle it is in
+        the changelog for this version.
         """
         if not slope_pts:
             return None
@@ -1915,37 +2033,19 @@ class PathSearch(BaseSearch):
     @staticmethod
     def _ground_profile(ext_verts):
         """Real upper contour of the External (not the convex hull),
-        sorted by x. For each distinct x, the maximum y over all edges."""
-        from ogr_core.geometry import Vertex
-        n = len(ext_verts)
-        if n < 3:
+        sorted by x. For each distinct x, the maximum y over all edges.
+
+        v0.1.84 — delegates to :func:`ogr_core.geometry.ground_surface`.
+        This was the only one of the project's three ground-surface
+        implementations that walked the edges rather than the vertices, so
+        it is the one the shared function generalises; keeping a private
+        copy here would have re-created the divergence that produced the
+        Ej_2 anomaly.
+        """
+        from ogr_core.geometry import ground_surface
+        if len(ext_verts) < 3:
             return list(ext_verts)
-        xs_sorted = sorted({round(v.x, 9) for v in ext_verts})
-
-        def _upper_y_at(x):
-            best = None
-            for i in range(n):
-                a = ext_verts[i]
-                b = ext_verts[(i + 1) % n]
-                x0, x1 = a.x, b.x
-                if x0 == x1:
-                    if abs(x - x0) < 1e-9:
-                        cand = max(a.y, b.y)
-                        best = cand if best is None else max(best, cand)
-                    continue
-                lo, hi = (x0, x1) if x0 < x1 else (x1, x0)
-                if lo - 1e-9 <= x <= hi + 1e-9:
-                    t = (x - x0) / (x1 - x0)
-                    y = a.y + t * (b.y - a.y)
-                    best = y if best is None else max(best, y)
-            return best
-
-        out = []
-        for x in xs_sorted:
-            y = _upper_y_at(x)
-            if y is not None:
-                out.append(Vertex(x, y))
-        return out
+        return list(ground_surface(list(ext_verts)).vertices)
 
     @staticmethod
     def _interpolate_top_y(top_verts, x: float) -> Optional[float]:

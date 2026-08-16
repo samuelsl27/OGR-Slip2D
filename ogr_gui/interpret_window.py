@@ -169,9 +169,14 @@ class _SummaryDock(QDockWidget):
         # scale in the dock on the left, and this table claiming the
         # heatmap meant something else. A legend that is not generated
         # from the mapping it explains will always end up saying that.
+        # v0.1.84 — the count that can actually produce the answer below
+        # it. A surface screened out by a post-analysis check converged,
+        # so it is "valid", but it is barred from being the critical
+        # surface; reporting it here made the panel contradict itself.
+        n_ok = getattr(result, "analysed_count", result.valid_count)
         self.label.setText(
             f"Method: <b>{result.method_id}</b><br>"
-            f"Valid surfaces: <b>{result.valid_count}</b> / "
+            f"Valid surfaces: <b>{n_ok}</b> / "
             f"{getattr(result, 'total_count', len(result.evaluations))}<br>"
             f"<br>"
             f"<b>Critical surface</b><br>"
@@ -1513,8 +1518,11 @@ class InterpretWindow(QMainWindow):
             return
         with_reason = sum(n for _why, n in reasons)
         generated = getattr(res, "total_count", len(res.evaluations))
+        # v0.1.84 — rejected against the count that can actually be the
+        # answer, so this total and the summary panel agree.
+        n_ok = getattr(res, "analysed_count", res.valid_count)
         lines = [tr("%d surface(s) rejected of %d generated:")
-                 % (generated - res.valid_count, generated), ""]
+                 % (generated - n_ok, generated), ""]
         lines += [f"  {n} × {why}" for why, n in reasons]
         # v0.1.83 — the two numbers rarely agree, and saying so is the
         # point. A circle rejected BEFORE it was sliced — no two ground
@@ -1523,7 +1531,7 @@ class InterpretWindow(QMainWindow):
         # group it under and no geometry to draw in "Surfaces with error
         # code". Reporting only the ones with a reason would understate
         # the rejections by two thirds on a typical grid.
-        silent = (generated - res.valid_count) - with_reason
+        silent = (generated - n_ok) - with_reason
         if silent > 0:
             lines += ["", tr("%d more were discarded before slicing, so "
                              "they carry no error code and cannot be "

@@ -15,6 +15,7 @@ from .expand_shrink import (
     ExpandShrinkResult,
     expand_shrink_external,
 )
+from .ground import ground_surface, upper_y_at
 from .primitives import Polyline, Vertex, segments_of
 from .tension_crack import TensionCrackProperties, WaterLevelMode
 from .regions import MaterialRegion, build_regions, region_at_point, regions_available
@@ -57,4 +58,7 @@ __all__ = [
     # v0.1.7 tension crack
     "TensionCrackProperties",
     "WaterLevelMode",
+    # v0.1.84 — the single definition of the ground surface
+    "ground_surface",
+    "upper_y_at",
 ]

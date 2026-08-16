@@ -37,6 +37,74 @@ def ground_y_at(ground: Polyline, x: float) -> Optional[float]:
 
 
 # ----------------------------------------------------------------------
+def leaves_soil_region(circle: "SlipCircle", external_vertices: list,
+                       x_l: float, x_r: float) -> bool:
+    """True when the arc between ``x_l`` and ``x_r`` leaves the soil.
+
+    The reference states the rule plainly under *Grid Search*: "if a
+    circular surface extends past the lower limits of the External
+    Boundary, the surface is discarded, and is not analyzed", and its
+    report counts those surfaces under error code −103 — "two surface /
+    slope intersections, but one or more surface / nonslope external
+    polygon intersections lie between them. This usually occurs when the
+    slip surface extends past the bottom of the soil region."
+
+    ``x_l`` and ``x_r`` are consecutive GROUND crossings, so by
+    construction the arc meets no ground between them. Any further
+    intersection of the *lower* arc with the external polygon strictly
+    inside the chord is therefore an intersection with a non-ground part
+    of the boundary — the floor or a side — and the mass it would enclose
+    is not made of soil.
+
+    Only the lower arc is tested: the upper arc is not the slip surface.
+    Disabled by the caller when Composite Surfaces is on, which is exactly
+    what that option means — the surface then follows the boundary instead
+    of being rejected by it.
+    """
+    from ogr_core.geometry.ground import upper_y_at
+
+    n = len(external_vertices)
+    if n < 3 or x_r - x_l < 1e-9:
+        return False
+    # Relative to the chord: the same model in millimetres and in metres
+    # must reject and accept the same surfaces.
+    span = x_r - x_l
+    tol = 1e-6 * max(span, circle.radius)
+
+    for i in range(n):
+        p1 = external_vertices[i]
+        p2 = external_vertices[(i + 1) % n]
+        dx = p2.x - p1.x
+        dy = p2.y - p1.y
+        a = dx * dx + dy * dy
+        if a < 1e-14:
+            continue
+        b = 2 * ((p1.x - circle.centre_x) * dx + (p1.y - circle.centre_y) * dy)
+        c = ((p1.x - circle.centre_x) ** 2
+             + (p1.y - circle.centre_y) ** 2
+             - circle.radius ** 2)
+        disc = b * b - 4 * a * c
+        if disc < 0:
+            continue
+        sq = math.sqrt(disc)
+        for t in ((-b - sq) / (2 * a), (-b + sq) / (2 * a)):
+            if not (-1e-9 <= t <= 1 + 1e-9):
+                continue
+            x = p1.x + t * dx
+            if x <= x_l + tol or x >= x_r - tol:
+                continue
+            y = p1.y + t * dy
+            arc_y = circle.base_y_at(x)
+            if arc_y is None or abs(y - arc_y) > tol:
+                continue          # meets the UPPER arc, not the surface
+            gy = upper_y_at(external_vertices, x)
+            if gy is not None and abs(gy - y) <= tol:
+                continue          # a ground crossing after all
+            return True
+    return False
+
+
+# ----------------------------------------------------------------------
 class SurfaceProtocol(Protocol):
     """Minimum interface every slip geometry must satisfy."""
 
@@ -93,17 +161,22 @@ class SlipCircle:
         return (self.centre_x - self.radius, self.centre_x + self.radius)
 
     # ------------------------------------------------------------------
-    def intersect_with_ground(self, ground: Polyline) -> tuple[float, float] | None:
-        """Find the two intersection x-coordinates with the ground polyline.
+    def candidate_chords(self, ground: Polyline) -> list[tuple[float, float]]:
+        """Every sliding mass this circle defines against ``ground``.
 
-        The LEM solver uses only the *lower* arc of the circle as the
-        failure surface; hence we require the chord between the two
-        intersection points to span a region where the lower arc lies
-        *below* the ground surface.
+        The LEM solver uses only the *lower* arc of the circle, so a mass
+        exists between two consecutive ground crossings whenever the arc
+        between them runs BELOW the ground surface. A circle that crosses
+        the ground more than twice therefore defines several **disjoint**
+        masses, and they are all returned here, left to right.
 
-        Returns (x_left, x_right) or None if no valid chord is found.
+        Consecutive pairs only, never the extreme pair: on a benched or
+        footed slope the circle dips under the toe bench and crosses the
+        flat ground again much further right, and joining the first
+        crossing to the last would span a stretch where the arc is out in
+        the open air.
         """
-        roots: list[tuple[float, float]] = []  # (x, y) pairs
+        roots: list[float] = []
         for p1, p2 in zip(ground.vertices[:-1], ground.vertices[1:]):
             dx = p2.x - p1.x
             dy = p2.y - p1.y
@@ -122,50 +195,38 @@ class SlipCircle:
             sq = math.sqrt(disc)
             for t in ((-b - sq) / (2 * a), (-b + sq) / (2 * a)):
                 if -1e-9 <= t <= 1 + 1e-9:
-                    x = p1.x + t * dx
-                    y = p1.y + t * dy
-                    roots.append((x, y))
+                    roots.append(round(p1.x + t * dx, 6))
 
-        if len(roots) < 2:
-            return None
-        # Deduplicate on x and sort left→right
-        roots_sorted = sorted(set((round(x, 6), round(y, 6))
-                                  for x, y in roots))
-        if len(roots_sorted) < 2:
-            return None
-
-        # v0.1.18 — pick the FIRST consecutive pair of crossings whose
-        # interior arc lies below the ground. The previous code took the
-        # extreme pair (first, last), which is only correct for
-        # "composite" surfaces. With non-composite circular surfaces
-        # (Slide "Composite Surfaces: Disabled"), the slip surface must
-        # daylight at the FIRST re-emergence. On a benched/footed slope
-        # the circle can dip below the toe bench and cross the flat
-        # ground again much further right (x≈100 instead of the true
-        # exit x≈74.8); taking the extreme pair grossly overestimates
-        # the sliding mass and the FoS.
-        def _ground_y(xq: float):
-            return ground_y_at(ground, xq)
-
-        chosen = None
-        for k in range(len(roots_sorted) - 1):
-            xa = roots_sorted[k][0]
-            xb = roots_sorted[k + 1][0]
+        roots = sorted(set(roots))
+        out: list[tuple[float, float]] = []
+        for k in range(len(roots) - 1):
+            xa, xb = roots[k], roots[k + 1]
             if xb - xa < 1e-6:
                 continue
             x_mid = 0.5 * (xa + xb)
             arc_y = self.base_y_at(x_mid)
-            gy = _ground_y(x_mid)
+            gy = ground_y_at(ground, x_mid)
             if arc_y is None or gy is None:
                 continue
             if arc_y <= gy + 1e-6:
-                chosen = (xa, xb)
-                break
-        if chosen is None:
-            return None
-        x_l, x_r = chosen
+                out.append((xa, xb))
+        return out
 
-        self.x_left, self.x_right = x_l, x_r
+    def intersect_with_ground(self, ground: Polyline) -> tuple[float, float] | None:
+        """Resolve the circle onto its FIRST sliding mass, left to right.
+
+        Kept as the default single-chord resolution for callers that only
+        want a surface to draw or to slice. A search must not use this on
+        its own: when a circle defines more than one mass the first one is
+        not necessarily the critical one — see
+        :meth:`BaseSearch.evaluate_circle`, which evaluates them all.
+
+        Returns (x_left, x_right) or None if no valid chord is found.
+        """
+        chords = self.candidate_chords(ground)
+        if not chords:
+            return None
+        self.x_left, self.x_right = chords[0]
         return self.x_left, self.x_right
 
     # ------------------------------------------------------------------

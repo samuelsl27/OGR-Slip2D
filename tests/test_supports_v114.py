@@ -234,7 +234,19 @@ class TestSupportPattern:
 class TestSupportLEMIntegration:
     def test_support_increases_fos(self):
         """A row of supports applied to a marginal slope should increase
-        the computed FoS."""
+        the computed FoS.
+
+        v0.1.84 — the model gained a 10 m foundation. It used to be
+        ``(0,0) (60,0) (60,H) (crest,H) (toe,0)``, whose closing edge runs
+        back along the bottom one: between x = 0 and the toe at x = 30 the
+        ground surface and the base of the model are the same line at
+        y = 0, enclosing no soil. Once v0.1.84 stopped analysing surfaces
+        that leave the soil region, the only circles left with enough
+        driving moment to carry these five nails were exactly the ones
+        that had been reaching below the base, and the supported search
+        returned no critical surface at all. With real ground underneath,
+        the answer is the same as before the rule existed: 1.159 → 2.128.
+        """
         from ogr_core.geometry import (Boundary, BoundaryType, Polyline,
                                        Vertex)
         from ogr_core.materials import Material, MohrCoulomb
@@ -246,8 +258,8 @@ class TestSupportLEMIntegration:
         H = 12.0; beta = math.radians(30.96)
         toe = 30.0; crest = toe + H / math.tan(beta)
         ext = Polyline(vertices=[
-            Vertex(0, 0), Vertex(60, 0), Vertex(60, H),
-            Vertex(crest, H), Vertex(toe, 0),
+            Vertex(0, -10), Vertex(60, -10), Vertex(60, H),
+            Vertex(crest, H), Vertex(toe, 0), Vertex(0, 0),
         ], closed=True); ext.ensure_ccw()
 
         p = Project("test")

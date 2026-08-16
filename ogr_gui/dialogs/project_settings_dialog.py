@@ -1068,10 +1068,11 @@ class _AdvancedPage(QWidget):
         form.addRow(tr("Maximum lambda:"), self.sp_lmax)
 
         # v0.1.74 — offered, so it is reachable, but OFF by default. The
-        # note below is the whole reason it is not a plain checkbox with
-        # the reference's default, and it stays next to the control it
-        # explains: a warning kept in a changelog is a warning nobody
-        # reads at the moment they need it.
+        # v0.1.84 — the note below used to explain why this diverged from
+        # the reference's default. It does not diverge: the reference
+        # screens with m-alpha by default and counts the rejects as error
+        # -112. The note now says what the check DOES to the results,
+        # which is what a user needs at the moment they read it.
         self.chk_m_alpha = QCheckBox(tr("Check m-alpha < 0.2"))
         self.chk_m_alpha.setChecked(bool(self.s.check_m_alpha))
         self.chk_m_alpha.setToolTip(tr(
@@ -1080,13 +1081,11 @@ class _AdvancedPage(QWidget):
         form.addRow("", self.chk_m_alpha)
 
         note = QLabel(tr(
-            "The m-alpha check is OFF by default, unlike in the "
-            "reference. Measured on the validation case, the "
-            "reference-validated critical circle has a minimum m-alpha "
-            "of −0.0100, with 5 of its 25 slices below the limit: the "
-            "check rejects the very surface this project validates "
-            "against a published value. Treat it as a diagnostic, not as "
-            "a validity criterion."))
+            "The m-alpha check is ON by default, as in the reference, "
+            "which screens surfaces with it and reports them as error "
+            "-112. Surfaces it rejects keep their factor of safety and "
+            "stay in the results; they are only barred from being the "
+            "critical surface. Switch it off to see them compete."))
         note.setWordWrap(True)
         form.addRow("", note)
         self._refresh()

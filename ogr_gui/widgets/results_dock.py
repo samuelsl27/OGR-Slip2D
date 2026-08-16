@@ -64,9 +64,15 @@ class ResultsDock(QDockWidget):
 
         crit = search_result.critical
         if crit:
+            # v0.1.84 — the same count the Interpret summary shows, and for
+            # the same reason: a surface screened out by a post-analysis
+            # check converged, so it is "valid", but it can never be the
+            # critical factor of safety printed next to it.
+            n_ok = getattr(search_result, "analysed_count",
+                           search_result.valid_count)
             self.header_label.setText(
                 f"Method: <b>{search_result.method_id}</b>   "
-                f"Valid: {search_result.valid_count}   "
+                f"Valid: {n_ok}   "
                 f"Critical FoS: <b>{crit.fos:.3f}</b>"
             )
         else:

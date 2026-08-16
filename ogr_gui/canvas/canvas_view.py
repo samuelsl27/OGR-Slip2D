@@ -2162,21 +2162,23 @@ class CanvasView(QGraphicsView):
     # v0.1.7 — Tension Crack zone visualisation
     # ==================================================================
     def _ground_polyline(self):
-        """Upper envelope of the external boundary, or None."""
+        """Upper envelope of the external boundary, or None.
+
+        v0.1.84 — delegates to :func:`ogr_core.geometry.ground_surface`,
+        the same function the slicer and the searches use. What was here
+        kept the vertices with ``y >= (y_min + y_max) / 2``, which on the
+        Ej_2 reference model discards every vertex of the lower half of
+        the profile and returns only its right-hand quarter — so the
+        tension-crack zone was being drawn against a ground surface that
+        stopped short of most of the slope.
+        """
         external = self.project.external_boundary()
         if external is None:
             return None
-        ext_verts = list(external.polyline.vertices)
-        if not ext_verts:
+        if not external.polyline.vertices:
             return None
-        ymin = min(v.y for v in ext_verts)
-        ymax = max(v.y for v in ext_verts)
-        y_mid = 0.5 * (ymin + ymax)
-        gv = sorted([v for v in ext_verts if v.y >= y_mid], key=lambda v: v.x)
-        if len(gv) < 2:
-            gv = sorted(ext_verts, key=lambda v: v.x)
-        from ogr_core.geometry import Polyline as _PL
-        return _PL(vertices=gv, closed=False)
+        from ogr_core.geometry import ground_surface
+        return ground_surface(external)
 
     def _draw_ponded_water(self, scene, opts) -> None:
         """Fill and/or hatch the ponded-water region.

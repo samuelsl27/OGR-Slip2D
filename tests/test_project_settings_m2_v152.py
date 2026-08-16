@@ -354,25 +354,34 @@ class TestAdvancedPage:
         assert abs(adv.initial_fos - 1.5) < 1e-9
         assert abs(adv.max_lambda - 2.0) < 1e-9
 
-    def test_m_alpha_is_offered_but_off_by_default(self):
+    def test_m_alpha_is_offered_and_on_by_default(self):
         """v0.1.74 — it used to be absent from the page entirely.
 
-        Absent was the wrong answer to a right worry: it rejects the
-        reference-validated critical circle, so it must not be ON, but
-        making it unreachable is rule 3 in reverse — a capability the
-        engine has and the interface hides. It is offered now, off by
-        default, with the reason next to it, which is a deliberate
-        divergence from the reference's own default.
+        Absent was the wrong answer to a right worry: making a capability
+        the engine has unreachable from the interface is rule 3 in
+        reverse. So it was offered, but OFF, on the grounds that it
+        "rejects the reference-validated critical circle" and that this
+        was "a deliberate divergence from the reference's own default".
+
+        Both halves of that turned out to be wrong. v0.1.82 found the
+        rejection to be a sign error — m-alpha read in the mirror — and
+        with it fixed the same circle scores +0.928. And the reference
+        does NOT ship it off: its reports for both worked examples screen
+        surfaces with it by default, under error code -112, for 97
+        surfaces in Ej_1 bishop and 225 in Ej_2 bishop.
+
+        v0.1.84 — ON by default, and the checkbox still reaches it either
+        way, which is what this case has always really been about.
         """
         from PySide6.QtWidgets import QLabel
         p, d = _dialog()
         page = _pages(d)["Advanced"]
-        assert page.chk_m_alpha.isChecked() is False
-        assert p.settings.advanced.check_m_alpha is False
-        # The warning stays beside the control it explains.
+        assert page.chk_m_alpha.isChecked() is True
+        assert p.settings.advanced.check_m_alpha is True
+        # The explanation stays beside the control it explains.
         text = " ".join(" ".join(la.text().split())
                         for la in page.findChildren(QLabel))
         assert "m-alpha" in text
-        page.chk_m_alpha.setChecked(True)
+        page.chk_m_alpha.setChecked(False)
         page.apply()
-        assert p.settings.advanced.check_m_alpha is True
+        assert p.settings.advanced.check_m_alpha is False

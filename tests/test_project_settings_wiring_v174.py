@@ -400,19 +400,46 @@ class TestTheMAlphaCheckIsReachableButOff:
                           check_m_alpha=True).check_m_alpha is True
 
     def test_and_passes_it_with_the_check_off(self):
-        """Off is the default because that is what the reference ships;
-        the published factor of safety is reproducible either way."""
+        """The published factor of safety is reproducible either way."""
         from ogr_slip2d.checks import check_surface
         ok, why = check_surface(self._reference_result(), m_alpha=False)
         assert ok is True and why is None
 
-    def test_the_default_is_off_and_it_reaches_the_search(self):
+    def test_the_default_is_on_and_it_reaches_the_search(self):
+        """v0.1.84 — ON, and the reference is why.
+
+        This asserted OFF until v0.1.84, on the stated grounds that "off
+        is the default because that is what the reference ships". The
+        reference's own reports for both worked examples say otherwise:
+        they screen surfaces with m-alpha < 0.2 by default and count them
+        under error code -112 — 97 surfaces in Ej_1 bishop, 225 in Ej_2
+        bishop, and likewise for janbu, spencer and GLE.
+
+        The claim came from v0.1.74, which turned the check off because it
+        measured min m-alpha = -0.0100 on the reference-validated critical
+        circle. v0.1.82 found that measurement to be a sign error; with it
+        fixed the same circle gives +0.928, and it still does — which is
+        what ``test_the_reference_circle_survives_the_check`` guards.
+        """
         from ogr_core.project import ProjectSettings
         s = ProjectSettings()
-        assert s.advanced.check_m_alpha is False
-        assert s.admissibility_kwargs()["check_m_alpha"] is False
-        s.advanced.check_m_alpha = True
+        assert s.advanced.check_m_alpha is True
         assert s.admissibility_kwargs()["check_m_alpha"] is True
+        s.advanced.check_m_alpha = False
+        assert s.admissibility_kwargs()["check_m_alpha"] is False
+
+    def test_the_reference_circle_survives_the_check(self):
+        """The anomaly of v0.1.82 must not come back through the default.
+
+        Turning the check on is only safe because the circle the project
+        validates against a published factor of safety passes it. If a
+        future change to the m-alpha sign convention breaks that again,
+        this fails here rather than silently moving every critical
+        surface in the program.
+        """
+        from ogr_slip2d.checks import check_surface
+        ok, why = check_surface(self._reference_result(), m_alpha=True)
+        assert ok is True, why
 
 
 # ======================================================================

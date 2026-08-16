@@ -1070,20 +1070,17 @@ _DICTS: dict[str, dict[str, str]] = {
         "0.2 (Whitman and Bailey, 1967).":
             "Rechaza las superficies cuyo denominador de la normal de "
             "base baja de 0.2 (Whitman y Bailey, 1967).",
-        "The m-alpha check is OFF by default, unlike in the "
-        "reference. Measured on the validation case, the "
-        "reference-validated critical circle has a minimum m-alpha "
-        "of −0.0100, with 5 of its 25 slices below the limit: the "
-        "check rejects the very surface this project validates "
-        "against a published value. Treat it as a diagnostic, not as "
-        "a validity criterion.":
-            "La comprobación de m-alfa está DESACTIVADA por defecto, al "
-            "contrario que en la referencia. Medido sobre el caso de "
-            "validación, el círculo crítico validado tiene un m-alfa "
-            "mínimo de −0.0100, con 5 de sus 25 dovelas por debajo del "
-            "límite: la comprobación rechaza justamente la superficie que "
-            "este proyecto valida contra un valor publicado. Trátala como "
-            "un diagnóstico, no como un criterio de validez.",
+        "The m-alpha check is ON by default, as in the reference, "
+        "which screens surfaces with it and reports them as error "
+        "-112. Surfaces it rejects keep their factor of safety and "
+        "stay in the results; they are only barred from being the "
+        "critical surface. Switch it off to see them compete.":
+            "La comprobación de m-alfa está ACTIVADA por defecto, como en "
+            "la referencia, que filtra superficies con ella y las informa "
+            "como error -112. Las superficies que rechaza conservan su "
+            "factor de seguridad y siguen en los resultados; solo se les "
+            "impide ser la superficie crítica. Desactívala para verlas "
+            "competir.",
         "Percentage of slices:": "Porcentaje de dovelas:",
         "Percentage of slices, counted from the toe, over which the "
         "tensile check applies.":

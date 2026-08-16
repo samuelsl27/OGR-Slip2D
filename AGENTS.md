@@ -149,8 +149,12 @@ proyecto salieron de esa disciplina:
   diagnóstico (v0.1.82): `m_alpha` no es simétrica en α, así que solo
   significa algo evaluada con el mismo sentido de deslizamiento que usó el
   solver, y la comprobación omitía ese factor. Con el signo correcto el
-  círculo pasa (min m_alpha +0,93 en vez de −0,01). Sigue desactivada por
-  defecto porque así la trae la referencia, no porque rechace nada;
+  círculo pasa (min m_alpha +0,93 en vez de −0,01). Quedó desactivada por
+  defecto «porque así la trae la referencia», y eso era falso: los
+  informes de los dos ejemplos trabajados filtran con ella por defecto y
+  la cuentan como error −112 (97 superficies en Ej_1 bishop, 225 en Ej_2).
+  Activada por defecto en v0.1.84. La lección no es el signo: es que una
+  medición equivocada se quedó dos versiones justificando una decisión;
 - un arranque de Simulated Annealing que dependía de la suerte: 200
   rechazos consecutivos con semillas desafortunadas.
 
