@@ -1894,11 +1894,27 @@ class CanvasView(QGraphicsView):
             return
 
         # v0.1.12 — generic scene_clicked emission for Interpret tools
-        # (Query Slice Data picker etc.). Only on plain left-click in
-        # SELECT mode and only if no other handler has consumed the event.
-        if (event.button() == Qt.LeftButton
-                and mode == ToolMode.SELECT
-                and not event.isAccepted()):
+        # (Add Query, the Query Slice Data picker). Plain left-click in
+        # SELECT mode, and only if no other handler has consumed the
+        # event.
+        #
+        # v0.1.86 — the guard used to include ``not event.isAccepted()``,
+        # and a QMouseEvent for a button press arrives ALREADY ACCEPTED.
+        # The condition was therefore never true and this signal was never
+        # emitted, in any build, since v0.1.12. Everything downstream of
+        # it was dead: the click that turns the previewed surface into a
+        # Query, and the click that picks a slice for the Slice Data
+        # panel. Both looked implemented and neither could fire.
+        #
+        # Reaching this line already means no handler consumed the event —
+        # every branch above ends in ``event.accept(); return``. So the
+        # position in the method IS the guard, and there is nothing left
+        # to test.
+        #
+        # The test that covered this called the slot directly instead of
+        # dispatching a mouse event, which is why it stayed green for
+        # seventy-four versions. The new one sends a real QMouseEvent.
+        if event.button() == Qt.LeftButton and mode == ToolMode.SELECT:
             scene_pt = self.mapToScene(event.position().toPoint())
             self.scene_clicked.emit(scene_pt.x(), scene_pt.y())
 

@@ -950,6 +950,11 @@ class InterpretWindow(QMainWindow):
             query_ids=[q.surface.to_dict().get("id")
                        for q in self._queries()],
         )
+        # v0.1.86 — the read-outs are re-added here, after the canvas has
+        # rebuilt the scene, for the same reason everything else is: this
+        # is the ONE place that draws the result, and a label added
+        # anywhere else would survive into a view it does not belong to.
+        self._draw_persistent_query_labels()
 
     def _on_canvas_click_default(self, x: float, y: float) -> None:
         """Default click handler in Interpret mode.
@@ -1350,6 +1355,74 @@ class InterpretWindow(QMainWindow):
             self._redraw_slices_for_selected()
         self.statusBar().showMessage(
             tr("Query added — %s") % self._query_label_text(res), 6000)
+
+    # ------------------------------------------------------------------
+    # v0.1.86 — a Query keeps its read-out
+    #
+    # The floating label that follows the cursor while picking was
+    # DELETED on commit, so the moment a surface became a Query its
+    # factor of safety vanished from the screen. That defeats the point
+    # of being able to keep several: the reference draws the value beside
+    # each queried surface precisely so two or three of them can be
+    # compared at a glance, which is what the report asks for.
+    #
+    # Anchored at the centre of rotation, where the radial lines already
+    # converge and where the reference puts it.
+    # ------------------------------------------------------------------
+    def _clear_persistent_query_labels(self) -> None:
+        scene = self.canvas.scene()
+        for item in list(scene.items()):
+            if getattr(item, "_is_query_label", False):
+                scene.removeItem(item)
+
+    def _draw_persistent_query_labels(self) -> None:
+        from PySide6.QtGui import QBrush, QColor, QFont
+        from PySide6.QtWidgets import QGraphicsSimpleTextItem
+
+        self._clear_persistent_query_labels()
+        queries = self._queries()
+        if not queries:
+            return
+        scene = self.canvas.scene()
+        crit_id = None
+        if self.search_result is not None and self.search_result.critical:
+            crit_id = self.search_result.critical.surface.to_dict().get("id")
+        for q in queries:
+            sd = q.surface.to_dict()
+            anchor = self._label_anchor(sd)
+            if anchor is None:
+                continue
+            item = QGraphicsSimpleTextItem(f"{q.fos:.3f}")
+            font = QFont(); font.setPointSizeF(8.5); font.setBold(True)
+            item.setFont(font)
+            # The Global Minimum is drawn in red by the canvas; a Query on
+            # it keeps that identity so the two never look like different
+            # surfaces sitting on top of each other.
+            is_crit = sd.get("id") == crit_id
+            item.setBrush(QBrush(QColor("#c0392b" if is_crit else "#101010")))
+            item.setFlag(item.GraphicsItemFlag.ItemIgnoresTransformations,
+                         True)
+            item.setPos(anchor[0], anchor[1])
+            item.setZValue(21.0)
+            item._is_query_label = True
+            scene.addItem(item)
+
+    @staticmethod
+    def _label_anchor(surface_dict) -> tuple[float, float] | None:
+        """Where a Query's read-out sits, in scene coordinates."""
+        cx, cy = surface_dict.get("centre_x"), surface_dict.get("centre_y")
+        if cx is not None and cy is not None:
+            return (cx, cy)
+        # Non-circular: the crest end of the surface, which is the only
+        # point of it that is never buried under the sliding mass.
+        verts = surface_dict.get("vertices") or []
+        if verts:
+            v = max(verts, key=lambda p: p[1] if isinstance(p, (list, tuple))
+                    else p.get("y", 0.0))
+            if isinstance(v, (list, tuple)):
+                return (float(v[0]), float(v[1]))
+            return (float(v.get("x", 0.0)), float(v.get("y", 0.0)))
+        return None
 
     def _ensure_a_query(self):
         """The documented shortcut: options that need a Query and find
