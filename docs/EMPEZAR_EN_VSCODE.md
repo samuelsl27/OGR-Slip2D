@@ -66,9 +66,21 @@ Comprueba que funciona:
 QT_QPA_PLATFORM=offscreen python tests/_runner.py
 ```
 
-Debe terminar con `Failed: 0`. Tarda unos 290 s. En VSCode tienes la tarea
-**Tests: suite completa** (`Ctrl+Shift+P` → *Run Task*) que ya lleva la
-variable puesta.
+Debe terminar con `Failed: 0`. Tarda entre 5 y 7½ minutos. En VSCode tienes
+la tarea **Tests: suite completa** (`Ctrl+Shift+P` → *Run Task*) que ya
+lleva la variable puesta.
+
+Mientras trabajas en un área concreta no hace falta pagar ese rato entero:
+
+```bash
+python tests/_runner.py transient          # solo esos archivos
+python tests/_runner.py -k erfc            # solo tests con ese nombre
+python tests/_runner.py --list transient   # enseña la selección, no ejecuta
+```
+
+La tarea **Tests: selección** hace lo mismo preguntándote el patrón. Antes
+de publicar, la suite entera y sin argumentos: una ejecución filtrada
+avisa con `FILTERED RUN` porque no sirve como evidencia.
 
 ---
 

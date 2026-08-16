@@ -10,10 +10,26 @@
       "problemMatcher": []
     },
     {
+      "label": "Tests: selección",
+      "type": "shell",
+      "command": "python tests/_runner.py ${input:patronDeTests}",
+      "options": { "env": { "QT_QPA_PLATFORM": "offscreen" } },
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
       "label": "Abrir OGR Slip2D",
       "type": "shell",
       "command": "python -m ogr_gui",
       "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "patronDeTests",
+      "type": "promptString",
+      "description": "Fragmento del nombre de archivo (p. ej. transient)",
+      "default": ""
     }
   ]
 }

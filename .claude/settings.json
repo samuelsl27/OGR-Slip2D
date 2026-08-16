@@ -2,12 +2,15 @@
   "$comment": [
     "Configuración compartida del proyecto (se versiona).",
     "Los ajustes personales van en .claude/settings.local.json, que está",
-    "en .gitignore: así cada persona ajusta lo suyo sin tocar el repo."
+    "en .gitignore: así cada persona ajusta lo suyo sin tocar el repo.",
+    "Las reglas del runner llevan ':*' desde v0.1.80: acepta patrones de",
+    "selección, y la forma de coincidencia exacta pediría permiso para",
+    "cualquier `tests/_runner.py transient`."
   ],
   "permissions": {
     "allow": [
-      "Bash(python tests/_runner.py)",
-      "Bash(QT_QPA_PLATFORM=offscreen python tests/_runner.py)",
+      "Bash(python tests/_runner.py:*)",
+      "Bash(QT_QPA_PLATFORM=offscreen python tests/_runner.py:*)",
       "Bash(python -m ogr_cli:*)",
       "Bash(git status)",
       "Bash(git diff:*)",

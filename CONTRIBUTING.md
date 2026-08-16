@@ -31,6 +31,18 @@ QT_QPA_PLATFORM=offscreen python tests/_runner.py
 widgets; they simply never reach a display. The runner exits non-zero if
 anything fails, which is what CI checks.
 
+While working on one area, run only that part:
+
+```bash
+python tests/_runner.py transient          # files whose name contains it
+python tests/_runner.py -k erfc            # tests whose name contains it
+python tests/_runner.py --list transient   # show the selection, run nothing
+```
+
+A pattern that matches nothing **exits 2** rather than reporting an empty
+success, and a filtered run prints a `FILTERED RUN` warning around its
+totals. Before opening a pull request, run the suite with no arguments.
+
 ---
 
 ## Layout

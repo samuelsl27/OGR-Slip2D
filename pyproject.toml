@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ogr-slip2d"
-version = "0.1.79"
+version = "0.1.80"
 description = "OGR Slip2D — open-source slope stability and groundwater analysis (OpenGeoRock Suite)"
 readme = "README.md"
 requires-python = ">=3.11"

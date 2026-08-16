@@ -42,6 +42,24 @@ pip install -e .                                     # instalar en editable
 `QT_QPA_PLATFORM=offscreen` es **obligatorio** para los tests: construyen
 widgets Qt reales, solo que nunca llegan a una pantalla.
 
+Durante el desarrollo se puede ejecutar solo una parte (desde v0.1.80):
+
+```bash
+python tests/_runner.py transient          # archivos que contengan eso
+python tests/_runner.py transient seepage  # unión de los dos
+python tests/_runner.py -k erfc            # solo tests con ese nombre
+python tests/_runner.py --list transient   # enseña la selección, no ejecuta
+```
+
+El patrón admite fragmento, nombre de archivo o ruta —`transient`,
+`test_transient_v130.py` y `tests/test_transient_v130.py` seleccionan lo
+mismo— y no distingue mayúsculas. Un patrón que no case con nada **sale
+con código 2**, para que una errata no se lea como una suite en verde.
+
+**Una ejecución filtrada no es evidencia para publicar.** Lleva un aviso
+`FILTERED RUN` antes y después de los totales precisamente por eso: antes
+de una versión, la suite entera y sin argumentos.
+
 ## Estructura del proyecto
 
 | Ruta | Contenido |
