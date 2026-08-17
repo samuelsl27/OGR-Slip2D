@@ -139,7 +139,10 @@ def _grid_search(method_id: str):
     from ogr_slip2d.search import GridSearch
     gs = GridSearch(method=get_method(method_id)(), grid_x=GRID_X,
                     grid_y=GRID_Y, grid_nx=GRID_NX, grid_ny=GRID_NY,
-                    radius_increment=RADIUS_INCREMENT, min_radius=2.0,
+                    # v0.1.88 — 0, not 2: the reference has no
+                    # minimum-radius control, so any floor here samples a
+                    # different population than the one being validated.
+                    radius_increment=RADIUS_INCREMENT, min_radius=0.0,
                     num_slices=NUM_SLICES, min_area=1.0)
     _CACHE[method_id] = (gs.run(_ej2_project()))
     return _CACHE[method_id]
@@ -324,21 +327,33 @@ class TestGridSearchEj2:
         result = _grid_search("bishop_simplified")
         assert result.total_count == EXPECTED_TOTAL, result.total_count
 
-    def test_bishop_global_minimum_within_two_percent(self):
-        """Within 2 %, not 0.5 %.
+    def test_bishop_global_minimum(self):
+        """Within 0.5 %, and it used to have to be 2 %.
 
-        The per-centre radius sampling is not the reference's — the
-        reference's own critical radius, 60.257 at centre
-        (-3.333, 87.632), is not among the eleven this program generates
-        there — so the search lands on a neighbouring circle. On the SAME
-        circle the agreement is 0.07 % (see TestReferenceCirclesEj2); the
-        residue here is sampling, not formulation, and the radius rule is
-        the open item recorded in the v0.1.84 changelog.
+        v0.1.88 — the residue that forced the wide tolerance was radius
+        SAMPLING, not formulation: the reference's own critical radius,
+        60.257 at centre (-3.333, 87.632), was not among the eleven this
+        program generated there, so the search could only land on a
+        neighbouring circle. With the measured radius rule it lands on the
+        reference's circle, and the search agrees with the reference to the
+        same 0.07 % that evaluating that circle directly always did.
         """
         result = _grid_search("bishop_simplified")
         assert result.critical is not None
         err = abs(result.critical.fos - 1.155640) / 1.155640
-        assert err < 0.02, (result.critical.fos, err)
+        assert err < 0.005, (result.critical.fos, err)
+
+    def test_search_lands_on_the_reference_circle(self):
+        """The assertion that could not be made before v0.1.88, and the one
+        that actually pins the search down: agreeing on a factor of safety
+        while sitting on a different surface is agreement by luck."""
+        result = _grid_search("bishop_simplified")
+        sd = result.critical.surface.to_dict()
+        assert abs(sd["centre_x"] - BIG[0]) < 1e-3, sd["centre_x"]
+        assert abs(sd["centre_y"] - BIG[1]) < 1e-3, sd["centre_y"]
+        # 60.2564659 read from the reference's Global Minimum block; BIG
+        # carries it rounded to five decimals.
+        assert abs(sd["radius"] - 60.2564659) < 1e-3, sd["radius"]
 
     def test_critical_surface_daylights_on_the_slope(self):
         """Not on the floor of the model, which is what the bug did."""

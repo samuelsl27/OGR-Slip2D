@@ -9,12 +9,50 @@ verbatim from the reference; the expected factors of safety and the
 critical-circle geometry come from the reference's Info Viewer / report.
 
 Reference (Global Minimums):
-  Bishop simplified: FS = 0.882889, centre (88.000, 70.500), R = 47.212
-  Janbu  simplified: FS = 0.842548, centre (84.000, 66.000), R = 41.501
+  Bishop simplified: FS = 0.882889, centre (88.000, 70.500), R = 47.2124436
+  Janbu  simplified: FS = 0.842548, centre (84.000, 66.000), R = 41.5014358
   25 slices, Grid Search, Radius Increment 10, Composite disabled.
+  Population 21 x 21 x 11 = 4851 circles.
+
+The radii above carry seven decimals since v0.1.88 for a reason: they are
+the 5th and 4th of the eleven the reference generates at those centres, and
+until v0.1.88 this program generated neither. The cases below therefore
+assert the critical CENTRE AND RADIUS, not only the factor of safety —
+matching a number from a different surface is agreement by luck. See
+tests/test_grid_radius_rule_v188.py for the radius rule itself.
 """
 from __future__ import annotations
 import math
+
+
+_GRID_CACHE: dict = {}
+
+# The reference grid, verbatim from Slide2d_Ej_1_General.sli.
+#
+# min_radius is 0 since v0.1.88: the reference has no minimum-radius control,
+# so any floor here samples a different population than the one being
+# validated.
+_GRID = dict(grid_x=(40, 120), grid_y=(30, 120), grid_nx=20, grid_ny=20,
+             radius_increment=10, min_radius=0.0,
+             num_slices=25, min_area=0.5)
+
+# (X intervals + 1)(Y intervals + 1)(Radius Increment + 1), the population
+# the reference documents and reports.
+_EXPECTED_TOTAL = 21 * 21 * 11      # 4851
+
+
+def _grid_result(method_id: str):
+    """The reference Grid Search, run once per method for the whole file.
+
+    4851 circles is about twenty seconds. Six cases across three classes
+    interrogate these runs; each starting its own would cost two minutes.
+    """
+    if method_id not in _GRID_CACHE:
+        from ogr_slip2d.methods import get_method
+        from ogr_slip2d.search import GridSearch
+        _GRID_CACHE[method_id] = GridSearch(
+            method=get_method(method_id)(), **_GRID).run(_ej1_project())
+    return _GRID_CACHE[method_id]
 
 
 def _ej1_project():
@@ -108,32 +146,48 @@ class TestSlideValidationEj1:
         assert abs(c.x_right - 74.842) < 0.2, c.x_right
 
     def test_bishop_grid_search_finds_minimum(self):
-        """Full Grid Search recovers the reference FoS within 1 %."""
-        from ogr_slip2d import BishopSimplified
-        from ogr_slip2d.search import GridSearch
-        p = _ej1_project()
-        gs = GridSearch(method=BishopSimplified(), grid_x=(40, 120),
-                        grid_y=(30, 120), grid_nx=20, grid_ny=20,
-                        radius_increment=10, min_radius=2.0,
-                        num_slices=25, min_area=0.5)
-        r = gs.run(p)
+        """Within 0.5 %, and it used to have to be 1 %.
+
+        v0.1.88 — with the measured radius rule the search reaches the
+        reference's own critical radius (47.2124436, the 5th of the eleven
+        at centre (88, 70.5)), which the previous per-centre bracket never
+        generated. +0.18 % -> +0.02 %.
+        """
+        r = _grid_result("bishop_simplified")
         assert r.critical is not None
-        assert abs(r.critical.fos - 0.882889) / 0.882889 < 0.01, \
+        assert abs(r.critical.fos - 0.882889) / 0.882889 < 0.005, \
             r.critical.fos
 
+    def test_bishop_search_lands_on_the_reference_circle(self):
+        """The assertion that could not be made before v0.1.88. Matching a
+        factor of safety from a different surface is agreement by luck, and
+        that is exactly what the old sampling was doing."""
+        sd = _grid_result("bishop_simplified").critical.surface.to_dict()
+        assert abs(sd["centre_x"] - 88.0) < 1e-6, sd["centre_x"]
+        assert abs(sd["centre_y"] - 70.5) < 1e-6, sd["centre_y"]
+        assert abs(sd["radius"] - 47.2124436) < 1e-3, sd["radius"]
+
     def test_janbu_grid_search_finds_minimum(self):
-        from ogr_slip2d import JanbuSimplified
-        from ogr_slip2d.search import GridSearch
-        p = _ej1_project()
-        gs = GridSearch(method=JanbuSimplified(), grid_x=(40, 120),
-                        grid_y=(30, 120), grid_nx=20, grid_ny=20,
-                        radius_increment=10, min_radius=2.0,
-                        num_slices=25, min_area=0.5)
-        r = gs.run(p)
+        """v0.1.88 — this used to accept "anything at or below the reference
+        within 1 %", because the search landed on centre (80, 61.5) with
+        0.8379 (-0.55 %) instead of the reference's (84, 66). It now finds
+        the reference's centre and radius, so the assertion can be two-sided.
+        """
+        r = _grid_result("janbu_simplified")
         assert r.critical is not None
-        # OGR may find a marginally lower minimum on a nearby centre;
-        # accept anything at or below the reference within 1 %.
-        assert r.critical.fos < 0.882889 * 1.01, r.critical.fos
+        assert abs(r.critical.fos - 0.842548) / 0.842548 < 0.005, \
+            r.critical.fos
+        sd = r.critical.surface.to_dict()
+        assert abs(sd["centre_x"] - 84.0) < 1e-6, sd["centre_x"]
+        assert abs(sd["centre_y"] - 66.0) < 1e-6, sd["centre_y"]
+        assert abs(sd["radius"] - 41.5014358) < 1e-3, sd["radius"]
+
+    def test_generated_population_matches_the_reference(self):
+        """4851 circles, the identity the reference documents. Ej_1 is the
+        model that makes this bite: 21 of its 441 centres sit directly above
+        the right Slope Limit, where the radius bracket has zero width."""
+        r = _grid_result("bishop_simplified")
+        assert r.total_count == _EXPECTED_TOTAL, r.total_count
 
 
 class TestAllMethodsValidationEj1:
@@ -195,18 +249,13 @@ class TestReportGeneration:
 
     def test_generate_report_smoke(self, tmp_path=None):
         import tempfile, os
-        from ogr_slip2d.search import GridSearch
-        import ogr_slip2d as M
         from ogr_core.report import generate_report
         p = _ej1_project()
-        results = {}
-        for mid, method in [("bishop_simplified", M.BishopSimplified()),
-                            ("janbu_simplified", M.JanbuSimplified())]:
-            gs = GridSearch(method=method, grid_x=(40, 120),
-                            grid_y=(30, 120), grid_nx=20, grid_ny=20,
-                            radius_increment=10, min_radius=2.0,
-                            num_slices=25, min_area=0.5)
-            results[mid] = gs.run(p)
+        # The same two runs the validation cases above already paid for.
+        # A report smoke test needs a populated SearchResult, not its own
+        # search; running one cost forty seconds for no extra coverage.
+        results = {mid: _grid_result(mid)
+                   for mid in ("bishop_simplified", "janbu_simplified")}
         out = os.path.join(tempfile.gettempdir(), "ogr_test_report.pdf")
         generate_report(p, results, out, author="Test", company="UPCT",
                         title="Test Report")

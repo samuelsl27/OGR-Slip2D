@@ -344,7 +344,13 @@ class GridSearch(BaseSearch):
         grid_nx: int = 10,
         grid_ny: int = 10,
         radius_increment: float = 10.0,
-        min_radius: float = 2.0,
+        # v0.1.88 — was 2.0. The reference has no minimum-radius control at
+        # all, so any non-zero default made the out-of-the-box sampling
+        # differ from it at every centre whose nearest ground point is
+        # closer than that. Kept as an option because excluding tiny
+        # circles is a legitimate thing to want; zero by default because
+        # reproducing the reference is what the default is for.
+        min_radius: float = 0.0,
         num_slices: int = 30,
         min_area: float = 0.5,
         slope_limits: tuple[float, float] | None = None,
@@ -388,9 +394,16 @@ class GridSearch(BaseSearch):
 
     # ------------------------------------------------------------------
     def _slope_surface(self, project):
-        """Return the ground-profile vertices between the Slope Limits
-        (or the whole ground profile if no limits set)."""
-        from ogr_core.geometry import BoundaryType
+        """The ground profile between the Slope Limits, **ends included**.
+
+        v0.1.88 — the clip now INTERPOLATES the two limit abscissae instead
+        of filtering vertices by x. It has to: the radius bracket below is
+        measured to the two limit POINTS, and a limit falling between two
+        vertices used to yield no point at all — the segment it cut was
+        dropped whole, the surface ended at the last vertex strictly inside,
+        and both ends of the bracket were then measured to the wrong place.
+        """
+        from ogr_core.geometry import BoundaryType, Vertex
         ext = None
         for b in project.boundaries:
             if b.btype == BoundaryType.EXTERNAL:
@@ -399,67 +412,179 @@ class GridSearch(BaseSearch):
         if ext is None:
             return []
         top = PathSearch._ground_profile(ext.polyline.vertices)
-        if self.slope_limits is not None:
-            x0, x1 = sorted(self.slope_limits)
-            top = [v for v in top if x0 - 1e-9 <= v.x <= x1 + 1e-9]
-        return top
+        if self.slope_limits is None or len(top) < 2:
+            return top
+        x0, x1 = sorted(self.slope_limits)
+        x0 = max(x0, top[0].x)
+        x1 = min(x1, top[-1].x)
+        # Relative to the profile's own width, not absolute: the same model
+        # in millimetres and in metres has to clip identically.
+        tol = 1e-9 * max(top[-1].x - top[0].x, 1e-300)
+        if x1 - x0 <= tol:
+            # Limits that cross, or collapse onto one abscissa, describe no
+            # surface at all. Falling back to the whole profile keeps the
+            # search running on something meaningful instead of returning a
+            # result computed from a single point.
+            return top
+        y0 = PathSearch._interpolate_top_y(top, x0)
+        y1 = PathSearch._interpolate_top_y(top, x1)
+        if y0 is None or y1 is None:
+            return top
+        # Strict comparison, so a profile vertex sitting exactly on a limit
+        # is not emitted twice: the interpolated end already carries it.
+        inner = [v for v in top if x0 + tol < v.x < x1 - tol]
+        return [Vertex(x0, y0)] + inner + [Vertex(x1, y1)]
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _distance_to_surface(xc, yc, pts) -> float:
+        """Shortest distance from a centre to the slope surface POLYLINE.
+
+        The nearest point is the foot of a perpendicular when that foot
+        falls inside a segment and a VERTEX when it does not, and both cases
+        occur among the reference centres — at Ej_2's (12.381, 87.632) the
+        nearest point is the vertex (40, 55), not any perpendicular foot. So
+        clamping the projection parameter to [0, 1] is not a nicety; taking
+        distances to vertices only (which is what this class did until
+        v0.1.88) is a different and wrong measurement.
+        """
+        best = float("inf")
+        for a, b in zip(pts[:-1], pts[1:]):
+            dx = b.x - a.x
+            dy = b.y - a.y
+            L2 = dx * dx + dy * dy
+            if L2 <= 0.0:
+                t = 0.0
+            else:
+                t = ((xc - a.x) * dx + (yc - a.y) * dy) / L2
+                t = 0.0 if t < 0.0 else (1.0 if t > 1.0 else t)
+            d = math.hypot(xc - (a.x + t * dx), yc - (a.y + t * dy))
+            if d < best:
+                best = d
+        return best
+
+    # The sampled range is inset by this fraction of its own width at each
+    # end. MEASURED, not chosen — see _radius_bracket. It is a constant of
+    # the rule: the A1/A2 pair (same grid, Radius Increment 1 and 10) gives
+    # byte-identical bracket ends, so the inset does not depend on how many
+    # circles are asked for.
+    RADIUS_INSET = 0.05
 
     def _radius_bracket(self, xc, yc, slope_pts):
-        """Compute (r_min, r_max) for a centre.
+        """The (r_min, r_max) sampled at one grid centre.
 
-        r_min: the shortest distance from the centre to the slope
-        surface — any smaller circle floats entirely above the ground
-        and is meaningless.
+        v0.1.88 — DERIVED FROM MEASUREMENT, replacing two versions of
+        inference from a drawing. *Grid Search* says only that "suitable
+        Minimum and Maximum radii are determined, based on the distances
+        from the slip center to the slope surface", and v0.1.84 recorded
+        that reading the accompanying figure literally made one reference
+        model better and the other twice as bad. The rule below is not a
+        reading of the figure: it is read off the reference's own output.
 
-        r_max: chosen so the circle still daylights on the slope without
-        engulfing the entire model. We use the distance to the toe/crest
-        ends of the slope surface, but cap it so the deepest circle's
-        lowest point stays near the model floor rather than far below it.
+        The rule
+        --------
+        With ``S`` the slope surface (the ground profile between the Slope
+        Limits) and ``P_L``, ``P_R`` the two limit points::
 
-        v0.1.84 — this rule is KNOWN not to be the reference's, and the
-        attempt to replace it with the reference's was measured and
-        rejected. *Grid Search* says only that "suitable Minimum and
-        Maximum radii are determined, based on the distances from the slip
-        center to the slope surface"; its figure ``fig_gridsearch2.gif``
-        draws the minimum radius to the nearest point of the slope face
-        and the maximum radius to the far slope limit. Implementing that
-        literally — r_min = distance to the nearest point of the slope
-        POLYLINE instead of its nearest VERTEX, r_max = distance to the
-        farther end of the slope surface instead of the toe plus 8 % —
-        gives, against the two reference models:
+            d_min = distance from the centre to the nearest point of S
+            d_max = min(|C - P_L|, |C - P_R|)      # the limit reached FIRST
+            delta = RADIUS_INSET * (d_max - d_min)
 
-            bracket        Ej_1 (ref 0.882889)   Ej_2 (ref 1.155640)
-            shipped        0.88452  (+0.18 %)    1.16693  (+0.98 %)
-            per the figure 0.90049  (+1.99 %)    1.14910  (−0.57 %)
+            r_min = d_min + delta
+            r_max = d_max - delta
 
-        It is better on one model and twice as bad on the other, so the
-        figure is not being read the way the program implements it, and
-        neither reading reproduces the reference's own critical radii: at
-        the Ej_2 critical centre (−3.333, 87.632) no integer step of
-        either bracket lands on R = 60.257. Changing a validated result on
-        a guess is what rule 1 exists to prevent, so the shipped rule
-        stays until the sampling can be derived from data rather than
-        inferred from a drawing. The experiment that would settle it is in
-        the changelog for this version.
+        and Radius Increment intervals give ``rinc + 1`` equally spaced
+        radii across ``[r_min, r_max]``.
+
+        Two consequences worth stating, because both were bugs before:
+
+        * ``d_max >= d_min`` is a THEOREM, not a case to guard: ``P_L`` and
+          ``P_R`` are points OF ``S``, so their distances cannot be below
+          the minimum distance to ``S``. This function therefore never
+          fails, and the population of a grid is exactly
+          ``(nx+1)(ny+1)(rinc+1)`` — the denominator v0.1.83 fixed. An
+          earlier draft returned None when ``d_max == d_min`` and silently
+          dropped Ej_1's whole ``x = 120`` column, 4851 circles down to
+          4620.
+        * when ``d_min == d_max`` (the centre sits directly above a limit
+          point) the rule yields ``rinc + 1`` IDENTICAL radii, and that is
+          what the reference does too: at Ej_1's (120, 30) it emits eleven
+          circles of R = 5.
+
+        How it was measured
+        -------------------
+        ``referencias/Ejemplos/00_2026_08_17_Test_Regla_radios`` holds six
+        Slide models run for this. Their ``.s01`` output lists, per centre,
+        every generated circle as ``(r, yleft, x1, y1, x2, y2, yright,
+        fs..., b1)``, so the bracket is READ rather than fitted — which is
+        what unblocked this, since four fitted numbers could never have
+        settled it (rule 1). The models come in pairs: Radius Increment 1
+        (exactly two circles, the two ends) and 10 (eleven), on the same
+        grid, for two geometries — one failing left-to-right, one
+        right-to-left.
+
+            check                                          worst error
+            68 bracket ends, both geometries, rinc 1 & 10   5.7e-14
+            441 centres of Ej_1's reference grid            4.0e-08 *
+            440 centres of Ej_2's reference grid            7.0e-13
+            uniform spacing, rinc+1 circles per centre      8.4e-13
+
+        (*) that outlier is one centre, Ej_1's (52, 48), which lies exactly
+        ON the slope face so ``d_min`` is 0: the reference prints
+        2.601922406 where the rule gives 2.601922366, 1.5e-8 relative. Its
+        own numerics in the degenerate case, not a disagreement.
+
+        Decisively, the rule generates the two critical radii that no
+        previous bracket could reach: 47.2124436 at Ej_1's (88, 70.5), the
+        4th of its 11, and 60.2564659 at Ej_2's (-3.333, 87.632), the 4th
+        of its 11. Both reference global minima are now IN the sampled
+        population, and the searches land on the reference's own centre and
+        radius rather than on a neighbour:
+
+            case            method        before            after
+            Ej_1            Bishop        +0.18 %           +0.02 %
+            Ej_1            Janbu simpl.  -0.55 %           +0.13 %
+            Ej_2            Bishop        +0.95 %           -0.07 %
+            Ej_2            Janbu simpl.  +0.83 %           -0.03 %
+
+        The five PUBLISHED cases of ``validacion/casos/`` — an independent
+        check, since none of them is a Slide run — all stay inside their
+        declared tolerances, moving by at most 0.24 % and in both
+        directions. Both facts are tabulated in
+        ``docs/audits/grid_radius_rule_v188.md``.
+
+        What is NOT measured
+        --------------------
+        In all six models the Slope Limits sit at their automatic position,
+        which coincides with the ends of the ground profile. The data
+        therefore cannot distinguish "the limit points" from "the ends of
+        the profile", nor whether ``d_min`` is measured over the clipped
+        surface or the whole one. What is implemented is the documented
+        reading — "the slope surface is simply the segments of the External
+        Boundary between the Slope Limits" — so narrowing the limits
+        narrows the radii. Confirming it needs one more Slide model with
+        the limits moved inward to an abscissa that is NOT a profile
+        vertex; until that exists, this paragraph is the honest statement of
+        what the rule rests on.
+
+        ``min_radius`` is an OGR control with no counterpart in the
+        reference (which offers Minimum Elevation and Minimum Depth
+        instead). It acts as a floor on ``d_min``, and its default is 0 so
+        that the out-of-the-box sampling is the reference's exactly.
         """
-        if not slope_pts:
+        if not slope_pts or len(slope_pts) < 2:
             return None
-        dists = [math.hypot(xc - v.x, yc - v.y) for v in slope_pts]
-        r_min = max(min(dists), self.min_radius)
-        # v0.1.18 — r_max should reach the toe of the slope (so toe-exit
-        # circles are generated) but NOT the far opposite corner of the
-        # model (which would stretch the 11-radius sampling so coarse
-        # that the critical radius is skipped). For a left-to-right
-        # failure the relevant span is bounded by the slope toe — the
-        # lowest ground point — measured from the centre. We take the
-        # distance to the toe (lowest slope point) plus a margin, and
-        # also ensure the closest-point r_min is included.
-        toe = min(slope_pts, key=lambda v: v.y)
-        r_toe = math.hypot(xc - toe.x, yc - toe.y)
-        r_max = r_toe + max(self.min_radius, 0.08 * r_toe)
-        if r_max <= r_min:
-            r_max = r_min + max(self.min_radius, 1.0)
-        return r_min, r_max
+        d_min = max(self._distance_to_surface(xc, yc, slope_pts),
+                    self.min_radius)
+        # The FIRST limit reached as the radius grows, not the farthest one:
+        # past it the circle no longer daylights inside the Slope Limits.
+        d_max = min(math.hypot(xc - slope_pts[0].x, yc - slope_pts[0].y),
+                    math.hypot(xc - slope_pts[-1].x, yc - slope_pts[-1].y))
+        # max() only matters when min_radius has been raised above d_min,
+        # which is the one way the caller can break the theorem above.
+        d_max = max(d_max, d_min)
+        delta = self.RADIUS_INSET * (d_max - d_min)
+        return d_min + delta, d_max - delta
 
     # ------------------------------------------------------------------
     def run(self, project: Project) -> SearchResult:
@@ -486,6 +611,10 @@ class GridSearch(BaseSearch):
 
                 bracket = self._radius_bracket(xc, yc, slope_pts)
                 if bracket is None:
+                    # No slope surface at all: nothing can be generated
+                    # here. Counted rather than skipped, for the same
+                    # reason as below.
+                    result.invalid_count += n_circles
                     continue
                 r_min, r_max = bracket
                 for k in range(n_circles):
@@ -494,6 +623,11 @@ class GridSearch(BaseSearch):
                     else:
                         r = r_min
                     if r <= 0:
+                        # Only reachable when the centre IS a limit point,
+                        # so d_min = d_max = 0. Counted, not skipped: the
+                        # population has to stay (nx+1)(ny+1)(rinc+1)
+                        # whatever the geometry does — see total_count.
+                        result.invalid_count += 1
                         continue
                     if self.focus_objects:
                         from .focus import accepts as _focus_accepts

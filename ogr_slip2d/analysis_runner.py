@@ -316,7 +316,11 @@ def build_search(project, method_id: str, progress_cb: Optional[Callable] = None
         grid_nx=s_search.grid_nx,
         grid_ny=s_search.grid_ny,
         radius_increment=s_search.radius_increment or 1.5,
-        min_radius=3.0,
+        # v0.1.88 — was 3.0, which pushed the sampled minimum radius above
+        # the reference's at every centre closer than 3 m to the ground.
+        # The radius bracket is now the reference's, and a hard-coded floor
+        # here would have been the one thing still departing from it.
+        min_radius=0.0,
         min_area=s_search.min_area or 1.0,
         **common,
     )
