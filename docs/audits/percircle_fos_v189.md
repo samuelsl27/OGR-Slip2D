@@ -82,6 +82,30 @@ referencia < 3**, que es el rango que alguien mira:
 
 ## 4 · Hallazgo A — Spencer y GLE: el problema es la CONVERGENCIA, no la precisión
 
+> **RESUELTO en v0.1.90.** Este apartado se conserva como se escribió porque
+> es el que llevó al diagnóstico. La causa resultó ser el rango de λ, cortado
+> en ±1,5 mientras la raíz de las superficies difíciles está más allá; la
+> referencia no restringe λ por defecto (`max_lambda: 6`, sin aplicar). Tras
+> el arreglo, sobre las mismas rejillas:
+>
+> | | v0.1.89 | v0.1.90 |
+> |---|---|---|
+> | Ej_1 spencer | 71,1 % | **94,7 %** |
+> | Ej_1 gle | 59,2 % | **86,9 %** |
+> | Ej_2 spencer | 69,4 % | **95,9 %** |
+> | Ej_2 gle | 54,4 % | **85,8 %** |
+>
+> Los p90 de las tablas de abajo **suben** tras el arreglo (Ej_1 GLE 0,358 →
+> 0,467 %), y no es una regresión: la población medida crece un 30-40 % con
+> los círculos difíciles, que son justo los que más error llevan. Medido
+> aparte: de los círculos que ya convergían, el 97-98 % da un valor **idéntico
+> bit a bit** y ninguno se pierde. Los pocos que se mueven son los que antes
+> se resolvían por la vía de «sin bracket» —promedio de la muestra más
+> cercana, sin λ registrado— y ahora encuentran raíz real; el mayor cambio
+> observado fue 9·10⁻³, y acercó el valor a la referencia.
+
+
+
 Es la vuelta de tuerca que la población da y el círculo único no daba.
 
 `docs/audits/spencer_gle_interslice_v179.md` está abierto porque Spencer y GLE

@@ -1,12 +1,56 @@
 # Spencer y GLE devuelven prácticamente el valor de Bishop
 
-**Estado: reportado, NO corregido.** Regla 6. Este documento es la evidencia;
-el arreglo, si lo hay, va en su propia versión con su propia validación.
+**Estado: la hipótesis de partida era la equivocada.** Ver el apartado de
+v0.1.90 justo debajo antes que nada. El resto del documento se conserva tal
+como se escribió en v0.1.79 porque las mediciones siguen siendo válidas; lo
+que cambia es qué explican.
 
-Encontrado en v0.1.79, al añadir los casos de validación publicados. No es un
-fallo introducido por ese trabajo: es un comportamiento que llevaba desde
-siempre y que **ningún test podía ver**, por el motivo que se explica al
-final.
+---
+
+## ACTUALIZACIÓN v0.1.90 — el problema no era la formulación, era el alcance
+
+Este documento llevaba once versiones buscando el fallo en la formulación
+interdovela. La auditoría por círculo de v0.1.89 —67 837 valores de
+referencia, no catorce— apuntó a otro sitio, y v0.1.90 lo confirmó midiendo.
+
+**Lo que ya no encajaba.** Donde Spencer y GLE convergen, son **los dos
+métodos más exactos del programa**: p99 de 0,62 % y 0,67 % en Ej_1, contra el
+11-14 % de Fellenius y Janbu, y el 100,0 % de los círculos de GLE dentro del
+1 %. Si la ecuación estuviera mal, ahí es donde se vería.
+
+**Lo que sí fallaba: convergían en muy pocos.** El λ se busca muestreando un
+grid y localizando el cambio de signo de `F_f(λ) − F_m(λ)`. El grid **paraba
+en ±1,5**, y para las superficies difíciles `F_f − F_m` es monótona y sigue
+negativa ahí. «Sin cambio de signo» nunca quiso decir «no hay raíz»: quería
+decir que estaba fuera de alcance.
+
+```
+λ = 1,500   F_f 0,7351   F_m 1,0551   F_f−F_m = −0,320
+λ = 2,994   F_f 1,1257   F_m 1,1262   F_f−F_m = −0,0005   <-- la raíz
+```
+
+La referencia no restringe λ por defecto: sus modelos traen `min_lambda: -0.1`
+y `max_lambda: 6` con las casillas de aplicación **desmarcadas**.
+
+**Efecto, sobre las mismas rejillas de referencia** (círculos que la
+referencia resuelve y este programa abandonaba):
+
+| | v0.1.89 | v0.1.90 |
+|---|---|---|
+| Ej_1 spencer | 2301 / 3237 = 71,1 % | **3065 = 94,7 %** |
+| Ej_1 gle | 1908 / 3222 = 59,2 % | **2800 = 86,9 %** |
+| Ej_2 spencer | 2115 / 3047 = 69,4 % | **2921 = 95,9 %** |
+| Ej_2 gle | 1708 / 3141 = 54,4 % | **2695 = 85,8 %** |
+
+**Qué queda de la hipótesis original.** El síntoma que abrió este documento
+—que sobre un círculo dado Spencer y GLE se separan de Bishop mucho menos de
+lo que dicen las referencias publicadas— **no queda explicado por esto**, y
+las tablas de abajo siguen en pie. Lo que cambia es que ya no se puede
+atribuir a «la formulación está mal» sin más: ahora sabemos que una parte
+grande de la población nunca llegaba a resolverse, y que la que se resolvía
+salía muy bien. Antes de seguir buscando en la ecuación hay que **rehacer la
+comparación con Bishop sobre la población completa**, que hasta v0.1.90 no
+existía.
 
 ---
 

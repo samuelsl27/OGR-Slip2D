@@ -63,46 +63,19 @@ class TestAnomalyA5:
         """The original diagnosis blamed Spencer; in fact EVERY method
         failed on that seed, which is what pointed at the bootstrap.
 
-        v0.1.89 — GLE moved to its own case below. It is NOT excused here:
-        it is asserted to fail, so the day it stops failing this file goes
-        red and somebody has to come and delete that case.
+        v0.1.89 moved GLE out of this list because it returned 0 valid
+        surfaces, and put a case beside it that ASSERTED the failure so
+        that fixing it would turn the file red. v0.1.90 turned it red: the
+        cause was never the annealing but the λ range, clipped at ±1.5
+        while the roots of these surfaces sit beyond it. GLE is back where
+        it belongs. See tests/test_lambda_range_v190.py.
         """
         for m in (OrdinaryFellenius(), BishopSimplified(),
-                  JanbuSimplified(), Spencer(), LoweKarafiath()):
+                  JanbuSimplified(), Spencer(), GLEMorgensternPrice(),
+                  LoweKarafiath()):
             r = _run(method=m, seed=1)
             assert r.critical is not None, m.DISPLAY_NAME
             assert r.valid_count > 0, m.DISPLAY_NAME
-
-    def test_gle_under_annealing_produces_nothing_open_defect(self):
-        """GLE + Simulated Annealing yields NO valid surface. Open defect,
-        recorded rather than hidden. See docs/PENDIENTES.md.
-
-        Introduced by v0.1.89's slicer change, which places slice
-        boundaries at the slip surface's own vertices — the principle
-        v0.1.66 stated for material crossings ("the base of a slice belongs
-        to one material or to another, never to a blend"), applied to the
-        surface's geometry. That change fixes a WRONG NUMBER: Block Search
-        used to return 0.65-0.82 on a stable slope whose circular minimum
-        is 1.1239, from surfaces containing near-vertical steps narrower
-        than a slice, invisible to every check. Across five seeds it now
-        returns 1.13-1.16.
-
-        The cost is here, and it was taken deliberately: a wrong number a
-        user would act on is worse than a visible absence of one. The
-        failure is narrow — GLE under SA only. Under Block Search GLE gives
-        10-17 valid surfaces, and under circular Grid Search it is
-        untouched, because circles have no vertices to cut at.
-
-        Measured: 0 valid surfaces for seeds 0 through 7, at 18, 27, 36, 54
-        and 72 slices. Not a fragile edge — a systematic one, which is why
-        it is worth its own investigation instead of a tolerance.
-        """
-        for seed in (0, 1, 2):
-            r = _run(method=GLEMorgensternPrice(), seed=seed)
-            assert r.valid_count == 0, (
-                f"seed {seed}: GLE now returns {r.valid_count} valid "
-                f"surfaces. If this is a fix, delete this case and put GLE "
-                f"back in the list above.")
 
     def test_spencer_specifically(self):
         r = _run(method=Spencer(), seed=1)

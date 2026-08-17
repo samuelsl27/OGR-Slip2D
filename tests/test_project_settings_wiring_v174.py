@@ -268,13 +268,19 @@ class TestTheLambdaRangeClipsACalibratedGrid:
     def test_the_two_mistaken_defaults_are_migrated(self):
         """A file written before v0.1.74 carries values that never
         reached a calculation, so they express no intent to preserve —
-        which is what makes rewriting them safe."""
+        which is what makes rewriting them safe.
+
+        v0.1.90 — ``max_lambda`` now lands on 6.0, not 1.5, and the
+        migrations CHAIN on purpose: 1.25 was v0.1.73's default, 1.5 was
+        v0.1.74's, and 6.0 is the reference's own. A project stored back
+        then must not come out on an intermediate default nobody uses.
+        """
         from ogr_core.project.settings import AdvancedSettings
         old = AdvancedSettings.from_dict({
             "check_tensile_stresses": True, "min_initial_fs": 1.4,
             "min_lambda": -1.25, "max_lambda": 1.25})
         assert old.check_tensile_stresses is False
-        assert old.min_lambda == -1.5 and old.max_lambda == 1.5
+        assert old.min_lambda == -1.5 and old.max_lambda == 6.0
         # The renamed field keeps its value.
         assert abs(old.initial_fos - 1.4) < 1e-12
 

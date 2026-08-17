@@ -319,11 +319,31 @@ class TestOptimisation:
     def test_never_returns_a_worse_surface(self):
         """A walk that ends worse than it started would be useless: only
         improvements are accepted."""
-        p, ev, surf, f0 = self._start()
+        p, ev, surf, _f0 = self._start()
         _s, _r, rep = optimize_surface(
             p, ev, surf, OptimizeSettings(max_iterations=60, seed=1))
         assert rep.final_fos <= rep.initial_fos + 1e-9
-        assert abs(rep.initial_fos - f0) < 0.05
+
+    def test_it_starts_from_the_surface_it_was_given(self):
+        """v0.1.90 — this used to ride along in the case above as
+        ``abs(rep.initial_fos - f0) < 0.05``, and it was measuring
+        something else: with the default ``densify_to=12`` the optimiser
+        reports the factor of safety of the DENSIFIED surface, which is a
+        different surface from the four-vertex one ``f0`` came from. The
+        0.05 was a capture of how far densification happened to move that
+        particular surface, and when v0.1.90's λ range changed which of
+        fifteen random paths comes out critical, the new one moved 0.061.
+        Nothing had broken; the tolerance was measuring the wrong thing.
+
+        Without densification the claim is an IDENTITY and needs no
+        tolerance at all: the walk must start from exactly the number the
+        evaluator gives for the surface it was handed.
+        """
+        p, ev, surf, f0 = self._start()
+        _s, _r, rep = optimize_surface(
+            p, ev, surf, OptimizeSettings(max_iterations=1, seed=1,
+                                          densify_to=0))
+        assert rep.initial_fos == f0, (rep.initial_fos, f0)
 
     def test_result_is_a_valid_surface(self):
         p, ev, surf, _f0 = self._start()

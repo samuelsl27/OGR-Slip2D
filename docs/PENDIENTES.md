@@ -85,89 +85,83 @@ la documentación que la interfaz **no** reproduce el muestreo de la referencia.
 
 ---
 
-## 0a · GLE bajo Simulated Annealing no devuelve nada — REGRESIÓN de v0.1.89
+## 0a · GLE bajo Simulated Annealing — CERRADO en v0.1.90
 
-**Estado**: introducida a sabiendas, medida y acotada. Regla 6.
-
-El cambio del rebanador de v0.1.89 —cortes de dovela en los vértices de la
-propia superficie— deja a **GLE/Morgenstern-Price combinado con Simulated
-Annealing** con **0 superficies válidas**. Medido en las semillas 0 a 7 y con
-18, 27, 36, 54 y 72 dovelas: siempre cero. No es un borde frágil, es
-sistemático.
-
-**Por qué se aceptó igualmente.** El mismo cambio arregla un **número
-equivocado**: Block Search devolvía 0,65-0,82 en un talud estable cuyo mínimo
-circular es 1,1239, sobre superficies con escalones casi verticales más
-estrechos que una dovela —invisibles para m-alpha, que veía 0,50 contra un
-límite de 0,2. Con el arreglo, las cinco semillas dan 1,13-1,16. Un número
-equivocado que un usuario se creería es peor que una ausencia visible de
-número.
-
-**Está acotado**, y eso es parte del argumento:
-
-| | con el cambio |
-|---|---|
-| GLE + Simulated Annealing | **0 válidas** (semillas 0-7) |
-| GLE + Block Search | 10-17 válidas, FoS 1,03-1,18 |
-| GLE + Grid Search circular | intacto, 340 válidas — los círculos no tienen vértices |
-
-Lo que **no** se sabe: por qué. Las anchuras de dovela no degeneran (mínima
-0,31 m, razón máx/mín 5,3), así que no son astillas, y no cambia con el número
-de dovelas. Está en `tests/test_annealing_bootstrap_v139.py` como test que
-afirma el fallo, de modo que **el día que GLE funcione la suite se pondrá roja
-y alguien tendrá que venir a borrarlo**.
-
-Relacionado con el pendiente 0 (SA converge peor que un círculo) y con
-`docs/audits/spencer_gle_interslice_v179.md`, donde ya consta que GLE es el método que peor converge: en la auditoría por
-círculo de v0.1.89 converge en el 57-64 % de los círculos donde la referencia
-sí lo hace. Es probable que los tres sean el mismo sitio.
+No era el rebanador de v0.1.89 y no era el recocido: era el **rango de λ**,
+cortado en ±1,5 mientras la raíz de esas superficies está en λ ≈ 3. Medido,
+arreglado y validado por tres caminos en v0.1.90. Ver
+`docs/audits/spencer_gle_interslice_v179.md`.
 
 ---
 
-## 0 · Simulated Annealing converge peor que un círculo — NUEVO en v0.1.89
+## 0 · Simulated Annealing converge peor que un círculo
 
 **Estado**: reportado con medidas, sin corregir. Regla 6.
 
-Apareció al arreglar el pendiente 2. Con la geometría corregida, sobre un
-talud cuyo mínimo **circular** es 1,1239, SA devuelve **1,6564**. Una búsqueda
-no circular no puede hacerlo peor que un círculo: los círculos están en su
-espacio de búsqueda.
+Sobre un talud cuyo mínimo **circular** es 1,1239, SA devuelve **1,6564**. Una
+búsqueda no circular no puede hacerlo peor que un círculo: los círculos están,
+salvo discretización, en su espacio de búsqueda. Block Search, sobre el mismo
+modelo, da 1,13-1,16 — dentro de la discretización. SA se va un 47 %.
 
-No es lo mismo que los dos defectos que sí se corrigieron en v0.1.89 (el
-predeterminado de m-alpha y los cortes de dovela en los vértices). Con
-aquellos arreglados, SA pasó de 0,500 —basura— a un rango físico, y ahí se
-quedó corto.
+### Corrección de lo que decía esta entrada en v0.1.89
 
-**`generation_steps` deja de hacer nada, y no es monótono.** Medido sobre ese
-modelo, con 9 vértices y 25 dovelas:
+Decía que `generation_steps` «deja de hacer nada». **Estaba mal medido**, y el
+mecanismo real apunta a otro sitio. Instrumentado (`search.py:2686-2687` y
+`:2767`):
 
-| `generation_steps` | evaluaciones válidas | FoS |
+```python
+K     = max(4,  int(self.generation_steps / 50))   # pasadas externas
+Ngen0 = max(20, self.generation_steps // K)        # bucle interno
+Ngen  = max(10, Ngen0 // (2 ** (k - 1)))           # se HALVA cada pasada
+if no_improve_passes >= 3: break                   # parada
+```
+
+| `generation_steps` | K | Ngen0 | Σ Ngen nominal | **evaluadas de verdad** | FoS |
+|---|---|---|---|---|---|
+| 50 | 4 | 20 | 50 | 151 | 1,7491 |
+| 300 | 6 | **50** | 117 | 459 | 2,1854 |
+| 1 000 | 20 | **50** | 257 | **462** | 1,6564 |
+| 3 000 | 60 | **50** | 657 | **462** | 1,6564 |
+
+Tres cosas, y ninguna es «el ajuste se ignora»:
+
+1. `K = generation_steps/50` hace que `Ngen0 = generation_steps // K` sea
+   **50 siempre** para `generation_steps ≥ 200`. El ajuste no controla el
+   tamaño del bucle interno; sólo añade pasadas externas.
+2. `Ngen` se halva cada pasada hasta un suelo de 10, así que las pasadas de
+   temperatura baja —donde el recocido debería explotar el óptimo— exploran
+   con diez propuestas.
+3. La parada a las 3 pasadas sin mejorar congela el total en 462 evaluaciones,
+   así que de 1000 en adelante el ajuste es inerte **por la parada**, no por
+   la fórmula.
+
+### Los parámetros de la referencia, que ahora sí se conocen
+
+De sus propios modelos (`simulatedannealing search` en el `.sli`):
+
+| | referencia | OGR |
 |---|---|---|
-| 50 | 92 | 1,7491 |
-| 300 | 257 | **2,1854** |
-| 1 000 | 260 | 1,6564 |
-| 3 000 | 260 | 1,6564 |
-| 10 000 | 260 | 1,6564 |
+| `ngen` (estados generados por temperatura) | **1000** | 50 (fijo) |
+| `nepsilon` (pasadas sin mejora antes de parar) | **5** | 3 |
+| `ftol` | **0,0001** | `tolerance` 1e-3 |
+| `c` (enfriamiento) | 8 | 8 ✔ |
+| `nvertices` | 8 | 9 por defecto |
 
-Dos cosas mal, no una: satura en ~260 evaluaciones por muchas que se pidan
-—un ajuste que no mueve el número a partir de 1000, que es la regla 7— y con
-300 pasos da **peor** resultado que con 50, lo que apunta a la aceptación o al
-enfriamiento, no al muestreo.
+Eso convierte esta entrada de «investigar» en «cambiar exactamente esto». No
+se hizo en v0.1.90 porque cambia coste y resultados en toda la suite y **no
+hay referencia externa para el resultado de una búsqueda no circular** — lo
+dice `validacion/casos/004-arai-tagyo-1985-ej1/caso.md`. Merece su propia
+versión con su propio triaje.
 
-Sobre el modelo degenerado antiguo SA daba 1,1220 con 300, 1000 y 3000 pasos
-—idéntico, y con 301 evaluaciones en los tres casos—, así que el síntoma
-estaba ahí desde antes: lo que la geometría degenerada tapaba no era el
-defecto, era el espacio de búsqueda en el que se nota.
+Qué haría falta además: el mínimo **no circular** publicado de Yamagami y Ueta
+(1988) o del reanálisis de Greco (1996), cuyo talud ya está en
+`validacion/casos/002-yamagami-ueta-1988/` con coordenadas rotuladas. Con ese
+número, las búsquedas no circulares tendrían por primera vez una referencia
+externa en vez de una identidad interna.
 
-Relacionado: `test_annealing_bootstrap_v139.py` ya documenta que el arranque
-de SA dependía de la suerte (200 rechazos consecutivos con semillas
-desafortunadas). Es probable que sea el mismo sitio.
-
-Qué haría falta: instrumentar cuántas propuestas genera y cuántas acepta por
-temperatura, y comprobar el calendario `T_k = T_0 · exp(-c · k^(1/n))` contra
-Su (2009), que es la fuente citada en el docstring de la clase. Hasta
-entonces, `test_sa_autorefine_v117.py` conserva la guarda de «nada por debajo
-de 0,9» y **no** afirma cota superior.
+Relacionado: `test_annealing_bootstrap_v139.py` documenta que el arranque de
+SA dependía de la suerte (200 rechazos consecutivos con semillas
+desafortunadas).
 
 ---
 

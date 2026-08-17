@@ -110,7 +110,9 @@ class GLEMorgensternPrice(LEMMethod):
         initial_fos: float = 1.0,
         interslice_func: Callable[[float, float, float], float] = half_sine,
         min_lambda: float = -1.5,
-        max_lambda: float = 1.5,
+        # v0.1.90 — the reference's own upper default. It does not widen
+        # the first sampling pass; see BaseSearch.lambda_grid.
+        max_lambda: float = 6.0,
         iterate_steffensen: bool = False,
     ) -> None:
         # v0.1.74 — this signature has to accept EVERY argument the base
@@ -172,11 +174,30 @@ class GLEMorgensternPrice(LEMMethod):
                 error_message="GLE: all sampled λ diverged",
             )
 
-        bracket = None
-        for i in range(len(samples) - 1):
-            if samples[i][1] * samples[i + 1][1] < 0:
-                bracket = (samples[i], samples[i + 1])
-                break
+        def _first_bracket(rows):
+            for i in range(len(rows) - 1):
+                if rows[i][1] * rows[i + 1][1] < 0:
+                    return (rows[i], rows[i + 1])
+            return None
+
+        bracket = _first_bracket(samples)
+
+        # v0.1.90 — the calibrated grid brackets nothing: reach further out
+        # before giving up. F_f − F_m is monotone in λ for these surfaces,
+        # so "no sign change" here usually means the root is beyond ±1.5,
+        # not that there is none. Sampled lazily, so every surface that
+        # brackets above is untouched. See BaseSearch._LAMBDA_EXTENSION.
+        if bracket is None:
+            for lam in self.lambda_grid_extension():
+                ff, fm = self._inner_solve(
+                    slices, lam, kh, kv, slide_sign,
+                    circle_R, circle_yc, x0, x1, sup,
+                )
+                if (math.isfinite(ff) and math.isfinite(fm)
+                        and 0.05 < ff < 50 and 0.05 < fm < 50):
+                    samples.append((lam, ff - fm, ff, fm))
+            samples.sort(key=lambda r: r[0])
+            bracket = _first_bracket(samples)
 
         if bracket is None:
             best = min(samples, key=lambda r: abs(r[1]))

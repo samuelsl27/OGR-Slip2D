@@ -100,11 +100,28 @@ class Spencer(LEMMethod):
             )
 
         # Find a bracket (sign change in g)
-        bracket = None
-        for i in range(len(samples) - 1):
-            if samples[i][1] * samples[i + 1][1] < 0:
-                bracket = (samples[i], samples[i + 1])
-                break
+        def _first_bracket(rows):
+            for i in range(len(rows) - 1):
+                if rows[i][1] * rows[i + 1][1] < 0:
+                    return (rows[i], rows[i + 1])
+            return None
+
+        bracket = _first_bracket(samples)
+
+        # v0.1.90 — same lazy extension as GLE, and for the same measured
+        # reason: 13 of 49 Simulated Annealing candidates failed here with
+        # "no λ-bracket" while their root simply sat beyond the calibrated
+        # ±1.5. Only surfaces that bracket nothing pay for these samples.
+        if bracket is None:
+            for lam in self.lambda_grid_extension():
+                ff, fm = self._inner_solve(
+                    slices, lam, kh, kv, slide_sign, circle_R, circle_yc, sup,
+                )
+                if (math.isfinite(ff) and math.isfinite(fm)
+                        and 0.05 < ff < 50 and 0.05 < fm < 50):
+                    samples.append((lam, ff - fm, ff, fm))
+            samples.sort(key=lambda r: r[0])
+            bracket = _first_bracket(samples)
 
         if bracket is None:
             # No bracket → return the sample with smallest |g| (closest

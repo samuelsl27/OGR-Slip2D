@@ -468,7 +468,12 @@ class AdvancedSettings:
     # Range searched for the interslice force scaling factor. See the
     # note above for why these are ±1.5 and not ±1.25.
     min_lambda: float = -1.5
-    max_lambda: float = 1.5
+    # v0.1.90 — was 1.5. The reference's own models carry max_lambda 6
+    # with enforcement off; clipping at 1.5 left Spencer and GLE unable to
+    # bracket surfaces whose root sits beyond it. Sampling past the
+    # calibrated shape is lazy, so this widens what CAN be reached without
+    # adding a single evaluation to a surface that already converges.
+    max_lambda: float = 6.0
     iterate_steffensen: bool = True
 
     @classmethod
@@ -490,8 +495,13 @@ class AdvancedSettings:
         # it, because from v0.1.74 on it means something.
         if data.get("check_tensile_stresses") is True:
             data["check_tensile_stresses"] = False
+        # Applied in order, and they CHAIN on purpose: a project stored
+        # under v0.1.73 carries max_lambda 1.25, which v0.1.74 mapped to
+        # 1.5 and v0.1.90 maps on to 6.0. Landing such a project on an
+        # intermediate default nobody uses would be worse than either.
         for key, old, new in (("min_lambda", -1.25, -1.5),
-                              ("max_lambda", 1.25, 1.5)):
+                              ("max_lambda", 1.25, 1.5),
+                              ("max_lambda", 1.5, 6.0)):
             if key in data and abs(float(data[key]) - old) < 1e-12:
                 data[key] = new
         known = {f for f in cls.__dataclass_fields__}

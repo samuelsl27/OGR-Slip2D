@@ -105,7 +105,10 @@ class LEMMethod(ABC):
         max_iterations: int = 75,
         initial_fos: float = 1.0,
         min_lambda: float = -1.5,
-        max_lambda: float = 1.5,
+        # v0.1.90 — was 1.5, now the reference's own upper default. It
+        # does NOT widen the first sampling pass (see lambda_grid); it is
+        # the room the lazy extension is allowed to use.
+        max_lambda: float = 6.0,
         iterate_steffensen: bool = False,
     ) -> None:
         self.tolerance = tolerance
@@ -158,10 +161,50 @@ class LEMMethod(ABC):
     _LAMBDA_SHAPE = (-1.5, -1.0, -0.6, -0.4, -0.2, -0.1, 0.0,
                      0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 1.5)
 
+    # v0.1.90 — λ BEYOND the calibrated shape, sampled ONLY when the shape
+    # found no bracket. Two facts made this necessary:
+    #
+    # * The reference's own models carry ``min_lambda: -0.1`` and
+    #   ``max_lambda: 6``, with the enforcement checkboxes OFF — so it does
+    #   not restrict λ by default at all, while this program clipped at
+    #   ±1.5 always.
+    # * Measured on a Simulated Annealing candidate that GLE could not
+    #   solve: F_f − F_m is monotone in λ and still −0.32 at λ = 1.5. The
+    #   root is at λ = 2.994, where F_f = 1.1257 and F_m = 1.1262, giving
+    #   FoS 1.1260 against a circular minimum of 1.1239 on the same model.
+    #   Every one of the 61 candidates of that run failed with "no
+    #   λ-bracket"; none of them was unsolvable, all of them were
+    #   unreachable.
+    #
+    # Positive only, and that is not an oversight: λ is the interslice
+    # force ratio X/E, and the far side of the range that surfaces reach
+    # for is the steep-interslice one. The reference's own lower bound is
+    # −0.1, well inside what the shape above already covers.
+    #
+    # This has bitten once before, which is why it is sampled lazily
+    # rather than by widening the shape: the range used to be ±1.25 and
+    # was raised to ±1.5 in v0.1.74 because the reference-validated Ej_1
+    # circle converges at λ = 1.4919 — widened exactly enough for the case
+    # that failed at the time. Sampling these only on failure means every
+    # surface that converges today is untouched, by construction, and only
+    # the ones that currently give up pay for the extra evaluations.
+    _LAMBDA_EXTENSION = (2.0, 2.5, 3.0, 3.5, 4.0, 5.0, 6.0)
+
     def lambda_grid(self) -> list:
-        """The λ values to sample, clipped to the configured range."""
-        lo = min(self.min_lambda, self.max_lambda)
-        hi = max(self.min_lambda, self.max_lambda)
+        """The λ values sampled FIRST: the calibrated shape, clipped.
+
+        Intersected with the calibrated span as well as with the user's
+        range, so that widening ``max_lambda`` does not add samples here.
+        Anything beyond the shape belongs to :meth:`lambda_grid_extension`
+        and is only reached when this grid brackets nothing.
+        """
+        lo = max(min(self.min_lambda, self.max_lambda),
+                 min(self._LAMBDA_SHAPE))
+        hi = min(max(self.min_lambda, self.max_lambda),
+                 max(self._LAMBDA_SHAPE))
+        if hi < lo:
+            lo = hi = min(max(self.min_lambda, self.max_lambda),
+                          max(self._LAMBDA_SHAPE))
         grid = [v for v in self._LAMBDA_SHAPE if lo <= v <= hi]
         # The endpoints always belong to the search: without them a
         # narrowed range could lose the sign change that brackets the
@@ -171,6 +214,21 @@ class LEMMethod(ABC):
             if not any(abs(v - end) < 1e-12 for v in grid):
                 grid.append(end)
         return sorted(grid)
+
+    def lambda_grid_extension(self) -> list:
+        """The λ tried only after :meth:`lambda_grid` brackets nothing.
+
+        Bounded by the user's configured range, so narrowing it still
+        narrows the search — a range the user set has to mean something
+        (rule 7), and it means the same thing here as it always did.
+        """
+        lo = min(self.min_lambda, self.max_lambda)
+        hi = max(self.min_lambda, self.max_lambda)
+        out = [v for v in self._LAMBDA_EXTENSION if lo <= v <= hi]
+        if hi > max(self._LAMBDA_SHAPE) and not any(
+                abs(v - hi) < 1e-12 for v in out):
+            out.append(hi)
+        return sorted(out)
 
     # ------------------------------------------------------------------
     @abstractmethod
