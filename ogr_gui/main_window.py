@@ -206,7 +206,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.91"
+    VERSION = "0.1.92"
 
     def __init__(self) -> None:
         super().__init__()
@@ -516,6 +516,14 @@ class MainWindow(QMainWindow):
         # simply Move with the same dialog.
         self._mk("slope_limits", "Define Limits...",
                  self._move_slope_limits, "slope_limits")
+        # v0.1.92 — the moment axis for non-circular surfaces. A moment
+        # method has to take moments about something, and a polyline offers
+        # no natural point; leaving it out meant the automatic axis could
+        # never be overridden. Reachable from the menu (rule 3).
+        self._mk("moment_axis", "Define Moment Axis...",
+                 self._define_moment_axis, None)
+        self._mk("moment_axis_reset", "Reset Moment Axis",
+                 self._reset_moment_axis, None)
 
         # Properties
         self._mk("def_materials", "Define Materials...", self.act_define_materials, "define_materials")
@@ -737,6 +745,9 @@ class MainWindow(QMainWindow):
         m_limits = m_surf.addMenu(tr("Slope Limits"))
         for k in ["slope_limits", "slope_limits_move",
                   "slope_limits_reset"]:
+            m_limits.addAction(self._actions[k])
+        m_limits.addSeparator()
+        for k in ["moment_axis", "moment_axis_reset"]:
             m_limits.addAction(self._actions[k])
 
         m_prop = mb.addMenu(tr("Properties"))
@@ -2144,6 +2155,42 @@ class MainWindow(QMainWindow):
         self.canvas.refresh_scene()
         self.statusBar().showMessage(
             tr("Slope limits: %.3f to %.3f") % (left, right), 6000)
+
+    def _define_moment_axis(self) -> None:
+        """The point non-circular surfaces take moments about.
+
+        Optional: with no axis set, every surface builds its own from its
+        entry-exit chord. Setting one applies it to ALL non-circular
+        surfaces, which is what the reference does with the same control.
+        """
+        from PySide6.QtWidgets import QInputDialog
+        s = self.project.settings.search
+        x, ok = QInputDialog.getDouble(
+            self, tr("Define Moment Axis"), tr("Axis x:"),
+            float(getattr(s, "axis_x", 0.0) or 0.0), -1e9, 1e9, 4)
+        if not ok:
+            return
+        y, ok = QInputDialog.getDouble(
+            self, tr("Define Moment Axis"), tr("Axis y:"),
+            float(getattr(s, "axis_y", 0.0) or 0.0), -1e9, 1e9, 4)
+        if not ok:
+            return
+        # Both or neither: half a point is not a point.
+        s.axis_x, s.axis_y = x, y
+        self.project.is_dirty = True
+        self.canvas.refresh_scene()
+        self.statusBar().showMessage(
+            tr("Moment axis: (%.3f, %.3f)") % (x, y), 6000)
+
+    def _reset_moment_axis(self) -> None:
+        """Back to automatic: one axis per surface, from its own chord."""
+        s = self.project.settings.search
+        s.axis_x = None
+        s.axis_y = None
+        self.project.is_dirty = True
+        self.canvas.refresh_scene()
+        self.statusBar().showMessage(
+            tr("Moment axis: automatic (one per surface)."), 6000)
 
     def _reset_slope_limits(self) -> None:
         """Back to automatic, derived from the ground surface."""

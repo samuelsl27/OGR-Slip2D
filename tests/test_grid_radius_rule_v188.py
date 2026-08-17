@@ -314,6 +314,74 @@ class TestPopulationIsExact:
         assert len(degenerate) == 3, degenerate
 
 
+class TestTheLimitsAreWhereDMaxIsMeasuredTo:
+    """v0.1.92 — the piece v0.1.88 could not measure, now measured.
+
+    In every model available then, the Slope Limits sat at their automatic
+    position, which coincides with the ends of the ground profile. The data
+    therefore could not tell "distance to the limit POINTS" from "distance to
+    the ENDS OF THE PROFILE": both readings fitted 881 centres perfectly.
+
+    Two models were run with the limits moved INWARD, each to an abscissa that
+    is not a profile vertex — Ej_1 has vertices at 0, 50, 75 and 120, so the
+    limits went to 20 and 100; Ej_2 has them at −50, 15, 25, 40, 55, 60, 70
+    and 100, so its limits went to −20 and 85. That is the only way to
+    separate the readings, and it separates them decisively:
+
+        d_max to the LIMIT POINTS          error 5e-14   both models
+        d_max to the ends of the profile   error 10.0 m (Ej_1), 23.5 m (Ej_2)
+
+    What is STILL not separated, and is said rather than glossed: whether
+    d_min is measured over the clipped surface or the whole one. Both give
+    the identical answer here, because in these grids the nearest point of
+    the profile falls inside the limits at every centre.
+    """
+
+    # Read from the .s01 of the two Define-Limits models.
+    EJ1_LIMITED = {
+        (84.0, 66.0):  (35.7881402148276, 43.5785610138306),
+        (84.0, 70.5):  (39.0220142939048, 47.7465192401887),
+        (88.0, 70.5):  (41.6502502603785, 46.7713143577574),
+    }
+    EJ2_LIMITED = {
+        (-3.333333, 61.315789):  (31.5237360225216, 35.2667824279112),
+        (-3.333333, 74.473684):  (44.5654075729404, 47.3399266034891),
+        (12.380952, 87.631579):  (43.9185399471733, 64.9376779850609),
+    }
+
+    def test_ej1_with_the_limits_at_20_and_100(self):
+        p = _ej1_external()
+        for (xc, yc), (lo_ref, hi_ref) in self.EJ1_LIMITED.items():
+            lo, hi = _bracket(p, xc, yc, slope_limits=(20.0, 100.0))
+            assert abs(lo - lo_ref) < 1e-6, (xc, yc, lo, lo_ref)
+            assert abs(hi - hi_ref) < 1e-6, (xc, yc, hi, hi_ref)
+
+    def test_ej2_with_the_limits_at_minus_20_and_85(self):
+        p = _ej2_external()
+        for (xc, yc), (lo_ref, hi_ref) in self.EJ2_LIMITED.items():
+            lo, hi = _bracket(p, xc, yc, slope_limits=(-20.0, 85.0))
+            assert abs(lo - lo_ref) < 1e-6, (xc, yc, lo, lo_ref)
+            assert abs(hi - hi_ref) < 1e-6, (xc, yc, hi, hi_ref)
+
+    def test_measuring_to_the_profile_ends_would_be_wrong_by_metres(self):
+        """The rejected reading, kept so the choice is visible rather than
+        implicit. Measuring d_max to the ends of the WHOLE profile instead of
+        to the limit points misses by 10 m on Ej_1."""
+        import math
+        p = _ej1_external()
+        gs = _searcher(slope_limits=(20.0, 100.0))
+        full = gs.__class__(method=gs.method).\
+            _slope_surface(p)                      # unclipped profile
+        xc, yc = 84.0, 66.0
+        d_min = gs._distance_to_surface(xc, yc, gs._slope_surface(p))
+        to_ends = min(math.hypot(xc - full[0].x, yc - full[0].y),
+                      math.hypot(xc - full[-1].x, yc - full[-1].y))
+        delta = to_ends - d_min
+        wrong_hi = to_ends - 0.05 * delta
+        _lo, hi = _bracket(p, xc, yc, slope_limits=(20.0, 100.0))
+        assert abs(wrong_hi - hi) > 5.0, (wrong_hi, hi)
+
+
 class TestSlopeLimitsAreHonoured:
     """The clip has to interpolate the limit abscissae, because the bracket
     is measured TO the limit points. Filtering vertices by x — what this did

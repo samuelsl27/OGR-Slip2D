@@ -396,10 +396,18 @@ _DICTS: dict[str, dict[str, str]] = {
         'X right (kN)': 'X derecha (kN)',
         'no — this method does not resolve them':
             'no — este método no las resuelve',
-        'Copy': 'Copiar',
         'Copy the table to the clipboard':
             'Copiar la tabla al portapapeles',
         'Zoom Slice': 'Ampliar dovela',
+        # v0.1.92 — el eje de momentos de las superficies no circulares.
+        'Define Moment Axis...': 'Definir eje de momentos...',
+        'Define Moment Axis': 'Definir eje de momentos',
+        'Reset Moment Axis': 'Restablecer eje de momentos',
+        'Axis x:': 'Eje x:',
+        'Axis y:': 'Eje y:',
+        'Moment axis: (%.3f, %.3f)': 'Eje de momentos: (%.3f, %.3f)',
+        'Moment axis: automatic (one per surface).':
+            'Eje de momentos: automático (uno por superficie).',
         'Centre the view on the selected slice':
             'Centrar la vista en la dovela seleccionada',
         'Hide Geometry': 'Ocultar geometría',

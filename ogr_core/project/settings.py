@@ -182,6 +182,21 @@ class SearchSettings:
 
     slope_limit_left: Optional[float] = None
     slope_limit_right: Optional[float] = None
+    # v0.1.92 — the moment axis for NON-CIRCULAR surfaces, None by default
+    # meaning automatic: each surface gets its own, built from its entry-exit
+    # chord. A circle needs none, having a centre already.
+    #
+    # It exists because a moment method has to take moments about SOMETHING,
+    # and a polyline offers no natural point. The reference carries the same
+    # control and describes it the same way: "a single axis point, which will
+    # be used for moment equilibrium calculations, for ALL surfaces generated
+    # by a Block Search or a Path Search".
+    #
+    # Both or neither: one coordinate alone does not define a point, and
+    # silently pairing it with an automatic other half would be a setting
+    # that half-applies.
+    axis_x: Optional[float] = None
+    axis_y: Optional[float] = None
     surface_type: str = SurfaceType.CIRCULAR.value
     search_method: str = SearchMethod.GRID_SEARCH.value
 

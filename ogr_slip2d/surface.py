@@ -439,3 +439,50 @@ class SlipSurface:
         if "id" in data:
             s.id = data["id"]
         return s
+
+
+# ----------------------------------------------------------------------
+def moment_axis(surface, override=None) -> tuple[float, float]:
+    """The point about which moment equilibrium is taken.
+
+    A circle has one by definition: its centre. A polyline does not, and a
+    moment method needs one anyway — which is why the reference program
+    carries an explicit *Add Axis* option, described in its documentation as
+    "a single axis point, which will be used for moment equilibrium
+    calculations", and calculates one automatically per surface when the user
+    has not placed it.
+
+    ``override`` is that user-placed point, and wins for every surface.
+
+    The automatic construction was NOT documented anywhere; it was measured
+    from the reference's own output. A non-circular result reports ``xc, yc,
+    r`` in its Global Minimum block, and those fields are the axis:
+
+        chord = exit - entry
+        axis  = midpoint(chord) + rot90(chord)        rot90: (x, y) -> (-y, x)
+
+    Checked against the two reference surfaces (v0.1.92):
+
+        Ej_1  built (82.5, 72.5)   reported (82.500000825, 72.500000825)
+        Ej_2  built (2.5, 105.0)   reported (2.50000105, 105.00000105)
+
+    to 1.2e-6 and 1.5e-6. The residual is the SAME shift in x and y in both
+    cases, about 6.3e-9 of the model diagonal — noise from its own geometry
+    code, not a different construction.
+
+    The ``r`` it reports alongside is the MEAN distance from the axis to the
+    surface vertices, which is a display value: it is not the distance to the
+    endpoints (48.09 against the reported 47.21 in Ej_1), so it is not the
+    radius of any circle through them.
+    """
+    if override is not None:
+        return float(override[0]), float(override[1])
+    if isinstance(surface, SlipCircle):
+        return surface.centre_x, surface.centre_y
+    verts = list(getattr(getattr(surface, "polyline", None), "vertices", ()))
+    if len(verts) < 2:
+        return 0.0, 0.0
+    x0, y0 = verts[0].x, verts[0].y
+    x1, y1 = verts[-1].x, verts[-1].y
+    dx, dy = x1 - x0, y1 - y0
+    return 0.5 * (x0 + x1) - dy, 0.5 * (y0 + y1) + dx

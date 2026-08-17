@@ -1053,12 +1053,35 @@ class AutoRefineSearch(BaseSearch):
         if len(top) < 2:
             return result
 
-        # Initial slope polyline = ground profile within Slope Limits
-        if self.slope_limits is not None:
+        # Initial slope polyline = ground profile within Slope Limits.
+        #
+        # v0.1.92 — the clip INTERPOLATES the limit abscissae, as
+        # GridSearch._slope_surface has done since v0.1.88. It used to keep
+        # the vertices whose x fell between the limits, which throws away the
+        # segment a limit cuts through: a limit that is not itself a vertex
+        # produced no point at all, and the polyline this search starts from
+        # ended at the last vertex strictly inside instead of at the limit.
+        #
+        # v0.1.88 reported this and did NOT fix it, because there was no
+        # measurement saying where the limits belong. There is now: two
+        # models run with the limits moved inward to abscissae that are not
+        # vertices show the surface reaching exactly to the limit POINTS, to
+        # 5e-14. See tests/test_grid_radius_rule_v188.py.
+        poly_pts = list(top)
+        if self.slope_limits is not None and len(top) >= 2:
             x0, x1 = sorted(self.slope_limits)
-            poly_pts = [v for v in top if x0 - 1e-9 <= v.x <= x1 + 1e-9]
-        else:
-            poly_pts = list(top)
+            x0 = max(x0, top[0].x)
+            x1 = min(x1, top[-1].x)
+            span = max(top[-1].x - top[0].x, 1e-300)
+            tol = 1e-9 * span            # relative, never absolute
+            if x1 - x0 > tol:
+                y0 = PathSearch._interpolate_top_y(top, x0)
+                y1 = PathSearch._interpolate_top_y(top, x1)
+                if y0 is not None and y1 is not None:
+                    from ogr_core.geometry import Vertex as _V
+                    poly_pts = ([_V(x0, y0)]
+                                + [v for v in top if x0 + tol < v.x < x1 - tol]
+                                + [_V(x1, y1)])
         if len(poly_pts) < 2:
             poly_pts = list(top)
 

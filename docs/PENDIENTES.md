@@ -23,47 +23,19 @@ Limits están en su posición automática, así que los datos no distinguen si
 `d_min` se mide sobre el perfil recortado o el completo. Se implementó la
 lectura documentada.
 
-### Qué haría falta para cerrar también eso (a ejecutar en Slide2)
+### CERRADO en v0.1.92
 
-> Los modelos **A1** y **B1** tal como están —rejilla de pocos centros,
-> `Radius Increment = 1`, dos círculos por centro— pero con los **Slope
-> Limits movidos hacia dentro**, cada uno a una `x` que **no** caiga en un
-> vértice del perfil. En Ej_1, por ejemplo, x = 20 y x = 100 (sus vértices
-> están en 0, 50, 75 y 120).
->
-> Los dos radios de cada centro responden las dos preguntas de golpe, y de
-> paso dicen si el retranqueo sigue siendo el 5 %.
+Los modelos con los Slope Limits metidos a x = 20/100 (Ej_1) y −20/85 (Ej_2)
+—abscisas que no son vértices del perfil— distinguen por fin las lecturas:
+`d_max` se mide **a los puntos límite** (5·10⁻¹⁴), no a los extremos del perfil
+(error de 10,0 m y 23,5 m). Lo implementado desde v0.1.88 era lo correcto.
 
-Sin esa corrida, mover los límites en OGR se comporta según la lectura
-documentada, y el docstring de `GridSearch._radius_bracket` lo dice con esas
-palabras. No bloquea nada: los dos modelos de referencia y los cinco casos
-publicados se reproducen igual.
+Sigue sin distinguirse, y se dice: si `d_min` se mide sobre el perfil recortado
+o el completo. En esas rejillas el punto más cercano cae dentro de los límites
+en todos los centros, así que las dos lecturas dan idéntico.
 
-### Reportado de paso, no corregido: `AutoRefineSearch` recorta igual de mal
-
-`GridSearch._slope_surface` recortaba a los Slope Limits **filtrando vértices
-por `x`**, lo que tira el tramo que un límite corta por el medio. v0.1.88 lo
-arregló ahí, interpolando las dos abscisas límite.
-
-`AutoRefineSearch.run` (`ogr_slip2d/search.py`, sobre la línea 1031) hace
-exactamente lo mismo:
-
-```python
-poly_pts = [v for v in top if x0 - 1e-9 <= v.x <= x1 + 1e-9]
-```
-
-Con los límites en su posición automática da igual, porque coinciden con los
-extremos del perfil — que es el caso de todos los tests y de los dos ejemplos.
-Con límites metidos hacia dentro en una `x` sin vértice, la polilínea de
-partida termina en el último vértice interior en vez de en el límite.
-
-**No se ha corregido a propósito** (regla 6): no hay dato de referencia para
-*esta* búsqueda, así que arreglarlo movería números sin nada contra lo que
-comprobarlos. La corrida de Slide2 que pide el apartado anterior serviría
-también para esto.
-
-`BlockSearch` (línea 1326) usa sólo el rango de `x`, no la polilínea, así que
-no le afecta.
+`AutoRefineSearch` **queda arreglado** con esa misma medición: recortaba los
+límites filtrando vértices y ahora interpola, como `GridSearch`.
 
 ### Decisión tomada en v0.1.88 que conviene revisar: `min_radius = 0`
 

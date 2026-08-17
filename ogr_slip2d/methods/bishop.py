@@ -146,6 +146,143 @@ class BishopSimplified(LEMMethod):
         return c + c_suction, tan_phi
 
     # ------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    def _general_moment_fos(self, project, surface, slices, s_list,
+                            kh, kv, slide_sign, sup) -> LEMResult:
+        """Bishop on a surface that is not a circle: real moments about an
+        axis, written as cross products.
+
+        Every moment here is ``(P - O) x F`` for a force ``F`` applied at
+        ``P``. That is deliberate. Three earlier attempts at this derived
+        "arms" by hand and all three came out wrong — once by 6 %, once by
+        13 %, once by 8 % — always through a sign, never through the
+        physics. A cross product takes its sign from the geometry, so there
+        is nothing left to get backwards.
+
+        The one place a sign still has to be chosen is which way the base
+        shear acts, and it is not chosen either: the block turns in the
+        sense of the weights' own moment about the axis, so each slice's
+        base velocity follows from that rotation, and the shear opposes it.
+
+        Reference for the method: Bishop (1955); the general form with a
+        moment axis follows Abramson, Lee, Sharma & Boyce (2001), which the
+        reference's documentation cites for the equations of every method.
+        """
+        from ..surface import moment_axis
+
+        axis_override = None
+        s_search = getattr(getattr(project, "settings", None), "search", None)
+        ax = getattr(s_search, "axis_x", None)
+        ay = getattr(s_search, "axis_y", None)
+        if ax is not None and ay is not None:
+            axis_override = (ax, ay)
+        ox, oy = moment_axis(surface, axis_override)
+
+        def moment(px, py, fx, fy):
+            return (px - ox) * fy - (py - oy) * fx
+
+        fos = max(0.05, self.initial_fos)
+        converged = False
+        iterations = 0
+        for it in range(1, self.max_iterations + 1):
+            iterations = it
+            rows = []
+            m_weight = 0.0
+            for i_s, s in enumerate(s_list):
+                f = slice_forces(s, kh, kv)
+                w = f.w_total
+                alpha = slide_sign * s.base_angle
+                n_est = w * math.cos(s.base_angle)
+                sigma = max(0.0, n_est - s.pore_pressure * s.base_length)
+                sigma /= max(s.base_length, 1e-9)
+                c, tan_phi = self._local_c_phi(s, s.material, sigma)
+                m_alpha = math.cos(alpha) + math.sin(alpha) * tan_phi / fos
+                if abs(m_alpha) < 1e-6:
+                    return LEMResult(
+                        fos=math.nan, converged=False, iterations=iterations,
+                        method_id=self.METHOD_ID, surface=surface,
+                        slices=slices,
+                        error_message=(f"mα collapsed to {m_alpha:.4g} "
+                                       f"at slice {s.index}"))
+                # Q = S·F, the resisting force with the factor divided out.
+                q = (c * s.width
+                     + (w - s.pore_pressure * s.width) * tan_phi) / m_alpha
+                if sup.present and sup.n_press[i_s]:
+                    q += sup.n_press[i_s] * tan_phi
+                xa, ya = s.base_x_left, s.base_y_left
+                xb, yb = s.base_x_right, s.base_y_right
+                length = math.hypot(xb - xa, yb - ya) or 1e-9
+                tx, ty = (xb - xa) / length, (yb - ya) / length
+                xm, ym = 0.5 * (xa + xb), 0.5 * (ya + yb)
+                # The weight is vertical, so only its x matters here.
+                m_weight += moment(xm, ym, 0.0, -w)
+                rows.append((s, i_s, f, w, q, alpha, tx, ty, xm, ym))
+
+            # The block turns the way its own weight turns it; the shear on
+            # each base opposes the motion that rotation produces there.
+            rot = 1.0 if m_weight >= 0.0 else -1.0
+            m_normal = m_shear = m_extra = 0.0
+            for (s, i_s, f, w, q, alpha, tx, ty, xm, ym) in rows:
+                vx, vy = -rot * (ym - oy), rot * (xm - ox)
+                shear_sign = -1.0 if (vx * tx + vy * ty) >= 0.0 else 1.0
+                nx, ny = -ty, tx
+                if nx * (ox - xm) + ny * (oy - ym) < 0.0:
+                    nx, ny = -nx, -ny        # normal points into the mass
+                shear = q / fos
+                normal = ((w - shear * math.sin(alpha))
+                          / max(math.cos(alpha), 1e-9))
+                m_normal += moment(xm, ym, normal * nx, normal * ny)
+                m_shear += moment(xm, ym, shear_sign * q * tx,
+                                  shear_sign * q * ty)
+                # Seismic and water thrusts as plain moments about the axis.
+                # The circular path divides these by R because it works in
+                # units of Σ W sinα; here there is no R to divide by, and no
+                # need for one. NOTE: unvalidated — the reference surfaces
+                # carry no seismic, no water and no support, so this term
+                # rests on the statics alone.
+                if f.h_seismic:
+                    y_cg = 0.5 * (0.5 * (s.top_y_left + s.top_y_right)
+                                  + 0.5 * (s.base_y_left + s.base_y_right))
+                    m_extra += moment(xm, y_cg, f.h_seismic, 0.0)
+                # A support's TANGENTIAL force, Active and Passive alike,
+                # acts along the base opposing the slide — same direction as
+                # the shear, so the same sign. The circular path keeps the
+                # two apart (Active off the driving side, Passive onto the
+                # resisting one) because it works with a ratio; a moment
+                # balance has one side, and putting a resisting force on it
+                # with its own sign is the same statement.
+                if sup.present:
+                    t_sup = sup.t_active[i_s] + sup.t_passive[i_s]
+                    if t_sup:
+                        m_extra += moment(xm, ym,
+                                          shear_sign * t_sup * tx,
+                                          shear_sign * t_sup * ty)
+
+            driving = m_weight + m_normal + m_extra
+            if abs(driving) < 1e-9:
+                return LEMResult(
+                    fos=math.inf, converged=False, iterations=iterations,
+                    method_id=self.METHOD_ID, surface=surface, slices=slices,
+                    error_message=("Zero driving moment — surface does not "
+                                   "slide"))
+            new_fos = -m_shear / driving
+            if not math.isfinite(new_fos) or new_fos <= 0.0:
+                return LEMResult(
+                    fos=math.nan, converged=False, iterations=iterations,
+                    method_id=self.METHOD_ID, surface=surface, slices=slices,
+                    error_message="Non-physical factor of safety")
+            if abs(new_fos - fos) < self.tolerance:
+                fos = new_fos
+                converged = True
+                break
+            fos = 0.5 * fos + 0.5 * new_fos
+
+        return LEMResult(
+            fos=fos, converged=converged, iterations=iterations,
+            method_id=self.METHOD_ID, surface=surface, slices=slices,
+            details={"moment_axis": (ox, oy)},
+        )
+
     def compute_fos(
         self,
         project: Project,
@@ -252,6 +389,37 @@ class BishopSimplified(LEMMethod):
                 slices=slices,
                 error_message="Zero driving moment — surface does not slide",
             )
+
+        # v0.1.92 — a NON-CIRCULAR surface does not get the formula above.
+        #
+        # ``Σ W sinα`` over ``Σ Q`` is the driving-over-resisting moment
+        # ratio only because a circle's radius is the same for every slice
+        # and cancels top and bottom. On a polyline every slice base has its
+        # own arm, and the base normal stops pointing at the axis, so it
+        # contributes a moment of its own that this form has no term for.
+        # The reference's documentation is explicit that it does compute
+        # that arm ("Slide2 does account for the fact that the normal force
+        # does not pass through the center of rotation by calculating the
+        # moment arm associated with each normal force").
+        #
+        # Measured on the two reference non-circular surfaces, against the
+        # values the reference reports for them:
+        #
+        #     Ej_1    Σ W sinα form  +2.01 %      full moments  -0.01 %
+        #     Ej_2    Σ W sinα form  +4.06 %      full moments  -0.14 %
+        #
+        # The circular path above is left untouched rather than expressed
+        # through the general one, so no circle can move: the two are not
+        # bit-identical anyway, because the circular formula idealises each
+        # slice base as an ARC of arm R while the general one takes the
+        # straight CHORD the slicer actually built. That difference is
+        # O(theta^2) per slice — 0.055 to 0.067 % over these models with 25
+        # slices — and it is a real modelling choice, not an error. Applying
+        # the general form to circles would therefore have moved every
+        # validated result by half a per mil for no gain.
+        if not isinstance(surface, SlipCircle):
+            return self._general_moment_fos(
+                project, surface, slices, s_list, kh, kv, slide_sign, sup)
 
         # Iterative fixed-point solve for FoS
         fos = self.initial_fos
