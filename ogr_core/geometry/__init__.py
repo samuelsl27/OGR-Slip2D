@@ -15,7 +15,8 @@ from .expand_shrink import (
     ExpandShrinkResult,
     expand_shrink_external,
 )
-from .ground import ground_surface, upper_y_at
+from .ground import (ground_surface, lower_y_at, upper_y_at,
+                     zero_thickness_spans)
 from .primitives import Polyline, Vertex, segments_of
 from .tension_crack import TensionCrackProperties, WaterLevelMode
 from .regions import MaterialRegion, build_regions, region_at_point, regions_available
@@ -60,5 +61,7 @@ __all__ = [
     "WaterLevelMode",
     # v0.1.84 — the single definition of the ground surface
     "ground_surface",
+    "lower_y_at",
     "upper_y_at",
+    "zero_thickness_spans",
 ]

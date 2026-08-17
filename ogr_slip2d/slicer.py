@@ -408,6 +408,29 @@ def _slice_boundaries(
                 s_hi = max(s_hi, v.y)
 
     cuts: set = set()
+
+    # v0.1.89 — the slip surface's OWN kinks are mandatory cuts too, and
+    # for the same reason as the layer crossings below: a slice base
+    # belongs to one segment of the surface or to another, never to a
+    # blend. A slice straddling a kink gets a base angle that is neither of
+    # the two real ones.
+    #
+    # What that cost, found when nine test models stopped being degenerate
+    # and non-circular searches could finally dive: Block Search returned
+    # FoS 0.821 on a stable slope whose circular minimum is 1.124, on a
+    # surface containing a NEARLY VERTICAL STEP 0.14 m wide — while the
+    # slices were 1.26 m wide. The step fell inside a single slice, so no
+    # slice base was steep, so the m-alpha check saw nothing to reject:
+    # min m_alpha was 0.50 against a limit of 0.2. The geometry was not
+    # wrong, it was invisible.
+    #
+    # Circles have no vertices, so this is inert for every circular search
+    # — the validated Ej_1 and Ej_2 benchmarks cannot move.
+    if not isinstance(surface, SlipCircle):
+        for v in getattr(getattr(surface, "polyline", None), "vertices", ()):
+            if x_l + 1e-9 < v.x < x_r - 1e-9:
+                cuts.add(v.x)
+
     for b in project.boundaries:
         if b.btype not in (BoundaryType.MATERIAL, BoundaryType.WATER_TABLE):
             continue

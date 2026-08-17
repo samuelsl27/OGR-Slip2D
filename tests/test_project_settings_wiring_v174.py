@@ -319,6 +319,11 @@ class TestTheTensileCheckReachesTheSearch:
                 method=BishopSimplified(), grid_x=(40, 120), grid_y=(30, 120),
                 grid_nx=8, grid_ny=8, radius_increment=10, min_radius=2.0,
                 num_slices=25, min_area=0.5, reject_tensile=reject,
+                # v0.1.89 — m-alpha off EXPLICITLY: this case is about the
+                # tensile check, and since m-alpha defaults on it would
+                # otherwise mark surfaces inadmissible for a reason that has
+                # nothing to do with what is being measured here.
+                check_m_alpha=False,
                 tensile_percent=95.0).run(val._ej1_project())
 
         off, on = _run(False), _run(True)
@@ -395,9 +400,11 @@ class TestTheMAlphaCheckIsReachableButOff:
         assert m_alpha_check.__doc__            # the criterion exists
         from ogr_slip2d.search import GridSearch
         from ogr_slip2d.methods import Spencer
-        assert GridSearch(method=Spencer()).check_m_alpha is False
+        # v0.1.89 — the default is now ON (it disagreed with
+        # ProjectSettings until then), so "off" has to be asked for.
+        assert GridSearch(method=Spencer()).check_m_alpha is True
         assert GridSearch(method=Spencer(),
-                          check_m_alpha=True).check_m_alpha is True
+                          check_m_alpha=False).check_m_alpha is False
 
     def test_and_passes_it_with_the_check_off(self):
         """The published factor of safety is reproducible either way."""

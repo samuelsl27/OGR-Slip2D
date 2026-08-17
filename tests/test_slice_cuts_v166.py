@@ -60,9 +60,12 @@ def _crossing_project():
     from ogr_core.materials import Material, MohrCoulomb
     from ogr_core.project import Project
 
+    # v0.1.89 — 10 m of foundation. Without it the stretch from x = 0 to
+    # the toe at x = 30 encloses no soil. Not listed among the five in
+    # docs/PENDIENTES.md — the inventory there was made by hand.
     ext = Polyline(vertices=[
-        Vertex(0, 0), Vertex(60, 0), Vertex(60, 12),
-        Vertex(50, 12), Vertex(30, 0),
+        Vertex(0, -10.0), Vertex(60, -10.0), Vertex(60, 12),
+        Vertex(50, 12), Vertex(30, 0), Vertex(0, 0),
     ], closed=True)
     ext.ensure_ccw()
     p = Project("cut")

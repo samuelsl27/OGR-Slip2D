@@ -21,9 +21,11 @@ def _slope_project():
     beta = math.radians(30.96)
     toe = 30.0
     crest = toe + H / math.tan(beta)
+    # v0.1.89 — 10 m foundation; see the module docstring.
+    base = -10.0
     ext = Polyline(vertices=[
-        Vertex(0, 0), Vertex(60, 0), Vertex(60, H),
-        Vertex(crest, H), Vertex(toe, 0),
+        Vertex(0, base), Vertex(60, base), Vertex(60, H),
+        Vertex(crest, H), Vertex(toe, 0), Vertex(0, 0),
     ], closed=True)
     ext.ensure_ccw()
     p = Project("nc")
@@ -164,8 +166,10 @@ class TestSurfacesInsideExternal:
         beta = math.radians(30.96)
         toe = 30.0
         crest = toe + H / math.tan(beta)
-        ext_verts = [Vertex(0, 0), Vertex(60, 0), Vertex(60, H),
-                     Vertex(crest, H), Vertex(toe, 0)]
+        # v0.1.89 — 10 m foundation; see the module docstring. Without
+        # it the stretch from x = 0 to the toe encloses no soil.
+        ext_verts = [Vertex(0, -10.0), Vertex(60, -10.0), Vertex(60, H),
+                     Vertex(crest, H), Vertex(toe, 0), Vertex(0, 0)]
         top = PathSearch._ground_profile(ext_verts)
         # The toe (30, 0) must be present — the convex hull dropped it
         xs = [round(v.x, 1) for v in top]
@@ -213,8 +217,10 @@ class TestSurfacesInsideExternal:
         beta = math.radians(30.96)
         toe = 30.0
         crest = toe + H / math.tan(beta)
-        ext_verts = [Vertex(0, 0), Vertex(60, 0), Vertex(60, H),
-                     Vertex(crest, H), Vertex(toe, 0)]
+        # v0.1.89 — 10 m foundation; see the module docstring. Without
+        # it the stretch from x = 0 to the toe encloses no soil.
+        ext_verts = [Vertex(0, -10.0), Vertex(60, -10.0), Vertex(60, H),
+                     Vertex(crest, H), Vertex(toe, 0), Vertex(0, 0)]
         ext = Polyline(vertices=ext_verts, closed=True)
         ext.ensure_ccw()
         p = Project("std")
@@ -248,9 +254,10 @@ class TestPathSearchXSTABL:
         beta = math.radians(30.96)
         toe = 30.0
         crest = toe + H / math.tan(beta)
+        # v0.1.89 — 10 m foundation; see the module docstring.
         ext = Polyline(vertices=[
-            Vertex(0, 0), Vertex(60, 0), Vertex(60, H),
-            Vertex(crest, H), Vertex(toe, 0),
+            Vertex(0, -10.0), Vertex(60, -10.0), Vertex(60, H),
+            Vertex(crest, H), Vertex(toe, 0), Vertex(0, 0),
         ], closed=True)
         ext.ensure_ccw()
         p = Project("xstabl")

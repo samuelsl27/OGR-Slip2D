@@ -36,6 +36,7 @@ Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 
+import math
 from functools import lru_cache
 from typing import Iterable, Optional
 
@@ -83,6 +84,87 @@ def upper_y_at(vertices: list[Vertex], x: float,
             continue
         best = y if best is None else max(best, y)
     return best
+
+
+def lower_y_at(vertices: list[Vertex], x: float,
+               tol: float = 0.0) -> Optional[float]:
+    """Lowest point of the closed polygon above ``x``, or None.
+
+    The mirror of :func:`upper_y_at`, and it needs its own function rather
+    than a sign flip: a vertical edge contributes its BOTTOM end here and its
+    top end there, so negating the coordinates and reusing the other would
+    give the wrong answer at every vertical cut face.
+    """
+    best: Optional[float] = None
+    for a, b in _edges(vertices):
+        if a.x == b.x:
+            y = min(a.y, b.y) if abs(x - a.x) <= tol else None
+        else:
+            y = _y_on_edge(a, b, x, tol)
+        if y is None:
+            continue
+        best = y if best is None else min(best, y)
+    return best
+
+
+def zero_thickness_spans(external, rel_tol: float = 1e-9
+                         ) -> list[tuple[float, float]]:
+    """Abscissa intervals over which the boundary encloses NO soil.
+
+    Returns ``[(x0, x1), ...]``, empty for a well-formed boundary.
+
+    v0.1.89 — this exists because a hand-drawn contour that looks perfectly
+    ordinary can enclose nothing over part of its width, and everything
+    downstream then computes confidently about ground that is not there.
+    Seven test models in this project shared one::
+
+        (0,0) (60,0) (60,12) (crest,12) (toe,0)
+
+    The closing edge runs back along the bottom one, so between ``x = 0`` and
+    the toe at ``x = 30`` the ground surface and the base of the model are the
+    same line at ``y = 0``. v0.1.84 met this the hard way: once surfaces
+    leaving the soil region stopped being analysed, a supported search
+    returned no critical surface at all, and the diagnosis cost far more than
+    the fix. It is equally reachable from a DXF import, where nobody drew the
+    contour by hand at all.
+
+    The test is on the ENVELOPES, not on the vertex list, so it does not care
+    how the contour was wound or where its vertices happen to sit: between two
+    consecutive breakpoints the upper and lower envelopes are both straight,
+    so sampling their midpoint decides the whole sub-interval.
+
+    ``rel_tol`` is relative to the boundary's own diagonal, never absolute —
+    the same model in millimetres and in metres must give the same verdict.
+    """
+    vertices = _as_vertices(external)
+    if len(vertices) < 3:
+        return []
+    xs = [v.x for v in vertices]
+    ys = [v.y for v in vertices]
+    span_x = max(xs) - min(xs)
+    diag = math.hypot(span_x, max(ys) - min(ys))
+    if diag <= 0.0:
+        return []
+    x_tol = _X_MERGE_REL * span_x if span_x > 0 else _X_MERGE_REL
+    y_tol = rel_tol * diag
+
+    spans: list[tuple[float, float]] = []
+    bps = _breakpoints(vertices, x_tol)
+    for x0, x1 in zip(bps[:-1], bps[1:]):
+        if x1 - x0 <= x_tol:
+            continue
+        mid = 0.5 * (x0 + x1)
+        hi = upper_y_at(vertices, mid, x_tol)
+        lo = lower_y_at(vertices, mid, x_tol)
+        if hi is None or lo is None or abs(hi - lo) > y_tol:
+            continue
+        # Merge with the previous span when they touch, so one degenerate
+        # stretch crossed by unrelated breakpoints is reported once.
+        if spans and abs(spans[-1][1] - x0) <= x_tol:
+            spans[-1] = (spans[-1][0], x1)
+        else:
+            spans.append((x0, x1))
+    return spans
 
 
 def _breakpoints(vertices: list[Vertex], tol: float) -> list[float]:

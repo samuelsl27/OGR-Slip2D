@@ -85,29 +85,105 @@ la documentación que la interfaz **no** reproduce el muestreo de la referencia.
 
 ---
 
-## 2 · La geometría degenerada compartida por cinco archivos de test
+## 0a · GLE bajo Simulated Annealing no devuelve nada — REGRESIÓN de v0.1.89
 
-**Estado**: conocido, sin corregir a propósito.
+**Estado**: introducida a sabiendas, medida y acotada. Regla 6.
 
-Siete archivos de test usan este contorno externo:
+El cambio del rebanador de v0.1.89 —cortes de dovela en los vértices de la
+propia superficie— deja a **GLE/Morgenstern-Price combinado con Simulated
+Annealing** con **0 superficies válidas**. Medido en las semillas 0 a 7 y con
+18, 27, 36, 54 y 72 dovelas: siempre cero. No es un borde frágil, es
+sistemático.
 
-```
-(0,0) (60,0) (60,12) (crest,12) (toe,0)
-```
+**Por qué se aceptó igualmente.** El mismo cambio arregla un **número
+equivocado**: Block Search devolvía 0,65-0,82 en un talud estable cuyo mínimo
+circular es 1,1239, sobre superficies con escalones casi verticales más
+estrechos que una dovela —invisibles para m-alpha, que veía 0,50 contra un
+límite de 0,2. Con el arreglo, las cinco semillas dan 1,13-1,16. Un número
+equivocado que un usuario se creería es peor que una ausencia visible de
+número.
 
-La última arista vuelve por encima de la primera: entre `x = 0` y el pie en
-`x = 30`, la superficie del terreno y la base del modelo son la misma recta
-`y = 0`, y ese tramo **no encierra suelo**.
+**Está acotado**, y eso es parte del argumento:
 
-v0.1.84 corrigió los dos que dependían de ello para pasar
-(`test_supports_v114.py` y `test_slope_search_v117.py`, ambos con 10 m de
-cimiento). Los otros cinco —`test_block_search_v117`,
-`test_grid_search_v117`, `test_noncircular_v115`, `test_sa_autorefine_v117`,
-`test_strength_models_v115`— siguen en verde porque no afirman nada
-sensible a la degeneración.
+| | con el cambio |
+|---|---|
+| GLE + Simulated Annealing | **0 válidas** (semillas 0-7) |
+| GLE + Block Search | 10-17 válidas, FoS 1,03-1,18 |
+| GLE + Grid Search circular | intacto, 340 válidas — los círculos no tienen vértices |
 
-**Por qué no se tocaron**: cambiar cinco modelos que pasan movería números
-que nadie ha pedido mover. Queda anotado para quien se lo encuentre.
+Lo que **no** se sabe: por qué. Las anchuras de dovela no degeneran (mínima
+0,31 m, razón máx/mín 5,3), así que no son astillas, y no cambia con el número
+de dovelas. Está en `tests/test_annealing_bootstrap_v139.py` como test que
+afirma el fallo, de modo que **el día que GLE funcione la suite se pondrá roja
+y alguien tendrá que venir a borrarlo**.
+
+Relacionado con el pendiente 0 (SA converge peor que un círculo) y con
+`docs/audits/spencer_gle_interslice_v179.md`, donde ya consta que GLE es el método que peor converge: en la auditoría por
+círculo de v0.1.89 converge en el 57-64 % de los círculos donde la referencia
+sí lo hace. Es probable que los tres sean el mismo sitio.
+
+---
+
+## 0 · Simulated Annealing converge peor que un círculo — NUEVO en v0.1.89
+
+**Estado**: reportado con medidas, sin corregir. Regla 6.
+
+Apareció al arreglar el pendiente 2. Con la geometría corregida, sobre un
+talud cuyo mínimo **circular** es 1,1239, SA devuelve **1,6564**. Una búsqueda
+no circular no puede hacerlo peor que un círculo: los círculos están en su
+espacio de búsqueda.
+
+No es lo mismo que los dos defectos que sí se corrigieron en v0.1.89 (el
+predeterminado de m-alpha y los cortes de dovela en los vértices). Con
+aquellos arreglados, SA pasó de 0,500 —basura— a un rango físico, y ahí se
+quedó corto.
+
+**`generation_steps` deja de hacer nada, y no es monótono.** Medido sobre ese
+modelo, con 9 vértices y 25 dovelas:
+
+| `generation_steps` | evaluaciones válidas | FoS |
+|---|---|---|
+| 50 | 92 | 1,7491 |
+| 300 | 257 | **2,1854** |
+| 1 000 | 260 | 1,6564 |
+| 3 000 | 260 | 1,6564 |
+| 10 000 | 260 | 1,6564 |
+
+Dos cosas mal, no una: satura en ~260 evaluaciones por muchas que se pidan
+—un ajuste que no mueve el número a partir de 1000, que es la regla 7— y con
+300 pasos da **peor** resultado que con 50, lo que apunta a la aceptación o al
+enfriamiento, no al muestreo.
+
+Sobre el modelo degenerado antiguo SA daba 1,1220 con 300, 1000 y 3000 pasos
+—idéntico, y con 301 evaluaciones en los tres casos—, así que el síntoma
+estaba ahí desde antes: lo que la geometría degenerada tapaba no era el
+defecto, era el espacio de búsqueda en el que se nota.
+
+Relacionado: `test_annealing_bootstrap_v139.py` ya documenta que el arranque
+de SA dependía de la suerte (200 rechazos consecutivos con semillas
+desafortunadas). Es probable que sea el mismo sitio.
+
+Qué haría falta: instrumentar cuántas propuestas genera y cuántas acepta por
+temperatura, y comprobar el calendario `T_k = T_0 · exp(-c · k^(1/n))` contra
+Su (2009), que es la fuente citada en el docstring de la clase. Hasta
+entonces, `test_sa_autorefine_v117.py` conserva la guarda de «nada por debajo
+de 0,9» y **no** afirma cota superior.
+
+---
+
+## 2 · La geometría degenerada — CERRADO en v0.1.89
+
+Eran **nueve** contornos en siete archivos, no cinco: la lista de aquí estaba
+hecha a mano y se había quedado corta. El inventario se toma ahora con
+`ogr_core.geometry.zero_thickness_spans()` ejecutando la suite con
+`Project.add_boundary` instrumentado, que no se puede quedar obsoleto.
+
+Lo que tapaba está en el changelog de v0.1.89 y en los pendientes 0 y 0a de
+este documento.
+
+Queda una limitación dicha: el detector **no impide** que un archivo nuevo
+reintroduzca el contorno. Haría falta que todos los modelos de test pasaran por
+una fábrica única.
 
 ---
 
@@ -139,17 +215,10 @@ mismo error que v0.1.82 corrigió en la línea de empuje.
 
 ---
 
-## 4 · Diagnóstico fuera del runner que no reproducía el fallo
+## 4 · Diagnóstico fuera del runner — CERRADO en v0.1.89
 
-**Estado**: sin explicar.
-
-Diagnosticando la caída de `test_support_increases_fos` (v0.1.84), un
-script suelto que replicaba el test **línea por línea** daba el mismo
-resultado en el árbol de trabajo y en HEAD, y habría llevado a la
-conclusión contraria a la correcta. Instrumentando **dentro** del runner
-apareció la diferencia real: HEAD 10 válidas y crítica 2,1279, árbol de
-trabajo 0 válidas.
-
-No se ha averiguado por qué el script suelto no reproducía. Mientras no se
-sepa, **el diagnóstico se hace dentro del runner**, que es donde ocurre el
-fallo.
+Explicado, comprobado con un señuelo y con guarda: `pip install -e .` registra
+un buscador que resuelve todo `ogr_*` a una ruta absoluta fija, y
+`sys.path[0]` es el directorio **del script**, no el de trabajo. El runner
+imprime ahora la procedencia y se niega a correr sobre otro árbol. Detalle en
+el changelog de v0.1.89.

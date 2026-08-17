@@ -164,22 +164,41 @@ class TestTensileStressCheck:
 
     def test_tension_only_on_the_degenerate_surface(self):
         """v0.1.82 — with the sign convention corrected, the two checks
-        agree on the same slice instead of contradicting each other.
+        agree on the same slices instead of contradicting each other.
 
-        Slice 14 of the degenerate wedge is the near-vertical RISING
-        segment (+73.8°) in the passive zone. Its m_alpha goes to −0.42,
-        which flips the sign of the base normal force and reports a base
-        effective stress of about −300 kPa. Both checks therefore point at
-        the same physical pathology — exactly the case the reference
-        describes for its error −112 ("deep seated slip surfaces with many
-        high negative base angle slices in the passive zone").
+        The pathology of the degenerate wedge is its near-vertical RISING
+        segment, from (69.8, 8.1) to (72.8, 18.4) — a base angle of +73.8°
+        in the passive zone. There m_alpha goes to −0.42, which flips the
+        sign of the base normal force and reports a base effective stress
+        of about −300 kPa. Both checks therefore point at the same physical
+        pathology — exactly the case the reference describes for its error
+        −112 ("deep seated slip surfaces with many high negative base angle
+        slices in the passive zone").
+
+        v0.1.89 — this asserted ``bad == [14]``, and the answer became
+        ``[15, 14]`` when the slicer started cutting at the surface's own
+        vertices: that segment now gets slices of its own instead of being
+        blended into its neighbours, so the check sees all of it rather than
+        part of it. The index was a capture of one slicing; what the case is
+        really about is WHICH GEOMETRY is flagged, so that is what it asserts
+        now. It would have survived the change, and it is the better test.
 
         The healthy surface stays clean, which is what makes the
         distinction a diagnosis and not a blanket rejection.
         """
-        ok_bad, bad = tensile_stress_check(_eval_poly(_DEGENERATE))
+        import math
+        r = _eval_poly(_DEGENERATE)
+        ok_bad, bad = tensile_stress_check(r)
         assert not ok_bad
-        assert bad == [14], bad
+        assert bad, bad
+        by_index = {s.index: s for s in r.slices}
+        for i in bad:
+            angle = math.degrees(by_index[i].base_angle)
+            assert angle > 70.0, (i, angle)
+        # And every steeply rising slice is caught, not just one of them.
+        steep = [s.index for s in r.slices
+                 if math.degrees(s.base_angle) > 70.0]
+        assert sorted(bad) == sorted(steep), (bad, steep)
         ok_good, clean = tensile_stress_check(_eval_poly(_HEALTHY))
         assert ok_good, clean
 
@@ -194,10 +213,30 @@ class TestTensileStressCheck:
 
 
 class TestPostFilterBehaviour:
-    def test_disabled_by_default(self):
+    def test_the_defaults_are_asymmetric_on_purpose(self):
+        """v0.1.89 — m-alpha ON, tensile OFF, and the asymmetry is the
+        point.
+
+        The reference's own reports filter on m_alpha by default and count
+        the rejects as error -112, while they permit tensile normal stresses
+        unless the user opts in. So the two checks get opposite defaults.
+
+        This case used to assert BOTH were off, which had stopped being true
+        of the program as a whole: ``ProjectSettings.advanced.check_m_alpha``
+        has said True since v0.1.84, so the same model gave two different
+        answers depending on whether the search was built through
+        ``build_search`` or constructed directly. See v0.1.89's changelog for
+        what that hid.
+        """
         s = GridSearch(method=Spencer())
         assert s.reject_tensile is False
-        assert s.check_m_alpha is False
+        assert s.check_m_alpha is True
+
+    def test_the_class_default_matches_the_project_default(self):
+        """The two must not be allowed to drift apart again."""
+        from ogr_core.project.settings import AdvancedSettings
+        assert (GridSearch(method=Spencer()).check_m_alpha
+                is AdvancedSettings().check_m_alpha)
 
     def test_inadmissible_surfaces_are_marked_not_dropped(self):
         """The check runs as a POST-FILTER: the surface keeps its
@@ -211,9 +250,15 @@ class TestPostFilterBehaviour:
         assert r.admissibility_note
 
     def test_critical_skips_inadmissible(self):
+        # v0.1.89 — ``check_m_alpha=False`` is now spelled out on the
+        # baseline. It used to rely on the default being off, so once the
+        # default flipped the two runs became the same run and the case
+        # compared nothing. A comparison test must not take either side of
+        # the comparison from a default.
         p = _ej1_project()
         base = BlockSearch(method=Spencer(), num_surfaces=120,
-                           num_slices=18, seed=0).run(p)
+                           num_slices=18, seed=0,
+                           check_m_alpha=False).run(p)
         checked = BlockSearch(method=Spencer(), num_surfaces=120,
                               num_slices=18, seed=0,
                               check_m_alpha=True).run(p)

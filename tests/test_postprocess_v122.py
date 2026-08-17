@@ -157,18 +157,46 @@ class TestTensileAdmissibilityFilter:
         ev = GridSearch(method=Spencer(), num_slices=18, min_area=0.0, **kw)
         return ev.evaluate_surface(p, surf)
 
-    def test_degenerate_surface_requires_tension(self):
-        res = self._eval(self._DEGENERATE)
-        assert res is not None
-        st = compute_interslice_state(res)
+    # v0.1.89 — the two cases below used a fixed −5 % of e_max as the line
+    # between "requires tension" and "essentially compressive". That
+    # constant was calibrated on a slicing that did not resolve the
+    # surface: until v0.1.89 the slicer divided the failure width uniformly
+    # and ignored the surface's own vertices, so the near-vertical rising
+    # segment of the degenerate wedge was blended into its neighbours.
+    #
+    # With slice boundaries at the vertices, both surfaces measure
+    # differently and neither reaches −5 %. Refinement says the new numbers
+    # are the converged ones, not an artefact — asking for 18, 27, 36, 54,
+    # 72 and 108 slices gives:
+    #
+    #     degenerate  −1.50  −1.56  −1.57  −1.59  −1.60  −1.60  %
+    #     healthy     −0.52  −0.55  −0.53  −0.55  −0.57  −0.58  %
+    #
+    # stable to two figures from 36 slices on. So what is asserted now is
+    # the SEPARATION, which is what the pair was always about and which no
+    # longer needs a constant chosen to fit it: the degenerate surface
+    # needs several times more interslice tension, on several times more
+    # interfaces. A threshold picked to sit between two measured numbers is
+    # the parameter-fitting rule 1 forbids; a ratio is a claim about shape.
+    def _tension(self, pts):
+        st = compute_interslice_state(self._eval(pts))
         interior = st.E[1:-1]
-        assert min(interior) < -0.05 * st.e_max, min(interior)
+        return min(interior) / st.e_max, sum(1 for e in interior if e < 0)
 
-    def test_healthy_surface_essentially_compressive(self):
-        res = self._eval(self._HEALTHY)
-        st = compute_interslice_state(res)
-        interior = st.E[1:-1]
-        assert min(interior) >= -0.05 * st.e_max, min(interior)
+    def test_degenerate_surface_requires_more_tension_than_healthy(self):
+        deg_ratio, deg_n = self._tension(self._DEGENERATE)
+        ok_ratio, ok_n = self._tension(self._HEALTHY)
+        assert deg_ratio < 0.0 and ok_ratio < 0.0        # both have some
+        assert deg_ratio < 2.0 * ok_ratio, (deg_ratio, ok_ratio)
+        assert deg_n > ok_n, (deg_n, ok_n)
+
+    def test_healthy_surface_is_essentially_compressive(self):
+        """Still an absolute statement, because "essentially compressive"
+        has to mean something on its own: under 1 % of the largest
+        interslice force, measured 0.52-0.58 % across the refinement above.
+        """
+        ratio, _ = self._tension(self._HEALTHY)
+        assert ratio >= -0.01, ratio
 
     def test_filter_rejects_degenerate_keeps_healthy(self):
         """v0.1.32 — the admissibility filter became a POST-filter: the

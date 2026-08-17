@@ -121,7 +121,7 @@ class BaseSearch(ABC):
         reject_tensile: bool = False,
         tensile_tolerance: float = 0.05,
         tensile_percent: float = 95.0,
-        check_m_alpha: bool = False,
+        check_m_alpha: bool = True,
     ) -> None:
         self.method = method
         self.num_slices = num_slices
@@ -148,6 +148,32 @@ class BaseSearch(ABC):
         # reference, where tensile normal stresses are permitted unless
         # the user opts in.
         self.tensile_percent = tensile_percent
+        # v0.1.89 — DEFAULT ON, matching ProjectSettings.advanced, which has
+        # said True since v0.1.84. Until now the two disagreed, so the same
+        # model gave two different answers depending on which door you came
+        # in by: through build_search (interface, CLI, validation cases) the
+        # check ran, and constructing a search directly — every test, every
+        # script, examples/ — it did not.
+        #
+        # What that hid, found in v0.1.89 when nine test models stopped being
+        # degenerate: with 10 m of foundation under the toe, Simulated
+        # Annealing returned FoS 0.500 and Block Search 0.651 on this stable
+        # slope, against a circular minimum of 1.1239. Both surfaces closed
+        # with a near-vertical segment, where m_alpha goes NEGATIVE and
+        # Bishop's formulation divides by it. With the check on: 1.187 and
+        # 1.120, and the surfaces still reach 9.5 m below the toe — depth was
+        # never the problem, the vertical closing segment was.
+        #
+        # The comment above, written in v0.1.24, names this exact mechanism
+        # ("a deep wedge closed by a near-vertical rising segment") and says
+        # the filter is "recommended ON for non-circular searches". It was
+        # left off "to preserve existing results" — results that were only
+        # stable because no test model had soil to dive into.
+        #
+        # NOTE the asymmetry, and it is deliberate: reject_tensile stays OFF
+        # because the reference permits tensile normal stresses unless the
+        # user opts in, while its reports DO filter on m_alpha by default and
+        # count the rejects as error -112.
         self.check_m_alpha = check_m_alpha
 
     # ------------------------------------------------------------------
@@ -366,7 +392,7 @@ class GridSearch(BaseSearch):
             tensile_percent=float(
                 legacy_kwargs.pop('tensile_percent', 95.0)),
             check_m_alpha=bool(
-                legacy_kwargs.pop('check_m_alpha', False)),
+                legacy_kwargs.pop('check_m_alpha', True)),
         )
         self.grid_x = grid_x
         self.grid_y = grid_y
@@ -716,7 +742,7 @@ class SlopeSearch(BaseSearch):
             tensile_percent=float(
                 legacy_kwargs.pop('tensile_percent', 95.0)),
             check_m_alpha=bool(
-                legacy_kwargs.pop('check_m_alpha', False)),
+                legacy_kwargs.pop('check_m_alpha', True)),
         )
         self.num_surfaces = num_surfaces
         self.initial_angle_lower_deg = initial_angle_lower_deg
@@ -990,7 +1016,7 @@ class AutoRefineSearch(BaseSearch):
             tensile_percent=float(
                 legacy_kwargs.pop('tensile_percent', 95.0)),
             check_m_alpha=bool(
-                legacy_kwargs.pop('check_m_alpha', False)),
+                legacy_kwargs.pop('check_m_alpha', True)),
         )
         self.divisions = max(2, divisions)
         self.circles_per_division = max(1, circles_per_division)
@@ -1254,7 +1280,7 @@ class BlockSearch(BaseSearch):
             tensile_percent=float(
                 legacy_kwargs.pop('tensile_percent', 95.0)),
             check_m_alpha=bool(
-                legacy_kwargs.pop('check_m_alpha', False)),
+                legacy_kwargs.pop('check_m_alpha', True)),
         )
         self.num_groups = max(1, num_groups)
         # Single-angle defaults; ranges override if provided.
@@ -1717,7 +1743,7 @@ class PathSearch(BaseSearch):
             tensile_percent=float(
                 legacy_kwargs.pop('tensile_percent', 95.0)),
             check_m_alpha=bool(
-                legacy_kwargs.pop('check_m_alpha', False)),
+                legacy_kwargs.pop('check_m_alpha', True)),
         )
         self.num_paths = num_paths
         # v0.1.24 — cap on generation attempts (num_paths × factor)
@@ -2256,7 +2282,7 @@ class SimulatedAnnealingSearch(BaseSearch):
             tensile_percent=float(
                 legacy_kwargs.pop('tensile_percent', 95.0)),
             check_m_alpha=bool(
-                legacy_kwargs.pop('check_m_alpha', False)),
+                legacy_kwargs.pop('check_m_alpha', True)),
         )
         self.seed = seed
         self.initial_vertices = max(4, initial_vertices)

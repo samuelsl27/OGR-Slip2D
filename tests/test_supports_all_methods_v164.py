@@ -95,9 +95,13 @@ def _project(support=None):
     from ogr_core.project import Project
     from ogr_core.support import SoilNail
 
+    # v0.1.89 — 10 m of foundation. Without it the stretch from x = 0 to
+    # the toe encloses no soil: the closing edge runs back along the bottom
+    # one. Not listed among the five in docs/PENDIENTES.md — the inventory
+    # there was made by hand and had gone stale.
     ext = Polyline(vertices=[
-        Vertex(0, 0), Vertex(60, 0), Vertex(60, H),
-        Vertex(CREST, H), Vertex(TOE, 0),
+        Vertex(0, -10.0), Vertex(60, -10.0), Vertex(60, H),
+        Vertex(CREST, H), Vertex(TOE, 0), Vertex(0, 0),
     ], closed=True)
     ext.ensure_ccw()
     p = Project("sup")

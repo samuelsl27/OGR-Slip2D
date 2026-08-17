@@ -196,9 +196,16 @@ class TestModelsInFoS:
         beta = math.radians(30.96)
         toe = 30.0
         crest = toe + H / math.tan(beta)
+    # v0.1.89 — the 10 m foundation. This contour used to be
+    # ``(0,0) (60,0) (60,H) (crest,H) (toe,0)``, whose closing edge runs back
+    # along the bottom one: between x = 0 and the toe at x = 30 the ground
+    # surface and the base of the model are the same line at y = 0, enclosing
+    # no soil at all. v0.1.84 fixed the two files that depended on the
+    # degeneracy to pass and left five that did not; this is one of them.
+        base = -10.0
         ext = Polyline(vertices=[
-            Vertex(0, 0), Vertex(60, 0), Vertex(60, H),
-            Vertex(crest, H), Vertex(toe, 0),
+            Vertex(0, base), Vertex(60, base), Vertex(60, H),
+            Vertex(crest, H), Vertex(toe, 0), Vertex(0, 0),
         ], closed=True)
         ext.ensure_ccw()
         p = Project("t")

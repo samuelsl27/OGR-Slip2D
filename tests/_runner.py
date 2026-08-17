@@ -35,6 +35,22 @@ Two rules keep the shortcut from becoming a liar, and both are tested:
 1. **No arguments behaves exactly as before.** That is what CI runs.
 2. **A selection that matches nothing exits non-zero.** Otherwise a typo
    prints ``Total: 0  Passed: 0  Failed: 0`` and reads as success.
+
+Which tree is being measured
+----------------------------
+
+Every run opens with a ``tree:`` line naming the directory the ``ogr_*``
+packages resolve to, and refuses to run if any of them resolves outside this
+repository. That is not defensive tidiness — it is the fix for a wrong
+diagnosis that nearly reversed a correct conclusion in v0.1.84, because
+``pip install -e .`` registers a finder that resolves every ``ogr_*`` to one
+hard-coded absolute path. A diagnostic script kept outside the repository
+therefore imports the main working tree no matter which tree you cd into or
+which commit you check out. The full mechanism is in
+:func:`foreign_packages`.
+
+The practical rule that follows: **run diagnostics from inside the tree you
+mean to measure**, and check the ``tree:`` line rather than assuming.
 """
 from __future__ import annotations
 
@@ -91,6 +107,114 @@ sys.modules["pytest"] = _FakePytest()  # type: ignore
 
 
 # --- Selection --------------------------------------------------------
+PACKAGES = ("ogr_core", "ogr_slip2d", "ogr_fem2d", "ogr_gui", "ogr_cli")
+
+
+def package_origins() -> dict:
+    """Where each ``ogr_*`` package WOULD be imported from.
+
+    ``find_spec`` resolves through the same finders a real import would, so
+    this sees exactly what the tests will see — but it executes no
+    module-level code, which is the property that lets it run before the
+    first test. Importing the five packages here to ask them their
+    ``__file__`` would run the module-level code of half the project before
+    anything is measured, which is what rule 5 exists to prevent.
+
+    Returns ``{name: directory or None}``.
+    """
+    out = {}
+    for name in PACKAGES:
+        try:
+            spec = importlib.util.find_spec(name)
+        except (ImportError, ValueError, AttributeError):
+            spec = None
+        origin = getattr(spec, "origin", None) if spec else None
+        out[name] = Path(origin).resolve().parent if origin else None
+    return out
+
+
+def foreign_packages(origins: dict, repo_root: Path) -> list:
+    """The packages that resolve OUTSIDE ``repo_root``.
+
+    v0.1.89 — this exists because of a wrong diagnosis that cost two days
+    and nearly reversed a correct conclusion. Diagnosing the v0.1.84 fall of
+    ``test_support_increases_fos``, a stand-alone script replicating the test
+    line by line reported the SAME result for the working tree and for HEAD,
+    when instrumenting inside the runner showed 10 valid surfaces and a
+    critical 2.1279 against 0 valid. The script was not wrong about what it
+    measured; it was measuring the wrong tree, and said nothing about it.
+
+    The mechanism, and it is fully deterministic:
+
+    1. ``python C:\\somewhere\\else\\script.py`` puts the SCRIPT's directory
+       in ``sys.path[0]`` — not the working directory.
+    2. There is no ``ogr_*`` there, so ``PathFinder`` (position 2 of
+       ``sys.meta_path``) finds nothing.
+    3. ``_EditableFinder`` (position 3), installed by ``pip install -e .``,
+       answers instead — and it resolves every ``ogr_*`` to one hard-coded
+       absolute path, the tree that was installed.
+
+    So a script stored outside the repository imports the MAIN working tree
+    whatever tree you cd into or commit you check out. Verified: with the cwd
+    set to a directory containing its own ``ogr_slip2d``, the import still
+    came from the installed path and the decoy's marker never appeared.
+
+    This runner does not have the problem — it inserts its own parent in
+    ``sys.path`` — but it cannot detect the problem for others either, so
+    what it can do is refuse to run when it is itself pointed at another
+    tree, and print where it is looking either way. A suite that silently
+    tests a different tree than the one being edited is the worst failure
+    available: every result is real and every conclusion is wrong.
+    """
+    bad = []
+    for name, where in sorted(origins.items()):
+        if where is None:
+            bad.append((name, None))
+            continue
+        try:
+            where.relative_to(repo_root)
+        except ValueError:
+            bad.append((name, where))
+    return bad
+
+
+def head_sha(repo_root: Path) -> str:
+    """The short commit of ``repo_root``, read from ``.git`` directly.
+
+    No subprocess: the banner must not be able to fail. This says which
+    commit, not whether the tree is clean — ``git status`` is the reader's
+    job, and the PATH above is the part that actually caused the bug.
+    """
+    try:
+        head = (repo_root / ".git" / "HEAD").read_text(
+            encoding="utf-8").strip()
+        if head.startswith("ref: "):
+            ref = head[5:].strip()
+            sha = (repo_root / ".git" / ref).read_text(
+                encoding="utf-8").strip()
+        else:
+            sha = head
+        return sha[:7] if sha else "?"
+    except OSError:
+        return "?"
+
+
+def provenance(repo_root: Path, origins: dict) -> str:
+    """One line saying which tree is about to be measured.
+
+    Each package sits in its OWN directory under the tree, so the thing to
+    collapse is their common parent, not the directories themselves. Getting
+    that wrong prints five absolute paths on one line, which is the sort of
+    banner people learn to skip — and a banner nobody reads protects nothing.
+    """
+    parents = {v.parent for v in origins.values() if v is not None}
+    if len(parents) == 1:
+        return (f"tree: {parents.pop()}  @ {head_sha(repo_root)}  "
+                f"({len(PACKAGES)} ogr packages)")
+    return "tree: " + ", ".join(
+        f"{k}={v}" for k, v in sorted(origins.items()))
+
+
 def _normalise(pattern: str) -> str:
     """Reduce a file pattern to the fragment that is compared against a stem.
 
@@ -231,6 +355,26 @@ def main(tests_dir: Path, patterns=(), k: str | None = None,
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except (AttributeError, ValueError):  # non-reconfigurable stream
         pass
+
+    # Before anything else: which tree is this about to measure? See
+    # foreign_packages() for why a run that answers this wrongly is worse
+    # than a run that fails.
+    repo_root = tests_dir.parent
+    origins = package_origins()
+    strangers = foreign_packages(origins, repo_root)
+    if strangers:
+        print("WRONG TREE — this suite would not test the code you are "
+              "editing.")
+        for name, where in strangers:
+            print(f"  {name} resolves to "
+                  f"{where if where else '(not importable)'}")
+        print(f"  this runner lives in {repo_root}")
+        print("An ogr_* package resolving outside the runner's own "
+              "repository usually means an editable install is answering "
+              "the import. Put the tree first on sys.path, or reinstall, "
+              "then run again.")
+        return 2
+    print(provenance(repo_root, origins))
 
     patterns = list(patterns)
     every = sorted(tests_dir.glob("test_*.py"))
