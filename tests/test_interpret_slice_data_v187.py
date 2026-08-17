@@ -178,16 +178,35 @@ class TestThePanelMatchesTheReference:
 # ======================================================================
 @_requires_qt
 class TestClickingASliceFillsThePanel:
-    def test_no_field_is_left_as_a_dash(self):
-        """The whole complaint: the panel was there and always empty."""
+    def test_no_field_the_method_can_compute_is_left_as_a_dash(self):
+        """The whole complaint: the panel was there and always empty.
+
+        v0.1.91 — the interslice rows are excluded, and the exclusion is
+        the point rather than a concession. This panel is driven with
+        Bishop, which does not FORM interslice forces at all: it assumes
+        the interslice shear is zero. A dash there is the honest answer,
+        and the row beside it says so in words. Printing a number would be
+        printing the solver's assumption as if it were a result — the
+        mistake v0.1.82 removed from the line of thrust.
+
+        A method that does solve them fills these in; that is asserted in
+        tests/test_slice_panel_buttons_v191.py, on Spencer.
+        """
         _p, r, w = _interpret()
         w._query_slice()
         s = w._query_slice_target.slices[5]
         _click_slice(w, s)
         t = w.slice_dock.table
+        interslice = {"E left (kN)", "E right (kN)",
+                      "X left (kN)", "X right (kN)"}
         blanks = [t.item(i, 0).text() for i in range(t.rowCount())
                   if t.item(i, 1).text() == "—"]
-        assert blanks == [], blanks
+        unexpected = [b for b in blanks if b not in interslice]
+        assert unexpected == [], unexpected
+        # And the exclusion must not become a hole: with a method that
+        # does not resolve them, all four have to be dashes, not some.
+        assert sorted(b for b in blanks if b in interslice) == sorted(
+            interslice), blanks
 
     def test_clicking_another_slice_updates_it(self):
         _p, r, w = _interpret()

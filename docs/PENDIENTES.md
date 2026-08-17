@@ -181,31 +181,16 @@ una fábrica única.
 
 ---
 
-## 3 · Del punto 4 del informe, lo que no se hizo
+## 3 · El panel de dovelas — CERRADO en v0.1.91
 
-**Estado**: hecho lo esencial en v0.1.87; queda lo accesorio.
+Los tres botones (Copy, Zoom Slice, Hide/Show Geometry) y las fuerzas entre
+dovelas, dibujadas **sólo** cuando el método publica `boundary_ratios` y
+declaradas en palabras cuando no. Detalle en el changelog de v0.1.91.
 
-El panel *Query Slice Data* ya se abre, se rellena sin guiones, coincide
-con la tabla de la referencia al 0,5 %, resalta la dovela y dibuja las
-flechas de fuerzas. La referencia describe además cuatro botones del
-diálogo que **no** se han implementado:
-
-- **Hide Geometry / Show Geometry** — oculta todo el modelo menos la
-  dovela seleccionada, para capturas.
-- **Zoom Slice** — lleva la dovela seleccionada al centro de la vista.
-- **Copy** — copia los datos de la dovela al portapapeles.
-- El «roll-up» del diálogo (plegarlo sin cerrarlo). Aquí el panel es un
-  dock, y un dock ya se pliega, así que probablemente no aplica.
-
-Ninguno cambia un número; son comodidades. Se dejan fuera porque el
-informe pedía que el panel **se abriera y mostrara las propiedades**, y eso
-está.
-
-Falta también la flecha de **fuerzas entre dovelas**: se dibujan peso,
-normal en la base y cortante en la base. Las interdovela solo existen como
-tales en los métodos que las resuelven (Spencer, GLE, Lowe-Karafiath), y
-dibujarlas para Bishop u Ordinary sería dibujar una hipótesis, que es el
-mismo error que v0.1.82 corrigió en la línea de empuje.
+Se abre uno nuevo de paso: **OGR no tiene «analizar exactamente esta
+superficie»**, lo que la referencia llama *Add Surface*. Las superficies no
+circulares de referencia sólo se pueden evaluar por programa, no desde la
+interfaz. Ver `referencias/Ejemplos/README.md`.
 
 ---
 

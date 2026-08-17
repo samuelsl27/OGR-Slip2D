@@ -173,11 +173,91 @@ class _SliceDataDock(QDockWidget):
          lambda s, r: _SliceDataDock._r(_mc_param(s, "cohesion"), 2)),
         ("Base friction angle φ (°)",
          lambda s, r: _SliceDataDock._r(_mc_param(s, "friction_angle"), 2)),
+        # --- Interslice ------------------------------------------------
+        # v0.1.91 — shown for the methods that SOLVE the interslice
+        # inclination and refused to the ones that do not. The test is the
+        # DATUM, ``details["boundary_ratios"]``, not a list of method
+        # names: a method added later that solves λ gets this for free,
+        # and one that does not can never be given numbers it never
+        # computed. Printing an interslice force for Bishop would be
+        # printing an assumption, which is the mistake v0.1.82 corrected
+        # in the line of thrust.
+        ("─ Interslice forces ─", lambda s, r: ""),
+        ("Resolved by this method",
+         lambda s, r: _SliceDataDock._inter_status(r)),
+        ("E left (kN)",  lambda s, r: _SliceDataDock._inter(r, s, "E", 0)),
+        ("E right (kN)", lambda s, r: _SliceDataDock._inter(r, s, "E", 1)),
+        ("X left (kN)",  lambda s, r: _SliceDataDock._inter(r, s, "X", 0)),
+        ("X right (kN)", lambda s, r: _SliceDataDock._inter(r, s, "X", 1)),
     ]
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def solves_interslice(result) -> bool:
+        """Whether the method actually solved the interslice inclination.
+
+        Spencer, GLE and Lowe-Karafiath publish ``boundary_ratios``;
+        Bishop, Janbu and Ordinary do not, because they never form them.
+        """
+        details = getattr(result, "details", None) or {}
+        return bool(details.get("boundary_ratios"))
+
+    @staticmethod
+    def _inter_status(result):
+        if result is None:
+            return "—"
+        return (tr("yes") if _SliceDataDock.solves_interslice(result)
+                else tr("no — this method does not resolve them"))
+
+    @staticmethod
+    def _inter_state(result):
+        """The interslice march for a result, computed once per result.
+
+        Cached on the result object: the panel asks for four of these per
+        slice redraw, and the march is O(n) over every slice.
+        """
+        if result is None or not _SliceDataDock.solves_interslice(result):
+            return None
+        cached = getattr(result, "_ogr_interslice_state", None)
+        if cached is None:
+            try:
+                from ogr_slip2d.postprocess import compute_interslice_state
+                cached = compute_interslice_state(result)
+            except Exception:  # noqa: BLE001
+                cached = False
+            try:
+                result._ogr_interslice_state = cached
+            except Exception:  # noqa: BLE001
+                pass
+        return cached or None
+
+    @staticmethod
+    def _inter(result, s, name, side):
+        """``E``/``X`` at the left (side 0) or right (side 1) boundary.
+
+        The march carries n+1 boundary values, so slice ``i`` sits between
+        boundaries ``i`` and ``i+1``.
+        """
+        st = _SliceDataDock._inter_state(result)
+        if st is None:
+            return "—"
+        values = getattr(st, name, None) or []
+        i = getattr(s, "index", None)
+        if i is None or not (0 <= i + side < len(values)):
+            return "—"
+        return _SliceDataDock._r(values[i + side], 2)
+
+    # v0.1.91 — the dock owns the buttons but not what they mean on the
+    # canvas, so zooming and hiding leave as signals for the window.
+    # Copying is the exception: it needs nothing but the table.
+    zoom_requested = Signal()
+    geometry_hidden_changed = Signal(bool)
 
     def __init__(self, parent=None) -> None:
         super().__init__(tr("Slice Data"), parent)
         self.setObjectName("SliceDataDock")
+        self._slice = None
+        self._result = None
         container = QWidget()
         vbox = QVBoxLayout(container)
         self.table = QTableWidget(len(self.FIELDS), 2)
@@ -196,19 +276,82 @@ class _SliceDataDock(QDockWidget):
             self.table.setItem(i, 0, item_label)
             self.table.setItem(i, 1, QTableWidgetItem("—"))
         vbox.addWidget(self.table)
+
+        # v0.1.91 — the three buttons the reference's dialog carries. They
+        # move no number; they exist so the panel can be USED: read a
+        # value out, find the slice on screen, and photograph it without
+        # the rest of the model on top.
+        from PySide6.QtWidgets import QHBoxLayout, QPushButton
+        row = QHBoxLayout()
+        self.btn_copy = QPushButton(tr("Copy"))
+        self.btn_copy.setToolTip(tr("Copy the table to the clipboard"))
+        self.btn_copy.clicked.connect(self.copy_to_clipboard)
+        self.btn_zoom = QPushButton(tr("Zoom Slice"))
+        self.btn_zoom.setToolTip(tr("Centre the view on the selected slice"))
+        self.btn_zoom.clicked.connect(self.zoom_requested)
+        self.btn_geometry = QPushButton(tr("Hide Geometry"))
+        self.btn_geometry.setCheckable(True)
+        self.btn_geometry.setToolTip(
+            tr("Show only the selected slice, for a clean capture"))
+        self.btn_geometry.toggled.connect(self._on_geometry_toggled)
+        for b in (self.btn_copy, self.btn_zoom, self.btn_geometry):
+            row.addWidget(b)
+        row.addStretch(1)
+        vbox.addLayout(row)
+        self._set_buttons_enabled(False)
         self.setWidget(container)
 
+    # ------------------------------------------------------------------
+    def _set_buttons_enabled(self, on: bool) -> None:
+        """Copy and Zoom need a slice; hiding the model does not."""
+        self.btn_copy.setEnabled(on)
+        self.btn_zoom.setEnabled(on)
+
+    def _on_geometry_toggled(self, hidden: bool) -> None:
+        self.btn_geometry.setText(
+            tr("Show Geometry") if hidden else tr("Hide Geometry"))
+        self.geometry_hidden_changed.emit(bool(hidden))
+
+    def current(self):
+        """``(slice, result)`` currently displayed, or ``(None, None)``."""
+        return self._slice, self._result
+
+    def as_tsv(self) -> str:
+        """The table as tab-separated text — property, then value.
+
+        TSV rather than CSV because the destination is a spreadsheet or a
+        report table, and several of these labels carry commas.
+        """
+        lines = []
+        for i, (label, _) in enumerate(self.FIELDS):
+            value = self.table.item(i, 1).text()
+            if label.startswith("─"):
+                lines.append(tr(label))          # section header, no value
+            else:
+                lines.append(f"{tr(label)}\t{value}")
+        return "\n".join(lines)
+
+    def copy_to_clipboard(self) -> None:
+        from PySide6.QtWidgets import QApplication
+        clipboard = QApplication.clipboard()
+        if clipboard is not None:
+            clipboard.setText(self.as_tsv())
+
     def show_slice(self, s, result=None) -> None:
+        self._slice, self._result = s, result
         for i, (_, getter) in enumerate(self.FIELDS):
             try:
                 value = getter(s, result)
             except Exception:  # noqa: BLE001
                 value = "—"
             self.table.item(i, 1).setText(str(value))
+        self._set_buttons_enabled(True)
 
     def clear_slice(self) -> None:
+        self._slice = self._result = None
         for i in range(len(self.FIELDS)):
             self.table.item(i, 1).setText("—")
+        self._set_buttons_enabled(False)
 
 
 # ======================================================================
@@ -359,6 +502,11 @@ class InterpretWindow(QMainWindow):
 
         self.slice_dock = _SliceDataDock(self)
         self.addDockWidget(Qt.BottomDockWidgetArea, self.slice_dock)
+        self.slice_dock.zoom_requested.connect(self._zoom_to_current_slice)
+        self.slice_dock.geometry_hidden_changed.connect(
+            self._set_geometry_hidden)
+        self._geometry_hidden = False
+        self._saved_display_options = None
 
         # Menus + toolbar
         self._build_menus()
@@ -1032,6 +1180,19 @@ class InterpretWindow(QMainWindow):
         # is the ONE place that draws the result, and a label added
         # anywhere else would survive into a view it does not belong to.
         self._draw_persistent_query_labels()
+        # v0.1.91 — and the slice overlay, for exactly the same reason.
+        # Hiding the geometry rebuilds the scene, and the highlight the
+        # user pressed the button to photograph would have been the one
+        # thing the rebuild threw away.
+        #
+        # getattr, because __init__ paints once before the docks exist:
+        # this method is called from there, and asking for a dock that is
+        # three lines further down raised on every window ever opened.
+        dock = getattr(self, "slice_dock", None)
+        if dock is not None:
+            s, res = dock.current()
+            if s is not None:
+                self._highlight_slice(s, res)
 
     def _on_canvas_click_default(self, x: float, y: float) -> None:
         """Default click handler in Interpret mode.
@@ -2325,6 +2486,59 @@ class InterpretWindow(QMainWindow):
     # that. It is a diagram of directions and proportions, not a
     # measurement — the numbers are in the panel beside it.
     # ------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    def _zoom_to_current_slice(self) -> None:
+        """Centre the view on the slice the panel is showing.
+
+        Reuses ``CanvasView.zoom_to_point``, which already preserves the
+        upward y of the model — a zoom written here would have had to
+        rediscover that the hard way. The half-width is the slice's own
+        size, so the slice fills the view with a little of its
+        surroundings rather than becoming a single point.
+        """
+        s, _res = self.slice_dock.current()
+        if s is None:
+            return
+        x = 0.5 * (s.base_x_left + s.base_x_right)
+        y = 0.5 * (0.5 * (s.base_y_left + s.base_y_right)
+                   + 0.5 * (s.top_y_left + s.top_y_right))
+        span = max(s.width, abs(s.top_y_left - s.base_y_left),
+                   abs(s.top_y_right - s.base_y_right))
+        self.canvas.zoom_to_point(x, y, half_width=max(span, 1e-6) * 2.0)
+
+    def _set_geometry_hidden(self, hidden: bool) -> None:
+        """Show only the slice, for a capture — and put it all back.
+
+        The flags are restored from a SAVED copy rather than by setting
+        them all back to True: the user may have turned some off in
+        Display Options before pressing this, and coming back with
+        everything on would be the panel silently changing their view.
+        """
+        import copy
+        opts = getattr(self.canvas, "display_options", None)
+        if opts is None:
+            return
+        if hidden:
+            if self._saved_display_options is None:
+                self._saved_display_options = copy.copy(opts)
+            hidden_opts = copy.copy(opts)
+            for flag in ("show_external", "show_material", "show_water_table",
+                         "show_piezometric", "show_tension_crack",
+                         "show_boundary_vertices", "show_fem_mesh",
+                         "show_supports", "show_loads", "show_grid",
+                         "show_ruler"):
+                if hasattr(hidden_opts, flag):
+                    setattr(hidden_opts, flag, False)
+            self._geometry_hidden = True
+            self.canvas.set_display_options(hidden_opts)
+        else:
+            self._geometry_hidden = False
+            if self._saved_display_options is not None:
+                self.canvas.set_display_options(self._saved_display_options)
+                self._saved_display_options = None
+        # set_display_options rebuilds the scene, which drops the overlay.
+        self._refresh_canvas_with_highlights()
+
     def _clear_slice_highlight(self) -> None:
         scene = self.canvas.scene()
         for item in list(scene.items()):
@@ -2365,7 +2579,17 @@ class InterpretWindow(QMainWindow):
         y_base = 0.5 * (s.base_y_left + s.base_y_right)
         y_top = 0.5 * (s.top_y_left + s.top_y_right)
 
-        biggest = max(abs(W), abs(N), abs(T), 1e-9)
+        # v0.1.91 — the interslice forces join the scale. They are of the
+        # same order as the weight, so leaving them out made every other
+        # arrow shrink to nothing the moment they were drawn.
+        _st = _SliceDataDock._inter_state(result)
+        _inter_mags = []
+        if _st is not None and idx is not None:
+            for _arr in (getattr(_st, "E", []), getattr(_st, "X", [])):
+                for _k in (idx, idx + 1):
+                    if _arr and 0 <= _k < len(_arr):
+                        _inter_mags.append(abs(_arr[_k]))
+        biggest = max(abs(W), abs(N), abs(T), *_inter_mags, 1e-9)
         span = max(s.width, abs(y_top - y_base), 1e-9)
         unit = span / biggest      # scene units per kN
 
@@ -2379,6 +2603,28 @@ class InterpretWindow(QMainWindow):
             (xc, y_base, -T * unit * math.cos(alpha),
              -T * unit * math.sin(alpha), "#c0392b"),
         ]
+
+        # v0.1.91 — the interslice forces on the two vertical faces, drawn
+        # ONLY when the method actually solved them. The test is the datum
+        # the method published, not a list of method names: Spencer, GLE
+        # and Lowe-Karafiath carry ``boundary_ratios``; Bishop, Janbu and
+        # Ordinary never form them. Drawing an arrow for those would be
+        # drawing an assumption of the solver as if it were a result —
+        # the same mistake v0.1.82 removed from the line of thrust. The
+        # panel says so in words instead.
+        st = _SliceDataDock._inter_state(result)
+        if st is not None and idx is not None:
+            E = getattr(st, "E", []) or []
+            X = getattr(st, "X", []) or []
+            for side, x_face in ((0, s.base_x_left), (1, s.base_x_right)):
+                k = idx + side
+                if not (0 <= k < len(E) and k < len(X)):
+                    continue
+                y_face = 0.5 * ((s.base_y_left + s.top_y_left) if side == 0
+                                else (s.base_y_right + s.top_y_right))
+                # E is horizontal, X vertical; both scaled like the rest.
+                arrows.append((x_face, y_face, E[k] * unit, 0.0, "#8e44ad"))
+                arrows.append((x_face, y_face, 0.0, X[k] * unit, "#16a085"))
         for x0, y0, dx, dy, colour in arrows:
             if abs(dx) < 1e-12 and abs(dy) < 1e-12:
                 continue

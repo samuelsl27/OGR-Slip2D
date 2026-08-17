@@ -386,6 +386,26 @@ _DICTS: dict[str, dict[str, str]] = {
         'Base cohesion c (kPa)': 'Cohesión en la base c (kPa)',
         'Base friction angle φ (°)':
             'Ángulo de rozamiento en la base φ (°)',
+        # v0.1.91 — el panel de dovelas: fuerzas entre dovelas y los tres
+        # botones del diálogo de la referencia.
+        '─ Interslice forces ─': '─ Fuerzas entre dovelas ─',
+        'Resolved by this method': 'Las resuelve este método',
+        'E left (kN)': 'E izquierda (kN)',
+        'E right (kN)': 'E derecha (kN)',
+        'X left (kN)': 'X izquierda (kN)',
+        'X right (kN)': 'X derecha (kN)',
+        'no — this method does not resolve them':
+            'no — este método no las resuelve',
+        'Copy': 'Copiar',
+        'Copy the table to the clipboard':
+            'Copiar la tabla al portapapeles',
+        'Zoom Slice': 'Ampliar dovela',
+        'Centre the view on the selected slice':
+            'Centrar la vista en la dovela seleccionada',
+        'Hide Geometry': 'Ocultar geometría',
+        'Show Geometry': 'Mostrar geometría',
+        'Show only the selected slice, for a clean capture':
+            'Mostrar solo la dovela seleccionada, para una captura limpia',
         'active: %.2f': 'activa: %.2f',
         'capacity %.2f kN': 'capacidad %.2f kN',
         'capacity not defined': 'capacidad no definida',
