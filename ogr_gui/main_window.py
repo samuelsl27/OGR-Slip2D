@@ -206,7 +206,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.94"
+    VERSION = "0.1.95"
 
     def __init__(self) -> None:
         super().__init__()
@@ -3048,7 +3048,14 @@ class MainWindow(QMainWindow):
             out.append((b.id, label))
         return out
 
-    def act_assign_water_surface(self) -> None:
+    #: Whether finishing a water-surface boundary pops the Assign dialog.
+    #: The reference does this, and it is how a user ever finds the panel.
+    #: It is a class attribute so a test can switch it off: a modal dialog
+    #: opened from a signal handler blocks forever without a screen, which
+    #: is the one thing the project forbids outright.
+    PROMPT_ASSIGN_ON_DRAW = True
+
+    def act_assign_water_surface(self, preselect: str | None = None) -> None:
         """Assign one water surface to several materials at once."""
         from ogr_gui.dialogs.assign_water_surface_dialog import (
             AssignWaterSurfaceDialog,
@@ -3066,18 +3073,75 @@ class MainWindow(QMainWindow):
 
         mats = [(m.id, m.name, m.water_surface_id)
                 for m in self.project.materials]
-        dlg = AssignWaterSurfaceDialog(choices, mats, self)
+        dlg = AssignWaterSurfaceDialog(choices, mats, self,
+                                       preselect=preselect)
         if not dlg.exec():
             return
-        wid = dlg.selected_surface_id()
-        picked = set(dlg.selected_material_ids())
-        cleared = set(dlg.cleared_material_ids())
+        self.apply_water_surface_assignment(
+            dlg.selected_surface_id(),
+            dlg.selected_material_ids(),
+            dlg.cleared_material_ids(),
+        )
+
+    def apply_water_surface_assignment(self, wid, picked, cleared) -> None:
+        """Write one Assign Water Surface decision onto the materials.
+
+        Split out of the dialog handler so it can be tested without opening
+        a modal, and because of what it has to do beyond storing the id.
+
+        v0.1.95 — IT ALSO SETS ``Material.pore_pressure``, and that is the
+        whole reason this function exists. Until now the assignment wrote
+        ``water_surface_id`` alone, while ``pore_pressure_at`` returns 0.0
+        out of ``if ppt == PorePressureType.NONE`` BEFORE it ever reads that
+        field. So ticking a material here moved nothing: measured on the
+        Ej_2 piezometric model, u at (0, 10) stayed at 0.000 kPa with the
+        id written, and became 196.200 kPa once the model was set too.
+        A control that does not change the number is worse than no control,
+        because the user believes the analysis respects it.
+
+        Unticking restores ``NONE``, but only for a material that was
+        actually using a water surface: one on Ru, a constant or a
+        finite-element field is left alone, since its pore-pressure model
+        was never this dialog's to set.
+        """
+        from ogr_core.geometry import BoundaryType
+        from ogr_core.materials import PorePressureType
+
+        surface = next((b for b in self.project.boundaries if b.id == wid),
+                       None)
+        model = (PorePressureType.WATER_TABLE
+                 if surface is not None
+                 and surface.btype == BoundaryType.WATER_TABLE
+                 else PorePressureType.PIEZO_LINE)
+        picked, cleared = set(picked), set(cleared)
+        _SURFACE_MODELS = (PorePressureType.WATER_TABLE,
+                           PorePressureType.PIEZO_LINE)
         for m in self.project.materials:
             if m.id in picked:
                 m.water_surface_id = wid
+                m.pore_pressure = model
             elif m.id in cleared:
                 m.water_surface_id = None
+                if m.pore_pressure in _SURFACE_MODELS:
+                    m.pore_pressure = PorePressureType.NONE
         self.project._notify("materials_changed")
+
+    def _maybe_prompt_assign_water_surface(self, boundary) -> None:
+        """Open the Assign dialog after a water surface has been drawn.
+
+        Silent when there is nothing to assign to, so drawing a water table
+        into an empty project does not throw a dialog at the user.
+        """
+        from ogr_core.geometry import BoundaryType
+
+        if not self.PROMPT_ASSIGN_ON_DRAW:
+            return
+        if boundary.btype not in (BoundaryType.WATER_TABLE,
+                                  BoundaryType.PIEZOMETRIC):
+            return
+        if not self.project.materials:
+            return
+        self.act_assign_water_surface(preselect=boundary.id)
 
     # ==================================================================
     # Support menu (v0.1.14)
@@ -3949,6 +4013,10 @@ class MainWindow(QMainWindow):
             f"Added {boundary.btype.display_name} with {len(boundary.vertices)} vertices",
             3000,
         )
+        # v0.1.95 — a water surface that is not assigned to any material
+        # does nothing at all, and nothing on screen says so. The reference
+        # closes that gap by opening the Assign panel right here.
+        self._maybe_prompt_assign_water_surface(boundary)
 
     def _on_boundary_clicked(self, index: int) -> None:
         """Canvas hit-tested a boundary while a pick-based tool is active."""

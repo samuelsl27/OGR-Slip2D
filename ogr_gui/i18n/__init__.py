@@ -1046,6 +1046,15 @@ _DICTS: dict[str, dict[str, str]] = {
         "Piezometric Line": "Línea piezométrica",
         "(first of this type)": "(la primera de este tipo)",
         "Apply to materials": "Aplicar a los materiales",
+        # --- v0.1.95: panel Assign Water Surface ---------------------
+        # Terminología: «superficie de agua» cubre nivel freático y
+        # línea piezométrica, como en la referencia.
+        "Assign to Materials:": "Asignar a los materiales:",
+        "Current Water Surface": "Superficie de agua actual",
+        "Select All": "Seleccionar todo",
+        "Clear All": "Desmarcar todo",
+        "Unticking a material removes its assignment to this surface. Materials assigned to a different water surface are not changed.":
+            "Desmarcar un material elimina su asignación a esta superficie. Los materiales asignados a otra superficie de agua no se modifican.",
         "This project has no materials yet.":
             "Este proyecto todavía no tiene materiales.",
         "Draw a water table or a piezometric line first.":
