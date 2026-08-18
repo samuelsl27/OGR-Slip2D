@@ -200,6 +200,57 @@ cubre. El arreglo previsible es reemplazar la lista
 código, pero **no se toca sin saber antes por qué nadie lo notó**: si el
 bloque fuera inalcanzable, el arreglo sería un parche sobre código muerto.
 
+## 7 · Lowe-Karafiath con agua: ¿empuje entre dovelas, sí o no? — ABIERTO (v0.1.94)
+
+**Estado: diagnosticado y medido, sin corregir. Regla 6.** Falta UN dato
+externo, y está identificado exactamente.
+
+Sobre `Ej_2_Piezometric_Line`, círculo crítico de la referencia, Lowe-Karafiath
+da **−10,89 %**. La causa está localizada: `interslice_water_thrust`
+(`ogr_slip2d/external_forces.py`), que usa **sólo** este método. Integra u sobre
+las caras verticales entre dovelas y la aplica como fuerza externa, con lo que
+la `Z` de la recursión pasa a ser la fuerza interdovela **efectiva** en vez de
+la **total**.
+
+```
+con el empuje (hoy)     0,626915    −10,89 %
+sin el empuje           0,704139     +0,09 %
+referencia              0,703504
+```
+
+**Y quitarlo rompe un caso publicado.** Verificación #70 de Duncan y Wright
+(talud sumergido, árbitro 1,60):
+
+| | ponded 75 | ponded 105 | boyante | invarianza |
+|---|---|---|---|---|
+| Bishop / Spencer / GLE | 1,6006 | 1,6006 | 1,6003 | 0,00 % |
+| **Lowe CON empuje** | 1,6092 | 1,6099 | 1,6081 | 0,05 % ✔ |
+| **Lowe SIN empuje** | **5,0000** | **0,2203** | 1,6081 | **95,6 %** ✘ |
+
+Se pierde la magnitud **y** la invarianza con la profundidad del agua, que es
+el invariante fuerte del caso. `test_ponded_water_v161.py` la exige dentro del
+1 % y del 2 %, así que borrar el término deja la suite en rojo — como debe.
+
+Las dos formulaciones son consistentes consigo mismas. Difieren en si la
+inclinación prescrita θ = ½(β+α) se aplica a la fuerza interdovela **total** o
+a la **efectiva**. Ninguna acierta en los dos casos.
+
+**Qué haría falta para cerrarlo**: el factor de seguridad que da la referencia
+con **Lowe-Karafiath** sobre un modelo con **agua embalsada** — la propia
+verificación #70 sirve, o cualquier talud con la lámina de agua por encima del
+contorno externo. Dos lecturas posibles y las dos son concluyentes:
+
+- si da ≈ 1,6 → la referencia desdobla efectiva/total, y nuestro −10,9 % viene
+  de otro sitio dentro del mismo término;
+- si da ≈ 5 → la referencia simplemente no lo hace, y entonces **OGR es más
+  correcto que la referencia aquí**. Lo que procede es documentar la
+  divergencia, no «arreglarla» persiguiendo su número.
+
+Lo que NO hay que hacer mientras tanto: borrar el término para que Ej_2 salga
+bien. Sería cambiar un resultado validado por otro validado, a ciegas.
+
+---
+
 ## 6 · Arranque en caliente de λ en Spencer y GLE — ABIERTO (v0.1.93)
 
 Con el corte del muestreo de v0.1.93, Spencer y GLE siguen costando ~15×
@@ -211,3 +262,25 @@ No entró en v0.1.93 porque **mueve los números dentro de la tolerancia**, y
 esa versión se definió por no mover ninguno. Para cerrarlo hace falta
 revalidar Ej_1, Ej_2 y los cinco casos de `validacion/casos/`, y publicar el
 desplazamiento de cada uno — no basta con que sigan dentro de tolerancia.
+
+### Y una medición nueva de v0.1.94, que es de la OTRA auditoría de Spencer
+
+`docs/audits/spencer_gle_interslice_v179.md` lleva abierto desde v0.1.79 el
+síntoma «Spencer y GLE se separan de Bishop mucho menos de lo que dicen las
+referencias publicadas», que v0.1.90 dejó explícitamente sin explicar. El
+modelo con piezométrica lo hace **medible por primera vez**:
+
+| separación respecto de su propio Bishop | seco ref | seco OGR | agua ref | agua OGR |
+|---|---|---|---|---|
+| spencer | +0,087 % | −0,026 % | **+1,888 %** | **−0,000 %** |
+| gle | +0,191 % | −0,001 % | **+0,809 %** | −0,056 % |
+
+En seco la separación verdadera está por debajo del ruido (0,09-0,19 %), y por
+eso el defecto era invisible. Con agua la referencia separa casi un 2 % y OGR
+separa **cero**.
+
+El mecanismo, a la vista en `spencer.py`: el término resistente es el numerador
+de Bishop, `(c·b + (W − u·b)·tanφ)/m_α`, con `m_α` **sin λ**; λ sólo modula el
+numerador del balance de fuerzas. La fuerza vertical interdovela `X = λ·f(x)·E`
+nunca llega a la normal en la base. No es un problema del agua: el agua sólo lo
+hace visible.

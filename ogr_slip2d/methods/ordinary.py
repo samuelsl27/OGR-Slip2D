@@ -8,7 +8,7 @@ moment equilibrium about the centre of a circular surface only.
 
 Formulation (circular surface):
 
-    FS = Σ [c'·l + (W cos α − u·l) · tan φ'] / Σ (W sin α)
+    FS = Σ [c'·l + (W cos α − u·l·cos²α) · tan φ'] / Σ (W sin α)
 
 where
     l   = base length of slice
@@ -20,7 +20,13 @@ where
 
 Non-iterative → always returns converged=True.
 
-Reference: Fellenius (1927).
+The pore-pressure term uses the vertical projection of the base,
+u·l·cos²α, which is the correction of Turnbull & Hvorslev (1967); with
+u·l instead, the method disagrees with the reference by −24.7 % on the
+Ej_2 piezometric benchmark and by nothing at all on a dry model.
+
+Reference: Fellenius (1927); Turnbull, W.J. & Hvorslev, M.J. (1967),
+"Special problems in slope stability", ASCE JSMFD 93(SM4), 499-528.
 
 Author: Samuel Sáez López (UPCT)
 """
@@ -96,16 +102,35 @@ class OrdinaryFellenius(LEMMethod):
             N = (W * math.cos(s.base_angle)
                  - H * math.sin(s.base_angle)
                  + Hw * math.sin(s.base_angle))
-            N_eff = N - s.pore_pressure * s.base_length
+            # v0.1.94 — the pore-pressure force is taken over the base's
+            # VERTICAL PROJECTION, u·l·cos²α, and not over the whole base
+            # length. This is the correction of Turnbull & Hvorslev (1967)
+            # — Lambe & Whitman (1969) call it the Ordinary method with
+            # corrected pore pressure — and it is what the reference
+            # implements. Measured against its published slice table on the
+            # Ej_2 piezometric model, u·l·cos²α reproduces the effective
+            # normal stress of the 22 slices carrying water to within
+            # 0.03 %, while u·l is out by up to 118 %.
+            #
+            # The two forms are IDENTICAL when u = 0, which is why eighty
+            # versions of dry reference models never saw this: the whole
+            # error is proportional to u·(1 − cos²α), so it needs both water
+            # AND an inclined base to exist at all. On that circle it cost
+            # −24.7 % on the factor of safety.
+            cos_a = math.cos(s.base_angle)
+            N_eff = N - s.pore_pressure * s.base_length * cos_a * cos_a
             # v0.1.62 — count the slices whose effective normal force comes
-            # out negative. This is THE failure mode of the method, not of
-            # this implementation: Ordinary resolves the weight on the base
-            # without any interslice force, so a high u on a steep part of
-            # the arc drives N' below zero, the clamp below throws the
-            # deficit away and the factor of safety comes out low. Whitman
-            # and Bailey (1967) measured errors of up to 60 % this way,
-            # against under 7 % for Bishop (1955). Reported rather than
-            # patched: "fixing" it would no longer be Fellenius' method.
+            # out negative.
+            #
+            # v0.1.94 — and the explanation that stood here was WRONG, which
+            # is the part worth keeping written down. It called this "THE
+            # failure mode of the method, not of this implementation",
+            # citing Whitman and Bailey (1967) and their errors of up to
+            # 60 %. On the Ej_2 piezometric circle it was 5 slices of 25,
+            # with σ' down to −7.3 kPa; with the correction above, NOT ONE
+            # of the 25 comes out negative. The negative normals were made
+            # by the uncorrected water term, and a citation was covering
+            # for them.
             if N_eff < 0.0:
                 n_negative_normal += 1
             sigma_n_eff = max(0.0, N_eff) / max(s.base_length, 1e-9)
