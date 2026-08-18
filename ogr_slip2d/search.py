@@ -358,6 +358,146 @@ class BaseSearch(ABC):
 
 
 # ======================================================================
+# Parallel grid evaluation (v0.1.97)
+#
+# The circles of a Grid Search are INDEPENDENT: each one is sliced and
+# solved from the project alone, nothing is carried between them, and
+# ``regions_frozen`` already guarantees by contract that the project does
+# not change while it is analysed. So splitting them across processes
+# cannot change a result — and the test that guards this demands
+# BIT-IDENTICAL output, not agreement to a tolerance.
+#
+# Processes, not threads: every inner loop here is pure Python, so the GIL
+# would serialise them straight back.
+#
+# Only Grid Search is parallel so far. The random searches (Simulated
+# Annealing, Path, Block) would need their seed derived per batch to keep
+# the reproducibility promise of v0.1.74, and Auto Refine feeds each
+# iteration from the previous one. Saying so is cheaper than letting a
+# user wonder why one search got faster and another did not.
+
+#: Below this many circles the process pool costs more than it saves. On
+#: Windows every worker re-imports the package, which is most of the
+#: ~0.5 s startup, so the floor is deliberately generous.
+_PARALLEL_MIN_CIRCLES = 400
+
+#: More workers than this and the per-process import cost and the parent's
+#: deserialisation start to dominate. Measured, not guessed: see the
+#: changelog for v0.1.97.
+_MAX_WORKERS = 8
+
+
+def _worker_count(project, n_circles: int) -> int:
+    """How many processes this run should use. 1 means "stay sequential".
+
+    Two controls, both on the Project Settings page:
+
+    * ``parallel_search`` — off means off, on every model and every size.
+      A user who wants the machine left alone must be able to say so once
+      and have it stick.
+    * ``parallel_cpu_percent`` — the share of the logical processors the
+      search may occupy. It rounds DOWN to a whole process and never below
+      one, so 1 % is "as little as possible", not "none": switching the
+      feature off is the checkbox's job, and a percentage that silently
+      meant off would be a second way to say the same thing.
+
+    Independently of both, a small search stays in-process: below
+    ``_PARALLEL_MIN_CIRCLES`` the pool costs more than it saves, and that
+    is what keeps a 25-circle test from starting eight interpreters.
+    """
+    import os
+
+    adv = getattr(getattr(project, "settings", None), "advanced", None)
+    if not getattr(adv, "parallel_search", True):
+        return 1
+    if n_circles < _PARALLEL_MIN_CIRCLES:
+        return 1
+    try:
+        pct = int(getattr(adv, "parallel_cpu_percent", 50))
+    except (TypeError, ValueError):
+        pct = 50
+    pct = max(1, min(100, pct))
+    total = os.cpu_count() or 1
+    return max(1, min(_MAX_WORKERS, int(total * pct / 100)))
+
+
+def _grid_batch(payload):
+    """Worker entry point. Must stay importable at module level.
+
+    Returns the partial :class:`SearchResult` for one contiguous run of
+    grid centres.
+    """
+    search, project, centres, done_before, total = payload
+    with project.regions_frozen():
+        return search._run_centres(project, centres, done_before, total)
+
+
+def _parallel_grid_run(search, project, centres, workers):
+    """Evaluate ``centres`` across processes, or return None to fall back.
+
+    Returning None rather than raising is deliberate: a machine that
+    cannot start a process pool — a frozen build, a sandbox, a platform
+    without fork or spawn — must still compute the right answer, just
+    slower. A failure to parallelise is not a failure to analyse.
+    """
+    from concurrent.futures import ProcessPoolExecutor
+
+    n = len(centres)
+    if n < workers:
+        return None
+    # MANY MORE BATCHES THAN WORKERS, and that is the whole trick.
+    #
+    # One batch per worker looks natural and measured badly: the cost of a
+    # grid centre varies by more than an order of magnitude — centres over
+    # the slope generate circles that slice and solve, centres far from it
+    # are rejected by the bounding-box test almost for free — and the
+    # visiting order is column by column, so contiguous batches hand one
+    # worker several expensive columns and another several cheap ones.
+    # Measured on the Ej_2 grid with Lowe-Karafiath: one batch per worker
+    # gave x1.85 on 7 workers, which is most of the gain thrown away
+    # waiting for the slowest batch.
+    #
+    # Splitting finer lets the pool schedule dynamically. ``map`` still
+    # returns results in the order the batches were submitted, so the
+    # merged ``evaluations`` list stays byte-identical to the sequential
+    # one — the ordering guarantee does not depend on which worker got
+    # what, only on the batches being contiguous and reassembled in order.
+    n_batches = min(n, workers * 8)
+    size, extra = divmod(n, n_batches)
+    batches, start = [], 0
+    for i in range(n_batches):
+        stop = start + size + (1 if i < extra else 0)
+        batches.append((start, stop))
+        start = stop
+
+    # ``progress_cb`` is very often a bound Qt signal or a closure, and
+    # neither survives pickling. The callback belongs to the parent
+    # anyway, so it is stripped for the trip and restored afterwards.
+    cb = search.progress_cb
+    search.progress_cb = None
+    try:
+        payloads = [(search, project, centres[a:b], a, n)
+                    for a, b in batches if b > a]
+        with ProcessPoolExecutor(max_workers=workers) as pool:
+            parts = list(pool.map(_grid_batch, payloads))
+    except Exception:  # noqa: BLE001 - see the docstring
+        return None
+    finally:
+        search.progress_cb = cb
+
+    if cb is not None:
+        cb(n, n)
+
+    merged = SearchResult(method_id=search.method.METHOD_ID)
+    for part in parts:
+        merged.evaluations.extend(part.evaluations)
+        merged.valid_count += part.valid_count
+        merged.invalid_count += part.invalid_count
+        merged.attempts += part.attempts
+    return merged
+
+
+# ======================================================================
 class GridSearch(BaseSearch):
     """Grid Search (circular) — Slide2 method.
 
@@ -632,24 +772,49 @@ class GridSearch(BaseSearch):
         return d_min + delta, d_max - delta
 
     # ------------------------------------------------------------------
-    def _run(self, project: Project) -> SearchResult:
+    def _centres(self, project: Project) -> list:
+        """Every grid centre, in the order the sequential run visits them.
+
+        Split out of ``_run`` so a parallel run can hand each worker a
+        CONTIGUOUS slice of this list and concatenate the partial results
+        in the same order. That is what makes the parallel path produce a
+        byte-for-byte identical ``evaluations`` list rather than merely an
+        equivalent one.
+        """
         gx = self.grid_x or self._auto_grid(project)[0]
         gy = self.grid_y or self._auto_grid(project)[1]
-
         nx_pts = self.grid_nx + 1
         ny_pts = self.grid_ny + 1
         xs = [gx[0] + (gx[1] - gx[0]) * i / (nx_pts - 1) for i in range(nx_pts)]
         ys = [gy[0] + (gy[1] - gy[0]) * j / (ny_pts - 1) for j in range(ny_pts)]
+        return [(xc, yc) for xc in xs for yc in ys]
 
+    def _run(self, project: Project) -> SearchResult:
+        centres = self._centres(project)
+        n_circles = self.radius_increment + 1
+        workers = _worker_count(project, len(centres) * n_circles)
+        if workers > 1:
+            out = _parallel_grid_run(self, project, centres, workers)
+            if out is not None:
+                return out
+        return self._run_centres(project, centres, 0, len(centres))
+
+    def _run_centres(self, project: Project, centres: list,
+                     done_before: int, total: int) -> SearchResult:
+        """Evaluate a contiguous run of grid centres.
+
+        ``done_before`` and ``total`` exist only so the progress callback
+        keeps reporting against the WHOLE grid while a worker sees a slice
+        of it.
+        """
         slope_pts = self._slope_surface(project)
 
         result = SearchResult(method_id=self.method.METHOD_ID)
-        total = nx_pts * ny_pts
-        processed = 0
+        processed = done_before
         n_circles = self.radius_increment + 1  # circles per centre
 
-        for xc in xs:
-            for yc in ys:
+        if True:
+            for xc, yc in centres:
                 processed += 1
                 if self.progress_cb:
                     self.progress_cb(processed, total)

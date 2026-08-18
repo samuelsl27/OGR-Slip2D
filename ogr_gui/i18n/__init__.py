@@ -1050,6 +1050,15 @@ _DICTS: dict[str, dict[str, str]] = {
         # Terminología: «superficie de agua» cubre nivel freático y
         # línea piezométrica, como en la referencia.
         "Assign to Materials:": "Asignar a los materiales:",
+        # --- v0.1.97: busqueda en paralelo -------------------------
+        "Search surfaces in parallel": "Buscar superficies en paralelo",
+        "Processors to use:": "Procesadores a usar:",
+        "On this computer:": "En este equipo:",
+        "of": "de",
+        "Splits the surfaces of a search across several processes. The circles are independent, so the result is identical to the last bit; only the clock changes.":
+            "Reparte las superficies de una búsqueda entre varios procesos. Los círculos son independientes, así que el resultado es idéntico hasta el último bit; sólo cambia el reloj.",
+        "Share of the processors the search may occupy. Measured on the reference grid, the speed-up is flat from two processes upwards, so taking the whole machine buys nothing and freezes everything else you have open.":
+            "Porcentaje de procesadores que la búsqueda puede ocupar. Medido sobre la rejilla de referencia, la aceleración es plana a partir de dos procesos, así que tomar el equipo entero no aporta nada y bloquea todo lo demás que tengas abierto.",
         "Current Water Surface": "Superficie de agua actual",
         "Select All": "Seleccionar todo",
         "Clear All": "Desmarcar todo",

@@ -200,6 +200,41 @@ cubre. El arreglo previsible es reemplazar la lista
 código, pero **no se toca sin saber antes por qué nadie lo notó**: si el
 bloque fuera inalcanzable, el arreglo sería un parche sobre código muerto.
 
+## 8 · La carga de vuelta del paralelismo — ABIERTO (v0.1.97)
+
+**Estado: medido, con el camino identificado.** La búsqueda en paralelo da
+1,5-2× cuando el techo con transferencia cero sería 3,0×.
+
+Instrumentado sobre Lowe-Karafiath, rejilla completa, 7 procesos, 56 lotes:
+
+| | wall | paralelismo efectivo |
+|---|---|---|
+| **sin** devolver las evaluaciones | **11,79 s** | 6,30× |
+| devolviendo todo | 18,05 s | 6,39× |
+
+El reparto funciona: 6,3× de paralelismo efectivo, sin desequilibrio de carga
+que arreglar (se probó afinar los lotes de 7 a 56 y dio 1,85× → 1,84 %, nada).
+Lo que cuesta el 35 % del reloj es **deserializar ~30 MB de `LEMResult` en el
+proceso padre**, cada uno con sus 25 dovelas y sus referencias a materiales, y
+ese trabajo es **serie**.
+
+**Qué haría falta**: que los workers devuelvan un resumen compacto por círculo
+—centro, radio, FoS, convergencia, admisibilidad, motivo— y que el padre
+reconstruya por su cuenta sólo las superficies que se van a enseñar.
+
+**Por qué no se hizo ya**: cambia *qué recibe la ventana de interpretación* de
+una búsqueda. Antes de tocarlo hay que saber **quién recorre `evaluations`
+esperando encontrar dovelas**: el panel de dovelas, las consultas fijadas, los
+mapas de calor de la rejilla y la exportación. Si alguno las necesita para toda
+la población y no sólo para la superficie consultada, el resumen no vale y hay
+que rebanar bajo demanda.
+
+Relacionado: sólo Grid Search se paraleliza. Las aleatorias (SA, Path, Block)
+necesitan semilla derivada por lote para no romper la reproducibilidad de
+v0.1.74, y Auto Refine encadena iteraciones.
+
+---
+
 ## 7 · Lowe-Karafiath con agua: ¿empuje entre dovelas, sí o no? — ABIERTO (v0.1.94)
 
 **Estado: diagnosticado y medido, sin corregir. Regla 6.** Falta UN dato

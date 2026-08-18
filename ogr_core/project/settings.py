@@ -490,6 +490,24 @@ class AdvancedSettings:
     # adding a single evaluation to a surface that already converges.
     max_lambda: float = 6.0
     iterate_steffensen: bool = True
+    # v0.1.97 — parallel surface search.
+    #
+    # Processes and not threads: every inner loop of the solver is pure
+    # Python, so the GIL would serialise them straight back. This cannot
+    # change a single number by construction — the circles of a grid are
+    # independent, and ``regions_frozen`` guarantees the project does not
+    # move while it is analysed — which is why the test that guards it
+    # demands BIT-IDENTICAL output rather than agreement to a tolerance.
+    parallel_search: bool = True
+    # Share of the machine's logical processors the search may occupy.
+    #
+    # 50 % and not 100 %, and the reason is measured rather than polite:
+    # on the Ej_2 reference grid the speed-up is flat from two workers
+    # upwards (1.3x to 1.5x across 2, 3, 4, 6 and 7 processes, against a
+    # 15 % drift between two identical control runs). The bottleneck is
+    # not the number of cores, so taking the whole machine buys nothing
+    # and costs the user every other program they have open.
+    parallel_cpu_percent: int = 50
 
     @classmethod
     def from_dict(cls, data: dict) -> "AdvancedSettings":
@@ -501,6 +519,23 @@ class AdvancedSettings:
         honouring them unsafe.
         """
         data = dict(data or {})
+        # v0.1.97 briefly stored a raw process count before the setting was
+        # expressed as a share of the machine. Nothing shipped with it, but
+        # a project saved mid-development would otherwise carry a key no
+        # longer read, silently losing the choice it recorded.
+        if "num_processes" in data:
+            n = data.pop("num_processes")
+            try:
+                n = int(n)
+            except (TypeError, ValueError):
+                n = 0
+            if n == 1:
+                data.setdefault("parallel_search", False)
+            elif n > 1:
+                import os
+                total = os.cpu_count() or 1
+                data.setdefault("parallel_cpu_percent",
+                                max(1, min(100, round(100 * n / total))))
         # ``min_initial_fs`` → ``initial_fos``
         if "min_initial_fs" in data and "initial_fos" not in data:
             data["initial_fos"] = data.pop("min_initial_fs")

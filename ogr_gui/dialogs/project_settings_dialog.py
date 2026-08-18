@@ -1040,6 +1040,37 @@ class _AdvancedPage(QWidget):
             "of 19."))
         form.addRow("", self.chk_steffensen)
 
+        # v0.1.97 — parallel search. Two controls and not one, because
+        # "use the machine" and "use HOW MUCH of the machine" are
+        # different questions: a run that takes every core makes the
+        # computer unusable for anything else while it lasts.
+        self.chk_parallel = QCheckBox(
+            tr("Search surfaces in parallel"))
+        self.chk_parallel.setChecked(bool(
+            getattr(self.s, "parallel_search", True)))
+        self.chk_parallel.setToolTip(tr(
+            "Splits the surfaces of a search across several processes. "
+            "The circles are independent, so the result is identical to "
+            "the last bit; only the clock changes."))
+        form.addRow("", self.chk_parallel)
+
+        self.sp_cpu_pct = QSpinBox()
+        self.sp_cpu_pct.setRange(1, 100)
+        self.sp_cpu_pct.setSingleStep(5)
+        self.sp_cpu_pct.setSuffix(" %")
+        self.sp_cpu_pct.setValue(int(
+            getattr(self.s, "parallel_cpu_percent", 50)))
+        self.sp_cpu_pct.setToolTip(tr(
+            "Share of the processors the search may occupy. Measured on "
+            "the reference grid, the speed-up is flat from two processes "
+            "upwards, so taking the whole machine buys nothing and "
+            "freezes everything else you have open."))
+        form.addRow(tr("Processors to use:"), self.sp_cpu_pct)
+        self.lbl_cpu = QLabel("")
+        form.addRow("", self.lbl_cpu)
+        self.chk_parallel.toggled.connect(self._refresh)
+        self.sp_cpu_pct.valueChanged.connect(self._refresh)
+
         self.sp_initial = QDoubleSpinBox()
         self.sp_initial.setDecimals(3)
         self.sp_initial.setRange(0.001, 100.0)
@@ -1093,8 +1124,21 @@ class _AdvancedPage(QWidget):
     def _refresh(self) -> None:
         """The percentage decides nothing with the check switched off."""
         self.sp_tensile_pct.setEnabled(self.chk_tensile.isChecked())
+        on = self.chk_parallel.isChecked()
+        self.sp_cpu_pct.setEnabled(on)
+        # Say how many processes the percentage actually buys on THIS
+        # machine: a share is not a number the user can act on, and the
+        # rounding is downward, so 30 % of four processors is one.
+        import os as _os
+        total = _os.cpu_count() or 1
+        n = max(1, min(8, int(total * self.sp_cpu_pct.value() / 100))) if on else 1
+        self.lbl_cpu.setText(
+            "%s %d %s %d" % (tr("On this computer:"), n,
+                             tr("of"), total))
 
     def apply(self) -> None:
+        self.s.parallel_search = self.chk_parallel.isChecked()
+        self.s.parallel_cpu_percent = int(self.sp_cpu_pct.value())
         self.s.check_tensile_stresses = self.chk_tensile.isChecked()
         self.s.tensile_percent = self.sp_tensile_pct.value()
         self.s.check_m_alpha = self.chk_m_alpha.isChecked()
