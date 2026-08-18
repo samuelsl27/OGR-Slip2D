@@ -206,7 +206,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.95"
+    VERSION = "0.1.96"
 
     def __init__(self) -> None:
         super().__init__()
@@ -3089,7 +3089,7 @@ class MainWindow(QMainWindow):
         Split out of the dialog handler so it can be tested without opening
         a modal, and because of what it has to do beyond storing the id.
 
-        v0.1.95 — IT ALSO SETS ``Material.pore_pressure``, and that is the
+        v0.1.96 — IT ALSO SETS ``Material.pore_pressure``, and that is the
         whole reason this function exists. Until now the assignment wrote
         ``water_surface_id`` alone, while ``pore_pressure_at`` returns 0.0
         out of ``if ppt == PorePressureType.NONE`` BEFORE it ever reads that
@@ -4013,7 +4013,7 @@ class MainWindow(QMainWindow):
             f"Added {boundary.btype.display_name} with {len(boundary.vertices)} vertices",
             3000,
         )
-        # v0.1.95 — a water surface that is not assigned to any material
+        # v0.1.96 — a water surface that is not assigned to any material
         # does nothing at all, and nothing on screen says so. The reference
         # closes that gap by opening the Assign panel right here.
         self._maybe_prompt_assign_water_surface(boundary)

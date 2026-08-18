@@ -157,6 +157,50 @@ def water_surface_y_at(
     return interp_y_on_polyline(b.polyline, x)
 
 
+def water_surface_defined_at(project, material, x: float) -> bool:
+    """Is the water surface this material uses defined over ``x``?
+
+    v0.1.96. ``interp_y_on_polyline`` answers None outside the x-range of a
+    polyline, and ``pore_pressure_at`` turned that into ``u = 0`` — a DRY
+    slope, silently, on the unsafe side. The reference does the opposite and
+    says so twice in its documentation, under both Add Water Table and Add
+    Piezometric Surface:
+
+        "the analysis will not be able to calculate the pore pressure for
+        slip surfaces where the [surface] is not defined, and a safety
+        factor will NOT BE CALCULATED"
+
+    So the two answers have to be told apart: "u = 0 because the water is
+    below this point" is a result, and "there is no water surface over this
+    abscissa" is a refusal. This function is the second question; the
+    slicer asks it per slice and discards the whole surface when it fails.
+
+    Returns True — analysable — when the material does not use a water
+    surface at all (Ru, a constant, a finite-element field or none), since
+    the question does not arise there.
+
+    A material whose model IS a water surface but which resolves to no
+    boundary at all also returns True: that is a project with a model set
+    and nothing drawn, which already yields u = 0 everywhere and is a
+    different problem from a surface that exists but stops short.
+    """
+    from ..materials import PorePressureType
+
+    ppt = getattr(material, "pore_pressure", None)
+    if ppt == PorePressureType.WATER_TABLE:
+        target = BoundaryType.WATER_TABLE
+    elif ppt == PorePressureType.PIEZO_LINE:
+        target = BoundaryType.PIEZOMETRIC
+    else:
+        return True
+
+    b = resolve_water_surface(project, getattr(material, "water_surface_id",
+                                               None), target)
+    if b is None:
+        return True
+    return interp_y_on_polyline(b.polyline, x) is not None
+
+
 # ----------------------------------------------------------------------
 def water_table_y_at(project, x: float) -> Optional[float]:
     """Elevation of the highest WATER TABLE at ``x``, or None.

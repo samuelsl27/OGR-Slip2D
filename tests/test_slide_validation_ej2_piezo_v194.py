@@ -102,6 +102,15 @@ REF_SIGMA_EFF_ORDINARY = [
     2.6228,
 ]
 
+# Slice Data (bishop simplified): "Weight [kN]". Same column in every
+# method's table, since the mass does not depend on the method.
+REF_W = [
+    9.40306, 27.8169, 45.4389, 62.2524, 78.2371, 93.3686, 107.618, 120.95,
+    133.324, 144.691, 154.995, 164.167, 172.125, 178.77, 183.98, 187.605,
+    189.454, 189.282, 186.761, 176.044, 167.918, 155.782, 138.072, 99.9242,
+    37.0206,
+]
+
 _CACHE: dict = {}
 
 
@@ -245,12 +254,42 @@ class TestOrdinaryUsesTheCorrectedPorePressure:
             cos_a = math.cos(s.base_angle)
             sigma = (s.weight * cos_a / l) - s.pore_pressure * cos_a * cos_a
             err = abs(sigma - ref) / abs(ref)
-            # The last two slices carry u = 0 and are very steep, where the
-            # chord-vs-arc difference of the slicer dominates; they say
-            # nothing about the pore-pressure convention, so they are held
-            # to a looser bound on purpose.
-            limit = 0.06 if i >= 23 else 0.005
-            assert err < limit, (i, sigma, ref, err)
+            assert err < self._limit(i), (i, sigma, ref, err)
+
+    @staticmethod
+    def _limit(i: int) -> float:
+        """Per-slice bound, and why two of them are not 0.5 %.
+
+        These are NOT tolerances relaxed until the test passed. Each one is
+        a measured property of the reference data, and saying so here is
+        the point of the method existing at all.
+
+        * **slices 24 and 25** carry u = 0, so they cannot discriminate
+          between the two candidate pore-pressure formulas at all — the
+          term under test is multiplied by zero. What is left is the
+          chord-versus-arc difference of the slicer on a base at 68 deg and
+          74 deg, which is a different subject.
+
+        * **slice 23** is the one the reference's own table contradicts
+          itself on, by 0.48 %. Its printed weight is 138.0720; the weight
+          IMPLIED by its printed effective normal stress, inverting
+          ``sigma' = W*cos(a)/l - u*cos^2(a)``, is 137.4177. Feeding the
+          reference's OWN printed weight into that formula reproduces this
+          program's number, not the reference's:
+
+              W = 138.0720 (theirs)  ->  sigma' = 22.7903
+              reference prints           sigma' = 22.6617   (+0.567 %)
+
+          Since v0.1.96 this program agrees with the printed WEIGHT to
+          2e-4 %, so it inherits the whole of that 0.567 %. Holding it to
+          0.5 % would be demanding agreement with a number the source does
+          not agree with either.
+        """
+        if i >= 23:
+            return 0.06
+        if i == 22:
+            return 0.008
+        return 0.005
 
     def test_the_uncorrected_form_would_fail_this_same_check(self):
         """The discriminating power of the anchor, made explicit.
@@ -325,15 +364,35 @@ class TestTheSevenMethods:
             assert err < 0.005, (method_id, res.fos, ref, err)
         assert len(worst) == 4
 
+    def test_every_slice_weight_matches_the_reference(self):
+        """v0.1.96 — the ground profile is integrated, not chorded.
+
+        Slice 23 spans x = 39.08 to 40.10 and the crest VERTEX at x = 40
+        falls inside it. Taking the top as the midpoint of the chord
+        between the slice's two corners cut that corner off: W came out
+        137.192 against 138.072, while the other 24 slices agreed to 1e-5.
+        The reference does not cut a slice at a ground kink — its widths
+        are 19 x 1.04705 plus 6 x 1.01518, with no extra break at x = 40 —
+        so it must be integrating the real area, and now so does this.
+        """
+        res = _result("bishop_simplified", SMALL)
+        for i, (s, ref) in enumerate(zip(res.slices, REF_W)):
+            err = abs(s.weight - ref) / ref
+            assert err < 1e-4, (i, s.weight, ref, err)
+
     def test_the_slice_geometry_matches_the_reference(self):
         """Same mass, so the factors compare like for like."""
         res = _result("bishop_simplified", SMALL)
         sd = res.surface.to_dict()
         assert abs(sd["x_left"] - 16.141) < 0.01, sd["x_left"]
         assert abs(sd["x_right"] - 42.126) < 0.01, sd["x_right"]
+        # Reference: Total Slice Area = 160.25 m2. The bound is 1e-4 and
+        # not the 0.5 % the rest of this file uses, because v0.1.96 made
+        # ``Slice.height`` read the exactly integrated ground profile: the
+        # area went from 160.205 (-0.03 %) to 160.2489 (-0.0007 %). A loose
+        # bound here would no longer be measuring anything.
         area = sum(s.width * max(s.height, 0.0) for s in res.slices)
-        # Reference: Total Slice Area = 160.25 m2
-        assert abs(area - 160.25) / 160.25 < 0.005, area
+        assert abs(area - 160.25) / 160.25 < 1e-4, area
 
 
 # ======================================================================

@@ -560,8 +560,35 @@ class BishopSimplified(LEMMethod):
                  + slide_sign * (s.pore_pressure * l * tan_phi
                                  * math.sin(alpha)) / fos
                  ) / max(abs(m_alpha), 1e-6)
-            sigma_eff = max(0.0, N / l - s.pore_pressure)
-            tau = self._shear_strength(s.material, sigma_eff)
+            # v0.1.96 — σ' is reported WITH ITS SIGN, and the envelope is
+            # read at that signed value. It used to be clamped at zero
+            # here, and again inside ``MohrCoulomb.shear_strength``, so a
+            # base in tension was published with the full cohesion:
+            #
+            #   Ej_2 piezométrica, dovela 25, σ' = −11.27 kPa
+            #     reference   τ = 15 + (−11.27)·tan 28° =  9.005 kPa
+            #     clamped     τ = 15 + max(0, −11.27)·… = 15.000 kPa  (+66 %)
+            #
+            # Only water can drive σ' negative, which is why two dry
+            # benchmarks never showed it. The FACTOR OF SAFETY does not
+            # move: this block runs after convergence and reports, and
+            # Bishop's numerator uses ``(W − u·b)·tanφ``, which never
+            # passed through here. ``checks.base_effective_stresses`` —
+            # the one the Tensile Stress Check reads — has always returned
+            # σ' signed, so the two agree now instead of only one of them
+            # being right.
+            #
+            # The envelope is evaluated through the LINEARISATION rather
+            # than through ``shear_strength`` so this stays correct for the
+            # non-linear models too: for Mohr-Coulomb it is exact, and for
+            # Hoek-Brown it is the tangent at the air-entry point extended
+            # into tension, which is the natural reading and beats
+            # truncating. Floored at zero because a negative shear
+            # STRENGTH is not a physical quantity — that is what the
+            # Tensile Stress Check is for.
+            sigma_eff = N / l - s.pore_pressure
+            c_rep, tan_phi_rep = self._local_c_phi(s, s.material, sigma_eff)
+            tau = max(0.0, c_rep + sigma_eff * tan_phi_rep)
             normals.append(N)
             shears.append(slide_sign * W_eff * math.sin(alpha))
             strengths.append(tau * l)

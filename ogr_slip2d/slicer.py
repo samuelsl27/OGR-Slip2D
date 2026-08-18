@@ -38,7 +38,10 @@ from ogr_core.hydraulic.excess_pore_pressure import (
 )
 from ogr_core.hydraulic.ponded_water import ponded_depth_at
 from ogr_core.hydraulic.pore_pressure import pore_pressure_at, _interp_y_on_polyline
-from ogr_core.hydraulic.water_surfaces import water_table_y_at
+from ogr_core.hydraulic.water_surfaces import (
+    water_surface_defined_at,
+    water_table_y_at,
+)
 from ogr_core.materials import Material
 from ogr_core.project import Project
 
@@ -62,6 +65,14 @@ class Slice:
     # Top (ground surface)
     top_y_left: float
     top_y_right: float
+    # v0.1.96 — MEAN ground elevation over the slice, integrated exactly.
+    # It differs from ``top_y_mid`` only when a profile VERTEX falls inside
+    # the slice, and there the chord between the two corners cuts the corner
+    # off. ``height`` reads this one so that the weight, the height and the
+    # reported area all describe the same column: with a single material,
+    # ``weight == gamma * height * width`` has to stay exactly true, and it
+    # is a test. None falls back to the chord midpoint.
+    top_y_mean: Optional[float] = None
     # Derived scalars
     weight: float = 0.0          # kN/m (per unit out-of-plane width)
     pore_pressure: float = 0.0   # kPa (at the midpoint of the base)
@@ -101,7 +112,8 @@ class Slice:
 
     @property
     def height(self) -> float:
-        return self.top_y_mid - self.base_y_mid
+        top = self.top_y_mid if self.top_y_mean is None else self.top_y_mean
+        return top - self.base_y_mid
 
     @property
     def base_normal_force(self) -> float:
@@ -133,6 +145,7 @@ class Slice:
             "base_y_right": self.base_y_right,
             "base_angle_deg": math.degrees(self.base_angle),
             "base_length": self.base_length,
+            "top_y_mean": self.top_y_mean,
             "height": self.height,
             "weight": self.weight,
             "pore_pressure": self.pore_pressure,
@@ -482,6 +495,38 @@ def _slice_boundaries(
     return bounds
 
 
+def _mean_polyline_y(polyline: Polyline, x_l: float, x_r: float) -> Optional[float]:
+    """Mean elevation of a piecewise-linear profile over ``[x_l, x_r]``.
+
+    v0.1.96 — the reason this is not ``½(y(x_l) + y(x_r))``: a profile
+    VERTEX falling inside the interval is a kink, and the chord between the
+    two ends cuts the corner. On the Ej_2 reference model the crest vertex
+    at x = 40 lands inside slice 23, whose weight came out 137.192 against
+    the reference's 138.072 — every other slice of the 25 agreeing to 1e-5.
+
+    The integral is exact rather than sampled: the profile is linear
+    between breakpoints, so splitting at every breakpoint inside the
+    interval and summing trapezia leaves no error at all.
+
+    Returns None when the profile does not span the interval.
+    """
+    if x_r <= x_l:
+        return None
+    xs = {x_l, x_r}
+    for v in polyline.vertices:
+        if x_l < v.x < x_r:
+            xs.add(v.x)
+    marks = sorted(xs)
+    area = 0.0
+    for a, b in zip(marks[:-1], marks[1:]):
+        ya = _interp_y_on_polyline(polyline, a)
+        yb = _interp_y_on_polyline(polyline, b)
+        if ya is None or yb is None:
+            return None
+        area += 0.5 * (ya + yb) * (b - a)
+    return area / (x_r - x_l)
+
+
 def _column_weight(
     project: Project,
     x: float,
@@ -757,11 +802,30 @@ def slice_surface(
         top_y_mid = 0.5 * (y_top_l + y_top_r)
         mat = _material_at(project, Vertex(xc, base_y_mid + 0.01))
 
+        # v0.1.96 — the TOP used for the weight is the mean ground
+        # elevation over the slice, not the midpoint of the chord joining
+        # its two corners. They differ only where a profile vertex falls
+        # INSIDE a slice, and there the chord cuts the corner off. See
+        # ``_mean_polyline_y``. ``top_y_mid`` itself is left alone: it is
+        # the geometric midpoint the rest of the slice reports.
+        top_y_w = _mean_polyline_y(ground, xl, xr)
+        if top_y_w is None:
+            top_y_w = top_y_mid
+
         # v0.1.63 — the weight comes from integrating the column, so a
         # slice spanning several layers, or straddling the water table,
         # is weighed band by band instead of being classified whole by
         # its base midpoint.
-        weight = _column_weight(project, xc, base_y_mid, top_y_mid, dx)
+        weight = _column_weight(project, xc, base_y_mid, top_y_w, dx)
+
+        # v0.1.96 — a water surface that does not reach this abscissa is
+        # a REFUSAL, not zero pore pressure. ``pore_pressure_at`` cannot
+        # tell the caller which of the two it is returning, so the question
+        # is asked separately; the reference discards the whole slip
+        # surface in this case and writes an error rather than reporting a
+        # dry slope, which is the unsafe side to be wrong on.
+        if not water_surface_defined_at(project, mat, xc):
+            return None
 
         # Pore pressure at the midpoint of the base
         u = pore_pressure_at(
@@ -815,6 +879,7 @@ def slice_surface(
             base_length=base_len,
             top_y_left=y_top_l,
             top_y_right=y_top_r,
+            top_y_mean=top_y_w,
             weight=weight,
             pore_pressure=u,
             raw_pore_pressure=u_raw,
