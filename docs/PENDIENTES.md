@@ -173,3 +173,41 @@ un buscador que resuelve todo `ogr_*` a una ruta absoluta fija, y
 `sys.path[0]` es el directorio **del script**, no el de trabajo. El runner
 imprime ahora la procedencia y se niega a correr sobre otro árbol. Detalle en
 el changelog de v0.1.89.
+
+---
+
+## 5 · Arrastrar un contorno entero rompe — ABIERTO (v0.1.93)
+
+`ogr_gui/canvas/canvas_view.py:1966-1968` asigna sobre un `Vertex`, que es un
+`@dataclass(frozen=True, slots=True)`:
+
+```python
+for vi, v in enumerate(b.polyline.vertices):
+    v.x = ox0 + dx
+    v.y = oy0 + dy
+```
+
+Reproducido: `FrozenInstanceError: cannot assign to field 'x'`. Es decir, el
+arrastre de un contorno completo lanza al primer movimiento del ratón.
+
+Apareció escribiendo el test de invalidación in situ de v0.1.93 —que intentó
+editar así porque el comentario del lienzo dice que así se edita— y se dejó
+sin tocar según la regla 6. **Falta por averiguar**: desde qué versión, qué
+modos de herramienta llegan a ese bloque (`_dragging_boundary` se arma en
+algún sitio que hay que localizar), y por qué ningún test de la interfaz lo
+cubre. El arreglo previsible es reemplazar la lista
+(`b.polyline.vertices[vi] = Vertex(...)`), que es como edita el resto del
+código, pero **no se toca sin saber antes por qué nadie lo notó**: si el
+bloque fuera inalcanzable, el arreglo sería un parche sobre código muerto.
+
+## 6 · Arranque en caliente de λ en Spencer y GLE — ABIERTO (v0.1.93)
+
+Con el corte del muestreo de v0.1.93, Spencer y GLE siguen costando ~15×
+Bishop por círculo. Lo que queda es que cada *inner solve* arranca siempre en
+`initial_fos = 1.0`, en vez de en la `F` ya convergida del λ anterior. Es
+previsiblemente el mayor ahorro que resta.
+
+No entró en v0.1.93 porque **mueve los números dentro de la tolerancia**, y
+esa versión se definió por no mover ninguno. Para cerrarlo hace falta
+revalidar Ej_1, Ej_2 y los cinco casos de `validacion/casos/`, y publicar el
+desplazamiento de cada uno — no basta con que sigan dentro de tolerancia.

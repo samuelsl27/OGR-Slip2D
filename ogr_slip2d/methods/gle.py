@@ -166,6 +166,24 @@ class GLEMorgensternPrice(LEMMethod):
             if (math.isfinite(ff) and math.isfinite(fm)
                     and 0.05 < ff < 50 and 0.05 < fm < 50):
                 samples.append((lam, ff - fm, ff, fm))
+                # v0.1.93 — stop at the FIRST sign change instead of
+                # sampling the whole shape and looking afterwards. Neutral
+                # by construction: ``_first_bracket`` scans consecutive
+                # pairs in ascending λ and returns the first, and samples
+                # are appended in that same order, so the bracket found
+                # here is the one it would have found — hence the same
+                # root. Measured on the Ej_2 reference grid, 82 % of
+                # Spencer's inner solves were this sampling and only 3 per
+                # surface were the bisection that actually finds λ.
+                #
+                # Only cut when a bracket EXISTS. The two paths that need
+                # the whole grid are untouched, because both are reached
+                # only when nothing bracketed: the "no bracket" fallback
+                # picks ``min(samples, key=|g|)`` over every sample, and
+                # the v0.1.90 λ-extension runs only after the shape is
+                # exhausted.
+                if len(samples) > 1 and samples[-2][1] * samples[-1][1] < 0:
+                    break
 
         if not samples:
             return LEMResult(

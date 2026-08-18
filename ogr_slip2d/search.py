@@ -334,8 +334,27 @@ class BaseSearch(ABC):
         return res
 
     # ------------------------------------------------------------------
+    def run(self, project: Project) -> SearchResult:
+        """Run the search with the project's region caches frozen.
+
+        v0.1.93 — a template method purely so the freeze cannot be
+        forgotten by one search or one caller. Resolving the material at a
+        point revalidates the regions cache by rebuilding a signature over
+        every boundary vertex, about twice per slice; on the Ej_2 reference
+        grid that was 41 % of the run, for a model that by contract does
+        not change while it is being analysed.
+
+        It is here rather than in ``analysis_runner.build_search`` for the
+        reason v0.1.89 records above: when the interface and direct
+        construction come in by different doors, the two end up behaving
+        differently. Tests, scripts and ``examples/`` all build their
+        search by hand.
+        """
+        with project.regions_frozen():
+            return self._run(project)
+
     @abstractmethod
-    def run(self, project: Project) -> SearchResult: ...
+    def _run(self, project: Project) -> SearchResult: ...
 
 
 # ======================================================================
@@ -613,7 +632,7 @@ class GridSearch(BaseSearch):
         return d_min + delta, d_max - delta
 
     # ------------------------------------------------------------------
-    def run(self, project: Project) -> SearchResult:
+    def _run(self, project: Project) -> SearchResult:
         gx = self.grid_x or self._auto_grid(project)[0]
         gy = self.grid_y or self._auto_grid(project)[1]
 
@@ -749,7 +768,7 @@ class SlopeSearch(BaseSearch):
         self.initial_angle_upper_deg = initial_angle_upper_deg
         self.rng = random.Random(seed)
 
-    def run(self, project: Project) -> SearchResult:
+    def _run(self, project: Project) -> SearchResult:
         from ogr_core.geometry import BoundaryType
 
         result = SearchResult(method_id=self.method.METHOD_ID)
@@ -1036,7 +1055,7 @@ class AutoRefineSearch(BaseSearch):
         self.focus_objects = focus_objects or []
         self.progress_cb = progress_cb
 
-    def run(self, project) -> SearchResult:
+    def _run(self, project) -> SearchResult:
         from ogr_core.geometry import BoundaryType
         from .surface import SlipCircle
 
@@ -1331,7 +1350,7 @@ class BlockSearch(BaseSearch):
         self.seed = seed
         self.progress_cb = progress_cb
 
-    def run(self, project) -> SearchResult:
+    def _run(self, project) -> SearchResult:
         import random
         from ogr_core.geometry import Polyline, Vertex, BoundaryType
         from .surface import SlipSurface
@@ -1794,7 +1813,7 @@ class PathSearch(BaseSearch):
         self._y_floor = None
 
     # ------------------------------------------------------------------
-    def run(self, project) -> SearchResult:
+    def _run(self, project) -> SearchResult:
         import random
         from ogr_core.geometry import BoundaryType, Polyline, Vertex
         from .surface import SlipSurface
@@ -2323,7 +2342,7 @@ class SimulatedAnnealingSearch(BaseSearch):
     # ==================================================================
     # Top-level: HSA = VFSA + LMC
     # ==================================================================
-    def run(self, project) -> SearchResult:
+    def _run(self, project) -> SearchResult:
         result = SearchResult(method_id=self.method.METHOD_ID)
         if self.seed is not None:
             import random as _r

@@ -18,6 +18,7 @@ Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 
+import contextlib
 import json
 from datetime import datetime
 from pathlib import Path
@@ -93,6 +94,10 @@ class Project:
         # v0.1.11 — Bounding-box cache (used in early-skip checks)
         self._bbox_cache: Optional[tuple] = None
         self._bbox_cache_signature: Optional[tuple] = None
+        # v0.1.93 — depth of nested regions_frozen() blocks. While it is
+        # non-zero the two caches above are trusted without revalidating
+        # their signature. See :meth:`regions_frozen`.
+        self._regions_freeze_depth: int = 0
 
         # v0.1.6 — Region assignments (Slide-style material painting).
         # Each entry: {"x": float, "y": float, "material_id": str}.
@@ -165,6 +170,11 @@ class Project:
     def bounding_box(self) -> tuple[float, float, float, float]:
         # v0.1.11 — cached for hot-loop callers (search/evaluator).
         # Invalidated by invalidate_regions_cache() on any boundary change.
+        # v0.1.93 — and not revalidated at all inside a frozen block. This
+        # is called once per candidate circle, and each call rebuilt the
+        # boundary signature TWICE.
+        if self._regions_freeze_depth and self._bbox_cache is not None:
+            return self._bbox_cache
         if (self._bbox_cache is not None
                 and self._bbox_cache_signature == self._regions_cache_key()[0]):
             return self._bbox_cache
@@ -237,6 +247,13 @@ class Project:
         :meth:`invalidate_regions_cache`, which the project notifier
         calls automatically.
         """
+        # v0.1.93 — inside a frozen block the signature is not rebuilt at
+        # all: the caller has declared the model will not change, and
+        # rebuilding it cost more than everything it guarded (see
+        # :meth:`regions_frozen`).
+        if self._regions_freeze_depth and self._regions_cache is not None:
+            return self._regions_cache
+
         # v0.1.11 — fast path: return cached regions if still valid
         cache_key = self._regions_cache_key()
         if (self._regions_cache is not None
@@ -409,6 +426,47 @@ class Project:
         )
         mat_sig = tuple(m.id for m in self.materials) if self.materials else ()
         return (boundary_sig, assign_sig, mat_sig)
+
+    @contextlib.contextmanager
+    def regions_frozen(self):
+        """Trust the region and bbox caches for the duration of the block.
+
+        A limit-equilibrium run asks for the material at a point about twice
+        per slice, and every one of those calls used to revalidate the
+        regions cache by rebuilding a signature over **every vertex of every
+        external and material boundary**. On the Ej_2 reference grid that
+        signature was 41 % of the whole search: 27 342 rebuilds and 1.5 M
+        calls to ``round`` for a model whose geometry never moved. Inside
+        this block the caches are believed without being rechecked, which
+        measured 1.77 s -> 0.94 s on that grid with the factor of safety
+        identical to the last bit.
+
+        WHY THE SIGNATURE CANNOT SIMPLY BE DROPPED, and why this is scoped
+        rather than a flag on the class: the canvas edits boundaries **in
+        place** — ``project.boundaries[bi] = new_b`` and vertex drags in
+        ``ogr_gui/canvas/canvas_view.py`` — without going through
+        :meth:`_notify`. A cheap revision counter would therefore hand back
+        a stale region map after an ordinary vertex drag. The content
+        signature is what makes editing safe, and it is only suspended
+        where a stronger guarantee already holds: an analysis must not
+        modify the user's project (design coefficients are applied to a
+        *copy*, which is a different Project with its own caches).
+
+        Entering populates both caches once, so a frozen block never serves
+        a cache that was empty when it started. Reentrant, and released in
+        ``finally`` so an exception cannot leave a project pinned to a
+        stale subdivision.
+        """
+        if self._regions_freeze_depth == 0:
+            # Resolve once, with the signature still live, so what the
+            # block goes on to trust is current.
+            self.resolve_regions()
+            self.bounding_box()
+        self._regions_freeze_depth += 1
+        try:
+            yield self
+        finally:
+            self._regions_freeze_depth -= 1
 
     def invalidate_regions_cache(self) -> None:
         """Force the regions cache to be recomputed on the next call."""
