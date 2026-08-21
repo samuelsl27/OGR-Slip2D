@@ -129,11 +129,12 @@ def check_analysis_settings(project) -> list[str]:
 
 
 def settings_warnings(project) -> list[str]:
-    """Settings this project sets that the chosen analysis will not read.
+    """Settings this project sets that the chosen analysis cannot honour.
 
     Not a refusal: the analysis is valid, it just does less than the
-    Project Settings pages suggest. Saying so is the minimum rule 7 asks
-    when a control cannot be honoured.
+    Project Settings pages suggest, or it rests on a declaration the
+    geometry disagrees with. Saying so is the minimum rule 7 asks when a
+    control cannot be honoured.
     """
     notes: list[str] = []
     s_search = project.settings.search
@@ -144,7 +145,87 @@ def settings_warnings(project) -> list[str]:
             "Slope Search derives its entry and exit window from the "
             "ground profile and does not read the Slope Limits you set; "
             "they apply to Grid Search. The limits were ignored.")
+    notes.extend(_failure_direction_note(project))
     return notes
+
+
+#: How far apart the two ends of the ground surface must be, as a
+#: fraction of the model's own relief, before the check will call a side
+#: up-slope. Relative and not absolute, so it reads the same in
+#: millimetres and in metres.
+#:
+#: The bank it was measured on gives no evidence for the exact value: the
+#: ratio comes out at exactly 0 for 13 of the 138 models and at 0.50 or
+#: more for the other 125, with nothing in between. Any threshold in that
+#: gap behaves identically there, so this is a judgement — biased towards
+#: speaking up, since a spurious note costs a glance and a missed
+#: contradiction costs what the nineteen cost.
+_FAILURE_DIRECTION_REL_TOL = 0.01
+
+
+def _failure_direction_note(project) -> list[str]:
+    """Warn when the declared Failure Direction contradicts the ground.
+
+    The crest is the end the mass moves AWAY from, so a ground surface
+    that is higher on the left describes a mass sliding towards
+    increasing x — left to right. A project that declares the opposite
+    has its crest on the wrong side, and three decisions read that
+    declaration: which slice carries the tension-crack water thrust
+    (``slicer._apply_tension_crack``), which way a support resists
+    (``support_integration``), and which face Path Search starts from
+    when two are equally steep. A fourth place reads it — the "Failure
+    Direction" row of the PDF report — but that one only prints it.
+
+    Found by auditing a bank of 138 models: 19 of them declared right to
+    left with the crest plainly on the left. None of the nineteen had a
+    support, and the only one with a tension crack had it dry, so not a
+    single factor of safety was wrong — which is exactly why it survived.
+    The one that mattered would have gone on being wrong silently: with
+    the crack wet, the contradictory declaration picks the down-slope end
+    of the crack zone, where the ground has already fallen to the base of
+    the crack, so the thrust is never applied at all and its factor of
+    safety comes out 22.6 % too high, on the unsafe side.
+
+    Compares only the two ENDS of the upper envelope. The steepest-face
+    rule the searches use answers a different question and gives false
+    positives here: an embankment dam with both toes at the same level
+    has a steep face on each side and no up-slope side at all.
+
+    Abstains on a tie. A symmetric embankment has no geometric answer,
+    and a check that guesses is worse than one that keeps quiet.
+    """
+    from ogr_core.geometry import ground_surface
+
+    from .failure_direction import crest_is_on_the_right
+
+    external = project.external_boundary()
+    if external is None:
+        return []
+    vertices = list(ground_surface(external).vertices)
+    if len(vertices) < 2:
+        return []
+    y_left, y_right = vertices[0].y, vertices[-1].y
+    relief = max(v.y for v in vertices) - min(v.y for v in vertices)
+    if abs(y_left - y_right) <= _FAILURE_DIRECTION_REL_TOL * relief:
+        return []
+
+    crest_right = y_right > y_left
+    if crest_right == crest_is_on_the_right(project):
+        return []
+
+    # Only reached when the two disagree, so the declaration is whatever
+    # the ground is not.
+    declared_crest_right = not crest_right
+    declared = "Right to Left" if declared_crest_right else "Left to Right"
+    higher, lower = ("right", "left") if crest_right else ("left", "right")
+    return [
+        f"The Failure Direction is set to {declared}, which puts the "
+        f"crest on the {lower}, but the ground surface is higher on the "
+        f"{higher} (y = {y_left:g} at the left end against "
+        f"y = {y_right:g} at the right end). Tension-crack water thrust, "
+        f"support force direction and the Path Search starting face all "
+        f"read this setting."
+    ]
 
 
 # ======================================================================

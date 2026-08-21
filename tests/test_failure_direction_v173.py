@@ -404,3 +404,212 @@ class TestTheSelectorWritesTheSetting:
                 assert tr(key) != key, key
         finally:
             set_language(prev)
+
+
+# ======================================================================
+# 4. The declaration, checked against the ground (v0.1.98)
+# ======================================================================
+# Everything above pins what the setting DOES. Nothing above noticed that
+# it can simply be declared wrong, and for three years of model-building
+# nothing did: auditing a bank of 138 models found 19 that declared right
+# to left with the crest plainly on the left.
+#
+# Not one of them had a wrong factor of safety, which is exactly why they
+# survived — none had a support, and the only one with a tension crack
+# had it dry. The one that mattered was waiting: with the crack wet, the
+# contradictory declaration sends the thrust to the down-slope end of the
+# zone, where the ground has already dropped to the base of the crack, so
+# it is never applied at all and the factor of safety comes out 22.6 %
+# too high, on the unsafe side. Fixing the crack would have looked like
+# it changed nothing.
+def _fd_notes(project):
+    """Just the failure-direction lines of ``settings_warnings``."""
+    from ogr_slip2d.analysis_runner import settings_warnings
+
+    return [n for n in settings_warnings(project) if "Failure Direction" in n]
+
+
+def _mirrored(project, axis: float = 30.0):
+    """The same model reflected about a vertical line.
+
+    Reflecting rather than hand-writing a second fixture: the two models
+    are then provably the same problem, so an asymmetry a test finds is
+    in the code and not in two sets of coordinates that merely look
+    alike.
+    """
+    from ogr_core.geometry import Polyline, Vertex
+
+    for b in project.boundaries:
+        vs = [Vertex(2.0 * axis - v.x, v.y)
+              for v in reversed(b.polyline.vertices)]
+        b.polyline = Polyline(vertices=vs, closed=b.polyline.closed)
+        if b.polyline.closed:
+            b.polyline.ensure_ccw()
+    return project
+
+
+def _mirrored_circle(axis: float = 30.0):
+    from ogr_slip2d import SlipCircle
+
+    c = _circle()
+    return SlipCircle(centre_x=2.0 * axis - c.centre_x,
+                      centre_y=c.centre_y, radius=c.radius)
+
+
+def _loaded_slice_x_at(project, circle):
+    """``_loaded_slice_x`` on a surface other than the fixture circle.
+
+    The mirrored model needs the mirrored circle: reusing the original
+    would compare two different surfaces and call the difference an
+    asymmetry.
+    """
+    from ogr_slip2d import slice_surface
+
+    sl = slice_surface(project, circle, num_slices=40)
+    assert sl is not None, "the fixture surface must be sliceable"
+    loaded = [s for s in sl.slices if abs(s.water_force_h) > 1e-12]
+    assert len(loaded) <= 1, "the thrust goes on exactly one slice"
+    return (loaded[0].x_centre if loaded else None), sl
+
+
+def _fos_at(project, circle):
+    from ogr_slip2d import slice_surface
+    from ogr_slip2d.methods import BishopSimplified
+
+    sl = slice_surface(project, circle, num_slices=40)
+    return BishopSimplified().compute_fos(project, circle, sl).fos
+
+
+class TestTheDeclaredDirectionIsCheckedAgainstTheGround:
+
+    def test_a_crest_on_the_left_declared_right_to_left_is_reported(self):
+        """The shape of all nineteen: ground high on the left, R2L."""
+        notes = _fd_notes(_r2l(_crack_project()))
+        assert len(notes) == 1, notes
+        # The message has to name the contradiction, not merely exist:
+        # a note that says "check your settings" sends nobody anywhere.
+        assert "Right to Left" in notes[0]
+        assert "higher on the left" in notes[0]
+
+    def test_the_matching_declaration_is_silent(self):
+        """Both ways round, so the check is not simply biased to L2R."""
+        assert _fd_notes(_l2r(_crack_project())) == []
+        assert _fd_notes(_r2l(_mirrored(_crack_project()))) == []
+
+    def test_the_contradiction_is_caught_in_the_mirror_too(self):
+        assert len(_fd_notes(_l2r(_mirrored(_crack_project())))) == 1
+
+    def test_a_symmetric_embankment_gets_no_verdict(self):
+        """The check abstains where the geometry genuinely does not say.
+
+        Both ends of this ground surface are at y = 5, so neither side is
+        up-slope and only the figure in the source decides. A check that
+        guessed here would be worse than no check: it would file the one
+        real answer under the same heading as its own coin-flip.
+        """
+        assert _fd_notes(_r2l(_embankment())) == []
+        assert _fd_notes(_l2r(_embankment())) == []
+
+    def test_the_steepest_face_rule_would_have_been_wrong_here(self):
+        """Why the check compares the two ENDS and not the steepest face.
+
+        Locating the slope face as the steepest ground segment is what
+        the searches do, so reusing that rule here is the obvious move.
+        It gives false positives. An embankment dam has a face on each
+        side and they are rarely cut to the same batter; the steeper one
+        is a statement about riprap and drawdown, not about which side
+        the crest is on. This fixture is that shape — both toes at y = 0,
+        upstream 3H:1V and downstream 2H:1V — the two rules disagree:
+        the steepest-face rule names the downstream side, while the ends
+        tie and the check keeps quiet.
+
+        Not hypothetical. On the bank the steepest-face rule contradicts
+        five dam models that are declared correctly.
+        """
+        from ogr_core.geometry import (Boundary, BoundaryType, Polyline,
+                                       Vertex)
+        from ogr_core.geometry import ground_surface
+        from ogr_core.materials import Material, MohrCoulomb
+        from ogr_core.project import Project
+
+        ext = Polyline(vertices=[
+            Vertex(0, -10), Vertex(180, -10), Vertex(180, 0),
+            Vertex(120, 30), Vertex(90, 30), Vertex(0, 0),
+        ], closed=True)
+        ext.ensure_ccw()
+        p = Project("dam")
+        p.add_boundary(Boundary(polyline=ext, btype=BoundaryType.EXTERNAL))
+        p.materials = [Material(
+            name="Fill", strength=MohrCoulomb(cohesion=20, friction_angle=32))]
+
+        top = list(ground_surface(p.external_boundary()).vertices)
+        assert top[0].y == top[-1].y, top          # the ends really tie
+        faces = {abs((b.y - a.y) / (b.x - a.x)): (a.x, b.x)
+                 for a, b in zip(top, top[1:]) if abs(b.x - a.x) > 1e-9}
+        batters = sorted(k for k in faces if k > 0)
+        assert len(batters) == 2, faces
+        assert math.isclose(batters[0], 1 / 3, rel_tol=1e-9), faces
+        assert math.isclose(batters[1], 0.5, rel_tol=1e-9), faces
+        # One face IS steeper, so the steepest-face rule would answer —
+        # and it would answer about the downstream side, on the right.
+        assert faces[batters[1]][0] > 100.0, faces
+
+        # The rule this check actually uses says nothing at all.
+        assert _fd_notes(_r2l(p)) == []
+        assert _fd_notes(_l2r(p)) == []
+
+    def test_the_note_reaches_the_analysis_outcome(self):
+        """Reachability, not plumbing taste.
+
+        A check nobody can see is the same defect as a setting nobody
+        reads. This is the path the graphical interface, the terminal and
+        the verification bank all take.
+        """
+        from ogr_slip2d.analysis_runner import run_analysis
+
+        outcome = run_analysis(_r2l(_crack_project()), ["bishop_simplified"])
+        assert any("Failure Direction" in w for w in outcome.warnings)
+
+
+class TestTheCrackThrustLandsOnTheCrestSlice:
+    """The invariant the nineteen were hiding, in both directions.
+
+    ``TestTheCrackTruncatesTheUpSlopeEnd`` above proves the two
+    declarations pick OPPOSITE ends of the crack zone. It never proves
+    which end is right, so it passes just as happily with the convention
+    inverted. This does: with the direction declared to match the ground,
+    the thrust must land on the crest side and the factor of safety must
+    fall — mirrored, so neither answer can come from a hard-coded side.
+    """
+
+    def _dry(self, project):
+        from ogr_core.geometry.tension_crack import WaterLevelMode
+
+        project.tension_crack_properties.mode = WaterLevelMode.DRY
+        return project
+
+    def test_the_thrust_lands_on_the_crest_half_of_the_zone(self):
+        x_l2r, _ = _loaded_slice_x(_l2r(_crack_project()))
+        x_r2l, _ = _loaded_slice_x_at(_r2l(_mirrored(_crack_project())),
+                                     _mirrored_circle())
+        assert x_l2r is not None and x_r2l is not None
+        # Zone 3 → 13 with the crest on the left; mirrored, 47 → 57 with
+        # the crest on the right.
+        assert x_l2r < 8.0, x_l2r
+        assert x_r2l > 52.0, x_r2l
+
+    def test_a_wet_crack_lowers_the_factor_of_safety_both_ways(self):
+        """Rule 7 for the pairing of setting and geometry, not the setting
+        alone: water in a crack can only ever push the mass out."""
+        wet = _fos(_l2r(_crack_project()))
+        dry = _fos(self._dry(_l2r(_crack_project())))
+        assert 0.5 < wet < dry < 3.0, (wet, dry)
+
+        m_wet = _fos_at(_r2l(_mirrored(_crack_project())), _mirrored_circle())
+        m_dry = _fos_at(self._dry(_r2l(_mirrored(_crack_project()))),
+                        _mirrored_circle())
+        assert 0.5 < m_wet < m_dry < 3.0, (m_wet, m_dry)
+        # Same problem, so the same numbers: any gap is an asymmetry in
+        # the code, which is the whole point of testing it mirrored.
+        assert math.isclose(wet, m_wet, rel_tol=1e-9), (wet, m_wet)
+        assert math.isclose(dry, m_dry, rel_tol=1e-9), (dry, m_dry)

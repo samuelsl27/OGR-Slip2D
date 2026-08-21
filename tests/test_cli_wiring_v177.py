@@ -51,6 +51,7 @@ def _small_slope(name="cli"):
     from ogr_core.geometry import Boundary, BoundaryType, Polyline, Vertex
     from ogr_core.materials import Material, MohrCoulomb
     from ogr_core.project import Project
+    from ogr_core.project.units import FailureDirection
 
     ext = Polyline(vertices=[
         Vertex(0, 0), Vertex(50, 0), Vertex(50, 15),
@@ -59,6 +60,15 @@ def _small_slope(name="cli"):
     ext.ensure_ccw()
     p = Project(name)
     p.add_boundary(Boundary(polyline=ext, btype=BoundaryType.EXTERNAL))
+    # v0.1.98 — the crest is at y = 25 on the LEFT, so this slope
+    # slides towards increasing x. It said nothing and therefore
+    # inherited right to left, which is the contradiction the new
+    # check in ``settings_warnings`` reports; the check found this
+    # fixture the same day it found nineteen models in the
+    # verification bank. Nothing here has a support or a tension
+    # crack, so no number in this file moves — it never was wrong
+    # in its results, only in what it claimed.
+    p.settings.units.failure_direction = FailureDirection.LEFT_TO_RIGHT
     p.add_material(Material(
         name="Silty clay", unit_weight=19.0,
         strength=MohrCoulomb(cohesion=10.0, friction_angle=25.0)))
@@ -478,6 +488,18 @@ class TestTheCommandsThatDoNotCompute:
 
 
 # ======================================================================
+def _limit_notes(project):
+    """Only the Slope-Limits note, which is what these tests are about.
+
+    Asserting on the whole list made an unrelated check added later
+    fail here instead of where it belonged.
+    """
+    from ogr_slip2d.analysis_runner import settings_warnings
+
+    return [n for n in settings_warnings(project)
+            if "slope limits" in n.lower()]
+
+
 class TestSettingsThatCannotBeHonouredAreReported:
     def test_slope_search_says_it_ignores_the_slope_limits(self):
         """``SlopeSearch.run`` derives its own entry/exit window from the
@@ -487,17 +509,14 @@ class TestSettingsThatCannotBeHonouredAreReported:
 
         p = _small_slope()
         p.settings.search.search_method = "slope"
-        assert settings_warnings(p) == []
+        assert _limit_notes(p) == []
         p.settings.search.slope_limit_left = 5.0
         p.settings.search.slope_limit_right = 40.0
-        notes = settings_warnings(p)
-        assert notes and "slope limits" in notes[0].lower()
+        assert len(_limit_notes(p)) == 1, settings_warnings(p)
 
     def test_grid_search_does_not_warn(self):
         """Grid Search does read them, so there is nothing to say."""
-        from ogr_slip2d.analysis_runner import settings_warnings
-
         p = _small_slope()
         p.settings.search.slope_limit_left = 5.0
         p.settings.search.slope_limit_right = 40.0
-        assert settings_warnings(p) == []
+        assert _limit_notes(p) == []

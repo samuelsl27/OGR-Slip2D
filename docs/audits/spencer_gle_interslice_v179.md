@@ -1,9 +1,14 @@
 # Spencer y GLE devuelven prácticamente el valor de Bishop
 
-**Estado: la hipótesis de partida era la equivocada.** Ver el apartado de
-v0.1.90 justo debajo antes que nada. El resto del documento se conserva tal
-como se escribió en v0.1.79 porque las mediciones siguen siendo válidas; lo
-que cambia es qué explican.
+**Estado: la hipótesis de partida era la equivocada, y el síntoma era peor de
+lo que este documento decía.** Léanse los dos apartados de actualización antes
+que nada: el de **v0.1.90** (el alcance de λ) y el de **0.1.97** (la separación
+medida sin ruido de parada resulta ser CERO, y la causa es demostrable desde
+el código). El resto del documento se conserva tal como se escribió en v0.1.79
+porque las mediciones siguen siendo válidas; lo que cambia es qué explican —
+con una salvedad que el apartado de 0.1.97 detalla: las de la tabla del
+síntoma se tomaron a la tolerancia por defecto y llevan ruido de parada
+dentro.
 
 ---
 
@@ -51,6 +56,83 @@ grande de la población nunca llegaba a resolverse, y que la que se resolvía
 salía muy bien. Antes de seguir buscando en la ecuación hay que **rehacer la
 comparación con Bishop sobre la población completa**, que hasta v0.1.90 no
 existía.
+
+---
+
+## ACTUALIZACIÓN 0.1.97 — la separación no es pequeña, es CERO, y la que se veía era ruido de parada
+
+Esta salió de otro sitio: de medir el defecto **D03c** del banco de
+verificación, que preguntaba si la tolerancia de parada (0,005, absoluta sobre
+el factor de seguridad) explicaba la banda de resultados marcados `REVISAR`.
+No la explica —el efecto máximo es 0,155 % contra un `REVISAR` mínimo de
+2,17 %— pero al medirlo aparece esto.
+
+**Lo que este documento no había hecho nunca.** Arriba, en «Lo que NO es», se
+lee «no es falta de convergencia», y se sostenía sólo sobre `converged` a
+True. **Nadie había variado la tolerancia.** Con Spencer parando su búsqueda de
+λ sobre el residuo `|F_f − F_m| < tol` y devolviendo `(F_f + F_m)/2`, una
+tolerancia de 0,005 acota ese residuo a la mitad: **±0,0025, o ±0,18 % sobre
+un FoS de 1,4** — el mismo orden que las separaciones que este documento
+llevaba once versiones citando.
+
+**Medido a 10⁻⁷, sobre el mismo círculo**, en los cinco modelos que el banco
+usa para esto:
+
+| Modelo | círculo | Bishop | Spencer | separación |
+|---|---|---|---|---|
+| ACADS 1(c) | (34,121 · 43,254) R 18,781 | 1,405090162 | 1,405090142 | **−0,000001 %** |
+| ACADS 1(d) | (35,0 · 53,75) R 29,564 | 1,016579644 | 1,016579628 | **−0,000002 %** |
+| Arai & Tagyo ej.2 | (26,264 · 52,042) R 38,046 | 0,421359426 | 0,421359422 | **−0,000001 %** |
+| Duncan & Wright | (500,0 · 172,5) R 170,053 | 1,239159044 | 1,239159035 | **−0,000001 %** |
+| Duncan & Wright | (54,2 · 50,0) R 49,889 | 1,235635348 | 1,235635337 | **−0,000001 %** |
+
+GLE da lo mismo. Las fuentes separan Spencer de Bishop entre un 1,7 y un 2,6 %
+en estos mismos problemas.
+
+**Dos cosas cambian con esto.**
+
+1. **El síntoma era más grave de lo que este documento decía.** La tabla de
+   arriba registra «OGR: Spencer −0,065 %» y «−0,02 %», y se leía como *una
+   separación pequeña*. **No era una separación pequeña: era ruido de
+   parada.** A tolerancia suficiente el residuo se va y queda cero exacto, a
+   siete cifras. Un número que se estaba interpretando como señal era el
+   criterio de parada.
+
+2. **La causa deja de ser una sospecha y pasa a ser demostrable desde el
+   código**, sin necesidad de medir nada: en `spencer.py` la rama de momentos
+
+   ```python
+   S_term = (c_loc * b + (W_eff - u * b) * tan_phi) / m_alpha   # sin lam
+   num_m += S_term
+   den_m += W_eff * math.sin(alpha)                             # sin lam
+   new_fm = num_m / den_m
+   ```
+
+   **no contiene λ por ninguna parte** — `m_alpha` tampoco. En la raíz, donde
+   `F_f = F_m`, ambas ramas comparten la `F` de la iteración interna, así que
+   ese valor común satisface exactamente la ecuación de punto fijo de Bishop.
+   λ decide **dónde** se cruzan las dos ramas; no puede mover el valor en que
+   se cruzan. Para una superficie circular, Spencer tal como está escrito es
+   **incapaz** de dar algo distinto de Bishop.
+
+   Eso confirma la sospecha 1 de «Lo que sí hace falta mirar» y **cierra la
+   sospecha 2**: el cruce `F_f = F_m` sí se resuelve, y sí es cierto que «no
+   significa nada», pero no porque el criterio esté mal — porque la rama de
+   momentos es constante en λ por construcción.
+
+**Y la nota sobre las tolerancias dobles de `test_slide_validation_ej1.py`
+sigue en pie, con un matiz.** Los errores de 0,64 % y 0,53 % que se les
+concedían se midieron a la tolerancia por defecto, así que **parte de esos
+números era ruido de parada** y no error de formulación. Cuando se corrija el
+fondo, la revalidación tendrá que hacerse a tolerancia estrecha para que la
+comparación mida la ecuación y no el criterio de parada.
+
+**Lo que protege esto de aquí en adelante**:
+`tests/test_convergence_tolerance_v198.py`. Fija que apretar la tolerancia no
+mueve el punto fijo más de lo que su mecanismo predice — y **deliberadamente
+no fija** que los cuatro métodos coincidan a 10⁻⁷, porque eso es el síntoma de
+este documento y consagrarlo en un test sería exactamente lo que prohíbe la
+regla 1.
 
 ---
 
