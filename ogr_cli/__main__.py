@@ -79,6 +79,11 @@ METHOD_ALIASES = {
     "gle": "gle_morgenstern_price",
     "morgenstern_price": "gle_morgenstern_price",
     "lowe": "lowe_karafiath",
+    "corps1": "corps_engineers_1",
+    "corps2": "corps_engineers_2",
+    "coe1": "corps_engineers_1",
+    "coe2": "corps_engineers_2",
+    "modified_swedish": "corps_engineers_1",
 }
 
 

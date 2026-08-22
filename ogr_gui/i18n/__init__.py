@@ -1206,6 +1206,24 @@ _DICTS: dict[str, dict[str, str]] = {
             "Morgenstern-Price. Constante hace GLE equivalente a Spencer. "
             "x va de 0 en el extremo IZQUIERDO de la superficie a 1 en el "
             "derecho, sea cual sea la dirección de rotura.",
+        "Interslice forces:": "Fuerzas entre dovelas:",
+        "Effective (water thrust separated)":
+            "Efectivas (empuje del agua aparte)",
+        "Total (water thrust included)": "Totales (empuje del agua incluido)",
+        "Whether the interslice resultant whose inclination is "
+        "prescribed represents the effective force between slices, "
+        "with the water pressure on the vertical faces applied "
+        "separately, or the total force including it. USACE EM "
+        "1110-2-1902 treats both as valid and states that the factor "
+        "of safety differs between them. Read by Lowe-Karafiath and "
+        "Corps of Engineers #1 and #2.":
+            "Si la resultante entre dovelas cuya inclinación se impone "
+            "representa la fuerza efectiva entre dovelas, con la presión "
+            "de agua sobre las caras verticales aplicada aparte, o la "
+            "fuerza total que la incluye. La EM 1110-2-1902 del USACE da "
+            "las dos por válidas y advierte de que el factor de seguridad "
+            "difiere entre ellas. La leen Lowe-Karafiath y Corps of "
+            "Engineers #1 y #2.",
         "None": "Ninguna",
         "Transient groundwater": "Filtración transitoria",
         "Staged transient seepage. Its solver options are on the "

@@ -200,6 +200,91 @@ cubre. El arreglo previsible es reemplazar la lista
 código, pero **no se toca sin saber antes por qué nadie lo notó**: si el
 bloque fuera inalcanzable, el arreglo sería un parche sobre código muerto.
 
+## 9 · La rama de fuerzas de Spencer y GLE lleva cos α donde va sec α — ABIERTO (v0.1.98)
+
+**Estado: medido, con reproductor, sin corregir. Regla 6.** Encontrado al
+buscar una identidad con la que validar los métodos Corps of Engineers.
+
+La EM 1110-2-1902 §C-4a dice que la hipótesis de fuerzas entre dovelas
+**horizontales** en un método de sólo equilibrio de fuerzas *«is sometimes
+referred to as the "Simplified Janbu" Method»*. Es una identidad exacta, así que
+sirve de prueba. El motor nuevo de inclinación prescrita, con θ = 0, la pasa:
+**0,845089** contra **0,845273** del `janbu_simplified` de OGR, un 0,02 %.
+
+`GLEMorgensternPrice._inner_solve` con λ = 0 —la misma hipótesis— devuelve
+**0,4119**.
+
+**La causa, una línea, la misma en los dos archivos**:
+
+```
+ogr_slip2d/methods/spencer.py:314   num_f += S_term * math.cos(alpha)
+ogr_slip2d/methods/gle.py:377       num_f += S_term * math.cos(alpha)
+ogr_slip2d/methods/janbu.py:150     n_alpha = cos²α·(1 + tanα·tanφ/F)
+                                    es decir  S_term / cos α
+```
+
+Los denominadores de los tres son **idénticos** —`Σ (W·tanα + H_sísmico +
+H_agua + H_soporte)`—, comprobado leyéndolos. Así que las dos expresiones
+difieren en **cos²α por dovela**, y en un talud de 45-64° eso es un factor 2.
+
+**Cuál es la correcta**: el equilibrio horizontal del conjunto con X = 0 da
+
+```
+N = (W − S·sinα)/cosα      (equilibrio vertical de la dovela)
+Σ N·sinα = Σ S·cosα        (equilibrio horizontal del conjunto)
+  ⇒  Σ W·tanα = Σ S·(cosα + tanα·sinα) = Σ S·sec α
+```
+
+**Reproductor** (círculo de referencia de Ej_1, 25 dovelas, seco):
+
+| forma del numerador | F |
+|---|---|
+| `S_term · cos α` — lo que hay hoy en Spencer y GLE | **0,3074** |
+| `S_term / cos α` — el equilibrio horizontal | **0,8451** |
+| `janbu_simplified` de OGR | **0,8453** |
+
+**Por qué ha sobrevivido a la validación, que es la parte interesante**:
+Spencer y GLE publican el factor en la λ donde `F_f = F_m`. `F_m` es correcto y
+bishopiano. Un `F_f` deprimido no desplaza mucho el valor final —lo empuja hacia
+Bishop— pero **sí desplaza hacia arriba la λ de cruce**. Eso explica de golpe
+tres cosas ya escritas y nunca explicadas:
+
+- `docs/audits/spencer_gle_interslice_v179.md`, abierto desde v0.1.79: «Spencer
+  y GLE se separan de Bishop mucho menos de lo que dicen las referencias»;
+- la medida con piezométrica del §7 de este archivo: con agua la referencia
+  separa +1,89 % y OGR separa −0,00 %;
+- el rango de λ, ensanchado **dos veces** persiguiendo raíces que no llegaban: a
+  ±1,5 en v0.1.74 porque el círculo de Ej_1 «necesitaba λ = 1,4919», y a +6 en
+  v0.1.90 por 61 candidatas de Simulated Annealing que ninguna resolvía. Las dos
+  ampliaciones se justificaron por síntomas, no por causa.
+
+**Y corrige un diagnóstico que ya estaba escrito.** El defecto **D10** del banco
+de verificación mide desde el 2026-08-20 que `F_f(0)/Janbu` vale
+0,500 · 0,701 · 0,774 · 0,794 en cuatro problemas, y lo atribuye a que «λ no
+llega a la normal en la base» (`m_alpha` sin λ, `W_eff` sin `X`). Eso no puede
+ser la causa **en λ = 0**, porque en λ = 0 no hay cortante entre dovelas y las
+dos omisiones son correctas ahí. El factor `cos²α` sí lo explica, y explica
+además que el ratio **no sea constante**: pondera por dovela, así que da menos
+cuanto más empinada es la superficie — el problema 8 es no circular con tramos
+muy inclinados y el 1 y el 6 son suaves. Un factor de escala no haría eso.
+
+La otra mitad de D10 sigue en pie y es independiente: `F_m(0)/Bishop` se queda
+en 0,961–0,979, un 2–4 % corto, y eso no lo toca esta línea.
+
+**Qué hace falta para cerrarlo**: no es escribir la línea, es **revalidar**. El
+cambio mueve dos métodos validados y toca la λ de todos los casos de referencia,
+así que hay que publicar el desplazamiento de Ej_1, Ej_2, los cinco casos de
+`validacion/casos/` y los problemas del banco donde Spencer o GLE tienen valor
+publicado — y comprobar si la separación respecto de Bishop pasa a ser la que
+las referencias publican. Es una versión entera.
+
+**Lo que NO hay que hacer**: cambiarlo de paso, dentro de otra tarea, porque
+«se ve que está mal».
+
+**Signo**: desconocido en el factor final; en λ, la desplaza hacia arriba.
+
+---
+
 ## 8 · La carga de vuelta del paralelismo — ABIERTO (v0.1.97)
 
 **Estado: medido, con el camino identificado.** La búsqueda en paralelo da
@@ -270,10 +355,36 @@ Las dos formulaciones son consistentes consigo mismas. Difieren en si la
 inclinación prescrita θ = ½(β+α) se aplica a la fuerza interdovela **total** o
 a la **efectiva**. Ninguna acierta en los dos casos.
 
-**Qué haría falta para cerrarlo**: el factor de seguridad que da la referencia
-con **Lowe-Karafiath** sobre un modelo con **agua embalsada** — la propia
-verificación #70 sirve, o cualquier talud con la lámina de agua por encima del
-contorno externo. Dos lecturas posibles y las dos son concluyentes:
+### El dato externo apareció en v0.1.98, y no basta
+
+Buscando la fuente de los métodos Corps of Engineers salió que la EM
+1110-2-1902 se pronuncia sobre exactamente esta pregunta, y en los dos sentidos:
+
+- §C-4a, sobre la hipótesis del Corps: *«Total interslice forces are used in much
+  of the computer software …, but **effective forces are recommended** when the
+  side forces are assumed to be parallel to the average embankment slope.»*
+- §C-4a, sobre Lowe-Karafiath: *«This assumption appears to be better than any of
+  the assumptions described earlier, **especially when the side forces represent
+  total, rather than effective, forces**.»*
+- y su propio ejemplo resuelto del apéndice G, §G-5a, usa **totales**: *«The
+  interslice forces are total forces and thus include the water pressures on the
+  sides of the slices … also consistent with most computer software.»*
+
+O sea: para el Corps, efectivas; para Lowe-Karafiath, **totales** — que es lo
+contrario de lo que OGR hace. Eso apoya el −10,89 % de `Ej_2` y **no explica el
+problema 70**, donde quitar el empuje daba 5,0 y 0,2203 y destruía la
+invarianza con la profundidad del agua. Un dato que apoya una mitad y contradice
+la otra no cierra nada, así que el pendiente sigue abierto.
+
+Lo que sí cambió en v0.1.98: el reparto es ahora un **ajuste del proyecto**
+(`MethodsSettings.interslice_forces`), predeterminado en `effective`, de modo que
+ningún número validado se mueve y la bifurcación se puede medir sin parchear
+código. Los métodos Corps nuevos leen el mismo ajuste.
+
+**Qué sigue haciendo falta para cerrarlo**: el factor de seguridad que da la
+referencia con **Lowe-Karafiath** sobre un modelo con **agua embalsada** — la
+propia verificación #70 sirve, o cualquier talud con la lámina de agua por
+encima del contorno externo. Dos lecturas posibles y las dos son concluyentes:
 
 - si da ≈ 1,6 → la referencia desdobla efectiva/total, y nuestro −10,9 % viene
   de otro sitio dentro del mismo término;

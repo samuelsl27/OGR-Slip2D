@@ -16,10 +16,12 @@ Public API:
 
 Author: Samuel Sáez López — PhD Student, UPCT
 """
-__version__ = "0.1.97"
+__version__ = "0.1.98"
 
 from .methods import (
     BishopSimplified,
+    CorpsOfEngineers1,
+    CorpsOfEngineers2,
     GLEMorgensternPrice,
     JanbuCorrected,
     JanbuSimplified,
@@ -55,6 +57,8 @@ __all__ = [
     "Spencer",
     "GLEMorgensternPrice",
     "LoweKarafiath",
+    "CorpsOfEngineers1",
+    "CorpsOfEngineers2",
     "constant",
     "half_sine",
     "trapezoidal",

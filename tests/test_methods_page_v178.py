@@ -23,9 +23,19 @@ drifts in. So the test does not assert "Lowe-Karafiath is enabled" — that
 would be a third list. It asserts the two sets agree, which is the
 property that makes the drift impossible.
 
-Consequence worth stating: Corps of Engineers #1 and #2 are genuinely not
-in the registry, so they must stay disabled. The day someone registers
-them, this test keeps passing and the checkboxes light up on their own.
+Consequence worth stating: Corps of Engineers #1 and #2 were genuinely not
+in the registry, so they had to stay disabled. The day someone registered
+them, this test would keep passing and the checkboxes would light up on
+their own.
+
+**That day was v0.1.98**, and it is the proof the invariant is worth
+having: the two methods were implemented and registered, and not one line
+of ``_MethodsPage`` changed. The test below used to assert the opposite —
+that they stay grey — and it has been rewritten rather than deleted,
+because the half of the invariant it guards is still needed: the fix must
+not turn the greying off wholesale. What changed is only which methods
+are on which side of it, and the first test in this file, the one that
+compares the two SETS, never had to change at all.
 """
 from __future__ import annotations
 
@@ -65,18 +75,41 @@ class TestTheMethodsPageAsksTheRegistry:
         assert cb.isEnabled(), "Lowe-Karafiath is registered and validated"
         assert not cb.toolTip(), "no 'not implemented' tooltip on a method"
 
-    def test_corps_of_engineers_stays_disabled(self):
-        """The other half of the invariant: the fix must not turn the
-        greying off wholesale. These two really are missing."""
+    def test_corps_of_engineers_is_now_offered(self):
+        """Was ``test_corps_of_engineers_stays_disabled`` until v0.1.98.
+
+        Why it changed. Until v0.1.97 these two ids were in the
+        ``LEMMethod`` enum and in no registry, which is exactly what this
+        assertion pinned. v0.1.98 implemented them — Modified Swedish,
+        validated against the slice tables USACE publishes in EM
+        1110-2-1902 Appendix G — so the honest assertion is now the
+        opposite one. It is rewritten rather than deleted because the
+        claim it protects has not changed: the greying must follow the
+        registry and nothing else, in both directions.
+
+        If a third method is ever declared in the enum without being
+        implemented, this test is where to state it, and the set
+        comparison above will already be enforcing it.
+        """
         from ogr_core.project.settings import LEMMethod as LEM
         from ogr_slip2d.methods import method_registry
         registry = set(method_registry())
         page = _methods_page()
         for m in (LEM.CORPS_OF_ENGINEERS_1, LEM.CORPS_OF_ENGINEERS_2):
-            assert m.value not in registry, m.value
+            assert m.value in registry, m.value
             cb = page.checkboxes[m.value]
-            assert not cb.isEnabled(), m.value
-            assert cb.toolTip(), f"{m.value} needs to say why it is grey"
+            assert cb.isEnabled(), m.value
+            assert not cb.toolTip(), (
+                f"{m.value} is implemented; no 'not implemented' tooltip")
+
+    def test_nothing_in_the_enum_is_unimplemented_any_more(self):
+        """The state of the gap itself, named. Nine declared, nine
+        registered — so today no checkbox on that page is grey, and the
+        day one is, the set comparison above says which and why."""
+        from ogr_core.project.settings import LEMMethod as LEM
+        from ogr_slip2d.methods import method_registry
+        missing = {m.value for m in LEM} - set(method_registry())
+        assert not missing, sorted(missing)
 
     def test_every_enum_member_has_a_checkbox(self):
         """A method the engine knows about but the page never lists is

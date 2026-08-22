@@ -99,6 +99,21 @@ class MethodsSettings:
     # the only possibility. Ids come from
     # ``ogr_slip2d.methods.gle.INTERSLICE_FUNCTIONS``.
     interslice_function: str = "half_sine"
+    # v0.1.98 — for the three methods that PRESCRIBE the inter-slice
+    # inclination (Lowe-Karafiath, Corps of Engineers #1 and #2), whether
+    # the resultant whose inclination is prescribed is the EFFECTIVE
+    # inter-slice force — the water pressure on the vertical faces taken
+    # out and applied as its own horizontal load — or the TOTAL one.
+    #
+    # USACE (2003), EM 1110-2-1902 §C-4a treats both as legitimate and
+    # states that the computed factor of safety differs between them. It
+    # recommends effective forces for the Corps assumption, yet its own
+    # worked example in Appendix G uses total forces, "consistent with
+    # most computer software". Nothing in this program had ever offered
+    # the choice: it was effective, always, and that is the open question
+    # of D20. "effective" stays the default so no stored project moves.
+    # Values: "effective" | "total".
+    interslice_forces: str = "effective"
 
 
 @dataclass

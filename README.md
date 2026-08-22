@@ -49,7 +49,7 @@ results can be checked instead of believed.
 
 ### Limit equilibrium
 
-Seven methods, each validated against a reference case:
+Nine methods, each validated against a reference case:
 
 | Method | Equilibrium satisfied | Validation error |
 |---|---|---|
@@ -60,6 +60,13 @@ Seven methods, each validated against a reference case:
 | Spencer | force + moment | +0.64 % |
 | GLE / Morgenstern-Price | force + moment | +0.53 % |
 | Lowe-Karafiath | force | +0.09 % |
+| Corps of Engineers #1 | force | −0.5 % |
+| Corps of Engineers #2 | force | −0.5 % |
+
+The two Corps of Engineers methods — the Modified Swedish procedure — are
+validated slice by slice against the worked example published in USACE
+EM 1110-2-1902, Appendix G, whose tables print the interslice force and
+base normal columns.
 
 Six search algorithms — grid, slope, auto-refine, block, path and simulated
 annealing — over **circular and non-circular** surfaces, with composite

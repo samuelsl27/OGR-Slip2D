@@ -53,6 +53,8 @@ _METHOD_NAMES = {
     "gle_morgenstern_price": "GLE / Morgenstern-Price",
     "morgenstern_price": "GLE / Morgenstern-Price",
     "lowe_karafiath": "Lowe-Karafiath",
+    "corps_engineers_1": "Corps of Engineers #1",
+    "corps_engineers_2": "Corps of Engineers #2",
 }
 
 

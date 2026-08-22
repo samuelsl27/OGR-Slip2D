@@ -56,6 +56,13 @@ __all__ = [
 _LAMBDA_METHODS = ("spencer", "gle_morgenstern_price")
 _INTERSLICE_METHODS = ("gle_morgenstern_price",)
 
+# v0.1.98 — the methods that PRESCRIBE the inter-slice inclination, and so
+# are the only ones for which "is Z the effective or the total inter-slice
+# force?" is a question at all. Spencer and GLE solve for the inclination
+# and are insensitive to the split; Bishop and Janbu assume it horizontal.
+_PRESCRIBED_THETA_METHODS = (
+    "lowe_karafiath", "corps_engineers_1", "corps_engineers_2")
+
 # Searches that enumerate rather than draw at random. Seeding them would
 # mean handing an argument they can only ignore.
 _DETERMINISTIC_SEARCHES = ("grid", "auto_refine")
@@ -260,6 +267,9 @@ def build_method(project, method_id: str, num_slices: Optional[int] = None):
     if method_id in _INTERSLICE_METHODS:
         kwargs["interslice_func"] = interslice_function(
             s.methods.interslice_function)
+    if method_id in _PRESCRIBED_THETA_METHODS:
+        kwargs["interslice_forces"] = getattr(
+            s.methods, "interslice_forces", "effective")
 
     method = cls(**kwargs)
 

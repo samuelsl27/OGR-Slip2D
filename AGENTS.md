@@ -65,7 +65,7 @@ de una versión, la suite entera y sin argumentos.
 | Ruta | Contenido |
 |---|---|
 | `ogr_core/` | Geometría, materiales, cargas, soportes, proyecto, hidráulica, estadística, anotaciones, DXF |
-| `ogr_slip2d/` | Motor LEM: 7 métodos, 6 búsquedas, rebanado, foco, optimización, retroanálisis |
+| `ogr_slip2d/` | Motor LEM: 9 métodos, 6 búsquedas, rebanado, foco, optimización, retroanálisis |
 | `ogr_fem2d/` | Elementos finitos: mallado y solvers de filtración |
 | `ogr_gui/` | Interfaz PySide6: lienzo, ~30 diálogos, ventanas de interpretación, i18n |
 | `ogr_cli/` | Interfaz de línea de comandos |
@@ -89,8 +89,9 @@ de instantánea consagra el bug.
 
 Ejemplos de lo que sí cuenta, todos ya en la suite:
 
-- el factor de seguridad de referencia de un caso conocido (los 7 métodos
-  LEM están validados así, con error < 0.7 %);
+- el factor de seguridad de referencia de un caso conocido (los métodos
+  LEM están validados así, con error < 0.7 %; los dos Corps of Engineers,
+  contra las tablas dovela a dovela de la EM 1110-2-1902);
 - una solución cerrada (el solver de filtración se contrasta con la
   respuesta escalón erfc y con las medias armónica y aritmética por
   capas);

@@ -282,6 +282,14 @@ class _MethodsPage(QWidget):
         (LEM.LOWE_KARAFIATH, "Lowe-Karafiath"),
     ]
 
+    #: The methods that read ``interslice_forces``. Same three ids as
+    #: ``analysis_runner._PRESCRIBED_THETA_METHODS``.
+    _PRESCRIBED_THETA = (
+        LEM.LOWE_KARAFIATH.value,
+        LEM.CORPS_OF_ENGINEERS_1.value,
+        LEM.CORPS_OF_ENGINEERS_2.value,
+    )
+
     def __init__(self, s: ProjectSettings) -> None:
         super().__init__()
         self.s = s
@@ -306,9 +314,11 @@ class _MethodsPage(QWidget):
             # four versions. It is the same failure `build_method` already
             # documents for `janbu_corrected` (analysis_runner.py:160-164):
             # a second list of methods can only ever drift from the first.
-            # Corps of Engineers #1/#2 are genuinely absent from the
-            # registry, so they stay disabled — and the day someone
-            # registers them, they light up on their own.
+            # Corps of Engineers #1/#2 were genuinely absent from the
+            # registry until v0.1.98, so they stayed disabled — and the day
+            # someone registered them, they lit up on their own, with no
+            # edit here. That day was v0.1.98, and this block did not
+            # change: that is the whole point of asking the registry.
             implemented = m.value in registry
             if not implemented:
                 cb.setEnabled(False)
@@ -348,16 +358,48 @@ class _MethodsPage(QWidget):
             "Spencer. x runs from 0 at the LEFT end of the surface to 1 "
             "at the right, whatever the failure direction."))
         form.addRow(tr("Interslice force function:"), self.cbo_f)
+
+        # v0.1.98 — read only by the three methods that PRESCRIBE the
+        # inter-slice inclination, so it is gated on one of them being
+        # enabled, exactly like the function above is gated on GLE. An
+        # option that cannot change the result of the analysis you have
+        # configured is worse than no option (rule 7).
+        self.cbo_zf = QComboBox()
+        for label, value in (
+            (tr("Effective (water thrust separated)"), "effective"),
+            (tr("Total (water thrust included)"), "total"),
+        ):
+            self.cbo_zf.addItem(label, value)
+        i = self.cbo_zf.findData(
+            getattr(s.methods, "interslice_forces", "effective"))
+        self.cbo_zf.setCurrentIndex(max(0, i))
+        self.cbo_zf.setToolTip(tr(
+            "Whether the interslice resultant whose inclination is "
+            "prescribed represents the effective force between slices, "
+            "with the water pressure on the vertical faces applied "
+            "separately, or the total force including it. USACE EM "
+            "1110-2-1902 treats both as valid and states that the factor "
+            "of safety differs between them. Read by Lowe-Karafiath and "
+            "Corps of Engineers #1 and #2."))
+        form.addRow(tr("Interslice forces:"), self.cbo_zf)
         root.addWidget(conv)
 
         gle = self.checkboxes.get(LEM.GLE_MORGENSTERN_PRICE.value)
         if gle is not None:
             gle.toggled.connect(self._refresh_interslice)
+        for mid in self._PRESCRIBED_THETA:
+            cb = self.checkboxes.get(mid)
+            if cb is not None:
+                cb.toggled.connect(self._refresh_interslice)
         self._refresh_interslice()
 
     def _refresh_interslice(self) -> None:
         gle = self.checkboxes.get(LEM.GLE_MORGENSTERN_PRICE.value)
         self.cbo_f.setEnabled(bool(gle is not None and gle.isChecked()))
+        prescribed = [self.checkboxes.get(mid)
+                      for mid in self._PRESCRIBED_THETA]
+        self.cbo_zf.setEnabled(
+            any(cb is not None and cb.isChecked() for cb in prescribed))
 
     def apply(self) -> None:
         self.s.methods.enabled_methods = [
@@ -367,6 +409,7 @@ class _MethodsPage(QWidget):
         self.s.methods.tolerance = self.dsp_tol.value()
         self.s.methods.max_iterations = self.spn_iter.value()
         self.s.methods.interslice_function = self.cbo_f.currentData()
+        self.s.methods.interslice_forces = self.cbo_zf.currentData()
 
 
 # ----------------------------------------------------------------------

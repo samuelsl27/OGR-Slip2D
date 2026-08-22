@@ -52,7 +52,7 @@ comprobar en lugar de creer.
 
 ### Equilibrio límite
 
-Siete métodos, cada uno validado contra un caso de referencia:
+Nueve métodos, cada uno validado contra un caso de referencia:
 
 | Método | Equilibrio | Error de validación |
 |---|---|---|
@@ -63,6 +63,13 @@ Siete métodos, cada uno validado contra un caso de referencia:
 | Spencer | fuerzas + momentos | +0.64 % |
 | GLE / Morgenstern-Price | fuerzas + momentos | +0.53 % |
 | Lowe-Karafiath | fuerzas | +0.09 % |
+| Corps of Engineers #1 | fuerzas | −0.5 % |
+| Corps of Engineers #2 | fuerzas | −0.5 % |
+
+Los dos Corps of Engineers —el procedimiento Modified Swedish— están
+validados dovela a dovela contra el ejemplo resuelto que publica la
+EM 1110-2-1902 del USACE en su apéndice G, cuyas tablas imprimen las
+columnas de fuerza entre dovelas y de normal en la base.
 
 Seis algoritmos de búsqueda —malla, talud, refinamiento automático,
 bloques, trayectorias y recocido simulado— sobre superficies **circulares

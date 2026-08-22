@@ -8,6 +8,11 @@ from .bishop import BishopSimplified
 from .gle import GLEMorgensternPrice, constant, half_sine, trapezoidal
 from .janbu import JanbuCorrected, JanbuSimplified
 from .lowe_karafiath import LoweKarafiath
+from .modified_swedish import (
+    CorpsOfEngineers1,
+    CorpsOfEngineers2,
+    PrescribedInclinationMethod,
+)
 from .ordinary import OrdinaryFellenius
 from .spencer import Spencer
 
@@ -21,6 +26,9 @@ __all__ = [
     "Spencer",
     "GLEMorgensternPrice",
     "LoweKarafiath",
+    "CorpsOfEngineers1",
+    "CorpsOfEngineers2",
+    "PrescribedInclinationMethod",
     "half_sine",
     "constant",
     "trapezoidal",
