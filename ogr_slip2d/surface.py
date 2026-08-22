@@ -135,11 +135,35 @@ class SlipCircle:
     tension_cracks: list = field(default_factory=list)
 
     # ------------------------------------------------------------------
+    # v0.1.100 — how far ``R² − (x−xc)²`` may go negative and still
+    # count as "on the arc". RELATIVE to R², so the same circle in
+    # millimetres and in metres answers the same question the same way.
+    #
+    # It exists because the arc's own extremes, |x − xc| = R, are ordinary
+    # places for a ground crossing to fall — a circle whose centre sits at
+    # the crest elevation daylights exactly there, with a VERTICAL tangent —
+    # and no floating-point x lands on them exactly. On the reference circle
+    # of verification problem 23 (Low 1989), centre (18.001, 16.000),
+    # R = 15.556, the exit is x = 33.557 and ``33.557 − 18.001`` evaluates to
+    # 15.556000000000001: one ulp past R, hence disc = −5.7e−14, hence "not
+    # on the circle". The slicer dropped the last slice for that, silently,
+    # and Bishop came out 25 % low. See tests/test_tangent_surface_v1100.py.
+    _ARC_EPS = 1e-12
+
+    def _lower_arc_disc(self, x: float) -> Optional[float]:
+        """``R² − (x−xc)²``, clamped at the extremes. None if outside."""
+        dx = x - self.centre_x
+        disc = self.radius ** 2 - dx * dx
+        if disc < 0.0:
+            if disc > -self._ARC_EPS * self.radius ** 2:
+                return 0.0
+            return None
+        return disc
+
     def base_y_at(self, x: float) -> Optional[float]:
         """Return the y-coordinate of the circle at x (lower arc)."""
-        dx = x - self.centre_x
-        disc = self.radius ** 2 - dx ** 2
-        if disc < 0:
+        disc = self._lower_arc_disc(x)
+        if disc is None:
             return None
         return self.centre_y - math.sqrt(disc)
 
@@ -147,11 +171,17 @@ class SlipCircle:
         """Inclination of the base at x [rad].
 
         Positive angles: base rises to the right (dy/dx > 0).
+
+        v0.1.100 — at the arc's extreme the tangent is VERTICAL, and this
+        returned 0.0, i.e. horizontal: the one answer that is not merely
+        imprecise but backwards. The old guard was also an ABSOLUTE
+        ``disc <= 1e-12``, against the project's rule that geometric
+        tolerances scale with the model.
         """
         dx = x - self.centre_x
-        disc = self.radius ** 2 - dx ** 2
-        if disc <= 1e-12:
-            return 0.0
+        disc = self._lower_arc_disc(x)
+        if disc is None or disc <= 0.0:
+            return math.copysign(math.pi / 2.0, dx) if dx else 0.0
         # y = yc - sqrt(R² - (x-xc)²)  →  dy/dx = (x-xc)/sqrt(...)
         dy_dx = dx / math.sqrt(disc)
         return math.atan(dy_dx)
@@ -195,9 +225,26 @@ class SlipCircle:
             sq = math.sqrt(disc)
             for t in ((-b - sq) / (2 * a), (-b + sq) / (2 * a)):
                 if -1e-9 <= t <= 1 + 1e-9:
-                    roots.append(round(p1.x + t * dx, 6))
+                    roots.append(p1.x + t * dx)
 
-        roots = sorted(set(roots))
+        # v0.1.100 — the roots used to be rounded to six decimals so that
+        # ``set()`` would collapse the one a shared profile vertex produces
+        # twice. Six decimals is plenty of x — but not plenty of y: where the
+        # arc is nearly vertical dy/dx runs into the thousands, so 5e−7 of x
+        # became 3.4e−4 of y, enough to place the endpoint ABOVE the ground
+        # and have the slicer throw the last slice away. Measured on the
+        # problem-23 profile with the centre at (18.001, 16.010): one slice
+        # lost, FoS 0.93 with 30 slices against 1.19.
+        #
+        # Duplicates are merged with a tolerance RELATIVE to the circle
+        # instead, which collapses the same pairs without spending precision.
+        roots.sort()
+        merged: list[float] = []
+        r_tol = 1e-9 * self.radius
+        for x in roots:
+            if not merged or x - merged[-1] > r_tol:
+                merged.append(x)
+        roots = merged
         out: list[tuple[float, float]] = []
         for k in range(len(roots) - 1):
             xa, xb = roots[k], roots[k + 1]

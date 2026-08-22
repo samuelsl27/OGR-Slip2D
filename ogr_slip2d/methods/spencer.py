@@ -245,7 +245,7 @@ class Spencer(LEMMethod):
         ff_last = math.nan
         fm_last = math.nan
 
-        for _ in range(80):
+        for _it in range(80):
             num_m = 0.0
             den_m = 0.0
             num_f = 0.0
@@ -292,7 +292,11 @@ class Spencer(LEMMethod):
 
                 # --- Moment equilibrium (driving = + Σ W·sin α) ----
                 num_m += S_term
-                den_m += W_eff * math.sin(alpha)
+                # v0.1.100 — the MOMENT side takes its arm from the
+                # geometry, see ``Slice.weight_arm_ratio``; the FORCE side
+                # below keeps sin(alpha), which there is a direction and
+                # not an arm.
+                den_m += W_eff * slide_sign * s.weight_arm_ratio
                 if kh > 0 and circle_R is not None:
                     y_cg = 0.5 * (
                         0.5 * (s.top_y_left + s.top_y_right)
@@ -334,7 +338,9 @@ class Spencer(LEMMethod):
 
             new_F = 0.5 * (new_fm + new_ff)
             ff_last, fm_last = new_ff, new_fm
-            if abs(new_F - F) < self.tolerance:
+            # v0.1.100 — not on the first pass; see
+            # ``BishopSimplified._general_moment_fos``.
+            if _it > 0 and abs(new_F - F) < self.tolerance:
                 return new_ff, new_fm
             F = max(0.2, min(new_F, 10.0))
 

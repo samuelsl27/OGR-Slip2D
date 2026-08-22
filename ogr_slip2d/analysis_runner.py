@@ -35,6 +35,7 @@ No Qt anywhere in this file — that is what makes it shareable.
 """
 from __future__ import annotations
 
+import math
 from typing import Callable, Optional
 
 from .methods import method_registry
@@ -46,6 +47,7 @@ __all__ = [
     "build_method",
     "build_search",
     "check_analysis_settings",
+    "daylight_tangent_note",
     "run_analysis",
     "settings_warnings",
 ]
@@ -236,6 +238,65 @@ def _failure_direction_note(project) -> list[str]:
 
 
 # ======================================================================
+#: How steep the slip surface's own tangent must be where it daylights,
+#: in degrees, before the run says that the factor of safety on that
+#: surface depends on the number of slices.
+#:
+#: A surface that leaves the ground VERTICALLY has an endpoint no finite
+#: slicing can represent: the last slice's base angle tends to 90 degrees
+#: as the count grows, and every method's contribution from that slice
+#: depends strongly on it, so refining keeps moving the answer instead of
+#: settling. Measured on the two published circles of verification problem
+#: 23 (Low 1989), in one and the same model:
+#:
+#:     exit tangent 90.00 deg   FoS 1.19207 -> 1.14739 over 30..240 slices
+#:                              (3.9 %, still falling)
+#:     exit tangent 74.43 deg   FoS 1.36835 -> 1.36482 over 30..240 slices
+#:                              (0.26 %, settled)
+#:
+#: 85 degrees sits in the gap between those two, and it is a REPORTING
+#: threshold, not a physical constant: nothing changes in the analysis on
+#: either side of it. Being told costs a glance; not being told cost this
+#: project anomaly A23-1, where a 25 % error read as convergence.
+_DAYLIGHT_TANGENT_WARN_DEG = 85.0
+
+
+def daylight_tangent_note(result, num_slices: int) -> list[str]:
+    """Warn when a critical surface leaves the ground near-vertically.
+
+    The factor of safety is correct for the slicing it was computed with;
+    what it is not, on such a surface, is independent of that slicing. The
+    reference values published for surfaces like this are themselves values
+    at a particular slice count.
+    """
+    surface = getattr(result, "surface", None)
+    angle_at = getattr(surface, "base_angle_at", None)
+    if angle_at is None:
+        return []
+    ends = [getattr(surface, "x_left", None),
+            getattr(surface, "x_right", None)]
+    if any(x is None for x in ends):
+        try:
+            ends = list(surface.x_range())
+        except Exception:  # noqa: BLE001
+            return []
+    steepest = 0.0
+    for x in ends:
+        try:
+            steepest = max(steepest, abs(math.degrees(angle_at(x))))
+        except Exception:  # noqa: BLE001
+            return []
+    if steepest < _DAYLIGHT_TANGENT_WARN_DEG:
+        return []
+    return [
+        f"The critical surface daylights at {steepest:.1f} deg from the "
+        f"horizontal, which is too steep for a fixed number of slices to "
+        f"resolve: its factor of safety depends on that number. It was "
+        f"computed with {num_slices} slices. Re-run with more and compare "
+        f"before quoting it."
+    ]
+
+
 def build_method(project, method_id: str, num_slices: Optional[int] = None):
     """The configured LEM method object for ``method_id``, or None.
 
@@ -480,5 +541,14 @@ def run_analysis(project, method_ids=None,
         if search is None:  # pragma: no cover - guarded by the check above
             continue
         results[mid] = search.run(project)
+        # v0.1.100 — a surface that daylights near-vertically has a factor
+        # of safety that moves with the slice count. Said once per method,
+        # on the surface the run actually reports.
+        crit = getattr(results[mid], "critical", None)
+        if crit is not None:
+            for note in daylight_tangent_note(crit, search.num_slices):
+                line = f"{mid}: {note}"
+                if line not in warnings:
+                    warnings.append(line)
 
     return AnalysisOutcome(results, factor_report, warnings, project)

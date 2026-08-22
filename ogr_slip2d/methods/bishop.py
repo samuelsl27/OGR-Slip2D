@@ -271,7 +271,22 @@ class BishopSimplified(LEMMethod):
                     fos=math.nan, converged=False, iterations=iterations,
                     method_id=self.METHOD_ID, surface=surface, slices=slices,
                     error_message="Non-physical factor of safety")
-            if abs(new_fos - fos) < self.tolerance:
+            # v0.1.100 — never on the FIRST pass. The stopping rule is a
+            # STEP between two successive iterates, and the initial guess is
+            # not an iterate: comparing against it measures the distance from
+            # a value chosen by the program, not the distance to a fixed
+            # point. Where the map is slow near the guess the two look the
+            # same and are not — on the ACADS 1(c) validation case a circle
+            # daylighting at 90 deg mapped F = 1.0 to 0.995, inside the
+            # model's own tolerance of 0.005, and was published as converged
+            # with a factor of safety of 0.995 whose real fixed point is
+            # 5.51. It then won the search, 29 % below the published value.
+            #
+            # The contraction argument that justifies this criterion (see
+            # tests/test_convergence_tolerance_v198.py) is about ITERATES; it
+            # says nothing about the first step, so the first step does not
+            # get to end the iteration.
+            if it > 1 and abs(new_fos - fos) < self.tolerance:
                 fos = new_fos
                 converged = True
                 break
@@ -324,7 +339,11 @@ class BishopSimplified(LEMMethod):
             # v0.1.61 — the gravity driving term uses the TOTAL vertical
             # load (soil + ponded water); both act at the slice's x, so
             # they share the moment arm R·sin α.
-            denominator += slide_sign * f.w_total * math.sin(s.base_angle)
+            # v0.1.100 — the arm of this vertical load is a GEOMETRIC
+            # quantity, not the sine of the base angle; the two coincide
+            # only while the base is the tangent at the slice's own x.
+            # See ``Slice.weight_arm_ratio``.
+            denominator += slide_sign * f.w_total * s.weight_arm_ratio
             if kh > 0 and circle_R is not None:
                 y_cg = 0.5 * (
                     0.5 * (s.top_y_left + s.top_y_right)
@@ -520,7 +539,9 @@ class BishopSimplified(LEMMethod):
                     ),
                 )
 
-            if abs(new_fos - fos) < self.tolerance:
+            # See the note in ``_general_moment_fos``: the first step is
+            # measured from the initial guess, not from an iterate.
+            if it > 1 and abs(new_fos - fos) < self.tolerance:
                 fos = new_fos
                 converged = True
                 break

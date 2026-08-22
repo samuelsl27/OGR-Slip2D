@@ -146,7 +146,9 @@ class OrdinaryFellenius(LEMMethod):
             strength = tau * s.base_length
 
             driving = (
-                slide_sign * W * math.sin(s.base_angle)
+                # v0.1.100 — geometric moment arm, see
+                # ``Slice.weight_arm_ratio``.
+                slide_sign * W * s.weight_arm_ratio
                 + H * math.cos(s.base_angle)
             )
             if circle_R is not None:

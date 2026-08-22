@@ -304,8 +304,25 @@ class TestOptimisation:
 
     def test_densification_is_what_makes_it_work(self):
         """The measured finding of this phase: with the four vertices a
-        Path Search produces, the walk improves nothing; densified, it
-        lowers the factor of safety appreciably."""
+        Path Search produces, the walk barely moves the factor of safety;
+        densified, it lowers it appreciably.
+
+        v0.1.100 — this used to assert ``plain.improvement <= 1e-6``, an
+        exact "improves nothing", and the number it rested on came from a
+        surface that was never legitimate. The Path Search minimum this test
+        started from, FoS 0.88281 at vertices (44.24, 50) … (76.94, 25), was
+        sliced into TWELVE slices of the fourteen asked for: the slicer used
+        to drop a slice it could not build and say nothing, so a surface two
+        slices short of its own length won the search. Refusing it (anomaly
+        A23-1) moves the start to 0.91075 with all fourteen, and on THAT
+        surface the plain walk does find a step — 0.0007, against 0.023
+        densified.
+
+        The finding is the CONTRAST, and it survives with room to spare:
+        densification buys more than an order of magnitude. Asserting the
+        contrast rather than the exact zero is also what stops this test
+        from breaking on the next 1e-16 that flips one accept/reject.
+        """
         p, ev, surf, _f0 = self._start()
         _s1, _r1, plain = optimize_surface(
             p, ev, surf, OptimizeSettings(max_iterations=120, seed=7,
@@ -313,8 +330,21 @@ class TestOptimisation:
         _s2, _r2, dense = optimize_surface(
             p, ev, surf, OptimizeSettings(max_iterations=200, seed=7,
                                           densify_to=12))
-        assert plain.improvement <= 1e-6
         assert dense.improvement > 0.01, dense.summary()
+        assert dense.improvement > 10.0 * plain.improvement, (
+            plain.summary(), dense.summary())
+
+    def test_the_starting_surface_is_fully_sliced(self):
+        """Why the numbers above are what they are, pinned separately.
+
+        A Path Search minimum built from fewer slices than it asked for is
+        not a minimum, it is a shorter surface. Before v0.1.100 this one was
+        twelve of fourteen."""
+        from ogr_slip2d.slicer import slice_surface
+        p, _ev, surf, _f0 = self._start()
+        sl = slice_surface(p, surf, 14)
+        assert sl is not None
+        assert len(sl) == 14, len(sl)
 
     def test_never_returns_a_worse_surface(self):
         """A walk that ends worse than it started would be useless: only

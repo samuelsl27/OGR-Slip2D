@@ -73,6 +73,23 @@ class Slice:
     # ``weight == gamma * height * width`` has to stay exactly true, and it
     # is a test. None falls back to the chord midpoint.
     top_y_mean: Optional[float] = None
+    # v0.1.100 — moment arm of a VERTICAL load applied on this slice, about
+    # the surface's moment axis, divided by R. The moment methods write the
+    # driving term as ``Σ W·sin α``, which is that arm only while α is the
+    # tangent AT the slice's own abscissa; since the base became the chord
+    # (see ``slice_surface``) it no longer is, and on a circle the arm is
+    # simply ``(x_centre − x_c)/R``, exactly.
+    #
+    # Getting this back exactly is not cosmetic. On an already-submerged
+    # slope the added water weight and the added hydrostatic thrust must
+    # cancel term for term, and the cancellation telescopes only when the
+    # weight's arm is the true one: with ``sin α`` of the chord it held to
+    # 2.4e-4 at 50 slices instead of to 1e-15, and two separate tests exist
+    # in this project precisely to catch that.
+    #
+    # ``sin(base_angle)`` for anything that is not a circle, which is what
+    # those methods used before and still their only arm there.
+    weight_arm_ratio: float = 0.0
     # Derived scalars
     weight: float = 0.0          # kN/m (per unit out-of-plane width)
     pore_pressure: float = 0.0   # kPa (at the midpoint of the base)
@@ -757,43 +774,122 @@ def slice_surface(
 
     result = Slices()
 
+    # v0.1.100 — THE SLICER BUILDS ONE SLICE PER INTERVAL, OR NONE AT ALL.
+    #
+    # Every branch below that used to ``continue`` now abandons the surface.
+    # Skipping one interval does not produce a coarser answer, it produces an
+    # answer for a DIFFERENT, shorter surface, and says nothing about it —
+    # which is anomaly A23-1: on the reference circle of verification problem
+    # 23 the last slice was dropped for a one-ulp geometric round-off and
+    # Bishop came out at 0.897 against a published 1.192, with the deficit
+    # shrinking only as 1/sqrt(n) so that refining looked like convergence.
+    # The precedent is right above: ``_slice_boundaries`` returning None
+    # already discards the surface rather than swallow a layer crossing.
+    #
+    # The last boundary is the last index of ``bounds``, needed below to tell
+    # the two chord ENDS from the interior cuts.
+    last_i = len(bounds) - 2
+
+    # Overshoot tolerance, RELATIVE to the failure width, replacing an
+    # absolute 1e-4 that meant something different in millimetres and in
+    # metres. Sized to the same order that absolute value had on the models
+    # it was chosen for, because what it forgives is unchanged: root-finding
+    # round-off, "a few 1e-6" by the v0.1.18 note.
+    tol = 1e-6 * (x_r - x_l)
+
+    # Whether the two extreme boundaries can be clamped without asking. On a
+    # CIRCLE they can: ``candidate_chords`` returns crossings of the arc with
+    # the ground, so the base is the ground there by construction and any
+    # difference is the root-finder's own error — which a vertical tangent
+    # multiplies by dy/dx, 1600 on the problem-23 circle, so no tolerance on
+    # y survives it. A polyline's endpoints are just its first and last
+    # vertices and carry no such guarantee, so they stay judged.
+    ends_are_ground_crossings = isinstance(surface, SlipCircle)
+
     for i, (xl, xr) in enumerate(zip(bounds[:-1], bounds[1:])):
         dx = xr - xl
         if dx <= 0.0:
-            continue
+            return None
         xc = 0.5 * (xl + xr)
 
         y_base_l = surface.base_y_at(xl)
         y_base_r = surface.base_y_at(xr)
         if y_base_l is None or y_base_r is None:
-            continue
+            return None
 
         y_top_l = _interp_y_on_polyline(ground, xl)
         y_top_r = _interp_y_on_polyline(ground, xr)
         if y_top_l is None or y_top_r is None:
-            continue
+            return None
 
         # v0.1.18 — at the slip-surface endpoints the circular arc can
         # sit a few 1e-6 ABOVE the ground purely from root-finding
         # round-off. Clamp the base to the ground there instead of
         # dropping the slice; dropping it lost the first/last slice and
         # produced 24 slices where Slide builds 25, biasing the FoS by
-        # ~1%. Only a genuine overshoot (> a small tolerance) is treated
-        # as degenerate.
-        tol = 1e-4
+        # ~1%.
+        #
+        # v0.1.100 — on a circle the two ENDS are not a tolerance question
+        # at all; see ``ends_are_ground_crossings`` above. Everything else
+        # is judged, against a tolerance relative to the model.
         if y_base_l > y_top_l:
-            if y_base_l - y_top_l <= tol:
+            if ((i == 0 and ends_are_ground_crossings)
+                    or y_base_l - y_top_l <= tol):
                 y_base_l = y_top_l
             else:
-                continue
+                return None
         if y_base_r > y_top_r:
-            if y_base_r - y_top_r <= tol:
+            if ((i == last_i and ends_are_ground_crossings)
+                    or y_base_r - y_top_r <= tol):
                 y_base_r = y_top_r
             else:
-                continue
+                return None
 
-        alpha = surface.base_angle_at(xc)
-        base_len = dx / math.cos(alpha) if abs(math.cos(alpha)) > 1e-9 else dx
+        # v0.1.100 — THE BASE OF A SLICE IS THE CHORD between its two
+        # endpoints, not the tangent at its midpoint.
+        #
+        # Both the derivation of Bishop (1955) and those of the other eight
+        # methods treat a slice base as a STRAIGHT segment, and write its
+        # horizontal projection as ``b = l·cos α``. Taking α from the
+        # tangent at the midpoint and then l from ``b/cos α`` satisfies that
+        # identity too, but it measures the arc with a secant of the
+        # midpoint slope, and where the arc turns quickly inside one slice
+        # that secant is far too short: at a vertical tangent it converges
+        # to 1/sqrt(2) of the true arc, however fine the slicing.
+        #
+        # Measured against a CLOSED FORM — a homogeneous phi = 0 slope,
+        # where moment equilibrium gives F = c·L_arc·R/M exactly — on a
+        # circle whose exit is tangent:
+        #
+        #     n      midpoint tangent      chord
+        #     30        -2.63 %           +1.41 %
+        #     120       -1.90 %           +0.20 %
+        #     3840      -0.37 %            +0.00 %   (O(1/sqrt(n)) vs O(1/n))
+        #
+        # And on the two published circles of verification problem 23, with
+        # the slice counts of the problem itself:
+        #
+        #     Bishop   (published 1.192)   30 slices   1.19204   +0.00 %
+        #     Ordinary (published 1.370)   30 slices   1.36835   -0.12 %
+        #
+        # against -4.34 % and -0.75 % with the midpoint tangent. Away from a
+        # vertical tangent the two agree to a few 1e-4: on the validated
+        # benchmarks the change is -0.014 % (Ej_1 Bishop), -0.018 % (Ej_1
+        # Janbu), -0.015 % (Ej_1 Spencer) and -0.043 % (Ej_2 Bishop).
+        #
+        # It also makes the circular and non-circular paths describe the same
+        # base: ``_general_moment_fos`` has taken the chord since v0.1.92.
+        dy = y_base_r - y_base_l
+        alpha = math.atan2(dy, dx)
+        base_len = math.hypot(dx, dy)
+
+        # See ``Slice.weight_arm_ratio``: the chord's own angle is no longer
+        # the tangent at ``xc``, so the moment arm is taken from the geometry
+        # instead of from the angle.
+        if isinstance(surface, SlipCircle) and surface.radius > 0.0:
+            arm_ratio = (xc - surface.centre_x) / surface.radius
+        else:
+            arm_ratio = math.sin(alpha)
 
         # Material at the base midpoint. This one stays a single query:
         # the base is where the shear strength and the pore pressure are
@@ -877,6 +973,7 @@ def slice_surface(
             base_y_right=y_base_r,
             base_angle=alpha,
             base_length=base_len,
+            weight_arm_ratio=arm_ratio,
             top_y_left=y_top_l,
             top_y_right=y_top_r,
             top_y_mean=top_y_w,

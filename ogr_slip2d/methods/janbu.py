@@ -199,7 +199,9 @@ class JanbuSimplified(LEMMethod):
                         else "Non-finite FoS"
                     ),
                 )
-            if abs(new_fos - fos) < self.tolerance:
+            # v0.1.100 — not on the first pass; see
+            # ``BishopSimplified._general_moment_fos``.
+            if it > 1 and abs(new_fos - fos) < self.tolerance:
                 fos = new_fos
                 converged = True
                 break

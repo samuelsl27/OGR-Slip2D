@@ -83,6 +83,14 @@ _MODEL = (Path(__file__).resolve().parent.parent
 #: The published critical circle of ACADS 1(c).
 _CIRCLE = (34.121, 43.254, 18.781)
 
+#: v0.1.100 — a circle of the SAME model's grid whose centre sits on the crest
+#: vertex (50, 35), so it daylights at 90 deg. Its fixed point is 5.51; the map
+#: sends the default initial guess F = 1.0 to 0.995, one step of 0.0048. It is
+#: the surface that showed the first step must not be allowed to end the
+#: iteration: accepted as converged it published 0.995 and won the grid search
+#: at 29 % below the study's value.
+_SLOW_CIRCLE = (50.0, 35.0, 9.181818181818182)
+
 _LOOSE = 1e-3
 _TIGHT = 1e-7
 
@@ -132,6 +140,21 @@ def _case():
 
     project = Project.load(_MODEL)
     cx, cy, r = _CIRCLE
+    circle = SlipCircle(centre_x=cx, centre_y=cy, radius=r)
+    slices = slice_surface(project, circle, num_slices=25)
+    assert slices is not None and len(slices) == 25
+    return project, circle, slices
+
+
+def _slow_case():
+    """The same model, on the circle whose map crawls past the initial guess."""
+    if not _MODEL.is_file():
+        return None
+    from ogr_core.project import Project
+    from ogr_slip2d import SlipCircle, slice_surface
+
+    project = Project.load(_MODEL)
+    cx, cy, r = _SLOW_CIRCLE
     circle = SlipCircle(centre_x=cx, centre_y=cy, radius=r)
     slices = slice_surface(project, circle, num_slices=25)
     assert slices is not None and len(slices) == 25
@@ -195,3 +218,51 @@ class TestTheStoppingPointDoesNotDecideTheAnswer:
             moved = abs(_solve(methods[name], _LOOSE, case).fos
                         - _solve(methods[name], _TIGHT, case).fos)
             assert moved < 0.1 * _LOOSE, (name, moved)
+
+
+# ======================================================================
+class TestTheFirstStepCannotEndTheIteration:
+    """v0.1.100 — the initial guess is not an iterate of the map.
+
+    The stopping rule is a STEP between two successive iterates, and the
+    contraction argument in the module docstring is about ITERATES. Measuring
+    the step from the value the program picked to start with says nothing
+    about where the fixed point is: where the map is slow near that value the
+    two are indistinguishable, and they are not the same thing.
+
+    Measured on ``_SLOW_CIRCLE`` with the model's own tolerance of 0.005: the
+    map sends F = 1.0 to 0.995207, a step of 0.0048, and accepting it reported
+    a converged factor of safety of 0.995 whose real fixed point is 5.5147 —
+    a factor of five and a half, on a surface that then won the ACADS 1(c)
+    grid search and dragged it 29 % below the published value.
+    """
+
+    def test_a_slow_map_is_not_mistaken_for_a_fixed_point(self):
+        case = _slow_case()
+        if case is None:
+            return
+        loose = _solve(_methods()["bishop_simplified"], 0.005, case)
+        tight = _solve(_methods()["bishop_simplified"], _TIGHT, case)
+        assert tight.converged, tight.error_message
+        assert loose.converged, loose.error_message
+        # The whole point: the loose run must land on the same fixed point,
+        # not on the neighbourhood of its own starting guess.
+        assert abs(loose.fos - tight.fos) < 0.1, (loose.fos, tight.fos)
+        assert abs(tight.fos - 1.0) > 1.0, (
+            "the fixture stopped being the pathological one")
+
+    def test_no_method_ever_converges_on_its_first_pass(self):
+        """Stated as an invariant rather than as one circle's number.
+
+        One pass means the only comparison made was against the initial guess,
+        so ``converged`` would be asserting something the iteration never
+        measured — whatever the surface, whatever the method.
+        """
+        for case in (_case(), _slow_case()):
+            if case is None:
+                continue
+            for name, cls in _methods().items():
+                for tol in (0.005, _LOOSE, _TIGHT):
+                    r = _solve(cls, tol, case)
+                    if r.converged:
+                        assert r.iterations > 1, (name, tol, r.iterations)
