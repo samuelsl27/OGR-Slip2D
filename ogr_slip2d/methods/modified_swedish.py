@@ -110,6 +110,13 @@ class PrescribedInclinationMethod(LEMMethod):
     def compute_fos(
         self, project: Project, surface: SurfaceProtocol, slices: Slices,
     ) -> LEMResult:
+        # A surface with no shear strength anywhere has F = 0 exactly and
+        # no iteration to run; see LEMMethod.NO_SHEAR_STRENGTH_NOTE for why
+        # this is answered here rather than left to the arithmetic.
+        strengthless = self._no_shear_strength_result(surface, slices)
+        if strengthless is not None:
+            return strengthless
+
         if not slices.slices:
             return LEMResult(
                 fos=math.nan, converged=False, iterations=0,

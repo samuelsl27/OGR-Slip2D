@@ -55,6 +55,13 @@ class OrdinaryFellenius(LEMMethod):
         surface: SurfaceProtocol,
         slices: Slices,
     ) -> LEMResult:
+        # A surface with no shear strength anywhere has F = 0 exactly and
+        # no iteration to run; see LEMMethod.NO_SHEAR_STRENGTH_NOTE for why
+        # this is answered here rather than left to the arithmetic.
+        strengthless = self._no_shear_strength_result(surface, slices)
+        if strengthless is not None:
+            return strengthless
+
         numerator = 0.0
         denominator = 0.0
 

@@ -205,6 +205,49 @@ class BaseSearch(ABC):
         return ok
 
     # ------------------------------------------------------------------
+    def _analyse(self, project: Project, surface, slices) -> LEMResult:
+        """Solve one surface, and never let its arithmetic kill the run.
+
+        Every search reaches the engine through this method —
+        :meth:`evaluate_circle` and :meth:`evaluate_surface` are the only
+        two doors into ``compute_fos``, and ``optimize`` and the
+        probabilistic sampler come in by them as well — so this is the one
+        place where the invariant can be stated once: a surface that cannot
+        be analysed is counted and explained, it does not end the analysis.
+
+        ``ArithmeticError`` and NOT ``Exception``, deliberately. It covers
+        ZeroDivisionError, OverflowError and FloatingPointError, the
+        failures that belong to the numbers, while a TypeError or an
+        AttributeError still raises loudly, because those are defects in the
+        code and hiding one costs far more than it saves. This program has
+        already paid for the wide version once: the blanket
+        ``except Exception`` in the compute worker turned Slope Search's
+        TypeError into a generic "Error" dialog with no results, in every
+        release up to v0.1.77 (see the note in ``SlopeSearch.__init__``).
+
+        The one ArithmeticError ever seen in practice — a mass lying
+        entirely inside a material with no shear strength, 147 of the 4860
+        circles of the problem-27 reference grid — is now answered by the
+        methods themselves before any division happens. Reaching this
+        handler therefore means something NEW, which is why the message
+        carries the exception's own text instead of a fixed phrase.
+        """
+        try:
+            res = self.method.compute_fos(project, surface, slices)
+        except ArithmeticError as exc:
+            res = LEMResult(
+                fos=math.nan,
+                converged=False,
+                iterations=0,
+                method_id=self.method.METHOD_ID,
+                surface=surface,
+                slices=slices,
+                error_message=f"Arithmetic failure: {exc}",
+            )
+        self._is_admissible(res)     # marks res.admissible in place
+        return res
+
+    # ------------------------------------------------------------------
     def evaluate_circle(
         self, project: Project, circle: SlipCircle
     ) -> Optional[LEMResult]:
@@ -249,8 +292,7 @@ class BaseSearch(ABC):
             area = sum(s.width * max(s.height, 0.0) for s in slices)
             if area < self.min_area:
                 continue
-            res = self.method.compute_fos(project, trial, slices)
-            self._is_admissible(res)     # marks res.admissible in place
+            res = self._analyse(project, trial, slices)
             if res is None:
                 continue
             if best is None:
@@ -329,9 +371,7 @@ class BaseSearch(ABC):
         area = sum(s.width * max(s.height, 0.0) for s in slices)
         if area < self.min_area:
             return None
-        res = self.method.compute_fos(project, surface, slices)
-        self._is_admissible(res)     # marks res.admissible in place
-        return res
+        return self._analyse(project, surface, slices)
 
     # ------------------------------------------------------------------
     def run(self, project: Project) -> SearchResult:

@@ -231,6 +231,118 @@ class LEMMethod(ABC):
         return sorted(out)
 
     # ------------------------------------------------------------------
+    # A SURFACE WITH NO SHEAR STRENGTH AT ALL.
+    #
+    # Every method answers this with the same value and the same words, and
+    # the uniformity is the point. Measured on 0.1.98, a mass lying entirely
+    # inside a c = 0, phi = 0 material got six different answers out of the
+    # nine methods:
+    #
+    #   Bishop, Janbu simplified, Janbu corrected  ZeroDivisionError
+    #   Spencer, GLE                               nan, "all sampled lambda
+    #                                              diverged" — a false reason
+    #   Corps 1, Corps 2, Lowe-Karafiath           0.2, which is not a factor
+    #                                              of safety but the first
+    #                                              sample of their F grid
+    #   Ordinary / Fellenius                       0.0, right and unexplained
+    #
+    # The three that raised did so because the numerator is EXACTLY 0.0, so
+    # F becomes 0.0 — which is finite, and therefore passes the isfinite
+    # guard — and the next pass evaluates tan(phi)/F as 0.0/0.0. In Python
+    # that is ZeroDivisionError, not nan, so the m_alpha guard two lines
+    # further down never runs and the exception leaves the search.
+    #
+    # The answer is not a modelling choice. With tau = 0 on every slice base
+    # the resisting term of Bishop (1955), c'*b + (W - u*b)*tan(phi'),
+    # vanishes identically, so F = 0 exactly: a mass with no strength
+    # anywhere does not stand up.
+    #
+    # It is reported as a FAILED calculation rather than as a factor of
+    # safety of zero, which is what the reference documentation does with
+    # this exact condition — it writes an error code in place of the safety
+    # factor, and the surface joins the invalid population. Here that means
+    # ``error_message`` (so ``is_valid`` is False and the searches count it
+    # in ``invalid_count``) and NOT ``admissible=False``, which is reserved
+    # for a CONVERGED factor that fails a post-analysis check.
+
+    #: One string, so a caller can group by it. Deliberately not passed
+    #: through ``tr()``: every other engine reason is a plain English
+    #: string and the interface translates at the point of display.
+    NO_SHEAR_STRENGTH_NOTE: ClassVar[str] = (
+        "Zero shear strength on the whole slip surface — "
+        "factor of safety is zero"
+    )
+
+    @staticmethod
+    def surface_has_no_shear_strength(slices) -> bool:
+        """True when NO slice base offers any shear resistance.
+
+        Both the cohesion and the friction tangent of the linearised
+        envelope have to be zero on every slice — the condition under which
+        the resisting term of every method here is identically zero.
+
+        The envelope is read through ``BishopSimplified._local_c_phi``, the
+        one linearisation the nine methods already share, so the verdict
+        covers the non-linear strength models and matric suction as well as
+        Mohr-Coulomb. ``InfiniteStrength`` linearises to 1e12, so it can
+        never trip this.
+
+        The effective normal stress is the same first-pass estimate the
+        methods use for their own first iteration,
+        ``sigma'_n = max(0, W*cos(alpha) - u*l) / l``, with the seismic
+        coefficients left out so the predicate needs nothing from the
+        project. For a linear envelope the verdict does not depend on
+        sigma' at all; for a non-linear one this is the same point the
+        method itself evaluates first.
+
+        Returns on the FIRST slice that has any strength, so an ordinary
+        surface pays one envelope evaluation.
+
+        Measured over the 4860 circles of the problem-27 reference grid:
+        true for 147 of the 147 that raised ZeroDivisionError, false for
+        all 4713 others.
+        """
+        from ..external_forces import slice_forces
+        from .bishop import BishopSimplified
+
+        any_slice = False
+        for s in slices:
+            any_slice = True
+            length = max(s.base_length, 1e-9)
+            w = slice_forces(s).w_total
+            sigma_n_eff = max(
+                0.0, w * math.cos(s.base_angle) - s.pore_pressure * length
+            ) / length
+            c, tan_phi = BishopSimplified._local_c_phi(
+                s, s.material, sigma_n_eff
+            )
+            if c != 0.0 or tan_phi != 0.0:
+                return False
+        # An empty slice list is not a strengthless surface, it is no
+        # surface. The methods have their own "no slices" paths for that.
+        return any_slice
+
+    def _no_shear_strength_result(
+        self, surface: SurfaceProtocol, slices: Slices
+    ) -> Optional[LEMResult]:
+        """The result for a strengthless surface, or None if it has strength.
+
+        Called first by every ``compute_fos``, which is what makes the nine
+        methods agree instead of failing six different ways.
+        """
+        if not self.surface_has_no_shear_strength(slices):
+            return None
+        return LEMResult(
+            fos=0.0,
+            converged=False,
+            iterations=0,
+            method_id=self.METHOD_ID,
+            surface=surface,
+            slices=slices,
+            error_message=self.NO_SHEAR_STRENGTH_NOTE,
+        )
+
+    # ------------------------------------------------------------------
     @abstractmethod
     def compute_fos(
         self,

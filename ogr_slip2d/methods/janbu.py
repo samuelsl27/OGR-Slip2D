@@ -61,6 +61,13 @@ class JanbuSimplified(LEMMethod):
         surface: SurfaceProtocol,
         slices: Slices,
     ) -> LEMResult:
+        # A surface with no shear strength anywhere has F = 0 exactly and
+        # no iteration to run; see LEMMethod.NO_SHEAR_STRENGTH_NOTE for why
+        # this is answered here rather than left to the arithmetic.
+        strengthless = self._no_shear_strength_result(surface, slices)
+        if strengthless is not None:
+            return strengthless
+
         kh = project.seismic.kh if project.seismic.enabled else 0.0
         kv = project.seismic.kv if project.seismic.enabled else 0.0
 
@@ -173,16 +180,24 @@ class JanbuSimplified(LEMMethod):
 
             numerator += sup.total_passive_h()
 
+            # Same backstop as Bishop's, and for the same reason: the next
+            # pass computes tan(phi)/F inside n_alpha, so a zero F raises
+            # ZeroDivisionError before the n_alpha guard above can run.
             new_fos = numerator / denominator
-            if not math.isfinite(new_fos):
+            if not math.isfinite(new_fos) or new_fos <= 0.0:
+                finite = math.isfinite(new_fos)
                 return LEMResult(
-                    fos=math.nan,
+                    fos=new_fos if finite else math.nan,
                     converged=False,
                     iterations=iterations,
                     method_id=self.METHOD_ID,
                     surface=surface,
                     slices=slices,
-                    error_message="Non-finite FoS",
+                    error_message=(
+                        f"Non-physical factor of safety {new_fos:.4g} "
+                        f"in iteration" if finite
+                        else "Non-finite FoS"
+                    ),
                 )
             if abs(new_fos - fos) < self.tolerance:
                 fos = new_fos

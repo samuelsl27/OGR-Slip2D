@@ -289,6 +289,13 @@ class BishopSimplified(LEMMethod):
         surface: SurfaceProtocol,
         slices: Slices,
     ) -> LEMResult:
+        # A surface with no shear strength anywhere has F = 0 exactly and
+        # no iteration to run; see LEMMethod.NO_SHEAR_STRENGTH_NOTE for why
+        # this is answered here rather than left to the arithmetic.
+        strengthless = self._no_shear_strength_result(surface, slices)
+        if strengthless is not None:
+            return strengthless
+
         kh = project.seismic.kh if project.seismic.enabled else 0.0
         kv = project.seismic.kv if project.seismic.enabled else 0.0
 
@@ -488,16 +495,29 @@ class BishopSimplified(LEMMethod):
             # denominator before the iteration started.
             numerator += sup.total_passive_t()
 
+            # ``new_fos <= 0`` has to stop the iteration, not just a
+            # non-finite one. The next pass computes tan(phi)/F, so a zero
+            # F raises ZeroDivisionError before the m_alpha guard below can
+            # ever run — that is the crash a strengthless surface used to
+            # cause, and this is the backstop for any OTHER route to the
+            # same place (a cancelling numerator, a negative driving term).
+            # ``_general_moment_fos`` has always had this guard; the
+            # circular path is the one that was missing it.
             new_fos = numerator / denominator
-            if not math.isfinite(new_fos):
+            if not math.isfinite(new_fos) or new_fos <= 0.0:
+                finite = math.isfinite(new_fos)
                 return LEMResult(
-                    fos=math.nan,
+                    fos=new_fos if finite else math.nan,
                     converged=False,
                     iterations=iterations,
                     method_id=self.METHOD_ID,
                     surface=surface,
                     slices=slices,
-                    error_message="Non-finite FoS in iteration",
+                    error_message=(
+                        f"Non-physical factor of safety {new_fos:.4g} "
+                        f"in iteration" if finite
+                        else "Non-finite FoS in iteration"
+                    ),
                 )
 
             if abs(new_fos - fos) < self.tolerance:

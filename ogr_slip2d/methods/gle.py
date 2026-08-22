@@ -127,6 +127,13 @@ class GLEMorgensternPrice(LEMMethod):
         self.f_func = interslice_func
 
     def compute_fos(self, project: Project, surface, slices) -> LEMResult:
+        # A surface with no shear strength anywhere has F = 0 exactly and
+        # no iteration to run; see LEMMethod.NO_SHEAR_STRENGTH_NOTE for why
+        # this is answered here rather than left to the arithmetic.
+        strengthless = self._no_shear_strength_result(surface, slices)
+        if strengthless is not None:
+            return strengthless
+
         kh = project.seismic.kh if project.seismic.enabled else 0.0
         kv = project.seismic.kv if project.seismic.enabled else 0.0
 
