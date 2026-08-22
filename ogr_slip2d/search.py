@@ -215,6 +215,11 @@ class BaseSearch(ABC):
         place where the invariant can be stated once: a surface that cannot
         be analysed is counted and explained, it does not end the analysis.
 
+        Two doors, one answer, since v0.1.101: on a CIRCLE the second door
+        opens into the first, and both walk the sliding masses through
+        :meth:`_best_of_masses`. They used to answer differently on the very
+        same circle; see the note on :meth:`evaluate_surface`.
+
         ``ArithmeticError`` and NOT ``Exception``, deliberately. It covers
         ZeroDivisionError, OverflowError and FloatingPointError, the
         failures that belong to the numbers, while a TypeError or an
@@ -246,6 +251,47 @@ class BaseSearch(ABC):
             )
         self._is_admissible(res)     # marks res.admissible in place
         return res
+
+    # ------------------------------------------------------------------
+    def _best_of_masses(self, project: Project, candidates) -> Optional[LEMResult]:
+        """The lowest-factor mass among several DISJOINT candidates.
+
+        A surface that crosses the ground more than twice does not define
+        one failure mechanism but several separate ones, and the critical
+        mechanism is the one with the lowest factor of safety. Choosing
+        among them therefore belongs to the engine and not to the caller,
+        who has no way of knowing there was more than one.
+
+        Shared by the two public doors — :meth:`evaluate_circle` and
+        :meth:`evaluate_surface` — precisely so they cannot drift apart
+        again. Until v0.1.101 this loop existed twice: once here, walking
+        the masses, and once inside ``evaluate_surface`` with the walk
+        missing, so the same circle got two different answers depending on
+        which method you called.
+
+        A candidate that cannot be sliced, that resolves to fewer than
+        three slices or that falls under ``min_area`` is skipped, not
+        returned: it is not an answer about a shorter surface, it is no
+        answer at all. If NO candidate survives the result is ``None``,
+        which is what both doors have always returned in that case.
+        """
+        best: Optional[LEMResult] = None
+        for trial in candidates:
+            slices = slice_surface(project, trial, num_slices=self.num_slices)
+            if slices is None or len(slices) < 3:
+                continue
+            # Filter by minimum "area" (here approximated as Σ w_i · h_i)
+            area = sum(s.width * max(s.height, 0.0) for s in slices)
+            if area < self.min_area:
+                continue
+            res = self._analyse(project, trial, slices)
+            if res is None:
+                continue
+            if best is None:
+                best = res
+            elif res.is_valid and (not best.is_valid or res.fos < best.fos):
+                best = res
+        return best
 
     # ------------------------------------------------------------------
     def evaluate_circle(
@@ -283,22 +329,8 @@ class BaseSearch(ABC):
         # (driving moment ≈ 0, so no factor of safety at all) instead of
         # the 184 m² slope failure at FoS = 1.155, and the true critical
         # circle was thrown away as invalid.
-        best: Optional[LEMResult] = None
-        for trial in self._candidate_surfaces(project, circle):
-            slices = slice_surface(project, trial, num_slices=self.num_slices)
-            if slices is None or len(slices) < 3:
-                continue
-            # Filter by minimum "area" (here approximated as Σ w_i · h_i)
-            area = sum(s.width * max(s.height, 0.0) for s in slices)
-            if area < self.min_area:
-                continue
-            res = self._analyse(project, trial, slices)
-            if res is None:
-                continue
-            if best is None:
-                best = res
-            elif res.is_valid and (not best.is_valid or res.fos < best.fos):
-                best = res
+        best = self._best_of_masses(
+            project, self._candidate_surfaces(project, circle))
         if best is not None:
             # The caller's circle must end up carrying the mass that was
             # actually analysed, or the drawing and the number disagree.
@@ -364,14 +396,46 @@ class BaseSearch(ABC):
     def evaluate_surface(
         self, project: Project, surface
     ) -> Optional[LEMResult]:
-        """Evaluate any SurfaceProtocol (circular or non-circular)."""
-        slices = slice_surface(project, surface, num_slices=self.num_slices)
-        if slices is None or len(slices) < 3:
-            return None
-        area = sum(s.width * max(s.height, 0.0) for s in slices)
-        if area < self.min_area:
-            return None
-        return self._analyse(project, surface, slices)
+        """Evaluate any SurfaceProtocol (circular or non-circular).
+
+        v0.1.101 — a CIRCLE is handed to :meth:`evaluate_circle`, and that
+        is not a convenience. Until now this door sliced the circle
+        directly, and ``slice_surface`` resolves an unresolved circle onto
+        the FIRST sliding mass from the left, which on a circle that
+        crosses the ground more than twice is whichever mass happens to
+        come first — not the critical one. The walk over the masses was
+        added to ``evaluate_circle`` in v0.1.84 and this door was left
+        outside it, so the same circle gave two different answers
+        depending on which public method you called.
+
+        What that cost, on the reference circle of verification problem 27
+        (Malkawi & Sarma 2001, after XSTABL v5): the arc grazes the toe
+        vertex (38, 63) from 0.0054 ft above it, so it cuts the ground
+        FOUR times and defines a 0.9 ft lens between x = 17.62 and 37.95
+        as well as the real 22 ft mechanism between x = 38.01 and 169.89.
+        This door answered for the lens — Bishop 34.32 against 1.4071, a
+        factor of 24 — with no warning of any kind. Janbu corrected,
+        34.53 against 1.4026; Spencer and GLE, 34.20 against 1.4071.
+
+        A POLYLINE needs no such walk, and gets none. Its own vertices fix
+        where it runs, so a polyline crossing the ground more than twice
+        has to RISE ABOVE it in between — and a slice whose base sits above
+        its own top is not a mass to choose between, it is a surface the
+        slicer refuses whole since v0.1.100 (see the note in
+        ``slice_surface``). Measured on the same problem-27 geometry: a
+        vertex lifted 0.05 ft over the ground is already enough to have the
+        polyline discarded.
+
+        The judgement is made at the slice boundaries, so a poke-through
+        narrower than the boundary spacing is not seen as one — but neither
+        is it analysed: the surface that gets sliced is the chord polygon
+        through the vertices, which runs below the ground, and the factor
+        returned belongs to that surface. It is a different mechanism from
+        the circle, not a wrong answer about it.
+        """
+        if isinstance(surface, SlipCircle):
+            return self.evaluate_circle(project, surface)
+        return self._best_of_masses(project, (surface,))
 
     # ------------------------------------------------------------------
     def run(self, project: Project) -> SearchResult:
