@@ -191,7 +191,7 @@ def compute(
     if samples is not None:
         s.search.num_surfaces = int(samples)
         s.search.block_num_surfaces = int(samples)
-        s.search.path_num_paths = int(samples)
+        s.search.path_num_surfaces = int(samples)
 
     if method is not None:
         mid = _resolve_method(method)

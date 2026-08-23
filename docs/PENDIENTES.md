@@ -430,3 +430,56 @@ de Bishop, `(c·b + (W − u·b)·tanφ)/m_α`, con `m_α` **sin λ**; λ sólo 
 numerador del balance de fuerzas. La fuerza vertical interdovela `X = λ·f(x)·E`
 nunca llega a la normal en la base. No es un problema del agua: el agua sólo lo
 hace visible.
+
+---
+
+## 10 · Lo que el inventario de ajustes dejó abierto (D07c) — ABIERTO (v0.1.103)
+
+v0.1.103 colapsó los seis pares de ajustes que existían dos veces (el nombre
+que la interfaz enseñaba y el que el motor leía). El inventario que hizo falta
+para encontrarlos —los 64 campos de `SearchSettings` cruzados contra todo
+lector fuera de `ogr_gui/`— dejó tres cosas señaladas y sin arreglar, cada una
+porque **mueve un número** y necesita su propia referencia. El test
+`tests/test_settings_coverage_v1103.py` las sujeta en un inventario congelado,
+así que no pueden pudrirse en silencio.
+
+### a) `sa_num_fos_compared_before_stopping`: declarado 5, el código para en 3
+
+Es el n_ε del criterio de parada de Su (2009), sección 2.1.7: se comparan los
+últimos n_ε mejores factores y se para si ninguno mejora más que la tolerancia.
+El diálogo lo enseña con el valor de la referencia, **5**, y `search.py` para
+en un `no_improve_passes >= 3` escrito a mano.
+
+Para cerrarlo: cablearlo y medir qué le hace a los modelos de recocido del
+banco. Alarga la búsqueda, así que el factor sólo puede bajar o quedarse — pero
+hay que enseñarlo, no suponerlo.
+
+### b) `block_multiple_groups` no lo lee nadie, y lo que sí se lee se deriva mal
+
+El motor lee `block_num_groups`; el diálogo lo calcula como
+`num_surfaces // 1000` cuando la casilla *Multiple Groups* está marcada, y 3
+cuando no. Eso no es lo que la referencia llama Multiple Groups. Antes de tocar
+nada hay que leer su documentación de Block Search: el número de grupos y el
+número de superficies no son la misma magnitud dividida por mil.
+
+### c) El rótulo del Auto Refine publica una cifra que no es la suya
+
+`grid_dialogs.py` estima «Number of Surfaces Computed» como
+`divisiones × círculos × iteraciones`, que con los valores por defecto da
+**1000**. La referencia anuncia **4500** para esos mismos valores, porque cuenta
+**pares** de divisiones: C(10,2) = 45 × 10 círculos × 10 iteraciones, y su
+«Surfaces Interpreted: 45» es exactamente C(10,2). El algoritmo de OGR sí
+recorre pares, así que el que cuenta mal es el rótulo.
+
+No cambia ningún cálculo — es una cifra de pantalla — pero es una cifra
+publicada que miente, y la medida real está a un `math.comb` de distancia.
+
+### d) Un ángulo guardado en el marco viejo no se convierte al migrar
+
+`path_min_angle_deg` y `path_max_angle_deg` guardaban el ángulo en el marco
+pie→cresta de la búsqueda; los campos que los sustituyen son absolutos. La
+conversión necesita la dirección de rotura, que no está en el bloque de ajustes
+que `SearchSettings.from_dict` recibe, así que un valor fuera de su defecto se
+**reporta** en vez de adivinarse. Ninguno de los 142 modelos del banco lo tiene
+fuera del defecto, de modo que hoy no hay nada que convertir; si algún día lo
+hay, la conversión tiene que hacerse donde se conoce el proyecto entero.

@@ -160,25 +160,41 @@ class TestRoundtripV112:
 
 
 # ======================================================================
-class TestLegacyFieldsPreserved:
-    """Backward compatibility: the v0.1.10/v0.1.11 fields used by the
-    search algorithms in ogr_slip2d/search.py must still exist with
-    sensible defaults."""
+class TestShadowFieldsAreGone:
+    """v0.1.103 — this class used to be ``TestLegacyFieldsPreserved`` and
+    it REQUIRED every one of these names to exist, on the grounds that
+    "these are read by the solver classes". That was true, and it was the
+    defect: they were read by the solver while the interface showed and
+    saved a different field of the same meaning, so a project built by a
+    script declared 5000 surfaces and searched 500.
 
-    def test_legacy_fields_exist(self):
+    The invariant now runs the other way. If one of these names comes
+    back, so does the fault."""
+
+    def test_shadow_names_are_not_fields(self):
+        from dataclasses import fields
         from ogr_core.project.settings import SearchSettings
-        s = SearchSettings()
-        # These are read by the solver classes
-        assert hasattr(s, "auto_refine_divisions")
-        assert hasattr(s, "auto_refine_iterations")
-        assert hasattr(s, "auto_refine_factor")
-        assert hasattr(s, "sa_temperature_factor")
-        assert hasattr(s, "path_num_paths")
-        assert hasattr(s, "path_segment_length")
-        assert hasattr(s, "path_min_angle_deg")
-        assert hasattr(s, "path_max_angle_deg")
-        assert hasattr(s, "block_num_groups")
-        assert hasattr(s, "block_left_proj_angle_deg")
-        assert hasattr(s, "block_right_proj_angle_deg")
-        assert hasattr(s, "initial_angle_lower_deg")
-        assert hasattr(s, "initial_angle_upper_deg")
+        names = {f.name for f in fields(SearchSettings)}
+        for gone in ("auto_refine_divisions", "auto_refine_iterations",
+                     "auto_refine_factor", "sa_temperature_factor",
+                     "path_num_paths", "path_segment_length",
+                     "path_min_angle_deg", "path_max_angle_deg",
+                     "path_upper_angle_enabled",
+                     "block_left_proj_angle_deg",
+                     "block_right_proj_angle_deg",
+                     "initial_angle_lower_deg", "initial_angle_upper_deg"):
+            assert gone not in names, gone
+
+    def test_every_retired_name_is_registered_with_its_survivor(self):
+        """The registry is what the migration and the refusal both read,
+        so a name retired without an entry would go back to being
+        silent."""
+        from dataclasses import fields
+        from ogr_core.project.settings import (
+            _SHADOW_FIELDS, SearchSettings,
+        )
+        names = {f.name for f in fields(SearchSettings)}
+        for gone, (_default, survivor) in _SHADOW_FIELDS.items():
+            assert gone not in names, gone
+            if survivor is not None:
+                assert survivor in names, survivor

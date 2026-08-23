@@ -810,15 +810,6 @@ class SurfaceOptionsDialog(QDialog):
         s.initial_angle_at_toe_upper_deg = self._sl_upper_sb.value()
         s.initial_angle_at_toe_lower_enabled = self._sl_lower_cb.isChecked()
         s.initial_angle_at_toe_lower_deg = self._sl_lower_sb.value()
-        # Map to legacy fields used by the solver
-        s.initial_angle_lower_deg = (
-            self._sl_lower_sb.value() if self._sl_lower_cb.isChecked()
-            else 0.0
-        )
-        s.initial_angle_upper_deg = (
-            self._sl_upper_sb.value() if self._sl_upper_cb.isChecked()
-            else 90.0
-        )
 
         # ----- Auto Refine -----
         s.auto_refine_divisions_along_slope = int(self._ar_div_slope.value())
@@ -827,10 +818,6 @@ class SurfaceOptionsDialog(QDialog):
         s.auto_refine_divisions_to_use_pct = self._ar_div_pct.value()
         if self._ar_num_verts is not None:
             s.auto_refine_num_vertices_along_surface = int(self._ar_num_verts.value())
-        # Map to legacy
-        s.auto_refine_divisions = int(self._ar_div_slope.value())
-        s.auto_refine_iterations = int(self._ar_num_iter.value())
-        s.auto_refine_factor = max(0.05, min(0.95, self._ar_div_pct.value() / 100.0))
 
         # ----- Simulated Annealing -----
         s.sa_initial_vertices = int(self._sa_verts.value())
@@ -851,13 +838,6 @@ class SurfaceOptionsDialog(QDialog):
         s.path_segment_length_value = self._p_seglen.value()
         s.path_convex_only = self._p_convex.isChecked()
         s.optimize_enabled = self._p_optimize.isChecked() or s.optimize_enabled
-        # Map to legacy
-        s.path_num_paths = int(self._p_num.value())
-        s.path_segment_length = self._p_seglen.value()
-        if self._p_lower_cb.isChecked():
-            s.path_min_angle_deg = -abs(self._p_lower_sb.value())
-        if self._p_upper_cb.isChecked():
-            s.path_max_angle_deg = abs(self._p_upper_sb.value())
 
         # ----- Block Search -----
         s.block_num_surfaces = int(self._b_num.value())
@@ -868,10 +848,10 @@ class SurfaceOptionsDialog(QDialog):
         s.block_right_end_angle_deg = self._b_right_end.value()
         s.block_convex_only = self._b_convex.isChecked()
         s.optimize_enabled = self._b_optimize.isChecked() or s.optimize_enabled
-        # Map to legacy fields used by the solver
+        # The only "map to legacy" line left, because the search does read
+        # block_num_groups. What it is derived from is not what the
+        # reference calls Multiple Groups — see D07c.
         s.block_num_groups = max(1, int(self._b_num.value()) // 1000) if self._b_multi.isChecked() else 3
-        s.block_left_proj_angle_deg = (self._b_left_start.value() + self._b_left_end.value()) / 2.0
-        s.block_right_proj_angle_deg = (self._b_right_start.value() + self._b_right_end.value()) / 2.0
 
         # ----- Filters -----
         s.min_elevation = (

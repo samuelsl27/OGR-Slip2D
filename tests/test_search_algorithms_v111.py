@@ -120,7 +120,6 @@ class TestSimulatedAnnealingAlgorithm:
             initial_vertices=6,
             generation_steps=50,
             tolerance=1e-3,
-            temperature_factor=0.95,
             convex_only=False,
             num_slices=15,
             min_area=0.5,
@@ -136,7 +135,6 @@ class TestSimulatedAnnealingAlgorithm:
             initial_vertices=5,
             generation_steps=30,
             tolerance=1e-3,
-            temperature_factor=0.95,
             convex_only=True,  # extra constraint
             num_slices=15,
             min_area=0.5,
@@ -153,7 +151,6 @@ class TestSimulatedAnnealingAlgorithm:
             initial_vertices=5,
             generation_steps=10,  # min is 10 by clamp
             tolerance=1e-3,
-            temperature_factor=0.95,
             num_slices=15,
             min_area=0.5,
         )

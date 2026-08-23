@@ -1359,7 +1359,12 @@ class AutoRefineSearch(BaseSearch):
         method,
         divisions: int = 10,
         circles_per_division: int = 10,
-        iterations: int = 5,
+        # 10 and not 5: it is what the reference's panel shows next to
+        # "Number of Iterations", and matches the settings field the user
+        # edits. A second settings field held 5 and it was the one the
+        # runner read, so a model built by a script ran half the search it
+        # declared (v0.1.103).
+        iterations: int = 10,
         next_iter_fraction: float = 0.5,
         num_slices: int = 30,
         min_area: float = 0.5,
@@ -2044,6 +2049,24 @@ class BlockSearch(BaseSearch):
         return None
 
 
+def toe_frame_angle_deg(absolute_deg: float, to_right: bool) -> float:
+    """An absolute slip-surface angle, expressed in the toe-to-crest frame.
+
+    The *Initial Angle at Toe* limits are stated as absolute angles,
+    measured counter-clockwise from the positive x axis. The Path Search
+    generator works in a local frame whose +x runs from the toe towards
+    the crest, so for a slope whose crest lies to the LEFT the frame is
+    the model's mirrored in x, and a direction at absolute angle t sits at
+    180 − t in it.
+
+    The reference states the same thing as a user-facing equivalence: an
+    upper angular limit of 30 degrees for a right-to-left failure "is
+    equivalent to" 150 degrees for a left-to-right one. 180 − 150 = 30,
+    which is this function and is what the test pins.
+    """
+    return absolute_deg if to_right else 180.0 - absolute_deg
+
+
 class PathSearch(BaseSearch):
     """Path Search (non-circular) — XSTABL "Irregular Surface Search".
 
@@ -2092,11 +2115,19 @@ class PathSearch(BaseSearch):
     def __init__(
         self,
         method,
-        num_paths: int = 500,
+        # The reference calls this "Number of Surfaces" and means the count
+        # of VALID surfaces; the loop below stops on exactly that, so the
+        # two names were the same quantity all along. It was called
+        # ``num_paths`` until v0.1.103, which is why the settings field the
+        # user edits and the one the engine read could drift apart.
+        num_surfaces: int = 5000,
         num_slices: int = 30,
         segment_length: Optional[float] = None,
+        # ``None`` on either angle means AUTOMATIC. A value is an ABSOLUTE
+        # angle, counter-clockwise from the model's +x axis; ``_run``
+        # converts it into the toe-to-crest frame the generator works in.
         initial_angle_upper_deg: Optional[float] = None,
-        initial_angle_lower_deg: float = -45.0,
+        initial_angle_lower_deg: Optional[float] = None,
         min_elevation: Optional[float] = None,
         optimize: bool = True,
         optimize_iterations: int = 200,
@@ -2114,13 +2145,16 @@ class PathSearch(BaseSearch):
         # class now filters on. Passing it here makes the two agree —
         # generation stays above the floor AND anything that slipped below
         # it anyway is discarded, which is what the filter promises.
+        # Pre-v0.1.103 name for the same count.
+        if "num_paths" in legacy_kwargs:
+            num_surfaces = legacy_kwargs.pop("num_paths")
         _base = _base_kwargs(legacy_kwargs)
         _base["min_elevation"] = min_elevation
         super().__init__(
             method=method, num_slices=num_slices, **_base,
         )
-        self.num_paths = num_paths
-        # v0.1.24 — cap on generation attempts (num_paths × factor)
+        self.num_surfaces = num_surfaces
+        # v0.1.24 — cap on generation attempts (num_surfaces × factor)
         self.max_attempts_factor = max(1, max_attempts_factor)
         # segment_length None → auto (0.3·H) computed in run()
         self.segment_length = segment_length
@@ -2138,6 +2172,10 @@ class PathSearch(BaseSearch):
         self.min_area = legacy_kwargs.get("min_area", 1.0)
         if "min_angle_deg" in legacy_kwargs:
             self.initial_angle_lower_deg = legacy_kwargs["min_angle_deg"]
+        # v0.1.103 — ``max_angle_deg`` was absorbed and then never read, so
+        # a caller passing it got the automatic upper limit and no warning.
+        if "max_angle_deg" in legacy_kwargs:
+            self.initial_angle_upper_deg = legacy_kwargs["max_angle_deg"]
         # External polygon + ground profile, set in run()
         self._ext_poly = None
         self._top = None
@@ -2269,11 +2307,27 @@ class PathSearch(BaseSearch):
             exit_x1 = crest_pt.x + 0.55 * face_w
             exit_x0, exit_x1 = min(exit_x0, exit_x1), max(exit_x0, exit_x1)
 
-        # Initial-angle window (radians), in "descending into slope"
-        # terms. Lower = 45° below horizontal; Upper = β − 5°.
-        ang_lo = math.radians(self.initial_angle_lower_deg)  # e.g. -45°
+        # Initial-angle window (radians), in the local toe-to-crest frame:
+        # +x runs from the toe towards the crest.
+        #
+        # v0.1.103 — the limits ARRIVE as absolute angles, counter-clockwise
+        # from the model's +x axis, because that is the convention the
+        # control the user edits is stated in. The reference makes the frame
+        # change explicit: an upper limit of 30 degrees for a right-to-left
+        # failure "is equivalent to" 150 degrees for a left-to-right one.
+        # That equivalence IS the reflection below — mirroring x maps an
+        # absolute angle t onto 180 − t here, and 180 − 150 = 30.
+        #
+        # Before v0.1.103 the settings stored this frame directly, under a
+        # name the interface never showed, so the angle boxes the user could
+        # tick reached nothing at all.
+        # Lower = 45° below horizontal, i.e. diving into the slope.
+        ang_lo = math.radians(
+            toe_frame_angle_deg(self.initial_angle_lower_deg, to_right)
+            if self.initial_angle_lower_deg is not None else -45.0)
         if self.initial_angle_upper_deg is not None:
-            ang_hi = math.radians(self.initial_angle_upper_deg)
+            ang_hi = math.radians(
+                toe_frame_angle_deg(self.initial_angle_upper_deg, to_right))
         else:
             # v0.1.24 FIX (anomaly A1): the documented Upper Angle is
             # +(β − 5)°, NOT −(β − 5)°. In this local frame the +x axis
@@ -2294,18 +2348,19 @@ class PathSearch(BaseSearch):
         # v0.1.24 — per the documented behaviour, "Number of Surfaces" is
         # the number of VALID surfaces generated: invalid ones are
         # discarded and do NOT count towards the total. We therefore keep
-        # generating until num_paths valid surfaces exist, capped at
+        # generating until num_surfaces valid surfaces exist, capped at
         # max_attempts_factor× attempts so a pathological model cannot
         # spin forever.
         best_surfaces = []
         attempts = 0
-        max_attempts = self.num_paths * self.max_attempts_factor
-        while result.valid_count < self.num_paths and attempts < max_attempts:
+        max_attempts = self.num_surfaces * self.max_attempts_factor
+        while (result.valid_count < self.num_surfaces
+               and attempts < max_attempts):
             ip = attempts
             attempts += 1
             if self.progress_cb and ip % 25 == 0:
-                self.progress_cb(min(result.valid_count, self.num_paths),
-                                 self.num_paths)
+                self.progress_cb(min(result.valid_count, self.num_surfaces),
+                                 self.num_surfaces)
             verts = self._generate_path_xstabl(
                 rng, top, init_x0, init_x1, exit_x0, exit_x1,
                 seg_len, ang_lo, ang_hi, to_right, self._y_floor,
@@ -2341,7 +2396,7 @@ class PathSearch(BaseSearch):
                         result.valid_count += 1
 
         if self.progress_cb:
-            self.progress_cb(self.num_paths, self.num_paths)
+            self.progress_cb(self.num_surfaces, self.num_surfaces)
         result.attempts = attempts
         return result
 
@@ -2616,7 +2671,8 @@ class SimulatedAnnealingSearch(BaseSearch):
       - State generation: Cauchy distribution
             r = sgn(u-0.5) · T_gen · [(1 + 1/T_gen)^|2u-1| - 1]
       - Acceptance: 1 / (1 + exp(dE/T_accept))
-      - Schedule: T_k = T_0 · exp(-c · k^(1/n)), c=8
+      - Schedule: T_k = T_0 · exp(-c · k^(1/n)), c = 8 by default
+        (Su 2009 section 2.1.6, eqs. 10-11; 1 to 10 all adequate)
       - Ratio control: if accept/reject ratio > 2 → halve T_accept
         (more selective); if < 0.5 → double it (less selective)
 
@@ -2639,7 +2695,12 @@ class SimulatedAnnealingSearch(BaseSearch):
         initial_vertices: int = 9,
         generation_steps: int = 200,
         tolerance: float = 1e-3,
-        temperature_factor: float = 0.97,
+        # c in T_k = T_0 exp(-c k^(1/n)) — Su (2009) section 2.1.6, eqs.
+        # (10)-(11). Was called ``temperature_factor`` and defaulted to a
+        # geometric cooling rate of 0.97 until v0.1.103; that value was
+        # stored, clamped and never read, while the schedule below used a
+        # hard-coded 8.0.
+        temperature_coefficient: float = 8.0,
         convex_only: bool = False,
         num_slices: int = 30,
         min_area: float = 1.0,
@@ -2647,6 +2708,17 @@ class SimulatedAnnealingSearch(BaseSearch):
         progress_cb=None,
         **legacy_kwargs,
     ) -> None:
+        # Pre-v0.1.103 name, and it held a DIFFERENT quantity: a geometric
+        # cooling rate, not the c of the exponential schedule. 0.97 and 8.0
+        # are not one number in two units, so there is nothing to convert —
+        # and absorbing it in silence is exactly how it came to be stored,
+        # clamped and never read for eighty-odd versions.
+        if "temperature_factor" in legacy_kwargs:
+            raise TypeError(
+                "temperature_factor was a geometric cooling rate and no "
+                "analysis ever read it. Pass temperature_coefficient "
+                "instead: it is the c of T_k = T_0 exp(-c k^(1/n)), which "
+                "the schedule does use (Su 2009, section 2.1.6).")
         super().__init__(
             method=method, num_slices=num_slices,
             **_base_kwargs(legacy_kwargs),
@@ -2655,11 +2727,10 @@ class SimulatedAnnealingSearch(BaseSearch):
         self.initial_vertices = max(4, initial_vertices)
         self.generation_steps = max(10, generation_steps)
         self.tolerance = tolerance
-        # Note: temperature_factor in the UI maps to the c parameter
-        # of VFSA (Su 2009). The paper uses c=8.0 but values 1-10 work.
-        # We keep the user's parameter as a "speed knob" (closer to 1
-        # = more thorough/slower) and translate to c internally.
-        self.temperature_factor = max(0.5, min(0.999, temperature_factor))
+        # Su (2009) reports 1.0 to 10.0 as the adequate range and adopts
+        # 8.0; the bounds keep a stored value inside it.
+        self.temperature_coefficient = max(1.0, min(10.0,
+                                                    temperature_coefficient))
         self.convex_only = convex_only
         self.min_area = min_area
         self.progress_cb = progress_cb
@@ -3047,7 +3118,7 @@ class SimulatedAnnealingSearch(BaseSearch):
         # Initial temperatures (Su 2009 Section 2.1.3)
         T_gen = 1.0
         T_accept = best_fos  # initial acceptance T = current FoS
-        c = 8.0  # paper-recommended; user's temperature_factor influences cooling
+        c = self.temperature_coefficient
 
         # External annealing iterations
         K = max(4, int(self.generation_steps / 50))  # outer loop count

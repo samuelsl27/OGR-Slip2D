@@ -427,7 +427,7 @@ class TestTheTwoEntryPointsAgree:
             p.settings.search.search_method = strategy
             p.settings.search.num_surfaces = 30
             p.settings.search.block_num_surfaces = 30
-            p.settings.search.path_num_paths = 30
+            p.settings.search.path_num_surfaces = 30
             out = run_analysis(p, ["bishop_simplified"])
             assert "bishop_simplified" in out.results, strategy
 

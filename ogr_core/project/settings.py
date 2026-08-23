@@ -15,6 +15,7 @@ Author: Samuel Sáez López (UPCT)
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+from dataclasses import fields as dataclass_fields
 from enum import Enum
 from typing import Optional
 
@@ -180,6 +181,43 @@ class GroundwaterSettings:
                 if st.get("calculate_sf")]
 
 
+#: The settings that used to be stored TWICE, under two names: the one the
+#: interface showed and serialised, and the one the engine actually read.
+#:
+#: The interface wrote both from the same widget, so from the interface they
+#: agreed; a model built by a script, or saved by an older version, kept the
+#: name that was NOT consumed and the analysis silently ran on the other
+#: one's default. Two of them differed by a factor of ten and of two:
+#: "Number of Surfaces" declared 5000 and the Path Search generated 500;
+#: "Number of Iterations" declared 10 and the Auto Refine ran 5.
+#:
+#: Maps each retired name to its old default and to the field that replaced
+#: it (``None`` where nothing read it at all, so nothing replaces it).
+_SHADOW_FIELDS: dict = {
+    # Same quantity under two names — the value migrates straight across.
+    "path_num_paths": (500, "path_num_surfaces"),
+    "auto_refine_iterations": (5, "auto_refine_num_iterations"),
+    "auto_refine_divisions": (10, "auto_refine_divisions_along_slope"),
+    # Different shape: 0 meant "automatic", anything else a fixed length.
+    "path_segment_length": (5.0, "path_segment_length_manual"),
+    # Different frame: these were angles in the search's toe-to-crest frame,
+    # the survivors are absolute and counter-clockwise from +x.
+    "path_min_angle_deg": (-45.0, "path_initial_angle_at_toe_lower_deg"),
+    "path_max_angle_deg": (45.0, "path_initial_angle_at_toe_upper_deg"),
+    "path_upper_angle_enabled": (False,
+                                 "path_initial_angle_at_toe_upper_enabled"),
+    # Different quantity: a geometric cooling rate against the c of
+    # T_k = T_0 exp(-c k^(1/n)). The rate was never read by anything.
+    "sa_temperature_factor": (0.97, "sa_temperature_coefficient"),
+    # Read by nobody, ever. The interface wrote them and there they died.
+    "initial_angle_lower_deg": (0.0, None),
+    "initial_angle_upper_deg": (90.0, None),
+    "auto_refine_factor": (0.5, None),
+    "block_left_proj_angle_deg": (135.0, None),
+    "block_right_proj_angle_deg": (45.0, None),
+}
+
+
 @dataclass
 class SearchSettings:
     """Search options.
@@ -226,20 +264,17 @@ class SearchSettings:
     initial_angle_at_toe_upper_deg: float = -45.0
     initial_angle_at_toe_lower_enabled: bool = False
     initial_angle_at_toe_lower_deg: float = -45.0
-    # Legacy compatibility
-    initial_angle_lower_deg: float = 0.0
-    initial_angle_upper_deg: float = 90.0
 
     # ---------- Auto Refine Search (circular & non-circular) ----------
     auto_refine_divisions_along_slope: int = 10
     auto_refine_circles_per_division: int = 10
+    # 10 and not 5: it is what the reference's own panel shows next to
+    # "Number of Iterations", and what this field has always displayed.
+    # A second field held 5, and it was the one the engine read — see the
+    # note on ``_SHADOW_FIELDS`` below.
     auto_refine_num_iterations: int = 10
     auto_refine_divisions_to_use_pct: float = 50.0  # %
     auto_refine_num_vertices_along_surface: int = 12  # only non-circular
-    # Legacy
-    auto_refine_divisions: int = 10
-    auto_refine_iterations: int = 5
-    auto_refine_factor: float = 0.5
 
     # ---------- Simulated Annealing (non-circular) ----------
     sa_initial_vertices: int = 8
@@ -248,30 +283,41 @@ class SearchSettings:
     # before the search stops (Slide spec). PDF default 5.
     sa_num_fos_compared_before_stopping: int = 5
     sa_tolerance: float = 1e-4
-    # Temperature reduction coefficient — c in T_k = T_0 · exp(-c · k^(1/n))
-    # Slide default 8.0 (Su 2009 paper Section 2.1.5)
+    # Temperature reduction coefficient — c in T_k = T_0 · exp(-c · k^(1/n)),
+    # Su (2009) "Global Optimization of General Failure Surfaces in Slope
+    # Analysis by Hybrid Simulated Annealing", section 2.1.6, eqs. (10)-(11).
+    # c = 8.0 is the value that work adopted; 1 to 10 are all adequate.
+    #
+    # (The note here used to cite section 2.1.5, which is the acceptance
+    # function, not the schedule.)
     sa_temperature_coefficient: float = 8.0
-    # Legacy field (was the cooling rate)
-    sa_temperature_factor: float = 0.97
     sa_convex_only: bool = False
 
     # ---------- Path Search (non-circular) ----------
+    # "Number of Surfaces" counts VALID surfaces: the generator discards the
+    # invalid ones and they do not count towards the total. That is what the
+    # search's own loop does, so the number means the same on both sides.
     path_num_surfaces: int = 5000
+    # Initial Angle at Toe. The angles are ABSOLUTE, measured
+    # counter-clockwise from the positive x axis — the convention the user
+    # sees, and therefore the one a stored model has to keep; the search
+    # works in a toe-to-crest frame and the conversion happens in one place,
+    # ``analysis_runner._path_toe_angles``. Both are ``None``-like when
+    # disabled: the upper limit then defaults to (β − 5)° at the initiation
+    # point and the lower one to 45° below the horizontal.
     path_initial_angle_at_toe_upper_enabled: bool = False
     path_initial_angle_at_toe_upper_deg: float = 45.0
     path_initial_angle_at_toe_lower_enabled: bool = False
     path_initial_angle_at_toe_lower_deg: float = 45.0
+    # Segment Length. Unticked means AUTOMATIC (~0.3·H), which is the normal
+    # way to run a Path Search; the value is only read when ticked. The
+    # default value is the one the reference's own panel happens to show for
+    # its model — it means nothing until the box is ticked.
     path_segment_length_manual: bool = False
     path_segment_length_value: float = 7.142857
     path_convex_only: bool = False
     # v0.1.17 — XSTABL Path Search controls
     path_optimize: bool = True
-    path_upper_angle_enabled: bool = False
-    # Legacy fields
-    path_segment_length: float = 5.0
-    path_min_angle_deg: float = -45.0
-    path_max_angle_deg: float = 45.0
-    path_num_paths: int = 500
 
     # ---------- Block Search (non-circular) ----------
     block_num_surfaces: int = 5000
@@ -281,10 +327,10 @@ class SearchSettings:
     block_right_start_angle_deg: float = 45.0
     block_right_end_angle_deg: float = 45.0
     block_convex_only: bool = False
-    # Legacy
+    # Read by the search, unlike the two projection angles that used to sit
+    # here. What the interface derives it from does not match what the
+    # reference calls Multiple Groups — see D07c.
     block_num_groups: int = 3
-    block_left_proj_angle_deg: float = 135.0
-    block_right_proj_angle_deg: float = 45.0
 
     # ---------- Optimize Surfaces (post-processing, non-circular) ----------
     optimize_enabled: bool = False
@@ -315,6 +361,108 @@ class SearchSettings:
     min_elevation: Optional[float] = None
     min_depth: Optional[float] = None
     min_area: Optional[float] = None
+
+    # ------------------------------------------------------------------
+    @classmethod
+    def from_dict(cls, data: dict) -> "SearchSettings":
+        """Read a stored block, migrating the settings that lived twice.
+
+        Until v0.1.103 this was a bare ``SearchSettings(**data)``, so a
+        stored key that is no longer a field would raise ``TypeError`` and
+        every model ever saved carries several. Unknown keys are now
+        ignored, which is what a format that has to survive its own history
+        needs.
+
+        **Which of the two wins when a file carries both and they
+        disagree**: the one that departs from its own default, because it
+        is the only one of the two that shows intent. A model built by a
+        script set ONE of the names on purpose and left the other at
+        whatever the dataclass gave it; a model saved from the interface
+        has them equal, so the question does not arise. Same reasoning as
+        ``AdvancedSettings.from_dict``, read the other way round: a value
+        that never reached a calculation expresses no intent to preserve,
+        and one that differs from its default does.
+        """
+        data = dict(data or {})
+        names = {f.name for f in dataclass_fields(cls)}
+        defaults = {f.name: f.default for f in dataclass_fields(cls)}
+        notes: list[str] = []
+
+        def _resolve(survivor: str, old, old_default) -> None:
+            """Store ``old`` under ``survivor`` if it is the one with intent."""
+            if survivor not in data:
+                data[survivor] = old          # older format: only the one name
+                return
+            if data[survivor] == old:
+                return                         # written from the interface
+            if old != old_default and data[survivor] == defaults[survivor]:
+                data[survivor] = old
+
+        # ---- same quantity, two names: the value migrates straight across
+        for shadow in ("path_num_paths", "auto_refine_iterations",
+                       "auto_refine_divisions"):
+            if shadow in data:
+                old_default, survivor = _SHADOW_FIELDS[shadow]
+                _resolve(survivor, data.pop(shadow), old_default)
+
+        # ---- segment length: 0 used to mean "automatic", which is now the
+        # unticked checkbox. Only migrates when the old field shows intent
+        # AND the pair that replaced it is still untouched.
+        if "path_segment_length" in data:
+            old = data.pop("path_segment_length")
+            old_default = _SHADOW_FIELDS["path_segment_length"][0]
+            untouched = (
+                data.get("path_segment_length_manual",
+                         defaults["path_segment_length_manual"])
+                == defaults["path_segment_length_manual"]
+                and data.get("path_segment_length_value",
+                             defaults["path_segment_length_value"])
+                == defaults["path_segment_length_value"])
+            if old != old_default and untouched:
+                try:
+                    old = float(old)
+                except (TypeError, ValueError):
+                    old = old_default
+                data["path_segment_length_manual"] = old > 0.0
+                if old > 0.0:
+                    data["path_segment_length_value"] = old
+
+        # ---- the toe angles CANNOT be migrated here and are not guessed.
+        # They were stored in the search's toe-to-crest frame; the fields
+        # that replaced them are absolute, which means the conversion needs
+        # the failure direction — a property of the project, not of this
+        # block. Dropping them silently would be the same fault this whole
+        # change is about, so a value that carried intent is reported.
+        for shadow in ("path_min_angle_deg", "path_max_angle_deg",
+                       "path_upper_angle_enabled", "sa_temperature_factor"):
+            if shadow not in data:
+                continue
+            old = data.pop(shadow)
+            old_default, survivor = _SHADOW_FIELDS[shadow]
+            if old == old_default:
+                continue
+            if shadow == "sa_temperature_factor":
+                why = ("it held a geometric cooling rate that no analysis "
+                       "ever read; the coefficient the schedule does use is")
+            else:
+                why = ("it held an angle in the search's own toe-to-crest "
+                       "frame and the field replacing it is absolute, so "
+                       "converting it needs the failure direction, which is "
+                       "not part of this block. The field to set is")
+            notes.append(
+                f"This model carries {shadow} = {old}, removed in v0.1.103: "
+                f"{why} {survivor}. The stored value was NOT converted.")
+
+        # ---- read by nobody, ever: dropped without a word, because a value
+        # that never reached a calculation has nothing to say.
+        for shadow, (_old_default, survivor) in _SHADOW_FIELDS.items():
+            if survivor is None:
+                data.pop(shadow, None)
+
+        obj = cls(**{k: v for k, v in data.items() if k in names})
+        # Not a field: it must not travel back out through ``asdict``.
+        obj._migration_notes = notes
+        return obj
 
     def methods_for_surface_type(self) -> list[SearchMethod]:
         """Returns the list of search methods compatible with the
@@ -692,7 +840,7 @@ class ProjectSettings:
             units=Units.from_dict(data.get("units", {})),
             methods=MethodsSettings(**data.get("methods", {})),
             groundwater=GroundwaterSettings(**data.get("groundwater", {})),
-            search=SearchSettings(**data.get("search", {})),
+            search=SearchSettings.from_dict(data.get("search", {})),
             statistics=StatisticsSettings(**data.get("statistics", {})),
             back_analysis=BackAnalysisSettings(
                 **data.get("back_analysis", {})),

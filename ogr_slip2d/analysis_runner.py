@@ -123,6 +123,8 @@ def check_analysis_settings(project) -> list[str]:
     # main_window.py), or a model where the groundwater analysis was
     # simply never run. Only the wording changed: it used to blame the
     # file format, which is no longer true.
+    problems.extend(_shadow_setting_problems(project))
+
     from ogr_core.materials import PorePressureType
     uses_fem = [m.name for m in project.materials
                 if getattr(m, "pore_pressure", None) == PorePressureType.FEM_SEEPAGE]
@@ -136,6 +138,40 @@ def check_analysis_settings(project) -> list[str]:
             "everywhere, which looks like a dry slope.")
 
     return problems
+
+
+def _shadow_setting_problems(project) -> list[str]:
+    """Refuse to run on a settings object carrying a retired field name.
+
+    Until v0.1.103 six settings existed twice — the name the interface
+    showed and the name the engine read — and assigning the second one is
+    what a script did when it thought it was configuring the search. The
+    names are gone, but a dataclass takes any attribute you hand it
+    without a word, so ``s.path_num_paths = 300`` would still look like a
+    setting and still reach nothing. Refusing is the only answer that
+    cannot be mistaken for having worked.
+    """
+    from ogr_core.project.settings import _SHADOW_FIELDS
+
+    s_search = project.settings.search
+    out = []
+    for name in _SHADOW_FIELDS:
+        if name not in vars(s_search):
+            continue
+        _old_default, survivor = _SHADOW_FIELDS[name]
+        value = getattr(s_search, name)
+        if survivor is None:
+            out.append(
+                f"This project sets {name} = {value}. That setting was "
+                f"removed in v0.1.103: no analysis ever read it, and it "
+                f"has no replacement.")
+        else:
+            out.append(
+                f"This project sets {name} = {value}. That name was "
+                f"removed in v0.1.103 because the interface never showed "
+                f"it; set {survivor} instead. Computing now would ignore "
+                f"the value and report a plausible number.")
+    return out
 
 
 def settings_warnings(project) -> list[str]:
@@ -155,6 +191,14 @@ def settings_warnings(project) -> list[str]:
             "Slope Search derives its entry and exit window from the "
             "ground profile and does not read the Slope Limits you set; "
             "they apply to Grid Search. The limits were ignored.")
+    # Anything the stored model carried that could not be migrated. It is
+    # a note and not a refusal: the analysis is valid, it simply did not
+    # honour a value the file still mentions.
+    #
+    # Not a field of the dataclass, so it does not survive a project that
+    # is rebuilt from its own dictionary — which happens only when design
+    # factors are enabled, and costs the note, never the result.
+    notes.extend(getattr(s_search, "_migration_notes", []) or [])
     notes.extend(_failure_direction_note(project))
     return notes
 
@@ -451,31 +495,44 @@ def build_search(project, method_id: str, progress_cb: Optional[Callable] = None
 
     if search_method == "slope":
         from .search import SlopeSearch
-        _up_en = getattr(s_search, "initial_angle_at_toe_upper_enabled", False)
         # ``slope_limits`` is deliberately NOT passed. SlopeSearch.run
         # derives the entry/exit window from the ground profile itself
         # and has no code that reads a user-supplied limit, so handing it
         # one would be an argument that changes nothing — see the warning
         # raised in ``check_analysis_settings``.
+        #
+        # v0.1.103 — the LOWER checkbox used to decide nothing: its angle
+        # was passed whether or not the box was ticked, so a user who
+        # changed the number without ticking got it applied anyway. Same
+        # fault as the Path Search's, found while inventorying which
+        # settings have a reader at all. Every model of the reference bank
+        # stores this field at -45, which is also the search's own default,
+        # so gating it moves nothing that exists today.
         return SlopeSearch(
             num_surfaces=s_search.num_surfaces,
             min_area=s_search.min_area or 1.0,
-            initial_angle_lower_deg=getattr(
-                s_search, "initial_angle_at_toe_lower_deg", -45.0),
+            initial_angle_lower_deg=(
+                s_search.initial_angle_at_toe_lower_deg
+                if s_search.initial_angle_at_toe_lower_enabled else -45.0),
             initial_angle_upper_deg=(
-                getattr(s_search, "initial_angle_at_toe_upper_deg", None)
-                if _up_en else None),
+                s_search.initial_angle_at_toe_upper_deg
+                if s_search.initial_angle_at_toe_upper_enabled else None),
             **common,
         )
 
     if search_method == "auto_refine":
         from .search import AutoRefineSearch
         return AutoRefineSearch(
-            divisions=getattr(s_search, "auto_refine_divisions_along_slope",
-                              s_search.auto_refine_divisions),
+            # v0.1.103 — both of these used to come from a SECOND field of
+            # the same name-but-not-quite (``auto_refine_divisions`` and
+            # ``auto_refine_iterations``), which the interface wrote from
+            # the same widget and a script never touched. The iterations
+            # one defaulted to 5 against the 10 the panel displayed, so a
+            # model built by code ran half the search it declared.
+            divisions=s_search.auto_refine_divisions_along_slope,
             circles_per_division=getattr(
                 s_search, "auto_refine_circles_per_division", 10),
-            iterations=s_search.auto_refine_iterations,
+            iterations=s_search.auto_refine_num_iterations,
             next_iter_fraction=getattr(
                 s_search, "auto_refine_divisions_to_use_pct", 50.0),
             min_area=s_search.min_area or 0.5,
@@ -498,16 +555,23 @@ def build_search(project, method_id: str, progress_cb: Optional[Callable] = None
 
     if search_method == "path":
         from .search import PathSearch
-        _seg = s_search.path_segment_length
         return PathSearch(
-            # 0 means "auto", which the search reads as 0.3 H.
-            segment_length=(_seg if _seg and _seg > 0 else None),
-            initial_angle_lower_deg=s_search.path_min_angle_deg,
+            # v0.1.103 — every argument on this call used to be read from a
+            # field the interface did not show, while the one it did show
+            # was saved and ignored. Unticked boxes mean AUTOMATIC, which is
+            # how the reference describes all three: the segment length is
+            # then ~0.3·H and the angular window [45° below horizontal,
+            # β − 5°]. The angles travel in the absolute convention and
+            # PathSearch converts them; see the note there.
+            segment_length=(float(s_search.path_segment_length_value)
+                            if s_search.path_segment_length_manual else None),
+            initial_angle_lower_deg=(
+                s_search.path_initial_angle_at_toe_lower_deg
+                if s_search.path_initial_angle_at_toe_lower_enabled else None),
             initial_angle_upper_deg=(
-                s_search.path_max_angle_deg
-                if getattr(s_search, "path_upper_angle_enabled", False)
-                else None),
-            num_paths=s_search.path_num_paths,
+                s_search.path_initial_angle_at_toe_upper_deg
+                if s_search.path_initial_angle_at_toe_upper_enabled else None),
+            num_surfaces=s_search.path_num_surfaces,
             optimize=getattr(s_search, "path_optimize", True),
             convex_only=getattr(s_search, "path_convex_only", False),
             **common,
@@ -519,7 +583,7 @@ def build_search(project, method_id: str, progress_cb: Optional[Callable] = None
             initial_vertices=s_search.sa_initial_vertices,
             generation_steps=s_search.sa_generation_steps,
             tolerance=s_search.sa_tolerance,
-            temperature_factor=s_search.sa_temperature_factor,
+            temperature_coefficient=s_search.sa_temperature_coefficient,
             convex_only=s_search.sa_convex_only,
             min_area=s_search.min_area or 1.0,
             **common,

@@ -32,24 +32,27 @@ class TestSearchSettingsExtended:
         assert s.create_tension_crack_reverse_curvature is True
         # Slope
         assert s.num_surfaces > 0
-        assert s.initial_angle_lower_deg < s.initial_angle_upper_deg
-        # Auto Refine (legacy fields preserved for back-compat)
-        assert s.auto_refine_divisions >= 2
-        assert s.auto_refine_iterations >= 1
-        assert 0.0 < s.auto_refine_factor < 1.0
+        assert s.initial_angle_at_toe_lower_enabled is False
+        assert s.initial_angle_at_toe_upper_enabled is False
+        # Auto Refine. v0.1.103 — these used to read the second, shadow
+        # copy of each field (auto_refine_divisions / _iterations /
+        # _factor), which is exactly the pair the engine consumed and the
+        # interface never showed. Only the shown ones exist now.
+        assert s.auto_refine_divisions_along_slope >= 2
+        assert s.auto_refine_num_iterations >= 1
+        assert 0.0 < s.auto_refine_divisions_to_use_pct <= 100.0
         # SA
         assert s.sa_initial_vertices >= 3
         assert s.sa_generation_steps > 0
         assert s.sa_tolerance > 0
-        assert 0.0 < s.sa_temperature_factor < 1.0
-        # Path (legacy fields)
-        assert s.path_segment_length > 0
-        assert s.path_min_angle_deg < s.path_max_angle_deg
-        assert s.path_num_paths > 0
-        # Block (legacy fields)
+        assert 1.0 <= s.sa_temperature_coefficient <= 10.0
+        # Path
+        assert s.path_segment_length_manual is False
+        assert s.path_segment_length_value > 0
+        assert s.path_num_surfaces > 0
+        # Block
         assert s.block_num_groups > 0
-        assert s.block_left_proj_angle_deg > 0
-        assert s.block_right_proj_angle_deg > 0
+        assert s.block_num_surfaces > 0
 
 
 # ======================================================================
@@ -104,7 +107,6 @@ class TestNewSolverClasses:
             method=BishopSimplified(),
             divisions=5,
             iterations=2,
-            factor=0.5,
         )
         assert s.divisions == 5
 
@@ -123,9 +125,9 @@ class TestNewSolverClasses:
         s = PathSearch(
             method=BishopSimplified(),
             segment_length=4.0,
-            min_angle_deg=-30.0,
-            max_angle_deg=30.0,
-            num_paths=100,
+            initial_angle_lower_deg=-30.0,
+            initial_angle_upper_deg=30.0,
+            num_surfaces=100,
         )
         assert s.segment_length == 4.0
 
@@ -136,7 +138,7 @@ class TestNewSolverClasses:
             initial_vertices=8,
             generation_steps=100,
             tolerance=1e-3,
-            temperature_factor=0.95,
+            temperature_coefficient=9.5,
         )
         assert s.initial_vertices == 8
 
@@ -154,9 +156,9 @@ class TestSearchSettingsRoundtripV110:
         # Tweak one field per panel
         s.radius_increment = 0.75
         s.num_surfaces = 5000
-        s.auto_refine_divisions = 25
-        s.sa_temperature_factor = 0.92
-        s.path_segment_length = 7.5
+        s.auto_refine_divisions_along_slope = 25
+        s.sa_temperature_coefficient = 9.2
+        s.path_segment_length_value = 7.5
         s.block_num_groups = 5
         s.create_tension_crack_reverse_curvature = True
         s.sa_convex_only = True
@@ -165,9 +167,9 @@ class TestSearchSettingsRoundtripV110:
         s2 = SearchSettings(**d)
         assert s2.radius_increment == 0.75
         assert s2.num_surfaces == 5000
-        assert s2.auto_refine_divisions == 25
-        assert s2.sa_temperature_factor == 0.92
-        assert s2.path_segment_length == 7.5
+        assert s2.auto_refine_divisions_along_slope == 25
+        assert s2.sa_temperature_coefficient == 9.2
+        assert s2.path_segment_length_value == 7.5
         assert s2.block_num_groups == 5
         assert s2.create_tension_crack_reverse_curvature is True
         assert s2.sa_convex_only is True
