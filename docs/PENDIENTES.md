@@ -200,90 +200,20 @@ cubre. El arreglo previsible es reemplazar la lista
 código, pero **no se toca sin saber antes por qué nadie lo notó**: si el
 bloque fuera inalcanzable, el arreglo sería un parche sobre código muerto.
 
-## 9 · La rama de fuerzas de Spencer y GLE lleva cos α donde va sec α — ABIERTO (v0.1.98)
+## 9 · La rama de fuerzas de Spencer y GLE llevaba cos α donde va sec α — CERRADO en v0.1.106
 
-**Estado: medido, con reproductor, sin corregir. Regla 6.** Encontrado al
-buscar una identidad con la que validar los métodos Corps of Engineers.
+Era correcto, y era **una de tres**. Entró en v0.1.106 junto con las otras dos,
+porque arreglar ésta sola no habría movido el factor de seguridad: `F_m` seguía
+sin depender de λ, así que la raíz `F_f = F_m` habría vuelto a aterrizar sobre
+Bishop. Ver `docs/audits/spencer_gle_interslice_v179.md`, apartado v0.1.106.
 
-La EM 1110-2-1902 §C-4a dice que la hipótesis de fuerzas entre dovelas
-**horizontales** en un método de sólo equilibrio de fuerzas *«is sometimes
-referred to as the "Simplified Janbu" Method»*. Es una identidad exacta, así que
-sirve de prueba. El motor nuevo de inclinación prescrita, con θ = 0, la pasa:
-**0,845089** contra **0,845273** del `janbu_simplified` de OGR, un 0,02 %.
-
-`GLEMorgensternPrice._inner_solve` con λ = 0 —la misma hipótesis— devuelve
-**0,4119**.
-
-**La causa, una línea, la misma en los dos archivos**:
-
-```
-ogr_slip2d/methods/spencer.py:314   num_f += S_term * math.cos(alpha)
-ogr_slip2d/methods/gle.py:377       num_f += S_term * math.cos(alpha)
-ogr_slip2d/methods/janbu.py:150     n_alpha = cos²α·(1 + tanα·tanφ/F)
-                                    es decir  S_term / cos α
-```
-
-Los denominadores de los tres son **idénticos** —`Σ (W·tanα + H_sísmico +
-H_agua + H_soporte)`—, comprobado leyéndolos. Así que las dos expresiones
-difieren en **cos²α por dovela**, y en un talud de 45-64° eso es un factor 2.
-
-**Cuál es la correcta**: el equilibrio horizontal del conjunto con X = 0 da
-
-```
-N = (W − S·sinα)/cosα      (equilibrio vertical de la dovela)
-Σ N·sinα = Σ S·cosα        (equilibrio horizontal del conjunto)
-  ⇒  Σ W·tanα = Σ S·(cosα + tanα·sinα) = Σ S·sec α
-```
-
-**Reproductor** (círculo de referencia de Ej_1, 25 dovelas, seco):
-
-| forma del numerador | F |
-|---|---|
-| `S_term · cos α` — lo que hay hoy en Spencer y GLE | **0,3074** |
-| `S_term / cos α` — el equilibrio horizontal | **0,8451** |
-| `janbu_simplified` de OGR | **0,8453** |
-
-**Por qué ha sobrevivido a la validación, que es la parte interesante**:
-Spencer y GLE publican el factor en la λ donde `F_f = F_m`. `F_m` es correcto y
-bishopiano. Un `F_f` deprimido no desplaza mucho el valor final —lo empuja hacia
-Bishop— pero **sí desplaza hacia arriba la λ de cruce**. Eso explica de golpe
-tres cosas ya escritas y nunca explicadas:
-
-- `docs/audits/spencer_gle_interslice_v179.md`, abierto desde v0.1.79: «Spencer
-  y GLE se separan de Bishop mucho menos de lo que dicen las referencias»;
-- la medida con piezométrica del §7 de este archivo: con agua la referencia
-  separa +1,89 % y OGR separa −0,00 %;
-- el rango de λ, ensanchado **dos veces** persiguiendo raíces que no llegaban: a
-  ±1,5 en v0.1.74 porque el círculo de Ej_1 «necesitaba λ = 1,4919», y a +6 en
-  v0.1.90 por 61 candidatas de Simulated Annealing que ninguna resolvía. Las dos
-  ampliaciones se justificaron por síntomas, no por causa.
-
-**Y corrige un diagnóstico que ya estaba escrito.** El defecto **D10** del banco
-de verificación mide desde el 2026-08-20 que `F_f(0)/Janbu` vale
-0,500 · 0,701 · 0,774 · 0,794 en cuatro problemas, y lo atribuye a que «λ no
-llega a la normal en la base» (`m_alpha` sin λ, `W_eff` sin `X`). Eso no puede
-ser la causa **en λ = 0**, porque en λ = 0 no hay cortante entre dovelas y las
-dos omisiones son correctas ahí. El factor `cos²α` sí lo explica, y explica
-además que el ratio **no sea constante**: pondera por dovela, así que da menos
-cuanto más empinada es la superficie — el problema 8 es no circular con tramos
-muy inclinados y el 1 y el 6 son suaves. Un factor de escala no haría eso.
-
-La otra mitad de D10 sigue en pie y es independiente: `F_m(0)/Bishop` se queda
-en 0,961–0,979, un 2–4 % corto, y eso no lo toca esta línea.
-
-**Qué hace falta para cerrarlo**: no es escribir la línea, es **revalidar**. El
-cambio mueve dos métodos validados y toca la λ de todos los casos de referencia,
-así que hay que publicar el desplazamiento de Ej_1, Ej_2, los cinco casos de
-`validacion/casos/` y los problemas del banco donde Spencer o GLE tienen valor
-publicado — y comprobar si la separación respecto de Bishop pasa a ser la que
-las referencias publican. Es una versión entera.
-
-**Lo que NO hay que hacer**: cambiarlo de paso, dentro de otra tarea, porque
-«se ve que está mal».
-
-**Signo**: desconocido en el factor final; en λ, la desplaza hacia arriba.
-
----
+**Y corrige un diagnóstico que este mismo apartado dejó a medias.** Decía que la
+otra mitad de D10 —`F_m(0)/Bishop` corto un 2-4 %— «sigue en pie y es
+independiente». Lo primero era cierto; lo segundo no tenía la causa que D10 le
+atribuía. No era `m_α` sin λ: en λ = 0 no hay cortante interdovela y `m_α` sin λ
+**es** la expresión correcta ahí. Era que las dos ramas compartían un solo
+iterado `F = (F_f + F_m)/2`, de modo que ninguna era su propio punto fijo.
+Separadas, `F_m(0)` sale exactamente Bishop a ocho cifras.
 
 ## 8 · La carga de vuelta del paralelismo — ABIERTO (v0.1.97)
 
@@ -395,41 +325,116 @@ encima del contorno externo. Dos lecturas posibles y las dos son concluyentes:
 Lo que NO hay que hacer mientras tanto: borrar el término para que Ej_2 salga
 bien. Sería cambiar un resultado validado por otro validado, a ciegas.
 
+### Y en v0.1.106 la misma pregunta aparece en Spencer y GLE
+
+No es el mismo término, pero es la misma bifurcación, y ahora tiene una medida
+propia. Duncan y Wright #70 dice que sobre un talud **ya sumergido** subir el
+agua no puede cambiar nada. Bishop lo cumple a 9·10⁻¹³ y Janbu simplificado
+también. Spencer y GLE se quedan en **3·10⁻⁴**, y el residuo **no baja al
+apretar la tolerancia**: es real.
+
+Aislado por ramas, la causa no admite discusión:
+
+| | F_f | F_m |
+|---|---|---|
+| λ = 0,0 | 9·10⁻¹³ | 9·10⁻¹³ |
+| λ = 0,1 | **16 %** | 0,6 % |
+| λ = 0,2 | **45 %** | 1,3 % |
+
+En λ = 0 las dos ramas **son** Janbu y Bishop, y heredan su exactitud. En
+λ ≠ 0, `X = λ·E` se aplica a la fuerza interdovela **total**, y la presión del
+agua sobre la cara vertical es parte de `E`: sube la lámina, sube `E`, sube el
+cortante interdovela a igualdad de λ. Lo que rescata el resultado final es que
+la **raíz se mueve con ellas** y el cruce acaba casi donde estaba.
+
+**Qué haría falta**: extender `MethodsSettings.interslice_forces` —la
+bifurcación efectiva/total que la familia Corps ya tiene desde v0.1.98— a
+Spencer y GLE. No se hizo en v0.1.106 por dos motivos, y el segundo es el que
+manda:
+
+1. falta el mismo dato externo que este pendiente lleva pidiendo desde v0.1.94;
+2. la evidencia disponible apunta a **totales**, que es lo que hay: Fredlund y
+   Krahn (1977) escriben `E` como fuerza total, y la referencia separa su
+   Spencer de su Bishop un +1,888 % sobre el modelo con piezométrica, donde OGR
+   con totales da +2,14 %. Con efectivas ese número se movería, y se movería
+   alejándose.
+
+Medido y sujeto en `tests/test_ponded_water_v161.py`, con un tripwire de dos
+caras: falla si el residuo crece, y falla si desaparece — porque desaparecer
+significaría que alguien cambió la hipótesis sin actualizar esta entrada.
+
 ---
 
-## 6 · Arranque en caliente de λ en Spencer y GLE — ABIERTO (v0.1.93)
+## 6 · Arranque en caliente de λ en Spencer y GLE — ABIERTO (v0.1.106)
 
-Con el corte del muestreo de v0.1.93, Spencer y GLE siguen costando ~15×
-Bishop por círculo. Lo que queda es que cada *inner solve* arranca siempre en
-`initial_fos = 1.0`, en vez de en la `F` ya convergida del λ anterior. Es
-previsiblemente el mayor ahorro que resta.
+Cada *inner solve* sigue arrancando en `initial_fos = 1.0` en vez de en la `F`
+ya convergida del λ anterior. Sigue siendo previsiblemente el mayor ahorro que
+resta, y sigue sin hacerse por lo mismo: **mueve los números dentro de la
+tolerancia**, y cerrarlo exige revalidar Ej_1, Ej_2 y los cinco casos de
+`validacion/casos/` publicando el desplazamiento de cada uno.
 
-No entró en v0.1.93 porque **mueve los números dentro de la tolerancia**, y
-esa versión se definió por no mover ninguno. Para cerrarlo hace falta
-revalidar Ej_1, Ej_2 y los cinco casos de `validacion/casos/`, y publicar el
-desplazamiento de cada uno — no basta con que sigan dentro de tolerancia.
+Lo que sí cambió en v0.1.106, y va en la dirección contraria al coste: la
+linealización de la resistencia y el denominador de momentos se resuelven ahora
+**una vez por superficie** (`GLESystem`) en vez de una vez por iteración y por
+λ. A cambio, cada pasada hace la recursión interdovela, que antes no existía.
 
-### Y una medición nueva de v0.1.94, que es de la OTRA auditoría de Spencer
+### La segunda medición de este apartado — CERRADA en v0.1.106
 
-`docs/audits/spencer_gle_interslice_v179.md` lleva abierto desde v0.1.79 el
-síntoma «Spencer y GLE se separan de Bishop mucho menos de lo que dicen las
-referencias publicadas», que v0.1.90 dejó explícitamente sin explicar. El
-modelo con piezométrica lo hace **medible por primera vez**:
+La tabla de separación respecto de Bishop con piezométrica, que en v0.1.94
+medía **−0,000 %** donde la referencia separa **+1,888 %**, era el síntoma de
+los tres defectos de la auditoría. Sobre el mismo círculo:
 
-| separación respecto de su propio Bishop | seco ref | seco OGR | agua ref | agua OGR |
-|---|---|---|---|---|
-| spencer | +0,087 % | −0,026 % | **+1,888 %** | **−0,000 %** |
-| gle | +0,191 % | −0,001 % | **+0,809 %** | −0,056 % |
+| separación respecto de su propio Bishop | referencia | OGR 0.1.105 | **OGR 0.1.106** |
+|---|---|---|---|
+| spencer | +1,888 % | −0,000 % | **+2,142 %** |
+| gle | +0,809 % | −0,056 % | **+1,743 %** |
 
-En seco la separación verdadera está por debajo del ruido (0,09-0,19 %), y por
-eso el defecto era invisible. Con agua la referencia separa casi un 2 % y OGR
-separa **cero**.
+El mecanismo que este apartado describía —«el término resistente es el
+numerador de Bishop, con `m_α` **sin λ**»— era la mitad correcta del
+diagnóstico. La otra mitad, que atribuía a lo mismo el hueco de `F_m(0)`, no lo
+era; ver el §9 de este archivo.
 
-El mecanismo, a la vista en `spencer.py`: el término resistente es el numerador
-de Bishop, `(c·b + (W − u·b)·tanφ)/m_α`, con `m_α` **sin λ**; λ sólo modula el
-numerador del balance de fuerzas. La fuerza vertical interdovela `X = λ·f(x)·E`
-nunca llega a la normal en la base. No es un problema del agua: el agua sólo lo
-hace visible.
+---
+
+## 11 · GLE se queda sistemáticamente por encima de Spencer — ABIERTO (v0.1.106)
+
+**Estado: medido, con la causa acotada por descarte, sin corregir. Regla 6.**
+
+Con la corrección interdovela de v0.1.106, Spencer cae dentro del 0,1 % de la
+referencia y GLE se queda un escalón por encima, **siempre del mismo lado**:
+
+| caso | Spencer | GLE |
+|---|---|---|
+| problema 1 (ACADS 1a) | +0,01 % | +0,01 % |
+| problema 3 (ACADS 1c) | −0,02 % | +0,00 % |
+| problema 6 (Talbingo) | +0,03 % | +0,04 % |
+| problema 8 (no circular) | +0,89 % | +0,83 % |
+| Ej_2 con piezométrica | **+0,10 %** | **+0,77 %** |
+| Ej_1 no circular | +0,03 % | +0,83 % |
+| Ej_2 no circular | −0,29 % | −0,09 % |
+
+**Lo que NO es, y está comprobado**: la función de forma. El informe de la
+referencia dice literalmente `interslice force function : Half Sine`, que es el
+predeterminado de OGR, así que nominalmente las dos son la misma `f(x)`.
+
+**Lo que queda por comprobar**: cómo se normaliza su **argumento**. OGR mapea x
+linealmente sobre la luz **horizontal** entre el primer y el último borde de
+dovela (`gle.py`, `x0` y `x1`). Una referencia que midiera x **a lo largo de la
+superficie**, o sobre una luz que una grieta de tracción trunca, obtendría una
+`f` distinta en cada borde — poco, y siempre en el mismo sentido. Un error
+aleatorio no sería sistemático; un argumento desplazado sí.
+
+La diferencia es la única cosa que distingue GLE de Spencer desde v0.1.106,
+porque los dos comparten `ogr_slip2d/interslice.py` entero. Eso acota el sitio
+donde buscar a una función de cuatro líneas.
+
+**Cómo se cerraría**: la referencia publica el valor de `f(x)` por borde de
+dovela en su panel de datos de dovela cuando el método es GLE. Con esa columna
+al lado de la de OGR sobre el mismo círculo, la normalización queda decidida en
+una lectura, sin conjeturas.
+
+Anotado con su medida en `TestKnownDivergences` de
+`tests/test_slide_validation_ej2_piezo_v194.py`.
 
 ---
 

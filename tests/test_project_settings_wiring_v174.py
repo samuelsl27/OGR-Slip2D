@@ -222,7 +222,10 @@ class TestTheLambdaRangeClipsACalibratedGrid:
         default range did not regenerate it byte for byte, every stored
         project's Spencer and GLE results would have moved."""
         from ogr_slip2d.methods import Spencer
-        assert Spencer().lambda_grid() == [
+        # v0.1.106 — the DEFAULT range now starts at the reference's own
+        # -0.1, so the calibrated shape is asked for explicitly here. See
+        # ``AdvancedSettings.min_lambda`` for why the negative tail went.
+        assert Spencer(min_lambda=-1.5).lambda_grid() == [
             -1.5, -1.0, -0.6, -0.4, -0.2, -0.1, 0.0,
             0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 1.5]
 
@@ -241,13 +244,26 @@ class TestTheLambdaRangeClipsACalibratedGrid:
         assert any(abs(v + 0.35) < 1e-12 for v in grid)
         assert any(abs(v - 0.55) < 1e-12 for v in grid)
 
-    def test_the_stored_default_would_have_clipped_a_validated_case(self):
-        """The measurement behind the ±1.25 → ±1.5 correction.
+    def test_the_default_range_reaches_the_root_of_a_validated_case(self):
+        """The measurement behind the ±1.25 → ±1.5 correction, and what
+        v0.1.106 did to it.
 
-        GLE converges at λ = 1.4919 on the Ej1 reference circle. The old
-        stored range stopped at 1.25, so wiring it unchanged would have
-        excluded the solution of a case the project validates against a
-        published value.
+        This case used to assert ``1.25 < lam < 1.5``: GLE converged at
+        λ = 1.4919 on the Ej1 reference circle, so the stored ±1.25 range
+        would have excluded the solution of a validated case, and that is
+        why v0.1.74 widened it.
+
+        **That λ was an artefact.** The force branch summed ``S·cos α``
+        where horizontal equilibrium gives ``S·sec α``, which depressed
+        ``F_f`` and pushed the crossing ``F_f = F_m`` far out; with the
+        equation corrected in v0.1.106 the same circle converges at
+        **λ = 0.862**. So the widening was chasing a symptom — which
+        ``PENDIENTES.md`` §9 predicted before it was measured.
+
+        What is asserted now is the thing that was actually at stake and
+        still is: the DEFAULT range must contain the root of a case this
+        project validates against a published value. The range is not
+        narrowed to fit; it stays at the reference's own [-0.1, 6].
         """
         import sys
         from pathlib import Path
@@ -261,9 +277,15 @@ class TestTheLambdaRangeClipsACalibratedGrid:
         p = val._ej1_project()
         circle = SlipCircle(centre_x=88.0, centre_y=70.5, radius=47.212)
         sl = slice_surface(p, circle, num_slices=25)
-        res = GLEMorgensternPrice().compute_fos(p, circle, sl)
+        m = GLEMorgensternPrice()
+        res = m.compute_fos(p, circle, sl)
         lam = res.details["lambda"]
-        assert 1.25 < lam < 1.5, lam
+        assert res.converged, res.error_message
+        assert m.min_lambda <= lam <= m.max_lambda, (lam, m.min_lambda,
+                                                     m.max_lambda)
+        # And it is now comfortably inside the calibrated shape rather than
+        # at its edge, which is what makes the range no longer critical.
+        assert 0.5 < lam < 1.5, lam
 
     def test_the_two_mistaken_defaults_are_migrated(self):
         """A file written before v0.1.74 carries values that never
@@ -280,7 +302,9 @@ class TestTheLambdaRangeClipsACalibratedGrid:
             "check_tensile_stresses": True, "min_initial_fs": 1.4,
             "min_lambda": -1.25, "max_lambda": 1.25})
         assert old.check_tensile_stresses is False
-        assert old.min_lambda == -1.5 and old.max_lambda == 6.0
+        # v0.1.106 adds a third link to the min_lambda chain:
+        # -1.25 (v0.1.73) -> -1.5 (v0.1.74) -> -0.1 (the reference's own).
+        assert old.min_lambda == -0.1 and old.max_lambda == 6.0
         # The renamed field keeps its value.
         assert abs(old.initial_fos - 1.4) < 1e-12
 

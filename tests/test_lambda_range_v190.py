@@ -84,10 +84,29 @@ class TestTheCalibratedGridIsUnchanged:
     """Half 1: the first sampling pass must be what it always was."""
 
     def test_the_shape_is_still_the_calibrated_list(self):
+        """v0.1.106 — asked for explicitly, because the DEFAULT lower bound
+        is now the reference's own −0.1 and clips the negative tail. The
+        shape itself is untouched; see ``AdvancedSettings.min_lambda``."""
         from ogr_slip2d import GLEMorgensternPrice
-        assert list(GLEMorgensternPrice().lambda_grid()) == [
+        assert list(GLEMorgensternPrice(min_lambda=-1.5).lambda_grid()) == [
             -1.5, -1.0, -0.6, -0.4, -0.2, -0.1, 0.0,
             0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 1.5]
+
+    def test_the_default_grid_starts_at_the_reference_lower_bound(self):
+        """And a case for the clip itself, so it cannot be undone silently.
+
+        λ is the inclination of the inter-slice force, X/E = tanθ. The
+        reference's own models carry ``min_lambda: -0.1``; this program
+        reached −1.5 as symmetry with a positive side that v0.1.74 widened
+        for a real reason. With ``F_f − F_m`` now able to cross more than
+        once, that unjustified tail was catching spurious roots — see
+        ``TestSpuriousNegativeRoots`` below.
+        """
+        from ogr_slip2d import GLEMorgensternPrice, Spencer
+        for cls in (GLEMorgensternPrice, Spencer):
+            grid = cls().lambda_grid()
+            assert abs(min(grid) + 0.1) < 1e-12, (cls.DISPLAY_NAME, grid)
+            assert all(v >= -0.1 - 1e-12 for v in grid), grid
 
     def test_widening_the_range_adds_nothing_to_the_first_pass(self):
         """The whole safety argument in one line: max_lambda 6 must not put
@@ -133,23 +152,64 @@ class TestTheExtensionRespectsTheUser:
         assert ext and max(ext) <= 3.0 + 1e-12, ext
 
 
-class TestTheRootBeyondFifteenIsFound:
-    """Half 2, on the surface that motivated the change."""
+class TestTheReachOfTheLambdaSearch:
+    """Half 2, and v0.1.106 turned its witness inside out.
 
-    def test_gle_converges_where_it_used_to_give_up(self):
+    This class was written around a Simulated Annealing candidate whose root
+    sat at λ ≈ 2.99, far outside the calibrated ±1.5, and it asserted that
+    the clipped range could NOT solve it while the open one could. Both
+    halves of that have stopped being true, and the reason is the finding:
+
+        the same surface, same slices, same everything
+            v0.1.105   root at λ = 2.994
+            v0.1.106   root at λ = 0.782
+
+    The force branch used to sum ``S·cos α`` where the horizontal equilibrium
+    of the mass gives ``S·sec α``. That depressed ``F_f`` — by ``cos²α`` per
+    slice, so most on the steep parts — and pushed the crossing ``F_f = F_m``
+    out to λ values no slope needs. **Both widenings of the range were
+    chasing that**: ±1.25 → ±1.5 in v0.1.74 for the Ej_1 circle "needing"
+    λ = 1.4919 (it needs 0.862), and → 6 in v0.1.90 for 61 annealing
+    candidates that "had no bracket". ``docs/PENDIENTES.md`` §9 predicted
+    exactly this before it was measured, and
+    ``docs/audits/spencer_gle_interslice_v179.md`` has the equation.
+
+    Measured after the correction, over three Simulated Annealing runs on
+    this same model: 341 solved surfaces between Spencer and GLE, **not one**
+    with |λ| > 1.5, and **not one** failing with "no λ-bracket" — against 61
+    of 61 failing before v0.1.90.
+
+    So the reach is no longer exercised by any surface this project has. It
+    is KEPT, because 6 is the reference's own upper bound and narrowing a
+    range on the strength of "nothing needs it today" is how the ±1.25 of
+    v0.1.74 came about in the first place. What this class asserts is what
+    is still true and still checkable: the surface solves, the mechanism
+    still respects the user's range, and the reach is there if a surface
+    ever wants it.
+    """
+
+    def test_the_witness_surface_solves_inside_the_calibrated_shape(self):
         from ogr_slip2d import GLEMorgensternPrice
-        clipped = _solve(GLEMorgensternPrice, _BEYOND_15, max_lambda=1.5)
         opened = _solve(GLEMorgensternPrice, _BEYOND_15, max_lambda=6.0)
-        assert not clipped.converged, "the case no longer reproduces"
-        assert "λ-bracket" in (clipped.error_message or "")
         assert opened.converged, opened.error_message
-        assert not opened.error_message, opened.error_message
+        lam = opened.details.get("lambda")
+        assert lam is not None and abs(lam) <= 1.5, (
+            f"λ = {lam}, outside the calibrated shape. If a surface needs "
+            f"the extension again, say so here rather than leaving this "
+            f"case asserting the opposite of what happens.")
 
-    def test_the_root_it_finds_is_beyond_the_calibrated_grid(self):
+    def test_clipping_the_range_below_the_root_still_loses_it(self):
+        """The mechanism, exercised on purpose now that no surface does it
+        by accident: a range that excludes the root must fail to bracket,
+        or ``max_lambda`` would be a setting that does nothing (rule 7)."""
         from ogr_slip2d import GLEMorgensternPrice
         opened = _solve(GLEMorgensternPrice, _BEYOND_15, max_lambda=6.0)
-        lam = opened.details.get("lambda")
-        assert lam is not None and lam > 1.5, lam
+        root = opened.details["lambda"]
+        clipped = _solve(GLEMorgensternPrice, _BEYOND_15,
+                         max_lambda=round(root, 3) - 0.3)
+        assert not clipped.converged or (
+            abs(clipped.details.get("lambda", 0.0) - root) > 1e-6), (
+            f"clipping below λ = {root:.3f} changed nothing")
 
     def test_force_and_moment_agree_at_that_root(self):
         """The real check on the answer, and it needs no reference value:
@@ -281,3 +341,99 @@ class TestStoredProjectsMigrate:
     def test_the_new_default_is_the_reference_range(self):
         from ogr_core.project.settings import AdvancedSettings
         assert abs(AdvancedSettings().max_lambda - 6.0) < 1e-12
+
+
+# ======================================================================
+class TestSpuriousNegativeRoots:
+    """Why the default lower bound came back to the reference's -0.1.
+
+    ``F_f(lambda) - F_m(lambda)`` had exactly one crossing until v0.1.106,
+    for a reason that was itself the defect: ``F_m`` did not depend on lambda
+    at all. Once the inter-slice shear reaches the base normal it does, and
+    the difference can cross more than once. Ching and Fredlund (1983) is the
+    reference for that and for rejecting the extra crossings.
+
+    The one that bit is Duncan and Wright verification #70 on a polyline —
+    an already-submerged slope whose answer is 1.60, the referee value the
+    file ``test_ponded_water_v161`` validates. Sampling from -1.5 upwards,
+    the outer search met a crossing at lambda = -1.5 and took it, because it
+    takes the FIRST sign change in ascending lambda:
+
+        lambda = -1.5   F_f 1.0755  F_m 1.0452   -> crossing, F = 1.051
+        lambda = +0.3   F_f 1.6      F_m 1.6      -> the answer
+
+    A resultant at lambda = -1.5 is inclined 56 degrees downward-BACKWARD on
+    a mass sliding forward. It is not a stress state; it is arithmetic.
+    """
+
+    def test_the_submerged_polyline_lands_on_its_referee_value(self):
+        """The case itself, end to end. It is here and not only in
+        ``test_noncircular_moments_v1105`` because what it guards is the
+        LAMBDA RANGE, and someone widening that range back would break it
+        without ever opening the other file."""
+        import copy
+        import sys
+        from pathlib import Path
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from ogr_core.geometry import Polyline, Vertex
+        from ogr_core.geometry.ground import ground_surface
+        from ogr_slip2d import Spencer
+        from ogr_slip2d.search import GridSearch
+        from ogr_slip2d.surface import SlipCircle, SlipSurface
+        from test_ponded_water_v161 import CIRCLE, buoyant
+
+        c = SlipCircle(**CIRCLE)
+        g = ground_surface(buoyant().external_boundary().polyline)
+        x_l, x_r = c.intersect_with_ground(g)
+        pts = [(x_l + (x_r - x_l) * i / 24,
+                SlipCircle(**CIRCLE).base_y_at(x_l + (x_r - x_l) * i / 24))
+               for i in range(25)]
+        surface = SlipSurface(polyline=Polyline(
+            vertices=[Vertex(x, y) for x, y in pts], closed=False))
+        p = copy.deepcopy(buoyant())
+        p.settings.search.axis_x = CIRCLE["centre_x"]
+        p.settings.search.axis_y = CIRCLE["centre_y"]
+
+        res = GridSearch(method=Spencer(), num_slices=50,
+                         min_area=0.0).evaluate_surface(p, surface)
+        assert res is not None and res.is_valid, res
+        assert abs(res.fos - 1.60) / 1.60 < 0.01, res.fos
+        assert res.details["lambda"] > 0.0, res.details["lambda"]
+
+    def test_widening_the_range_backwards_is_what_loses_it(self):
+        """The other half, so the cause is pinned and not just the symptom.
+
+        With the old -1.5 lower bound handed in explicitly, the same surface
+        returns the spurious crossing. If some later change makes this pass
+        too, the clip has stopped being load-bearing and can be revisited —
+        which is a better outcome than the clip quietly outliving its reason.
+        """
+        import copy
+        import sys
+        from pathlib import Path
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from ogr_core.geometry import Polyline, Vertex
+        from ogr_core.geometry.ground import ground_surface
+        from ogr_slip2d import Spencer
+        from ogr_slip2d.search import GridSearch
+        from ogr_slip2d.surface import SlipCircle, SlipSurface
+        from test_ponded_water_v161 import CIRCLE, buoyant
+
+        c = SlipCircle(**CIRCLE)
+        g = ground_surface(buoyant().external_boundary().polyline)
+        x_l, x_r = c.intersect_with_ground(g)
+        pts = [(x_l + (x_r - x_l) * i / 24,
+                SlipCircle(**CIRCLE).base_y_at(x_l + (x_r - x_l) * i / 24))
+               for i in range(25)]
+        surface = SlipSurface(polyline=Polyline(
+            vertices=[Vertex(x, y) for x, y in pts], closed=False))
+        p = copy.deepcopy(buoyant())
+        p.settings.search.axis_x = CIRCLE["centre_x"]
+        p.settings.search.axis_y = CIRCLE["centre_y"]
+
+        res = GridSearch(method=Spencer(min_lambda=-1.5), num_slices=50,
+                         min_area=0.0).evaluate_surface(p, surface)
+        assert res is not None
+        assert abs(res.fos - 1.60) / 1.60 > 0.10, (
+            f"the -1.5 lower bound no longer loses this surface "
+            f"({res.fos:.4f}); the clip of v0.1.106 may be revisitable")

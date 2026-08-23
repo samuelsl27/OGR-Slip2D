@@ -1,14 +1,142 @@
 # Spencer y GLE devuelven prácticamente el valor de Bishop
 
-**Estado: la hipótesis de partida era la equivocada, y el síntoma era peor de
-lo que este documento decía.** Léanse los dos apartados de actualización antes
-que nada: el de **v0.1.90** (el alcance de λ) y el de **0.1.97** (la separación
-medida sin ruido de parada resulta ser CERO, y la causa es demostrable desde
-el código). El resto del documento se conserva tal como se escribió en v0.1.79
-porque las mediciones siguen siendo válidas; lo que cambia es qué explican —
-con una salvedad que el apartado de 0.1.97 detalla: las de la tabla del
-síntoma se tomaron a la tolerancia por defecto y llevan ruido de parada
-dentro.
+**Estado: CERRADO en v0.1.106.** Eran **tres** defectos, no uno, y sólo uno de
+los tres estaba nombrado correctamente antes de medirlo. El apartado de
+**v0.1.106** los separa y publica la corrección; léase ése primero. Los de
+**v0.1.90** (el alcance de λ) y **0.1.97** (la separación es CERO, no pequeña)
+siguen siendo válidos y son los que llevaron hasta aquí. El resto del documento
+se conserva tal como se escribió en v0.1.79 porque las mediciones siguen siendo
+válidas; lo que cambia es qué explican — con una salvedad que el apartado de
+0.1.97 detalla: las de la tabla del síntoma se tomaron a la tolerancia por
+defecto y llevan ruido de parada dentro.
+
+---
+
+## ACTUALIZACIÓN v0.1.106 — eran TRES defectos, y la mitad de momentos estaba mal atribuida
+
+Reproducido primero sobre 0.1.105 sin tocar nada, con los dos anclajes exactos
+de Fredlund y Krahn (1977): en λ = 0 la rama de fuerzas **es** Janbu
+simplificado (fuerzas interdovela horizontales, sin cortante: la misma
+ecuación) y la rama de momentos **es** Bishop simplificado sobre un círculo.
+
+| Problema | Bishop | Janbu simp. | Spencer | GLE | λ | F_f(0)/Janbu | F_m(0)/Bishop |
+|---|---|---|---|---|---|---|---|
+| 1 (ACADS 1a) | 0,986936 | 0,950307 | **0,986936** | **0,986936** | 0,68 | **0,774** | 0,977 |
+| 3 (ACADS 1c) | 1,405251 | 1,291785 | **1,405251** | **1,405251** | 1,05 | **0,700** | 0,961 |
+| 6 (Talbingo) | 2,208783 | 1,949617 | **2,208783** | **2,208783** | 1,08 | **0,794** | 0,979 |
+| 8 (no circular) | 1,229727 | 1,208040 | **1,229727** | **1,229727** | 1,44 | **0,497** | 1,017 |
+
+Spencer y GLE valen Bishop a seis cifras en los cuatro, incluido el problema 8,
+que desde v0.1.105 ya **no** pasa por la guarda `circle_R`: quitar esa guarda no
+tocó nada de esto.
+
+### (A) La rama de fuerzas llevaba `cos α` donde va `sec α`
+
+`spencer.py:381` y `gle.py:415`. Ya estaba escrito en `PENDIENTES.md` §9 desde
+v0.1.98. El equilibrio horizontal del conjunto con X = 0 lo cierra sin margen:
+
+```
+N = (W − S·senα)/cos α          (equilibrio vertical de la dovela)
+Σ N·senα = Σ S·cos α            (equilibrio horizontal del conjunto)
+  ⇒  F · Σ W·tanα = Σ S_term·sec α
+```
+
+y `Σ S_term·secα / Σ W·tanα` **es** Janbu simplificado, término a término,
+porque `n_α = cos α · m_α`.
+
+### (B) Las dos ramas compartían UNA sola F — y esto no estaba nombrado en ninguna parte
+
+`_inner_solve` iteraba `new_F = 0.5·(new_fm + new_ff)` y evaluaba `m_α` con esa
+media. Ninguna de las dos ramas era, por tanto, su propio punto fijo: `F_m` se
+calculaba con la `m_α` de un factor que no era `F_m`.
+
+**Eso, y no `m_α` sin λ, es la causa entera del `F_m(0)/Bishop = 0,961–0,979`.**
+El defecto D10 del banco lo venía atribuyendo desde el 2026-08-20 a que «λ no
+llega a la normal en la base», y esa atribución es falsa para la mitad de
+momentos: **en λ = 0 no hay cortante interdovela**, así que `m_α` sin λ y
+`W_eff` sin `X` son las expresiones correctas ahí. Es el mismo error de
+razonamiento que la regla 6 registra para `m_alpha` en v0.1.82: una medición
+correcta sosteniendo una explicación equivocada.
+
+Con (A) y (B) corregidos y nada más, las dos identidades salen **exactas a ocho
+cifras** en los problemas 1, 3 y 6, y también con presión intersticial:
+
+```
+F_f(0)/Janbu  = 1,00000000        F_m(0)/Bishop = 1,00000000
+```
+
+### (C) La normal en la base omitía (X_R − X_L)
+
+Éste sí es el que decía D10, y es el de fondo. **Arreglar (A) y (B) no
+basta**: la rama de momentos seguiría sin contener λ por ninguna parte, `F_m(λ)`
+sería constante, y la raíz `F_f = F_m` volvería a aterrizar exactamente sobre
+Bishop. Es lo que el apartado de 0.1.97 de este mismo documento ya demostraba
+desde el código.
+
+La forma completa de Fredlund y Krahn (1977) —recursión horizontal de `E`,
+`X_i = λ·f(x_i)·E_i`, y `N = [W + (X_R − X_L) − (c'l − u·l·tanφ')·senα/F] / m_α`—
+reproduce los valores publicados:
+
+| Problema | Bishop OGR | **Spencer** | publicado | error | separación OGR | separación publicada |
+|---|---|---|---|---|---|---|
+| 1 | 0,986936 | **0,986078** | 0,986 | **+0,01 %** | −0,09 % | −0,10 % |
+| 3 | 1,405251 | **1,374693** | 1,375 | **−0,02 %** | −2,17 % | −2,14 % |
+| 6 | 2,208783 | **2,292801** | 2,292 | **+0,03 %** | +3,80 % | +3,80 % |
+
+Y con agua, que es donde este documento medía CERO separación
+(`Ej_2_Piezometric_Line`, círculo de referencia de la propia referencia):
+
+| | Bishop | Spencer | separación |
+|---|---|---|---|
+| referencia | 0,674931 | 0,687672 | **+1,888 %** |
+| OGR 0.1.105 | 0,673203 | 0,673203 | **+0,000 %** |
+| **OGR 0.1.106** | 0,673203 | **0,685984** | **+1,898 %** |
+
+λ pasa de 0,68–3,21 a **0,39–0,63**. Las dos ampliaciones del rango de λ
+—a ±1,5 en v0.1.74 y a +6 en v0.1.90— perseguían raíces que sólo estaban lejos
+porque `F_f` venía deprimido por (A). Se conservan: no estorban, y ahora se
+sabe qué eran.
+
+### Lo que se movió en el banco de verificación
+
+60 de sus problemas declaran Spencer o GLE, y se han vuelto a correr los 60.
+
+| | antes | **ahora** |
+|---|---|---|
+| problemas con un método de λ enteramente `OK` | 12 | **15** |
+| de ellos corroborados sobre el círculo publicado | 8 | **11** |
+| problemas del banco enteramente `OK` (de 77) | 16 | **20** |
+
+Sobre la superficie publicada —que aísla el método de la búsqueda— de 40
+valores comparables con su publicado, **28 mejoran** y 12 empeoran; once de
+esos doce por menos de 0,75 puntos. El duodécimo es el problema 12, y no es de
+esta corrección: su Bishop ya erraba **+21 %** porque la grieta de tracción seca
+no trunca el arco (defecto D13 del banco, abierto), así que la masa analizada no
+es la del enunciado y su separación no es comparable con la publicada.
+
+El desplazamiento número a número está en
+`_auditoria/DESPLAZAMIENTO_v1106.md` del banco, con una advertencia que costó
+una lectura equivocada: el base de esa resta **no es 0.1.105** sino la versión en
+que cada caso se corrió por última vez, y 52 de 60 eran de 0.1.97. Por eso el
+informe mide además la **separación respecto de Bishop**, que cancela la deriva
+común porque Bishop se recorre en la misma corrida.
+
+### Lo que sujeta esto de aquí en adelante
+
+`tests/test_gle_interslice_v1106.py`, con cuatro identidades analíticas —la
+mejor clase de test que admite este proyecto— y ninguna instantánea:
+
+| | identidad | fuente |
+|---|---|---|
+| I1 | `F_f(λ=0)` ≡ Janbu simplificado | Fredlund y Krahn (1977) |
+| I2 | `F_m(λ=0)` ≡ Bishop simplificado (circular) | íd. |
+| I3 | `F_f(λ)` ≡ el motor de inclinación prescrita con θ = arctan λ, **para todo λ** | Spencer (1967) es Modified Swedish con θ resuelto en vez de prescrito |
+| I4 | GLE con `f(x) ≡ 1` ≡ Spencer | Fredlund y Krahn (1977) |
+
+I3 es la más fuerte: ese motor está validado término a término contra el
+ejemplo resuelto de **USACE EM 1110-2-1902 apéndice G**, así que la rama de
+fuerzas de Spencer queda anclada a un caso publicado dovela a dovela. Medida a
+< 1,5·10⁻⁹ en λ = 0 / 0,2 / 0,43 / 0,8.
 
 ---
 
@@ -261,6 +389,10 @@ tocan para que pasen ni para que fallen. Cuando se corrija el fondo, las dos
 tolerancias deberían bajar a 0.5 % como las demás, y ese será el test de que
 la corrección funcionó.
 
+> **v0.1.106**: hecho. Las dos bajaron a 0.5 %, y pasan. La asimetría
+> desapareció con la causa que la producía, que es la única manera legítima de
+> quitar una tolerancia doble.
+
 ---
 
 ## Consecuencia inmediata
@@ -283,3 +415,9 @@ arregle:
 | ACADS 1(a) | 0.986 | 0.986 |
 | ACADS 1(c) | 1.375 | 1.374 |
 | Arai & Tagyo ej.1 | 1.406 | — |
+
+> **v0.1.106**: ese día llegó. ACADS 1(a) sale 0.986078 y 0.986059 contra el
+> 0.986 publicado; ACADS 1(c), 1.374693 y 1.374028 contra 1.375 y 1.374. Los
+> `esperado.json` de los casos 002, 003 y 004 pueden escribirse ya, y con la
+> **fuente publicada** como valor esperado — no con lo que imprime el código,
+> que es lo que la regla 1 prohibía y por lo que llevaban vacíos.

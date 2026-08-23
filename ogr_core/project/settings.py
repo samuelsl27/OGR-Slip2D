@@ -674,9 +674,26 @@ class AdvancedSettings:
     # until v0.1.74, which was a misnomer: it is a starting point, not a
     # floor. ``from_dict`` still reads the old key.
     initial_fos: float = 1.0
-    # Range searched for the interslice force scaling factor. See the
-    # note above for why these are ±1.5 and not ±1.25.
-    min_lambda: float = -1.5
+    # Range searched for the interslice force scaling factor.
+    #
+    # v0.1.106 — was −1.5, and that lower end was never justified by
+    # anything. The widening of v0.1.74 (±1.25 → ±1.5) was driven by the
+    # Ej_1 circle needing λ = 1.4919, which is the POSITIVE side; the
+    # negative tail came along as symmetry. The reference's own models
+    # carry ``min_lambda: -0.1``, and that is now the default here too.
+    #
+    # It stopped being harmless in this version. λ is the inclination of
+    # the inter-slice force, X/E = tan θ, so λ = −1.5 is a resultant
+    # inclined 56° downward-BACKWARD on a mass sliding forward. Until
+    # v0.1.106 no such λ could win, because ``F_m`` did not depend on λ at
+    # all and ``F_f − F_m`` had exactly one crossing. Now it can have
+    # several, and on the Duncan and Wright buoyant polyline the crossing
+    # at λ = −1.5 returned 1.051 where the answer is 1.60 — the first
+    # crossing in ascending λ, so the outer search took it.
+    #
+    # A user who wants the old reach still has it: the range is a setting,
+    # and ``lambda_grid`` intersects the calibrated shape with it.
+    min_lambda: float = -0.1
     # v0.1.90 — was 1.5. The reference's own models carry max_lambda 6
     # with enforcement off; clipping at 1.5 left Spencer and GLE unable to
     # bracket surfaces whose root sits beyond it. Sampling past the
@@ -744,6 +761,7 @@ class AdvancedSettings:
         # 1.5 and v0.1.90 maps on to 6.0. Landing such a project on an
         # intermediate default nobody uses would be worse than either.
         for key, old, new in (("min_lambda", -1.25, -1.5),
+                              ("min_lambda", -1.5, -0.1),
                               ("max_lambda", 1.25, 1.5),
                               ("max_lambda", 1.5, 6.0)):
             if key in data and abs(float(data[key]) - old) < 1e-12:

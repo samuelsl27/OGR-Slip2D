@@ -162,41 +162,73 @@ class TestTensileAdmissibilityFilter:
     # constant was calibrated on a slicing that did not resolve the
     # surface: until v0.1.89 the slicer divided the failure width uniformly
     # and ignored the surface's own vertices, so the near-vertical rising
-    # segment of the degenerate wedge was blended into its neighbours.
+    # segment of the degenerate wedge was blended into its neighbours. What
+    # is asserted instead is the SEPARATION, which is what the pair was
+    # always about and which needs no constant chosen to fit it.
     #
-    # With slice boundaries at the vertices, both surfaces measure
-    # differently and neither reaches −5 %. Refinement says the new numbers
-    # are the converged ones, not an artefact — asking for 18, 27, 36, 54,
-    # 72 and 108 slices gives:
+    # v0.1.106 — remeasured, because Spencer's λ moved when the inter-slice
+    # forces reached the base normal and this reconstruction is driven by
+    # that λ. Asking for 18, 27, 36, 54, 72 and 108 slices:
     #
-    #     degenerate  −1.50  −1.56  −1.57  −1.59  −1.60  −1.60  %
-    #     healthy     −0.52  −0.55  −0.53  −0.55  −0.57  −0.58  %
+    #     degenerate  −1.59  −1.59  −1.60  −1.59  −1.60  −1.60  %
+    #     healthy     +0.52  +0.11  −0.01  −0.07  −0.07  −0.07  %
     #
-    # stable to two figures from 36 slices on. So what is asserted now is
-    # the SEPARATION, which is what the pair was always about and which no
-    # longer needs a constant chosen to fit it: the degenerate surface
-    # needs several times more interslice tension, on several times more
-    # interfaces. A threshold picked to sit between two measured numbers is
-    # the parameter-fitting rule 1 forbids; a ratio is a claim about shape.
+    # The degenerate surface is where it was (v0.1.105 measured −1.50 to
+    # −1.60). The HEALTHY one moved, and in the direction that makes the
+    # pair mean more: it used to carry −0.52 to −0.58 % of tension and now
+    # carries essentially none, so the claim is no longer "one needs several
+    # times more tension" but the cleaner "one needs tension and the other
+    # does not".
+    #
+    # Two things had to be right for this to be measurable at all, and both
+    # were fixed in v0.1.106. The reconstruction is driven by
+    # ``details["boundary_ratios"]``, and the no-λ-bracket path — which is
+    # the path the DEGENERATE surface takes — used to return an empty
+    # ``details``. So it was being marched with ZERO inter-slice ratios: a
+    # Janbu picture over a Spencer number, closing at 49 % instead of 1e-6.
     def _tension(self, pts):
         st = compute_interslice_state(self._eval(pts))
         interior = st.E[1:-1]
         return min(interior) / st.e_max, sum(1 for e in interior if e < 0)
 
-    def test_degenerate_surface_requires_more_tension_than_healthy(self):
+    def test_degenerate_surface_requires_interslice_tension(self):
+        """The wedge cannot stand without the slices pulling on each other,
+        which is what makes it a drawing rather than a mechanism."""
+        ratio, n_neg = self._tension(self._DEGENERATE)
+        assert ratio < -0.01, ratio
+        assert n_neg > 0, n_neg
+
+    def test_the_two_surfaces_are_far_apart(self):
+        """Otherwise either assertion could pass on a coin toss. A full
+        percentage point of e_max between them, on a pair whose factors of
+        safety differ by more than three times."""
         deg_ratio, deg_n = self._tension(self._DEGENERATE)
         ok_ratio, ok_n = self._tension(self._HEALTHY)
-        assert deg_ratio < 0.0 and ok_ratio < 0.0        # both have some
-        assert deg_ratio < 2.0 * ok_ratio, (deg_ratio, ok_ratio)
+        assert deg_ratio < ok_ratio - 0.01, (deg_ratio, ok_ratio)
         assert deg_n > ok_n, (deg_n, ok_n)
 
     def test_healthy_surface_is_essentially_compressive(self):
         """Still an absolute statement, because "essentially compressive"
-        has to mean something on its own: under 1 % of the largest
-        interslice force, measured 0.52-0.58 % across the refinement above.
+        has to mean something on its own: within 1 % of the largest
+        inter-slice force of zero, and at this slicing not a single boundary
+        in tension.
         """
-        ratio, _ = self._tension(self._HEALTHY)
+        ratio, n_neg = self._tension(self._HEALTHY)
         assert ratio >= -0.01, ratio
+        assert n_neg == 0, n_neg
+
+    def test_the_reconstruction_closes(self):
+        """And the control for all three: a march that does not close is not
+        an equilibrium, and every number above would be furniture.
+
+        This is what caught the empty ``details`` of the no-bracket path —
+        the degenerate surface reconstructed at a relative closure of 0.49,
+        and nothing in the file was looking.
+        """
+        for pts in (self._DEGENERATE, self._HEALTHY):
+            st = compute_interslice_state(self._eval(pts))
+            assert st.ok, pts[0]
+            assert st.relative_closure < 1e-3, (pts[0], st.relative_closure)
 
     def test_filter_rejects_degenerate_keeps_healthy(self):
         """v0.1.32 — the admissibility filter became a POST-filter: the

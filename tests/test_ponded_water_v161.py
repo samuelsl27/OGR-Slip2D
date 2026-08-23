@@ -153,14 +153,83 @@ class TestVerification70:
             f = fos(ponded(105.0), m)
             assert abs(f - REFEREE_FOS) / REFEREE_FOS < 0.005, (name, f)
 
+    #: How far each method may drift when the pond is raised. Bishop is
+    #: EXACT, and so is Janbu simplified; Spencer and GLE are not, for a
+    #: reason measured in v0.1.106 and stated in the case below.
+    DEPTH_INVARIANCE = {"Bishop": 1e-6, "Spencer": 1e-3, "GLE": 1e-3}
+
     def test_invariant_to_the_depth_of_water_above_the_slope(self):
         """The signature of a correct treatment: on an already-submerged
         slope the added weight and the added thrust cancel exactly, so
-        raising the water changes nothing."""
+        raising the water changes nothing.
+
+        EXACTLY, for a method whose equation is a ratio of global sums:
+        Bishop holds this to 1e-12. Spencer and GLE hold it to 3e-4, and
+        v0.1.106 measured why rather than widening the number quietly —
+        see ``test_the_two_lambda_methods_are_only_nearly_invariant``.
+        """
         for name, m in RIGOROUS:
             a = fos(ponded(75.0), m)
             b = fos(ponded(105.0), m)
-            assert math.isclose(a, b, rel_tol=1e-6), (name, a, b)
+            tol = self.DEPTH_INVARIANCE[name]
+            assert math.isclose(a, b, rel_tol=tol), (name, a, b, tol)
+
+    def test_the_two_lambda_methods_are_only_nearly_invariant(self):
+        """WHY Spencer and GLE get 1e-3 above, pinned so it cannot be taken
+        for rounding. Reported under rule 6 in v0.1.106, not corrected.
+
+        Their defining assumption is ``X = lambda * E`` where ``E`` is the
+        TOTAL inter-slice force — Fredlund and Krahn (1977) write it that
+        way, and the pressure of the water standing on the vertical face
+        between two slices is part of it. Raise the pond and every ``E``
+        grows, so at a FIXED lambda the inter-slice shear grows with it and
+        the two branches move a lot:
+
+            lambda = 0.0    F_f and F_m invariant to 9e-13   (they ARE Janbu
+                                                              simplified and
+                                                              Bishop)
+            lambda = 0.1    F_f moves 16 %,  F_m moves 0.6 %
+            lambda = 0.2    F_f moves 45 %,  F_m moves 1.3 %
+
+        What rescues the answer is that the CROSSING moves with them: the
+        root lambda shifts until F_f = F_m lands almost where it did, and
+        the factor of safety ends up 3e-4 apart instead of 16 %. "Almost"
+        is the honest word, and this case is where it is written down.
+
+        The way out is the effective/total fork that
+        ``PrescribedInclinationMethod`` already offers the Corps methods
+        (``MethodsSettings.interslice_forces``, v0.1.98), extended to these
+        two. It is NOT done here: docs/PENDIENTES.md section 7 records that
+        the datum needed to settle effective-versus-total is still missing,
+        and the reference's own Spencer separates from its own Bishop by
+        +1.888 % on the piezometric model where OGR with TOTAL forces gives
+        +2.14 % — which is evidence for keeping totals, not against.
+
+        The two assertions are a two-sided tripwire: the drift must be
+        small enough to be a distribution effect, and large enough that it
+        has not silently been fixed without this note being updated.
+        """
+        for name in ("Spencer", "GLE"):
+            m = dict(RIGOROUS)[name]
+            a = fos(ponded(75.0), m)
+            b = fos(ponded(105.0), m)
+            drift = abs(a - b) / b
+            assert drift < 1e-3, (name, a, b, drift)
+            assert drift > 1e-5, (
+                f"{name} is now invariant to {drift:.1e}. If the inter-slice "
+                f"assumption was moved onto EFFECTIVE forces, this case and "
+                f"docs/PENDIENTES.md section 7 both need rewriting.")
+
+    def test_the_lambda_zero_branches_are_exactly_invariant(self):
+        """And the control that identifies the mechanism rather than naming
+        a suspect: with no inter-slice shear there is no total-force
+        assumption to be sensitive to, and the exactness comes back."""
+        from ogr_slip2d import JanbuSimplified
+        for m in (BishopSimplified(tolerance=1e-9),
+                  JanbuSimplified(tolerance=1e-9)):
+            a = fos(ponded(75.0), m)
+            b = fos(ponded(105.0), m)
+            assert math.isclose(a, b, rel_tol=1e-9), (m.METHOD_ID, a, b)
 
     def test_ponded_water_is_never_negative_factor_of_safety(self):
         """The v0.1.60 behaviour: u carried the whole head, the water's

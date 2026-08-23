@@ -37,10 +37,16 @@ Three anchors, in increasing order of strength:
    output.
 
 3. **THE SEVEN FACTORS OF SAFETY** on the reference's own critical circles
-   (``TestTheSevenMethods``). Four of the seven agree to 0.5 %. THREE DO NOT,
-   and they are pinned separately and deliberately in
+   (``TestTheSevenMethods``). Four of the seven agreed to 0.5 %, and THREE
+   did not; the three were pinned separately and deliberately in
    ``TestKnownDivergences`` — see that class for why writing them down as
    "passing" would have been the wrong thing to do.
+
+   **v0.1.106**: two of the three closed. Spencer moved from −2.0 % to
+   **+0.10 %** and GLE from −0.8 % to **+0.77 %**, and this model is where
+   the defect was measurable in the first place — the only one in the suite
+   where the true separation between Bishop and a rigorous method is bigger
+   than the noise. Only Lowe-Karafiath is still pinned.
 
 Reference: Slide2d_Ej_2_Piezo_Line.htm / .slim, in
 ``referencias/Ejemplos/Ej_2/Ej_2_Piezometric_Line/``. That directory is NOT
@@ -346,10 +352,14 @@ class TestOrdinaryUsesTheCorrectedPorePressure:
 
 # ======================================================================
 class TestTheSevenMethods:
-    """Anchor 3 — the four methods that agree with the reference."""
+    """Anchor 3 — the methods that agree with the reference."""
 
+    # v0.1.106 — SPENCER joined this list when the inter-slice forces
+    # reached the base normal: -2.0 % became +0.10 %. GLE moved with it but
+    # stopped at +0.77 %, so it stays pinned in ``TestKnownDivergences``
+    # with its own entry and its own measurement.
     AGREE = ("ordinary_fellenius", "bishop_simplified",
-             "janbu_simplified", "janbu_corrected")
+             "janbu_simplified", "janbu_corrected", "spencer")
 
     def test_within_half_a_percent(self):
         worst = []
@@ -362,7 +372,7 @@ class TestTheSevenMethods:
             err = abs(res.fos - ref) / ref
             worst.append((method_id, res.fos, ref, err))
             assert err < 0.005, (method_id, res.fos, ref, err)
-        assert len(worst) == 4
+        assert len(worst) == len(self.AGREE), worst
 
     def test_every_slice_weight_matches_the_reference(self):
         """v0.1.96 — the ground profile is integrated, not chorded.
@@ -397,7 +407,7 @@ class TestTheSevenMethods:
 
 # ======================================================================
 class TestKnownDivergences:
-    """The three methods that do NOT agree, pinned deliberately.
+    """The methods that do NOT agree, pinned deliberately.
 
     Writing these down with a tolerance loose enough to "pass" would be the
     snapshot test rule 1 forbids: it would consecrate the defect. Writing
@@ -405,7 +415,19 @@ class TestKnownDivergences:
     it makes the gap visible, and it makes anyone who narrows it come here
     and say so.
 
-    * **lowe-karafiath, -10.9 %** — ``interslice_water_thrust``
+    **v0.1.106 — two of the three closed, and this is where they were
+    caught.** Spencer and GLE were listed here at −2.0 % and −0.8 % with the
+    cause named: the resisting term was Bishop's numerator with an
+    ``m_alpha`` carrying no lambda, so the inter-slice vertical force never
+    reached the base normal. Implementing the full Fredlund and Krahn (1977)
+    normal moved them to **+0.10 %** and **+0.77 %**, and the separation from
+    their own Bishop from 0.00 % to +2.14 % and +1.74 %, against the
+    reference's +1.89 % and +0.81 %. They are now in ``TestTheSevenMethods``
+    with everything else. See docs/audits/spencer_gle_interslice_v179.md.
+
+    What remains:
+
+    * **lowe-karafiath, −10.9 %** — ``interslice_water_thrust``
       (``external_forces.py``), applied by this method and no other. Removing
       it lands on +0.09 % here and BREAKS Duncan & Wright verification #70
       (a submerged slope goes from 1.609 to 5.000 and stops being invariant
@@ -413,21 +435,32 @@ class TestKnownDivergences:
       whether the prescribed inclination theta = (beta+alpha)/2 applies to
       the TOTAL or to the EFFECTIVE inter-slice force. Settling it needs one
       datum this project does not have: the reference's own Lowe-Karafiath
-      value on a model with ponded water.
-    * **spencer, -2.0 %** and **gle, -0.8 %** — not a pore-pressure defect.
-      ``spencer.py`` builds its resisting term as Bishop's numerator with an
-      m_alpha that carries no lambda, so the inter-slice vertical force never
-      reaches the base normal, and the method tracks Bishop far too closely.
-      Open since v0.1.79 in ``docs/audits/spencer_gle_interslice_v179.md``;
-      this model is the first to make it measurable, because it is the first
-      where the true separation is bigger than the noise.
+      value on a model with ponded water. docs/PENDIENTES.md section 7.
     """
 
     EXPECTED = {
         "lowe_karafiath": (-0.109, 0.02),
-        "spencer": (-0.020, 0.01),
-        "gle_morgenstern_price": (-0.008, 0.01),
+        # v0.1.106 — was -0.008 with the cause misattributed. GLE moved with
+        # Spencer when the inter-slice forces reached the base normal, but
+        # overshot: +0.0077 where Spencer lands on +0.0010. Reported, not
+        # corrected. What it is NOT: the shape function. The reference's own
+        # report names "interslice force function : Half Sine", which is this
+        # program's default too, so the two are nominally the same f(x). What
+        # is left to check is how its ARGUMENT is normalised — OGR maps x
+        # linearly onto the horizontal span between the first and last slice
+        # boundary, and a reference that measured x along the surface, or
+        # over a span a tension crack truncates, would get a slightly
+        # different f at every boundary. The residual is systematic and in
+        # the same direction on every model measured in v0.1.106 (problems 1,
+        # 3, 6 and 8 give +0.01, +0.00, +0.04 and +0.83 %), which is what a
+        # shifted argument would do and what a random error would not.
+        "gle_morgenstern_price": (0.0077, 0.004),
     }
+
+    #: Closed in v0.1.106, kept as a two-sided tripwire: a regression that
+    #: put Spencer back on Bishop would otherwise show up only as a slightly
+    #: worse number somewhere.
+    CLOSED = ("spencer",)
 
     def test_each_divergence_is_the_size_it_was_measured_to_be(self):
         for method_id, ref, circle in REFERENCE_FOS:
@@ -440,16 +473,35 @@ class TestKnownDivergences:
             assert abs(rel - expected) < band, (
                 method_id, res.fos, ref, rel, expected)
 
-    def test_the_reference_separates_spencer_from_bishop_and_we_do_not(self):
-        """The signature of the open audit, as a number.
+    def test_the_two_that_closed_stay_closed(self):
+        for method_id, ref, circle in REFERENCE_FOS:
+            if method_id not in self.CLOSED:
+                continue
+            res = _result(method_id, circle)
+            assert res is not None and res.is_valid, method_id
+            rel = abs(res.fos - ref) / ref
+            assert rel < 0.01, (method_id, res.fos, ref, rel)
+
+    def test_we_separate_spencer_from_bishop_as_the_reference_does(self):
+        """The signature of the audit, as a number, in both directions.
 
         The reference moves Spencer from +0.09 % above its own Bishop when
-        dry to +1.89 % above it with water. This program stays at 0.0 % in
-        both. That contrast is the measurement the audit was missing.
+        dry to **+1.89 %** above it with water. Until v0.1.106 this program
+        stayed at 0.0 % in both, and that contrast was the measurement the
+        audit had been missing for fifteen versions. It now separates
+        +2.14 %.
+
+        Asserted as a BAND and not as a value: what is being checked is that
+        the water opens a gap of the published order, not that we reproduce
+        one program's third decimal.
         """
         b = _result("bishop_simplified", SMALL).fos
         s = _result("spencer", SMALL).fos
         ours = (s - b) / b
         theirs = (0.687672 - 0.674931) / 0.674931
         assert theirs > 0.018, theirs
-        assert abs(ours) < 0.002, ours
+        assert ours > 0.010, (
+            f"Spencer separates from Bishop by only {ours * 100:.3f} % where "
+            f"the reference has {theirs * 100:.3f} %. Collapsing onto Bishop "
+            f"is the defect of docs/audits/spencer_gle_interslice_v179.md.")
+        assert ours < 2.0 * theirs, (ours, theirs)

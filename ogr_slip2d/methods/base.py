@@ -104,7 +104,7 @@ class LEMMethod(ABC):
         tolerance: float = 1e-3,
         max_iterations: int = 75,
         initial_fos: float = 1.0,
-        min_lambda: float = -1.5,
+        min_lambda: float = -0.1,
         # v0.1.90 — was 1.5, now the reference's own upper default. It
         # does NOT widen the first sampling pass (see lambda_grid); it is
         # the room the lazy extension is allowed to use.

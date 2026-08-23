@@ -146,6 +146,50 @@ class TestCaseFilesAreWellFormed:
             assert tipo in known, f"{path.name}: búsqueda '{tipo}'"
 
 
+def _stated_surface(data: dict):
+    """The slip surface a case STATES, or None when it asks for a search.
+
+    v0.1.106. Every case in the folder until now validated a **search**, so
+    the runner could only ever answer "does the program find the published
+    minimum?". Some published problems state the surface instead and publish
+    the factor of safety ON it — ACADS 2(b) tabulates its circle — and those
+    answer the other question, "does the METHOD give the published number on
+    a surface both programs agree about?".
+
+    That second question is the one the folder could not ask, and it is the
+    only one that separates the methods: on a critical circle that each
+    method finds for itself, a difference between two methods mixes the
+    method with the search.
+    """
+    spec = data.get("superficie")
+    if not spec:
+        return None
+    from ogr_slip2d.surface import SlipCircle
+    cx, cy = spec["centro"]
+    return SlipCircle(centre_x=float(cx), centre_y=float(cy),
+                      radius=float(spec["radio"]))
+
+
+def _fos_on_stated_surface(project, data: dict, method_id: str, surface):
+    """Evaluate one method on the stated surface, as the program would."""
+    from ogr_slip2d.analysis_runner import build_method
+    from ogr_slip2d.search import GridSearch
+    from ogr_slip2d.surface import SlipCircle
+
+    n = int((data.get("busqueda") or {}).get("num_slices")
+            or project.settings.methods.num_slices)
+    method = build_method(project, method_id, n)
+    assert method is not None, f"método no registrado: {method_id}"
+    ev = GridSearch(method=method, num_slices=n, min_area=0.0)
+    # A circle goes through evaluate_CIRCLE: it is the only path that walks
+    # the disjoint masses a circle can cut and keeps the lowest (v0.1.84).
+    from copy import copy as _copy
+    s = _copy(surface)
+    res = (ev.evaluate_circle(project, s) if isinstance(s, SlipCircle)
+           else ev.evaluate_surface(project, s))
+    return None if res is None else float(res.fos)
+
+
 class TestCasesReproduceTheirReference:
     def test_all_runnable_cases(self):
         """Every case with a model must reproduce its expected values.
@@ -165,7 +209,21 @@ class TestCasesReproduceTheirReference:
             runnable += 1
             project = Project.load(path / "modelo.ogr")
             tol = float(data["tolerancia_relativa"])
+            stated = _stated_surface(data)
             for mid, expected in (data.get("fos") or {}).items():
+                if stated is not None:
+                    got = _fos_on_stated_surface(project, data, mid, stated)
+                    if got is None:
+                        failures.append(f"{path.name}/{mid}: el método no "
+                                        f"devolvió resultado sobre la "
+                                        f"superficie del enunciado")
+                        continue
+                    error = abs(got - expected) / abs(expected)
+                    if error > tol:
+                        failures.append(
+                            f"{path.name}/{mid}: esperado {expected:.4f}, "
+                            f"obtenido {got:.4f} ({error * 100:.2f} %)")
+                    continue
                 search = _search_for(project, data, mid)
                 result = search.run(project)
                 if result.critical is None:

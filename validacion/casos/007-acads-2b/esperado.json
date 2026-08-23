@@ -1,0 +1,20 @@
+{
+  "id": "007-acads-2b",
+  "fuente": "Giam, S.K. & Donald, I.B. (1989), Example problems for testing soil slope stability programs, Civil Engineering Research Report No. 8/1989, Monash University. Problema 2(b) de la encuesta ACADS: presa de Talbingo, cuatro materiales, final de construccion, sobre un CIRCULO DADO por el enunciado de centro (100.3, 291.0) y radio 278.8. Factor arbitrado = 2.29; media Bishop de 11 programas = 2.204; media de 24 programas (todos los metodos) = 2.239.",
+  "tipo_referencia": "publicado",
+  "tolerancia_relativa": 0.02,
+  "superficie": {
+    "centro": [100.3, 291.0],
+    "radio": 278.8
+  },
+  "fos": {
+    "bishop_simplified": 2.204,
+    "spencer": 2.29,
+    "gle_morgenstern_price": 2.29,
+    "janbu_corrected": 2.073
+  },
+  "busqueda": {
+    "num_slices": 25
+  },
+  "notas": "El unico caso de la carpeta que DISTINGUE un metodo riguroso de Bishop contra un valor publicado, y el unico que no valida una busqueda: el circulo esta tabulado en el enunciado, asi que el numero mide el METODO y nada mas. Bishop se compara con su propia media de 11 programas (2.204) y los dos metodos rigurosos con el factor arbitrado (2.29), que la encuesta publica para el problema y que Bishop no reproduce. Esa separacion de 3.9 % entre las dos referencias es justo lo que ningun otro caso podia medir: el Spencer de v0.1.105 daba 2.2088 -el valor de Bishop, -3.6 % sobre el arbitrado- y este caso lo habria suspendido. Ver docs/audits/spencer_gle_interslice_v179.md."
+}

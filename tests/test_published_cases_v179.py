@@ -208,24 +208,89 @@ class TestTheWaterTableMovesTheNumber:
 
 class TestTheCasesStayHonestAboutSpencer:
     """Guards the decision recorded in
-    docs/audits/spencer_gle_interslice_v179.md."""
+    docs/audits/spencer_gle_interslice_v179.md.
 
-    _OPEN = ("spencer", "gle_morgenstern_price")
+    v0.1.106 turned this class inside out, and the reason is worth stating
+    because it is not "the audit closed, so the guard is obsolete".
 
-    def test_no_case_declares_a_method_under_investigation(self):
-        """Every source below publishes Spencer and GLE values, and none
-        of them is in a case, on purpose. Writing down what the code
-        prints today is exactly what rule 1 forbids."""
+    Until now the guard demanded that Spencer and GLE be ABSENT from every
+    case, because the two returned the Bishop value and writing that down
+    would have consecrated it (rule 1). The audit is closed and they no
+    longer do — but they still do not belong in cases 001 to 004, for a
+    DIFFERENT and permanent reason: those four expect a published CONSENSUS
+    ("mean Bishop of 16 samples"), never one program's output, and the ACADS
+    survey publishes no Spencer-specific mean for any of them. Its tables
+    give "Mean Bishop FOS (n samples)" and "Mean FOS (n samples)" and nothing
+    per rigorous method. A Spencer value taken from the verification manual's
+    own results table would be one program's answer wearing a citation.
+
+    So the guard now asserts the two things that are actually true: those
+    four cases must NOT quote a per-method value they cannot source, and at
+    least one case MUST discriminate a rigorous method from Bishop against a
+    published number — which is what 007 does, on a circle the statement
+    tabulates and against the arbitrated 2.29 that Bishop does not reproduce.
+    """
+
+    _RIGOROUS = ("spencer", "gle_morgenstern_price")
+    # The cases whose expected values are survey CONSENSUS figures. The ACADS
+    # report publishes no per-method mean for a rigorous method, so none of
+    # these four can declare one without sourcing it to a single program.
+    _CONSENSUS_CASES = ("001-acads-1a", "002-yamagami-ueta-1988",
+                        "003-acads-1c", "004-arai-tagyo-1985-ej1")
+
+    @staticmethod
+    def _fos(path):
+        spec = path / "esperado.json"
+        if not spec.is_file():
+            return None
+        return json.loads(spec.read_text(encoding="utf-8")).get("fos") or {}
+
+    def test_the_consensus_cases_quote_no_unsourced_per_method_value(self):
+        for name in self._CONSENSUS_CASES:
+            fos = self._fos(_CASES / name)
+            if fos is None:
+                continue
+            offenders = [m for m in self._RIGOROUS if m in fos]
+            assert not offenders, (
+                f"{name} declares {offenders}, but the ACADS survey publishes "
+                f"no per-method consensus for them — only 'Mean Bishop' and "
+                f"'Mean FOS'. A value taken from the verification manual's "
+                f"results table is one program's output.")
+
+    def test_some_case_separates_a_rigorous_method_from_bishop(self):
+        """The gap that let the defect live eighty versions.
+
+        Every case validated a SEARCH, so each method was compared on the
+        circle it found for itself and a method returning Bishop's number
+        looked fine. A case is only evidence here if it states its surface
+        and expects a rigorous method to differ from Bishop by more than the
+        tolerance it allows.
+        """
+        import json as _json
+        witnesses = []
         for path in sorted(p for p in _CASES.iterdir() if p.is_dir()):
             spec = path / "esperado.json"
             if not spec.is_file():
                 continue
-            fos = json.loads(spec.read_text(encoding="utf-8")).get("fos") or {}
-            offenders = [m for m in self._OPEN if m in fos]
-            assert not offenders, (
-                f"{path.name} declares {offenders}; see "
-                f"docs/audits/spencer_gle_interslice_v179.md before "
-                f"re-adding them")
+            data = _json.loads(spec.read_text(encoding="utf-8"))
+            fos = data.get("fos") or {}
+            if not data.get("superficie"):
+                continue          # a search case cannot separate methods
+            bishop = fos.get("bishop_simplified")
+            if bishop is None:
+                continue
+            tol = float(data["tolerancia_relativa"])
+            for mid in self._RIGOROUS:
+                if mid not in fos:
+                    continue
+                gap = abs(fos[mid] - bishop) / abs(bishop)
+                if gap > tol:
+                    witnesses.append((path.name, mid, round(gap * 100, 2)))
+        assert witnesses, (
+            "no validation case can tell a rigorous method from Bishop: "
+            "every case either searches for its own surface or expects the "
+            "two to agree, which is exactly the blind spot that hid "
+            "docs/audits/spencer_gle_interslice_v179.md for eighty versions")
 
     def test_the_report_exists(self):
         """A test that points at a document is only worth the document."""

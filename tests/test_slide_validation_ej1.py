@@ -201,8 +201,15 @@ class TestAllMethodsValidationEj1:
         ("bishop_simplified",  88.0, 70.5, 47.212, 0.882889, 0.5),
         ("janbu_simplified",   84.0, 66.0, 41.501, 0.842548, 0.5),
         ("janbu_corrected",    88.0, 70.5, 47.212, 0.883036, 0.5),
-        ("spencer",            88.0, 70.5, 47.212, 0.876917, 1.0),
-        ("gle_morgenstern_price", 88.0, 70.5, 47.212, 0.878343, 1.0),
+        # v0.1.106 — these two were the only entries at 1.0 %, and the
+        # asymmetry WAS the finding: the two methods that needed double the
+        # margin were exactly the two sharing the lambda machinery. They come
+        # down to 0.5 % now that the inter-slice forces reach the base normal
+        # (0.64 % -> 0.343 % and 0.53 % -> 0.158 %). A tolerance is only
+        # allowed to shrink when its cause does; see
+        # docs/audits/spencer_gle_interslice_v179.md.
+        ("spencer",            88.0, 70.5, 47.212, 0.876917, 0.5),
+        ("gle_morgenstern_price", 88.0, 70.5, 47.212, 0.878343, 0.5),
     ]
 
     @staticmethod

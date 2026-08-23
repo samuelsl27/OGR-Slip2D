@@ -35,46 +35,39 @@ normal stops passing through the axis so it contributes a moment of its own.
 Fixed in v0.1.92; this file is what measured it and what keeps it fixed.
 
 ------------------------------------------------------------------------------
-v0.1.105 — SPENCER AND GLE ARE NOW THE TWO THAT DISAGREE, ON PURPOSE.
+v0.1.105 — SPENCER AND GLE WERE THE TWO THAT DISAGREED, ON PURPOSE.
+v0.1.106 — THE DEBT IS PAID, AND THE TOLERANCES ARE BACK.
 
-Their tolerance below went from 0.5 % / 1.0 % to 5 %, and that is a DEBT
-recorded, not a test relaxed to make a change pass. What was traded, and why:
+v0.1.105 raised their tolerance from 0.5 % / 1.0 % to 5 % and said why: it was
+a debt recorded, not a test relaxed. Off a circle their moment side became a
+real sum of moments about the axis — which fixed a +45.4 % error under kh and a
++157 % one on the Loukidis benchmark, both on the unsafe side — but the normal
+force in that sum still came from ``N = (W - S*sen(a))/cos(a)``, omitting the
+inter-slice shear difference ``(X_R - X_L)``. On a sharply kinked surface that
+omitted term is precisely what separates Spencer from Bishop, so the two landed
+within 0.02 % of each other and 2 to 4 % below the reference.
 
-Until v0.1.105 these two wrote their moment equation as ``Σ S_term / Σ W·senα``
-on every surface. That is a moment ratio only on a circle, where every arm is R
-and R cancels — off a circle it carried no moment arms at all, and so dropped
-the seismic, water and support moments outright. The same arc described as a
-circle and as a polyline, under kh = 0.15, differed by +45.4 %; on the Loukidis
-critical-seismic-coefficient benchmark the non-circular answer came out +157 %,
-on the unsafe side, with nothing said. Now the moment side is a real sum of
-moments about the axis, and both of those are −0.01 %.
+v0.1.106 implements the full Fredlund and Krahn (1977) normal,
 
-The cost is here. The normal force in that sum comes from the slice's own
-vertical equilibrium, ``N = (W − S·senα)/cosα``, which omits the inter-slice
-shear difference ``(X_R − X_L)``. On a circle that costs nothing, since the
-normal points at the centre and takes no moment. On a sharply kinked surface it
-does take a moment, and the omitted term is precisely what separates Spencer
-from Bishop — so the two now land within 0.02 % of each other here, and about
-2 to 4 % below the reference.
+    N = [W + (X_R - X_L) - (c'*l*sen(a))/F + (u*l*tanphi'*sen(a))/F] / m_a
+    X_i = lambda*f(x_i)*E_i,  with E_i from the horizontal force recursion,
 
-    Ej_1   Spencer  0.942419 published   0.941354 before   0.922940 now
-    Ej_2   Spencer  1.479930 published   1.483330 before   1.423177 now
+which is exactly what the v0.1.105 header said would pay this. The three
+numbers it named:
 
-That the residual is exactly the Bishop value, and that Ordinary — which has no
-inter-slice forces to omit and therefore no such residual — lands on both
-published values to six figures, is what identifies the missing term rather
-than merely naming a suspect.
+                    published    v0.1.104    v0.1.105    v0.1.106
+    Ej_1 Spencer     0.942419    0.941354    0.922940    0.942663  (+0.026 %)
+    Ej_2 Spencer     1.479930    1.483330    1.423177    1.475703  (-0.286 %)
 
-HOW THIS DEBT IS PAID, and then this header goes away: the full Fredlund and
-Krahn (1977) normal,
+So the two tolerances go back to 0.5 % and 1.0 %, and
+``TestSpencerHasCollapsedOntoBishop`` is now ``TestSpencerSeparatesFromBishop``
+— the opposite claim it made in v0.1.92, restored, and this time asserting that
+the gap MATCHES the published one rather than merely existing.
 
-    N = [W + (X_R − X_L) − (c'·l·senα)/F + (u·l·tanφ'·senα)/F] / m_α
-    X_i = λ·f(x_i)·E_i,  with E_i from the horizontal force recursion,
-
-which needs the inter-slice forces E_i that the current solver never forms.
-When it does, the two tolerances below go back to 0.5 % and 1.0 % and
-``TestSpencerHasCollapsedOntoBishop`` goes back to being the opposite claim it
-was in v0.1.92.
+Note what did NOT change: Ordinary still lands on both published values to six
+figures, which was the observation that identified the missing term in the
+first place rather than merely naming a suspect. It has no inter-slice forces
+to omit.
 
 Author: Samuel Sáez López (UPCT)
 """
@@ -96,22 +89,23 @@ EJ1_REFERENCE = {
     "bishop_simplified":      (0.922931, 0.5),
     "janbu_simplified":       (0.885579, 0.5),
     "janbu_corrected":        (0.926203, 0.5),
-    # v0.1.105 — 5 % is a DEBT, not a tolerance. See the header.
-    "spencer":                (0.942419, 5.0),
+    # v0.1.106 — the debt of v0.1.105 is paid and these are back where the
+    # rest of the table lives: +0.026 % and +0.830 %. See the header.
+    "spencer":                (0.942419, 0.5),
     "lowe_karafiath":         (0.955461, 2.0),
-    "gle_morgenstern_price":  (0.941668, 5.0),
+    "gle_morgenstern_price":  (0.941668, 1.0),
 }
 EJ2_REFERENCE = {
     "ordinary_fellenius":     (1.36921, 1.0),
     "bishop_simplified":      (1.42443, 0.5),
     "janbu_simplified":       (1.34347, 0.5),
     "janbu_corrected":        (1.42566, 0.5),
-    "spencer":                (1.47993, 5.0),        # v0.1.105 debt
+    "spencer":                (1.47993, 0.5),        # v0.1.106: -0.286 %
     # lowe-karafiath: the reference reports -1000, its "no valid surface"
     # code. Nothing to compare against, and that is worth recording rather
     # than quietly leaving the method out of the table.
     "lowe_karafiath":         (None, None),
-    "gle_morgenstern_price":  (1.4887, 5.0),         # v0.1.105 debt
+    "gle_morgenstern_price":  (1.4887, 1.0),         # v0.1.106: -0.090 %
 }
 
 # v0.1.92 — Bishop USED to live apart here, with a case asserting that it
@@ -207,43 +201,66 @@ class TestTheSixMethodsThatAgree:
         assert EJ2_REFERENCE["lowe_karafiath"] == (None, None)
 
 
-class TestSpencerHasCollapsedOntoBishop:
-    """The debt of v0.1.105, pinned so it cannot drift unnoticed either way.
+class TestSpencerSeparatesFromBishop:
+    """That Spencer does NOT return the Bishop answer, and by how much.
 
-    In v0.1.92 this class asserted the OPPOSITE — that Bishop and Spencer stay
-    apart, as the reference separates them by about 2 %. That claim was the
-    regression guarding a real fix. It is now false, knowingly: giving Spencer
-    a true moment balance while its normal force still omits ``(X_R − X_L)``
-    makes it converge to Bishop's answer on a sharply kinked surface. The
-    header of this file has the measurement and the way out.
+    This class has now been written three times, and the sequence is the
+    point:
 
-    Written as a two-sided tripwire on purpose. It fails if the gap GROWS,
-    which would mean somebody paid the debt and must now tighten the
-    tolerances back; and it fails if the gap SHRINKS to nothing in a way the
-    reference gap does not explain. Either way the next person is told what
-    changed rather than left with a green suite and a stale header.
+    * **v0.1.92** asserted that the two stay apart. It was guarding a real
+      fix — Bishop had just been given a true moment balance off a circle.
+    * **v0.1.105** turned it around, knowingly, and renamed it
+      ``TestSpencerHasCollapsedOntoBishop``. Giving Spencer a true moment
+      balance while its normal force still omitted ``(X_R - X_L)`` made it
+      converge onto Bishop on a sharply kinked surface: 0.02 % and 0.00 %
+      apart. The class was left as a two-sided tripwire with a note saying
+      what paying the debt would look like.
+    * **v0.1.106** paid it, and the tripwire fired exactly as written.
+
+    What is asserted now is not "they differ" — a solver could differ by
+    anything and still be wrong. It is that the gap MATCHES the one the
+    reference publishes, which is an external number:
+
+        Ej_1   reference 2.07 %      OGR 2.08 %
+        Ej_2   reference 3.75 %      OGR 3.56 %
+
+    A method returning Bishop's number, which is what this program did for
+    eighty versions, fails on the first of the two assertions below.
     """
 
-    #: Measured with v0.1.105 on both surfaces: 0.02 % and 0.00 %. The band is
-    #: generous downwards and tight upwards, because "Spencer is Bishop" is
-    #: the state being recorded and any real separation is the news.
-    KNOWN_GAP_MAX = 0.005          # 0.5 %
+    #: How far the measured gap may sit from the published gap, as a fraction
+    #: of the published gap. Wide enough for the 0.3 % the two factors
+    #: themselves are allowed to move, narrow enough that "no separation at
+    #: all" (the v0.1.105 state) is nowhere near passing.
+    GAP_MATCH = 0.25
 
-    def test_spencer_still_coincides_with_bishop_and_that_is_the_debt(self):
-        for tag, pts, ref_b, ref_s in (("Ej_1", EJ1_SURFACE, EJ1_BISHOP, 0.942419),
-                                       ("Ej_2", EJ2_SURFACE, EJ2_BISHOP, 1.47993)):
+    _CASES = (("Ej_1", 0.922931, 0.942419),
+              ("Ej_2", 1.424430, 1.479930))
+
+    def test_the_gap_exists_at_all(self):
+        """The one assertion the v0.1.105 solver could not pass."""
+        for tag, _ref_b, _ref_s in self._CASES:
+            pts = EJ1_SURFACE if tag == "Ej_1" else EJ2_SURFACE
+            b = _fos(tag, pts, "bishop_simplified").fos
+            s = _fos(tag, pts, "spencer").fos
+            gap = abs(b - s) / s
+            assert gap > 0.01, (
+                f"{tag}: Bishop {b:.5f} and Spencer {s:.5f} differ by only "
+                f"{gap * 100:.3f} %. Spencer collapsing onto Bishop is the "
+                f"defect of docs/audits/spencer_gle_interslice_v179.md, not "
+                f"a property of a kinked surface.")
+
+    def test_the_gap_is_the_one_the_reference_publishes(self):
+        for tag, ref_b, ref_s in self._CASES:
+            pts = EJ1_SURFACE if tag == "Ej_1" else EJ2_SURFACE
             b = _fos(tag, pts, "bishop_simplified").fos
             s = _fos(tag, pts, "spencer").fos
             gap = abs(b - s) / s
             ref_gap = abs(ref_b - ref_s) / ref_s
-            assert gap <= self.KNOWN_GAP_MAX, (
-                f"{tag}: Bishop {b:.5f} and Spencer {s:.5f} now differ by "
-                f"{gap*100:.2f}%, where v0.1.105 measured under "
-                f"{self.KNOWN_GAP_MAX*100:.1f}% and the reference has "
-                f"{ref_gap*100:.2f}%. If the inter-slice shear term (X_R - X_L) "
-                f"has been implemented, this is the good news: put the 0.5 % "
-                f"and 1.0 % tolerances back in the table above, and turn this "
-                f"case around to assert the separation again.")
+            off = abs(gap - ref_gap) / ref_gap
+            assert off < self.GAP_MATCH, (
+                f"{tag}: gap {gap * 100:.2f} % against a published "
+                f"{ref_gap * 100:.2f} % ({off * 100:.0f} % off)")
 
     def test_the_moment_axis_is_recorded_on_the_result(self):
         """The axis is a modelling choice, so it has to be inspectable

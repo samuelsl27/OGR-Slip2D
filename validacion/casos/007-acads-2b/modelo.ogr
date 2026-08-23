@@ -1,0 +1,742 @@
+{
+  "format_version": "0.1",
+  "id": "102fe466-2412-489c-bc0c-7ab29a41bbd0",
+  "name": "Slide2 verificacion #6 - ACADS 2(b), circulo dado",
+  "settings": {
+    "units": {
+      "system": "metric",
+      "time": "d",
+      "permeability": "m/s",
+      "failure_direction": "R2L",
+      "system_id": "metric_kpa"
+    },
+    "methods": {
+      "enabled_methods": [
+        "bishop_simplified",
+        "spencer",
+        "gle_morgenstern_price",
+        "janbu_corrected"
+      ],
+      "num_slices": 25,
+      "tolerance": 0.005,
+      "max_iterations": 50,
+      "interslice_function": "half_sine"
+    },
+    "groundwater": {
+      "method": "water_table",
+      "pore_fluid_unit_weight": 9.81,
+      "excess_pore_pressure": false,
+      "rapid_drawdown": false,
+      "transient": false,
+      "transient_stages": [],
+      "transient_tolerance": 1e-05,
+      "transient_max_iterations": 30,
+      "transient_time_steps": 0,
+      "transient_initial_bcs": null,
+      "rapid_drawdown_method": "b_bar",
+      "default_hu": 1.0,
+      "auto_hu": false
+    },
+    "search": {
+      "slope_limit_left": null,
+      "slope_limit_right": null,
+      "axis_x": null,
+      "axis_y": null,
+      "surface_type": "circular",
+      "search_method": "grid",
+      "radius_increment": 10,
+      "composite_surfaces": false,
+      "create_tension_crack_reverse_curvature": true,
+      "num_surfaces": 5000,
+      "initial_angle_at_toe_upper_enabled": false,
+      "initial_angle_at_toe_upper_deg": -45.0,
+      "initial_angle_at_toe_lower_enabled": false,
+      "initial_angle_at_toe_lower_deg": -45.0,
+      "initial_angle_lower_deg": 0.0,
+      "initial_angle_upper_deg": 90.0,
+      "auto_refine_divisions_along_slope": 10,
+      "auto_refine_circles_per_division": 10,
+      "auto_refine_num_iterations": 10,
+      "auto_refine_divisions_to_use_pct": 50.0,
+      "auto_refine_num_vertices_along_surface": 12,
+      "auto_refine_divisions": 10,
+      "auto_refine_iterations": 5,
+      "auto_refine_factor": 0.5,
+      "sa_initial_vertices": 8,
+      "sa_generation_steps": 1000,
+      "sa_num_fos_compared_before_stopping": 5,
+      "sa_tolerance": 0.0001,
+      "sa_temperature_coefficient": 8.0,
+      "sa_temperature_factor": 0.97,
+      "sa_convex_only": false,
+      "path_num_surfaces": 5000,
+      "path_initial_angle_at_toe_upper_enabled": false,
+      "path_initial_angle_at_toe_upper_deg": 45.0,
+      "path_initial_angle_at_toe_lower_enabled": false,
+      "path_initial_angle_at_toe_lower_deg": 45.0,
+      "path_segment_length_manual": false,
+      "path_segment_length_value": 7.142857,
+      "path_convex_only": false,
+      "path_optimize": true,
+      "path_upper_angle_enabled": false,
+      "path_segment_length": 5.0,
+      "path_min_angle_deg": -45.0,
+      "path_max_angle_deg": 45.0,
+      "path_num_paths": 500,
+      "block_num_surfaces": 5000,
+      "block_multiple_groups": false,
+      "block_left_start_angle_deg": 135.0,
+      "block_left_end_angle_deg": 135.0,
+      "block_right_start_angle_deg": 45.0,
+      "block_right_end_angle_deg": 45.0,
+      "block_convex_only": false,
+      "block_num_groups": 3,
+      "block_left_proj_angle_deg": 135.0,
+      "block_right_proj_angle_deg": 45.0,
+      "optimize_enabled": false,
+      "optimize_target": "global_minimum",
+      "optimize_fos_threshold": 1.5,
+      "optimize_tolerance": 1e-09,
+      "optimize_max_iterations": 4000,
+      "optimize_step_reduction_factor": 0.5,
+      "optimize_max_concave_angle_enabled": true,
+      "optimize_max_concave_angle_deg": 5.0,
+      "optimize_explore_all_vertices": false,
+      "optimize_snap_shallow_to_slope": true,
+      "optimize_snap_specify_distance": false,
+      "optimize_snap_distance": 0.01,
+      "optimize_use_depth_elevation_concave_checks": true,
+      "grid_x_min": 100.0,
+      "grid_x_max": 550.0,
+      "grid_y_min": 170.0,
+      "grid_y_max": 450.0,
+      "grid_nx": 20,
+      "grid_ny": 20,
+      "min_elevation": null,
+      "min_depth": null,
+      "min_area": null
+    },
+    "statistics": {
+      "sensitivity_analysis": false,
+      "probabilistic_analysis": false,
+      "sampling_method": "monte_carlo",
+      "num_samples": 1000,
+      "analysis_type": "global_minimum",
+      "sensitivity_intervals": 50,
+      "seed": null
+    },
+    "back_analysis": {
+      "enabled": false,
+      "target_fos": 1.3,
+      "elevation": 0.0,
+      "method_id": "bishop_simplified"
+    },
+    "random_numbers": {
+      "method": "pseudo_random",
+      "seed": 10116,
+      "lhs_correlate": false
+    },
+    "design_standard": {
+      "enabled": false,
+      "standard": "none",
+      "factor_permanent": 1.0,
+      "factor_variable": 1.0,
+      "factor_cohesion": 1.0,
+      "factor_friction": 1.0,
+      "factor_unit_weight": 1.0,
+      "factor_resistance": 1.0
+    },
+    "advanced": {
+      "check_tensile_stresses": false,
+      "tensile_percent": 95.0,
+      "check_m_alpha": true,
+      "initial_fos": 1.0,
+      "min_lambda": -1.5,
+      "max_lambda": 6.0,
+      "iterate_steffensen": true,
+      "parallel_search": true,
+      "parallel_cpu_percent": 50
+    },
+    "summary": {
+      "title": "Slide2 verificacion #5 - ACADS 2(a) presa de Talbingo",
+      "analysis": "",
+      "author": "Samuel Sáez López",
+      "company": "UPCT",
+      "date_created": "2026-08-18T22:10:34.455859",
+      "comments": []
+    },
+    "max_materials": 20,
+    "max_supports": 20
+  },
+  "boundaries": [
+    {
+      "id": "63f9f94b-0a30-4dc7-9b9b-a88b210a2231",
+      "name": "External Boundary",
+      "type": "EXTERNAL",
+      "color": "#2c2c2c",
+      "line_width": 1.5,
+      "visible": true,
+      "material_id": null,
+      "polyline": {
+        "id": "acc0b533-7e33-4190-9357-5af63173fdb1",
+        "closed": true,
+        "vertices": [
+          [
+            648,
+            0
+          ],
+          [
+            585.1,
+            31.4
+          ],
+          [
+            577.9,
+            31.4
+          ],
+          [
+            521.1,
+            65.3
+          ],
+          [
+            515,
+            65.3
+          ],
+          [
+            460.6,
+            97.9
+          ],
+          [
+            453.4,
+            97.9
+          ],
+          [
+            394.1,
+            130.6
+          ],
+          [
+            386.9,
+            130.6
+          ],
+          [
+            327.6,
+            162
+          ],
+          [
+            321.6,
+            162
+          ],
+          [
+            319.5,
+            162
+          ],
+          [
+            315.5,
+            162
+          ],
+          [
+            0,
+            0
+          ]
+        ]
+      }
+    },
+    {
+      "id": "b2669498-c991-40ad-ab0c-3be9f8dd549b",
+      "name": "Material Boundary",
+      "type": "MATERIAL",
+      "color": "#8b4513",
+      "line_width": 1.5,
+      "visible": true,
+      "material_id": null,
+      "polyline": {
+        "id": "ec7e0088-a2d8-4e01-81b4-3217d88306f9",
+        "closed": false,
+        "vertices": [
+          [
+            168.1,
+            0
+          ],
+          [
+            302.2,
+            130.6
+          ],
+          [
+            315.5,
+            162
+          ]
+        ]
+      }
+    },
+    {
+      "id": "8618766e-6052-4cd4-9520-508323f7e9e2",
+      "name": "Material Boundary",
+      "type": "MATERIAL",
+      "color": "#8b4513",
+      "line_width": 1.5,
+      "visible": true,
+      "material_id": null,
+      "polyline": {
+        "id": "a689ec77-2437-4150-b97a-d66fe2246413",
+        "closed": false,
+        "vertices": [
+          [
+            200.7,
+            0
+          ],
+          [
+            311.9,
+            130.6
+          ],
+          [
+            319.5,
+            162
+          ]
+        ]
+      }
+    },
+    {
+      "id": "885b1781-1a0b-4377-9eb2-61210e2c7e68",
+      "name": "Material Boundary",
+      "type": "MATERIAL",
+      "color": "#8b4513",
+      "line_width": 1.5,
+      "visible": true,
+      "material_id": null,
+      "polyline": {
+        "id": "bfbe5033-eb78-4bec-a3f5-74cfbcda9f89",
+        "closed": false,
+        "vertices": [
+          [
+            307.1,
+            0
+          ],
+          [
+            331.3,
+            130.6
+          ],
+          [
+            328.8,
+            146.1
+          ],
+          [
+            321.6,
+            162
+          ]
+        ]
+      }
+    },
+    {
+      "id": "4e185513-2987-4765-95e3-33c1599dc0be",
+      "name": "Material Boundary",
+      "type": "MATERIAL",
+      "color": "#8b4513",
+      "line_width": 1.5,
+      "visible": true,
+      "material_id": null,
+      "polyline": {
+        "id": "2f06efa1-7f13-44e5-9157-18fe6b512b20",
+        "closed": false,
+        "vertices": [
+          [
+            310.7,
+            0
+          ],
+          [
+            333.7,
+            130.6
+          ],
+          [
+            331.3,
+            146.1
+          ],
+          [
+            327.6,
+            162
+          ]
+        ]
+      }
+    },
+    {
+      "id": "63128737-e05e-45da-b012-ce0e5833b25a",
+      "name": "Material Boundary",
+      "type": "MATERIAL",
+      "color": "#8b4513",
+      "line_width": 1.5,
+      "visible": true,
+      "material_id": null,
+      "polyline": {
+        "id": "3efee2bb-e06f-4582-9e83-bafb7d38f47c",
+        "closed": false,
+        "vertices": [
+          [
+            372.4,
+            0
+          ],
+          [
+            347,
+            130.6
+          ],
+          [
+            327.6,
+            162
+          ]
+        ]
+      }
+    }
+  ],
+  "materials": [
+    {
+      "id": "1ab75a7f-fd8b-472b-b57b-4a6ec238372f",
+      "name": "Rockfill",
+      "strength": {
+        "model_id": "mohr_coulomb",
+        "params": {
+          "cohesion": 0.0,
+          "friction_angle": 45.0
+        }
+      },
+      "unit_weight": 20.4,
+      "sat_unit_weight": 21.0,
+      "use_sat_unit_weight": false,
+      "pore_pressure": "none",
+      "ru": 0.0,
+      "constant_u": 0.0,
+      "water_surface_id": null,
+      "color": "#d4a373",
+      "hatch": null,
+      "hydraulic": null,
+      "phi_b": 0.0,
+      "air_entry_value": 0.0,
+      "hu": null,
+      "auto_hu": false,
+      "undrained_behaviour": false,
+      "b_bar": 0.0,
+      "drawdown_envelope": null,
+      "use_grid": true,
+      "weight_creates_excess": false
+    },
+    {
+      "id": "a37aafa5-0362-4478-894b-0b9a459c1b3c",
+      "name": "Transition",
+      "strength": {
+        "model_id": "mohr_coulomb",
+        "params": {
+          "cohesion": 0.0,
+          "friction_angle": 45.0
+        }
+      },
+      "unit_weight": 20.4,
+      "sat_unit_weight": 21.0,
+      "use_sat_unit_weight": false,
+      "pore_pressure": "none",
+      "ru": 0.0,
+      "constant_u": 0.0,
+      "water_surface_id": null,
+      "color": "#d4a373",
+      "hatch": null,
+      "hydraulic": null,
+      "phi_b": 0.0,
+      "air_entry_value": 0.0,
+      "hu": null,
+      "auto_hu": false,
+      "undrained_behaviour": false,
+      "b_bar": 0.0,
+      "drawdown_envelope": null,
+      "use_grid": true,
+      "weight_creates_excess": false
+    },
+    {
+      "id": "4456c0da-b1be-4801-a075-18939dd212e0",
+      "name": "Filter",
+      "strength": {
+        "model_id": "mohr_coulomb",
+        "params": {
+          "cohesion": 0.0,
+          "friction_angle": 45.0
+        }
+      },
+      "unit_weight": 20.4,
+      "sat_unit_weight": 21.0,
+      "use_sat_unit_weight": false,
+      "pore_pressure": "none",
+      "ru": 0.0,
+      "constant_u": 0.0,
+      "water_surface_id": null,
+      "color": "#d4a373",
+      "hatch": null,
+      "hydraulic": null,
+      "phi_b": 0.0,
+      "air_entry_value": 0.0,
+      "hu": null,
+      "auto_hu": false,
+      "undrained_behaviour": false,
+      "b_bar": 0.0,
+      "drawdown_envelope": null,
+      "use_grid": true,
+      "weight_creates_excess": false
+    },
+    {
+      "id": "387cfd6a-5490-4873-9a90-7c25ae10ecdb",
+      "name": "Core",
+      "strength": {
+        "model_id": "mohr_coulomb",
+        "params": {
+          "cohesion": 85.0,
+          "friction_angle": 23.0
+        }
+      },
+      "unit_weight": 18.1,
+      "sat_unit_weight": 21.0,
+      "use_sat_unit_weight": false,
+      "pore_pressure": "none",
+      "ru": 0.0,
+      "constant_u": 0.0,
+      "water_surface_id": null,
+      "color": "#d4a373",
+      "hatch": null,
+      "hydraulic": null,
+      "phi_b": 0.0,
+      "air_entry_value": 0.0,
+      "hu": null,
+      "auto_hu": false,
+      "undrained_behaviour": false,
+      "b_bar": 0.0,
+      "drawdown_envelope": null,
+      "use_grid": true,
+      "weight_creates_excess": false
+    }
+  ],
+  "supports": [],
+  "support_types": [],
+  "distributed_loads": [],
+  "line_loads": [],
+  "seismic": {
+    "kh": 0.0,
+    "kv": 0.0,
+    "enabled": false,
+    "creates_excess_pore_pressure": false
+  },
+  "region_assignments": [
+    {
+      "x": 80,
+      "y": 5.0,
+      "material_id": "1ab75a7f-fd8b-472b-b57b-4a6ec238372f",
+      "footprint": [
+        [
+          302.1999999753446,
+          130.59999765088085
+        ],
+        [
+          315.50000305537367,
+          162.00000331544723
+        ],
+        [
+          0.0,
+          0.0
+        ],
+        [
+          168.10000045928277,
+          0.0
+        ]
+      ]
+    },
+    {
+      "x": 185,
+      "y": 5.0,
+      "material_id": "a37aafa5-0362-4478-894b-0b9a459c1b3c",
+      "footprint": [
+        [
+          302.1999999753446,
+          130.59999765088085
+        ],
+        [
+          168.10000045928277,
+          0.0
+        ],
+        [
+          200.6999993205451,
+          0.0
+        ],
+        [
+          311.8999967475613,
+          130.59999765088085
+        ],
+        [
+          319.50000041598685,
+          162.00000331544723
+        ],
+        [
+          315.50000305537367,
+          162.00000331544723
+        ]
+      ]
+    },
+    {
+      "x": 250,
+      "y": 5.0,
+      "material_id": "387cfd6a-5490-4873-9a90-7c25ae10ecdb",
+      "footprint": [
+        [
+          311.8999967475613,
+          130.59999765088085
+        ],
+        [
+          200.6999993205451,
+          0.0
+        ],
+        [
+          307.09999724305305,
+          0.0
+        ],
+        [
+          331.2999969714259,
+          130.59999765088085
+        ],
+        [
+          328.7999994559716,
+          146.09999827733247
+        ],
+        [
+          321.6000001992092,
+          162.00000331544723
+        ],
+        [
+          319.50000041598685,
+          162.00000331544723
+        ]
+      ]
+    },
+    {
+      "x": 308.9,
+      "y": 5.0,
+      "material_id": "4456c0da-b1be-4801-a075-18939dd212e0",
+      "footprint": [
+        [
+          346.9999998037091,
+          130.59999765088085
+        ],
+        [
+          327.5999995798445,
+          162.00000331544723
+        ],
+        [
+          331.2999969714259,
+          146.09999827733247
+        ],
+        [
+          333.69999672368004,
+          130.59999765088085
+        ],
+        [
+          307.09999724305305,
+          0.0
+        ],
+        [
+          372.39999940820906,
+          0.0
+        ]
+      ]
+    },
+    {
+      "x": 340,
+      "y": 5.0,
+      "material_id": "a37aafa5-0362-4478-894b-0b9a459c1b3c",
+      "footprint": [
+        [
+          346.9999998037091,
+          130.59999765088085
+        ],
+        [
+          327.5999995798445,
+          162.00000331544723
+        ],
+        [
+          331.2999969714259,
+          146.09999827733247
+        ],
+        [
+          333.69999672368004,
+          130.59999765088085
+        ],
+        [
+          307.09999724305305,
+          0.0
+        ],
+        [
+          372.39999940820906,
+          0.0
+        ]
+      ]
+    },
+    {
+      "x": 500,
+      "y": 5.0,
+      "material_id": "1ab75a7f-fd8b-472b-b57b-4a6ec238372f",
+      "footprint": [
+        [
+          346.9999998037091,
+          130.59999765088085
+        ],
+        [
+          372.39999940820906,
+          0.0
+        ],
+        [
+          647.9999999029267,
+          0.0
+        ],
+        [
+          585.0999974900249,
+          31.39999898513526
+        ],
+        [
+          577.8999982332624,
+          31.39999898513526
+        ],
+        [
+          521.0999996436273,
+          65.30000216515599
+        ],
+        [
+          515.0000024997917,
+          65.30000216515599
+        ],
+        [
+          460.5999969829795,
+          97.90000102641831
+        ],
+        [
+          453.3999977262171,
+          97.90000102641831
+        ],
+        [
+          394.10000162112755,
+          130.59999765088085
+        ],
+        [
+          386.90000236436515,
+          130.59999765088085
+        ],
+        [
+          327.5999995798445,
+          162.00000331544723
+        ]
+      ]
+    }
+  ],
+  "tension_crack_properties": {
+    "mode": "filled",
+    "percent_filled": 100.0,
+    "elevation": 0.0,
+    "depth": 0.0,
+    "piezo_id": null
+  },
+  "water_pressure_grid": null,
+  "fem_mesh": null,
+  "seepage_bcs": null,
+  "seepage_result": null,
+  "transient_results": [],
+  "random_variables": [],
+  "annotations": [],
+  "focus_objects": []
+}

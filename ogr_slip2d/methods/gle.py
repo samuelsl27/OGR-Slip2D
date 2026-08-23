@@ -109,7 +109,7 @@ class GLEMorgensternPrice(LEMMethod):
         max_iterations: int = 50,
         initial_fos: float = 1.0,
         interslice_func: Callable[[float, float, float], float] = half_sine,
-        min_lambda: float = -1.5,
+        min_lambda: float = -0.1,
         # v0.1.90 — the reference's own upper default. It does not widen
         # the first sampling pass; see BaseSearch.lambda_grid.
         max_lambda: float = 6.0,
@@ -165,10 +165,25 @@ class GLEMorgensternPrice(LEMMethod):
         x0 = slices.slices[0].base_x_left
         x1 = slices.slices[-1].base_x_right
 
+        # v0.1.106 — the whole surface resolved ONCE, reused at every λ. The
+        # shape function is evaluated at the slice BOUNDARIES and not at the
+        # slice centres, because X_i lives on a boundary: it is the vertical
+        # inter-slice force there, and ``_boundary_ratios`` has always
+        # reported it that way. Until now the solver used f(x_centre) and the
+        # report used f(x_boundary), so the two disagreed about the very
+        # quantity the method is defined by.
+        from ..interslice import GLESystem
+        s_list = slices.slices
+        shape = [self.f_func(x, x0, x1)
+                 for x in self._boundary_x(slices)]
+        system = GLESystem(
+            s_list, shape, kh, kv, slide_sign, circle_R, circle_yc, sup, axis,
+            tolerance=self.tolerance, initial_fos=self.initial_fos,
+        )
+
         def solve(lam):
             """The inner solve at one λ, with the geometry already bound."""
-            return self._inner_solve(slices, lam, kh, kv, slide_sign,
-                                     circle_R, circle_yc, x0, x1, sup, axis)
+            return self._inner_solve(slices, lam, system)
 
         # Outer: bracket and refine λ. Wider grid for difficult slopes;
         # v0.1.74 moved it to the base class so the configured range can
@@ -199,6 +214,23 @@ class GLEMorgensternPrice(LEMMethod):
                 # exhausted.
                 if len(samples) > 1 and samples[-2][1] * samples[-1][1] < 0:
                     break
+
+        # v0.1.106 — nothing survived the strict pass. Before giving up,
+        # sample again WITHOUT the inter-slice thrust criterion and say so:
+        # a surface with no admissible λ anywhere is a real answer about the
+        # stress state, but it is not a reason to hand back a NaN where the
+        # previous version handed back a number. Measured on the reinforced
+        # slope of verification problem 85, where 9000 kN/m of anchorage puts
+        # the soil faces in net tension at every λ.
+        inadmissible = False
+        if not samples and system.n_thrust_rejected:
+            inadmissible = True
+            system.strict = False
+            for lam in lam_grid:
+                ff, fm = solve(lam)
+                if (math.isfinite(ff) and math.isfinite(fm)
+                        and 0.05 < ff < 50 and 0.05 < fm < 50):
+                    samples.append((lam, ff - fm, ff, fm))
 
         if not samples:
             return LEMResult(
@@ -231,14 +263,39 @@ class GLEMorgensternPrice(LEMMethod):
 
         if bracket is None:
             best = min(samples, key=lambda r: abs(r[1]))
-            _, _, ff, fm = best
+            lam_star, _, ff, fm = best
+            # v0.1.106 — see ``Spencer.compute_fos``: this path discarded the
+            # λ it had and returned an EMPTY ``details``, so a surface that
+            # reaches here was drawn with zero inter-slice ratios.
+            force, _moment = system.states(lam_star)
+            from .spencer import _base_forces
+            normals, shears, strengths = _base_forces(system, force)
             return LEMResult(
                 fos=0.5 * (ff + fm),
                 converged=abs(best[1]) < 0.02,
                 iterations=len(samples),
                 method_id=self.METHOD_ID, surface=surface, slices=slices,
-                error_message=("GLE: no λ-bracket; using nearest F_f≈F_m"
-                               if abs(best[1]) >= 0.02 else None),
+                base_normal=normals,
+                base_shear_force=shears,
+                base_shear_strength=strengths,
+                details={
+                    "lambda": lam_star,
+                    "slide_sign": slide_sign,
+                    "boundary_ratios": [lam_star * fb for fb in system.shape],
+                    "interslice_e": ([] if force is None else
+                                     system.boundaries_in_slice_order(
+                                         force.boundary_e)),
+                    "interslice_x": ([] if force is None else
+                                     system.boundaries_in_slice_order(
+                                         force.boundary_x)),
+                },
+                error_message=(
+                    ("GLE: no λ-bracket; using nearest F_f≈F_m"
+                     if abs(best[1]) >= 0.02 else None)
+                    if not inadmissible else
+                    "GLE: no λ leaves the inter-slice thrust in net "
+                    "compression; the answer is reported with the criterion "
+                    "relaxed"),
             )
 
         (lam_lo, g_lo, ff_lo, fm_lo), (lam_hi, g_hi, ff_hi, fm_hi) = bracket
@@ -277,169 +334,68 @@ class GLEMorgensternPrice(LEMMethod):
                 method_id=self.METHOD_ID, surface=surface, slices=slices,
                 error_message="GLE: divergent at final λ",
             )
+        force, moment = system.states(lam_lo)
+        from .spencer import _base_forces
+        normals, shears, strengths = _base_forces(system, force)
+        # v0.1.106 — see ``Spencer.compute_fos``: the flag is a property of
+        # the state returned, not of the pass that found it.
+        from ..interslice import thrust_is_admissible
+        inadmissible = force is None or not thrust_is_admissible(force)
         return LEMResult(
             fos=0.5 * (ff_final + fm_final),
             converged=converged,
             iterations=iterations,
             method_id=self.METHOD_ID, surface=surface, slices=slices,
+            base_normal=normals,
+            base_shear_force=shears,
+            base_shear_strength=strengths,
+            error_message=(
+                "" if not inadmissible else
+                "GLE: no λ leaves the inter-slice thrust in net compression; "
+                "the answer is reported with the criterion relaxed"),
             details={
                 "lambda": lam_lo,
+                "thrust_admissible": not inadmissible,
                 "slide_sign": slide_sign,
                 # Boundary ratios λ·f(x) evaluated at the n+1 slice
-                # boundaries with x normalised over the surface span.
-                "boundary_ratios": self._boundary_ratios(
-                    slices, lam_lo, x0, x1
-                ),
+                # boundaries with x normalised over the surface span. The
+                # solver uses exactly this list (v0.1.106).
+                "boundary_ratios": [lam_lo * fb for fb in system.shape],
+                "interslice_e": ([] if force is None else
+                                 system.boundaries_in_slice_order(
+                                     force.boundary_e)),
+                "interslice_x": ([] if force is None else
+                                 system.boundaries_in_slice_order(
+                                     force.boundary_x)),
             },
         )
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _boundary_x(slices: Slices) -> list[float]:
+        """The abscissa of each of the n+1 slice boundaries."""
+        slist = slices.slices
+        return [slist[0].base_x_left] + [s.base_x_right for s in slist]
 
     # ------------------------------------------------------------------
     def _boundary_ratios(self, slices: Slices, lam: float,
                          x0: float, x1: float) -> list[float]:
         """λ·f(x) at each of the n+1 slice boundaries."""
-        slist = slices.slices
-        xs = [slist[0].base_x_left] + [s.base_x_right for s in slist]
-        return [lam * self.f_func(x, x0, x1) for x in xs]
+        return [lam * self.f_func(x, x0, x1)
+                for x in self._boundary_x(slices)]
 
     # ==================================================================
-    def _inner_solve(
-        self, slices: Slices, lam: float,
-        kh: float, kv: float, slide_sign: float,
-        circle_R, circle_yc, x0: float, x1: float, sup=None, axis=None,
-    ) -> Tuple[float, float]:
-        """Return (F_f, F_m) at the given inter-slice ratio lambda.
+    def _inner_solve(self, slices, lam: float, system) -> Tuple[float, float]:
+        """Return ``(F_f, F_m)`` at the given inter-slice ratio λ.
 
-        v0.1.105 — off a circle the moment side is a real sum of moments about
-        ``axis``; see :meth:`Spencer._inner_solve`, which carries the full
-        note. The short version: ``Sigma S_term / Sigma W senalpha`` is a
-        moment ratio only where every arm is R, and off a circle it dropped
-        the seismic, water and support moments entirely — the same arc as a
-        circle and as a polyline differed by +45.4 % under kh = 0.15. The
-        cost, taken knowingly, is that the normal force still omits the
-        inter-slice shear ``(X_R - X_L)``, which is what separates this method
-        from Bishop on a sharply kinked surface.
+        v0.1.106 — the arithmetic moved to :mod:`ogr_slip2d.interslice`, which
+        this method now shares with Spencer line for line: GLE differs only in
+        the shape function f(x), so "GLE with a constant f IS Spencer" became
+        an identity of the code rather than of the documentation. See
+        :meth:`Spencer._inner_solve` for the three things that changed, and
+        ``docs/audits/spencer_gle_interslice_v179.md`` for the measurements.
+
+        ``slices`` is unused and kept because the tests that watch the λ
+        search read λ from the second positional argument.
         """
-        F = max(0.5, self.initial_fos)
-        s_list = slices.slices if hasattr(slices, "slices") else slices
-        general = circle_R is None
-        if general:
-            from ..moment_balance import moment_terms
-        ff_last = math.nan
-        fm_last = math.nan
-
-        for _it in range(80):
-            num_m = 0.0
-            den_m = 0.0
-            num_f = 0.0
-            den_f = 0.0
-            g_forces: list = []
-            g_weights: list = []
-            g_resist: list = []
-            g_normals: list = []
-
-            for i_s, s in enumerate(s_list):
-                fx = slice_forces(s, kh, kv)
-                # v0.1.61 — soil + ponded water for the base normal;
-                # the water thrust resolved along the sliding direction,
-                # whose x component is −slide_sign.
-                W_eff = fx.w_total
-                H_eq = fx.h_seismic
-                H_water = -slide_sign * fx.h_water
-                # v0.1.64 — the support as an external force on the slice,
-                # exactly as in Spencer: its vertical component joins the
-                # load the base normal carries, so T_N·tanφ' emerges from
-                # the equilibrium instead of being added to the ratio.
-                H_support = 0.0
-                if sup is not None and sup.present:
-                    W_eff -= sup.f_v[i_s]
-                    H_support = -slide_sign * sup.f_h[i_s]
-                # Flip α once according to detected sliding direction
-                alpha = slide_sign * s.base_angle
-                l = s.base_length
-                b = s.width
-                u = s.pore_pressure
-
-                # Per-slice f(x) shape factor for GLE
-                f_i = self.f_func(s.x_centre, x0, x1)
-                lam_i = lam * f_i
-
-                sigma_est = max(0.0, W_eff * math.cos(alpha) - u * l) / max(l, 1e-9)
-                c_loc, tan_phi = BishopSimplified._local_c_phi(
-                    s, s.material, sigma_est
-                )
-
-                m_alpha = math.cos(alpha) + math.sin(alpha) * tan_phi / F
-                if abs(m_alpha) < 1e-6:
-                    return math.nan, math.nan
-
-                S_term = (c_loc * b + (W_eff - u * b) * tan_phi) / m_alpha
-
-                # Moment side
-                if general:
-                    # Off a circle there is no common R to divide out, so the
-                    # terms are collected and summed as true moments below.
-                    g_forces.append(fx)
-                    g_weights.append(W_eff)
-                    g_resist.append(S_term)
-                    g_normals.append(
-                        (W_eff - (S_term / F) * math.sin(alpha))
-                        / max(math.cos(alpha), 1e-9)
-                    )
-                else:
-                    num_m += S_term
-                    # v0.1.100 — the MOMENT side takes its arm from the
-                    # geometry, see ``Slice.weight_arm_ratio``; the FORCE side
-                    # below keeps sin(alpha), which there is a direction and
-                    # not an arm.
-                    den_m += W_eff * slide_sign * s.weight_arm_ratio
-                    if kh > 0:
-                        y_cg = 0.5 * (
-                            0.5 * (s.top_y_left + s.top_y_right)
-                            + 0.5 * (s.base_y_left + s.base_y_right)
-                        )
-                        arm = (circle_yc - y_cg) / circle_R
-                        den_m += H_eq * arm
-                    den_m += (
-                        -slide_sign
-                        * fx.water_moment_about(circle_yc) / circle_R
-                    )
-                    if sup is not None and sup.present and sup.f_h[i_s]:
-                        # The vertical component needs no term: folded
-                        # into W_eff, it already rides the R·sin α arm.
-                        den_m += (
-                            -slide_sign * sup.f_h[i_s]
-                            * (circle_yc - sup.y_app[i_s]) / circle_R
-                        )
-
-                # Force side: λ·f_i modulates the numerator
-                num_f += S_term * math.cos(alpha)
-                num_f += lam_i * S_term * math.sin(alpha)
-                den_f += W_eff * math.tan(alpha) + H_eq + H_water + H_support
-
-            if general:
-                # The support goes in as a cartesian force, which is how this
-                # method already treats it on a circle: the vertical component
-                # is inside ``W_eff`` and the horizontal one needs a moment.
-                terms = moment_terms(
-                    axis, s_list, g_weights, g_resist, g_normals,
-                    kh=kh, kv=kv, sup=sup, forces=g_forces)
-                den_m = terms.driving
-                num_m = -terms.shear
-            if abs(den_m) < 1e-9 or abs(den_f) < 1e-9:
-                return math.nan, math.nan
-            new_fm = num_m / den_m
-            new_ff = num_f / den_f
-            if not (math.isfinite(new_fm) and math.isfinite(new_ff)):
-                return math.nan, math.nan
-            if new_fm <= 0 or new_ff <= 0:
-                return math.nan, math.nan
-
-            new_F = 0.5 * (new_fm + new_ff)
-            ff_last, fm_last = new_ff, new_fm
-            # v0.1.100 — not on the first pass; see
-            # ``BishopSimplified._general_moment_fos``.
-            if _it > 0 and abs(new_F - F) < self.tolerance:
-                return new_ff, new_fm
-            F = max(0.2, min(new_F, 10.0))
-
-        return ff_last, fm_last
+        return system.branches(lam)
