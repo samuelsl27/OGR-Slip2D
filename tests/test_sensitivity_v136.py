@@ -31,16 +31,25 @@ from ogr_core.statistics import (  # noqa: E402
     available_variables,
     run_sensitivity,
 )
-from ogr_slip2d import BishopSimplified, Spencer  # noqa: E402
+from ogr_slip2d.analysis_runner import build_method  # noqa: E402
 from ogr_slip2d.search import GridSearch  # noqa: E402
 
 
 def _deterministic(project, methods=("bishop_simplified",)):
-    factory = {"bishop_simplified": BishopSimplified, "spencer": Spencer}
+    """The deterministic critical of each method, as the program builds it.
+
+    v0.1.108 — through ``build_method``, and not ``BishopSimplified()``.
+    Since this version the statistical engines build their method the way
+    the PROJECT configures it, so a deterministic run made with the class
+    defaults is a different calculation: the project tolerance is 0.005
+    against the class's 0.001, which is worth about 3e-4 in the factor of
+    safety — enough to break the 1e-6 identities below, and rightly so.
+    """
     out = {}
     for mid in methods:
         out[mid] = GridSearch(
-            method=factory[mid](), grid_x=(70, 100), grid_y=(60, 85),
+            method=build_method(project, mid, 18),
+            grid_x=(70, 100), grid_y=(60, 85),
             grid_nx=4, grid_ny=4, radius_increment=6, min_radius=15,
             num_slices=18, min_area=0.5).run(project).critical
     return out

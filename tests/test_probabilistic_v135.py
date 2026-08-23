@@ -37,16 +37,24 @@ from ogr_core.statistics import (  # noqa: E402
     run_global_minimum,
     sample_project_variables,
 )
-from ogr_slip2d import BishopSimplified, Spencer  # noqa: E402
+from ogr_slip2d.analysis_runner import build_method  # noqa: E402
 from ogr_slip2d.search import GridSearch  # noqa: E402
 
 
 def _deterministic(project, methods=("bishop_simplified",)):
-    """Small deterministic search giving each method its own critical."""
+    """Small deterministic search giving each method its own critical.
+
+    v0.1.108 — through ``build_method``, and not ``BishopSimplified()``.
+    Since this version the statistical engines build their method the way
+    the PROJECT configures it, so a deterministic run made with the class
+    defaults is a different calculation: the project tolerance is 0.005
+    against the class's 0.001, which is worth about 3e-4 in the factor of
+    safety — enough to break the 1e-6 identities below, and rightly so.
+    """
     out = {}
-    factory = {"bishop_simplified": BishopSimplified, "spencer": Spencer}
     for mid in methods:
-        r = GridSearch(method=factory[mid](), grid_x=(70, 100),
+        r = GridSearch(method=build_method(project, mid, 18),
+                       grid_x=(70, 100),
                        grid_y=(60, 85), grid_nx=4, grid_ny=4,
                        radius_increment=6, min_radius=15, num_slices=18,
                        min_area=0.5).run(project)
@@ -90,8 +98,15 @@ class TestGlobalMinimumEngine:
 
         samples = sample_project_variables([v], n, SM.LATIN_HYPERCUBE, 7)
         surface = det["bishop_simplified"].surface
-        search = GridSearch(method=BishopSimplified(), num_slices=18,
-                            min_area=0.0)
+        # v0.1.108 — ``build_method`` and not ``BishopSimplified()``: since
+        # this version the engine builds its method the way the project
+        # configures it, so a hand recomputation with the class defaults is
+        # no longer the same calculation. It showed up here as 0.89318
+        # against 0.89288, a tolerance apart — which is the point of the
+        # change, not a casualty of it: the engine used to ignore the
+        # convergence settings the user chose.
+        search = GridSearch(method=build_method(p, "bishop_simplified", 18),
+                            num_slices=18, min_area=0.0)
         manual = []
         for i in range(n):
             clone = clone_project(p)

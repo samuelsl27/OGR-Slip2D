@@ -332,13 +332,30 @@ def _stage1_state(project, surface, slices, result):
     v0.1.66 the water table is a mandatory slice cut, and the two stages
     have different water tables by construction. Matching by slice index
     would quietly pair up slices from different places on the surface.
+
+    v0.1.108 — a short list of normals is REFUSED and not truncated. Until
+    v0.1.107 only Bishop and Fellenius filled the column, so this loop hit
+    its ``break`` on the first pass with every other method, returned an
+    empty state, and the two-stage procedure degraded into re-solving
+    stage 1 at the lower reservoir — no undrained strength on any slice, no
+    message. Measured on the Appendix G circle: Spencer reported 2.0773
+    where the published answer is 1.347, +54 % and on the unsafe side. The
+    silence is what made it survive fifty versions, so what is guarded here
+    is not the arithmetic but the degradation: a tenth method that forgets
+    the column has to fail loudly rather than quietly analyse something
+    else.
     """
     normals = list(getattr(result, "base_normal_force", ()) or ())
+    if len(normals) < len(slices.slices):
+        raise RapidDrawdownError(
+            f"Method '{getattr(result, 'method_id', '?')}' reported "
+            f"{len(normals)} base normal forces for {len(slices.slices)} "
+            f"slices, so the stage-1 consolidation state cannot be "
+            f"recovered. Without it the procedure would apply no undrained "
+            f"strength at all and report the drained factor of safety.")
     fs1 = result.fos
     out = []
     for i, s in enumerate(slices.slices):
-        if i >= len(normals):
-            break
         l = max(s.base_length, 1e-9)
         n_eff = normals[i] - s.pore_pressure * l          # (2)
         sigma_fc = max(0.0, n_eff) / l
@@ -507,11 +524,19 @@ def rapid_drawdown_fos(
     converged = False
     for _ in range(CAP_MAX_PASSES):
         normals2 = list(getattr(last, "base_normal_force", ()) or ())
+        # v0.1.108 — same refusal as ``_stage1_state``, and for the same
+        # reason: a slice with no normal used to keep its uncapped strength
+        # silently, so the drained cap simply did not apply to it. The
+        # stage-1 guard already catches every method that omits the column,
+        # so reaching this is a NEW way of losing it.
+        if len(normals2) < len(sl2.slices):
+            raise RapidDrawdownError(
+                f"Method '{getattr(last, 'method_id', '?')}' reported "
+                f"{len(normals2)} base normal forces for "
+                f"{len(sl2.slices)} slices, so the drained cap cannot be "
+                f"evaluated on all of them.")
         nxt: dict = {}
         for i, tau_ff in tau_by_index.items():
-            if i >= len(normals2):
-                nxt[i] = cur[i]
-                continue
             l = max(sl2.slices[i].base_length, 1e-9)
             sigma_d = max(0.0, normals2[i]) / l               # (9)
             c_eff, phi_eff = _effective_c_phi(sl2.slices[i].material)
@@ -607,6 +632,12 @@ class MultiStageDrawdownMethod:
     needs the mass sliced at TWO different reservoir levels, and neither
     of them is the one the caller happened to build.
     """
+
+    #: v0.1.108 — read by :func:`drawdown_gap`. An ATTRIBUTE and not an
+    #: ``isinstance`` check, so a fourth procedure that arrives as its own
+    #: wrapper class is covered by declaring it rather than by remembering
+    #: to widen a tuple somewhere else.
+    PERFORMS_DRAWDOWN = True
 
     def __init__(self, inner, procedure: str, num_slices: int = 25) -> None:
         self.inner = inner
@@ -742,6 +773,8 @@ class BBarDrawdownMethod:
     nor the ponding load is visible.
     """
 
+    PERFORMS_DRAWDOWN = True      # see MultiStageDrawdownMethod
+
     def __init__(self, inner, num_slices: int = 25) -> None:
         self.inner = inner
         self.num_slices = num_slices
@@ -777,6 +810,48 @@ class BBarDrawdownMethod:
 
 
 # ----------------------------------------------------------------------
+def performs_drawdown(method) -> bool:
+    """Whether ``method`` runs a rapid-drawdown procedure of its own."""
+    return bool(getattr(method, "PERFORMS_DRAWDOWN", False))
+
+
+def drawdown_gap(project, method) -> Optional[str]:
+    """Why ``method`` would silently skip the drawdown ``project`` asks for.
+
+    ``None`` when there is no gap: either the project asks for no drawdown,
+    or the method already performs one.
+
+    v0.1.108, anomaly A98-1. ``build_method`` is the only place that wraps
+    the procedure — it says so itself — so instantiating a class out of
+    ``method_registry()`` and handing it to a search returned an ordinary
+    DRAINED analysis with no exception and no warning. Measured on the
+    Appendix G circle with Spencer: 2.2017 by the short path against 1.3498
+    by the wrapped one, +63 % and on the unsafe side. It went unnoticed
+    because a plausible number came back; in verification problem 98 the
+    three procedures agreed to six decimal places, which is what a
+    procedure that never ran looks like.
+
+    Stated as a question about the PAIR (project, method) rather than as a
+    check inside either one, because neither alone is wrong: the method is
+    a perfectly good method and the project is a perfectly good project.
+    What cannot be allowed is the two of them meeting quietly.
+    """
+    gw = getattr(getattr(project, "settings", None), "groundwater", None)
+    if gw is None or not getattr(gw, "rapid_drawdown", False):
+        return None
+    if performs_drawdown(method):
+        return None
+    return (
+        f"This project asks for a rapid drawdown "
+        f"('{getattr(gw, 'rapid_drawdown_method', '?')}'), and the method "
+        f"'{getattr(method, 'METHOD_ID', method.__class__.__name__)}' does "
+        f"not perform one, so the factor of safety would be the ordinary "
+        f"DRAINED one at the lowered water level. Build the method with "
+        f"ogr_slip2d.analysis_runner.build_method(project, method_id), "
+        f"which is the one place that applies the drawdown wrapper."
+    )
+
+
 def wrap_for_drawdown(method, project, num_slices: int = 25):
     """Wrap ``method`` when the project asks for a rapid drawdown.
 
@@ -784,14 +859,24 @@ def wrap_for_drawdown(method, project, num_slices: int = 25):
     unconditionally at the one place where methods are instantiated —
     which is the point: a second place that forgot to apply it would give
     a silently different answer.
+
+    v0.1.108 — a project that asks for a drawdown it cannot run is REFUSED
+    here rather than analysed. ``check_drawdown_settings`` has spelt out
+    every such reason since v0.1.68, but only for callers that thought to
+    ask; the interface and the CLI do, and a script does not. Since this
+    function is applied at the single instantiation point, checking here
+    means the refusal cannot be walked around — and neither door changes,
+    because both already call ``check_analysis_settings`` first and show
+    the list of problems before they ever get this far.
     """
     gw = project.settings.groundwater
     if not gw.rapid_drawdown:
         return method
+    why = check_drawdown_settings(project)
+    if why:
+        raise RapidDrawdownError(why)
     if gw.rapid_drawdown_method == B_BAR:
         return BBarDrawdownMethod(method, num_slices=num_slices)
-    if gw.rapid_drawdown_method not in MULTISTAGE_METHODS:
-        return method
     return MultiStageDrawdownMethod(
         method, gw.rapid_drawdown_method, num_slices=num_slices)
 
@@ -810,7 +895,17 @@ def check_drawdown_settings(project) -> Optional[str]:
     if not gw.rapid_drawdown:
         return None
     if gw.rapid_drawdown_method not in MULTISTAGE_METHODS + (B_BAR,):
-        return None
+        # v0.1.108 — this used to return None, i.e. "nothing wrong here",
+        # and ``wrap_for_drawdown`` returned the method unwrapped for the
+        # same condition. So a procedure name that was merely misspelt in a
+        # .ogr gave a drained analysis without a word: the same silence as
+        # A98-1, reached by a typo instead of by an API.
+        return (
+            f"'{gw.rapid_drawdown_method}' is not a rapid-drawdown "
+            f"procedure, so the analysis would ignore the drawdown "
+            f"entirely. Available: "
+            f"{', '.join(MULTISTAGE_METHODS + (B_BAR,))}."
+        )
     allowed = ("water_table", "piezo_line")
     if gw.method not in allowed:
         return (

@@ -26,6 +26,7 @@ from typing import Callable, Optional
 from ogr_core.project import Project
 
 from .methods import LEMMethod, LEMResult
+from .rapid_drawdown import RapidDrawdownError, drawdown_gap
 from .slicer import slice_surface
 from .surface import SlipCircle, lowest_elevation
 
@@ -332,7 +333,29 @@ class BaseSearch(ABC):
         methods themselves before any division happens. Reaching this
         handler therefore means something NEW, which is why the message
         carries the exception's own text instead of a fixed phrase.
+
+        v0.1.108 — and it is where the rapid-drawdown guard goes, for the
+        same "one place" argument, one level up: a project can ask for a
+        drawdown and be handed a method that does not perform one, and the
+        answer that comes back is the ordinary drained factor of safety
+        with nothing to say it is not the drawdown one (anomaly A98-1,
+        +63 % measured on the Appendix G circle). The check is a question
+        about the pair, so it belongs where the pair meets.
+
+        It RAISES rather than returning an invalid result, because it is
+        not a fact about this surface — every surface of the run would come
+        back the same way, and a search that reports "no valid surfaces"
+        buries the cause in the invalid-surface report. ``RapidDrawdownError``
+        is a ``RuntimeError``, so the handler below does not swallow it.
+
+        Cost on the ordinary path is one attribute read per surface —
+        ``rapid_drawdown`` is False — against a solve of a few
+        milliseconds, which is the same order of magnitude the v0.1.65
+        note settles by counting rather than by the stopwatch.
         """
+        gap = drawdown_gap(project, self.method)
+        if gap:
+            raise RapidDrawdownError(gap)
         try:
             res = self.method.compute_fos(project, surface, slices)
         except ArithmeticError as exc:

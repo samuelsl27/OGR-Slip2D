@@ -327,9 +327,33 @@ class TestBBarMovesTheNumber:
                 f"{reservoir_full:.4f}")
 
     def test_a_freely_draining_material_retains_no_excess(self):
-        """Without the flag, the pore pressure is the final level's."""
+        """Without the flag, the pore pressure is the final level's.
+
+        v0.1.108 — the freely draining side is built with
+        ``BBarDrawdownMethod`` directly instead of through
+        ``wrap_for_drawdown``, which now refuses a project that asks for a
+        drawdown with no undrained material at all. That refusal is not new
+        in substance: ``check_drawdown_settings`` has said so since v0.1.68
+        and both front doors have blocked such a project ever since; what
+        v0.1.108 changed is that the engine agrees with them. The invariant
+        measured here is about the pore pressures and not about the
+        settings, so it goes straight to the wrapper — and the refusal has
+        its own test in ``test_drawdown_methods_v1108``.
+
+        Worth writing down, because the refusal's wording does not say it:
+        with no undrained material a B-bar run is still a real analysis and
+        still moves the number, since the reservoir load and the pore
+        pressures are the drawn-down ones. What it does not move is any
+        STRENGTH, which is what the message is about.
+        """
+        from ogr_slip2d.methods.bishop import BishopSimplified
+        from ogr_slip2d.rapid_drawdown import BBarDrawdownMethod
+
+        p_dry = _slope(final_y=50.0, b_bar=1.0, undrained=False)
         undrained = _fos(_slope(final_y=50.0, b_bar=1.0, undrained=True))
-        draining = _fos(_slope(final_y=50.0, b_bar=1.0, undrained=False))
+        draining = BBarDrawdownMethod(
+            BishopSimplified(), num_slices=30).compute_fos(
+                p_dry, _circle(), None).fos
         assert math.isfinite(undrained) and math.isfinite(draining)
         assert draining > undrained
 

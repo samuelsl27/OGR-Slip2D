@@ -157,14 +157,15 @@ def run_global_minimum(
         sampling: Monte Carlo or Latin Hypercube.
         seed: for reproducibility.
         num_slices: slicing used in the repeated evaluations.
-        method_factory: ``method_id -> LEMMethod``; defaults to the
-            registry.
+        method_factory: ``method_id -> LEMMethod``; defaults to
+            ``analysis_runner.build_method``, which is the one place that
+            configures a method from the project (v0.1.108).
         progress_cb: called as ``(done, total)``.
 
     Returns:
         A :class:`ProbabilisticResult`, empty when no variable is random.
     """
-    from ogr_slip2d.methods import method_registry
+    from ogr_slip2d.analysis_runner import build_method
     from ogr_slip2d.search import GridSearch
 
     result = ProbabilisticResult(
@@ -193,13 +194,22 @@ def run_global_minimum(
         correlate=bool(project.settings.random_numbers.lhs_correlate))
     result.samples = samples
 
-    registry = method_registry()
-
     def _make_method(mid):
+        """The method as the PROJECT configures it, not as the registry
+        hands it over.
+
+        v0.1.108 — this used to fall back to ``registry[mid]()``, a bare
+        instance, and no caller in the program ever passed a
+        ``method_factory``: not the interface, not the CLI, not the bank
+        scripts. So a statistical run of a rapid-drawdown model computed
+        the ordinary DRAINED factor of safety on every sample, silently
+        (anomaly A98-1 by a third route), and it also dropped the
+        convergence settings the user configured — the same fault v0.1.74
+        closed for the searches, still open here.
+        """
         if method_factory is not None:
             return method_factory(mid)
-        cls = registry.get(mid)
-        return cls() if cls is not None else None
+        return build_method(project, mid, num_slices)
 
     total = num_samples * max(1, len(critical_surfaces))
     done = 0
