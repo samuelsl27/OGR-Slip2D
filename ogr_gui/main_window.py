@@ -206,7 +206,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.103"
+    VERSION = "0.1.104"
 
     def __init__(self) -> None:
         super().__init__()

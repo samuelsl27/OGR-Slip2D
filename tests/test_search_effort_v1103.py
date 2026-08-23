@@ -63,7 +63,11 @@ def _path_project(num_surfaces: int):
     s.surface_type = "non_circular"
     s.search_method = "path"
     s.path_num_surfaces = num_surfaces
-    s.path_optimize = False        # so valid_count is the generator's own count
+    # v0.1.104 — ``s.path_optimize = False`` stood here, "so valid_count is
+    # the generator's own count". The field is gone: Path Search no longer
+    # optimises unless asked, so that IS the count now, and assigning the
+    # retired name is refused by ``check_analysis_settings`` — which is the
+    # guard this file's own last test checks.
     return p
 
 

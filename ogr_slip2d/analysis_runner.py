@@ -200,7 +200,37 @@ def settings_warnings(project) -> list[str]:
     # factors are enabled, and costs the note, never the result.
     notes.extend(getattr(s_search, "_migration_notes", []) or [])
     notes.extend(_failure_direction_note(project))
+    notes.extend(_optimize_notes(s_search))
     return notes
+
+
+#: Search methods Optimize Surfaces can be applied to. The reference makes
+#: the option available for Surface Type = Non-Circular, and these are the
+#: three non-circular strategies this program implements.
+_OPTIMIZABLE_SEARCHES = ("block", "path", "simulated_annealing")
+
+
+def _optimize_notes(s_search) -> list[str]:
+    """What Optimize Surfaces will and will not do on this model.
+
+    Both notes are rule 7's minimum: a control that cannot be honoured has
+    to say so, and one whose cost is unbounded has to say that too.
+    """
+    if not getattr(s_search, "optimize_enabled", False):
+        return []
+    out = []
+    if s_search.search_method not in _OPTIMIZABLE_SEARCHES:
+        out.append(
+            "Optimize Surfaces applies to non-circular surfaces, which are "
+            "the ones with vertices to move; this project searches with "
+            "'%s'. The setting was ignored." % s_search.search_method)
+    elif getattr(s_search, "optimize_target", "") == "all":
+        out.append(
+            "Optimize Surfaces is set to optimise ALL surfaces, so the "
+            "random walk runs once per surface the search generates rather "
+            "than once on the critical one. The answer is the same kind of "
+            "answer; the run takes far longer.")
+    return out
 
 
 #: How far apart the two ends of the ground surface must be, as a
@@ -478,6 +508,26 @@ def build_search(project, method_id: str, progress_cb: Optional[Callable] = None
             return {}
         return {"seed": s.analysis_seed()}
 
+    def _optimize_kw() -> dict:
+        """Optimize Surfaces, for the NON-CIRCULAR searches only.
+
+        v0.1.104 — the whole panel was editable, saved and read by nobody
+        (defect D08, anomaly A9-1): ticking the box on a Block Search
+        stored the tick and changed nothing. It is not in ``common``
+        because the reference offers the option for Surface Type =
+        Non-Circular alone; a circular search would only be able to ignore
+        it, which is the fault this closes, not one to repeat.
+
+        The optimisation gets the project's seed too. Without one the walk
+        would draw from ``random.Random(None)`` and the same model would
+        give a different answer on every run — which is exactly what the
+        Random Numbers page promises it will not do.
+        """
+        kw = dict(s.optimize_kwargs())
+        if kw.get("optimize") is not None:
+            kw["optimize_seed"] = s.analysis_seed()
+        return kw
+
     common = dict(
         method=method,
         num_slices=num_slices,
@@ -550,6 +600,7 @@ def build_search(project, method_id: str, progress_cb: Optional[Callable] = None
             num_surfaces=s_search.block_num_surfaces,
             min_area=s_search.min_area or 2.0,
             convex_only=s_search.block_convex_only,
+            **_optimize_kw(),
             **common,
         )
 
@@ -572,8 +623,13 @@ def build_search(project, method_id: str, progress_cb: Optional[Callable] = None
                 s_search.path_initial_angle_at_toe_upper_deg
                 if s_search.path_initial_angle_at_toe_upper_enabled else None),
             num_surfaces=s_search.path_num_surfaces,
-            optimize=getattr(s_search, "path_optimize", True),
             convex_only=getattr(s_search, "path_convex_only", False),
+            # v0.1.104 — this used to read ``path_optimize``, a field the
+            # dialog never showed and that defaulted to True, so Path
+            # Search optimised on every run while the checkbox the user
+            # could see wrote a setting nothing read. One optimisation
+            # now, the same one every non-circular search gets.
+            **_optimize_kw(),
             **common,
         )
 
@@ -586,6 +642,7 @@ def build_search(project, method_id: str, progress_cb: Optional[Callable] = None
             temperature_coefficient=s_search.sa_temperature_coefficient,
             convex_only=s_search.sa_convex_only,
             min_area=s_search.min_area or 1.0,
+            **_optimize_kw(),
             **common,
         )
 

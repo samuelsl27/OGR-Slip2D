@@ -308,6 +308,10 @@ class SurfaceOptionsDialog(QDialog):
 
         root.addWidget(header)
 
+        # Every "Optimize Surfaces" checkbox on the page; they show
+        # one and the same setting, so they are kept in step.
+        self._optimize_boxes = []
+
         # ============ STACKED PANELS (one per method) ============
         self.stack = QStackedWidget()
         self._panels: dict = {}
@@ -476,7 +480,7 @@ class SurfaceOptionsDialog(QDialog):
                 self._sa_tol.setValue(defaults.sa_tolerance)
                 self._sa_tcoef.setValue(defaults.sa_temperature_coefficient)
                 self._sa_convex.setChecked(defaults.sa_convex_only)
-                self._sa_optimize.setChecked(defaults.optimize_enabled)
+                self._sync_optimize_boxes(defaults.optimize_enabled)
             elif m == SM.PATH_SEARCH:
                 self._p_num.setValue(int(defaults.path_num_surfaces))
                 self._p_upper_cb.setChecked(defaults.path_initial_angle_at_toe_upper_enabled)
@@ -486,7 +490,7 @@ class SurfaceOptionsDialog(QDialog):
                 self._p_seglen_cb.setChecked(defaults.path_segment_length_manual)
                 self._p_seglen.setValue(defaults.path_segment_length_value)
                 self._p_convex.setChecked(defaults.path_convex_only)
-                self._p_optimize.setChecked(defaults.optimize_enabled)
+                self._sync_optimize_boxes(defaults.optimize_enabled)
             elif m == SM.BLOCK_SEARCH:
                 self._b_num.setValue(int(defaults.block_num_surfaces))
                 self._b_multi.setChecked(defaults.block_multiple_groups)
@@ -495,9 +499,63 @@ class SurfaceOptionsDialog(QDialog):
                 self._b_right_start.setValue(defaults.block_right_start_angle_deg)
                 self._b_right_end.setValue(defaults.block_right_end_angle_deg)
                 self._b_convex.setChecked(defaults.block_convex_only)
-                self._b_optimize.setChecked(defaults.optimize_enabled)
+                self._sync_optimize_boxes(defaults.optimize_enabled)
         except (AttributeError, RuntimeError):
             pass
+
+    # ================================================================
+    def _optimize_row(self, s):
+        """One "Optimize Surfaces" checkbox with its Settings... button.
+
+        v0.1.104 — three panels show this control and there is ONE setting
+        behind it, ``optimize_enabled``, so the three have to agree. They
+        did not: ``apply`` used to fold them together with an OR, and since
+        all three start from the same stored value, unticking the box in
+        one panel left the other two holding True and the OR put it back.
+        The box could be ticked and never cleared.
+
+        They are kept in step here instead, at the moment of the click, so
+        ``apply`` has one value to write and no rule to get wrong.
+        """
+        from PySide6.QtWidgets import QHBoxLayout, QWidget
+
+        box = QCheckBox(tr("Optimize Surfaces"))
+        box.setChecked(s.optimize_enabled)
+        button = QPushButton(tr("Settings..."))
+        button.setEnabled(box.isChecked())
+        button.clicked.connect(self._on_optimize_settings)
+        box.toggled.connect(button.setEnabled)
+        box.toggled.connect(self._sync_optimize_boxes)
+        row = QWidget()
+        h = QHBoxLayout(row)
+        h.setContentsMargins(0, 0, 0, 0)
+        h.addWidget(box)
+        h.addWidget(button)
+        h.addStretch(1)
+        self._optimize_boxes.append(box)
+        return box, row
+
+    def _sync_optimize_boxes(self, checked: bool) -> None:
+        """Carry a tick across to the panels the user cannot see."""
+        for box in self._optimize_boxes:
+            if box.isChecked() != checked:
+                box.blockSignals(True)
+                box.setChecked(checked)
+                box.blockSignals(False)
+
+    def _on_optimize_settings(self) -> None:
+        """Open the Optimize Surfaces Settings panel.
+
+        Applied straight onto the project rather than held: this dialog's
+        own OK writes the rest of the page the same way, and holding a
+        second layer of pending values would be a second place for them to
+        get out of step.
+        """
+        from .optimize_settings_dialog import OptimizeSettingsDialog
+
+        dlg = OptimizeSettingsDialog(self.project, self)
+        if dlg.exec():
+            dlg.apply()
 
     # ================================================================
     # Panel builders
@@ -663,9 +721,8 @@ class SurfaceOptionsDialog(QDialog):
         self._sa_convex = QCheckBox(tr("Convex Surfaces Only"))
         self._sa_convex.setChecked(s.sa_convex_only)
         f.addRow("", self._sa_convex)
-        self._sa_optimize = QCheckBox(tr("Optimize Surfaces"))
-        self._sa_optimize.setChecked(s.optimize_enabled)
-        f.addRow("", self._sa_optimize)
+        self._sa_optimize, sa_row = self._optimize_row(s)
+        f.addRow("", sa_row)
         return w
 
     def _build_path_panel(self, s):
@@ -720,9 +777,8 @@ class SurfaceOptionsDialog(QDialog):
         self._p_convex = QCheckBox(tr("Convex Surfaces Only"))
         self._p_convex.setChecked(s.path_convex_only)
         f.addRow("", self._p_convex)
-        self._p_optimize = QCheckBox(tr("Optimize Surfaces"))
-        self._p_optimize.setChecked(s.optimize_enabled)
-        f.addRow("", self._p_optimize)
+        self._p_optimize, p_row = self._optimize_row(s)
+        f.addRow("", p_row)
         return w
 
     def _build_block_panel(self, s):
@@ -778,9 +834,8 @@ class SurfaceOptionsDialog(QDialog):
         self._b_convex = QCheckBox(tr("Convex Surfaces Only"))
         self._b_convex.setChecked(s.block_convex_only)
         outer.addWidget(self._b_convex)
-        self._b_optimize = QCheckBox(tr("Optimize Surfaces"))
-        self._b_optimize.setChecked(s.optimize_enabled)
-        outer.addWidget(self._b_optimize)
+        self._b_optimize, b_row = self._optimize_row(s)
+        outer.addWidget(b_row)
         return w
 
     # ================================================================
@@ -826,7 +881,6 @@ class SurfaceOptionsDialog(QDialog):
         s.sa_tolerance = self._sa_tol.value()
         s.sa_temperature_coefficient = self._sa_tcoef.value()
         s.sa_convex_only = self._sa_convex.isChecked()
-        s.optimize_enabled = self._sa_optimize.isChecked()
 
         # ----- Path Search -----
         s.path_num_surfaces = int(self._p_num.value())
@@ -837,7 +891,6 @@ class SurfaceOptionsDialog(QDialog):
         s.path_segment_length_manual = self._p_seglen_cb.isChecked()
         s.path_segment_length_value = self._p_seglen.value()
         s.path_convex_only = self._p_convex.isChecked()
-        s.optimize_enabled = self._p_optimize.isChecked() or s.optimize_enabled
 
         # ----- Block Search -----
         s.block_num_surfaces = int(self._b_num.value())
@@ -847,7 +900,10 @@ class SurfaceOptionsDialog(QDialog):
         s.block_right_start_angle_deg = self._b_right_start.value()
         s.block_right_end_angle_deg = self._b_right_end.value()
         s.block_convex_only = self._b_convex.isChecked()
-        s.optimize_enabled = self._b_optimize.isChecked() or s.optimize_enabled
+        # v0.1.104 — ONE write for the three synchronised boxes.
+        # It used to be three, folded with an OR, which is why the
+        # option could be ticked and never cleared.
+        s.optimize_enabled = self._b_optimize.isChecked()
         # The only "map to legacy" line left, because the search does read
         # block_num_groups. What it is derived from is not what the
         # reference calls Multiple Groups — see D07c.

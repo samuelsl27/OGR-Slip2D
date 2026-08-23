@@ -20,7 +20,7 @@ from __future__ import annotations
 import math
 import random
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Callable, Optional
 
 from ogr_core.project import Project
@@ -52,7 +52,41 @@ def _base_kwargs(legacy: dict) -> dict:
         "check_m_alpha": bool(legacy.pop("check_m_alpha", True)),
         "min_elevation": legacy.pop("min_elevation", None),
         "min_depth": legacy.pop("min_depth", None),
+        # v0.1.104 — Optimize Surfaces. Every search ACCEPTS them for the
+        # reason above (a shared argument must be forgettable only once),
+        # but only the three non-circular branches of ``build_search`` are
+        # given one: the reference offers the option for Surface Type =
+        # Non-Circular alone.
+        "optimize": _optimize_argument(legacy.pop("optimize", None)),
+        "optimize_seed": legacy.pop("optimize_seed", None),
     }
+
+
+def _optimize_argument(value):
+    """Refuse the boolean ``optimize`` Path Search took until v0.1.104.
+
+    ``PathSearch(..., optimize=True)`` used to mean "run the private random
+    walk over the best five surfaces". The argument now belongs to every
+    search and carries an :class:`~ogr_slip2d.optimize.OptimizeSettings`,
+    so a stale ``True`` would be absorbed by ``**legacy_kwargs`` and mean
+    something else entirely.
+
+    Refusing is the only answer that cannot be mistaken for having worked —
+    the same argument ``_shadow_setting_problems`` makes for the settings
+    that were renamed in v0.1.103, and the reason ``_base_kwargs`` exists
+    at all. ``False`` is refused too, though it happens to mean what the
+    default already does: a caller who wrote it deserves to be told the
+    argument is gone rather than to keep writing it into new code.
+    """
+    if isinstance(value, bool):
+        raise TypeError(
+            "The boolean 'optimize' argument was removed in v0.1.104: Path "
+            "Search no longer carries an optimiser of its own, and the "
+            "argument now takes an OptimizeSettings (or None) and applies "
+            "to every non-circular search. Pass "
+            "optimize=OptimizeSettings(enabled=True) to optimise, or drop "
+            "the argument not to.")
+    return value
 
 
 @dataclass
@@ -66,6 +100,13 @@ class SearchResult:
     # v0.1.24 — generation attempts made (searches that count VALID
     # surfaces, e.g. Path Search, report the true attempt count here).
     attempts: int = 0
+    # v0.1.104 — the surface Optimize Surfaces produced, when it ran and
+    # improved on what the search found. It is ALSO appended to
+    # ``evaluations``, so ``critical`` finds it the ordinary way; this
+    # attribute exists so a report can say that the answer came from the
+    # optimisation rather than from the search, which is the one thing the
+    # factor of safety alone cannot tell you.
+    optimized: Optional[LEMResult] = None
 
     @property
     def critical(self) -> Optional[LEMResult]:
@@ -149,6 +190,8 @@ class BaseSearch(ABC):
         check_m_alpha: bool = True,
         min_elevation: Optional[float] = None,
         min_depth: Optional[float] = None,
+        optimize=None,
+        optimize_seed: Optional[int] = None,
     ) -> None:
         self.method = method
         self.num_slices = num_slices
@@ -219,6 +262,15 @@ class BaseSearch(ABC):
         # user opts in, while its reports DO filter on m_alpha by default and
         # count the rejects as error -112.
         self.check_m_alpha = check_m_alpha
+        # v0.1.104 — Optimize Surfaces: an :class:`OptimizeSettings`, or
+        # None for off. None is the default so that a search built by hand
+        # behaves as it always did, and it is also what an unticked model
+        # produces, so the two doors agree (the v0.1.89 lesson).
+        self.optimize = optimize
+        # Its own seed, drawn from the project's, because a walk seeded with
+        # None would make an analysis unreproducible from the Random Numbers
+        # page onwards — which is the promise v0.1.74 went and kept.
+        self.optimize_seed = optimize_seed
 
     # ------------------------------------------------------------------
     def _is_admissible(self, result: Optional[LEMResult]) -> bool:
@@ -527,9 +579,117 @@ class BaseSearch(ABC):
         construction come in by different doors, the two end up behaving
         differently. Tests, scripts and ``examples/`` all build their
         search by hand.
+
+        v0.1.104 — and it is why Optimize Surfaces attaches HERE too. The
+        option is a post-process over the population the search produced,
+        so every one of the six searches would otherwise have to remember
+        to run it, and five of them would be right until the sixth was
+        written. The freeze covers it as well, which it must: the walk
+        evaluates thousands of surfaces against the same unchanging model.
         """
         with project.regions_frozen():
-            return self._run(project)
+            result = self._run(project)
+            if self.optimize is not None and self.optimize.enabled:
+                self._optimize_result(project, result)
+            return result
+
+    # ------------------------------------------------------------------
+    def _optimize_result(self, project: Project, result) -> None:
+        """Run Optimize Surfaces over what the search found.
+
+        The reference documents the behaviour exactly, and two sentences of
+        it decide everything here: "this option will perform the
+        optimization on EVERY SURFACE generated by the search", and "the
+        only result which will be displayed [...] is the (new) optimized
+        Global Minimum surface. [...] All intermediate slip surfaces
+        generated by the optimization are NOT stored. [...] the original
+        surfaces which existed BEFORE the optimization will still be
+        displayed."
+
+        So: the search's own population is left untouched, every selected
+        surface is walked, and only the BEST of the walks is added. Whether
+        a surface is walked as it is generated or afterwards is not
+        observable in the answer — only the minimum survives either way -
+        so it is done afterwards, where the selection can be made once.
+
+        CIRCLES ARE SKIPPED, and so is anything else without a polyline of
+        its own. A circle has three degrees of freedom and no vertices to
+        move, and the reference offers this option for Surface Type =
+        Non-Circular only. Skipping rather than refusing matters because a
+        non-circular search can still return a circular mass.
+        """
+        from .optimize import optimize_surface
+
+        opts = self.optimize
+        targets = self._surfaces_to_optimize(result)
+        if not targets:
+            return
+
+        # EVERY walk gets the SAME seed, and that is a decision worth the
+        # three lines it takes to justify. The obvious alternative — draw a
+        # sub-seed per surface from one generator - makes a walk's random
+        # stream depend on how many surfaces happened to be selected before
+        # it, so the walk that starts from the global minimum is a
+        # different walk under "All" than under "Global Minimum". Measured
+        # on a 120-surface Block Search: "All" then came back with 1.1229
+        # against Global Minimum's 1.1129, WORSE for doing strictly more
+        # work, and nothing said so. Sharing the seed makes the wider
+        # choice contain the narrower one, so "All" can never lose to
+        # "Global Minimum". The walks do not collapse onto each other:
+        # each starts from a different surface with a different vertex
+        # count and a different shuffle order.
+        walk = replace(opts, seed=self.optimize_seed)
+        best = None
+        for i, start in enumerate(targets):
+            # Reported BEFORE the guards below, so a walk that comes back
+            # unusable still advances the bar. With "All" this loop is the
+            # bulk of the run, and a bar that stalls on the failures reads
+            # as a hung analysis.
+            if self.progress_cb is not None and len(targets) > 1:
+                self.progress_cb(i + 1, len(targets))
+            _surface, res, _rep = optimize_surface(
+                project, self, start.surface, walk)
+            if res is None or not res.is_valid:
+                continue
+            if not getattr(res, "admissible", True):
+                continue
+            if best is None or res.fos < best.fos:
+                best = res
+
+        if best is None:
+            return
+        # Only worth reporting when it beat what the search found: an
+        # optimisation that ends where it started has produced no new
+        # surface, and adding one would inflate the count for nothing.
+        critical = result.critical
+        if critical is not None and best.fos >= critical.fos:
+            return
+        result.optimized = best
+        result.evaluations.append(best)
+        result.valid_count += 1
+
+    def _surfaces_to_optimize(self, result) -> list:
+        """The *Surfaces to Optimize* group, as a list of results.
+
+        Global Minimum, All, or Factor of Safety Less Than — the three
+        exclusive choices of the reference's settings dialog. Anything
+        inadmissible or without a polyline is dropped here rather than
+        inside the walk, so the cost of the choice is visible in one place.
+        """
+        opts = self.optimize
+        target = getattr(opts, "target", "global_minimum")
+        if target == "all":
+            pool = [r for r in result.evaluations if r.is_valid]
+        elif target == "fos_less_than":
+            pool = [r for r in result.evaluations
+                    if r.is_valid and r.fos < opts.fos_threshold]
+        else:
+            crit = result.critical
+            pool = [crit] if crit is not None else []
+        return [r for r in pool
+                if getattr(r, "admissible", True)
+                and getattr(getattr(r, "surface", None), "polyline", None)
+                is not None]
 
     @abstractmethod
     def _run(self, project: Project) -> SearchResult: ...
@@ -2104,9 +2264,14 @@ class PathSearch(BaseSearch):
     5. **Minimum Elevation** — no vertex may go below the lower limit of
        the External boundary (or a user Minimum Elevation).
 
-    6. **Optimize Surfaces** — optional Surface Altering Optimization
-       (random-walk refinement of the best surfaces) to drive the FoS
-       lower, matching Slide's "Optimize Surfaces" post-process.
+    6. **Optimize Surfaces** is NOT part of this search. Until v0.1.104
+       it was: a private random walk over the best five surfaces, run
+       unconditionally because the field that switched it on defaulted to
+       True and no dialog ever showed it, while the "Optimize Surfaces"
+       checkbox of the Path Search panel wrote a setting no analysis read.
+       There is now one optimisation, in ``BaseSearch.run``, driven by
+       that checkbox, and every non-circular search reaches it the same
+       way. See ``ogr_slip2d.optimize`` and defect D08.
 
     All randomness is reproducible when ``seed`` is given (Slide's
     Pseudo-Random mode).
@@ -2129,8 +2294,6 @@ class PathSearch(BaseSearch):
         initial_angle_upper_deg: Optional[float] = None,
         initial_angle_lower_deg: Optional[float] = None,
         min_elevation: Optional[float] = None,
-        optimize: bool = True,
-        optimize_iterations: int = 200,
         convex_only: bool = False,
         seed: Optional[int] = None,
         progress_cb=None,
@@ -2160,8 +2323,6 @@ class PathSearch(BaseSearch):
         self.segment_length = segment_length
         self.initial_angle_upper_deg = initial_angle_upper_deg
         self.initial_angle_lower_deg = initial_angle_lower_deg
-        self.optimize = optimize
-        self.optimize_iterations = optimize_iterations
         self.convex_only = convex_only
         self.seed = seed
         self.progress_cb = progress_cb
@@ -2351,7 +2512,6 @@ class PathSearch(BaseSearch):
         # generating until num_surfaces valid surfaces exist, capped at
         # max_attempts_factor× attempts so a pathological model cannot
         # spin forever.
-        best_surfaces = []
         attempts = 0
         max_attempts = self.num_surfaces * self.max_attempts_factor
         while (result.valid_count < self.num_surfaces
@@ -2380,20 +2540,8 @@ class PathSearch(BaseSearch):
             result.evaluations.append(res)
             if res.is_valid:
                 result.valid_count += 1
-                best_surfaces.append((res.fos, verts))
             else:
                 result.invalid_count += 1
-
-        # Surface Altering Optimization on the best few
-        if self.optimize and best_surfaces:
-            best_surfaces.sort(key=lambda t: t[0])
-            for k in range(min(5, len(best_surfaces))):
-                _f, verts0 = best_surfaces[k]
-                opt = self._optimize_surface(project, list(verts0), rng)
-                if opt is not None:
-                    result.evaluations.append(opt)
-                    if opt.is_valid:
-                        result.valid_count += 1
 
         if self.progress_cb:
             self.progress_cb(self.num_surfaces, self.num_surfaces)
@@ -2571,52 +2719,6 @@ class PathSearch(BaseSearch):
         return None
 
     # ------------------------------------------------------------------
-    def _optimize_surface(self, project, verts, rng):
-        """Surface Altering Optimization (random-walk refinement)."""
-        from ogr_core.geometry import Polyline, Vertex
-        from .surface import SlipSurface
-
-        def _fos_of(vs):
-            poly = Polyline(vertices=vs, closed=False)
-            surf = SlipSurface(polyline=poly)
-            r = self.evaluate_surface(project, surf)
-            if r is None or not r.is_valid:
-                return None, None
-            if not (0.2 <= r.fos <= 100.0):
-                return None, None
-            return r.fos, r
-
-        cur = list(verts)
-        cur_fos, cur_res = _fos_of(cur)
-        if cur_fos is None:
-            return None
-        span = abs(cur[-1].x - cur[0].x)
-        step0 = 0.05 * span
-        for it in range(self.optimize_iterations):
-            step = step0 * (1.0 - it / self.optimize_iterations)
-            if len(cur) <= 2:
-                break
-            idx = rng.randint(1, len(cur) - 2)
-            v = cur[idx]
-            dy = rng.uniform(-step, step)
-            dx = rng.uniform(-0.3 * step, 0.3 * step)
-            new_v = Vertex(v.x + dx, v.y + dy)
-            trial = list(cur)
-            trial[idx] = new_v
-            if not (trial[idx - 1].x < trial[idx].x < trial[idx + 1].x):
-                continue
-            if self._ext_poly is not None:
-                from shapely.geometry import Point as _Pt
-                if not self._ext_poly.buffer(1e-6 * max(span, 1.0)).contains(
-                        _Pt(new_v.x, new_v.y)):
-                    continue
-            f, r = _fos_of(trial)
-            if f is not None and f < cur_fos:
-                cur = trial
-                cur_fos = f
-                cur_res = r
-        return cur_res
-
     # ------------------------------------------------------------------
     @staticmethod
     def _ground_profile(ext_verts):

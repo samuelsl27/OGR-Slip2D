@@ -23,6 +23,7 @@ from .project_settings_dialog import ProjectSettingsDialog
 # v0.1.9 — old surface_options_dialog deprecated; full Slide-style
 # version lives in grid_dialogs.
 from .grid_dialogs import AddGridDialog, SurfaceOptionsDialog
+from .optimize_settings_dialog import OptimizeSettingsDialog
 
 __all__ = [
     "AboutDialog",
@@ -36,6 +37,7 @@ __all__ = [
     "ExpandShrinkDialog",
     "GeometryCleanupDialog",
     "MaterialPropertiesDialog",
+    "OptimizeSettingsDialog",
     "PreferencesDialog",
     "ProjectSettingsDialog",
     "RotateDialog",

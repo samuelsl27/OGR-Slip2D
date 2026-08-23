@@ -302,37 +302,60 @@ class TestOptimisation:
                                min_area=0.0)
         return p, evaluator, surf, fos
 
-    def test_densification_is_what_makes_it_work(self):
-        """The measured finding of this phase: with the four vertices a
-        Path Search produces, the walk barely moves the factor of safety;
-        densified, it lowers it appreciably.
+    def test_the_walk_spends_the_budget_it_was_given(self):
+        """v0.1.104 — this test used to assert the opposite finding, and
+        the reason it changed is worth more than the assertion.
 
-        v0.1.100 — this used to assert ``plain.improvement <= 1e-6``, an
-        exact "improves nothing", and the number it rested on came from a
-        surface that was never legitimate. The Path Search minimum this test
-        started from, FoS 0.88281 at vertices (44.24, 50) … (76.94, 25), was
-        sliced into TWELVE slices of the fourteen asked for: the slicer used
-        to drop a slice it could not build and say nothing, so a surface two
-        slices short of its own length won the search. Refusing it (anomaly
-        A23-1) moves the start to 0.91075 with all fourteen, and on THAT
-        surface the plain walk does find a step — 0.0007, against 0.023
-        densified.
+        It was called ``test_densification_is_what_makes_it_work`` and it
+        claimed: with the four vertices a Path Search produces, the walk
+        barely moves the factor of safety; densified to twelve, it lowers
+        it appreciably. Measured on this very surface, at 200 evaluations
+        and seed 7:
 
-        The finding is the CONTRAST, and it survives with room to spare:
-        densification buys more than an order of magnitude. Asserting the
-        contrast rather than the exact zero is also what stops this test
-        from breaking on the next 1e-16 that flips one accept/reject.
+            v0.1.103   densify_to=0    +0.0007 in  36 evaluations, 3 accepted
+                       densify_to=12   +0.0228 in 200 evaluations, 22 accepted
+            v0.1.104   densify_to=0    +0.0939 in 200 evaluations, 91 accepted
+                       densify_to=12   +0.0765 in 200 evaluations, 75 accepted
+
+        Read the middle column. The old plain walk did not fail to find
+        anything — it STOPPED, after 36 of the 200 evaluations it was
+        given, and the two things that stopped it were both this module's
+        own inventions rather than the reference's: an acceptance deadband
+        of 1e-4 (the documented rule is simply "if the factor of safety
+        for the modified surface is lower [...] the new surface replaces
+        the original"), and a hard-coded limit of six fruitless passes.
+        With two movable vertices, improvements below the deadband are
+        most of what there is, so the walk ran out of patience at once.
+        The 0.0007 was measuring the stopping rule, not densification.
+
+        So the invariant this file protects here is now the one that was
+        actually violated: **a walk that still has budget and is still
+        finding improvements must not stop**. Densification remains what
+        gives a four-vertex surface room to be reshaped — it is asserted
+        by ``test_densified_surface_has_the_requested_vertices`` and by
+        the vertex count — but it is no longer the difference between
+        working and not working, and saying that it is would be recording
+        a measurement that has been superseded.
+
+        The threshold is a CONTRAST against the number the old stopping
+        rule produced, two orders of magnitude below either column, not a
+        capture of what this code prints today.
         """
         p, ev, surf, _f0 = self._start()
+        assert len(surf.polyline.vertices) == 4, (
+            "the premise: this is the short surface a Path Search makes")
         _s1, _r1, plain = optimize_surface(
-            p, ev, surf, OptimizeSettings(max_iterations=120, seed=7,
+            p, ev, surf, OptimizeSettings(max_iterations=200, seed=7,
                                           densify_to=0))
         _s2, _r2, dense = optimize_surface(
             p, ev, surf, OptimizeSettings(max_iterations=200, seed=7,
                                           densify_to=12))
+        assert plain.improvement > 0.01, plain.summary()
         assert dense.improvement > 0.01, dense.summary()
-        assert dense.improvement > 10.0 * plain.improvement, (
-            plain.summary(), dense.summary())
+        # And the budget itself: neither may walk away from it while it is
+        # still buying improvements. 36 of 200 was the defect.
+        assert plain.iterations > 150, plain.summary()
+        assert dense.iterations > 150, dense.summary()
 
     def test_the_starting_surface_is_fully_sliced(self):
         """Why the numbers above are what they are, pinned separately.

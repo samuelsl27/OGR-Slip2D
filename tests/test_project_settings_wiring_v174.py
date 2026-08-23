@@ -541,7 +541,7 @@ class TestThereIsOneSeed:
 
         def _run(seed):
             r = PathSearch(method=BishopSimplified(), num_paths=6,
-                           num_slices=15, optimize=False, seed=seed)
+                           num_slices=15, seed=seed)
             return [e.surface.polyline.vertices[0].x
                     for e in r.run(_slope()).evaluations]
 

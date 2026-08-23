@@ -10,6 +10,8 @@ Slide2 algorithm (Greco 1996) with concave-up admissibility, and adds
 an admissibility filter to Block Search.
 """
 from __future__ import annotations
+
+from ogr_slip2d.optimize import OptimizeSettings
 import math
 
 
@@ -52,6 +54,14 @@ def _is_concave_up(verts) -> bool:
     return True
 
 
+#: v0.1.104 — ``optimize=True`` used to switch on a random walk private
+#: to Path Search, run over its best five surfaces for 200 iterations.
+#: There is one optimiser now, shared by every non-circular search and
+#: driven by the *Optimize Surfaces* checkbox; this is what asking for it
+#: from code looks like. The budget matches what these tests used to get.
+_OPTIMISE = OptimizeSettings(enabled=True, max_iterations=200)
+
+
 # ======================================================================
 class TestPathSearch:
     def test_path_search_finds_valid_surface(self):
@@ -59,7 +69,7 @@ class TestPathSearch:
         from ogr_slip2d.search import PathSearch
         p = _slope_project()
         search = PathSearch(method=BishopSimplified(), num_vertices=8,
-            num_paths=200, num_slices=25, optimize=True, seed=1)
+            num_paths=200, num_slices=25, optimize=_OPTIMISE, seed=1)
         r = search.run(p)
         assert r.valid_count > 0, "Path Search found no valid surfaces"
         assert r.critical is not None
@@ -73,7 +83,7 @@ class TestPathSearch:
         from ogr_slip2d.search import PathSearch
         p = _slope_project()
         search = PathSearch(method=BishopSimplified(), num_vertices=8,
-            num_paths=200, num_slices=25, optimize=True, seed=7)
+            num_paths=200, num_slices=25, optimize=_OPTIMISE, seed=7)
         r = search.run(p)
         vs = r.critical.surface.polyline.vertices
         assert _is_concave_up(vs), (
@@ -86,7 +96,7 @@ class TestPathSearch:
         from ogr_slip2d.search import PathSearch
         p = _slope_project()
         search = PathSearch(method=BishopSimplified(), num_vertices=8,
-            num_paths=150, num_slices=25, optimize=False, seed=3)
+            num_paths=150, num_slices=25, seed=3)
         r = search.run(p)
         vs = r.critical.surface.polyline.vertices
         xs = [v.x for v in vs]
@@ -100,9 +110,9 @@ class TestPathSearch:
         from ogr_slip2d.search import PathSearch
         p = _slope_project()
         r1 = PathSearch(method=BishopSimplified(), num_vertices=8,
-            num_paths=100, num_slices=20, optimize=False, seed=99).run(p)
+            num_paths=100, num_slices=20, seed=99).run(p)
         r2 = PathSearch(method=BishopSimplified(), num_vertices=8,
-            num_paths=100, num_slices=20, optimize=False, seed=99).run(p)
+            num_paths=100, num_slices=20, seed=99).run(p)
         assert abs(r1.critical.fos - r2.critical.fos) < 1e-9, (
             "Same seed should give identical results"
         )
@@ -113,9 +123,9 @@ class TestPathSearch:
         from ogr_slip2d.search import PathSearch
         p = _slope_project()
         r_no = PathSearch(method=BishopSimplified(), num_vertices=8,
-            num_paths=200, num_slices=20, optimize=False, seed=5).run(p)
+            num_paths=200, num_slices=20, seed=5).run(p)
         r_opt = PathSearch(method=BishopSimplified(), num_vertices=8,
-            num_paths=200, num_slices=20, optimize=True, seed=5).run(p)
+            num_paths=200, num_slices=20, optimize=_OPTIMISE, seed=5).run(p)
         # Optimized run should find FoS ≤ non-optimized (same seed,
         # extra optimization can only help or stay equal)
         assert r_opt.critical.fos <= r_no.critical.fos + 0.05
@@ -188,7 +198,7 @@ class TestSurfacesInsideExternal:
         ext_poly = Polygon([(v.x, v.y) for v in ext_verts])
         for seed in (7, 42, 100):
             search = PathSearch(method=BishopSimplified(), num_vertices=8,
-                num_paths=300, num_slices=20, optimize=True, seed=seed)
+                num_paths=300, num_slices=20, optimize=_OPTIMISE, seed=seed)
             r = search.run(p)
             assert r.critical is not None, f"seed {seed}: no critical"
             vs = r.critical.surface.polyline.vertices
@@ -229,7 +239,7 @@ class TestSurfacesInsideExternal:
             strength=MohrCoulomb(cohesion=8, friction_angle=20))]
         ext_poly = Polygon([(v.x, v.y) for v in ext_verts])
         search = PathSearch(method=BishopSimplified(), num_vertices=8,
-            num_paths=300, num_slices=25, optimize=True, seed=42)
+            num_paths=300, num_slices=25, optimize=_OPTIMISE, seed=42)
         r = search.run(p)
         assert r.critical is not None
         vs = r.critical.surface.polyline.vertices
@@ -278,7 +288,7 @@ class TestPathSearchXSTABL:
             min_area=0.5)
         ref = gs.run(p).critical.fos
         r = PathSearch(method=BishopSimplified(), num_paths=400,
-            num_slices=25, optimize=True, seed=100).run(p)
+            num_slices=25, optimize=_OPTIMISE, seed=100).run(p)
         assert r.critical is not None
         # Non-circular should be within a sensible band of the circular
         assert r.critical.fos <= ref + 0.15, (
@@ -293,7 +303,7 @@ class TestPathSearchXSTABL:
         from ogr_slip2d.search import PathSearch
         p = self._slope()
         r = PathSearch(method=BishopSimplified(), num_paths=300,
-            num_slices=25, segment_length=None, optimize=False,
+            num_slices=25, segment_length=None,
             seed=5).run(p)
         assert r.valid_count > 0
 
@@ -304,7 +314,7 @@ class TestPathSearchXSTABL:
         from ogr_slip2d.search import PathSearch
         p = self._slope()
         r = PathSearch(method=BishopSimplified(), num_paths=300,
-            num_slices=25, optimize=False, seed=11).run(p)
+            num_slices=25, seed=11).run(p)
         vs = r.critical.surface.polyline.vertices
         # Entry is at the toe side; the surface must dip down then rise.
         ymin = min(v.y for v in vs)
@@ -319,7 +329,7 @@ class TestPathSearchXSTABL:
         from ogr_slip2d.search import PathSearch
         p = self._slope()
         r = PathSearch(method=BishopSimplified(), num_paths=400,
-            num_slices=25, optimize=False, seed=100).run(p)
+            num_slices=25, seed=100).run(p)
         total = r.valid_count + r.invalid_count
         assert total > 0
         assert r.valid_count / total > 0.10, (

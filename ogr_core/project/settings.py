@@ -209,6 +209,12 @@ _SHADOW_FIELDS: dict = {
     # Different quantity: a geometric cooling rate against the c of
     # T_k = T_0 exp(-c k^(1/n)). The rate was never read by anything.
     "sa_temperature_factor": (0.97, "sa_temperature_coefficient"),
+    # Same quantity, opposite visibility: the engine read ``path_optimize``
+    # and the interface showed ``optimize_enabled``. The value is NOT
+    # migrated — a field that defaulted to True in every model ever saved
+    # expresses no intent, and carrying it across would tick a box the user
+    # never ticked. See v0.1.104.
+    "path_optimize": (True, "optimize_enabled"),
     # Read by nobody, ever. The interface wrote them and there they died.
     "initial_angle_lower_deg": (0.0, None),
     "initial_angle_upper_deg": (90.0, None),
@@ -316,8 +322,11 @@ class SearchSettings:
     path_segment_length_manual: bool = False
     path_segment_length_value: float = 7.142857
     path_convex_only: bool = False
-    # v0.1.17 — XSTABL Path Search controls
-    path_optimize: bool = True
+    # ``path_optimize`` used to sit here, True by default and read by
+    # ``build_search``, while the checkbox the Path Search panel actually
+    # shows wrote ``optimize_enabled`` — which no analysis read. Visible
+    # name dead, hidden name live: the shape of D07b, found while closing
+    # D08. Retired in v0.1.104; see ``_SHADOW_FIELDS``.
 
     # ---------- Block Search (non-circular) ----------
     block_num_surfaces: int = 5000
@@ -452,6 +461,28 @@ class SearchSettings:
             notes.append(
                 f"This model carries {shadow} = {old}, removed in v0.1.103: "
                 f"{why} {survivor}. The stored value was NOT converted.")
+
+        # ---- path_optimize: the ONLY shadow whose note fires on the value
+        # that EQUALS its old default, and the reason is that this one is
+        # the reverse of the others. Every model ever saved carries
+        # ``path_optimize = True`` because nothing could set it to anything
+        # else — the interface never showed it — and True is the value that
+        # made Path Search optimise. Dropping it therefore CHANGES the
+        # number for exactly the models that never chose it, which is the
+        # one case worth saying out loud. ``False`` needs no note: the
+        # replacement is unticked by default, so the behaviour is the same.
+        if "path_optimize" in data:
+            old = data.pop("path_optimize")
+            if old and not data.get("optimize_enabled",
+                                    defaults["optimize_enabled"]):
+                notes.append(
+                    "This model carries path_optimize = True, removed in "
+                    "v0.1.104. Path Search used to optimise its best "
+                    "surfaces whether or not anything asked it to, because "
+                    "that field defaulted to True and the interface never "
+                    "showed it. The optimisation is now the Optimize "
+                    "Surfaces checkbox, which is UNTICKED here, so this run "
+                    "does not optimise. Tick it to get the old behaviour.")
 
         # ---- read by nobody, ever: dropped without a word, because a value
         # that never reached a calculation has nothing to say.
@@ -814,6 +845,55 @@ class ProjectSettings:
             "min_depth": (None if s.min_depth is None
                           else float(s.min_depth)),
         }
+
+    def optimize_kwargs(self) -> dict:
+        """Optimize Surfaces arguments, for the NON-CIRCULAR searches.
+
+        v0.1.104 — the third of the same family as ``admissibility_kwargs``
+        and ``surface_filter_kwargs``, and it exists for the same reason
+        the other two do: thirteen fields were editable, saved to the .ogr
+        and read by nobody at all (defect D08, anomaly A9-1). Ticking
+        "Optimize Surfaces" on a Block Search stored the tick, showed it
+        again on reopening and changed nothing.
+
+        Returns ``{"optimize": None}`` when the box is unticked, so a
+        search built from an unticked model is the search it always was,
+        argument for argument.
+
+        Unlike its two siblings this one does NOT travel in ``common``:
+        the reference offers the option only for Surface Type =
+        Non-Circular, so handing it to Grid, Slope or Auto Refine would be
+        an argument they can only ignore.
+        """
+        from ogr_slip2d.optimize import OptimizeSettings
+
+        s = self.search
+        if not s.optimize_enabled:
+            return {"optimize": None}
+        return {"optimize": OptimizeSettings(
+            enabled=True,
+            target=str(s.optimize_target),
+            fos_threshold=float(s.optimize_fos_threshold),
+            max_iterations=int(s.optimize_max_iterations),
+            tolerance=float(s.optimize_tolerance),
+            step_reduction_factor=float(s.optimize_step_reduction_factor),
+            # Unticked means "concave angles will not be allowed", which is
+            # a limit of zero — not "no limit". Reading the unticked box as
+            # unconstrained would invert the option.
+            max_concave_angle_deg=(
+                float(s.optimize_max_concave_angle_deg)
+                if s.optimize_max_concave_angle_enabled else 0.0),
+            explore_all_vertices=bool(s.optimize_explore_all_vertices),
+            snap_shallow_to_slope=bool(s.optimize_snap_shallow_to_slope),
+            # Unticked Specify Distance means AUTOMATIC, and the value the
+            # box shows means nothing until it is ticked.
+            snap_distance=(float(s.optimize_snap_distance)
+                           if (s.optimize_snap_shallow_to_slope
+                               and s.optimize_snap_specify_distance)
+                           else None),
+            use_surface_checks=bool(
+                s.optimize_use_depth_elevation_concave_checks),
+        )}
 
     # ------------------------------------------------------------------
     def to_dict(self) -> dict:

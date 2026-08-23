@@ -10,7 +10,9 @@ it, the user is configuring nothing and believes the analysis respects it.
 That is rule 7, and this project has now met it three times in three
 disguises:
 
-    A9-1  — the whole Optimize Surfaces panel, stored and read by nobody.
+    A9-1  — the whole Optimize Surfaces panel, thirteen fields stored and
+            read by nobody. Closed in v0.1.104, which is why not one of
+            them is on the list below any more.
     A37-1 — Minimum Elevation and Minimum Depth, declared, editable,
             saved, and not passed by a single one of the six searches.
     D07b  — six settings that existed TWICE, under the name the interface
@@ -38,21 +40,13 @@ _ENGINE_PACKAGES = ("ogr_core", "ogr_slip2d", "ogr_fem2d", "ogr_cli")
 #: Search settings that no engine module reads yet, each with the open
 #: defect that owns it. Shrinks; never grows.
 _KNOWN_UNREAD = {
-    # D08 (groups A9-1) — Optimize Surfaces. The capability exists in the
-    # searches; what is missing is any wiring from these settings to it.
-    "optimize_enabled": "D08",
-    "optimize_target": "D08",
-    "optimize_fos_threshold": "D08",
-    "optimize_tolerance": "D08",
-    "optimize_max_iterations": "D08",
-    "optimize_step_reduction_factor": "D08",
-    "optimize_max_concave_angle_enabled": "D08",
-    "optimize_max_concave_angle_deg": "D08",
-    "optimize_explore_all_vertices": "D08",
-    "optimize_snap_shallow_to_slope": "D08",
-    "optimize_snap_specify_distance": "D08",
-    "optimize_snap_distance": "D08",
-    "optimize_use_depth_elevation_concave_checks": "D08",
+    # The thirteen ``optimize_*`` fields were here until v0.1.104, the
+    # whole of defect D08. They are gone from this list because they now
+    # have readers: ``ProjectSettings.optimize_kwargs`` turns them into an
+    # ``OptimizeSettings``, ``build_search`` hands it to the three
+    # non-circular searches and ``BaseSearch.run`` walks the surfaces with
+    # it. The list is a budget that only shrinks, so this is what closing
+    # a defect looks like from here.
     # D32 — the non-circular Auto Refine does not exist: the setting is
     # there and the search it configures is the circular one.
     "auto_refine_num_vertices_along_surface": "D32",
@@ -127,7 +121,12 @@ class TestEverySearchSettingHasAReader:
                      "path_initial_angle_at_toe_lower_enabled",
                      "path_initial_angle_at_toe_upper_enabled",
                      "sa_temperature_coefficient",
-                     "initial_angle_at_toe_lower_enabled"):
+                     "initial_angle_at_toe_lower_enabled",
+                     # v0.1.104 — the seventh pair, and the only one found
+                     # the other way round: the engine read the hidden
+                     # ``path_optimize`` while the dialog showed
+                     # ``optimize_enabled``, which nothing read.
+                     "optimize_enabled"):
             assert _reads(blob, name), name
 
     def test_no_field_is_a_second_name_for_another(self):

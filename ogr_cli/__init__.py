@@ -5,4 +5,4 @@ OGR Slip2D — command-line interface (Typer).
 
 Author: Samuel Sáez López — PhD Student, UPCT
 """
-__version__ = "0.1.103"
+__version__ = "0.1.104"

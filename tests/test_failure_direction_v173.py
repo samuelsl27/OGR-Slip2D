@@ -276,7 +276,7 @@ def _mean_initiation_x(project, seed: int = 7):
     from ogr_slip2d.methods import BishopSimplified
 
     search = PathSearch(method=BishopSimplified(), num_paths=12,
-                        num_slices=20, optimize=False, seed=seed)
+                        num_slices=20, seed=seed)
     result = search.run(project)
     xs = []
     for r in result.evaluations:

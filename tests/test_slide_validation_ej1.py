@@ -337,11 +337,29 @@ class TestSearchAnomaliesA1A2:
         assert r.valid_count > 200, r.valid_count
 
     def test_a1_path_search_finds_critical_surface(self):
+        """v0.1.104 — the optimisation is now ASKED FOR, and the band below
+        is untouched.
+
+        Until v0.1.104 this call optimised without saying so: Path Search
+        carried a private random walk switched on by ``path_optimize``,
+        which defaulted to True and which no dialog ever showed. Removing
+        it left this search unoptimised, and unoptimised it comes back with
+        1.027 instead of the 0.6-to-1.0 band asserted here.
+
+        The band is a reference claim and is NOT what gets adjusted: it says
+        a Path Search must land in the physical range of the circular
+        minimum (0.883) rather than at the 1.60 the pre-A1 sign error gave.
+        What is restored is the CONFIGURATION the test was written against,
+        stated this time instead of inherited from a hidden default.
+        """
         from ogr_slip2d import BishopSimplified
+        from ogr_slip2d.optimize import OptimizeSettings
         from ogr_slip2d.search import PathSearch
         p = _ej1_project()
         r = PathSearch(method=BishopSimplified(), num_paths=80,
-                       num_slices=18, seed=7).run(p)
+                       num_slices=18, seed=7,
+                       optimize=OptimizeSettings(enabled=True,
+                                                 max_iterations=200)).run(p)
         assert r.critical is not None
         # Non-circular surfaces may be more critical than the circular
         # minimum (0.883), but must be in the same physical range — the
