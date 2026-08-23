@@ -533,3 +533,46 @@ def moment_axis(surface, override=None) -> tuple[float, float]:
     x1, y1 = verts[-1].x, verts[-1].y
     dx, dy = x1 - x0, y1 - y0
     return 0.5 * (x0 + x1) - dy, 0.5 * (y0 + y1) + dx
+
+
+# ----------------------------------------------------------------------
+def lowest_elevation(surface) -> Optional[float]:
+    """The lowest y the surface actually reaches, or None if unanswerable.
+
+    "Actually reaches" is the whole point: it is the minimum over the part
+    of the surface that is analysed, not over the geometry it was built
+    from. On a circle those are different things, and confusing them is
+    easy — :meth:`SlipCircle.x_range` answers with the extent of the WHOLE
+    circle, ``xc ± R``, while the surface runs only between ``x_left`` and
+    ``x_right``, endpoints that a reverse-curvature tension crack may
+    already have moved.
+
+    Exact geometry rather than a minimum sampled over the slices, and that
+    is deliberate: a sampled minimum would make the Minimum Elevation
+    filter depend on the number of slices, which is the class of defect
+    v0.1.100 and D05 were spent on. On a 46 m radius sliced 50 ways the
+    sampling error is only ~4 mm, but a filter whose answer moves when the
+    slicing changes has no defensible value at all.
+
+    Used by the Minimum Elevation surface filter, whose rule is that a
+    surface dipping below the user's elevation is discarded, not trimmed.
+    """
+    if isinstance(surface, SlipCircle):
+        x_l, x_r = surface.x_left, surface.x_right
+        if x_l is None or x_r is None:
+            x_l, x_r = surface.x_range()
+        if x_l > x_r:
+            x_l, x_r = x_r, x_l
+        # The arc's own lowest point is the bottom of the circle, and it
+        # belongs to the surface only when the centre's abscissa is inside
+        # the span; otherwise the arc is monotone and an endpoint wins.
+        if x_l <= surface.centre_x <= x_r:
+            return surface.centre_y - surface.radius
+        ends = [surface.base_y_at(x_l), surface.base_y_at(x_r)]
+        ends = [y for y in ends if y is not None]
+        return min(ends) if ends else None
+
+    verts = list(getattr(getattr(surface, "polyline", None), "vertices", ()))
+    if verts:
+        return min(v.y for v in verts)
+    return None

@@ -456,6 +456,13 @@ _DICTS: dict[str, dict[str, str]] = {
         'Latin Hypercube': 'Hipercubo latino',
         'Maximum lambda:': 'Lambda máxima:',
         'Minimum lambda:': 'Lambda mínima:',
+        # v0.1.102 — the three Surface Filter labels. "Cota" and
+        # "profundidad" are the standard Spanish geotechnical terms;
+        # "elevación" would be a literal translation of the English
+        # rather than the word a Spanish-speaking engineer reads.
+        'Minimum elevation': 'Cota mínima',
+        'Minimum depth': 'Profundidad mínima',
+        'Minimum area': 'Área mínima',
         'Monte Carlo': 'Monte Carlo',
         'Number of samples:': 'Número de muestras:',
         'Off by default: applying partial factors silently would change every factor of safety previously compared against, so it has to be an explicit choice. Selecting a standard loads its factors; choose Custom to enter your own.': 'Desactivado por defecto: aplicar coeficientes parciales en silencio cambiaría todos los factores de seguridad con los que se haya comparado antes, así que debe ser una elección explícita. Elegir una norma carga sus coeficientes; escoja Personalizado para introducir los suyos.',

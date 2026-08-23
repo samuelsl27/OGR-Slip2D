@@ -48,6 +48,7 @@ __all__ = [
     "build_search",
     "check_analysis_settings",
     "daylight_tangent_note",
+    "grid_edge_note",
     "run_analysis",
     "settings_warnings",
 ]
@@ -297,6 +298,66 @@ def daylight_tangent_note(result, num_slices: int) -> list[str]:
     ]
 
 
+#: How close to a grid edge the critical centre must fall, as a fraction
+#: of that axis' own span, before the run says the grid may be too small.
+#:
+#: Relative and not absolute, by the project's rule that a geometric
+#: tolerance has to read the same in millimetres and in metres. The value
+#: barely matters: the centre returned by a Grid Search IS one of the grid
+#: nodes, so it either sits on the perimeter exactly or a whole node
+#: spacing away from it. Anything well below 1/nx behaves identically.
+_GRID_EDGE_REL_TOL = 1e-6
+
+
+def grid_edge_note(search, result) -> list[str]:
+    """Warn when the critical centre came off the edge of the grid.
+
+    A minimum on the boundary of the searched region is not a minimum, it
+    is the best of what was looked at — the true one may lie outside, and
+    the grid is what decided the answer. Reporting only, like the
+    daylight-tangent note: nothing in the analysis changes either way.
+
+    Measured on verification problem 77 of the reference bank, one and the
+    same model: with the grid ending at x = 900 the minimum came out AT
+    x = 900 and gave 1.757, 11 % above the published value; widened to
+    1400 the minimum moved inside to x = 1019 and gave 1.587, 0.2 % off.
+    Nothing warned. The back-analysis problem 37 does the same thing with
+    its left edge.
+
+    Abstains on an axis of zero span. A one-row or one-column grid puts
+    every centre on the perimeter by construction, so a note there would
+    fire on every run and mean nothing.
+    """
+    gx = getattr(search, "grid_x_used", None)
+    gy = getattr(search, "grid_y_used", None)
+    if gx is None or gy is None:
+        return []                      # not a grid search, or it never ran
+    crit = getattr(result, "critical", None)
+    surface = getattr(crit, "surface", None)
+    cx = getattr(surface, "centre_x", None)
+    cy = getattr(surface, "centre_y", None)
+    if cx is None or cy is None:
+        return []
+
+    on_edge = []
+    for name, value, (lo, hi) in (("x", cx, gx), ("y", cy, gy)):
+        span = abs(hi - lo)
+        if span <= 0.0:
+            continue
+        tol = _GRID_EDGE_REL_TOL * span
+        if abs(value - min(lo, hi)) <= tol or abs(value - max(lo, hi)) <= tol:
+            on_edge.append(f"{name} = {value:g}")
+    if not on_edge:
+        return []
+    return [
+        f"The critical centre lies on the edge of the search grid "
+        f"({', '.join(on_edge)}; grid x {gx[0]:g} to {gx[1]:g}, "
+        f"y {gy[0]:g} to {gy[1]:g}). A minimum on the boundary is the best "
+        f"of what was searched, not necessarily the lowest one: widen the "
+        f"grid on that side and re-run before quoting it."
+    ]
+
+
 def build_method(project, method_id: str, num_slices: Optional[int] = None):
     """The configured LEM method object for ``method_id``, or None.
 
@@ -378,6 +439,13 @@ def build_search(project, method_id: str, progress_cb: Optional[Callable] = None
         num_slices=num_slices,
         progress_cb=progress_cb,
         **admissibility,
+        # v0.1.102 — the Surface Filters, and they go in ``common`` rather
+        # than into each branch on purpose: they apply to EVERY search, and
+        # the six branches below are exactly the place where a filter gets
+        # forgotten for one of them. That is anomaly A37-1: Minimum
+        # Elevation and Minimum Depth were declared, editable and saved,
+        # and not one branch passed them.
+        **s.surface_filter_kwargs(),
         **_seed_kw(),
     )
 
@@ -550,5 +618,11 @@ def run_analysis(project, method_ids=None,
                 line = f"{mid}: {note}"
                 if line not in warnings:
                     warnings.append(line)
+        # v0.1.102 — and once per method, whether the answer came off the
+        # boundary of the region that was searched at all.
+        for note in grid_edge_note(search, results[mid]):
+            line = f"{mid}: {note}"
+            if line not in warnings:
+                warnings.append(line)
 
     return AnalysisOutcome(results, factor_report, warnings, project)

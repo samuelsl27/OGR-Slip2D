@@ -1,0 +1,333 @@
+{
+  "format_version": "0.1",
+  "id": "51d857ed-bb7a-4d8f-9441-aad250ed60d7",
+  "name": "XSTABL (1999) back-analysis slope - Minimum Depth filter",
+  "settings": {
+    "units": {
+      "system": "metric",
+      "time": "d",
+      "permeability": "m/s",
+      "failure_direction": "R2L",
+      "system_id": "metric_kpa"
+    },
+    "methods": {
+      "enabled_methods": [
+        "bishop_simplified"
+      ],
+      "num_slices": 50,
+      "tolerance": 0.005,
+      "max_iterations": 50,
+      "interslice_function": "half_sine",
+      "interslice_forces": "effective"
+    },
+    "groundwater": {
+      "method": "water_table",
+      "pore_fluid_unit_weight": 9.81,
+      "excess_pore_pressure": false,
+      "rapid_drawdown": false,
+      "transient": false,
+      "transient_stages": [],
+      "transient_tolerance": 1e-05,
+      "transient_max_iterations": 30,
+      "transient_time_steps": 0,
+      "transient_initial_bcs": null,
+      "rapid_drawdown_method": "b_bar",
+      "default_hu": 1.0,
+      "auto_hu": false
+    },
+    "search": {
+      "slope_limit_left": 5.0,
+      "slope_limit_right": 25.0,
+      "axis_x": null,
+      "axis_y": null,
+      "surface_type": "circular",
+      "search_method": "grid",
+      "radius_increment": 40,
+      "composite_surfaces": false,
+      "create_tension_crack_reverse_curvature": true,
+      "num_surfaces": 5000,
+      "initial_angle_at_toe_upper_enabled": false,
+      "initial_angle_at_toe_upper_deg": -45.0,
+      "initial_angle_at_toe_lower_enabled": false,
+      "initial_angle_at_toe_lower_deg": -45.0,
+      "initial_angle_lower_deg": 0.0,
+      "initial_angle_upper_deg": 90.0,
+      "auto_refine_divisions_along_slope": 10,
+      "auto_refine_circles_per_division": 10,
+      "auto_refine_num_iterations": 10,
+      "auto_refine_divisions_to_use_pct": 50.0,
+      "auto_refine_num_vertices_along_surface": 12,
+      "auto_refine_divisions": 10,
+      "auto_refine_iterations": 5,
+      "auto_refine_factor": 0.5,
+      "sa_initial_vertices": 8,
+      "sa_generation_steps": 1000,
+      "sa_num_fos_compared_before_stopping": 5,
+      "sa_tolerance": 0.0001,
+      "sa_temperature_coefficient": 8.0,
+      "sa_temperature_factor": 0.97,
+      "sa_convex_only": false,
+      "path_num_surfaces": 5000,
+      "path_initial_angle_at_toe_upper_enabled": false,
+      "path_initial_angle_at_toe_upper_deg": 45.0,
+      "path_initial_angle_at_toe_lower_enabled": false,
+      "path_initial_angle_at_toe_lower_deg": 45.0,
+      "path_segment_length_manual": false,
+      "path_segment_length_value": 7.142857,
+      "path_convex_only": false,
+      "path_optimize": true,
+      "path_upper_angle_enabled": false,
+      "path_segment_length": 5.0,
+      "path_min_angle_deg": -45.0,
+      "path_max_angle_deg": 45.0,
+      "path_num_paths": 500,
+      "block_num_surfaces": 5000,
+      "block_multiple_groups": false,
+      "block_left_start_angle_deg": 135.0,
+      "block_left_end_angle_deg": 135.0,
+      "block_right_start_angle_deg": 45.0,
+      "block_right_end_angle_deg": 45.0,
+      "block_convex_only": false,
+      "block_num_groups": 3,
+      "block_left_proj_angle_deg": 135.0,
+      "block_right_proj_angle_deg": 45.0,
+      "optimize_enabled": false,
+      "optimize_target": "global_minimum",
+      "optimize_fos_threshold": 1.5,
+      "optimize_tolerance": 1e-09,
+      "optimize_max_iterations": 4000,
+      "optimize_step_reduction_factor": 0.5,
+      "optimize_max_concave_angle_enabled": true,
+      "optimize_max_concave_angle_deg": 5.0,
+      "optimize_explore_all_vertices": false,
+      "optimize_snap_shallow_to_slope": true,
+      "optimize_snap_specify_distance": false,
+      "optimize_snap_distance": 0.01,
+      "optimize_use_depth_elevation_concave_checks": true,
+      "grid_x_min": -20.0,
+      "grid_x_max": 12.0,
+      "grid_y_min": 15.0,
+      "grid_y_max": 50.0,
+      "grid_nx": 16,
+      "grid_ny": 16,
+      "min_elevation": null,
+      "min_depth": 2.0,
+      "min_area": null
+    },
+    "statistics": {
+      "sensitivity_analysis": false,
+      "probabilistic_analysis": false,
+      "sampling_method": "monte_carlo",
+      "num_samples": 1000,
+      "analysis_type": "global_minimum",
+      "sensitivity_intervals": 50,
+      "seed": null
+    },
+    "back_analysis": {
+      "enabled": false,
+      "target_fos": 1.5,
+      "elevation": 9.0,
+      "method_id": "bishop_simplified"
+    },
+    "random_numbers": {
+      "method": "pseudo_random",
+      "seed": 10116,
+      "lhs_correlate": false
+    },
+    "design_standard": {
+      "enabled": false,
+      "standard": "none",
+      "factor_permanent": 1.0,
+      "factor_variable": 1.0,
+      "factor_cohesion": 1.0,
+      "factor_friction": 1.0,
+      "factor_unit_weight": 1.0,
+      "factor_resistance": 1.0
+    },
+    "advanced": {
+      "check_tensile_stresses": false,
+      "tensile_percent": 95.0,
+      "check_m_alpha": true,
+      "initial_fos": 1.0,
+      "min_lambda": -1.5,
+      "max_lambda": 6.0,
+      "iterate_steffensen": true,
+      "parallel_search": true,
+      "parallel_cpu_percent": 50
+    },
+    "summary": {
+      "title": "Slide2 verificacion #37 - XSTABL (1999), modelo.ogr",
+      "analysis": "",
+      "author": "Samuel Sáez López",
+      "company": "UPCT",
+      "date_created": "2026-08-22T18:46:10.049821",
+      "comments": []
+    },
+    "max_materials": 20,
+    "max_supports": 20
+  },
+  "boundaries": [
+    {
+      "id": "bf813080-d35c-492f-8642-84bc70bf8ee9",
+      "name": "External Boundary",
+      "type": "EXTERNAL",
+      "color": "#2c2c2c",
+      "line_width": 1.5,
+      "visible": true,
+      "material_id": null,
+      "polyline": {
+        "id": "7536e5cf-e896-4419-ba13-38e545fc05d0",
+        "closed": true,
+        "vertices": [
+          [
+            0,
+            0
+          ],
+          [
+            40,
+            0
+          ],
+          [
+            40,
+            17
+          ],
+          [
+            17,
+            17
+          ],
+          [
+            5,
+            5
+          ],
+          [
+            0,
+            5
+          ]
+        ]
+      }
+    }
+  ],
+  "materials": [
+    {
+      "id": "f67725c4-6e18-42da-a4c0-10cfe860e61f",
+      "name": "Material 1",
+      "strength": {
+        "model_id": "mohr_coulomb",
+        "params": {
+          "cohesion": 0.0,
+          "friction_angle": 36.0
+        }
+      },
+      "unit_weight": 20.0,
+      "sat_unit_weight": 20.0,
+      "use_sat_unit_weight": false,
+      "pore_pressure": "none",
+      "ru": 0.0,
+      "constant_u": 0.0,
+      "water_surface_id": null,
+      "color": "#d4a373",
+      "hatch": null,
+      "hydraulic": null,
+      "phi_b": 0.0,
+      "air_entry_value": 0.0,
+      "hu": null,
+      "auto_hu": false,
+      "undrained_behaviour": false,
+      "b_bar": 0.0,
+      "drawdown_envelope": null,
+      "use_grid": true,
+      "weight_creates_excess": false
+    }
+  ],
+  "supports": [],
+  "support_types": [],
+  "distributed_loads": [
+    {
+      "id": "d8731152-64cf-4d90-a878-88200fbabf79",
+      "type": "distributed",
+      "name": "",
+      "start": [
+        17.0,
+        17.0
+      ],
+      "end": [
+        30.0,
+        17.0
+      ],
+      "magnitude_1": 40.0,
+      "magnitude_2": 40.0,
+      "orientation": "normal_to_boundary",
+      "angle_deg": 0.0,
+      "distribution": "constant",
+      "creates_excess_pore_pressure": false
+    }
+  ],
+  "line_loads": [],
+  "seismic": {
+    "kh": 0.0,
+    "kv": 0.0,
+    "enabled": false,
+    "creates_excess_pore_pressure": false
+  },
+  "region_assignments": [
+    {
+      "x": 23.36131393973229,
+      "y": 7.635036497280316,
+      "material_id": "f67725c4-6e18-42da-a4c0-10cfe860e61f",
+      "footprint": [
+        [
+          40.000000066998744,
+          0.0
+        ],
+        [
+          40.000000066998744,
+          16.99999998501184
+        ],
+        [
+          16.99999998501184,
+          16.99999998501184
+        ],
+        [
+          4.999999791061705,
+          4.999999791061705
+        ],
+        [
+          0.0,
+          4.999999791061705
+        ],
+        [
+          0.0,
+          0.0
+        ]
+      ]
+    }
+  ],
+  "tension_crack_properties": {
+    "mode": "filled",
+    "percent_filled": 100.0,
+    "elevation": 0.0,
+    "depth": 0.0,
+    "piezo_id": null
+  },
+  "water_pressure_grid": null,
+  "fem_mesh": null,
+  "seepage_bcs": null,
+  "seepage_result": null,
+  "transient_results": [],
+  "random_variables": [],
+  "annotations": [],
+  "focus_objects": [
+    {
+      "kind": "point",
+      "points": [
+        [
+          5.0,
+          5.0
+        ]
+      ],
+      "tolerance": 1.0,
+      "enabled": true,
+      "id": "f385fa109ba4"
+    }
+  ]
+}

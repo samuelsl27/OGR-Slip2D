@@ -27,7 +27,32 @@ from ogr_core.project import Project
 
 from .methods import LEMMethod, LEMResult
 from .slicer import slice_surface
-from .surface import SlipCircle
+from .surface import SlipCircle, lowest_elevation
+
+
+# ----------------------------------------------------------------------
+def _base_kwargs(legacy: dict) -> dict:
+    """The :class:`BaseSearch` arguments every search takes by keyword.
+
+    v0.1.102 — these are PROJECT settings, not per-search ones, so all six
+    strategies accept them and all six used to pop them out of their own
+    ``**legacy_kwargs`` with the same four lines copied six times.
+
+    Consolidated because the copies were not merely repetitive, they were
+    the trap: a new shared argument added to ``build_search`` lands in
+    ``**legacy_kwargs`` and is **absorbed without a word**. That is how
+    anomaly A37-1 would have happened a second time, one search at a time.
+    Here it can only be forgotten once, and a test walks the six branches
+    to make sure it has not been.
+    """
+    return {
+        "reject_tensile": bool(legacy.pop("reject_tensile", False)),
+        "tensile_tolerance": float(legacy.pop("tensile_tolerance", 0.05)),
+        "tensile_percent": float(legacy.pop("tensile_percent", 95.0)),
+        "check_m_alpha": bool(legacy.pop("check_m_alpha", True)),
+        "min_elevation": legacy.pop("min_elevation", None),
+        "min_depth": legacy.pop("min_depth", None),
+    }
 
 
 @dataclass
@@ -122,11 +147,30 @@ class BaseSearch(ABC):
         tensile_tolerance: float = 0.05,
         tensile_percent: float = 95.0,
         check_m_alpha: bool = True,
+        min_elevation: Optional[float] = None,
+        min_depth: Optional[float] = None,
     ) -> None:
         self.method = method
         self.num_slices = num_slices
         self.min_area = min_area
         self.progress_cb = progress_cb
+        # v0.1.102 — the two Surface Filters, applied in ``_best_of_masses``.
+        # None means OFF, and it is the default so that a search built by
+        # hand behaves as it always did.
+        #
+        # They were declared in SearchSettings, editable in the dialog and
+        # saved to the .ogr since long before this, and NO search had ever
+        # been told about either (anomaly A37-1). What that cost, on the
+        # back-analysis problem of the XSTABL reference manual (1999), whose
+        # statement asks for a minimum depth of 2 m to clear the shallow
+        # face slides out of the way: the minimum landed on a 0.64 m skin,
+        # factor 0.726, against the 0.764 published for the deep mechanism
+        # (0.766 once the filter is honoured).
+        # The user sets a filter, gets the identical number back, and
+        # concludes there is no deep mechanism — which is rule 7's argument
+        # in one sentence.
+        self.min_elevation = min_elevation
+        self.min_depth = min_depth
         # v0.1.24 — optional kinematic-admissibility filter (anomaly A3).
         # A physically acceptable limit-equilibrium mechanism requires
         # COMPRESSIVE interslice forces; a surface whose force field
@@ -270,13 +314,32 @@ class BaseSearch(ABC):
         which method you called.
 
         A candidate that cannot be sliced, that resolves to fewer than
-        three slices or that falls under ``min_area`` is skipped, not
-        returned: it is not an answer about a shorter surface, it is no
+        three slices or that fails one of the Surface Filters is skipped,
+        not returned: it is not an answer about a shorter surface, it is no
         answer at all. If NO candidate survives the result is ``None``,
-        which is what both doors have always returned in that case.
+        which is what both doors have always returned in that case. Every
+        search counts that ``None`` as one invalid surface, so filtering
+        moves surfaces from valid to invalid and NEVER moves the total —
+        the denominator a user compares between runs stays put (v0.1.83).
+
+        v0.1.102 — this is where the three Surface Filters live, and there
+        is exactly one of it. Both public doors pass through here, the six
+        searches reach the engine through those doors, and so do Optimize
+        Surfaces and the probabilistic sampler; a filter placed anywhere
+        else would be a filter some door could walk around.
+
+        Ordered by what each one costs. Minimum Elevation is pure geometry
+        and is asked before slicing; Minimum Depth needs the slices by
+        definition, so it is asked after them and before the solve.
         """
         best: Optional[LEMResult] = None
         for trial in candidates:
+            # Minimum Elevation — the lowest point of the SURFACE (not of
+            # the mass) may not go below the user's elevation.
+            if self.min_elevation is not None:
+                y_low = lowest_elevation(trial)
+                if y_low is not None and y_low < self.min_elevation:
+                    continue
             slices = slice_surface(project, trial, num_slices=self.num_slices)
             if slices is None or len(slices) < 3:
                 continue
@@ -284,6 +347,17 @@ class BaseSearch(ABC):
             area = sum(s.width * max(s.height, 0.0) for s in slices)
             if area < self.min_area:
                 continue
+            # Minimum Depth — the MAXIMUM slice height, measured vertically
+            # from the slip surface to the ground surface, must EXCEED the
+            # value; this is the filter for shallow surfaces. Maximum and
+            # not mean, and not per slice: a deep mechanism is deep
+            # somewhere, and one thin slice at the toe does not make it
+            # shallow. ``Slice.height`` is already that vertical distance,
+            # taken to the mean ground elevation over the slice, which is
+            # the same column its weight is computed from.
+            if self.min_depth is not None:
+                if max(s.height for s in slices) <= self.min_depth:
+                    continue
             res = self._analyse(project, trial, slices)
             if res is None:
                 continue
@@ -649,16 +723,15 @@ class GridSearch(BaseSearch):
     ) -> None:
         super().__init__(
             method, num_slices, min_area, progress_cb,
-            reject_tensile=bool(legacy_kwargs.pop('reject_tensile', False)),
-            tensile_tolerance=float(
-                legacy_kwargs.pop('tensile_tolerance', 0.05)),
-            tensile_percent=float(
-                legacy_kwargs.pop('tensile_percent', 95.0)),
-            check_m_alpha=bool(
-                legacy_kwargs.pop('check_m_alpha', True)),
+            **_base_kwargs(legacy_kwargs),
         )
         self.grid_x = grid_x
         self.grid_y = grid_y
+        # The grid actually swept, filled in by ``_centres``. None until
+        # the search has run, because with grid_x = None it is not known
+        # before then.
+        self.grid_x_used = None
+        self.grid_y_used = None
         self.grid_nx = max(2, grid_nx)
         self.grid_ny = max(2, grid_ny)
         # radius_increment is the NUMBER OF INTERVALS (Slide convention).
@@ -887,6 +960,12 @@ class GridSearch(BaseSearch):
         """
         gx = self.grid_x or self._auto_grid(project)[0]
         gy = self.grid_y or self._auto_grid(project)[1]
+        # v0.1.102 — remembered because the caller cannot work it out: with
+        # no user grid the extent comes from the model's bounding box, and
+        # ``grid_x`` is None. ``grid_edge_note`` needs the grid that was
+        # actually swept to say whether the answer came off its edge.
+        self.grid_x_used = gx
+        self.grid_y_used = gy
         nx_pts = self.grid_nx + 1
         ny_pts = self.grid_ny + 1
         xs = [gx[0] + (gx[1] - gx[0]) * i / (nx_pts - 1) for i in range(nx_pts)]
@@ -1024,13 +1103,7 @@ class SlopeSearch(BaseSearch):
         # release since the first public one.
         super().__init__(
             method, num_slices, min_area, progress_cb,
-            reject_tensile=bool(legacy_kwargs.pop('reject_tensile', False)),
-            tensile_tolerance=float(
-                legacy_kwargs.pop('tensile_tolerance', 0.05)),
-            tensile_percent=float(
-                legacy_kwargs.pop('tensile_percent', 95.0)),
-            check_m_alpha=bool(
-                legacy_kwargs.pop('check_m_alpha', True)),
+            **_base_kwargs(legacy_kwargs),
         )
         self.num_surfaces = num_surfaces
         self.initial_angle_lower_deg = initial_angle_lower_deg
@@ -1298,13 +1371,7 @@ class AutoRefineSearch(BaseSearch):
     ) -> None:
         super().__init__(
             method=method, num_slices=num_slices,
-            reject_tensile=bool(legacy_kwargs.pop('reject_tensile', False)),
-            tensile_tolerance=float(
-                legacy_kwargs.pop('tensile_tolerance', 0.05)),
-            tensile_percent=float(
-                legacy_kwargs.pop('tensile_percent', 95.0)),
-            check_m_alpha=bool(
-                legacy_kwargs.pop('check_m_alpha', True)),
+            **_base_kwargs(legacy_kwargs),
         )
         self.divisions = max(2, divisions)
         self.circles_per_division = max(1, circles_per_division)
@@ -1585,13 +1652,7 @@ class BlockSearch(BaseSearch):
     ) -> None:
         super().__init__(
             method=method, num_slices=num_slices,
-            reject_tensile=bool(legacy_kwargs.pop('reject_tensile', False)),
-            tensile_tolerance=float(
-                legacy_kwargs.pop('tensile_tolerance', 0.05)),
-            tensile_percent=float(
-                legacy_kwargs.pop('tensile_percent', 95.0)),
-            check_m_alpha=bool(
-                legacy_kwargs.pop('check_m_alpha', True)),
+            **_base_kwargs(legacy_kwargs),
         )
         self.num_groups = max(1, num_groups)
         # Single-angle defaults; ranges override if provided.
@@ -2046,15 +2107,17 @@ class PathSearch(BaseSearch):
         max_attempts_factor: int = 20,
         **legacy_kwargs,
     ) -> None:
+        # ``min_elevation`` is this search's OWN named argument and wins
+        # over whatever ``_base_kwargs`` would default it to: Path Search
+        # has used it since it was written as the floor of its vertex
+        # sampling (``_y_floor``), and it is the same elevation the base
+        # class now filters on. Passing it here makes the two agree —
+        # generation stays above the floor AND anything that slipped below
+        # it anyway is discarded, which is what the filter promises.
+        _base = _base_kwargs(legacy_kwargs)
+        _base["min_elevation"] = min_elevation
         super().__init__(
-            method=method, num_slices=num_slices,
-            reject_tensile=bool(legacy_kwargs.pop('reject_tensile', False)),
-            tensile_tolerance=float(
-                legacy_kwargs.pop('tensile_tolerance', 0.05)),
-            tensile_percent=float(
-                legacy_kwargs.pop('tensile_percent', 95.0)),
-            check_m_alpha=bool(
-                legacy_kwargs.pop('check_m_alpha', True)),
+            method=method, num_slices=num_slices, **_base,
         )
         self.num_paths = num_paths
         # v0.1.24 — cap on generation attempts (num_paths × factor)
@@ -2063,7 +2126,6 @@ class PathSearch(BaseSearch):
         self.segment_length = segment_length
         self.initial_angle_upper_deg = initial_angle_upper_deg
         self.initial_angle_lower_deg = initial_angle_lower_deg
-        self.min_elevation = min_elevation
         self.optimize = optimize
         self.optimize_iterations = optimize_iterations
         self.convex_only = convex_only
@@ -2587,13 +2649,7 @@ class SimulatedAnnealingSearch(BaseSearch):
     ) -> None:
         super().__init__(
             method=method, num_slices=num_slices,
-            reject_tensile=bool(legacy_kwargs.pop('reject_tensile', False)),
-            tensile_tolerance=float(
-                legacy_kwargs.pop('tensile_tolerance', 0.05)),
-            tensile_percent=float(
-                legacy_kwargs.pop('tensile_percent', 95.0)),
-            check_m_alpha=bool(
-                legacy_kwargs.pop('check_m_alpha', True)),
+            **_base_kwargs(legacy_kwargs),
         )
         self.seed = seed
         self.initial_vertices = max(4, initial_vertices)

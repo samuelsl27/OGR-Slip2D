@@ -646,6 +646,27 @@ class ProjectSettings:
             "check_m_alpha": bool(self.advanced.check_m_alpha),
         }
 
+    def surface_filter_kwargs(self) -> dict:
+        """Surface Filter arguments shared by every search object.
+
+        v0.1.102 — the same reason ``admissibility_kwargs`` exists: one
+        place that turns settings into search arguments. Until now these
+        two were declared, editable, saved to the .ogr and read by nobody
+        (anomaly A37-1), which is rule 7 exactly.
+
+        ``None`` means OFF and is passed through as such. ``min_area`` is
+        deliberately NOT here: it has a different per-search default when
+        unset (``or 1.0``, ``or 0.5``, ``or 2.0``), so it cannot travel in
+        a dict that every branch expands the same way.
+        """
+        s = self.search
+        return {
+            "min_elevation": (None if s.min_elevation is None
+                              else float(s.min_elevation)),
+            "min_depth": (None if s.min_depth is None
+                          else float(s.min_depth)),
+        }
+
     # ------------------------------------------------------------------
     def to_dict(self) -> dict:
         return {

@@ -1,0 +1,14 @@
+{
+  "id": "006-xstabl-1999-min-depth",
+  "fuente": "XSTABL Reference Manual (1999), ejemplo de retroanalisis de refuerzo: talud no cohesivo con carga repartida en coronacion, resuelto considerando 'only failure surfaces with a minimum depth of 2 m'. Factor de seguridad publicado sin reforzar 0.764, sobre el circulo de centro (-11.41, 35.264) y R = 34.426 m.",
+  "tipo_referencia": "publicado",
+  "tolerancia_relativa": 0.01,
+  "fos": {
+    "bishop_simplified": 0.764
+  },
+  "busqueda": {
+    "tipo": "grid",
+    "num_slices": 50
+  },
+  "notas": "El unico caso de la carpeta que ejercita un FILTRO DE SUPERFICIE, y por eso existe: sin 'Minimum Depth' = 2 m el minimo cae en una lamina de 0.669 m de espesor con centro en el borde izquierdo de la rejilla y da 0.7277, un -4.7 % que rompe este caso. El enunciado no publica tabla de propiedades: phi = 36 grados se DEDUCE de las dos formulas que si publica y gamma = 20 kN/m3 se toma con un barrido documentado. Ambas cosas estan explicadas en caso.md."
+}

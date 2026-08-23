@@ -342,14 +342,24 @@ class SurfaceOptionsDialog(QDialog):
             f_filt.addRow(label_text, w)
             return cb, sb
 
+        # v0.1.102 — wrapped HERE and not inside ``_filter_row``. The three
+        # labels used to reach ``addRow`` as a variable, which is a blind
+        # spot in both directions: the coverage test counts unwrapped text
+        # by looking for a literal in ``addRow(...)`` and saw none, and the
+        # completeness test collects tr() keys from the syntax tree, where
+        # ``tr(label_text)`` carries no key to check. Untranslated, and
+        # nothing said so.
         self.cb_filter_min_elev, self.sb_min_elev = _filter_row(
-            "Min elevation", 0.0, " m", s.min_elevation, allow_negative=True,
+            tr("Minimum elevation"), 0.0, " m", s.min_elevation,
+            allow_negative=True,
         )
         self.cb_filter_min_depth, self.sb_min_depth = _filter_row(
-            "Min depth", 0.0, " m", s.min_depth, allow_negative=False,
+            tr("Minimum depth"), 0.0, " m", s.min_depth,
+            allow_negative=False,
         )
         self.cb_filter_min_area, self.sb_min_area = _filter_row(
-            "Min area", 0.5, " m²", s.min_area, allow_negative=False,
+            tr("Minimum area"), 0.5, " m²", s.min_area,
+            allow_negative=False,
         )
         root.addWidget(g_filt)
 
