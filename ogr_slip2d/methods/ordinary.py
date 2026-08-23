@@ -152,7 +152,7 @@ class OrdinaryFellenius(LEMMethod):
         return LEMResult(
             fos=fos, converged=True, iterations=1,
             method_id=self.METHOD_ID, surface=surface, slices=slices,
-            base_normal=normals,
+            base_normal_force=normals,
             base_shear_force=driving_forces,
             base_shear_strength=resisting,
             details={
@@ -363,7 +363,7 @@ class OrdinaryFellenius(LEMMethod):
             method_id=self.METHOD_ID,
             surface=surface,
             slices=slices,
-            base_normal=normals,
+            base_normal_force=normals,
             base_shear_force=shears,
             base_shear_strength=strengths,
             details={

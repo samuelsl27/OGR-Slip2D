@@ -124,12 +124,20 @@ class _SliceDataDock(QDockWidget):
         ("Surface load q (kPa)",    lambda s, r: round(s.surface_pressure, 2)),
         ("Base normal force N (kN)",
          lambda s, r: _SliceDataDock._r(
-             _per_slice(r, "base_normal", getattr(s, "index", None)), 2)),
+             _per_slice(r, "base_normal_force",
+                        getattr(s, "index", None)), 2)),
         # W·sin(α) — what drives the slice, which is NOT the mobilised
         # shear. They are different quantities and the difference is the
         # whole point of a factor of safety; labelling this one "mobilised"
         # was the first mistake this panel made when it was given real
         # numbers instead of dashes.
+        #
+        # v0.1.107 — and until then the row was telling the truth for only
+        # two methods. Corps #1, Corps #2, Lowe-Karafiath, Spencer and GLE
+        # put the MOBILISED shear in that field — 41.0 against 2.58 on the
+        # same slice — and the two Janbu put nothing there at all. All nine
+        # report the driving force now; the mobilised shear is the row
+        # three below, which divides the strength by F.
         ("Driving shear W·sinα (kN)",
          lambda s, r: _SliceDataDock._r(
              _per_slice(r, "base_shear_force", getattr(s, "index", None)), 2)),
@@ -137,11 +145,12 @@ class _SliceDataDock(QDockWidget):
         ("─ Stresses ─", lambda s, r: ""),
         ("Base normal stress σₙ (kPa)",
          lambda s, r: _SliceDataDock._r(
-             _SliceDataDock._stress(r, "base_normal", s), 2)),
+             _SliceDataDock._stress(r, "base_normal_force", s), 2)),
         ("Effective normal σ′ₙ (kPa)",
          lambda s, r: _SliceDataDock._r(
-             None if _SliceDataDock._stress(r, "base_normal", s) is None
-             else _SliceDataDock._stress(r, "base_normal", s)
+             None if _SliceDataDock._stress(
+                 r, "base_normal_force", s) is None
+             else _SliceDataDock._stress(r, "base_normal_force", s)
              - (s.pore_pressure or 0.0), 2)),
         ("Shear strength τ_f (kPa)",
          lambda s, r: _SliceDataDock._r(
@@ -1686,7 +1695,7 @@ class InterpretWindow(QMainWindow):
         fields = [
             ("fos", tr("Factor of safety")),
             ("weight", tr("Slice weight")),
-            ("base_normal", tr("Base normal stress")),
+            ("base_normal_force", tr("Base normal stress")),
             ("shear_strength", tr("Shear strength")),
             ("shear_stress", tr("Mobilised shear stress")),
             ("pore_pressure", tr("Pore pressure")),
@@ -1759,8 +1768,8 @@ class InterpretWindow(QMainWindow):
         # The per-slice arrays are FORCES; the plots want stresses, so
         # they are divided by the base length of their own slice.
         length = max(getattr(s, "base_length", 0.0), 1e-12)
-        if key == "base_normal":
-            vals = result.base_normal or []
+        if key == "base_normal_force":
+            vals = result.base_normal_force or []
             return (vals[i] / length) if i < len(vals) else 0.0
         if key == "shear_strength":
             vals = result.base_shear_strength or []
@@ -2572,7 +2581,7 @@ class InterpretWindow(QMainWindow):
         # Forces, as (dx, dy) from the point they act on.
         idx = getattr(s, "index", None)
         W = float(getattr(s, "weight", 0.0) or 0.0)
-        N = _per_slice(result, "base_normal", idx) or 0.0
+        N = _per_slice(result, "base_normal_force", idx) or 0.0
         T = _per_slice(result, "base_shear_force", idx) or 0.0
         alpha = float(getattr(s, "base_angle", 0.0) or 0.0)
         xc = 0.5 * (s.base_x_left + s.base_x_right)

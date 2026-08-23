@@ -209,7 +209,7 @@ class TestQueryPoints:
         refusing."""
         _p, r, w = _interpret()
         assert w._queries() == []
-        w._graph_query_data("base_normal")      # must not raise
+        w._graph_query_data("base_normal_force")   # must not raise
         assert len(w._queries()) == 1
         assert w._queries()[0].fos == r.critical.fos
 

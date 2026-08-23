@@ -549,79 +549,8 @@ class BishopSimplified(LEMMethod):
                         fos = accelerated
 
         # ---- Post-processing per slice (diagnostics) ---------------
-        normals: list[float] = []
-        shears: list[float] = []
-        strengths: list[float] = []
-        # v0.1.67 — this block reports what the iteration computed, so it
-        # has to use the SAME load. Until now it used ``s.weight``, the
-        # soil alone, while the iteration above uses ``w_total``, soil
-        # plus the ponded water standing on the slice. With a reservoir
-        # over the slope the reported base normal came out about a THIRD
-        # of the one the factor of safety was built from, and that number
-        # is what the tensile-stress admissibility check judges.
-        #
-        # Second correction in the same block: the effective normal stress
-        # on the base is ``N/l − u``, with l the BASE LENGTH. It was
-        # computed as ``N/b − u`` with b the slice width, which differs by
-        # a factor cos α — and disagreed with ``checks.base_effective_
-        # stresses``, which had it right. Note that the ``u·b`` inside
-        # Bishop's FoS numerator is NOT the same quantity and is correct
-        # as it stands: it comes from the equilibrium algebra, not from a
-        # stress definition.
-        for s in slices:
-            f = slice_forces(s, kh, kv)
-            W_eff = f.w_total
-            l = max(s.base_length, 1e-9)
-            alpha = s.base_angle
-            N_est = W_eff * math.cos(alpha)
-            N_eff_est = max(0.0, N_est - s.pore_pressure * l)
-            sigma_n_eff = N_eff_est / l
-            c, tan_phi = self._local_c_phi(s, s.material, sigma_n_eff)
-            m_alpha = math.cos(alpha) + (
-                slide_sign * math.sin(alpha) * tan_phi / fos
-            )
-            # Bishop's expression for N, rearranged from the vertical
-            # equilibrium of the slice:
-            #     N·cos α + slide_sign·S·sin α = W
-            # with S = [c·l + (N − u·l)·tan φ] / F the mobilised base
-            # shear. A test pins that identity on the values reported.
-            N = (W_eff
-                 - slide_sign * (c * l * math.sin(alpha)) / fos
-                 + slide_sign * (s.pore_pressure * l * tan_phi
-                                 * math.sin(alpha)) / fos
-                 ) / max(abs(m_alpha), 1e-6)
-            # v0.1.96 — σ' is reported WITH ITS SIGN, and the envelope is
-            # read at that signed value. It used to be clamped at zero
-            # here, and again inside ``MohrCoulomb.shear_strength``, so a
-            # base in tension was published with the full cohesion:
-            #
-            #   Ej_2 piezométrica, dovela 25, σ' = −11.27 kPa
-            #     reference   τ = 15 + (−11.27)·tan 28° =  9.005 kPa
-            #     clamped     τ = 15 + max(0, −11.27)·… = 15.000 kPa  (+66 %)
-            #
-            # Only water can drive σ' negative, which is why two dry
-            # benchmarks never showed it. The FACTOR OF SAFETY does not
-            # move: this block runs after convergence and reports, and
-            # Bishop's numerator uses ``(W − u·b)·tanφ``, which never
-            # passed through here. ``checks.base_effective_stresses`` —
-            # the one the Tensile Stress Check reads — has always returned
-            # σ' signed, so the two agree now instead of only one of them
-            # being right.
-            #
-            # The envelope is evaluated through the LINEARISATION rather
-            # than through ``shear_strength`` so this stays correct for the
-            # non-linear models too: for Mohr-Coulomb it is exact, and for
-            # Hoek-Brown it is the tangent at the air-entry point extended
-            # into tension, which is the natural reading and beats
-            # truncating. Floored at zero because a negative shear
-            # STRENGTH is not a physical quantity — that is what the
-            # Tensile Stress Check is for.
-            sigma_eff = N / l - s.pore_pressure
-            c_rep, tan_phi_rep = self._local_c_phi(s, s.material, sigma_eff)
-            tau = max(0.0, c_rep + sigma_eff * tan_phi_rep)
-            normals.append(N)
-            shears.append(slide_sign * W_eff * math.sin(alpha))
-            strengths.append(tau * l)
+        normals, shears, strengths = base_forces_no_interslice_shear(
+            s_list, kh, kv, slide_sign, fos)
 
         return LEMResult(
             fos=fos,
@@ -630,8 +559,138 @@ class BishopSimplified(LEMMethod):
             method_id=self.METHOD_ID,
             surface=surface,
             slices=slices,
-            base_normal=normals,
+            base_normal_force=normals,
             base_shear_force=shears,
             base_shear_strength=strengths,
             details={"active_support_ratio": active_ratio},
         )
+
+
+# ======================================================================
+def base_forces_no_interslice_shear(
+    slices,
+    kh: float,
+    kv: float,
+    slide_sign: float,
+    fos: float,
+) -> tuple[list[float], list[float], list[float]]:
+    """Per-slice base normal, driving shear and available strength, with X = 0.
+
+    Not "Bishop's block", which is why it does not live inside the class:
+    it is the VERTICAL equilibrium of one slice when the inter-slice shear
+    is neglected, and that assumption is shared by Bishop (1955) and by
+    Janbu (1954, 1973). Eliminating the mobilised base shear
+    ``S = [c'*l + (N - u*l)*tan(phi')] / F`` from
+
+        N*cos(alpha) + s*S*sin(alpha) = W
+
+    gives the expression both methods use for the base normal:
+
+        N = [ W - (c'*l*sin(alpha) - u*l*tan(phi')*sin(alpha)) / F ] / m_alpha
+        m_alpha = cos(alpha) + s*sin(alpha)*tan(phi') / F
+
+    ``slide_sign`` is a PARAMETER and is deliberately not recomputed here.
+    Bishop takes it from ``sign(sum W*(1-kv)*sin alpha)`` and Janbu from
+    ``sign(sum W_total*tan alpha)``; each has to hand over the one its own
+    iteration used, because ``m_alpha`` is not symmetric in alpha and only
+    means something read in the same sense of sliding (the v0.1.82
+    anomaly, recorded in AGENTS.md).
+
+    Returns ``(normals, driving_shears, strengths)``, all three FORCES in
+    kN/m: the base normal N, the driving force ``s*W*sin(alpha)`` and the
+    available shear resistance ``tau_f*l``.
+
+    Known limitation, carried over unchanged from where this code used to
+    live: support forces do not enter ``N``. They enter the factor of
+    safety through their own terms, but the reported normal is the one the
+    soil alone carries.
+
+    References: Bishop, A.W. (1955), Geotechnique 5(1), 7-17; Janbu, N.
+    (1954, 1973).
+    """
+    normals: list[float] = []
+    shears: list[float] = []
+    strengths: list[float] = []
+    # v0.1.67 - this block reports what the iteration computed, so it has
+    # to use the SAME load. It used to use ``s.weight``, the soil alone,
+    # while the iteration uses ``w_total``, soil plus the ponded water
+    # standing on the slice. With a reservoir over the slope the reported
+    # base normal came out about a THIRD of the one the factor of safety
+    # was built from, and that number is what the tensile-stress
+    # admissibility check judges.
+    #
+    # Second correction in the same block: the effective normal stress on
+    # the base is ``N/l - u``, with l the BASE LENGTH. It was computed as
+    # ``N/b - u`` with b the slice width, which differs by a factor
+    # cos alpha - and disagreed with ``checks.base_effective_stresses``,
+    # which had it right. Note that the ``u*b`` inside Bishop's FoS
+    # numerator is NOT the same quantity and is correct as it stands: it
+    # comes from the equilibrium algebra, not from a stress definition.
+    for s in slices:
+        f = slice_forces(s, kh, kv)
+        W_eff = f.w_total
+        l = max(s.base_length, 1e-9)
+        alpha = s.base_angle
+        N_est = W_eff * math.cos(alpha)
+        N_eff_est = max(0.0, N_est - s.pore_pressure * l)
+        sigma_n_eff = N_eff_est / l
+        c, tan_phi = BishopSimplified._local_c_phi(s, s.material, sigma_n_eff)
+        m_alpha = math.cos(alpha) + (
+            slide_sign * math.sin(alpha) * tan_phi / fos
+        )
+        N = (W_eff
+             - slide_sign * (c * l * math.sin(alpha)) / fos
+             + slide_sign * (s.pore_pressure * l * tan_phi
+                             * math.sin(alpha)) / fos
+             ) / max(abs(m_alpha), 1e-6)
+        # v0.1.96 - sigma' is reported WITH ITS SIGN, and the envelope is
+        # read at that signed value. It used to be clamped at zero here,
+        # and again inside ``MohrCoulomb.shear_strength``, so a base in
+        # tension was published with the full cohesion:
+        #
+        #   Ej_2 piezometrica, dovela 25, sigma' = -11.27 kPa
+        #     reference   tau = 15 + (-11.27)*tan 28 deg =  9.005 kPa
+        #     clamped     tau = 15 + max(0, -11.27)*... = 15.000 kPa (+66 %)
+        #
+        # Only water can drive sigma' negative, which is why two dry
+        # benchmarks never showed it. The FACTOR OF SAFETY does not move:
+        # this runs after convergence and reports, and Bishop's numerator
+        # uses ``(W - u*b)*tanphi``, which never passed through here.
+        # ``checks.base_effective_stresses`` - the one the Tensile Stress
+        # Check reads - has always returned sigma' signed, so the two
+        # agree now instead of only one of them being right.
+        #
+        # The envelope is evaluated through the LINEARISATION rather than
+        # through ``shear_strength`` so this stays correct for the
+        # non-linear models too: for Mohr-Coulomb it is exact, and for
+        # Hoek-Brown it is the tangent at the air-entry point extended
+        # into tension, which is the natural reading and beats truncating.
+        # Floored at zero because a negative shear STRENGTH is not a
+        # physical quantity - that is what the Tensile Stress Check is for.
+        sigma_eff = N / l - s.pore_pressure
+        c_rep, tan_phi_rep = BishopSimplified._local_c_phi(
+            s, s.material, sigma_eff)
+        tau = max(0.0, c_rep + sigma_eff * tan_phi_rep)
+        normals.append(N)
+        shears.append(slide_sign * W_eff * math.sin(alpha))
+        strengths.append(tau * l)
+    return normals, shears, strengths
+
+
+# ======================================================================
+def driving_shear_forces(
+    slices, kh: float, kv: float, slide_sign: float,
+) -> list[float]:
+    """``s*W_total*sin(alpha)`` on every slice base, in kN/m.
+
+    v0.1.107 - the one meaning ``LEMResult.base_shear_force`` now carries
+    in every method. It used to be this in Bishop and Ordinary and the
+    MOBILISED shear in the other five that filled it, which is a factor of
+    the safety factor apart and was 2.58 against 41.0 on the same slice of
+    the same surface - printed under an interface row that says "Driving
+    shear W*sin(alpha)". The mobilised shear is not lost: it is exactly
+    ``base_shear_strength / fos``, which is what the interpretation window
+    already divides for its own "Mobilised shear" row.
+    """
+    return [slide_sign * slice_forces(s, kh, kv).w_total * math.sin(s.base_angle)
+            for s in slices]

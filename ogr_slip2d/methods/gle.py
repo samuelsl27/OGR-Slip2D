@@ -33,7 +33,7 @@ from ..external_forces import slice_forces
 from ..slicer import Slices
 from ..surface import SlipCircle, SurfaceProtocol
 from .base import LEMMethod, LEMResult, register_method
-from .bishop import BishopSimplified
+from .bishop import BishopSimplified, driving_shear_forces
 
 
 # ----------------------------------------------------------------------
@@ -269,14 +269,19 @@ class GLEMorgensternPrice(LEMMethod):
             # reaches here was drawn with zero inter-slice ratios.
             force, _moment = system.states(lam_star)
             from .spencer import _base_forces
-            normals, shears, strengths = _base_forces(system, force)
+            normals, _mobilised, strengths = _base_forces(system, force)
+            # v0.1.107 - ``base_shear_force`` is the DRIVING force in every
+            # method now; it used to publish the MOBILISED shear here, which
+            # is a factor of the safety factor away. The mobilised shear is
+            # exactly ``base_shear_strength / fos``.
+            driving = driving_shear_forces(slices, kh, kv, slide_sign)
             return LEMResult(
                 fos=0.5 * (ff + fm),
                 converged=abs(best[1]) < 0.02,
                 iterations=len(samples),
                 method_id=self.METHOD_ID, surface=surface, slices=slices,
-                base_normal=normals,
-                base_shear_force=shears,
+                base_normal_force=normals,
+                base_shear_force=driving,
                 base_shear_strength=strengths,
                 details={
                     "lambda": lam_star,
@@ -336,7 +341,12 @@ class GLEMorgensternPrice(LEMMethod):
             )
         force, moment = system.states(lam_lo)
         from .spencer import _base_forces
-        normals, shears, strengths = _base_forces(system, force)
+        normals, _mobilised, strengths = _base_forces(system, force)
+        # v0.1.107 - ``base_shear_force`` is the DRIVING force in every
+        # method now; it used to publish the MOBILISED shear here, which
+        # is a factor of the safety factor away. The mobilised shear is
+        # exactly ``base_shear_strength / fos``.
+        driving = driving_shear_forces(slices, kh, kv, slide_sign)
         # v0.1.106 — see ``Spencer.compute_fos``: the flag is a property of
         # the state returned, not of the pass that found it.
         from ..interslice import thrust_is_admissible
@@ -346,8 +356,8 @@ class GLEMorgensternPrice(LEMMethod):
             converged=converged,
             iterations=iterations,
             method_id=self.METHOD_ID, surface=surface, slices=slices,
-            base_normal=normals,
-            base_shear_force=shears,
+            base_normal_force=normals,
+            base_shear_force=driving,
             base_shear_strength=strengths,
             error_message=(
                 "" if not inadmissible else

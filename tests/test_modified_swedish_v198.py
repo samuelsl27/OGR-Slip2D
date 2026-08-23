@@ -279,7 +279,7 @@ class TestTheRecursionAgainstTheManualsOwnTable:
 class TestTheBaseNormalAgainstTheManualsOwnColumn:
     """EM Figure G-7b prints N for the twelve slices.
 
-    Until v0.1.98 only Bishop and Ordinary filled ``base_normal``, and the
+    Until v0.1.98 only Bishop and Ordinary filled the base normal, and the
     two-stage rapid drawdown reads it to recover the stage-1 consolidation
     state: with an empty list it applied undrained strength to ZERO slices
     and silently degraded to a re-run of stage 1.

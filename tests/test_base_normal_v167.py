@@ -6,7 +6,8 @@ The reported base normal must be the one the method actually used.
 v0.1.61 added ponded water and updated the equilibrium equations to carry
 it: every method's iteration uses ``slice_forces(...).w_total``, soil plus
 the water standing on the slice. What it did NOT update was the
-post-analysis block that fills ``LEMResult.base_normal``, which stayed on
+post-analysis block that fills ``LEMResult.base_normal_force`` (called
+``base_normal`` until v0.1.107), which stayed on
 ``s.weight`` — the soil alone.
 
 The gap was measured on the Pilarcitos dam geometry, with a reservoir over
@@ -116,7 +117,7 @@ class TestVerticalEquilibriumHolds:
         res = _run(p)
         assert math.isfinite(res.fos) and res.fos > 0
         slices = res.slices.slices
-        normals = res.base_normal
+        normals = res.base_normal_force
         assert len(normals) == len(slices)
 
         driving = sum(s.weight * math.sin(s.base_angle) for s in slices)
@@ -152,7 +153,7 @@ class TestTheNormalCarriesTheWater:
         res = _run(_pilarcitos())
         slices = res.slices.slices
         bigger = 0
-        for s, N in zip(slices, res.base_normal):
+        for s, N in zip(slices, res.base_normal_force):
             if N > 1.5 * s.weight:
                 bigger += 1
         assert bigger > len(slices) // 2, bigger
@@ -160,7 +161,7 @@ class TestTheNormalCarriesTheWater:
     def test_removing_the_reservoir_lowers_every_normal(self):
         wet = _run(_pilarcitos(with_reservoir=True))
         dry = _run(_pilarcitos(with_reservoir=False))
-        assert sum(wet.base_normal) > 2.0 * sum(dry.base_normal)
+        assert sum(wet.base_normal_force) > 2.0 * sum(dry.base_normal_force)
 
 
 class TestTheAdmissibilityCheckSeesTheWater:
@@ -184,7 +185,7 @@ class TestTheAdmissibilityCheckSeesTheWater:
         from_checks = base_effective_stresses(res)
         from_method = [
             N / max(s.base_length, 1e-9) - s.pore_pressure
-            for s, N in zip(res.slices.slices, res.base_normal)
+            for s, N in zip(res.slices.slices, res.base_normal_force)
         ]
         for a, b in zip(from_checks, from_method):
             assert abs(a - b) / max(abs(b), 1.0) < 1e-6, (a, b)

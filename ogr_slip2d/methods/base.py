@@ -37,8 +37,22 @@ class LEMResult:
     slices: Slices
     error_message: str = ""
 
-    # Per-slice arrays (useful for post-processing plots)
-    base_normal: list[float] = field(default_factory=list)
+    # Per-slice arrays. ALL THREE ARE FORCES, in kN/m per unit
+    # out-of-plane width, and none of them is a stress:
+    #
+    #   base_normal_force    N, the normal force on the slice base
+    #   base_shear_force     the DRIVING force, s*W_total*sin(alpha)
+    #   base_shear_strength  tau_f * l, the available shear RESISTANCE -
+    #                        the name says strength and the number is a
+    #                        force, which is why this list exists
+    #
+    # v0.1.107 - ``base_normal`` was the old name of the first one, and
+    # reading it as kPa gives a number about four times too small and
+    # plausible enough to go unnoticed: it stayed wrong in two benchmark
+    # sheets until one that publishes the STRESS caught it (force 7.69,
+    # stress 36.46, published 36.33). The effective stress is
+    # ``N/l - u``; the mobilised shear is ``base_shear_strength / fos``.
+    base_normal_force: list[float] = field(default_factory=list)
     base_shear_force: list[float] = field(default_factory=list)
     base_shear_strength: list[float] = field(default_factory=list)
 
@@ -63,6 +77,16 @@ class LEMResult:
     admissibility_note: str = ""
 
     @property
+    def base_normal(self) -> list[float]:
+        """Deprecated alias of :attr:`base_normal_force`.
+
+        Kept read-only because the name is the trap the rename exists to
+        close: it reads like a stress and holds a force. Scripts outside
+        this repository still ask for it by that name.
+        """
+        return self.base_normal_force
+
+    @property
     def is_valid(self) -> bool:
         return (
             self.converged
@@ -79,7 +103,7 @@ class LEMResult:
             "method": self.method_id,
             "surface": self.surface.to_dict(),
             "slices": self.slices.to_list(),
-            "base_normal": list(self.base_normal),
+            "base_normal_force": list(self.base_normal_force),
             "base_shear_force": list(self.base_shear_force),
             "base_shear_strength": list(self.base_shear_strength),
             "error": self.error_message,

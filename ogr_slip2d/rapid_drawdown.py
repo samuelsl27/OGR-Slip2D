@@ -184,6 +184,18 @@ class DrawdownResult:
     cap_converged: bool = True
     cap_min_m_alpha: Optional[float] = None
     note: str = ""
+    # v0.1.107 - the LEMResult the reported factor of safety came from, so
+    # the per-slice columns can travel with it. It carries its own slicing
+    # too, which is the point: stage 2 is sliced at the DRAWN-DOWN level
+    # and has a cut stage 1 does not, so pairing stage-1 slices with a
+    # stage-2 normal would silently match up different places on the
+    # surface - the same trap ``_stage1_state`` documents.
+    #
+    # None when no single solve produced the reported factor: a drained
+    # cap that never settled is reported at the CENTRE of its cycle, which
+    # is not a state any pass computed. Publishing the last iterate's
+    # forces beside that number would be worse than publishing none.
+    final_result: object = None
 
 
 # ----------------------------------------------------------------------
@@ -321,7 +333,7 @@ def _stage1_state(project, surface, slices, result):
     have different water tables by construction. Matching by slice index
     would quietly pair up slices from different places on the surface.
     """
-    normals = list(getattr(result, "base_normal", ()) or ())
+    normals = list(getattr(result, "base_normal_force", ()) or ())
     fs1 = result.fos
     out = []
     for i, s in enumerate(slices.slices):
@@ -475,6 +487,7 @@ def rapid_drawdown_fos(
     res = DrawdownResult(
         fos=r2.fos, method=procedure, fos_stage1=r1.fos, fos_stage2=r2.fos,
         n_undrained_slices=len(tau_by_index),
+        final_result=r2,
     )
     if not drained_cap or not tau_by_index:
         return res
@@ -493,7 +506,7 @@ def rapid_drawdown_fos(
     passes = 0
     converged = False
     for _ in range(CAP_MAX_PASSES):
-        normals2 = list(getattr(last, "base_normal", ()) or ())
+        normals2 = list(getattr(last, "base_normal_force", ()) or ())
         nxt: dict = {}
         for i, tau_ff in tau_by_index.items():
             if i >= len(normals2):
@@ -538,6 +551,9 @@ def rapid_drawdown_fos(
 
     if converged or len(recent) < 2:
         res.fos_stage3 = recent[-1] if recent else r2.fos
+        # ``last`` IS the pass that produced that number, so its columns
+        # belong beside it.
+        res.final_result = last
     else:
         # v0.1.71 — NEVER the last iterate on its own. If the cap is
         # still cycling, the last iterate is one horn of the cycle and
@@ -546,6 +562,10 @@ def rapid_drawdown_fos(
         # midpoint is the cycle centre, and it does not care where the
         # budget ran out.
         res.fos_stage3 = 0.5 * (recent[-1] + recent[-2])
+        # No pass computed the midpoint, so there are no per-slice forces
+        # that go with it. Reported without them rather than with somebody
+        # else's.
+        res.final_result = None
     res.n_cap_passes = passes
     res.cap_converged = converged
     if not converged:
@@ -564,7 +584,13 @@ def rapid_drawdown_fos(
     # Every iterate is a convex combination of the undrained strength and
     # something no larger than it, so cur[i] <= tau_by_index[i] always —
     # which is what keeps FS_DWW <= FS_LoweKarafiath structural.
-    res.fos = min(res.fos_stage2, res.fos_stage3)
+    if res.fos_stage3 < res.fos_stage2:
+        res.fos = res.fos_stage3
+    else:
+        # Stage 2 wins, so stage 2's forces are the ones that go with the
+        # answer - not stage 3's, which describe a weaker strength field.
+        res.fos = res.fos_stage2
+        res.final_result = r2
     return res
 
 
@@ -612,10 +638,25 @@ class MultiStageDrawdownMethod:
                 method_id=self.METHOD_ID, surface=surface, slices=slices,
                 error_message=str(exc),
             )
+        # v0.1.107 - the per-slice columns of the stage that produced the
+        # answer, and ITS slicing with them. Until now this built a result
+        # with three empty arrays and the STAGE-1 slices, so a drawdown
+        # left the interpretation window blank with every method, Bishop
+        # included, and ``checks.base_effective_stresses`` recomputed the
+        # normal from stage-1 slices at a stage-2 factor of safety - two
+        # different states in one expression.
+        final = getattr(res, "final_result", None)
         return LEMResult(
             fos=res.fos, converged=True, iterations=3 if res.fos_stage3
             else 2,
-            method_id=self.METHOD_ID, surface=surface, slices=slices,
+            method_id=self.METHOD_ID, surface=surface,
+            slices=getattr(final, "slices", None) or slices,
+            base_normal_force=list(getattr(final, "base_normal_force", ())
+                                   or ()),
+            base_shear_force=list(getattr(final, "base_shear_force", ())
+                                  or ()),
+            base_shear_strength=list(
+                getattr(final, "base_shear_strength", ()) or ()),
             details={
                 "drawdown_procedure": res.method,
                 "fos_stage1": res.fos_stage1,

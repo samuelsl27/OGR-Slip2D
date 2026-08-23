@@ -38,7 +38,7 @@ from ogr_core.project import Project
 from ..slicer import Slices
 from ..surface import SlipCircle, SurfaceProtocol
 from .base import LEMMethod, LEMResult, register_method
-from .bishop import BishopSimplified
+from .bishop import BishopSimplified, driving_shear_forces
 
 
 @register_method
@@ -184,14 +184,19 @@ class Spencer(LEMMethod):
             # to work with and silently marched the surface with zero
             # inter-slice ratios — a Janbu picture over a Spencer number.
             force, _moment = system.states(lam_star)
-            normals, shears, strengths = _base_forces(system, force)
+            normals, _mobilised, strengths = _base_forces(system, force)
+            # v0.1.107 - ``base_shear_force`` is the DRIVING force in every
+            # method now; it used to publish the MOBILISED shear here, which
+            # is a factor of the safety factor away. The mobilised shear is
+            # exactly ``base_shear_strength / fos``.
+            driving = driving_shear_forces(slices, kh, kv, slide_sign)
             return LEMResult(
                 fos=0.5 * (ff + fm),
                 converged=abs(best[1]) < 0.02,
                 iterations=len(samples),
                 method_id=self.METHOD_ID, surface=surface, slices=slices,
-                base_normal=normals,
-                base_shear_force=shears,
+                base_normal_force=normals,
+                base_shear_force=driving,
                 base_shear_strength=strengths,
                 details={
                     "lambda": lam_star,
@@ -257,7 +262,12 @@ class Spencer(LEMMethod):
                 error_message="Spencer: divergent at final λ",
             )
         force, moment = system.states(lam_lo)
-        normals, shears, strengths = _base_forces(system, force)
+        normals, _mobilised, strengths = _base_forces(system, force)
+        # v0.1.107 - ``base_shear_force`` is the DRIVING force in every
+        # method now; it used to publish the MOBILISED shear here, which
+        # is a factor of the safety factor away. The mobilised shear is
+        # exactly ``base_shear_strength / fos``.
+        driving = driving_shear_forces(slices, kh, kv, slide_sign)
         # v0.1.106 — the flag comes from the state that was RETURNED, not
         # from which pass produced it. A bisection can land on a lambda its
         # bracketing samples did not share, so "the strict pass found this"
@@ -269,8 +279,8 @@ class Spencer(LEMMethod):
             converged=converged,
             iterations=iterations,
             method_id=self.METHOD_ID, surface=surface, slices=slices,
-            base_normal=normals,
-            base_shear_force=shears,
+            base_normal_force=normals,
+            base_shear_force=driving,
             base_shear_strength=strengths,
             error_message=(
                 "" if not inadmissible else
@@ -333,8 +343,13 @@ def _base_forces(system, force):
     including the inter-slice shear, and its ``S/F`` is the shear that
     equilibrium actually mobilises. Until v0.1.106 these three lists were
     empty for Spencer and GLE, which mattered beyond reporting —
-    ``rapid_drawdown._stage1_state`` reads ``base_normal`` to recover the
+    ``rapid_drawdown._stage1_state`` reads ``base_normal_force`` to recover the
     stage-1 consolidation state and silently did nothing without it.
+
+    v0.1.107 - the MIDDLE value is the mobilised shear and no longer travels
+    to ``LEMResult.base_shear_force``, which is the driving force in every
+    method now. It is kept because it is the quantity this branch solved for,
+    and it is reachable from outside as ``base_shear_strength / fos``.
     """
     if force is None:
         return [], [], []

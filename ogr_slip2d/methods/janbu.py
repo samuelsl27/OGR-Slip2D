@@ -44,7 +44,10 @@ from ..external_forces import slice_forces
 from ..slicer import Slice, Slices
 from ..surface import SurfaceProtocol
 from .base import LEMMethod, LEMResult, register_method
-from .bishop import BishopSimplified  # reuse envelope linearisation
+from .bishop import (  # reuse the envelope linearisation and the X = 0 base forces
+    BishopSimplified,
+    base_forces_no_interslice_shear,
+)
 
 
 @register_method
@@ -222,6 +225,30 @@ class JanbuSimplified(LEMMethod):
         if self._CORRECTION:
             fos *= _janbu_correction_factor(project, surface, slices)
 
+        # v0.1.107 - the per-slice columns, which this method left EMPTY
+        # until now. Janbu neglects the inter-slice shear exactly as
+        # Bishop does, so the vertical equilibrium of the slice gives both
+        # methods the same expression for N; see
+        # ``base_forces_no_interslice_shear``. It is not a number for
+        # display only: ``rapid_drawdown._stage1_state`` reads the base
+        # normal to recover the stage-1 consolidation state, and with an
+        # empty list the two-stage drawdown applied undrained strength to
+        # ZERO slices and quietly became a re-run of stage 1. Measured on
+        # the published critical circle of a two-stage benchmark, 50
+        # slices: 1.7625 with nothing undrained against 1.2177 with all
+        # fifty, where the accepted answer is 1.347.
+        #
+        # AFTER the Janbu (1973) correction factor, deliberately: f0
+        # multiplies the factor of safety, and these forces are reported
+        # against the factor of safety that is reported. The price is that
+        # Janbu Corrected's set no longer satisfies the GLOBAL HORIZONTAL
+        # equilibrium that Janbu (1954) solves - f0 is empirical and does
+        # not come from re-solving anything - while Janbu Simplified's
+        # does, to 1e-5 of the forces involved. Each slice still satisfies
+        # its own vertical equilibrium in both.
+        normals, shears, strengths = base_forces_no_interslice_shear(
+            s_list, kh, kv, slide_sign, fos)
+
         return LEMResult(
             fos=fos,
             converged=converged,
@@ -229,6 +256,9 @@ class JanbuSimplified(LEMMethod):
             method_id=self.METHOD_ID,
             surface=surface,
             slices=slices,
+            base_normal_force=normals,
+            base_shear_force=shears,
+            base_shear_strength=strengths,
             details={"active_support_ratio": active_ratio},
         )
 

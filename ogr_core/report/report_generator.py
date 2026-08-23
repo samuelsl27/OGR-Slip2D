@@ -441,8 +441,9 @@ def _slice_table(crit, project):
                 c = getattr(mat.strength, "cohesion", 0)
                 phi = getattr(mat.strength, "friction_angle", 0)
         # Base normal/shear come from the LEMResult arrays if present
-        bn = (crit.base_normal[i]
-              if crit.base_normal and i < len(crit.base_normal) else None)
+        bn = (crit.base_normal_force[i]
+              if crit.base_normal_force
+              and i < len(crit.base_normal_force) else None)
         ss = (crit.base_shear_strength[i]
               if crit.base_shear_strength
               and i < len(crit.base_shear_strength) else None)

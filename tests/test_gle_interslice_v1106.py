@@ -458,7 +458,7 @@ class TestSpuriousRoots:
 class TestWhatTheMethodsNowReport:
     """Spencer and GLE fill the per-slice columns for the first time.
 
-    Not cosmetic: ``rapid_drawdown._stage1_state`` reads ``base_normal`` to
+    Not cosmetic: ``rapid_drawdown._stage1_state`` reads ``base_normal_force`` to
     recover the stage-1 consolidation state, and an empty list made the
     two-stage drawdown apply undrained strength to ZERO slices — the same
     trap that ``modified_swedish`` documents for the Corps methods in v0.1.98.
@@ -474,7 +474,7 @@ class TestWhatTheMethodsNowReport:
                        GLEMorgensternPrice(tolerance=TIGHT)):
             res = GridSearch(method=method, num_slices=NUM_SLICES,
                              min_area=0.0).evaluate_circle(p, _circle())
-            for name in ("base_normal", "base_shear_force",
+            for name in ("base_normal_force", "base_shear_force",
                          "base_shear_strength"):
                 col = getattr(res, name)
                 assert len(col) == NUM_SLICES, (method.METHOD_ID, name, col)

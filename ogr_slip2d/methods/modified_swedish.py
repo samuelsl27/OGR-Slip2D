@@ -63,7 +63,7 @@ from ..external_forces import interslice_water_thrust, slice_forces
 from ..slicer import Slices
 from ..surface import SurfaceProtocol
 from .base import LEMMethod, LEMResult, register_method
-from .bishop import BishopSimplified
+from .bishop import BishopSimplified, driving_shear_forces
 
 #: Accepted values of ``interslice_forces``.
 EFFECTIVE_INTERSLICE = "effective"
@@ -162,16 +162,24 @@ class PrescribedInclinationMethod(LEMMethod):
                 error_message=f"{self.DISPLAY_NAME}: force balance diverged",
             )
 
-        normals, shears, strengths = self._base_forces(
+        normals, _mobilised, strengths = self._base_forces(
             list(slices), ctx, fos)
+        # v0.1.107 - ``base_shear_force`` is the DRIVING force in every
+        # method now. This one used to publish the MOBILISED shear there,
+        # which is a factor of the safety factor away and was 2.58 against
+        # 41.0 on the same slice - under an interface row that reads
+        # "Driving shear W*sin(alpha)". The mobilised shear is not lost:
+        # it is exactly ``base_shear_strength / fos``, which is what the
+        # interpretation window already divides for its own row.
+        driving = driving_shear_forces(slices, kh, kv, slide_sign)
 
         return LEMResult(
             fos=fos,
             converged=converged,
             iterations=iters,
             method_id=self.METHOD_ID, surface=surface, slices=slices,
-            base_normal=normals,
-            base_shear_force=shears,
+            base_normal_force=normals,
+            base_shear_force=driving,
             base_shear_strength=strengths,
             details={
                 "boundary_ratios": self._boundary_ratios(slices),
@@ -308,8 +316,14 @@ class PrescribedInclinationMethod(LEMMethod):
         G-7b lists N for the twelve slices of its worked example and this
         expression reproduces it within the rounding of the table.
 
+        v0.1.107 - the MIDDLE value is the mobilised shear and no longer
+        travels to ``LEMResult.base_shear_force``, which is the driving force
+        in every method now. It is kept because it is the quantity the
+        recursion solved for, and it is reachable from outside as
+        ``base_shear_strength / fos``.
+
         **Why this matters beyond reporting.** Until v0.1.98 only Bishop
-        and Ordinary filled ``base_normal``, and ``rapid_drawdown._stage1_
+        and Ordinary filled the base normal, and ``rapid_drawdown._stage1_
         state`` reads it to recover the stage-1 consolidation state. With
         an empty list the two-stage drawdown applied undrained strength to
         ZERO slices and silently degraded to a re-run of stage 1.
