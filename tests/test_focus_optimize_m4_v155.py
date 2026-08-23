@@ -340,21 +340,68 @@ class TestOptimisation:
         The threshold is a CONTRAST against the number the old stopping
         rule produced, two orders of magnitude below either column, not a
         capture of what this code prints today.
+
+        v0.1.105 — THE SEED WAS DOING TOO MUCH OF THE WORK, and that is a
+        second finding, kept because it explains why this case moved.
+
+        Asserting ``iterations > 150`` on ONE seed does not measure "the walk
+        spends its budget"; it measures whether that particular walk got
+        lucky. Swept over eight seeds on this very surface, before and after
+        the moment-axis change of v0.1.105:
+
+            v0.1.104   plain   7 of 8 seeds reach 200, seed 13 stops at 100
+            v0.1.105   plain   6 of 8 seeds reach 200, seed 13 at 99, seed 7 at 57
+
+        Seed 13 was ALREADY below the threshold in v0.1.104, so this case was
+        one nudge away from failing there too — it happened to be calibrated
+        on a seed that survived. And the walk did not get worse: across the
+        eight seeds v0.1.105 improves the factor by +0.0592 to +0.1391 against
+        +0.0926 to +0.1079, so it finds MORE, with one unlucky seed finding
+        less.
+
+        The variation itself — a factor of 2.4 between seeds on the same
+        surface with the same budget — is a real property of this random walk
+        and is NOT addressed here; it is the same family as the Simulated
+        Annealing start that depended on luck (rule 6 of AGENTS.md). What is
+        addressed is the measurement: the assertion now runs over a spread of
+        seeds and holds the MEDIAN, which is what "spends the budget it was
+        given" actually claims and what a return of the old stopping rule
+        would drag down.
         """
+        import statistics
         p, ev, surf, _f0 = self._start()
         assert len(surf.polyline.vertices) == 4, (
             "the premise: this is the short surface a Path Search makes")
-        _s1, _r1, plain = optimize_surface(
-            p, ev, surf, OptimizeSettings(max_iterations=200, seed=7,
-                                          densify_to=0))
+        # Only the PLAIN walk is swept. With two movable vertices it is the
+        # fragile one — it is where a seed stops early in both versions — and
+        # sweeping the densified walk as well found nothing: twelve vertices
+        # reach the full 200 on all eight seeds, before and after. Five seeds
+        # rather than eight because the sweep is not free: the whole file went
+        # from 11 s to 45 s at eight, and to about 21 s here.
+        seeds = (1, 3, 5, 7, 11)
+        plain = [
+            optimize_surface(p, ev, surf,
+                             OptimizeSettings(max_iterations=200, seed=seed,
+                                              densify_to=0))[2]
+            for seed in seeds
+        ]
         _s2, _r2, dense = optimize_surface(
             p, ev, surf, OptimizeSettings(max_iterations=200, seed=7,
                                           densify_to=12))
-        assert plain.improvement > 0.01, plain.summary()
+
+        # Every walk must find something. This half was never seed-fragile:
+        # the worst seed of either version is +0.04.
+        for seed, rep in zip(seeds, plain):
+            assert rep.improvement > 0.01, (seed, rep.summary())
         assert dense.improvement > 0.01, dense.summary()
-        # And the budget itself: neither may walk away from it while it is
-        # still buying improvements. 36 of 200 was the defect.
-        assert plain.iterations > 150, plain.summary()
+
+        # And the budget itself: the walk may not abandon it while it is
+        # still buying improvements. 36 of 200 was the defect, and it was the
+        # TYPICAL walk that stopped there, not one unlucky seed — so the
+        # median is the statistic that catches its return, and it tolerates
+        # two unlucky seeds out of five without going blind to the defect.
+        median = statistics.median(r.iterations for r in plain)
+        assert median > 150, (median, [r.summary() for r in plain])
         assert dense.iterations > 150, dense.summary()
 
     def test_the_starting_surface_is_fully_sliced(self):

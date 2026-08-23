@@ -77,13 +77,28 @@ class Spencer(LEMMethod):
         )
         slide_sign = 1.0 if driving_raw >= 0 else -1.0
 
-        # Geometry — only used for the moment expression
+        # Geometry — only used for the moment expression. A circle has a
+        # centre; anything else gets an AXIS, and the moment equation becomes
+        # a real sum of moments about it (v0.1.105).
         circle_R = surface.radius if isinstance(surface, SlipCircle) else None
         circle_yc = surface.centre_y if isinstance(surface, SlipCircle) else None
+        axis = None
+        if circle_R is None:
+            from ..moment_balance import axis_for
+            axis = axis_for(project, surface)
 
         # v0.1.64 — supports, resolved once for every inner solve below.
         from ..support_integration import resolve_support_terms
         sup = resolve_support_terms(project, surface, slices, slide_sign)
+
+        def solve(lam):
+            """The inner solve at one λ, with the geometry already bound.
+
+            Every call site went through the same eight arguments and a new
+            one had to reach all five of them; a closure is one place to get
+            that right instead of five."""
+            return self._inner_solve(slices, lam, kh, kv, slide_sign,
+                                     circle_R, circle_yc, sup, axis)
 
         # Outer loop: bracket λ (= tan θ) and use bisection / secant
         # to drive g(λ) = F_f − F_m to zero. The grid may need to reach
@@ -92,9 +107,7 @@ class Spencer(LEMMethod):
         lam_grid = self.lambda_grid()
         samples: list[Tuple[float, float, float, float]] = []  # (lam, g, ff, fm)
         for lam in lam_grid:
-            ff, fm = self._inner_solve(
-                slices, lam, kh, kv, slide_sign, circle_R, circle_yc, sup,
-            )
+            ff, fm = solve(lam)
             if (math.isfinite(ff) and math.isfinite(fm)
                     and ff > 0.05 and fm > 0.05 and ff < 50 and fm < 50):
                 samples.append((lam, ff - fm, ff, fm))
@@ -139,9 +152,7 @@ class Spencer(LEMMethod):
         # ±1.5. Only surfaces that bracket nothing pay for these samples.
         if bracket is None:
             for lam in self.lambda_grid_extension():
-                ff, fm = self._inner_solve(
-                    slices, lam, kh, kv, slide_sign, circle_R, circle_yc, sup,
-                )
+                ff, fm = solve(lam)
                 if (math.isfinite(ff) and math.isfinite(fm)
                         and 0.05 < ff < 50 and 0.05 < fm < 50):
                     samples.append((lam, ff - fm, ff, fm))
@@ -178,14 +189,10 @@ class Spencer(LEMMethod):
             if not (min(lam_lo, lam_hi) <= lam_new <= max(lam_lo, lam_hi)):
                 lam_new = 0.5 * (lam_lo + lam_hi)
 
-            ff, fm = self._inner_solve(
-                slices, lam_new, kh, kv, slide_sign, circle_R, circle_yc, sup,
-            )
+            ff, fm = solve(lam_new)
             if not (math.isfinite(ff) and math.isfinite(fm) and ff > 0 and fm > 0):
                 lam_new = 0.5 * (lam_lo + lam_hi)
-                ff, fm = self._inner_solve(
-                    slices, lam_new, kh, kv, slide_sign, circle_R, circle_yc, sup,
-                )
+                ff, fm = solve(lam_new)
                 if not (math.isfinite(ff) and math.isfinite(fm)):
                     break
             g_new = ff - fm
@@ -202,9 +209,7 @@ class Spencer(LEMMethod):
                 lam_lo, g_lo, ff_lo, fm_lo = lam_new, g_new, ff, fm
 
         # Final FoS at converged λ
-        ff_final, fm_final = self._inner_solve(
-            slices, lam_lo, kh, kv, slide_sign, circle_R, circle_yc, sup,
-        )
+        ff_final, fm_final = solve(lam_lo)
         if not (math.isfinite(ff_final) and math.isfinite(fm_final)):
             return LEMResult(
                 fos=math.nan, converged=False, iterations=iterations,
@@ -230,7 +235,7 @@ class Spencer(LEMMethod):
     def _inner_solve(
         self, slices: Slices, lam: float,
         kh: float, kv: float, slide_sign: float,
-        circle_R, circle_yc, sup=None,
+        circle_R, circle_yc, sup=None, axis=None,
     ) -> Tuple[float, float]:
         """Return (F_f, F_m) at the given inter-slice ratio λ.
 
@@ -238,9 +243,46 @@ class Spencer(LEMMethod):
         the up-slope side is consistently positive. The driving terms
         in the denominator are then ALWAYS positive (we slide in the
         +α_local direction).
+
+        v0.1.105 — on a surface that is not a circle the moment side is a
+        real sum of moments about ``axis`` (see :mod:`ogr_slip2d.moment_
+        balance`) instead of ``Σ S_term / Σ W·sinα``. That form is a moment
+        ratio only on a circle, where every arm is R and R cancels; off a
+        circle it silently dropped the seismic, water and support moments
+        altogether. The same arc as a circle and as a polyline, kh = 0.15:
+
+            before   1.318156 → 1.916530   (+45.4 %, the dry answer)
+            after    1.318156 → 1.318081   (−0.01 %)
+
+        WHAT THIS DOES NOT FIX, and it is the honest half. The normal force
+        here comes from the slice's own vertical equilibrium, ``N = (W −
+        S·senα)/cosα``, which omits the inter-slice shear difference
+        ``(X_R − X_L)``. On a circle that costs nothing — the normal points at
+        the centre and takes no moment at all. Off one it does take a moment,
+        and the omitted term is precisely what separates Spencer from Bishop,
+        so on a sharply kinked surface the two now converge to nearly the same
+        number: measured against the reference's own values, Ej_1 −2.07 % and
+        Ej_2 −3.83 %, against −0.11 % and +0.23 % before. That is a real cost
+        and it was taken deliberately, because the alternative was leaving a
+        surface with an earthquake on it reporting a factor 45 % to 157 % too
+        high, on the unsafe side, with no warning.
+
+        The way out is the full Fredlund and Krahn (1977) form,
+
+            N = [W + (X_R − X_L) − (c'·l·senα)/F + (u·l·tanφ'·senα)/F] / m_α
+            X_i = λ·f(x_i)·E_i,   E_i by the horizontal force recursion
+
+        which needs ``E_i`` — a quantity this solver never forms, since its
+        ``F_f`` is the aggregate ``Σ S_term(cosα + λ senα) / Σ(W tanα + H)``.
+        Building the recursion on top of that would leave the two equations
+        solving different force systems, so it is a rewrite of this method
+        rather than a term to add, and it is not this version's work.
         """
         F = max(0.5, self.initial_fos)
         s_list = slices.slices if hasattr(slices, "slices") else slices
+        general = circle_R is None
+        if general:
+            from ..moment_balance import moment_terms
 
         ff_last = math.nan
         fm_last = math.nan
@@ -250,6 +292,10 @@ class Spencer(LEMMethod):
             den_m = 0.0
             num_f = 0.0
             den_f = 0.0
+            g_forces: list = []
+            g_weights: list = []
+            g_resist: list = []
+            g_normals: list = []
 
             for i_s, s in enumerate(s_list):
                 fx = slice_forces(s, kh, kv)
@@ -291,20 +337,30 @@ class Spencer(LEMMethod):
                 S_term = (c_loc * b + (W_eff - u * b) * tan_phi) / m_alpha
 
                 # --- Moment equilibrium (driving = + Σ W·sin α) ----
-                num_m += S_term
-                # v0.1.100 — the MOMENT side takes its arm from the
-                # geometry, see ``Slice.weight_arm_ratio``; the FORCE side
-                # below keeps sin(alpha), which there is a direction and
-                # not an arm.
-                den_m += W_eff * slide_sign * s.weight_arm_ratio
-                if kh > 0 and circle_R is not None:
-                    y_cg = 0.5 * (
-                        0.5 * (s.top_y_left + s.top_y_right)
-                        + 0.5 * (s.base_y_left + s.base_y_right)
+                if general:
+                    # Off a circle there is no common R to divide out, so the
+                    # terms are collected and summed as true moments below.
+                    g_forces.append(fx)
+                    g_weights.append(W_eff)
+                    g_resist.append(S_term)
+                    g_normals.append(
+                        (W_eff - (S_term / F) * math.sin(alpha))
+                        / max(math.cos(alpha), 1e-9)
                     )
-                    arm = (circle_yc - y_cg) / circle_R
-                    den_m += H_eq * arm
-                if circle_R is not None:
+                else:
+                    num_m += S_term
+                    # v0.1.100 — the MOMENT side takes its arm from the
+                    # geometry, see ``Slice.weight_arm_ratio``; the FORCE side
+                    # below keeps sin(alpha), which there is a direction and
+                    # not an arm.
+                    den_m += W_eff * slide_sign * s.weight_arm_ratio
+                    if kh > 0:
+                        y_cg = 0.5 * (
+                            0.5 * (s.top_y_left + s.top_y_right)
+                            + 0.5 * (s.base_y_left + s.base_y_right)
+                        )
+                        arm = (circle_yc - y_cg) / circle_R
+                        den_m += H_eq * arm
                     # Moment of the horizontal water forces about the
                     # centre, normalised by R like every other term here.
                     den_m += (
@@ -326,6 +382,16 @@ class Spencer(LEMMethod):
                 num_f += lam * S_term * math.sin(alpha)
                 den_f += W_eff * math.tan(alpha) + H_eq + H_water + H_support
 
+            if general:
+                # The support goes in as a cartesian force here, which is how
+                # this method already treats it on a circle: its vertical
+                # component is inside ``W_eff`` and its horizontal one needs
+                # a moment of its own.
+                terms = moment_terms(
+                    axis, s_list, g_weights, g_resist, g_normals,
+                    kh=kh, kv=kv, sup=sup, forces=g_forces)
+                den_m = terms.driving
+                num_m = -terms.shear
             if abs(den_m) < 1e-9 or abs(den_f) < 1e-9:
                 return math.nan, math.nan
 

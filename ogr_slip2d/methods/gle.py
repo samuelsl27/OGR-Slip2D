@@ -149,8 +149,14 @@ class GLEMorgensternPrice(LEMMethod):
         )
         slide_sign = 1.0 if driving_raw >= 0 else -1.0
 
+        # A circle has a centre; anything else gets an AXIS, and the moment
+        # equation becomes a real sum of moments about it (v0.1.105).
         circle_R = surface.radius if isinstance(surface, SlipCircle) else None
         circle_yc = surface.centre_y if isinstance(surface, SlipCircle) else None
+        axis = None
+        if circle_R is None:
+            from ..moment_balance import axis_for
+            axis = axis_for(project, surface)
 
         # v0.1.64 — supports, resolved once for every inner solve below.
         from ..support_integration import resolve_support_terms
@@ -159,6 +165,11 @@ class GLEMorgensternPrice(LEMMethod):
         x0 = slices.slices[0].base_x_left
         x1 = slices.slices[-1].base_x_right
 
+        def solve(lam):
+            """The inner solve at one λ, with the geometry already bound."""
+            return self._inner_solve(slices, lam, kh, kv, slide_sign,
+                                     circle_R, circle_yc, x0, x1, sup, axis)
+
         # Outer: bracket and refine λ. Wider grid for difficult slopes;
         # v0.1.74 moved it to the base class so the configured range can
         # clip it. This method is the reason the shape reaches ±1.5: the
@@ -166,10 +177,7 @@ class GLEMorgensternPrice(LEMMethod):
         lam_grid = self.lambda_grid()
         samples: list[Tuple[float, float, float, float]] = []
         for lam in lam_grid:
-            ff, fm = self._inner_solve(
-                slices, lam, kh, kv, slide_sign,
-                circle_R, circle_yc, x0, x1, sup,
-            )
+            ff, fm = solve(lam)
             if (math.isfinite(ff) and math.isfinite(fm)
                     and 0.05 < ff < 50 and 0.05 < fm < 50):
                 samples.append((lam, ff - fm, ff, fm))
@@ -214,10 +222,7 @@ class GLEMorgensternPrice(LEMMethod):
         # brackets above is untouched. See BaseSearch._LAMBDA_EXTENSION.
         if bracket is None:
             for lam in self.lambda_grid_extension():
-                ff, fm = self._inner_solve(
-                    slices, lam, kh, kv, slide_sign,
-                    circle_R, circle_yc, x0, x1, sup,
-                )
+                ff, fm = solve(lam)
                 if (math.isfinite(ff) and math.isfinite(fm)
                         and 0.05 < ff < 50 and 0.05 < fm < 50):
                     samples.append((lam, ff - fm, ff, fm))
@@ -247,16 +252,10 @@ class GLEMorgensternPrice(LEMMethod):
             lam_new = lam_hi - g_hi * (lam_hi - lam_lo) / (g_hi - g_lo)
             if not (min(lam_lo, lam_hi) <= lam_new <= max(lam_lo, lam_hi)):
                 lam_new = 0.5 * (lam_lo + lam_hi)
-            ff, fm = self._inner_solve(
-                slices, lam_new, kh, kv, slide_sign,
-                circle_R, circle_yc, x0, x1, sup,
-            )
+            ff, fm = solve(lam_new)
             if not (math.isfinite(ff) and math.isfinite(fm) and ff > 0 and fm > 0):
                 lam_new = 0.5 * (lam_lo + lam_hi)
-                ff, fm = self._inner_solve(
-                    slices, lam_new, kh, kv, slide_sign,
-                    circle_R, circle_yc, x0, x1, sup,
-                )
+                ff, fm = solve(lam_new)
                 if not (math.isfinite(ff) and math.isfinite(fm)):
                     break
             g_new = ff - fm
@@ -271,10 +270,7 @@ class GLEMorgensternPrice(LEMMethod):
             else:
                 lam_lo, g_lo, ff_lo, fm_lo = lam_new, g_new, ff, fm
 
-        ff_final, fm_final = self._inner_solve(
-            slices, lam_lo, kh, kv, slide_sign,
-            circle_R, circle_yc, x0, x1, sup,
-        )
+        ff_final, fm_final = solve(lam_lo)
         if not (math.isfinite(ff_final) and math.isfinite(fm_final)):
             return LEMResult(
                 fos=math.nan, converged=False, iterations=iterations,
@@ -309,10 +305,25 @@ class GLEMorgensternPrice(LEMMethod):
     def _inner_solve(
         self, slices: Slices, lam: float,
         kh: float, kv: float, slide_sign: float,
-        circle_R, circle_yc, x0: float, x1: float, sup=None,
+        circle_R, circle_yc, x0: float, x1: float, sup=None, axis=None,
     ) -> Tuple[float, float]:
+        """Return (F_f, F_m) at the given inter-slice ratio lambda.
+
+        v0.1.105 — off a circle the moment side is a real sum of moments about
+        ``axis``; see :meth:`Spencer._inner_solve`, which carries the full
+        note. The short version: ``Sigma S_term / Sigma W senalpha`` is a
+        moment ratio only where every arm is R, and off a circle it dropped
+        the seismic, water and support moments entirely — the same arc as a
+        circle and as a polyline differed by +45.4 % under kh = 0.15. The
+        cost, taken knowingly, is that the normal force still omits the
+        inter-slice shear ``(X_R - X_L)``, which is what separates this method
+        from Bishop on a sharply kinked surface.
+        """
         F = max(0.5, self.initial_fos)
         s_list = slices.slices if hasattr(slices, "slices") else slices
+        general = circle_R is None
+        if general:
+            from ..moment_balance import moment_terms
         ff_last = math.nan
         fm_last = math.nan
 
@@ -321,6 +332,10 @@ class GLEMorgensternPrice(LEMMethod):
             den_m = 0.0
             num_f = 0.0
             den_f = 0.0
+            g_forces: list = []
+            g_weights: list = []
+            g_resist: list = []
+            g_normals: list = []
 
             for i_s, s in enumerate(s_list):
                 fx = slice_forces(s, kh, kv)
@@ -360,20 +375,30 @@ class GLEMorgensternPrice(LEMMethod):
                 S_term = (c_loc * b + (W_eff - u * b) * tan_phi) / m_alpha
 
                 # Moment side
-                num_m += S_term
-                # v0.1.100 — the MOMENT side takes its arm from the
-                # geometry, see ``Slice.weight_arm_ratio``; the FORCE side
-                # below keeps sin(alpha), which there is a direction and
-                # not an arm.
-                den_m += W_eff * slide_sign * s.weight_arm_ratio
-                if kh > 0 and circle_R is not None:
-                    y_cg = 0.5 * (
-                        0.5 * (s.top_y_left + s.top_y_right)
-                        + 0.5 * (s.base_y_left + s.base_y_right)
+                if general:
+                    # Off a circle there is no common R to divide out, so the
+                    # terms are collected and summed as true moments below.
+                    g_forces.append(fx)
+                    g_weights.append(W_eff)
+                    g_resist.append(S_term)
+                    g_normals.append(
+                        (W_eff - (S_term / F) * math.sin(alpha))
+                        / max(math.cos(alpha), 1e-9)
                     )
-                    arm = (circle_yc - y_cg) / circle_R
-                    den_m += H_eq * arm
-                if circle_R is not None:
+                else:
+                    num_m += S_term
+                    # v0.1.100 — the MOMENT side takes its arm from the
+                    # geometry, see ``Slice.weight_arm_ratio``; the FORCE side
+                    # below keeps sin(alpha), which there is a direction and
+                    # not an arm.
+                    den_m += W_eff * slide_sign * s.weight_arm_ratio
+                    if kh > 0:
+                        y_cg = 0.5 * (
+                            0.5 * (s.top_y_left + s.top_y_right)
+                            + 0.5 * (s.base_y_left + s.base_y_right)
+                        )
+                        arm = (circle_yc - y_cg) / circle_R
+                        den_m += H_eq * arm
                     den_m += (
                         -slide_sign
                         * fx.water_moment_about(circle_yc) / circle_R
@@ -391,6 +416,15 @@ class GLEMorgensternPrice(LEMMethod):
                 num_f += lam_i * S_term * math.sin(alpha)
                 den_f += W_eff * math.tan(alpha) + H_eq + H_water + H_support
 
+            if general:
+                # The support goes in as a cartesian force, which is how this
+                # method already treats it on a circle: the vertical component
+                # is inside ``W_eff`` and the horizontal one needs a moment.
+                terms = moment_terms(
+                    axis, s_list, g_weights, g_resist, g_normals,
+                    kh=kh, kv=kv, sup=sup, forces=g_forces)
+                den_m = terms.driving
+                num_m = -terms.shear
             if abs(den_m) < 1e-9 or abs(den_f) < 1e-9:
                 return math.nan, math.nan
             new_fm = num_m / den_m
