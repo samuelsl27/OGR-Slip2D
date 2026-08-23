@@ -488,3 +488,58 @@ que `SearchSettings.from_dict` recibe, así que un valor fuera de su defecto se
 **reporta** en vez de adivinarse. Ninguno de los 142 modelos del banco lo tiene
 fuera del defecto, de modo que hoy no hay nada que convertir; si algún día lo
 hay, la conversión tiene que hacerse donde se conoce el proyecto entero.
+
+---
+
+## Interpolación de la rejilla de presiones: el spline clásico y el spline con tensión (v0.1.109)
+
+**Encontrado al cerrar D13.** Con la grieta de tracción ya truncando el arco,
+el problema 12 del banco de verificación pasa de **+20,8 %** a **−4,8 %** sobre
+el valor publicado (Bishop 1,0173 frente a 1,069), y lo que queda **no es la
+grieta**:
+
+- el criterio geométrico se cumple exacto: el arco termina en x = 19,5706
+  frente al 19,570 publicado;
+- el problema 27, que no lleva rejilla, cae en **+0,82 %** con el truncado —
+  el mismo sesgo (+0,80 %) que su modelo *sin* grieta ya tenía;
+- el problema 2 reproduce los cuatro métodos a **−0,03 %**, en la búsqueda y
+  sobre los círculos publicados.
+
+El problema 12 se resuelve con una **rejilla de 22 puntos de presión
+intersticial** y su factor es extremadamente sensible a *u*: 1,0173 con `u`,
+2,5765 con `u/2` y 4,1364 con `u = 0`. Un **1,7 %** de error en *u* explica
+entero el 4,8 %.
+
+**Lo comprobado sobre la implementación de OGR**, que está bien en lo que dice
+ser: reproduce los 22 puntos de dato con error 1e-12 y un campo plano con
+error 7e-15.
+
+**Lo que falla es de qué spline se trata.** El docstring de
+`ogr_core/hydraulic/water_pressure_grid.py` atribuía φ(r) = r²·ln r a *Franke
+(1985)* — corregido en v0.1.109 a Harder y Desmarais (1972) / Duchon (1976),
+que es de quien es—. Franke (1985) se titula **«Thin plate splines with
+tension»** y describe otra superficie: base ln(φr/2) + K₀(φr) + γₑ, con un
+parámetro de tensión φ, que degenera en el spline clásico sólo cuando φ → 0.
+La ayuda del programa de referencia habla literalmente de *una placa elástica
+infinita **bajo tensión*** y cita ese artículo, así que es esa la que usa.
+
+Las dos bases coinciden dentro de la nube de datos y divergen **extrapolando**,
+que es justo donde caen **6 de las 30 dovelas** del problema 12: sus bases
+quedan fuera de la envolvente convexa de los 22 puntos.
+
+### Por qué NO se ha implementado
+
+El parámetro de tensión φ **no está publicado**. Elegirlo para que el problema
+12 dé 1,069 sería ajustar al resultado, que es exactamente lo que prohíbe la
+regla 1. Si se aborda, tiene que ser como tarea propia y validado contra tres
+identidades **independientes del problema 12**:
+
+1. exactitud en los puntos de dato;
+2. límite φ → 0, que debe reproducir el spline clásico de hoy;
+3. límite φ → ∞, que tiende a la interpolación armónica (membrana).
+
+Y con la regla 7 encima, porque φ sería un ajuste nuevo: hay que enseñar que
+mueve el número. `scipy.special.k0` está disponible sin añadir dependencias.
+
+Mientras tanto, el problema 12 queda con **causa nombrada y medida**, no con
+un número inexplicado.

@@ -90,6 +90,14 @@ class TestHydrostaticForce:
         # the crack zone and no force was ever produced. That is exactly
         # what the vacuous ``if force > 0`` guard was hiding. Moved into
         # the surface's span so the test exercises something.
+        #
+        # v0.1.109 — and moved once more, out to x = 90. The v0.1.61 zone
+        # stopped at 84 and the arc daylights at 84.64, so the CREST of
+        # the surface was still outside it by six tenths of a metre. That
+        # no longer produces a thrust, and correctly so: the reference
+        # truncates a surface only when its crest lies inside the crack
+        # zone, and where nothing is truncated there is no crack wall for
+        # water to push on. Half of anomaly A2-2 was this exact case.
         p = Project("TC test")
         ext = Polyline(vertices=[
             Vertex(0, 0), Vertex(100, 0),
@@ -100,7 +108,7 @@ class TestHydrostaticForce:
         # Crack lower boundary
         tc = Boundary(
             polyline=Polyline(
-                vertices=[Vertex(75, 25), Vertex(84, 25)], closed=False
+                vertices=[Vertex(75, 25), Vertex(90, 25)], closed=False
             ),
             btype=BoundaryType.TENSION_CRACK,
         )

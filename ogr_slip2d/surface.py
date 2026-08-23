@@ -132,7 +132,17 @@ class SlipCircle:
     # v0.1.82 — reverse-curvature tension cracks. Empty unless
     # ``apply_reverse_curvature`` has moved an endpoint to the vertical
     # tangent; each entry is (x, y_bottom, y_top) of a vertical crack.
+    #
+    # v0.1.109 — a truncation against the user's Tension Crack BOUNDARY
+    # also lands here, because this list is what the canvas draws and the
+    # two cracks look identical on screen. What separates them is
+    # ``tension_crack_wall`` below: only the modelled one can hold water.
     tension_cracks: list = field(default_factory=list)
+    # v0.1.109 — the wall left by the user's Tension Crack boundary,
+    # (x, y_bottom, y_top), or None. Kept apart from ``tension_cracks``
+    # because the hydrostatic thrust is computed on THIS wall and a
+    # reverse-curvature crack is always dry.
+    tension_crack_wall: Optional[tuple] = None
 
     # ------------------------------------------------------------------
     # v0.1.100 — how far ``R² − (x−xc)²`` may go negative and still
@@ -443,6 +453,11 @@ class SlipSurface:
 
     polyline: Polyline
     id: str = field(default_factory=lambda: str(uuid4()))
+    # v0.1.109 — see :class:`SlipCircle`. Error code −119 of the
+    # reference exists precisely because a non-circular surface meets a
+    # tension crack the same way a circular one does.
+    tension_cracks: list = field(default_factory=list)
+    tension_crack_wall: Optional[tuple] = None
 
     def __post_init__(self) -> None:
         # Enforce left-to-right ordering
@@ -478,6 +493,10 @@ class SlipSurface:
             "type": "polyline",
             "id": self.id,
             "polyline": self.polyline.to_dict(),
+            # v0.1.109 — the vertical wall a tension crack leaves. The
+            # polyline itself is already truncated, so without this the
+            # drawing would stop in mid-air.
+            "tension_cracks": [list(t) for t in self.tension_cracks],
         }
 
     @classmethod
@@ -485,6 +504,7 @@ class SlipSurface:
         s = cls(polyline=Polyline.from_dict(data["polyline"]))
         if "id" in data:
             s.id = data["id"]
+        s.tension_cracks = [tuple(t) for t in data.get("tension_cracks", [])]
         return s
 
 

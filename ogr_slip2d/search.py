@@ -487,6 +487,8 @@ class BaseSearch(ABC):
             circle.x_right = best.surface.x_right
             circle.tension_cracks = list(
                 getattr(best.surface, "tension_cracks", []) or [])
+            circle.tension_crack_wall = getattr(
+                best.surface, "tension_crack_wall", None)
         return best
 
     # ------------------------------------------------------------------
@@ -508,7 +510,9 @@ class BaseSearch(ABC):
         belongs to.
         """
         from ogr_core.geometry import ground_surface
-        from .slicer import _reverse_curvature_mode
+        from .slicer import (
+            _reverse_curvature_mode, apply_tension_crack_truncation,
+        )
         from .surface import leaves_soil_region
 
         external = project.external_boundary()
@@ -536,6 +540,18 @@ class BaseSearch(ABC):
             trial.x_left, trial.x_right = x_l, x_r
             if not trial.apply_reverse_curvature(ground, mode=mode):
                 continue
+            # v0.1.109 — the user's Tension Crack boundary, applied
+            # BEFORE containment is judged. ``slice_surface`` would
+            # truncate this trial anyway, so what this call buys is the
+            # order: containment is judged "on the surface as finally
+            # analysed", exactly as the docstring above promises, and a
+            # trial lying entirely inside the crack zone is dropped here
+            # instead of being sliced first and refused after.
+            lim = apply_tension_crack_truncation(
+                project, trial, ground, trial.x_left, trial.x_right)
+            if lim is None:
+                continue        # entirely within the tension crack zone
+            trial.x_left, trial.x_right = lim
             if not composite and leaves_soil_region(
                     trial, ext_verts, trial.x_left, trial.x_right):
                 continue

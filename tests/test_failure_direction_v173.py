@@ -110,7 +110,7 @@ class TestTheConventionIsStatedInOnePlace:
 # ======================================================================
 # 1. The tension crack
 # ======================================================================
-def _crack_project(crack_base=((3.0, 21.0), (13.0, 27.0))):
+def _crack_project(crack_base=((0.0, 19.2), (13.0, 27.0))):
     """A slope whose crest is on the LEFT, with a WIDE crack zone on it.
 
     Two properties of this fixture are deliberate, and neither is
@@ -130,7 +130,17 @@ def _crack_project(crack_base=((3.0, 21.0), (13.0, 27.0))):
 
     The ground is high on the left, so the mass really slides towards
     increasing x: LEFT_TO_RIGHT is the correct declaration here, and it
-    is the one that picks the left-hand (true crest) end of the zone.
+    is the one that names the left-hand (true crest) end of the zone.
+
+    v0.1.109 — the zone starts at x = 0 rather than x = 3. The fixture
+    circle daylights at x = 2.12 and the zone began at 3, so the CREST of
+    the surface was outside the crack zone by nine tenths of a metre. The
+    reference truncates nothing in that case and applies no thrust
+    either, and now neither does OGR, so the old zone left every test
+    below with nothing to measure. It is the same trap this fixture's own
+    docstring warns about two paragraphs up, and the same one v0.1.61
+    found: a crack the surface never reaches makes the assertion vacuous.
+    The left end is dropped to y = 19.2 so the base keeps the same slope.
     """
     from ogr_core.geometry import Boundary, BoundaryType, Polyline, Vertex
     from ogr_core.geometry.tension_crack import (
@@ -184,63 +194,150 @@ def _fos(project):
 
 
 class TestTheCrackTruncatesTheUpSlopeEnd:
+    """v0.1.109 — the name of this class is finally true.
 
-    def test_the_two_directions_pick_opposite_ends_of_the_zone(self):
-        x_r2l, _ = _loaded_slice_x(_r2l(_crack_project()))
-        x_l2r, _ = _loaded_slice_x(_l2r(_crack_project()))
-        assert x_r2l is not None and x_l2r is not None
-        # Right-to-left has its crest on the right, so it takes the
-        # right-hand end of the zone; left-to-right takes the other.
-        assert x_r2l > x_l2r, (x_r2l, x_l2r)
+    From v0.1.7 to v0.1.108 nothing was truncated at all: the crack only
+    chose which slice received the water thrust, and the three tests that
+    used to live here pinned that choice to the DECLARED failure
+    direction, as v0.1.73 had decided.
 
-    def test_the_default_reproduces_the_old_hardcoded_assumption(self):
-        """The retired comment said "assume rightward ... the up-slope end
-        is on the right", which is exactly right-to-left. No stored
-        project may change its factor of safety by being reopened."""
-        x_default, _ = _loaded_slice_x(_crack_project())
-        x_r2l, _ = _loaded_slice_x(_r2l(_crack_project()))
-        assert x_default == x_r2l
+    That decision is reversed here, and the reason is a change of scale
+    rather than a change of opinion. Choosing the wrong end used to cost
+    a percent; it now decides which half of the arc survives, worth
+    twenty per cent on verification problem 12, and always on the unsafe
+    side. So the end is read off the surface's own geometry — the higher
+    ground wins — and the declaration is kept for the tie, which is the
+    role the module docstring reserves for it. The reference agrees
+    twice: its help says a failure direction does not affect modelling
+    options, and it states the tension-crack rule in terms of "the crest
+    of a slip surface", a property of the surface, not of the project.
 
-    def test_it_moves_the_factor_of_safety(self):
-        """Rule 7, and the reason the fixture's crack base slopes.
+    What the retired tests were worth is kept below, inverted: the case
+    they could not see is exactly the one that now has to work.
+    """
 
-        A different slice sits over a different crack depth, so both the
-        wet height and the line of action of the thrust move with it:
-        ½·γw·hw² is about 61 kN/m at one end of this zone and 352 kN/m at
-        the other. The factor of safety has to follow, or the setting is
-        decoration again.
+    def _ends(self, project):
+        """(x_left, x_right, wall) of the surface as finally analysed."""
+        from ogr_slip2d import slice_surface
+
+        c = _circle()
+        sl = slice_surface(project, c, num_slices=40)
+        assert sl is not None, "the fixture surface must be sliceable"
+        return c.x_left, c.x_right, c.tension_crack_wall
+
+    def test_the_crest_end_is_the_one_that_moves(self):
+        """The fixture's crest is on the LEFT, so the left end truncates.
+
+        And it lands ON the crack line rather than on the ground. That
+        geometric identity is stronger than any factor of safety: it is
+        checked against the crack boundary of the model itself, not
+        against a number somebody published.
         """
-        f_r2l = _fos(_r2l(_crack_project()))
-        f_l2r = _fos(_l2r(_crack_project()))
-        assert all(math.isfinite(f) for f in (f_r2l, f_l2r))
-        # Sanity: both are ordinary factors of safety, not a runaway from
-        # a degenerate fixture. A flat-topped block returns nonsense here
-        # (its driving moment is ~0) and the comparison below would mean
-        # nothing — which is how the first draft of this test failed.
-        assert 0.5 < f_l2r < f_r2l < 3.0, (f_r2l, f_l2r)
-        assert abs(f_r2l - f_l2r) > 1e-3, (f_r2l, f_l2r)
+        from ogr_core.geometry import BoundaryType
+        from ogr_core.hydraulic.water_surfaces import interp_y_on_polyline
 
-    def test_a_horizontal_crack_hides_the_choice_entirely(self):
-        """Why the wrong assumption survived sixty-six versions.
+        p = _l2r(_crack_project())
+        tc = next(b for b in p.boundaries
+                  if b.btype == BoundaryType.TENSION_CRACK)
+        x_l, x_r, wall = self._ends(p)
+        assert wall is not None, "the crest is inside the zone; it must cut"
+        # The untruncated arc daylights at x = 2.12; the crack pulls the
+        # crest end in, and leaves the far end exactly where it was.
+        assert x_l > 3.0, x_l
+        assert math.isclose(x_r, 49.18, abs_tol=0.2), x_r
+        assert math.isclose(x_l, wall[0], rel_tol=1e-12)
+        y_line = interp_y_on_polyline(tc.polyline, x_l)
+        assert math.isclose(_circle().base_y_at(x_l), y_line, abs_tol=1e-6)
 
-        The thrust reaches every method as a horizontal force whose
-        moment about the circle centre is ``y_c·F − F·y`` — a function of
-        the force and the HEIGHT of its line of action, and of nothing
-        else. With a horizontal crack base, ``F`` and ``y`` are identical
-        at both ends of the zone, so which slice carries the thrust
-        changes no number whatsoever. The assumption was wrong from
-        v0.1.7 and invisible in every model that did not slope its crack.
+    def test_a_contradictory_declaration_no_longer_moves_the_arc(self):
+        """The reason for the change, in one test.
 
-        Pinned as a test rather than left as a remark, because it is also
-        the honest boundary of what v0.1.73 fixed.
+        This fixture's crest is on the left, so LEFT_TO_RIGHT is the
+        truthful declaration. Declaring RIGHT_TO_LEFT is a lie about the
+        model — and D03d found nineteen benchmark models telling exactly
+        that lie. Under v0.1.73 the lie picked the other end of the zone;
+        now it picks nothing, because the geometry answers first. Both
+        declarations must analyse the same mass, digit for digit.
         """
-        flat = ((3.0, 24.0), (13.0, 24.0))
-        x_r2l, _ = _loaded_slice_x(_r2l(_crack_project(flat)))
-        x_l2r, _ = _loaded_slice_x(_l2r(_crack_project(flat)))
-        assert x_r2l != x_l2r, "the two ends must still be different slices"
-        assert math.isclose(_fos(_r2l(_crack_project(flat))),
-                            _fos(_l2r(_crack_project(flat))),
-                            rel_tol=1e-12)
+        truthful = self._ends(_l2r(_crack_project()))
+        lying = self._ends(_r2l(_crack_project()))
+        assert truthful == lying, (truthful, lying)
+        assert math.isclose(_fos(_l2r(_crack_project())),
+                            _fos(_r2l(_crack_project())), rel_tol=1e-12)
+
+    def test_the_declaration_still_breaks_a_genuine_tie(self):
+        """It is a tiebreak now, and a tie is not hypothetical.
+
+        Two ends at the SAME ground elevation — a crack cut into level
+        ground — leave the geometry with nothing to answer, and an end
+        still has to be picked. That is the declaration, and this is the
+        one case where changing it changes the arc.
+        """
+        from ogr_core.geometry import Boundary, BoundaryType, Polyline, Vertex
+        from ogr_core.geometry.tension_crack import (
+            TensionCrackProperties, WaterLevelMode,
+        )
+        from ogr_core.materials import Material, MohrCoulomb
+        from ogr_core.project import Project
+        from ogr_slip2d import SlipCircle, slice_surface
+
+        def _level():
+            p = Project("tie")
+            ext = Polyline(vertices=[
+                Vertex(0, 0), Vertex(100, 0),
+                Vertex(100, 30), Vertex(0, 30)], closed=True)
+            ext.ensure_ccw()
+            p.add_boundary(Boundary(polyline=ext,
+                                    btype=BoundaryType.EXTERNAL))
+            p.add_boundary(Boundary(polyline=Polyline(
+                vertices=[Vertex(0, 25), Vertex(100, 25)], closed=False),
+                btype=BoundaryType.TENSION_CRACK))
+            p.materials = [Material(
+                name="S",
+                strength=MohrCoulomb(cohesion=10, friction_angle=25))]
+            p.tension_crack_properties = TensionCrackProperties(
+                mode=WaterLevelMode.DRY)
+            return p
+
+        def _ends(project):
+            c = SlipCircle(centre_x=50, centre_y=50, radius=40)
+            assert slice_surface(project, c, num_slices=20) is not None
+            return round(c.x_left, 6), round(c.x_right, 6)
+
+        left = _ends(_l2r(_level()))
+        right = _ends(_r2l(_level()))
+        assert left != right, (left, right)
+        # Mirror images of each other about the circle's own centre.
+        assert math.isclose(50.0 - left[0], right[1] - 50.0, abs_tol=1e-6)
+
+    def test_a_horizontal_crack_can_no_longer_hide_the_choice(self):
+        """The inverse of the test this replaces, and the same lesson.
+
+        The retired ``test_a_horizontal_crack_hides_the_choice_entirely``
+        recorded why a wrong assumption survived from v0.1.7 to v0.1.73:
+        the thrust reaches every method as a horizontal force whose
+        moment depends only on its magnitude and on the height of its
+        line of action, so with a HORIZONTAL crack base both ends of the
+        zone gave factors identical to the last bit. Nothing could see
+        the mistake.
+
+        Truncation cannot hide that way — cutting one end or the other
+        removes a different piece of arc — which is what makes the choice
+        testable at all, and is part of why it was worth moving onto the
+        geometry.
+        """
+        flat = ((0.0, 24.0), (13.0, 24.0))
+        f_l2r = _fos(_l2r(_crack_project(flat)))
+        f_r2l = _fos(_r2l(_crack_project(flat)))
+        # The same answer, because the geometry decides and the geometry
+        # is the same. The declaration is no longer part of the question.
+        assert math.isclose(f_l2r, f_r2l, rel_tol=1e-12)
+        # And the crack IS doing something: without the boundary the
+        # untruncated arc gives a different, higher factor (rule 7).
+        bare = _crack_project(flat)
+        bare.boundaries = [b for b in bare.boundaries
+                           if b.btype.name != "TENSION_CRACK"]
+        assert _fos(bare) > f_l2r * 1.01, (_fos(bare), f_l2r)
 
 
 # ======================================================================

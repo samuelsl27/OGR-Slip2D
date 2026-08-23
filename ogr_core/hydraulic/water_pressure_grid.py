@@ -14,11 +14,28 @@ external seepage analysis. Three grid value types are supported:
 
 Two spatial interpolation methods are provided:
 
-    * ``tps`` — Thin Plate Spline (Franke, 1985): a radial-basis
-      surface φ(r) = r²·ln r plus a linear polynomial, fitted through
-      every data point. Smooth, exact at the data points, and exactly
-      reproduces planar fields (the polynomial part), which is the
-      analytically correct behaviour for hydrostatic conditions.
+    * ``tps`` — Thin Plate Spline: the radial-basis surface
+      φ(r) = r²·ln r plus a linear polynomial, fitted through every data
+      point. Smooth, exact at the data points, and it reproduces planar
+      fields exactly (the polynomial part), which is the analytically
+      correct behaviour for hydrostatic conditions.
+
+      **Source**: Harder & Desmarais (1972), *Interpolation using
+      surface splines*, J. Aircraft 9(2), and Duchon (1976), *Splines
+      minimizing rotation-invariant semi-norms in Sobolev spaces*. This
+      docstring cited **Franke (1985)** until v0.1.109, and that was
+      wrong in a way worth recording: Franke (1985), *Thin plate splines
+      with tension*, CAGD 2, is a DIFFERENT surface. Its basis is
+      ln(φr/2) + K₀(φr) + γₑ — a modified Bessel function of the second
+      kind with a tension parameter φ — and it degenerates to the
+      classical spline only as φ → 0. The two agree closely inside the
+      data cloud and diverge most where the interpolation EXTRAPOLATES,
+      which is exactly where a slip surface near the crest of a slope
+      tends to fall: on verification problem 12 six of thirty slice
+      bases lie outside the convex hull of the 22 published pressure
+      points. The misattribution mattered because it hid the fact that
+      the reference this benchmark suite is compared against says it
+      uses the tension form; see ``docs/PENDIENTES.md``.
     * ``idw`` — Shepard inverse-distance weighting (power 2) over the
       k nearest points. Robust for very large clouds; used as the
       automatic fallback when the TPS system is ill-conditioned or the

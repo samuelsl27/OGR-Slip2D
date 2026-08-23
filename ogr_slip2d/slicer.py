@@ -719,6 +719,167 @@ def _reverse_curvature_mode(project: Project) -> str:
     return "tension_crack" if on else "discard"
 
 
+def tension_crack_boundary(project: Project):
+    """The project's Tension Crack boundary, or None.
+
+    Only one can exist by construction (the interface disables *Add
+    Tension Crack* once there is one), but the engine has never enforced
+    it, so the first is taken and the rest ignored — the same rule the
+    code has followed since v0.1.7.
+    """
+    for b in project.boundaries:
+        if b.btype == BoundaryType.TENSION_CRACK:
+            return b
+    return None
+
+
+def apply_tension_crack_truncation(
+    project: Project,
+    surface: SurfaceProtocol,
+    ground: Polyline,
+    x_left: float,
+    x_right: float,
+):
+    """Truncate ``surface`` where it meets the Tension Crack boundary.
+
+    Returns ``(x_l, x_r)`` for the surface as it must be analysed, or
+    ``None`` to DISCARD it. The wall it leaves is recorded on the surface
+    as ``tension_crack_wall`` and appended to ``tension_cracks`` so the
+    canvas draws it.
+
+    What a tension crack does
+    -------------------------
+    A tension crack terminates the slip surface: the soil above the crack
+    cannot carry tension, so no shear resistance may be counted along it.
+    Where the surface reaches the crack boundary the failure mass is
+    closed by a VERTICAL wall running up to the ground surface, and the
+    soil between that wall and the arc keeps every bit of its weight —
+    it is driving weight with no base of its own. This is the treatment
+    described by Duncan & Wright (2005), *Soil Strength and Slope
+    Stability*, chapter 14, and the one the classical formulations assume
+    when they shorten the arc and leave the wedge in the weight.
+
+    Three rules, and each has a source
+    ----------------------------------
+    * **Only the crest end is truncated.** The crack forms at the head of
+      the slide, where the interslice forces go into tension; the toe is
+      in compression. Soil in the crack zone at the TOE end therefore
+      keeps its strength. (Measured: on ACADS 1(b) five of twenty-five
+      slices have their base inside the crack zone on the toe side, and
+      the published factor is only reproduced with them resisting.)
+    * **The crest must be inside the crack zone**, or nothing happens —
+      which is also what makes this idempotent, since after truncation
+      the crest sits ON the crack line rather than above it.
+    * **The first crossing from the crest wins** when the surface enters
+      and leaves the zone more than once.
+
+    A surface whose crest is inside the zone and which never reaches the
+    crack boundary lies ENTIRELY inside a region that cannot resist. It
+    is discarded rather than answered: a factor of safety computed on it
+    would be arithmetic about a mechanism that has no shear surface. The
+    reference reports the same case as its own error code.
+    """
+    from .failure_direction import crest_end_is_on_the_right
+
+    def _remember(wall) -> None:
+        """Record the wall, defensively.
+
+        ``SurfaceProtocol`` is a protocol, not a base class, so a caller
+        may hand in something of its own that has no such field — the
+        same reason ``_reverse_curvature_mode`` is written defensively.
+        Nothing downstream needs the wall except the water thrust, and a
+        surface that cannot carry one cannot be pushed on either.
+        """
+        try:
+            surface.tension_crack_wall = wall
+        except AttributeError:  # pragma: no cover - foreign surface type
+            pass
+
+    tc = tension_crack_boundary(project)
+    if tc is None or len(tc.polyline.vertices) < 2:
+        # Cleared, not merely skipped: the same surface object may have
+        # been analysed against a project that HAD a crack, and a wall
+        # left behind would push on a mass that has none.
+        _remember(None)
+        return (x_left, x_right)
+
+    crest_right = crest_end_is_on_the_right(project, ground, x_left, x_right)
+    x_crest = x_right if crest_right else x_left
+
+    # Already truncated at this very end — the search resolves its own
+    # chords and cuts them before the slicer ever sees them, and a caller
+    # may hand the same surface back for a second pass. Re-entering must
+    # neither cut again nor forget the wall it cut last time.
+    prev = getattr(surface, "tension_crack_wall", None)
+    if prev is not None and abs(prev[0] - x_crest) <= 1e-9 * max(
+            x_right - x_left, 1.0):
+        return (x_left, x_right)
+    _remember(None)
+
+    # Is the crest of the SURFACE inside the crack zone? The zone is the
+    # region above the crack boundary; outside the boundary's own x range
+    # there is no zone at all, and ``_interp_y_on_polyline`` says so by
+    # returning None.
+    y_crack_at_crest = _interp_y_on_polyline(tc.polyline, x_crest)
+    if y_crack_at_crest is None:
+        return (x_left, x_right)
+    y_surface_at_crest = surface.base_y_at(x_crest)
+    if y_surface_at_crest is None:
+        return (x_left, x_right)
+    # Tolerance relative to the surface's own extent, which is the length
+    # scale this question has — so the same slope answers it the same way
+    # in millimetres and in metres. A crest sitting ON the line is NOT
+    # inside the zone, and that is what stops a second pass from
+    # truncating an already-truncated surface.
+    tol = 1e-9 * max(x_right - x_left, 1.0)
+    if y_surface_at_crest <= y_crack_at_crest + tol:
+        return (x_left, x_right)
+
+    crossings = _surface_crossings(surface, tc.polyline, x_left, x_right)
+    if not crossings:
+        # Entirely within the tension crack zone.
+        return None
+    x_wall = max(crossings) if crest_right else min(crossings)
+    if abs(x_wall - (x_left if crest_right else x_right)) < 1e-9 * max(
+            x_right - x_left, 1.0):
+        # Truncating would leave no mass at all.
+        return None
+
+    y_bottom = _interp_y_on_polyline(tc.polyline, x_wall)
+    y_top = _interp_y_on_polyline(ground, x_wall)
+    if y_bottom is None or y_top is None or y_top <= y_bottom:
+        return (x_left, x_right)
+
+    wall = (x_wall, y_bottom, y_top)
+    _remember(wall)
+    try:
+        surface.tension_cracks.append(wall)
+    except AttributeError:      # a surface type without the channel
+        pass
+
+    if crest_right:
+        return (x_left, x_wall)
+    return (x_wall, x_right)
+
+
+def _truncate_polyline_surface(surface, x_l: float, x_r: float) -> None:
+    """Cut a non-circular slip surface down to ``[x_l, x_r]``, in place.
+
+    The vertices outside the range go, and the exact cut point is added
+    so the polyline still ends where the tension crack does — dropping
+    the vertices alone would leave the end at the last SURVIVING vertex,
+    short of the crack by up to one segment.
+    """
+    verts = surface.polyline.vertices
+    y_l = surface.base_y_at(x_l)
+    y_r = surface.base_y_at(x_r)
+    if y_l is None or y_r is None:
+        return
+    kept = [v for v in verts if x_l < v.x < x_r]
+    surface.polyline.vertices = (
+        [Vertex(x_l, y_l)] + kept + [Vertex(x_r, y_r)])
+
+
 def slice_surface(
     project: Project,
     surface: SurfaceProtocol,
@@ -726,8 +887,16 @@ def slice_surface(
 ) -> Optional[Slices]:
     """Build the list of slices for a given slip surface.
 
-    Returns None if the surface does not intersect the ground twice or
-    the failure mass is degenerate.
+    Returns None if the surface does not intersect the ground twice, the
+    failure mass is degenerate, or — since v0.1.109 — the surface lies
+    entirely inside a Tension Crack zone and so has no shear plane to
+    write an equilibrium on.
+
+    The surface is resolved onto the mass that is actually analysed
+    before slicing: ground crossings, reverse curvature, and the user's
+    tension crack. It is left carrying that resolution, because a drawing
+    of the untruncated surface next to the number of the truncated one
+    would be a picture of a different problem.
     """
     external = project.external_boundary()
     if external is None:
@@ -752,10 +921,38 @@ def slice_surface(
             if not surface.apply_reverse_curvature(
                     ground, mode=_reverse_curvature_mode(project)):
                 return None
+        # v0.1.109 — the user's Tension Crack boundary. UNLIKE reverse
+        # curvature this runs whether or not the endpoints were cached,
+        # because a cached pair is not evidence that anything truncated
+        # it: a search hands over chords it resolved itself, and so does
+        # any caller that picked a mass by hand. Applying it only on a
+        # fresh resolution left verification problem 27 untruncated while
+        # problem 2 worked, which is the least useful kind of bug.
+        # ``apply_tension_crack_truncation`` recognises its own work, so a
+        # second pass over an already-cut surface changes nothing.
+        _lim = apply_tension_crack_truncation(
+            project, surface, ground, surface.x_left, surface.x_right)
+        if _lim is None:
+            return None
+        surface.x_left, surface.x_right = _lim
         x_l, x_r = surface.x_left, surface.x_right
     else:
-        x_l, x_r = surface.x_range()
         ground = _ground_surface_from_external(external)
+        x_l, x_r = surface.x_range()
+        if x_l is None or x_r is None or x_r - x_l < 1e-6:
+            return None
+        # A polyline carries no cached endpoints, so the truncation is
+        # applied to the polyline ITSELF. That keeps ``x_range`` the one
+        # source of truth, makes a second pass a no-op, and — the reason
+        # it is done here rather than locally — leaves the drawn surface
+        # and the computed number describing the same mass.
+        _lim = apply_tension_crack_truncation(
+            project, surface, ground, x_l, x_r)
+        if _lim is None:
+            return None
+        if _lim != (x_l, x_r):
+            _truncate_polyline_surface(surface, *_lim)
+        x_l, x_r = surface.x_range()
 
     if x_l is None or x_r is None or x_r - x_l < 1e-6:
         return None
@@ -1005,82 +1202,65 @@ def slice_surface(
     if len(result) < 3:
         return None
 
-    # v0.1.7 — Tension Crack hydrostatic force.
-    # If the slip surface enters a Tension Crack zone (i.e. there is a
-    # Tension Crack boundary in the project, and the surface intersects
-    # the column where the crack is defined), the topmost slice is
-    # truncated at the crack's vertical wall and a horizontal force is
-    # applied on that wall, equal to the integral of the water column
-    # pressure over the wet height of the crack.
-    tc_boundaries = [
-        b for b in project.boundaries
-        if b.btype == BoundaryType.TENSION_CRACK
-    ]
-    if tc_boundaries and not project.tension_crack_properties.is_dry():
-        result = _apply_tension_crack(project, result, tc_boundaries[0])
+    # v0.1.7 — Tension Crack hydrostatic force, on the wall the
+    # truncation actually left.
+    #
+    # v0.1.109 — this used to be guarded by ``not ...is_dry()``, which
+    # made a DRY crack do nothing at all: no thrust (right, there is no
+    # water) and no truncation (wrong — truncating is the other half of
+    # the model, and the half that works without water). The truncation
+    # now happens up in ``slice_surface``, for every crack; what is left
+    # here is only the water.
+    #
+    # And it is keyed on ``tension_crack_wall`` rather than on "is there
+    # a crack boundary somewhere under this mass". The old question let a
+    # surface that never reaches the crack receive the full-depth thrust:
+    # on ACADS 1(b) a 1.58 m circle beside the crest, weighing 50 kN, was
+    # handed 73.5 kN — more than its own weight — and the search dutifully
+    # found that as its minimum.
+    wall = getattr(surface, "tension_crack_wall", None)
+    if wall is not None and not project.tension_crack_properties.is_dry():
+        result = _apply_tension_crack(project, result, wall)
 
     return result
 
 
-def _apply_tension_crack(project: Project, slices: Slices, tc_boundary):
-    """Apply the Tension Crack hydrostatic force to ``slices`` in-place.
+def _apply_tension_crack(project: Project, slices: Slices, wall):
+    """Apply the water thrust on a tension crack wall to ``slices``, in place.
 
-    Looks for the slice nearest to the failure-direction-side endpoint
-    of the tension crack within the slice population. Computes the
-    hydrostatic force as ½ γ_w h_w², acting horizontally, where h_w
-    is the wet column height inside the crack.
+    ``wall`` is ``(x, y_bottom, y_top)``: the vertical face the truncation
+    left, from the crack boundary up to the ground surface. The thrust is
+    the integral of the hydrostatic pressure over the WET part of it,
+
+        F = ½ γ_w h_w²        acting horizontally,
+
+    with its line of action at the centroid of the triangular pressure
+    distribution, h_w/3 above the water's own base. Terzaghi (1943),
+    *Theoretical Soil Mechanics*; the same expression Duncan & Wright
+    (2005), chapter 14, use for a water-filled crack.
+
+    v0.1.109 — the geometry now comes from the wall instead of from the
+    centre of whichever slice happened to fall inside the crack's x
+    range. Two consequences, and both were defects:
+
+    * ``h_w`` is measured on the crack the surface actually reaches. It
+      used to be the crack's full depth whatever the surface did, so
+      three different circles on ACADS 1(b) — the Bishop critical one,
+      the Janbu one, and a 1.58 m circle that never touches the crack
+      base — all received exactly −73.46 kN;
+    * a surface with no wall receives nothing, instead of a thrust on a
+      crack it never opened.
     """
     if not slices.slices:
         return slices
 
-    # v0.1.73 — which end of the crack zone is up-slope now comes from
-    # the project's Failure Direction instead of being assumed. The old
-    # comment said "assume rightward ... for a typical slope", and that
-    # assumption happens to match the DEFAULT (right to left, crest on
-    # the right), which is why nothing was visibly wrong; a left-to-right
-    # model, though, had the crack truncating the slice at the wrong end
-    # of the zone, and therefore applying the water thrust to the wrong
-    # slice. Only the CHOICE of slice is decided here — the sense of the
-    # thrust has been derived from the geometry since v0.1.61, below.
-    # Find the column x where the tension crack meets the slip surface
-    tc_verts = tc_boundary.polyline.vertices
-    if len(tc_verts) < 2:
-        return slices
-
-    # The tension crack boundary defines the LOWER limit of the crack
-    # zone. For each x where the boundary is defined, the crack base
-    # y is given by linear interpolation; the crack TOP is the ground
-    # surface.
-    external = project.external_boundary()
-    if external is None:
-        return slices
-    ground = _ground_surface_from_external(external)
-
-    # Find the slice whose x_centre is at the up-slope side and within
-    # the tension-crack-boundary's x range
-    from .failure_direction import crest_is_on_the_right
-
-    tc_xs = sorted([v.x for v in tc_verts])
-    tc_xmin, tc_xmax = tc_xs[0], tc_xs[-1]
-    upslope_slice = None
-    ordered = (reversed(slices.slices) if crest_is_on_the_right(project)
-               else iter(slices.slices))
-    for s in ordered:
-        if tc_xmin - 1e-6 <= s.x_centre <= tc_xmax + 1e-6:
-            upslope_slice = s
-            break
-    if upslope_slice is None:
-        return slices
-
-    x = upslope_slice.x_centre
-    crack_top_y = _interp_y_on_polyline(ground, x)
-    crack_bottom_y = _interp_y_on_polyline(tc_boundary.polyline, x)
-    if crack_top_y is None or crack_bottom_y is None:
-        return slices
+    x, crack_bottom_y, crack_top_y = wall
     if crack_top_y <= crack_bottom_y:
         return slices
 
-    # Resolve the water level inside the crack (Slide modes)
+    # Resolve the water level inside the crack (the seven modes of
+    # ``TensionCrackProperties``: dry, filled, percent, below elevation,
+    # to depth, water table, piezometric line).
     wt = next(
         (b for b in project.boundaries
          if b.btype == BoundaryType.WATER_TABLE),
@@ -1102,10 +1282,7 @@ def _apply_tension_crack(project: Project, slices: Slices, tc_boundary):
         return slices
 
     gamma_w = project.settings.groundwater.pore_fluid_unit_weight
-    # Hydrostatic force: F = ½ γ_w h_w² (per unit out-of-plane width)
     F = 0.5 * gamma_w * h_w * h_w
-    # Moment arm: centroid of the triangular pressure distribution
-    # is at h_w/3 above the crack base
     arm = crack_bottom_y + h_w / 3.0
 
     slices.tension_crack_force = F
@@ -1121,8 +1298,17 @@ def _apply_tension_crack(project: Project, slices: Slices, tc_boundary):
     # pushes the mass away from the intact ground, i.e. from the crack
     # towards the rest of the mass. Deriving the sense from the geometry
     # avoids assuming which way the slope faces.
+    #
+    # v0.1.109 — the wall IS one end of the mass now, so the slice that
+    # carries the thrust is simply the outermost one on that side. No
+    # search for it, and no way to land on the wrong one.
     xs = [s.x_centre for s in slices.slices]
     mass_centre = 0.5 * (min(xs) + max(xs))
-    push_sign = 1.0 if mass_centre > x else -1.0
-    upslope_slice.add_water_force(f_h=push_sign * F, y=arm)
+    if mass_centre > x:
+        wall_slice = slices.slices[0]
+        push_sign = 1.0
+    else:
+        wall_slice = slices.slices[-1]
+        push_sign = -1.0
+    wall_slice.add_water_force(f_h=push_sign * F, y=arm)
     return slices

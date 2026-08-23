@@ -569,7 +569,17 @@ class SlipSurfaceItem(QGraphicsPathItem):
                 pl = surface_dict.get("polyline", {})
                 verts = pl.get("vertices", [])
             if len(verts) >= 2:
+                # v0.1.109 — a tension crack truncates a non-circular
+                # surface too, and the polyline it leaves ends ON the
+                # crack line. Without the vertical wall the drawing stops
+                # in mid-air, metres below the ground it came from, which
+                # is exactly the mismatch between picture and number that
+                # the circular branch above was given its own crack list
+                # to avoid.
+                cracks = {round(float(c[0]), 9): (float(c[1]), float(c[2]))
+                          for c in surface_dict.get("tension_cracks", [])}
                 first = True
+                x = y = None
                 for v in verts:
                     if isinstance(v, dict):
                         x, y = v["x"], v["y"]
@@ -578,10 +588,19 @@ class SlipSurfaceItem(QGraphicsPathItem):
                     else:
                         x, y = v.x, v.y
                     if first:
-                        path.moveTo(x, y)
+                        crack = cracks.get(round(float(x), 9))
+                        if crack is not None:
+                            path.moveTo(x, crack[1])
+                            path.lineTo(x, crack[0])
+                        else:
+                            path.moveTo(x, y)
                         first = False
                     else:
                         path.lineTo(x, y)
+                if x is not None:
+                    crack = cracks.get(round(float(x), 9))
+                    if crack is not None:
+                        path.lineTo(x, crack[1])
         self.setPath(path)
 
         # Pen selection by visual state.
