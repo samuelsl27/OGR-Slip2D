@@ -30,7 +30,8 @@ from dataclasses import dataclass, field
 from typing import Iterator, Optional
 
 from ogr_core.geometry import (
-    Boundary, BoundaryType, Polyline, Vertex, ground_surface,
+    Boundary, BoundaryType, Polyline, Vertex, envelope_y_at,
+    ground_surface,
 )
 from ogr_core.hydraulic.excess_pore_pressure import (
     excess_at,
@@ -532,6 +533,14 @@ def _mean_polyline_y(polyline: Polyline, x_l: float, x_r: float) -> Optional[flo
     between breakpoints, so splitting at every breakpoint inside the
     interval and summing trapezia leaves no error at all.
 
+    v0.1.114 — the two ends of each sub-interval are read off the SEGMENT
+    that spans it rather than by interpolating the profile at an abscissa.
+    The profile is an envelope now, and an envelope steps at a vertical
+    face: asking for "y at x" exactly on the step is ambiguous — the bench
+    at the foot of a wall and the crest above it share that abscissa — while
+    "y at the two ends of this segment" never is. Integrating a step
+    function this way is exact, which is what the docstring above promises.
+
     Returns None when the profile does not span the interval.
     """
     if x_r <= x_l:
@@ -543,12 +552,31 @@ def _mean_polyline_y(polyline: Polyline, x_l: float, x_r: float) -> Optional[flo
     marks = sorted(xs)
     area = 0.0
     for a, b in zip(marks[:-1], marks[1:]):
-        ya = _interp_y_on_polyline(polyline, a)
-        yb = _interp_y_on_polyline(polyline, b)
-        if ya is None or yb is None:
+        pair = _segment_y_pair(polyline, a, b)
+        if pair is None:
             return None
-        area += 0.5 * (ya + yb) * (b - a)
+        area += 0.5 * (pair[0] + pair[1]) * (b - a)
     return area / (x_r - x_l)
+
+
+def _segment_y_pair(polyline: Polyline, a: float, b: float):
+    """``(y(a), y(b))`` on the profile segment that spans ``[a, b]``.
+
+    ``a`` and ``b`` are consecutive marks, so exactly one non-degenerate
+    segment covers the interval; the vertical segments an envelope uses for
+    its jumps span no interval and are skipped. Returns None when nothing
+    covers it, which is how :func:`_mean_polyline_y` reports a profile that
+    falls short of the slice.
+    """
+    if b <= a:
+        return None
+    for p1, p2 in zip(polyline.vertices[:-1], polyline.vertices[1:]):
+        lo, hi = (p1.x, p2.x) if p1.x <= p2.x else (p2.x, p1.x)
+        if hi - lo < 1e-12 or a < lo - 1e-12 or b > hi + 1e-12:
+            continue
+        t = (p2.y - p1.y) / (p2.x - p1.x)
+        return (p1.y + (a - p1.x) * t, p1.y + (b - p1.x) * t)
+    return None
 
 
 def _column_weight(
@@ -853,7 +881,7 @@ def apply_tension_crack_truncation(
         return None
 
     y_bottom = _interp_y_on_polyline(tc.polyline, x_wall)
-    y_top = _interp_y_on_polyline(ground, x_wall)
+    y_top = envelope_y_at(ground, x_wall)
     if y_bottom is None or y_top is None or y_top <= y_bottom:
         return (x_left, x_right)
 
@@ -1029,8 +1057,21 @@ def slice_surface(
         if y_base_l is None or y_base_r is None:
             return None
 
-        y_top_l = _interp_y_on_polyline(ground, xl)
-        y_top_r = _interp_y_on_polyline(ground, xr)
+        # v0.1.114 — one-sided, and it has to be. A slice corner landing
+        # exactly on a step of the envelope — the foot of a wall, where the
+        # bench in front and the crest behind share an abscissa — must take
+        # the branch this slice's own body sits on: the right-hand branch at
+        # its left corner and the left-hand branch at its right one. Asking
+        # for "the ground at that x" answers with the crest for both, and
+        # the slice in front of the wall then reports 20 ft of soil that is
+        # not above it. ``side=0`` is the fallback at the two ends of the
+        # profile, where one of the branches does not exist.
+        y_top_l = envelope_y_at(ground, xl, side=1)
+        if y_top_l is None:
+            y_top_l = envelope_y_at(ground, xl)
+        y_top_r = envelope_y_at(ground, xr, side=-1)
+        if y_top_r is None:
+            y_top_r = envelope_y_at(ground, xr)
         if y_top_l is None or y_top_r is None:
             return None
 

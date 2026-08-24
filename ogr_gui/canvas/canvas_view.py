@@ -2324,6 +2324,7 @@ class CanvasView(QGraphicsView):
             _FEA_METHODS,
             _fea_level_at,
         )
+        from ogr_core.geometry import envelope_y_at
         from ogr_core.hydraulic.pore_pressure import _interp_y_on_polyline
 
         ground = self._ground_polyline()
@@ -2364,7 +2365,9 @@ class CanvasView(QGraphicsView):
             run: list[tuple[float, float, float]] = []
             for i in range(n + 1):
                 x = x_min + step * i
-                y_g = _interp_y_on_polyline(ground, x)
+                # v0.1.114 — el perfil escalona en una cara vertical,
+                # y ahi interpolar el primer tramo da la rama que toque.
+                y_g = envelope_y_at(ground, x)
                 y_w = level_at(x)
                 wet = (y_g is not None and y_w is not None and y_w > y_g)
                 if wet:
@@ -2418,6 +2421,7 @@ class CanvasView(QGraphicsView):
         from PySide6.QtGui import QPen
         from PySide6.QtCore import QPointF
         from PySide6.QtWidgets import QGraphicsLineItem
+        from ogr_core.geometry import envelope_y_at
         from ogr_core.hydraulic.pore_pressure import _interp_y_on_polyline
 
         external = self.project.external_boundary()
@@ -2471,7 +2475,7 @@ class CanvasView(QGraphicsView):
 
         for i in range(n_lines + 1):
             x = x_min + (x_max - x_min) * i / n_lines
-            y_top = _interp_y_on_polyline(ground, x)
+            y_top = envelope_y_at(ground, x)
             y_bot = _interp_y_on_polyline(tc_boundary.polyline, x)
             if y_top is None or y_bot is None or y_top <= y_bot:
                 continue

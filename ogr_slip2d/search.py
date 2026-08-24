@@ -2803,15 +2803,17 @@ class PathSearch(BaseSearch):
 
     @staticmethod
     def _interpolate_top_y(top_verts, x: float) -> Optional[float]:
+        """Ground elevation at ``x`` on a profile from ``_ground_profile``.
+
+        v0.1.114 — through :func:`envelope_y_at`. The profile steps at a
+        vertical face, and returning on the first segment that spans ``x``
+        answered with the branch the winding happened to put first: at the
+        foot of a wall, the bench in front of it instead of its crest.
+        """
+        from ogr_core.geometry import Polyline, envelope_y_at
         if x < top_verts[0].x - 1e-9 or x > top_verts[-1].x + 1e-9:
             return None
-        for v1, v2 in zip(top_verts[:-1], top_verts[1:]):
-            if v1.x <= x <= v2.x:
-                if abs(v2.x - v1.x) < 1e-12:
-                    return max(v1.y, v2.y)
-                t = (x - v1.x) / (v2.x - v1.x)
-                return v1.y + t * (v2.y - v1.y)
-        return None
+        return envelope_y_at(Polyline(vertices=list(top_verts)), x)
 
 
 

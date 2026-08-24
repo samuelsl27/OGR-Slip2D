@@ -29,8 +29,29 @@ two of them were wrong:
 Sampling at vertex abscissae alone is not enough either: where two edges
 overlap in projection the upper envelope can change edge at an x that is
 nobody's vertex (a re-entrant or overhanging boundary). Those crossing
-abscissae are added here, so the returned polyline is the exact envelope
-for any simple polygon, not just for monotone slope profiles.
+abscissae are added here.
+
+v0.1.114 — and neither is sampling enough on its own, which is what this
+paragraph used to claim: it promised "the exact envelope for any simple
+polygon", and that is false the moment the boundary has a VERTICAL face.
+The envelope is then DISCONTINUOUS — a retaining wall jumps from the bench
+in front of it to its own crest at one abscissa — and a polyline sampled at
+breakpoints and joined by straight lines cannot hold a jump: it draws a
+ramp up the face and invents the soil under it. Measured on a five-vertex
+model, ``(0,0) (30,0) (30,10) (10,10) (10,0)``, the flat bench from x = 0
+to x = 10 came back as a 45-degree ramp; on verification problem 59 of the
+reference bank it was 100 ft2 of soil that is not there, and the mass the
+slicer weighed came out 26 % heavy against the same polygon measured with
+Shapely.
+
+So the envelope carries its jumps: at an abscissa where the one-sided
+limits differ, the polyline gets TWO (or three) vertices sharing that x and
+the step is a real vertical segment. That costs the profile its strict
+monotonicity in x, which is why every consumer reads it through
+:func:`envelope_y_at` rather than by interpolating the first segment that
+happens to span x — on the upper envelope a vertical segment is worth its
+TOP end, on the lower one its BOTTOM end, and returning the midpoint (as
+one of them did) is worth neither.
 
 Author: Samuel Sáez López (UPCT)
 """
@@ -46,6 +67,11 @@ from .primitives import Polyline, Vertex
 # horizontal extent of the model, never absolute: the same boundary
 # expressed in millimetres and in metres must produce the same envelope.
 _X_MERGE_REL = 1e-9
+
+# Two elevations closer than this are the same value, so the envelope is
+# continuous there. Relative to the model's own relief, for the same reason
+# ``_X_MERGE_REL`` is relative to its width.
+_Y_MERGE_REL = 1e-9
 
 
 def _edges(vertices: list[Vertex]) -> list[tuple[Vertex, Vertex]]:
@@ -206,6 +232,81 @@ def _breakpoints(vertices: list[Vertex], tol: float) -> list[float]:
     return out
 
 
+def _side_limits(vertices: list[Vertex], x: float, tol: float,
+                 pick) -> tuple[Optional[float], Optional[float]]:
+    """One-sided limits of an envelope at ``x``: ``(from the left, from the
+    right)``, either of them None at the ends of the domain.
+
+    ``pick`` is ``max`` for the upper envelope and ``min`` for the lower one.
+
+    Only edges that span an INTERVAL on that side count, so a vertical edge
+    — which spans no interval at all — contributes to the value AT ``x`` and
+    to neither limit. That is exactly what makes the jump visible: on a
+    retaining wall the bench edge reaches ``x`` from the left and the crest
+    edge leaves it to the right, and the two disagree by the height of the
+    face.
+
+    Taken from the edges rather than by probing at ``x ± delta``: a probe
+    needs a step small enough to stay inside the nearest breakpoint and
+    large enough to survive the tolerance the edges are tested with, and
+    those two are not always both satisfiable.
+    """
+    left: Optional[float] = None
+    right: Optional[float] = None
+    for a, b in _edges(vertices):
+        if a.x == b.x:
+            continue
+        y = _y_on_edge(a, b, x, tol)
+        if y is None:
+            continue
+        lo, hi = (a.x, b.x) if a.x < b.x else (b.x, a.x)
+        if lo < x - tol:
+            left = y if left is None else pick(left, y)
+        if hi > x + tol:
+            right = y if right is None else pick(right, y)
+    return left, right
+
+
+def _sampled_envelope(vertices: list[Vertex], at, pick
+                      ) -> tuple[tuple[float, float], ...]:
+    """Sample an envelope at its breakpoints, carrying its jumps.
+
+    ``at`` is :func:`upper_y_at` or :func:`lower_y_at` and ``pick`` the
+    matching ``max`` / ``min``. Where a one-sided limit differs from the
+    value at the breakpoint, the limit is emitted as its own vertex at the
+    SAME abscissa, before or after the breakpoint value as the side
+    requires, so the polyline steps instead of ramping.
+    """
+    xs_all = [v.x for v in vertices]
+    ys_all = [v.y for v in vertices]
+    span = max(xs_all) - min(xs_all)
+    relief = max(ys_all) - min(ys_all)
+    tol = _X_MERGE_REL * span if span > 0 else _X_MERGE_REL
+    y_tol = _Y_MERGE_REL * relief if relief > 0 else _Y_MERGE_REL
+
+    out: list[tuple[float, float]] = []
+
+    def push(x: float, y: float) -> None:
+        # A jump repeated at the next breakpoint, or a limit that equals the
+        # value already written, would leave a zero-length segment for every
+        # consumer to special-case.
+        if out and abs(out[-1][0] - x) <= tol and abs(out[-1][1] - y) <= y_tol:
+            return
+        out.append((x, y))
+
+    for x in _breakpoints(vertices, tol):
+        y = at(vertices, x, tol)
+        if y is None:
+            continue
+        y_l, y_r = _side_limits(vertices, x, tol, pick)
+        if y_l is not None and abs(y_l - y) > y_tol:
+            push(x, y_l)
+        push(x, y)
+        if y_r is not None and abs(y_r - y) > y_tol:
+            push(x, y_r)
+    return tuple(out)
+
+
 @lru_cache(maxsize=64)
 def _envelope(key: tuple[tuple[float, float], ...]
               ) -> tuple[tuple[float, float], ...]:
@@ -224,17 +325,7 @@ def _envelope(key: tuple[tuple[float, float], ...]
     boundary is edited in place by the modeller and an identity key would
     hand back a stale profile after every vertex drag.
     """
-    vertices = [Vertex(x, y) for x, y in key]
-    xs_all = [v.x for v in vertices]
-    span = max(xs_all) - min(xs_all)
-    tol = _X_MERGE_REL * span if span > 0 else _X_MERGE_REL
-
-    out: list[tuple[float, float]] = []
-    for x in _breakpoints(vertices, tol):
-        y = upper_y_at(vertices, x, tol)
-        if y is not None:
-            out.append((x, y))
-    return tuple(out)
+    return _sampled_envelope([Vertex(x, y) for x, y in key], upper_y_at, max)
 
 
 @lru_cache(maxsize=64)
@@ -246,17 +337,57 @@ def _lower_envelope(key: tuple[tuple[float, float], ...]
     reason squared: Composite Surfaces asks for this profile once per trial
     circle of a search.
     """
-    vertices = [Vertex(x, y) for x, y in key]
-    xs_all = [v.x for v in vertices]
-    span = max(xs_all) - min(xs_all)
-    tol = _X_MERGE_REL * span if span > 0 else _X_MERGE_REL
+    return _sampled_envelope([Vertex(x, y) for x, y in key], lower_y_at, min)
 
-    out: list[tuple[float, float]] = []
-    for x in _breakpoints(vertices, tol):
-        y = lower_y_at(vertices, x, tol)
-        if y is not None:
-            out.append((x, y))
-    return tuple(out)
+
+def envelope_y_at(profile: Polyline, x: float, upper: bool = True,
+                  side: int = 0) -> Optional[float]:
+    """Elevation of an ENVELOPE polyline at ``x``, or None outside its span.
+
+    The one reader for a profile that :func:`ground_surface` or
+    :func:`bedrock_surface` produced. It exists because those profiles are
+    no longer strictly increasing in x: a vertical face is carried as two
+    vertices sharing an abscissa, and interpolating the first segment that
+    happens to span ``x`` then answers with whichever branch the winding
+    put first. On verification problem 59 that is the difference between
+    the bench at the foot of a wall (y = 0) and its crest (y = 20).
+
+    At a step the answer is the value the envelope actually takes there:
+    the TOP of the face on an upper envelope, its BOTTOM on a lower one —
+    which is what ``upper`` selects, and what makes this the polyline
+    counterpart of :func:`upper_y_at` / :func:`lower_y_at`.
+
+    ``side`` asks for a one-sided limit instead: ``-1`` for the branch
+    arriving from the left, ``+1`` for the branch leaving to the right,
+    ``0`` (the default) for the value at ``x`` itself. A slice whose top
+    corner lands exactly on a step needs the branch its own body sits on —
+    the bench in front of a wall or the crest behind it — and asking for
+    "the ground at that abscissa" cannot tell them apart. Returns None when
+    the requested side has no branch, which is what happens at the two ends
+    of the profile.
+    """
+    pts = profile.vertices if hasattr(profile, "vertices") else profile
+    if len(pts) < 2:
+        return None
+    pick = max if upper else min
+    best: Optional[float] = None
+    for p1, p2 in zip(pts[:-1], pts[1:]):
+        lo, hi = (p1.x, p2.x) if p1.x <= p2.x else (p2.x, p1.x)
+        if x < lo or x > hi:
+            continue
+        if hi - lo < 1e-12:
+            if side:
+                continue      # a vertical step leans to neither side
+            y = pick(p1.y, p2.y)
+        else:
+            if side < 0 and lo >= x:
+                continue      # this branch only exists to the right
+            if side > 0 and hi <= x:
+                continue
+            t = (x - p1.x) / (p2.x - p1.x)
+            y = p1.y + t * (p2.y - p1.y)
+        best = y if best is None else pick(best, y)
+    return best
 
 
 def ground_surface(external) -> Polyline:

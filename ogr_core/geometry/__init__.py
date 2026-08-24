@@ -15,8 +15,8 @@ from .expand_shrink import (
     ExpandShrinkResult,
     expand_shrink_external,
 )
-from .ground import (bedrock_surface, ground_surface, lower_y_at, upper_y_at,
-                     zero_thickness_spans)
+from .ground import (bedrock_surface, envelope_y_at, ground_surface,
+                     lower_y_at, upper_y_at, zero_thickness_spans)
 from .primitives import Polyline, Vertex, segments_of
 from .tension_crack import TensionCrackProperties, WaterLevelMode
 from .regions import MaterialRegion, build_regions, region_at_point, regions_available
@@ -64,6 +64,7 @@ __all__ = [
     # v0.1.111 — and of the floor of the model, which Composite Surfaces
     # makes a slip surface follow instead of crossing.
     "bedrock_surface",
+    "envelope_y_at",
     "lower_y_at",
     "upper_y_at",
     "zero_thickness_spans",

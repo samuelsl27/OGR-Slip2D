@@ -21,19 +21,24 @@ from dataclasses import dataclass, field
 from typing import Optional, Protocol
 from uuid import uuid4
 
-from ogr_core.geometry import Polyline, Vertex
+from ogr_core.geometry import Polyline, Vertex, envelope_y_at
 
 
 # ----------------------------------------------------------------------
-def ground_y_at(ground: Polyline, x: float) -> Optional[float]:
-    """Elevation of a ground polyline at ``x``, or None outside its span."""
-    for q1, q2 in zip(ground.vertices[:-1], ground.vertices[1:]):
-        if (q1.x <= x <= q2.x) or (q2.x <= x <= q1.x):
-            if abs(q2.x - q1.x) < 1e-12:
-                return 0.5 * (q1.y + q2.y)
-            t = (x - q1.x) / (q2.x - q1.x)
-            return q1.y + t * (q2.y - q1.y)
-    return None
+def ground_y_at(ground: Polyline, x: float,
+                upper: bool = True) -> Optional[float]:
+    """Elevation of a ground polyline at ``x``, or None outside its span.
+
+    v0.1.114 — delegates to :func:`ogr_core.geometry.envelope_y_at`, because
+    a ground profile is no longer strictly increasing in x: a vertical face
+    is carried as two vertices sharing an abscissa. This function used to
+    return on the FIRST segment spanning ``x`` and to answer the MIDPOINT of
+    a vertical one — at the foot of the wall of verification problem 59 that
+    is 10 ft between the bench (0) and the crest (20), and neither of them
+    is the ground. Pass ``upper=False`` for a profile that came from
+    :func:`bedrock_surface`, where a step is worth its bottom end.
+    """
+    return envelope_y_at(ground, x, upper)
 
 
 # ----------------------------------------------------------------------
@@ -665,7 +670,9 @@ class CompositeSurface:
         return 1e-12 * max(self.radius, 1e-300)
 
     def _bedrock_y_at(self, x: float) -> Optional[float]:
-        return ground_y_at(self.bedrock, x)
+        # The FLOOR of the model, so a vertical step there is worth its
+        # bottom end and not its top.
+        return ground_y_at(self.bedrock, x, upper=False)
 
     def follows_bedrock_at(self, x: float) -> bool:
         """True where the FLOOR is the slip surface and not the arc."""

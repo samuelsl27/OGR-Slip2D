@@ -321,18 +321,24 @@ def _evaluator_for(search, opts: "OptimizeSettings"):
 
 
 def _ground_y(ground_vertices, x: float) -> Optional[float]:
-    """Ground elevation at ``x`` by linear interpolation, or None."""
+    """Ground elevation at ``x``, or None outside the profile.
+
+    v0.1.114 — through :func:`envelope_y_at`, because the profile steps at a
+    vertical face and this used to return on the FIRST segment spanning
+    ``x``. It already knew a vertical segment is worth its top end; what it
+    did not know is that the segment BEFORE the step also spans that
+    abscissa and comes first, so at the foot of a wall it answered with the
+    bench and never reached the step at all.
+    """
     vs = ground_vertices
     if not vs:
         return None
     if x < vs[0].x:
         return vs[0].y if abs(x - vs[0].x) < 1e-9 else None
-    for a, b in zip(vs, vs[1:]):
-        if a.x <= x <= b.x:
-            if b.x - a.x < 1e-12:
-                return max(a.y, b.y)
-            t = (x - a.x) / (b.x - a.x)
-            return a.y + t * (b.y - a.y)
+    from ogr_core.geometry import Polyline, envelope_y_at
+    y = envelope_y_at(Polyline(vertices=list(vs)), x)
+    if y is not None:
+        return y
     return vs[-1].y if abs(x - vs[-1].x) < 1e-9 else None
 
 
