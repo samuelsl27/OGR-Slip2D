@@ -43,15 +43,20 @@ What this file protects, in four parts:
    must equal ``axis_angle_rad()`` exactly, and ``bisector`` must sit
    strictly between tangent and parallel. The signature of the old bug is
    that the first differed from the axis by exactly π.
-3. **An external value.** Sheahan (2003), the Amherst test wall, which is
-   problem 47 of the reference's verification manual: Janbu simplified
-   and Janbu corrected = 0.890 on the published planar surface
-   (0,0) → (6.279, 6.100). Reproduced here to ±3 % with
-   ``tangent_to_slip``.
+3. **The Amherst wall itself**, Sheahan (2003) — problem 47 of the
+   reference's verification manual. The published number moved to
+   ``tests/test_support_projection_v1113.py`` when the projection was
+   corrected; what stays here is the identity that no orientation may
+   make that wall LESS safe, which is the assertion the old code failed.
 4. **The support type's declared defaults reach the instance**, and they
    move the number. ``SupportInstance`` used to be born TANGENT_TO_SLIP +
    ACTIVE regardless of its type, so a ``PileMicropile`` — which declares
-   PERPENDICULAR_TO_PILE and PASSIVE — silently analysed as neither.
+   PASSIVE — silently analysed as Active.
+
+v0.1.113 — the type defaults this file asserts changed with it. OGR had
+``SoilNail`` on BISECTOR + ACTIVE and ``PileMicropile`` on
+PERPENDICULAR_TO_PILE, and the reference documents PARALLEL + PASSIVE and
+TANGENTIAL. The expectations here are now that table, page by page.
 """
 from __future__ import annotations
 
@@ -268,19 +273,19 @@ def _amherst_fos(project, method_id, surface=None):
 
 
 class TestAmherstWall:
-    """Part 3 — the external number."""
+    """Part 3 — the external number.
+
+    v0.1.113 — the value itself moved to
+    ``tests/test_support_projection_v1113.py``, together with the
+    orientation the reference documents (parallel) and the projection
+    that makes it land. What stays here is the half this file is about:
+    that NO orientation may make the wall less safe. That is the
+    assertion the pre-v0.1.112 code failed; the published value never
+    discriminated it, because it was reached with the one orientation
+    that was already right.
+    """
 
     PUBLISHED = 0.890
-
-    def test_janbu_reproduces_the_published_factor_of_safety(self):
-        from ogr_core.support import ForceOrientation
-        p = _amherst(orientation=ForceOrientation.TANGENT_TO_SLIP)
-        for method_id in ("janbu_simplified", "janbu_corrected"):
-            f = _amherst_fos(p, method_id)
-            err = abs(f - self.PUBLISHED) / self.PUBLISHED
-            assert err < 0.03, (
-                f"{method_id}: {f:.4f} vs {self.PUBLISHED} "
-                f"({100 * (f - self.PUBLISHED) / self.PUBLISHED:+.2f} %)")
 
     def test_the_nails_are_what_moves_it(self):
         """Without them the same plane is well below 1, as the wall was —
@@ -309,14 +314,18 @@ class TestTheTypeDefaultsReachTheInstance:
         from ogr_core.geometry import Vertex
         from ogr_core.support import (ForceApplication, ForceOrientation,
                                       SupportInstance, support_registry)
+        # v0.1.113 — this table is the reference's own, page by page:
+        # "always PARALLEL" for the three anchored types, TANGENTIAL by
+        # default for a pile because it fails in shear on the slip plane,
+        # and a free choice for the two sheet/table types.
         expected = {
-            "soil_nail": ForceOrientation.BISECTOR,
+            "soil_nail": ForceOrientation.PARALLEL_TO_SUPPORT,
             "grouted_tieback": ForceOrientation.PARALLEL_TO_SUPPORT,
             "grouted_tieback_friction": ForceOrientation.PARALLEL_TO_SUPPORT,
             "end_anchored": ForceOrientation.PARALLEL_TO_SUPPORT,
             "geosynthetic": ForceOrientation.PARALLEL_TO_SUPPORT,
             "user_defined": ForceOrientation.PARALLEL_TO_SUPPORT,
-            "pile_micropile": ForceOrientation.PERPENDICULAR_TO_PILE,
+            "pile_micropile": ForceOrientation.TANGENT_TO_SLIP,
         }
         # Every registered type must be listed: a new plugin should make
         # this fail rather than slip through untested.
@@ -327,10 +336,19 @@ class TestTheTypeDefaultsReachTheInstance:
             assert s.orientation == orientation, type_id
             cls = support_registry()[type_id]
             assert s.force_application == cls.DEFAULT_APPLICATION, type_id
-        # The one that used to be wrong in both fields at once.
-        s = SupportInstance(type_id="pile_micropile",
-                            head=Vertex(0.0, 0.0), tail=Vertex(0.0, -5.0))
-        assert s.force_application == ForceApplication.PASSIVE
+        # The three the reference defaults to Passive, and that this
+        # project declared Active until v0.1.113: an untensioned nail, an
+        # untensioned sheet and a pile.
+        for type_id in ("soil_nail", "geosynthetic", "pile_micropile"):
+            s = SupportInstance(type_id=type_id,
+                                head=Vertex(0.0, 0.0), tail=Vertex(0.0, -5.0))
+            assert s.force_application == ForceApplication.PASSIVE, type_id
+        # And the two it defaults to Active, because a tieback is usually
+        # tensioned on installation.
+        for type_id in ("grouted_tieback", "end_anchored"):
+            s = SupportInstance(type_id=type_id,
+                                head=Vertex(0.0, 0.0), tail=Vertex(5.0, -1.0))
+            assert s.force_application == ForceApplication.ACTIVE, type_id
 
     def test_an_unknown_type_still_gets_a_usable_default(self):
         """A project carrying a support whose plugin is not loaded must
@@ -362,11 +380,11 @@ class TestTheTypeDefaultsReachTheInstance:
         raw = {"type_id": "pile_micropile", "head": [0.0, 0.0],
                "tail": [0.0, -5.0]}
         s = SupportInstance.from_dict(raw)
-        assert s.orientation == ForceOrientation.PERPENDICULAR_TO_PILE
+        assert s.orientation == ForceOrientation.TANGENT_TO_SLIP
         assert s.force_application == ForceApplication.PASSIVE
-        raw["orientation"] = "horizontal"
+        raw["orientation"] = "perpendicular_to_pile"
         got = SupportInstance.from_dict(raw).orientation
-        assert got == ForceOrientation.HORIZONTAL
+        assert got == ForceOrientation.PERPENDICULAR_TO_PILE
 
     def test_a_pattern_inherits_the_same_way(self):
         from ogr_core.support import (ForceApplication, ForceOrientation,
@@ -399,6 +417,8 @@ class TestTheTypeDefaultsReachTheInstance:
         inherited = _fos(BishopSimplified, _project(nail(None))).fos
         forced = _fos(BishopSimplified,
                       _project(nail(ForceOrientation.TANGENT_TO_SLIP))).fos
-        # ``soil_nail`` declares BISECTOR, so the two must differ.
-        assert nail(None).orientation == ForceOrientation.BISECTOR
+        # ``soil_nail`` declares PARALLEL_TO_SUPPORT, which is what the
+        # reference says a nail always applies its force along, so the
+        # inherited value must differ from the old hard-coded default.
+        assert nail(None).orientation == ForceOrientation.PARALLEL_TO_SUPPORT
         assert abs(inherited - forced) > 1e-4, (inherited, forced)

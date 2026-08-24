@@ -37,10 +37,30 @@ Implementation follows Slide's convention:
     (V_s) components. The slice into whose base x-range the intersection
     falls receives those components, plus a flag for Active vs Passive.
 
-  - Solver-side: an Active support REDUCES the driving moment / force
-    by the projection of the support force on the slip surface; a
-    Passive support INCREASES the resisting moment / force by the
-    same projection (divided by F in the iteration).
+  - Solver-side, for the RATIO methods (Ordinary/Fellenius, Bishop,
+    Janbu simplified and corrected), the reference writes one pair of
+    equations and OGR follows it literally:
+
+        Active   F = (R + T_N·tan φ') / (D − T_S)
+        Passive  F = (R + T_N·tan φ' + T_S) / D
+
+    ``T_S`` is the support force projected ON THE BASE of the slice it
+    crosses, and ``T_N`` the projection on the base normal. Both are
+    added OUTSIDE the per-slice ``m_α`` / ``n_α`` normalisation, which
+    is how the reference writes them.
+
+    The full-equilibrium methods (Spencer, GLE, Lowe-Karafiath) do not
+    use this pair at all: for them the support is an external force on
+    the slice, ``f_h`` / ``f_v``, and ``T_N·tan φ'`` falls out of the
+    equilibrium instead of being added by hand. That is also why Active
+    and Passive give the same number there.
+
+    NOT divided by F. Method B of Duncan & Wright (2005) factors the
+    reinforcement by F as well as the soil strength, and this module's
+    docstring claimed as much until v0.1.113 — but measured against the
+    reference it is wrong: on problem 85, which is the reference's own
+    Active/Passive case (Duncan & Wright fig. 6.34), dividing moves the
+    published passive value from +0.23 % to −5.91 %.
 
 v0.1.64 — ``resolve_support_terms`` below turns those raw effects into
 the two quantities the equilibrium equations actually need, T_S and T_N,
@@ -88,6 +108,20 @@ class SupportTerms:
     itself admits, partly arbitrary — it is a modelling choice about
     whether a reinforcement is pre-tensioned. What is NOT arbitrary is
     that both must be signed.
+
+    v0.1.113 — there used to be a third pair, ``h_active`` / ``h_passive``,
+    holding the HORIZONTAL projection, and Janbu was its only consumer.
+    The reference resolves a support into exactly two numbers, and writes
+    the same two equations for every ratio method:
+
+        Active   F = (R + T_N·tanφ') / (D − T_S)
+        Passive  F = (R + T_N·tanφ' + T_S) / D
+
+    ``T_S`` is the component ON THE BASE. Janbu taking the horizontal one
+    instead put a 15 % systematic error into every reinforced Janbu run —
+    see ``tests/test_support_projection_v1113.py`` for the six published
+    planes that measure it. The pair is gone rather than left unused: a
+    dead field is an invitation to route a method through it again.
     """
 
     t_active: list
@@ -97,13 +131,6 @@ class SupportTerms:
     f_v: list
     y_app: list
     present: bool = False
-    # Resisting HORIZONTAL component, for the methods whose equilibrium is
-    # a horizontal force balance rather than a moment balance. Janbu's
-    # driving side is Σ W·tan α + Σ kh·W, a sum of horizontal forces, so
-    # projecting the support onto the base tangent there would be mixing
-    # two different balances.
-    h_active: list = None
-    h_passive: list = None
 
     def total_active_t(self) -> float:
         return sum(self.t_active)
@@ -111,17 +138,11 @@ class SupportTerms:
     def total_passive_t(self) -> float:
         return sum(self.t_passive)
 
-    def total_active_h(self) -> float:
-        return sum(self.h_active or ())
-
-    def total_passive_h(self) -> float:
-        return sum(self.h_passive or ())
-
 
 # Shared "there is no reinforcement here" answer. Immutable in practice:
 # every consumer guards on ``present`` before indexing, and the empty
 # lists make ``total_*`` return 0.0 without a special case.
-_EMPTY_TERMS = SupportTerms([], [], [], [], [], [], False, [], [])
+_EMPTY_TERMS = SupportTerms([], [], [], [], [], [], False)
 
 
 def resolve_support_terms(
@@ -172,8 +193,6 @@ def resolve_support_terms(
 
     t_active = [0.0] * n
     t_passive = [0.0] * n
-    h_active = [0.0] * n
-    h_passive = [0.0] * n
     n_press = [0.0] * n
     f_h = [0.0] * n
     f_v = [0.0] * n
@@ -190,17 +209,10 @@ def resolve_support_terms(
         t_r = slide_sign * (eff.force_h * ca + eff.force_v * sa)
         # Pressing normal: −F·n  with  n = (−sin, cos)
         t_n = eff.force_h * sa - eff.force_v * ca
-        # Resisting HORIZONTAL component. The sliding direction has x
-        # component −slide_sign (the sense in which the water thrust is
-        # already resolved by every force method), so a force resists by
-        # +slide_sign·F_h.
-        h_r = slide_sign * eff.force_h
         if eff.is_active:
             t_active[i] += t_r
-            h_active[i] += h_r
         else:
             t_passive[i] += t_r
-            h_passive[i] += h_r
         n_press[i] += t_n
         f_h[i] += eff.force_h
         f_v[i] += eff.force_v
@@ -216,8 +228,7 @@ def resolve_support_terms(
             # irrelevant, but the base is the honest place to report.
             y_app[i] = 0.5 * (s_list[i].base_y_left + s_list[i].base_y_right)
 
-    return SupportTerms(t_active, t_passive, n_press, f_h, f_v, y_app, True,
-                        h_active, h_passive)
+    return SupportTerms(t_active, t_passive, n_press, f_h, f_v, y_app, True)
 
 
 @dataclass

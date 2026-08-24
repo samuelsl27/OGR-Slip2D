@@ -81,9 +81,23 @@ class JanbuSimplified(LEMMethod):
         )
         slide_sign = 1.0 if driving_raw >= 0 else -1.0
 
-        # v0.1.64 — supports. Janbu balances HORIZONTAL forces, so the
-        # relevant projection is the horizontal one, not the tangential
-        # one a moment method uses.
+        # v0.1.113 — supports enter through T_S, the projection ON THE
+        # BASE, exactly as in Bishop and Ordinary and exactly as the
+        # reference writes the two ratio-method equations. From v0.1.64
+        # to v0.1.112 Janbu used the HORIZONTAL projection instead, on
+        # the argument that "Janbu balances horizontal forces". That
+        # argument does not survive the arithmetic: with φ' = 0 a slice
+        # term is c'·b/cos²α = c'·l/cos α and the driving term is
+        # W·tan α = W·sin α/cos α, so both sides are SHEAR quantities
+        # carrying a common 1/cos α. A horizontal force H fits that
+        # weighting because its driving shear H·cos α divided by cos α
+        # gives H back — which is why the seismic and water terms below
+        # are summed raw — but a support at an arbitrary angle does not.
+        #
+        # Measured on the six published planes of the Clouterre wall
+        # (Sheahan 2003): mean error 14.96 % with the horizontal
+        # projection, 1.76 % with T_S, 6.90 % with the strict per-slice
+        # weighting T_S/cos α. See tests/test_support_projection_v1113.py.
         from ..support_integration import resolve_support_terms
         sup = resolve_support_terms(project, surface, slices, slide_sign)
         s_list = slices.slices if hasattr(slices, "slices") else slices
@@ -101,9 +115,9 @@ class JanbuSimplified(LEMMethod):
             denominator += -slide_sign * f.h_water
 
         driving_no_support = denominator
-        denominator -= sup.total_active_h()
+        denominator -= sup.total_active_t()
         active_ratio = (
-            sup.total_active_h() / driving_no_support
+            sup.total_active_t() / driving_no_support
             if sup.present and abs(driving_no_support) > 1e-9 else 0.0
         )
         if sup.present and denominator <= 0.0:
@@ -181,7 +195,7 @@ class JanbuSimplified(LEMMethod):
                 if sup.present and sup.n_press[i_s]:
                     numerator += sup.n_press[i_s] * tan_phi
 
-            numerator += sup.total_passive_h()
+            numerator += sup.total_passive_t()
 
             # Same backstop as Bishop's, and for the same reason: the next
             # pass computes tan(phi)/F inside n_alpha, so a zero F raises

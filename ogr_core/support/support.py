@@ -551,8 +551,17 @@ class SoilNail(SupportType):
         "Fully-bonded soil nail (no free length). Computes 3 failure "
         "modes along the full length: tensile, pullout, stripping."
     )
-    DEFAULT_ORIENTATION = ForceOrientation.BISECTOR
-    DEFAULT_APPLICATION = ForceApplication.ACTIVE
+    # v0.1.113 — both corrected. The reference's own page for this
+    # support type states that the applied force is ALWAYS parallel to
+    # the nail, and that the default force application is Passive
+    # "since there is normally no initial loading or tensioning of a
+    # soil nail". This project had BISECTOR + ACTIVE, which is what the
+    # user got out of the box. It is an interface convention, not a
+    # published formula, so it is cited as such and not attributed to an
+    # author. Confirmed independently by the verification problems that
+    # use soil nails: both declare Passive in their own tables.
+    DEFAULT_ORIENTATION = ForceOrientation.PARALLEL_TO_SUPPORT
+    DEFAULT_APPLICATION = ForceApplication.PASSIVE
     SUPPORTS_SHEAR: ClassVar[bool] = True
     PARAMETERS: ClassVar[dict] = {
         "tensile_capacity": (100.0, "kN",
@@ -646,7 +655,13 @@ class PileMicropile(SupportType):
         "The applied force is constant along the pile = pile_shear "
         "÷ spacing."
     )
-    DEFAULT_ORIENTATION = ForceOrientation.PERPENDICULAR_TO_PILE
+    # v0.1.113 — was PERPENDICULAR_TO_PILE. The reference's default is
+    # TANGENTIAL to the slip surface, and it gives the mechanical reason:
+    # a pile fails in shear THROUGH its cross-section on the slip plane,
+    # so the force it mobilises acts in that plane. Perpendicular-to-pile
+    # exists as an option for a force independent of the surface, but it
+    # is not the default.
+    DEFAULT_ORIENTATION = ForceOrientation.TANGENT_TO_SLIP
     DEFAULT_APPLICATION = ForceApplication.PASSIVE
     PARAMETERS: ClassVar[dict] = {
         "pile_shear_strength": (100.0, "kN",
@@ -721,8 +736,12 @@ class Geosynthetic(SupportType):
         "and pullout (interface) failure modes. Pullout acts on BOTH "
         "surfaces of the sheet."
     )
+    # v0.1.113 — application was ACTIVE. A sheet is normally laid
+    # untensioned, so the reference defaults it to Passive; the
+    # orientation is genuinely the user's choice for this type, and
+    # parallel is the one that matches the sheet's own axis.
     DEFAULT_ORIENTATION = ForceOrientation.PARALLEL_TO_SUPPORT
-    DEFAULT_APPLICATION = ForceApplication.ACTIVE
+    DEFAULT_APPLICATION = ForceApplication.PASSIVE
     PARAMETERS: ClassVar[dict] = {
         "tensile_capacity": (50.0, "kN/m",
             "Tensile capacity of the sheet per metre of slope width"),
