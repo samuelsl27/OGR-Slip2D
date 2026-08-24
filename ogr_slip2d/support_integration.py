@@ -467,6 +467,55 @@ def _support_force_angle(
     return axis_angle
 
 
+def _bond_profiles(project: "Project") -> dict:
+    """Interface shear strength along every support, keyed by support id.
+
+    v0.1.116 — the two stress-dependent pullout laws need σ'_n sampled
+    along the reinforcement, and that profile depends ONLY on the project:
+    the layers above, the water, the external loads. Not on the trial
+    surface. So it is built once per analysis rather than once per
+    surface, which is the difference between a few milliseconds and a few
+    minutes — 50 column weights per support, times fifteen sheets, times
+    the thousands of surfaces a grid search evaluates, times nine methods.
+
+    The cache is trusted inside a ``regions_frozen()`` block and rebuilt
+    outside one. That is the same contract the regions cache runs on, and
+    it is what makes a stale profile impossible: an analysis cannot modify
+    the project it is analysing (design coefficients are applied to a
+    COPY, which is a different Project with its own caches), and the entry
+    to the freeze clears whatever was there. Outside a freeze the only
+    caller is a canvas tooltip, with a handful of supports.
+    """
+    cached = getattr(project, "_support_bond_cache", None)
+    if cached is not None and getattr(project, "_regions_freeze_depth", 0):
+        return cached
+
+    from ogr_core.support import build_bond_profile, support_registry as _reg
+
+    registry = _reg()
+    type_props = {st.TYPE_ID: st
+                  for st in (getattr(project, "support_types", []) or [])}
+    profiles: dict = {}
+    for support in (getattr(project, "supports", None) or ()):
+        stype = type_props.get(support.type_id)
+        if stype is None:
+            cls = registry.get(support.type_id)
+            if cls is None:
+                continue
+            stype = cls()
+        if not getattr(stype, "NEEDS_BOND_PROFILE", False):
+            continue
+        try:
+            profiles[support.id] = build_bond_profile(project, support, stype)
+        except Exception:  # noqa: BLE001
+            # A profile that cannot be built leaves ``force_at`` to fall
+            # back on its zero-stress envelope, which is conservative:
+            # never MORE reinforcement than the stress state would give.
+            continue
+    project._support_bond_cache = profiles
+    return profiles
+
+
 def compute_support_effects(
     project: "Project",
     surface: "SurfaceProtocol",
@@ -495,6 +544,7 @@ def compute_support_effects(
     slip_xy = _slip_polyline(surface, slices)
     if len(slip_xy) < 2:
         return []
+    bond_profiles = _bond_profiles(project)
     registry = support_registry()
     s_list = slices.slices if hasattr(slices, "slices") else slices
     effects: list[SupportEffect] = []
@@ -527,7 +577,8 @@ def compute_support_effects(
             stype = cls()
 
         L_total = support.length()
-        F = stype.force_at(d_from_head, L_total)
+        F = stype.force_at(d_from_head, L_total,
+                           bond_profiles.get(support.id))
         if F <= 0:
             continue
 

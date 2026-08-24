@@ -98,6 +98,12 @@ class Project:
         # non-zero the two caches above are trusted without revalidating
         # their signature. See :meth:`regions_frozen`.
         self._regions_freeze_depth: int = 0
+        # v0.1.116 — interface shear strength sampled along each support,
+        # keyed by support id. It depends on the model and not on the trial
+        # surface, so it is built once per analysis; cleared on entering a
+        # freeze so it cannot outlive an edit. See
+        # ``ogr_slip2d.support_integration._bond_profiles``.
+        self._support_bond_cache: Optional[dict] = None
 
         # v0.1.6 — Region assignments (Slide-style material painting).
         # Each entry: {"x": float, "y": float, "material_id": str}.
@@ -143,6 +149,7 @@ class Project:
             self._regions_cache_signature = None
             self._bbox_cache = None
             self._bbox_cache_signature = None
+            self._support_bond_cache = None
         for cb in self._listeners:
             try:
                 cb(event)
@@ -462,6 +469,13 @@ class Project:
             # block goes on to trust is current.
             self.resolve_regions()
             self.bounding_box()
+            # v0.1.116 — the support bond profiles have no cheap signature
+            # of their own (they depend on the boundaries, the materials,
+            # the water and the loads all at once), so they are dropped
+            # here instead and rebuilt on first use inside the block. A
+            # profile therefore cannot survive an edit made between two
+            # analyses.
+            self._support_bond_cache = None
         self._regions_freeze_depth += 1
         try:
             yield self
@@ -474,6 +488,7 @@ class Project:
         self._regions_cache_signature = None
         self._bbox_cache = None
         self._bbox_cache_signature = None
+        self._support_bond_cache = None
 
     def material_at(self, x: float, y: float):
         """Return the resolved ``Material`` at (x, y), or None."""

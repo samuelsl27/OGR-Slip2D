@@ -47,8 +47,58 @@ import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import ClassVar, Optional
+from typing import TYPE_CHECKING, ClassVar, Optional
 from uuid import uuid4
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from .bond import BondProfile
+
+
+# ======================================================================
+# Interface shear-strength envelopes
+# ======================================================================
+def interface_shear(
+    sigma_n_eff: float, adhesion: float, friction_angle_deg: float,
+    model: str = "linear",
+) -> float:
+    """Shear strength of a soil/reinforcement interface, kPa.
+
+    Two envelopes, and the parameters mean DIFFERENT things in each —
+    which is the single most common way to misuse this input:
+
+    ``linear``
+        Mohr-Coulomb on the interface, the classical bond formulation for
+        geotextiles in Jewell (1996)::
+
+            tau = a + sigma'_n · tan(delta)
+
+        ``a`` is the strength at zero normal stress and ``delta`` the
+        interface friction angle.
+
+    ``hyperbolic``
+        The envelope fitted to geosynthetic interface tests by
+        Esterhuizen, Filz and Duncan (2001)::
+
+            tau = a_inf · sigma'_n · tan(phi_0)
+                  / (a_inf + sigma'_n · tan(phi_0))
+
+        Here ``a_inf`` is the LIMITING strength as sigma_n → ∞, not the
+        strength at zero, and ``phi_0`` is the tangent friction angle at
+        sigma_n = 0. The curve starts with slope tan(phi_0) and saturates
+        at a_inf, so the same pair of numbers describes a completely
+        different envelope from the linear one.
+
+    With pore pressure in the analysis the normal stress is effective, so
+    both parameters are effective-stress parameters.
+    """
+    s = max(0.0, sigma_n_eff)
+    t = math.tan(math.radians(friction_angle_deg))
+    if model == "hyperbolic":
+        denom = adhesion + s * t
+        if denom <= 0.0:
+            return 0.0
+        return max(0.0, adhesion * s * t / denom)
+    return max(0.0, adhesion + s * t)
 
 
 # ======================================================================
@@ -104,16 +154,44 @@ class SupportType(ABC):
     PARAMETER_TABS: ClassVar[dict] = {}
     # Whether this type supports shear capacity (extra perpendicular force)
     SUPPORTS_SHEAR: ClassVar[bool] = False
+    # v0.1.116 — whether this type's capacity depends on the stress state
+    # along the reinforcement, and therefore needs a ``BondProfile``.
+    # False for the four types whose diagram is a constant, a table or a
+    # bond strength given directly per metre; building a 50-sample profile
+    # for those would cost a search real time for a number nobody reads.
+    NEEDS_BOND_PROFILE: ClassVar[bool] = False
 
     @abstractmethod
     def force_at(
         self, distance_from_head: float, total_length: float,
+        bond: "BondProfile | None" = None,
     ) -> float:
         """Available support force at the slip intersection, kN/m of slope.
 
         Returns the MINIMUM of all applicable failure-mode capacities
         at the given distance from the head end.
+
+        ``bond`` carries the interface shear strength sampled along the
+        support (v0.1.116). Only the two stress-dependent types read it;
+        passing ``None`` evaluates their law at zero effective stress,
+        which is the honest answer when no project is available to supply
+        one — a tooltip drawn before the model has geometry, say — and
+        which reproduces the pre-v0.1.116 numbers for an interface
+        described by adhesion alone.
         """
+
+    def interface_tau(
+        self, sigma_v_eff: float, **ctx,
+    ) -> float:
+        """Interface shear strength at one point, kPa.
+
+        Overridden by the types whose pullout is stress-dependent. The
+        keyword context carries ``project``, ``x``, ``y``,
+        ``pore_pressure``, ``depth`` and ``axis_angle_rad``; a law that
+        needs none of them ignores them all, which is why they arrive as
+        keywords rather than as a positional record.
+        """
+        return 0.0
 
     def shear_at(
         self, distance_from_head: float, total_length: float,
@@ -174,9 +252,10 @@ class SupportType(ABC):
 
     def axial_capacity(
         self, length_along: float, total_length: float,
+        bond: "BondProfile | None" = None,
     ) -> float:
         """Back-compat alias used by older v0.1.13 callers."""
-        return self.force_at(length_along, total_length)
+        return self.force_at(length_along, total_length, bond)
 
 
 _SUPPORT_REGISTRY: dict[str, type[SupportType]] = {}
@@ -252,7 +331,8 @@ class EndAnchored(SupportType):
     anchor_capacity: float = 200.0       # kN per anchor
     out_of_plane_spacing: float = 1.5    # m
 
-    def force_at(self, distance_from_head: float, total_length: float) -> float:
+    def force_at(self, distance_from_head: float, total_length: float,
+                 bond=None) -> float:
         if self.out_of_plane_spacing <= 0:
             return 0.0
         # Constant force, regardless of slip-surface position
@@ -344,7 +424,8 @@ class GroutedTieback(SupportType):
     out_of_plane_spacing: float = 2.0
     shear_capacity: float = 0.0
 
-    def force_at(self, distance_from_head: float, total_length: float) -> float:
+    def force_at(self, distance_from_head: float, total_length: float,
+                 bond=None) -> float:
         s = self.out_of_plane_spacing
         if s <= 0 or total_length <= 0:
             return 0.0
@@ -408,22 +489,30 @@ class GroutedTieback(SupportType):
 class GroutedTiebackFriction(SupportType):
     """Grouted Tieback whose pullout depends on σ' via Mohr-Coulomb.
 
-    τ_bond = adhesion + σ'_n · tan(φ_bond)
+    The grout annulus is a cylinder of diameter ``D_grout``, so the bond
+    surface per metre of bond length is its outer circumference, π·D. The
+    three failure modes are then
 
-    The pullout force across the bond zone is the integral of τ_bond
-    over the bond surface area:
+        pullout     F₁ = π·D · ∫_{L_o} τ ds / S
+        tensile     F₂ = T / S
+        stripping   F₃ = [P + π·D · ∫_{L_i} τ ds] / S
 
-        F_pullout = ∫_bond τ_bond · (π · D_grout) dL  / spacing
+    with ``L_o`` the bonded length BEYOND the slip surface, ``L_i`` the
+    bonded length between the head and the slip surface, and the applied
+    force the minimum of the three. τ is the interface envelope of
+    :func:`interface_shear` — Jewell (1996) for the linear form,
+    Esterhuizen, Filz and Duncan (2001) for the hyperbolic one — and the
+    normal stress on the annulus is taken uniform around it and equal to
+    the effective VERTICAL stress at that depth.
 
-    Because σ' depends on depth, the integral requires knowledge of
-    the average σ' along the bond. As a first approximation we use
-    the user-provided ``adhesion`` as the average bond shear stress
-    (i.e. the φ_bond contribution is folded into adhesion). For
-    depth-dependent behaviour, future versions can integrate σ' from
-    the slope geometry.
-
-    Bond surface area per metre of bond:
-        A_bond/L = π · D_grout
+    v0.1.116 — the integral is real. Until this version the docstring
+    promised ``τ = adhesion + σ'_n·tan φ`` and the code computed
+    ``tau_bond = self.adhesion``: ``friction_angle_bond`` was declared,
+    editable and serialised, and read by nobody. The consequence was not a
+    small error but a BINARY answer — no adhesion meant no pullout
+    resistance at all at any friction angle, and any adhesion at all meant
+    the tendon's whole tensile capacity. See ``bond.py`` for where σ'_n
+    comes from and why it cannot come from the slice context.
     """
     TYPE_ID: ClassVar[str] = "grouted_tieback_friction"
     DISPLAY_NAME: ClassVar[str] = "Grouted Tieback with Friction"
@@ -436,6 +525,7 @@ class GroutedTiebackFriction(SupportType):
     DEFAULT_ORIENTATION = ForceOrientation.PARALLEL_TO_SUPPORT
     DEFAULT_APPLICATION = ForceApplication.ACTIVE
     SUPPORTS_SHEAR: ClassVar[bool] = True
+    NEEDS_BOND_PROFILE: ClassVar[bool] = True
     PARAMETERS: ClassVar[dict] = {
         "tensile_capacity": (600.0, "kN",
             "Ultimate tensile capacity of the tendon"),
@@ -446,10 +536,17 @@ class GroutedTiebackFriction(SupportType):
         "grout_diameter": (0.15, "m",
             "Outer diameter of the grout annulus (used for the "
             "bond surface area)"),
+        "shear_strength_model": ("linear", "-",
+            "Interface envelope: linear (Mohr-Coulomb) | hyperbolic. "
+            "The two give DIFFERENT meanings to adhesion and friction "
+            "angle — see the help for each."),
         "adhesion": (60.0, "kPa",
-            "Adhesion (cohesion) at the grout/soil interface"),
+            "Adhesion at the grout/soil interface. Linear model: the "
+            "strength at zero normal stress. Hyperbolic model: the "
+            "LIMITING strength at high normal stress."),
         "friction_angle_bond": (25.0, "deg",
-            "Friction angle at the grout/soil interface"),
+            "Friction angle at the grout/soil interface. Hyperbolic "
+            "model: the tangent angle at zero normal stress."),
         "out_of_plane_spacing": (2.0, "m",
             "Out-of-plane spacing of tiebacks"),
         "shear_capacity": (0.0, "kN", "Optional shear capacity"),
@@ -457,7 +554,8 @@ class GroutedTiebackFriction(SupportType):
     PARAMETER_TABS: ClassVar[dict] = {
         "Tensile / Plate": ["tensile_capacity", "plate_capacity",
                             "shear_capacity"],
-        "Pullout (Friction)": ["adhesion", "friction_angle_bond",
+        "Pullout (Friction)": ["shear_strength_model", "adhesion",
+                               "friction_angle_bond",
                                "grout_diameter", "bond_length_percent"],
         "Geometry": ["out_of_plane_spacing"],
     }
@@ -466,12 +564,20 @@ class GroutedTiebackFriction(SupportType):
     plate_capacity: float = 300.0
     bond_length_percent: float = 30.0
     grout_diameter: float = 0.15
+    shear_strength_model: str = "linear"
     adhesion: float = 60.0
     friction_angle_bond: float = 25.0
     out_of_plane_spacing: float = 2.0
     shear_capacity: float = 0.0
 
-    def force_at(self, distance_from_head: float, total_length: float) -> float:
+    def interface_tau(self, sigma_v_eff: float, **ctx) -> float:
+        """Grout/soil interface strength at one point, kPa."""
+        return interface_shear(sigma_v_eff, self.adhesion,
+                               self.friction_angle_bond,
+                               self.shear_strength_model)
+
+    def force_at(self, distance_from_head: float, total_length: float,
+                 bond=None) -> float:
         s = self.out_of_plane_spacing
         if s <= 0 or total_length <= 0:
             return 0.0
@@ -479,23 +585,30 @@ class GroutedTiebackFriction(SupportType):
         free_len = total_length - bond_len
         x = max(0.0, min(distance_from_head, total_length))
 
-        if x <= free_len:
-            L_o = bond_len
-            L_i = 0.0
-        else:
-            L_o = max(0.0, total_length - x)
-            L_i = x - free_len
+        # The bond runs from ``free_len`` to the tail. ``L_i`` is the
+        # bonded length on the head side of the slip surface and ``L_o``
+        # the bonded length beyond it, so a surface cutting the free
+        # length leaves the whole bond resisting pullout and none of it
+        # resisting stripping.
+        lo_start = max(x, free_len)
+        li_end = max(x, free_len)
 
-        # Bond perimeter
         perim = math.pi * self.grout_diameter
-        # Effective shear stress on bond — using adhesion as
-        # depth-averaged σ-contribution (first-order). The friction
-        # angle contributes via the user-tuned adhesion.
-        tau_bond = self.adhesion  # kPa, → kN/m²
-        f_pullout = (tau_bond * perim * L_o) / s
+        if bond is None:
+            # No project to measure σ'_n from: the envelope at zero
+            # effective stress. For an interface described by adhesion
+            # alone this is the exact answer, which is why it reproduces
+            # every pre-v0.1.116 number.
+            tau0 = self.interface_tau(0.0)
+            bond_o = tau0 * max(0.0, total_length - lo_start)
+            bond_i = tau0 * max(0.0, li_end - free_len)
+        else:
+            bond_o = bond.integral(lo_start, total_length)
+            bond_i = bond.integral(free_len, li_end)
+
+        f_pullout = perim * bond_o / s
         f_tensile = self.tensile_capacity / s
-        f_stripping = (self.plate_capacity
-                       + tau_bond * perim * L_i) / s
+        f_stripping = (self.plate_capacity + perim * bond_i) / s
         return max(0.0, min(f_pullout, f_tensile, f_stripping))
 
     def shear_at(self, distance_from_head: float, total_length: float) -> float:
@@ -590,7 +703,8 @@ class SoilNail(SupportType):
     out_of_plane_spacing: float = 1.5
     shear_capacity: float = 0.0
 
-    def force_at(self, distance_from_head: float, total_length: float) -> float:
+    def force_at(self, distance_from_head: float, total_length: float,
+                 bond=None) -> float:
         s = self.out_of_plane_spacing
         if s <= 0 or total_length <= 0:
             return 0.0
@@ -673,7 +787,8 @@ class PileMicropile(SupportType):
     pile_shear_strength: float = 100.0
     out_of_plane_spacing: float = 2.0
 
-    def force_at(self, distance_from_head: float, total_length: float) -> float:
+    def force_at(self, distance_from_head: float, total_length: float,
+                 bond=None) -> float:
         s = self.out_of_plane_spacing
         if s <= 0:
             return 0.0
@@ -711,23 +826,56 @@ class PileMicropile(SupportType):
 class Geosynthetic(SupportType):
     """Geosynthetic — sheet reinforcement (geotextile, geogrid).
 
-    Slide: "The Pullout Strength options for the Grouted Tieback with
-    Friction support type are the same as described for the
-    Geosynthetic support type." For a geosynthetic, pullout occurs
-    along BOTH surfaces of the sheet:
+    A sheet buried in soil has TWO interfaces with it, so pullout
+    mobilises both faces. With ``A`` the strip coverage in per cent —
+    ``a/(a+b)·100`` for strips of width ``a`` laid at gaps ``b``, so 100 %
+    for a continuous sheet — the three failure modes per unit width of
+    slope are
 
-        F_pullout(x) = 2 · τ_int · L_emb(x) / spacing
+        pullout     F₁ = 2·(A/100) · ∫_{L_o} τ ds
+        tensile     F₂ = T·A/100
+        stripping   F₃ = (A/100) · [C + 2·∫_{L_i} τ ds]
 
-    where τ_int = c_int + σ'_v · tan(φ_int), and L_emb(x) is the
-    shorter side (towards head or tail) — whichever is being pulled.
-    spacing = 1.0 m for geosynthetics (force per unit width of slope).
+    ``L_i`` runs from the head (the slope face) to the slip surface and
+    ``L_o`` from the slip surface to the embedded tail; ``C`` is the
+    connection strength at the face. The applied force is the minimum of
+    the modes that ``anchorage`` allows: an embedded end that is anchored
+    cannot be pulled out, so F₁ drops out.
 
-    Alternative input modes (per Slide):
-        - Adhesion & Friction Angle (Mohr-Coulomb)
-        - Coefficient of Interaction (Ci) × soil strength
-        - Friction Factor (F* α)
+    The factor of two is not a modelling choice here. FHWA-NHI-10-024
+    (Berg, Christopher and Samtani 2009), Eq. 3-2, writes the pullout
+    resistance as ``P_r = F*·α·σ'_v·L_e·C`` with the effective unit
+    perimeter ``C = 2`` for sheets, and with ``L_e`` measured in the
+    resisting zone BEHIND the failure surface.
 
-    We expose all three via ``pullout_mode``.
+    Three ways to describe τ, all published:
+
+    ``mohr_coulomb``
+        The interface envelope directly — ``τ = a + σ'_n·tan δ`` (linear)
+        or the hyperbolic form of Esterhuizen, Filz and Duncan (2001),
+        selected by ``shear_strength_model``. See :func:`interface_shear`.
+
+    ``coefficient``
+        A fraction of the SURROUNDING SOIL's own strength,
+        ``τ = C_i · τ_soil(σ'_n)`` — the bond coefficient of Jewell
+        (1996). C_i = 0 takes no strength from the soil and C_i = 1 the
+        whole of it. Evaluating τ_soil with the material's own strength
+        model rather than with a cohesion and a friction angle read off it
+        is what makes this work for a material that is not Mohr-Coulomb.
+
+    ``friction_factor``
+        ``τ = F*·σ'_n``, the pullout friction factor of the FHWA equation
+        above. The scale-effect correction α (0.6–1.0 for geosynthetics)
+        is not a separate input: multiply it into F*, as that guidance
+        itself directs. F* may be constant or vary linearly with depth.
+
+    v0.1.116 — all three laws are real. Until this version the first
+    returned ``adhesion`` alone (so ``friction_angle_interface`` moved
+    nothing) and the other two returned ``coefficient · 10.0`` and
+    ``friction_factor · 10.0`` — literal placeholders, so C_i and F*
+    moved nothing either. The pullout length was also the SHORTER of the
+    two sides rather than the one behind the surface, which happens to
+    agree with min(F₁, F₃) only while τ is uniform and C = 0.
     """
     TYPE_ID: ClassVar[str] = "geosynthetic"
     DISPLAY_NAME: ClassVar[str] = "Geosynthetic"
@@ -742,73 +890,159 @@ class Geosynthetic(SupportType):
     # parallel is the one that matches the sheet's own axis.
     DEFAULT_ORIENTATION = ForceOrientation.PARALLEL_TO_SUPPORT
     DEFAULT_APPLICATION = ForceApplication.PASSIVE
+    NEEDS_BOND_PROFILE: ClassVar[bool] = True
     PARAMETERS: ClassVar[dict] = {
         "tensile_capacity": (50.0, "kN/m",
-            "Tensile capacity of the sheet per metre of slope width"),
+            "Tensile capacity of the sheet per metre of strip width"),
+        "strip_coverage": (100.0, "%",
+            "Out-of-plane coverage A = a/(a+b)·100 for strips of width "
+            "a laid at gaps b. 100 % for a continuous sheet."),
+        "connection_strength": (0.0, "kN/m",
+            "Force the connection at the slope face can carry. It is "
+            "the force at the head of the diagram; set it to the "
+            "tensile capacity to make stripping impossible."),
+        "anchorage": ("none", "-",
+            "Which ends are anchored: none | slope_face | embedded_end "
+            "| both_ends. Pullout is only possible while the embedded "
+            "end is free."),
         "pullout_mode": ("mohr_coulomb", "-",
             "Pullout strength model: mohr_coulomb | coefficient | "
             "friction_factor"),
+        "shear_strength_model": ("linear", "-",
+            "Interface envelope in Mohr-Coulomb mode: linear | "
+            "hyperbolic. The two give DIFFERENT meanings to adhesion "
+            "and friction angle."),
         "adhesion": (0.0, "kPa",
-            "Interface adhesion (only used in Mohr-Coulomb mode)"),
+            "Interface adhesion (Mohr-Coulomb mode). Linear: strength "
+            "at zero normal stress. Hyperbolic: the LIMITING strength "
+            "at high normal stress."),
         "friction_angle_interface": (25.0, "deg",
-            "Interface friction angle (Mohr-Coulomb mode)"),
+            "Interface friction angle (Mohr-Coulomb mode). Hyperbolic: "
+            "the tangent angle at zero normal stress."),
         "coefficient_of_interaction": (0.8, "-",
-            "Ci: τ_int = Ci · τ_soil (used in coefficient mode)"),
+            "Ci: τ_int = Ci · τ_soil, the fraction of the surrounding "
+            "soil's own strength the interface develops"),
         "friction_factor": (0.6, "-",
-            "F·α: τ_int = (F·α) · σ'_v (used in friction-factor mode)"),
+            "F*: τ_int = F* · σ'_v. Multiply the scale-effect factor α "
+            "into it. In function mode, the value at the reference "
+            "elevation."),
+        "friction_factor_mode": ("constant", "-",
+            "F* constant, or a function of depth: constant | function"),
         "reference_elevation": (0.0, "m",
-            "Reference elevation for computing σ'_v (vertical stress)"),
+            "Elevation at which F* takes its entered value "
+            "(function mode)"),
+        "reference_depth": (0.0, "m",
+            "Depth below the reference elevation at which F* takes its "
+            "second value (function mode)"),
+        "friction_factor_at_depth": (0.6, "-",
+            "F* at the reference depth (function mode)"),
     }
     PARAMETER_TABS: ClassVar[dict] = {
-        "Tensile": ["tensile_capacity"],
-        "Pullout & Stripping": ["pullout_mode", "adhesion",
+        "Tensile": ["tensile_capacity", "strip_coverage",
+                    "connection_strength", "anchorage"],
+        "Pullout & Stripping": ["pullout_mode", "shear_strength_model",
+                                "adhesion",
                                 "friction_angle_interface",
                                 "coefficient_of_interaction",
-                                "friction_factor",
-                                "reference_elevation"],
+                                "friction_factor"],
+        "F* vs Depth": ["friction_factor_mode", "reference_elevation",
+                        "reference_depth", "friction_factor_at_depth"],
     }
 
     tensile_capacity: float = 50.0
+    strip_coverage: float = 100.0
+    connection_strength: float = 0.0
+    anchorage: str = "none"
     pullout_mode: str = "mohr_coulomb"
+    shear_strength_model: str = "linear"
     adhesion: float = 0.0
     friction_angle_interface: float = 25.0
     coefficient_of_interaction: float = 0.8
     friction_factor: float = 0.6
+    friction_factor_mode: str = "constant"
     reference_elevation: float = 0.0
+    reference_depth: float = 0.0
+    friction_factor_at_depth: float = 0.6
 
-    def force_at(self, distance_from_head: float, total_length: float) -> float:
+    def _friction_factor_at(self, y: float, depth: float) -> float:
+        """F* at one point, constant or varying linearly with depth.
+
+        In function mode F* is interpolated between its entered value at
+        ``reference_elevation`` and ``friction_factor_at_depth`` at
+        ``reference_depth`` BELOW that elevation, and held constant
+        outside that range — extrapolating a fitted straight line past
+        its data would eventually turn F* negative.
+
+        v0.1.116 — this is what ``reference_elevation`` is for. It was
+        declared, editable and serialised since v0.1.14 and read by
+        nobody: a second inert control sitting next to the one this
+        version came to fix.
+        """
+        if self.friction_factor_mode != "function":
+            return self.friction_factor
+        span = self.reference_depth
+        if span <= 0.0:
+            return self.friction_factor
+        # Depth below the reference elevation, not below the ground: the
+        # datum is the one the user entered.
+        d = self.reference_elevation - y
+        t = max(0.0, min(1.0, d / span))
+        return (self.friction_factor
+                + t * (self.friction_factor_at_depth - self.friction_factor))
+
+    def interface_tau(self, sigma_v_eff: float, **ctx) -> float:
+        """Sheet/soil interface strength at one point, kPa."""
+        mode = self.pullout_mode
+        if mode == "coefficient":
+            project = ctx.get("project")
+            if project is None:
+                # The soil's strength is the whole law here, so without a
+                # project there is nothing to take a fraction OF. Zero is
+                # the honest answer; inventing one is what v0.1.115 did.
+                return 0.0
+            from .bond import soil_shear_strength_at
+            tau_soil = soil_shear_strength_at(
+                project, ctx.get("x", 0.0), ctx.get("y", 0.0), sigma_v_eff,
+                depth=ctx.get("depth", 0.0),
+                pore_pressure=ctx.get("pore_pressure", 0.0),
+                axis_angle_rad=ctx.get("axis_angle_rad", 0.0),
+            )
+            return max(0.0, self.coefficient_of_interaction * tau_soil)
+        if mode == "friction_factor":
+            f = self._friction_factor_at(ctx.get("y", 0.0),
+                                         ctx.get("depth", 0.0))
+            return max(0.0, f * max(0.0, sigma_v_eff))
+        return interface_shear(sigma_v_eff, self.adhesion,
+                               self.friction_angle_interface,
+                               self.shear_strength_model)
+
+    def force_at(self, distance_from_head: float, total_length: float,
+                 bond=None) -> float:
         if total_length <= 0:
             return 0.0
-        # Pullout length: shorter side of the geosynthetic measured
-        # from the intersection point
-        L_a = max(0.0, distance_from_head)            # ahead of slip
-        L_b = max(0.0, total_length - distance_from_head)  # behind slip
-        L_pull = min(L_a, L_b)
-        # Interface shear (Slide form, depth-averaged):
-        #   τ_int ≈ adhesion + σ_avg · tan(φ_int)
-        # With no σ info at this level we use adhesion as average
-        # (users can tune adhesion to reflect average σ·tanφ for the
-        # slope; the GUI shows all three input modes).
-        if self.pullout_mode == "mohr_coulomb":
-            tau = self.adhesion  # kPa
-        elif self.pullout_mode == "coefficient":
-            # Without material strength here we fold via tensile_capacity
-            # heuristic. The real Slide computation reaches into the
-            # material the sheet passes through; we approximate with
-            # tensile_capacity / total_length × Ci as a placeholder
-            # (users tuning this should switch to mohr_coulomb mode).
-            tau = self.coefficient_of_interaction * 10.0  # placeholder
-        elif self.pullout_mode == "friction_factor":
-            tau = self.friction_factor * 10.0  # placeholder
-        else:
-            tau = self.adhesion
+        cover = max(0.0, self.strip_coverage) / 100.0
+        x = max(0.0, min(distance_from_head, total_length))
 
-        # 2-sided pullout: τ acts on both surfaces of the sheet
-        f_pullout = 2.0 * tau * L_pull  # kN/m
-        f_tensile = self.tensile_capacity
-        if L_pull <= 0:
-            return f_tensile
-        return max(0.0, min(f_pullout, f_tensile))
+        if bond is None:
+            # Evaluated at zero effective stress — see the base class.
+            # For the two stress-only laws that is genuinely zero, and
+            # saying so beats the placeholder it replaces.
+            tau0 = self.interface_tau(0.0)
+            bond_i = tau0 * x
+            bond_o = tau0 * (total_length - x)
+        else:
+            bond_i = bond.integral(0.0, x)
+            bond_o = bond.integral(x, total_length)
+
+        f_tensile = self.tensile_capacity * cover
+        f_stripping = cover * (self.connection_strength + 2.0 * bond_i)
+        modes = [f_tensile, f_stripping]
+        # Pullout needs a free embedded end. Anchoring it removes the
+        # mode outright rather than making it large, because an anchored
+        # end is a boundary condition, not a bigger bond.
+        if self.anchorage in ("none", "slope_face"):
+            modes.append(cover * 2.0 * bond_o)
+        return max(0.0, min(modes))
 
     def to_dict(self) -> dict:
         # Serialise only public dataclass fields; private GUI
@@ -864,7 +1098,8 @@ class UserDefined(SupportType):
         (0.0, 100.0), (5.0, 200.0), (10.0, 100.0),
     ])
 
-    def force_at(self, distance_from_head: float, total_length: float) -> float:
+    def force_at(self, distance_from_head: float, total_length: float,
+                 bond=None) -> float:
         s = self.out_of_plane_spacing if self.out_of_plane_spacing > 0 else 1.0
         if not self.points:
             return 0.0

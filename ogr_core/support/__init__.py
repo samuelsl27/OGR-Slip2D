@@ -11,8 +11,17 @@
     - Geosynthetic
     - User Defined
 
-Plus :class:`SupportPattern` for batch creation of regular rows.
+Plus :class:`SupportPattern` for batch creation of regular rows, and
+:class:`BondProfile` (v0.1.116), the interface shear strength sampled
+along a reinforcement that the two stress-dependent pullout laws need.
 """
+from .bond import (
+    DEFAULT_SEGMENTS,
+    BondProfile,
+    build_bond_profile,
+    sigma_v_effective_at,
+    soil_shear_strength_at,
+)
 from .support import (
     EndAnchored,
     ForceApplication,
@@ -28,6 +37,7 @@ from .support import (
     UserDefined,
     register_support,
     support_from_dict,
+    interface_shear,
     support_registry,
 )
 
@@ -47,4 +57,10 @@ __all__ = [
     "support_registry",
     "support_from_dict",
     "register_support",
+    "interface_shear",
+    "BondProfile",
+    "build_bond_profile",
+    "sigma_v_effective_at",
+    "soil_shear_strength_at",
+    "DEFAULT_SEGMENTS",
 ]

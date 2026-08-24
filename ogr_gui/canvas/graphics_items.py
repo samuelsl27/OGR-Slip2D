@@ -350,6 +350,7 @@ class SupportItem(DomainItem):
         support_type_display: str = "",
         support_type_obj=None,
         parent: QGraphicsItem | None = None,
+        project=None,
     ) -> None:
         super().__init__(parent)
         self.support = support
@@ -372,9 +373,22 @@ class SupportItem(DomainItem):
         )
         if support_type_obj is not None:
             try:
-                F0 = support_type_obj.force_at(0, support.length())
+                # v0.1.116 — the two stress-dependent pullout laws need
+                # the interface strength sampled along the bolt, so the
+                # tooltip builds one instead of falling back to the
+                # zero-stress envelope. Without it a geosynthetic in
+                # coefficient or friction-factor mode reads 0 kN/m here
+                # while the analysis uses a real number, and the two
+                # disagreeing is worse than either.
+                bond = None
+                if project is not None and getattr(
+                        support_type_obj, "NEEDS_BOND_PROFILE", False):
+                    from ogr_core.support import build_bond_profile
+                    bond = build_bond_profile(
+                        project, support, support_type_obj)
+                F0 = support_type_obj.force_at(0, support.length(), bond)
                 Fmid = support_type_obj.force_at(
-                    0.5 * support.length(), support.length()
+                    0.5 * support.length(), support.length(), bond
                 )
                 tooltip += (
                     f"<br><i>Force at head:</i> {F0:.1f} kN/m"

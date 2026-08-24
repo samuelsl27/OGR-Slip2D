@@ -1411,6 +1411,22 @@ _DICTS: dict[str, dict[str, str]] = {
         "GRID": "REJILLA",
         "ORTHO": "ORTO",
         "OSNAP": "OSNAP",
+        # --- v0.1.116: arrancamiento del refuerzo -------------------
+        # Terminologia: «arrancamiento» (pullout), «descabezamiento»
+        # (stripping), «adherencia» (bond/adhesion), «coeficiente de
+        # interaccion» (coefficient of interaction), «anclaje»
+        # (anchorage), «paramento» (slope face).
+        "Adhesion and friction angle": "Adhesión y ángulo de rozamiento",
+        "Coefficient of interaction (Ci)": "Coeficiente de interacción (Ci)",
+        "Friction factor (F*)": "Factor de rozamiento (F*)",
+        "Linear (Mohr-Coulomb)": "Lineal (Mohr-Coulomb)",
+        "Hyperbolic": "Hiperbólica",
+        "None": "Ninguno",
+        "Slope face": "Paramento",
+        "Embedded end": "Extremo embebido",
+        "Both ends": "Ambos extremos",
+        "Constant": "Constante",
+        "Function of depth": "Función de la profundidad",
     },
 }
 

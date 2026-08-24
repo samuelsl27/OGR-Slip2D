@@ -87,7 +87,7 @@ class HelicalAnchor(SupportType):
     helix_pitch: float = 0.1
     torque_capacity: float = 5000.0
 
-    def axial_capacity(self, length_along, total_length):
+    def force_at(self, distance_from_head, total_length, bond=None):
         return self.torque_capacity  # simplified
 
     def to_dict(self):
@@ -98,6 +98,16 @@ class HelicalAnchor(SupportType):
         d = {k: v for k, v in data.items() if k != "type_id"}
         return cls(**d)
 ```
+
+`force_at` is the abstract method — the example used to override
+`axial_capacity`, which is only a back-compat alias for it, so the class it
+showed could not be instantiated at all.
+
+If the capacity depends on the stress state along the reinforcement, declare
+`NEEDS_BOND_PROFILE = True` and implement `interface_tau(sigma_v_eff, **ctx)`.
+The engine then hands `force_at` a `BondProfile` with the interface strength
+already sampled and integrated along the support, built once per analysis
+rather than once per trial surface. See `ogr_core/support/bond.py`.
 
 ## 4. Adding GUI translations
 

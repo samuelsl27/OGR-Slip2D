@@ -65,6 +65,38 @@ from ogr_gui.i18n import tr  # noqa: E402
 
 
 # ----------------------------------------------------------------------
+# Choice lists for the string-valued support parameters. Kept here rather
+# than in ``PARAMETERS`` because a label is user-visible text and belongs
+# on the GUI side of the line, where ``tr()`` can reach it; the stored
+# value is the ASCII token the .ogr file carries.
+#
+# v0.1.116 — ``pullout_mode`` used to be the only one, hard-coded inline
+# and NOT wrapped in ``tr()``, so its three labels were the only part of
+# this dialog a Spanish user still read in English.
+_CHOICES: dict[str, list[tuple[str, str]]] = {
+    "pullout_mode": [
+        ("Adhesion and friction angle", "mohr_coulomb"),
+        ("Coefficient of interaction (Ci)", "coefficient"),
+        ("Friction factor (F*)", "friction_factor"),
+    ],
+    "shear_strength_model": [
+        ("Linear (Mohr-Coulomb)", "linear"),
+        ("Hyperbolic", "hyperbolic"),
+    ],
+    "anchorage": [
+        ("None", "none"),
+        ("Slope face", "slope_face"),
+        ("Embedded end", "embedded_end"),
+        ("Both ends", "both_ends"),
+    ],
+    "friction_factor_mode": [
+        ("Constant", "constant"),
+        ("Function of depth", "function"),
+    ],
+}
+
+
+# ----------------------------------------------------------------------
 class _SupportParamPanel(QWidget):
     """Parameter editor for the currently-selected SupportType class.
 
@@ -148,15 +180,13 @@ class _SupportParamPanel(QWidget):
     def _build_editor_for_param(
         self, name: str, default, unit: str, desc: str, value,
     ) -> QWidget:
-        # String fields (like Geosynthetic.pullout_mode)
+        # String fields (choice lists declared in _CHOICES below)
         if isinstance(default, str):
             editor = QComboBox()
-            if name == "pullout_mode":
-                editor.addItem("Mohr-Coulomb (c + σ·tanφ)", "mohr_coulomb")
-                editor.addItem("Coefficient of Interaction (Ci)",
-                               "coefficient")
-                editor.addItem("Friction Factor (F·α)",
-                               "friction_factor")
+            choices = _CHOICES.get(name)
+            if choices:
+                for label, data in choices:
+                    editor.addItem(tr(label), data)
                 idx = editor.findData(value)
                 editor.setCurrentIndex(max(0, idx))
             else:

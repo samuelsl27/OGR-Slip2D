@@ -567,7 +567,9 @@ class CanvasView(QGraphicsView):
             for s in self.project.supports:
                 display = reg[s.type_id].DISPLAY_NAME if s.type_id in reg else s.type_id
                 type_obj = proj_types.get(s.type_id)
-                scene.addItem(SupportItem(s, display, support_type_obj=type_obj))
+                scene.addItem(SupportItem(
+                    s, display, support_type_obj=type_obj,
+                    project=self.project))
 
         self.viewport().update()
 
