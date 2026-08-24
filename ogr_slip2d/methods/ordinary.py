@@ -87,6 +87,7 @@ class OrdinaryFellenius(LEMMethod):
         resisting: list[float] = []
         driving_forces: list[float] = []
         tangential = [0.0] * len(s_list) if sup.present else None
+        tangential_passive = [0.0] * len(s_list) if sup.present else None
         n_negative_normal = 0
         for i, s in enumerate(s_list):
             f = forces[i]
@@ -94,9 +95,19 @@ class OrdinaryFellenius(LEMMethod):
             # N = −(sum of external forces)·n̂, the Fellenius normal.
             fx = rot * f.h_seismic + f.h_water
             fy = -f.w_total
-            if sup.present:
-                fx += sup.f_h[i]
-                fy += sup.f_v[i]
+            # v0.1.115 — the support does NOT enter here, and until then it
+            # did, WHOLE. Two things were wrong with that. Its normal part
+            # landed inside ``N``, so the frictional resistance it mobilises
+            # was already in ``strength`` below — and then ``T_N·tan φ'`` was
+            # added a SECOND time a few lines down. Measured on a nail
+            # perpendicular to a horizontal pile (T_N = −9.0 kN/m lifting,
+            # tan φ' = 0.364) the polyline sampled from a circle answered
+            # 1.530128 where the circle itself gave 1.552546, a −1.44 % gap
+            # against the +0.14 % the same two paths differ by with no
+            # support at all. And the CIRCULAR path of this same method has
+            # never put the support in ``N``: it adds ``T_N·tan φ'`` to the
+            # strength and nothing else. Two paths of one method disagreeing
+            # about a free body is the defect, whichever of them is nicer.
             N = -(fx * nx + fy * ny)
             # The DOWNSLOPE tangent, for the reported driving force: the base
             # moves with the rotation, and the shear opposes that motion, so
@@ -125,7 +136,12 @@ class OrdinaryFellenius(LEMMethod):
                 # Its own branch: a support can be purely tangential to the
                 # base, and then ``n_press`` is zero while the force that
                 # actually holds the slice back is not.
-                tangential[i] = sup.t_active[i] + sup.t_passive[i]
+                #
+                # v0.1.115 — split by Active/Passive, which is the whole of
+                # the anomaly: until then the SUM went to the driving side,
+                # so this path answered the same figure for both settings.
+                tangential[i] = sup.t_active[i]
+                tangential_passive[i] = sup.t_passive[i]
             normals.append(N)
             resisting.append(strength)
 
@@ -134,6 +150,7 @@ class OrdinaryFellenius(LEMMethod):
         # (``tangential``), which is the same split the circular path makes.
         terms = moment_terms(axis, s_list, weights, resisting, normals,
                              kh=kh, kv=kv, tangential=tangential,
+                             tangential_passive=tangential_passive,
                              rotation=rot, forces=forces)
         if abs(terms.driving) < 1e-9:
             return LEMResult(

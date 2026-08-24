@@ -166,7 +166,13 @@ def _em_context(rows, with_water: bool, theta_deg: float):
     slist, h_water = _em_slices(rows, with_water)
     alpha_n = [-s.base_angle for s in slist]
     theta = [-math.radians(theta_deg)] * len(slist)
-    ctx = (alpha_n, theta, 0.0, 0.0, h_water, [0.0] * len(slist))
+    # v0.1.115 — the context carries two more slots, the ACTIVE and PASSIVE
+    # reinforcement along each base. The EM worked example has none, so they
+    # are zero here and the published columns below are driven by exactly the
+    # recursion they were driven by before.
+    n = len(slist)
+    ctx = (alpha_n, theta, 0.0, 0.0, h_water,
+           [0.0] * n, [0.0] * n, [0.0] * n)
     return slist, ctx
 
 
@@ -183,7 +189,7 @@ def _engine():
 
 def _march(rows, with_water, theta_deg, F):
     slist, ctx = _em_context(rows, with_water, theta_deg)
-    alpha_n, theta, kh, kv, hw, vs = ctx
+    alpha_n, theta, kh, kv, hw, vs, _ta, _tp = ctx
     return _engine()._march(slist, theta, alpha_n, kh, kv, F,
                             h_water=hw, v_support=vs)
 

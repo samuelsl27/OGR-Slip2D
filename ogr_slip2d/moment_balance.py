@@ -175,6 +175,7 @@ def moment_terms(
     kv: float = 0.0,
     sup=None,
     tangential: Optional[Sequence[float]] = None,
+    tangential_passive: Optional[Sequence[float]] = None,
     rotation: Optional[float] = None,
     forces: Optional[Sequence] = None,
 ) -> MomentTerms:
@@ -186,22 +187,33 @@ def moment_terms(
         weights: total vertical DOWNWARD load on each slice [kN/m]. The moment
             of a vertical force depends only on its abscissa, so it is applied
             at the base midpoint. The caller folds in whatever it must —
-            ponded water always, and a support's vertical component in the
-            methods that treat the support as an external force.
+            ponded water always. A support's vertical component does NOT
+            belong here since v0.1.115: it is applied at the support's own
+            abscissa through ``sup``, because the slice's centre of gravity is
+            not where a bolt crosses the surface.
         resisting: tangential resisting force of each base with the factor of
             safety divided out, i.e. ``S · F``. For Ordinary, whose factor is
             a plain ratio, that is the available strength ``tau · l``.
         normals: base normal force of each slice [kN/m], positive pressing.
         kh, kv: seismic coefficients. Only ``kh`` produces a moment of its
             own; ``kv`` is already inside ``weights``.
-        sup: :class:`~ogr_slip2d.support_integration.SupportTerms`, and ONLY
-            for the methods that treat a support as an external CARTESIAN
-            force — Spencer and GLE, which fold its vertical component into
-            ``weights`` and need the moment of its horizontal one here.
-        tangential: optional extra force along each base that follows the
-            SHEAR's own sign — the convention of the methods that split a
-            support into a tangential and a normal part instead (Bishop,
-            Ordinary), where the normal part is already inside ``resisting``.
+        sup: :class:`~ogr_slip2d.support_integration.SupportTerms`. Only its
+            NORMAL part is read — ``nf_h`` / ``nf_v`` applied at
+            ``(x_app, y_app)`` — and only by the methods that resolve that
+            part inside the slice equilibrium (Spencer, GLE). Bishop and
+            Ordinary put the same normal part inside ``resisting`` as
+            ``T_N·tan φ'`` and pass no ``sup`` at all.
+        tangential: extra force along each base that follows the SHEAR's own
+            sign, from ACTIVE supports. It joins the DRIVING side, which is
+            the reference's Eqn. 1: ``F = M_resisting / (M_overturning −
+            M_reinforcement)``.
+        tangential_passive: the same from PASSIVE supports, which instead
+            joins the RESISTING side — Eqn. 3, ``F = (M_resisting +
+            M_reinforcement) / M_overturning``. Splitting the two is what
+            makes the Active/Passive control move the number on a
+            non-circular surface; until v0.1.114 every caller handed the SUM
+            through ``tangential`` and seven of the nine methods answered the
+            same figure either way.
         rotation: pass the value from :func:`rotation_sense` when the caller
             already needed it; otherwise it is computed here.
         forces: the :class:`~ogr_slip2d.external_forces.SliceForces` the caller
@@ -210,8 +222,11 @@ def moment_terms(
             surface of a search, so one avoidable object per slice per pass is
             worth not allocating.
 
-    ``sup`` and ``tangential`` are two ways of saying the same thing, so a
-    caller passes ONE of them. Passing both counts the support twice.
+    ``sup`` and the two ``tangential*`` lists are DIFFERENT halves of the
+    same support, so passing all three is correct and is what Spencer and GLE
+    do: ``sup`` carries the normal part, the lists carry the tangential one.
+    What must never happen is the normal part arriving twice — through
+    ``sup`` AND already summed into ``resisting`` as ``T_N·tan φ'``.
 
     Returns:
         The :class:`MomentTerms`.
@@ -239,6 +254,13 @@ def moment_terms(
             t_extra = tangential[i]
             m_extra += moment(xm, ym, shear_sign * t_extra * tx,
                               shear_sign * t_extra * ty)
+        if tangential_passive is not None and tangential_passive[i]:
+            # Same force, same sign, the OTHER side of the fraction bar:
+            # ``driving`` collects ``m_extra`` while ``factor_of_safety``
+            # divides by it, and ``m_shear`` is the numerator.
+            t_pas = tangential_passive[i]
+            m_shear += moment(xm, ym, shear_sign * t_pas * tx,
+                              shear_sign * t_pas * ty)
 
         f = slice_forces(s, kh, kv) if forces is None else forces[i]
         if f.h_seismic:
@@ -251,8 +273,13 @@ def moment_terms(
             # water forces with OPPOSITE signs can act on the same slice and a
             # force-weighted mean height is undefined there.
             m_extra += moment(xm, f.m_water_ref0 / f.h_water, f.h_water, 0.0)
-        if sup is not None and sup.present and sup.f_h[i]:
-            m_extra += moment(xm, sup.y_app[i], sup.f_h[i], 0.0)
+        if sup is not None and sup.present and (sup.nf_h[i] or sup.nf_v[i]):
+            # The NORMAL part, at the point the support actually crosses the
+            # surface. About a circle's centre this moment is exactly zero;
+            # about a general axis it is not, and that is why it is taken
+            # here instead of being assumed away.
+            m_extra += moment(sup.x_app[i], sup.y_app[i],
+                              sup.nf_h[i], sup.nf_v[i])
 
     return MomentTerms(axis=(ox, oy), rotation=rotation, weight=m_weight,
                        normal=m_normal, external=m_extra, shear=m_shear)

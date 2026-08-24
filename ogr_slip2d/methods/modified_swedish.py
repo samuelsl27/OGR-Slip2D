@@ -205,7 +205,7 @@ class PrescribedInclinationMethod(LEMMethod):
 
     # ==================================================================
     def _march(self, slices_list, theta, alpha_n, kh, kv, F: float,
-               h_water=None, v_support=None):
+               h_water=None, v_support=None, t_support=None):
         """The inter-slice resultant ``Z`` on the right face of every slice.
 
         Each slice carries a resultant inter-slice force ``Z_i`` on its
@@ -224,6 +224,26 @@ class PrescribedInclinationMethod(LEMMethod):
                       − (W + k0·sinα)(sinα + a·cosα)
             k0      = (c·l − u·l·tanφ) / F
 
+        v0.1.115 — ``t_support`` is a reinforcement force ALONG THE BASE, in
+        the sense that resists sliding, already mobilised. It enters through
+        ``k0`` and that is exact rather than an analogy: the mobilised shear
+        of this recursion is ``S/F = k0 + N·a``, so a resisting tangential
+        force ``T`` is literally ``k0 + T``. The caller decides what to pass
+        — ``T_S`` for an ACTIVE support, ``T_S/F`` for a PASSIVE one — which
+        is the whole of the Active/Passive distinction in a method that never
+        forms a ratio to move a term across.
+
+        Until v0.1.114 the support arrived instead as a Cartesian force in
+        ``h_water``/``v_support``, whole. For an ACTIVE support that is the
+        same statement — ``k0 += T`` changes ``const_i`` by exactly ``−T``,
+        and so does the Cartesian pair that represents the same tangential
+        force — which is why the Active answers of this family do not move a
+        digit in v0.1.115. What a Cartesian load cannot express is a PASSIVE
+        support, because ``T/F`` is not a load: it is a resistance that
+        develops only as far as the rest of the slope mobilises. That is why
+        all three methods of this family answered the same number for both
+        settings until now.
+
         ``D⁻`` is what generalises EM 1110-2-1902 equation C-19 from a
         constant θ to one that varies from slice to slice: with θ constant
         ``D⁻ = D_i`` and the recursion collapses to the manual's
@@ -241,9 +261,11 @@ class PrescribedInclinationMethod(LEMMethod):
             h_water = [0.0] * len(slices_list)
         if v_support is None:
             v_support = [0.0] * len(slices_list)
+        if t_support is None:
+            t_support = [0.0] * len(slices_list)
 
-        for s, alpha, th, hw, vs in zip(slices_list, alpha_n, theta,
-                                        h_water, v_support):
+        for s, alpha, th, hw, vs, ts in zip(slices_list, alpha_n, theta,
+                                            h_water, v_support, t_support):
             # v0.1.61 — the ponded water rides in the vertical term (it is
             # a load the base has to carry) and its horizontal thrust joins
             # the seismic force in the horizontal slot. This is a
@@ -264,6 +286,10 @@ class PrescribedInclinationMethod(LEMMethod):
             a = tan_phi / F
             ca, sa = math.cos(alpha), math.sin(alpha)
             k0 = (c_loc * l - u * l * tan_phi) / F
+            # The reinforcement, already mobilised: see the note above on why
+            # a base-tangential force is exactly an addition to ``k0``.
+            if ts:
+                k0 += ts
 
             D_i = math.cos(alpha - th) - a * math.sin(alpha - th)
             D_prev = math.cos(alpha - theta_prev) - a * math.sin(alpha - theta_prev)
@@ -287,14 +313,15 @@ class PrescribedInclinationMethod(LEMMethod):
 
     # ------------------------------------------------------------------
     def _z_end(self, slices_list, theta, alpha_n, kh, kv, F: float,
-               h_water=None, v_support=None) -> float:
+               h_water=None, v_support=None, t_support=None) -> float:
         """Residual inter-slice force left at the down-slope free end.
 
         Thin wrapper over :meth:`_march`; kept as its own name because it
         is what the root finder reads and what the validation tests drive.
         """
         zs = self._march(slices_list, theta, alpha_n, kh, kv, F,
-                         h_water=h_water, v_support=v_support)
+                         h_water=h_water, v_support=v_support,
+                         t_support=t_support)
         return math.nan if zs is None else zs[-1]
 
     # ==================================================================
@@ -330,9 +357,11 @@ class PrescribedInclinationMethod(LEMMethod):
         """
         if ctx is None:
             return [], [], []
-        alpha_n, theta, kh, kv, h_water, v_sup = ctx
+        alpha_n, theta, kh, kv, h_water, v_sup, t_act, t_pas = ctx
+        t_sup = [t_act[i] + t_pas[i] / F for i in range(len(t_act))]
         zs = self._march(slist, theta, alpha_n, kh, kv, F,
-                         h_water=h_water, v_support=v_sup)
+                         h_water=h_water, v_support=v_sup,
+                         t_support=t_sup)
         if zs is None:
             return [], [], []
 
@@ -353,6 +382,10 @@ class PrescribedInclinationMethod(LEMMethod):
             a = tan_phi / F
             ca, sa = math.cos(alpha), math.sin(alpha)
             k0 = (c_loc * l - u * l * tan_phi) / F
+            # The reinforcement, already mobilised: see the note above on why
+            # a base-tangential force is exactly an addition to ``k0``.
+            if t_sup[i]:
+                k0 += t_sup[i]
             dz_v = zs[i] * math.sin(th) - z_prev * math.sin(th_prev)
             den = ca - a * sa
             N = (W_eff + dz_v + k0 * sa) / (den if abs(den) > 1e-9 else 1e-9)
@@ -418,21 +451,35 @@ class PrescribedInclinationMethod(LEMMethod):
             # v0.1.64 — the support's horizontal component is signed in
             # the true +x direction, exactly like the water thrust, so it
             # takes the same ``orient`` mirror.
+            # v0.1.115 — and it is the NORMAL part only. The tangential part
+            # is not a Cartesian load on the slice: it is reinforcement on
+            # the base, so it goes to ``t_support`` and thence to ``k0``.
             has_sup = sup is not None and sup.present
             h_water = [
                 orient * (slice_forces(s, kh, kv).h_water
                           + ft[i] - ft[i + 1]
-                          + (sup.f_h[i] if has_sup else 0.0))
+                          + (sup.nf_h[i] if has_sup else 0.0))
                 for i, s in enumerate(slist)
             ]
-            v_sup = [(sup.f_v[i] if has_sup else 0.0)
+            v_sup = [(sup.nf_v[i] if has_sup else 0.0)
                      for i in range(len(slist))]
-            ctx = (alpha_n, theta, kh, kv, h_water, v_sup)
+            # ACTIVE at face value, PASSIVE divided by the factor of safety.
+            # The two are the reference's Eqn. 2 and Eqn. 4: ``F = R/(D − T)``
+            # is ``D − T = R/F``, and ``F = (R+T)/D`` is ``D = R/F + T/F``,
+            # so the only difference is whether the reinforcement is factored
+            # alongside the soil strength. Duncan and Wright (2005) call them
+            # Method A and Method B.
+            t_act = [(sup.t_active[i] if has_sup else 0.0)
+                     for i in range(len(slist))]
+            t_pas = [(sup.t_passive[i] if has_sup else 0.0)
+                     for i in range(len(slist))]
+            ctx = (alpha_n, theta, kh, kv, h_water, v_sup, t_act, t_pas)
 
             def residual(F, alpha_n=alpha_n, theta=theta, hw=h_water,
-                         vs=v_sup):
+                         vs=v_sup, ta=t_act, tp=t_pas):
+                ts = [ta[i] + tp[i] / F for i in range(len(ta))]
                 return self._z_end(slist, theta, alpha_n, kh, kv, F,
-                                   h_water=hw, v_support=vs)
+                                   h_water=hw, v_support=vs, t_support=ts)
 
             samples = []
             for F in grid:

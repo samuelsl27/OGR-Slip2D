@@ -49,11 +49,57 @@ Implementation follows Slide's convention:
     added OUTSIDE the per-slice ``m_α`` / ``n_α`` normalisation, which
     is how the reference writes them.
 
-    The full-equilibrium methods (Spencer, GLE, Lowe-Karafiath) do not
-    use this pair at all: for them the support is an external force on
-    the slice, ``f_h`` / ``f_v``, and ``T_N·tan φ'`` falls out of the
-    equilibrium instead of being added by hand. That is also why Active
-    and Passive give the same number there.
+    v0.1.115 — the SAME split now governs the methods that solve complete
+    equilibrium (Spencer, GLE, the two Corps of Engineers, Lowe-Karafiath).
+    Until then those five took the support's whole Cartesian resultant as an
+    external force on the slice, which had two consequences:
+
+      * Active and Passive came out BIT FOR BIT EQUAL in all five — the
+        reference's own Active/Passive case, verification problem 85, gave
+        the same six digits either way while Bishop separated them by 20 %.
+        A configurable control that cannot move the number is worse than no
+        control at all;
+      * a PASSIVE support cannot be a Cartesian load at all. Passive
+        reinforcement develops only as far as the rest of the slope
+        mobilises, so what acts is ``T_S/F`` — and that is exactly what turns
+        ``F = R/(D − T)`` into ``F = (R + T)/D``. A resultant stored as
+        ``f_h`` / ``f_v`` has nowhere to put that F, which is why one number
+        came out for both settings.
+
+    So the support arrives here SPLIT, and every solver reads the split:
+
+      * the NORMAL part is a Cartesian load on the slice (``nf_h`` /
+        ``nf_v``) and enters the equilibrium whole in both cases, so
+        ``T_N·tan φ'`` falls out of it instead of being added by hand;
+      * the TANGENTIAL part is a RESISTANCE on the base, mobilised at
+        ``t_active + t_passive/F``, which is the only place the Active /
+        Passive flag has any arithmetic effect.
+
+    The ACTIVE answer barely moves under this, and that is the honest
+    result: applying ``t_active`` at face value on the base is algebraically
+    the same statement as applying the whole resultant as a Cartesian load.
+    On the published circle of verification problem 85 the two Corps methods
+    and Lowe-Karafiath do not move a digit and Spencer moves 0.07 %. It is
+    PASSIVE that changes — from equal-to-Active to within 1.2 % (GLE) and
+    4.3 % (Spencer) of what a φ' = 0 circle forces, against 18.6 % and
+    27.7 % before.
+
+    The normal part is resolved INSIDE the equilibrium rather than bolted on
+    outside ``m_α`` as Bishop does; the difference is second-order and is
+    the same modelling choice ``bishop.py`` already documents.
+
+    The reference publishes FOUR equations, not two — one pair for moment
+    equilibrium and one for force equilibrium — which is precisely what says
+    the distinction is defined for the complete-equilibrium methods too:
+
+        Active   moment  F = M_resisting / (M_overturning − M_reinforcement)
+        Active   force   F = τ_available / (τ_required − T_reinforcement)
+        Passive  moment  F = (M_resisting + M_reinforcement) / M_overturning
+        Passive  force   F = (τ_available + T_reinforcement) / τ_required
+
+    and it attributes the pair to Methods A and B of Duncan & Wright (2005),
+    chapter 8. In both of them ``T_N·tan φ'`` is in the NUMERATOR; only the
+    tangential term changes sides.
 
     NOT divided by F. Method B of Duncan & Wright (2005) factors the
     reinforcement by F as well as the soil strength, and this module's
@@ -100,14 +146,32 @@ class SupportTerms:
                    Positive presses, negative lifts. Multiplied by tan φ'
                    it is the frictional resistance the support mobilises,
                    which the previous implementation dropped entirely.
-        f_h, f_v   raw resultant per slice, +x and +y [kN/m], for the
-                   methods that solve equilibrium rather than a ratio.
-        y_app      elevation at which the resultant acts, for moments.
+        nf_h, nf_v the NORMAL part alone, back in Cartesian components
+                   (+x, +y) [kN/m]. This is the Cartesian LOAD a solver
+                   hands to the slice's own equilibrium; the tangential part
+                   travels separately through ``t_active`` / ``t_passive``,
+                   because only there can it be mobilised at T/F.
+                   Identically ``n_press·(sin α, −cos α)``.
+        f_h, f_v   the WHOLE resultant per slice, +x and +y [kN/m]. No
+                   solver reads it since v0.1.115 — it is what a report or
+                   a data tip shows, and what locates the slice a support
+                   crossed.
+        x_app,     where the resultant acts, force-magnitude weighted when
+        y_app      several supports cross the same slice. Needed for the
+                   moment of the normal part about a general axis; about a
+                   circle's centre that moment is exactly zero, because a
+                   base normal passes through the centre.
 
     The distinction between Active and Passive is, as the reference
     itself admits, partly arbitrary — it is a modelling choice about
     whether a reinforcement is pre-tensioned. What is NOT arbitrary is
     that both must be signed.
+
+    v0.1.115 — ``t_active`` and ``t_passive`` are no longer only the ratio
+    methods' business. Every method now takes the tangential part from one
+    of these two lists, and the ONLY thing Active and Passive change is
+    which side of the fraction bar it lands on. See the module docstring
+    for the four published equations that say so.
 
     v0.1.113 — there used to be a third pair, ``h_active`` / ``h_passive``,
     holding the HORIZONTAL projection, and Janbu was its only consumer.
@@ -127,8 +191,11 @@ class SupportTerms:
     t_active: list
     t_passive: list
     n_press: list
+    nf_h: list
+    nf_v: list
     f_h: list
     f_v: list
+    x_app: list
     y_app: list
     present: bool = False
 
@@ -142,7 +209,7 @@ class SupportTerms:
 # Shared "there is no reinforcement here" answer. Immutable in practice:
 # every consumer guards on ``present`` before indexing, and the empty
 # lists make ``total_*`` return 0.0 without a special case.
-_EMPTY_TERMS = SupportTerms([], [], [], [], [], [], False)
+_EMPTY_TERMS = SupportTerms([], [], [], [], [], [], [], [], [], False)
 
 
 def resolve_support_terms(
@@ -196,8 +263,9 @@ def resolve_support_terms(
     n_press = [0.0] * n
     f_h = [0.0] * n
     f_v = [0.0] * n
+    x_app = [0.0] * n
     y_app = [0.0] * n
-    w_h = [0.0] * n  # |F_h| weights for the application elevation
+    w_app = [0.0] * n  # |F| weights for the application point
 
     for eff in effects:
         i = eff.slice_index
@@ -216,19 +284,40 @@ def resolve_support_terms(
         n_press[i] += t_n
         f_h[i] += eff.force_h
         f_v[i] += eff.force_v
-        w = abs(eff.force_h)
+        # v0.1.115 — weighted by the force MAGNITUDE, not by |F_h| as it was
+        # until v0.1.114. The old weight had no answer for a support with no
+        # horizontal component: it fell through to the base midpoint, which
+        # is not where a vertical anchor acts. The two agree whenever every
+        # support crossing a slice is horizontal, which is every case of the
+        # validation bank that this weight reaches.
+        w = abs(eff.force_magnitude)
+        x_app[i] += w * eff.intersection_x
         y_app[i] += w * eff.intersection_y
-        w_h[i] += w
+        w_app[i] += w
 
+    # The normal part alone, back in Cartesian components. Written from
+    # ``n_press`` rather than accumulated per effect on purpose: every effect
+    # in a slice shares that slice's base direction, so the sum of the normal
+    # parts IS the normal part of the sum, and saying it once is one place
+    # for the sign convention to live.
+    nf_h = [0.0] * n
+    nf_v = [0.0] * n
     for i in range(n):
-        if w_h[i] > 0.0:
-            y_app[i] /= w_h[i]
+        if n_press[i]:
+            a = s_list[i].base_angle
+            nf_h[i] = n_press[i] * math.sin(a)
+            nf_v[i] = -n_press[i] * math.cos(a)
+        if w_app[i] > 0.0:
+            x_app[i] /= w_app[i]
+            y_app[i] /= w_app[i]
         else:
-            # No horizontal component to take a moment: the elevation is
-            # irrelevant, but the base is the honest place to report.
+            # Nothing crossed this slice: the base midpoint is the honest
+            # place to report a point that no force is applied at.
+            x_app[i] = 0.5 * (s_list[i].base_x_left + s_list[i].base_x_right)
             y_app[i] = 0.5 * (s_list[i].base_y_left + s_list[i].base_y_right)
 
-    return SupportTerms(t_active, t_passive, n_press, f_h, f_v, y_app, True)
+    return SupportTerms(t_active, t_passive, n_press, nf_h, nf_v,
+                        f_h, f_v, x_app, y_app, True)
 
 
 @dataclass

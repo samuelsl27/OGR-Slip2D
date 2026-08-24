@@ -25,6 +25,10 @@ it. Measured on the fixture below, before the change:
     published equations make Passive ≤ Active always:
         F_act = (R + T_N·tanφ') / (D − T_S)
         F_pas = (R + T_N·tanφ' + T_S) / D
+    v0.1.64 fixed that for the RATIO methods only. The three that solve
+    complete equilibrium kept answering one number for both settings until
+    v0.1.115, and this file asserted it — see
+    ``TestPassiveNeverBeatsActive`` below.
 
 The anchors here are analytic identities and cross-method consistency,
 never captured values:
@@ -36,9 +40,9 @@ never captured values:
   * Passive ≤ Active follows from the two equations above and must hold
     for every ratio method.
   * The three methods that satisfy full equilibrium (Spencer, GLE,
-    Lowe-Karafiath) treat the support as an external force on the slice
-    and must therefore agree with each other, as they already do without
-    reinforcement. They are each other's reference.
+    Lowe-Karafiath) resolve the support's NORMAL part inside the slice
+    equilibrium and must therefore agree with each other, as they already
+    do without reinforcement. They are each other's reference.
   * A support that does not cross the slip surface must change nothing,
     in every method — the cheapest way to catch a term added on the wrong
     side of an equation.
@@ -269,18 +273,35 @@ class TestPassiveNeverBeatsActive:
                 _nail(application=ForceApplication.PASSIVE))).fos
             assert fp < fa, f"{name}: passive {fp:.5f} >= active {fa:.5f}"
 
-    def test_the_rigorous_methods_do_not_distinguish_them(self):
-        """Deliberate, and the reason it is asserted rather than left to
-        chance: Active vs Passive is an artefact of writing the factor of
-        safety as a ratio. A method that solves equilibrium sees a force,
-        and a force has no such flag."""
+    def test_the_rigorous_methods_distinguish_them_too(self):
+        """v0.1.115 — this test used to assert the OPPOSITE, that Spencer,
+        GLE and Lowe-Karafiath answer the same number for both settings, and
+        it carried a reason:
+
+            *"Active vs Passive is an artefact of writing the factor of
+            safety as a ratio. A method that solves equilibrium sees a
+            force, and a force has no such flag."*
+
+        The reason is false, and the reference says so on the page that
+        defines the setting: it publishes FOUR equations, a pair for MOMENT
+        equilibrium and a pair for FORCE equilibrium, and attributes them to
+        Methods A and B of Duncan & Wright (2005). A complete-equilibrium
+        method has a numerator and a denominator like any other. What a
+        force genuinely has no flag for is the base normal — which is why
+        the tangential part of a support is now outside the slice
+        equilibrium in every method, and only its side of the fraction bar
+        changes.
+
+        See ``tests/test_support_active_passive_v1115.py`` for the closed
+        forms that measure it.
+        """
         from ogr_core.support import ForceApplication
         for name, cls in _rigorous():
             fa = _fos(cls, _project(
                 _nail(application=ForceApplication.ACTIVE))).fos
             fp = _fos(cls, _project(
                 _nail(application=ForceApplication.PASSIVE))).fos
-            assert abs(fa - fp) < 1e-9, f"{name}: {fa!r} vs {fp!r}"
+            assert fp < fa, f"{name}: passive {fp:.6f} >= active {fa:.6f}"
 
 
 class TestTheRigorousMethodsAgreeWithEachOther:
@@ -297,12 +318,30 @@ class TestTheRigorousMethodsAgreeWithEachOther:
         assert max(vals) - min(vals) < 0.01 * min(vals), vals
 
     def test_the_gain_is_the_same_for_all_three(self):
+        """v0.1.115 — the band went from 0.5 % to 1 %, and the reason is a
+        real difference between two correct routes to the PASSIVE case,
+        which is what ``_nail()`` defaults to.
+
+        Spencer and GLE move the reinforcement term across the fraction bar,
+        so it never touches the base normal. Lowe-Karafiath never forms a
+        ratio: its factor of safety is the root of a marching recursion, and
+        the only faithful way to mobilise reinforcement there is ``T_S/F`` on
+        the base — where the recursion has already eliminated N analytically
+        from BOTH projections, so it does reach the normal. There is no
+        "outside the equilibrium" in a marching method to put it in.
+
+        The residue is 0.61 % on the gain and 0.57 % on the factor of safety,
+        against the 0.49 % these three already disagree by with no
+        reinforcement at all. Tightening this back would be asserting that
+        two different formulations of complete equilibrium agree better with
+        a support than without one.
+        """
         gains = []
         for _n, cls in _rigorous():
             f0 = _fos(cls, _project()).fos
             f1 = _fos(cls, _project(_nail())).fos
             gains.append((f1 - f0) / f0)
-        assert max(gains) - min(gains) < 0.005, gains
+        assert max(gains) - min(gains) < 0.01, gains
 
 
 class TestOverwhelmingActiveSupportIsInadmissible:

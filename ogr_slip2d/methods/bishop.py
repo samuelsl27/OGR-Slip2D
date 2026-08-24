@@ -187,6 +187,7 @@ class BishopSimplified(LEMMethod):
             resisting = []
             normals = []
             tangential = [0.0] * len(s_list) if sup.present else None
+            tangential_passive = [0.0] * len(s_list) if sup.present else None
             for i_s, s in enumerate(s_list):
                 f = slice_forces(s, kh, kv)
                 w = f.w_total
@@ -220,15 +221,22 @@ class BishopSimplified(LEMMethod):
                 weights.append(w)
                 resisting.append(q)
                 normals.append(normal)
-                # A support's TANGENTIAL force, Active and Passive alike, acts
-                # along the base opposing the slide — the same direction as
-                # the shear, so the same sign. The circular path keeps the two
-                # apart (Active off the driving side, Passive onto the
-                # resisting one) because it works with a ratio; a moment
-                # balance has one side, and putting a resisting force on it
-                # with its own sign is the same statement.
+                # A support's TANGENTIAL force acts along the base opposing
+                # the slide — the same direction as the shear, so the same
+                # sign — but Active and Passive land on OPPOSITE sides of the
+                # balance, exactly as they do on the circular path.
+                #
+                # v0.1.115 — until then both went through ``tangential``,
+                # i.e. both were treated as Active, and Bishop answered the
+                # same figure for the two settings on every non-circular
+                # surface. The claim that "a moment balance has one side" was
+                # what justified it, and it is false: a moment balance has a
+                # numerator and a denominator like any other, and the
+                # reference publishes the pair for moment equilibrium
+                # separately from the pair for force equilibrium.
                 if tangential is not None:
-                    tangential[i_s] = sup.t_active[i_s] + sup.t_passive[i_s]
+                    tangential[i_s] = sup.t_active[i_s]
+                    tangential_passive[i_s] = sup.t_passive[i_s]
 
             # ``sup`` is deliberately NOT passed: Bishop splits a support into
             # a normal part (already inside ``resisting`` as T_N·tanφ') and a
@@ -237,7 +245,8 @@ class BishopSimplified(LEMMethod):
             # twice — the circular path above has no ``f_h`` moment either.
             terms = moment_terms(
                 axis, s_list, weights, resisting, normals, kh=kh, kv=kv,
-                tangential=tangential, forces=forces)
+                tangential=tangential, tangential_passive=tangential_passive,
+                forces=forces)
             if abs(terms.driving) < 1e-9:
                 return LEMResult(
                     fos=math.inf, converged=False, iterations=iterations,

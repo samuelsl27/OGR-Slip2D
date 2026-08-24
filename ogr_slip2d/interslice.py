@@ -115,8 +115,11 @@ class SliceRow:
     c_l: float             # c' * l
     tan_phi: float
     w_eff: float           # total vertical downward load on the slice
+    w_soil: float          # the same WITHOUT the support (moment arms)
     h_drive: float         # net external horizontal load, driving-positive
     arm_ratio: float       # slide_sign * weight_arm_ratio (circle only)
+    t_active: float        # resisting tangential force, ACTIVE supports
+    t_passive: float       # the same for PASSIVE supports
 
 
 # ----------------------------------------------------------------------
@@ -155,12 +158,25 @@ def prepare_rows(s_list, kh: float, kv: float, slide_sign: float,
         w_eff = fx.w_total
         # The external horizontal loads, all in the DRIVING sense.
         # ``h_seismic`` is a magnitude and already points down-slope;
-        # ``h_water`` and the support's ``f_h`` are signed in true +x, so they
-        # take ``-slide_sign`` to land in the same frame.
+        # ``h_water`` and the support's ``nf_h`` are signed in true +x, so
+        # they take ``-slide_sign`` to land in the same frame.
         h_drive = fx.h_seismic - slide_sign * fx.h_water
+        t_act = t_pas = 0.0
         if has_sup:
-            w_eff -= sup.f_v[i]
-            h_drive -= slide_sign * sup.f_h[i]
+            # v0.1.115 — the support arrives SPLIT. Its NORMAL part is a
+            # Cartesian load on the slice like ponded water: it presses the
+            # base, raises N, and the friction it mobilises falls out of the
+            # equilibrium as ``T_N·tan φ'`` without being added by hand. Its
+            # TANGENTIAL part is not a load but a RESISTANCE on the base, and
+            # it is carried separately because Active and Passive mobilise it
+            # differently — see ``t_mob`` in :func:`solve_branch`. Until
+            # v0.1.114 the whole resultant came in through ``f_h``/``f_v``,
+            # which is the Active reading of it, and Spencer and GLE gave the
+            # same number for both settings to the last digit.
+            w_eff -= sup.nf_v[i]
+            h_drive -= slide_sign * sup.nf_h[i]
+            t_act = sup.t_active[i]
+            t_pas = sup.t_passive[i]
 
         alpha = slide_sign * s.base_angle
         ca = math.cos(alpha)
@@ -181,8 +197,9 @@ def prepare_rows(s_list, kh: float, kv: float, slide_sign: float,
             tan_a=(sa / ca if abs(ca) > 1e-12 else math.copysign(1e12, sa)),
             sec_a=(1.0 / ca if abs(ca) > 1e-12 else 1e12),
             length=length, u=u, c_l=c_loc * length, tan_phi=tan_phi,
-            w_eff=w_eff, h_drive=h_drive,
+            w_eff=w_eff, w_soil=fx.w_total, h_drive=h_drive,
             arm_ratio=slide_sign * s.weight_arm_ratio,
+            t_active=t_act, t_passive=t_pas,
         ))
     order = list(range(len(rows)))
     if slide_sign < 0.0:
@@ -257,8 +274,19 @@ def solve_branch(
             m_alpha = r.cos_a + r.sin_a * r.tan_phi / F
             if abs(m_alpha) < 1e-6:
                 return None
+            # v0.1.115 — the reinforcement on this base, at the value it is
+            # MOBILISED at. An Active support is a force that is already
+            # there, so it enters whole; a Passive one develops in proportion
+            # to the mobilisation of everything else, so it enters at T/F
+            # exactly as the soil strength does. That single line is the
+            # whole of Method A versus Method B (Duncan & Wright 2005), and
+            # it is why the two give different answers: substituting it into
+            # the global horizontal balance below turns ``F = R/(D − T)``
+            # into ``F = (R + T)/D``.
+            t_mob = r.t_active + r.t_passive / F
             n_i = (r.w_eff + X[i + 1] - X[i]
                    - (r.c_l - r.u * r.length * r.tan_phi) * r.sin_a / F
+                   - t_mob * r.sin_a
                    ) / m_alpha
             s_i = r.c_l + (n_i - r.u * r.length) * r.tan_phi
             normals[i] = n_i
@@ -266,8 +294,13 @@ def solve_branch(
             # Horizontal equilibrium of the slice. The external loads are
             # driving-positive, i.e. they point at -x in this frame, hence the
             # minus sign; the march closing on E_n = 0 is what global
-            # horizontal equilibrium means.
-            e += -n_i * r.sin_a + (s_i / F) * r.cos_a - r.h_drive
+            # horizontal equilibrium means. The reinforcement resists in the
+            # same sense as the mobilised base shear, so it carries the same
+            # sign here as ``s_i / F`` — and it MUST appear, or the thrust
+            # this march reports is the thrust of a slope with no
+            # reinforcement in it while the factor of safety below is not.
+            e += (-n_i * r.sin_a + (s_i / F) * r.cos_a
+                  + t_mob * r.cos_a - r.h_drive)
             E[i + 1] = e
 
         # X_0 and X_n stay at zero: both ends of the surface are free.
@@ -280,6 +313,23 @@ def solve_branch(
             for i, r in enumerate(rows):
                 num += resisting[i] * r.sec_a
                 den += (r.w_eff + X[i + 1] - X[i]) * r.tan_a + r.h_drive
+                # v0.1.115 — the reinforcement, on whichever side of the bar
+                # its Active/Passive flag puts it. Both carry ``sec(a)`` and
+                # not ``cos(a)``, and that is not a choice: substituting
+                # ``N·sen(a)`` out of global horizontal equilibrium (see the
+                # module docstring) turns a base-tangential force T into
+                # ``T·(cos a + sen^2 a / cos a) = T·sec(a)``, exactly as it
+                # does for the base shear itself.
+                #
+                # For the ACTIVE case this is an IDENTITY with the treatment
+                # it replaces: the old whole-resultant contribution
+                # ``-f_v·tan(a) - slide_sign·f_h`` equals ``-T_S·sec(a)`` term
+                # for term. The PASSIVE case is where the two part company,
+                # because ``t_mob`` above divides it by F.
+                if r.t_active:
+                    den -= r.t_active * r.sec_a
+                if r.t_passive:
+                    num += r.t_passive * r.sec_a
             if abs(den) < 1e-9:
                 return None
             f_new = num / den
@@ -403,17 +453,25 @@ class GLESystem:
         if circle_R is None:
             from .moment_balance import moment_terms
             # Weights in SLICE order, which is what ``moment_terms`` walks
-            # alongside ``s_list``.
+            # alongside ``s_list``. The SOIL weight: the support's normal part
+            # is applied at its own point by ``moment_terms``, not smeared to
+            # the slice's centre of gravity, and its tangential part goes
+            # through ``tangential`` / ``tangential_passive``.
             weights = [0.0] * len(self.rows)
             for k, r in enumerate(self.rows):
-                weights[self.order[k]] = r.w_eff
+                weights[self.order[k]] = r.w_soil
+            t_act = t_pas = None
+            if sup is not None and sup.present:
+                t_act = list(sup.t_active)
+                t_pas = list(sup.t_passive)
 
             def moment_fos(normals, resisting):
                 terms = moment_terms(
                     axis, self.s_list, weights,
                     self.to_slice_order(resisting),
                     self.to_slice_order(normals),
-                    kh=kh, kv=kv, sup=sup, forces=self.forces)
+                    kh=kh, kv=kv, sup=sup, tangential=t_act,
+                    tangential_passive=t_pas, forces=self.forces)
                 return terms.factor_of_safety()
         else:
             # A circle divides its radius out of every term, so the whole
@@ -427,22 +485,32 @@ class GLESystem:
             by_slice = self.to_slice_order(self.rows)
             for i, (r, s) in enumerate(zip(by_slice, self.s_list)):
                 fx = self.forces[i]
-                den += r.w_eff * r.arm_ratio
+                den += r.w_soil * r.arm_ratio
                 if kh > 0:
                     den += fx.h_seismic * (circle_yc - slice_cg_y(s)) / circle_R
                 den += (-slide_sign
                         * fx.water_moment_about(circle_yc) / circle_R)
-                if has_sup and sup.f_h[i]:
-                    # The VERTICAL component needs no term of its own: folded
-                    # into ``w_eff``, it already rides the R*sen(a) arm.
-                    den += (-slide_sign * sup.f_h[i]
-                            * (circle_yc - sup.y_app[i]) / circle_R)
+            # v0.1.115 — the reinforcement moment, and it needs no arm at
+            # all. A support resolved on the base splits into a NORMAL part,
+            # whose line of action passes through the centre and whose moment
+            # is therefore exactly zero, and a TANGENTIAL part, whose arm is
+            # exactly R — which divides out of every term of this
+            # denominator. So the whole contribution is −T_S, full stop.
+            # Until v0.1.114 it was reached the long way round, through the
+            # vertical component riding the slice's own centre-of-gravity arm
+            # plus a separate term for the horizontal one, and that arm is
+            # not the support's: the two agree only where the support crosses
+            # the slice's centre of gravity.
+            m_passive = 0.0
+            if has_sup:
+                den -= math.fsum(sup.t_active)
+                m_passive = math.fsum(sup.t_passive)
             self._driving = den
 
-            def moment_fos(normals, resisting, _den=den):
+            def moment_fos(normals, resisting, _den=den, _pas=m_passive):
                 if abs(_den) < 1e-9:
                     return None
-                return math.fsum(resisting) / _den
+                return (math.fsum(resisting) + _pas) / _den
 
         self._moment_fos = moment_fos
 
