@@ -113,6 +113,15 @@ class SurfaceProtocol(Protocol):
     def x_range(self) -> tuple[float, float]: ...
     def to_dict(self) -> dict: ...
 
+    # v0.1.111 — the two questions the slicer used to answer for itself with
+    # ``isinstance`` and a peek at ``.polyline``. A surface knows where it
+    # bends and how deep it goes; the slicer does not, and a third geometry
+    # made that gap a defect rather than a wart (see ``CompositeSurface``).
+    def kinks(self, x_l: Optional[float] = None,
+              x_r: Optional[float] = None) -> list[float]: ...
+    def y_span(self, x_l: float,
+               x_r: float) -> Optional[tuple[float, float]]: ...
+
 
 # ----------------------------------------------------------------------
 @dataclass
@@ -199,6 +208,28 @@ class SlipCircle:
     def x_range(self) -> tuple[float, float]:
         """Total x-extent of the circle (before ground clipping)."""
         return (self.centre_x - self.radius, self.centre_x + self.radius)
+
+    # ------------------------------------------------------------------
+    def kinks(self, x_l: Optional[float] = None,
+              x_r: Optional[float] = None) -> list[float]:
+        """None: an arc is smooth everywhere, so no cut is mandatory."""
+        return []
+
+    def y_span(self, x_l: float,
+               x_r: float) -> Optional[tuple[float, float]]:
+        """Exact ``(y_min, y_max)`` of the lower arc over ``[x_l, x_r]``.
+
+        The lower arc is convex, so its extremes are the two ends and — when
+        the centre's abscissa falls inside the span — the bottom of the
+        circle. Three evaluations, exact, no sampling.
+        """
+        ys = [self.base_y_at(x_l), self.base_y_at(x_r)]
+        if x_l <= self.centre_x <= x_r:
+            ys.append(self.base_y_at(self.centre_x))
+        ys = [y for y in ys if y is not None]
+        if not ys:
+            return None
+        return min(ys), max(ys)
 
     # ------------------------------------------------------------------
     def candidate_chords(self, ground: Polyline) -> list[tuple[float, float]]:
@@ -488,6 +519,47 @@ class SlipSurface:
         verts = self.polyline.vertices
         return (verts[0].x, verts[-1].x) if verts else (0.0, 0.0)
 
+    # ------------------------------------------------------------------
+    def kinks(self, x_l: Optional[float] = None,
+              x_r: Optional[float] = None) -> list[float]:
+        """Its own vertices, strictly inside the span.
+
+        Every one is a mandatory slice cut: a slice base belongs to one
+        segment of the surface or to another, never to a blend, and a slice
+        straddling a vertex gets a base angle that is neither of the two
+        real ones. What that cost is recorded in ``_slice_boundaries``: a
+        0.14 m near-vertical step invisible inside a 1.26 m slice, and
+        Block Search returning 0.821 on a slope whose circular minimum is
+        1.124.
+
+        The 1e-9 margin is ABSOLUTE, which the project's own rule says it
+        should not be. It is kept exactly as it was because this method was
+        extracted from the slicer, not rewritten: changing the margin here
+        changes which surfaces are cut and therefore every non-circular
+        number in the suite.
+        """
+        lo = -math.inf if x_l is None else x_l + 1e-9
+        hi = math.inf if x_r is None else x_r - 1e-9
+        return [v.x for v in self.polyline.vertices if lo < v.x < hi]
+
+    def y_span(self, x_l: float,
+               x_r: float) -> Optional[tuple[float, float]]:
+        """Exact ``(y_min, y_max)`` over ``[x_l, x_r]``.
+
+        A polyline is not convex, so its interior vertices can sit outside
+        the envelope of the two ends and all of them have to be looked at.
+        """
+        ys = [self.base_y_at(x_l), self.base_y_at(x_r)]
+        ys = [y for y in ys if y is not None]
+        if not ys:
+            return None
+        lo, hi = min(ys), max(ys)
+        for v in self.polyline.vertices:
+            if x_l <= v.x <= x_r:
+                lo = min(lo, v.y)
+                hi = max(hi, v.y)
+        return lo, hi
+
     def to_dict(self) -> dict:
         return {
             "type": "polyline",
@@ -506,6 +578,358 @@ class SlipSurface:
             s.id = data["id"]
         s.tension_cracks = [tuple(t) for t in data.get("tension_cracks", [])]
         return s
+
+
+# ----------------------------------------------------------------------
+@dataclass
+class CompositeSurface:
+    """A circular arc clipped to the FLOOR of the model.
+
+    Composite Surfaces, in the words of the reference program's own help: a
+    circular surface that "extends past the lower limits of the External
+    Boundary" is not discarded but made to "conform to the shape of the
+    External Boundary, between the two circle intersection points along the
+    lower edge". Which is to say the surface is, at every abscissa, the
+    higher of the arc and the floor::
+
+        base_y(x) = max(arc(x), floor(x))
+
+    Written as a maximum rather than as "arc, then floor, then arc" on
+    purpose: that phrasing needs the arc to dip below exactly once, and a
+    shaped bedrock horizon — which is the whole reason the option exists —
+    can be crossed any number of times. The maximum reduces to the
+    documented three-piece surface when there is one dip, generalises with
+    no special cases, and states the mechanics directly: the floor
+    constrains the surface from BELOW and nowhere else, so where the arc
+    comes back up into the soil the arc is the surface again.
+
+    NOT a subclass of :class:`SlipCircle`, and that is the design decision
+    of the whole class. The four moment methods dispatch on
+    ``isinstance(surface, SlipCircle)`` to the classical circular formula,
+    which divides the radius out of every term because every base normal
+    points at the centre. On the linear stretches it does not: the normal
+    is offset from the centre and has a moment of its own — the ``Σ N·f``
+    term of Fredlund and Krahn (1977), which is exactly the term their
+    general formulation carries so that composite surfaces can be solved at
+    all. A composite therefore takes the general moment balance of
+    :mod:`ogr_slip2d.moment_balance`, about the centre of its own circle;
+    :func:`moment_axis` is what hands it that centre.
+
+    Measured on the composite surface of verification problem 22 — Fredlund
+    and Krahn (1977), a 1 ft weak layer along the floor of the model and a
+    published circle that dips 5 ft below it — 40 slices, dry case, against
+    what that manual publishes::
+
+        moment axis            Ordinary  Bishop   Spencer   GLE
+        polyline auto-axis      -0.31 %  -1.84 %  +0.13 %  +0.13 %
+        centre of the circle    +0.23 %  +0.08 %  +0.10 %  +0.11 %
+
+    ``bedrock`` is the LOWER envelope of the external boundary
+    (:func:`ogr_core.geometry.bedrock_surface`), never a material boundary:
+    the option is defined against the External Boundary alone, and a
+    bedrock horizon is modelled by shaping its lower edge.
+    """
+
+    circle: SlipCircle
+    bedrock: Polyline
+    x_left: Optional[float] = None
+    x_right: Optional[float] = None
+    id: str = field(default_factory=lambda: str(uuid4()))
+    # Both inherited from the circle the composite was built from: the
+    # reverse-curvature crack and the user's Tension Crack wall are decided
+    # before the clipping and are not changed by it.
+    tension_cracks: list = field(default_factory=list)
+    tension_crack_wall: Optional[tuple] = None
+
+    # ------------------------------------------------------------------
+    # The circle's own geometry, readable straight off the composite. It is
+    # what the reported centre and radius of the surface are, and what the
+    # moment axis is; the arc itself is always evaluated THROUGH ``circle``
+    # so that the one-ulp handling of ``_lower_arc_disc`` (v0.1.100) stays
+    # in a single place.
+    @property
+    def centre_x(self) -> float:
+        return self.circle.centre_x
+
+    @property
+    def centre_y(self) -> float:
+        return self.circle.centre_y
+
+    @property
+    def radius(self) -> float:
+        return self.circle.radius
+
+    # ------------------------------------------------------------------
+    def _tol(self) -> float:
+        """Elevation tolerance, RELATIVE to the circle it was built from."""
+        return 1e-12 * max(self.radius, 1e-300)
+
+    def _bedrock_y_at(self, x: float) -> Optional[float]:
+        return ground_y_at(self.bedrock, x)
+
+    def follows_bedrock_at(self, x: float) -> bool:
+        """True where the FLOOR is the slip surface and not the arc."""
+        arc = self.circle.base_y_at(x)
+        floor = self._bedrock_y_at(x)
+        if floor is None:
+            return False
+        if arc is None:
+            return True
+        return floor > arc + self._tol()
+
+    # ------------------------------------------------------------------
+    def base_y_at(self, x: float) -> Optional[float]:
+        """``max(arc, floor)`` — see the class docstring."""
+        arc = self.circle.base_y_at(x)
+        floor = self._bedrock_y_at(x)
+        if arc is None:
+            return floor
+        if floor is None:
+            return arc
+        return floor if floor > arc else arc
+
+    def base_angle_at(self, x: float) -> float:
+        """Inclination of whichever branch is the surface at ``x`` [rad].
+
+        The arc wins ties, and that matters at one place worth naming: the
+        two endpoints are GROUND crossings, so the arc is the surface
+        there, and ``daylight_tangent_note`` reads the angle there to
+        decide whether the surface leaves the ground too steeply for a
+        fixed slice count to resolve.
+        """
+        if not self.follows_bedrock_at(x):
+            return self.circle.base_angle_at(x)
+        verts = self.bedrock.vertices
+        for p1, p2 in zip(verts[:-1], verts[1:]):
+            if p1.x <= x <= p2.x and abs(p2.x - p1.x) > 1e-12:
+                return math.atan((p2.y - p1.y) / (p2.x - p1.x))
+        return 0.0
+
+    def x_range(self) -> tuple[float, float]:
+        if self.x_left is not None and self.x_right is not None:
+            return (self.x_left, self.x_right)
+        return self.circle.x_range()
+
+    # ------------------------------------------------------------------
+    def _transitions(self) -> list[float]:
+        """Abscissae where the arc meets the floor, i.e. where it changes.
+
+        Solved segment by segment against the circle rather than sampled: a
+        transition is a MANDATORY slice cut, and a cut found by sampling
+        moves when the sampling does.
+        """
+        out: list[float] = []
+        verts = self.bedrock.vertices
+        cx, cy, r = self.centre_x, self.centre_y, self.radius
+        tol = 1e-9 * max(r, 1e-300)
+        for p1, p2 in zip(verts[:-1], verts[1:]):
+            dx, dy = p2.x - p1.x, p2.y - p1.y
+            a = dx * dx + dy * dy
+            if a < 1e-14 or abs(dx) < 1e-12:
+                continue          # a vertical step is not a crossing
+            b = 2 * ((p1.x - cx) * dx + (p1.y - cy) * dy)
+            c = (p1.x - cx) ** 2 + (p1.y - cy) ** 2 - r * r
+            disc = b * b - 4 * a * c
+            if disc < 0.0:
+                continue
+            sq = math.sqrt(disc)
+            for t in ((-b - sq) / (2 * a), (-b + sq) / (2 * a)):
+                if not (-1e-9 <= t <= 1 + 1e-9):
+                    continue
+                x = p1.x + t * dx
+                y = p1.y + t * dy
+                arc_y = self.circle.base_y_at(x)
+                # The UPPER arc can cut the floor too, and it is not the
+                # slip surface: only the lower one is.
+                if arc_y is None or abs(y - arc_y) > tol:
+                    continue
+                out.append(x)
+        return out
+
+    def _bedrock_bends(self) -> list[float]:
+        """Abscissae where the FLOOR itself changes slope.
+
+        Not every vertex of ``bedrock`` is one. The envelope is emitted at
+        every breakpoint of the boundary, so a flat floor under a slope with
+        three kinks arrives as four collinear vertices; on problem 22 that
+        is a vertex at x = 140 in the middle of a straight stretch at
+        y = 15. Passing it on as a mandatory cut would spend a slice on a
+        bend that does not exist — and the slicer's budget is finite, which
+        is exactly the failure this class is careful about.
+
+        The test is the cross product of the two adjacent segments,
+        RELATIVE to their lengths, so it reads the same in millimetres and
+        in metres.
+        """
+        verts = self.bedrock.vertices
+        out: list[float] = []
+        for a, b, c in zip(verts[:-2], verts[1:-1], verts[2:]):
+            ux, uy = b.x - a.x, b.y - a.y
+            vx, vy = c.x - b.x, c.y - b.y
+            scale = math.hypot(ux, uy) * math.hypot(vx, vy)
+            if scale > 0.0 and abs(ux * vy - uy * vx) > 1e-9 * scale:
+                out.append(b.x)
+        return out
+
+    def kinks(self, x_l: Optional[float] = None,
+              x_r: Optional[float] = None) -> list[float]:
+        """Abscissae where this surface changes slope, strictly inside.
+
+        Two kinds, and both are mandatory slice cuts: the arc-to-floor
+        transitions, and the floor's own bends in the stretches where the
+        floor IS the surface. A floor bend under a stretch the arc wins is
+        not a kink of the surface and must not spend a slice.
+
+        On the composite of verification problem 22 this returns exactly
+        two abscissae, which is why the surface can be described at all
+        without running into the slicer's "more mandatory cuts than slices"
+        refusal — the trap a hand-built polyline of the same surface falls
+        into as soon as the arc is described finely.
+        """
+        lo, hi = self.x_range() if x_l is None or x_r is None else (x_l, x_r)
+        if lo is None or hi is None or hi <= lo:
+            return []
+        tol = 1e-9 * (hi - lo)
+        marks = [x for x in self._transitions() if lo + tol < x < hi - tol]
+        marks += [x for x in self._bedrock_bends()
+                  if lo + tol < x < hi - tol and self.follows_bedrock_at(x)]
+        marks.sort()
+        out: list[float] = []
+        for x in marks:
+            if not out or x - out[-1] > tol:
+                out.append(x)
+        return out
+
+    def clips_the_arc(self) -> bool:
+        """True when this composite differs from the circle it came from.
+
+        The sign of ``floor - arc`` is CONSTANT between two consecutive
+        breakpoints: over such an interval the floor is one straight
+        segment and the arc one smooth piece, and every place the two swap
+        is by definition a transition, which is a breakpoint. Sampling one
+        midpoint per interval therefore decides the whole interval, and the
+        question is answered exactly with a handful of evaluations.
+
+        Not derived from :meth:`kinks` being non-empty, which is the
+        tempting shortcut: a transition falling exactly ON an endpoint is
+        not an interior cut and would not appear there, and the arc would
+        then be handed back unclipped — the very defect this class exists
+        to fix, surviving in the corner where the ground meets the floor.
+        """
+        x_l, x_r = self.x_range()
+        if x_l is None or x_r is None or x_r <= x_l:
+            return False
+        marks = sorted({x_l, x_r, *self.kinks(x_l, x_r)})
+        return any(self.follows_bedrock_at(0.5 * (a + b))
+                   for a, b in zip(marks[:-1], marks[1:]))
+
+    def y_span(self, x_l: float, x_r: float) -> Optional[tuple[float, float]]:
+        """Exact ``(y_min, y_max)`` of the surface over ``[x_l, x_r]``.
+
+        Exact and not sampled, and this is the one that bites. Between two
+        consecutive breakpoints the surface is either a straight floor
+        segment — extremes at its ends — or a piece of arc, whose only
+        interior extreme is the bottom of the circle. Evaluating the ends,
+        the kinks and that bottom therefore covers every case.
+
+        The slicer uses this span to throw away material boundaries that
+        cannot cut the surface. Answer it the way a plain arc would and
+        problem 22 reports (20, 60) for a surface that runs along y = 15:
+        the weak layer at y = 16 falls outside, is culled by bounding box,
+        and stops being a mandatory cut — silently, which is the worst way
+        to lose a layer.
+        """
+        xs = [x_l, x_r] + self.kinks(x_l, x_r)
+        if x_l <= self.centre_x <= x_r and not self.follows_bedrock_at(
+                self.centre_x):
+            xs.append(self.centre_x)
+        ys = [y for y in (self.base_y_at(x) for x in xs) if y is not None]
+        if not ys:
+            return None
+        return min(ys), max(ys)
+
+    # ------------------------------------------------------------------
+    def drawing_vertices(self, samples: int = 60) -> list[tuple[float, float]]:
+        """The surface as a polyline, for drawing and for export.
+
+        The kinks are included exactly; the arc stretches between them are
+        sampled. This is a PICTURE of the surface, never the surface the
+        slicer works on — that one keeps its arc exact.
+        """
+        x_l, x_r = self.x_range()
+        if x_l is None or x_r is None or x_r <= x_l:
+            return []
+        xs = [x_l + (x_r - x_l) * i / samples for i in range(samples + 1)]
+        xs += self.kinks(x_l, x_r)
+        xs.sort()
+        out: list[tuple[float, float]] = []
+        for x in xs:
+            y = self.base_y_at(x)
+            if y is None:
+                continue
+            if out and x - out[-1][0] <= 1e-12 * (x_r - x_l):
+                continue
+            out.append((x, y))
+        return out
+
+    def to_dict(self) -> dict:
+        """Serialised form.
+
+        Carries the circle it came from AND the polyline it became. The
+        circle, because that is what a composite is reported by — it has a
+        centre and a radius and is picked off the slip-centre grid by them
+        — and because it is enough to rebuild the surface: re-clipping the
+        same circle against the same model gives the same composite, which
+        is what the probabilistic sampler relies on. The polyline, because
+        a drawing of the arc alone would be a picture of a surface that was
+        never analysed.
+        """
+        return {
+            "type": "composite",
+            "id": self.id,
+            "centre_x": self.centre_x,
+            "centre_y": self.centre_y,
+            "radius": self.radius,
+            "x_left": self.x_left,
+            "x_right": self.x_right,
+            "vertices": [list(p) for p in self.drawing_vertices()],
+            "tension_cracks": [list(t) for t in self.tension_cracks],
+        }
+
+
+# ----------------------------------------------------------------------
+def compose_with_bedrock(circle: SlipCircle, external):
+    """Clip ``circle`` to the floor of the model, if it dips below it.
+
+    Returns the circle UNCHANGED when its arc stays inside the soil, and
+    that is not an optimisation: it is what keeps every model without
+    escaping surfaces answering exactly as it did before the option
+    existed. A composite is built only where the alternative — with the
+    option off — is for the surface to be discarded outright, which is the
+    trade the reference documents and its dialog illustrates.
+
+    ``circle`` must already carry its endpoints. The caller resolves them,
+    together with reverse curvature and the user's tension crack, before
+    the clipping, so that the surface which gets clipped is the surface
+    that gets analysed.
+    """
+    from ogr_core.geometry import bedrock_surface
+
+    if circle.x_left is None or circle.x_right is None:
+        return circle
+    bedrock = bedrock_surface(external)
+    if len(bedrock.vertices) < 2:
+        return circle
+
+    composite = CompositeSurface(
+        circle=circle, bedrock=bedrock,
+        x_left=circle.x_left, x_right=circle.x_right,
+        tension_cracks=list(circle.tension_cracks or []),
+        tension_crack_wall=getattr(circle, "tension_crack_wall", None),
+    )
+    if not composite.clips_the_arc():
+        return circle
+    return composite
 
 
 # ----------------------------------------------------------------------
@@ -541,7 +965,17 @@ def moment_axis(surface, override=None) -> tuple[float, float]:
     surface vertices, which is a display value: it is not the distance to the
     endpoints (48.09 against the reported 47.21 in Ej_1), so it is not the
     radius of any circle through them.
+
+    v0.1.111 — a COMPOSITE surface is answered before the override is even
+    read, and for the same reason a circle is: it has a real centre of
+    rotation, the one its arc was drawn about, and a constructed axis would
+    be a worse answer than the true one. It is not a preference. Measured on
+    the composite of verification problem 22, 40 slices, dry: with the
+    constructed axis Bishop comes out at -1.84 % of the published value and
+    with the circle's own centre at +0.08 %.
     """
+    if isinstance(surface, CompositeSurface):
+        return surface.centre_x, surface.centre_y
     if override is not None:
         return float(override[0]), float(override[1])
     if isinstance(surface, SlipCircle):
@@ -576,7 +1010,18 @@ def lowest_elevation(surface) -> Optional[float]:
 
     Used by the Minimum Elevation surface filter, whose rule is that a
     surface dipping below the user's elevation is discarded, not trimmed.
+
+    v0.1.111 — a COMPOSITE has to be asked, not derived: the bottom of its
+    circle is exactly the point the clipping removed, so answering with
+    ``centre_y - radius`` would filter it on an elevation it never reaches.
+    On problem 22 that is 10.0 against the 15.0 the surface actually runs
+    along, and Minimum Elevation would discard the very surface the option
+    exists to build.
     """
+    if isinstance(surface, CompositeSurface):
+        x_l, x_r = surface.x_range()
+        span = surface.y_span(x_l, x_r)
+        return span[0] if span else None
     if isinstance(surface, SlipCircle):
         x_l, x_r = surface.x_left, surface.x_right
         if x_l is None or x_r is None:

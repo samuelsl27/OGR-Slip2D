@@ -761,7 +761,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Comments:': 'Comentarios:',
         'Company:': 'Empresa:',
         'Composite Surfaces': 'Superficies compuestas',
-        'Composite Surfaces (slip surface follows a Material Boundary)': 'Superficies compuestas (la superficie de rotura sigue un contorno de material)',
+        'Composite Surfaces (the slip surface follows the base of the External Boundary)': 'Superficies compuestas (la superficie de rotura sigue la base del contorno externo)',
         'Constant u:': 'u constante:',
         'Convergence Options': 'Opciones de convergencia',
         'Convert Boundary': 'Convertir contorno',

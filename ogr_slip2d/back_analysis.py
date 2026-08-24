@@ -243,6 +243,8 @@ def run_back_analysis(project, search, target_fos=1.3, elevation=0.0,
         out.notes["error"] = "The target factor of safety must be positive."
         return out
 
+    from .surface import CompositeSurface
+
     kh = project.seismic.kh if project.seismic.enabled else 0.0
     kv = project.seismic.kv if project.seismic.enabled else 0.0
 
@@ -254,8 +256,20 @@ def run_back_analysis(project, search, target_fos=1.3, elevation=0.0,
 
     best = None
     total = len(run.evaluations)
+    # v0.1.111 — composite surfaces are COUNTED and reported, not passed
+    # over. ``required_force`` writes Bishop in its circular form, which
+    # assumes every base normal points at the centre and every moment arm
+    # is R; on the straight stretch of a composite neither holds, so it
+    # answers None rather than a plausible wrong number. That is the right
+    # refusal, but a silent one would be worse than the defect this version
+    # fixes: with Composite Surfaces enabled the back-analysis would report
+    # a governing force drawn from a population it never says it shrank.
+    n_composite = 0
     for i, ev in enumerate(run.evaluations):
         if not ev.is_valid or not ev.slices:
+            continue
+        if isinstance(ev.surface, CompositeSurface):
+            n_composite += 1
             continue
         r = required_force(ev.slices, ev.surface, target_fos, method_id,
                            elevation, kh, kv)
@@ -271,6 +285,13 @@ def run_back_analysis(project, search, target_fos=1.3, elevation=0.0,
             progress_cb(i, total)
 
     out.critical = best
+    if n_composite:
+        out.notes["composite_skipped"] = (
+            f"{n_composite} composite surface(s) were left out: back "
+            f"analysis is written in the circular form of the method, which "
+            f"does not hold on the straight stretches of a composite. Turn "
+            f"Composite Surfaces off to back-analyse this model, and read "
+            f"the result as being about circular surfaces only.")
     if best is None:
         out.notes["error"] = (
             "No surface could be back-analysed. Check the target factor "

@@ -45,7 +45,8 @@ from ogr_core.hydraulic.water_surfaces import (
 from ogr_core.materials import Material
 from ogr_core.project import Project
 
-from .surface import SlipCircle, SlipSurface, SurfaceProtocol
+from .surface import (CompositeSurface, SlipCircle, SlipSurface,
+                      SurfaceProtocol)
 
 
 @dataclass
@@ -341,6 +342,18 @@ def _surface_crossings(
 
     Sampling the whole range densely would have been simpler and much
     more expensive — this runs for every trial surface of a search.
+
+    v0.1.111 — a surface that RUNS ALONG a boundary is not crossing it, and
+    the two look identical to a sign test because both give ``g = 0``. The
+    distinction is whether the zero is isolated: a crossing touches the
+    line at a point, a coincident stretch gives zeros at consecutive
+    samples. Composite Surfaces makes this reachable in an ordinary model —
+    the slip surface then follows the floor of the External Boundary
+    exactly, and a material boundary drawn along that same floor is what the
+    reference tutorial for the option produces before asking the user to
+    delete it. Without the distinction one such stretch emits about eight
+    spurious cuts per segment, and the surface is refused whole for having
+    more mandatory cuts than slices, saying nothing about why.
     """
     pts = polyline.vertices
     if len(pts) < 2:
@@ -363,15 +376,14 @@ def _surface_crossings(
         if hi - lo <= 0.0:
             continue
         step = (hi - lo) / sub
-        prev_x, prev_g = None, None
-        for k in range(sub + 1):
-            x = lo + step * k
-            gx = g(x, p1, p2)
-            if gx is None:
-                prev_x, prev_g = None, None
+        vals = [(lo + step * k, g(lo + step * k, p1, p2))
+                for k in range(sub + 1)]
+        for k in range(1, len(vals)):
+            (xa, ga), (xb, gb) = vals[k - 1], vals[k]
+            if ga is None or gb is None:
                 continue
-            if prev_g is not None and prev_g * gx < 0.0:
-                a, b, ga = prev_x, x, prev_g
+            if ga * gb < 0.0:
+                a, b = xa, xb
                 for _ in range(50):
                     m = 0.5 * (a + b)
                     gm = g(m, p1, p2)
@@ -382,9 +394,14 @@ def _surface_crossings(
                     else:
                         a, ga = m, gm
                 out.append(0.5 * (a + b))
-            elif gx == 0.0:
-                out.append(x)
-            prev_x, prev_g = x, gx
+        for k, (x, gx) in enumerate(vals):
+            if gx != 0.0:
+                continue
+            neighbours = [vals[j][1] for j in (k - 1, k + 1)
+                          if 0 <= j < len(vals)]
+            if any(v == 0.0 for v in neighbours):
+                continue          # a coincident stretch, not a crossing
+            out.append(x)
     return out
 
 
@@ -413,31 +430,24 @@ def _slice_boundaries(
     if width <= 0.0:
         return None
 
-    # The y-range the slip surface spans. For a circle the lower arc is
-    # convex, so its extremes are the lowest point and the two ends —
-    # exact, and three evaluations. Used to throw away whole boundaries
-    # before scanning them: a layer that runs well below the failure mass
-    # cannot cut it, and checking that costs two comparisons instead of
-    # eight evaluations per segment. Without it, this search ran in full
-    # for every trial surface of a grid search and cost 20 %.
-    y_ends = [surface.base_y_at(x_l), surface.base_y_at(x_r)]
-    y_ends = [v for v in y_ends if v is not None]
-    if isinstance(surface, SlipCircle) and x_l <= surface.centre_x <= x_r:
-        v = surface.base_y_at(surface.centre_x)
-        if v is not None:
-            y_ends.append(v)
-    if not y_ends:
+    # The y-range the slip surface spans. Used to throw away whole
+    # boundaries before scanning them: a layer that runs well below the
+    # failure mass cannot cut it, and checking that costs two comparisons
+    # instead of eight evaluations per segment. Without it, this search ran
+    # in full for every trial surface of a grid search and cost 20 %.
+    #
+    # v0.1.111 — ASKED OF THE SURFACE instead of worked out here. It used to
+    # be an ``isinstance`` plus a peek at ``.polyline``, which is a rule
+    # about two geometries written where a third could not be seen: a
+    # composite surface has no ``.polyline``, so it would have answered with
+    # the envelope of its two ENDS alone. On problem 22 that is (20, 60) for
+    # a surface running along y = 15, and the weak layer at y = 16 — the
+    # layer the whole problem is about — would have been culled by bounding
+    # box and stopped being a mandatory cut, without a word.
+    span = surface.y_span(x_l, x_r)
+    if span is None:
         return None
-    s_lo, s_hi = min(y_ends), max(y_ends)
-    if not isinstance(surface, SlipCircle):
-        # A polyline surface is not convex: its interior vertices can sit
-        # outside the envelope of the two ends.
-        for v in getattr(getattr(surface, "polyline", None), "vertices", ()):
-            if x_l <= v.x <= x_r:
-                s_lo = min(s_lo, v.y)
-                s_hi = max(s_hi, v.y)
-
-    cuts: set = set()
+    s_lo, s_hi = span
 
     # v0.1.89 — the slip surface's OWN kinks are mandatory cuts too, and
     # for the same reason as the layer crossings below: a slice base
@@ -454,12 +464,9 @@ def _slice_boundaries(
     # min m_alpha was 0.50 against a limit of 0.2. The geometry was not
     # wrong, it was invisible.
     #
-    # Circles have no vertices, so this is inert for every circular search
+    # Circles have no kinks, so this stays inert for every circular search
     # — the validated Ej_1 and Ej_2 benchmarks cannot move.
-    if not isinstance(surface, SlipCircle):
-        for v in getattr(getattr(surface, "polyline", None), "vertices", ()):
-            if x_l + 1e-9 < v.x < x_r - 1e-9:
-                cuts.add(v.x)
+    cuts: set = set(surface.kinks(x_l, x_r))
 
     for b in project.boundaries:
         if b.btype not in (BoundaryType.MATERIAL, BoundaryType.WATER_TABLE):
@@ -902,8 +909,15 @@ def slice_surface(
     if external is None:
         return None
 
-    # For circles, compute ground intersections if not cached
-    if isinstance(surface, SlipCircle):
+    # For circles, compute ground intersections if not cached.
+    #
+    # v0.1.111 — and for COMPOSITE surfaces, which are resolved the same
+    # way: their endpoints are ground crossings of the arc they were built
+    # from, the search hands them over already resolved, and a tension
+    # crack truncates them by moving an abscissa exactly as it does on a
+    # circle. What they must NOT take is the polyline branch below, which
+    # would try to cut a ``.polyline`` they do not have.
+    if isinstance(surface, (SlipCircle, CompositeSurface)):
         ground = _ground_surface_from_external(external)
         if surface.x_left is None or surface.x_right is None:
             if surface.intersect_with_ground(ground) is None:
@@ -1001,7 +1015,8 @@ def slice_surface(
     # multiplies by dy/dx, 1600 on the problem-23 circle, so no tolerance on
     # y survives it. A polyline's endpoints are just its first and last
     # vertices and carry no such guarantee, so they stay judged.
-    ends_are_ground_crossings = isinstance(surface, SlipCircle)
+    ends_are_ground_crossings = isinstance(
+        surface, (SlipCircle, CompositeSurface))
 
     for i, (xl, xr) in enumerate(zip(bounds[:-1], bounds[1:])):
         dx = xr - xl
@@ -1083,8 +1098,17 @@ def slice_surface(
         # See ``Slice.weight_arm_ratio``: the chord's own angle is no longer
         # the tangent at ``xc``, so the moment arm is taken from the geometry
         # instead of from the angle.
-        if isinstance(surface, SlipCircle) and surface.radius > 0.0:
-            arm_ratio = (xc - surface.centre_x) / surface.radius
+        #
+        # v0.1.111 — asked for a CENTRE rather than for a class. The arm of
+        # a vertical force about a point depends only on its abscissa, so
+        # ``(xc - centre_x)/R`` is the true normalised arm on every surface
+        # that has a centre — including a composite, whose straight
+        # stretches are no exception. Answering ``sin(alpha)`` there would
+        # write a number into the slice that is not the arm of anything.
+        _centre_x = getattr(surface, "centre_x", None)
+        _radius = getattr(surface, "radius", 0.0) or 0.0
+        if _centre_x is not None and _radius > 0.0:
+            arm_ratio = (xc - _centre_x) / _radius
         else:
             arm_ratio = math.sin(alpha)
 

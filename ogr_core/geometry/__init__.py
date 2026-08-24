@@ -15,7 +15,7 @@ from .expand_shrink import (
     ExpandShrinkResult,
     expand_shrink_external,
 )
-from .ground import (ground_surface, lower_y_at, upper_y_at,
+from .ground import (bedrock_surface, ground_surface, lower_y_at, upper_y_at,
                      zero_thickness_spans)
 from .primitives import Polyline, Vertex, segments_of
 from .tension_crack import TensionCrackProperties, WaterLevelMode
@@ -61,6 +61,9 @@ __all__ = [
     "WaterLevelMode",
     # v0.1.84 — the single definition of the ground surface
     "ground_surface",
+    # v0.1.111 — and of the floor of the model, which Composite Surfaces
+    # makes a slip surface follow instead of crossing.
+    "bedrock_surface",
     "lower_y_at",
     "upper_y_at",
     "zero_thickness_spans",

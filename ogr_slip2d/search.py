@@ -501,19 +501,35 @@ class BaseSearch(ABC):
 
         Masses that leave the soil region are dropped, which is the
         reference's documented behaviour for non-composite circular
-        surfaces and what its report counts as error −103. With Composite
-        Surfaces enabled the rule does not apply: that option exists
-        precisely so such a circle follows the boundary instead of being
-        rejected by it. Containment is judged on the surface as finally
-        analysed — after any reverse-curvature tension crack has moved an
-        endpoint — because that is the surface the factor of safety
-        belongs to.
+        surfaces and what its report counts as error −103. Containment is
+        judged on the surface as finally analysed — after any
+        reverse-curvature tension crack has moved an endpoint — because
+        that is the surface the factor of safety belongs to.
+
+        With Composite Surfaces enabled the mass is CLIPPED to the floor of
+        the model instead of being dropped, which is what that option
+        means and what it is for: a bedrock horizon is modelled by shaping
+        the lower edge of the External Boundary, and a circular search then
+        follows it.
+
+        v0.1.111 — until now the option only skipped the rejection, so the
+        escaping circle was analysed WHOLE, with slices whose bases stood
+        several feet below the model and whose weight came from soil that
+        does not exist. On the published circle of verification problem 22
+        (Fredlund and Krahn 1977) the arc reached y = 10 against a floor at
+        y = 15, only 2 of its 30 slices sat in the weak layer that governs
+        the problem, and Bishop came out at 1.9806 against a published
+        1.377 to 1.382: +43 %, on the unsafe side. The docstring of this
+        very method said the opposite of what the code did — it promised
+        the circle would "follow the boundary instead of being rejected by
+        it" — which is how the defect survived the reading that found it
+        twice.
         """
         from ogr_core.geometry import ground_surface
         from .slicer import (
             _reverse_curvature_mode, apply_tension_crack_truncation,
         )
-        from .surface import leaves_soil_region
+        from .surface import compose_with_bedrock, leaves_soil_region
 
         external = project.external_boundary()
         if external is None:
@@ -552,7 +568,16 @@ class BaseSearch(ABC):
             if lim is None:
                 continue        # entirely within the tension crack zone
             trial.x_left, trial.x_right = lim
-            if not composite and leaves_soil_region(
+            if composite:
+                # Clipping REPLACES the containment rule rather than
+                # joining it: a clipped surface is inside the soil by
+                # construction, so there is nothing left for
+                # ``leaves_soil_region`` to reject. A circle that never
+                # dipped comes back unchanged, which is what keeps every
+                # model without escaping surfaces answering exactly as it
+                # did before.
+                trial = compose_with_bedrock(trial, external)
+            elif leaves_soil_region(
                     trial, ext_verts, trial.x_left, trial.x_right):
                 continue
             yield trial

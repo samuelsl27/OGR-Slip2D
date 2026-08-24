@@ -1442,7 +1442,11 @@ class InterpretWindow(QMainWindow):
         answer with the other.
         """
         sd = res.surface.to_dict()
-        if sd.get("type") == "circle":
+        # v0.1.111 — a COMPOSITE reads out like the circle it came from,
+        # because that is what identifies it: the reference reports centre
+        # and radius for a composite surface exactly as for a circular one,
+        # and the reader comparing two programs is comparing those numbers.
+        if sd.get("type") in ("circle", "composite"):
             return (f"FS ={res.fos:.3f} r ={sd['radius']:.3f} "
                     f"c=({sd['centre_x']:.3f},{sd['centre_y']:.3f})")
         return f"FS ={res.fos:.3f}"
@@ -1515,7 +1519,10 @@ class InterpretWindow(QMainWindow):
         hits = []
         for r in res.evaluations:
             sd = r.surface.to_dict()
-            if sd.get("type") != "circle":
+            # A composite belongs to the grid centre its circle was drawn
+            # about; excluding it would make the surfaces the option exists
+            # to produce unclickable on the very grid that generated them.
+            if sd.get("type") not in ("circle", "composite"):
                 continue
             cx, cy = sd.get("centre_x"), sd.get("centre_y")
             if cx is None or cy is None:

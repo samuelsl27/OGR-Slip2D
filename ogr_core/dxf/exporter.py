@@ -273,14 +273,23 @@ def export_dxf(project, path, options: Optional[ExportOptions] = None,
 
     # ---- critical slip surface --------------------------------------
     if opts.slip_surface and results:
-        from ogr_slip2d.surface import SlipCircle
+        from ogr_slip2d.surface import CompositeSurface, SlipCircle
         for mid, sr in results.items():
             crit = getattr(sr, "critical", None)
             if crit is None:
                 continue
             surf = crit.surface
             layer = _layer(LAYER_SURFACE)
-            if isinstance(surf, SlipCircle):
+            if isinstance(surf, CompositeSurface):
+                # v0.1.111 — asked BEFORE the circle branch, and asked of
+                # the surface rather than reconstructed here: a composite
+                # has a centre and a radius, so ``_surface_arc`` would
+                # happily draw the arc it was clipped from — a curve that
+                # dives below the floor of the model and was never
+                # analysed. Exporting that into a drawing someone builds
+                # from is worse than exporting nothing.
+                pts = surf.drawing_vertices()
+            elif isinstance(surf, SlipCircle):
                 pts = _surface_arc(surf, crit)
             else:
                 pts = [(v.x, v.y) for v in surf.polyline.vertices]

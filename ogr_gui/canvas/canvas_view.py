@@ -772,8 +772,9 @@ class CanvasView(QGraphicsView):
             sd = ev.surface.to_dict()
             # A surface rejected before it was ever sliced has no
             # endpoints, so there is nothing to draw for it.
-            if sd.get("type") == "circle" and (sd.get("x_left") is None
-                                               or sd.get("x_right") is None):
+            if (sd.get("type") in ("circle", "composite")
+                    and (sd.get("x_left") is None
+                         or sd.get("x_right") is None)):
                 continue
             item = SlipSurfaceItem(sd, ev.fos)
             pen = item.pen()

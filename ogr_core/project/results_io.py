@@ -112,7 +112,10 @@ def save_results(
 
             sd = res.surface.to_dict()
             sg.attrs["surface_type"] = sd["type"]
-            if sd["type"] == "circle":
+            # v0.1.111 — "composite" as well: the type string says which of
+            # the two it is, and the centre and radius are what the surface
+            # is identified by in either case.
+            if sd["type"] in ("circle", "composite"):
                 sg.attrs["centre_x"] = sd["centre_x"]
                 sg.attrs["centre_y"] = sd["centre_y"]
                 sg.attrs["radius"] = sd["radius"]

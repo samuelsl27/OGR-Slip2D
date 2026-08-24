@@ -237,6 +237,28 @@ def _envelope(key: tuple[tuple[float, float], ...]
     return tuple(out)
 
 
+@lru_cache(maxsize=64)
+def _lower_envelope(key: tuple[tuple[float, float], ...]
+                    ) -> tuple[tuple[float, float], ...]:
+    """The LOWER envelope of an immutable vertex tuple, memoised.
+
+    Memoised for the same reason as :func:`_envelope`, and it is the same
+    reason squared: Composite Surfaces asks for this profile once per trial
+    circle of a search.
+    """
+    vertices = [Vertex(x, y) for x, y in key]
+    xs_all = [v.x for v in vertices]
+    span = max(xs_all) - min(xs_all)
+    tol = _X_MERGE_REL * span if span > 0 else _X_MERGE_REL
+
+    out: list[tuple[float, float]] = []
+    for x in _breakpoints(vertices, tol):
+        y = lower_y_at(vertices, x, tol)
+        if y is not None:
+            out.append((x, y))
+    return tuple(out)
+
+
 def ground_surface(external) -> Polyline:
     """Upper envelope of an external boundary, left to right.
 
@@ -252,6 +274,32 @@ def ground_surface(external) -> Polyline:
         return Polyline(vertices=sorted(vertices, key=lambda v: v.x))
     key = tuple((v.x, v.y) for v in vertices)
     return Polyline(vertices=[Vertex(x, y) for x, y in _envelope(key)])
+
+
+def bedrock_surface(external) -> Polyline:
+    """LOWER envelope of an external boundary, left to right.
+
+    The mirror of :func:`ground_surface`, and the floor of the model: for
+    each x inside it, the lowest point of the boundary. Below this line
+    there is no soil, which is why the reference program discards a
+    circular surface that dips under it — and why its Composite Surfaces
+    option, which analyses those surfaces instead of discarding them, has
+    to make them follow *this* profile.
+
+    Named for what it models rather than for the geometry: the whole point
+    of drawing a shaped lower edge is to represent a bedrock or otherwise
+    impenetrable horizon, which is how both the option and this profile are
+    used.
+
+    Shares :func:`_breakpoints` with the upper envelope, so a re-entrant or
+    overhanging boundary changes edge at the same abscissae in both. Takes
+    the same three input forms and returns an open polyline.
+    """
+    vertices = _as_vertices(external)
+    if len(vertices) < 3:
+        return Polyline(vertices=sorted(vertices, key=lambda v: v.x))
+    key = tuple((v.x, v.y) for v in vertices)
+    return Polyline(vertices=[Vertex(x, y) for x, y in _lower_envelope(key)])
 
 
 def _as_vertices(external) -> list[Vertex]:

@@ -560,10 +560,19 @@ class SlipSurfaceItem(QGraphicsPathItem):
                 right_crack = cracks.get(round(float(xr), 9))
                 if right_crack is not None:
                     path.lineTo(xr, right_crack[1])
-        elif stype == "polyline":
+        elif stype in ("polyline", "composite"):
             # v0.1.12 — non-circular surface (SlipSurface).
             # to_dict() returns {"type": "polyline", "polyline": {...}}
             # where polyline is itself a Polyline.to_dict() with "vertices".
+            #
+            # v0.1.111 — and Composite Surfaces, which shares this branch
+            # rather than the circular one above ON PURPOSE. A composite
+            # carries a centre and a radius, so drawing it as an arc would
+            # succeed and would be wrong: the arc is the surface only down
+            # to the floor of the model, and below that the analysed
+            # surface runs along the boundary. Its ``vertices`` are that
+            # analysed surface, and this is the one place where the picture
+            # and the number are made to agree.
             verts = surface_dict.get("vertices")
             if not verts:
                 pl = surface_dict.get("polyline", {})
@@ -662,7 +671,12 @@ class SlipRadiiItem(QGraphicsPathItem):
         super().__init__(parent)
         self.surface_dict = surface_dict
         path = QPainterPath()
-        if surface_dict.get("type", "circle") == "circle":
+        # v0.1.111 — a COMPOSITE too: it is a circular surface that was
+        # clipped, it has the same centre of rotation, and the two radii to
+        # its endpoints are drawn from the same arc. Its moment axis IS
+        # this point, so leaving it undrawn would hide exactly what the
+        # reader needs to judge the mechanism.
+        if surface_dict.get("type", "circle") in ("circle", "composite"):
             xc = surface_dict["centre_x"]
             yc = surface_dict["centre_y"]
             r = surface_dict["radius"]

@@ -311,6 +311,18 @@ class SurfaceOptionsDialog(QDialog):
         # Every "Optimize Surfaces" checkbox on the page; they show
         # one and the same setting, so they are kept in step.
         self._optimize_boxes = []
+        # v0.1.111 — the same problem the optimize boxes were given
+        # ``_sync_optimize_boxes`` for in v0.1.104, and the same answer.
+        # THREE panels show "Composite Surfaces" and two show "Create
+        # tension crack for reverse curvature", and there is ONE setting
+        # behind each. ``apply`` used to write both from the GRID widgets
+        # whatever page the user had been on, so ticking Composite Surfaces
+        # under Slope Search or Auto Refine did nothing at all — and was
+        # then overwritten by whatever the unseen Grid page still showed.
+        # Open since v0.1.78, and rule 7 in its plainest form now that the
+        # option finally does something.
+        self._composite_boxes: list = []
+        self._tcrack_boxes: list = []
 
         # ============ STACKED PANELS (one per method) ============
         self.stack = QStackedWidget()
@@ -537,7 +549,27 @@ class SurfaceOptionsDialog(QDialog):
 
     def _sync_optimize_boxes(self, checked: bool) -> None:
         """Carry a tick across to the panels the user cannot see."""
-        for box in self._optimize_boxes:
+        self._sync_boxes(self._optimize_boxes, checked)
+
+    def _sync_composite_boxes(self, checked: bool) -> None:
+        """Composite Surfaces: three panels, one setting."""
+        self._sync_boxes(self._composite_boxes, checked)
+
+    def _sync_tcrack_boxes(self, checked: bool) -> None:
+        """Reverse-curvature tension crack: two panels, one setting."""
+        self._sync_boxes(self._tcrack_boxes, checked)
+
+    @staticmethod
+    def _sync_boxes(boxes, checked: bool) -> None:
+        """Carry a tick across to the panels the user cannot see.
+
+        Kept at the moment of the click rather than reconciled in
+        ``apply``, so that ``apply`` has one value to write and no rule to
+        get wrong. v0.1.104 tried the other way for the optimize boxes: an
+        OR over the three, which — since all three start from the same
+        stored value — put back a tick the user had just cleared.
+        """
+        for box in boxes:
             if box.isChecked() != checked:
                 box.blockSignals(True)
                 box.setChecked(checked)
@@ -580,14 +612,23 @@ class SurfaceOptionsDialog(QDialog):
         )
         f.addRow(tr("Radius Increment:"), self._g_radius)
         self._g_composite = QCheckBox(
-            tr("Composite Surfaces (slip surface follows a Material Boundary)")
+            # v0.1.111 — the label said "a Material Boundary" and that is
+            # not what it does: the surface follows the LOWER EDGE OF THE
+            # EXTERNAL BOUNDARY, which is where a bedrock horizon is drawn.
+            # Harmless while the option did nothing; misleading now.
+            tr("Composite Surfaces (the slip surface follows the base of "
+               "the External Boundary)")
         )
         self._g_composite.setChecked(s.composite_surfaces)
+        self._composite_boxes.append(self._g_composite)
+        self._g_composite.toggled.connect(self._sync_composite_boxes)
         f.addRow("", self._g_composite)
         self._g_tcrack = QCheckBox(
             tr("Create tension crack for reverse curvature")
         )
         self._g_tcrack.setChecked(s.create_tension_crack_reverse_curvature)
+        self._tcrack_boxes.append(self._g_tcrack)
+        self._g_tcrack.toggled.connect(self._sync_tcrack_boxes)
         self._g_tcrack.setToolTip(
             "Insert a tension crack automatically when the slip surface\n"
             "exhibits a concave segment (κ < 0) at the up-slope side."
@@ -636,9 +677,13 @@ class SurfaceOptionsDialog(QDialog):
 
         self._sl_composite = QCheckBox(tr("Composite Surfaces"))
         self._sl_composite.setChecked(s.composite_surfaces)
+        self._composite_boxes.append(self._sl_composite)
+        self._sl_composite.toggled.connect(self._sync_composite_boxes)
         f.addRow("", self._sl_composite)
         self._sl_tcrack = QCheckBox(tr("Create tension crack for reverse curvature"))
         self._sl_tcrack.setChecked(s.create_tension_crack_reverse_curvature)
+        self._tcrack_boxes.append(self._sl_tcrack)
+        self._sl_tcrack.toggled.connect(self._sync_tcrack_boxes)
         f.addRow("", self._sl_tcrack)
         return w
 
@@ -687,6 +732,8 @@ class SurfaceOptionsDialog(QDialog):
         f.addRow("", self._ar_total_label)
         self._ar_composite = QCheckBox(tr("Composite Surfaces"))
         self._ar_composite.setChecked(s.composite_surfaces)
+        self._composite_boxes.append(self._ar_composite)
+        self._ar_composite.toggled.connect(self._sync_composite_boxes)
         f.addRow("", self._ar_composite)
         return w
 
