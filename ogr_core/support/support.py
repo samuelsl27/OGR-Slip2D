@@ -200,6 +200,25 @@ def support_from_dict(data: dict) -> SupportType:
     return _SUPPORT_REGISTRY[tid].from_dict(data)
 
 
+def _default_orientation(type_id: str) -> ForceOrientation:
+    """``DEFAULT_ORIENTATION`` of a support type, by id.
+
+    An unknown id falls back to TANGENT_TO_SLIP rather than raising: a
+    project may carry a support whose plugin is not loaded, and losing
+    the whole model over a default is worse than analysing it with one.
+    """
+    cls = _SUPPORT_REGISTRY.get(type_id)
+    return (cls.DEFAULT_ORIENTATION if cls is not None
+            else ForceOrientation.TANGENT_TO_SLIP)
+
+
+def _default_application(type_id: str) -> ForceApplication:
+    """``DEFAULT_APPLICATION`` of a support type, by id. See above."""
+    cls = _SUPPORT_REGISTRY.get(type_id)
+    return (cls.DEFAULT_APPLICATION if cls is not None
+            else ForceApplication.ACTIVE)
+
+
 # ======================================================================
 # 1. End Anchored
 # ======================================================================
@@ -876,23 +895,46 @@ class SupportInstance:
 
     Attributes:
         type_id: ``SupportType.TYPE_ID`` of the property type used
-        head: head end (where the slope surface is)
+        head: head end, at the slope FACE — where the plate is. Not a
+            free choice: ``force_at`` measures the stripping length
+            from here and the pullout length from the tail, and
+            ``_support_force_angle`` points the parallel force head →
+            tail because that is the way a bolt in tension pulls.
         tail: tail end (anchor end, inside the slope)
-        force_application: Active / Passive
+        force_application: Active / Passive. ``None`` means "whatever
+            this support type declares" — see below.
         orientation: how the support force vector aligns with the
-            slip surface
+            slip surface. ``None`` means "whatever this support type
+            declares".
         user_angle_deg: only used if orientation = USER_DEFINED
         name, color, id: bookkeeping
+
+    v0.1.112 — ``orientation`` and ``force_application`` default to
+    ``None`` and are resolved in ``__post_init__`` against the support
+    type's ``DEFAULT_ORIENTATION`` / ``DEFAULT_APPLICATION``. Before
+    that they were plain dataclass defaults, so an instance built in
+    code was born TANGENT_TO_SLIP + ACTIVE no matter what its type
+    declared: a ``GroutedTieback`` (PARALLEL_TO_SUPPORT) and a
+    ``PileMicropile`` (PERPENDICULAR_TO_PILE, PASSIVE) both silently
+    ignored their own declaration. The GUI never had the bug — it
+    copies the type's values by hand — which is exactly why it went
+    unnoticed for so long.
     """
     type_id: str
     head: "Vertex"                    # type: ignore[name-defined]
     tail: "Vertex"                    # type: ignore[name-defined]
-    force_application: ForceApplication = ForceApplication.ACTIVE
-    orientation: ForceOrientation = ForceOrientation.TANGENT_TO_SLIP
+    force_application: Optional[ForceApplication] = None
+    orientation: Optional[ForceOrientation] = None
     user_angle_deg: float = 0.0
     name: str = ""
     color: str = "#4b0082"
     id: str = field(default_factory=lambda: str(uuid4()))
+
+    def __post_init__(self) -> None:
+        if self.orientation is None:
+            self.orientation = _default_orientation(self.type_id)
+        if self.force_application is None:
+            self.force_application = _default_application(self.type_id)
 
     def length(self) -> float:
         from ..geometry.primitives import Vertex  # noqa
@@ -958,12 +1000,14 @@ class SupportInstance:
             type_id=data["type_id"],
             head=Vertex(*data["head"]),
             tail=Vertex(*data["tail"]),
-            force_application=ForceApplication(
-                data.get("force_application", "active"),
-            ),
-            orientation=ForceOrientation(
-                data.get("orientation", "tangent_to_slip"),
-            ),
+            # A key that is ABSENT means the file never said, so the
+            # support type decides; a key that is PRESENT is honoured.
+            # Reading it as ``get(..., "active")`` invented a value the
+            # file did not contain.
+            force_application=(ForceApplication(data["force_application"])
+                               if data.get("force_application") else None),
+            orientation=(ForceOrientation(data["orientation"])
+                         if data.get("orientation") else None),
             user_angle_deg=data.get("user_angle_deg", 0.0),
             name=data.get("name", ""),
             color=data.get("color", "#4b0082"),
@@ -1008,9 +1052,19 @@ class SupportPattern:
     orientation_mode: str = "angle"     # angle | normal | depth
     angle_deg: float = -15.0            # negative = pointing down into slope
     flip_180: bool = False
-    force_application: ForceApplication = ForceApplication.ACTIVE
-    orientation: ForceOrientation = ForceOrientation.TANGENT_TO_SLIP
+    # v0.1.112 — ``None`` means "ask the support type", exactly as in
+    # :class:`SupportInstance`. A pattern is just a factory of instances,
+    # so it cannot be the one place that overrides the type's own
+    # declaration with a default nobody chose.
+    force_application: Optional[ForceApplication] = None
+    orientation: Optional[ForceOrientation] = None
     user_angle_deg: float = 0.0
+
+    def __post_init__(self) -> None:
+        if self.orientation is None:
+            self.orientation = _default_orientation(self.type_id)
+        if self.force_application is None:
+            self.force_application = _default_application(self.type_id)
 
     def generate_along_segment(
         self, p1, p2,
@@ -1098,11 +1152,9 @@ class SupportPattern:
             orientation_mode=data.get("orientation_mode", "angle"),
             angle_deg=data.get("angle_deg", -15.0),
             flip_180=data.get("flip_180", False),
-            force_application=ForceApplication(
-                data.get("force_application", "active"),
-            ),
-            orientation=ForceOrientation(
-                data.get("orientation", "tangent_to_slip"),
-            ),
+            force_application=(ForceApplication(data["force_application"])
+                               if data.get("force_application") else None),
+            orientation=(ForceOrientation(data["orientation"])
+                         if data.get("orientation") else None),
             user_angle_deg=data.get("user_angle_deg", 0.0),
         )

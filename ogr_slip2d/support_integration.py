@@ -17,12 +17,21 @@ Implementation follows Slide's convention:
 
   - The support force orientation is decided by ``ForceOrientation``:
 
-      * tangent_to_slip:    along slip-surface tangent at intersection
-      * parallel_to_support: along support axis
+      * tangent_to_slip:    along the slip-surface tangent, in the sense
+        that RESISTS sliding
+      * parallel_to_support: along the support axis, HEAD → TAIL, i.e.
+        from the slope face towards the anchor — the direction a bolt in
+        tension pulls the sliding mass
       * bisector:           halfway between tangent and parallel
-      * horizontal:         along positive x (used for piles only)
-      * perpendicular_to_pile: perpendicular to support axis
+      * horizontal:         opposing the sliding direction
+      * perpendicular_to_pile: perpendicular to the support axis, on the
+        side that resists sliding
       * user_defined:       at ``user_angle_deg`` from horizontal
+
+    Only the first, the fourth and the fifth consult the sliding sense.
+    The parallel direction is pure geometry: a bolt whose anchor lies
+    downhill of the slip surface genuinely pushes the mass, and saying so
+    is the point of publishing the angle.
 
   - The force is then decomposed into HORIZONTAL (H_s) and VERTICAL
     (V_s) components. The slice into whose base x-range the intersection
@@ -281,17 +290,38 @@ def _support_force_angle(
 ) -> float:
     """Compute the angle at which the support force is applied.
 
-    Returns angle in radians from positive x. The convention follows
-    Slide's force-application rules per orientation type.
+    Returns angle in radians from positive x.
 
-    The orientation is taken so that the support RESISTS the sliding
-    direction — i.e. for a slide moving LEFT (most typical), the
-    resisting force has a horizontal component pointing RIGHT (+x).
+    Two of the five orientations are decided by the SLIDING SENSE and
+    three by GEOMETRY, and mixing the two up is what made v0.1.97 hand a
+    tensioned bolt a force pointing downhill:
+
+      * ``tangent_to_slip`` and ``horizontal`` are resisting directions
+        by construction, so they must consult
+        ``is_left_to_right_failure``;
+      * ``parallel_to_support`` is the bolt's own axis, HEAD → TAIL. It
+        is not oriented to resist anything: a bolt whose anchor sits
+        downhill of the slip surface really does push the mass, and the
+        angle is an output the user is meant to check.
+      * ``perpendicular_to_pile`` is an axis-derived direction with a
+        free sign, and there the sliding sense picks WHICH of the two
+        perpendiculars — a pile mobilises its shear against the movement.
+
+    ``head`` is the end at the slope FACE and ``tail`` the anchored end.
+    That is not a free choice made here: ``SoilNail.force_at`` and
+    ``GroutedTieback.force_at`` already measure the stripping length
+    ``L_i`` from the head and the pullout length ``L_o`` from the tail,
+    so the plate is at the head. A bolt in tension pulls the sliding
+    mass TOWARDS its anchor, which is ``axis_angle`` — head → tail. Until
+    v0.1.112 this returned ``axis_angle + pi``, anchor → face, i.e. the
+    sliding direction, and reinforcement LOWERED the factor of safety
+    with ``parallel_to_support`` and with ``bisector`` (the factory
+    default of ``SoilNail``). See ``tests/test_support_orientation_v1112.py``.
     """
     from ogr_core.support import ForceOrientation
 
     o = support.orientation
-    axis_angle = support.axis_angle_rad()  # head → tail
+    axis_angle = support.axis_angle_rad()  # head (face) → tail (anchor)
 
     # The slip tangent vector points along the slip surface; we
     # orient it to oppose the sliding direction (resisting tangent).
@@ -305,18 +335,14 @@ def _support_force_angle(
         # Slide moves leftward → resisting tangent points right
         tangent_angle = math.atan(slip_tangent)
 
-    # Support axis: pointing from tail → head (the resisting direction
-    # of an anchored bolt is from anchor toward the slope face)
-    support_resisting_angle = axis_angle + math.pi
-
     if o == ForceOrientation.TANGENT_TO_SLIP:
         return tangent_angle
     if o == ForceOrientation.PARALLEL_TO_SUPPORT:
-        return support_resisting_angle
+        return axis_angle
     if o == ForceOrientation.BISECTOR:
         # Bisector of tangent and parallel-to-support
         a1 = tangent_angle
-        a2 = support_resisting_angle
+        a2 = axis_angle
         # Wrap to nearest equivalent angles
         while a2 - a1 > math.pi:
             a2 -= 2 * math.pi
@@ -326,12 +352,19 @@ def _support_force_angle(
     if o == ForceOrientation.HORIZONTAL:
         return math.pi if is_left_to_right_failure else 0.0
     if o == ForceOrientation.PERPENDICULAR_TO_PILE:
-        # Perpendicular to support axis. Pick the perpendicular that
-        # opposes sliding (positive y component on the up-slope side).
-        return axis_angle + math.pi / 2
+        # Perpendicular to the pile axis. Two of them exist; the shear a
+        # pile mobilises acts AGAINST the movement, so take the one whose
+        # projection on the resisting tangent is positive. Before
+        # v0.1.112 this returned ``axis_angle + pi/2`` unconditionally —
+        # right only for a pile drawn head-at-top, and silently pushing
+        # the mass downhill for one drawn the other way round.
+        perp = axis_angle + math.pi / 2
+        if math.cos(perp - tangent_angle) < 0.0:
+            perp -= math.pi
+        return perp
     if o == ForceOrientation.USER_DEFINED:
         return math.radians(support.user_angle_deg)
-    return support_resisting_angle
+    return axis_angle
 
 
 def compute_support_effects(
