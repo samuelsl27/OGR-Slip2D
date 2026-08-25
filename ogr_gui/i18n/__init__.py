@@ -800,6 +800,11 @@ _DICTS: dict[str, dict[str, str]] = {
         'FoS max:': 'FoS máx:',
         'FoS min:': 'FoS mín:',
         'Function points:': 'Puntos de la función:',
+        'Apply cutoff': 'Aplicar límite',
+        'The cutoff is a maximum strength; if the rate of change is '
+        'negative it is a minimum instead.':
+            'El límite es una resistencia máxima; si la tasa de cambio '
+            'es negativa, actúa como mínimo.',
         'General': 'General',
         'Geometry Cleanup': 'Limpieza de geometría',
         'Grayscale': 'Escala de grises',

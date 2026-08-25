@@ -60,6 +60,11 @@ class _StrengthParamPanel(QWidget):
     # corresponding Quantity. Used for display + conversion only.
     _UNIT_TO_QUANTITY = {
         "kPa":     "pressure",
+        # v0.1.120 — a cohesion gradient is stress per length, which is
+        # the quantity the imperial system already spells psf/ft. Without
+        # this entry it would fall through to "dimensionless" and reach a
+        # project in feet unconverted.
+        "kPa/m":   "joint_stiffness",
         "kN/m³":   "unit_weight",
         "kN/m²":   "shear_strength",
         "kN":      "force",
@@ -173,6 +178,41 @@ class _StrengthParamPanel(QWidget):
                          (90.0, 20.0, 30.0)],
             )
 
+        # v0.1.120 — the depth-dependent undrained models carry ONE piece
+        # of state that is not a number: whether the cutoff applies at
+        # all. A spinbox showing 0 or 1 would be a worse control than a
+        # checkbox, and the value alone cannot encode "off" — zero is a
+        # legitimate minimum when the rate is negative.
+        self._chk_cutoff = None
+        if getattr(model_cls, "_C_REF", None) is not None and \
+                "cutoff" in model_cls.PARAMETERS:
+            self._build_cutoff_switch(
+                bool(current_params.get("cutoff_enabled", False)))
+
+    def _build_cutoff_switch(self, enabled: bool) -> None:
+        """Checkbox governing the cutoff, and the spinbox it governs.
+
+        Disabling the value rather than hiding it is deliberate: unticking
+        the box must not lose what was typed.
+        """
+        from PySide6.QtWidgets import QCheckBox
+
+        chk = QCheckBox(tr("Apply cutoff"))
+        chk.setChecked(enabled)
+        chk.setToolTip(tr(
+            "The cutoff is a maximum strength; if the rate of change is "
+            "negative it is a minimum instead."))
+        editor = self._editors.get("cutoff")
+
+        def _sync(*_a):
+            if editor is not None:
+                editor.setEnabled(chk.isChecked())
+
+        chk.stateChanged.connect(_sync)
+        _sync()
+        self._form.addRow("", chk)
+        self._chk_cutoff = chk
+
     def _build_points_table(self, current_params, columns, kind, default):
         """Build an editable table for function-based models."""
         from PySide6.QtWidgets import (
@@ -248,6 +288,10 @@ class _StrengthParamPanel(QWidget):
                 except (ValueError, AttributeError):
                     continue
             out["points"] = pts
+        # v0.1.120 — the cutoff switch, for the models that have one.
+        chk = getattr(self, "_chk_cutoff", None)
+        if chk is not None:
+            out["cutoff_enabled"] = chk.isChecked()
         return out
 
     def current_model(self) -> type[StrengthModel] | None:
@@ -613,9 +657,14 @@ class MaterialPropertiesDialog(QDialog):
 
     # ------------------------------------------------------------------
     # Strength models for which the reference disables water parameters
-    # outright: none of the three reads a pore pressure, so offering the
+    # outright: not one of them reads a pore pressure, so offering the
     # inputs would suggest an influence that does not exist (rule 7).
-    _NO_WATER_STRENGTHS = ("undrained", "no_strength", "infinite_strength")
+    # v0.1.120 — the three depth-dependent undrained models join the list
+    # for the same reason as the first: φ = 0 and τ = c(z), so no pore
+    # pressure enters the strength.
+    _NO_WATER_STRENGTHS = ("undrained", "no_strength", "infinite_strength",
+                           "undrained_depth_layer", "undrained_depth_datum",
+                           "undrained_slope_distance")
 
     @staticmethod
     def _set_row_visible(form: QFormLayout, field: QWidget,
@@ -662,7 +711,7 @@ class MaterialPropertiesDialog(QDialog):
         # applies only after switching the grid off.
         own_model = on and (not grid or not self.chk_use_grid.isChecked())
 
-        # Rule of the reference: these three strength models read no pore
+        # Rule of the reference: these strength models read no pore
         # pressure at all, so the whole group is greyed out.
         mid = self.cbo_strength.currentData()
         if mid in self._NO_WATER_STRENGTHS:
@@ -769,7 +818,12 @@ class MaterialPropertiesDialog(QDialog):
         idx = self.cbo_strength.findData(m.strength.MODEL_ID)
         if idx >= 0:
             self.cbo_strength.setCurrentIndex(idx)
-        self.param_panel.set_model(type(m.strength), m.strength.params)
+        # v0.1.120 — ``cutoff_enabled`` rides beside the numeric params,
+        # because it is a boolean and PARAMETERS holds only floats.
+        _params = dict(m.strength.params)
+        if hasattr(m.strength, "cutoff_enabled"):
+            _params["cutoff_enabled"] = m.strength.cutoff_enabled
+        self.param_panel.set_model(type(m.strength), _params)
         # v0.1.15 — for function/table-based models, also pass the
         # ``points`` so the table editor pre-fills.
         if hasattr(m.strength, "points") and self.param_panel._table is not None:
@@ -836,6 +890,11 @@ class MaterialPropertiesDialog(QDialog):
                                 "model assigned per base-angle range",
         "snowden_anisotropic_linear":
                                 "(c, φ) vary by cosine with angle to bedding",
+        # v0.1.120 — undrained strength varying linearly with depth
+        "undrained_depth_layer": "τ = c_top + Δc·(y_top − y)",
+        "undrained_depth_datum": "τ = c_datum + Δc·(y_datum − y)",
+        "undrained_slope_distance":
+                                "τ = c_top + Δc·(distance to slope)",
     }
 
     def _unit_weight_label_factor(self) -> tuple[str, float]:

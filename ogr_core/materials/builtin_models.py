@@ -16,12 +16,16 @@ Implemented models (matching Slide's Strength Type list):
     - PowerCurve             τ = c + a·(σ'ₙ + d)^b + σ'ₙ·tan(W)
     - Hyperbolic             τ = c_∞·σ'ₙ·tan(φ_0) / (c_∞ + σ'ₙ·tan(φ_0))
     - VerticalStressRatio    τ = K · σ'v
+    - UndrainedDepthFromLayerTop   c = c_top   + Δc·(y_top   − y)
+    - UndrainedDepthFromDatum      c = c_datum + Δc·(y_datum − y)
+    - UndrainedDistanceToSlope     c = c_top   + Δc·(distance to slope)
 
 Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 
 import math
+from typing import ClassVar
 
 from .registry import register
 from .strength_model import SliceContext, StrengthModel
@@ -830,3 +834,215 @@ class SnowdenModifiedAnisotropicLinear(StrengthModel):
             return self.shear_strength(sigma_n_eff)
         c, phi = self._c_phi(math.degrees(ctx.base_angle_rad))
         return c + max(sigma_n_eff, 0.0) * math.tan(math.radians(phi))
+
+
+# ======================================================================
+# v0.1.120 — Undrained strength that VARIES LINEARLY WITH DEPTH
+# ======================================================================
+#
+# Why a straight line, and why it is not invented: in a normally
+# consolidated clay the undrained strength is proportional to the vertical
+# effective stress, su/σ'v ≈ const (Skempton 1957; Ladd & Foott 1974), and
+# σ'v grows linearly with depth under a level deposit. A soft-clay
+# foundation is therefore described in practice by
+#
+#       su(z) = su0 + ρ · z
+#
+# and that is how the published cases this project validates against state
+# it: Low (1989) gives 15 → 30 kPa across a 4 m layer, Duncan (2000) gives
+# "100 psf at elevation −20 ft, increasing at 9.8 psf/ft", and Duncan and
+# Wright (2005) give cu = 300 + cz·z psf for four values of cz.
+#
+# What changes between the three models below is ONLY where z is measured
+# from. They are three separate registry entries rather than one model with
+# a mode switch because this registry is flat by construction: the GUI
+# builds its list from REGISTRY.all(), a saved project stores MODEL_ID, and
+# a mode that is neither of those would have to be smuggled through both.
+# Splitting them also leaves ``undrained`` — the model every existing
+# project uses — untouched.
+
+
+class _UndrainedLinearBase(StrengthModel):
+    """Shared body of the three depth-dependent undrained models.
+
+    φ = 0, so τ = c(z) and the strength does not depend on σ'ₙ at all.
+    Subclasses supply ``_depth_from(ctx)``; everything else — the linear
+    law and the cutoff — lives here so the two cannot drift apart.
+
+    **The cutoff is asymmetric, on purpose.** When it is enabled the value
+    is a MAXIMUM strength; but if the rate of change is NEGATIVE the same
+    value acts as a MINIMUM instead. That is the rule as stated, and it is
+    the useful one: the cutoff always bounds the side the straight line
+    runs away on.
+
+    Not registered: it has no MODEL_ID and describes no criterion by
+    itself.
+    """
+
+    #: Name of the PARAMETERS entry holding the cohesion at z = 0.
+    _C_REF: ClassVar[str] = "cohesion_top"
+
+    def __init__(self, **params) -> None:
+        # ``cutoff_enabled`` is a BOOLEAN and PARAMETERS only holds floats,
+        # so it travels beside them — the same place ``points`` and
+        # ``rules`` travel for the table-based models.
+        cutoff_enabled = params.pop("cutoff_enabled", False)
+        super().__init__(**params)
+        self.cutoff_enabled = bool(cutoff_enabled)
+
+    @property
+    def needs_context(self) -> bool:
+        return True
+
+    # ------------------------------------------------------------------
+    def cohesion_at(self, depth: float) -> float:
+        """Undrained cohesion at ``depth`` below this model's reference,
+        with the cutoff applied.
+
+        Reference: see the module note above (Skempton 1957 and Ladd &
+        Foott 1974 for the proportionality that makes the profile linear;
+        Low 1989, Duncan 2000 and Duncan and Wright 2005 for the published
+        profiles this reproduces).
+        """
+        rate = self.params["cohesion_change"]
+        c = self.params[self._C_REF] + rate * depth
+        if self.cutoff_enabled:
+            cut = self.params["cutoff"]
+            # Negative rate → the line falls with depth → the cutoff is the
+            # floor. Positive or zero → it rises → the cutoff is the cap.
+            c = max(c, cut) if rate < 0.0 else min(c, cut)
+        return c
+
+    def _depth_from(self, ctx: SliceContext):
+        """Depth of the slice base below this model's reference, or None
+        when the context does not carry what this model needs."""
+        raise NotImplementedError
+
+    # ------------------------------------------------------------------
+    def shear_strength(self, sigma_n_eff: float) -> float:
+        # No context: the only depth that is not a guess is zero, which is
+        # the reference elevation itself. Callers that plot an envelope
+        # against σ'ₙ land here, and a horizontal line is the honest shape
+        # for a φ = 0 material.
+        return self.cohesion_at(0.0)
+
+    def shear_strength_ctx(self, sigma_n_eff, ctx: SliceContext | None = None):
+        if ctx is None:
+            return self.shear_strength(sigma_n_eff)
+        depth = self._depth_from(ctx)
+        if depth is None:
+            return self.shear_strength(sigma_n_eff)
+        return self.cohesion_at(depth)
+
+    def tangent_slope(self, sigma_n_eff: float) -> float:
+        return 0.0  # φ = 0: the envelope is horizontal in σ'ₙ
+
+    # ------------------------------------------------------------------
+    def to_dict(self) -> dict:
+        d = super().to_dict()
+        d["cutoff_enabled"] = self.cutoff_enabled
+        return d
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "_UndrainedLinearBase":
+        return cls(cutoff_enabled=bool(data.get("cutoff_enabled", False)),
+                   **data.get("params", {}))
+
+
+# ----------------------------------------------------------------------
+@register
+class UndrainedDepthFromLayerTop(_UndrainedLinearBase):
+    """Undrained cohesion measured from the TOP OF THE LOCAL LAYER.
+
+        c = c_top + Δc · (y_top − y)
+
+    where y_top is the top of the material band the slice base sits in —
+    not the ground surface. Under an embankment on three stacked clays,
+    each slice measures from the top of its own clay.
+
+    This is the form the published cases state their profiles in: Low
+    (1989) and Borges and Cardoso (2002) both tabulate a Cu at the top and
+    a Cu at the bottom of each layer, which is (c_top, Δc) written twice.
+    """
+
+    MODEL_ID = "undrained_depth_layer"
+    DISPLAY_NAME = "Undrained, c(depth below layer top)"
+    NEEDS_LAYER_TOP = True
+    PARAMETERS = {
+        "cohesion_top": (20.0, "kPa", "Undrained cohesion at the layer top"),
+        "cohesion_change": (2.0, "kPa/m",
+            "Rate of change of cohesion with depth below the layer top"),
+        "cutoff": (100.0, "kPa",
+            "Cutoff: a maximum, or a minimum when the rate is negative "
+            "(applied only when enabled)"),
+    }
+
+    def _depth_from(self, ctx: SliceContext):
+        if ctx.layer_top_y is None:
+            return None
+        return ctx.layer_top_y - ctx.y_base
+
+
+# ----------------------------------------------------------------------
+@register
+class UndrainedDepthFromDatum(_UndrainedLinearBase):
+    """Undrained cohesion measured from a horizontal DATUM elevation.
+
+        c = c_datum + Δc · (y_datum − y)
+
+    With Δc positive the cohesion GROWS below the datum and FALLS above
+    it: the law is a straight line in elevation, not a one-sided ramp, and
+    nothing here bounds it from below. That matters wherever the material
+    reaches well above its datum — Duncan (2000) states the San Francisco
+    Bay Mud profile as "100 psf at elevation −20 ft, +9.8 psf/ft", and that
+    line reaches zero at elevation −9.8.
+
+    Unlike the layer-top form this needs no geometry beyond the slice's own
+    elevation, so it is the one form that works from any caller.
+    """
+
+    MODEL_ID = "undrained_depth_datum"
+    DISPLAY_NAME = "Undrained, c(depth below datum)"
+    _C_REF = "cohesion_datum"
+    PARAMETERS = {
+        "cohesion_datum": (20.0, "kPa", "Undrained cohesion at the datum"),
+        "cohesion_change": (2.0, "kPa/m",
+            "Rate of change of cohesion with (y_datum − y)"),
+        "datum": (0.0, "m", "Datum elevation"),
+        "cutoff": (100.0, "kPa",
+            "Cutoff: a maximum, or a minimum when the rate is negative "
+            "(applied only when enabled)"),
+    }
+
+    def _depth_from(self, ctx: SliceContext):
+        return self.params["datum"] - ctx.y_base
+
+
+# ----------------------------------------------------------------------
+@register
+class UndrainedDistanceToSlope(_UndrainedLinearBase):
+    """Undrained cohesion measured along the TRUE DISTANCE to the slope.
+
+        c = c_top + Δc · d
+
+    where d is the distance from the slice base centre to the nearest
+    point of the ground profile — the perpendicular one under a slope
+    face, not the vertical one. On level ground the two coincide, which is
+    what ties this model to the layer-top form as an exact identity.
+    """
+
+    MODEL_ID = "undrained_slope_distance"
+    DISPLAY_NAME = "Undrained, c(distance to slope)"
+    NEEDS_SLOPE_DISTANCE = True
+    PARAMETERS = {
+        "cohesion_top": (20.0, "kPa",
+            "Undrained cohesion at the slope surface"),
+        "cohesion_change": (2.0, "kPa/m",
+            "Rate of change of cohesion with distance from the slope"),
+        "cutoff": (100.0, "kPa",
+            "Cutoff: a maximum, or a minimum when the rate is negative "
+            "(applied only when enabled)"),
+    }
+
+    def _depth_from(self, ctx: SliceContext):
+        return ctx.slope_distance

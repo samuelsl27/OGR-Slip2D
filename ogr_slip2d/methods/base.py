@@ -17,7 +17,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import ClassVar, Optional
 
-from ogr_core.materials import Material
 from ogr_core.project import Project
 
 from ..slicer import Slices
@@ -376,12 +375,14 @@ class LEMMethod(ABC):
     ) -> LEMResult:
         """Compute the Factor of Safety for one failure surface."""
 
-    # ------------------------------------------------------------------
-    @staticmethod
-    def _shear_strength(material: Optional[Material], sigma_n_eff: float) -> float:
-        if material is None:
-            return 0.0
-        return material.strength.shear_strength(sigma_n_eff)
+    # v0.1.120 — ``_shear_strength`` used to live here: a one-line helper
+    # that asked ``material.strength.shear_strength(sigma)`` with no
+    # SliceContext. Its only reader was Ordinary/Fellenius, and through it
+    # that method silently ignored the eight strength models that depend on
+    # more than sigma'n, plus the matric-suction cohesion. It is deleted
+    # rather than fixed: a context-free strength lookup sitting on the base
+    # class is an invitation to use it, and there is exactly one right way
+    # to read an envelope in this program — ``_local_c_phi``.
 
 
 # ======================================================================

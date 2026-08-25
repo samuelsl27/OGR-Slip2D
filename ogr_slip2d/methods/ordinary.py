@@ -127,11 +127,17 @@ class OrdinaryFellenius(LEMMethod):
             if N_eff < 0.0:
                 n_negative_normal += 1
             sigma_n_eff = max(0.0, N_eff) / max(s.base_length, 1e-9)
-            strength = self._shear_strength(s.material, sigma_n_eff) \
-                * s.base_length
+            # v0.1.120 — through ``_local_c_phi``, like the other eight
+            # methods. It used to be ``self._shear_strength``, which asked
+            # the model for tau WITHOUT a SliceContext: Ordinary was the
+            # only method that did, and so the only one that ignored
+            # SHANSEP, the four anisotropic models, the three depth
+            # profiles and the matric-suction cohesion. See the note in
+            # the circular path for the measurement.
+            c_loc, tan_phi = _B._local_c_phi(s, s.material, sigma_n_eff)
+            strength = (c_loc + sigma_n_eff * tan_phi) * s.base_length
             if sup.present:
                 if sup.n_press[i]:
-                    _c, tan_phi = _B._local_c_phi(s, s.material, sigma_n_eff)
                     strength += sup.n_press[i] * tan_phi
                 # Its own branch: a support can be purely tangential to the
                 # base, and then ``n_press`` is zero while the force that
@@ -287,7 +293,38 @@ class OrdinaryFellenius(LEMMethod):
                 n_negative_normal += 1
             sigma_n_eff = max(0.0, N_eff) / max(s.base_length, 1e-9)
 
-            tau = self._shear_strength(s.material, sigma_n_eff)
+            # v0.1.120 — ORDINARY READS THE ENVELOPE THROUGH THE SAME
+            # LINEARISATION AS EVERY OTHER METHOD.
+            #
+            # This was ``self._shear_strength(s.material, sigma_n_eff)``,
+            # which calls ``shear_strength`` with no SliceContext. Eight of
+            # the registered models need one — SHANSEP, the four
+            # anisotropic ones and the three depth profiles of v0.1.120 —
+            # and every one of them answers its no-context fallback
+            # instead: SHANSEP takes sigma'v = sigma'n, the anisotropic
+            # ones take their weakest direction, and a depth profile takes
+            # the value at its own reference elevation. The suction
+            # cohesion, which ``_local_c_phi`` adds, was not seen either,
+            # against what the v0.1.28 changelog claims about "the seven
+            # methods".
+            #
+            # Measured on one circle of a homogeneous slope, 50 slices,
+            # against Bishop on the same circle:
+            #
+            #     mohr_coulomb (the control)          -11.1 %
+            #     shansep                             -22.3 %
+            #     anisotropic_linear                  -55.6 %
+            #     undrained_depth_datum               -67.8 %
+            #
+            # Fellenius is the conservative member of the family, and the
+            # control says by how much. What exceeded it was the strength
+            # law going unread. It surfaced when verification problem 23
+            # stopped approximating its depth profile with four bands:
+            # Fellenius fell from 1.3674 to 1.1710 against a published
+            # 1.370 while Bishop moved 0.3 %, because the bands were plain
+            # ``undrained`` and needed no context.
+            c_loc, tan_phi = _B._local_c_phi(s, s.material, sigma_n_eff)
+            tau = c_loc + sigma_n_eff * tan_phi
             strength = tau * s.base_length
 
             # v0.1.105 — the seismic term was ``H·cos α``, and it was wrong
@@ -326,7 +363,6 @@ class OrdinaryFellenius(LEMMethod):
             # NORMAL component, T_N·tanφ'. Ordinary resolves everything on
             # the base already, so it lands naturally here.
             if sup.present and sup.n_press[i_s]:
-                _c, tan_phi = _B._local_c_phi(s, s.material, sigma_n_eff)
                 strength += sup.n_press[i_s] * tan_phi
 
             numerator += strength

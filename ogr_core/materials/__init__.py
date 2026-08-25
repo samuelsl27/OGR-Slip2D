@@ -11,6 +11,9 @@ from .builtin_models import (
     NoStrength,
     PowerCurve,
     Undrained,
+    UndrainedDepthFromDatum,
+    UndrainedDepthFromLayerTop,
+    UndrainedDistanceToSlope,
     VerticalStressRatio,
 )
 from .material import Material, PorePressureType
@@ -32,6 +35,9 @@ __all__ = [
     "PowerCurve",
     "Hyperbolic",
     "VerticalStressRatio",
+    "UndrainedDepthFromLayerTop",
+    "UndrainedDepthFromDatum",
+    "UndrainedDistanceToSlope",
 ]
 
 from .parameter_calculator import (  # noqa: E402,F401

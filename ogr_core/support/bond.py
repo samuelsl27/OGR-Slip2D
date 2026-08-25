@@ -215,7 +215,10 @@ def sigma_v_effective_at(
         sigma_v = 0.0
     else:
         depth = ground_y - y
-        sigma_v = _column_weight(project, x, y, ground_y, 1.0)  # dx = 1 m
+        # v0.1.120 — ``_column_weight`` now returns the top of the band the
+        # bottom of the column sits in as well; here only the weight is
+        # wanted. See ``_layer_top_at`` below for the reader of the other.
+        sigma_v = _column_weight(project, x, y, ground_y, 1.0)[0]
 
     sigma_v += _surface_pressure_at(project, x)
 
@@ -265,6 +268,27 @@ def build_bond_profile(
     return BondProfile.from_samples(taus, length)
 
 
+def _layer_top_at(project: "Project", x: float, y: float):
+    """Top of the material band containing ``(x, y)``, or None.
+
+    The same decomposition the slice weight uses — see the note inside
+    :func:`sigma_v_effective_at` about why this package reaches into the
+    slicer for it instead of keeping a second opinion about what is above
+    a point.
+    """
+    from ogr_slip2d.slicer import _column_weight
+
+    from ..geometry.ground import envelope_y_at, ground_surface
+
+    ext = project.external_boundary()
+    if ext is None:
+        return None
+    ground_y = envelope_y_at(ground_surface(ext), x)
+    if ground_y is None or ground_y <= y:
+        return ground_y
+    return _column_weight(project, x, y, ground_y, 1.0)[1]
+
+
 def soil_shear_strength_at(
     project: "Project", x: float, y: float, sigma_v_eff: float,
     depth: float = 0.0, pore_pressure: float = 0.0,
@@ -282,21 +306,40 @@ def soil_shear_strength_at(
 
     For an anisotropic model the plane of interest is the reinforcement's
     own plane, so the support axis angle is passed as the base angle.
+
+    v0.1.120 — the two fields the slicer measures for the depth-dependent
+    undrained models are measured here too, and only when the material's
+    own model declares that it reads them. Leaving them empty would have
+    let a sheet buried in a clay whose strength grows with depth take its
+    fraction of the strength at the TOP of that clay, all along the sheet,
+    without saying so.
     """
     from ..materials.strength_model import SliceContext
 
     mat = project.material_at(x, y)
     if mat is None or getattr(mat, "strength", None) is None:
         return 0.0
+    strength = mat.strength
+    layer_top_y = None
+    if getattr(strength, "NEEDS_LAYER_TOP", False):
+        layer_top_y = _layer_top_at(project, x, y)
+    slope_distance = None
+    if getattr(strength, "NEEDS_SLOPE_DISTANCE", False):
+        ext = project.external_boundary()
+        if ext is not None:
+            from ..geometry.ground import distance_to_profile, ground_surface
+            slope_distance = distance_to_profile(ground_surface(ext), x, y)
     ctx = SliceContext(
         base_angle_rad=axis_angle_rad,
         sigma_v_eff=sigma_v_eff,
         depth=depth,
         pore_pressure=pore_pressure,
         y_base=y,
+        layer_top_y=layer_top_y,
+        slope_distance=slope_distance,
     )
     try:
-        tau = mat.strength.shear_strength_ctx(sigma_v_eff, ctx)
+        tau = strength.shear_strength_ctx(sigma_v_eff, ctx)
     except Exception:  # noqa: BLE001 - a plugin must not kill an analysis
         return 0.0
     # Infinite Strength is a modelling device for rigid bedrock, not a

@@ -104,6 +104,13 @@ class BishopSimplified(LEMMethod):
                 pore_pressure=getattr(slice_, "pore_pressure", 0.0),
                 y_base=0.5 * (getattr(slice_, "base_y_left", 0.0)
                               + getattr(slice_, "base_y_right", 0.0)),
+                # v0.1.120 — measured by the slicer, which is the only
+                # thing that knows the layer contacts and the ground
+                # profile. Passed through unchanged, None included: a
+                # model that needs one and is handed None must fall back,
+                # not read a depth off the other field.
+                layer_top_y=getattr(slice_, "layer_top_y", None),
+                slope_distance=getattr(slice_, "slope_distance", None),
             )
 
         def _tau(s: float) -> float:

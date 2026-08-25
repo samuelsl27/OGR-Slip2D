@@ -433,6 +433,45 @@ def bedrock_surface(external) -> Polyline:
     return Polyline(vertices=[Vertex(x, y) for x, y in _lower_envelope(key)])
 
 
+def distance_to_profile(profile: Polyline, x: float, y: float) -> float:
+    """Shortest distance from the point ``(x, y)`` to ``profile``.
+
+    The TRUE distance to the nearest point of the polyline, not the
+    vertical drop: under a slope face the nearest point is the foot of the
+    perpendicular, and the two differ by the cosine of the face angle.
+    A depth-dependent undrained strength measured "from the slope" needs
+    this one (v0.1.120).
+
+    Unsigned: a point above the profile and its mirror below it are the
+    same distance away. Callers pass points inside the mass, where the
+    question does not arise.
+
+    Returns ``inf`` for a profile with no segments, so that a caller
+    reading a strength off it gets an obviously wrong number rather than a
+    plausible one.
+    """
+    pts = profile.vertices if profile is not None else []
+    if len(pts) < 2:
+        return float(pts[0].distance_to(Vertex(x, y))) if pts else math.inf
+    best = math.inf
+    for a, b in zip(pts[:-1], pts[1:]):
+        dx = b.x - a.x
+        dy = b.y - a.y
+        span = dx * dx + dy * dy
+        if span <= 0.0:
+            d = math.hypot(x - a.x, y - a.y)
+        else:
+            # Projection parameter clamped to the segment: the nearest
+            # point of a SEGMENT is an endpoint whenever the foot of the
+            # perpendicular falls outside it.
+            t = ((x - a.x) * dx + (y - a.y) * dy) / span
+            t = 0.0 if t < 0.0 else (1.0 if t > 1.0 else t)
+            d = math.hypot(x - (a.x + t * dx), y - (a.y + t * dy))
+        if d < best:
+            best = d
+    return best
+
+
 def _as_vertices(external) -> list[Vertex]:
     """Accept a Boundary, a Polyline or a raw vertex sequence."""
     polyline = getattr(external, "polyline", None)

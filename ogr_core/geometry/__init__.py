@@ -15,8 +15,9 @@ from .expand_shrink import (
     ExpandShrinkResult,
     expand_shrink_external,
 )
-from .ground import (bedrock_surface, envelope_y_at, ground_surface,
-                     lower_y_at, upper_y_at, zero_thickness_spans)
+from .ground import (bedrock_surface, distance_to_profile, envelope_y_at,
+                     ground_surface, lower_y_at, upper_y_at,
+                     zero_thickness_spans)
 from .primitives import Polyline, Vertex, segments_of
 from .tension_crack import TensionCrackProperties, WaterLevelMode
 from .regions import MaterialRegion, build_regions, region_at_point, regions_available
@@ -65,6 +66,9 @@ __all__ = [
     # makes a slip surface follow instead of crossing.
     "bedrock_surface",
     "envelope_y_at",
+    # v0.1.120 — true distance to the ground profile, for the
+    # undrained strength measured from the slope face.
+    "distance_to_profile",
     "lower_y_at",
     "upper_y_at",
     "zero_thickness_spans",

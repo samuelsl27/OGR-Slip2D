@@ -38,6 +38,8 @@ from __future__ import annotations
 import math
 from typing import Callable, Optional
 
+from ogr_core.geometry import BoundaryType
+
 from .methods import method_registry
 from .methods.gle import interslice_function
 from .rapid_drawdown import check_drawdown_settings, wrap_for_drawdown
@@ -202,7 +204,111 @@ def settings_warnings(project) -> list[str]:
     notes.extend(getattr(s_search, "_migration_notes", []) or [])
     notes.extend(_failure_direction_note(project))
     notes.extend(_optimize_notes(s_search))
+    notes.extend(_undrained_profile_notes(project))
     return notes
+
+
+def _undrained_profile_notes(project) -> list[str]:
+    """Materials whose undrained profile reaches zero inside the model.
+
+    An undrained strength that varies linearly with depth is a straight
+    line, and a straight line crosses zero. Where it does, the material
+    has NO shear strength: the solver floors the local cohesion at zero
+    (``BishopSimplified._local_c_phi``), so nothing negative ever reaches
+    the equilibrium, but a search that looks above that elevation finds
+    surfaces with a factor of zero and reports one as the minimum.
+
+    That is what the law says, not a defect. It is worth a note because
+    the elevation where it happens is not visible in the three numbers the
+    material dialog shows, and because the Cutoff cannot prevent it: with
+    a rising profile the Cutoff is a maximum.
+
+    Measured on verification problem 29 (Duncan 2000), whose published
+    profile — 100 psf at elevation −20 ft, +9.8 psf/ft — reaches zero at
+    −9.8 while the model runs up to +22.
+    """
+    extents = _material_y_extents(project)
+    if not extents:
+        return []
+    notes: list[str] = []
+    for mat in project.materials:
+        span = extents.get(mat.id)
+        if span is None:
+            continue
+        y_min, y_max = span
+        st = getattr(mat, "strength", None)
+        rate = (getattr(st, "params", None) or {}).get("cohesion_change")
+        c_ref = getattr(st, "_C_REF", None)
+        if rate is None or c_ref is None or rate == 0.0:
+            continue
+        c0 = st.params.get(c_ref, 0.0)
+        # A cutoff only helps on the side the line falls towards, and only
+        # when it is enabled and non-negative.
+        if (getattr(st, "cutoff_enabled", False) and rate < 0.0
+                and st.params.get("cutoff", 0.0) >= 0.0):
+            continue
+        d0 = -c0 / rate            # depth at which the line reaches zero
+        if st.MODEL_ID == "undrained_depth_datum":
+            y0 = st.params.get("datum", 0.0) - d0
+            # rate > 0: the line falls going UP, so the dead zone is above
+            # y0; rate < 0: it falls going DOWN, and the zone is below.
+            reaches = y0 < y_max if rate > 0.0 else y0 > y_min
+            where = ("above" if rate > 0.0 else "below")
+            if reaches:
+                notes.append(
+                    f"Material '{mat.name}': its undrained profile reaches "
+                    f"zero at elevation {y0:.4g}, and the material extends "
+                    f"{where} that ({y_min:.4g} to {y_max:.4g}). The soil "
+                    f"{where} it has no shear strength at all, so any "
+                    f"surface that goes there has a factor of safety of "
+                    f"zero. The Cutoff cannot bound this side of the line.")
+        elif 0.0 < d0 < (y_max - y_min):
+            # Layer-top and distance-to-slope measure a depth that cannot
+            # be negative, so only a FALLING profile can reach zero.
+            notes.append(
+                f"Material '{mat.name}': its undrained profile reaches "
+                f"zero {d0:.4g} below its reference, and the material is "
+                f"{y_max - y_min:.4g} deep. Below that it has no shear "
+                f"strength and any surface reaching it has a factor of "
+                f"safety of zero.")
+    return notes
+
+
+def _material_y_extents(project) -> dict:
+    """{material id: (y_min, y_max)} from the planar subdivision.
+
+    The MODEL's own range would be the easy answer and it is the wrong
+    one: on verification problem 84 the foundation's steepest profile
+    reaches zero exactly at the crest of the EMBANKMENT, twenty feet above
+    any soil the profile describes. Asking where the material actually is
+    keeps the note about soil that exists.
+
+    Falls back to the external boundary for a project whose regions cannot
+    be resolved, which is the state a half-built model is in.
+    """
+    try:
+        regions = project.resolve_regions()
+    except Exception:                                        # noqa: BLE001
+        regions = []
+    out: dict = {}
+    for region in regions or []:
+        mid = getattr(region, "material_id", None)
+        ys = [v.y for v in region.polygon.vertices]
+        if mid is None or not ys:
+            continue
+        lo, hi = min(ys), max(ys)
+        if mid in out:
+            out[mid] = (min(out[mid][0], lo), max(out[mid][1], hi))
+        else:
+            out[mid] = (lo, hi)
+    if out:
+        return out
+    ys = [v.y for b in project.boundaries
+          if b.btype == BoundaryType.EXTERNAL
+          for v in b.polyline.vertices]
+    if not ys:
+        return {}
+    return {m.id: (min(ys), max(ys)) for m in project.materials}
 
 
 #: Search methods Optimize Surfaces can be applied to. The reference makes

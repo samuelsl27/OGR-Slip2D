@@ -30,8 +30,8 @@ from dataclasses import dataclass, field
 from typing import Iterator, Optional
 
 from ogr_core.geometry import (
-    Boundary, BoundaryType, Polyline, Vertex, envelope_y_at,
-    ground_surface,
+    Boundary, BoundaryType, Polyline, Vertex, distance_to_profile,
+    envelope_y_at, ground_surface,
 )
 from ogr_core.hydraulic.excess_pore_pressure import (
     excess_at,
@@ -119,6 +119,20 @@ class Slice:
     water_force_h: float = 0.0
     water_force_h_moment: float = 0.0
     material: Optional[Material] = None
+    # v0.1.120 — geometry that only the SLICER can measure, kept here so
+    # that every LEM method reads it through the one place that builds a
+    # SliceContext. Both are None when nothing in the project asks for
+    # them; a strength model that needs one must fall back rather than
+    # invent a depth from the other.
+    #
+    #   layer_top_y     top of the material band the BASE sits in. Not the
+    #                   ground surface: under an embankment on three
+    #                   stacked clays each slice sees the top of its own.
+    #   slope_distance  true distance from the base centre to the nearest
+    #                   point of the ground profile. Under a slope face
+    #                   that is the perpendicular, not the vertical drop.
+    layer_top_y: Optional[float] = None
+    slope_distance: Optional[float] = None
 
     # ------------------------------------------------------------------
     @property
@@ -585,8 +599,9 @@ def _column_weight(
     y_bottom: float,
     y_top: float,
     dx: float,
-) -> float:
-    """Weight per unit width of the soil column at ``x``, in kN/m.
+) -> tuple[float, float]:
+    """Weight per unit width of the soil column at ``x`` (kN/m), and the
+    top of the material band the BOTTOM of the column sits in.
 
     The column is cut at every material boundary and at every water table
     crossing it, and each band is weighed with the unit weight of the
@@ -597,10 +612,17 @@ def _column_weight(
     reduces to ``γ · (y_top − y_bottom) · dx``, which is what the previous
     implementation computed — so a one-layer model keeps its factor of
     safety to the last bit.
+
+    v0.1.120 — the LAYER TOP comes back with the weight because it is the
+    same measurement: the bands and the material of each are already
+    resolved here, so finding where the bottom one ends costs a handful of
+    comparisons on work that was already paid for. Computing it separately
+    would have meant a second pass over the same boundaries and a second
+    region lookup, per slice, on every trial surface of a search.
     """
     height = y_top - y_bottom
     if height <= 0.0:
-        return 0.0
+        return 0.0, y_top
 
     # Candidate cuts: where the material can change, and where saturation
     # can change. Piezometric and drawdown lines are NOT included — they
@@ -621,7 +643,7 @@ def _column_weight(
     # would have to scale with the model.
     bands = [(lo, hi) for lo, hi in zip(ys[:-1], ys[1:]) if hi > lo]
     if not bands:
-        return 0.0
+        return 0.0, y_top
 
     mids = [(x, 0.5 * (lo + hi)) for lo, hi in bands]
     if len(project.materials) == 1:
@@ -636,14 +658,33 @@ def _column_weight(
         # point-in-polygon scan it protects.
         mats = project.materials_at(mids)
 
+    fallback = project.materials[0] if project.materials else None
+    mats = [fallback if m is None else m for m in mats]
+
     total = 0.0
     for (lo, hi), mat, (_mx, y_mid) in zip(bands, mats, mids):
-        if mat is None:
-            mat = project.materials[0] if project.materials else None
         below_water = wt_y is not None and wt_y > y_mid
         gamma = mat.gamma_at(below_water) if mat else 20.0
         total += gamma * (hi - lo) * dx
-    return total
+
+    # The layer top: walk up from the bottom band and stop at the first
+    # band made of a DIFFERENT material. Identity is compared through the
+    # material id, because a water table crossing splits a band without
+    # changing what fills it, and two consecutive bands of the same layer
+    # must not be mistaken for a contact. Reaching the top of the column
+    # without a change means the layer runs to the ground surface.
+    base_key = _material_key(mats[0])
+    layer_top = y_top
+    for (lo, _hi), mat in zip(bands, mats):
+        if _material_key(mat) != base_key:
+            layer_top = lo
+            break
+    return total, layer_top
+
+
+def _material_key(material) -> Optional[str]:
+    """Identity of a material for band comparison; None if there is none."""
+    return getattr(material, "id", None) if material is not None else None
 
 
 # ----------------------------------------------------------------------
@@ -1013,6 +1054,12 @@ def slice_surface(
 
     result = Slices()
 
+    # v0.1.120 — asked ONCE, of the project, not once per slice: whether
+    # any material's strength model reads the distance to the slope face.
+    wants_slope_distance = any(
+        getattr(getattr(m, "strength", None), "NEEDS_SLOPE_DISTANCE", False)
+        for m in project.materials)
+
     # v0.1.100 — THE SLICER BUILDS ONE SLICE PER INTERVAL, OR NONE AT ALL.
     #
     # Every branch below that used to ``continue`` now abandons the surface.
@@ -1174,7 +1221,17 @@ def slice_surface(
         # slice spanning several layers, or straddling the water table,
         # is weighed band by band instead of being classified whole by
         # its base midpoint.
-        weight = _column_weight(project, xc, base_y_mid, top_y_w, dx)
+        weight, layer_top_y = _column_weight(
+            project, xc, base_y_mid, top_y_w, dx)
+
+        # v0.1.120 — the true distance to the slope is the one measurement
+        # here that nothing else needs, and it costs a pass over the whole
+        # ground profile. Asked for only when a material's strength model
+        # declares it reads it, so a search that does not use it pays
+        # nothing at all.
+        slope_distance = (
+            distance_to_profile(ground, xc, base_y_mid)
+            if wants_slope_distance else None)
 
         # v0.1.96 — a water surface that does not reach this abscissa is
         # a REFUSAL, not zero pore pressure. ``pore_pressure_at`` cannot
@@ -1245,6 +1302,8 @@ def slice_surface(
             suction_cohesion=c_suction,
             surface_pressure=q,
             material=mat,
+            layer_top_y=layer_top_y,
+            slope_distance=slope_distance,
         )
         # v0.1.61 — free-standing water resting on this slice. Applied
         # after the slice exists because it needs the finished top

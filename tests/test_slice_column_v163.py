@@ -104,8 +104,11 @@ def _two_layers(p, split_y: float):
 
 
 def _column(p, x, y0, y1, dx=1.0):
+    # v0.1.120 — ``_column_weight`` also returns the top of the band the
+    # bottom of the column sits in. These cases are about the WEIGHT; the
+    # layer top has its own tests in test_undrained_depth_v1120.py.
     from ogr_slip2d.slicer import _column_weight
-    return _column_weight(p, x, y0, y1, dx)
+    return _column_weight(p, x, y0, y1, dx)[0]
 
 
 # ======================================================================
