@@ -51,6 +51,11 @@ _KIND_LAYER_NAMES = {
     "piezo": "OGR_PIEZO",
     "drawdown": "OGR_DRAWDOWN",
     "tension_crack": "OGR_CRACK",
+    # v0.1.121 — a weak layer is model input like any other boundary, so it
+    # goes out and comes back on its own layer. The material it names does
+    # NOT survive the trip: DXF carries geometry, and a re-imported joint has
+    # to be assigned one, exactly as a re-imported material boundary has.
+    "weak_layer": "OGR_WEAK_LAYER",
 }
 BOUNDARY_TO_LAYER = {
     btype: _KIND_LAYER_NAMES[kind.value]
@@ -73,6 +78,7 @@ _LAYER_COLOURS = {
     "OGR_PIEZO": 4,           # cyan
     "OGR_DRAWDOWN": 6,        # magenta
     "OGR_CRACK": 1,           # red
+    "OGR_WEAK_LAYER": 140,    # slate blue, as on the canvas
     LAYER_SUPPORT: 2,         # yellow
     LAYER_LOADS: 30,          # orange
     LAYER_MESH: 8,            # dark grey

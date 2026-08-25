@@ -206,7 +206,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.120"
+    VERSION = "0.1.121"
 
     def __init__(self) -> None:
         super().__init__()
@@ -398,6 +398,11 @@ class MainWindow(QMainWindow):
                  lambda: self._set_tool(ToolMode.DRAW_PIEZOMETRIC), "piezo_line", "Ctrl+5")
         self._mk("add_crack", "Add Tension Crack",
                  lambda: self._set_tool(ToolMode.DRAW_TENSION_CRACK), "tension_crack", "Ctrl+6")
+        # v0.1.121 — a polyline with a strength of its own. It sits with the
+        # other boundary-creation actions because that is what it is to the
+        # user, even though the engine never treats it as model geometry.
+        self._mk("add_weak_layer", "Add Weak Layer",
+                 lambda: self._set_tool(ToolMode.DRAW_WEAK_LAYER), None, "Ctrl+7")
         # v0.1.23 — Water Pressure Grid editor (Phase 0 groundwater)
         self._mk("wp_grid", "Water Pressure Grid...",
                  self._edit_water_pressure_grid, "water_table")
@@ -689,7 +694,8 @@ class MainWindow(QMainWindow):
 
         m_bnd = mb.addMenu(tr("Boundaries"))
         # Creation
-        for k in ["add_ext", "add_mat", "add_wt", "add_drawdown", "add_piezo", "add_crack"]:
+        for k in ["add_ext", "add_mat", "add_wt", "add_drawdown", "add_piezo",
+                  "add_crack", "add_weak_layer"]:
             m_bnd.addAction(self._actions[k])
         m_bnd.addSeparator()
         # Advanced geometry
@@ -3143,6 +3149,39 @@ class MainWindow(QMainWindow):
             return
         self.act_assign_water_surface(preselect=boundary.id)
 
+    def _maybe_prompt_weak_layer_material(self, boundary) -> None:
+        """Ask which material a freshly drawn weak layer is made of.
+
+        A weak layer with no material carries no strength of its own, so it
+        would only reshape the surfaces it clips — which is the one outcome
+        nobody wants and nothing on screen would say. Asking here is the same
+        cure v0.1.97 applied to a water surface nobody had assigned.
+
+        Silent with no materials to choose from, and silent under the class
+        flag the tests set, because a modal dialog with no screen behind it
+        blocks for ever.
+        """
+        from ogr_core.geometry import BoundaryType
+
+        if not self.PROMPT_ASSIGN_ON_DRAW:
+            return
+        if boundary.btype is not BoundaryType.WEAK_LAYER:
+            return
+        if not self.project.materials:
+            return
+        idx = next((i for i, b in enumerate(self.project.boundaries)
+                    if b.id == boundary.id), None)
+        if idx is None:
+            return
+        dlg = AssignMaterialDialog(self.project.materials,
+                                   boundary.material_id, self)
+        if dlg.exec():
+            self.command_stack.do(self.project, AssignMaterialCommand(
+                index=idx, material_id=dlg.material_id()))
+            self.canvas.refresh()
+            self.ogr_status.showMessage(
+                tr("Weak layer material assigned."), 3000)
+
     # ==================================================================
     # Support menu (v0.1.14)
     # ==================================================================
@@ -4017,6 +4056,9 @@ class MainWindow(QMainWindow):
         # does nothing at all, and nothing on screen says so. The reference
         # closes that gap by opening the Assign panel right here.
         self._maybe_prompt_assign_water_surface(boundary)
+        # v0.1.121 — and the same for a weak layer, whose strength is the
+        # material it names.
+        self._maybe_prompt_weak_layer_material(boundary)
 
     def _on_boundary_clicked(self, index: int) -> None:
         """Canvas hit-tested a boundary while a pick-based tool is active."""
@@ -4111,10 +4153,14 @@ class MainWindow(QMainWindow):
         if not (0 <= index < len(self.project.boundaries)):
             return
         b = self.project.boundaries[index]
-        if b.btype != BoundaryType.MATERIAL:
+        # v0.1.121 — a WEAK LAYER is the second boundary type whose
+        # ``material_id`` means something, and it is the only way to give one
+        # its strength after it has been drawn.
+        if b.btype not in (BoundaryType.MATERIAL, BoundaryType.WEAK_LAYER):
             self.ogr_status.showMessage(
-                "Assign Material applies to Material boundaries only. "
-                "Use Properties → Assign Materials to paint regions.",
+                "Assign Material applies to Material and Weak Layer "
+                "boundaries only. Use Properties → Assign Materials to "
+                "paint regions.",
                 3000,
             )
             return

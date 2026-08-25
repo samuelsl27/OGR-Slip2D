@@ -39,6 +39,16 @@ class BoundaryType(Enum):
     """Block Search object (window / line / point / polyline) used to
     generate non-circular slip-surface vertices in a Block Search."""
 
+    WEAK_LAYER = auto()
+    """Polyline carrying a strength of its own — a joint or an interface
+    the slip surface travels ALONG instead of crossing.
+
+    v0.1.121. Unlike every other member of this enum it is not model
+    geometry: it is never intersected with other boundaries and it never
+    defines a material region. Its strength comes from the material named
+    by ``Boundary.material_id``.
+    """
+
     @property
     def display_name(self) -> str:
         mapping = {
@@ -49,6 +59,7 @@ class BoundaryType(Enum):
             BoundaryType.DRAWDOWN: "Drawdown Line",
             BoundaryType.TENSION_CRACK: "Tension Crack",
             BoundaryType.BLOCK_SEARCH_OBJECT: "Block Search Object",
+            BoundaryType.WEAK_LAYER: "Weak Layer",
         }
         return mapping[self]
 
@@ -63,5 +74,6 @@ class BoundaryType(Enum):
             BoundaryType.DRAWDOWN: "#00bfff",
             BoundaryType.TENSION_CRACK: "#dc143c",
             BoundaryType.BLOCK_SEARCH_OBJECT: "#9932cc",
+            BoundaryType.WEAK_LAYER: "#6a5acd",
         }
         return mapping[self]

@@ -28,7 +28,19 @@ class Boundary:
     line_width: float = 1.5
     visible: bool = True
     material_id: Optional[str] = None
-    """Reference to a material (only meaningful for material boundaries)."""
+    """Reference to a material.
+
+    Meaningful for material boundaries and — since v0.1.121 — for WEAK_LAYER
+    boundaries, where it names the material whose strength the slip surface
+    mobilises along the layer.
+    """
+    suppressed: bool = False
+    """Excluded from the analysis without being deleted (v0.1.121).
+
+    Only WEAK_LAYER reads it. It exists because an active weak layer lying
+    outside the external boundary can make discretisation fail, and deleting
+    the layer to find out is not a workflow.
+    """
 
     def __post_init__(self) -> None:
         if self.color is None:
@@ -45,6 +57,7 @@ class Boundary:
             "line_width": self.line_width,
             "visible": self.visible,
             "material_id": self.material_id,
+            "suppressed": self.suppressed,
             "polyline": self.polyline.to_dict(),
         }
 
@@ -58,6 +71,7 @@ class Boundary:
             line_width=data.get("line_width", 1.5),
             visible=data.get("visible", True),
             material_id=data.get("material_id"),
+            suppressed=bool(data.get("suppressed", False)),
         )
         if "id" in data:
             b.id = data["id"]

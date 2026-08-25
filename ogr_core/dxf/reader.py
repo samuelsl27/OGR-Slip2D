@@ -59,6 +59,7 @@ class DxfEntityKind(Enum):
     PIEZO = "piezo"
     DRAWDOWN = "drawdown"
     TENSION_CRACK = "tension_crack"
+    WEAK_LAYER = "weak_layer"
     SUPPORT = "support"
 
 
@@ -83,6 +84,9 @@ LAYER_DEFAULTS: dict[DxfEntityKind, tuple[str, ...]] = {
     DxfEntityKind.TENSION_CRACK: (
         "OGR_CRACK", "CRACK", "TENSION_CRACK", "TENSIONCRACK", "GRIETA",
         "GRIETA_TRACCION"),
+    DxfEntityKind.WEAK_LAYER: (
+        "OGR_WEAK_LAYER", "WEAK_LAYER", "WEAKLAYER", "WEAK", "JOINT",
+        "CAPA_DEBIL", "CAPADEBIL", "JUNTA", "JUNTAS"),
     DxfEntityKind.SUPPORT: (
         "OGR_SUPPORT", "SUPPORT", "SUPPORTS", "SOPORTE", "SOPORTES",
         "ANCLAJE", "ANCLAJES", "BULON", "BULONES", "REFUERZO"),

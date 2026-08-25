@@ -256,7 +256,7 @@ class SurfaceOptionsDialog(QDialog):
         )
         from ogr_core.project.settings import (
             CIRCULAR_METHODS, NON_CIRCULAR_METHODS,
-            SearchMethod, SurfaceType,
+            SearchMethod, SurfaceType, WeakLayerHandling,
         )
         self._SearchMethod = SearchMethod
         self._SurfaceType = SurfaceType
@@ -378,6 +378,39 @@ class SurfaceOptionsDialog(QDialog):
             allow_negative=False,
         )
         root.addWidget(g_filt)
+
+        # ============ WEAK LAYER HANDLING (v0.1.121) ============
+        # Shown always and not only when the model has weak layers: the
+        # dialog is built from the settings, not from the geometry, and a
+        # control that appears and disappears is one the user cannot find
+        # when they need it.
+        self.g_weak = QGroupBox(tr("Weak Layer Handling"))
+        f_weak = QFormLayout(self.g_weak)
+        self.cb_weak = QComboBox()
+        self.cb_weak.addItem(tr("Always snap to highest layer"),
+                             WeakLayerHandling.HIGHEST.value)
+        self.cb_weak.addItem(tr("Automatic case generation"),
+                             WeakLayerHandling.AUTO_CASES.value)
+        _wl = getattr(s, "weak_layer_handling", WeakLayerHandling.HIGHEST.value)
+        _i = self.cb_weak.findData(_wl)
+        self.cb_weak.setCurrentIndex(_i if _i >= 0 else 0)
+        self.cb_weak.setToolTip(tr(
+            "Snapping to the highest layer costs one analysis per surface. "
+            "Automatic case generation tries every combination of the layers "
+            "a surface touches and keeps the worst, which is rigorous and "
+            "costs 2^n analyses of that surface."))
+        f_weak.addRow(tr("When a surface touches several layers:"),
+                      self.cb_weak)
+        self.sp_weak_cases = QSpinBox()
+        self.sp_weak_cases.setRange(0, 12)
+        self.sp_weak_cases.setValue(
+            int(getattr(s, "weak_layer_max_cases_log2", 6)))
+        self.sp_weak_cases.setToolTip(tr(
+            "Above this many layers on one surface, that surface falls back "
+            "to snapping to the highest, and the run says so."))
+        f_weak.addRow(tr("Most layers to combine (n in 2^n):"),
+                      self.sp_weak_cases)
+        root.addWidget(self.g_weak)
 
         # ============ BUTTONS ============
         btn_box = QHBoxLayout()
@@ -999,3 +1032,7 @@ class SurfaceOptionsDialog(QDialog):
         s.min_area = (
             self.sb_min_area.value() if self.cb_filter_min_area.isChecked() else None
         )
+
+        # ----- Weak layer handling (v0.1.121) -----
+        s.weak_layer_handling = self.cb_weak.currentData()
+        s.weak_layer_max_cases_log2 = int(self.sp_weak_cases.value())

@@ -47,7 +47,7 @@ from ogr_core.materials import Material
 from ogr_core.project import Project
 
 from .surface import (CompositeSurface, SlipCircle, SlipSurface,
-                      SurfaceProtocol)
+                      SurfaceProtocol, WeakLayerSurface)
 
 
 @dataclass
@@ -133,6 +133,12 @@ class Slice:
     #                   that is the perpendicular, not the vertical drop.
     layer_top_y: Optional[float] = None
     slope_distance: Optional[float] = None
+    # v0.1.121 — the id of the weak-layer boundary this base runs along, or
+    # None. It is what makes the substitution auditable: the strength of a
+    # slice on a joint comes from the joint's material and not from the
+    # region its midpoint falls in, and without this the two are
+    # indistinguishable in the output.
+    weak_layer_id: Optional[str] = None
 
     # ------------------------------------------------------------------
     @property
@@ -188,6 +194,7 @@ class Slice:
             "water_weight": self.water_weight,
             "water_force_h": self.water_force_h,
             "material_id": self.material.id if self.material else None,
+            "weak_layer_id": self.weak_layer_id,
         }
 
 
@@ -311,6 +318,22 @@ def _material_at(project: Project, point: Vertex) -> Optional[Material]:
 
 
 # ----------------------------------------------------------------------
+def _weak_layer_at(spans, x: float):
+    """``(material, boundary_id)`` of the weak layer covering ``x``, or None.
+
+    ``spans`` comes from :meth:`~ogr_slip2d.surface.WeakLayerSurface.spans`
+    and is already sorted and non-overlapping, so a linear scan over a handful
+    of stretches is the whole cost. The test is closed at both ends because
+    the ends of every stretch are MANDATORY slice cuts: what falls on one is a
+    slice boundary, never a slice centre, so the ambiguity cannot decide
+    anything.
+    """
+    for a, b, mat, bid in spans:
+        if a <= x <= b:
+            return mat, bid
+    return None
+
+
 def _polyline_crossings_at_x(polyline: Polyline, x: float) -> list[float]:
     """Every y at which ``polyline`` crosses the vertical line at ``x``.
 
@@ -986,7 +1009,12 @@ def slice_surface(
     # crack truncates them by moving an abscissa exactly as it does on a
     # circle. What they must NOT take is the polyline branch below, which
     # would try to cut a ``.polyline`` they do not have.
-    if isinstance(surface, (SlipCircle, CompositeSurface)):
+    # v0.1.121 — a WEAK-LAYER surface joins the two that arrive already
+    # resolved. Its endpoints come from the surface it was clipped from,
+    # and the tension crack that may have moved them ran BEFORE the
+    # clipping: what it must not take is the polyline branch below, which
+    # would try to cut a .polyline it does not have.
+    if isinstance(surface, (SlipCircle, CompositeSurface, WeakLayerSurface)):
         ground = _ground_surface_from_external(external)
         if surface.x_left is None or surface.x_right is None:
             if surface.intersect_with_ground(ground) is None:
@@ -1059,6 +1087,26 @@ def slice_surface(
     wants_slope_distance = any(
         getattr(getattr(m, "strength", None), "NEEDS_SLOPE_DISTANCE", False)
         for m in project.materials)
+
+    # v0.1.121 — the stretches where a weak layer IS the surface, resolved to
+    # materials once instead of once per slice. Empty for every surface that
+    # no joint clips, which is every surface of every model without weak
+    # layers: the loop below then pays one truth test per slice.
+    #
+    # A stretch whose layer has no material assigned is dropped rather than
+    # given a null one. The layer still shapes the surface — that is geometry,
+    # and the user drew it — but a base with no material would take the
+    # fallback material of the project without a word, and a joint silently
+    # made of the surrounding soil is worse than one that was never there.
+    # ``weak_layer_model_warnings`` says so once, at the start of the run.
+    weak_spans: tuple = ()
+    if isinstance(surface, WeakLayerSurface):
+        weak_spans = tuple(
+            (a, b, project.material_by_id(band.material_id), band.boundary_id)
+            for a, b, band in surface.spans()
+            if band.material_id
+            and project.material_by_id(band.material_id) is not None
+        )
 
     # v0.1.100 — THE SLICER BUILDS ONE SLICE PER INTERVAL, OR NONE AT ALL.
     #
@@ -1207,6 +1255,25 @@ def slice_surface(
         top_y_mid = 0.5 * (y_top_l + y_top_r)
         mat = _material_at(project, Vertex(xc, base_y_mid + 0.01))
 
+        # v0.1.121 — where the base runs ALONG a weak layer, the strength is
+        # the joint's and not the region's. Only the material is swapped, and
+        # deliberately not the weight: a joint has no thickness, so there is
+        # nothing of it to weigh, and ``_column_weight`` below keeps
+        # integrating the column band by band out of the regions the model
+        # really has.
+        #
+        # The pore pressure follows the joint's material too, because
+        # ``pore_pressure_at`` is asked with it. That is a decision and not an
+        # oversight: a weak layer is declared as a material, with its own
+        # water surface and its own Ru, so a joint drained differently from
+        # the soil around it is expressible. With the same water surface on
+        # both — every model of the verification bank — it changes nothing.
+        weak_layer_id = None
+        if weak_spans:
+            hit = _weak_layer_at(weak_spans, xc)
+            if hit is not None:
+                mat, weak_layer_id = hit
+
         # v0.1.96 — the TOP used for the weight is the mean ground
         # elevation over the slice, not the midpoint of the chord joining
         # its two corners. They differ only where a profile vertex falls
@@ -1304,6 +1371,7 @@ def slice_surface(
             material=mat,
             layer_top_y=layer_top_y,
             slope_distance=slope_distance,
+            weak_layer_id=weak_layer_id,
         )
         # v0.1.61 — free-standing water resting on this slice. Applied
         # after the slice exists because it needs the finished top

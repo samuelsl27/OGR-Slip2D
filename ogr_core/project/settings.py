@@ -55,6 +55,17 @@ class SurfaceType(Enum):
     NON_CIRCULAR = "non_circular"
 
 
+class WeakLayerHandling(Enum):
+    """Policy for clipping a trial surface against several weak layers.
+
+    v0.1.121. See ``SearchSettings.weak_layer_handling`` for what each one
+    costs and when it is the right answer.
+    """
+
+    HIGHEST = "highest"
+    AUTO_CASES = "auto_cases"
+
+
 class SearchMethod(Enum):
     # Circular-only
     GRID_SEARCH = "grid"
@@ -383,6 +394,31 @@ class SearchSettings:
     min_elevation: Optional[float] = None
     min_depth: Optional[float] = None
     min_area: Optional[float] = None
+
+    # ---------- Weak Layer Handling (v0.1.121) ----------
+    # How a trial surface is clipped when it touches more than one weak
+    # layer. Two deterministic policies, both documented by the reference
+    # interface:
+    #
+    #   "highest"    every weak layer the surface touches clips it, and the
+    #                clipped surface follows the HIGHEST of them. One
+    #                evaluation per surface, and the right choice when only
+    #                the top joint is of concern.
+    #   "auto_cases" every combination of the touched layers being on or
+    #                off is evaluated and the WORST is kept. Rigorous, and
+    #                2**n evaluations of one surface.
+    #
+    # The reference has a third, heuristic, policy. It is an extension of
+    # Particle Swarm Optimization and exists only on top of it; with no PSO
+    # in this program it would have nothing to attach to, so it is left out
+    # rather than approximated.
+    weak_layer_handling: str = WeakLayerHandling.HIGHEST.value
+    # Ceiling on how many weak layers one surface may be cut by under
+    # "auto_cases". Eight layers is 256 evaluations of a single surface;
+    # past this the search reverts to "highest" FOR THAT SURFACE and says
+    # so in the warnings, because a silently truncated case set reads
+    # exactly like full coverage.
+    weak_layer_max_cases_log2: int = 6
 
     # ------------------------------------------------------------------
     @classmethod
@@ -760,6 +796,24 @@ class AdvancedSettings:
     # not the number of cores, so taking the whole machine buys nothing
     # and costs the user every other program they have open.
     parallel_cpu_percent: int = 50
+    # v0.1.121 — ceiling on the inclination of a slice base, in degrees.
+    #
+    # A near-vertical base makes the limit-equilibrium equations numerically
+    # unstable: m_alpha = cos(a)(1 + tan(a) tan(phi)/F) collapses towards
+    # zero as the base approaches the vertical, and the normal force it
+    # divides blows up with it. Every classical formulation assumes the base
+    # is a shear plane, and a vertical one is not.
+    #
+    # It exists because weak layers can produce such bases where nothing
+    # else in this program could: a surface that snaps onto a steep joint
+    # inherits its inclination. The reference carries the same control, in
+    # its Advanced project settings, with the same default of 80 degrees,
+    # and reports the surfaces it rejects rather than analysing them.
+    #
+    # 80 degrees and not 90: at 80 degrees with phi = 30 and F = 1 the
+    # factor m_alpha is already down to 0.235, so the last ten degrees are
+    # where the conditioning is lost, not where it ends.
+    max_base_angle_deg: float = 80.0
 
     @classmethod
     def from_dict(cls, data: dict) -> "AdvancedSettings":

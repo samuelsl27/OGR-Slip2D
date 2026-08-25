@@ -124,6 +124,7 @@ class DisplayOptions:
     show_fem_mesh: bool = True
     show_piezometric: bool = True
     show_tension_crack: bool = True
+    show_weak_layer: bool = True
     show_boundary_vertices: bool = True
     line_width: float = 1.5
 
@@ -132,6 +133,7 @@ class DisplayOptions:
     color_water_table: str = "#1e90ff"
     color_piezometric: str = "#4169e1"
     color_tension_crack: str = "#dc143c"
+    color_weak_layer: str = "#6a5acd"
 
     # Miscellaneous
     show_ruler: bool = True
@@ -582,6 +584,7 @@ class CanvasView(QGraphicsView):
             BoundaryType.PIEZOMETRIC: opts.show_piezometric,
             BoundaryType.DRAWDOWN: True,
             BoundaryType.TENSION_CRACK: opts.show_tension_crack,
+            BoundaryType.WEAK_LAYER: opts.show_weak_layer,
         }.get(btype, True)
 
     def _color_for_type(self, btype: BoundaryType) -> Optional[str]:
@@ -592,6 +595,7 @@ class CanvasView(QGraphicsView):
             BoundaryType.WATER_TABLE: opts.color_water_table,
             BoundaryType.PIEZOMETRIC: opts.color_piezometric,
             BoundaryType.TENSION_CRACK: opts.color_tension_crack,
+            BoundaryType.WEAK_LAYER: opts.color_weak_layer,
         }.get(btype)
 
     # ------------------------------------------------------------------

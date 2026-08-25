@@ -24,11 +24,12 @@ from dataclasses import dataclass, field, replace
 from typing import Callable, Optional
 
 from ogr_core.project import Project
+from ogr_core.project.settings import WeakLayerHandling
 
 from .methods import LEMMethod, LEMResult
 from .rapid_drawdown import RapidDrawdownError, drawdown_gap
 from .slicer import slice_surface
-from .surface import SlipCircle, lowest_elevation
+from .surface import SlipCircle, WeakLayerSurface, lowest_elevation
 
 
 # ----------------------------------------------------------------------
@@ -115,6 +116,12 @@ class SearchResult:
     # optimisation rather than from the search, which is the one thing the
     # factor of safety alone cannot tell you.
     optimized: Optional[LEMResult] = None
+    # v0.1.121 — lines the run needs to say once, not once per surface.
+    # Weak-layer case generation is the first user: when a surface is cut by
+    # more layers than the case limit allows, the set of cases is truncated,
+    # and a truncated case set reads exactly like full coverage unless it is
+    # said out loud. ``run_analysis`` folds these into its warnings.
+    notes: list = field(default_factory=list)
 
     @property
     def critical(self) -> Optional[LEMResult]:
@@ -393,6 +400,72 @@ class BaseSearch(ABC):
         return res
 
     # ------------------------------------------------------------------
+    def _weak_bands(self, project: Project):
+        """The project's weak layers, cached for the length of a search.
+
+        Cached under the SAME condition ``_bond_profiles`` uses and for the
+        same reason: inside ``regions_frozen()`` the model does not move by
+        contract, so building the list once is safe, and outside it the only
+        caller is a tooltip. The list itself is cheap; what it saves is a walk
+        over every boundary of the model for every trial surface of a grid.
+        """
+        cached = getattr(self, "_weak_bands_cache", None)
+        frozen = getattr(project, "_regions_freeze_depth", 0)
+        if cached is not None and frozen:
+            return cached
+        from .weak_layers import weak_layer_bands
+        bands = weak_layer_bands(project)
+        if frozen:
+            self._weak_bands_cache = bands
+        return bands
+
+    def _note(self, line: str) -> None:
+        """Record a line to be reported once, however often it is raised."""
+        notes = getattr(self, "_pending_notes", None)
+        if notes is None:
+            notes = self._pending_notes = []
+        if line not in notes:
+            notes.append(line)
+
+    def _base_angle_ok(self, project: Project, trial, slices) -> bool:
+        """Reject a clipped surface whose base turns too steeply to solve.
+
+        A near-vertical base makes the limit-equilibrium equations
+        ill-conditioned: ``m_alpha = cos a (1 + tan a tan phi / F)`` collapses
+        towards zero as the base approaches the vertical while the normal
+        force it divides grows without bound, and every classical formulation
+        assumes the base is a shear plane rather than a wall.
+
+        SCOPED TO SURFACES A WEAK LAYER ACTUALLY CLIPPED, and that is a
+        deliberate narrowing of what the reference does with the same setting.
+        The reference applies its ceiling to every column; applying it here to
+        every surface would change results in models that have no weak layers
+        at all — including the published cases this project is validated
+        against — and a feature is not allowed to move those. The steep base
+        this ceiling exists for is the one a joint creates: where a layer
+        simply stops, the surface drops back to the arc down a vertical step.
+        """
+        if not isinstance(trial, WeakLayerSurface):
+            return True
+        try:
+            limit = float(project.settings.advanced.max_base_angle_deg)
+        except (AttributeError, TypeError, ValueError):
+            return True
+        if not (0.0 < limit < 90.0):
+            return True
+        limit_rad = math.radians(limit)
+        for sl in slices:
+            if abs(sl.base_angle) > limit_rad:
+                self._note(
+                    f"A surface clipped by a weak layer was discarded: its "
+                    f"steepest slice base is "
+                    f"{math.degrees(abs(sl.base_angle)):.1f} deg, past the "
+                    f"{limit:.0f} deg ceiling in Project Settings > Advanced."
+                )
+                return False
+        return True
+
+    # ------------------------------------------------------------------
     def _best_of_masses(self, project: Project, candidates) -> Optional[LEMResult]:
         """The lowest-factor mass among several DISJOINT candidates.
 
@@ -429,52 +502,94 @@ class BaseSearch(ABC):
         definition, so it is asked after them and before the solve.
         """
         best: Optional[LEMResult] = None
-        for trial in candidates:
-            # Minimum Elevation — the lowest point of the SURFACE (not of
-            # the mass) may not go below the user's elevation.
-            if self.min_elevation is not None:
-                y_low = lowest_elevation(trial)
-                if y_low is not None and y_low < self.min_elevation:
+        for mass in candidates:
+            # v0.1.121 — one mass becomes one surface per weak-layer case, and
+            # the worst of them is the answer. It goes HERE, wrapped around the
+            # loop that already picks the worst of several disjoint masses,
+            # because this method is the single door every search reaches the
+            # engine through — the same argument v0.1.102 used for the Surface
+            # Filters and v0.1.118 for the Slope Limits. A model with no weak
+            # layers yields the mass itself, unchanged and not wrapped, so its
+            # numbers cannot move.
+            for trial in self._weak_layer_cases(project, mass):
+                # Minimum Elevation — the lowest point of the SURFACE (not of
+                # the mass) may not go below the user's elevation.
+                if self.min_elevation is not None:
+                    y_low = lowest_elevation(trial)
+                    if y_low is not None and y_low < self.min_elevation:
+                        continue
+                slices = slice_surface(project, trial, num_slices=self.num_slices)
+                if slices is None or len(slices) < 3:
                     continue
-            slices = slice_surface(project, trial, num_slices=self.num_slices)
-            if slices is None or len(slices) < 3:
-                continue
-            # Slope Limits — both ends of the MASS must daylight inside
-            # them. Asked here, after slicing, because that is the first
-            # moment the extent is known for a circle: its own endpoints
-            # are wherever the arc meets the ground, and on an arc that
-            # cuts the ground more than twice each mass has its own pair.
-            # A polyline knows its extent earlier, but answering the same
-            # question in two places is how the two answers drift apart.
-            if self.slope_limits is not None:
-                sl_lo, sl_hi = sorted(self.slope_limits)
-                tol = 1e-9 * max(abs(sl_hi - sl_lo), 1.0)
-                if (slices[0].base_x_left < sl_lo - tol
-                        or slices[-1].base_x_right > sl_hi + tol):
+                # Slope Limits — both ends of the MASS must daylight inside
+                # them. Asked here, after slicing, because that is the first
+                # moment the extent is known for a circle: its own endpoints
+                # are wherever the arc meets the ground, and on an arc that
+                # cuts the ground more than twice each mass has its own pair.
+                # A polyline knows its extent earlier, but answering the same
+                # question in two places is how the two answers drift apart.
+                if self.slope_limits is not None:
+                    sl_lo, sl_hi = sorted(self.slope_limits)
+                    tol = 1e-9 * max(abs(sl_hi - sl_lo), 1.0)
+                    if (slices[0].base_x_left < sl_lo - tol
+                            or slices[-1].base_x_right > sl_hi + tol):
+                        continue
+                # Filter by minimum "area" (here approximated as Σ w_i · h_i)
+                area = sum(s.width * max(s.height, 0.0) for s in slices)
+                if area < self.min_area:
                     continue
-            # Filter by minimum "area" (here approximated as Σ w_i · h_i)
-            area = sum(s.width * max(s.height, 0.0) for s in slices)
-            if area < self.min_area:
-                continue
-            # Minimum Depth — the MAXIMUM slice height, measured vertically
-            # from the slip surface to the ground surface, must EXCEED the
-            # value; this is the filter for shallow surfaces. Maximum and
-            # not mean, and not per slice: a deep mechanism is deep
-            # somewhere, and one thin slice at the toe does not make it
-            # shallow. ``Slice.height`` is already that vertical distance,
-            # taken to the mean ground elevation over the slice, which is
-            # the same column its weight is computed from.
-            if self.min_depth is not None:
-                if max(s.height for s in slices) <= self.min_depth:
+                # Minimum Depth — the MAXIMUM slice height, measured vertically
+                # from the slip surface to the ground surface, must EXCEED the
+                # value; this is the filter for shallow surfaces. Maximum and
+                # not mean, and not per slice: a deep mechanism is deep
+                # somewhere, and one thin slice at the toe does not make it
+                # shallow. ``Slice.height`` is already that vertical distance,
+                # taken to the mean ground elevation over the slice, which is
+                # the same column its weight is computed from.
+                if self.min_depth is not None:
+                    if max(s.height for s in slices) <= self.min_depth:
+                        continue
+                # v0.1.121 — the base-angle ceiling, asked after slicing
+                # because a base angle is a property of a slice.
+                if not self._base_angle_ok(project, trial, slices):
                     continue
-            res = self._analyse(project, trial, slices)
-            if res is None:
-                continue
-            if best is None:
-                best = res
-            elif res.is_valid and (not best.is_valid or res.fos < best.fos):
-                best = res
+                res = self._analyse(project, trial, slices)
+                if res is None:
+                    continue
+                if best is None:
+                    best = res
+                elif res.is_valid and (not best.is_valid or res.fos < best.fos):
+                    best = res
         return best
+
+    # ------------------------------------------------------------------
+    def _weak_layer_cases(self, project: Project, mass):
+        """The surfaces to analyse in place of one sliding mass.
+
+        Yields the mass ITSELF when no weak layer reaches it — the same
+        object, not a wrapper around it — which is what keeps every model
+        without weak layers answering bit for bit as it did before.
+
+        The two policies are read straight off the project rather than
+        copied into the search when it is built. That is on purpose: the
+        settings that were mirrored into search objects are exactly the ones
+        that spent versions being edited in the dialog and read by nobody
+        (D07b, D08), and the cure was to have the name the user sees be the
+        name the engine consumes.
+        """
+        bands = self._weak_bands(project)
+        if not bands:
+            yield mass
+            return
+        from .weak_layers import weak_layer_variants
+        search = getattr(getattr(project, "settings", None), "search", None)
+        handling = getattr(search, "weak_layer_handling",
+                           WeakLayerHandling.HIGHEST.value)
+        max_log2 = getattr(search, "weak_layer_max_cases_log2", 6)
+        yield from weak_layer_variants(
+            mass, bands, handling=handling, max_cases_log2=max_log2,
+            note_cb=self._note,
+        )
 
     # ------------------------------------------------------------------
     def evaluate_circle(
@@ -685,10 +800,18 @@ class BaseSearch(ABC):
         written. The freeze covers it as well, which it must: the walk
         evaluates thousands of surfaces against the same unchanging model.
         """
+        self._weak_bands_cache = None
+        self._pending_notes = []
         with project.regions_frozen():
             result = self._run(project)
             if self.optimize is not None and self.optimize.enabled:
                 self._optimize_result(project, result)
+            # v0.1.121 — anything the run decided it had to say. Attached
+            # after the optimisation so a note raised while optimising is
+            # carried too.
+            for line in getattr(self, "_pending_notes", ()):
+                if line not in result.notes:
+                    result.notes.append(line)
             return result
 
     # ------------------------------------------------------------------

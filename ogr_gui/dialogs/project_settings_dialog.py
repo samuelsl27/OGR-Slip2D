@@ -1141,6 +1141,23 @@ class _AdvancedPage(QWidget):
             "validation case needs lambda = 1.49."))
         form.addRow(tr("Maximum lambda:"), self.sp_lmax)
 
+        # v0.1.121 — the ceiling on how steeply a slice base may turn.
+        # Offered here rather than left in the file because a setting with
+        # no editor is the defect D08 was spent on: thirteen fields, twelve
+        # of them unreachable, all of them saved.
+        self.sp_base_angle = QDoubleSpinBox()
+        self.sp_base_angle.setDecimals(1)
+        self.sp_base_angle.setRange(1.0, 90.0)
+        self.sp_base_angle.setSuffix(" °")
+        self.sp_base_angle.setValue(
+            float(getattr(self.s, "max_base_angle_deg", 80.0)))
+        self.sp_base_angle.setToolTip(tr(
+            "A slice base steeper than this is not a shear plane, and the "
+            "limit-equilibrium equations lose their conditioning against "
+            "it. Applies to surfaces a weak layer has clipped, where a "
+            "layer that simply stops leaves a near-vertical step."))
+        form.addRow(tr("Maximum slice base angle:"), self.sp_base_angle)
+
         # v0.1.74 — offered, so it is reachable, but OFF by default. The
         # v0.1.84 — the note below used to explain why this diverged from
         # the reference's default. It does not diverge: the reference
@@ -1189,3 +1206,4 @@ class _AdvancedPage(QWidget):
         self.s.initial_fos = self.sp_initial.value()
         self.s.min_lambda = self.sp_lmin.value()
         self.s.max_lambda = self.sp_lmax.value()
+        self.s.max_base_angle_deg = self.sp_base_angle.value()

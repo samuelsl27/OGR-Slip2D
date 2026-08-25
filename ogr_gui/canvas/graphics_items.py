@@ -109,6 +109,11 @@ class BoundaryItem(DomainItem):
             BoundaryType.DRAWDOWN: 4.0,
             BoundaryType.TENSION_CRACK: 6.0,
             BoundaryType.BLOCK_SEARCH_OBJECT: 7.0,
+            # Above the material boundaries it crosses, below the water
+            # surfaces: a joint is a line the surface follows, and the
+            # thing a user needs to see is where it runs relative to the
+            # layers, not relative to the piezometric line.
+            BoundaryType.WEAK_LAYER: 3.0,
         }.get(btype, 1.0)
 
 

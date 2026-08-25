@@ -214,6 +214,12 @@ def convert_boundary(boundary: Boundary, new_type: BoundaryType) -> Boundary:
                     BoundaryType.DRAWDOWN, BoundaryType.TENSION_CRACK):
         new.polyline.closed = False
         new.material_id = None
+    elif new_type is BoundaryType.WEAK_LAYER:
+        # v0.1.121 — open like the hydraulic lines, but the material is KEPT:
+        # it is where a weak layer's strength comes from, so converting a
+        # material boundary into a joint hands it a sensible one instead of
+        # silently making it strengthless.
+        new.polyline.closed = False
     elif new_type == BoundaryType.MATERIAL:
         new.polyline.closed = True
     new.name = new_type.display_name

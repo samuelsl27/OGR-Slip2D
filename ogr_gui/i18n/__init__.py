@@ -1046,6 +1046,43 @@ _DICTS: dict[str, dict[str, str]] = {
         "Add Water Table": "Añadir nivel freático",
         "Add Piezometric Line": "Añadir línea piezométrica",
         "Add Tension Crack": "Añadir grieta de tracción",
+        # v0.1.121 — capa débil. El término geotécnico castellano es
+        # "capa débil" (una junta o interfaz con resistencia propia), no
+        # "capa floja", que en obra significa otra cosa.
+        "Add Weak Layer": "Añadir capa débil",
+        "Maximum slice base angle:": "Ángulo máximo de base de dovela:",
+        "A slice base steeper than this is not a shear plane, and the "
+        "limit-equilibrium equations lose their conditioning against "
+        "it. Applies to surfaces a weak layer has clipped, where a "
+        "layer that simply stops leaves a near-vertical step.":
+            "Una base de dovela más inclinada que esto no es un plano "
+            "de corte, y las ecuaciones de equilibrio límite pierden "
+            "su condicionamiento frente a ella. Se aplica a las "
+            "superficies recortadas por una capa débil, donde una capa "
+            "que simplemente termina deja un escalón casi vertical.",
+        "Weak Layer": "Capa débil",
+        "Weak layer material assigned.": "Material de la capa débil asignado.",
+        "Weak Layer Handling": "Tratamiento de capas débiles",
+        "Always snap to highest layer": "Pegar siempre a la capa más alta",
+        "Automatic case generation": "Generación automática de casos",
+        "When a surface touches several layers:":
+            "Cuando una superficie toca varias capas:",
+        "Most layers to combine (n in 2^n):":
+            "Máximo de capas a combinar (n en 2^n):",
+        "Snapping to the highest layer costs one analysis per surface. "
+        "Automatic case generation tries every combination of the layers "
+        "a surface touches and keeps the worst, which is rigorous and "
+        "costs 2^n analyses of that surface.":
+            "Pegarse a la capa más alta cuesta un análisis por superficie. "
+            "La generación automática de casos prueba todas las "
+            "combinaciones de las capas que la superficie toca y se queda "
+            "con la peor: es rigurosa y cuesta 2^n análisis de esa "
+            "superficie.",
+        "Above this many layers on one surface, that surface falls back "
+        "to snapping to the highest, and the run says so.":
+            "Por encima de este número de capas sobre una misma "
+            "superficie, esa superficie pasa a pegarse a la más alta, y "
+            "el análisis lo advierte.",
         "Simplify Boundary...": "Simplificar contorno...",
         "Geometry Cleanup...": "Limpiar geometría...",
         "Delete Boundary": "Eliminar contorno",

@@ -42,6 +42,7 @@ KIND_TO_BOUNDARY = {
     DxfEntityKind.PIEZO: BoundaryType.PIEZOMETRIC,
     DxfEntityKind.DRAWDOWN: BoundaryType.DRAWDOWN,
     DxfEntityKind.TENSION_CRACK: BoundaryType.TENSION_CRACK,
+    DxfEntityKind.WEAK_LAYER: BoundaryType.WEAK_LAYER,
 }
 
 

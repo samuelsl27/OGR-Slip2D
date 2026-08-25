@@ -185,6 +185,11 @@ def settings_warnings(project) -> list[str]:
     control cannot be honoured.
     """
     notes: list[str] = []
+    # v0.1.121 — facts about the weak layers of the model. Asked once, here,
+    # because they cannot change while the model is analysed and a per-surface
+    # version of the same sentence would arrive thousands of times.
+    from .weak_layers import weak_layer_model_warnings
+    notes.extend(weak_layer_model_warnings(project))
     s_search = project.settings.search
     if (s_search.search_method == "slope"
             and s_search.slope_limit_left is not None
@@ -864,6 +869,14 @@ def run_analysis(project, method_ids=None,
         # v0.1.102 — and once per method, whether the answer came off the
         # boundary of the region that was searched at all.
         for note in grid_edge_note(search, results[mid]):
+            line = f"{mid}: {note}"
+            if line not in warnings:
+                warnings.append(line)
+        # v0.1.121 — anything the search itself decided it had to say, such
+        # as a weak-layer case set that had to be truncated. Prefixed with
+        # the method because the same surface can be truncated under one
+        # method and not another.
+        for note in getattr(results[mid], "notes", ()):
             line = f"{mid}: {note}"
             if line not in warnings:
                 warnings.append(line)

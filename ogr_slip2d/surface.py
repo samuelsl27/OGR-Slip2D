@@ -905,6 +905,512 @@ class CompositeSurface:
 
 
 # ----------------------------------------------------------------------
+@dataclass(frozen=True)
+class WeakLayerBand:
+    """One weak layer, as the slip surface sees it.
+
+    A band is a polyline plus the identifier of the material whose strength
+    the surface mobilises where it runs along it. It carries no thickness:
+    a joint between two gabion courses, a geomembrane interface or a bedding
+    plane are all modelled as a line, which is the whole point — a thin band
+    of material HAS thickness, and a surface can cut it diagonally instead
+    of following it.
+    """
+
+    polyline: Polyline
+    material_id: Optional[str] = None
+    boundary_id: str = ""
+
+    def x_range(self) -> tuple[float, float]:
+        vs = self.polyline.vertices
+        if not vs:
+            return (0.0, 0.0)
+        xs = [v.x for v in vs]
+        return (min(xs), max(xs))
+
+    def y_at(self, x: float) -> Optional[float]:
+        """HIGHEST elevation of the band at ``x``, or None outside it.
+
+        Highest, and not the first branch found, because a band enters the
+        surface through a maximum (see :class:`WeakLayerSurface`): where a
+        band doubles back or steps vertically, the branch that can capture
+        the surface is its upper one. A band that never doubles back — every
+        real joint — has one value there and the choice does not arise.
+        """
+        vs = self.polyline.vertices
+        best: Optional[float] = None
+        for p1, p2 in zip(vs[:-1], vs[1:]):
+            lo_x, hi_x = (p1.x, p2.x) if p1.x <= p2.x else (p2.x, p1.x)
+            if x < lo_x or x > hi_x:
+                continue
+            if abs(p2.x - p1.x) < 1e-12:
+                y = max(p1.y, p2.y)
+            else:
+                t = min(1.0, max(0.0, (x - p1.x) / (p2.x - p1.x)))
+                y = p1.y + t * (p2.y - p1.y)
+            if best is None or y > best:
+                best = y
+        return best
+
+    def angle_at(self, x: float) -> Optional[float]:
+        """Inclination of the segment that provides :meth:`y_at`, in rad."""
+        vs = self.polyline.vertices
+        best_y: Optional[float] = None
+        best_a: Optional[float] = None
+        for p1, p2 in zip(vs[:-1], vs[1:]):
+            lo_x, hi_x = (p1.x, p2.x) if p1.x <= p2.x else (p2.x, p1.x)
+            if x < lo_x or x > hi_x:
+                continue
+            if abs(p2.x - p1.x) < 1e-12:
+                y, a = max(p1.y, p2.y), math.pi / 2
+            else:
+                t = min(1.0, max(0.0, (x - p1.x) / (p2.x - p1.x)))
+                y = p1.y + t * (p2.y - p1.y)
+                a = math.atan((p2.y - p1.y) / (p2.x - p1.x))
+            if best_y is None or y > best_y:
+                best_y, best_a = y, a
+        return best_a
+
+    def segments(self) -> list:
+        vs = self.polyline.vertices
+        return list(zip(vs[:-1], vs[1:]))
+
+    def bends(self) -> list[float]:
+        """Abscissae where the band itself changes slope.
+
+        Not every vertex is one: a boundary drawn with a redundant point in
+        the middle of a straight run would otherwise spend a mandatory slice
+        cut on a bend that does not exist. Same relative cross-product test
+        as :meth:`CompositeSurface._bedrock_bends`, and for the same reason.
+        """
+        vs = self.polyline.vertices
+        out: list[float] = []
+        for a, b, c in zip(vs[:-2], vs[1:-1], vs[2:]):
+            ux, uy = b.x - a.x, b.y - a.y
+            vx, vy = c.x - b.x, c.y - b.y
+            scale = math.hypot(ux, uy) * math.hypot(vx, vy)
+            if scale > 0.0 and abs(ux * vy - uy * vx) > 1e-9 * scale:
+                out.append(b.x)
+        return out
+
+
+def _surface_pieces(surface) -> tuple[Optional["SlipCircle"], list]:
+    """The circular piece and the straight pieces of a resolved surface.
+
+    Returned as a pair so that intersecting anything with a slip surface is
+    written once instead of once per surface class. A circle contributes its
+    arc and no segments; a polyline the reverse; a composite BOTH, which is
+    exactly why the two come back together rather than being dispatched on.
+    """
+    if isinstance(surface, SlipCircle):
+        return surface, []
+    if isinstance(surface, CompositeSurface):
+        vs = surface.bedrock.vertices
+        return surface.circle, list(zip(vs[:-1], vs[1:]))
+    poly = getattr(surface, "polyline", None)
+    if poly is not None:
+        vs = poly.vertices
+        return None, list(zip(vs[:-1], vs[1:]))
+    return None, []
+
+
+def _segment_crossings(p1, p2, q1, q2) -> list[float]:
+    """Abscissae where segment p1-p2 meets segment q1-q2, ends included.
+
+    Parallel segments return nothing on purpose: a stretch where the two run
+    along each other is not a place where one overtakes the other, and
+    reporting every point of it as a crossing would flood the slicer with
+    mandatory cuts.
+    """
+    rx, ry = p2.x - p1.x, p2.y - p1.y
+    sx, sy = q2.x - q1.x, q2.y - q1.y
+    den = rx * sy - ry * sx
+    if abs(den) < 1e-14:
+        return []
+    t = ((q1.x - p1.x) * sy - (q1.y - p1.y) * sx) / den
+    u = ((q1.x - p1.x) * ry - (q1.y - p1.y) * rx) / den
+    if -1e-9 <= t <= 1 + 1e-9 and -1e-9 <= u <= 1 + 1e-9:
+        return [p1.x + t * rx]
+    return []
+
+
+def _circle_segment_crossings(circle: "SlipCircle", p1, p2) -> list[float]:
+    """Abscissae where the LOWER arc of ``circle`` meets segment p1-p2."""
+    dx, dy = p2.x - p1.x, p2.y - p1.y
+    a = dx * dx + dy * dy
+    if a < 1e-14 or abs(dx) < 1e-12:
+        return []                 # a vertical step is not a crossing
+    cx, cy, r = circle.centre_x, circle.centre_y, circle.radius
+    b = 2 * ((p1.x - cx) * dx + (p1.y - cy) * dy)
+    c = (p1.x - cx) ** 2 + (p1.y - cy) ** 2 - r * r
+    disc = b * b - 4 * a * c
+    if disc < 0.0:
+        return []
+    sq = math.sqrt(disc)
+    tol = 1e-9 * max(r, 1e-300)
+    out: list[float] = []
+    for t in ((-b - sq) / (2 * a), (-b + sq) / (2 * a)):
+        if not (-1e-9 <= t <= 1 + 1e-9):
+            continue
+        x = p1.x + t * dx
+        y = p1.y + t * dy
+        arc_y = circle.base_y_at(x)
+        # The UPPER arc can cut the same line, and it is not the surface.
+        if arc_y is None or abs(y - arc_y) > tol:
+            continue
+        out.append(x)
+    return out
+
+
+@dataclass
+class WeakLayerSurface:
+    """A resolved slip surface clipped to one or more weak layers.
+
+    The rule, in one line::
+
+        base_y(x) = max( base(x), highest active weak layer at x )
+
+    the same shape as :class:`CompositeSurface`, and it states the same
+    mechanics: a weak layer constrains the surface from BELOW and nowhere
+    else. It is the reference interface's own description read literally — a
+    surface "continues down into the soil, and if it hits a weak layer it
+    will traverse along the weak layer until either it hits the ground
+    surface, it finds the original slip surface intersection on its way back
+    to the ground surface, or it subducts another weak layer with higher
+    elevation". Each of those three exits is a place where the maximum swaps
+    branch: to the ground at the ends, back to the base where the two cross
+    again, and to the other joint where that one is higher.
+
+    Written as a maximum rather than as "descend, follow, ascend" for the
+    reason the composite gives: that phrasing needs the base to dip below
+    exactly once, and a stepped wall with four joints can be crossed any
+    number of times. The maximum reduces to the documented three-piece
+    surface when there is one dip and generalises with no special cases.
+
+    NOT a subclass of :class:`SlipCircle`, deliberately, and for the same
+    reason :class:`CompositeSurface` is not: on the stretches where a joint
+    is the surface the base normal no longer points at the centre, so the
+    classical circular moment formula does not hold and the general balance
+    of Fredlund and Krahn (1977) is the one that applies.
+
+    ``bands`` is the set of layers ACTIVE for this evaluation, which is not
+    necessarily every layer in the model: under *automatic case generation*
+    the same base surface is clipped once per subset and the worst answer is
+    the one that counts. See :mod:`ogr_slip2d.weak_layers`.
+    """
+
+    base: object
+    bands: tuple = ()
+    x_left: Optional[float] = None
+    x_right: Optional[float] = None
+    id: str = field(default_factory=lambda: str(uuid4()))
+    # Inherited from the surface this was clipped from: reverse curvature
+    # and the user's tension crack are decided BEFORE any weak layer is
+    # considered, and clipping does not revisit them.
+    tension_cracks: list = field(default_factory=list)
+    tension_crack_wall: Optional[tuple] = None
+
+    def __post_init__(self) -> None:
+        if self.x_left is None or self.x_right is None:
+            bl = getattr(self.base, "x_left", None)
+            br = getattr(self.base, "x_right", None)
+            if bl is None or br is None:
+                bl, br = self.base.x_range()
+            if self.x_left is None:
+                self.x_left = bl
+            if self.x_right is None:
+                self.x_right = br
+        if not self.tension_cracks:
+            self.tension_cracks = list(
+                getattr(self.base, "tension_cracks", ()) or ())
+        if self.tension_crack_wall is None:
+            self.tension_crack_wall = getattr(
+                self.base, "tension_crack_wall", None)
+
+    # ------------------------------------------------------------------
+    @property
+    def circle(self):
+        """The circle this was ultimately clipped from, or None."""
+        return _surface_pieces(self.base)[0]
+
+    def x_range(self) -> tuple[float, float]:
+        if self.x_left is not None and self.x_right is not None:
+            return (self.x_left, self.x_right)
+        return self.base.x_range()
+
+    def _tol(self) -> float:
+        """Elevation tolerance, RELATIVE to the span of the surface."""
+        x_l, x_r = self.x_range()
+        return 1e-12 * max(abs(x_r - x_l), 1e-300)
+
+    # ------------------------------------------------------------------
+    def band_at(self, x: float):
+        """The weak layer that IS the surface at ``x``, or None.
+
+        None where the base wins, ties included: a joint that merely touches
+        the surface without lifting it changes nothing, and a surface must
+        not acquire a joint's strength by grazing it.
+        """
+        base_y = self.base.base_y_at(x)
+        best_y: Optional[float] = None
+        best = None
+        for band in self.bands:
+            y = band.y_at(x)
+            if y is None:
+                continue
+            if best_y is None or y > best_y:
+                best_y, best = y, band
+        if best_y is None:
+            return None
+        if base_y is not None and best_y <= base_y + self._tol():
+            return None
+        return best
+
+    def base_y_at(self, x: float) -> Optional[float]:
+        base_y = self.base.base_y_at(x)
+        best_y: Optional[float] = None
+        for band in self.bands:
+            y = band.y_at(x)
+            if y is not None and (best_y is None or y > best_y):
+                best_y = y
+        if best_y is None:
+            return base_y
+        if base_y is None:
+            return best_y
+        return best_y if best_y > base_y else base_y
+
+    def base_angle_at(self, x: float) -> float:
+        band = self.band_at(x)
+        if band is None:
+            return self.base.base_angle_at(x)
+        a = band.angle_at(x)
+        return 0.0 if a is None else a
+
+    # ------------------------------------------------------------------
+    def _transitions(self) -> list[float]:
+        """Abscissae where the winning branch changes.
+
+        Three kinds, and all three are SOLVED rather than sampled, because
+        each one is a mandatory slice cut and a cut found by sampling moves
+        when the sampling does:
+
+        * base against band — the surface meeting a joint and leaving it;
+        * band against band — one joint subducting another;
+        * the ENDS of a band, where the joint simply stops existing and the
+          surface drops back to the base. That drop is vertical, which is
+          the reason ``max_base_angle_deg`` exists.
+        """
+        circle, segments = _surface_pieces(self.base)
+        out: list[float] = []
+        for band in self.bands:
+            bx0, bx1 = band.x_range()
+            out.append(bx0)
+            out.append(bx1)
+            for q1, q2 in band.segments():
+                if circle is not None:
+                    out.extend(_circle_segment_crossings(circle, q1, q2))
+                for p1, p2 in segments:
+                    out.extend(_segment_crossings(p1, p2, q1, q2))
+        for i, band in enumerate(self.bands):
+            for other in self.bands[i + 1:]:
+                for p1, p2 in band.segments():
+                    for q1, q2 in other.segments():
+                        out.extend(_segment_crossings(p1, p2, q1, q2))
+        return out
+
+    def _breakpoints(self, x_l: float, x_r: float) -> list[float]:
+        """``[x_l, x_r]`` plus every interior change, sorted and merged."""
+        tol = 1e-9 * max(abs(x_r - x_l), 1e-300)
+        marks = [x for x in self._transitions() if x_l + tol < x < x_r - tol]
+        marks += [x for x in self.base.kinks(x_l, x_r)
+                  if x_l + tol < x < x_r - tol]
+        for band in self.bands:
+            marks += [x for x in band.bends() if x_l + tol < x < x_r - tol]
+        marks.sort()
+        out = [x_l]
+        for x in marks:
+            if x - out[-1] > tol:
+                out.append(x)
+        if x_r - out[-1] > tol:
+            out.append(x_r)
+        else:
+            out[-1] = x_r
+        return out
+
+    def _intervals(self, x_l: float, x_r: float) -> list:
+        """``(a, b, winner)`` over ``[x_l, x_r]``, one entry per breakpoint gap.
+
+        The winner is read at the MIDPOINT of each gap, which decides the
+        whole gap: between two consecutive breakpoints no branch overtakes
+        another — that is what makes a breakpoint a breakpoint — so one
+        evaluation answers for the interval exactly, without sampling it.
+        """
+        out: list = []
+        marks = self._breakpoints(x_l, x_r)
+        for a, b in zip(marks[:-1], marks[1:]):
+            out.append((a, b, self.band_at(0.5 * (a + b))))
+        return out
+
+    def spans(self) -> list:
+        """The stretches where a weak layer IS the surface.
+
+        ``(x0, x1, band)`` per stretch, ascending in x, with consecutive gaps
+        won by the same joint merged into one. This is what the slicer reads
+        to give those slices the joint's strength, and what makes the ends of
+        each stretch mandatory slice cuts so that no slice base is half on the
+        joint and half off it.
+        """
+        x_l, x_r = self.x_range()
+        if x_l is None or x_r is None or x_r <= x_l:
+            return []
+        out: list = []
+        for a, b, band in self._intervals(x_l, x_r):
+            if band is None:
+                continue
+            if out and out[-1][2] is band and out[-1][1] == a:
+                out[-1] = (out[-1][0], b, band)
+            else:
+                out.append((a, b, band))
+        return out
+
+    def clips_the_base(self) -> bool:
+        """True when this surface differs from the one it was clipped from.
+
+        Decided on interval midpoints and not on ``kinks()`` being non-empty,
+        for the reason :meth:`CompositeSurface.clips_the_arc` records: a
+        transition landing exactly ON an endpoint is not an interior cut and
+        would not appear there — and the surface would be handed back
+        unclipped, which is the very defect this class exists to prevent,
+        surviving in the corner where the joint meets the ground.
+        """
+        return bool(self.spans())
+
+    # ------------------------------------------------------------------
+    def kinks(self, x_l: Optional[float] = None,
+              x_r: Optional[float] = None) -> list[float]:
+        """Abscissae where this surface changes slope, strictly inside.
+
+        The transitions between branches, plus the base's own kinks in the
+        stretches the base wins, plus each joint's own bends in the
+        stretches that joint wins. A bend under a stretch it does not win is
+        not a kink of this surface and must not spend a slice: the slicer's
+        budget is finite and it refuses a surface carrying more mandatory
+        cuts than slices.
+        """
+        lo, hi = self.x_range() if x_l is None or x_r is None else (x_l, x_r)
+        if lo is None or hi is None or hi <= lo:
+            return []
+        tol = 1e-9 * (hi - lo)
+        intervals = self._intervals(lo, hi)
+        base_kinks = set(self.base.kinks(lo, hi))
+        out: list[float] = []
+        for (a0, b0, w0), (a1, b1, w1) in zip(intervals[:-1], intervals[1:]):
+            x = b0
+            if not (lo + tol < x < hi - tol):
+                continue
+            if w0 is not w1:
+                # The surface swaps branch here: base to joint, joint to
+                # base, or one joint subducting another. Always a kink.
+                out.append(x)
+            elif w0 is None:
+                # Both sides on the base: only the base's own kinks count.
+                if any(abs(x - k) <= tol for k in base_kinks):
+                    out.append(x)
+            else:
+                # Both sides on the SAME joint: only that joint's own bends.
+                if any(abs(x - k) <= tol for k in w0.bends()):
+                    out.append(x)
+        # A candidate that turned out to change nothing is NOT a kink, and
+        # spending a mandatory slice cut on it is not merely wasteful: the
+        # slicer refuses a surface carrying more cuts than slices, so a joint
+        # whose ends happen to lie over a stretch the base wins could make a
+        # perfectly ordinary surface unanalysable. Measured before this
+        # filter existed: a joint clipping one polyline reported four cuts
+        # where two are real, and the factor of safety moved 1.6e-6 against
+        # the same path built by hand — small, and entirely spurious.
+        out.sort()
+        merged: list[float] = []
+        for x in out:
+            if not merged or x - merged[-1] > tol:
+                merged.append(x)
+        return merged
+
+    def y_span(self, x_l: float,
+               x_r: float) -> Optional[tuple[float, float]]:
+        """Exact ``(y_min, y_max)`` over ``[x_l, x_r]``.
+
+        Interval by interval, because on each one a single branch wins: a
+        joint is linear there so its extremes are its ends, and the base is
+        asked for its own span over that sub-interval. Sampling instead
+        would make the Minimum Elevation filter depend on the sample count,
+        which is the class of defect v0.1.100 was spent on.
+        """
+        lo: Optional[float] = None
+        hi: Optional[float] = None
+
+        def _take(*vals):
+            nonlocal lo, hi
+            for v in vals:
+                if v is None:
+                    continue
+                lo = v if lo is None else min(lo, v)
+                hi = v if hi is None else max(hi, v)
+
+        if x_r > x_l:
+            for a, b, band in self._intervals(x_l, x_r):
+                if band is None:
+                    span = self.base.y_span(a, b)
+                    if span is not None:
+                        _take(span[0], span[1])
+                    else:
+                        _take(self.base.base_y_at(a), self.base.base_y_at(b))
+                else:
+                    _take(band.y_at(a), band.y_at(b))
+                    for x in band.bends():
+                        if a < x < b:
+                            _take(band.y_at(x))
+        # The ends belong to the surface whichever branch wins there.
+        _take(self.base_y_at(x_l), self.base_y_at(x_r))
+        if lo is None or hi is None:
+            return None
+        return lo, hi
+
+    def drawing_vertices(self, samples: int = 60) -> list:
+        """Points for drawing, breakpoints included so no corner is rounded."""
+        x_l, x_r = self.x_range()
+        if x_l is None or x_r is None or x_r <= x_l:
+            return []
+        marks = self._breakpoints(x_l, x_r)
+        xs = set(marks)
+        for a, b in zip(marks[:-1], marks[1:]):
+            if self.band_at(0.5 * (a + b)) is None:
+                n = max(2, int(samples * (b - a) / (x_r - x_l)))
+                xs.update(a + (b - a) * k / n for k in range(1, n))
+        out = []
+        for x in sorted(xs):
+            y = self.base_y_at(x)
+            if y is not None:
+                out.append((x, y))
+        return out
+
+    def to_dict(self) -> dict:
+        return {
+            "type": "weak_layer",
+            "id": self.id,
+            "base": self.base.to_dict(),
+            "x_left": self.x_left,
+            "x_right": self.x_right,
+            "weak_layers": [
+                {"x0": a, "x1": b, "material_id": band.material_id,
+                 "boundary_id": band.boundary_id}
+                for a, b, band in self.spans()
+            ],
+            "vertices": [list(p) for p in self.drawing_vertices()],
+            "tension_cracks": [list(t) for t in self.tension_cracks],
+        }
+
+
+# ----------------------------------------------------------------------
 def compose_with_bedrock(circle: SlipCircle, external):
     """Clip ``circle`` to the floor of the model, if it dips below it.
 
@@ -981,6 +1487,15 @@ def moment_axis(surface, override=None) -> tuple[float, float]:
     constructed axis Bishop comes out at -1.84 % of the published value and
     with the circle's own centre at +0.08 %.
     """
+    if isinstance(surface, WeakLayerSurface):
+        # v0.1.121 — a clipped surface keeps the axis rule of the surface it
+        # was clipped from. Delegating instead of deciding again is the
+        # point: a circle clipped by a joint still turns about its own
+        # centre, and a polyline clipped by one still has no centre to turn
+        # about. Clipping never moves the two ends — they are ground
+        # crossings, and a joint lives below ground — so the constructed
+        # axis of a clipped polyline is the same point as before.
+        return moment_axis(surface.base, override)
     if isinstance(surface, CompositeSurface):
         return surface.centre_x, surface.centre_y
     if override is not None:
@@ -1025,7 +1540,11 @@ def lowest_elevation(surface) -> Optional[float]:
     along, and Minimum Elevation would discard the very surface the option
     exists to build.
     """
-    if isinstance(surface, CompositeSurface):
+    if isinstance(surface, (CompositeSurface, WeakLayerSurface)):
+        # v0.1.121 — and a weak-layer surface for the same reason as a
+        # composite: the deepest point of the circle it came from is exactly
+        # the part the joint removed, so answering from the circle would
+        # filter it on an elevation it never reaches.
         x_l, x_r = surface.x_range()
         span = surface.y_span(x_l, x_r)
         return span[0] if span else None
