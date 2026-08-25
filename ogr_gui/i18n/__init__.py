@@ -833,6 +833,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Move Down': 'Bajar',
         'Move Up': 'Subir',
         'Multiple Groups': 'Grupos múltiples',
+        'Number of Groups:': 'Número de grupos:',
         'New type:': 'Nuevo tipo:',
         'No probabilistic result for this method.': 'Sin resultado probabilístico para este método.',
         'No results to display.': 'No hay resultados que mostrar.',

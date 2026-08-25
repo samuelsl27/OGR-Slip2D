@@ -54,9 +54,12 @@ _KNOWN_UNREAD = {
     # fixed because each one moves a number and needs its own reference.
     #   the n_e of Su (2009) section 2.1.7, against a hard-coded 3;
     "sa_num_fos_compared_before_stopping": "D07c",
-    #   what the interface derives block_num_groups from is not what the
-    #   reference calls Multiple Groups.
-    "block_multiple_groups": "D07c",
+    #   D07c(b) is closed in v0.1.118 — ``block_num_groups`` stopped being
+    #   derived as ``num_surfaces // 1000`` and got its own control. This
+    #   field STAYS on the list, and legitimately: it enables that control
+    #   and nothing else, so the engine has nothing to read. Kept here so
+    #   the inventory keeps saying so out loud.
+    "block_multiple_groups": "UI only",
 }
 
 
@@ -162,5 +165,14 @@ class TestTheInventoryItselfIsHonest:
             + ", ".join(stale))
 
     def test_every_entry_names_the_defect_that_owns_it(self):
+        """Or, since v0.1.118, says why there is no defect to name.
+
+        ``UI only`` is the one other answer allowed, and it is a narrow
+        one: a field the interface uses to drive its own widgets and that
+        the engine therefore has nothing to read. It is not an escape
+        hatch for a setting that ought to reach the analysis and does not
+        — that is what the defect ids are for.
+        """
         for name, owner in _KNOWN_UNREAD.items():
-            assert re.fullmatch(r"D\d+[a-z]?", owner), (name, owner)
+            ok = owner == "UI only" or re.fullmatch(r"D\d+[a-z]?", owner)
+            assert ok, (name, owner)

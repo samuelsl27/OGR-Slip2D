@@ -293,8 +293,20 @@ class TestOptimisation:
     def _start(self):
         if not self._CACHE:
             p = _ej1_project()
+            # v0.1.118 — the segment length is PINNED, and stating the
+            # premise beats inheriting it. These tests need the SHORT
+            # surface, the one with few movable vertices, because that is
+            # the fragile case for the walk. It used to arrive by accident:
+            # the automatic length was 0.3 x the relief of the MODEL, and
+            # Ej_1 carries 25 m of foundation under its toe bench, so the
+            # search chopped a 25 m slope into 15 m segments. With the
+            # relief of the SLOPE, as the reference states it, the
+            # automatic value is 7.5 and the same search returns fourteen
+            # vertices — a perfectly good surface, and the wrong one for
+            # what is being measured here.
             run = PathSearch(method=Spencer(), num_paths=15,
-                             num_slices=14, seed=3).run(p)
+                             num_slices=14, seed=3,
+                             segment_length=15.0).run(p)
             self._CACHE["v"] = (p, run.critical.surface,
                                 run.critical.fos)
         p, surf, fos = self._CACHE["v"]
@@ -307,7 +319,8 @@ class TestOptimisation:
         the reason it changed is worth more than the assertion.
 
         It was called ``test_densification_is_what_makes_it_work`` and it
-        claimed: with the four vertices a Path Search produces, the walk
+        claimed: with the handful of vertices a Path Search produces, the
+        walk
         barely moves the factor of safety; densified to twelve, it lowers
         it appreciably. Measured on this very surface, at 200 evaluations
         and seed 7:
@@ -370,7 +383,7 @@ class TestOptimisation:
         """
         import statistics
         p, ev, surf, _f0 = self._start()
-        assert len(surf.polyline.vertices) == 4, (
+        assert len(surf.polyline.vertices) == 5, (
             "the premise: this is the short surface a Path Search makes")
         # Only the PLAIN walk is swept. With two movable vertices it is the
         # fragile one — it is where a seed stops early in both versions — and

@@ -71,8 +71,16 @@ class TestBlockSearchV117:
             assert not outside, f"seed {seed}: outside {outside}"
 
     def test_no_spurious_low_fos(self):
-        """The unimodal filter should remove sawtooth wedges that give
-        spurious sub-unity FoS for this stable slope."""
+        """A stable slope must not return a sub-unity factor.
+
+        v0.1.118 — this used to say "the unimodal filter should remove
+        sawtooth wedges", and that filter is gone: the reference does not
+        have it, it was applied whether or not the user asked for
+        convexity, and it was the acceptance rate (defect D21). The
+        invariant survives it untouched, which is the point — what catches
+        those wedges now is the post-analysis m-alpha check, on by default
+        since v0.1.89, which is where the reference puts the screen.
+        """
         from ogr_slip2d import BishopSimplified
         from ogr_slip2d.search import BlockSearch
         p, _ = _slope()

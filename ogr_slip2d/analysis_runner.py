@@ -189,8 +189,9 @@ def settings_warnings(project) -> list[str]:
             and s_search.slope_limit_right is not None):
         notes.append(
             "Slope Search derives its entry and exit window from the "
-            "ground profile and does not read the Slope Limits you set; "
-            "they apply to Grid Search. The limits were ignored.")
+            "ground profile, so the Slope Limits you set did not steer "
+            "where it looked. They were still applied as a filter, as "
+            "they are for every search.")
     # Anything the stored model carried that could not be migrated. It is
     # a note and not a refusal: the analysis is valid, it simply did not
     # honour a value the file still mentions.
@@ -540,16 +541,26 @@ def build_search(project, method_id: str, progress_cb: Optional[Callable] = None
         # Elevation and Minimum Depth were declared, editable and saved,
         # and not one branch passed them.
         **s.surface_filter_kwargs(),
+        # v0.1.118 — and the Slope Limits go with them, for the same reason
+        # and one more. The reason: they are a project setting, so the six
+        # branches below are exactly where one of them gets forgotten — and
+        # one HAD been, five of them. The extra reason: the reference is
+        # explicit that the limits "ALWAYS serve as a filter for valid
+        # surfaces, regardless of the Surface Type or the Search Method",
+        # and only the Grid Search was ever handed them. Block Search even
+        # implemented the filter and was never given a value to filter on.
+        # Defect D21 / anomaly A19-1.
+        slope_limits=_slope_limits(s_search),
         **_seed_kw(),
     )
 
     if search_method == "slope":
         from .search import SlopeSearch
-        # ``slope_limits`` is deliberately NOT passed. SlopeSearch.run
-        # derives the entry/exit window from the ground profile itself
-        # and has no code that reads a user-supplied limit, so handing it
-        # one would be an argument that changes nothing — see the warning
-        # raised in ``check_analysis_settings``.
+        # ``slope_limits`` reaches this search through ``common`` since
+        # v0.1.118, but only as the FILTER every search now applies in
+        # ``_best_of_masses``. Its GENERATION still derives the entry/exit
+        # window from the ground profile and reads no user-supplied limit,
+        # which is what ``settings_warnings`` still warns about.
         #
         # v0.1.103 — the LOWER checkbox used to decide nothing: its angle
         # was passed whether or not the box was ticked, so a user who
@@ -649,7 +660,6 @@ def build_search(project, method_id: str, progress_cb: Optional[Callable] = None
     # Default = Grid Search.
     from .search import GridSearch
     return GridSearch(
-        slope_limits=_slope_limits(s_search),
         focus_objects=[f for f in getattr(project, "focus_objects", [])
                        if f.enabled and f.valid],
         grid_x=_grid_range(s_search.grid_x_min, s_search.grid_x_max),

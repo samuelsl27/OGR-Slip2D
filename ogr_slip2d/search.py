@@ -53,6 +53,13 @@ def _base_kwargs(legacy: dict) -> dict:
         "check_m_alpha": bool(legacy.pop("check_m_alpha", True)),
         "min_elevation": legacy.pop("min_elevation", None),
         "min_depth": legacy.pop("min_depth", None),
+        # v0.1.118 — the Slope Limits. They belong here, and not in four of
+        # the six branches, because the reference is unambiguous that they
+        # "ALWAYS serve as a filter for valid surfaces, regardless of the
+        # Surface Type or the Search Method being used". Four searches
+        # declared the argument, only ONE was ever given it, and the two
+        # that did not declare it could not have honoured it at all.
+        "slope_limits": legacy.pop("slope_limits", None),
         # v0.1.104 — Optimize Surfaces. Every search ACCEPTS them for the
         # reason above (a shared argument must be forgettable only once),
         # but only the three non-circular branches of ``build_search`` are
@@ -191,6 +198,7 @@ class BaseSearch(ABC):
         check_m_alpha: bool = True,
         min_elevation: Optional[float] = None,
         min_depth: Optional[float] = None,
+        slope_limits: Optional[tuple] = None,
         optimize=None,
         optimize_seed: Optional[int] = None,
     ) -> None:
@@ -215,6 +223,19 @@ class BaseSearch(ABC):
         # in one sentence.
         self.min_elevation = min_elevation
         self.min_depth = min_depth
+        # v0.1.118 — the Slope Limits, ``(x_left, x_right)`` or None for
+        # automatic. Two distinct jobs, and only the first is done here:
+        #
+        # * FILTERING — a mass must daylight within them, for every search
+        #   and every surface type. That is done once, in
+        #   ``_best_of_masses``, for the same reason the two filters above
+        #   are: every search reaches the engine through that method, so a
+        #   filter placed anywhere else is one some door can walk around.
+        # * GENERATION — the searches that build their candidates from the
+        #   slope surface read ``self.slope_limits`` themselves. The
+        #   reference exempts exactly one from this, the Block Search,
+        #   whose vertices come from user-drawn objects instead.
+        self.slope_limits = slope_limits
         # v0.1.24 — optional kinematic-admissibility filter (anomaly A3).
         # A physically acceptable limit-equilibrium mechanism requires
         # COMPRESSIVE interslice forces; a surface whose force field
@@ -418,6 +439,19 @@ class BaseSearch(ABC):
             slices = slice_surface(project, trial, num_slices=self.num_slices)
             if slices is None or len(slices) < 3:
                 continue
+            # Slope Limits — both ends of the MASS must daylight inside
+            # them. Asked here, after slicing, because that is the first
+            # moment the extent is known for a circle: its own endpoints
+            # are wherever the arc meets the ground, and on an arc that
+            # cuts the ground more than twice each mass has its own pair.
+            # A polyline knows its extent earlier, but answering the same
+            # question in two places is how the two answers drift apart.
+            if self.slope_limits is not None:
+                sl_lo, sl_hi = sorted(self.slope_limits)
+                tol = 1e-9 * max(abs(sl_hi - sl_lo), 1.0)
+                if (slices[0].base_x_left < sl_lo - tol
+                        or slices[-1].base_x_right > sl_hi + tol):
+                    continue
             # Filter by minimum "area" (here approximated as Σ w_i · h_i)
             area = sum(s.width * max(s.height, 0.0) for s in slices)
             if area < self.min_area:
@@ -940,7 +974,6 @@ class GridSearch(BaseSearch):
         min_radius: float = 0.0,
         num_slices: int = 30,
         min_area: float = 0.5,
-        slope_limits: tuple[float, float] | None = None,
         focus_objects=None,
         progress_cb: Optional[Callable[[int, int], None]] = None,
         **legacy_kwargs,
@@ -962,7 +995,6 @@ class GridSearch(BaseSearch):
         # Accept floats for back-compat but use as an integer count.
         self.radius_increment = max(1, int(round(radius_increment)))
         self.min_radius = min_radius
-        self.slope_limits = slope_limits
         # v0.1.55 (phase M4) — focus objects, applied BEFORE evaluation:
         # rejecting a circle costs two distance calculations, evaluating
         # one costs a full slicing and iteration, so the order is what
@@ -1592,7 +1624,6 @@ class AutoRefineSearch(BaseSearch):
         next_iter_fraction: float = 0.5,
         num_slices: int = 30,
         min_area: float = 0.5,
-        slope_limits: Optional[tuple] = None,
         focus_objects=None,
         progress_cb=None,
         # Back-compat (old signature used factor/radius_increment)
@@ -1612,7 +1643,6 @@ class AutoRefineSearch(BaseSearch):
             f = f / 100.0
         self.next_iter_fraction = min(0.95, max(0.1, f))
         self.min_area = min_area
-        self.slope_limits = slope_limits
         # v0.1.55 (phase M4) — focus objects, applied BEFORE evaluation:
         # rejecting a circle costs two distance calculations, evaluating
         # one costs a full slicing and iteration, so the order is what
@@ -1838,13 +1868,17 @@ class BlockSearch(BaseSearch):
     The sliding mass is treated as active / central / passive "blocks".
 
     Method (per the Slide documentation):
-      1. One random point is generated for each Block Search object. In
-         the absence of user-drawn search objects, OGR generates the
-         points within ``num_groups`` vertical "block windows" spanning
-         the central part of the slope — these act as implicit search
-         windows.
+      1. One random point is generated for each Block Search object. The
+         reference REQUIRES the user to draw them; in their absence OGR
+         tiles an implicit block region with ``num_groups`` vertical
+         windows and samples one point in each. That fallback is ours, not
+         the reference's, and it is worth saying so: an unguided random
+         search over N free vertices is not the same thing as N windows
+         placed by someone who knows where the weak layer runs.
       2. The points are sorted by X-coordinate so the surface is
          kinematically admissible (single-valued, does not reverse).
+         That sort is the WHOLE of the admissibility condition; see
+         ``_run`` for the two extra filters that used to sit here.
       3. The Left and Right Projection Angles project the surface up to
          the ground surface from the leftmost and rightmost block points.
          Angles are measured CCW from the +x axis (Slide convention):
@@ -1856,7 +1890,9 @@ class BlockSearch(BaseSearch):
       5. Repeated for ``num_surfaces`` candidates.
 
     Options: ``convex_only`` rejects surfaces with a reflex (non-convex)
-    vertex, matching Slide's "Convex Surfaces Only".
+    vertex, matching the documented "Convex Surfaces Only" checkbox. It is
+    the user's option and it is OFF by default, which is why nothing else
+    may quietly enforce the same thing.
     """
 
     def __init__(
@@ -1873,7 +1909,6 @@ class BlockSearch(BaseSearch):
         num_slices: int = 30,
         min_area: float = 1.0,
         convex_only: bool = False,
-        slope_limits: Optional[tuple] = None,
         focus_objects=None,
         seed: Optional[int] = None,
         progress_cb=None,
@@ -1900,7 +1935,6 @@ class BlockSearch(BaseSearch):
         self.num_surfaces = num_surfaces
         self.min_area = min_area
         self.convex_only = convex_only
-        self.slope_limits = slope_limits
         # v0.1.55 (phase M4) — focus objects, applied BEFORE evaluation:
         # rejecting a circle costs two distance calculations, evaluating
         # one costs a full slicing and iteration, so the order is what
@@ -1987,6 +2021,18 @@ class BlockSearch(BaseSearch):
         face_w = max(face_hi_x - face_lo_x, 1e-6)
         # Windows span from a little before the toe to a little past the
         # crest, where realistic slip surfaces pass.
+        #
+        # Every fraction below is taken over the MODEL's bounding box, and
+        # v0.1.118 leaves them alone deliberately while saying so out loud.
+        # They are the same conceptual slip the segment length had — the
+        # relief of the model standing in for the height of the slope — and
+        # on a model with deep foundation they open a very tall sampling
+        # band: 70 m for the four-layer benchmark of Greco (1996) example
+        # 4, whose slope is 60 m. But unlike the segment length, these
+        # fractions have NO documented value to be corrected to: the
+        # reference has the user draw the windows and offers no fallback at
+        # all. Changing them would be tuning towards a known answer, which
+        # is the one thing that must not happen here. Reported instead.
         x_lo = max(xmin, face_lo_x - 0.3 * face_w)
         x_hi = min(xmax, face_hi_x + 0.5 * face_w)
         y_lo = ymin + 0.05 * dy
@@ -2022,6 +2068,29 @@ class BlockSearch(BaseSearch):
                             break
                     block_pts.append(Vertex(px, py))
             else:
+                # One band per group, and the band is the stand-in for a
+                # Block Search Window the user did not draw. Tiling the
+                # region is a legitimate arrangement of ``num_groups``
+                # windows — the reference lets them overlap, it does not
+                # require it — and it is what keeps the sampled vertices
+                # spread across the slope instead of clustering.
+                #
+                # v0.1.118 measured the alternative before keeping this:
+                # drawing all ``num_groups`` points from the whole region
+                # and sorting them by x, which is what N overlapping
+                # windows would give. On the four-layer benchmark of Greco
+                # (1996) example 4, 3000 candidates, 2..5 groups:
+                #
+                #   tiled    1.596973 1.606084 1.668830 1.822153
+                #            1852     1623     1214      841  valid
+                #   overlap  1.644    1.610    1.603     1.832
+                #            1204     1142      831      586  valid
+                #
+                # The minima differ by less than the noise of a random
+                # search and in both directions, while overlapping costs
+                # about a third of the yield to near-coincident abscissae.
+                # So the tiling stays. The rejection D21 was actually about
+                # is the pair of undocumented filters further down.
                 for k in range(self.num_groups):
                     bx0 = x_lo + (x_hi - x_lo) * k / self.num_groups
                     bx1 = x_lo + (x_hi - x_lo) * (k + 1) / self.num_groups
@@ -2030,8 +2099,13 @@ class BlockSearch(BaseSearch):
                     if gy is None:
                         ok = False
                         break
-                    min_depth = 0.10 * max(dy, 1.0)
-                    hi = min(y_hi, gy - min_depth)
+                    # Named ``cover`` and not ``min_depth``: this is how
+                    # far under the ground a sampled vertex must sit, and
+                    # ``self.min_depth`` is the Surface Filter, a different
+                    # thing applied to the finished mass. The local name
+                    # used to shadow it.
+                    cover = 0.10 * max(dy, 1.0)
+                    hi = min(y_hi, gy - cover)
                     lo = y_lo
                     if hi <= lo:
                         hi = lo + 0.1
@@ -2084,40 +2158,32 @@ class BlockSearch(BaseSearch):
                 result.invalid_count += 1
                 continue
 
-            # kinematic admissibility: interior vertices below the chord
-            x0v, y0v = deduped[0].x, deduped[0].y
-            xnv, ynv = deduped[-1].x, deduped[-1].y
-            admissible = True
-            if xnv - x0v > 1e-9:
-                for vv in deduped[1:-1]:
-                    tt = (vv.x - x0v) / (xnv - x0v)
-                    chord = y0v + tt * (ynv - y0v)
-                    if vv.y > chord + 1e-6:
-                        admissible = False
-                        break
-            if not admissible:
-                result.invalid_count += 1
-                continue
-
-            # v0.1.17 — require the surface to be UNIMODAL (single
-            # valley): y descends to a minimum then ascends. This
-            # rejects "sawtooth" surfaces (down-up-down-up) that produce
-            # spurious low FoS values from non-physical wedge shapes.
-            ys = [v.y for v in deduped]
-            imin = ys.index(min(ys))
-            unimodal = True
-            for a in range(1, imin + 1):
-                if ys[a] > ys[a - 1] + 1e-6:
-                    unimodal = False
-                    break
-            if unimodal:
-                for a in range(imin + 1, len(ys)):
-                    if ys[a] < ys[a - 1] - 1e-6:
-                        unimodal = False
-                        break
-            if not unimodal:
-                result.invalid_count += 1
-                continue
+            # v0.1.118 — sorting by x IS the kinematic admissibility this
+            # search asks for: it is what stops the surface reversing
+            # direction, and the reference names no other condition on the
+            # generated shape. Two more used to be applied here, both
+            # unconditionally and neither documented: interior vertices
+            # below the entry-exit chord, and UNIMODALITY (descend to a
+            # single minimum, then ascend). They are gone.
+            #
+            # What they cost, and it is not a matter of taste. Each block
+            # point draws its own y independently and uniformly, so the
+            # chance that N of them come out unimodal is 2^(N-1)/N! — 1,
+            # 0.67, 0.33, 0.13 for N = 2..5. Measured on the four-layer
+            # benchmark of Greco (1996) example 4, 3000 candidates each:
+            # 1852, 1364, 635, 222 valid, i.e. 1, 0.74, 0.34, 0.12. The
+            # filter WAS the acceptance rate. Asking for more groups
+            # bought rejection, not freedom, and the reported minimum rose
+            # monotonically with the count (defect D21 / anomaly A19-1).
+            #
+            # The concern they were written for in v0.1.17 — "sawtooth"
+            # shapes returning spuriously low factors — is real, and it is
+            # now answered where the reference answers it: AFTER the
+            # factor converges, by the m-alpha check (on by default since
+            # v0.1.89) and the optional Tensile Stress Check. Those two
+            # did not exist when these filters were written. Convexity
+            # stays, because the reference offers it — as the user's
+            # checkbox, not as a standing condition.
 
             # Convex Surfaces Only filter
             if self.convex_only and len(deduped) >= 3:
@@ -2301,10 +2367,12 @@ class PathSearch(BaseSearch):
     that produced reasonable shapes but did not match the documented
     method. The XSTABL method is:
 
-    1. **Initiation point** — randomly generated on the slope surface
-       within the toe-side half of the Slope Limits. Slide ALWAYS starts
-       at the toe and progresses towards the crest, regardless of the
-       Failure Direction.
+    1. **Initiation point** — randomly generated on the ground surface
+       within the toe-side HALF of the Slope Limits. The slide ALWAYS
+       starts at the toe and progresses towards the crest, regardless of
+       the Failure Direction. Until v0.1.118 the window was derived from
+       the slope FACE instead, and on a model with a bench in front of the
+       toe that excluded the answer — see ``_run``.
 
     2. **First segment** — emitted from the initiation point at a random
        *Initial Angle at Toe*. The default angular window is
@@ -2313,8 +2381,10 @@ class PathSearch(BaseSearch):
        Slide's convention (CCW-positive from +x axis); for a
        right-to-left failure the surface descends into the slope.
 
-    3. **Subsequent segments** — each of fixed ``segment_length`` (Slide
-       default ≈ 0.3·H, H = slope height). The direction of each new
+    3. **Subsequent segments** — each of fixed ``segment_length``
+       (default ≈ 0.3·H, H = the height of the SLOPE, which is the relief
+       of the ground profile between the Slope Limits and NOT the relief
+       of the model — see ``_run``). The direction of each new
        segment is drawn randomly but constrained to keep the surface
        *kinematically admissible* (concave-up: the segment angle rotates
        monotonically upward, never folding back down). This is the XSTABL
@@ -2322,8 +2392,8 @@ class PathSearch(BaseSearch):
 
     4. **Termination** — the surface is grown until it re-emerges on the
        ground surface. The exit point must lie within the Slope Limits,
-       otherwise the surface is discarded (the Slope Limits act as a
-       filter on the endpoint, per the documentation).
+       otherwise the surface is discarded: the limits FILTER the endpoint,
+       they do not place it.
 
     5. **Minimum Elevation** — no vertex may go below the lower limit of
        the External boundary (or a user Minimum Elevation).
@@ -2359,6 +2429,13 @@ class PathSearch(BaseSearch):
         initial_angle_lower_deg: Optional[float] = None,
         min_elevation: Optional[float] = None,
         convex_only: bool = False,
+        # ``slope_limits`` arrives through ``**legacy_kwargs`` and
+        # ``_base_kwargs``, like every other project-level setting. It is
+        # not optional decoration here: this search is DEFINED in terms of
+        # the limits — they bound the initiation range and they filter the
+        # exit point — and until v0.1.118 it had no such argument at all,
+        # so a user who narrowed them to steer a Path Search moved nothing
+        # and was not told. Defect D21 / anomaly A19-1.
         seed: Optional[int] = None,
         progress_cb=None,
         max_segments: int = 30,
@@ -2445,15 +2522,51 @@ class PathSearch(BaseSearch):
         x_left = top[0].x
         x_right = top[-1].x
         y_min = min(v.y for v in ext_verts)
-        y_max = max(v.y for v in ext_verts)
-        H = y_max - y_min  # slope height
         self._y_floor = (self.min_elevation if self.min_elevation is not None
                          else y_min)
 
-        # Segment length default ≈ 0.3 H (Slide recommendation)
+        # Slope Limits — the stretch of ground within which a surface may
+        # daylight. Automatic (None) means the whole ground profile, which
+        # is where the reference puts the two markers when the External
+        # Boundary is created.
+        if self.slope_limits is not None:
+            sl_x0, sl_x1 = sorted(self.slope_limits)
+            sl_x0 = max(sl_x0, x_left)
+            sl_x1 = min(sl_x1, x_right)
+            if sl_x1 - sl_x0 <= 1e-9:
+                return result
+        else:
+            sl_x0, sl_x1 = x_left, x_right
+
+        # v0.1.118 — H is the height of the SLOPE, not of the model, and
+        # the difference is the whole of defect D21 on this search. The
+        # recommendation the segment length follows is "approximately 0.3H,
+        # where H is the maximum height of the slope"; ``y_max - y_min``
+        # over the External Boundary measures instead the model's total
+        # relief, which includes every metre of FOUNDATION under the toe —
+        # soil the slip surface may pass through but that is no part of any
+        # slope. On the four-layer benchmark of Greco (1996) example 4 the
+        # slope is 60 m over 40 m of foundation, so the old reading gave
+        # 100: segments of 30 m, eight vertices for a 150 m mass, and a
+        # polyline too coarse to follow the arc it was competing with. The
+        # same critical circle read 1.4332 as an arc and 1.4470 in eight
+        # chords — the whole of the gap the anomaly reported.
+        #
+        # The relief of the GROUND PROFILE is the faithful measure, and it
+        # is taken between the Slope Limits because that is the slope being
+        # searched. Not ``crest.y - toe.y`` of the steepest face: on a
+        # benched slope the steepest face is one bench, not the slope.
+        ys = [v.y for v in top if sl_x0 - 1e-9 <= v.x <= sl_x1 + 1e-9]
+        for xe in (sl_x0, sl_x1):
+            ye = self._interpolate_top_y(top, xe)
+            if ye is not None:
+                ys.append(ye)
+        H = (max(ys) - min(ys)) if ys else 0.0
+
+        # Segment length default ≈ 0.3 H (see above for what H is)
         seg_len = self.segment_length
         if seg_len is None or seg_len <= 0:
-            seg_len = max(0.3 * H, (x_right - x_left) * 0.05, 1e-3)
+            seg_len = max(0.3 * H, (sl_x1 - sl_x0) * 0.05, 1e-3)
 
         # Locate the slope face (steepest ground segment) → defines the
         # toe / crest and the Slope-Limits ranges.
@@ -2513,24 +2626,39 @@ class PathSearch(BaseSearch):
         face_hi_x = max(face_a.x, face_b.x)
         face_w = max(face_hi_x - face_lo_x, 1e-6)
 
-        # Initiation range: toe-side portion of the slope face + a small
-        # margin onto the adjoining flat (Slope-Limits toe half).
-        if to_right:
-            init_x0 = max(x_left, toe_pt.x - 0.15 * face_w)
-            init_x1 = toe_pt.x + 0.55 * face_w
+        # Initiation range: the HALF of the Slope Limits closest to the toe.
+        #
+        # v0.1.118 — this is the documented rule, and it replaces a window
+        # of our own that was derived from the slope FACE:
+        # ``[toe - 0.15 w, toe + 0.55 w]``. The two are not close. On the
+        # four-layer benchmark of Greco (1996) example 4 the face rule gave
+        # [42, 126] while the reference gives [0, 130] — and the manual
+        # PUBLISHES the entry point of the critical surface it found, at
+        # x = 39.18, which the face rule can never sample. Nor can it reach
+        # x = 29.37, where the critical circle of the ordinary grid search
+        # on the same model daylights. The search was not returning a worse
+        # surface than the grid: it was forbidden from starting where the
+        # answer starts, and its own minimum came out pinned against the
+        # left edge of the window, which is what a clipped optimum looks
+        # like. Defect D21 / anomaly A19-1.
+        sl_mid = 0.5 * (sl_x0 + sl_x1)
+        if toe_pt.x <= sl_mid:
+            init_x0, init_x1 = sl_x0, sl_mid
         else:
-            init_x0 = toe_pt.x - 0.55 * face_w
-            init_x1 = min(x_right, toe_pt.x + 0.15 * face_w)
-            init_x0, init_x1 = min(init_x0, init_x1), max(init_x0, init_x1)
+            init_x0, init_x1 = sl_mid, sl_x1
 
-        # Exit range (crest side) — used to filter endpoints.
+        # The endpoint is FILTERED by the Slope Limits and nothing else:
+        # "the Slope Limits do not influence the location of the endpoint,
+        # but are used as a filter". ``crest_target`` is a separate matter —
+        # it steers the turn-up schedule below, is a heuristic of ours with
+        # no counterpart in the reference, and keeps the crest-side window
+        # it has always used so that only the FILTER changes here.
         if to_right:
-            exit_x0 = crest_pt.x - 0.55 * face_w
-            exit_x1 = min(x_right, crest_pt.x + 0.6 * face_w)
+            crest_target = 0.5 * ((crest_pt.x - 0.55 * face_w)
+                                  + min(x_right, crest_pt.x + 0.6 * face_w))
         else:
-            exit_x0 = max(x_left, crest_pt.x - 0.6 * face_w)
-            exit_x1 = crest_pt.x + 0.55 * face_w
-            exit_x0, exit_x1 = min(exit_x0, exit_x1), max(exit_x0, exit_x1)
+            crest_target = 0.5 * (max(x_left, crest_pt.x - 0.6 * face_w)
+                                  + (crest_pt.x + 0.55 * face_w))
 
         # Initial-angle window (radians), in the local toe-to-crest frame:
         # +x runs from the toe towards the crest.
@@ -2586,7 +2714,7 @@ class PathSearch(BaseSearch):
                 self.progress_cb(min(result.valid_count, self.num_surfaces),
                                  self.num_surfaces)
             verts = self._generate_path_xstabl(
-                rng, top, init_x0, init_x1, exit_x0, exit_x1,
+                rng, top, init_x0, init_x1, sl_x0, sl_x1, crest_target,
                 seg_len, ang_lo, ang_hi, to_right, self._y_floor,
             )
             if verts is None or len(verts) < 3:
@@ -2614,14 +2742,14 @@ class PathSearch(BaseSearch):
 
     # ------------------------------------------------------------------
     def _generate_path_xstabl(
-        self, rng, top, init_x0, init_x1, exit_x0, exit_x1,
+        self, rng, top, init_x0, init_x1, sl_x0, sl_x1, crest_target,
         seg_len, ang_lo, ang_hi, to_right, y_floor,
     ):
         """Grow one irregular surface following the XSTABL method.
 
         Returns a left-to-right-ordered list of Vertex, or None if the
-        surface is invalid (doesn't re-emerge in the exit range, goes
-        below the floor, or exceeds the segment budget).
+        surface is invalid (doesn't re-emerge within the Slope Limits,
+        goes below the floor, or exceeds the segment budget).
         """
         from ogr_core.geometry import Vertex
 
@@ -2686,7 +2814,6 @@ class PathSearch(BaseSearch):
             #    XSTABL admissibility (monotone upward rotation) while
             #    greatly improving the fraction of surfaces that emerge
             #    inside the Slope Limits.
-            crest_target = 0.5 * (exit_x0 + exit_x1)
             remaining = abs(crest_target - cx)
             total = abs(crest_target - x_start) + 1e-9
             progress = max(0.0, min(1.0, 1.0 - remaining / total))
@@ -2703,9 +2830,11 @@ class PathSearch(BaseSearch):
         if not emerged or len(pts) < 3:
             return None
 
-        # 4. Endpoint must be within the exit (crest-side) range
+        # 4. The endpoint must daylight WITHIN THE SLOPE LIMITS. That is
+        #    the whole of the rule: the limits filter the endpoint, they do
+        #    not place it.
         ex = pts[-1][0]
-        if not (min(exit_x0, exit_x1) - 1e-6 <= ex <= max(exit_x0, exit_x1) + 1e-6):
+        if not (sl_x0 - 1e-6 <= ex <= sl_x1 + 1e-6):
             return None
 
         # Order left→right
