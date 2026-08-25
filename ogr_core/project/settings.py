@@ -342,7 +342,20 @@ class SearchSettings:
     block_num_groups: int = 3
 
     # ---------- Optimize Surfaces (post-processing, non-circular) ----------
-    optimize_enabled: bool = False
+    # v0.1.119 — THREE states, and the third one is the default. ``None``
+    # means AUTOMATIC: on for Simulated Annealing, off for the others, which
+    # is what the reference documents ("By default the Optimize Surfaces
+    # option is enabled for Simulated Annealing [...] It is recommended that
+    # this option is always enabled"). ``True`` and ``False`` are the user's
+    # own answer and always win, so unticking it for an annealing run really
+    # unticks it.
+    #
+    # It is a tri-state rather than a plain ``True`` default because the two
+    # are not the same statement: a stored ``false`` written by a model saved
+    # before this version is a default nobody chose, and flipping it under
+    # those models would change their answers without anyone asking. See
+    # ``optimize_enabled_for``.
+    optimize_enabled: Optional[bool] = None
     optimize_target: str = "global_minimum"  # global_minimum | all | fos_less_than
     optimize_fos_threshold: float = 1.5
     optimize_tolerance: float = 1e-9
@@ -508,6 +521,34 @@ class SearchSettings:
         a non-grid method is selected. Only Grid Search uses a grid in
         Slide."""
         return self.search_method == SearchMethod.GRID_SEARCH.value
+
+
+#: Search methods for which Optimize Surfaces is on unless the user says
+#: otherwise. One entry today, and a set rather than a comparison because
+#: the reference states the default per method and nothing says the list
+#: cannot grow.
+_OPTIMIZE_ON_BY_DEFAULT = frozenset({SearchMethod.SIMULATED_ANNEALING.value})
+
+
+def optimize_enabled_for(search: "SearchSettings") -> bool:
+    """Resolve the tri-state ``optimize_enabled`` for this search method.
+
+    v0.1.119. ``None`` — the default, and what a model written from now on
+    carries when nobody touched the box — means AUTOMATIC: on for Simulated
+    Annealing, off for the rest, which is the default the reference
+    documents. ``True`` and ``False`` are the user's answer and win.
+
+    Why the annealing needs it, measured on the v0.1.17 test slope over
+    seven seeds with the two v0.1.119 engine fixes in place: with this off
+    the worst seed lands at 1.2054 against a circular minimum of 1.1135;
+    with it on, at 1.1232, and six of the seven fall BELOW the circle. The
+    reference does not merely default it on for this search, it recommends
+    never turning it off.
+    """
+    declared = getattr(search, "optimize_enabled", None)
+    if declared is None:
+        return search.search_method in _OPTIMIZE_ON_BY_DEFAULT
+    return bool(declared)
 
 
 @dataclass
@@ -878,6 +919,12 @@ class ProjectSettings:
         search built from an unticked model is the search it always was,
         argument for argument.
 
+        v0.1.119 — "unticked" is now a question for
+        :func:`optimize_enabled_for`, because the setting has three states
+        and the default is the third: ``None`` reads on for Simulated
+        Annealing and off for the rest, which is the per-method default the
+        reference documents.
+
         Unlike its two siblings this one does NOT travel in ``common``:
         the reference offers the option only for Surface Type =
         Non-Circular, so handing it to Grid, Slope or Auto Refine would be
@@ -886,7 +933,7 @@ class ProjectSettings:
         from ogr_slip2d.optimize import OptimizeSettings
 
         s = self.search
-        if not s.optimize_enabled:
+        if not optimize_enabled_for(s):
             return {"optimize": None}
         return {"optimize": OptimizeSettings(
             enabled=True,

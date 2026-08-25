@@ -2980,6 +2980,16 @@ class SimulatedAnnealingSearch(BaseSearch):
         vertex's step size by factor (1 - eps), eps=0.75 default
       - Stop when all step sizes < tolerance OR no improvement after
         a full pass over all vertices
+      - The two EXTREMITIES move too (v0.1.119), in x only, with their
+        y read off the ground profile so they keep daylighting; their
+        travel is bounded by the Slope Limits. Su (2009) section 2.1
+        counts n = 2N - 2 for exactly this reason.
+
+    What the search may STEER by, and it is not the same as what it may
+    evaluate: only surfaces that survive the post-analysis checks. See
+    :meth:`_steer` — until v0.1.119 it steered by all of them, including
+    the ones :attr:`SearchResult.critical` refuses to report, and that was
+    defect D22.
 
     Convex-only mode: rejects candidate surfaces whose curvature
     changes sign (kappa < 0 anywhere), preserving downward-concave
@@ -3037,9 +3047,16 @@ class SimulatedAnnealingSearch(BaseSearch):
     # ==================================================================
     def _run(self, project) -> SearchResult:
         result = SearchResult(method_id=self.method.METHOD_ID)
-        if self.seed is not None:
-            import random as _r
-            _r.seed(self.seed)
+        # v0.1.119 — a generator of its OWN, not ``random.seed()`` on the
+        # module. The old line reproduced (it re-seeded on every run, so two
+        # runs agreed) and still broke rule 5: it left the process-wide
+        # stream wherever the annealing happened to leave it, so anything
+        # drawing from ``random`` afterwards — another search, a
+        # probabilistic sampler, a test — inherited a state decided by this
+        # one. Reproducibility and non-interference are two properties, and
+        # only the first one was ever checked.
+        import random as _random
+        rng = _random.Random(self.seed)
         try:
             xmin, ymin, xmax, ymax = project.bounding_box()
         except Exception:
@@ -3097,21 +3114,31 @@ class SimulatedAnnealingSearch(BaseSearch):
         N = self.initial_vertices
         x1 = min(toe_pt.x, crest_pt.x)
         xN = max(toe_pt.x, crest_pt.x)
-        # Small inward margin so endpoints sit on the slope, not exactly
-        # on a corner
-        face_w = max(xN - x1, 1e-6)
-        x1 = x1 - 0.0 * face_w
-        xN = xN + 0.0 * face_w
+
+        # v0.1.119 — and the Slope Limits bracket the bracket. They used to
+        # reach this search only as the mass filter in ``_best_of_masses``,
+        # so a project that narrowed them past the toe or the crest got NO
+        # SURFACE AT ALL: phase 1 kept starting from a pair of endpoints
+        # outside the limits and every candidate it built was thrown away
+        # after being analysed. A filter the generator does not know about
+        # is a filter that can reject an entire search, which is the shape
+        # of D21's Block Search finding as well.
+        if self.slope_limits is not None:
+            sl_lo, sl_hi = sorted(self.slope_limits)
+            x1, xN = max(x1, sl_lo), min(xN, sl_hi)
+            if xN - x1 < 1e-9:
+                return result
 
         # Phase 1 — VFSA
         best_verts, best_fos = self._vfsa(
-            project, result, x1, xN, ymin, ymax, top, N, dx, dy,
+            project, result, x1, xN, ymin, ymax, top, N, dx, dy, rng,
         )
 
         # Phase 2 — LMC (local refinement, only if VFSA produced something)
         if best_verts is not None:
             best_verts, best_fos = self._lmc(
                 project, result, best_verts, best_fos, ymin, ymax, top, dx,
+                rng,
             )
 
         if self.progress_cb:
@@ -3248,9 +3275,61 @@ class SimulatedAnnealingSearch(BaseSearch):
         res = self.evaluate_surface(project, surface)
         if res is None or not res.is_valid:
             return None, None
+        # v0.1.17 wrote this floor to stop the search "chasing degenerate
+        # surfaces [...] that yield spurious sub-unity FoS values". It was a
+        # bandage over the defect fixed in v0.1.119 (see ``_steer``): those
+        # surfaces are not degenerate geometry, they are surfaces the
+        # m-alpha check bars from ever being the answer, and the annealing
+        # was descending into them until it hit this very number. It stays
+        # because a factor below 0.5 on a candidate the checks DO accept is
+        # still not something to steer a random walk by, but it is no longer
+        # what keeps the search out of the forbidden basin.
         if not (0.5 <= res.fos <= 100.0):
             return None, None
         return res, res.fos
+
+    # ------------------------------------------------------------------
+    def _steer(self, project, result, verts):
+        """Evaluate a candidate, record it, and say whether it may GUIDE.
+
+        v0.1.119 — the defect this method exists to make impossible.
+        ``_evaluate_polyline`` asks for ``is_valid`` and never asked for
+        ``admissible``; :attr:`SearchResult.critical` asks for both. So the
+        annealing was minimising a function whose minimum sits on surfaces
+        the program then refuses to publish, and the number the user saw was
+        the best admissible surface it happened to cross on the way in — a
+        by-product, not a result.
+
+        Measured on the v0.1.17 test slope, ``generation_steps`` = 300:
+        83-98 % of the evaluated population was inadmissible (``m_alpha <
+        0.2``, Whitman & Bailey 1967), the LAST FIFTY evaluations were
+        inadmissible in every seed tried, and the local phase converged to
+        0.500 — the floor of the guard in ``_evaluate_polyline`` — while
+        1.36 was reported. It also explains why more effort made the answer
+        WORSE (1.3631 at 300 steps, 1.4341 at 1000): a bigger budget is a
+        better descent into the wrong basin.
+
+        ``optimize.py`` learned this in v0.1.104 and says it in one line:
+        "optimisation chases a LOWER factor, which is exactly where
+        kinematically impossible surfaces live". This search is from
+        v0.1.17 and never heard it.
+
+        The surface is still COUNTED — appended to ``evaluations`` and to
+        ``valid_count`` — so ``inadmissible_count`` and ``total_count`` keep
+        meaning here what they mean in the other five searches. Only the
+        steering changes.
+
+        Returns ``(result, fos)`` when the candidate may guide the search,
+        ``(None, None)`` otherwise.
+        """
+        res, fos = self._evaluate_polyline(project, verts)
+        if res is None:
+            return None, None
+        result.evaluations.append(res)
+        result.valid_count += 1
+        if not getattr(res, "admissible", True):
+            return None, None
+        return res, fos
 
     # ==================================================================
     # Phase 1 — Very Fast Simulated Annealing
@@ -3310,9 +3389,13 @@ class SimulatedAnnealingSearch(BaseSearch):
             P_Y.append((ym - ym_min) / max(ym_max - ym_min, 1e-12))
         return P_X, P_Y
 
-    def _vfsa(self, project, result, x1, xN, ymin, ymax, top, N, dx, dy):
-        """Run the VFSA loop. Returns (best_verts, best_fos)."""
-        import random
+    def _vfsa(self, project, result, x1, xN, ymin, ymax, top, N, dx, dy,
+              random):
+        """Run the VFSA loop. Returns (best_verts, best_fos).
+
+        ``random`` is the search's own :class:`random.Random`, not the
+        module — see the note in :meth:`_run`.
+        """
         from ogr_core.geometry import Vertex
 
         # Slope endpoint y-values (snap to top profile)
@@ -3381,19 +3464,38 @@ class SimulatedAnnealingSearch(BaseSearch):
         # arc. Randomness now controls the depth and the asymmetry of the
         # bowl instead of each vertex independently, so every draw is
         # admissible and the annealing always has somewhere to start.
+        #
+        # v0.1.119 — "admissible" above meant the geometric filters. The
+        # start must now also survive the post-analysis checks, because that
+        # is what the walk steers by; ``fallback`` holds the best candidate
+        # that passed the geometry and failed the checks, so a model where
+        # NO admissible start can be found still gets a search rather than
+        # an empty result. Which end of that trade matters is settled:
+        # test_annealing_bootstrap_v139 exists because returning nothing at
+        # all is the worst outcome here.
         best_verts = None
         best_fos = None
+        fallback = None
+
+        def _bootstrap_try(verts):
+            nonlocal best_verts, best_fos, fallback
+            res, fos = self._evaluate_polyline(project, verts)
+            if res is None:
+                return False
+            result.evaluations.append(res)
+            result.valid_count += 1
+            if not getattr(res, "admissible", True):
+                if fallback is None or fos < fallback[1]:
+                    fallback = (verts, fos)
+                return False
+            best_verts, best_fos = verts, fos
+            return True
+
         for attempt in range(60):
             P_X, P_Y = self._bootstrap_parameters(
                 n_inner, D, top, y_floor, dy, ymax, x1, xN, y1, yN,
                 random, attempt)
-            verts = _denormalize(P_X, P_Y)
-            r, f = self._evaluate_polyline(project, verts)
-            if r is not None:
-                best_verts = verts
-                best_fos = f
-                result.evaluations.append(r)
-                result.valid_count += 1
+            if _bootstrap_try(_denormalize(P_X, P_Y)):
                 break
         if best_verts is None:
             # Last resort: the plain random draw, in case an unusual
@@ -3401,14 +3503,10 @@ class SimulatedAnnealingSearch(BaseSearch):
             for _ in range(200):
                 P_X = [random.random() for _ in range(n_inner)]
                 P_Y = [random.random() for _ in range(n_inner)]
-                verts = _denormalize(P_X, P_Y)
-                r, f = self._evaluate_polyline(project, verts)
-                if r is not None:
-                    best_verts = verts
-                    best_fos = f
-                    result.evaluations.append(r)
-                    result.valid_count += 1
+                if _bootstrap_try(_denormalize(P_X, P_Y)):
                     break
+        if best_verts is None and fallback is not None:
+            best_verts, best_fos = fallback
         if best_verts is None:
             return None, None
 
@@ -3448,11 +3546,9 @@ class SimulatedAnnealingSearch(BaseSearch):
                     cand_Y[i] = max(0.001, min(0.999, new_p))
 
                 verts = _denormalize(cand_X, cand_Y)
-                r, f = self._evaluate_polyline(project, verts)
+                r, f = self._steer(project, result, verts)
                 if r is None:
                     continue
-                result.evaluations.append(r)
-                result.valid_count += 1
 
                 # Acceptance: Eq (9) in Su 2009
                 dE = f - best_fos
@@ -3511,10 +3607,27 @@ class SimulatedAnnealingSearch(BaseSearch):
     # Phase 2 — Local Monte-Carlo (Greco 1996, Su 2009 Section 2.2)
     # ==================================================================
     def _lmc(
-        self, project, result, verts, fos, ymin, ymax, top, dx,
+        self, project, result, verts, fos, ymin, ymax, top, dx, random,
     ):
-        """Local Monte-Carlo refinement of the surface from VFSA."""
-        import random
+        """Local Monte-Carlo refinement of the surface from VFSA.
+
+        v0.1.119 — the two extremity vertices are control variables here,
+        as they are in the formulation: Su (2009) section 2.1 counts
+        ``n = 2N - 2`` degrees of freedom precisely because "the two
+        extremity points of the failure surface can only move along the
+        slope line" — they move, on a line. This search froze them at the
+        toe and the crest of the steepest ground segment and never touched
+        them again, so on the v0.1.17 test slope every surface it could
+        express entered and left within x = [30.00, 50.00] while the
+        critical circle daylights at 30.03 and 51.45. Freeing them took the
+        worst of seven seeds from 1.3781 to 1.1862.
+
+        An endpoint moves in x only; its y is read off the ground profile,
+        so it keeps daylighting. Its travel is bounded by the Slope Limits
+        when the project declares them — which is where they finally reach
+        the GENERATION of this search and not only the mass filter in
+        ``_best_of_masses``.
+        """
         from ogr_core.geometry import Vertex
 
         if len(verts) < 4:
@@ -3527,6 +3640,12 @@ class SimulatedAnnealingSearch(BaseSearch):
         eps = 0.75   # step reduction factor per Su 2009
         min_step = self.tolerance * dx * 0.1
 
+        # Where an endpoint is allowed to travel to.
+        end_lo, end_hi = top[0].x, top[-1].x
+        if self.slope_limits is not None:
+            sl_lo, sl_hi = sorted(self.slope_limits)
+            end_lo, end_hi = max(end_lo, sl_lo), min(end_hi, sl_hi)
+
         # 8 cardinal+diagonal directions
         DIRS = [
             (-1, -1), (-1, 0), (-1, 1),
@@ -3538,9 +3657,33 @@ class SimulatedAnnealingSearch(BaseSearch):
         max_total_evals = 2 * self.generation_steps  # hard cap on # of evals
         evals_done = 0
 
+        def _moved(cand, i, Nx, Ny, Rx, Ry):
+            """The i-th vertex displaced, or None if the move is not one.
+
+            An endpoint slides along the ground: only x is a degree of
+            freedom, y follows the profile.
+            """
+            x = cand[i].x + Nx * Rx * step_x[i]
+            if i == 0 or i == len(cand) - 1:
+                if not (end_lo <= x <= end_hi):
+                    return None
+                y = self._interp_top_y(top, x)
+                if y is None:
+                    return None
+                return Vertex(x, y)
+            return Vertex(x, cand[i].y + Ny * Ry * step_y[i])
+
+        def _ordered(cand, i):
+            """x still strictly increasing around the moved vertex."""
+            if i > 0 and cand[i].x <= cand[i - 1].x:
+                return False
+            if i < len(cand) - 1 and cand[i].x >= cand[i + 1].x:
+                return False
+            return True
+
         for pass_idx in range(max_passes):
             improved_anywhere = False
-            for i in range(1, len(verts) - 1):  # skip slope endpoints
+            for i in range(len(verts)):
                 if evals_done >= max_total_evals:
                     return verts, fos
 
@@ -3561,19 +3704,16 @@ class SimulatedAnnealingSearch(BaseSearch):
                     if Nx == 0 and Ny == 0:
                         continue
                     cand = [Vertex(v.x, v.y) for v in verts]
-                    cand[i] = Vertex(
-                        cand[i].x + Nx * Rx * step_x[i],
-                        cand[i].y + Ny * Ry * step_y[i],
-                    )
-                    # Keep monotonically increasing x
-                    if cand[i].x <= cand[i - 1].x or cand[i].x >= cand[i + 1].x:
+                    moved = _moved(cand, i, Nx, Ny, Rx, Ry)
+                    if moved is None:
                         continue
-                    r, f = self._evaluate_polyline(project, cand)
+                    cand[i] = moved
+                    if not _ordered(cand, i):
+                        continue
+                    r, f = self._steer(project, result, cand)
                     evals_done += 1
                     if r is None:
                         continue
-                    result.evaluations.append(r)
-                    result.valid_count += 1
                     if f < best_local_fos - self.tolerance:
                         best_local_fos = f
                         best_dir = (Nx, Ny)
@@ -3594,18 +3734,16 @@ class SimulatedAnnealingSearch(BaseSearch):
                         if evals_done >= max_total_evals:
                             return verts, fos
                         cand = [Vertex(v.x, v.y) for v in verts]
-                        cand[i] = Vertex(
-                            cand[i].x + Nx * Rx * step_x[i],
-                            cand[i].y + Ny * Ry * step_y[i],
-                        )
-                        if cand[i].x <= cand[i - 1].x or cand[i].x >= cand[i + 1].x:
+                        moved = _moved(cand, i, Nx, Ny, Rx, Ry)
+                        if moved is None:
                             break
-                        r, f = self._evaluate_polyline(project, cand)
+                        cand[i] = moved
+                        if not _ordered(cand, i):
+                            break
+                        r, f = self._steer(project, result, cand)
                         evals_done += 1
                         if r is None or f >= fos - self.tolerance:
                             break
-                        result.evaluations.append(r)
-                        result.valid_count += 1
                         verts = cand
                         fos = f
                 else:
@@ -3617,7 +3755,7 @@ class SimulatedAnnealingSearch(BaseSearch):
                 # Check if all step sizes are below threshold
                 all_done = all(
                     step_x[i] < min_step and step_y[i] < min_step
-                    for i in range(1, len(verts) - 1)
+                    for i in range(len(verts))
                 )
                 if all_done:
                     break

@@ -65,75 +65,107 @@ arreglado y validado por tres caminos en v0.1.90. Ver
 `docs/audits/spencer_gle_interslice_v179.md`.
 
 ---
+## 0 · Simulated Annealing converge peor que un círculo — CERRADO en v0.1.119
 
-## 0 · Simulated Annealing converge peor que un círculo
+La causa que esta entrada daba por diagnosticada —«eso convierte esta entrada
+de *investigar* en *cambiar exactamente esto*»: `ngen` 1000, `nepsilon` 5—
+**era falsa**, y se midió una a una antes de tocar nada. La real: SA se
+guiaba por superficies que el programa después se niega a publicar
+(`_evaluate_polyline` preguntaba `is_valid` y nunca `admissible`), y las dos
+puntas de la superficie estaban clavadas donde el paper dice que son
+variables de control. Peor de siete semillas 1,7365 → **1,1232** contra un
+mínimo circular de 1,1135, y el caso 002 pasa de +13 % sobre lo publicado a
+dentro de la banda de Greco (1996). Detalle en el changelog de v0.1.119.
 
-**Estado**: reportado con medidas, sin corregir. Regla 6.
+La referencia externa que esta entrada decía que faltaba **existe y está
+publicada** sobre un talud que ya estaba en el repositorio: Yamagami y Ueta
+(1988) 1,338–1,348 y Greco (1996) 1,327–1,333 sobre
+`validacion/casos/002-yamagami-ueta-1988`. Ahora hay un test.
 
-Sobre un talud cuyo mínimo **circular** es 1,1239, SA devuelve **1,6564**. Una
-búsqueda no circular no puede hacerlo peor que un círculo: los círculos están,
-salvo discretización, en su espacio de búsqueda. Block Search, sobre el mismo
-modelo, da 1,13-1,16 — dentro de la discretización. SA se va un 47 %.
+---
 
-### Corrección de lo que decía esta entrada en v0.1.89
+## 0b · `generation_steps` sigue sin ser monótono
 
-Decía que `generation_steps` «deja de hacer nada». **Estaba mal medido**, y el
-mecanismo real apunta a otro sitio. Instrumentado (`search.py:2686-2687` y
-`:2767`):
+**Estado**: medido, sin corregir. Regla 6. Abierto en v0.1.119.
+
+Esto es lo que sobrevive del pendiente anterior, y sobrevive **por otra
+razón** de la que se creía. La puerta de admisibilidad de v0.1.119 explicaba
+el nivel del error; no explica que pedir más esfuerzo dé peor respuesta.
+
+Peor de siete semillas, con la causa raíz ya corregida y Optimize Surfaces
+activo:
+
+| `generation_steps` | talud del defecto | caso 002 (Spencer) |
+|---|---|---|
+| 300 | **1,1232** | 1,3550 |
+| 600 | 1,1611 | 1,3500 |
+| 1 000 | **1,1772** | 1,3500 |
+
+En el talud del defecto **empeora**; en el caso 002 mejora un poco y tampoco
+es monótono. La medición de v0.1.90 que hay más abajo sigue en pie:
 
 ```python
 K     = max(4,  int(self.generation_steps / 50))   # pasadas externas
-Ngen0 = max(20, self.generation_steps // K)        # bucle interno
-Ngen  = max(10, Ngen0 // (2 ** (k - 1)))           # se HALVA cada pasada
+Ngen0 = max(20, self.generation_steps // K)        # = 50 SIEMPRE si gs >= 200
+Ngen  = max(10, Ngen0 // (2 ** (k - 1)))           # se halva cada pasada
 if no_improve_passes >= 3: break                   # parada
 ```
 
-| `generation_steps` | K | Ngen0 | Σ Ngen nominal | **evaluadas de verdad** | FoS |
-|---|---|---|---|---|---|
-| 50 | 4 | 20 | 50 | 151 | 1,7491 |
-| 300 | 6 | **50** | 117 | 459 | 2,1854 |
-| 1 000 | 20 | **50** | 257 | **462** | 1,6564 |
-| 3 000 | 60 | **50** | 657 | **462** | 1,6564 |
+Lo que hay que medir antes de tocar nada, y por orden:
 
-Tres cosas, y ninguna es «el ajuste se ignora»:
+1. **`generation_steps` mueve DOS cosas a la vez** y eso solo ya impide leer
+   el efecto de una: las pasadas externas de VFSA, y el tope de evaluaciones
+   del LMC (`max_total_evals = 2 * generation_steps`). Separarlos es la
+   primera medición, no la última.
+2. Más pasadas externas con `Ngen0` fijo en 50 es **más enfriamiento con la
+   misma exploración**: `T_gen` cae antes de que el muestreo haya cubierto
+   nada, así que la fase local arranca de otro sitio. Es la hipótesis, no un
+   hecho.
+3. El presupuesto del LMC **ya no ata**: subirlo de ×2 a ×8 y a ×20 no mueve
+   el resultado, converge antes.
 
-1. `K = generation_steps/50` hace que `Ngen0 = generation_steps // K` sea
-   **50 siempre** para `generation_steps ≥ 200`. El ajuste no controla el
-   tamaño del bucle interno; sólo añade pasadas externas.
-2. `Ngen` se halva cada pasada hasta un suelo de 10, así que las pasadas de
-   temperatura baja —donde el recocido debería explotar el óptimo— exploran
-   con diez propuestas.
-3. La parada a las 3 pasadas sin mejorar congela el total en 462 evaluaciones,
-   así que de 1000 en adelante el ajuste es inerte **por la parada**, no por
-   la fórmula.
+Y lo que ya está descartado con medida, para que nadie lo vuelva a intentar:
+`Ngen0 = generation_steps` (el «ngen 1000» del paper) **empeora**, y
+`nepsilon` = 5 no mueve dos de tres semillas.
 
-### Los parámetros de la referencia, que ahora sí se conocen
+---
 
-De sus propios modelos (`simulatedannealing search` en el `.sli`):
+## 0c · Cuatro desviaciones del paper del recocido, con su efecto medido
 
-| | referencia | OGR |
-|---|---|---|
-| `ngen` (estados generados por temperatura) | **1000** | 50 (fijo) |
-| `nepsilon` (pasadas sin mejora antes de parar) | **5** | 3 |
-| `ftol` | **0,0001** | `tolerance` 1e-3 |
-| `c` (enfriamiento) | 8 | 8 ✔ |
-| `nvertices` | 8 | 9 por defecto |
+**Estado**: medido, sin corregir. Regla 6. Abierto en v0.1.119.
 
-Eso convierte esta entrada de «investigar» en «cambiar exactamente esto». No
-se hizo en v0.1.90 porque cambia coste y resultados en toda la suite y **no
-hay referencia externa para el resultado de una búsqueda no circular** — lo
-dice `validacion/casos/004-arai-tagyo-1985-ej1/caso.md`. Merece su propia
-versión con su propio triaje.
+Todas contra Su, X. (2009), *Global Optimization of General Failure Surfaces
+in Slope Analysis by Hybrid Simulated Annealing*, University of Waterloo,
+que es el paper de la formulación y está en
+`referencias/Documentacion_Guia/Search_Option_Surface/`.
 
-Qué haría falta además: el mínimo **no circular** publicado de Yamagami y Ueta
-(1988) o del reanálisis de Greco (1996), cuyo talud ya está en
-`validacion/casos/002-yamagami-ueta-1988/` con coordenadas rotuladas. Con ese
-número, las búsquedas no circulares tendrían por primera vez una referencia
-externa en vez de una identidad interna.
+**(a) El enfriamiento es acumulado, no absoluto.** `search.py` multiplica
+`T_k = T_{k-1}·e^{-c·k^{1/n}}` donde las Ecs. (10)-(11) escriben
+`T_k = T_in·e^{-c·k^{1/n}}` desde la temperatura inicial. Conformar el
+código al paper **empeora** el resultado: peor de siete semillas 1,1237 →
+1,1394 (los dos del mismo A/B, antes del cambio de semilla propia: se
+comparan entre sí, no con el 1,1232 de producción). No se cambió, y ésa es la parte que hay que resolver algún día: o el
+código está bien por una razón que no se ha escrito, o la ventaja del código
+es una casualidad de este talud. Hace falta un segundo modelo para
+distinguirlo.
 
-Relacionado: `test_annealing_bootstrap_v139.py` documenta que el arranque de
-SA dependía de la suerte (200 rechazos consecutivos con semillas
-desafortunadas).
+**(b) `dE` se mide contra el mejor histórico, no contra el estado actual.**
+La Ec. (9) dice `dE = F(v_{j+1}) − F(v_j)`. Corregido, el resultado es
+**idéntico bit a bit** en las tres semillas probadas: una desviación real con
+efecto nulo medido. Se deja dicha para que el siguiente no la vuelva a
+encontrar y crea que ha dado con algo.
+
+**(c) Las divisiones en x no son las de la Ec. (3).** El código usa `N−1`
+divisiones donde el paper usa `N−2`, y además mete los `N−2` vértices
+interiores en las `N−2` divisiones **de la izquierda**: ningún vértice
+interior puede acercarse al extremo derecho más de `(xN−x1)/(N−1)`, que con
+`N` = 9 es el 12,5 % derecho del vano, vedado. Hay un `# Wait —` escrito en
+v0.1.17 encima de esa misma línea señalándolo. Desde v0.1.119 los extremos se
+mueven, así que el vano ya no es fijo y el sesgo pesa menos, pero sigue ahí.
+
+**(d) `y_floor` sólo ata a la fase 1.** `_vfsa` limita la profundidad a
+0,15·H bajo el pie; `_lmc` no la conoce. Uno de los dos está de más, y hasta
+saber cuál no se toca ninguno.
 
 ---
 

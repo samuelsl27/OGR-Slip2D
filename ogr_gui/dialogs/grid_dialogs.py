@@ -460,8 +460,21 @@ class SurfaceOptionsDialog(QDialog):
 
     def _on_defaults(self) -> None:
         """Reset the current panel to engineering defaults from SearchSettings()."""
-        from ogr_core.project.settings import SearchSettings
+        from ogr_core.project.settings import (SearchSettings,
+                                               optimize_enabled_for)
         defaults = SearchSettings()
+
+        def _optimize_default_for(method) -> bool:
+            """The Optimize Surfaces default OF THIS METHOD.
+
+            v0.1.119 — it is not one value any more: the setting defaults to
+            automatic, which reads ON for Simulated Annealing and OFF for
+            the rest. Restoring defaults on the annealing panel with the
+            Block Search's answer would be restoring the wrong default.
+            """
+            probe = SearchSettings()
+            probe.search_method = getattr(method, "value", method)
+            return optimize_enabled_for(probe)
         SM = self._SearchMethod
         m = self.cb_method.currentData()
         try:
@@ -492,7 +505,7 @@ class SurfaceOptionsDialog(QDialog):
                 self._sa_tol.setValue(defaults.sa_tolerance)
                 self._sa_tcoef.setValue(defaults.sa_temperature_coefficient)
                 self._sa_convex.setChecked(defaults.sa_convex_only)
-                self._sync_optimize_boxes(defaults.optimize_enabled)
+                self._sync_optimize_boxes(_optimize_default_for(m))
             elif m == SM.PATH_SEARCH:
                 self._p_num.setValue(int(defaults.path_num_surfaces))
                 self._p_upper_cb.setChecked(defaults.path_initial_angle_at_toe_upper_enabled)
@@ -502,7 +515,7 @@ class SurfaceOptionsDialog(QDialog):
                 self._p_seglen_cb.setChecked(defaults.path_segment_length_manual)
                 self._p_seglen.setValue(defaults.path_segment_length_value)
                 self._p_convex.setChecked(defaults.path_convex_only)
-                self._sync_optimize_boxes(defaults.optimize_enabled)
+                self._sync_optimize_boxes(_optimize_default_for(m))
             elif m == SM.BLOCK_SEARCH:
                 self._b_num.setValue(int(defaults.block_num_surfaces))
                 self._b_multi.setChecked(defaults.block_multiple_groups)
@@ -512,7 +525,7 @@ class SurfaceOptionsDialog(QDialog):
                 self._b_right_start.setValue(defaults.block_right_start_angle_deg)
                 self._b_right_end.setValue(defaults.block_right_end_angle_deg)
                 self._b_convex.setChecked(defaults.block_convex_only)
-                self._sync_optimize_boxes(defaults.optimize_enabled)
+                self._sync_optimize_boxes(_optimize_default_for(m))
         except (AttributeError, RuntimeError):
             pass
 
@@ -533,7 +546,13 @@ class SurfaceOptionsDialog(QDialog):
         from PySide6.QtWidgets import QHBoxLayout, QWidget
 
         box = QCheckBox(tr("Optimize Surfaces"))
-        box.setChecked(s.optimize_enabled)
+        # v0.1.119 — the RESOLVED value. ``optimize_enabled`` is a
+        # tri-state since this version and ``None`` means automatic;
+        # handing a checkbox a None would show it unticked and then
+        # write that back on OK, quietly turning the option off for
+        # Simulated Annealing, which is where it defaults ON.
+        from ogr_core.project.settings import optimize_enabled_for
+        box.setChecked(optimize_enabled_for(s))
         button = QPushButton(tr("Settings..."))
         button.setEnabled(box.isChecked())
         button.clicked.connect(self._on_optimize_settings)

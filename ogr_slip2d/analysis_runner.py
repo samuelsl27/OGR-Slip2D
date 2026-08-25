@@ -217,7 +217,13 @@ def _optimize_notes(s_search) -> list[str]:
     Both notes are rule 7's minimum: a control that cannot be honoured has
     to say so, and one whose cost is unbounded has to say that too.
     """
-    if not getattr(s_search, "optimize_enabled", False):
+    from ogr_core.project.settings import optimize_enabled_for
+
+    # v0.1.119 — the RESOLVED tri-state, not the raw field. Reading the
+    # automatic ``None`` as "off" would silence both notes for every
+    # Simulated Annealing run, which is the one search where the option is
+    # on by default and therefore the one where the notes matter most.
+    if not optimize_enabled_for(s_search):
         return []
     out = []
     if s_search.search_method not in _OPTIMIZABLE_SEARCHES:

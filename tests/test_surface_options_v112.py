@@ -114,12 +114,35 @@ class TestUsesGrid:
 # ======================================================================
 class TestOptimizeSurfaces:
     def test_optimize_defaults_match_pdf(self):
-        from ogr_core.project.settings import SearchSettings
+        from ogr_core.project.settings import (SearchSettings,
+                                               SearchMethod,
+                                               optimize_enabled_for)
         s = SearchSettings()
         # PDF Optimize Surfaces Settings dialog shows:
         # Tolerance=1e-9, Max iter=4000, Step reduction=0.5,
         # Max concave angle=5, Snap shallow=checked, distance=0.01
-        assert s.optimize_enabled is False  # disabled by default
+        #
+        # v0.1.119 — this line used to read ``s.optimize_enabled is False``
+        # with the comment "disabled by default", and that was only half of
+        # what the reference says. Its Simulated Annealing page states the
+        # opposite for that one search: "By default the Optimize Surfaces
+        # option is enabled for Simulated Annealing [...] It is recommended
+        # that this option is always enabled". So the default is not one
+        # value, it is per method, and the field is a tri-state whose
+        # ``None`` means exactly that.
+        assert s.optimize_enabled is None      # automatic
+        for m in (SearchMethod.BLOCK_SEARCH, SearchMethod.PATH_SEARCH):
+            s.search_method = m.value
+            assert optimize_enabled_for(s) is False, m
+        s.search_method = SearchMethod.SIMULATED_ANNEALING.value
+        assert optimize_enabled_for(s) is True
+        # And an explicit answer always beats the automatic one, in both
+        # directions — otherwise unticking the box for an annealing run
+        # would not untick it.
+        for declared in (True, False):
+            s.optimize_enabled = declared
+            assert optimize_enabled_for(s) is declared
+        s.optimize_enabled = None
         assert s.optimize_tolerance == 1e-9
         assert s.optimize_max_iterations == 4000
         assert s.optimize_step_reduction_factor == 0.5
