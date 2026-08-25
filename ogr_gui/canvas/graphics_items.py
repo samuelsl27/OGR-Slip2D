@@ -347,6 +347,7 @@ class SupportItem(DomainItem):
         "pile_micropile": "#9467bd",          # purple
         "geosynthetic": "#8c564b",            # brown
         "user_defined": "#7f7f7f",            # grey
+        "retaining_wall_efp": "#17becf",      # teal
     }
 
     def __init__(
@@ -395,10 +396,22 @@ class SupportItem(DomainItem):
                 Fmid = support_type_obj.force_at(
                     0.5 * support.length(), support.length(), bond
                 )
-                tooltip += (
-                    f"<br><i>Force at head:</i> {F0:.1f} kN/m"
-                    f"<br><i>Force at midpoint:</i> {Fmid:.1f} kN/m"
-                )
+                # v0.1.122 — "force at head" is a lie for a type whose
+                # profile is INTEGRATED from the crest: there the integral
+                # is zero by definition, and reporting it as a capacity
+                # reads as "this support does nothing".
+                if getattr(support_type_obj, "MEASURED_FROM_TOP", False):
+                    Fend = support_type_obj.force_at(
+                        support.length(), support.length(), bond)
+                    tooltip += (
+                        f"<br><i>Force at midpoint:</i> {Fmid:.1f} kN/m"
+                        f"<br><i>Force at the foot:</i> {Fend:.1f} kN/m"
+                    )
+                else:
+                    tooltip += (
+                        f"<br><i>Force at head:</i> {F0:.1f} kN/m"
+                        f"<br><i>Force at midpoint:</i> {Fmid:.1f} kN/m"
+                    )
             except Exception:  # noqa: BLE001
                 pass
         self.setToolTip(tooltip)

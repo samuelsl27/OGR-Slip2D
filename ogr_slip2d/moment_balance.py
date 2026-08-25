@@ -178,6 +178,7 @@ def moment_terms(
     tangential_passive: Optional[Sequence[float]] = None,
     rotation: Optional[float] = None,
     forces: Optional[Sequence] = None,
+    couple: float = 0.0,
 ) -> MomentTerms:
     """Sum every moment about ``axis``.
 
@@ -216,6 +217,14 @@ def moment_terms(
             same figure either way.
         rotation: pass the value from :func:`rotation_sense` when the caller
             already needed it; otherwise it is computed here.
+        couple: a pure moment, in the same CCW sense as everything else here,
+            from applying a support's resultant somewhere other than where it
+            crosses the surface (v0.1.122). Zero unless a retaining wall was
+            asked to act at the centroid of its pressure diagram. It arrives
+            as a scalar and not as a force at a point because that is what it
+            is: translating a force leaves a couple, and a couple has the same
+            value about every axis, so no method needs to be told where the
+            wall was.
         forces: the :class:`~ogr_slip2d.external_forces.SliceForces` the caller
             already built, to save resolving them a second time. Every caller
             has them: this sits inside a fixed-point iteration over every trial
@@ -280,6 +289,10 @@ def moment_terms(
             # here instead of being assumed away.
             m_extra += moment(sup.x_app[i], sup.y_app[i],
                               sup.nf_h[i], sup.nf_v[i])
+
+    # The couple, added once and outside the loop because it belongs to no
+    # slice in particular.
+    m_extra += couple
 
     return MomentTerms(axis=(ox, oy), rotation=rotation, weight=m_weight,
                        normal=m_normal, external=m_extra, shear=m_shear)

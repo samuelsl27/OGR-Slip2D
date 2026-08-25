@@ -103,11 +103,35 @@ class HelicalAnchor(SupportType):
 `axial_capacity`, which is only a back-compat alias for it, so the class it
 showed could not be instantiated at all.
 
+The example above serialises with `{**self.__dict__}`, which is NOT what the
+registered types do: they filter the private attributes and add an `_extras`
+sub-dict (`ogr_core/support/support.py:344-352`). Copy the example and the
+GUI's own bookkeeping ends up in the `.ogr` file. Write `to_dict` by hand,
+naming the fields.
+
 If the capacity depends on the stress state along the reinforcement, declare
 `NEEDS_BOND_PROFILE = True` and implement `interface_tau(sigma_v_eff, **ctx)`.
 The engine then hands `force_at` a `BondProfile` with the interface strength
 already sampled and integrated along the support, built once per analysis
 rather than once per trial surface. See `ogr_core/support/bond.py`.
+
+### Optional class declarations (v0.1.122)
+
+Four more class attributes, all read by code outside the type. They exist
+because `RetainingWallEFP` needed them and hard-wiring a second
+`if TYPE_ID == ...` into the dialog was the alternative:
+
+| Attribute | Read by | What it does |
+|---|---|---|
+| `TABLE_FIELD` | the Define Support dialog | names a LIST-valued field edited through a table instead of a spin box. It must stay OUT of `PARAMETERS`, like `UserDefined.points` |
+| `TABLE_COLUMNS`, `TABLE_TITLE` | the same dialog | the column headers, their accepted range, and the group-box title. Without them the table says "Distance (m)" / "Force (kN)", which is right for exactly one type |
+| `PARAMETER_USED_BY` | the same dialog | `{choice: (params it reads,)}` for a type whose first `str` parameter selects a mode. Fields the chosen mode does not read are disabled, because a field that is editable and inert is the same defect as an inert setting and harder to spot |
+| `MEASURED_FROM_TOP` | `compute_support_effects` | measure `distance_from_head` from the HIGHER end instead of from the head. `force_at` never sees the instance, so a profile defined from the crest down cannot work out which end that is; a support declaring this and drawn flat is excluded, not guessed |
+| `ALLOWS_PATTERN` | the analysis notes | `False` for a type whose capacity is per metre of slope already, so a row of them would apply it once per member |
+
+A type with a table-valued field must write its own `to_dict`/`from_dict` and
+**copy the list** when constructing: JSON has no tuples, and two instances
+sharing one list object means editing one edits the other.
 
 ## 4. Adding GUI translations
 

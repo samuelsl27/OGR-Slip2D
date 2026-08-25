@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Samuel Sáez López — Universidad Politécnica de Cartagena
 """Structural support / reinforcement plugin system.
 
-7 built-in support types matching Slide's catalogue:
+8 built-in support types:
     - End Anchored
     - Grouted Tieback
     - Grouted Tieback with Friction
@@ -10,6 +10,7 @@
     - Pile / Micropile
     - Geosynthetic
     - User Defined
+    - Retaining Wall (EFP)
 
 Plus :class:`SupportPattern` for batch creation of regular rows, and
 :class:`BondProfile` (v0.1.116), the interface shear strength sampled
@@ -40,6 +41,11 @@ from .support import (
     interface_shear,
     support_registry,
 )
+# Imported for its side effect as much as for the name: the
+# ``@register_support`` decorator runs on import, and this package
+# ``__init__`` is what guarantees it has run before anything can ask
+# the registry for the type.
+from .retaining_wall import RetainingWallEFP
 
 __all__ = [
     "SupportType",
@@ -54,6 +60,7 @@ __all__ = [
     "PileMicropile",
     "Geosynthetic",
     "UserDefined",
+    "RetainingWallEFP",
     "support_registry",
     "support_from_dict",
     "register_support",

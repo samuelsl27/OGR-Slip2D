@@ -746,8 +746,35 @@ def _line_load_components(load) -> tuple[float, float]:
     return -load.magnitude * dy, load.magnitude * dx
 
 
+#: A load segment narrower than this in x has no horizontal extent to
+#: spread a pressure over, and is treated as a line load of the integrated
+#: magnitude — see :func:`distributed_loads_on`. Relative to the model, not
+#: absolute: the same tolerance must not mean different things in metres
+#: and in millimetres.
+_VERTICAL_SEGMENT_FRACTION = 1e-9
+
+
+def _is_vertical_segment(load, span: float) -> bool:
+    """Whether a load segment is vertical, to within the model size."""
+    return abs(load.end.x - load.start.x) <= _VERTICAL_SEGMENT_FRACTION * span
+
+
 def _surface_pressure_at(project: Project, x: float) -> float:
-    """Sum of distributed-load pressures acting at x (vertical component)."""
+    """Sum of distributed-load pressures acting at x (vertical component).
+
+    In kPa, and per unit HORIZONTAL length: the caller multiplies by the
+    slice width. That is the convention the whole engine has used since
+    the class existed, and v0.1.122 did not change it — it only completed
+    it, by giving the horizontal component of the same load the channel it
+    never had (:func:`distributed_loads_on`). The two together make the
+    resultant on a slice ``p·dx``, so ``p`` is a pressure over the
+    horizontal projection of the loaded boundary.
+
+    A load whose segment is VERTICAL has no horizontal projection at all,
+    so it cannot be expressed here and is handled by
+    :func:`distributed_loads_on` instead. Before v0.1.122 such a load
+    contributed nothing anywhere, silently.
+    """
     total = 0.0
     for load in project.distributed_loads:
         x1, x2 = load.start.x, load.end.x
@@ -760,6 +787,86 @@ def _surface_pressure_at(project: Project, x: float) -> float:
             _, dy = load.direction_vector()
             total += abs(p * dy)  # kPa
     return total
+
+
+def distributed_loads_on(project: Project, x_left: float, x_right: float,
+                         span: float):
+    """Distributed-load forces on the slice ``[x_left, x_right)``.
+
+    Yields ``(f_h, f_v_extra, y)``: the HORIZONTAL force in kN/m signed in
+    +x, an EXTRA downward force for the vertical-segment case only, and the
+    elevation the horizontal force acts at.
+
+    v0.1.122 — until this version the horizontal component of a distributed
+    load was **discarded entirely**. :func:`_surface_pressure_at` kept
+    ``abs(p·dy)`` and nothing else, so a load declared ``HORIZONTAL`` moved
+    the factor of safety by exactly zero: a configurable orientation that
+    could not change the result. It also meant a pressure on a vertical
+    face — a wall back, a cut face — did nothing at all, and that is the
+    shape of the published verification this feature was written for.
+
+    Two cases, and the second is the one that could not be expressed at all:
+
+    * **A segment with horizontal extent.** The force on the part of the
+      segment inside this slice is ``p·dx`` in the load's own direction,
+      the same convention :func:`_surface_pressure_at` uses for the
+      vertical half. The vertical half is NOT repeated here — the slicer
+      has already put it in the slice weight — so only the horizontal one
+      comes back, at the elevation of the loaded boundary.
+
+    * **A vertical segment.** There is no horizontal extent to spread a
+      pressure over, so the pressure is taken per unit length of the
+      segment, integrated over the whole of it, and applied at the
+      CENTROID of the resulting diagram to the slice that contains its
+      abscissa. That is a line load of the integrated magnitude, which is
+      what a pressure on a face of zero width is. Here the vertical part
+      does come back, because ``_surface_pressure_at`` could not see it.
+
+    The half-open interval is the one :func:`line_loads_on` uses, and for
+    the same reason: a load sitting exactly on a slice boundary must be
+    counted once, not twice and not never.
+    """
+    out = []
+    for load in getattr(project, "distributed_loads", None) or []:
+        dxu, dyu = load.direction_vector()
+        x1, x2 = load.start.x, load.end.x
+        if _is_vertical_segment(load, span):
+            x = 0.5 * (x1 + x2)
+            if not (x_left - 1e-12 <= x < x_right - 1e-12):
+                continue
+            y1, y2 = load.start.y, load.end.y
+            L = abs(y2 - y1)
+            if L <= 0.0:
+                continue
+            # ∫p ds and its first moment, exact for the linear ramp
+            # ``pressure_at`` describes: p(t) = p1 + (p2 − p1)·t.
+            p1, p2 = load.pressure_at(0.0), load.pressure_at(1.0)
+            total = 0.5 * (p1 + p2) * L
+            if not total:
+                continue
+            # Centroid of a trapezium along the segment, measured from the
+            # start end. Reduces to L/2 for a uniform load and to 2L/3 for
+            # a triangle growing towards the far end, as it must.
+            denom = p1 + p2
+            t_c = ((p1 + 2.0 * p2) / (3.0 * denom)) if denom else 0.5
+            y_c = y1 + (y2 - y1) * t_c
+            out.append((total * dxu, -total * dyu, y_c))
+            continue
+
+        lo, hi = min(x1, x2), max(x1, x2)
+        a, b = max(lo, x_left), min(hi, x_right)
+        if b <= a:
+            continue
+        if not dxu:
+            continue
+        xm = 0.5 * (a + b)
+        t = max(0.0, min(1.0, (xm - x1) / (x2 - x1)))
+        p = load.pressure_at(t)
+        if not p:
+            continue
+        y = load.start.y + (load.end.y - load.start.y) * t
+        out.append((p * dxu * (b - a), 0.0, y))
+    return out
 
 
 # ----------------------------------------------------------------------
@@ -1349,6 +1456,14 @@ def slice_surface(
         for _load in _lines:
             weight += _line_load_components(_load)[0]
 
+        # v0.1.122 — the horizontal half of the distributed loads, which
+        # until this version was thrown away. Only the VERTICAL-segment case
+        # brings a vertical part back with it: for every other segment the
+        # weight above already carries it, through ``_surface_pressure_at``.
+        _dist = distributed_loads_on(project, xl, xr, x_r - x_l)
+        for _fh, _fv, _y in _dist:
+            weight += _fv
+
         sl = Slice(
             index=i,
             x_centre=xc,
@@ -1389,6 +1504,12 @@ def slice_surface(
             _fh = _line_load_components(_load)[1]
             if _fh:
                 sl.add_water_force(f_h=_fh, y=_load.point.y)
+        # v0.1.122 — and the same for the distributed loads, through the
+        # same accumulator and for the same reason: what it models is a
+        # horizontal force at a height.
+        for _fh, _fv, _y in _dist:
+            if _fh:
+                sl.add_water_force(f_h=_fh, y=_y)
         result.slices.append(sl)
 
     if len(result) < 3:

@@ -61,10 +61,22 @@ class AddSupportPatternDialog(QDialog):
         gtype = QGroupBox(tr("Support type"))
         ftype = QFormLayout(gtype)
         self.cbo_type = QComboBox()
-        if self.project.support_types:
-            for st in self.project.support_types:
+        # v0.1.122 — a type whose capacity is already per metre of slope
+        # cannot be laid out in a row: N members would apply the same
+        # pressure N times. It is refused HERE, where the choice is made,
+        # and not in the analysis, because a pattern leaves no mark on the
+        # instances it generates — a warning there could never fire.
+        offerable = [st for st in (self.project.support_types or [])
+                     if getattr(st, "ALLOWS_PATTERN", True)]
+        if offerable:
+            for st in offerable:
                 name = getattr(st, "_display_name", st.DISPLAY_NAME)
                 self.cbo_type.addItem(name, st.TYPE_ID)
+        elif self.project.support_types:
+            self.cbo_type.addItem(
+                tr("(no support type in this model can be patterned)"), "",
+            )
+            self.cbo_type.setEnabled(False)
         else:
             self.cbo_type.addItem(
                 "(no support types — open Define Support first)", "",

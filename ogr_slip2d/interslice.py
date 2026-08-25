@@ -471,7 +471,9 @@ class GLESystem:
                     self.to_slice_order(resisting),
                     self.to_slice_order(normals),
                     kh=kh, kv=kv, sup=sup, tangential=t_act,
-                    tangential_passive=t_pas, forces=self.forces)
+                    tangential_passive=t_pas, forces=self.forces,
+                    couple=sup.couple if (sup is not None and sup.present)
+                    else 0.0)
                 return terms.factor_of_safety()
         else:
             # A circle divides its radius out of every term, so the whole
@@ -503,6 +505,11 @@ class GLESystem:
             # the slice's centre of gravity.
             m_passive = 0.0
             if has_sup:
+                # v0.1.122 -- and the couple, when the resultant does not act
+                # where the support crosses. Normalised like the water moment
+                # in the loop above: -slide_sign*M/R.
+                if sup.couple:
+                    den += -slide_sign * sup.couple / circle_R
                 den -= math.fsum(sup.t_active)
                 m_passive = math.fsum(sup.t_passive)
             self._driving = den

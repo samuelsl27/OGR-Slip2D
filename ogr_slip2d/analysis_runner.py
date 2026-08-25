@@ -176,7 +176,7 @@ def _shadow_setting_problems(project) -> list[str]:
     return out
 
 
-def settings_warnings(project) -> list[str]:
+def settings_warnings(project, method_ids=()) -> list[str]:
     """Settings this project sets that the chosen analysis cannot honour.
 
     Not a refusal: the analysis is valid, it just does less than the
@@ -190,6 +190,10 @@ def settings_warnings(project) -> list[str]:
     # version of the same sentence would arrive thousands of times.
     from .weak_layers import weak_layer_model_warnings
     notes.extend(weak_layer_model_warnings(project))
+    # v0.1.122 — and the same for the equivalent-fluid retaining walls,
+    # for the same reason and asked the same way: once per analysis.
+    from .retaining_wall_notes import retaining_wall_notes
+    notes.extend(retaining_wall_notes(project, method_ids))
     s_search = project.settings.search
     if (s_search.search_method == "slope"
             and s_search.slope_limit_left is not None
@@ -834,7 +838,7 @@ def run_analysis(project, method_ids=None,
     method_ids = list(method_ids) or ["bishop_simplified"]
 
     known = method_registry()
-    warnings: list[str] = settings_warnings(project)
+    warnings: list[str] = settings_warnings(project, method_ids)
     results: dict = {}
     n_methods = len(method_ids)
 

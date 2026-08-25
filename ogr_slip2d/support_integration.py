@@ -198,6 +198,14 @@ class SupportTerms:
     x_app: list
     y_app: list
     present: bool = False
+    #: v0.1.122 -- the COUPLE left over from applying a resultant somewhere
+    #: other than the point where the support crosses the surface. Zero for
+    #: every support that acts at its own intersection, which is all seven
+    #: types that existed before. One scalar for the whole surface because a
+    #: couple is independent of the axis it is measured about; only the four
+    #: methods that write a moment equation can honour it, and the ones that
+    #: cannot say so rather than ignoring it silently.
+    couple: float = 0.0
 
     def total_active_t(self) -> float:
         return sum(self.t_active)
@@ -209,7 +217,8 @@ class SupportTerms:
 # Shared "there is no reinforcement here" answer. Immutable in practice:
 # every consumer guards on ``present`` before indexing, and the empty
 # lists make ``total_*`` return 0.0 without a special case.
-_EMPTY_TERMS = SupportTerms([], [], [], [], [], [], [], [], [], False)
+_EMPTY_TERMS = SupportTerms([], [], [], [], [], [], [], [], [],
+                            False, 0.0)
 
 
 def resolve_support_terms(
@@ -266,6 +275,7 @@ def resolve_support_terms(
     x_app = [0.0] * n
     y_app = [0.0] * n
     w_app = [0.0] * n  # |F| weights for the application point
+    couple = 0.0
 
     for eff in effects:
         i = eff.slice_index
@@ -294,6 +304,7 @@ def resolve_support_terms(
         x_app[i] += w * eff.intersection_x
         y_app[i] += w * eff.intersection_y
         w_app[i] += w
+        couple += eff.couple()
 
     # The normal part alone, back in Cartesian components. Written from
     # ``n_press`` rather than accumulated per effect on purpose: every effect
@@ -317,7 +328,7 @@ def resolve_support_terms(
             y_app[i] = 0.5 * (s_list[i].base_y_left + s_list[i].base_y_right)
 
     return SupportTerms(t_active, t_passive, n_press, nf_h, nf_v,
-                        f_h, f_v, x_app, y_app, True)
+                        f_h, f_v, x_app, y_app, True, couple)
 
 
 @dataclass
@@ -336,6 +347,12 @@ class SupportEffect:
         force_v: vertical component F·sin(angle)    (kN/m)
         is_active: True for Active (Method A) support, False for Passive
         support_id: id of the SupportInstance for traceability
+        application_x, application_y: where the resultant ACTS. Equal to
+            the intersection for every support type but a retaining wall
+            asked to act at the centroid of its pressure diagram
+            (v0.1.122). Translating a force does not change the force, so
+            the two points differ by a pure COUPLE and nothing else --
+            which is exactly how it enters the solvers.
     """
     slice_index: int
     intersection_x: float
@@ -346,6 +363,24 @@ class SupportEffect:
     force_v: float
     is_active: bool
     support_id: str
+    application_x: float = float("nan")
+    application_y: float = float("nan")
+
+    def __post_init__(self) -> None:
+        if self.application_x != self.application_x:      # NaN
+            self.application_x = self.intersection_x
+        if self.application_y != self.application_y:
+            self.application_y = self.intersection_y
+
+    def couple(self) -> float:
+        """Moment of moving the resultant from the cut to where it acts.
+
+        A pure couple: ``(P2 - P1) x F`` does not depend on the axis it is
+        taken about, which is why one scalar per analysis is enough and no
+        method has to be told where the wall is.
+        """
+        return ((self.application_x - self.intersection_x) * self.force_v
+                - (self.application_y - self.intersection_y) * self.force_h)
 
 
 def _slip_polyline(surface, slices) -> list[tuple[float, float]]:
@@ -577,7 +612,26 @@ def compute_support_effects(
             stype = cls()
 
         L_total = support.length()
-        F = stype.force_at(d_from_head, L_total,
+
+        # v0.1.122 -- some profiles are defined from the CREST of the
+        # support, not from its head. ``force_at`` never sees the instance,
+        # so it cannot tell which end is higher; a wall drawn bottom-to-top
+        # would silently invert its pressure diagram and return a plausible,
+        # wrong number. Deciding it here, by geometry, is the only place the
+        # question can be answered at all.
+        d_along = d_from_head
+        crest, other = support.head, support.tail
+        if getattr(stype, "MEASURED_FROM_TOP", False):
+            if support.tail.y > support.head.y:
+                d_along = L_total - d_from_head
+                crest, other = support.tail, support.head
+            elif support.tail.y == support.head.y:
+                # No crest to measure from. Refusing beats guessing: the
+                # analysis reports it instead of publishing a number that
+                # depends on the drawing order.
+                continue
+
+        F = stype.force_at(d_along, L_total,
                            bond_profiles.get(support.id))
         if F <= 0:
             continue
@@ -591,6 +645,17 @@ def compute_support_effects(
         from ogr_core.support import ForceApplication
         is_active = (support.force_application == ForceApplication.ACTIVE)
 
+        # v0.1.122 -- where the resultant acts. Every type but a retaining
+        # wall asked for the centroid acts at the cut, and then the two
+        # points coincide and the couple below is exactly zero.
+        ax, ay = ix, iy
+        if (getattr(stype, "force_location", "intersection") == "centroid"
+                and hasattr(stype, "resultant_arm") and L_total > 0.0):
+            arm = stype.resultant_arm(d_along, L_total)
+            ux = (other.x - crest.x) / L_total
+            uy = (other.y - crest.y) / L_total
+            ax, ay = crest.x + arm * ux, crest.y + arm * uy
+
         effects.append(SupportEffect(
             slice_index=slice_idx,
             intersection_x=ix,
@@ -601,6 +666,8 @@ def compute_support_effects(
             force_v=Fv,
             is_active=is_active,
             support_id=support.id,
+            application_x=ax,
+            application_y=ay,
         ))
 
     return effects

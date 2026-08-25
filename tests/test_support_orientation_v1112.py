@@ -326,6 +326,14 @@ class TestTheTypeDefaultsReachTheInstance:
             "geosynthetic": ForceOrientation.PARALLEL_TO_SUPPORT,
             "user_defined": ForceOrientation.PARALLEL_TO_SUPPORT,
             "pile_micropile": ForceOrientation.TANGENT_TO_SLIP,
+            # v0.1.122 — the reference's page for the equivalent-fluid
+            # retaining wall states its default outright: "The default
+            # force orientation for the Retaining Wall support is
+            # Horizontal." It is the only type in the catalogue that
+            # defaults there, and it is not decoration: an earth thrust
+            # quoted as a fluid pressure is a HORIZONTAL pressure, and
+            # projecting it on the wall axis would change the resultant.
+            "retaining_wall_efp": ForceOrientation.HORIZONTAL,
         }
         # Every registered type must be listed: a new plugin should make
         # this fail rather than slip through untested.

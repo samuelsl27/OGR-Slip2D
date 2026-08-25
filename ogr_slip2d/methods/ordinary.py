@@ -157,7 +157,8 @@ class OrdinaryFellenius(LEMMethod):
         terms = moment_terms(axis, s_list, weights, resisting, normals,
                              kh=kh, kv=kv, tangential=tangential,
                              tangential_passive=tangential_passive,
-                             rotation=rot, forces=forces)
+                             rotation=rot, forces=forces,
+                             couple=sup.couple if sup.present else 0.0)
         if abs(terms.driving) < 1e-9:
             return LEMResult(
                 fos=math.inf, converged=False, iterations=0,
@@ -375,6 +376,13 @@ class OrdinaryFellenius(LEMMethod):
         # Reference formulation, as for every other method:
         #     F_act = (R + T_N·tanφ') / (D − T_S)
         #     F_pas = (R + T_N·tanφ' + T_S) / D
+        if sup.present and sup.couple:
+            # v0.1.122 -- the couple left over when a support's resultant
+            # acts somewhere other than where it crosses the surface. Same
+            # normalisation as the horizontal water moment two lines up: a
+            # CCW moment enters the driving side as -slide_sign*M/R.
+            denominator += -slide_sign * sup.couple / circle_R
+
         numerator += sup.total_passive_t()
         driving_no_support = denominator
         denominator -= sup.total_active_t()

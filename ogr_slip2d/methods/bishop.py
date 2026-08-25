@@ -253,7 +253,8 @@ class BishopSimplified(LEMMethod):
             terms = moment_terms(
                 axis, s_list, weights, resisting, normals, kh=kh, kv=kv,
                 tangential=tangential, tangential_passive=tangential_passive,
-                forces=forces)
+                forces=forces,
+                couple=sup.couple if sup.present else 0.0)
             if abs(terms.driving) < 1e-9:
                 return LEMResult(
                     fos=math.inf, converged=False, iterations=iterations,
@@ -410,6 +411,13 @@ class BishopSimplified(LEMMethod):
         # as much as one holding it back. The instability it was avoiding
         # is real, and is handled below by marking the surface
         # INADMISSIBLE rather than by discarding the sign.
+        if sup.present and sup.couple:
+            # v0.1.122 -- the couple left over when a support's resultant
+            # acts somewhere other than where it crosses the surface. Same
+            # normalisation as the horizontal water moment two lines up: a
+            # CCW moment enters the driving side as -slide_sign*M/R.
+            denominator += -slide_sign * sup.couple / circle_R
+
         driving_no_support = denominator
         denominator -= sup.total_active_t()
         # How much of the driving moment the Active supports have taken

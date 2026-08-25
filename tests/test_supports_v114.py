@@ -11,12 +11,18 @@ import math
 
 # ======================================================================
 class TestSupportRegistry:
-    def test_seven_types_registered(self):
+    def test_the_known_types_are_registered(self):
+        # Named for what it checks: INCLUSION, not cardinality. It read
+        # ``test_seven_types_registered`` until v0.1.122 added an eighth
+        # and the name started lying — the count is frozen elsewhere, in
+        # ``test_support_orientation_v1112``, which is where a new type is
+        # meant to be noticed.
         from ogr_core.support import support_registry
         ids = list(support_registry().keys())
         for sid in (
             "end_anchored", "grouted_tieback", "grouted_tieback_friction",
             "soil_nail", "pile_micropile", "geosynthetic", "user_defined",
+            "retaining_wall_efp",
         ):
             assert sid in ids, f"Missing support type: {sid}"
 

@@ -1470,6 +1470,38 @@ _DICTS: dict[str, dict[str, str]] = {
         "Both ends": "Ambos extremos",
         "Constant": "Constante",
         "Function of depth": "Función de la profundidad",
+
+        # --- v0.1.122 · muro de contención por presión fluida equivalente
+        # Terminología: el empuje se cuantifica con una PRESIÓN FLUIDA
+        # EQUIVALENTE, que es el término castellano corriente para el peso
+        # específico ficticio del que se deduce el empuje; el diagrama que
+        # resulta es el DIAGRAMA DE PRESIONES, y su resultante actúa en el
+        # CENTROIDE. «Trasdós» es la cara del muro contra el terreno.
+        "Retaining Wall (EFP)": "Muro de contención (presión fluida)",
+        "Retaining wall defined by an equivalent fluid pressure profile. "
+        "The profile is integrated from the crest down to the slip "
+        "surface, so the force depends on where the surface cuts the wall.":
+            "Muro de contención definido por un perfil de presión fluida "
+            "equivalente. El perfil se integra desde la coronación hasta la "
+            "superficie de rotura, así que la fuerza depende de por dónde la "
+            "superficie corta el muro.",
+        "Uniform": "Uniforme",
+        # "Triangular" y "Trapezoidal" se escriben igual en castellano; van
+        # en la lista blanca del test de traducciones perezosas, con
+        # "Horizontal" y las demás cognadas que ya estaban.
+        "Triangular": "Triangular",
+        "At the slip surface": "En la superficie de rotura",
+        "At the centroid of the pressure diagram":
+            "En el centroide del diagrama de presiones",
+        "Custom Pressure Profile (points)":
+            "Perfil de presión personalizado (puntos)",
+        "Relative distance from crest":
+            "Distancia relativa desde la coronación",
+        "Pressure": "Presión",
+        "(no support type in this model can be patterned)":
+            "(ningún tipo de soporte de este modelo admite fila)",
+        "Distance (m)": "Distancia (m)",
+        "Force (kN)": "Fuerza (kN)",
     },
 }
 

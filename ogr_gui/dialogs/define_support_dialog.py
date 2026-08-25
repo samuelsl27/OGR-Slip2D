@@ -93,6 +93,17 @@ _CHOICES: dict[str, list[tuple[str, str]]] = {
         ("Constant", "constant"),
         ("Function of depth", "function"),
     ],
+    # v0.1.122 — the equivalent-fluid retaining wall.
+    "profile_type": [
+        ("Uniform", "uniform"),
+        ("Triangular", "triangular"),
+        ("Trapezoidal", "trapezoidal"),
+        ("Custom", "custom"),
+    ],
+    "force_location": [
+        ("At the slip surface", "intersection"),
+        ("At the centroid of the pressure diagram", "centroid"),
+    ],
 }
 
 
@@ -112,6 +123,8 @@ class _SupportParamPanel(QWidget):
         self._editors: dict[str, QWidget] = {}
         self._type_cls: Optional[type[SupportType]] = None
         self._user_table: Optional[QTableWidget] = None
+        self._table_group: Optional[QGroupBox] = None
+        self._table_field: Optional[str] = None
 
     def _clear(self) -> None:
         # Remove all widgets from layout
@@ -122,6 +135,8 @@ class _SupportParamPanel(QWidget):
                 w.deleteLater()
         self._editors.clear()
         self._user_table = None
+        self._table_group = None
+        self._table_field = None
 
     def set_type(
         self,
@@ -170,9 +185,42 @@ class _SupportParamPanel(QWidget):
                 form.addRow(label, editor)
             self._layout.addWidget(form_widget)
 
-        # User-defined table?
-        if type_cls.TYPE_ID == "user_defined":
-            self._build_user_table(current_values)
+        # A table-edited field, declared by the class. Until v0.1.122 this
+        # was ``if type_cls.TYPE_ID == "user_defined"``, and a second type
+        # needing a table would have meant a second hard-wired branch.
+        self._table_field = getattr(type_cls, "TABLE_FIELD", None) or (
+            "points" if type_cls.TYPE_ID == "user_defined" else None)
+        if self._table_field:
+            self._build_user_table(type_cls, current_values)
+
+        # v0.1.122 — a shape combo that decides which of the other fields
+        # mean anything. Without this the editor shows every field for
+        # every shape and two or three of them do nothing, which is the
+        # same defect as an inert setting and harder to notice.
+        if getattr(type_cls, "PARAMETER_USED_BY", None):
+            combo = self._editors.get("profile_type")
+            if combo is not None:
+                combo.currentIndexChanged.connect(self._sync_used_fields)
+            self._sync_used_fields()
+
+    def _sync_used_fields(self) -> None:
+        """Grey out the parameters the chosen profile does not read."""
+        spec = getattr(self._type_cls, "PARAMETER_USED_BY", None) or {}
+        combo = self._editors.get("profile_type")
+        if combo is None:
+            return
+        used = set(spec.get(combo.currentData(), ()))
+        governed = set()
+        for names in spec.values():
+            governed.update(names)
+        for name in governed:
+            ed = self._editors.get(name)
+            if ed is not None:
+                ed.setEnabled(name in used)
+        if self._table_group is not None:
+            wanted = (self._table_field is not None
+                      and combo.currentData() == "custom")
+            self._table_group.setEnabled(wanted)
 
     def _pretty_name(self, name: str) -> str:
         return name.replace("_", " ").title() + ":"
@@ -205,17 +253,26 @@ class _SupportParamPanel(QWidget):
         self._editors[name] = spin
         return spin
 
-    def _build_user_table(self, current_values: dict) -> None:
-        """Table editor for the UserDefined support's (distance, force)
-        capacity points."""
-        gb = QGroupBox(tr("Capacity vs Distance from Head (points)"))
+    def _build_user_table(self, type_cls, current_values: dict) -> None:
+        """Table editor for a support type's table-valued field.
+
+        v0.1.122 — the column headers and the default rows come from the
+        class instead of being written here: a retaining wall's table is
+        (relative distance, pressure), not (metres, kN), and printing the
+        wrong unit over the right number is worse than printing none.
+        """
+        cols = getattr(type_cls, "TABLE_COLUMNS", None) or (
+            ("Distance (m)", -1e9, 1e9), ("Force (kN)", -1e9, 1e9))
+        title = getattr(type_cls, "TABLE_TITLE", None) or (
+            "Capacity vs Distance from Head (points)")
+        gb = QGroupBox(tr(title))
         v = QVBoxLayout(gb)
         tbl = QTableWidget(0, 2)
-        tbl.setHorizontalHeaderLabels(["Distance (m)", "Force (kN)"])
+        tbl.setHorizontalHeaderLabels([tr(c[0]) for c in cols])
         tbl.horizontalHeader().setStretchLastSection(True)
-        pts = current_values.get("points") or [
-            (0.0, 100.0), (5.0, 200.0), (10.0, 100.0),
-        ]
+        field = getattr(type_cls, "TABLE_FIELD", None) or "points"
+        pts = current_values.get(field) or list(
+            getattr(type_cls(), field, None) or [])
         tbl.setRowCount(len(pts))
         for i, (x, f) in enumerate(pts):
             tbl.setItem(i, 0, QTableWidgetItem(f"{x:.3f}"))
@@ -241,6 +298,7 @@ class _SupportParamPanel(QWidget):
         v.addLayout(btns)
         self._layout.addWidget(gb)
         self._user_table = tbl
+        self._table_group = gb
 
     def get_values(self) -> dict:
         """Return the current values as a dict ready for the
@@ -251,17 +309,24 @@ class _SupportParamPanel(QWidget):
                 out[name] = editor.value()
             elif isinstance(editor, QComboBox):
                 out[name] = editor.currentData()
-        # User-defined: read the table
+        # The table-valued field, under the name the class declares.
         if self._user_table is not None:
+            cols = getattr(self._type_cls, "TABLE_COLUMNS", None) or (
+                ("", -1e9, 1e9), ("", -1e9, 1e9))
             pts = []
             for r in range(self._user_table.rowCount()):
                 try:
                     x = float(self._user_table.item(r, 0).text())
                     f = float(self._user_table.item(r, 1).text())
-                    pts.append((x, f))
                 except (ValueError, AttributeError):
                     continue
-            out["points"] = pts
+                # Clamped, not dropped: a relative distance typed as 1.5
+                # is a slip of the finger, and silently discarding the row
+                # would change the profile without saying so.
+                x = min(cols[0][2], max(cols[0][1], x))
+                f = min(cols[1][2], max(cols[1][1], f))
+                pts.append((x, f))
+            out[self._table_field or "points"] = pts
         return out
 
 
@@ -542,7 +607,17 @@ class DefineSupportDialog(QDialog):
         self._commit_row(cur)
         src = self._rows[cur]
         cls = type(src.support)
-        new_support = cls(**src.support.__dict__)
+        # v0.1.122 — through ``to_dict``/``from_dict`` and not through
+        # ``__dict__``. A table-valued field is a LIST, and handing the same
+        # list object to the copy meant editing one row edited the other; it
+        # was latent for the user-defined type and would have been reachable
+        # for the retaining wall.
+        try:
+            new_support = cls.from_dict(src.support.to_dict())
+        except Exception:                                       # noqa: BLE001
+            new_support = cls(**{k: (list(v) if isinstance(v, list) else v)
+                                 for k, v in src.support.__dict__.items()
+                                 if not k.startswith("_")})
         new_row = _SupportRow(
             name=src.name + " (copy)",
             support=new_support,

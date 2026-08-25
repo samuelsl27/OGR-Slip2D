@@ -158,7 +158,14 @@ class TestTranslationCompleteness:
                    # through a variable, so tr() has to find them in the
                    # dictionary; they are identical because translating
                    # them would be inventing a difference.
-                   "Material", "─ Material ─"}
+                   "Material", "─ Material ─",
+                   # v0.1.122 — the equivalent-fluid retaining wall's
+                   # profile shapes. "Triangular" is the same word in
+                   # Spanish, exactly as "Trapezoidal" above already was;
+                   # the other two of the four ARE translated ("Uniform" →
+                   # "Uniforme", "Custom" → "Personalizado"), which is what
+                   # says these two are cognates and not forgotten entries.
+                   "Triangular"}
         same = [k for k, v in _DICTS["es"].items()
                 if k == v and k not in allowed]
         assert len(same) < 12, same[:15]
