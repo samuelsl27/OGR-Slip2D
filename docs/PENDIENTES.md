@@ -250,80 +250,146 @@ v0.1.74, y Auto Refine encadena iteraciones.
 
 ---
 
-## 7 · Lowe-Karafiath con agua: ¿empuje entre dovelas, sí o no? — ABIERTO (v0.1.94)
+## 7 · Lowe-Karafiath con agua: ¿empuje entre dovelas, sí o no? — ABIERTO (v0.1.117)
 
-**Estado: diagnosticado y medido, sin corregir. Regla 6.** Falta UN dato
-externo, y está identificado exactamente.
+**Estado: cerrada la pregunta, abierta la decisión.** Desde v0.1.94 esta
+entrada decía «falta UN dato externo». **Ya no falta**: la evidencia está
+completa y apunta a un sitio, y lo que queda es elegir el predeterminado
+sabiendo lo que se pierde con cada opción. Remedido entero en v0.1.117.
 
-Sobre `Ej_2_Piezometric_Line`, círculo crítico de la referencia, Lowe-Karafiath
-da **−10,89 %**. La causa está localizada: `interslice_water_thrust`
-(`ogr_slip2d/external_forces.py`), que usa **sólo** este método. Integra u sobre
-las caras verticales entre dovelas y la aplica como fuerza externa, con lo que
-la `Z` de la recursión pasa a ser la fuerza interdovela **efectiva** en vez de
-la **total**.
+Los tres métodos que **prescriben** la inclinación interdovela —Lowe y
+Karafiath (1960) y los dos Corps of Engineers, USACE (2003) EM 1110-2-1902
+§C-4a— obligan a la resultante de cada cara vertical a ir a un ángulo θ fijado
+por la geometría. Con agua, esa resultante es la suma de una parte efectiva y
+del empuje del agua sobre la cara, que es **horizontal**. Que θ se imponga a la
+**total** o sólo a la **efectiva** es una elección de modelo: desde v0.1.98 es
+`MethodsSettings.interslice_forces`, predeterminado en `effective`, y desde
+v0.1.61 lo que la separa es `interslice_water_thrust`
+(`ogr_slip2d/external_forces.py`), que sólo usa esta familia.
 
-```
-con el empuje (hoy)     0,626915    −10,89 %
-sin el empuje           0,704139     +0,09 %
-referencia              0,703504
-```
+### La medida, en 0.1.116, mismo círculo, cambiando sólo el ajuste
 
-**Y quitarlo rompe un caso publicado.** Verificación #70 de Duncan y Wright
-(talud sumergido, árbitro 1,60):
+Fuente: `_tools/medir_d20_interdovela.py` en el banco, que no toca ningún
+`.ogr`; el reparto se cambia en memoria.
 
-| | ponded 75 | ponded 105 | boyante | invarianza |
+| caso | publicado | `effective` | error | `total` | error |
+|---|---|---|---|---|---|
+| #55 lowe-k (Pockoski y Duncan 2000) | 1,318 · UTEXAS4 1,32 | 1,25346 | **−4,90 %** | 1,31520 | **−0,21 %** |
+| #56 lowe-k | 1,304 · UTEXAS4 1,31 | 1,24936 | −4,19 % | 1,30097 | −0,23 % |
+| Ej_2 piezométrica lowe-k | 0,703504 | 0,62685 | **−10,90 %** | 0,70411 | **+0,09 %** |
+
+Sobre esos mismos círculos Bishop cae a +0,03 % y −0,05 % de su valor
+publicado, así que la comparación es del **método**, no de la geometría ni de
+la búsqueda. Los cinco métodos que no leen el ajuste dan el mismo número dígito
+a dígito en las dos columnas, y **sin freática las dos columnas coinciden**: la
+anomalía es del término de agua, no de θ.
+
+El **#51** (Zhu 2003) mejora en la misma dirección sin llegar (relación con
+Bishop 0,9333 → 0,9738, publicada 1,008), y no puede llegar: su capa 4 no está
+publicada y gobierna más de media superficie. Su Corps of Engineers #2 pasa de
+0,9939 a **1,0673** contra 1,0775 de Zhu.
+
+### Cinco líneas de evidencia, todas hacia TOTALES
+
+1. **La referencia lo declara por escrito**, en su base de conocimiento de agua
+   subterránea: *«In the case of total stress, you formulate in terms of total
+   force and seepage forces are conveniently hidden within the interslice
+   normal forces … This is why [este programa] and most LEM programs formulate
+   in terms of total forces»*, citando a Duncan, Wright y Brandon, *Soil
+   Strength and Slope Stability*, §6.8.1, p. 105. **Ése es el dato que esta
+   entrada llevaba pidiendo desde v0.1.94**, en forma documental en vez de
+   numérica, y cae del lado «≈ 5»: la referencia no desdobla. La misma página
+   añade *«both give identical solutions»*, que es cierto para Bishop, Janbu,
+   Spencer y GLE y **falso** para un método de inclinación prescrita — aquí la
+   diferencia es del 5 al 12 %.
+2. **EM 1110-2-1902 §C-4a**, sobre esta hipótesis: *«This assumption appears to
+   be better than any of the assumptions described earlier, especially when the
+   side forces represent **total**, rather than effective, forces.»*
+3. **§G-5a de la misma norma**, sobre su ejemplo resuelto: *«The interslice
+   forces are total forces and thus include the water pressures on the sides of
+   the slices.»* Y OGR **ya reproduce ese ejemplo dovela a dovela** desde
+   v0.1.98 (`tests/test_modified_swedish_v198.py`) alimentando la recursión con
+   las columnas publicadas y **sin restar ningún empuje de cara**: la única
+   validación dovela a dovela de este motor es una validación en convenio
+   total.
+4. **Tres implementaciones independientes**: la referencia, **UTEXAS4** (el
+   programa de S. G. Wright, coautor del libro del punto 1) y **Zhu (2003)**.
+   Las tres ponen Lowe-Karafiath por encima de Bishop con freática.
+5. **La tabla de arriba**: con totales, tres valores publicados se reproducen
+   dentro del 0,25 %.
+
+*(No encontrado, y se dice: el artículo original de Lowe y Karafiath (1960) es
+un acta del 1er Congreso Panamericano y no está en línea.)*
+
+### Y una identidad analítica en contra, que tampoco admite discusión
+
+Sobre un talud **ya sumergido**, subir la lámina Δh añade una presión uniforme
+γ_w·Δh sobre todas las caras del sólido libre. El incremento exacto es
+ΔN = γ_w·Δh·ℓ, ΔE_i = γ_w·Δh·h_i **horizontal** y ΔX_i = 0, con lo que σ' y F
+no cambian. Una hipótesis que obliga a X_i = E_i·tan θ exige
+ΔX_i = ΔE_i·tan θ ≠ 0. Por tanto **con fuerzas totales esta familia no puede
+ser invariante con la profundidad del agua.** Sobre el problema 70 (Duncan y
+Wright 2005, fig. 6.27, árbitro 1,60):
+
+| | embalsada 75 | embalsada 105 | boyante | invarianza |
 |---|---|---|---|---|
-| Bishop / Spencer / GLE | 1,6006 | 1,6006 | 1,6003 | 0,00 % |
-| **Lowe CON empuje** | 1,6092 | 1,6099 | 1,6081 | 0,05 % ✔ |
-| **Lowe SIN empuje** | **5,0000** | **0,2203** | 1,6081 | **95,6 %** ✘ |
+| bishop / spencer | 1,60031 / 1,59536 | 1,60031 / 1,59491 | 1,60017 / 1,59685 | 0,00 % / 0,03 % |
+| **lowe-k `effective`** | **1,60758** | **1,60758** | 1,60777 | **0,000 %** |
+| **lowe-k `total`** | **5,00000** | **0,22043** | 1,60777 | destruida |
 
-Se pierde la magnitud **y** la invarianza con la profundidad del agua, que es
-el invariante fuerte del caso. `test_ponded_water_v161.py` la exige dentro del
-1 % y del 2 %, así que borrar el término deja la suite en rojo — como debe.
+Con efectivas la invarianza no es aproximada: las **dieciséis muestras del
+residuo Z_n(F)** son idénticas dígito a dígito entre las dos profundidades, no
+sólo su raíz; y la equivalencia de Duncan y Wright con el peso boyante se
+cumple al 0,012 %.
 
-Las dos formulaciones son consistentes consigo mismas. Difieren en si la
-inclinación prescrita θ = ½(β+α) se aplica a la fuerza interdovela **total** o
-a la **efectiva**. Ninguna acierta en los dos casos.
+**Corrección a lo que decía esta entrada: el 5,0 no es un factor de seguridad.**
+Muestreado el residuo de cierre sobre la rejilla de arranque de
+`_force_balance`, en las dos orientaciones de marcha:
 
-### El dato externo apareció en v0.1.98, y no basta
+- **embalsada 75, totales**: el residuo **no cambia de signo en ninguna**. No
+  hay raíz. Lo devuelto es `best_fallback`, el menor |Z_n| muestreado, que cae
+  en F = 5,0 — el **techo** de la rejilla — y sale con `converged = False`;
+- **embalsada 105, totales**: aparece un cambio de signo **espurio** en la
+  orientación reflejada, entre F = 0,2 (+89 642) y F = 0,3 (−45 380), y el
+  buscador converge a **0,22043**. Éste es el peor: número convergido, de
+  aspecto plausible y sin aviso.
 
-Buscando la fuente de los métodos Corps of Engineers salió que la EM
-1110-2-1902 se pronuncia sobre exactamente esta pregunta, y en los dos sentidos:
+### Lo que esto cierra, y lo que abre
 
-- §C-4a, sobre la hipótesis del Corps: *«Total interslice forces are used in much
-  of the computer software …, but **effective forces are recommended** when the
-  side forces are assumed to be parallel to the average embankment slope.»*
-- §C-4a, sobre Lowe-Karafiath: *«This assumption appears to be better than any of
-  the assumptions described earlier, **especially when the side forces represent
-  total, rather than effective, forces**.»*
-- y su propio ejemplo resuelto del apéndice G, §G-5a, usa **totales**: *«The
-  interslice forces are total forces and thus include the water pressures on the
-  sides of the slices … also consistent with most computer software.»*
+**Cierra la pregunta.** Las dos formulaciones son consistentes consigo mismas y
+cada una acierta donde la otra falla, y ya se sabe por qué: el mundo formula en
+totales, y en totales la hipótesis de inclinación prescrita es incompatible con
+un talud sumergido. No es un defecto a la espera de un parche.
 
-O sea: para el Corps, efectivas; para Lowe-Karafiath, **totales** — que es lo
-contrario de lo que OGR hace. Eso apoya el −10,89 % de `Ej_2` y **no explica el
-problema 70**, donde quitar el empuje daba 5,0 y 0,2203 y destruía la
-invarianza con la profundidad del agua. Un dato que apoya una mitad y contradice
-la otra no cierra nada, así que el pendiente sigue abierto.
+**Y anula el criterio de cierre que este pendiente y la ficha D20 llevaban
+escrito**, que pedía a la vez relación > 1,0 en 51/55/56 (exige totales) e
+invarianza dentro del 1 % en el 70 (exige efectivas). **Ningún ajuste único
+cumple las dos.**
 
-Lo que sí cambió en v0.1.98: el reparto es ahora un **ajuste del proyecto**
-(`MethodsSettings.interslice_forces`), predeterminado en `effective`, de modo que
-ningún número validado se mueve y la bifurcación se puede medir sin parchear
-código. Los métodos Corps nuevos leen el mismo ajuste.
+**Abre una decisión de producto**, que es lo único que queda:
 
-**Qué sigue haciendo falta para cerrarlo**: el factor de seguridad que da la
-referencia con **Lowe-Karafiath** sobre un modelo con **agua embalsada** — la
-propia verificación #70 sirve, o cualquier talud con la lámina de agua por
-encima del contorno externo. Dos lecturas posibles y las dos son concluyentes:
+- seguir en `effective` — físicamente coherente, y solo: se aleja del 0,2 % al
+  10,9 % de todo valor publicado de esta familia con agua;
+- pasar a `total` — reproduce lo publicado dentro del 0,25 %, alinea la familia
+  con el Spencer/GLE de este mismo programa (que aplican λ·E a la fuerza total
+  desde siempre, con su falta de invarianza documentada como *tripwire* desde
+  v0.1.106) y con la única validación dovela a dovela que tiene el motor, **a
+  cambio de** quedarse sin respuesta sobre un talud sumergido, donde hoy hace
+  falta además un aviso, porque el 0,22043 del caso de 105 ft converge.
 
-- si da ≈ 1,6 → la referencia desdobla efectiva/total, y nuestro −10,9 % viene
-  de otro sitio dentro del mismo término;
-- si da ≈ 5 → la referencia simplemente no lo hace, y entonces **OGR es más
-  correcto que la referencia aquí**. Lo que procede es documentar la
-  divergencia, no «arreglarla» persiguiendo su número.
+Sea cual sea, la alternativa tiene que seguir siendo alcanzable: la norma que
+define los métodos considera legítimas las dos.
 
-Lo que NO hay que hacer mientras tanto: borrar el término para que Ej_2 salga
-bien. Sería cambiar un resultado validado por otro validado, a ciegas.
+**La salida práctica, con fuente, mientras tanto**: sobre un talud sumergido,
+el procedimiento equivalente de Duncan y Wright —peso boyante γ' = γ − γ_w y
+nada de agua— hace desaparecer la bifurcación entera, porque sin superficie de
+agua no hay empuje de cara que separar. Los dos ajustes dan entonces el mismo
+número, a 0,012 % del que da el tratamiento con agua embalsada y efectivas.
+
+Medido y sujeto en `tests/test_interslice_split_v1117.py`, 12 casos con las dos
+anclas enfrentadas y *tripwires* de dos caras: fallan si la divergencia crece y
+fallan si desaparece, porque desaparecer significaría que alguien cambió el
+predeterminado sin actualizar esta entrada.
 
 ### Y en v0.1.106 la misma pregunta aparece en Spencer y GLE
 
@@ -348,16 +414,15 @@ cortante interdovela a igualdad de λ. Lo que rescata el resultado final es que
 la **raíz se mueve con ellas** y el cruce acaba casi donde estaba.
 
 **Qué haría falta**: extender `MethodsSettings.interslice_forces` —la
-bifurcación efectiva/total que la familia Corps ya tiene desde v0.1.98— a
-Spencer y GLE. No se hizo en v0.1.106 por dos motivos, y el segundo es el que
-manda:
-
-1. falta el mismo dato externo que este pendiente lleva pidiendo desde v0.1.94;
-2. la evidencia disponible apunta a **totales**, que es lo que hay: Fredlund y
-   Krahn (1977) escriben `E` como fuerza total, y la referencia separa su
-   Spencer de su Bishop un +1,888 % sobre el modelo con piezométrica, donde OGR
-   con totales da +2,14 %. Con efectivas ese número se movería, y se movería
-   alejándose.
+bifurcación efectiva/total que la familia de inclinación prescrita tiene desde
+v0.1.98— a Spencer y GLE. No se hizo en v0.1.106 porque faltaba el dato externo
+que este pendiente pedía; ese motivo ha caído en v0.1.117, y el que queda es
+que la evidencia apunta a **totales**, que es lo que ya hacen: Fredlund y Krahn
+(1977) escriben `E` como fuerza total, y la referencia separa su Spencer de su
+Bishop un +1,888 % sobre el modelo con piezométrica, donde OGR con totales da
++2,14 %. Con efectivas ese número se movería, y se movería alejándose. La tarea
+sigue en pie como **tarea propia**: si el predeterminado de la familia
+prescrita cambia, esto tiene que decidirse con él.
 
 Medido y sujeto en `tests/test_ponded_water_v161.py`, con un tripwire de dos
 caras: falla si el residuo crece, y falla si desaparece — porque desaparecer
