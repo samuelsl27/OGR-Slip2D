@@ -58,6 +58,12 @@ class Project:
         self.distributed_loads: list[DistributedLoad] = []
         self.line_loads: list[LineLoad] = []
         self.seismic: SeismicLoad = SeismicLoad()
+        # v0.1.127 - the strong-motion records available to a Newmark
+        # analysis. They live in the project and NOT as a path to a file
+        # outside it, for the reason the seepage field taught in v0.1.78:
+        # an input that is not saved is an input that comes back empty
+        # without saying so.
+        self.seismic_records: list = []
         # v0.1.23 — Water Pressure Grid (Phase 0 groundwater plan);
         # active when settings.groundwater.method is a GRID_* type.
         self.water_pressure_grid = None  # Optional[WaterPressureGrid]
@@ -172,6 +178,13 @@ class Project:
         for m in self.materials:
             if m.id == mid:
                 return m
+        return None
+
+    def seismic_record_by_id(self, rid: str):
+        """The strong-motion record with that id, or None (v0.1.127)."""
+        for r in self.seismic_records:
+            if r.id == rid:
+                return r
         return None
 
     def bounding_box(self) -> tuple[float, float, float, float]:
@@ -596,6 +609,8 @@ class Project:
             "distributed_loads": [l.to_dict() for l in self.distributed_loads],
             "line_loads": [l.to_dict() for l in self.line_loads],
             "seismic": self.seismic.to_dict(),
+            # v0.1.127
+            "seismic_records": [r.to_dict() for r in self.seismic_records],
             # v0.1.6
             "region_assignments": list(self.region_assignments),
             # v0.1.7
@@ -728,6 +743,11 @@ class Project:
         ]
         proj.line_loads = [LineLoad.from_dict(l) for l in data.get("line_loads", [])]
         proj.seismic = SeismicLoad.from_dict(data.get("seismic", {}))
+        # v0.1.127
+        from ..loads.seismic_record import SeismicRecord
+        proj.seismic_records = [
+            SeismicRecord.from_dict(r) for r in data.get("seismic_records", [])
+        ]
         # v0.1.6
         proj.region_assignments = list(data.get("region_assignments", []))
         # v0.1.14 — normalise footprints to tuple-of-tuples (JSON parses

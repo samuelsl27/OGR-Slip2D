@@ -639,16 +639,23 @@ _WINDOWS: list = []
 
 class TestTheDialogKeepsItsPages:
 
-    def test_restore_defaults_rebuilds_all_nine(self):
+    def test_restore_defaults_rebuilds_every_page(self):
         """It rebuilt four. Transient, Statistics, Random Numbers, Design
         Standard and Advanced vanished until the dialog was reopened,
         because ``_defaults`` carried a second, shorter, hand-written
-        list of the pages."""
+        list of the pages.
+
+        The count comes from the dialog's own tuple rather than from a
+        number written here, because a number written here is a third
+        list of the same thing: v0.1.127 added the Seismic page and this
+        test failed for saying nine, which is precisely the failure mode
+        the second list caused in the first place."""
         _s, d = _dialog()
-        assert d.nav.count() == 9
+        expected = len(d._PAGES)
+        assert d.nav.count() == expected
         d._defaults()
-        assert d.nav.count() == 9
-        assert len(d.pages) == 9
+        assert d.nav.count() == expected
+        assert len(d.pages) == expected
 
     def test_the_advanced_option_has_exactly_one_home(self):
         """Groundwater and Transient both used to write it, and

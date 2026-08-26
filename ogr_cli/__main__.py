@@ -227,6 +227,20 @@ def compute(
     # an over-design factor, and it must be greater than 1.
     factored = bool(getattr(outcome.factor_report, "applied", False))
     label = "Over-design factor" if factored else "Critical FoS"
+    # v0.1.127 - and with a seismic mode on it is neither. The reference
+    # says of its own Ky analysis that "the output will be in terms of Ky
+    # values rather than Factor of Safety", and the surface reported is
+    # the one with the LOWEST Ky, which is not the one with the lowest
+    # factor. Printing "Critical FoS" over that column would be the
+    # terminal contradicting the analysis it just ran - the same fault
+    # the Interpret window had, fixed in the same version.
+    first = next(iter(outcome.results.values()), None)
+    seismic_objective = getattr(first, "objective", "fos") == "ky"
+    newmark_on = bool(
+        first is not None and first.critical is not None
+        and "newmark_displacement" in (first.critical.details or {}))
+    if seismic_objective and not factored:
+        label = "Newmark disp. (cm)" if newmark_on else "Critical Ky"
     if factored:
         console.print(f"[cyan]Design standard applied:[/cyan] "
                       f"{outcome.factor_report.summary()} — the reported "
@@ -241,10 +255,20 @@ def compute(
     tbl.add_column("Converged")
     for mid, result in outcome.results.items():
         critical = result.critical
+        detail = (critical.details or {}) if critical is not None else {}
+        if critical is None:
+            shown = "[red]no valid surface[/red]"
+        elif newmark_on:
+            shown = ("[bold yellow]%.4f[/bold yellow]"
+                     % (detail["newmark_displacement"] * 100.0))
+        elif seismic_objective:
+            shown = "[bold yellow]%.4f[/bold yellow]" % detail.get(
+                "ky", float("nan"))
+        else:
+            shown = f"[bold yellow]{critical.fos:.4f}[/bold yellow]"
         tbl.add_row(
             mid,
-            (f"[bold yellow]{critical.fos:.4f}[/bold yellow]"
-             if critical is not None else "[red]no valid surface[/red]"),
+            shown,
             str(result.valid_count),
             str(result.invalid_count),
             str(critical.converged) if critical is not None else "—",

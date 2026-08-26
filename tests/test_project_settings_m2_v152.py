@@ -45,9 +45,13 @@ def _requires_qt(cls):
 
 _DIALOGS = []
 
+# v0.1.127 added Seismic, so this list is ten. It stays written out by
+# hand on purpose: the point of the test is that the dialog shows the
+# pages the specification names, and deriving the expectation from the
+# dialog's own tuple would make it agree with itself.
 _EXPECTED_PAGES = ["General", "Methods", "Groundwater", "Transient",
                    "Statistics", "Random Numbers", "Design Standard",
-                   "Advanced", "Project Summary"]
+                   "Advanced", "Seismic", "Project Summary"]
 
 
 def _dialog(project=None):
@@ -157,7 +161,7 @@ class TestDesignStandardSettings:
 # ======================================================================
 @_requires_qt
 class TestDialogStructure:
-    def test_all_nine_pages_present(self):
+    def test_every_named_page_is_present(self):
         _p, d = _dialog()
         assert [d.nav.item(i).text() for i in range(d.nav.count())] == \
             _EXPECTED_PAGES

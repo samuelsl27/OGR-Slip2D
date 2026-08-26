@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
 )
 
 from ogr_core.project import Project
+from ogr_core.units.quantities import Quantity
 
 from .canvas import CanvasView
 from .i18n import tr
@@ -364,6 +365,63 @@ class _SliceDataDock(QDockWidget):
 
 
 # ======================================================================
+# v0.1.127 — what a seismic run reports instead of a factor of safety.
+#
+# With "Compute Ky" on, the reference states that "the output will be in
+# terms of Ky values rather than Factor of Safety"; with Newmark on, the
+# critical surface is the one that MOVES the most. Both are properties of
+# the run, so the window asks the result which of the three it is holding
+# rather than asking the project — a window that reads the settings can
+# disagree with the results it is showing, which is how a stale panel
+# reports a number the analysis never produced.
+def _reported_quantity(result):
+    """``("fos" | "ky" | "newmark", label)`` for one search result."""
+    if result is None:
+        return "fos", tr("Factor of safety")
+    if getattr(result, "objective", "fos") != "ky":
+        return "fos", tr("Factor of safety")
+    critical = result.critical
+    details = getattr(critical, "details", None) or {} if critical else {}
+    if "newmark_displacement" in details:
+        return "newmark", tr("Newmark displacement")
+    return "ky", tr("Critical seismic coefficient")
+
+
+def _reported_value(result, item, project=None):
+    """The number to print for ``item``, under this run's objective.
+
+    Returns ``(text, tooltip)``. The displacement is stored in metres, as
+    every length in this program is, and printed through the project's
+    SMALL_LENGTH quantity - the one the units page already reserves for
+    settlements and displacements - so a metric model reads centimetres
+    and an imperial one reads inches without this function knowing what
+    an inch is. With no project to ask, it falls back to centimetres,
+    which is what the reference prints.
+    """
+    kind, _label = _reported_quantity(result)
+    details = getattr(item, "details", None) or {}
+    if kind == "newmark":
+        metres = details.get("newmark_displacement")
+        if metres is None:
+            return "", ""
+        value, unit = metres * 100.0, "cm"
+        try:
+            system = project.settings.units.unit_system()
+            value = system.to_user(metres, Quantity.SMALL_LENGTH)
+            unit = system.label_for(Quantity.SMALL_LENGTH)
+        except Exception:
+            pass
+        return ("%.3f %s" % (value, unit),
+                tr("Ky:") + " %.4f" % details.get("ky", float("nan")))
+    if kind == "ky":
+        ky = details.get("ky")
+        if ky is None:
+            return "", ""
+        return "%.4f" % ky, "FS(0) = %.3f" % item.fos
+    return "%.3f" % item.fos, ""
+
+
+# ======================================================================
 class _SummaryDock(QDockWidget):
     """Header summary: method, number of valid surfaces, critical FoS."""
 
@@ -379,7 +437,9 @@ class _SummaryDock(QDockWidget):
         vbox.addStretch(1)
         self.setWidget(container)
 
-    def show_result(self, result) -> None:
+    def show_result(self, result, project=None) -> None:
+        self.project = project if project is not None else getattr(
+            self, "project", None)
         if result is None or not result.evaluations:
             self.label.setText(tr("<i>No results to display.</i>"))
             return
@@ -389,6 +449,21 @@ class _SummaryDock(QDockWidget):
                 f"Method: <b>{result.method_id}</b><br>"
                 f"<i>No valid surfaces ({result.invalid_count} invalid)</i>"
             )
+            # v0.1.127 - and under a seismic objective "no critical
+            # surface" is not the same statement as "no valid surfaces".
+            # Every surface can converge perfectly well and still have no
+            # critical seismic coefficient, because none of them reached
+            # the target factor below the search ceiling. Saying "no valid
+            # surfaces" there would send the user to look at the geometry
+            # for a problem that is in the seismic settings.
+            if (getattr(result, "objective", "fos") != "fos"
+                    and result.valid_count):
+                self.label.setText(
+                    f"Method: <b>{result.method_id}</b><br>"
+                    f"<i>{result.valid_count} valid surfaces, none with a "
+                    f"critical seismic coefficient: no coefficient within "
+                    f"the search range brings them to the target factor "
+                    f"of safety.</i>")
             return
         sd = c.surface.to_dict()
         # v0.1.82 — the hard-coded colour table that used to live here is
@@ -403,14 +478,20 @@ class _SummaryDock(QDockWidget):
         # so it is "valid", but it is barred from being the critical
         # surface; reporting it here made the panel contradict itself.
         n_ok = getattr(result, "analysed_count", result.valid_count)
+        # v0.1.127 - the headline number is whatever the run minimised.
+        # Printing "FoS" over a Ky run would be the panel contradicting
+        # the analysis, which is the fault v0.1.84 fixed one line above.
+        kind, label = _reported_quantity(result)
+        value, note = _reported_value(result, c, getattr(self, "project", None))
+        extra = f"<br><i>{note}</i>" if note else ""
         self.label.setText(
             f"Method: <b>{result.method_id}</b><br>"
             f"Valid surfaces: <b>{n_ok}</b> / "
             f"{getattr(result, 'total_count', len(result.evaluations))}<br>"
             f"<br>"
-            f"<b>Critical surface</b><br>"
-            f"FoS = <span style='color:#c0392b; font-size:14pt;'>"
-            f"<b>{c.fos:.3f}</b></span><br>"
+            f"<b>{tr('Critical surface')}</b><br>"
+            f"{label} = <span style='color:#c0392b; font-size:14pt;'>"
+            f"<b>{value}</b></span>{extra}<br>"
             f"Iterations: {c.iterations}<br>"
             f"Centre: ({sd.get('centre_x', 0):.2f}, {sd.get('centre_y', 0):.2f})<br>"
             f"Radius: {sd.get('radius', 0):.2f} m"
@@ -507,7 +588,7 @@ class InterpretWindow(QMainWindow):
         # Docks
         self.summary_dock = _SummaryDock(self)
         self.addDockWidget(Qt.RightDockWidgetArea, self.summary_dock)
-        self.summary_dock.show_result(self.search_result)
+        self.summary_dock.show_result(self.search_result, self.project)
 
         self.results_dock = _ResultsTableDock(self)
         self.addDockWidget(Qt.RightDockWidgetArea, self.results_dock)
@@ -690,12 +771,19 @@ class InterpretWindow(QMainWindow):
         self._data_tips_enabled = bool(on)
 
     def critical_label_text(self) -> str:
-        """Text of the factor-of-safety label anchored to the critical
-        surface, as the specification describes."""
+        """Text of the label anchored to the critical surface.
+
+        v0.1.127 - it carries the quantity the run reports, so a Newmark
+        run labels its surface in centimetres and a Ky run in
+        coefficients. The specification describes the factor of safety
+        because until now there was nothing else to describe.
+        """
         res = self.search_result
         if res is None or res.critical is None:
             return ""
-        return f"{res.critical.fos:.3f}"
+        text, _tip = _reported_value(res, res.critical,
+                                     getattr(self, "project", None))
+        return text
 
     def active_algorithm(self) -> str:
         """Which numerical method produced what is on screen."""
@@ -1091,7 +1179,7 @@ class InterpretWindow(QMainWindow):
         self._current_method_id = mid
         self.search_result = result
         self._refresh_canvas_with_highlights()
-        self.summary_dock.show_result(result)
+        self.summary_dock.show_result(result, self.project)
         self.results_dock.show_result(result)
         # v0.1.49 — the legend range and the algorithm read-out belong to
         # the ACTIVE method: each one has its own critical surface and its

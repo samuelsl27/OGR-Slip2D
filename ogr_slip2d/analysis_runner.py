@@ -43,6 +43,7 @@ from ogr_core.geometry import BoundaryType
 from .methods import method_registry
 from .methods.gle import interslice_function
 from .rapid_drawdown import check_drawdown_settings, wrap_for_drawdown
+from .yield_acceleration import DEFAULT_K_MAX
 
 __all__ = [
     "AnalysisOutcome",
@@ -204,6 +205,25 @@ def settings_warnings(project, method_ids=()) -> list[str]:
     notes.extend(ito_matsui_notes(project, method_ids))
     notes.extend(helical_anchor_notes(project, method_ids))
     notes.extend(force_location_notes(project, method_ids))
+    # v0.1.127 — the seismic modes change WHICH surface is reported, so
+    # anything downstream that consumes "the critical surface" is now
+    # consuming a different one. The probabilistic and sensitivity runs
+    # are the case that matters: they build the same search per sample and
+    # then take statistics of ``critical.fos``, which under the Ky
+    # objective is the factor of the LOWEST-Ky surface and not the lowest
+    # factor. That is a defensible thing to want and a terrible thing to
+    # get by accident.
+    seismic_cfg = getattr(project.settings, "seismic", None)
+    if seismic_cfg is not None and seismic_cfg.needs_ky:
+        stats = project.settings.statistics
+        if (getattr(stats, "probabilistic_analysis", False)
+                or getattr(stats, "sensitivity_analysis", False)):
+            notes.append(
+                "A seismic analysis mode is on, so the critical surface is "
+                "the one with the lowest critical seismic coefficient. The "
+                "probabilistic and sensitivity statistics are taken on the "
+                "factor of safety OF THAT SURFACE, which is not the lowest "
+                "factor of safety of the sample.")
     s_search = project.settings.search
     if (s_search.search_method == "slope"
             and s_search.slope_limit_left is not None
@@ -700,6 +720,13 @@ def build_search(project, method_id: str, progress_cb: Optional[Callable] = None
         # implemented the filter and was never given a value to filter on.
         # Defect D21 / anomaly A19-1.
         slope_limits=_slope_limits(s_search),
+        # v0.1.127 — the seismic analysis modes, and in ``common`` for the
+        # third time for the third variation of the same reason: this one
+        # decides what the search MINIMISES. A branch that did not receive
+        # it would go on returning the lowest factor of safety while the
+        # report said "critical seismic coefficient", which is the most
+        # expensive kind of silence there is.
+        seismic_analysis=(s.seismic if s.seismic.needs_ky else None),
         **_seed_kw(),
     )
 
@@ -966,5 +993,116 @@ def run_analysis(project, method_ids=None,
             line = f"{mid}: {note}"
             if line not in warnings:
                 warnings.append(line)
+        # v0.1.127 — the seismic modes have their own things to say, and
+        # the Newmark displacement is attached here rather than inside the
+        # search. It is attached AFTER because the search does not need it:
+        # the displacement of a rigid block never increases with the
+        # critical acceleration, so the surface that moves the most is the
+        # one with the lowest Ky, which is what the search already
+        # minimised. Integrating a record inside the loop would have bought
+        # a different ordering of the same surfaces at the price of one
+        # pass over the record per trial.
+        for line in _seismic_notes(project, mid, results[mid]):
+            if line not in warnings:
+                warnings.append(line)
 
     return AnalysisOutcome(results, factor_report, warnings, project)
+
+
+# ----------------------------------------------------------------------
+def _seismic_notes(project, method_id: str, result) -> list:
+    """Attach the Newmark displacements and report what could not be done.
+
+    Returns the lines the run has to say. Three of them are worth saying
+    out loud, and all three are cases where a number would otherwise
+    appear that means something else:
+
+    * the Newmark mode is on and **no record is chosen**, so there is
+      nothing to integrate. Reported, and no displacement is invented;
+    * the record is there but cannot be integrated — too few samples,
+      a non-positive interval;
+    * some surfaces have **no Ky at all**, because no coefficient below
+      the ceiling brought their factor down to the target. Those surfaces
+      are not "strong with a large Ky", they are unanswered, and a count
+      of them belongs in the report.
+    """
+    cfg = getattr(project.settings, "seismic", None)
+    if cfg is None or not cfg.needs_ky or result is None:
+        return []
+
+    lines: list = []
+    # A model that already applies a pseudo-static coefficient AND asks
+    # for Ky is asking two questions at once, and only one of them gets
+    # answered: Ky is solved over kh from zero, so the stored coefficient
+    # is REPLACED, not added to. Said out loud, because the factor of
+    # safety on screen and the Ky beside it then come from different
+    # loadings.
+    seismic_load = getattr(project, "seismic", None)
+    if (getattr(seismic_load, "enabled", False)
+            and float(getattr(seismic_load, "kh", 0.0) or 0.0) != 0.0):
+        lines.append(
+            f"{method_id}: the project applies a horizontal seismic "
+            f"coefficient of {seismic_load.kh:g}, and the critical "
+            f"coefficient replaces it rather than adding to it. Ky is "
+            f"solved over kh from zero.")
+    valid = [r for r in result.evaluations if r.is_valid]
+
+    def _has_ky(res) -> bool:
+        value = (res.details or {}).get("ky")
+        # ``is None`` explicitly: ``math.isfinite(None)`` raises, and a
+        # TypeError raised while WRITING THE REPORT would lose an analysis
+        # that had already finished.
+        return value is not None and math.isfinite(value)
+
+    unanswered = sum(1 for r in valid if not _has_ky(r))
+    if unanswered:
+        lines.append(
+            f"{method_id}: {unanswered} of {len(valid)} surfaces have no "
+            f"critical seismic coefficient below "
+            f"{DEFAULT_K_MAX:g}; they are excluded from the ranking rather "
+            f"than treated as strong.")
+
+    if not cfg.newmark:
+        return lines
+
+    record = None
+    rid = (cfg.record_id or "").strip()
+    if rid:
+        record = project.seismic_record_by_id(rid)
+    if record is None:
+        lines.append(
+            f"{method_id}: Newmark displacements were requested but no "
+            f"seismic record is selected, so no displacement was computed.")
+        return lines
+    if not record.is_usable():
+        lines.append(
+            f"{method_id}: the seismic record '{record.name}' cannot be "
+            f"integrated (it needs at least two samples and a positive "
+            f"time interval), so no displacement was computed.")
+        return lines
+
+    from .newmark import Polarity, displacement_for_record
+    try:
+        polarity = Polarity(cfg.polarity)
+    except ValueError:
+        polarity = Polarity.MAXIMUM
+        lines.append(
+            f"{method_id}: '{cfg.polarity}' is not a polarity this program "
+            f"knows, so the maximum of the two was used.")
+
+    for r in valid:
+        if not _has_ky(r):
+            continue
+        ky = r.details["ky"]
+        out = displacement_for_record(
+            record, float(ky), polarity=polarity,
+            allow_upslope=bool(cfg.allow_upslope),
+            scale=float(cfg.scale))
+        if out is None:
+            continue
+        if r.details is None:
+            r.details = {}
+        r.details["newmark_displacement"] = out.displacement
+        r.details["newmark_direct"] = out.direct
+        r.details["newmark_inverse"] = out.inverse
+    return lines

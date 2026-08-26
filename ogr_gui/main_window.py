@@ -206,7 +206,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.126"
+    VERSION = "0.1.127"
 
     def __init__(self) -> None:
         super().__init__()
@@ -480,6 +480,8 @@ class MainWindow(QMainWindow):
         self._mk("add_dist", "Add Distributed Load...", self.act_add_distributed_load, "distributed_load")
         self._mk("add_line", "Add Line Load...", self.act_add_line_load, "line_load")
         self._mk("seismic", "Seismic Load...", self.act_seismic_load, "seismic_load")
+        self._mk("seismic_records", "Seismic Records...",
+                 self.act_seismic_records, "seismic_load")
         self._mk("del_load", "Delete Load", self.act_delete_load, "delete_load")
 
         # Support
@@ -722,7 +724,7 @@ class MainWindow(QMainWindow):
         m_bnd.addAction(self._actions["selection_filter"])
 
         m_load = mb.addMenu(tr("Loading"))
-        for k in ["add_dist", "add_line", "seismic",
+        for k in ["add_dist", "add_line", "seismic", "seismic_records",
                   "modify_load", "del_load"]:
             m_load.addAction(self._actions[k])
 
@@ -1287,7 +1289,8 @@ class MainWindow(QMainWindow):
     # Analysis
     # ==================================================================
     def act_project_settings(self) -> None:
-        dlg = ProjectSettingsDialog(self.project.settings, self)
+        dlg = ProjectSettingsDialog(self.project.settings, self,
+                                    project=self.project)
         if dlg.exec():
             self.project._notify("settings_changed")
             self._update_groundwater_actions()
@@ -3642,6 +3645,22 @@ class MainWindow(QMainWindow):
                 )
             else:
                 self.ogr_status.showMessage("Seismic load disabled", 3000)
+
+    def act_seismic_records(self) -> None:
+        """Open the Seismic Records dialog (v0.1.127).
+
+        The records are project data, like materials: defined here, chosen
+        on the Seismic page of Project Settings.
+        """
+        from .dialogs.seismic_records_dialog import SeismicRecordsDialog
+        dlg = SeismicRecordsDialog(self.project, self)
+        if dlg.exec():
+            dlg.apply()
+            self.project.is_dirty = True
+            self.project._notify("seismic_changed")
+            n = len(self.project.seismic_records)
+            self.ogr_status.showMessage(
+                f"Seismic records: {n}", 4000)
 
     def act_delete_load(self) -> None:
         """Delete a load via a list dialog (also available via right-click).

@@ -748,6 +748,58 @@ class BackAnalysisSettings:
 
 
 @dataclass
+class SeismicAnalysisSettings:
+    """What a seismic run reports, beyond the factor of safety.
+
+    Two analyses, and the second needs the first. ``compute_ky`` asks for
+    the critical seismic coefficient of every surface — the coefficient
+    that brings the factor down to ``ky_target_fos`` — and reports the
+    surface that needs the LOWEST one. ``newmark`` asks for the permanent
+    displacement, which is the double integral of whatever a record does
+    above that coefficient, and reports the surface that moves the MOST.
+
+    They share a search objective and that is not a shortcut: the
+    displacement of a rigid block is non-increasing in the critical
+    acceleration, so the surface that moves most is the surface with the
+    lowest Ky. Turning on ``newmark`` therefore turns on the Ky solve too,
+    and :meth:`objective` says so in one place instead of two.
+
+    v0.1.127.
+    """
+
+    # Critical seismic coefficient for every surface.
+    compute_ky: bool = False
+    # The factor Ky is solved to reach. The reference defaults to 1.0 and
+    # lets the user ask for another; so does this.
+    ky_target_fos: float = 1.0
+
+    # Newmark permanent displacement.
+    newmark: bool = False
+    # Which record, by id. Empty means "none chosen", which is an error
+    # the run reports rather than a zero it invents.
+    record_id: str = ""
+    # Polarity of the record: see ogr_slip2d.newmark.Polarity. The
+    # reference default is the larger of the two polarities.
+    polarity: str = "maximum"
+    # Newmark assumption 4: the upslope resistance is infinite, so the
+    # block only moves downslope. Off means the symmetric two-sided block.
+    allow_upslope: bool = False
+    # The reference offers "do not scale" or "scale by a factor of".
+    # A factor of 1.0 is the first of those, so one field says both.
+    scale: float = 1.0
+
+    # ------------------------------------------------------------------
+    @property
+    def needs_ky(self) -> bool:
+        """Whether a run has to solve Ky for every surface."""
+        return bool(self.compute_ky or self.newmark)
+
+    def objective(self) -> str:
+        """The quantity the search minimises: ``"fos"`` or ``"ky"``."""
+        return "ky" if self.needs_ky else "fos"
+
+
+@dataclass
 class AdvancedSettings:
     """Convergence and admissibility options for the limit-equilibrium run.
 
@@ -951,6 +1003,8 @@ class ProjectSettings:
     design_standard: DesignStandardSettings = field(
         default_factory=DesignStandardSettings)
     advanced: AdvancedSettings = field(default_factory=AdvancedSettings)
+    seismic: SeismicAnalysisSettings = field(
+        default_factory=SeismicAnalysisSettings)
     summary: ProjectSummary = field(default_factory=ProjectSummary)
 
     max_materials: int = 20
@@ -1088,6 +1142,7 @@ class ProjectSettings:
                 k: v for k, v in asdict(self.design_standard).items()
                 if k != "PRESETS"},
             "advanced": asdict(self.advanced),
+            "seismic": asdict(self.seismic),
             "summary": asdict(self.summary),
             "max_materials": self.max_materials,
             "max_supports": self.max_supports,
@@ -1110,6 +1165,7 @@ class ProjectSettings:
                    (data.get("design_standard") or {}).items()
                    if k != "PRESETS"}),
             advanced=AdvancedSettings.from_dict(data.get("advanced", {})),
+            seismic=SeismicAnalysisSettings(**data.get("seismic", {})),
             summary=ProjectSummary(**data.get("summary", {})),
             max_materials=data.get("max_materials", 20),
             max_supports=data.get("max_supports", 20),

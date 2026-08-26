@@ -50,6 +50,10 @@ from ogr_core.project.units import (
 )
 from ogr_gui.i18n import tr
 
+# v0.1.127 — the separator the Seismic page prints between a
+# record's name and its peak acceleration.
+DASH = "—"
+
 
 # ----------------------------------------------------------------------
 class _FailureDirectionSelector(QWidget):
@@ -659,11 +663,18 @@ class _SummaryPage(QWidget):
 class ProjectSettingsDialog(QDialog):
     """Tree-navigated project settings editor."""
 
-    def __init__(self, settings: ProjectSettings, parent=None) -> None:
+    def __init__(self, settings: ProjectSettings, parent=None,
+                 project=None) -> None:
         super().__init__(parent)
         self.setWindowTitle(tr("Project Settings..."))
         self.resize(720, 480)
         self.settings = settings
+        # v0.1.127 — optional, and only the Seismic page reads it: the
+        # seismic records are project data and not settings, so the page
+        # that chooses one has to see the list. Optional because six
+        # callers construct this dialog with settings alone, and none of
+        # them should have to change to go on working.
+        self.project = project
 
         layout = QHBoxLayout(self)
 
@@ -719,12 +730,16 @@ class ProjectSettingsDialog(QDialog):
         ("Random Numbers", "_RandomNumbersPage"),
         ("Design Standard", "_DesignStandardPage"),
         ("Advanced", "_AdvancedPage"),
+        ("Seismic", "_SeismicPage"),
         ("Project Summary", "_SummaryPage"),
     )
 
     def _build_pages(self) -> None:
         for label, cls_name in self._PAGES:
-            self._add_page(label, globals()[cls_name](self.settings))
+            cls = globals()[cls_name]
+            widget = (cls(self.settings, self.project)
+                      if cls_name == "_SeismicPage" else cls(self.settings))
+            self._add_page(label, widget)
         self._refresh_page_gates()
 
     def _add_page(self, label: str, widget: QWidget) -> None:
@@ -860,6 +875,136 @@ class _TransientPage(QWidget):
         self.s.transient_tolerance = self.sp_tol.value()
         self.s.transient_max_iterations = self.sp_iter.value()
         self.s.transient_time_steps = self.sp_steps.value()
+
+
+class _SeismicPage(QWidget):
+    """Seismic analysis: critical coefficient and Newmark displacement.
+
+    Both are switches that change WHAT THE RUN REPORTS, and not merely how
+    it is presented: with either on, the critical surface becomes the one
+    with the lowest critical seismic coefficient instead of the one with
+    the lowest factor of safety. The page says so out loud, because a
+    control that changes the answer quietly is the fault this program
+    keeps finding.
+
+    v0.1.127.
+    """
+
+    def __init__(self, settings, project=None) -> None:
+        super().__init__()
+        self.s = settings.seismic
+        self.project = project
+        form = QFormLayout(self)
+
+        self.cb_ky = QCheckBox(tr("Compute Ky for all surfaces"))
+        self.cb_ky.setChecked(self.s.compute_ky)
+        self.cb_ky.setToolTip(tr(
+            "Report the horizontal seismic coefficient that brings each "
+            "surface to the target factor of safety, and rank the "
+            "surfaces by it."))
+        form.addRow(tr("Critical acceleration:"), self.cb_ky)
+
+        self.sp_target = QDoubleSpinBox()
+        self.sp_target.setDecimals(3)
+        self.sp_target.setRange(0.001, 100.0)
+        self.sp_target.setSingleStep(0.05)
+        self.sp_target.setValue(self.s.ky_target_fos)
+        form.addRow(tr("Target factor of safety:"), self.sp_target)
+
+        self.cb_newmark = QCheckBox(tr("Newmark displacements"))
+        self.cb_newmark.setChecked(self.s.newmark)
+        self.cb_newmark.setToolTip(tr(
+            "Permanent displacement of a rigid sliding block, integrated "
+            "from a seismic record above the critical acceleration."))
+        form.addRow(tr("Permanent displacement:"), self.cb_newmark)
+
+        self.cmb_record = QComboBox()
+        self._fill_records()
+        form.addRow(tr("Seismic record:"), self.cmb_record)
+
+        self.cmb_polarity = QComboBox()
+        self._polarities = (
+            ("maximum", tr("Maximum of both polarities")),
+            ("direct", tr("Direct polarity")),
+            ("inverse", tr("Inverse polarity")),
+            ("average", tr("Average of both polarities")),
+        )
+        for _value, label in self._polarities:
+            self.cmb_polarity.addItem(label)
+        values = [v for v, _ in self._polarities]
+        if self.s.polarity in values:
+            self.cmb_polarity.setCurrentIndex(values.index(self.s.polarity))
+        form.addRow(tr("Displacements computed using:"), self.cmb_polarity)
+
+        self.cb_upslope = QCheckBox(tr("Allow upslope displacement"))
+        self.cb_upslope.setChecked(self.s.allow_upslope)
+        self.cb_upslope.setToolTip(tr(
+            "Off is the usual assumption: the resistance to upslope "
+            "movement is taken as infinite, so the block moves only "
+            "downslope."))
+        form.addRow(tr("Direction:"), self.cb_upslope)
+
+        self.sp_scale = QDoubleSpinBox()
+        self.sp_scale.setDecimals(4)
+        self.sp_scale.setRange(0.0001, 1000.0)
+        self.sp_scale.setSingleStep(0.1)
+        self.sp_scale.setValue(self.s.scale)
+        self.sp_scale.setToolTip(tr(
+            "Multiplies the accelerations of the record. Leave it at 1 to "
+            "use the record as it was measured."))
+        form.addRow(tr("Scale record by a factor of:"), self.sp_scale)
+
+        note = QLabel(tr(
+            "With either option on, the critical surface reported is the "
+            "one with the LOWEST Ky, which is not in general the one with "
+            "the lowest factor of safety. Records are defined under "
+            "Loading."))
+        note.setWordWrap(True)
+        form.addRow("", note)
+
+        self.cb_ky.toggled.connect(self._gate)
+        self.cb_newmark.toggled.connect(self._gate)
+        self._gate()
+
+    # ------------------------------------------------------------------
+    def _fill_records(self) -> None:
+        self.cmb_record.clear()
+        self._record_ids = [""]
+        self.cmb_record.addItem(tr("(none)"))
+        for rec in getattr(self.project, "seismic_records", None) or []:
+            self.cmb_record.addItem(
+                "%s %s %.3f g, %.1f s" % (rec.name, DASH, rec.pga,
+                                          rec.duration))
+            self._record_ids.append(rec.id)
+        if self.s.record_id in self._record_ids:
+            self.cmb_record.setCurrentIndex(
+                self._record_ids.index(self.s.record_id))
+
+    def _gate(self) -> None:
+        """Grey out what the chosen analysis does not read.
+
+        The reference gates its own page the same way, and the reason is
+        rule 7 in miniature: a polarity no analysis reads is a control
+        that does nothing.
+        """
+        self.sp_target.setEnabled(self.cb_ky.isChecked()
+                                  or self.cb_newmark.isChecked())
+        on = self.cb_newmark.isChecked()
+        for widget in (self.cmb_record, self.cmb_polarity, self.cb_upslope,
+                       self.sp_scale):
+            widget.setEnabled(on)
+
+    def apply(self) -> None:
+        self.s.compute_ky = self.cb_ky.isChecked()
+        self.s.ky_target_fos = self.sp_target.value()
+        self.s.newmark = self.cb_newmark.isChecked()
+        index = max(0, self.cmb_record.currentIndex())
+        ids = getattr(self, "_record_ids", [""])
+        self.s.record_id = ids[index] if index < len(ids) else ""
+        self.s.polarity = self._polarities[
+            max(0, self.cmb_polarity.currentIndex())][0]
+        self.s.allow_upslope = self.cb_upslope.isChecked()
+        self.s.scale = self.sp_scale.value()
 
 
 class _StatisticsPage(QWidget):

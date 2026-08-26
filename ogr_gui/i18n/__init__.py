@@ -919,6 +919,47 @@ _DICTS: dict[str, dict[str, str]] = {
         'Search Method:': 'Método de búsqueda:',
         'Segment Length:': 'Longitud de segmento:',
         'Seismic Load': 'Carga sísmica',
+        # ------------------------------------------------
+        # v0.1.127 — Newmark analysis: the seismic records,
+        # the Seismic page of Project Settings and what Interpret
+        # reports when either seismic mode is on.
+        # ------------------------------------------------
+        'Seismic Records...': 'Registros sísmicos...',
+        'Seismic Records': 'Registros sísmicos',
+        'Acceleration-time histories for Newmark displacement analysis.': 'Acelerogramas para el análisis de desplazamiento de Newmark.',
+        'Import from file...': 'Importar de un archivo...',
+        'Delete record': 'Borrar registro',
+        'Time interval (s):': 'Intervalo de tiempo (s):',
+        'File units:': 'Unidades del archivo:',
+        'Unit of the file being imported. Records are stored in g.': 'Unidad del archivo que se importa. Los registros se guardan en g.',
+        'Record:': 'Registro:',
+        'No record defined.': 'Ningún registro definido.',
+        '%d samples, %.3f s, PGA %.4f g': '%d muestras, %.3f s, PGA %.4f g',
+        'Import Seismic Record': 'Importar registro sísmico',
+        'Text files (*.txt *.dat *.csv);;All files (*)': 'Archivos de texto (*.txt *.dat *.csv);;Todos los archivos (*)',
+        'Could not read the file:': 'No se pudo leer el archivo:',
+        'Nothing was imported:': 'No se importó nada:',
+        'Compute Ky for all surfaces': 'Calcular Ky para todas las superficies',
+        'Report the horizontal seismic coefficient that brings each surface to the target factor of safety, and rank the surfaces by it.': 'Informa del coeficiente sísmico horizontal que lleva cada superficie al factor de seguridad objetivo, y ordena las superficies por él.',
+        'Critical acceleration:': 'Aceleración crítica:',
+        'Newmark displacements': 'Desplazamientos de Newmark',
+        'Permanent displacement of a rigid sliding block, integrated from a seismic record above the critical acceleration.': 'Desplazamiento permanente de un bloque rígido deslizante, integrado de un registro sísmico por encima de la aceleración crítica.',
+        'Permanent displacement:': 'Desplazamiento permanente:',
+        'Seismic record:': 'Registro sísmico:',
+        'Displacements computed using:': 'Desplazamientos calculados con:',
+        'Maximum of both polarities': 'Máximo de las dos polaridades',
+        'Direct polarity': 'Polaridad directa',
+        'Inverse polarity': 'Polaridad inversa',
+        'Average of both polarities': 'Media de las dos polaridades',
+        'Allow upslope displacement': 'Permitir desplazamiento talud arriba',
+        'Off is the usual assumption: the resistance to upslope movement is taken as infinite, so the block moves only downslope.': 'Desactivado es la hipótesis habitual: la resistencia al movimiento talud arriba se toma infinita, así que el bloque sólo se mueve talud abajo.',
+        'Direction:': 'Sentido:',
+        'Scale record by a factor of:': 'Escalar el registro por un factor de:',
+        'Multiplies the accelerations of the record. Leave it at 1 to use the record as it was measured.': 'Multiplica las aceleraciones del registro. Déjalo en 1 para usar el registro tal como se midió.',
+        'With either option on, the critical surface reported is the one with the LOWEST Ky, which is not in general the one with the lowest factor of safety. Records are defined under Loading.': 'Con cualquiera de las dos opciones activa, la superficie crítica que se informa es la de Ky MÁS BAJO, que en general no es la de factor de seguridad más bajo. Los registros se definen en Cargas.',
+        'Critical seismic coefficient': 'Coeficiente sísmico crítico',
+        'Newmark displacement': 'Desplazamiento de Newmark',
+        'Ky:': 'Ky:',
         'Select one or more loads to delete:': 'Seleccione una o más cargas para eliminar:',
         'Selectable entity types': 'Tipos de entidad seleccionables',
         'Selection Filter (Ctrl+F)': 'Filtro de selección (Ctrl+F)',
@@ -1444,6 +1485,11 @@ _DICTS: dict[str, dict[str, str]] = {
         "Drawdown level (y)": "Nivel de desembalse (y)",
         "Factor of safety vs drawdown level":
             "Factor de seguridad frente al nivel de desembalse",
+        # v0.1.127 — el encabezado del panel de Interpret. Se coló sin
+        # traducción porque va dentro de una f-string con comillas
+        # simples, que es justo la forma que un rastreador ingenuo no ve;
+        # lo cazó el test de cobertura, que sí la ve.
+        "Critical surface": "Superficie crítica",
         "Critical drawdown level": "Nivel de desembalse crítico",
         "total drawdown": "desembalse total",
         "the total drawdown alone would overstate it by":

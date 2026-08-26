@@ -150,14 +150,14 @@ _INVALID = math.inf
 class _Particle:
     """One trial circle, as a point of the unit cube plus its history."""
 
-    __slots__ = ("u", "v", "fos", "best_u", "best_fos", "result")
+    __slots__ = ("u", "v", "score", "best_u", "best_score", "result")
 
     def __init__(self, u):
         self.u = list(u)
         self.v = [0.0, 0.0, 0.0]
-        self.fos = _INVALID
+        self.score = _INVALID
         self.best_u = list(u)
-        self.best_fos = _INVALID
+        self.best_score = _INVALID
         self.result = None
 
 
@@ -175,12 +175,12 @@ def _distance(a, b) -> float:
 def species_seeds(items, radius: float) -> list:
     """Species seeds of ``items``, best first.
 
-    ``items`` is a sequence of ``(key_position, fos, payload)``. Returns
+    ``items`` is a sequence of ``(key_position, score, payload)``. Returns
     the payloads of the seeds: the best item overall, then the best of
     what is left outside the radius of every seed already taken, and so
     on. Li (2004), section 3.
 
-    Ties in ``fos`` are broken by the original order, so the same input
+    Ties in ``score`` are broken by the original order, so the same input
     always gives the same seeds — a search that promised reproducibility
     from a seed cannot have its REPORTING depend on sort instability.
     """
@@ -188,8 +188,8 @@ def species_seeds(items, radius: float) -> list:
     seeds = []
     taken_positions = []
     for i in order:
-        pos, fos, payload = items[i]
-        if not math.isfinite(fos):
+        pos, score, payload = items[i]
+        if not math.isfinite(score):
             continue
         if any(_distance(pos, p) < radius for p in taken_positions):
             continue
@@ -246,7 +246,9 @@ class ParticleSwarmSearch(BaseSearch):
     def _evaluate(self, project, frame, result, u):
         """Factor of safety of the circle at ``u``, and its result.
 
-        Returns ``(fos, LEMResult or None)``. Everything generated is
+        Returns ``(score, LEMResult or None)`` where the score is the
+        run's objective — the factor of safety, or the critical seismic
+        coefficient when a seismic mode is on. Everything generated is
         appended to ``result.evaluations``, valid or not, so the counts
         the user is shown are the counts the search really made.
         """
@@ -284,7 +286,7 @@ class ParticleSwarmSearch(BaseSearch):
             result.invalid_count += 1
             return _INVALID, None
         result.valid_count += 1
-        return res.fos, res
+        return self.score(res), res
 
     # ------------------------------------------------------------------
     def _neighbours(self, swarm, i):
@@ -308,13 +310,13 @@ class ParticleSwarmSearch(BaseSearch):
         for i, p in enumerate(swarm):
             if self.multiple_minima:
                 j, k = self._neighbours(swarm, i)
-                a = swarm[j].best_u if math.isfinite(swarm[j].best_fos) \
+                a = swarm[j].best_u if math.isfinite(swarm[j].best_score) \
                     else swarm[j].u
-                b = swarm[k].best_u if math.isfinite(swarm[k].best_fos) \
+                b = swarm[k].best_u if math.isfinite(swarm[k].best_score) \
                     else swarm[k].u
             else:
                 a = global_best_u
-                b = p.best_u if math.isfinite(p.best_fos) else p.u
+                b = p.best_u if math.isfinite(p.best_score) else p.u
             r1 = self.rng.random()
             r2 = self.rng.random()
             for d in range(3):
@@ -332,7 +334,8 @@ class ParticleSwarmSearch(BaseSearch):
 
     # ------------------------------------------------------------------
     def _run(self, project: Project) -> SearchResult:
-        result = SearchResult(method_id=self.method.METHOD_ID)
+        result = SearchResult(method_id=self.method.METHOD_ID,
+                              objective=self.objective)
         frame = slope_frame(project, self.initial_angle_lower_deg,
                             self.initial_angle_upper_deg)
         if frame is None:
@@ -341,18 +344,18 @@ class ParticleSwarmSearch(BaseSearch):
         swarm = [_Particle([self.rng.random() for _ in range(3)])
                  for _ in range(self.num_particles)]
         global_best_u = list(swarm[0].u)
-        global_best_fos = _INVALID
+        global_best_score = _INVALID
 
         total = self.num_iterations * self.num_particles
         done = 0
         for it in range(self.num_iterations):
             for p in swarm:
-                p.fos, p.result = self._evaluate(project, frame, result, p.u)
-                if p.fos < p.best_fos:
-                    p.best_fos = p.fos
+                p.score, p.result = self._evaluate(project, frame, result, p.u)
+                if p.score < p.best_score:
+                    p.best_score = p.score
                     p.best_u = list(p.u)
-                if p.fos < global_best_fos:
-                    global_best_fos = p.fos
+                if p.score < global_best_score:
+                    global_best_score = p.score
                     global_best_u = list(p.u)
                 done += 1
             if self.progress_cb is not None:
@@ -380,8 +383,8 @@ class ParticleSwarmSearch(BaseSearch):
             return
         # Ties by index, so the same seed relocates the same particles.
         order = sorted(range(len(swarm)),
-                       key=lambda i: (-swarm[i].fos
-                                      if math.isfinite(swarm[i].fos)
+                       key=lambda i: (-swarm[i].score
+                                      if math.isfinite(swarm[i].score)
                                       else -math.inf, i))
         for i in order[:n]:
             swarm[i].u = [self.rng.random() for _ in range(3)]
@@ -396,19 +399,19 @@ class ParticleSwarmSearch(BaseSearch):
         """
         finals = []
         for p in swarm:
-            if not math.isfinite(p.best_fos):
+            if not math.isfinite(p.best_score):
                 continue
             res = p.result if (p.result is not None
-                               and abs(p.fos - p.best_fos) < 1e-12) else None
+                               and abs(p.score - p.best_score) < 1e-12) else None
             if res is None:
                 # The particle's best is not where it currently stands, so
                 # the surface has to be rebuilt. Re-evaluating rather than
                 # remembering every result keeps the swarm's memory to
                 # three numbers per particle.
-                fos, res = self._evaluate(project, frame, result, p.best_u)
+                _sc, res = self._evaluate(project, frame, result, p.best_u)
                 if res is None:
                     continue
-            finals.append((tuple(p.best_u), p.best_fos, res))
+            finals.append((tuple(p.best_u), p.best_score, res))
 
         if not finals:
             return []

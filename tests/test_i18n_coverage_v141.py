@@ -171,7 +171,14 @@ class TestTranslationCompleteness:
                    # OTHER mode of the same combo IS translated ("Shear" →
                    # "Cortante"), which is what says this one is a name and
                    # not a forgotten entry.
-                   "Ito & Matsui"}
+                   "Ito & Matsui",
+                   # v0.1.127 - the symbol for the critical seismic
+                   # coefficient, in the same class as "Cr:", "d:" and
+                   # "mi:" above: notation, not prose. The words around
+                   # it ARE translated ("Critical acceleration:" ->
+                   # "Aceleracion critica:"), which is what says this one
+                   # is a symbol and not a forgotten entry.
+                   "Ky:"}
         same = [k for k, v in _DICTS["es"].items()
                 if k == v and k not in allowed]
         assert len(same) < 12, same[:15]

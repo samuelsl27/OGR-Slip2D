@@ -68,6 +68,11 @@ def _base_kwargs(legacy: dict) -> dict:
         # Non-Circular alone.
         "optimize": _optimize_argument(legacy.pop("optimize", None)),
         "optimize_seed": legacy.pop("optimize_seed", None),
+        # v0.1.127 — the seismic analysis modes, here for the same
+        # reason as the six above: it decides what the search MINIMISES,
+        # so a search that never received it would quietly go on hunting
+        # the lowest factor of safety while the report said Ky.
+        "seismic_analysis": legacy.pop("seismic_analysis", None),
     }
 
 
@@ -98,6 +103,47 @@ def _optimize_argument(value):
     return value
 
 
+# v0.1.127 — what a search MINIMISES.
+#
+# Until now that was always the factor of safety, so every comparison in
+# this file said ``a.fos < b.fos`` and every one of them meant the same
+# thing. The seismic modes break that: asked for the critical seismic
+# coefficient, the reference reports "the surface which requires the
+# LOWEST value of Ky", and that surface is not in general the one with the
+# lowest factor — the reference says as much, calling its Ky surface
+# "quite different from the critical surface".
+#
+# So the comparison becomes a function, in ONE place, and the seven
+# searches consult it instead of reading ``.fos``. Its default IS
+# ``.fos``, which is what makes the change provable: with the seismic
+# modes off, every search must return output that is bit for bit what it
+# returned before, and that is the test.
+#
+# There is no third objective. The Newmark mode also minimises Ky, because
+# the displacement of a rigid block is non-increasing in the critical
+# acceleration — so the surface that moves the most IS the one with the
+# lowest Ky, and integrating a record inside the search would buy nothing.
+OBJECTIVE_FOS = "fos"
+OBJECTIVE_KY = "ky"
+
+
+def surface_score(result, objective: str = OBJECTIVE_FOS) -> float:
+    """The scalar to minimise for one surface. Lower is more critical.
+
+    ``math.inf`` for a surface that has no answer under this objective,
+    so it can never win a comparison and never has to be special-cased at
+    the call sites.
+    """
+    if result is None or not result.is_valid:
+        return math.inf
+    if objective == OBJECTIVE_KY:
+        ky = (result.details or {}).get("ky")
+        if ky is None or not math.isfinite(ky):
+            return math.inf
+        return float(ky)
+    return result.fos
+
+
 @dataclass
 class SearchResult:
     """Aggregate result of a surface-search run."""
@@ -123,6 +169,10 @@ class SearchResult:
     # fills this is saying something extra — that it looked for several
     # and these are the ones it can tell apart — not something different.
     minima: list = field(default_factory=list)
+    # v0.1.127 — the quantity this run minimised. "fos" for every run
+    # that predates the seismic modes and for every run with them off,
+    # which is why nothing downstream had to learn a new name.
+    objective: str = OBJECTIVE_FOS
     # v0.1.121 — lines the run needs to say once, not once per surface.
     # Weak-layer case generation is the first user: when a surface is cut by
     # more layers than the case limit allows, the set of cases is truncated,
@@ -130,9 +180,13 @@ class SearchResult:
     # said out loud. ``run_analysis`` folds these into its warnings.
     notes: list = field(default_factory=list)
 
+    def score(self, result) -> float:
+        """This run's objective, evaluated on one of its surfaces."""
+        return surface_score(result, self.objective)
+
     @property
     def critical(self) -> Optional[LEMResult]:
-        """Lowest-FoS surface among the ADMISSIBLE ones.
+        """Most critical surface among the ADMISSIBLE ones.
 
         v0.1.32 — surfaces rejected by the post-analysis checks are kept
         in ``evaluations`` (search algorithms that steer on the factor of
@@ -145,7 +199,15 @@ class SearchResult:
         if not valid:
             return None
         ok = [r for r in valid if getattr(r, "admissible", True)]
-        return min(ok or valid, key=lambda r: r.fos)
+        pool = ok or valid
+        best = min(pool, key=self.score)
+        if self.objective != OBJECTIVE_FOS and math.isinf(self.score(best)):
+            # Nothing has an answer under the active objective — every
+            # surface failed to yield a Ky, say. Falling back to the factor
+            # of safety would answer a different question in silence, so
+            # there is no critical surface to report.
+            return None
+        return best
 
     @property
     def total_count(self) -> int:
@@ -193,7 +255,7 @@ class SearchResult:
         return [r for r in self.evaluations if r.is_valid]
 
     def top_n(self, n: int = 10) -> list[LEMResult]:
-        return sorted(self.valid(), key=lambda r: r.fos)[:n]
+        return sorted(self.valid(), key=self.score)[:n]
 
 
 # ======================================================================
@@ -215,6 +277,7 @@ class BaseSearch(ABC):
         slope_limits: Optional[tuple] = None,
         optimize=None,
         optimize_seed: Optional[int] = None,
+        seismic_analysis=None,
     ) -> None:
         self.method = method
         self.num_slices = num_slices
@@ -307,6 +370,25 @@ class BaseSearch(ABC):
         # None would make an analysis unreproducible from the Random Numbers
         # page onwards — which is the promise v0.1.74 went and kept.
         self.optimize_seed = optimize_seed
+        # v0.1.127 — a :class:`SeismicAnalysisSettings`, or None for the
+        # ordinary factor-of-safety run. None is the default so that a
+        # search built by hand behaves exactly as it always did, which is
+        # the same contract ``optimize`` above signs.
+        self.seismic_analysis = seismic_analysis
+        self.objective = (seismic_analysis.objective()
+                          if seismic_analysis is not None
+                          else OBJECTIVE_FOS)
+
+    # ------------------------------------------------------------------
+    def score(self, result: Optional[LEMResult]) -> float:
+        """The scalar this search minimises. Lower is more critical.
+
+        Every comparison a search makes between two surfaces goes through
+        here, so that "better" has one definition per run instead of one
+        per algorithm. With the seismic modes off it returns the factor of
+        safety and the searches behave exactly as they did.
+        """
+        return surface_score(result, self.objective)
 
     # ------------------------------------------------------------------
     def _is_admissible(self, result: Optional[LEMResult]) -> bool:
@@ -404,7 +486,56 @@ class BaseSearch(ABC):
                 error_message=f"Arithmetic failure: {exc}",
             )
         self._is_admissible(res)     # marks res.admissible in place
+        self._solve_ky(project, surface, slices, res)
         return res
+
+    # ------------------------------------------------------------------
+    def _solve_ky(self, project, surface, slices, res) -> None:
+        """Attach the critical seismic coefficient to a solved surface.
+
+        Here and nowhere else, for the reason every other cross-cutting
+        rule in this class is here: ``_analyse`` is the single door the
+        seven searches, Optimize Surfaces and the probabilistic sampler
+        all reach the engine through, so a Ky computed anywhere else is a
+        Ky some door can walk around.
+
+        It costs nothing when the modes are off — one attribute read — and
+        about eight extra solves per surface when they are on. That is the
+        price of the question, not of this implementation: the coefficient
+        is defined by an equation the solver has to be run to evaluate.
+
+        The slices are reused as they are. The slicer does not read the
+        seismic coefficient, so they are the right slices for every trial
+        value — see ``ogr_slip2d.yield_acceleration``.
+        """
+        cfg = self.seismic_analysis
+        if cfg is None or not cfg.needs_ky:
+            return
+        if res is None or not res.is_valid:
+            return
+        from .yield_acceleration import critical_seismic_coefficient
+        # ``res.fos`` is FS at the project's OWN horizontal coefficient,
+        # which is FS(0) only when that coefficient is zero. Handing it to
+        # the solver as the starting point of a scan over kh would be
+        # comparing two different questions: a model carrying kh = 0.15
+        # would have its scan anchored at the factor WITH the earthquake
+        # and then walk kh from zero, so every bracket would be wrong and
+        # a plausible Ky would come back. When the project applies a
+        # coefficient of its own, the solver is left to evaluate FS(0)
+        # itself — one extra solve, and the right question.
+        seismic = getattr(project, "seismic", None)
+        applied_kh = (float(getattr(seismic, "kh", 0.0) or 0.0)
+                      if getattr(seismic, "enabled", False) else 0.0)
+        out = critical_seismic_coefficient(
+            self.method, project, surface, slices,
+            target_fos=float(cfg.ky_target_fos),
+            fos_initial=(res.fos if applied_kh == 0.0 else None))
+        if res.details is None:
+            res.details = {}
+        res.details["ky"] = out.ky
+        res.details["ky_fos"] = out.fos_at_ky
+        if out.note:
+            res.details["ky_note"] = out.note
 
     # ------------------------------------------------------------------
     def _weak_bands(self, project: Project):
@@ -565,7 +696,8 @@ class BaseSearch(ABC):
                     continue
                 if best is None:
                     best = res
-                elif res.is_valid and (not best.is_valid or res.fos < best.fos):
+                elif res.is_valid and (not best.is_valid
+                                       or self.score(res) < self.score(best)):
                     best = res
         return best
 
@@ -912,7 +1044,7 @@ class BaseSearch(ABC):
                 continue
             if not getattr(res, "admissible", True):
                 continue
-            if best is None or res.fos < best.fos:
+            if best is None or self.score(res) < self.score(best):
                 best = res
 
         if best is None:
@@ -921,7 +1053,7 @@ class BaseSearch(ABC):
         # optimisation that ends where it started has produced no new
         # surface, and adding one would inflate the count for nothing.
         critical = result.critical
-        if critical is not None and best.fos >= critical.fos:
+        if critical is not None and self.score(best) >= self.score(critical):
             return
         result.optimized = best
         result.evaluations.append(best)
@@ -958,14 +1090,14 @@ class BaseSearch(ABC):
                 _s, res, _rep = optimize_surface(project, self, start, opts)
                 if (res is not None and res.is_valid
                         and getattr(res, "admissible", True)
-                        and res.fos < r.fos):
+                        and self.score(res) < self.score(r)):
                     result.evaluations.append(res)
                     result.valid_count += 1
                     keep = res
-                    if improved is None or res.fos < improved.fos:
+                    if improved is None or self.score(res) < self.score(improved):
                         improved = res
             kept.append(keep)
-        result.minima = sorted(kept, key=lambda x: x.fos)
+        result.minima = sorted(kept, key=self.score)
         # ``optimized`` means "the answer came from the walk, not the
         # search", so it is only set when the walk actually produced the
         # global minimum.
@@ -1162,7 +1294,8 @@ def _parallel_grid_run(search, project, centres, workers):
     if cb is not None:
         cb(n, n)
 
-    merged = SearchResult(method_id=search.method.METHOD_ID)
+    merged = SearchResult(method_id=search.method.METHOD_ID,
+                          objective=search.objective)
     for part in parts:
         merged.evaluations.extend(part.evaluations)
         merged.valid_count += part.valid_count
@@ -1486,7 +1619,8 @@ class GridSearch(BaseSearch):
         """
         slope_pts = self._slope_surface(project)
 
-        result = SearchResult(method_id=self.method.METHOD_ID)
+        result = SearchResult(method_id=self.method.METHOD_ID,
+                              objective=self.objective)
         processed = done_before
         n_circles = self.radius_increment + 1  # circles per centre
 
@@ -1752,7 +1886,8 @@ class SlopeSearch(BaseSearch):
         self.rng = random.Random(seed)
 
     def _run(self, project: Project) -> SearchResult:
-        result = SearchResult(method_id=self.method.METHOD_ID)
+        result = SearchResult(method_id=self.method.METHOD_ID,
+                              objective=self.objective)
 
         # v0.1.126 — the frame moved to ``slope_frame`` so the Particle
         # Swarm search reads the SAME one. Nothing about it changed; the
@@ -1808,7 +1943,7 @@ class SlopeSearch(BaseSearch):
                 result.evaluations.append(res)
                 if res.is_valid:
                     result.valid_count += 1
-                    best.append((res.fos, cx, cy, radius))
+                    best.append((self.score(res), cx, cy, radius))
                 else:
                     result.invalid_count += 1
             else:
@@ -1841,8 +1976,8 @@ class SlopeSearch(BaseSearch):
                         continue
                     result.evaluations.append(res)
                     result.valid_count += 1
-                    if res.fos < cur_f:
-                        cur_f = res.fos
+                    if self.score(res) < cur_f:
+                        cur_f = self.score(res)
                         cur = (tcx, tcy, tr)
 
         if self.progress_cb:
@@ -1970,7 +2105,8 @@ class AutoRefineSearch(BaseSearch):
         from ogr_core.geometry import BoundaryType
         from .surface import SlipCircle
 
-        result = SearchResult(method_id=self.method.METHOD_ID)
+        result = SearchResult(method_id=self.method.METHOD_ID,
+                              objective=self.objective)
 
         ext = None
         for b in project.boundaries:
@@ -2104,7 +2240,7 @@ class AutoRefineSearch(BaseSearch):
                         result.evaluations.append(res)
                         result.valid_count += 1
                         for d in (i, j):
-                            div_fos_sum[d] += res.fos
+                            div_fos_sum[d] += self.score(res)
                             div_fos_cnt[d] += 1
 
             # Average FoS per division; keep the lowest fraction
@@ -2265,7 +2401,8 @@ class BlockSearch(BaseSearch):
         from .surface import SlipSurface
 
         rng = random.Random(self.seed)
-        result = SearchResult(method_id=self.method.METHOD_ID)
+        result = SearchResult(method_id=self.method.METHOD_ID,
+                              objective=self.objective)
 
         try:
             xmin, ymin, xmax, ymax = project.bounding_box()
@@ -2806,7 +2943,8 @@ class PathSearch(BaseSearch):
         from .surface import SlipSurface
 
         rng = random.Random(self.seed)
-        result = SearchResult(method_id=self.method.METHOD_ID)
+        result = SearchResult(method_id=self.method.METHOD_ID,
+                              objective=self.objective)
 
         ext = None
         for b in project.boundaries:
@@ -3362,7 +3500,8 @@ class SimulatedAnnealingSearch(BaseSearch):
     # Top-level: HSA = VFSA + LMC
     # ==================================================================
     def _run(self, project) -> SearchResult:
-        result = SearchResult(method_id=self.method.METHOD_ID)
+        result = SearchResult(method_id=self.method.METHOD_ID,
+                              objective=self.objective)
         # v0.1.119 — a generator of its OWN, not ``random.seed()`` on the
         # module. The old line reproduced (it re-seeded on every run, so two
         # runs agreed) and still broke rule 5: it left the process-wide
@@ -3602,7 +3741,7 @@ class SimulatedAnnealingSearch(BaseSearch):
         # what keeps the search out of the forbidden basin.
         if not (0.5 <= res.fos <= 100.0):
             return None, None
-        return res, res.fos
+        return res, self.score(res)
 
     # ------------------------------------------------------------------
     def _steer(self, project, result, verts):

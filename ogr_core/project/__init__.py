@@ -5,6 +5,7 @@ from .project import FILE_FORMAT_VERSION, Project
 from .results_io import RESULTS_FORMAT_VERSION, load_summary, save_results
 from .settings import (
     AdvancedSettings,
+    SeismicAnalysisSettings,
     GroundwaterMethod,
     GroundwaterSettings,
     LEMMethod,
@@ -37,6 +38,7 @@ __all__ = [
     "SearchSettings",
     "StatisticsSettings",
     "AdvancedSettings",
+    "SeismicAnalysisSettings",
     "LEMMethod",
     "GroundwaterMethod",
     "SearchMethod",

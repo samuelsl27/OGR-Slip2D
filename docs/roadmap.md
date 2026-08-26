@@ -72,7 +72,9 @@
 
 - 3D slope stability (OGR Slope3D)
 - Strength Reduction Method (SRM) — FEM-based stability
-- Earthquake time-history analysis (Newmark sliding block)
+- ~~Earthquake time-history analysis (Newmark sliding block)~~ — **shipped in v0.1.127**, rigid block only; the coupled and
+  decoupled flexible-block analyses remain research directions,
+  because they need a 1-D site response this program does not have
 - Machine-learning-assisted surface search
 - Integration with QGIS as a processing provider
 

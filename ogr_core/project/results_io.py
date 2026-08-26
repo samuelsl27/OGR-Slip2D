@@ -92,6 +92,12 @@ def save_results(
         f.attrs["n_surfaces"] = len(search_result.evaluations)
         f.attrs["n_valid"] = search_result.valid_count
         f.attrs["n_invalid"] = search_result.invalid_count
+        # v0.1.127 — which quantity the run minimised. A results file
+        # that records only the factor of safety cannot say which surface
+        # was the answer when the answer was a critical seismic
+        # coefficient, and "the one with the lowest fos" would be the
+        # wrong one.
+        f.attrs["objective"] = getattr(search_result, "objective", "fos")
         if extra_meta:
             for k, v in extra_meta.items():
                 try:
@@ -109,6 +115,14 @@ def save_results(
             sg.attrs["method"] = res.method_id
             sg.attrs["is_valid"] = res.is_valid
             sg.attrs["error"] = res.error_message or ""
+            # v0.1.127 — the seismic extras, written only when the run
+            # produced them, so a file from an ordinary run is byte for
+            # byte the file it always was.
+            for key in ("ky", "ky_fos", "newmark_displacement"):
+                value = (res.details or {}).get(key)
+                if value is not None:
+                    sg.attrs[key] = (float(value) if np.isfinite(value)
+                                     else np.nan)
 
             sd = res.surface.to_dict()
             sg.attrs["surface_type"] = sd["type"]
