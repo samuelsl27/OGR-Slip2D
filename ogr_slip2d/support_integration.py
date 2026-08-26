@@ -33,6 +33,16 @@ Implementation follows Slide's convention:
     downhill of the slip surface genuinely pushes the mass, and saying so
     is the point of publishing the angle.
 
+  - v0.1.124 — a type that declares ``SUPPORTS_SHEAR`` contributes a
+    SECOND vector: ``shear_at`` perpendicular to its own axis, on the side
+    that opposes the slide, added to the axial one. The reference states
+    it in words: "the vector perpendicular to the bolt direction, and
+    opposite to the direction of failure, is added to the overall bolt
+    capacity vector [...] the support force at the base of the slice is no
+    longer parallel to the support but angled in a direction opposite to
+    the slip direction". Until this version ``shear_at`` was declared by
+    three types, editable and serialised, and read by nobody.
+
   - The force is then decomposed into HORIZONTAL (H_s) and VERTICAL
     (V_s) components. The slice into whose base x-range the intersection
     falls receives those components, plus a flag for Active vs Passive.
@@ -418,6 +428,44 @@ def _slip_tangent_at_x(slices, x: float) -> Optional[float]:
     return None
 
 
+def _resisting_tangent_angle(
+    slip_tangent: float, is_left_to_right_failure: bool,
+) -> float:
+    """Angle of the slip-surface tangent, in the sense that RESISTS.
+
+    The slip tangent has slope ``slip_tangent``; of its two directions the
+    resisting one is the one pointing against the movement. If sliding is
+    right to left the resisting tangent points right, which is
+    ``atan(slip_tangent)``; the other way round it is that plus pi.
+
+    v0.1.124 -- lifted out of :func:`_support_force_angle` because the
+    shear capacity needs the same reference direction to decide which of
+    the two perpendiculars to the support opposes the slide. A rule
+    written in two places goes stale in one of them.
+    """
+    if is_left_to_right_failure:
+        return math.atan(slip_tangent) + math.pi
+    return math.atan(slip_tangent)
+
+
+def _resisting_perpendicular(
+    axis_angle: float, tangent_angle: float,
+) -> float:
+    """Perpendicular to a support axis, on the side that resists sliding.
+
+    Two perpendiculars exist; the shear a reinforcement mobilises acts
+    AGAINST the movement, so take the one whose projection on the
+    resisting tangent is positive. Before v0.1.112 the caller returned
+    ``axis_angle + pi/2`` unconditionally -- right only for a pile drawn
+    head-at-top, and silently pushing the mass downhill for one drawn the
+    other way round.
+    """
+    perp = axis_angle + math.pi / 2
+    if math.cos(perp - tangent_angle) < 0.0:
+        perp -= math.pi
+    return perp
+
+
 def _support_force_angle(
     support: "SupportInstance",
     slip_tangent: float,
@@ -457,18 +505,8 @@ def _support_force_angle(
 
     o = support.orientation
     axis_angle = support.axis_angle_rad()  # head (face) → tail (anchor)
-
-    # The slip tangent vector points along the slip surface; we
-    # orient it to oppose the sliding direction (resisting tangent).
-    # If sliding is right→left, the resisting tangent points right
-    # (positive cos). The slip-surface tangent has slope ``slip_tangent``;
-    # the resisting tangent angle is therefore atan(slip_tangent).
-    if is_left_to_right_failure:
-        # Slide moves rightward → resisting tangent points left
-        tangent_angle = math.atan(slip_tangent) + math.pi
-    else:
-        # Slide moves leftward → resisting tangent points right
-        tangent_angle = math.atan(slip_tangent)
+    tangent_angle = _resisting_tangent_angle(
+        slip_tangent, is_left_to_right_failure)
 
     if o == ForceOrientation.TANGENT_TO_SLIP:
         return tangent_angle
@@ -487,16 +525,7 @@ def _support_force_angle(
     if o == ForceOrientation.HORIZONTAL:
         return math.pi if is_left_to_right_failure else 0.0
     if o == ForceOrientation.PERPENDICULAR_TO_PILE:
-        # Perpendicular to the pile axis. Two of them exist; the shear a
-        # pile mobilises acts AGAINST the movement, so take the one whose
-        # projection on the resisting tangent is positive. Before
-        # v0.1.112 this returned ``axis_angle + pi/2`` unconditionally —
-        # right only for a pile drawn head-at-top, and silently pushing
-        # the mass downhill for one drawn the other way round.
-        perp = axis_angle + math.pi / 2
-        if math.cos(perp - tangent_angle) < 0.0:
-            perp -= math.pi
-        return perp
+        return _resisting_perpendicular(axis_angle, tangent_angle)
     if o == ForceOrientation.USER_DEFINED:
         return math.radians(support.user_angle_deg)
     return axis_angle
@@ -633,7 +662,29 @@ def compute_support_effects(
 
         F = stype.force_at(d_along, L_total,
                            bond_profiles.get(support.id))
-        if F <= 0:
+
+        # v0.1.124 -- the SHEAR capacity, at last connected to something.
+        # Until this version ``shear_at`` and ``SUPPORTS_SHEAR`` were
+        # declared by three types, editable, serialised and read by NOBODY
+        # outside ``ogr_core/support/support.py``: a configurable control
+        # that could not move the number, which is the defect rule 7
+        # exists for. The reference says what it does, in words: "the
+        # vector perpendicular to the bolt direction, and opposite to the
+        # direction of failure, is added to the overall bolt capacity
+        # vector [...] the support force at the base of the slice is no
+        # longer parallel to the support but angled in a direction
+        # opposite to the slip direction". So it is a SECOND vector, not a
+        # bigger axial one, and the two are summed here.
+        V = 0.0
+        if getattr(stype, "SUPPORTS_SHEAR", False):
+            try:
+                V = max(0.0, float(stype.shear_at(d_along, L_total)))
+            except Exception:  # noqa: BLE001 - a plugin must not kill a run
+                V = 0.0
+        # A support with no axial capacity left but some shear still acts.
+        # Before v0.1.124 the guard was ``F <= 0`` alone, which was right
+        # only because the shear reached nothing.
+        if F <= 0 and V <= 0:
             continue
 
         # Force orientation angle
@@ -641,6 +692,19 @@ def compute_support_effects(
         ang = _support_force_angle(support, slip_slope, is_l2r)
         Fh = F * math.cos(ang)
         Fv = F * math.sin(ang)
+        if V > 0.0:
+            perp = _resisting_perpendicular(
+                support.axis_angle_rad(),
+                _resisting_tangent_angle(slip_slope, is_l2r))
+            Fh += V * math.cos(perp)
+            Fv += V * math.sin(perp)
+            # The RESULTANT replaces the axial force from here on, which is
+            # what makes the split into T_S and T_N, the Active/Passive
+            # flag and the nine methods work unchanged. With ``V = 0`` the
+            # arithmetic below is untouched, bit for bit, and that is what
+            # protects every model validated before this version.
+            F = math.hypot(Fh, Fv)
+            ang = math.atan2(Fv, Fh)
 
         from ogr_core.support import ForceApplication
         is_active = (support.force_application == ForceApplication.ACTIVE)

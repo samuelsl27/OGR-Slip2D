@@ -348,6 +348,7 @@ class SupportItem(DomainItem):
         "geosynthetic": "#8c564b",            # brown
         "user_defined": "#7f7f7f",            # grey
         "retaining_wall_efp": "#17becf",      # teal
+        "helical_anchor": "#e377c2",          # pink
     }
 
     def __init__(

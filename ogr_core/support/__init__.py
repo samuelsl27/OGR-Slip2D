@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Samuel Sáez López — Universidad Politécnica de Cartagena
 """Structural support / reinforcement plugin system.
 
-8 built-in support types:
+9 built-in support types:
     - End Anchored
     - Grouted Tieback
     - Grouted Tieback with Friction
@@ -11,6 +11,7 @@
     - Geosynthetic
     - User Defined
     - Retaining Wall (EFP)
+    - Helical Anchor
 
 Plus :class:`SupportPattern` for batch creation of regular rows, and
 :class:`BondProfile` (v0.1.116), a per-unit-length quantity sampled along
@@ -62,6 +63,17 @@ from .support import (
 # ``__init__`` is what guarantees it has run before anything can ask
 # the registry for the type.
 from .retaining_wall import RetainingWallEFP
+from .helical_anchor import (
+    NC_AT_ZERO_FRICTION,
+    HelicalAnchor,
+    bearing_factors,
+    effective_spacing,
+    equivalent_projected_area,
+    helix_distances,
+    plate_bearing,
+    pullout_capacities,
+    stripping_capacities,
+)
 
 __all__ = [
     "SupportType",
@@ -77,6 +89,7 @@ __all__ = [
     "Geosynthetic",
     "UserDefined",
     "RetainingWallEFP",
+    "HelicalAnchor",
     "support_registry",
     "support_from_dict",
     "register_support",
@@ -94,4 +107,12 @@ __all__ = [
     "lateral_force_c_phi",
     "lateral_force_cohesionless",
     "lateral_force_cohesive",
+    "NC_AT_ZERO_FRICTION",
+    "bearing_factors",
+    "effective_spacing",
+    "equivalent_projected_area",
+    "helix_distances",
+    "plate_bearing",
+    "pullout_capacities",
+    "stripping_capacities",
 ]

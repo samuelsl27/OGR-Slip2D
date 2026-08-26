@@ -22,7 +22,7 @@ class TestSupportRegistry:
         for sid in (
             "end_anchored", "grouted_tieback", "grouted_tieback_friction",
             "soil_nail", "pile_micropile", "geosynthetic", "user_defined",
-            "retaining_wall_efp",
+            "retaining_wall_efp", "helical_anchor",
         ):
             assert sid in ids, f"Missing support type: {sid}"
 

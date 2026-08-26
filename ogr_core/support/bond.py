@@ -13,6 +13,14 @@ the support ONCE PER ANALYSIS, and ``force_at`` integrates the samples from
 the head to the cut. Everything below about WHY the profile can be built
 once and reused for every trial surface applies unchanged to both.
 
+v0.1.124 — and to a third thing, which is not per unit length at all: the
+``stations``, discrete points where a type needs a value that exists only
+there. A helical anchor's plates bear at their own positions and nowhere
+between them, so no per-segment average can stand in for them. They ride in
+the same object because they are built by the same pass, from the same
+stress state, and because ``force_at(d, L, bond)`` then keeps its signature
+for all nine types.
+
 v0.1.116 — until this version every stress-dependent pullout law in
 :mod:`ogr_core.support.support` was a placeholder: ``tau = self.adhesion``
 in ``GroutedTiebackFriction`` and in ``Geosynthetic``'s Mohr-Coulomb mode,
@@ -112,21 +120,30 @@ class BondProfile:
     total_length: float
     tau: tuple[float, ...]
     cum: tuple[float, ...]
+    #: v0.1.124 — DISCRETE points along the support, ``(distance from the
+    #: head, value)``, for the part of a capacity that is not a per-unit-length
+    #: quantity at all: the bearing capacity of a helical anchor's plates,
+    #: which exists at the plates and nowhere else. Sampled by the same pass,
+    #: with the same stress state, once per analysis. Empty for every type
+    #: that has none, which is all of them but one.
+    stations: tuple[tuple[float, float], ...] = ()
 
     # ------------------------------------------------------------------
     @classmethod
-    def from_samples(cls, tau, total_length: float) -> "BondProfile":
+    def from_samples(cls, tau, total_length: float,
+                     stations=()) -> "BondProfile":
         """Build a profile from per-segment strengths, head to tail."""
+        st = tuple((float(d), float(v)) for d, v in stations)
         tau_t = tuple(float(t) for t in tau)
         if not tau_t or total_length <= 0.0:
-            return cls(max(0.0, float(total_length)), (), (0.0,))
+            return cls(max(0.0, float(total_length)), (), (0.0,), st)
         step = total_length / len(tau_t)
         cum = [0.0]
         run = 0.0
         for t in tau_t:
             run += t * step
             cum.append(run)
-        return cls(float(total_length), tau_t, tuple(cum))
+        return cls(float(total_length), tau_t, tuple(cum), st)
 
     @classmethod
     def uniform(cls, tau: float, total_length: float) -> "BondProfile":
@@ -297,17 +314,33 @@ def build_bond_profile(
     step = length / segments
     axis_angle = support.axis_angle_rad()
 
-    taus = []
-    for i in range(segments):
-        s = (i + 0.5) * step
+    def _state(s: float):
         x = hx + ux * s
         y = hy + uy * s
         sigma_v_eff, u, depth = sigma_v_effective_at(project, x, y)
-        taus.append(stype.interface_tau(
-            sigma_v_eff, project=project, x=x, y=y,
-            pore_pressure=u, depth=depth, axis_angle_rad=axis_angle,
-        ))
-    return BondProfile.from_samples(taus, length)
+        return sigma_v_eff, dict(
+            project=project, x=x, y=y, pore_pressure=u, depth=depth,
+            axis_angle_rad=axis_angle)
+
+    taus = []
+    for i in range(segments):
+        sigma_v_eff, ctx = _state((i + 0.5) * step)
+        taus.append(stype.interface_tau(sigma_v_eff, **ctx))
+
+    # v0.1.124 — the discrete half. A helical anchor needs the bearing
+    # capacity AT each of its plates, which no per-segment average can
+    # stand in for: the plates sit at fixed distances along the anchor and
+    # their positions have nothing to do with the sampling step. They are
+    # gathered here, in the same pass and from the same stress state, so
+    # that ``force_at`` keeps its signature and the cache stays a single
+    # object built once per analysis.
+    stations = []
+    for d in stype.station_distances(length):
+        d = float(d)
+        sigma_v_eff, ctx = _state(min(max(0.0, d), length))
+        stations.append((d, stype.station_value(sigma_v_eff, **ctx)))
+
+    return BondProfile.from_samples(taus, length, stations)
 
 
 def _layer_top_at(project: "Project", x: float, y: float):

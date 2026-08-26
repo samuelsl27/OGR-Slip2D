@@ -152,7 +152,10 @@ class SupportType(ABC):
     # GUI tabs: groups parameters into tabs e.g. {"General": ["spacing"],
     #           "Pullout": ["bond_strength", "adhesion"]}
     PARAMETER_TABS: ClassVar[dict] = {}
-    # Whether this type supports shear capacity (extra perpendicular force)
+    # Whether this type supports shear capacity (extra perpendicular force).
+    # v0.1.124 — this is now the ENGINE's gate: ``compute_support_effects``
+    # asks for ``shear_at`` only when a type declares it. Until then the
+    # flag, like the method it guards, was read by nobody.
     SUPPORTS_SHEAR: ClassVar[bool] = False
     # v0.1.116 — whether this type's capacity depends on the stress state
     # along the reinforcement, and therefore needs a ``BondProfile``.
@@ -193,13 +196,55 @@ class SupportType(ABC):
         """
         return 0.0
 
+    def capacity_modes(
+        self, distance_from_head: float, total_length: float,
+        bond: "BondProfile | None" = None,
+    ) -> dict:
+        """Capacity of each failure mode at the cut, kN/m of slope.
+
+        The keys are ASCII tokens, not labels: a user-visible name is
+        translated GUI-side, which is where ``tr()`` can reach it. An empty
+        dict means "this type has no modes to break down" — a constant, a
+        table — and the caller then has only the applied force.
+
+        v0.1.124 — the types that HAVE modes compute them here and let
+        :meth:`force_at` be the minimum, rather than the other way round.
+        Two writings of the same formula drift apart; a test pins
+        ``force_at == min(capacity_modes)`` for every registered type.
+        """
+        return {}
+
+    def station_distances(self, total_length: float) -> tuple:
+        """Distances from the head where this type needs a POINT sample.
+
+        v0.1.124 — the companion of :meth:`interface_tau` for what is not a
+        per-unit-length quantity. A helical anchor answers with its plate
+        positions; every other type answers with nothing and pays nothing.
+        """
+        return ()
+
+    def station_value(self, sigma_v_eff: float, **ctx) -> float:
+        """Value at one of :meth:`station_distances`, in kN.
+
+        Same keyword context as :meth:`interface_tau`, evaluated in the
+        same pass over the support.
+        """
+        return 0.0
+
     def shear_at(
         self, distance_from_head: float, total_length: float,
     ) -> float:
-        """Optional perpendicular shear force at the intersection.
+        """Optional perpendicular shear force at the intersection, kN/m.
 
-        Returns 0 by default. Soil Nail and Grouted Tieback override
-        when the ``shear_capacity`` parameter is enabled.
+        Returns 0 by default. The four types that declare
+        ``SUPPORTS_SHEAR`` override it, dividing their shear capacity by
+        the out-of-plane spacing like every other capacity here.
+
+        v0.1.124 — what comes back is a SECOND force vector, perpendicular
+        to the support axis and pointing against the slide, summed with the
+        axial one by ``compute_support_effects``. Until that version this
+        method was declared, editable, serialised and read by nobody, so
+        the setting behind it could not move the number.
         """
         return 0.0
 
@@ -424,11 +469,11 @@ class GroutedTieback(SupportType):
     out_of_plane_spacing: float = 2.0
     shear_capacity: float = 0.0
 
-    def force_at(self, distance_from_head: float, total_length: float,
-                 bond=None) -> float:
+    def capacity_modes(self, distance_from_head: float,
+                       total_length: float, bond=None) -> dict:
         s = self.out_of_plane_spacing
         if s <= 0 or total_length <= 0:
-            return 0.0
+            return {}
         bond_len = total_length * self.bond_length_percent / 100.0
         free_len = total_length - bond_len
         x = max(0.0, min(distance_from_head, total_length))
@@ -445,12 +490,20 @@ class GroutedTieback(SupportType):
         else:
             L_i = x - free_len
 
-        f_pullout = (self.bond_strength * L_o) / s
-        f_tensile = self.tensile_capacity / s
-        # Stripping is plate + however much bond is on the head side
-        f_stripping = (self.plate_capacity + self.bond_strength * L_i) / s
+        return {
+            "pullout": (self.bond_strength * L_o) / s,
+            "tensile": self.tensile_capacity / s,
+            # Stripping is plate + however much bond is on the head side
+            "stripping": (self.plate_capacity
+                          + self.bond_strength * L_i) / s,
+        }
 
-        return max(0.0, min(f_pullout, f_tensile, f_stripping))
+    def force_at(self, distance_from_head: float, total_length: float,
+                 bond=None) -> float:
+        modes = self.capacity_modes(distance_from_head, total_length, bond)
+        if not modes:
+            return 0.0
+        return max(0.0, min(modes.values()))
 
     def shear_at(self, distance_from_head: float, total_length: float) -> float:
         if self.out_of_plane_spacing <= 0:
@@ -576,11 +629,11 @@ class GroutedTiebackFriction(SupportType):
                                self.friction_angle_bond,
                                self.shear_strength_model)
 
-    def force_at(self, distance_from_head: float, total_length: float,
-                 bond=None) -> float:
+    def capacity_modes(self, distance_from_head: float,
+                       total_length: float, bond=None) -> dict:
         s = self.out_of_plane_spacing
         if s <= 0 or total_length <= 0:
-            return 0.0
+            return {}
         bond_len = total_length * self.bond_length_percent / 100.0
         free_len = total_length - bond_len
         x = max(0.0, min(distance_from_head, total_length))
@@ -606,10 +659,18 @@ class GroutedTiebackFriction(SupportType):
             bond_o = bond.integral(lo_start, total_length)
             bond_i = bond.integral(free_len, li_end)
 
-        f_pullout = perim * bond_o / s
-        f_tensile = self.tensile_capacity / s
-        f_stripping = (self.plate_capacity + perim * bond_i) / s
-        return max(0.0, min(f_pullout, f_tensile, f_stripping))
+        return {
+            "pullout": perim * bond_o / s,
+            "tensile": self.tensile_capacity / s,
+            "stripping": (self.plate_capacity + perim * bond_i) / s,
+        }
+
+    def force_at(self, distance_from_head: float, total_length: float,
+                 bond=None) -> float:
+        modes = self.capacity_modes(distance_from_head, total_length, bond)
+        if not modes:
+            return 0.0
+        return max(0.0, min(modes.values()))
 
     def shear_at(self, distance_from_head: float, total_length: float) -> float:
         if self.out_of_plane_spacing <= 0:
@@ -703,18 +764,27 @@ class SoilNail(SupportType):
     out_of_plane_spacing: float = 1.5
     shear_capacity: float = 0.0
 
-    def force_at(self, distance_from_head: float, total_length: float,
-                 bond=None) -> float:
+    def capacity_modes(self, distance_from_head: float,
+                       total_length: float, bond=None) -> dict:
         s = self.out_of_plane_spacing
         if s <= 0 or total_length <= 0:
-            return 0.0
+            return {}
         x = max(0.0, min(distance_from_head, total_length))
         L_o = max(0.0, total_length - x)  # bond behind slip
         L_i = x                            # bond ahead of slip
-        f_pullout = (self.bond_strength * L_o) / s
-        f_tensile = self.tensile_capacity / s
-        f_stripping = (self.plate_capacity + self.bond_strength * L_i) / s
-        return max(0.0, min(f_pullout, f_tensile, f_stripping))
+        return {
+            "pullout": (self.bond_strength * L_o) / s,
+            "tensile": self.tensile_capacity / s,
+            "stripping": (self.plate_capacity
+                          + self.bond_strength * L_i) / s,
+        }
+
+    def force_at(self, distance_from_head: float, total_length: float,
+                 bond=None) -> float:
+        modes = self.capacity_modes(distance_from_head, total_length, bond)
+        if not modes:
+            return 0.0
+        return max(0.0, min(modes.values()))
 
     def shear_at(self, distance_from_head: float, total_length: float) -> float:
         if self.out_of_plane_spacing <= 0:

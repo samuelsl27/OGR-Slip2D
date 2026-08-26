@@ -1519,6 +1519,70 @@ _DICTS: dict[str, dict[str, str]] = {
             "pilote = cortante del pilote ÷ separación; en modo Ito & "
             "Matsui es la presión del terreno integrada sobre la fila, que "
             "crece con la profundidad.",
+
+        # --- v0.1.124 · ancla helicoidal y diagrama de fuerza -----------
+        # Terminología: «arrancamiento» (pullout) y «descabezamiento»
+        # (stripping) ya venían de v0.1.116; se añaden los tres tipos de
+        # rotura de cada uno. «Rotura somera» es la que rompe hasta la
+        # superficie, «corte cilíndrico» la que moviliza el cilindro de
+        # suelo entre placas, y «hundimiento» la capacidad portante de una
+        # placa, que en castellano geotécnico es hundimiento y no
+        # «apoyo». «Hélice» y «fuste» son los términos corrientes.
+        "Helical Anchor": "Anclaje helicoidal",
+        "Screw anchor with helical plates. The capacity is computed from "
+        "the soil, not entered: shallow failure, cylindrical shear and "
+        "individual bearing compete for pullout and for stripping, and "
+        "the diagram steps as the slip surface passes each plate.":
+            "Anclaje de hélices atornillado. La capacidad no se escribe, "
+            "se calcula del terreno: la rotura somera, el corte cilíndrico "
+            "y el hundimiento individual compiten en arrancamiento y en "
+            "descabezamiento, y el diagrama escalona al pasar cada placa.",
+        "Round": "Redondo",
+        "Square": "Cuadrado",
+
+        "Support Force Diagram...": "Diagrama de fuerza del soporte...",
+        "Support Force Diagram": "Diagrama de fuerza del soporte",
+        "Requires at least one support in the model.":
+            "Requiere al menos un soporte en el modelo.",
+        "Support:": "Soporte:",
+        "Distance from head (m)": "Distancia desde la cabeza (m)",
+        "Force per metre of slope (kN/m)":
+            "Fuerza por metro de talud (kN/m)",
+        "Applied": "Aplicada",
+        "At the slip surface: %.4f kN/m":
+            "En la superficie de rotura: %.4f kN/m",
+        "Pullout": "Arrancamiento",
+        "Stripping": "Descabezamiento",
+        "Tensile": "Tracción",
+        "Pullout - shallow failure": "Arrancamiento - rotura somera",
+        "Pullout - cylindrical shear": "Arrancamiento - corte cilíndrico",
+        "Pullout - individual bearing":
+            "Arrancamiento - hundimiento individual",
+        "Stripping - shallow failure": "Descabezamiento - rotura somera",
+        "Stripping - cylindrical shear":
+            "Descabezamiento - corte cilíndrico",
+        "Stripping - individual bearing":
+            "Descabezamiento - hundimiento individual",
+        "This support type publishes no failure modes; only the applied "
+        "force is shown.":
+            "Este tipo de soporte no publica modos de rotura; sólo se "
+            "muestra la fuerza aplicada.",
+
+        "The helix spacing of support '%s' is %.2f times the average "
+        "helix diameter. Design guides recommend 5 to 12.":
+            "La separación entre hélices del soporte «%s» es %.2f veces "
+            "el diámetro medio. Las guías de diseño recomiendan de 5 a 12.",
+        "The shaft of support '%s' is not narrower than its helices, so "
+        "the plates have no bearing area and the anchor carries nothing "
+        "in pullout.":
+            "El fuste del soporte «%s» no es más estrecho que sus "
+            "hélices, así que las placas no tienen área de apoyo y el "
+            "anclaje no resiste nada al arrancamiento.",
+        "The %d helices of support '%s' do not fit at %.2f m: the spacing "
+        "used is %.2f m, the anchor length divided by the number of gaps.":
+            "Las %d hélices del soporte «%s» no caben a %.2f m: la "
+            "separación empleada es %.2f m, la longitud del anclaje "
+            "dividida entre el número de huecos.",
     },
 }
 

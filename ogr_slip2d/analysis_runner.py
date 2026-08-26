@@ -197,9 +197,11 @@ def settings_warnings(project, method_ids=()) -> list[str]:
     # v0.1.123 — the Ito-Matsui pile row, and the *location of force*
     # setting, which two types now offer and which therefore stopped
     # belonging to either of them.
+    from .helical_anchor_notes import helical_anchor_notes
     from .ito_matsui_notes import ito_matsui_notes
     from .support_notes import force_location_notes
     notes.extend(ito_matsui_notes(project, method_ids))
+    notes.extend(helical_anchor_notes(project, method_ids))
     notes.extend(force_location_notes(project, method_ids))
     s_search = project.settings.search
     if (s_search.search_method == "slope"

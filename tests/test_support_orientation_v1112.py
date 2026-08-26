@@ -334,6 +334,15 @@ class TestTheTypeDefaultsReachTheInstance:
             # quoted as a fluid pressure is a HORIZONTAL pressure, and
             # projecting it on the wall axis would change the resultant.
             "retaining_wall_efp": ForceOrientation.HORIZONTAL,
+            # v0.1.124 - the helical anchor. Its page, unlike the pile's,
+            # states no default orientation at all; what declares TANGENT
+            # is the reference's OWN verification model for this type,
+            # whose support table reads "Tangent to Slip Surface". Chosen
+            # before any factor of safety was measured, deliberately: the
+            # published number for that model would have been decided by
+            # the orientation, and choosing one because it fits is what
+            # cost two versions in v0.1.112.
+            "helical_anchor": ForceOrientation.TANGENT_TO_SLIP,
         }
         # Every registered type must be listed: a new plugin should make
         # this fail rather than slip through untested.

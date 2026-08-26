@@ -46,6 +46,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QSpinBox,
     QTabWidget,
     QTableWidget,
     QTableWidgetItem,
@@ -110,6 +111,12 @@ _CHOICES: dict[str, list[tuple[str, str]]] = {
     "failure_mode": [
         ("Shear", "shear"),
         ("Ito & Matsui", "ito_matsui"),
+    ],
+    # v0.1.124 - the helical anchor. Only the AREA of the shaft matters,
+    # which is what the plate loses to it.
+    "shaft_type": [
+        ("Round", "round"),
+        ("Square", "square"),
     ],
 }
 
@@ -219,6 +226,27 @@ class _SupportParamPanel(QWidget):
                 combo.currentIndexChanged.connect(self._sync_used_fields)
             self._sync_used_fields()
 
+        # v0.1.124 - and the same job done by a NUMBER rather than a combo:
+        # a helical anchor with one plate has nothing to space, and the
+        # reference hides the input below two for that reason. Same defect
+        # if it were left editable, one level up from an inert setting.
+        for gate in (getattr(type_cls, "PARAMETER_ENABLED_WHEN", None)
+                     or {}).values():
+            ed = self._editors.get(gate[0])
+            if ed is not None and hasattr(ed, "valueChanged"):
+                ed.valueChanged.connect(self._sync_enabled_fields)
+        self._sync_enabled_fields()
+
+    def _sync_enabled_fields(self) -> None:
+        """Grey out fields whose enabling threshold is not met."""
+        spec = getattr(self._type_cls, "PARAMETER_ENABLED_WHEN", None) or {}
+        for name, (other, minimum) in spec.items():
+            ed = self._editors.get(name)
+            src = self._editors.get(other)
+            if ed is None or src is None or not hasattr(src, "value"):
+                continue
+            ed.setEnabled(float(src.value()) >= float(minimum))
+
     def _sync_used_fields(self) -> None:
         """Grey out the parameters the chosen mode does not read."""
         spec = getattr(self._type_cls, "PARAMETER_USED_BY", None) or {}
@@ -261,6 +289,17 @@ class _SupportParamPanel(QWidget):
             editor.setToolTip(desc)
             self._editors[name] = editor
             return editor
+        # A COUNT is an integer, and offering 2.5 helices in a spin box
+        # with four decimals is offering something the model cannot mean.
+        # v0.1.124: no parameter declared an int default before this one,
+        # so no existing type changes editor.
+        if isinstance(default, int) and not isinstance(default, bool):
+            counter = QSpinBox()
+            counter.setRange(1, 1000)
+            counter.setValue(int(round(float(value))))
+            counter.setToolTip(desc)
+            self._editors[name] = counter
+            return counter
         # Numeric
         spin = QDoubleSpinBox()
         spin.setRange(-1e9, 1e9)
@@ -324,7 +363,9 @@ class _SupportParamPanel(QWidget):
         constructor of the SupportType subclass."""
         out: dict = {}
         for name, editor in self._editors.items():
-            if isinstance(editor, QDoubleSpinBox):
+            if isinstance(editor, QSpinBox):
+                out[name] = editor.value()
+            elif isinstance(editor, QDoubleSpinBox):
                 out[name] = editor.value()
             elif isinstance(editor, QComboBox):
                 out[name] = editor.currentData()

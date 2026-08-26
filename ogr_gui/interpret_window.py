@@ -798,6 +798,18 @@ class InterpretWindow(QMainWindow):
             "Requires at least one support in the model."))
         m_data.addAction(self._act_support_force)
 
+        # v0.1.124 -- what ``Support Force Analysis`` cannot say: WHICH
+        # failure mode governs. A helical anchor has seven competing, and
+        # the winner changes twice along a five-metre anchor.
+        self._act_support_diagram = QAction(
+            tr("Support Force Diagram..."), self,
+            triggered=self._support_force_diagram)
+        self._act_support_diagram.setEnabled(
+            bool(getattr(self.project, "supports", [])))
+        self._act_support_diagram.setToolTip(tr(
+            "Requires at least one support in the model."))
+        m_data.addAction(self._act_support_diagram)
+
         m_data.addAction(QAction(tr("Back Analysis..."), self,
                                  triggered=self._back_analysis_report))
         self._act_supp_contours = QAction(tr("Supplemental Contours"), self,
@@ -1372,6 +1384,26 @@ class InterpretWindow(QMainWindow):
                            else tr("capacity not defined")))
         self._info(tr("Supports on the critical surface (FS = %.4f):")
                    % crit.fos + "\n\n" + "\n".join(rows))
+
+    def _support_force_diagram(self) -> None:
+        """Capacity of one support along its length, mode by mode.
+
+        NON-modal, like every other informative chart here: the diagram is
+        meant to be read beside the model, not instead of it.
+        """
+        if not getattr(self.project, "supports", None):
+            self._info(tr("Requires at least one support in the model."))
+            return
+        from ogr_gui.dialogs.support_force_diagram import (
+            SupportForceDiagramWindow,
+        )
+        res = self.search_result
+        crit = res.critical if res else None
+        win = SupportForceDiagramWindow(self.project, crit, self)
+        win.show()
+        if not hasattr(self, "_chart_windows"):
+            self._chart_windows = []
+        self._chart_windows.append(win)
 
     def _back_analysis_report(self) -> None:
         """Support force required to reach a target factor of safety."""
