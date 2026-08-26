@@ -730,9 +730,28 @@ class UnsaturatedSeepageSolver(SeepageSolver):
     avoids re-meshing altogether.
     """
 
+    #: How many times one boundary node may flip between "free" and
+    #: "held at P = 0" before it is frozen in its current state.
+    #:
+    #: v0.1.125 — this was **3**, and three is not a backstop, it is a
+    #: cap that fires during ordinary convergence. On the verification
+    #: dam of problem 102 it froze 47 of the 77 nodes of the exit face,
+    #: left the free surface 4.5 m too high, and the run still reported
+    #: ``converged = True`` — because a frozen node cannot change the
+    #: active set, and "the active set stopped changing" was the
+    #: convergence test. The factor of safety came out 9.4 % low, in the
+    #: unsafe direction and in silence.
+    #:
+    #: The chatter the budget exists for is actually stopped by the two
+    #: hysteresis bands below; the budget is only there for the case they
+    #: do not. Measured on that dam: the answer is identical for every
+    #: budget from 10 upwards (1.7174 at 10, at 40 and at 200), so the
+    #: cure cost nothing and the cap was pure damage.
+    DEFAULT_MAX_NODE_SWITCHES = 25
+
     def __init__(self, *args, relaxation: float = 0.5,
                  max_iterations: int = 200, tolerance: float = 1e-4,
-                 max_node_switches: int = 3,
+                 max_node_switches: Optional[int] = None,
                  switch_pressure_tol: float = 0.0,
                  **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -740,6 +759,8 @@ class UnsaturatedSeepageSolver(SeepageSolver):
         self.max_iterations = max(1, max_iterations)
         self.tolerance = tolerance
         # Anti-chatter budget for the seepage-face switching
+        if max_node_switches is None:
+            max_node_switches = self.DEFAULT_MAX_NODE_SWITCHES
         self.max_node_switches = max(1, max_node_switches)
         # Hysteresis band on the pressure-head decision; 0 → derived
         # from the mesh size in solve_unsaturated()
@@ -865,13 +886,57 @@ class UnsaturatedSeepageSolver(SeepageSolver):
         final.notes["relaxation"] = self.relaxation
         final.notes["kr_min"] = min(kr) if kr else 1.0
         final.notes["kr_max"] = max(kr) if kr else 1.0
-        if not converged:
+        # v0.1.125 — a frozen node is an unresolved boundary condition,
+        # and until this version nothing said so: freezing made the
+        # active set stop changing, which was read as convergence. The
+        # count is recorded even when zero so a run can be asked the
+        # question, and the check below asks it of the FINAL state
+        # rather than trusting that the loop ended for the right reason.
+        frozen = sorted(nid for nid, k in switches.items()
+                        if k >= self.max_node_switches)
+        final.notes["frozen_nodes"] = len(frozen)
+        unsettled = self._unsettled_nodes(final, unknown, active, p_tol,
+                                          q_tol)
+        final.notes["unsettled_nodes"] = len(unsettled)
+        if unsettled:
+            final.converged = False
+            final.notes["warning"] = (
+                f"the seepage face never settled: {len(unsettled)} "
+                f"boundary node(s) still want to switch between "
+                f"'P = 0' and 'no flow' "
+                f"({len(frozen)} were frozen by the switch budget of "
+                f"{self.max_node_switches}). The free surface this "
+                f"reports is not the converged one.")
+        elif not converged:
             final.notes["warning"] = (
                 f"Picard iteration did not converge in "
                 f"{self.max_iterations} steps (last change "
                 f"{history[-1]:.3e} m). Try a smaller relaxation factor "
                 f"or a finer mesh.")
         return final
+
+    # ------------------------------------------------------------------
+    def _unsettled_nodes(self, result, unknown, active, p_tol, q_tol
+                         ) -> list:
+        """Seepage-face nodes whose condition the final state violates.
+
+        The unilateral condition is "P = 0 **or** Q = 0, and never water
+        entering". A node left free whose pressure came out positive, or
+        held at zero pressure while water is being pushed in, breaks it —
+        whatever the iteration did on the way there. Asking the answer
+        instead of the loop is what makes the budget unable to hide.
+        """
+        out = []
+        for nid in unknown:
+            y = self.mesh.nodes[nid].y
+            if nid in active:
+                q_node = (result.reactions[nid] if result.reactions
+                          else 0.0)
+                if q_node > q_tol:
+                    out.append(nid)
+            elif result.total_head and result.total_head[nid] - y > p_tol:
+                out.append(nid)
+        return out
 
     # ------------------------------------------------------------------
     def free_surface_points(self, result: SeepageResult,
@@ -1193,7 +1258,17 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
             steady = super().solve_unsaturated(base_bcs)
             if not steady.total_head:
                 out = SeepageResult()
-                out.notes["error"] = "initial steady state failed"
+                # v0.1.125 — carry the reason through. It used to be
+                # replaced by this summary, and the summary is the one
+                # thing the caller already knew: the steady solver names
+                # the cause precisely — most often "no Dirichlet (head)
+                # boundary condition", which is a mistake the user can
+                # fix the moment somebody tells them.
+                why = (steady.notes.get("error")
+                       or steady.notes.get("warning") or "")
+                out.notes["error"] = (
+                    f"initial steady state failed: {why}" if why
+                    else "initial steady state failed")
                 return [out]
             H = list(steady.total_head)
 
@@ -1212,8 +1287,15 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
                                      for p in res.pressure_head]
                 res.gamma_w = self.gamma_w   # a zero-span stage still has
                 res.converged = True         # to survive a save
+                # v0.1.125 — ``calculate_sf`` travels with a zero-span
+                # stage too. Without it the INITIAL instant of a
+                # transient — the one stage that always has zero span —
+                # could be ticked *Calculate SF* and quietly produce no
+                # factor at all, because the consumer looks for this key
+                # and only the stages that actually advanced had it.
                 res.notes.update({"stage": k, "time": stage.time,
-                                  "time_steps": 0})
+                                  "time_steps": 0,
+                                  "calculate_sf": stage.calculate_sf})
                 results.append(res)
                 continue
 

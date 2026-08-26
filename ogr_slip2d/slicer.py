@@ -870,7 +870,28 @@ def distributed_loads_on(project: Project, x_left: float, x_right: float,
 
 
 # ----------------------------------------------------------------------
-def apply_unsaturated_policy(u: float, material) -> tuple[float, float]:
+def negative_pore_pressure_cutoff(project) -> Optional[float]:
+    """The project's cap on matric suction, or None when there is none.
+
+    Defensive on purpose: a project built in a test without full settings
+    gets the documented default, which is no cap at all.
+    """
+    try:
+        v = project.settings.groundwater.negative_pore_pressure_cutoff
+    except AttributeError:
+        return None
+    if v is None:
+        return None
+    try:
+        v = float(v)
+    except (TypeError, ValueError):
+        return None
+    return abs(v) if math.isfinite(v) else None
+
+
+def apply_unsaturated_policy(u: float, material,
+                             cutoff: Optional[float] = None
+                             ) -> tuple[float, float]:
     """Apply the extended Mohr-Coulomb treatment of matric suction.
 
     A seepage analysis returns NEGATIVE pore pressures above the water
@@ -897,10 +918,24 @@ def apply_unsaturated_policy(u: float, material) -> tuple[float, float]:
     exactly the conservative "truncate u at 0" behaviour, obtained as a
     special case rather than as a separate switch.
 
+    ``cutoff`` is the project's **negative pore pressure cutoff**: the
+    largest suction allowed to reach the strength calculation, applied
+    BEFORE the envelope because what it bounds is the pressure, not the
+    cohesion derived from it. ``None`` means no limit, which is the
+    reference default and what this function did until v0.1.125 — and
+    also the reason it exists: with no limit, a slope that has drained
+    for a long time develops suction all the way to the crest, and
+    ``(suction - AEV)*tan(phi_b)`` then hands it a cohesion that no
+    laboratory ever measured.
+
     Returns ``(u_effective, extra_cohesion)``.
     """
     if u >= 0.0 or material is None:
         return u, 0.0
+    if cutoff is not None:
+        # The reference states it takes the negative of the absolute
+        # value, so the sign the user typed cannot change the meaning.
+        u = max(u, -abs(float(cutoff)))
     suction = -u
     aev = max(getattr(material, "air_entry_value", 0.0) or 0.0, 0.0)
     if suction <= aev:
@@ -1189,6 +1224,12 @@ def slice_surface(
 
     result = Slices()
 
+    # v0.1.125 — the project's negative pore pressure cutoff, read ONCE
+    # for the same reason as the line below: it cannot change while a
+    # surface is being sliced, and a per-slice lookup would ask the same
+    # question a thousand times per surface.
+    _u_cutoff = negative_pore_pressure_cutoff(project)
+
     # v0.1.120 — asked ONCE, of the project, not once per slice: whether
     # any material's strength model reads the distance to the slope face.
     wants_slope_distance = any(
@@ -1427,7 +1468,7 @@ def slice_surface(
         # seepage analysis can return u < 0; everything else already
         # clamps at zero, so this is a no-op for those methods.
         u_raw = u
-        u, c_suction = apply_unsaturated_policy(u, mat)
+        u, c_suction = apply_unsaturated_policy(u, mat, _u_cutoff)
 
         # v0.1.75 — excess pore pressure from undrained loading, added to
         # the INITIAL pore pressure the groundwater method just produced,

@@ -13,7 +13,14 @@ Reproduces the reference dialog's behaviour:
   restricted to segments** — it cannot be applied to individual nodes;
 * assignment by boundary side rather than by mouse picking, which keeps
   this first iteration usable without a full interactive picking mode on
-  the canvas (that belongs with the mesh-editing tools).
+  the canvas (that belongs with the mesh-editing tools);
+* v0.1.125 — and, above the four sides, **a reservoir**. Four whole sides
+  cannot say where a body of water is: putting "total head = 24" on the
+  ground surface puts it on the crest of the dam and down the far face as
+  well, so a model with water on one side only was not expressible at
+  all. A reservoir is one number and a side, and the wetted perimeter
+  follows from the geometry (``ogr_fem2d.solvers.bc_targets``). A
+  drawdown is the same target with a lower level.
 
 The dialog edits a :class:`SeepageBoundaryConditions` in place and is
 only reachable when a mesh exists — the reference disables the option
@@ -35,12 +42,17 @@ from PySide6.QtWidgets import (
     QLabel,
     QListWidget,
     QListWidgetItem,
-    QMessageBox,
     QPushButton,
     QVBoxLayout,
 )
 
-from ogr_fem2d.solvers import BCType, SeepageBoundaryConditions
+from ogr_fem2d.solvers import (
+    BCType,
+    SIDE_LEFT,
+    SIDE_RIGHT,
+    SeepageBoundaryConditions,
+    wetted_nodes,
+)
 from ogr_gui.i18n import tr  # noqa: E402
 
 _BC_LABELS = [
@@ -124,6 +136,16 @@ class BoundaryConditionsDialog(QDialog):
             it = QListWidgetItem(f"{name}  ({len(ids)} nodes)")
             it.setData(32, name)
             self.list_sides.addItem(it)
+        # The reservoir targets. They are Total Head by construction — a
+        # water level IS a prescribed total head — so choosing one sets
+        # the type, rather than letting the two disagree.
+        for label, side in ((tr("Reservoir on the left, at Value"),
+                             SIDE_LEFT),
+                            (tr("Reservoir on the right, at Value"),
+                             SIDE_RIGHT)):
+            it = QListWidgetItem(label)
+            it.setData(32, "reservoir:" + side)
+            self.list_sides.addItem(it)
         v.addWidget(self.list_sides, 1)
 
         row = QHBoxLayout()
@@ -165,10 +187,13 @@ class BoundaryConditionsDialog(QDialog):
     def _assign(self) -> None:
         item = self.list_sides.currentItem()
         if item is None:
-            QMessageBox.information(self, "Assign",
-                                    "Select a boundary to assign to.")
+            self.lbl_summary.setText(
+                tr("Select a boundary to assign to."))
             return
         name = item.data(32)
+        if str(name).startswith("reservoir:"):
+            self._assign_reservoir(str(name).split(":", 1)[1])
+            return
         ids = self.sides.get(name, [])
         if not ids:
             return
@@ -193,6 +218,29 @@ class BoundaryConditionsDialog(QDialog):
                 self.bcs.add_node(nid, t, value,
                                   self.chk_seepage.isChecked())
         self._refresh_summary()
+
+    def _assign_reservoir(self, side: str) -> None:
+        """Prescribe a body of water standing at *Value* on one side.
+
+        Reports how many nodes it reached. A reservoir that touched two
+        nodes because the level was set below the toe is the mistake this
+        number exists to make visible; the dialog cannot know the right
+        answer, but it can refuse to be quiet about a suspicious one.
+        """
+        level = self.sp_value.value()
+        ids = wetted_nodes(self.mesh, level, side)
+        if not ids:
+            self.lbl_summary.setText(tr(
+                "No boundary node is below that level on that side: "
+                "nothing was assigned."))
+            return
+        for nid in ids:
+            self.bcs.add_node(nid, BCType.TOTAL_HEAD, float(level))
+        self.cbo_type.setCurrentIndex(0)     # Total Head, to match
+        self._refresh_summary()
+        self.lbl_summary.setText(
+            tr("Reservoir at %.3f: %d node(s) submerged.  ")
+            % (level, len(ids)) + self.lbl_summary.text())
 
     def _defaults(self) -> None:
         from ogr_fem2d.solvers import default_boundary_conditions

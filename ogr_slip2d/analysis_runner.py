@@ -48,6 +48,7 @@ __all__ = [
     "AnalysisOutcome",
     "build_method",
     "build_search",
+    "AnalysisNotConfigured",
     "check_analysis_settings",
     "daylight_tangent_note",
     "grid_edge_note",
@@ -827,8 +828,20 @@ def _slope_limits(s_search):
 
 
 # ======================================================================
+class AnalysisNotConfigured(ValueError):
+    """The project cannot be analysed as configured.
+
+    Carries the list of reasons ``check_analysis_settings`` gave.
+    """
+
+    def __init__(self, problems) -> None:
+        self.problems = list(problems)
+        super().__init__("  ".join(self.problems))
+
+
 def run_analysis(project, method_ids=None,
-                 progress_cb: Optional[Callable] = None) -> AnalysisOutcome:
+                 progress_cb: Optional[Callable] = None,
+                 *, allow_unconfigured: bool = False) -> AnalysisOutcome:
     """Run one configured search per method and return every result.
 
     ``progress_cb(done, total)`` is called across the whole run, not per
@@ -838,7 +851,24 @@ def run_analysis(project, method_ids=None,
     by substituting a factored **copy** of the project. Every analysis
     path downstream then reads the factored values without knowing the
     feature exists, and the caller's project is never modified.
+
+    v0.1.125 — this **refuses** a project ``check_analysis_settings``
+    objects to, raising :class:`AnalysisNotConfigured`. The guard was
+    written in v0.1.77 and then wired only into the command line and the
+    interface, so the one caller that most needed it — a script — kept
+    getting a plausible factor of safety computed from settings that had
+    been silently dropped. A material taking its pore pressure from a
+    finite-element field that was never computed reports u = 0
+    everywhere, which looks exactly like a dry slope.
+
+    ``allow_unconfigured`` runs anyway, for a caller that has already
+    read the problems and decided.
     """
+    if not allow_unconfigured:
+        problems = check_analysis_settings(project)
+        if problems:
+            raise AnalysisNotConfigured(problems)
+
     from ogr_core.project import apply_design_factors
     project, factor_report = apply_design_factors(project)
 

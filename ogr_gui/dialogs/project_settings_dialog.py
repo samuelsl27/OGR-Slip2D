@@ -451,10 +451,37 @@ class _GroundwaterPage(QWidget):
             "α=0 and Hu=1."
         )
 
+        # v0.1.125 — the cap on matric suction. Off by default, which is
+        # both the reference default and what this program did before it
+        # existed; when it is off there is NO upper limit on the negative
+        # pore pressure that reaches the strength calculation, and a
+        # long-drained slope can be handed a suction cohesion nothing
+        # measured.
+        cut = s.groundwater.negative_pore_pressure_cutoff
+        self.cb_ucut = QCheckBox(tr("Negative pore pressure cutoff"))
+        self.cb_ucut.setChecked(cut is not None)
+        self.cb_ucut.setToolTip(tr(
+            "Caps the matric suction used in the shear strength. It bites "
+            "wherever a material declares Unsaturated Shear Strength "
+            "parameters — EITHER of them: with phi_b it bounds the extra "
+            "cohesion, and with an air entry value it bounds the negative "
+            "pore pressure itself. Only a material with both at zero is "
+            "unaffected."
+        ))
+        self.dsp_ucut = QDoubleSpinBox()
+        self.dsp_ucut.setRange(0.0, 1e6)
+        self.dsp_ucut.setDecimals(3)
+        self.dsp_ucut.setSuffix(" kPa")
+        self.dsp_ucut.setValue(abs(cut) if cut is not None else 100.0)
+        self.dsp_ucut.setEnabled(cut is not None)
+        self.cb_ucut.toggled.connect(self.dsp_ucut.setEnabled)
+
         form.addRow(tr("Method:"), self.cbo_method)
         form.addRow(tr("Pore Fluid Unit Weight:"), self.dsp_gamma)
         form.addRow(tr("Default Hu:"), self.dsp_hu)
         form.addRow("", self.cb_auto_hu)
+        form.addRow("", self.cb_ucut)
+        form.addRow(tr("Cutoff value:"), self.dsp_ucut)
         root.addWidget(basic)
 
         # Advanced (Rapid Drawdown / Excess Pore Pressure)
@@ -545,6 +572,8 @@ class _GroundwaterPage(QWidget):
         self.s.groundwater.pore_fluid_unit_weight = self.dsp_gamma.value()
         self.s.groundwater.default_hu = self.dsp_hu.value()
         self.s.groundwater.auto_hu = self.cb_auto_hu.isChecked()
+        self.s.groundwater.negative_pore_pressure_cutoff = (
+            self.dsp_ucut.value() if self.cb_ucut.isChecked() else None)
         # v0.1.68 — go through set_advanced_option instead of writing the
         # three flags by hand. v0.1.74 — and read it from a radio group,
         # so "which of the three" has exactly one answer coming from

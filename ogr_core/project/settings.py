@@ -155,6 +155,23 @@ class GroundwaterSettings:
     # model starts already in equilibrium with them.
     transient_initial_bcs: Optional[dict] = None
     rapid_drawdown_method: str = "b_bar"  # b_bar | duncan_wright | corps_2 | lowe_karafiath
+    # v0.1.125 — the largest matric suction allowed to reach the strength
+    # calculation, in kPa. ``None`` means no limit, which is both the
+    # reference default and what this program did until this version.
+    #
+    # It bites wherever a material declares Unsaturated Shear Strength
+    # parameters, and EITHER of the two is enough: phi_b makes it bound
+    # the extra cohesion, and an air entry value makes it bound the
+    # negative pore pressure itself, because below the air entry value
+    # the real suction is kept and credited to the saturated friction
+    # angle. Only a material with BOTH at zero is unaffected — measured:
+    # with phi_b = 0 and AEV = 50, a suction of 90 kPa reaches the
+    # strength as -50 without a cap and as -20 with a cap of 20.
+    #
+    # Where it bites it matters a great deal — a slope drained for a long
+    # time develops suction all the way to its crest. The sign is
+    # ignored: the absolute value is used, as the reference states.
+    negative_pore_pressure_cutoff: Optional[float] = None
     # Hu coefficient default (per material can override). 1.0 = full
     # hydrostatic pressure under a horizontal water table.
     default_hu: float = 1.0

@@ -30,7 +30,10 @@ The other invariants:
   * the three Dirichlet types have to agree on what "the head is" —
     ``pressure_head`` of 5 at y = 10 is the same reservoir as
     ``total_head`` of 15;
-  * Neumann conditions and seepage faces prescribe no level at all.
+  * Neumann conditions and seepage faces prescribe no level at all;
+  * v0.1.125 — and the level exists ONLY where water was prescribed. It
+    is not extrapolated past the ends of a body of water, and not
+    interpolated across the gap between two of them.
 """
 from __future__ import annotations
 
@@ -261,8 +264,60 @@ class TestVaryingHead:
         assert abs(ponded_water_level_at(p, 0.0)
                    - (GROUND_Y + 10.0)) < 1e-9
 
-    def test_outside_the_wet_nodes_the_level_is_held(self):
+    def test_outside_the_wet_nodes_there_is_no_level(self):
+        """v0.1.125 — this test used to assert the OPPOSITE, and it was
+        wrong: it required the level to be HELD at its end value for
+        every abscissa beyond the last submerged node.
+
+        The rule looked harmless because it is harmless as long as the
+        ground stays above the water beyond the pond, and on a single
+        slope it always does. It stops being harmless the moment the
+        ground comes back down somewhere else — which is what a dam is.
+        On the verification dam of problem 102 the prescribed nodes end
+        partway up the upstream face, the ground rises to the crest and
+        then falls again to the apron, and the held level put seventeen
+        metres of standing water on the downstream slope: a factor of
+        safety of 5.83 where the answer is 1.72.
+
+        The drawn water surfaces had always answered this correctly —
+        ``interp_y_on_polyline`` returns None outside its own x-range —
+        so the two routes disagreed and this was the one that was wrong.
+        """
         from ogr_core.hydraulic.ponded_water import ponded_water_level_at
         p = _with_bcs(_flat_project(), GROUND_Y + 5.0, xs=(20.0, 40.0))
-        assert abs(ponded_water_level_at(p, 0.0)
+        assert ponded_water_level_at(p, 0.0) is None
+        assert ponded_water_level_at(p, 60.0) is None
+        # and inside it is still there, unchanged
+        assert abs(ponded_water_level_at(p, 30.0)
                    - (GROUND_Y + 5.0)) < 1e-9
+
+    def test_the_held_level_would_have_invented_water_downhill(self):
+        """The discriminating case, which the old rule could not survive:
+        ground that comes back DOWN beyond the prescribed water."""
+        from ogr_core.hydraulic.ponded_water import ponded_depth_at
+        p = _with_bcs(_flat_project(), GROUND_Y + 5.0, xs=(20.0, 40.0))
+        # Eight metres lower, and nothing prescribed there. Holding the
+        # level would report thirteen metres of standing water.
+        assert ponded_depth_at(p, 0.0, GROUND_Y - 8.0) == 0.0
+        assert ponded_depth_at(p, 30.0, GROUND_Y) == 5.0
+
+    def test_two_bodies_of_water_do_not_ramp_into_each_other(self):
+        """A headwater and a tailwater at different levels are two
+        reservoirs, not one sloping surface. Without the mesh topology
+        this stub cannot separate them, so the guarantee that has to hold
+        here is the weaker one that still forbids the invention: the
+        level is never higher than the highest head prescribed, and never
+        exists outside the prescribed span."""
+        from ogr_core.hydraulic.ponded_water import ponded_water_level_at
+        p = _flat_project()
+        p.fem_mesh = _Mesh([_Node(0.0, GROUND_Y), _Node(20.0, GROUND_Y),
+                            _Node(40.0, GROUND_Y), _Node(60.0, GROUND_Y)])
+        p.seepage_bcs = _BCSet([
+            _BC(0, "total_head", GROUND_Y + 20.0),
+            _BC(1, "total_head", GROUND_Y + 20.0),
+            _BC(2, "total_head", GROUND_Y + 2.0),
+            _BC(3, "total_head", GROUND_Y + 2.0)])
+        for x in (0.0, 20.0, 30.0, 40.0, 60.0):
+            level = ponded_water_level_at(p, x)
+            assert level is not None
+            assert level <= GROUND_Y + 20.0 + 1e-9

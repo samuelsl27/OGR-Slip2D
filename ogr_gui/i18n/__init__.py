@@ -1583,6 +1583,58 @@ _DICTS: dict[str, dict[str, str]] = {
             "Las %d hélices del soporte «%s» no caben a %.2f m: la "
             "separación empleada es %.2f m, la longitud del anclaje "
             "dividida entre el número de huecos.",
+
+        # --- v0.1.125 · filtración transitoria acoplada -----------------
+        # Terminología: «embalse» para el agua prescrita por condiciones
+        # de contorno, «perímetro mojado» para la parte del contorno que
+        # toca, «desembalse» para bajarlo (el término ya está en el
+        # programa desde v0.1.7, en la línea de desembalse) y «succión
+        # matricial» para la presión intersticial negativa. «Corte» de la
+        # succión y no «recorte»: es un tope, no una poda.
+        "Reservoir on the left, at Value":
+            "Embalse por la izquierda, a la cota de Valor",
+        "Reservoir on the right, at Value":
+            "Embalse por la derecha, a la cota de Valor",
+        "Select a boundary to assign to.":
+            "Elige un contorno al que asignar.",
+        "No boundary node is below that level on that side: "
+        "nothing was assigned.":
+            "Ningún nodo del contorno queda bajo esa cota por ese lado: "
+            "no se ha asignado nada.",
+        "Reservoir at %.3f: %d node(s) submerged.  ":
+            "Embalse a %.3f: %d nodo(s) sumergido(s).  ",
+
+        "Groundwater analysis: %s": "Análisis de filtración: %s",
+        "Cannot compute: %s": "No se puede calcular: %s",
+        "Negative pore pressure cutoff":
+            "Tope de presión intersticial negativa",
+        "Cutoff value:": "Valor del tope:",
+        "Caps the matric suction used in the shear strength. It bites "
+        "wherever a material declares Unsaturated Shear Strength "
+        "parameters — EITHER of them: with phi_b it bounds the extra "
+        "cohesion, and with an air entry value it bounds the negative "
+        "pore pressure itself. Only a material with both at zero is "
+        "unaffected.":
+            "Acota la succión matricial que entra en la resistencia. "
+            "Muerde siempre que un material declare parámetros de "
+            "resistencia no saturada, y basta CUALQUIERA de los dos: con "
+            "phi_b acota la cohesión añadida, y con un valor de entrada "
+            "de aire acota la propia presión intersticial negativa. Sólo "
+            "un material con los dos a cero no se entera.",
+
+        "This project has no transient groundwater stages, so there is "
+        "no factor-of-safety history to compute. Turn on Transient "
+        "Groundwater and define the stages first.":
+            "Este proyecto no tiene etapas de filtración transitoria, "
+            "así que no hay historia del factor de seguridad que "
+            "calcular. Activa antes la filtración transitoria y define "
+            "las etapas.",
+        "No material takes its pore pressure from the finite-element "
+        "seepage field, so the stage factors of safety would ignore the "
+        "computed water pressures entirely.":
+            "Ningún material toma su presión intersticial del campo de "
+            "filtración por elementos finitos, así que los factores por "
+            "etapa ignorarían por completo las presiones calculadas.",
     },
 }
 

@@ -206,7 +206,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.124"
+    VERSION = "0.1.125"
 
     def __init__(self) -> None:
         super().__init__()
@@ -2671,132 +2671,58 @@ class MainWindow(QMainWindow):
                 f"{n} stage(s)", 5000)
 
     def _compute_transient(self):
-        """Run the staged transient analysis and keep the per-stage
-        results. The stage flagged last (or the last one overall) becomes
-        the field feeding the stability analysis."""
-        from ogr_core.hydraulic import HydraulicProperties
-        from ogr_fem2d.solvers import (
-            TransientSeepageSolver, TransientStage,
-        )
-        gw = self.project.settings.groundwater
-        mesh = self.project.fem_mesh
-        props = {}
-        for m in self.project.materials:
-            props[m.id] = m.hydraulic or HydraulicProperties()
-        gamma_w = getattr(gw, "pore_fluid_unit_weight", 9.81)
-        solver = TransientSeepageSolver(
-            mesh, props, gamma_w=gamma_w, relaxation=0.5,
-            tolerance=gw.transient_tolerance,
-            max_picard=gw.transient_max_iterations,
-            time_steps=gw.transient_time_steps,
-        )
-        # v0.1.31 — per-stage boundary conditions. Without them the
-        # initial state and every stage would share the same conditions,
-        # the field would already be at equilibrium and NOTHING would
-        # evolve in time: a drawdown needs the initial (high) level to
-        # differ from the stage (lowered) level. Each stage may carry its
-        # own captured conditions; stages without one fall back to the
-        # currently defined set.
-        from ogr_fem2d.solvers import SeepageBoundaryConditions
-        current = self._seepage_bcs()
-        initial = current
-        init_dict = getattr(gw, "transient_initial_bcs", None)
-        if init_dict:
-            initial = SeepageBoundaryConditions.from_dict(init_dict)
-        stages = []
-        for st in gw.transient_stages:
-            sb = st.get("bcs")
-            stages.append(TransientStage(
-                time=float(st.get("time", 0.0)),
-                calculate_sf=bool(st.get("calculate_sf")),
-                label=str(st.get("label", "")),
-                bcs=(SeepageBoundaryConditions.from_dict(sb) if sb
-                     else current),
-            ))
-        results = solver.solve_transient(stages, initial_bcs=initial)
-        self.project.transient_results = results
-        self._gw_solver = solver
-        self._compute_stage_factors_of_safety(results)
-        return results
+        """Run the staged transient analysis and the per-stage factors.
 
-    def _compute_stage_factors_of_safety(self, results) -> None:
-        """Run the stability analysis at every stage flagged
-        *Calculate SF* (Phase 6, v0.1.31).
-
-        This is the point of the per-stage checkbox: it turns a transient
-        pore-pressure history into a factor-of-safety history, which is
-        what an engineer actually needs from a drawdown or a prolonged
-        rainfall. Each flagged stage temporarily becomes the project's
-        active seepage field, the configured search runs against it, and
-        the resulting critical FoS is stored in the stage's notes.
-
-        The search machinery is reused verbatim from ``_ComputeWorker``
-        (called synchronously) so the per-stage runs honour exactly the
-        same search method and settings as a normal Compute.
+        v0.1.125 — the whole chain moved to
+        ``ogr_slip2d.transient_stability``, which contains no Qt. That is
+        the point: a script, the command line and a verification bank can
+        now run a drawdown exactly as configured, instead of not being
+        able to run one at all. It also fixed what this method got wrong,
+        which was to hand each stage its own pore pressures but everyone
+        else's reservoir — see ``with_stage_water``. What is left here is
+        the window.
         """
-        flagged = [(i, r) for i, r in enumerate(results)
-                   if r.notes.get("calculate_sf") and r.total_head]
-        if not flagged:
-            return
-        # The stage pressures only reach the LEM through materials set to
-        # FEM_SEEPAGE; warn instead of silently reporting a dry FoS.
-        from ogr_core.materials import PorePressureType
-        if not any(m.pore_pressure == PorePressureType.FEM_SEEPAGE
-                   for m in self.project.materials):
-            for _i, r in flagged:
-                r.notes["fos_warning"] = (
-                    "No material uses the FEM seepage pore-pressure type, "
-                    "so the stage factors of safety would ignore the "
-                    "computed water pressures.")
-            return
-        method_ids = list(
-            self.project.settings.methods.enabled_methods) or [
-            "bishop_simplified"]
-        saved = getattr(self.project, "seepage_result", None)
+        from ogr_slip2d.analysis_runner import AnalysisNotConfigured
+        from ogr_slip2d.transient_stability import run_transient_stability
+
         try:
-            for _i, r in flagged:
-                self.project.seepage_result = r
-                worker = _ComputeWorker(self.project, method_ids)
-                worker.run()
-                per_method = {}
-                for mid, sr in (worker.results or {}).items():
-                    crit = sr.critical if sr else None
-                    if crit is not None:
-                        per_method[mid] = crit.fos
-                r.notes["fos"] = per_method
-                if per_method:
-                    r.notes["fos_min"] = min(per_method.values())
-        finally:
-            self.project.seepage_result = saved
+            outcome = run_transient_stability(self.project)
+        except AnalysisNotConfigured as exc:
+            # v0.1.125 — ``run_analysis`` refuses a project it cannot
+            # honour, and this is a Qt slot: an exception escaping here
+            # is not a message, it is a window left half updated with the
+            # seepage already solved and stored. Say it and stop.
+            self.statusBar().showMessage(
+                tr("Cannot compute: %s") % "  ".join(exc.problems), 15000)
+            self._gw_solver = getattr(self.project, "_gw_solver", None)
+            self._update_groundwater_actions()
+            return list(self.project.transient_results or [])
+        for note in outcome.warnings:
+            # tr() at the point of use: the driver has no interface and
+            # must not, so the English it returns is the KEY and the
+            # translation happens here. Without this the Spanish entries
+            # for these two warnings could never be reached.
+            self.statusBar().showMessage(tr(note), 9000)
+        self._gw_solver = getattr(self.project, "_gw_solver", None)
+        return list(self.project.transient_results or [])
 
     def _compute_groundwater(self) -> None:
         mesh = getattr(self.project, "fem_mesh", None)
         if mesh is None or mesh.element_count == 0:
             self._info("Generate the FE mesh first.")
             return
-        from ogr_core.hydraulic import HydraulicProperties
-        from ogr_fem2d.solvers import UnsaturatedSeepageSolver
-        props = {}
-        missing = []
-        for m in self.project.materials:
-            if m.hydraulic is None:
-                missing.append(m.name)
-                props[m.id] = HydraulicProperties()
-            else:
-                props[m.id] = m.hydraulic
-        gamma_w = 9.81
-        try:
-            gamma_w = self.project.settings.groundwater.pore_fluid_unit_weight
-        except Exception:  # noqa: BLE001
-            pass
-        if self.project.settings.groundwater.transient and \
-                self.project.settings.groundwater.transient_stages:
+        from ogr_slip2d.transient_stability import solve_project_groundwater
+
+        missing = [m.name for m in self.project.materials
+                   if m.hydraulic is None]
+        transient = bool(self.project.settings.groundwater.transient
+                         and self.project.settings.groundwater.transient_stages)
+        if transient:
             results = self._compute_transient()
             if not results:
                 self._info("Transient analysis produced no results.")
                 return
             result = results[-1]
-            self.project.seepage_result = result
             self._update_groundwater_actions()
             bad = [i for i, r in enumerate(results) if not r.converged]
             msg = (f"Transient: {len(results)} stage(s) solved; final "
@@ -2806,18 +2732,25 @@ class MainWindow(QMainWindow):
                 msg += f"  (stages not converged: {bad})"
             self.statusBar().showMessage(msg, 9000)
             return
-        solver = UnsaturatedSeepageSolver(mesh, props, gamma_w=gamma_w,
-                                          relaxation=0.4,
-                                          max_iterations=200,
-                                          tolerance=1e-5)
-        result = solver.solve_unsaturated(self._seepage_bcs())
-        self.project.seepage_result = result
-        self._gw_solver = solver
+
+        # v0.1.125 — one door for the steady solve too, shared with the
+        # command line and with any script: what used to be assembled
+        # here is now ``solve_project_groundwater``.
+        result = solve_project_groundwater(self.project)
+        self._gw_solver = getattr(self.project, "_gw_solver", None)
         self._update_groundwater_actions()
         if not result.converged:
+            # v0.1.125 — NOT modal. This is a diagnostic about the result
+            # that was just computed, not a question and not a
+            # precondition the user has to answer, and a modal box in a
+            # path an automated run can reach blocks it for ever. The
+            # path also became far easier to reach in this version: the
+            # seepage face now reports honestly that it never settled
+            # instead of freezing its nodes and calling that convergence.
             msg = result.notes.get("error") or result.notes.get(
                 "warning", "did not converge")
-            self._info(f"Groundwater analysis: {msg}")
+            self.statusBar().showMessage(
+                tr("Groundwater analysis: %s") % msg, 15000)
             return
         note = ""
         if missing:

@@ -16,10 +16,19 @@ from .seepage import (  # noqa: F401
     TransientSeepageSolver,
     TransientStage,
 )
+from .bc_targets import (  # noqa: F401
+    SIDE_LEFT,
+    SIDE_RIGHT,
+    apply_reservoir,
+    boundary_cycle,
+    wetted_nodes,
+)
 
 __all__ = [
     "BCType", "NodeBC", "SegmentBC", "SeepageBoundaryConditions",
     "SeepageSolver", "SeepageResult", "default_boundary_conditions",
     "hydraulic_props_of", "restore_derived",
     "solve_project_seepage", "UnsaturatedSeepageSolver", "TransientSeepageSolver", "TransientStage",
+    "SIDE_LEFT", "SIDE_RIGHT", "apply_reservoir", "boundary_cycle",
+    "wetted_nodes",
 ]
