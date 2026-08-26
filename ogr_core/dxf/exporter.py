@@ -56,6 +56,10 @@ _KIND_LAYER_NAMES = {
     # NOT survive the trip: DXF carries geometry, and a re-imported joint has
     # to be assigned one, exactly as a re-imported material boundary has.
     "weak_layer": "OGR_WEAK_LAYER",
+    # v0.1.126 — and an anisotropic surface for the same reason: it is
+    # model input. The MATERIAL it is assigned to does not survive the
+    # trip either, since DXF carries geometry and nothing else.
+    "anisotropic_surface": "OGR_ANISO_SURFACE",
 }
 BOUNDARY_TO_LAYER = {
     btype: _KIND_LAYER_NAMES[kind.value]
@@ -79,6 +83,7 @@ _LAYER_COLOURS = {
     "OGR_DRAWDOWN": 6,        # magenta
     "OGR_CRACK": 1,           # red
     "OGR_WEAK_LAYER": 140,    # slate blue, as on the canvas
+    "OGR_ANISO_SURFACE": 242,  # magenta, as on the canvas
     LAYER_SUPPORT: 2,         # yellow
     LAYER_LOADS: 30,          # orange
     LAYER_MESH: 8,            # dark grey

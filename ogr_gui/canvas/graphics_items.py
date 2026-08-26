@@ -114,6 +114,10 @@ class BoundaryItem(DomainItem):
             # thing a user needs to see is where it runs relative to the
             # layers, not relative to the piezometric line.
             BoundaryType.WEAK_LAYER: 3.0,
+            # Above everything: it is not geometry, it is an
+            # annotation about geometry, and it has to stay readable
+            # over the material it belongs to.
+            BoundaryType.ANISOTROPIC_SURFACE: 6.5,
         }.get(btype, 1.0)
 
 

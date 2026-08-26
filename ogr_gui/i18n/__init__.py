@@ -1062,6 +1062,74 @@ _DICTS: dict[str, dict[str, str]] = {
             "que simplemente termina deja un escalón casi vertical.",
         "Weak Layer": "Capa débil",
         "Weak layer material assigned.": "Material de la capa débil asignado.",
+        # v0.1.126 — búsqueda por enjambre de partículas y mínimos
+        # múltiples. "Enjambre de partículas" es el término asentado en
+        # castellano para Particle Swarm Optimization.
+        "Particle Swarm Search": "Búsqueda por enjambre de partículas",
+        "Particle Swarm Search Options":
+            "Opciones de la búsqueda por enjambre",
+        "Number of particles:": "Número de partículas:",
+        "Number of iterations:": "Número de iteraciones:",
+        "Number of Mins:": "Número de mínimos:",
+        "Report several minima": "Informar de varios mínimos",
+        "A slope may have several critical regions. With this on the "
+        "search reports the most critical surface of each region "
+        "instead of the single global minimum.":
+            "Un talud puede tener varias regiones críticas. Con esto "
+            "activado la búsqueda informa de la superficie más crítica "
+            "de cada región en vez del único mínimo global.",
+        "Grouping radius:": "Radio de agrupación:",
+        "The Particle Swarm search is reporting several minima with "
+        "Optimize Surfaces OFF. It is then looking for LOCAL minima, and "
+        "the lowest of them need not be the global minimum of the slope.":
+            "La búsqueda por enjambre está informando de varios mínimos "
+            "con Optimize Surfaces APAGADO. Entonces busca mínimos "
+            "LOCALES, y el menor de ellos no tiene por qué ser el mínimo "
+            "global del talud.",
+        "Two minima closer together than this are the same minimum. "
+        "As a percentage of the span of the search space, so it means "
+        "the same whatever the model measures.":
+            "Dos mínimos más próximos que esto son el mismo mínimo. En "
+            "porcentaje de la extensión del espacio de búsqueda, así que "
+            "significa lo mismo mida lo que mida el modelo.",
+        "Use enhanced particle swarm algorithm":
+            "Usar el algoritmo de enjambre mejorado",
+        "At the end of each iteration the particles sitting on the "
+        "highest factors are scattered again. It keeps a swarm that "
+        "has collapsed onto one region still looking elsewhere.":
+            "Al final de cada iteración se vuelven a esparcir las "
+            "partículas que están sobre los factores más altos. Mantiene "
+            "buscando en otras zonas a un enjambre que se ha juntado "
+            "todo en una.",
+        "Draws every minimum the result reports: the regions a "
+        "multimodal search told apart, or the per-sample global "
+        "minima of an Overall Slope run.":
+            "Dibuja todos los mínimos que informa el resultado: las "
+            "regiones que una búsqueda multimodal ha sabido separar, o "
+            "los mínimos globales de cada muestra de una corrida "
+            "Overall Slope.",
+        "Show GM Surfaces": "Ver superficies de mínimo global",
+        "%d distinct minimum surface(s)":
+            "%d superficie(s) de mínimo distintas",
+        "This search reported no separate minima. They come from the "
+        "Particle Swarm search with several minima requested.":
+            "Esta búsqueda no ha informado de mínimos separados. Los "
+            "produce la búsqueda por enjambre con varios mínimos pedidos.",
+        # v0.1.126 — superficie anisótropa. En castellano geotécnico el
+        # rumbo/buzamiento de la estratificación es el "buzamiento", y la
+        # polilínea que lo orienta es una "superficie anisótropa".
+        "Add Anisotropic Surface": "Añadir superficie anisótropa",
+        "Anisotropic Surface": "Superficie anisótropa",
+        "Anisotropic Surface:": "Superficie anisótropa:",
+        "Anisotropic Surface %d": "Superficie anisótropa %d",
+        "(none - use the angle above)": "(ninguna: usar el ángulo de arriba)",
+        "Polyline that gives the bedding orientation point by point, "
+        "for folded anisotropy. The angle is read at the CLOSEST point "
+        "of the polyline, not the one directly above.":
+            "Polilínea que da la orientación del buzamiento punto a "
+            "punto, para anisotropía plegada. El ángulo se lee en el "
+            "punto MÁS CERCANO de la polilínea, no en el que queda "
+            "justo encima.",
         "Weak Layer Handling": "Tratamiento de capas débiles",
         "Always snap to highest layer": "Pegar siempre a la capa más alta",
         "Automatic case generation": "Generación automática de casos",

@@ -47,6 +47,17 @@ from .drawdown_strength_dialog import DrawdownStrengthDialog, envelope_summary
 
 
 # ----------------------------------------------------------------------
+#: The strength models that can read an anisotropic surface. Named here
+#: rather than probed for a parameter, because Generalized Anisotropic has
+#: no ``bedding_angle`` of its own — its rule bands ARE the angles — and a
+#: probe would have left it out.
+_ANISOTROPIC_MODEL_IDS = frozenset({
+    "anisotropic_linear",
+    "snowden_anisotropic_linear",
+    "generalized_anisotropic",
+})
+
+
 class _StrengthParamPanel(QWidget):
     """Dynamically-built parameter editor for the active strength model.
 
@@ -310,6 +321,7 @@ class MaterialPropertiesDialog(QDialog):
         gw_method: str = "none",
         has_water_table: bool = False,
         water_surfaces: list[tuple[str, str]] | None = None,
+        anisotropic_surfaces: list[tuple[str, str]] | None = None,
         rapid_drawdown: bool = False,
         drawdown_method: str = "b_bar",
         excess_pore_pressure: bool = False,
@@ -320,6 +332,10 @@ class MaterialPropertiesDialog(QDialog):
         # from a Project so this dialog keeps knowing nothing about one,
         # the same way ``has_water_table`` is a derived flag.
         self._water_surfaces = list(water_surfaces or [])
+        # v0.1.126 — (boundary id, label) for every anisotropic surface in
+        # the project, passed in for the same reason the water surfaces
+        # are: this dialog knows nothing about a Project.
+        self._aniso_surfaces = list(anisotropic_surfaces or [])
         self._rapid_drawdown = bool(rapid_drawdown)
         # v0.1.72 — which of the four procedures is configured. B̄ and the
         # undrained envelope belong to different ones, so the dialog needs
@@ -481,6 +497,28 @@ class MaterialPropertiesDialog(QDialog):
         str_layout.addLayout(top_row)
         self.param_panel = _StrengthParamPanel(units_obj=self._units_obj)
         str_layout.addWidget(self.param_panel)
+
+        # v0.1.126 — which anisotropic surface orients this material's
+        # bedding. Shown ONLY for the three models that read it: offering
+        # it beside Mohr-Coulomb would be a control that decides nothing,
+        # which this project counts as worse than not having one.
+        self._aniso_row = QWidget()
+        _aniso_lay = QHBoxLayout(self._aniso_row)
+        _aniso_lay.setContentsMargins(0, 0, 0, 0)
+        self.lbl_aniso = QLabel(tr("Anisotropic Surface:"))
+        self.cbo_aniso = QComboBox()
+        self.cbo_aniso.addItem(tr("(none - use the angle above)"), None)
+        for sid, label in self._aniso_surfaces:
+            self.cbo_aniso.addItem(label, sid)
+        self.cbo_aniso.setToolTip(tr(
+            "Polyline that gives the bedding orientation point by point, "
+            "for folded anisotropy. The angle is read at the CLOSEST point "
+            "of the polyline, not the one directly above."))
+        _aniso_lay.addWidget(self.lbl_aniso)
+        _aniso_lay.addWidget(self.cbo_aniso, 1)
+        str_layout.addWidget(self._aniso_row)
+        self._aniso_row.setVisible(False)
+
         right.addWidget(str_grp)
 
         # Water parameters — named after what the reference calls this
@@ -832,6 +870,14 @@ class MaterialPropertiesDialog(QDialog):
             params_with_pts["points"] = list(m.strength.points)
             self.param_panel.set_model(type(m.strength), params_with_pts)
 
+        # v0.1.126 — the anisotropic surface, restored before the pore
+        # pressure so it sits with the strength it belongs to. An id that
+        # no longer names a boundary falls back to "(none)", which is what
+        # the engine does with it too.
+        ai = self.cbo_aniso.findData(
+            getattr(m, "anisotropic_surface_id", None))
+        self.cbo_aniso.setCurrentIndex(max(0, ai))
+
         idx = self.cbo_pp.findData(m.pore_pressure)
         if idx >= 0:
             self.cbo_pp.setCurrentIndex(idx)
@@ -971,6 +1017,9 @@ class MaterialPropertiesDialog(QDialog):
         btn = getattr(self, "btn_gsi", None)
         if btn is not None:
             btn.setVisible(mid == "hoek_brown")
+        row = getattr(self, "_aniso_row", None)
+        if row is not None:
+            row.setVisible(mid in _ANISOTROPIC_MODEL_IDS)
 
     def _open_parameter_calculator(self) -> None:
         """Derive mb, s and a from GSI, mi and D."""
@@ -1016,6 +1065,12 @@ class MaterialPropertiesDialog(QDialog):
         mid = self.cbo_strength.currentData()
         cls = REGISTRY.get(mid)
         m.strength = cls(**self.param_panel.get_params())
+        # Only the models that read it keep it. Switching a material away
+        # from an anisotropic model has to CLEAR the link, or a strength
+        # nobody can see would still be pointing at a polyline.
+        m.anisotropic_surface_id = (self.cbo_aniso.currentData()
+                                    if mid in _ANISOTROPIC_MODEL_IDS
+                                    else None)
 
         m.pore_pressure = self.cbo_pp.currentData()
         m.ru = self.dsp_ru.value()

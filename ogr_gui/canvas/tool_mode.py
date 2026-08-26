@@ -33,6 +33,7 @@ class ToolMode(Enum):
     DRAW_PIEZOMETRIC = "draw_piezometric"
     DRAW_TENSION_CRACK = "draw_tension_crack"
     DRAW_WEAK_LAYER = "draw_weak_layer"       # v0.1.121
+    DRAW_ANISOTROPIC_SURFACE = "draw_anisotropic_surface"   # v0.1.126
     DRAW_BLOCK_SEARCH = "draw_block_search"
 
     # ----- Boundary CRUD -----
@@ -78,6 +79,7 @@ class ToolMode(Enum):
             ToolMode.DRAW_PIEZOMETRIC,
             ToolMode.DRAW_TENSION_CRACK,
             ToolMode.DRAW_WEAK_LAYER,
+            ToolMode.DRAW_ANISOTROPIC_SURFACE,
             ToolMode.DRAW_BLOCK_SEARCH,
             ToolMode.DRAW_EXPAND_SHRINK,
         }
@@ -106,6 +108,8 @@ class ToolMode(Enum):
             ToolMode.DRAW_PIEZOMETRIC: BoundaryType.PIEZOMETRIC,
             ToolMode.DRAW_TENSION_CRACK: BoundaryType.TENSION_CRACK,
             ToolMode.DRAW_WEAK_LAYER: BoundaryType.WEAK_LAYER,
+            ToolMode.DRAW_ANISOTROPIC_SURFACE:
+                BoundaryType.ANISOTROPIC_SURFACE,
             ToolMode.DRAW_BLOCK_SEARCH: BoundaryType.BLOCK_SEARCH_OBJECT,
         }.get(self)
 
@@ -125,6 +129,7 @@ class ToolMode(Enum):
             ToolMode.DRAW_PIEZOMETRIC: "CrossCursor",
             ToolMode.DRAW_TENSION_CRACK: "CrossCursor",
             ToolMode.DRAW_WEAK_LAYER: "CrossCursor",
+            ToolMode.DRAW_ANISOTROPIC_SURFACE: "CrossCursor",
             ToolMode.DELETE_BOUNDARY: "PointingHandCursor",
             ToolMode.MOVE_BOUNDARY: "SizeAllCursor",
             ToolMode.COPY_BOUNDARY: "PointingHandCursor",
@@ -164,6 +169,7 @@ class ToolMode(Enum):
             ToolMode.DRAW_PIEZOMETRIC: "Draw Piezometric Line: click to add vertices, Enter or right-click to finish, Esc to cancel",
             ToolMode.DRAW_TENSION_CRACK: "Draw Tension Crack: click to add vertices, Enter or right-click to finish, Esc to cancel",
             ToolMode.DRAW_WEAK_LAYER: "Draw Weak Layer: click to add vertices, Enter or right-click to finish, Esc to cancel",
+            ToolMode.DRAW_ANISOTROPIC_SURFACE: "Draw Anisotropic Surface: click to add vertices IN ORDER (the order decides the angle at a kink), Enter or right-click to finish, Esc to cancel",
             ToolMode.DRAW_EXPAND_SHRINK: "Expand/Shrink External: FIRST point must be ON the External (green cross). Intermediate points go OUTSIDE (expand) or INSIDE (shrink). LAST point must be ON the External. Esc to cancel.",
             ToolMode.DELETE_BOUNDARY: "Click a boundary to delete it, Esc to exit",
             ToolMode.MOVE_BOUNDARY: "Click a boundary and drag to move it, Esc to exit",

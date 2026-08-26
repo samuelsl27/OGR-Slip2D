@@ -304,6 +304,7 @@ class SurfaceOptionsDialog(QDialog):
             SearchMethod.BLOCK_SEARCH: "Block Search",
             SearchMethod.PATH_SEARCH: "Path Search",
             SearchMethod.SIMULATED_ANNEALING: "Simulated Annealing",
+            SearchMethod.PARTICLE_SWARM: "Particle Swarm Search",
         }
 
         root.addWidget(header)
@@ -333,9 +334,11 @@ class SurfaceOptionsDialog(QDialog):
         self._panels[SearchMethod.BLOCK_SEARCH] = self._build_block_panel(s)
         self._panels[SearchMethod.PATH_SEARCH] = self._build_path_panel(s)
         self._panels[SearchMethod.SIMULATED_ANNEALING] = self._build_sa_panel(s)
+        self._panels[SearchMethod.PARTICLE_SWARM] = self._build_pso_panel(s)
         for m in (SearchMethod.GRID_SEARCH, SearchMethod.SLOPE_SEARCH,
                   SearchMethod.AUTO_REFINE, SearchMethod.BLOCK_SEARCH,
-                  SearchMethod.PATH_SEARCH, SearchMethod.SIMULATED_ANNEALING):
+                  SearchMethod.PATH_SEARCH, SearchMethod.SIMULATED_ANNEALING,
+                  SearchMethod.PARTICLE_SWARM):
             self.stack.addWidget(self._panels[m])
         root.addWidget(self.stack, stretch=1)
 
@@ -445,6 +448,7 @@ class SurfaceOptionsDialog(QDialog):
                 SearchMethod.GRID_SEARCH,
                 SearchMethod.SLOPE_SEARCH,
                 SearchMethod.AUTO_REFINE,
+                SearchMethod.PARTICLE_SWARM,
             ]
         else:
             allowed = [
@@ -452,6 +456,7 @@ class SurfaceOptionsDialog(QDialog):
                 SearchMethod.PATH_SEARCH,
                 SearchMethod.SIMULATED_ANNEALING,
                 SearchMethod.AUTO_REFINE,
+                SearchMethod.PARTICLE_SWARM,
             ]
 
         # Pre-fetch the previously selected method
@@ -538,6 +543,11 @@ class SurfaceOptionsDialog(QDialog):
                 self._sa_tol.setValue(defaults.sa_tolerance)
                 self._sa_tcoef.setValue(defaults.sa_temperature_coefficient)
                 self._sa_convex.setChecked(defaults.sa_convex_only)
+                self._pso_n.setValue(int(defaults.pso_num_particles))
+                self._pso_it.setValue(int(defaults.pso_num_iterations))
+                self._pso_multi.setChecked(bool(defaults.pso_multiple_minima))
+                self._pso_radius.setValue(
+                    float(defaults.pso_niche_radius_pct))
                 self._sync_optimize_boxes(_optimize_default_for(m))
             elif m == SM.PATH_SEARCH:
                 self._p_num.setValue(int(defaults.path_num_surfaces))
@@ -825,6 +835,43 @@ class SurfaceOptionsDialog(QDialog):
         f.addRow("", sa_row)
         return w
 
+    def _build_pso_panel(self, s):
+        from PySide6.QtWidgets import (
+            QCheckBox, QDoubleSpinBox, QFormLayout, QGroupBox, QSpinBox,
+        )
+        w = QGroupBox(tr("Particle Swarm Search Options"))
+        f = QFormLayout(w)
+        self._pso_n = QSpinBox()
+        self._pso_n.setRange(3, 2000)
+        self._pso_n.setValue(int(s.pso_num_particles))
+        f.addRow(tr("Number of particles:"), self._pso_n)
+        self._pso_it = QSpinBox()
+        self._pso_it.setRange(1, 10000)
+        self._pso_it.setValue(int(s.pso_num_iterations))
+        f.addRow(tr("Number of iterations:"), self._pso_it)
+        self._pso_multi = QCheckBox(tr("Report several minima"))
+        self._pso_multi.setChecked(bool(s.pso_multiple_minima))
+        self._pso_multi.setToolTip(tr(
+            "A slope may have several critical regions. With this on the "
+            "search reports the most critical surface of each region "
+            "instead of the single global minimum."))
+        f.addRow(tr("Number of Mins:"), self._pso_multi)
+        self._pso_radius = QDoubleSpinBox()
+        self._pso_radius.setRange(0.1, 100.0)
+        self._pso_radius.setDecimals(1)
+        self._pso_radius.setSuffix(" %")
+        self._pso_radius.setValue(float(s.pso_niche_radius_pct))
+        self._pso_radius.setToolTip(tr(
+            "Two minima closer together than this are the same minimum. "
+            "As a percentage of the span of the search space, so it means "
+            "the same whatever the model measures."))
+        f.addRow(tr("Grouping radius:"), self._pso_radius)
+        self._pso_radius.setEnabled(self._pso_multi.isChecked())
+        self._pso_multi.toggled.connect(self._pso_radius.setEnabled)
+        self._pso_optimize, pso_row = self._optimize_row(s)
+        f.addRow("", pso_row)
+        return w
+
     def _build_path_panel(self, s):
         from PySide6.QtWidgets import (
             QCheckBox, QDoubleSpinBox, QFormLayout, QGroupBox, QHBoxLayout,
@@ -992,6 +1039,12 @@ class SurfaceOptionsDialog(QDialog):
         s.sa_tolerance = self._sa_tol.value()
         s.sa_temperature_coefficient = self._sa_tcoef.value()
         s.sa_convex_only = self._sa_convex.isChecked()
+
+        # ----- Particle Swarm -----
+        s.pso_num_particles = int(self._pso_n.value())
+        s.pso_num_iterations = int(self._pso_it.value())
+        s.pso_multiple_minima = self._pso_multi.isChecked()
+        s.pso_niche_radius_pct = self._pso_radius.value()
 
         # ----- Path Search -----
         s.path_num_surfaces = int(self._p_num.value())

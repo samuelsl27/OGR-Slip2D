@@ -76,6 +76,7 @@ class SearchMethod(Enum):
     BLOCK_SEARCH = "block"
     PATH_SEARCH = "path"
     SIMULATED_ANNEALING = "simulated_annealing"
+    PARTICLE_SWARM = "particle_swarm"        # v0.1.126
 
 
 # Methods compatible with each surface type (Slide convention)
@@ -83,12 +84,20 @@ CIRCULAR_METHODS = {
     SearchMethod.GRID_SEARCH,
     SearchMethod.SLOPE_SEARCH,
     SearchMethod.AUTO_REFINE,
+    SearchMethod.PARTICLE_SWARM,
 }
 NON_CIRCULAR_METHODS = {
     SearchMethod.BLOCK_SEARCH,
     SearchMethod.PATH_SEARCH,
     SearchMethod.SIMULATED_ANNEALING,
     SearchMethod.AUTO_REFINE,
+    # v0.1.126 — the swarm is in BOTH lists, as Auto Refine already is,
+    # and for a reason the reference states about its own: the particles
+    # are circles, and the non-circular surface is what the optimisation
+    # makes of the winners afterwards. Offering it only under
+    # Non-Circular would hide a perfectly good circular search; offering
+    # it only under Circular would take the optimisation away from it.
+    SearchMethod.PARTICLE_SWARM,
 }
 
 
@@ -326,6 +335,24 @@ class SearchSettings:
     # function, not the schedule.)
     sa_temperature_coefficient: float = 8.0
     sa_convex_only: bool = False
+
+    # ---------- Particle Swarm (v0.1.126) ----------
+    # Defaults are the reference's own where it publishes them: 50
+    # particles, and a niching radius of 10 % of the span of the search
+    # space, which its help calls the recommended value. The iteration
+    # count it does not publish ("a finite number of iterations"); 50 is
+    # this program's own, chosen so a default run costs about what a
+    # default Slope Search costs.
+    pso_num_particles: int = 50
+    pso_num_iterations: int = 50
+    #: One minimum or several. The whole point of the search, and off by
+    #: default because it changes what the result MEANS: with it on the
+    #: answer is a list of mechanisms, not a number.
+    pso_multiple_minima: bool = False
+    pso_niche_radius_pct: float = 10.0
+    # *Use enhanced PSO algorithm* is NOT here: the reference places it in
+    # the Advanced project settings, next to the other search-wide
+    # switches, and ``AdvancedSettings.pso_enhanced`` is where it lives.
 
     # ---------- Path Search (non-circular) ----------
     # "Number of Surfaces" counts VALID surfaces: the generator discards the
@@ -577,10 +604,19 @@ class SearchSettings:
 
 
 #: Search methods for which Optimize Surfaces is on unless the user says
-#: otherwise. One entry today, and a set rather than a comparison because
-#: the reference states the default per method and nothing says the list
-#: cannot grow.
-_OPTIMIZE_ON_BY_DEFAULT = frozenset({SearchMethod.SIMULATED_ANNEALING.value})
+#: otherwise. A set rather than a comparison because the reference states
+#: the default per method and nothing says the list cannot grow — and in
+#: v0.1.126 it grew.
+#:
+#: The swarm joins it because the reference says so in as many words:
+#: optimisation is "strongly recommended with PSO, particularly in the
+#: case of multiple mins", since without it a multimodal search hunts
+#: local minima and can miss the global one. Measured on verification
+#: problem 103, ratio 1.4: 1.3329 without and 1.2538 with.
+_OPTIMIZE_ON_BY_DEFAULT = frozenset({
+    SearchMethod.SIMULATED_ANNEALING.value,
+    SearchMethod.PARTICLE_SWARM.value,
+})
 
 
 def optimize_enabled_for(search: "SearchSettings") -> bool:
@@ -831,6 +867,13 @@ class AdvancedSettings:
     # factor m_alpha is already down to 0.235, so the last ten degrees are
     # where the conditioning is lost, not where it ends.
     max_base_angle_deg: float = 80.0
+
+    # v0.1.126 — *Use enhanced PSO algorithm*. Here rather than beside the
+    # other swarm settings because that is where the reference puts it,
+    # and because it belongs with the other switches that change HOW a
+    # search runs rather than what it searches — ``max_base_angle_deg``
+    # above is here for the same reason. On by default, as documented.
+    pso_enhanced: bool = True
 
     @classmethod
     def from_dict(cls, data: dict) -> "AdvancedSettings":

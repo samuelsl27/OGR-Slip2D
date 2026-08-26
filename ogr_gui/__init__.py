@@ -5,4 +5,4 @@ OGR Slip2D — Graphical User Interface (PySide6 / Qt6).
 
 Developer: Samuel Sáez López — PhD Student, UPCT
 """
-__version__ = "0.1.125"
+__version__ = "0.1.126"

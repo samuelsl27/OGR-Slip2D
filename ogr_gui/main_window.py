@@ -206,7 +206,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.125"
+    VERSION = "0.1.126"
 
     def __init__(self) -> None:
         super().__init__()
@@ -403,6 +403,9 @@ class MainWindow(QMainWindow):
         # user, even though the engine never treats it as model geometry.
         self._mk("add_weak_layer", "Add Weak Layer",
                  lambda: self._set_tool(ToolMode.DRAW_WEAK_LAYER), None, "Ctrl+7")
+        self._mk("add_aniso_surface", "Add Anisotropic Surface",
+                 lambda: self._set_tool(ToolMode.DRAW_ANISOTROPIC_SURFACE),
+                 None, "Ctrl+8")
         # v0.1.23 — Water Pressure Grid editor (Phase 0 groundwater)
         self._mk("wp_grid", "Water Pressure Grid...",
                  self._edit_water_pressure_grid, "water_table")
@@ -695,7 +698,7 @@ class MainWindow(QMainWindow):
         m_bnd = mb.addMenu(tr("Boundaries"))
         # Creation
         for k in ["add_ext", "add_mat", "add_wt", "add_drawdown", "add_piezo",
-                  "add_crack", "add_weak_layer"]:
+                  "add_crack", "add_weak_layer", "add_aniso_surface"]:
             m_bnd.addAction(self._actions[k])
         m_bnd.addSeparator()
         # Advanced geometry
@@ -2947,6 +2950,9 @@ class MainWindow(QMainWindow):
             # v0.1.62 — the assignable water surfaces, already labelled and
             # translated here so ogr_core stays free of the interface.
             water_surfaces=self._water_surface_choices(),
+            # v0.1.126 — the anisotropic surfaces, labelled here for the
+            # same reason: ogr_core stays free of the interface.
+            anisotropic_surfaces=self._anisotropic_surface_choices(),
             rapid_drawdown=bool(
                 self.project.settings.groundwater.rapid_drawdown),
             # v0.1.72 — B̄ belongs to the effective-stress procedure and
@@ -2963,6 +2969,20 @@ class MainWindow(QMainWindow):
         if dlg.exec():
             self.project.materials = dlg.result_materials()
             self.project._notify("materials_changed")
+
+    # ------------------------------------------------------------------
+    def _anisotropic_surface_choices(self) -> list[tuple[str, str]]:
+        """(boundary id, translated label) for every anisotropic surface.
+
+        Numbered by project order, like the piezometric lines: they carry
+        no name of their own and the user needs to tell two apart.
+        """
+        out = []
+        for i, b in enumerate(
+                self.project.boundaries_of(
+                    BoundaryType.ANISOTROPIC_SURFACE), start=1):
+            out.append((b.id, tr("Anisotropic Surface %d") % i))
+        return out
 
     # ------------------------------------------------------------------
     def _water_surface_choices(self) -> list[tuple[str, str]]:

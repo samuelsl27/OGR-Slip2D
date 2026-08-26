@@ -333,7 +333,12 @@ def _material_y_extents(project) -> dict:
 #: Search methods Optimize Surfaces can be applied to. The reference makes
 #: the option available for Surface Type = Non-Circular, and these are the
 #: three non-circular strategies this program implements.
-_OPTIMIZABLE_SEARCHES = ("block", "path", "simulated_annealing")
+# v0.1.126 — the swarm joins them. Its particles are circles, but the
+# optimisation is what turns each minimum into a non-circular surface,
+# and the reference is explicit that optimisation is "strongly
+# recommended with PSO, particularly in the case of multiple mins".
+_OPTIMIZABLE_SEARCHES = ("block", "path", "simulated_annealing",
+                         "particle_swarm")
 
 
 def _optimize_notes(s_search) -> list[str]:
@@ -349,6 +354,19 @@ def _optimize_notes(s_search) -> list[str]:
     # Simulated Annealing run, which is the one search where the option is
     # on by default and therefore the one where the notes matter most.
     if not optimize_enabled_for(s_search):
+        # v0.1.126 — one note fires when the option is OFF, so it is
+        # written before the early return above can swallow it. The
+        # reference is explicit that optimisation is "strongly recommended
+        # with PSO, particularly in the case of multiple mins": without it
+        # a multimodal search is hunting LOCAL minima and can come back
+        # without the global one. Measured on verification problem 103,
+        # ratio 1.4: 1.3329 without and 1.2538 with.
+        if (s_search.search_method == "particle_swarm"
+                and getattr(s_search, "pso_multiple_minima", False)):
+            return ["The Particle Swarm search is reporting several minima "
+                    "with Optimize Surfaces OFF. It is then looking for "
+                    "LOCAL minima, and the lowest of them need not be the "
+                    "global minimum of the slope."]
         return []
     out = []
     if s_search.search_method not in _OPTIMIZABLE_SEARCHES:
@@ -771,6 +789,31 @@ def build_search(project, method_id: str, progress_cb: Optional[Callable] = None
             # Search optimised on every run while the checkbox the user
             # could see wrote a setting nothing read. One optimisation
             # now, the same one every non-circular search gets.
+            **_optimize_kw(),
+            **common,
+        )
+
+    if search_method == "particle_swarm":
+        from .particle_swarm import ParticleSwarmSearch
+        return ParticleSwarmSearch(
+            num_particles=s_search.pso_num_particles,
+            num_iterations=s_search.pso_num_iterations,
+            multiple_minima=s_search.pso_multiple_minima,
+            niche_radius_pct=s_search.pso_niche_radius_pct,
+            enhanced=bool(getattr(s.advanced, "pso_enhanced", True)),
+            # The swarm generates circles the way the Slope Search does,
+            # so it honours the same two Initial Angle at Toe controls
+            # WHEN THE USER TICKS THEM. Unticked it does NOT fall back on
+            # the Slope Search's automatic window: that window assumes a
+            # toe-exiting circle and hides the deep-seated mechanisms a
+            # multimodal search exists to report. See ``_WIDE_ANGLE_LO``.
+            **({"initial_angle_lower_deg":
+                s_search.initial_angle_at_toe_lower_deg}
+               if s_search.initial_angle_at_toe_lower_enabled else {}),
+            **({"initial_angle_upper_deg":
+                s_search.initial_angle_at_toe_upper_deg}
+               if s_search.initial_angle_at_toe_upper_enabled else {}),
+            min_area=s_search.min_area or 1.0,
             **_optimize_kw(),
             **common,
         )

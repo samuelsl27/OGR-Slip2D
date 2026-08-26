@@ -171,6 +171,13 @@ class SliceContext:
             nearest point of the ground profile [m], v0.1.120. Differs
             from ``depth`` under a slope face, where the nearest point is
             not the one straight above. ``None`` as above.
+        bedding_angle_deg: LOCAL orientation of the bedding at this
+            slice's base [deg from horizontal], v0.1.126. Filled in only
+            when the material names an anisotropic surface; ``None``
+            means it does not, and the anisotropic models then fall back
+            on the single global angle they carry themselves. The
+            distinction matters: 0.0 would be a horizontal bedding, which
+            is a real answer and not the absence of one.
     """
     base_angle_rad: float = 0.0
     sigma_v_eff: float = 0.0
@@ -179,3 +186,4 @@ class SliceContext:
     y_base: float = 0.0
     layer_top_y: "float | None" = None
     slope_distance: "float | None" = None
+    bedding_angle_deg: "float | None" = None

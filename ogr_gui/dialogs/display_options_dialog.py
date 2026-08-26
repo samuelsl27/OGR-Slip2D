@@ -148,6 +148,11 @@ class DisplayOptionsDialog(QDialog):
         self.chk_weak_layer.setChecked(self._opts.show_weak_layer)
         self.btn_color_weak_layer = _ColorButton(self._opts.color_weak_layer)
 
+        self.chk_aniso = QCheckBox(tr("Anisotropic Surface"))
+        self.chk_aniso.setChecked(self._opts.show_anisotropic_surface)
+        self.btn_color_aniso = _ColorButton(
+            self._opts.color_anisotropic_surface)
+
         for chk, btn, label in [
             (self.chk_external, self.btn_color_external, "External Boundary"),
             (self.chk_material, self.btn_color_material, "Material Boundary"),
@@ -155,6 +160,7 @@ class DisplayOptionsDialog(QDialog):
             (self.chk_piezo, self.btn_color_piezo, "Piezometric Line"),
             (self.chk_crack, self.btn_color_crack, "Tension Crack"),
             (self.chk_weak_layer, self.btn_color_weak_layer, "Weak Layer"),
+            (self.chk_aniso, self.btn_color_aniso, "Anisotropic Surface"),
         ]:
             row = QHBoxLayout()
             row.addWidget(chk, 1)
@@ -280,6 +286,8 @@ class DisplayOptionsDialog(QDialog):
         o.color_tension_crack = self.btn_color_crack.hex()
         o.show_weak_layer = self.chk_weak_layer.isChecked()
         o.color_weak_layer = self.btn_color_weak_layer.hex()
+        o.show_anisotropic_surface = self.chk_aniso.isChecked()
+        o.color_anisotropic_surface = self.btn_color_aniso.hex()
 
         o.show_boundary_vertices = self.chk_vertices.isChecked()
         o.line_width = self.spn_line_width.value()
@@ -331,6 +339,8 @@ class DisplayOptionsDialog(QDialog):
         self.btn_color_crack.set_hex(fresh.color_tension_crack)
         self.chk_weak_layer.setChecked(fresh.show_weak_layer)
         self.btn_color_weak_layer.set_hex(fresh.color_weak_layer)
+        self.chk_aniso.setChecked(fresh.show_anisotropic_surface)
+        self.btn_color_aniso.set_hex(fresh.color_anisotropic_surface)
         self.chk_vertices.setChecked(fresh.show_boundary_vertices)
         self.spn_line_width.setValue(fresh.line_width)
         self.chk_ruler.setChecked(fresh.show_ruler)

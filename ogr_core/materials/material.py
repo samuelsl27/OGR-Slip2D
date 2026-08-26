@@ -160,6 +160,19 @@ class Material:
     # Defaults to True so no existing project changes: a file written
     # before the field existed behaves as it always did, with the grid on.
     use_grid: bool = True
+    # v0.1.126 — boundary id of the ANISOTROPIC SURFACE that orients this
+    # material's bedding, or None for the single global angle its strength
+    # model already carries. Only the three anisotropic models read it
+    # (Anisotropic Linear, Snowden Modified, Generalized Anisotropic); for
+    # anything else it is inert, and that is deliberate rather than an
+    # oversight: assigning a fold direction to a Mohr-Coulomb material
+    # would be a setting that decides nothing, and the dialog does not
+    # offer it.
+    #
+    # It lives on the MATERIAL and not on the boundary because the link
+    # runs that way: several materials may read the same surface, and the
+    # surface knows nothing about who reads it.
+    anisotropic_surface_id: Optional[str] = None
     id: str = field(default_factory=lambda: str(uuid4()))
 
     # ------------------------------------------------------------------
@@ -202,6 +215,7 @@ class Material:
             "drawdown_envelope": _envelope_to_dict(self.drawdown_envelope),
             "use_grid": self.use_grid,
             "weight_creates_excess": self.weight_creates_excess,
+            "anisotropic_surface_id": self.anisotropic_surface_id,
         }
 
     @classmethod
@@ -231,6 +245,7 @@ class Material:
             auto_hu=bool(data.get("auto_hu", False)),
             undrained_behaviour=bool(data.get("undrained_behaviour", False)),
             b_bar=float(data.get("b_bar", 0.0)),
+            anisotropic_surface_id=data.get("anisotropic_surface_id"),
             drawdown_envelope=_envelope_from_dict(
                 data.get("drawdown_envelope")),
             # v0.1.72 — absent in files written before the switch existed,

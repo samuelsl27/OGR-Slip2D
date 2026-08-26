@@ -1102,6 +1102,17 @@ class _AdvancedPage(QWidget):
         form.addRow(tr("Percentage of slices:"), self.sp_tensile_pct)
         self.chk_tensile.toggled.connect(self._refresh)
 
+        # v0.1.126 — the swarm's own switch, where the reference puts it.
+        self.chk_pso_enhanced = QCheckBox(
+            tr("Use enhanced particle swarm algorithm"))
+        self.chk_pso_enhanced.setChecked(bool(
+            getattr(self.s, "pso_enhanced", True)))
+        self.chk_pso_enhanced.setToolTip(tr(
+            "At the end of each iteration the particles sitting on the "
+            "highest factors are scattered again. It keeps a swarm that "
+            "has collapsed onto one region still looking elsewhere."))
+        form.addRow("", self.chk_pso_enhanced)
+
         self.chk_steffensen = QCheckBox(
             tr("Accelerate convergence (Steffensen)"))
         self.chk_steffensen.setChecked(bool(self.s.iterate_steffensen))
@@ -1236,3 +1247,4 @@ class _AdvancedPage(QWidget):
         self.s.min_lambda = self.sp_lmin.value()
         self.s.max_lambda = self.sp_lmax.value()
         self.s.max_base_angle_deg = self.sp_base_angle.value()
+        self.s.pso_enhanced = self.chk_pso_enhanced.isChecked()

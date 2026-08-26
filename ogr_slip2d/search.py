@@ -116,6 +116,13 @@ class SearchResult:
     # optimisation rather than from the search, which is the one thing the
     # factor of safety alone cannot tell you.
     optimized: Optional[LEMResult] = None
+    # v0.1.126 — the DISTINCT local minima, best first. Empty for the six
+    # searches that predate the multimodal one, so nothing that reads a
+    # SearchResult today has to change: ``critical`` is still the answer,
+    # and it is still the lowest of everything evaluated. A search that
+    # fills this is saying something extra — that it looked for several
+    # and these are the ones it can tell apart — not something different.
+    minima: list = field(default_factory=list)
     # v0.1.121 — lines the run needs to say once, not once per surface.
     # Weak-layer case generation is the first user: when a surface is cut by
     # more layers than the case limit allows, the set of cases is truncated,
@@ -774,7 +781,31 @@ class BaseSearch(ABC):
         """
         if isinstance(surface, SlipCircle):
             return self.evaluate_circle(project, surface)
+        # v0.1.126 — and a polyline gets the containment rule a circle has
+        # had since v0.1.84. It never did, and every surface an
+        # optimisation produces is a polyline: on verification problem 103
+        # the walk took the critical surface to y = -4.83 under a model
+        # whose floor is y = 0 and came back with 1.0902 where the clipped
+        # surface gives 1.2676. Outside the regions the slicer falls back
+        # on the FIRST material, which on that model is the weakest of the
+        # two, so leaving the model was rewarded. Anomaly D48.
+        if self._leaves_soil(project, surface):
+            return None
         return self._best_of_masses(project, (surface,))
+
+    def _leaves_soil(self, project: Project, surface) -> bool:
+        """Whether a non-circular surface dips below the External."""
+        from ogr_core.geometry import BoundaryType
+        from .surface import polyline_leaves_soil
+
+        pl = getattr(surface, "polyline", None)
+        verts = list(getattr(pl, "vertices", ()) or ())
+        if not verts:
+            return False
+        for b in project.boundaries:
+            if b.btype == BoundaryType.EXTERNAL:
+                return polyline_leaves_soil(verts, list(b.polyline.vertices))
+        return False
 
     # ------------------------------------------------------------------
     def run(self, project: Project) -> SearchResult:
@@ -842,6 +873,13 @@ class BaseSearch(ABC):
         from .optimize import optimize_surface
 
         opts = self.optimize
+        # v0.1.126 — a search that reports SEVERAL minima optimises each
+        # of them and keeps each. Folding them into the ordinary path
+        # would keep only the best walk, which is exactly the information
+        # a multimodal search exists to produce.
+        if getattr(result, "minima", None):
+            self._optimize_each_minimum(project, result)
+            return
         targets = self._surfaces_to_optimize(result)
         if not targets:
             return
@@ -888,6 +926,83 @@ class BaseSearch(ABC):
         result.optimized = best
         result.evaluations.append(best)
         result.valid_count += 1
+
+    def _optimize_each_minimum(self, project: Project, result) -> None:
+        """Walk every reported minimum, and keep every walk.
+
+        The ordinary path keeps the single best walk because there is a
+        single answer to improve. Here each minimum is a different
+        mechanism, so a walk that lowers one of them says nothing about
+        the others and may not replace them.
+
+        A minimum found by the swarm is a CIRCLE, and the ordinary path
+        skips circles on the grounds that they have no vertices to move.
+        That is right for a circular search, whose whole answer is a
+        circle; it is wrong here, because the reference's own division of
+        labour is that the swarm finds circles and the optimisation
+        reshapes them. So a circle is discretised onto its own arc first
+        — onto ``densify_to`` points, which are ON the circle rather than
+        the chord polygon a coarser sampling would give.
+        """
+        from .optimize import optimize_surface
+
+        opts = replace(self.optimize, seed=self.optimize_seed)
+        kept = []
+        improved = None
+        for i, r in enumerate(result.minima):
+            if self.progress_cb is not None and len(result.minima) > 1:
+                self.progress_cb(i + 1, len(result.minima))
+            start = self._as_optimisable(r.surface, opts.densify_to)
+            keep = r
+            if start is not None:
+                _s, res, _rep = optimize_surface(project, self, start, opts)
+                if (res is not None and res.is_valid
+                        and getattr(res, "admissible", True)
+                        and res.fos < r.fos):
+                    result.evaluations.append(res)
+                    result.valid_count += 1
+                    keep = res
+                    if improved is None or res.fos < improved.fos:
+                        improved = res
+            kept.append(keep)
+        result.minima = sorted(kept, key=lambda x: x.fos)
+        # ``optimized`` means "the answer came from the walk, not the
+        # search", so it is only set when the walk actually produced the
+        # global minimum.
+        if improved is not None and result.minima \
+                and result.minima[0] is improved:
+            result.optimized = improved
+
+    @staticmethod
+    def _as_optimisable(surface, n_points: int):
+        """A surface the random walk can move, or None.
+
+        A polyline is already one. A circle becomes ``n_points`` samples
+        of its own arc between the endpoints it was resolved onto —
+        points ON the circle, so the starting surface is the circle to
+        within the sampling and not a coarser polygon inscribed in it.
+        """
+        if getattr(surface, "polyline", None) is not None:
+            return surface
+        if not isinstance(surface, SlipCircle):
+            return None
+        x0 = getattr(surface, "x_left", None)
+        x1 = getattr(surface, "x_right", None)
+        if x0 is None or x1 is None or not (x1 > x0):
+            return None
+        from ogr_core.geometry import Polyline, Vertex
+        from .surface import SlipSurface
+
+        n = max(3, int(n_points))
+        cx, cy, r = surface.centre_x, surface.centre_y, surface.radius
+        pts = []
+        for i in range(n + 1):
+            x = x0 + (x1 - x0) * i / n
+            d = r * r - (x - cx) ** 2
+            if d < 0.0:
+                return None
+            pts.append(Vertex(x, cy - math.sqrt(d)))
+        return SlipSurface(polyline=Polyline(vertices=pts, closed=False))
 
     def _surfaces_to_optimize(self, result) -> list:
         """The *Surfaces to Optimize* group, as a list of results.
@@ -1434,8 +1549,155 @@ class GridSearch(BaseSearch):
 
 
 # ======================================================================
+@dataclass
+class SlopeFrame:
+    """The sampling frame a circle-generating search works in.
+
+    Three numbers define one trial circle: the abscissa where it leaves
+    the ground on the toe side, the abscissa where it enters on the crest
+    side, and the inclination of the surface at the toe. Everything else
+    — the centre, the radius — follows from those by construction.
+
+    v0.1.126 — extracted from ``SlopeSearch._run`` so the Particle Swarm
+    search can search THE SAME space rather than inventing a second one.
+    Two doors into one calculation carrying different frames is the shape
+    of defect this project has already paid for twice (v0.1.89, D07b), and
+    a niching radius quoted as "10 % of the search space" means nothing
+    at all unless the space is one thing.
+
+    ``to_right`` says whether the crest is to the right of the toe, and
+    the two windows are stored already ordered, low first.
+    """
+
+    top: list
+    toe_x0: float
+    toe_x1: float
+    crest_x0: float
+    crest_x1: float
+    ang_lo: float          # radians
+    ang_hi: float          # radians
+    to_right: bool
+    beta_deg: float
+    height: float
+
+    def circle_params(self, u_toe: float, u_crest: float, u_ang: float):
+        """Map a point of the unit cube onto ``(x_toe, x_crest, theta)``.
+
+        The unit cube is what makes a distance between two particles
+        comparable across the three axes: two abscissae in metres and an
+        angle in radians cannot be added up otherwise. It is also what
+        gives "10 % of the span of the search space" a meaning that does
+        not change with the model's units.
+        """
+        def _c(u):
+            return 0.0 if u < 0.0 else (1.0 if u > 1.0 else u)
+
+        return (self.toe_x0 + _c(u_toe) * (self.toe_x1 - self.toe_x0),
+                self.crest_x0 + _c(u_crest) * (self.crest_x1 - self.crest_x0),
+                self.ang_lo + _c(u_ang) * (self.ang_hi - self.ang_lo))
+
+
+def slope_frame(project: Project,
+                initial_angle_lower_deg: float = -45.0,
+                initial_angle_upper_deg: Optional[float] = None
+                ) -> Optional[SlopeFrame]:
+    """Build the :class:`SlopeFrame` of ``project``, or None.
+
+    None means the model cannot be framed at all — no external boundary,
+    or a ground profile with fewer than two points — and the caller
+    returns an empty result rather than guessing.
+    """
+    from ogr_core.geometry import BoundaryType
+
+    ext = None
+    for b in project.boundaries:
+        if b.btype == BoundaryType.EXTERNAL:
+            ext = b
+            break
+    if ext is None:
+        return None
+    ext_verts = ext.polyline.vertices
+    if len(ext_verts) < 3:
+        return None
+
+    top = PathSearch._ground_profile(ext_verts)
+    if len(top) < 2:
+        return None
+
+    x_left = top[0].x
+    x_right = top[-1].x
+    y_max = max(v.y for v in ext_verts)
+    y_min = min(v.y for v in ext_verts)
+    H = y_max - y_min
+
+    # Locate slope face (steepest segment) → toe/crest + β
+    steepest_i = 0
+    steepest = -1.0
+    for i in range(len(top) - 1):
+        ddx = top[i + 1].x - top[i].x
+        ddy = top[i + 1].y - top[i].y
+        if abs(ddx) < 1e-9:
+            continue
+        s = abs(ddy / ddx)
+        if s > steepest:
+            steepest = s
+            steepest_i = i
+    face_a = top[steepest_i]
+    face_b = top[steepest_i + 1]
+    beta_deg = math.degrees(math.atan2(
+        abs(face_b.y - face_a.y), abs(face_b.x - face_a.x)))
+    toe_pt = face_a if face_a.y <= face_b.y else face_b
+    crest_pt = face_b if face_a.y <= face_b.y else face_a
+    to_right = crest_pt.x > toe_pt.x
+    face_lo_x = min(face_a.x, face_b.x)
+    face_hi_x = max(face_a.x, face_b.x)
+    face_w = max(face_hi_x - face_lo_x, 1e-6)
+
+    # Entry (toe-side) and exit (crest-side) sampling ranges along x.
+    # Generous ranges (extending onto the flat shelf and plateau) so
+    # the search can reach deep-seated circles whose daylight points
+    # are well beyond the slope face — these often govern the
+    # critical FoS.
+    if to_right:
+        toe_x0 = max(x_left, toe_pt.x - 0.8 * face_w)
+        toe_x1 = toe_pt.x + 0.6 * face_w
+        crest_x0 = crest_pt.x - 0.4 * face_w
+        crest_x1 = min(x_right, crest_pt.x + 1.5 * face_w)
+    else:
+        toe_x0 = toe_pt.x - 0.6 * face_w
+        toe_x1 = min(x_right, toe_pt.x + 0.8 * face_w)
+        crest_x0 = max(x_left, crest_pt.x - 1.5 * face_w)
+        crest_x1 = crest_pt.x + 0.4 * face_w
+        toe_x0, toe_x1 = min(toe_x0, toe_x1), max(toe_x0, toe_x1)
+        crest_x0, crest_x1 = min(crest_x0, crest_x1), max(crest_x0, crest_x1)
+
+    # Initial-angle window (radians, descending into slope). Use a
+    # wide window so both shallow and deep-seated circles are
+    # generated: from steep (toward −70°) up to nearly horizontal.
+    ang_lo = math.radians(initial_angle_lower_deg)
+    if initial_angle_upper_deg is not None:
+        ang_hi = math.radians(initial_angle_upper_deg)
+    else:
+        # v0.1.24 FIX (anomaly A2): same root cause as A1 — the
+        # documented Upper Angle is +(β − 5)°. The tangent of a
+        # toe-exiting circle at the toe RISES towards the crest
+        # (e.g. +15.5° for the reference case), so negating this
+        # limit excluded the true critical circle from the search
+        # and the reported FoS was ~1.05 instead of ~0.89.
+        ang_hi = math.radians(max(beta_deg - 5.0, 5.0))
+    # Broaden downward so deep circles (steep exit tangents) appear
+    ang_lo = min(ang_lo, math.radians(-70.0))
+    if ang_lo > ang_hi:
+        ang_lo, ang_hi = ang_hi, ang_lo
+
+    return SlopeFrame(top=top, toe_x0=toe_x0, toe_x1=toe_x1,
+                      crest_x0=crest_x0, crest_x1=crest_x1,
+                      ang_lo=ang_lo, ang_hi=ang_hi, to_right=to_right,
+                      beta_deg=beta_deg, height=H)
+
+
 class SlopeSearch(BaseSearch):
-    """Slope Search (circular) — Slide2 method.
+    """Slope Search (circular) — the documented random two-point method.
 
     v0.1.17 — reimplemented to follow the documented Slide2 algorithm,
     which is the circular analogue of the Path Search:
@@ -1490,91 +1752,22 @@ class SlopeSearch(BaseSearch):
         self.rng = random.Random(seed)
 
     def _run(self, project: Project) -> SearchResult:
-        from ogr_core.geometry import BoundaryType
-
         result = SearchResult(method_id=self.method.METHOD_ID)
 
-        ext = None
-        for b in project.boundaries:
-            if b.btype == BoundaryType.EXTERNAL:
-                ext = b
-                break
-        if ext is None:
+        # v0.1.126 — the frame moved to ``slope_frame`` so the Particle
+        # Swarm search reads the SAME one. Nothing about it changed; the
+        # suite is the proof, since every Slope Search result in it is
+        # pinned.
+        frame = slope_frame(project, self.initial_angle_lower_deg,
+                            self.initial_angle_upper_deg)
+        if frame is None:
             return result
-        ext_verts = ext.polyline.vertices
-        if len(ext_verts) < 3:
-            return result
-
-        # Ground profile (real upper contour). Reuse PathSearch helper.
-        top = PathSearch._ground_profile(ext_verts)
-        if len(top) < 2:
-            return result
-
-        x_left = top[0].x
-        x_right = top[-1].x
-        y_max = max(v.y for v in ext_verts)
-        y_min = min(v.y for v in ext_verts)
-        H = y_max - y_min
-
-        # Locate slope face (steepest segment) → toe/crest + β
-        steepest_i = 0
-        steepest = -1.0
-        for i in range(len(top) - 1):
-            ddx = top[i + 1].x - top[i].x
-            ddy = top[i + 1].y - top[i].y
-            if abs(ddx) < 1e-9:
-                continue
-            s = abs(ddy / ddx)
-            if s > steepest:
-                steepest = s
-                steepest_i = i
-        face_a = top[steepest_i]
-        face_b = top[steepest_i + 1]
-        beta_deg = math.degrees(math.atan2(
-            abs(face_b.y - face_a.y), abs(face_b.x - face_a.x)))
-        toe_pt = face_a if face_a.y <= face_b.y else face_b
-        crest_pt = face_b if face_a.y <= face_b.y else face_a
-        to_right = crest_pt.x > toe_pt.x
-        face_lo_x = min(face_a.x, face_b.x)
-        face_hi_x = max(face_a.x, face_b.x)
-        face_w = max(face_hi_x - face_lo_x, 1e-6)
-
-        # Entry (toe-side) and exit (crest-side) sampling ranges along x.
-        # Generous ranges (extending onto the flat shelf and plateau) so
-        # the search can reach deep-seated circles whose daylight points
-        # are well beyond the slope face — these often govern the
-        # critical FoS.
-        if to_right:
-            toe_x0 = max(x_left, toe_pt.x - 0.8 * face_w)
-            toe_x1 = toe_pt.x + 0.6 * face_w
-            crest_x0 = crest_pt.x - 0.4 * face_w
-            crest_x1 = min(x_right, crest_pt.x + 1.5 * face_w)
-        else:
-            toe_x0 = toe_pt.x - 0.6 * face_w
-            toe_x1 = min(x_right, toe_pt.x + 0.8 * face_w)
-            crest_x0 = max(x_left, crest_pt.x - 1.5 * face_w)
-            crest_x1 = crest_pt.x + 0.4 * face_w
-            toe_x0, toe_x1 = min(toe_x0, toe_x1), max(toe_x0, toe_x1)
-            crest_x0, crest_x1 = min(crest_x0, crest_x1), max(crest_x0, crest_x1)
-
-        # Initial-angle window (radians, descending into slope). Use a
-        # wide window so both shallow and deep-seated circles are
-        # generated: from steep (toward −70°) up to nearly horizontal.
-        ang_lo = math.radians(self.initial_angle_lower_deg)
-        if self.initial_angle_upper_deg is not None:
-            ang_hi = math.radians(self.initial_angle_upper_deg)
-        else:
-            # v0.1.24 FIX (anomaly A2): same root cause as A1 — the
-            # documented Upper Angle is +(β − 5)°. The tangent of a
-            # toe-exiting circle at the toe RISES towards the crest
-            # (e.g. +15.5° for the reference case), so negating this
-            # limit excluded the true critical circle from the search
-            # and the reported FoS was ~1.05 instead of ~0.89.
-            ang_hi = math.radians(max(beta_deg - 5.0, 5.0))
-        # Broaden downward so deep circles (steep exit tangents) appear
-        ang_lo = min(ang_lo, math.radians(-70.0))
-        if ang_lo > ang_hi:
-            ang_lo, ang_hi = ang_hi, ang_lo
+        top = frame.top
+        to_right = frame.to_right
+        toe_x0, toe_x1 = frame.toe_x0, frame.toe_x1
+        crest_x0, crest_x1 = frame.crest_x0, frame.crest_x1
+        ang_lo, ang_hi = frame.ang_lo, frame.ang_hi
+        H = frame.height
 
         best = []  # (fos, cx, cy, r)
         for i in range(self.num_surfaces):

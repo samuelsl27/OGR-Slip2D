@@ -33,6 +33,7 @@ from ogr_core.geometry import (
     Boundary, BoundaryType, Polyline, Vertex, distance_to_profile,
     envelope_y_at, ground_surface,
 )
+from ogr_core.geometry.anisotropic_surface import anisotropy_angle_at
 from ogr_core.hydraulic.excess_pore_pressure import (
     excess_at,
     is_enabled as excess_is_enabled,
@@ -133,6 +134,11 @@ class Slice:
     #                   that is the perpendicular, not the vertical drop.
     layer_top_y: Optional[float] = None
     slope_distance: Optional[float] = None
+    # v0.1.126 — LOCAL bedding orientation at this base [deg from
+    # horizontal], or None when the material names no anisotropic
+    # surface. None and 0.0 are different answers and stay different:
+    # 0.0 is a horizontal bedding, None is nobody having said.
+    bedding_angle_deg: Optional[float] = None
     # v0.1.121 — the id of the weak-layer boundary this base runs along, or
     # None. It is what makes the substitution auditable: the strength of a
     # slice on a joint comes from the joint's material and not from the
@@ -300,6 +306,36 @@ def _apply_ponded_water(project: Project, s: "Slice") -> None:
     slope = (s.top_y_right - s.top_y_left) / dx
     column = gamma_w * depth * dx        # kN/m, the water column weight
     s.add_water_force(f_h=column * slope, y=top, f_v=column)
+
+
+def _anisotropic_surfaces(project: Project) -> dict:
+    """``{material id: polyline}`` for the materials that name one.
+
+    v0.1.126. Empty when no material points at an anisotropic surface,
+    which is every project until somebody draws one — so the per-slice
+    cost of the feature is a dictionary lookup that finds nothing.
+
+    A material naming a surface that has been DELETED is left out rather
+    than made to fail: the strength model then falls back on its own
+    global bedding angle, which is what it did before the surface
+    existed. Silently ignoring a dangling id would be wrong if it changed
+    an answer, and it cannot: the fallback is the documented behaviour of
+    a material with no surface.
+    """
+    wanted = {getattr(m, "anisotropic_surface_id", None): None
+              for m in project.materials}
+    wanted.pop(None, None)
+    if not wanted:
+        return {}
+    by_id = {b.id: b.polyline for b in project.boundaries
+             if b.btype == BoundaryType.ANISOTROPIC_SURFACE}
+    out = {}
+    for m in project.materials:
+        sid = getattr(m, "anisotropic_surface_id", None)
+        pl = by_id.get(sid) if sid else None
+        if pl is not None:
+            out[m.id] = pl
+    return out
 
 
 def _material_at(project: Project, point: Vertex) -> Optional[Material]:
@@ -1236,6 +1272,13 @@ def slice_surface(
         getattr(getattr(m, "strength", None), "NEEDS_SLOPE_DISTANCE", False)
         for m in project.materials)
 
+    # v0.1.126 — the anisotropic surfaces the materials of THIS project
+    # point at, resolved once. Not once per slice: the lookup walks the
+    # boundary list, and the mapping cannot change while a surface is
+    # being sliced. Empty for every model that has none, which is all of
+    # them until somebody draws one, so the cost is one ``any()``.
+    aniso_by_material = _anisotropic_surfaces(project)
+
     # v0.1.121 — the stretches where a weak layer IS the surface, resolved to
     # materials once instead of once per slice. Empty for every surface that
     # no joint clips, which is every surface of every model without weak
@@ -1448,6 +1491,16 @@ def slice_surface(
             distance_to_profile(ground, xc, base_y_mid)
             if wants_slope_distance else None)
 
+        # v0.1.126 — the bedding orientation where THIS base sits. Read at
+        # the CLOSEST point of the polyline, not the one vertically above:
+        # that is what an anisotropic surface means and what separates it
+        # from a water surface.
+        bedding_angle_deg = None
+        if aniso_by_material:
+            pl = aniso_by_material.get(getattr(mat, "id", None))
+            if pl is not None:
+                bedding_angle_deg = anisotropy_angle_at(pl, xc, base_y_mid)
+
         # v0.1.96 — a water surface that does not reach this abscissa is
         # a REFUSAL, not zero pore pressure. ``pore_pressure_at`` cannot
         # tell the caller which of the two it is returning, so the question
@@ -1527,6 +1580,7 @@ def slice_surface(
             material=mat,
             layer_top_y=layer_top_y,
             slope_distance=slope_distance,
+            bedding_angle_deg=bedding_angle_deg,
             weak_layer_id=weak_layer_id,
         )
         # v0.1.61 — free-standing water resting on this slice. Applied

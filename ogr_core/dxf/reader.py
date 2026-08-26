@@ -60,6 +60,7 @@ class DxfEntityKind(Enum):
     DRAWDOWN = "drawdown"
     TENSION_CRACK = "tension_crack"
     WEAK_LAYER = "weak_layer"
+    ANISOTROPIC_SURFACE = "anisotropic_surface"
     SUPPORT = "support"
 
 
@@ -87,6 +88,9 @@ LAYER_DEFAULTS: dict[DxfEntityKind, tuple[str, ...]] = {
     DxfEntityKind.WEAK_LAYER: (
         "OGR_WEAK_LAYER", "WEAK_LAYER", "WEAKLAYER", "WEAK", "JOINT",
         "CAPA_DEBIL", "CAPADEBIL", "JUNTA", "JUNTAS"),
+    DxfEntityKind.ANISOTROPIC_SURFACE: (
+        "OGR_ANISO_SURFACE", "ANISO_SURFACE", "ANISOTROPIC_SURFACE",
+        "ANISOTROPIC", "ANISO", "SUPERFICIE_ANISOTROPA", "ANISOTROPA"),
     DxfEntityKind.SUPPORT: (
         "OGR_SUPPORT", "SUPPORT", "SUPPORTS", "SOPORTE", "SOPORTES",
         "ANCLAJE", "ANCLAJES", "BULON", "BULONES", "REFUERZO"),

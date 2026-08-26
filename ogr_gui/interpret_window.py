@@ -493,6 +493,11 @@ class InterpretWindow(QMainWindow):
         # v0.1.20 — surface display mode (Data menu): the default is the
         # global minimum surface, matching the checked menu radio.
         self._surface_mode = "global_min"
+        # v0.1.126 — whether *Show GM Surfaces* is ticked. Declared here
+        # rather than left to ``getattr``: a piece of view state that only
+        # exists once a slot has run is exactly how the action it belongs
+        # to came to draw nothing for so long.
+        self._show_minima = False
         self._selected_surface_id = None
         self._fos_filter = None
         self._error_filter = None
@@ -926,22 +931,37 @@ class InterpretWindow(QMainWindow):
         self._act_export_stats = QAction(
             "Export Statistics Data...", self,
             triggered=self._export_statistics)
-        self._act_show_gm = QAction("Show GM Surfaces", self,
+        self._act_show_gm = QAction(tr("Show GM Surfaces"), self,
                                     checkable=True)
         self._act_show_gm.toggled.connect(self._toggle_gm_surfaces)
-        self._act_pick_gm = QAction("Pick GM Surfaces...", self,
+        self._act_pick_gm = QAction(tr("Pick GM Surfaces"), self,
                                     triggered=self._pick_gm_surfaces)
         self._act_crit_prob = QAction(
             "Critical Probabilistic Surface", self, checkable=True)
         self._act_crit_prob.toggled.connect(self._toggle_critical_prob)
         stats_acts = [self._act_sens_plot, self._act_conv_plot,
-                      self._act_export_stats, self._act_show_gm,
-                      self._act_pick_gm, self._act_crit_prob]
+                      self._act_export_stats, self._act_crit_prob]
         for act in stats_acts:
             act.setEnabled(self._has_statistics())
             act.setToolTip(tr(
                 "Requires a probabilistic or sensitivity analysis: run "
                 "Statistics → Compute Statistics in the modeller."))
+            m_stat.addAction(act)
+
+        # v0.1.126 — the two "several minima" actions have a SECOND source
+        # since this version: a multimodal search fills
+        # ``SearchResult.minima`` without any statistics being run. Gating
+        # them on a probabilistic result alone would leave the minima of a
+        # Particle Swarm search unreachable from any menu, which is the
+        # defect rule 3 exists to catch — and it would be a new one, not
+        # an inherited one.
+        has_minima = bool(getattr(self.search_result, "minima", None))
+        for act in (self._act_show_gm, self._act_pick_gm):
+            act.setEnabled(self._has_statistics() or has_minima)
+            act.setToolTip(tr(
+                "Draws every minimum the result reports: the regions a "
+                "multimodal search told apart, or the per-sample global "
+                "minima of an Overall Slope run."))
             m_stat.addAction(act)
 
         # -- Tools ----------------------------------------------------
@@ -1195,6 +1215,9 @@ class InterpretWindow(QMainWindow):
             invalid_reason_fn=self.invalid_reason,
             query_ids=[q.surface.to_dict().get("id")
                        for q in self._queries()],
+            extra_surface_dicts=(self.reported_minima()
+                                 if getattr(self, "_show_minima", False)
+                                 else None),
         )
         # v0.1.86 — the read-outs are re-added here, after the canvas has
         # rebuilt the scene, for the same reason everything else is: this
@@ -2125,48 +2148,96 @@ class InterpretWindow(QMainWindow):
         self.statusBar().showMessage(tr("Statistics exported to %s")
                                     % path, 8000)
 
-    def _toggle_gm_surfaces(self, on: bool) -> None:
-        """Show every global minimum found by an Overall Slope run.
+    def reported_minima(self) -> list:
+        """Surface dicts of the several minima this result reports.
 
-        Their number is the point: several distinct locations mean the
-        critical surface moves with the input, which a single drawn
-        surface would hide.
+        Two sources, and they never both apply: a multimodal search fills
+        ``SearchResult.minima`` with the most critical surface of each
+        region it could tell apart, and an Overall Slope probabilistic run
+        fills ``global_minima`` with the critical surface of each sample.
+        The question the user asks of both is the same — where else could
+        this slope fail — so one pair of actions answers it.
         """
+        out = []
+        res = self.search_result
+        for r in (getattr(res, "minima", None) or []):
+            sd = dict(r.surface.to_dict())
+            sd["_fos"] = r.fos
+            out.append(sd)
+        if out:
+            return out
         prob, _sens = self._stat_results()
-        if prob is None or not prob.ok:
-            if on:
-                self._info(tr("No probabilistic result."))
-            return
-        mid = next(iter(prob.by_method))
-        minima = getattr(prob.by_method[mid], "global_minima", []) or []
+        if prob is not None and prob.ok and prob.by_method:
+            mid = next(iter(prob.by_method))
+            for sd in (getattr(prob.by_method[mid], "global_minima", [])
+                       or []):
+                if sd:
+                    out.append(dict(sd))
+        return out
+
+    def _toggle_gm_surfaces(self, on: bool) -> None:
+        """DRAW every reported minimum, not merely count them.
+
+        v0.1.126 — until this version the body of this slot was one
+        status-bar message and nothing else: the action was checkable, it
+        was in the menu, and ticking it drew no surface anywhere. A
+        control that does nothing is worse than no control, because the
+        user believes the picture in front of them shows what they asked
+        for. Found while building the multimodal search, which needed
+        exactly this machinery.
+        """
+        self._show_minima = bool(on)
+        n = len(self.reported_minima()) if on else 0
+        self._refresh_canvas_with_highlights()
         self.statusBar().showMessage(
-            tr("%d distinct global minimum surface(s)") % len(minima)
-            if on else "", 8000)
+            tr("%d distinct minimum surface(s)") % n if on else "", 8000)
 
     def _pick_gm_surfaces(self) -> None:
-        prob, _sens = self._stat_results()
-        if prob is None or not prob.ok:
-            self._info(tr("No probabilistic result."))
-            return
-        mid = next(iter(prob.by_method))
-        minima = getattr(prob.by_method[mid], "global_minima", []) or []
+        """Pick one reported minimum and select it on the canvas.
+
+        v0.1.126 — this used to open a MODAL ``QInputDialog`` and throw
+        the answer away: whatever the user picked, nothing happened.
+        Two defects in four lines, and the modal one is the graver, since
+        this project forbids a modal dialog in code a test may execute.
+        The list is now non-modal and picking a row selects the surface.
+        """
+        from PySide6.QtWidgets import QDialog, QListWidget, QVBoxLayout
+
+        minima = self.reported_minima()
         if not minima:
             self._info(tr(
-                "This run recorded no separate global minima. They are "
-                "produced by the Overall Slope analysis type, which "
-                "repeats the whole search per sample."))
+                "This search reported no separate minima. They come from "
+                "the Particle Swarm search with several minima "
+                "requested."))
             return
-        from PySide6.QtWidgets import QInputDialog
-        items = []
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(tr("Pick GM Surfaces"))
+        lay = QVBoxLayout(dlg)
+        lst = QListWidget(dlg)
         for i, sd in enumerate(minima, 1):
-            if sd and "radius" in sd:
-                items.append(tr("%d: circle centre (%.2f, %.2f) r = %.2f")
-                             % (i, sd["centre_x"], sd["centre_y"],
-                                sd["radius"]))
+            fos = sd.get("_fos")
+            tail = ("" if fos is None
+                    else tr("   |   FS = %s") % ("%.3f" % fos))
+            if "radius" in sd:
+                lst.addItem(tr("%d: circle centre (%.2f, %.2f) r = %.2f")
+                            % (i, sd["centre_x"], sd["centre_y"],
+                               sd["radius"]) + tail)
             else:
-                items.append(tr("%d: non-circular surface") % i)
-        QInputDialog.getItem(self, tr("Pick GM Surfaces"),
-                             tr("Global minima found:"), items, 0, False)
+                lst.addItem(tr("%d: non-circular surface") % i + tail)
+        lay.addWidget(lst)
+
+        def _picked(row: int) -> None:
+            if 0 <= row < len(minima):
+                self._selected_surface_id = minima[row].get("id")
+                self._refresh_canvas_with_highlights()
+
+        lst.currentRowChanged.connect(_picked)
+        # NON-modal, and kept on the window so Python does not collect it
+        # the moment this method returns.
+        dlg.setModal(False)
+        self._pick_minima_dialog = dlg
+        dlg.show()
 
     def _toggle_critical_prob(self, on: bool) -> None:
         prob, _sens = self._stat_results()

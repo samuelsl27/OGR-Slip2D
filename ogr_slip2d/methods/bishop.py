@@ -111,6 +111,11 @@ class BishopSimplified(LEMMethod):
                 # not read a depth off the other field.
                 layer_top_y=getattr(slice_, "layer_top_y", None),
                 slope_distance=getattr(slice_, "slope_distance", None),
+                # v0.1.126 — the local bedding orientation, for the three
+                # anisotropic models. None when the material names no
+                # anisotropic surface, and they then use the single global
+                # angle they carry, exactly as before this existed.
+                bedding_angle_deg=getattr(slice_, "bedding_angle_deg", None),
             )
 
         def _tau(s: float) -> float:

@@ -125,6 +125,7 @@ class DisplayOptions:
     show_piezometric: bool = True
     show_tension_crack: bool = True
     show_weak_layer: bool = True
+    show_anisotropic_surface: bool = True
     show_boundary_vertices: bool = True
     line_width: float = 1.5
 
@@ -134,6 +135,7 @@ class DisplayOptions:
     color_piezometric: str = "#4169e1"
     color_tension_crack: str = "#dc143c"
     color_weak_layer: str = "#6a5acd"
+    color_anisotropic_surface: str = "#c71585"
 
     # Miscellaneous
     show_ruler: bool = True
@@ -585,6 +587,8 @@ class CanvasView(QGraphicsView):
             BoundaryType.DRAWDOWN: True,
             BoundaryType.TENSION_CRACK: opts.show_tension_crack,
             BoundaryType.WEAK_LAYER: opts.show_weak_layer,
+            BoundaryType.ANISOTROPIC_SURFACE:
+                opts.show_anisotropic_surface,
         }.get(btype, True)
 
     def _color_for_type(self, btype: BoundaryType) -> Optional[str]:
@@ -596,6 +600,8 @@ class CanvasView(QGraphicsView):
             BoundaryType.PIEZOMETRIC: opts.color_piezometric,
             BoundaryType.TENSION_CRACK: opts.color_tension_crack,
             BoundaryType.WEAK_LAYER: opts.color_weak_layer,
+            BoundaryType.ANISOTROPIC_SURFACE:
+                opts.color_anisotropic_surface,
         }.get(btype)
 
     # ------------------------------------------------------------------
@@ -610,6 +616,7 @@ class CanvasView(QGraphicsView):
         query_ids=None,
         error_filter: str | None = None,
         invalid_reason_fn=None,
+        extra_surface_dicts=None,
     ) -> None:
         """Render the search result on the canvas.
 
@@ -753,6 +760,21 @@ class CanvasView(QGraphicsView):
 
         # Hover preview for an arbitrary surface (e.g. a grid centre
         # whose circle is NOT among those drawn)
+        # v0.1.126 — surfaces the window wants drawn that are not part of
+        # the ordinary population: the several minima of a multimodal
+        # search, and the per-sample global minima of an Overall Slope
+        # run. They survive the display mode and the filter, like a
+        # query, because the user asked for them by name.
+        for sd in (extra_surface_dicts or ()):
+            if not sd:
+                continue
+            item = SlipSurfaceItem(
+                sd, sd.get("_fos", float("inf")),
+                is_critical=False, is_selected=False, is_query=True,
+            )
+            scene.addItem(item)
+            self._result_items.append(item)
+
         if hover_surface_dict is not None:
             fos_h = hover_surface_dict.get("_hover_fos", float("inf"))
             preview = SlipSurfaceItem(

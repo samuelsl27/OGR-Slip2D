@@ -425,6 +425,20 @@ class DrainedUndrained(StrengthModel):
 
 
 # ----------------------------------------------------------------------
+def _local_bedding_deg(model, ctx, fallback_param: str = "bedding_angle"):
+    """The bedding orientation to measure against, in degrees.
+
+    v0.1.126 — an anisotropic surface answers per point, so when the
+    slicer has filled ``ctx.bedding_angle_deg`` that wins; otherwise the
+    model falls back on the single global angle it carries. ``None`` and
+    0.0 are different answers and are kept different: 0.0 is a horizontal
+    bedding somebody entered, ``None`` is nobody having said.
+    """
+    if ctx is not None and getattr(ctx, "bedding_angle_deg", None) is not None:
+        return float(ctx.bedding_angle_deg)
+    return float(model.params.get(fallback_param, 0.0))
+
+
 @register
 class AnisotropicLinear(StrengthModel):
     """Anisotropic Linear strength (Mercer 2012; Snowden / Slide2).
@@ -462,10 +476,11 @@ class AnisotropicLinear(StrengthModel):
     def needs_context(self) -> bool:
         return True
 
-    def _c_phi_for_angle(self, base_angle_deg: float):
+    def _c_phi_for_angle(self, base_angle_deg: float, bedding_deg=None):
         a = self.params["A"]
         b = self.params["B"]
-        bed = self.params["bedding_angle"]
+        bed = (self.params["bedding_angle"] if bedding_deg is None
+               else float(bedding_deg))
         # Angular distance between slice base and bedding, folded to 0–90
         delta = abs(base_angle_deg - bed) % 180.0
         if delta > 90.0:
@@ -490,7 +505,8 @@ class AnisotropicLinear(StrengthModel):
         if ctx is None:
             return self.shear_strength(sigma_n_eff)
         base_deg = math.degrees(ctx.base_angle_rad)
-        c, phi = self._c_phi_for_angle(base_deg)
+        c, phi = self._c_phi_for_angle(base_deg,
+                                       _local_bedding_deg(self, ctx))
         return c + max(sigma_n_eff, 0.0) * math.tan(math.radians(phi))
 
 
@@ -699,7 +715,8 @@ class AnisotropicStrengthFunction(StrengthModel):
     def shear_strength_ctx(self, sigma_n_eff, ctx: SliceContext | None = None):
         if ctx is None:
             return self.shear_strength(sigma_n_eff)
-        c, phi = self._c_phi(math.degrees(ctx.base_angle_rad))
+        c, phi = self._c_phi(math.degrees(ctx.base_angle_rad),
+                             _local_bedding_deg(self, ctx))
         return c + max(sigma_n_eff, 0.0) * math.tan(math.radians(phi))
 
     def to_dict(self) -> dict:
@@ -762,6 +779,20 @@ class GeneralizedAnisotropic(StrengthModel):
 
     def shear_strength_ctx(self, sigma_n_eff, ctx: SliceContext | None = None):
         angle = math.degrees(ctx.base_angle_rad) if ctx else 0.0
+        # v0.1.126 — the rule bands are angles RELATIVE TO THE BEDDING.
+        # With no anisotropic surface the bedding is horizontal and the
+        # base angle already is that relative angle, which is why this
+        # model never carried a bedding parameter; with one, the local
+        # orientation has to be subtracted first. Folded back into
+        # (-90, 90] because a bedding direction has no sense, and the
+        # bands are written on that interval.
+        bed = _local_bedding_deg(self, ctx)
+        if bed:
+            angle -= bed
+            while angle > 90.0:
+                angle -= 180.0
+            while angle <= -90.0:
+                angle += 180.0
         m = self._model_for_angle(angle)
         if m is None:
             return 0.0
@@ -813,8 +844,9 @@ class SnowdenModifiedAnisotropicLinear(StrengthModel):
     def needs_context(self) -> bool:
         return True
 
-    def _c_phi(self, base_angle_deg: float):
-        bed = self.params["bedding_angle"]
+    def _c_phi(self, base_angle_deg: float, bedding_deg=None):
+        bed = (self.params["bedding_angle"] if bedding_deg is None
+               else float(bedding_deg))
         b = max(self.params["B"], 1e-6)
         delta = abs(base_angle_deg - bed) % 180.0
         if delta > 90.0:

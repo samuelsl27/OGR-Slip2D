@@ -1446,6 +1446,80 @@ def compose_with_bedrock(circle: SlipCircle, external):
 
 
 # ----------------------------------------------------------------------
+# ----------------------------------------------------------------------
+def polyline_leaves_soil(points, external_vertices: list) -> bool:
+    """True when a POLYLINE surface dips below the External Boundary.
+
+    v0.1.126. The rule is the reference's, stated under *Grid Search*: "if
+    a surface extends past the lower limits of the External Boundary, the
+    surface is discarded, and is not analyzed", reported under its error
+    code -103. :func:`leaves_soil_region` has enforced it for CIRCLES
+    since v0.1.84 — and only for circles. A polyline never passed through
+    it, because ``evaluate_surface`` hands one straight to the slicer.
+
+    **What that cost.** Every surface an optimisation produces is a
+    polyline, and the walk moves vertices towards a lower factor of
+    safety, which is precisely the direction in which the outside of the
+    model lies. Measured on verification problem 103, whose base is at
+    y = 0: the optimised critical surface reached **y = -4.83**, was
+    judged valid and admissible, and returned 1.0902 where the same
+    surface clipped back to y >= 0 returns 1.2676. Sixteen per cent, on
+    the unsafe side.
+
+    And it is worse than analysing an empty region, because of what fills
+    it: outside every material region ``Project.material_at`` answers
+    None, and the slicer's fallback is the FIRST material of the project.
+    On that model that is the embankment at cu = 60 kPa — the WEAKEST of
+    the two — so the optimiser was not merely allowed to leave the model,
+    it was rewarded for it. Anomaly D48; it is also the size and the sign
+    of the long-standing anomaly of verification problem 41, where a Path
+    Search reported a minimum below every published reference.
+
+    The test is done at the surface's own vertices AND at every abscissa
+    where the boundary's lower envelope has one of its own. Vertices
+    alone would miss a straight segment passing under a base that steps
+    up between them, which is exactly the shape a benched excavation
+    has.
+    """
+    from ogr_core.geometry.ground import lower_y_at
+
+    pts = [(float(p.x), float(p.y)) if hasattr(p, "x")
+           else (float(p[0]), float(p[1])) for p in points]
+    if len(pts) < 2 or not external_vertices:
+        return False
+
+    x_lo = min(p[0] for p in pts)
+    x_hi = max(p[0] for p in pts)
+    span = max(x_hi - x_lo, 1e-12)
+    ys = [v.y for v in external_vertices]
+    # Relative, never absolute: the same tolerance has to read the same in
+    # metres and in feet. A surface grazing the floor of the model is not
+    # leaving it.
+    tol = 1e-9 * max(span, max(ys) - min(ys), 1e-12)
+
+    def _surface_y(x):
+        for (x1, y1), (x2, y2) in zip(pts[:-1], pts[1:]):
+            lo, hi = (x1, x2) if x1 <= x2 else (x2, x1)
+            if lo - tol <= x <= hi + tol:
+                if abs(x2 - x1) < 1e-12:
+                    return min(y1, y2)
+                t = (x - x1) / (x2 - x1)
+                return y1 + t * (y2 - y1)
+        return None
+
+    abscissae = [p[0] for p in pts]
+    abscissae += [v.x for v in external_vertices if x_lo < v.x < x_hi]
+    for x in abscissae:
+        sy = _surface_y(x)
+        if sy is None:
+            continue
+        floor = lower_y_at(external_vertices, x, tol=tol)
+        if floor is not None and sy < floor - tol:
+            return True
+    return False
+
+
+# ----------------------------------------------------------------------
 def moment_axis(surface, override=None) -> tuple[float, float]:
     """The point about which moment equilibrium is taken.
 
@@ -1479,13 +1553,61 @@ def moment_axis(surface, override=None) -> tuple[float, float]:
     endpoints (48.09 against the reported 47.21 in Ej_1), so it is not the
     radius of any circle through them.
 
+    v0.1.126 — **the inference from a printed field to the axis in use is
+    now checked, and it holds.** It was worth checking: a triple printed to
+    be SHOWN need not be the one the engine computes with, and the ``r``
+    beside it certainly is not. Both alternatives were run against the
+    seven-method table that the reference publishes for these two
+    hand-drawn surfaces (``tests/test_noncircular_validation_v192.py``),
+    with the axis forced onto the printed point and with the centre of the
+    circle that best fits the vertices:
+
+                            published   printed axis   best-fit centre
+        Ej_1 Ordinary        0.897423     0.89742        0.89407  (-0.37 %)
+        Ej_1 Bishop          0.922931     0.92308        0.91866  (-0.46 %)
+        Ej_2 Ordinary        1.36921      1.36921        1.38200  (+0.93 %)
+        Ej_2 Bishop          1.42443      1.42318        1.46904  (+3.13 %)
+
+    Ordinary reproduces the published value to SIX FIGURES on both
+    surfaces with the printed axis, and it is the method with no
+    inter-slice forces to hide behind. That is not a coincidence: the
+    printed pair is the axis, and this construction is right.
+
+    **What that costs, measured and left standing.** A moment-only method
+    on a surface with no centre of rotation depends on where moments are
+    taken, and this axis is not the centre of anything. The consequence is
+    that a polyline INSCRIBED IN AN ARC does not reproduce the arc, even
+    refined to the point of being it. On the deep critical circle of
+    verification problem 103 (centre 125.400, 56.700, R 56.40, 200
+    slices)::
+
+                    Ordinary   Bishop   Spencer
+        arc          1.3043    1.3043   1.3043
+        24 chords    1.2470    1.2490   1.3051
+        192 chords   1.2427    1.2500   1.3032
+
+    Ordinary settles at -4.7 % and Bishop at -4.2 % and neither improves
+    between 48 and 192 chords: that is the axis, not discretisation, and
+    forcing the axis onto the true centre returns all three to 1.3043
+    exactly. Spencer is unaffected because it satisfies force AND moment
+    equilibrium, so its answer cannot depend on the point at all.
+
+    So the -4.7 % is a property of the convention rather than a defect to
+    fix here, and the number is worth carrying: it bounds what a
+    moment-only factor of safety means on a non-circular surface, and it
+    is the size of the anomaly recorded for verification problem 41, where
+    a Path Search reported a minimum below every published reference.
+    Anomaly D47; ``tests/test_moment_axis_v1126.py`` keeps both halves
+    measured.
+
     v0.1.111 — a COMPOSITE surface is answered before the override is even
     read, and for the same reason a circle is: it has a real centre of
     rotation, the one its arc was drawn about, and a constructed axis would
     be a worse answer than the true one. It is not a preference. Measured on
     the composite of verification problem 22, 40 slices, dry: with the
     constructed axis Bishop comes out at -1.84 % of the published value and
-    with the circle's own centre at +0.08 %.
+    with the circle's own centre at +0.08 %. That measurement is the same
+    finding as D47, two versions early and on one surface type.
     """
     if isinstance(surface, WeakLayerSurface):
         # v0.1.121 — a clipped surface keeps the axis rule of the surface it
