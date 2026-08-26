@@ -111,23 +111,47 @@ naming the fields.
 
 If the capacity depends on the stress state along the reinforcement, declare
 `NEEDS_BOND_PROFILE = True` and implement `interface_tau(sigma_v_eff, **ctx)`.
-The engine then hands `force_at` a `BondProfile` with the interface strength
-already sampled and integrated along the support, built once per analysis
-rather than once per trial surface. See `ogr_core/support/bond.py`.
+The engine then hands `force_at` a `BondProfile` with that quantity already
+sampled and integrated along the support, built once per analysis rather than
+once per trial surface. See `ogr_core/support/bond.py`.
 
-### Optional class declarations (v0.1.122)
+Despite the names, what the profile carries is not necessarily an interface
+strength: it is whatever per-unit-length quantity the type integrates along
+its own length. `Geosynthetic` and `GroutedTiebackFriction` put a bond
+strength in kPa there; `PileMicropile` in Ito & Matsui mode puts the lateral
+force per metre of depth of Ito and Matsui (1975).
 
-Four more class attributes, all read by code outside the type. They exist
+Both `NEEDS_BOND_PROFILE` and `MEASURED_FROM_TOP` may be **properties** rather
+than class constants when they are true of one mode of a type and false of
+another — `PileMicropile` does exactly that, so a pile in Shear mode does not
+pay for 50 soil samples it never reads. The engine always asks the INSTANCE,
+so a property works; read off the CLASS a property object is truthy, so do
+not read them off the class.
+
+### Optional class declarations (v0.1.122, extended in v0.1.123)
+
+Seven more class attributes, all read by code outside the type. They exist
 because `RetainingWallEFP` needed them and hard-wiring a second
-`if TYPE_ID == ...` into the dialog was the alternative:
+`if TYPE_ID == ...` into the dialog was the alternative — and then
+`PileMicropile` needed the same machinery, which is how the last two were
+found:
 
 | Attribute | Read by | What it does |
 |---|---|---|
 | `TABLE_FIELD` | the Define Support dialog | names a LIST-valued field edited through a table instead of a spin box. It must stay OUT of `PARAMETERS`, like `UserDefined.points` |
 | `TABLE_COLUMNS`, `TABLE_TITLE` | the same dialog | the column headers, their accepted range, and the group-box title. Without them the table says "Distance (m)" / "Force (kN)", which is right for exactly one type |
 | `PARAMETER_USED_BY` | the same dialog | `{choice: (params it reads,)}` for a type whose first `str` parameter selects a mode. Fields the chosen mode does not read are disabled, because a field that is editable and inert is the same defect as an inert setting and harder to spot |
+| `MODE_FIELD` | the same dialog | names the parameter whose combo decides. **Required whenever `PARAMETER_USED_BY` is declared**: without it nothing is greyed out. Added in v0.1.123, when a second type declared `PARAMETER_USED_BY` and got a combo that changed nothing, because the dialog had assumed the answer was always `"profile_type"` |
+| `TABLE_SHOWN_FOR` | the same dialog | the modes that edit `TABLE_FIELD`. Was hard-wired to `"custom"` for the same reason |
 | `MEASURED_FROM_TOP` | `compute_support_effects` | measure `distance_from_head` from the HIGHER end instead of from the head. `force_at` never sees the instance, so a profile defined from the crest down cannot work out which end that is; a support declaring this and drawn flat is excluded, not guessed |
-| `ALLOWS_PATTERN` | the analysis notes | `False` for a type whose capacity is per metre of slope already, so a row of them would apply it once per member |
+| `ALLOWS_PATTERN` | the Add Support Pattern dialog | `False` for a type whose capacity is per metre of slope already, so a row of them would apply it once per member. It filters the type list, which is where the choice is made — an analysis-level note could never have fired, because `SupportPattern` leaves no mark on the instances it generates |
+
+A type that offers *location of force* declares a `force_location` parameter and
+a `resultant_arm(distance_from_head, total_length, bond=None)` method.
+`compute_support_effects` turns the difference between the cut and that point
+into a pure couple, which only the four methods with a moment equation can
+read; `ogr_slip2d/support_notes.py` says so, once per analysis, for every type
+that offers it.
 
 A type with a table-valued field must write its own `to_dict`/`from_dict` and
 **copy the list** when constructing: JSON has no tuples, and two instances

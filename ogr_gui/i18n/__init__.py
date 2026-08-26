@@ -1502,6 +1502,23 @@ _DICTS: dict[str, dict[str, str]] = {
             "(ningún tipo de soporte de este modelo admite fila)",
         "Distance (m)": "Distancia (m)",
         "Force (kN)": "Fuerza (kN)",
+
+        # --- v0.1.123 · pilote de Ito y Matsui
+        # Terminología: el modo de rotura por CORTANTE es el que ya había
+        # -la resistencia de la sección-, y el de ITO Y MATSUI es la
+        # presión que el terreno en fluencia ejerce sobre la fila. El
+        # nombre de los autores no se traduce, como «Monte Carlo».
+        "Shear": "Cortante",
+        "Ito & Matsui": "Ito & Matsui",
+        "Pile or micropile providing transverse shear resistance. In "
+        "Shear mode the applied force is constant along the pile = pile "
+        "shear ÷ spacing; in Ito & Matsui mode it is the integrated soil "
+        "pressure on the row, which grows with depth.":
+            "Pilote o micropilote que resiste transversalmente. En modo "
+            "cortante la fuerza aplicada es constante a lo largo del "
+            "pilote = cortante del pilote ÷ separación; en modo Ito & "
+            "Matsui es la presión del terreno integrada sobre la fila, que "
+            "crece con la profundidad.",
     },
 }
 

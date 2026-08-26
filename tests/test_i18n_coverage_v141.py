@@ -165,7 +165,13 @@ class TestTranslationCompleteness:
                    # the other two of the four ARE translated ("Uniform" →
                    # "Uniforme", "Custom" → "Personalizado"), which is what
                    # says these two are cognates and not forgotten entries.
-                   "Triangular"}
+                   "Triangular",
+                   # v0.1.123 — the pile failure mode of Ito and Matsui
+                   # (1975). A proper noun, like "Monte Carlo" above: the
+                   # OTHER mode of the same combo IS translated ("Shear" →
+                   # "Cortante"), which is what says this one is a name and
+                   # not a forgotten entry.
+                   "Ito & Matsui"}
         same = [k for k, v in _DICTS["es"].items()
                 if k == v and k not in allowed]
         assert len(same) < 12, same[:15]

@@ -8,11 +8,13 @@ change while the model is being analysed, and a per-surface version of the
 same sentence would arrive thousands of times. Same reasoning, and the same
 shape, as ``ogr_slip2d.weak_layers.weak_layer_model_warnings`` (v0.1.121).
 
-Two notes. One because a wall drawn flat has no crest, and a profile
-defined from the crest down then has no meaning; the other because of rule
+Two notes. One is the wall's own: a wall drawn flat has no crest, and a
+profile defined from the crest down then has no meaning. The other is rule
 7 — the *location of force* control cannot be honoured by five of the nine
-methods, and a control that stays quiet about its own reach is as bad as
-one that does nothing.
+methods — and as of v0.1.123 it is no longer written here: a second type
+offers the same control, so it moved to
+:func:`ogr_slip2d.support_notes.force_location_notes` and this module asks
+for it. A rule written in two places goes stale in one of them.
 
 There is deliberately no third note about support patterns; see the tail of
 :func:`retaining_wall_notes` for why it would have been dead code.
@@ -20,21 +22,6 @@ There is deliberately no third note about support patterns; see the tail of
 Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
-
-#: The methods that write a moment equation, and are therefore the only
-#: ones a pure couple can reach. Moving a force leaves a couple; a method
-#: that writes force equilibrium alone sees the same force either way, so
-#: the *location of force* control is genuinely inert there. Saying which
-#: is the honest half of shipping the control at all.
-_MOMENT_METHODS = frozenset((
-    "ordinary_fellenius", "bishop_simplified", "spencer",
-    "gle_morgenstern_price",
-))
-
-_FORCE_METHODS = frozenset((
-    "janbu_simplified", "janbu_corrected", "corps_engineers_1",
-    "corps_engineers_2", "lowe_karafiath",
-))
 
 
 def _walls(project):
@@ -58,11 +45,14 @@ def _walls(project):
 
 
 def retaining_wall_notes(project, method_ids=()) -> list[str]:
-    """Notes about the EFP walls in ``project``, for the given methods.
+    """Notes about the EFP walls in ``project``.
 
-    ``method_ids`` is what the run is about to compute. Empty means "not
-    known yet", and then the note about the location of force is phrased
-    as a general limitation rather than as a claim about this run.
+    ``method_ids`` is what the run is about to compute. It is unused since
+    v0.1.123 — the only note that depended on it was the one about the
+    location of force, which now belongs to
+    :func:`ogr_slip2d.support_notes.force_location_notes` — and it stays in
+    the signature because every model-level note function in this package
+    has it, and one of them differing would be a trap.
     """
     walls = _walls(project)
     if not walls:
@@ -79,26 +69,6 @@ def retaining_wall_notes(project, method_ids=()) -> list[str]:
             "analysed with a profile that would depend on which end was "
             "drawn first."
             % (len(flat), "" if len(flat) == 1 else "s are"))
-
-    at_centroid = [t for _, t in walls
-                   if getattr(t, "force_location", "") == "centroid"]
-    if at_centroid:
-        blind = sorted(set(method_ids) & _FORCE_METHODS)
-        if blind:
-            notes.append(
-                "The retaining wall force is set to act at the centroid of "
-                "its pressure diagram, and %s cannot tell that from acting "
-                "at the slip surface: moving a force leaves a couple, and a "
-                "couple has nowhere to go in a method that writes force "
-                "equilibrium alone. The four methods with a moment equation "
-                "— Ordinary, Bishop, Spencer and GLE — do honour it."
-                % ", ".join(blind))
-        elif not method_ids:
-            notes.append(
-                "The retaining wall force is set to act at the centroid of "
-                "its pressure diagram. Only the four methods with a moment "
-                "equation — Ordinary, Bishop, Spencer and GLE — can tell "
-                "that apart from acting at the slip surface.")
 
     # There is deliberately NO note about support patterns here. A wall
     # carries a pressure per metre of slope already, so a row of them would

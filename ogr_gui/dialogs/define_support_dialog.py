@@ -104,6 +104,13 @@ _CHOICES: dict[str, list[tuple[str, str]]] = {
         ("At the slip surface", "intersection"),
         ("At the centroid of the pressure diagram", "centroid"),
     ],
+    # v0.1.123 — the pile failure mode. The two entries are not two ways
+    # of writing the same thing: Shear is how much load the pile can take,
+    # Ito & Matsui is how much the ground can hand it.
+    "failure_mode": [
+        ("Shear", "shear"),
+        ("Ito & Matsui", "ito_matsui"),
+    ],
 }
 
 
@@ -125,6 +132,7 @@ class _SupportParamPanel(QWidget):
         self._user_table: Optional[QTableWidget] = None
         self._table_group: Optional[QGroupBox] = None
         self._table_field: Optional[str] = None
+        self._mode_field: Optional[str] = None
 
     def _clear(self) -> None:
         # Remove all widgets from layout
@@ -137,6 +145,7 @@ class _SupportParamPanel(QWidget):
         self._user_table = None
         self._table_group = None
         self._table_field = None
+        self._mode_field = None
 
     def set_type(
         self,
@@ -197,16 +206,25 @@ class _SupportParamPanel(QWidget):
         # mean anything. Without this the editor shows every field for
         # every shape and two or three of them do nothing, which is the
         # same defect as an inert setting and harder to notice.
-        if getattr(type_cls, "PARAMETER_USED_BY", None):
-            combo = self._editors.get("profile_type")
+        # v0.1.123 — WHICH combo governs is declared by the class. Until
+        # this version it was hard-wired to "profile_type", so a second
+        # type declaring PARAMETER_USED_BY got a combo that changed
+        # nothing and four fields that were all editable in both modes —
+        # the very defect this block exists to prevent. It did not show
+        # because only one type declared it.
+        self._mode_field = getattr(type_cls, "MODE_FIELD", None)
+        if getattr(type_cls, "PARAMETER_USED_BY", None) and self._mode_field:
+            combo = self._editors.get(self._mode_field)
             if combo is not None:
                 combo.currentIndexChanged.connect(self._sync_used_fields)
             self._sync_used_fields()
 
     def _sync_used_fields(self) -> None:
-        """Grey out the parameters the chosen profile does not read."""
+        """Grey out the parameters the chosen mode does not read."""
         spec = getattr(self._type_cls, "PARAMETER_USED_BY", None) or {}
-        combo = self._editors.get("profile_type")
+        if not self._mode_field:
+            return
+        combo = self._editors.get(self._mode_field)
         if combo is None:
             return
         used = set(spec.get(combo.currentData(), ()))
@@ -218,9 +236,10 @@ class _SupportParamPanel(QWidget):
             if ed is not None:
                 ed.setEnabled(name in used)
         if self._table_group is not None:
-            wanted = (self._table_field is not None
-                      and combo.currentData() == "custom")
-            self._table_group.setEnabled(wanted)
+            shown_for = getattr(self._type_cls, "TABLE_SHOWN_FOR", ())
+            self._table_group.setEnabled(
+                self._table_field is not None
+                and combo.currentData() in shown_for)
 
     def _pretty_name(self, name: str) -> str:
         return name.replace("_", " ").title() + ":"

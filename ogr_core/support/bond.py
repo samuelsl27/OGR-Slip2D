@@ -1,7 +1,17 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 Samuel Sáez López — Universidad Politécnica de Cartagena
 """
-Interface shear strength along a reinforcement, and the pullout integral.
+A per-unit-length quantity sampled along a reinforcement, and its integral.
+
+v0.1.123 — the module was born (v0.1.116) carrying only ONE thing, the
+interface shear strength of a pullout law, and its names still say so. It
+now also carries the Ito and Matsui (1975) lateral force per unit depth of
+an Ito-Matsui pile, which is not a strength and is not an interface. What
+the machinery actually does is general and worth naming as such: a type
+declares ``NEEDS_BOND_PROFILE``, the engine samples ``interface_tau`` along
+the support ONCE PER ANALYSIS, and ``force_at`` integrates the samples from
+the head to the cut. Everything below about WHY the profile can be built
+once and reused for every trial surface applies unchanged to both.
 
 v0.1.116 — until this version every stress-dependent pullout law in
 :mod:`ogr_core.support.support` was a placeholder: ``tau = self.adhesion``
@@ -154,6 +164,38 @@ class BondProfile:
         step = self.total_length / n
         i = min(n - 1, int(x / step))
         return self.cum[i] + self.tau[i] * (x - i * step)
+
+    def moment(self, a: float, b: float) -> float:
+        """First moment ``integral of s*tau ds`` over ``[a, b]``.
+
+        v0.1.123 — what the *location of force* setting needs: divided by
+        :meth:`integral` it is the centroid of the mobilised diagram,
+        measured from the head. It is written with the SAME piecewise
+        convention as :meth:`integral` — tau constant inside a segment —
+        so the quotient is guaranteed to land inside ``[a, b]`` instead of
+        drifting outside it when the two disagree about the last partial
+        segment.
+        """
+        n = len(self.tau)
+        if n == 0 or self.total_length <= 0.0:
+            return 0.0
+        lo = max(0.0, min(a, b))
+        hi = min(self.total_length, max(a, b))
+        if hi <= lo:
+            return 0.0
+        return self._moment_upto(hi) - self._moment_upto(lo)
+
+    def _moment_upto(self, x: float) -> float:
+        """First moment from the head to ``x``, with ``x`` already clamped."""
+        n = len(self.tau)
+        step = self.total_length / n
+        i = min(n - 1, int(x / step))
+        run = 0.0
+        for j in range(i):
+            lo_j, hi_j = j * step, (j + 1) * step
+            run += self.tau[j] * 0.5 * (hi_j * hi_j - lo_j * lo_j)
+        lo_i = i * step
+        return run + self.tau[i] * 0.5 * (x * x - lo_i * lo_i)
 
     @property
     def total(self) -> float:
@@ -349,3 +391,90 @@ def soil_shear_strength_at(
     if not math.isfinite(tau):
         return 0.0
     return max(0.0, tau)
+
+
+class _PointAsSlice:
+    """The handful of attributes ``_local_c_phi`` reads off a slice.
+
+    v0.1.123 — an Ito-Matsui pile needs the soil's cohesion and friction
+    angle at a point along its shaft, and the reference itself says "the
+    soil cohesion and friction angle (or equivalent values)". This program
+    has exactly ONE linearisation of a strength envelope,
+    ``BishopSimplified._local_c_phi``, and it is the one the nine methods
+    use; writing a second one here would be a second opinion about the
+    twenty constitutive models, and the two would drift apart.
+
+    So the point is dressed as the only argument that function knows how to
+    read. The fields are the ones it actually touches, and nothing else:
+    ``weight/width`` is how it recovers the total vertical stress, and the
+    two ``top``/``base`` pairs are how it recovers the depth. A test pins
+    this to ``_local_c_phi`` so that the dressing cannot silently rot.
+    """
+
+    __slots__ = ("width", "weight", "pore_pressure", "base_angle",
+                 "base_y_left", "base_y_right", "top_y_left", "top_y_right",
+                 "layer_top_y", "slope_distance", "suction_cohesion")
+
+    def __init__(self, y, sigma_v_eff, pore_pressure, depth,
+                 axis_angle_rad, layer_top_y, slope_distance):
+        self.width = 1.0
+        self.weight = sigma_v_eff + pore_pressure
+        self.pore_pressure = pore_pressure
+        self.base_angle = axis_angle_rad
+        self.base_y_left = self.base_y_right = y
+        self.top_y_left = self.top_y_right = y + max(0.0, depth)
+        self.layer_top_y = layer_top_y
+        self.slope_distance = slope_distance
+        # Not measured along a support: the slicer computes the matric
+        # suction term at a slice BASE, from that slice's own state. Left
+        # at zero rather than guessed, and said out loud because a soil
+        # with real suction will give a slightly lower c here than the
+        # same soil gives the slip surface that crosses it.
+        self.suction_cohesion = 0.0
+
+
+def equivalent_c_phi_at(
+    project: "Project", x: float, y: float, sigma_v_eff: float,
+    depth: float = 0.0, pore_pressure: float = 0.0,
+    axis_angle_rad: float = 0.0,
+) -> tuple[float, float]:
+    """``(c, tan phi)`` of the material at (x, y), linearised at sigma'_v.
+
+    The equivalent Mohr-Coulomb pair a formulation written for ``c`` and
+    ``phi`` needs when the material is not Mohr-Coulomb. Linearised at the
+    VERTICAL effective stress, which is the stress that formulation
+    consumes, so the tangent is taken where it is going to be used.
+
+    Returns ``(0.0, 0.0)`` for a material with no strength model and for
+    Infinite Strength, for the same reason
+    :func:`soil_shear_strength_at` does: rigid bedrock is a modelling
+    device, and letting an infinity through here would turn into an
+    infinite pile force.
+    """
+    import math as _math
+
+    from ogr_slip2d.methods.bishop import BishopSimplified
+
+    mat = project.material_at(x, y) if project is not None else None
+    if mat is None or getattr(mat, "strength", None) is None:
+        return 0.0, 0.0
+    strength = mat.strength
+    layer_top_y = None
+    if getattr(strength, "NEEDS_LAYER_TOP", False):
+        layer_top_y = _layer_top_at(project, x, y)
+    slope_distance = None
+    if getattr(strength, "NEEDS_SLOPE_DISTANCE", False):
+        ext = project.external_boundary()
+        if ext is not None:
+            from ..geometry.ground import distance_to_profile, ground_surface
+            slope_distance = distance_to_profile(ground_surface(ext), x, y)
+    stand_in = _PointAsSlice(y, sigma_v_eff, pore_pressure, depth,
+                             axis_angle_rad, layer_top_y, slope_distance)
+    try:
+        c, tan_phi = BishopSimplified._local_c_phi(
+            stand_in, mat, max(0.0, sigma_v_eff))
+    except Exception:  # noqa: BLE001 - a plugin must not kill an analysis
+        return 0.0, 0.0
+    if not (_math.isfinite(c) and _math.isfinite(tan_phi)) or c >= 1e11:
+        return 0.0, 0.0
+    return max(0.0, c), max(0.0, tan_phi)

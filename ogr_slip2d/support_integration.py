@@ -651,7 +651,12 @@ def compute_support_effects(
         ax, ay = ix, iy
         if (getattr(stype, "force_location", "intersection") == "centroid"
                 and hasattr(stype, "resultant_arm") and L_total > 0.0):
-            arm = stype.resultant_arm(d_along, L_total)
+            # v0.1.123 -- the profile goes in too. A wall knows its own
+            # diagram in closed form, but an Ito-Matsui pile does not: its
+            # diagram IS the sampled profile, so the centroid cannot be
+            # computed without it.
+            arm = stype.resultant_arm(d_along, L_total,
+                                      bond_profiles.get(support.id))
             ux = (other.x - crest.x) / L_total
             uy = (other.y - crest.y) / L_total
             ax, ay = crest.x + arm * ux, crest.y + arm * uy

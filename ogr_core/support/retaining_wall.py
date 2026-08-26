@@ -133,6 +133,13 @@ class RetainingWallEFP(SupportType):
     #: this to grey out the rest: three of the four fields do nothing for
     #: any given shape, and a field that is editable but inert is the same
     #: defect as an inert setting, only harder to spot.
+    #: v0.1.123 — which parameter the dialog watches to decide what the
+    #: chosen mode reads. Until this version the dialog assumed the answer
+    #: was always "profile_type", which held only while this was the only
+    #: type declaring ``PARAMETER_USED_BY``.
+    MODE_FIELD: ClassVar[str] = "profile_type"
+    #: The modes that edit ``TABLE_FIELD``. Was hard-wired to "custom".
+    TABLE_SHOWN_FOR: ClassVar[tuple] = ("custom",)
     PARAMETER_USED_BY: ClassVar[dict] = {
         "uniform": ("pressure",),
         "triangular": ("efp",),
@@ -302,9 +309,14 @@ class RetainingWallEFP(SupportType):
         return max(0.0, scale * L * self._shape_integral(d / L))
 
     def resultant_arm(self, distance_from_head: float,
-                      total_length: float) -> float:
+                      total_length: float, bond=None) -> float:
         """Distance from the CREST to the centroid of the diagram above
         the cut, in model units.
+
+        ``bond`` is accepted and ignored: this type knows its own diagram
+        in closed form. It is in the signature because a type whose
+        diagram is the SAMPLED profile cannot find its centroid without
+        it, and one signature beats two (v0.1.123).
 
         This is what the *location of force* setting needs: the reference
         lets the resultant act either at the slip-surface intersection or

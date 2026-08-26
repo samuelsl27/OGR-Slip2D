@@ -751,25 +751,50 @@ class SoilNail(SupportType):
 @register_support
 @dataclass
 class PileMicropile(SupportType):
-    """Pile / Micropile — constant transverse shear force.
+    """Pile / Micropile — transverse resistance, in one of two modes.
 
-    Slide: "A pile will apply a constant force to a slip surface,
-    regardless of where it is intersected. The applied load PER UNIT
-    WIDTH OF SLOPE is simply equal to the Pile Shear Strength
-    divided by the Out of Plane Spacing."
+    Unlike every other support here, a pile does not resist along its own
+    axis: it resists ACROSS it. Tension and pullout are not failure modes
+    for a pile at all — only transverse shear through the section.
 
-    The pile-shear strength is the user-provided force the pile
-    cross-section can resist transversely (computed externally from
-    bending / shear capacity of the structural member).
+    **Shear** (the original mode, and still the default). The pile applies
+    a CONSTANT force wherever the slip surface crosses it, equal to the
+    pile shear strength divided by the out-of-plane spacing. That strength
+    is the force the section can resist transversely, computed outside this
+    program from the bending or shear capacity of the structural member.
+
+    **Ito & Matsui** (v0.1.123). The force is not a property of the pile
+    but of the SOIL squeezing between the piles of the row, so it depends
+    on the spacing, on the diameter, on c, on phi and on depth — and it is
+    the integral of that pressure from the top of the pile down to the cut,
+    not a constant. See :mod:`ogr_core.support.ito_matsui` for the
+    equations and their source, Ito and Matsui (1975).
+
+    That the two modes answer different questions is the point of having
+    both. Shear asks how much load the pile can take before it breaks;
+    Ito & Matsui asks how much load the ground can hand it in the first
+    place. A design needs the smaller of the two, and this program does not
+    pick: the mode is the user declaring which one governs.
+
+    Two class declarations become per-INSTANCE here, because they are true
+    of one mode and false of the other, and a pile in Shear mode must not
+    pay for a mode it is not in:
+
+    * ``NEEDS_BOND_PROFILE`` — sampling the soil 50 times along every pile
+      of every analysis, for a constant that never reads it;
+    * ``MEASURED_FROM_TOP`` — which would also make a pile drawn exactly
+      horizontal be EXCLUDED from the analysis. That is right for a
+      pressure profile measured from the crest and wrong for a constant.
     """
     TYPE_ID: ClassVar[str] = "pile_micropile"
     DISPLAY_NAME: ClassVar[str] = "Pile / Micropile"
     DESCRIPTION: ClassVar[str] = (
-        "Pile or micropile providing transverse shear resistance. "
-        "The applied force is constant along the pile = pile_shear "
-        "÷ spacing."
+        "Pile or micropile providing transverse shear resistance. In "
+        "Shear mode the applied force is constant along the pile = pile "
+        "shear ÷ spacing; in Ito & Matsui mode it is the integrated soil "
+        "pressure on the row, which grows with depth."
     )
-    # v0.1.113 — was PERPENDICULAR_TO_PILE. The reference's default is
+    # v0.1.113 — was PERPENDICULAR_TO_PILE. The reference default is
     # TANGENTIAL to the slip surface, and it gives the mechanical reason:
     # a pile fails in shear THROUGH its cross-section on the slip plane,
     # so the force it mobilises acts in that plane. Perpendicular-to-pile
@@ -778,21 +803,168 @@ class PileMicropile(SupportType):
     DEFAULT_ORIENTATION = ForceOrientation.TANGENT_TO_SLIP
     DEFAULT_APPLICATION = ForceApplication.PASSIVE
     PARAMETERS: ClassVar[dict] = {
+        "failure_mode": ("shear", "-",
+            "How the pile is loaded: shear | ito_matsui. Shear applies a "
+            "constant force you provide; Ito & Matsui derives it from the "
+            "soil flowing between the piles of the row."),
         "pile_shear_strength": (100.0, "kN",
             "Lateral shear strength of the pile cross-section"),
         "out_of_plane_spacing": (2.0, "m",
-            "Out-of-plane spacing of piles"),
+            "Out-of-plane spacing of piles, centre to centre. In Ito & "
+            "Matsui mode it acts TWICE: as D1 inside the equation and as "
+            "the divisor that turns force per pile into force per metre "
+            "of slope."),
+        "pile_diameter": (0.6, "m",
+            "Pile diameter. Only Ito & Matsui reads it, through the "
+            "opening between piles D2 = spacing − diameter."),
+        "force_location": ("intersection", "-",
+            "Where the resultant acts: intersection | centroid. Only the "
+            "four methods with a moment equation can tell the two apart."),
+    }
+    #: Which parameters each mode actually reads — see ``docs/plugins.md``.
+    #: A field the chosen mode ignores is disabled in the dialog instead of
+    #: sitting there editable and inert. ``MODE_FIELD`` names the combo
+    #: that decides; without it the dialog would grey out nothing.
+    MODE_FIELD: ClassVar[str] = "failure_mode"
+    PARAMETER_USED_BY: ClassVar[dict] = {
+        "shear": ("pile_shear_strength", "out_of_plane_spacing"),
+        "ito_matsui": ("out_of_plane_spacing", "pile_diameter",
+                       "force_location"),
     }
 
+    failure_mode: str = "shear"
     pile_shear_strength: float = 100.0
     out_of_plane_spacing: float = 2.0
+    pile_diameter: float = 0.6
+    force_location: str = "intersection"
+
+    # ------------------------------------------------------------------
+    def _ito(self) -> bool:
+        """True when this pile is in Ito & Matsui mode.
+
+        Anything but the exact token is Shear, deliberately: a project
+        written by a newer version, or by hand, degrades to the mode that
+        needs no soil rather than to an error in the middle of a search.
+        """
+        return str(self.failure_mode).strip().lower() == "ito_matsui"
+
+    @property
+    def NEEDS_BOND_PROFILE(self) -> bool:  # noqa: N802 - shadows a ClassVar
+        """Only Ito & Matsui needs the soil sampled along the shaft.
+
+        Shadowing the base ``ClassVar`` with a property is legal, and works
+        because the three readers in the program all ask the INSTANCE. Read
+        off the CLASS it returns the property object, which is truthy — so
+        do not read it off the class.
+        """
+        return self._ito()
+
+    @property
+    def MEASURED_FROM_TOP(self) -> bool:  # noqa: N802 - see above
+        """Ito & Matsui measures depth from the top of the pile.
+
+        Cai and Ugai (2000) say it in as many words: Q is the integral
+        "from the top of the pile to the depth of the slip circle at the
+        pile position". A pile drawn bottom-to-top would otherwise invert
+        its own pressure diagram and return a plausible, wrong number.
+        """
+        return self._ito()
+
+    # ------------------------------------------------------------------
+    def interface_tau(self, sigma_v_eff: float, **ctx) -> float:
+        """The ``p`` of Ito and Matsui, kN/m of pile per metre of depth.
+
+        What travels in the sampled profile for this type is NOT an
+        interface strength — see the module docstring of
+        :mod:`ogr_core.support.bond`. It is the lateral force per unit
+        thickness of layer that the row takes off the sliding mass, which
+        ``force_at`` then integrates down to the cut.
+
+        **Which vertical stress.** The paper writes ``gamma z``, because
+        there is no water anywhere in it and its Eq. (8) is the Rankine
+        active pressure on the overburden. With effective strength
+        parameters that pressure is written on the EFFECTIVE vertical
+        stress, which is what arrives here, and the analysis says so when
+        there is pore pressure on the pile. Feeding it the total stress
+        instead would over-predict the pile force, the unsafe direction.
+
+        **Which c and phi.** The reference itself says "the soil cohesion
+        and friction angle (or equivalent values)": the equation is
+        Mohr-Coulomb and a material need not be. The equivalent pair comes
+        from the same linearisation the nine methods use — see
+        :func:`ogr_core.support.bond.equivalent_c_phi_at`.
+        """
+        if not self._ito():
+            return 0.0
+        from .bond import equivalent_c_phi_at
+        from .ito_matsui import clear_spacing, lateral_force
+
+        d1 = float(self.out_of_plane_spacing)
+        d2 = clear_spacing(d1, float(self.pile_diameter))
+        if d1 <= 0.0 or d2 <= 0.0:
+            # Piles that touch form a continuous wall and the equation
+            # diverges there. Reported by the analysis notes; zero here so
+            # a search does not die halfway through on a ValueError.
+            return 0.0
+        c, tan_phi = equivalent_c_phi_at(
+            ctx.get("project"), ctx.get("x", 0.0), ctx.get("y", 0.0),
+            sigma_v_eff,
+            depth=ctx.get("depth", 0.0),
+            pore_pressure=ctx.get("pore_pressure", 0.0),
+            axis_angle_rad=ctx.get("axis_angle_rad", 0.0),
+        )
+        return lateral_force(c, math.atan(tan_phi), max(0.0, sigma_v_eff),
+                             d1, d2)
 
     def force_at(self, distance_from_head: float, total_length: float,
                  bond=None) -> float:
+        """Force the pile hands the sliding mass, kN per metre of slope.
+
+        In Ito & Matsui mode this is Cai and Ugai (2000) Eq. (9) without
+        its moment arm: ``Q / D1``, with ``Q`` the integral of ``p`` from
+        the top of the pile to the cut. Dividing by the spacing is neither
+        optional nor a convention — ``p`` is a force per PILE and this
+        method must return a force per METRE OF SLOPE, and only ``Q/D1``
+        has those units.
+
+        The clamp at zero is on the INTEGRAL, never on the samples.
+        ``p`` can come out negative near the surface, where the cohesion
+        terms dominate: that is the theory saying no plastic pressure
+        develops there, and zeroing it sample by sample would quietly
+        raise the total. The analysis reports it instead.
+        """
         s = self.out_of_plane_spacing
         if s <= 0:
             return 0.0
+        if self._ito():
+            if bond is None:
+                # No project to sample the soil from — a tooltip drawn
+                # before the model has geometry, say. Zero is the honest
+                # answer for a force that IS the soil.
+                return 0.0
+            return max(0.0, bond.integral(0.0, distance_from_head) / s)
         return self.pile_shear_strength / s
+
+    def resultant_arm(self, distance_from_head: float,
+                      total_length: float, bond=None) -> float:
+        """Distance from the top of the pile to the centroid of ``p``.
+
+        The *location of force* setting: the reference lets the resultant
+        act at the slip-surface intersection or at the centroid of the
+        pressure diagram above it. First moment over integral, both taken
+        with the same piecewise convention, so the answer cannot land
+        outside the mobilised length.
+
+        Falls back to the cut itself when there is no diagram above it —
+        which is where a zero force acts, and avoids a division by zero.
+        """
+        d = max(0.0, float(distance_from_head))
+        if bond is None:
+            return d
+        area = bond.integral(0.0, d)
+        if abs(area) < 1e-12:
+            return d
+        return min(d, max(0.0, bond.moment(0.0, d) / area))
 
     def to_dict(self) -> dict:
         # Serialise only public dataclass fields; private GUI

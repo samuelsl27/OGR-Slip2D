@@ -13,15 +13,31 @@
     - Retaining Wall (EFP)
 
 Plus :class:`SupportPattern` for batch creation of regular rows, and
-:class:`BondProfile` (v0.1.116), the interface shear strength sampled
-along a reinforcement that the two stress-dependent pullout laws need.
+:class:`BondProfile` (v0.1.116), a per-unit-length quantity sampled along
+a reinforcement once per analysis: the interface shear strength of the two
+stress-dependent pullout laws, or (v0.1.123) the Ito and Matsui lateral
+force per unit depth of a pile in that mode.
+
+:mod:`ogr_core.support.ito_matsui` holds the three published equations of
+that mode on their own, with no project and no geometry, so that they can
+be checked against their source in isolation.
 """
 from .bond import (
     DEFAULT_SEGMENTS,
     BondProfile,
     build_bond_profile,
+    equivalent_c_phi_at,
     sigma_v_effective_at,
     soil_shear_strength_at,
+)
+from .ito_matsui import (
+    PHI_SWITCH_RAD,
+    clear_spacing,
+    lateral_force,
+    lateral_force_c_phi,
+    lateral_force_cohesionless,
+    lateral_force_cohesive,
+    n_phi,
 )
 from .support import (
     EndAnchored,
@@ -67,7 +83,15 @@ __all__ = [
     "interface_shear",
     "BondProfile",
     "build_bond_profile",
+    "equivalent_c_phi_at",
     "sigma_v_effective_at",
     "soil_shear_strength_at",
     "DEFAULT_SEGMENTS",
+    "PHI_SWITCH_RAD",
+    "clear_spacing",
+    "n_phi",
+    "lateral_force",
+    "lateral_force_c_phi",
+    "lateral_force_cohesionless",
+    "lateral_force_cohesive",
 ]
