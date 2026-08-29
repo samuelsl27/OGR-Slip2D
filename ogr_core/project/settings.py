@@ -101,6 +101,20 @@ NON_CIRCULAR_METHODS = {
 }
 
 
+def is_auto_refine_non_circular(search: "SearchSettings") -> bool:
+    """Whether this project runs the NON-CIRCULAR Auto Refine.
+
+    v0.1.128, defect D32. Auto Refine is in both families, so the answer
+    is a property of the PAIR and never of the method alone — and every
+    place that asked the method alone got it wrong: the search that was
+    built, the Optimize Surfaces default, and the note that said the
+    option had been ignored. Written once, here, so the next place to ask
+    cannot answer differently.
+    """
+    return (search.search_method == SearchMethod.AUTO_REFINE.value
+            and search.surface_type == SurfaceType.NON_CIRCULAR.value)
+
+
 # ----------------------------------------------------------------------
 @dataclass
 class MethodsSettings:
@@ -633,10 +647,19 @@ def optimize_enabled_for(search: "SearchSettings") -> bool:
     with it on, at 1.1232, and six of the seven fall BELOW the circle. The
     reference does not merely default it on for this search, it recommends
     never turning it off.
+
+    v0.1.128 — and the non-circular Auto Refine, which the reference also
+    defaults ON ("automatically ON by default for the Auto Refine
+    (Non-Circular) search method"). It cannot join
+    ``_OPTIMIZE_ON_BY_DEFAULT``, which is keyed by method: the CIRCULAR
+    Auto Refine shares that method id and has nothing to optimise, so
+    turning it on there would only produce the note that says it was
+    ignored.
     """
     declared = getattr(search, "optimize_enabled", None)
     if declared is None:
-        return search.search_method in _OPTIMIZE_ON_BY_DEFAULT
+        return (search.search_method in _OPTIMIZE_ON_BY_DEFAULT
+                or is_auto_refine_non_circular(search))
     return bool(declared)
 
 
@@ -1095,8 +1118,13 @@ class ProjectSettings:
 
         Unlike its two siblings this one does NOT travel in ``common``:
         the reference offers the option only for Surface Type =
-        Non-Circular, so handing it to Grid, Slope or Auto Refine would be
-        an argument they can only ignore.
+        Non-Circular, so handing it to Grid, Slope or the CIRCULAR Auto
+        Refine would be an argument they can only ignore.
+
+        v0.1.128 — "the circular Auto Refine", because the non-circular
+        one now exists and takes this like the other non-circular
+        searches. Which of the two is being built is a question about the
+        pair, not the method: see ``is_auto_refine_non_circular``.
         """
         from ogr_slip2d.optimize import OptimizeSettings
 

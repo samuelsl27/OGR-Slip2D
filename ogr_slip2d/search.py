@@ -2101,6 +2101,19 @@ class AutoRefineSearch(BaseSearch):
         self.focus_objects = focus_objects or []
         self.progress_cb = progress_cb
 
+    # ------------------------------------------------------------------
+    def _evaluate_trial(self, project, circle):
+        """The result for one generated circle. Here, the circle itself.
+
+        A seam, not a convenience. The non-circular variant of this search
+        is the SAME generation and the SAME refinement, and differs only in
+        what reaches the solver — so subclassing at this one line is what
+        keeps the circular answers identical to the digit. Anything else
+        (a second copy of ``_run``, a flag inside the loop) would have the
+        two variants drift apart the first time either is touched.
+        """
+        return self.evaluate_circle(project, circle)
+
     def _run(self, project) -> SearchResult:
         from ogr_core.geometry import BoundaryType
         from .surface import SlipCircle
@@ -2230,7 +2243,7 @@ class AutoRefineSearch(BaseSearch):
                             continue
                         cx, cy, r = circle
                         sc = SlipCircle(centre_x=cx, centre_y=cy, radius=r)
-                        res = self.evaluate_circle(project, sc)
+                        res = self._evaluate_trial(project, sc)
                         if res is None or not res.is_valid:
                             result.invalid_count += 1
                             continue
@@ -2311,6 +2324,234 @@ class AutoRefineSearch(BaseSearch):
             if cy < max(y1, y2):
                 return None
         return (cx, cy, r)
+
+
+class AutoRefineNonCircularSearch(AutoRefineSearch):
+    """Auto Refine Search (non-circular) — the documented variant.
+
+    v0.1.128, defect D32. The setting ``auto_refine_num_vertices_along
+    _surface`` and the membership of AUTO_REFINE in the non-circular
+    family had both existed since v0.1.10, and the search behind them had
+    not: ``build_search`` never looked at the surface type, so a model
+    declaring Non-Circular + Auto Refine saved without complaint, opened
+    without complaint and came back with CIRCLES. Rule 7, in the form
+    that costs most — a search declared non-circular whose answer equals
+    the circular one reads as agreement between the two families, which
+    is the very conclusion a verification bank exists to be able to draw.
+
+    The reference documents the method and nothing here was invented:
+
+    1. Circles are generated exactly as the circular Auto Refine
+       generates them — same divisions, same pairs, same tangent sweep.
+    2. Each circle is converted into a piece-wise linear surface by
+       sub-dividing its arc into approximately equal divisions, joining
+       the resulting ``num_vertices`` vertices with straight segments,
+       and THE FACTOR OF SAFETY IS COMPUTED ON THAT POLYLINE — not on
+       the circle it came from.
+    3. The refinement (average factor per division, keep the lowest
+       fraction, narrow the polyline) proceeds unchanged.
+    4. An optimisation search is applied afterwards, and it is ON by
+       default for this method: see ``optimize_enabled_for``. Once
+       optimised the vertices are no longer bound to any circle, so the
+       final surface can carry more vertices than were asked for here.
+
+    **How the answer relates to the circle it came from, measured rather
+    than reasoned.** The tempting argument — the chords of a concave-up
+    arc lie above it, so a coarse conversion is a shallower surface and
+    must read higher — predicts a SIGN, and the sign is not a property of
+    the conversion. Bishop against the same arc gives +5.24 % at 4
+    vertices falling to +0.30 % on the test slope of
+    ``tests/test_auto_refine_noncircular_v1128.py``, and -2.64 % rising
+    to -2.56 % on verification problem 77. Opposite directions, and
+    neither one settles on zero.
+
+    What does not settle is the moment axis, not the discretisation: a
+    polyline has no centre of rotation, the axis built for it is not the
+    generating circle's centre, and a moment-only method is entitled to
+    notice (anomaly D47, measured in ``moment_axis``). Spencer satisfies
+    force AND moment equilibrium, so its answer cannot depend on that
+    point, and it converges properly: +0.2920 %, +0.0472 %, +0.0151 %,
+    +0.0096 % at 8, 16, 32 and 64 vertices — close to the factor of four
+    per doubling an inscribed polygon owes its arc.
+
+    So the count is worth spending and 12 is a fair default, but what a
+    coarser one costs is model-dependent in size and in direction, and
+    only a complete-equilibrium method can be asked how much of the
+    difference is the surface.
+    """
+
+    def __init__(self, method, num_vertices: int = 12, **kwargs) -> None:
+        super().__init__(method=method, **kwargs)
+        # 3 is the floor a polyline needs to bend at all; below it the
+        # "surface" is a single chord and the search is not the one the
+        # user asked for.
+        self.num_vertices = max(3, int(num_vertices))
+
+    # ------------------------------------------------------------------
+    def _run(self, project) -> SearchResult:
+        """The circular run, plus the one thing it fails at silently.
+
+        A polyline of N vertices has N-1 straight segments, every vertex
+        is a mandatory slice boundary, and ``_slice_bounds`` refuses a
+        surface whole when the segments outnumber the slices. So a vertex
+        count that looks merely ambitious returns NO surfaces at all
+        rather than a coarser answer, and the user has asked for a number
+        the analysis silently cannot honour — which is the very shape of
+        defect this search was written to close.
+
+        ``settings_warnings`` states the part that can be predicted
+        (N-1 > slices refuses every surface). It cannot state the rest,
+        and the rest is the dangerous half: material boundaries and the
+        water table are mandatory cuts too and they differ PER SURFACE,
+        so the search does not fail cleanly — it quietly analyses the
+        surfaces that cross few layers and drops the ones that cross
+        many. Measured on verification problem 77 at 30 slices: 12
+        vertices evaluate 69 surfaces, 30 vertices evaluate 40, and
+        nothing said that 29 had gone. That is a biased search reported
+        as a complete one, so the count is observed here and stated.
+        """
+        self._unsliceable = 0
+        result = super()._run(project)
+        if self._unsliceable:
+            notes = getattr(self, "_pending_notes", None)
+            if notes is not None:
+                total = self._unsliceable + result.valid_count
+                notes.append(
+                    "%d of the %d surfaces this search formed could not be "
+                    "sliced and were dropped. Each circle is converted into "
+                    "%d vertices, which is %d straight segments, and this "
+                    "analysis uses %d slices; every vertex is a mandatory "
+                    "slice boundary, and material boundaries and the water "
+                    "table take slices of their own. The surfaces lost are "
+                    "the ones that cross the most layers, so this is not an "
+                    "even thinning of the search. Use fewer vertices or more "
+                    "slices." % (self._unsliceable, total, self.num_vertices,
+                                 self.num_vertices - 1, self.num_slices))
+        return result
+
+    # ------------------------------------------------------------------
+    def _evaluate_trial(self, project, circle):
+        """The factor of safety of the POLYLINE this circle converts to.
+
+        ``_candidate_surfaces`` does the whole geometric resolution and
+        spends no solver on it: it returns each sliding mass of the
+        circle with its endpoints resolved, its reverse curvature
+        treated, the user's tension crack applied, the composite clipping
+        done and containment already judged. That is exactly the step
+        this method needs, and it is why the non-circular variant costs
+        the same as the circular one — one analysis per mass, not two.
+
+        Every mass is walked and the worst kept, for the reason v0.1.84
+        records on ``evaluate_circle``: a circle crossing the ground more
+        than twice defines several disjoint masses and the first from the
+        left is not necessarily the critical one.
+
+        A mass that is NOT a plain circle passes through unconverted.
+        With Composite Surfaces on, a clipped mass is part arc and part
+        model floor, and the reference describes the conversion of a
+        CIRCLE only — inventing a rule for the composite case is exactly
+        what this project's contract forbids. It is still analysed, as
+        the composite surface it is.
+        """
+        polys = []
+        for mass in self._candidate_surfaces(project, circle):
+            if not isinstance(mass, SlipCircle):
+                polys.append(mass)
+                continue
+            poly = self._arc_polyline(mass, self.num_vertices)
+            if poly is None:
+                continue
+            # The chords sit above the arc, so a mass whose ARC stayed
+            # inside the soil can still have a chord break the surface
+            # near an endpoint where the ground curves away. That is the
+            # containment rule polylines were given in v0.1.126 (D48),
+            # and it is judged here on the surface actually analysed.
+            if self._leaves_soil(project, poly):
+                continue
+            polys.append(poly)
+        if not polys:
+            return None
+        best = self._best_of_masses(project, polys)
+        if best is None:
+            # Contained, and still no answer: the slicer refused it. That
+            # is overwhelmingly the segments-against-slices rule, and it
+            # is counted rather than assumed — ``_run`` reports the count.
+            self._unsliceable = getattr(self, "_unsliceable", 0) + 1
+        return best
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _arc_polyline(circle: SlipCircle, n_vertices: int):
+        """``n_vertices`` points on the arc, at equal central angles.
+
+        ``n_vertices`` vertices make ``n_vertices - 1`` segments, which is
+        the reference's own counting: "if the Number of vertices = 4, a
+        circle will be converted into a piecewise linear surface with 3
+        segments".
+
+        Equal CENTRAL ANGLE and not equal x, because on a circle equal
+        angle is equal arc length, and "sub-dividing the circular arc
+        into approximately equal divisions" is what the conversion is
+        defined to be. The difference is not cosmetic: near the
+        daylighting ends the arc is steep, and equal-x spacing puts its
+        longest chords exactly there, where the surface departs most from
+        the circle it claims to approximate.
+
+        ``BaseSearch._as_optimisable`` is NOT reused, for three reasons
+        that each disqualify it on their own: it requires a circle whose
+        endpoints are already resolved, it samples equal x, and it
+        returns n+1 points for an argument of n. Changing it to fit here
+        would move the Particle Swarm's multimodal answers, which is a
+        different search and six models of the reference bank.
+
+        Returns None if the circle is not resolved onto a chord.
+        """
+        from ogr_core.geometry import Polyline, Vertex
+        from .surface import SlipSurface
+
+        x0, x1 = circle.x_left, circle.x_right
+        if x0 is None or x1 is None or not (x1 > x0):
+            return None
+        cx, cy, r = circle.centre_x, circle.centre_y, circle.radius
+        if r <= 0.0:
+            return None
+
+        def _theta(x):
+            """The angle of the LOWER arc point at ``x``.
+
+            Both endpoints lie below the centre, so theta runs in
+            (-pi, 0) and increases monotonically with x along the lower
+            arc. No wrap-around to unfold, which is the whole reason the
+            interpolation below can be a straight lerp.
+            """
+            d = r * r - (x - cx) ** 2
+            if d < 0.0:
+                d = 0.0                 # a rounding-width overshoot at
+                # the very ends of the chord, not a geometry error
+            return math.atan2(-math.sqrt(d), x - cx)
+
+        th0, th1 = _theta(x0), _theta(x1)
+        n = max(3, int(n_vertices))
+        pts = []
+        for i in range(n):
+            th = th0 + (th1 - th0) * i / (n - 1)
+            pts.append(Vertex(cx + r * math.cos(th), cy + r * math.sin(th)))
+        # The ends are pinned to the resolved chord rather than left to
+        # the trigonometry: they are where the surface daylights, and a
+        # rounding-width drift there is what puts a first or last slice
+        # above its own ground.
+        pts[0] = Vertex(x0, cy + r * math.sin(th0))
+        pts[-1] = Vertex(x1, cy + r * math.sin(th1))
+
+        surface = SlipSurface(polyline=Polyline(vertices=pts, closed=False))
+        # The crack travels with the surface: it moved an endpoint of the
+        # mass, and the polyline that replaces it describes the same
+        # mechanism or it describes nothing.
+        surface.tension_cracks = list(
+            getattr(circle, "tension_cracks", []) or [])
+        surface.tension_crack_wall = getattr(
+            circle, "tension_crack_wall", None)
+        return surface
 
 
 class BlockSearch(BaseSearch):

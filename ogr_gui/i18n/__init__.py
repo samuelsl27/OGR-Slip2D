@@ -854,6 +854,16 @@ _DICTS: dict[str, dict[str, str]] = {
         'Number of slices:': 'Número de dovelas:',
         'Number of time steps:': 'Número de pasos de tiempo:',
         'Number of vertices along surface:': 'Número de vértices a lo largo de la superficie:',
+        'Each circle is converted into this many vertices, joined by '
+        'straight segments, and the factor of safety is computed on '
+        'that surface. Every vertex is a mandatory slice boundary, so '
+        'asking for more vertices than the analysis has slices makes '
+        'the surfaces impossible to slice.':
+            'Cada círculo se convierte en este número de vértices, unidos '
+            'por segmentos rectos, y el factor de seguridad se calcula sobre '
+            'esa superficie. Cada vértice es un límite de dovela obligatorio, '
+            'así que pedir más vértices que dovelas tiene el análisis hace '
+            'imposible rebanar las superficies.',
         'OK': 'Aceptar',
         'Offset distance:': 'Distancia de desplazamiento:',
         'Only one Drawdown Line is allowed.': 'Solo se permite una línea de desembalse.',

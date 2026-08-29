@@ -435,6 +435,7 @@ class SurfaceOptionsDialog(QDialog):
 
         # Initial fill of method dropdown
         self._refill_methods(initial=True)
+        self._sync_auto_refine_rows()
 
     # ----------------------------------------------------------------
     def _refill_methods(self, initial: bool = False) -> None:
@@ -443,21 +444,24 @@ class SurfaceOptionsDialog(QDialog):
         SearchMethod = self._SearchMethod
         s = self.project.settings.search
 
-        if self.rb_circular.isChecked():
-            allowed = [
-                SearchMethod.GRID_SEARCH,
-                SearchMethod.SLOPE_SEARCH,
-                SearchMethod.AUTO_REFINE,
-                SearchMethod.PARTICLE_SWARM,
-            ]
-        else:
-            allowed = [
-                SearchMethod.BLOCK_SEARCH,
-                SearchMethod.PATH_SEARCH,
-                SearchMethod.SIMULATED_ANNEALING,
-                SearchMethod.AUTO_REFINE,
-                SearchMethod.PARTICLE_SWARM,
-            ]
+        # v0.1.128 — filtered THROUGH the settings constants instead of
+        # retyping them. The two lists were duplicated here and the
+        # imported ones sat unused, which is a divergence waiting for the
+        # next method: a search added to one family in ``settings.py``
+        # would have been offered by the engine and never by this combo.
+        # The fixed order below is the display order and is this dialog's
+        # to choose; the sets decide membership alone.
+        order = (
+            SearchMethod.GRID_SEARCH,
+            SearchMethod.SLOPE_SEARCH,
+            SearchMethod.BLOCK_SEARCH,
+            SearchMethod.PATH_SEARCH,
+            SearchMethod.SIMULATED_ANNEALING,
+            SearchMethod.AUTO_REFINE,
+            SearchMethod.PARTICLE_SWARM,
+        )
+        family = self._CIRCULAR if self.rb_circular.isChecked()             else self._NON_CIRCULAR
+        allowed = [m for m in order if m in family]
 
         # Pre-fetch the previously selected method
         prev_id = (
@@ -487,6 +491,50 @@ class SurfaceOptionsDialog(QDialog):
 
     def _on_surface_type_changed(self, _checked: bool = False) -> None:
         self._refill_methods()
+        self._sync_auto_refine_rows()
+
+    def _sync_auto_refine_rows(self) -> None:
+        """Show the non-circular-only Auto Refine controls, or hide them.
+
+        ``setVisible`` on the label and the widget rather than
+        ``QFormLayout.setRowVisible``, which arrived in Qt 6.4: the rest of
+        this dialog carries no such floor and this row is not the place to
+        introduce one.
+        """
+        non_circular = self.rb_non_circular.isChecked()
+        for widget in (getattr(self, "_ar_num_verts_label", None),
+                       getattr(self, "_ar_num_verts", None),
+                       getattr(self, "_ar_optimize_row", None)):
+            if widget is not None:
+                widget.setVisible(non_circular)
+
+        # The Optimize Surfaces default is a property of the PAIR, so
+        # changing the surface type can change it under a dialog whose
+        # checkbox was resolved when it opened. Measured: opening on
+        # Circular + Auto Refine and switching to Non-Circular left the box
+        # holding the circular answer (off), and ``apply`` wrote that
+        # explicit off — turning off, by the act of switching, the option
+        # the reference has ON by default for this search.
+        #
+        # Only when the stored setting is still AUTOMATIC. A user who
+        # ticked or unticked the box has answered the question, and their
+        # answer is not a default to be recomputed.
+        if getattr(self, "_ar_optimize", None) is None:
+            return
+        s = self.project.settings.search
+        if getattr(s, "optimize_enabled", None) is not None:
+            return
+        from ogr_core.project.settings import (SearchSettings,
+                                               optimize_enabled_for)
+        method = self.cb_method.currentData()
+        if method is None:
+            return
+        probe = SearchSettings()
+        probe.search_method = getattr(method, "value", method)
+        probe.surface_type = (self._SurfaceType.NON_CIRCULAR.value
+                              if non_circular
+                              else self._SurfaceType.CIRCULAR.value)
+        self._sync_optimize_boxes(optimize_enabled_for(probe))
 
     def _on_method_changed(self, *_args) -> None:
         m = self.cb_method.currentData()
@@ -509,9 +557,19 @@ class SurfaceOptionsDialog(QDialog):
             automatic, which reads ON for Simulated Annealing and OFF for
             the rest. Restoring defaults on the annealing panel with the
             Block Search's answer would be restoring the wrong default.
+
+            v0.1.128 — and the SURFACE TYPE goes on the probe, because the
+            default stopped being a property of the method alone: Auto
+            Refine defaults ON under Non-Circular and OFF under Circular,
+            and a probe that never set the type would always answer for
+            the circular one.
             """
             probe = SearchSettings()
             probe.search_method = getattr(method, "value", method)
+            probe.surface_type = (
+                self._SurfaceType.NON_CIRCULAR.value
+                if self.rb_non_circular.isChecked()
+                else self._SurfaceType.CIRCULAR.value)
             return optimize_enabled_for(probe)
         SM = self._SearchMethod
         m = self.cb_method.currentData()
@@ -533,9 +591,11 @@ class SurfaceOptionsDialog(QDialog):
                 self._ar_circles_per_div.setValue(int(defaults.auto_refine_circles_per_division))
                 self._ar_num_iter.setValue(int(defaults.auto_refine_num_iterations))
                 self._ar_div_pct.setValue(defaults.auto_refine_divisions_to_use_pct)
-                if self._ar_num_verts is not None:
-                    self._ar_num_verts.setValue(int(defaults.auto_refine_num_vertices_along_surface))
+                self._ar_num_verts.setValue(
+                    int(defaults.auto_refine_num_vertices_along_surface))
                 self._ar_composite.setChecked(defaults.composite_surfaces)
+                if self.rb_non_circular.isChecked():
+                    self._sync_optimize_boxes(_optimize_default_for(m))
             elif m == SM.SIMULATED_ANNEALING:
                 self._sa_verts.setValue(int(defaults.sa_initial_vertices))
                 self._sa_steps.setValue(int(defaults.sa_generation_steps))
@@ -773,14 +833,24 @@ class SurfaceOptionsDialog(QDialog):
         self._ar_div_pct.setSuffix(" %")
         self._ar_div_pct.setValue(s.auto_refine_divisions_to_use_pct)
         f.addRow(tr("Divisions to use in next iteration:"), self._ar_div_pct)
-        # Only show "Number of vertices along surface" for non-circular
-        if s.surface_type == self._SurfaceType.NON_CIRCULAR.value:
-            self._ar_num_verts = QSpinBox()
-            self._ar_num_verts.setRange(3, 100)
-            self._ar_num_verts.setValue(int(s.auto_refine_num_vertices_along_surface))
-            f.addRow(tr("Number of vertices along surface:"), self._ar_num_verts)
-        else:
-            self._ar_num_verts = None
+        # "Number of vertices along surface" belongs to the non-circular
+        # variant alone, but it is BUILT either way and shown or hidden by
+        # ``_sync_auto_refine_rows``. It used to be created only when the
+        # dialog opened on Non-Circular, so switching the radio with the
+        # dialog already open left the control that decides the conversion
+        # unreachable — and ``apply`` then had nothing to write (v0.1.128).
+        self._ar_num_verts = QSpinBox()
+        self._ar_num_verts.setRange(3, 100)
+        self._ar_num_verts.setValue(int(s.auto_refine_num_vertices_along_surface))
+        self._ar_num_verts.setToolTip(tr(
+            "Each circle is converted into this many vertices, joined by "
+            "straight segments, and the factor of safety is computed on "
+            "that surface. Every vertex is a mandatory slice boundary, so "
+            "asking for more vertices than the analysis has slices makes "
+            "the surfaces impossible to slice."))
+        self._ar_num_verts_label = QLabel(
+            tr("Number of vertices along surface:"))
+        f.addRow(self._ar_num_verts_label, self._ar_num_verts)
         # Computed totals (informative)
         n_total = (s.auto_refine_divisions_along_slope
                    * s.auto_refine_circles_per_division
@@ -793,6 +863,12 @@ class SurfaceOptionsDialog(QDialog):
         )
         self._ar_total_label.setStyleSheet("color: #666; font-size: 9pt;")
         f.addRow("", self._ar_total_label)
+        # v0.1.128 — the non-circular variant takes Optimize Surfaces like
+        # the other non-circular searches, and the reference has it ON by
+        # default here. Without this row the option would be on by default
+        # and unreachable from the panel that owns the search.
+        self._ar_optimize, self._ar_optimize_row = self._optimize_row(s)
+        f.addRow("", self._ar_optimize_row)
         self._ar_composite = QCheckBox(tr("Composite Surfaces"))
         self._ar_composite.setChecked(s.composite_surfaces)
         self._composite_boxes.append(self._ar_composite)
@@ -1029,8 +1105,8 @@ class SurfaceOptionsDialog(QDialog):
         s.auto_refine_circles_per_division = int(self._ar_circles_per_div.value())
         s.auto_refine_num_iterations = int(self._ar_num_iter.value())
         s.auto_refine_divisions_to_use_pct = self._ar_div_pct.value()
-        if self._ar_num_verts is not None:
-            s.auto_refine_num_vertices_along_surface = int(self._ar_num_verts.value())
+        s.auto_refine_num_vertices_along_surface = int(
+            self._ar_num_verts.value())
 
         # ----- Simulated Annealing -----
         s.sa_initial_vertices = int(self._sa_verts.value())

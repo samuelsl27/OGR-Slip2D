@@ -47,9 +47,6 @@ _KNOWN_UNREAD = {
     # non-circular searches and ``BaseSearch.run`` walks the surfaces with
     # it. The list is a budget that only shrinks, so this is what closing
     # a defect looks like from here.
-    # D32 — the non-circular Auto Refine does not exist: the setting is
-    # there and the search it configures is the circular one.
-    "auto_refine_num_vertices_along_surface": "D32",
     # D07c — found by this inventory in v0.1.103, reported and not yet
     # fixed because each one moves a number and needs its own reference.
     #   the n_e of Su (2009) section 2.1.7, against a hard-coded 3;

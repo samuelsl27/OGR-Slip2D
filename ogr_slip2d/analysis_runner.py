@@ -242,6 +242,8 @@ def settings_warnings(project, method_ids=()) -> list[str]:
     # factors are enabled, and costs the note, never the result.
     notes.extend(getattr(s_search, "_migration_notes", []) or [])
     notes.extend(_failure_direction_note(project))
+    notes.extend(_surface_type_notes(s_search))
+    notes.extend(_auto_refine_vertex_notes(project))
     notes.extend(_optimize_notes(s_search))
     notes.extend(_undrained_profile_notes(project))
     return notes
@@ -361,13 +363,87 @@ _OPTIMIZABLE_SEARCHES = ("block", "path", "simulated_annealing",
                          "particle_swarm")
 
 
+def _surface_type_notes(s_search) -> list[str]:
+    """When the Surface Type and the Search Method disagree.
+
+    v0.1.128. Closing D32 gave the Auto Refine the non-circular search its
+    settings had been promising, but the shape of that defect is not
+    unique to it: the two controls are stored independently and nothing
+    ever compared them, so ``non_circular`` + ``grid`` still asks for
+    non-circular surfaces and gets circles. The method is what runs — it
+    is the method that owns an algorithm — and a run whose Surface Type
+    says otherwise has to say so out loud, because the alternative is a
+    result that looks like agreement between the two families.
+
+    The reference bank carries no such pair today (checked: 141
+    circular+grid, 33 non_circular+path, 6 non_circular+block, 6
+    non_circular+particle_swarm, 4 circular+auto_refine), so this note
+    cannot move a published number. It is here for the model written
+    next.
+    """
+    from ogr_core.project.settings import SearchMethod
+
+    try:
+        method = SearchMethod(s_search.search_method)
+    except (KeyError, ValueError):
+        return []          # an unknown id is the default Grid Search's
+    if method in s_search.methods_for_surface_type():
+        return []
+    return ["The Surface Type is set to '%s' and the Search Method to "
+            "'%s', which does not search for that kind of surface. The "
+            "method is what runs, so the surfaces this analysis returns "
+            "are the ones it generates, whatever the Surface Type says."
+            % (s_search.surface_type, s_search.search_method)]
+
+
+def _auto_refine_vertex_notes(project) -> list[str]:
+    """When the requested vertices cannot be sliced at the requested count.
+
+    v0.1.128. A polyline of N vertices has N-1 straight segments, and the
+    slicer makes every kink a mandatory cut because a slice straddling one
+    gets a base angle that is neither of the two real ones. When the
+    segments outnumber the slices it cannot honour both and refuses the
+    surface whole (``_slice_bounds``, "if len(segments) > num_slices").
+
+    That refusal is silent and total: not a coarser answer, NO surfaces at
+    all and no critical result. Measured on verification problem 77 while
+    closing D32 — 30 slices returns nothing from 32 vertices up, 60 slices
+    nothing from 64 up, and each works again once the slices pass the
+    segments. The non-circular Auto Refine is the first control that lets a
+    user ask for a vertex count directly (up to 100) while the default
+    slice count is 25, so it is the first place the refusal is one spinbox
+    away.
+
+    Material and water-table crossings are mandatory cuts too, so this is
+    the floor and not the requirement.
+    """
+    from ogr_core.project.settings import is_auto_refine_non_circular
+
+    s_search = project.settings.search
+    if not is_auto_refine_non_circular(s_search):
+        return []
+    n_vert = int(s_search.auto_refine_num_vertices_along_surface)
+    n_slices = int(project.settings.methods.num_slices)
+    if n_vert - 1 <= n_slices:
+        return []
+    return ["The search converts each circle into %d vertices, which is "
+            "%d straight segments, and the analysis uses %d slices. Every "
+            "vertex is a mandatory slice boundary, so a surface with more "
+            "segments than slices is refused whole: this run would return "
+            "no surfaces at all. Raise the number of slices to at least "
+            "%d, or lower the vertices."
+            % (n_vert, n_vert - 1, n_slices, n_vert - 1)]
+
+
 def _optimize_notes(s_search) -> list[str]:
     """What Optimize Surfaces will and will not do on this model.
 
     Both notes are rule 7's minimum: a control that cannot be honoured has
     to say so, and one whose cost is unbounded has to say that too.
     """
-    from ogr_core.project.settings import optimize_enabled_for
+    from ogr_core.project.settings import (
+        is_auto_refine_non_circular, optimize_enabled_for,
+    )
 
     # v0.1.119 — the RESOLVED tri-state, not the raw field. Reading the
     # automatic ``None`` as "off" would silence both notes for every
@@ -389,7 +465,11 @@ def _optimize_notes(s_search) -> list[str]:
                     "global minimum of the slope."]
         return []
     out = []
-    if s_search.search_method not in _OPTIMIZABLE_SEARCHES:
+    # v0.1.128 — the membership test alone would fire on the non-circular
+    # Auto Refine, which does take the option: the method id is shared
+    # with the circular one, so the pair has to be asked.
+    if (s_search.search_method not in _OPTIMIZABLE_SEARCHES
+            and not is_auto_refine_non_circular(s_search)):
         out.append(
             "Optimize Surfaces applies to non-circular surfaces, which are "
             "the ones with vertices to move; this project searches with "
@@ -657,6 +737,8 @@ def build_search(project, method_id: str, progress_cb: Optional[Callable] = None
     than duplicating this dispatch. Returns None when ``method_id`` is
     not registered.
     """
+    from ogr_core.project.settings import is_auto_refine_non_circular
+
     method = build_method(project, method_id)
     if method is None:
         return None
@@ -758,8 +840,7 @@ def build_search(project, method_id: str, progress_cb: Optional[Callable] = None
         )
 
     if search_method == "auto_refine":
-        from .search import AutoRefineSearch
-        return AutoRefineSearch(
+        auto_refine_kw = dict(
             # v0.1.103 — both of these used to come from a SECOND field of
             # the same name-but-not-quite (``auto_refine_divisions`` and
             # ``auto_refine_iterations``), which the interface wrote from
@@ -773,8 +854,26 @@ def build_search(project, method_id: str, progress_cb: Optional[Callable] = None
             next_iter_fraction=getattr(
                 s_search, "auto_refine_divisions_to_use_pct", 50.0),
             min_area=s_search.min_area or 0.5,
-            **common,
         )
+        # v0.1.128, defect D32 — the branch that had never asked the
+        # question. Auto Refine is offered under BOTH surface types and
+        # this dispatch read the method alone, so a model declaring
+        # Non-Circular got the circular search and its circles, silently.
+        # The setting that configures the conversion,
+        # ``auto_refine_num_vertices_along_surface``, had no reader at all.
+        if is_auto_refine_non_circular(s_search):
+            from .search import AutoRefineNonCircularSearch
+            return AutoRefineNonCircularSearch(
+                num_vertices=s_search.auto_refine_num_vertices_along_surface,
+                **auto_refine_kw,
+                # The optimisation is part of the documented method here,
+                # not an extra: the reference has it ON by default for
+                # this search and recommends never turning it off.
+                **_optimize_kw(),
+                **common,
+            )
+        from .search import AutoRefineSearch
+        return AutoRefineSearch(**auto_refine_kw, **common)
 
     if search_method == "block":
         from .search import BlockSearch
