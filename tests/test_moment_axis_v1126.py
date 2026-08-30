@@ -181,11 +181,17 @@ def _search(method, num_slices: int) -> GridSearch:
 
 
 def _resolved_circle(project, method, circle_def, num_slices):
-    """The circle with its ground crossings resolved, plus its result."""
+    """The mass that was analysed, plus its result.
+
+    v0.1.131 — read off ``res.surface`` and not off the circle handed in.
+    ``evaluate_circle`` used to write the analysed extent back onto its
+    argument, and this helper was one of the two places that read it there;
+    the value is the same one, from the object it belongs to (defect D36).
+    """
     cx, cy, r = circle_def
     circle = SlipCircle(centre_x=cx, centre_y=cy, radius=r)
     res = _search(method, num_slices).evaluate_circle(project, circle)
-    return circle, res
+    return (res.surface if res is not None else circle), res
 
 
 def _inscribed(circle_def, x_left, x_right, n_chords):

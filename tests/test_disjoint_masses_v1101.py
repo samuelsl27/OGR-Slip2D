@@ -177,10 +177,12 @@ def _ground_polyline():
 def _circle(x_left=None, x_right=None):
     """A FRESH circle, optionally pinned to one mass.
 
-    Fresh on every call, and that is not tidiness: ``evaluate_circle``
-    deliberately writes the analysed mass back onto the circle it is given
-    (so the drawing and the number agree), and a reused object would carry
-    those bounds into the next call and answer for whatever mass came first.
+    Fresh on every call. Until v0.1.131 that was a necessity rather than a
+    style: ``evaluate_circle`` wrote the analysed mass back onto the circle
+    it was given, so a reused object carried those bounds into the next
+    call and answered for whatever mass came first. It no longer writes
+    anything, and the helper stays as it is because pinning a mass by hand
+    is exactly what the ``x_left``/``x_right`` arguments are for.
     """
     from ogr_slip2d.surface import SlipCircle
     c = SlipCircle(**_CIRCLE)

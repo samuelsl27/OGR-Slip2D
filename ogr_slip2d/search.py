@@ -844,15 +844,30 @@ class BaseSearch(ABC):
         # circle was thrown away as invalid.
         best = self._best_of_masses(
             project, self._candidate_surfaces(project, circle))
-        if best is not None:
-            # The caller's circle must end up carrying the mass that was
-            # actually analysed, or the drawing and the number disagree.
-            circle.x_left = best.surface.x_left
-            circle.x_right = best.surface.x_right
-            circle.tension_cracks = list(
-                getattr(best.surface, "tension_cracks", []) or [])
-            circle.tension_crack_wall = getattr(
-                best.surface, "tension_crack_wall", None)
+        # v0.1.131 — the caller's circle comes out EXACTLY as it went in,
+        # and that is a rule rather than tidiness. Until now this method
+        # wrote the analysed extent back onto the argument "so the drawing
+        # and the number agree", and by v0.1.130 nothing drew from that
+        # object any more: the canvas, the exporters and the reports all
+        # read ``result.surface``, which carries the analysed mass with its
+        # endpoints, its cracks and its wall. The write fed nobody and
+        # poisoned the NEXT call on the same object.
+        #
+        # What it cost, measured on verification problem 22 (Fredlund and
+        # Krahn 1977) with Composite Surfaces on: the first call answers for
+        # the clipped surface, Bishop 1.3809 against the paper's 1.377; the
+        # second call on the SAME object answers 1.9806, the unclipped arc
+        # running five feet below the floor of the model. That is defect
+        # D15 exactly as v0.1.111 closed it, coming back through the
+        # endpoints written here — because a circle that arrives with its
+        # endpoints set takes the "named mass" branch of
+        # ``_candidate_surfaces`` and is never re-resolved.
+        #
+        # And it was not a masking defect, which is what its report said:
+        # ``run_global_minimum`` and ``run_sensitivity`` rebuild ONE surface
+        # and evaluate it on every sample, so a probabilistic run of that
+        # model reported 1.3809 for the first sample and 1.9806 for all the
+        # rest — five identical samples, no perturbation at all, four wrong.
         return best
 
     # ------------------------------------------------------------------
@@ -861,7 +876,16 @@ class BaseSearch(ABC):
 
         Each is a fresh :class:`SlipCircle` with its endpoints already
         resolved and its reverse curvature already treated, so the caller
-        only has to slice and solve.
+        only has to slice and solve. Fresh in every case, the caller's own
+        object included: nothing yielded here is the argument, so no caller
+        can be left holding a circle this method changed (v0.1.131, D36).
+
+        A circle that ARRIVES with its endpoints set names one mass, and
+        only that mass is yielded — no walk over the chords, and reverse
+        curvature not revisited, because whatever set those endpoints ran
+        already. It still gets the composite clipping and the containment
+        rule, which is what makes it the same kind of surface as a mass
+        this method resolved itself.
 
         Masses that leave the soil region are dropped, which is the
         reference's documented behaviour for non-composite circular
@@ -898,8 +922,45 @@ class BaseSearch(ABC):
         external = project.external_boundary()
         if external is None:
             return
+        try:
+            composite = bool(project.settings.search.composite_surfaces)
+        except AttributeError:
+            composite = False
+        ext_verts = list(external.polyline.vertices)
+
         if circle.x_left is not None and circle.x_right is not None:
-            yield circle           # already resolved by the caller
+            # Endpoints that ARRIVE set NAME one sliding mass, and that is a
+            # feature the program uses: it is how a caller asks about a mass
+            # other than the critical one, so they are honoured and the walk
+            # over the chords is skipped. What they may not be is a way past
+            # the rules that decide whether the surface exists at all.
+            #
+            # v0.1.131 — until now they were. This branch handed the circle
+            # straight back, so a named mass got neither the composite
+            # clipping nor the containment rule: on verification problem 22
+            # a pre-resolved circle measured 1.9806 against the 1.3809 of
+            # the clipped one, and with the option OFF the same circle —
+            # which ``leaves_soil_region`` refuses outright, ``None`` — came
+            # back with a factor of safety as soon as its endpoints were
+            # set, weighing five feet of soil the model does not contain.
+            # That is the reference's error -103 through the back door.
+            #
+            # On a COPY, and not on the caller's object: ``slice_surface``
+            # writes the tension-crack truncation back onto whatever it is
+            # handed, so yielding the argument itself would leak the very
+            # mutation ``evaluate_circle`` above stopped making.
+            #
+            # Reverse curvature is deliberately NOT re-applied, for the
+            # reason v0.1.82 gives in the slicer: a cached pair of endpoints
+            # is never re-cracked, because whatever moved it ran already.
+            named = replace(
+                circle, tension_cracks=list(circle.tension_cracks or []))
+            if composite:
+                named = compose_with_bedrock(named, external)
+            elif leaves_soil_region(named, ext_verts,
+                                    named.x_left, named.x_right):
+                return
+            yield named
             return
 
         ground = ground_surface(external)
@@ -907,11 +968,6 @@ class BaseSearch(ABC):
         if not chords:
             return
         mode = _reverse_curvature_mode(project)
-        try:
-            composite = bool(project.settings.search.composite_surfaces)
-        except AttributeError:
-            composite = False
-        ext_verts = list(external.polyline.vertices)
 
         for x_l, x_r in chords:
             trial = SlipCircle(centre_x=circle.centre_x,
