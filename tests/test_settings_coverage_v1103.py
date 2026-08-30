@@ -49,8 +49,10 @@ _KNOWN_UNREAD = {
     # a defect looks like from here.
     # D07c — found by this inventory in v0.1.103, reported and not yet
     # fixed because each one moves a number and needs its own reference.
-    #   the n_e of Su (2009) section 2.1.7, against a hard-coded 3;
-    "sa_num_fos_compared_before_stopping": "D07c",
+    #   D07c(a) is closed in v0.1.132: the n_eps of Su (2009) section
+    #   2.1.7 reaches ``_vfsa``, which broke on a hand-written 3 while the
+    #   field declared the paper's 5. Out of the list because it has a
+    #   reader now — ``tests/test_annealing_stopping_v1132.py`` holds it.
     #   D07c(b) is closed in v0.1.118 — ``block_num_groups`` stopped being
     #   derived as ``num_surfaces // 1000`` and got its own control. This
     #   field STAYS on the list, and legitimately: it enables that control

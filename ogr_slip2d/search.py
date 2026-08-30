@@ -3862,6 +3862,13 @@ class SimulatedAnnealingSearch(BaseSearch):
         initial_vertices: int = 9,
         generation_steps: int = 200,
         tolerance: float = 1e-3,
+        # n_eps of the stopping criterion — Su (2009) section 2.1.7: the
+        # search stops when the global optimum has not improved by more
+        # than the tolerance in n_eps consecutive outer runs. Section 3.1
+        # adopts N_eps = 5, which is also what the setting declares; until
+        # v0.1.131 the loop broke on a hand-written 3 and nobody read the
+        # setting at all (D07c(a)).
+        num_fos_compared_before_stopping: int = 5,
         # c in T_k = T_0 exp(-c k^(1/n)) — Su (2009) section 2.1.6, eqs.
         # (10)-(11). Was called ``temperature_factor`` and defaulted to a
         # geometric cooling rate of 0.97 until v0.1.103; that value was
@@ -3894,6 +3901,10 @@ class SimulatedAnnealingSearch(BaseSearch):
         self.initial_vertices = max(4, initial_vertices)
         self.generation_steps = max(10, generation_steps)
         self.tolerance = tolerance
+        # Below 1 it is not a criterion: it would stop without having
+        # compared the optimum against anything.
+        self.num_fos_compared_before_stopping = max(
+            1, int(num_fos_compared_before_stopping))
         # Su (2009) reports 1.0 to 10.0 as the adequate range and adopts
         # 8.0; the bounds keep a stored value inside it.
         self.temperature_coefficient = max(1.0, min(10.0,
@@ -4457,12 +4468,16 @@ class SimulatedAnnealingSearch(BaseSearch):
                     T_accept *= 2.0
 
             # ---- Stopping criterion (Section 2.1.7) ----
+            # n_eps is the setting, not a constant: "if there has not been
+            # any visible improvement for the global optimum in the previous
+            # n_eps consecutive runs, the algorithm is to be stopped"
+            # (Su 2009, section 2.1.7).
             if best_fos < last_best - self.tolerance:
                 last_best = best_fos
                 no_improve_passes = 0
             else:
                 no_improve_passes += 1
-            if no_improve_passes >= 3:
+            if no_improve_passes >= self.num_fos_compared_before_stopping:
                 break
 
             if self.progress_cb:

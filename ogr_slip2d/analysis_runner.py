@@ -1027,6 +1027,8 @@ def build_search(project, method_id: str, progress_cb: Optional[Callable] = None
             initial_vertices=s_search.sa_initial_vertices,
             generation_steps=s_search.sa_generation_steps,
             tolerance=s_search.sa_tolerance,
+            num_fos_compared_before_stopping=(
+                s_search.sa_num_fos_compared_before_stopping),
             temperature_coefficient=s_search.sa_temperature_coefficient,
             convex_only=s_search.sa_convex_only,
             **_optimize_kw(),

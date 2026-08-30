@@ -128,6 +128,17 @@ Y lo que ya está descartado con medida, para que nadie lo vuelva a intentar:
 `Ngen0 = generation_steps` (el «ngen 1000» del paper) **empeora**, y
 `nepsilon` = 5 no mueve dos de tres semillas.
 
+**Actualizado en v0.1.132**, al cablear `nepsilon` (D07c(a)): ese «no mueve
+dos de tres semillas» tiene causa, y es de este mismo pendiente. `K` es el
+tope de pasadas, así que **el criterio de parada sólo muerde mientras
+nepsilon < K**; con los 300 pasos de la medición K = 6 y con el defecto del
+motor (200) K = 4, de modo que el N_eps = 5 que adopta el paper **no puede
+dispararse**. Ahora `nepsilon` es un ajuste con valor 5 por defecto, así que
+`generation_steps` no sólo mueve dos cosas: gobierna si una tercera existe.
+Contado con `progress_cb` sobre el talud de este pendiente (300 pasos, sin
+optimización): con nepsilon = 2 las semillas paran en la pasada 2, 2, 2 y 5;
+con 3 para una sola; con 5 y con 20 no para ninguna.
+
 ---
 
 ## 0c · Cuatro desviaciones del paper del recocido, con su efecto medido
@@ -166,6 +177,15 @@ mueven, así que el vano ya no es fijo y el sesgo pesa menos, pero sigue ahí.
 **(d) `y_floor` sólo ata a la fase 1.** `_vfsa` limita la profundidad a
 0,15·H bajo el pie; `_lmc` no la conoce. Uno de los dos está de más, y hasta
 saber cuál no se toca ninguno.
+
+**(e) Una sola tolerancia hace dos trabajos.** Encontrada en v0.1.132 al leer
+la §3.1 para el valor por defecto de `nepsilon`, y **sin medir**: el paper usa
+dos tolerancias distintas —`f_tol` = 1e-4 para la parada y 1e-6 para el factor
+de seguridad—, y `_vfsa` usa `self.tolerance` para las dos cosas: para decidir
+qué cuenta como mejora del óptimo (`f < best_fos - self.tolerance`) y para
+decidir la parada. Con el defecto del proyecto, 1e-4, una mejora menor que
+1e-4 **no se guarda** como mejor superficie, cuando el paper la guardaría y
+sólo no la contaría para parar.
 
 ---
 
@@ -535,7 +555,7 @@ Anotado con su medida en `TestKnownDivergences` de
 
 ---
 
-## 10 · Lo que el inventario de ajustes dejó abierto (D07c) — ABIERTO (v0.1.103)
+## 10 · Lo que el inventario de ajustes dejó abierto (D07c) — (a) CERRADA en v0.1.132; (b), (c) y (d) ABIERTAS (v0.1.103)
 
 v0.1.103 colapsó los seis pares de ajustes que existían dos veces (el nombre
 que la interfaz enseñaba y el que el motor leía). El inventario que hizo falta
@@ -545,16 +565,31 @@ porque **mueve un número** y necesita su propia referencia. El test
 `tests/test_settings_coverage_v1103.py` las sujeta en un inventario congelado,
 así que no pueden pudrirse en silencio.
 
-### a) `sa_num_fos_compared_before_stopping`: declarado 5, el código para en 3
+### a) `sa_num_fos_compared_before_stopping` — CERRADO en v0.1.132
 
-Es el n_ε del criterio de parada de Su (2009), sección 2.1.7: se comparan los
-últimos n_ε mejores factores y se para si ninguno mejora más que la tolerancia.
-El diálogo lo enseña con el valor de la referencia, **5**, y `search.py` para
-en un `no_improve_passes >= 3` escrito a mano.
+Era el n_ε del criterio de parada de Su (2009), sección 2.1.7 —«if there has
+not been any visible improvement for the global optimum in the previous n_ε
+consecutive runs, the algorithm is to be stopped»—, el diálogo lo enseñaba con
+el valor de la referencia, **5**, y `search.py` paraba en un
+`no_improve_passes >= 3` escrito a mano. Ya lo lee el motor, con 5 por defecto
+en los dos sitios, que es el `N_ε = 5` que la §3.1 del paper adopta para sus
+casos de verificación.
 
-Para cerrarlo: cablearlo y medir qué le hace a los modelos de recocido del
-banco. Alarga la búsqueda, así que el factor sólo puede bajar o quedarse — pero
-hay que enseñarlo, no suponerlo.
+**Lo que se aprendió al medirlo**, y no era lo que esta entrada decía:
+
+- **el signo era falso.** «Alarga la búsqueda, así que el factor sólo puede
+  bajar o quedarse» no se sostiene: de diez pares semilla/modelo se mueven
+  cuatro, tres hacia abajo (caso 002) y **una hacia arriba** (talud D22,
+  semilla 7: 1,0808 → 1,0927, +1,1 % con una evaluación más). El recocido es
+  estocástico y la fase local arranca donde la global la deja;
+- **el mejor de cinco semillas no cambia** en ninguno de los dos modelos;
+- y el criterio de parada **sólo existe mientras n_ε < K**, con
+  `K = max(4, generation_steps/50)`. Está desarrollado en §0b, que es donde
+  vive esa cuerda.
+
+El test es `tests/test_annealing_stopping_v1132.py`, y contrasta 2 contra 20
+—no 3 contra 5, que no discrimina— más una comprobación determinista del
+número de pasadas.
 
 ### b) `block_multiple_groups` no lo lee nadie, y lo que sí se lee se deriva mal
 
