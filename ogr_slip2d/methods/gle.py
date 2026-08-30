@@ -294,10 +294,21 @@ class GLEMorgensternPrice(LEMMethod):
                                      system.boundaries_in_slice_order(
                                          force.boundary_x)),
                 },
-                error_message=(
-                    ("GLE: no λ-bracket; using nearest F_f≈F_m"
-                     if abs(best[1]) >= 0.02 else None)
-                    if not inadmissible else
+                # v0.1.130 — the two judgements this field used to mix are
+                # now separate, because they are not the same claim. "No
+                # λ-bracket" stays in ``error_message``: there is no root,
+                # the pair returned is the nearest crossing, and
+                # ``converged`` above already says so. The relaxed-thrust
+                # criterion moves to ``admissible`` for the reason given in
+                # ``Spencer.compute_fos``. Verification problems 85 (GLE) and
+                # 91 (Spencer) reach the engine by THIS branch and do not
+                # converge, so what the bank publishes on their circle is a
+                # fallback value, not a measurement.
+                error_message=("GLE: no λ-bracket; using nearest F_f≈F_m"
+                               if abs(best[1]) >= 0.02 else None),
+                admissible=not inadmissible,
+                admissibility_note=(
+                    "" if not inadmissible else
                     "GLE: no λ leaves the inter-slice thrust in net "
                     "compression; the answer is reported with the criterion "
                     "relaxed"),
@@ -359,7 +370,12 @@ class GLEMorgensternPrice(LEMMethod):
             base_normal_force=normals,
             base_shear_force=driving,
             base_shear_strength=strengths,
-            error_message=(
+            # v0.1.130 — see the note in ``Spencer.compute_fos``: this is a
+            # PREFERENCE and ``error_message`` is a veto. Moved to
+            # ``admissible``, which is where ``LEMResult`` says a converged
+            # but physically unreliable answer belongs.
+            admissible=not inadmissible,
+            admissibility_note=(
                 "" if not inadmissible else
                 "GLE: no λ leaves the inter-slice thrust in net compression; "
                 "the answer is reported with the criterion relaxed"),

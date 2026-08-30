@@ -209,10 +209,17 @@ class Spencer(LEMMethod):
                                      system.boundaries_in_slice_order(
                                          force.boundary_x)),
                 },
-                error_message=(
-                    ("Spencer: no λ-bracket; using nearest F_f≈F_m"
-                     if abs(best[1]) >= 0.02 else None)
-                    if not inadmissible else
+                # v0.1.130 — the same split as the λ-bracket branch of
+                # ``gle.py``: "no λ-bracket" is a failed solve and stays a
+                # veto, the relaxed-thrust criterion is a preference and
+                # moves to ``admissible``. Mixing them meant a surface with
+                # a perfectly good bracket was thrown out with the same
+                # force as one with none.
+                error_message=("Spencer: no λ-bracket; using nearest F_f≈F_m"
+                               if abs(best[1]) >= 0.02 else None),
+                admissible=not inadmissible,
+                admissibility_note=(
+                    "" if not inadmissible else
                     "Spencer: no λ leaves the inter-slice thrust in net "
                     "compression; the answer is reported with the criterion "
                     "relaxed"),
@@ -282,7 +289,23 @@ class Spencer(LEMMethod):
             base_normal_force=normals,
             base_shear_force=driving,
             base_shear_strength=strengths,
-            error_message=(
+            # v0.1.130 — this used to go in ``error_message``, and that field
+            # is a VETO: it feeds ``is_valid``, which scores the surface
+            # ``inf`` in ``search.surface_score`` and excludes it from
+            # ``SearchResult.critical`` with no fallback, so a search could
+            # never report it. The message said "the answer is reported" and
+            # the answer was not reported: it was discarded. ``interslice.py``
+            # states the intent — the strict pass "is a PREFERENCE, not a
+            # veto" — and ``LEMResult`` says where a converged but physically
+            # unreliable answer belongs. It belongs here. ``admissible`` keeps
+            # the surface out of the critical pick while other surfaces exist
+            # and hands it back when none do (``ok or valid``), which is what
+            # a preference means. Defect D37/C1 of the verification bank:
+            # verification problems 60, 90 and 93 published a search minimum
+            # ABOVE the factor the same engine computes on the manual's own
+            # circle, because that circle was solved and then erased.
+            admissible=not inadmissible,
+            admissibility_note=(
                 "" if not inadmissible else
                 "Spencer: no λ leaves the inter-slice thrust in net compression; "
                 "the answer is reported with the criterion relaxed"),
