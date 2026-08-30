@@ -386,16 +386,22 @@ class TestSlopeLimitsAreHonoured:
         assert 15.0 - 1e-6 <= v[0].x and v[-1].x <= 100.0 + 1e-6
 
     def test_build_search_hands_them_to_every_search(self):
-        """The settings page writes one pair of limits; the six branches
+        """The settings page writes one pair of limits; the seven branches
         of ``build_search`` are where one of them gets forgotten, and five
-        of them had been."""
+        of them had been.
+
+        v0.1.129 — it said six and walked six. ``particle_swarm`` arrived
+        in v0.1.126 with its own branch and was never added here, so for
+        three versions the test that exists to catch a forgotten branch had
+        forgotten one.
+        """
         from ogr_slip2d.analysis_runner import build_search
 
         p = _layered_slope()
         p.settings.search.slope_limit_left = 30.0
         p.settings.search.slope_limit_right = 80.0
         for m in ("grid", "slope", "auto_refine", "block", "path",
-                  "simulated_annealing"):
+                  "simulated_annealing", "particle_swarm"):
             p.settings.search.search_method = m
             s = build_search(p, "bishop_simplified")
             assert s.slope_limits == (30.0, 80.0), m

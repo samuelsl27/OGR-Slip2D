@@ -437,8 +437,25 @@ def optimize_surface(project, search, surface, settings=None):
             vertices=[Vertex(x, y) for x, y in points], closed=False))
 
     def _evaluate(points):
+        surface_ = _make(points)
+        # v0.1.129 — the walk may not leave the focus. This callback goes
+        # STRAIGHT to ``evaluate_surface``, so until now it was the one
+        # door in the engine that a focus object could not see, and it is
+        # the last one: the reference optimises every non-circular result
+        # it publishes, so the optimised surface is the one a bank row
+        # actually compares. A walk free to wander off the focus would
+        # have handed back a surface for a different case than the one the
+        # model declares — which is defect D33 arriving through the back
+        # door after being closed at the front.
+        #
+        # A rejected step is simply not taken: ``None`` is what this
+        # callback already returns for a surface that cannot be evaluated,
+        # and the walk treats both the same way.
+        rejects = getattr(evaluator, "_focus_rejects", None)
+        if rejects is not None and rejects(surface_):
+            return None
         try:
-            return evaluator.evaluate_surface(project, _make(points))
+            return evaluator.evaluate_surface(project, surface_)
         except Exception:  # noqa: BLE001
             return None
 

@@ -16,7 +16,7 @@ Public API:
 
 Author: Samuel Sáez López — PhD Student, UPCT
 """
-__version__ = "0.1.128"
+__version__ = "0.1.129"
 
 from .methods import (
     BishopSimplified,
@@ -77,6 +77,7 @@ from .focus import (  # noqa: E402,F401
     FocusKind,
     FocusObject,
     accepts,
+    accepts_surface,
     filter_circles,
 )
 from .optimize import (  # noqa: E402,F401

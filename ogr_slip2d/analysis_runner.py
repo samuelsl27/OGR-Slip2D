@@ -74,6 +74,23 @@ _PRESCRIBED_THETA_METHODS = (
 # mean handing an argument they can only ignore.
 _DETERMINISTIC_SEARCHES = ("grid", "auto_refine")
 
+# v0.1.129 — the Minimum Area filter's fallback, PER SEARCH, for when the
+# project leaves the field empty. It is a map and not one number because
+# the seven branches below had grown seven different fallbacks (0.5 for
+# Auto Refine, 2.0 for the Block Search, 1.0 for the rest), and 76 models
+# of the reference bank ride on whichever their branch happens to use.
+# Collapsing them to a single value would move published rows for a reason
+# that has nothing to do with the defect this closes. Defect D51.
+_MIN_AREA_FALLBACK = {
+    "grid": 1.0,
+    "slope": 1.0,
+    "auto_refine": 0.5,
+    "block": 2.0,
+    "path": 1.0,
+    "particle_swarm": 1.0,
+    "simulated_annealing": 1.0,
+}
+
 
 class AnalysisOutcome:
     """What one call to :func:`run_analysis` produced.
@@ -246,7 +263,50 @@ def settings_warnings(project, method_ids=()) -> list[str]:
     notes.extend(_auto_refine_vertex_notes(project))
     notes.extend(_optimize_notes(s_search))
     notes.extend(_undrained_profile_notes(project))
+    notes.extend(_focus_notes(project))
     return notes
+
+
+_GUIDED_SEARCHES = ("simulated_annealing", "particle_swarm")
+
+
+def _focus_notes(project) -> list[str]:
+    """What a focus object cannot promise on a guided search.
+
+    v0.1.129. Every search honours the focus objects now (defect D33),
+    but "honours" means two different things depending on how a search
+    produces candidates. The five that draw INDEPENDENT candidates — Grid,
+    Slope, Auto Refine, Block, Path — lose yield to a focus and nothing
+    else. The two GUIDED ones walk from candidate to candidate, so the
+    focus filters the path as well as the destination and can cut the walk
+    off before it starts.
+
+    Measured on a four-layer slope, Simulated Annealing against a tangent
+    to a boundary 15 m below the toe: nothing found at tolerances 2, 5 and
+    10, and at 12 and above the identical unfocused answer. There is no
+    middle, because the bootstrap builds its starting surface from a depth
+    and SHRINKS that depth on each retry, walking away from a deep tangent
+    instead of towards it. So the search can report no mechanism while a
+    surface satisfying the focus demonstrably exists — which is worth a
+    sentence, since "none found" and "none exists" look identical in a
+    result window.
+
+    A note and not a refusal: the analysis is valid and the focus IS
+    applied. See tests/test_focus_all_searches_v1129.py.
+    """
+    active = [f for f in getattr(project, "focus_objects", [])
+              if f.enabled and f.valid]
+    if not active:
+        return []
+    if project.settings.search.search_method not in _GUIDED_SEARCHES:
+        return []
+    return [
+        "This search steers from one candidate surface to the next, so a "
+        "focus object narrows the path it walks as well as the answer it "
+        "returns. A narrow focus can leave it with NO surface at all even "
+        "when surfaces satisfying the focus exist; that is a limit of the "
+        "search, not a statement about the slope. A Grid, Path or Block "
+        "Search reaches a tightly focused region more reliably."]
 
 
 def _undrained_profile_notes(project) -> list[str]:
@@ -809,6 +869,27 @@ def build_search(project, method_id: str, progress_cb: Optional[Callable] = None
         # report said "critical seismic coefficient", which is the most
         # expensive kind of silence there is.
         seismic_analysis=(s.seismic if s.seismic.needs_ky else None),
+        # v0.1.129 — the focus objects, and in ``common`` for the fourth
+        # time for the fourth variation of the same reason. They are drawn
+        # on the model and saved in the .ogr, and exactly ONE of the seven
+        # branches below was ever handed them, so a focus declared on a
+        # model that did not use a Grid Search did nothing at all. That is
+        # not a number moving by a percent: in the reference bank, ten
+        # non-circular models whose two published cases differ ONLY by
+        # their focus object were the same calculation twice, and the
+        # comparativa published an OK and a DISCREPANCIA out of it.
+        # Defect D33.
+        focus_objects=[f for f in getattr(project, "focus_objects", [])
+                       if f.enabled and f.valid],
+        # v0.1.129 — the Minimum Area filter, the last of the surface
+        # filters still being handed out by hand. Six branches passed it
+        # and the seventh, ``path``, did not, so ``PathSearch`` pinned it
+        # at 1.0 and a model declaring 50 was filtered at 1.0 in silence.
+        # What that cost, on verification problem 86: Spencer 1.1728
+        # (-26.4 %) on a 2.41 ft2 skin, against 1.5841 (-0.62 %) on the
+        # 201.95 ft2 mechanism the manual publishes. Defect D51.
+        min_area=(s_search.min_area
+                  or _MIN_AREA_FALLBACK.get(search_method, 1.0)),
         **_seed_kw(),
     )
 
@@ -829,7 +910,6 @@ def build_search(project, method_id: str, progress_cb: Optional[Callable] = None
         # so gating it moves nothing that exists today.
         return SlopeSearch(
             num_surfaces=s_search.num_surfaces,
-            min_area=s_search.min_area or 1.0,
             initial_angle_lower_deg=(
                 s_search.initial_angle_at_toe_lower_deg
                 if s_search.initial_angle_at_toe_lower_enabled else -45.0),
@@ -853,7 +933,6 @@ def build_search(project, method_id: str, progress_cb: Optional[Callable] = None
             iterations=s_search.auto_refine_num_iterations,
             next_iter_fraction=getattr(
                 s_search, "auto_refine_divisions_to_use_pct", 50.0),
-            min_area=s_search.min_area or 0.5,
         )
         # v0.1.128, defect D32 — the branch that had never asked the
         # question. Auto Refine is offered under BOTH surface types and
@@ -884,7 +963,6 @@ def build_search(project, method_id: str, progress_cb: Optional[Callable] = None
             right_start_angle_deg=s_search.block_right_start_angle_deg,
             right_end_angle_deg=s_search.block_right_end_angle_deg,
             num_surfaces=s_search.block_num_surfaces,
-            min_area=s_search.min_area or 2.0,
             convex_only=s_search.block_convex_only,
             **_optimize_kw(),
             **common,
@@ -939,7 +1017,6 @@ def build_search(project, method_id: str, progress_cb: Optional[Callable] = None
             **({"initial_angle_upper_deg":
                 s_search.initial_angle_at_toe_upper_deg}
                if s_search.initial_angle_at_toe_upper_enabled else {}),
-            min_area=s_search.min_area or 1.0,
             **_optimize_kw(),
             **common,
         )
@@ -952,7 +1029,6 @@ def build_search(project, method_id: str, progress_cb: Optional[Callable] = None
             tolerance=s_search.sa_tolerance,
             temperature_coefficient=s_search.sa_temperature_coefficient,
             convex_only=s_search.sa_convex_only,
-            min_area=s_search.min_area or 1.0,
             **_optimize_kw(),
             **common,
         )
@@ -960,8 +1036,6 @@ def build_search(project, method_id: str, progress_cb: Optional[Callable] = None
     # Default = Grid Search.
     from .search import GridSearch
     return GridSearch(
-        focus_objects=[f for f in getattr(project, "focus_objects", [])
-                       if f.enabled and f.valid],
         grid_x=_grid_range(s_search.grid_x_min, s_search.grid_x_max),
         grid_y=_grid_range(s_search.grid_y_min, s_search.grid_y_max),
         grid_nx=s_search.grid_nx,
@@ -972,7 +1046,6 @@ def build_search(project, method_id: str, progress_cb: Optional[Callable] = None
         # The radius bracket is now the reference's, and a hard-coded floor
         # here would have been the one thing still departing from it.
         min_radius=0.0,
-        min_area=s_search.min_area or 1.0,
         **common,
     )
 

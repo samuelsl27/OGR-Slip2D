@@ -315,8 +315,11 @@ class TestAllSixSearchesReceiveThem:
     A37-1, one branch at a time instead of all six at once.
     """
 
+    # v0.1.129 — ``particle_swarm`` has had a branch of its own since
+    # v0.1.126 and was missing from this tuple, which is the one place
+    # whose whole job is not to miss a branch.
     METHODS = ("grid", "slope", "auto_refine", "block", "path",
-               "simulated_annealing")
+               "simulated_annealing", "particle_swarm")
 
     def test_every_branch_of_build_search_gets_both_filters(self):
         from ogr_slip2d.analysis_runner import build_search

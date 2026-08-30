@@ -73,6 +73,18 @@ def _base_kwargs(legacy: dict) -> dict:
         # so a search that never received it would quietly go on hunting
         # the lowest factor of safety while the report said Ky.
         "seismic_analysis": legacy.pop("seismic_analysis", None),
+        # v0.1.129 — the focus objects, here for the same reason as the
+        # eight above and with a twist of its own. The reason: they are a
+        # PROJECT setting, drawn on the model and saved in the .ogr, so
+        # the seven branches of ``build_search`` are exactly where one of
+        # them gets forgotten — and six of them had been, since v0.1.55.
+        # The twist: two searches DECLARED the argument, stored it in
+        # ``self.focus_objects`` under a comment claiming it was "applied
+        # BEFORE evaluation", and never read it again. So handing them the
+        # value alone would have fixed nothing while looking fixed, which
+        # is why the reading moved down into ``BaseSearch`` where every
+        # search shares one. Defect D33.
+        "focus_objects": list(legacy.pop("focus_objects", None) or ()),
     }
 
 
@@ -278,6 +290,7 @@ class BaseSearch(ABC):
         optimize=None,
         optimize_seed: Optional[int] = None,
         seismic_analysis=None,
+        focus_objects=None,
     ) -> None:
         self.method = method
         self.num_slices = num_slices
@@ -313,6 +326,25 @@ class BaseSearch(ABC):
         #   reference exempts exactly one from this, the Block Search,
         #   whose vertices come from user-drawn objects instead.
         self.slope_limits = slope_limits
+        # v0.1.129 — the focus objects, and the split is the same one the
+        # Slope Limits describe just above, only the other way round:
+        #
+        # * FILTERING — every search asks ``_focus_rejects`` before it
+        #   spends anything on a candidate. NOT in ``_best_of_masses``,
+        #   where the other project filters live, and that is deliberate:
+        #   by the time a circle reaches that method it has become the
+        #   chords it was sliced into, and asking a chord approximation
+        #   whether it is tangent to a line is not the question the user
+        #   asked. See ``focus.py`` and the ``_chord_reference`` argument
+        #   of v0.1.118. So the ask happens where the candidate is still
+        #   the thing the search generated.
+        # * GENERATION — nothing generates from them. The reference does
+        #   (a Focus Point yields exactly one circle per slip centre, with
+        #   the Radius Increment switched off), this engine has always
+        #   filtered instead, and that difference is older than D33 and
+        #   left alone here on purpose: changing it would move every
+        #   circular row of the reference bank.
+        self.focus_objects = list(focus_objects or ())
         # v0.1.24 — optional kinematic-admissibility filter (anomaly A3).
         # A physically acceptable limit-equilibrium mechanism requires
         # COMPRESSIVE interslice forces; a surface whose force field
@@ -604,6 +636,50 @@ class BaseSearch(ABC):
         return True
 
     # ------------------------------------------------------------------
+    def _focus_rejects(self, candidate) -> bool:
+        """Whether the focus objects rule this candidate out.
+
+        v0.1.129, defect D33. One dispatcher, shared by every search, and
+        it asks the predicate that MATCHES WHAT THE SEARCH GENERATED: a
+        circle is asked about its centre and radius, a piece-wise linear
+        surface about its vertices. The two are not interchangeable — a
+        circle re-tested as its own chord approximation answers a
+        different question — so the choice is made here once instead of
+        by seven callers who could each choose differently.
+
+        ``candidate`` may be a :class:`SlipCircle`, a :class:`SlipSurface`
+        or a bare sequence of ``(x, y)``. Returns False with no work at
+        all when no focus object is defined, which is the common case.
+        """
+        if not self.focus_objects:
+            return False
+        from .focus import accepts_surface as _accepts_surface
+
+        radius = getattr(candidate, "radius", None)
+        if radius is not None:
+            return self._focus_rejects_circle(
+                candidate.centre_x, candidate.centre_y, radius)
+        polyline = getattr(candidate, "polyline", None)
+        if polyline is not None:
+            pts = [(v.x, v.y) for v in polyline.vertices]
+        else:
+            pts = [(float(p[0]), float(p[1])) for p in candidate]
+        return not _accepts_surface(self.focus_objects, pts)
+
+    def _focus_rejects_circle(self, cx: float, cy: float, r: float) -> bool:
+        """:meth:`_focus_rejects` for a circle not yet built into one.
+
+        The circle generators ask through here so that a rejected circle
+        never costs a :class:`SlipCircle` construction — which carries a
+        ``uuid4`` — on top of the two distance calculations that rejected
+        it. That ordering is the whole argument for focusing being worth
+        using; see ``focus.py``.
+        """
+        if not self.focus_objects:
+            return False
+        from .focus import accepts as _accepts_circle
+        return not _accepts_circle(self.focus_objects, cx, cy, r)
+
     def _best_of_masses(self, project: Project, candidates) -> Optional[LEMResult]:
         """The lowest-factor mass among several DISJOINT candidates.
 
@@ -1345,10 +1421,14 @@ class GridSearch(BaseSearch):
         min_radius: float = 0.0,
         num_slices: int = 30,
         min_area: float = 0.5,
-        focus_objects=None,
         progress_cb: Optional[Callable[[int, int], None]] = None,
         **legacy_kwargs,
     ) -> None:
+        # v0.1.129 — ``focus_objects`` used to be this search's OWN named
+        # argument, and it was the only search that ever received one. It
+        # now travels through ``_base_kwargs`` like every other project
+        # setting, so a caller passing it positionally still works and
+        # every other search gets it too. Defect D33.
         super().__init__(
             method, num_slices, min_area, progress_cb,
             **_base_kwargs(legacy_kwargs),
@@ -1366,11 +1446,6 @@ class GridSearch(BaseSearch):
         # Accept floats for back-compat but use as an integer count.
         self.radius_increment = max(1, int(round(radius_increment)))
         self.min_radius = min_radius
-        # v0.1.55 (phase M4) — focus objects, applied BEFORE evaluation:
-        # rejecting a circle costs two distance calculations, evaluating
-        # one costs a full slicing and iteration, so the order is what
-        # makes focusing worth using rather than merely tidy.
-        self.focus_objects = focus_objects or []
 
     # ------------------------------------------------------------------
     def _auto_grid(self, project: Project) -> tuple[tuple[float, float], tuple[float, float]]:
@@ -1650,11 +1725,8 @@ class GridSearch(BaseSearch):
                         # whatever the geometry does — see total_count.
                         result.invalid_count += 1
                         continue
-                    if self.focus_objects:
-                        from .focus import accepts as _focus_accepts
-                        if not _focus_accepts(self.focus_objects, xc, yc,
-                                              r):
-                            continue
+                    if self._focus_rejects_circle(xc, yc, r):
+                        continue
                     circle = SlipCircle(centre_x=xc, centre_y=yc, radius=r)
                     res = self.evaluate_circle(project, circle)
                     # v0.1.83 — a circle that could not be analysed is
@@ -1933,6 +2005,12 @@ class SlopeSearch(BaseSearch):
                 result.invalid_count += 1
                 continue
 
+            if self._focus_rejects_circle(cx, cy, radius):
+                # v0.1.129 — the reference documents the focus objects for
+                # the Grid Search AND for this one, and until now only the
+                # Grid Search had ever been handed any. Defect D33.
+                continue
+
             from .surface import SlipCircle
             sc = SlipCircle(centre_x=cx, centre_y=cy, radius=radius)
             res = self.evaluate_circle(project, sc)
@@ -1967,6 +2045,11 @@ class SlopeSearch(BaseSearch):
                     tcy = cur[1] + self.rng.uniform(-step, step)
                     tr = cur[2] + self.rng.uniform(-step, step)
                     if tr <= 0:
+                        continue
+                    if self._focus_rejects_circle(tcx, tcy, tr):
+                        # The refinement walk has to respect the focus too,
+                        # or the search would step off it after finding a
+                        # focused minimum and report the escape.
                         continue
                     sc = SlipCircle(centre_x=tcx, centre_y=tcy, radius=tr)
                     res = self.evaluate_circle(project, sc)
@@ -2075,7 +2158,6 @@ class AutoRefineSearch(BaseSearch):
         next_iter_fraction: float = 0.5,
         num_slices: int = 30,
         min_area: float = 0.5,
-        focus_objects=None,
         progress_cb=None,
         # Back-compat (old signature used factor/radius_increment)
         **legacy_kwargs,
@@ -2094,11 +2176,6 @@ class AutoRefineSearch(BaseSearch):
             f = f / 100.0
         self.next_iter_fraction = min(0.95, max(0.1, f))
         self.min_area = min_area
-        # v0.1.55 (phase M4) — focus objects, applied BEFORE evaluation:
-        # rejecting a circle costs two distance calculations, evaluating
-        # one costs a full slicing and iteration, so the order is what
-        # makes focusing worth using rather than merely tidy.
-        self.focus_objects = focus_objects or []
         self.progress_cb = progress_cb
 
     # ------------------------------------------------------------------
@@ -2242,6 +2319,16 @@ class AutoRefineSearch(BaseSearch):
                         if circle is None:
                             continue
                         cx, cy, r = circle
+                        if self._focus_rejects_circle(cx, cy, r):
+                            # v0.1.129 — asked HERE, on the circle, and not
+                            # inside ``_evaluate_trial``, for two reasons.
+                            # It skips instead of counting, as every other
+                            # focus rejection does; and the non-circular
+                            # variant subclasses that seam, so a candidate
+                            # would be judged on the chords it is about to
+                            # become rather than on the circle the search
+                            # generated. Defect D33.
+                            continue
                         sc = SlipCircle(centre_x=cx, centre_y=cy, radius=r)
                         res = self._evaluate_trial(project, sc)
                         if res is None or not res.is_valid:
@@ -2602,7 +2689,6 @@ class BlockSearch(BaseSearch):
         num_slices: int = 30,
         min_area: float = 1.0,
         convex_only: bool = False,
-        focus_objects=None,
         seed: Optional[int] = None,
         progress_cb=None,
         **legacy_kwargs,
@@ -2628,11 +2714,6 @@ class BlockSearch(BaseSearch):
         self.num_surfaces = num_surfaces
         self.min_area = min_area
         self.convex_only = convex_only
-        # v0.1.55 (phase M4) — focus objects, applied BEFORE evaluation:
-        # rejecting a circle costs two distance calculations, evaluating
-        # one costs a full slicing and iteration, so the order is what
-        # makes focusing worth using rather than merely tidy.
-        self.focus_objects = focus_objects or []
         self.seed = seed
         self.progress_cb = progress_cb
 
@@ -2895,6 +2976,14 @@ class BlockSearch(BaseSearch):
 
             poly = Polyline(vertices=deduped, closed=False)
             surface = SlipSurface(polyline=poly)
+            if self._focus_rejects(surface):
+                # v0.1.129 — this search DECLARED ``focus_objects`` since
+                # v0.1.55 under a comment saying it applied them before
+                # evaluating, and never read the attribute once. Defect
+                # D33. Asked before ``evaluate_surface`` because that is
+                # where the cost is: 2.18 ms against 0.44 ms to generate,
+                # measured on verification problem 78.
+                continue
             res = self.evaluate_surface(project, surface)
             if res is None:
                 result.invalid_count += 1
@@ -3115,6 +3204,12 @@ class PathSearch(BaseSearch):
         # user edits and the one the engine read could drift apart.
         num_surfaces: int = 5000,
         num_slices: int = 30,
+        # v0.1.129 — the ONLY search of the seven that did not name this,
+        # so ``build_search`` could not hand it one and the line below
+        # pinned it at 1.0 whatever the project said. A user who set 50 to
+        # clear the shallow skins off a Path Search got the identical
+        # number back. Defect D51.
+        min_area: float = 1.0,
         segment_length: Optional[float] = None,
         # ``None`` on either angle means AUTOMATIC. A value is an ABSOLUTE
         # angle, counter-clockwise from the model's +x axis; ``_run``
@@ -3149,7 +3244,8 @@ class PathSearch(BaseSearch):
         _base = _base_kwargs(legacy_kwargs)
         _base["min_elevation"] = min_elevation
         super().__init__(
-            method=method, num_slices=num_slices, **_base,
+            method=method, num_slices=num_slices, min_area=min_area,
+            **_base,
         )
         self.num_surfaces = num_surfaces
         # v0.1.24 — cap on generation attempts (num_surfaces × factor)
@@ -3165,7 +3261,6 @@ class PathSearch(BaseSearch):
         # Back-compat: older callers passed num_vertices / min_area /
         # min_angle_deg / max_angle_deg. Absorb silently.
         self.num_vertices = legacy_kwargs.get("num_vertices", 8)
-        self.min_area = legacy_kwargs.get("min_area", 1.0)
         if "min_angle_deg" in legacy_kwargs:
             self.initial_angle_lower_deg = legacy_kwargs["min_angle_deg"]
         # v0.1.103 — ``max_angle_deg`` was absorbed and then never read, so
@@ -3417,6 +3512,20 @@ class PathSearch(BaseSearch):
                 continue
             poly = Polyline(vertices=verts, closed=False)
             surface = SlipSurface(polyline=poly)
+            if self._focus_rejects(surface):
+                # v0.1.129 — this search did not even ACCEPT a focus
+                # object, so the ten non-circular models of the reference
+                # bank whose two cases differ only by their focus were the
+                # same calculation twice. Defect D33.
+                #
+                # The rejection stays inside the ``max_attempts`` budget
+                # rather than getting one of its own: a focus deliberately
+                # narrows the space, so it is right that fewer valid
+                # surfaces come out of the same effort. Measured on
+                # problem 78, a tangent focus passes 2.2 % of what the
+                # generator produces, and rejecting HERE rather than after
+                # the solve is what keeps that a x3 and not a x45.
+                continue
             res = self.evaluate_surface(project, surface)
             if res is None:
                 result.invalid_count += 1
@@ -3968,6 +4077,12 @@ class SimulatedAnnealingSearch(BaseSearch):
 
         poly = Polyline(vertices=verts, closed=False)
         surface = SlipSurface(polyline=poly)
+        if self._focus_rejects(surface):
+            # v0.1.129 — a focused annealing must not accept a move that
+            # leaves the focus, or the walk would wander off it and report
+            # where it landed. Rejected like any other inadmissible
+            # candidate: the step is simply not taken. Defect D33.
+            return None, None
         res = self.evaluate_surface(project, surface)
         if res is None or not res.is_valid:
             return None, None

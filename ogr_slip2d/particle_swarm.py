@@ -268,6 +268,16 @@ class ParticleSwarmSearch(BaseSearch):
             result.invalid_count += 1
             return _INVALID, None
 
+        if self._focus_rejects_circle(cx, cy, radius):
+            # v0.1.129 — the particles ARE circles, so the focus is the
+            # reference's own circular one here, with nothing invented.
+            # It returns the invalid score so the swarm steers away from
+            # the region instead of settling in it, but does NOT count the
+            # particle as invalid: a focus rejection skips silently in
+            # every search, which keeps the populations comparable between
+            # a focused run and an unfocused one. Defect D33.
+            return _INVALID, None
+
         res = self.evaluate_circle(
             project, SlipCircle(centre_x=cx, centre_y=cy, radius=radius))
         if res is None:
