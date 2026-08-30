@@ -848,6 +848,15 @@ _DICTS: dict[str, dict[str, str]] = {
         'Not yet implemented in OGR Slip2D': 'Todavía no implementado en OGR Slip2D',
         'Number of Iterations:': 'Número de iteraciones:',
         'Number of Surfaces:': 'Número de superficies:',
+        'Number of Surfaces Computed: %d': 'Número de superficies calculadas: %d',
+        'Number of surfaces per iteration: %d': 'Número de superficies por iteración: %d',
+        'What the search GENERATES, which is an upper bound on what it '
+        'analyses: a circle that cannot be constructed through a pair '
+        'of divisions, and one a focus object rejects, never reach the '
+        'solver.':
+            'Lo que la búsqueda GENERA, cota superior de lo que analiza: '
+            'un círculo que no se puede construir por un par de divisiones, '
+            'y uno que un foco rechaza, no llegan al solucionador.',
         'Number of annealing generation steps:': 'Número de pasos de generación del recocido:',
         'Number of centres': 'Número de centros',
         'Number of factors of safety compared\\nbefore stopping:': 'Número de factores de seguridad comparados\\nantes de parar:',

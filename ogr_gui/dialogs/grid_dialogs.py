@@ -493,6 +493,28 @@ class SurfaceOptionsDialog(QDialog):
         self._refill_methods()
         self._sync_auto_refine_rows()
 
+    def _sync_ar_total(self) -> None:
+        """Publish the population the Auto Refine search will generate.
+
+        Asked of ``AutoRefineSearch`` rather than recomputed here: a label
+        with its own copy of the arithmetic is a label that drifts from the
+        generator, which is what happened (defect D07c(c)). The count is
+        QUADRATIC in the divisions because circles are generated between
+        each PAIR of them.
+        """
+        from ogr_slip2d.search import AutoRefineSearch
+
+        d = int(self._ar_div_slope.value())
+        c = int(self._ar_circles_per_div.value())
+        it = int(self._ar_num_iter.value())
+        self._ar_total_label.setText(
+            (tr("Number of Surfaces Computed: %d")
+             % AutoRefineSearch.surfaces_generated(d, c, it))
+            + "\n"
+            + (tr("Number of surfaces per iteration: %d")
+               % AutoRefineSearch.surfaces_per_iteration(d, c))
+        )
+
     def _sync_auto_refine_rows(self) -> None:
         """Show the non-circular-only Auto Refine controls, or hide them.
 
@@ -851,18 +873,25 @@ class SurfaceOptionsDialog(QDialog):
         self._ar_num_verts_label = QLabel(
             tr("Number of vertices along surface:"))
         f.addRow(self._ar_num_verts_label, self._ar_num_verts)
-        # Computed totals (informative)
-        n_total = (s.auto_refine_divisions_along_slope
-                   * s.auto_refine_circles_per_division
-                   * s.auto_refine_num_iterations)
-        n_interp = (s.auto_refine_divisions_along_slope
-                    * s.auto_refine_circles_per_division)
-        self._ar_total_label = QLabel(
-            f"Number of Surfaces Computed: {n_total}\n"
-            f"Number of Surfaces Interpreted: {n_interp}"
-        )
+        # The population, asked of the search that generates it. It used to
+        # be a formula of its own here — divisions x circles x iterations —
+        # while the generator walks the PAIRS of divisions, so the panel
+        # published 1000 for a search that generates 4500 (defect D07c(c)).
+        self._ar_total_label = QLabel()
         self._ar_total_label.setStyleSheet("color: #666; font-size: 9pt;")
+        self._ar_total_label.setToolTip(tr(
+            "What the search GENERATES, which is an upper bound on what it "
+            "analyses: a circle that cannot be constructed through a pair "
+            "of divisions, and one a focus object rejects, never reach the "
+            "solver."))
         f.addRow("", self._ar_total_label)
+        for _sb in (self._ar_div_slope, self._ar_circles_per_div,
+                    self._ar_num_iter):
+            # Written once, when the dialog opened, until v0.1.133: it
+            # published the values the project arrived with however much
+            # the user typed afterwards.
+            _sb.valueChanged.connect(self._sync_ar_total)
+        self._sync_ar_total()
         # v0.1.128 — the non-circular variant takes Optimize Surfaces like
         # the other non-circular searches, and the reference has it ON by
         # default here. Without this row the option would be on by default

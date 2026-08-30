@@ -555,7 +555,7 @@ Anotado con su medida en `TestKnownDivergences` de
 
 ---
 
-## 10 · Lo que el inventario de ajustes dejó abierto (D07c) — (a) CERRADA en v0.1.132; (b), (c) y (d) ABIERTAS (v0.1.103)
+## 10 · Lo que el inventario de ajustes dejó abierto (D07c) — (a) CERRADA en v0.1.132, (c) CERRADA en v0.1.133; (b) y (d) ABIERTAS (v0.1.103)
 
 v0.1.103 colapsó los seis pares de ajustes que existían dos veces (el nombre
 que la interfaz enseñaba y el que el motor leía). El inventario que hizo falta
@@ -599,17 +599,43 @@ cuando no. Eso no es lo que la referencia llama Multiple Groups. Antes de tocar
 nada hay que leer su documentación de Block Search: el número de grupos y el
 número de superficies no son la misma magnitud dividida por mil.
 
-### c) El rótulo del Auto Refine publica una cifra que no es la suya
+### c) El rótulo del Auto Refine — CERRADO en v0.1.133
 
-`grid_dialogs.py` estima «Number of Surfaces Computed» como
-`divisiones × círculos × iteraciones`, que con los valores por defecto da
-**1000**. La referencia anuncia **4500** para esos mismos valores, porque cuenta
-**pares** de divisiones: C(10,2) = 45 × 10 círculos × 10 iteraciones, y su
-«Surfaces Interpreted: 45» es exactamente C(10,2). El algoritmo de OGR sí
-recorre pares, así que el que cuenta mal es el rótulo.
+`grid_dialogs.py` estimaba «Number of Surfaces Computed» como
+`divisiones × círculos × iteraciones`, **1000** con los valores por defecto,
+mientras el generador recorre los **pares** de divisiones: C(10,2) = 45 × 10
+círculos × 10 iteraciones = **4500**, que es lo que la referencia publica con
+fórmula (`z·(y·x(x−1)/2)`) y en prosa.
 
-No cambia ningún cálculo — es una cifra de pantalla — pero es una cifra
-publicada que miente, y la medida real está a un `math.comb` de distancia.
+Ya no hay fórmula paralela: el rótulo llama a
+`AutoRefineSearch.surfaces_generated` / `.surfaces_per_iteration`, que viven
+junto al bucle que genera la población, y `_run` lleva la cuenta de sus propios
+intentos en `SearchResult.attempts`, de modo que la cifra publicada se
+contrasta contra una corrida real en vez de contra otra fórmula.
+
+**Tres cosas que salieron y no estaban en el enunciado:**
+
+1. **El rótulo estaba congelado.** No había ningún `valueChanged` conectado:
+   se escribía una vez, al construir el panel. Cambiar las divisiones de 10 a
+   20 no movía la cifra, y la referencia dice que se muestra «as you enter the
+   parameters».
+2. **La segunda línea existe en la referencia y no está definida.** Las
+   capturas del diálogo (paneles circular y no circular) publican
+   «Number of Surfaces Interpreted: 45», pero no hay una sola página de la
+   ayuda —antigua, actual o el artículo de métodos de búsqueda— que diga qué
+   es. Con el único punto de dato coincide con C(x,2), y **un punto no fija una
+   fórmula**; además no describe nada que OGR haga, porque OGR conserva todas
+   las superficies evaluadas. Se sustituye por **superficies por iteración**
+   (450), que la referencia sí publica con fórmula y OGR sí calcula.
+3. **Generadas no es analizadas.** El problema 14 genera 4500 y analiza 3300
+   (900 → 701 y 90 → 53 en el talud del test): una construcción sin centro
+   válido, o un círculo que el foco rechaza, se salta sin contarse. La cifra
+   correcta es una **cota superior**, y el tooltip lo dice — si no, la queja
+   vuelve al comparar el rótulo con el informe.
+
+Y por eso no se llama `total_count`: ese nombre ya es la población
+**analizada** (`SearchResult.total_count`), la que el banco registra como
+`generadas`.
 
 ### d) Un ángulo guardado en el marco viejo no se convierte al migrar
 
