@@ -498,6 +498,148 @@ def _slip_tangent_at_x(slices, x: float) -> Optional[float]:
     return None
 
 
+def _side_of_slip(px: float, py: float,
+                  ix: float, iy: float, slope: float) -> float:
+    """Signed distance-like measure of (px, py) from the slip surface.
+
+    Positive ABOVE the surface — the side the sliding mass is on — and
+    negative below it, in the stable ground. Measured locally, at the
+    crossing point ``(ix, iy)`` and with the surface's own slope there,
+    rather than by comparing y against the surface's elevation at ``px``:
+    the anchored end of a bolt routinely sits at an x the slip surface
+    never reaches (the tieback of verification problem 59 ends at
+    x = 36.3 on a surface that stops at x = 12.6), and an elevation
+    comparison has nothing to say about such a point.
+
+    Not scaled by ``1 / hypot(1, slope)``, so it is proportional to but
+    not equal to the perpendicular distance. Only the SIGN is read.
+    """
+    return (py - iy) - slope * (px - ix)
+
+
+def reversed_support_notes(project, result) -> list[str]:
+    """Warn when a reinforcement is drawn head-first into the stable ground.
+
+    ``head`` is the end at the slope FACE and ``tail`` the anchored one.
+    Nothing enforced that convention, and three separate things read it:
+    ``GroutedTieback.capacity_modes`` and ``SoilNail.capacity_modes``
+    measure the stripping length ``L_i`` from the head and the pullout
+    length ``L_o`` from the tail, and since v0.1.112
+    ``_support_force_angle`` points the force head → tail under
+    ``parallel_to_support`` and ``bisector``. *Add Support* is first
+    click, second click, so drawing a bolt the other way round reverses
+    all three AT ONCE — which is why the error does not announce itself
+    as a wrong-looking number.
+
+    Measured on verification problem 59 with OGR 0.1.137, on the circle
+    its figure 59.2 publishes: swapping the two ends of the one tieback
+    takes Bishop from 0.756987 to 0.407783 and Spencer from 0.764945 to
+    0.495522. The direction of that move is NOT the point and this note
+    does not predict it — a bolt read as anchoring into the stable ground
+    when it really anchors inside the mass reports the HIGHER number,
+    which is the unsafe half and the one nobody questions.
+
+    Asked per SURFACE and not per model (v0.1.138), because the stable
+    side is a property of the surface being analysed: the same bolt can
+    be the right way round for one circle and the wrong way round for
+    another. Asked on the surface the run REPORTS, like
+    :func:`~ogr_slip2d.analysis_runner.daylight_tangent_note`, and not
+    inside the search, where it would be recomputed for thousands of
+    trial surfaces to say the same sentence.
+
+    Reporting only: nothing in the analysis changes either way. This is
+    deliberately NOT a rejection — the geometry is legal, and a bolt
+    anchored inside the sliding mass is a real, if bad, design.
+
+    FOUR abstentions, each because the note would have nothing to name:
+
+      * a support that never crosses the surface (it contributes no force
+        at all — a different defect, and not this one);
+      * a support that crosses it more than once, which is the one that
+        was learned the expensive way. Two crossings put BOTH ends
+        outside the sliding mass: the bolt is a chord through the mass,
+        not an anchor reaching past it, and there is no head/tail
+        asymmetry left to read. Verification problem 85 is exactly that
+        — a horizontal tieback at y = 20 against a shallow critical
+        surface that dips to y = 19.92, crossing at x = 41.1 and 44.0 —
+        and reading it off the FIRST crossing alone called a correctly
+        drawn bolt reversed. The premise "one crossing, one end on each
+        side" was the whole rule, and it was not being checked;
+      * a crossing outside the sliced range, where the surface has no
+        local slope;
+      * an end lying ON the surface within tolerance, so it has no side.
+
+    With the single crossing established, the local tangent settles the
+    question exactly: the segment from the crossing to either end is
+    straight, so it cannot re-cross that tangent, and the two ends are on
+    opposite sides of the surface by construction. Without that guard the
+    same arithmetic extrapolates one tangent past a second crossing and
+    answers confidently about a side it never looked at.
+
+    The check runs for every support type, including the ones whose
+    result provably does not move — a pile measured from the top with
+    ``tangent_to_slip`` reads neither ``L`` nor the axis sense. The
+    convention is documented for all of them, the model is drawn wrong
+    either way, and the orientation is a setting the user can change
+    afterwards. The sentence therefore states the geometric fact and
+    promises no effect.
+    """
+    supports = list(getattr(project, "supports", None) or [])
+    if not supports:
+        return []
+    surface = getattr(result, "surface", None)
+    slices = getattr(result, "slices", None)
+    if surface is None or not slices:
+        return []
+    slip_xy = _slip_polyline(surface, slices)
+    if len(slip_xy) < 2:
+        return []
+
+    notes: list[str] = []
+    for support in supports:
+        hits = support.intersections_with_polyline(slip_xy)
+        if len(hits) != 1:
+            continue      # never crosses, or crosses in and out again
+        ix, iy, _d = hits[0]
+        slope = _slip_tangent_at_x(slices, ix)
+        if slope is None:
+            continue
+        length = support.length()
+        if length <= 0.0:
+            continue      # a support with no extent has no two ends
+        # Relative to the support's own length, by the project's rule that
+        # a geometric tolerance has to read the same in millimetres and in
+        # metres. It only has to separate "on the surface" from "on a
+        # side": the measured margins on problem 59 are +15.8 and -58.2 on
+        # a 37.6-long bolt, so the value is nowhere near deciding anything.
+        tol = 1e-6 * length
+        head_side = _side_of_slip(support.head.x, support.head.y,
+                                  ix, iy, slope)
+        tail_side = _side_of_slip(support.tail.x, support.tail.y,
+                                  ix, iy, slope)
+        if not (head_side < -tol and tail_side > tol):
+            continue
+        name = getattr(support, "name", "") or getattr(support, "type_id", "")
+        # A support whose type is not in the registry keeps ``None`` here,
+        # and naming the orientation is the one part of the sentence that
+        # can be missing without costing the reader anything.
+        orientation = getattr(support.orientation, "value",
+                              support.orientation) or "the chosen orientation"
+        notes.append(
+            f"Support '{name}' has its head at "
+            f"({support.head.x:.2f}, {support.head.y:.2f}), on the stable "
+            f"side of the reported surface, and its tail at "
+            f"({support.tail.x:.2f}, {support.tail.y:.2f}), inside the "
+            f"sliding mass. The head is the end at the slope FACE: the "
+            f"stripping length L_i is measured from it, the pullout "
+            f"length L_o from the tail, and the force under "
+            f"'{orientation}' is placed from the axis read head to tail. "
+            f"Drawn this way round all three are reversed. Check which "
+            f"end was clicked first before quoting this factor."
+        )
+    return notes
+
+
 def _resisting_tangent_angle(
     slip_tangent: float, is_left_to_right_failure: bool,
 ) -> float:

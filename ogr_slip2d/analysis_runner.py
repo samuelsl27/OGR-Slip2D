@@ -43,6 +43,7 @@ from ogr_core.geometry import BoundaryType
 from .methods import method_registry
 from .methods.gle import interslice_function
 from .rapid_drawdown import check_drawdown_settings, wrap_for_drawdown
+from .support_integration import reversed_support_notes
 from .yield_acceleration import DEFAULT_K_MAX
 
 __all__ = [
@@ -53,6 +54,7 @@ __all__ = [
     "check_analysis_settings",
     "daylight_tangent_note",
     "grid_edge_note",
+    "reversed_support_notes",
     "run_analysis",
     "settings_warnings",
 ]
@@ -1252,6 +1254,17 @@ def run_analysis(project, method_ids=None,
         # population it looked at.
         if crit is not None:
             for note in m_alpha_margin_note(crit):
+                line = f"{mid}: {note}"
+                if line not in warnings:
+                    warnings.append(line)
+        # v0.1.138 — and whether any reinforcement is drawn head-first
+        # into the stable ground. On the SAME ``crit`` and for the same
+        # reason as the two above: which side of the surface an end falls
+        # on is a property of the surface the run reports, so it cannot be
+        # settled once per model, and asking it per trial surface would
+        # recompute the same sentence thousands of times.
+        if crit is not None:
+            for note in reversed_support_notes(project, crit):
                 line = f"{mid}: {note}"
                 if line not in warnings:
                     warnings.append(line)

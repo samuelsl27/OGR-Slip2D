@@ -1445,20 +1445,32 @@ class SupportInstance:
     def axis_angle_deg(self) -> float:
         return math.degrees(self.axis_angle_rad())
 
-    def intersection_with_polyline(
-        self, polyline_xy: list,
-    ) -> Optional[tuple]:
-        """Find the intersection of (head → tail) with a polyline.
+    def intersections_with_polyline(self, polyline_xy: list) -> list:
+        """EVERY crossing of (head → tail) with a polyline.
 
-        Returns ``(x, y, distance_from_head)`` of the FIRST intersection,
-        or None if there is none.
+        A list of ``(x, y, distance_from_head)``, ordered along the
+        support from the head, empty if it never crosses.
+
+        v0.1.138 — the counting version exists because *how many times*
+        is a different question from *where*, and it decides something
+        the first crossing cannot answer. A support that crosses the slip
+        surface TWICE has both of its ends outside the sliding mass: it
+        is a chord through the mass, not an anchor reaching past it, and
+        the head/tail check of
+        ``ogr_slip2d.support_integration.reversed_support_notes`` has no
+        asymmetry left to read. Verification problem 85 is exactly that
+        — a horizontal tieback at y = 20 against a shallow critical
+        surface that dips to y = 19.92 — and judging it on the first
+        crossing alone called a correctly drawn bolt reversed.
         """
+        out: list = []
         n = len(polyline_xy)
         if n < 2:
-            return None
+            return out
         hx, hy = self.head.x, self.head.y
         tx = self.tail.x - hx
         ty = self.tail.y - hy
+        span = math.hypot(tx, ty)
         for i in range(n - 1):
             sx0, sy0 = polyline_xy[i]
             sx1, sy1 = polyline_xy[i + 1]
@@ -1470,11 +1482,22 @@ class SupportInstance:
             s = ((sx0 - hx) * uy - (sy0 - hy) * ux) / denom
             u = ((sx0 - hx) * ty - (sy0 - hy) * tx) / denom
             if 0.0 <= s <= 1.0 and 0.0 <= u <= 1.0:
-                ix = hx + s * tx
-                iy = hy + s * ty
-                d = s * math.hypot(tx, ty)
-                return ix, iy, d
-        return None
+                out.append((hx + s * tx, hy + s * ty, s * span))
+        return out
+
+    def intersection_with_polyline(
+        self, polyline_xy: list,
+    ) -> Optional[tuple]:
+        """Find the intersection of (head → tail) with a polyline.
+
+        Returns ``(x, y, distance_from_head)`` of the FIRST intersection,
+        or None if there is none. Delegates to
+        :meth:`intersections_with_polyline` so the segment arithmetic
+        lives in one place: a rule written twice goes stale in one of
+        them.
+        """
+        hits = self.intersections_with_polyline(polyline_xy)
+        return hits[0] if hits else None
 
     def to_dict(self) -> dict:
         return {
