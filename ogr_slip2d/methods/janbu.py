@@ -192,6 +192,31 @@ class JanbuSimplified(LEMMethod):
                 # v0.1.64 — T_N·tanφ', the friction the support's normal
                 # component mobilises. Outside the n_α normalisation, as
                 # the reference writes it; see the note in ``bishop``.
+                #
+                # v0.1.137 — Bishop stopped doing this and Janbu did NOT,
+                # and that asymmetry is a MEASURED, REPORTED defect, not a
+                # derivation. Janbu's balance is Σ S·sec α = Σ W·tan α, so
+                # its support handling is wrong in TWO coupled places: this
+                # term belongs inside n_α (= cos α · m_α), and the driving
+                # side owes ``T_S·sec α`` where it subtracts ``T_S`` raw.
+                # Measured, all four combinations:
+                #
+                #   this pair (n_α outside, T_S raw)   Clouterre mean 1.76 %
+                #                                      load≡support -0.096 %
+                #                                      and it does NOT shrink
+                #   n_α outside, T_S·sec α             Clouterre 6.90 % (0.1.113)
+                #   inside n_α, T_S raw                geotextiles -20 to -39 %
+                #   inside n_α, T_S·sec α  (consistent) Clouterre mean 7.95 %
+                #                                      load≡support 0.000000
+                #                                      at 25, 100 and 400 slices
+                #
+                # So the only combination that reproduces the six published
+                # Clouterre planes is the one that cannot pass its own
+                # identity, and the one that passes the identity exactly
+                # loses them. Choosing between them needs external evidence
+                # this task does not have, and guessing would be exactly the
+                # retro-fitting rule 1 exists to forbid. Left as it stands,
+                # named, with both measurements written down.
                 if sup.present and sup.n_press[i_s]:
                     numerator += sup.n_press[i_s] * tan_phi
 

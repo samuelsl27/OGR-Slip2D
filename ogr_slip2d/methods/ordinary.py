@@ -363,6 +363,22 @@ class OrdinaryFellenius(LEMMethod):
             # v0.1.64 — frictional resistance mobilised by the support's
             # NORMAL component, T_N·tanφ'. Ordinary resolves everything on
             # the base already, so it lands naturally here.
+            #
+            # v0.1.137 — and it STAYS here, raw, now that Bishop has
+            # stopped adding it this way. That is not an exception granted
+            # to Fellenius, it is the same derivation: Bishop gets N by
+            # resolving the slice VERTICALLY, which is where m_α comes
+            # from, so an external force on the slice reaches the base
+            # divided by it. Fellenius resolves PERPENDICULAR TO THE BASE,
+            # so ``N = W·cos α + T_N`` is exact and the term needs no
+            # normalisation at all. (The two Janbu still add it raw as
+            # well, but for them that is an open defect and not this
+            # derivation — see the note in ``janbu.py``.) The measurement says the same thing:
+            # on the published Bishop circles of the tiered geosynthetic
+            # walls (verification problems 87, 92 and 94), where the bases
+            # run 37° to 73°, Fellenius already sat within 1.4 % of the
+            # published value while Bishop was 35 % high with the identical
+            # support force.
             if sup.present and sup.n_press[i_s]:
                 strength += sup.n_press[i_s] * tan_phi
 

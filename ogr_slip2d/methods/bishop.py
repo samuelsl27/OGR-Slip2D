@@ -186,6 +186,7 @@ class BishopSimplified(LEMMethod):
         reference's documentation cites for the equations of every method.
         """
         from ..moment_balance import axis_for, moment_terms
+        from ..support_integration import support_vertical_load
 
         axis = axis_for(project, surface)
 
@@ -204,7 +205,18 @@ class BishopSimplified(LEMMethod):
                 f = slice_forces(s, kh, kv)
                 w = f.w_total
                 alpha = slide_sign * s.base_angle
-                n_est = w * math.cos(s.base_angle)
+                # v0.1.137 — the support's line load joins the slice's own
+                # vertical equilibrium, exactly as on the circular path and
+                # as ``interslice.prepare_rows`` already did for the
+                # complete-equilibrium methods. ``w`` itself stays the SOIL
+                # weight: the driving moment below takes the support's
+                # moment from ``sup`` and the two tangential lists, so
+                # feeding it here as well would count that force twice.
+                w_n = w
+                if sup.present:
+                    w_n += support_vertical_load(
+                        sup, i_s, s.base_angle, slide_sign, fos)
+                n_est = w_n * math.cos(s.base_angle)
                 sigma = max(0.0, n_est - s.pore_pressure * s.base_length)
                 sigma /= max(s.base_length, 1e-9)
                 c, tan_phi = self._local_c_phi(s, s.material, sigma)
@@ -218,16 +230,14 @@ class BishopSimplified(LEMMethod):
                                        f"at slice {s.index}"))
                 # Q = S·F, the resisting force with the factor divided out.
                 q = (c * s.width
-                     + (w - s.pore_pressure * s.width) * tan_phi) / m_alpha
-                if sup.present and sup.n_press[i_s]:
-                    q += sup.n_press[i_s] * tan_phi
+                     + (w_n - s.pore_pressure * s.width) * tan_phi) / m_alpha
                 # N from the slice's own vertical equilibrium, the same one
                 # m_alpha comes from. On a circle this force points at the
                 # centre and takes no moment; on a polyline it does, and the
                 # reference's documentation is explicit that it accounts for
                 # it ("the normal force does not pass through the center of
                 # rotation").
-                normal = ((w - (q / fos) * math.sin(alpha))
+                normal = ((w_n - (q / fos) * math.sin(alpha))
                           / max(math.cos(alpha), 1e-9))
                 forces.append(f)
                 weights.append(w)
@@ -250,13 +260,19 @@ class BishopSimplified(LEMMethod):
                     tangential[i_s] = sup.t_active[i_s]
                     tangential_passive[i_s] = sup.t_passive[i_s]
 
-            # ``sup`` is deliberately NOT passed: Bishop splits a support into
-            # a normal part (already inside ``resisting`` as T_N·tanφ') and a
-            # tangential one, which goes through ``tangential``. Handing the
-            # cartesian resultant over as well would count the same force
-            # twice — the circular path above has no ``f_h`` moment either.
+            # v0.1.137 — ``sup`` IS passed now, and that is not a relaxation
+            # of the anti-double-counting rule but what the rule asks for.
+            # The support appears in this balance exactly once: its NORMAL
+            # part as a force at its own application point (``sup``) and its
+            # TANGENTIAL part through the two lists. What changed is that
+            # ``resisting`` no longer smuggles a second copy of the normal
+            # part in as a bolted-on ``T_N·tanφ'``; ``normals`` instead
+            # carries the base normal at its true value, support included,
+            # which is the force whose moment this axis needs. Spencer and
+            # GLE have called ``moment_terms`` this way since v0.1.115.
             terms = moment_terms(
                 axis, s_list, weights, resisting, normals, kh=kh, kv=kv,
+                sup=sup if sup.present else None,
                 tangential=tangential, tangential_passive=tangential_passive,
                 forces=forces,
                 couple=sup.couple if sup.present else 0.0)
@@ -324,7 +340,8 @@ class BishopSimplified(LEMMethod):
         # v0.1.64 — support terms, resolved with their SIGNS. The sliding
         # sense has to be known first, which is why this moved below the
         # detection above.
-        from ..support_integration import resolve_support_terms
+        from ..support_integration import (resolve_support_terms,
+                                           support_vertical_load)
         sup = resolve_support_terms(project, surface, slices, slide_sign)
 
         s_list = slices.slices if hasattr(slices, "slices") else slices
@@ -486,6 +503,14 @@ class BishopSimplified(LEMMethod):
                 W_eff = slice_forces(s, kh, kv).w_total
                 b = s.width
 
+                # v0.1.137 — the support is a LINE LOAD on this slice, so it
+                # joins the vertical equilibrium m_alpha comes from instead of
+                # being bolted on outside it. See
+                # ``support_integration.support_vertical_load``.
+                if sup.present:
+                    W_eff += support_vertical_load(
+                        sup, i_s, s.base_angle, slide_sign, fos)
+
                 N_est = W_eff * math.cos(s.base_angle)
                 N_eff_est = max(0.0, N_est - s.pore_pressure * s.base_length)
                 sigma_n_eff = N_eff_est / max(s.base_length, 1e-9)
@@ -513,19 +538,6 @@ class BishopSimplified(LEMMethod):
                 numerator += (
                     c * b + (W_eff - s.pore_pressure * b) * tan_phi
                 ) / m_alpha
-
-                # v0.1.64 — frictional resistance mobilised by the NORMAL
-                # component of the support, T_N·tanφ'. Added outside the
-                # m_α normalisation, as the reference writes it: m_α comes
-                # from solving the slice's vertical equilibrium for N under
-                # its own weight, whereas the reference treats the support
-                # as a force applied directly to the base. Folding it into
-                # the vertical equilibrium instead would divide this term
-                # by m_α too; the difference is second-order for the usual
-                # near-horizontal bases, but it is a modelling choice and
-                # not a detail, so it is written down here.
-                if sup.present and sup.n_press[i_s]:
-                    numerator += sup.n_press[i_s] * tan_phi
 
             # Passive supports add their resisting tangential component
             # to the numerator; the Active ones already came off the

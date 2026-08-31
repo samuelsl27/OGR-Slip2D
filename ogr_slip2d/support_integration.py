@@ -98,6 +98,15 @@ Implementation follows Slide's convention:
     outside ``m_α`` as Bishop does; the difference is second-order and is
     the same modelling choice ``bishop.py`` already documents.
 
+    v0.1.137 — that last sentence was WRONG, and it was wrong in the same way
+    the comment it pointed at was: the difference is second-order only while
+    the bases are near-horizontal, and between 37° and 81° it is worth 35 %.
+    Bishop no longer bolts anything on; it resolves the normal part inside the
+    equilibrium exactly as this paragraph describes for the five methods
+    above, which is what closed D39/D42/D44. The two Janbu still bolt it on,
+    and for them it is an open measured defect — see :func:`support_vertical_load`
+    and the note at the term in ``janbu.py``.
+
     The reference publishes FOUR equations, not two — one pair for moment
     equilibrium and one for force equilibrium — which is precisely what says
     the distinction is defined for the complete-equilibrium methods too:
@@ -339,6 +348,67 @@ def resolve_support_terms(
 
     return SupportTerms(t_active, t_passive, n_press, nf_h, nf_v,
                         f_h, f_v, x_app, y_app, True, couple)
+
+
+def support_vertical_load(sup: "SupportTerms", i: int, base_angle: float,
+                          slide_sign: float, fos: float) -> float:
+    """Downward load the support puts on slice ``i`` [kN/m of slope].
+
+    v0.1.137 — the quantity Bishop has to add to the slice's weight before
+    dividing by ``m_α``, and the reason it exists is that ``m_α`` is not a
+    normalisation one may put a term outside of: it is what solving the
+    slice's VERTICAL equilibrium for N leaves behind (Bishop 1955). Any
+    external force on that slice goes through the same equation, so its
+    frictional share arrives divided by ``m_α`` like everything else.
+
+    The reference's own documentation says the support force is applied at
+    the point where it cuts the surface, to the base of a single slice, and
+    that it "is simply a line load" — and a line load is exactly what enters
+    a slice's vertical equilibrium. Its two published equations,
+
+        Active   F = (resisting + T_N·tanφ') / (driving − T_S)
+        Passive  F = (resisting + T_N·tanφ' + T_S) / driving
+
+    are written in the words *resisting force* and *driving force*: they are
+    GLOBAL, and they do not say where ``m_α`` goes. Reading them as a term
+    bolted on outside it — which is what OGR did from v0.1.64 to v0.1.136 —
+    charges the base ``T_N·tanφ'`` where the equilibrium yields
+    ``T_N·cosα·tanφ'/m_α``. The two agree only as α → 0, which is the
+    "second-order for the usual near-horizontal bases" that ``bishop.py``
+    carried as a comment for seventy-two versions; between 37° and 81° the
+    ratio ``cosα/m_α`` falls to 0.51 and then to 0.36.
+
+    ``Ordinary/Fellenius does NOT use this``: it resolves forces
+    PERPENDICULAR to the base instead of vertically, so ``N = W·cosα + T_N``
+    is exact there and the term belongs added raw. That is not a special
+    case granted to it — it is why, on the published Bishop circles of the
+    tiered geosynthetic walls, Fellenius already landed within 1.4 % while
+    Bishop sat 35 % high.
+
+    ``The two Janbu do not use it either``, and THAT one is not a derivation
+    but an open, measured defect: their balance is ``Σ S·sec α = Σ W·tan α``,
+    so they need this term AND a ``sec α`` on the driving side, and the pair
+    reproduces the load-equals-support identity exactly (0.000000 at 25, 100
+    and 400 slices) while losing the six published Clouterre planes (mean
+    1.76 % → 7.95 %). See the note at the term in ``janbu.py``.
+
+    The split is the one every complete-equilibrium method already applies
+    (see :func:`ogr_slip2d.interslice.prepare_rows`): the NORMAL part is a
+    Cartesian load and enters whole, the TANGENTIAL part is a resistance on
+    the base and is mobilised at ``t_active + t_passive/F``.
+
+    Positive presses the slice DOWN onto its base, which is the sign
+    ``w_total`` carries.
+    """
+    if not sup.present:
+        return 0.0
+    down = sup.n_press[i] * math.cos(base_angle)
+    t = sup.t_active[i]
+    if sup.t_passive[i]:
+        t += sup.t_passive[i] / fos
+    if t:
+        down -= slide_sign * math.sin(base_angle) * t
+    return down
 
 
 @dataclass

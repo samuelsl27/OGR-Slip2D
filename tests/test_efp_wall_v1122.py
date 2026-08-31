@@ -62,10 +62,25 @@ the same arithmetic. Measured on a common fixture, same force, same point:
                                          side raw where the support enters
                                          projected on the base, a factor cos α
 
+v0.1.137 — BISHOP'S HALF IS CLOSED. Its row above is history: the support
+is now resolved as the line load the reference says it is, so its normal
+comes out of the same vertical equilibrium the load's does, and the gap
+falls to −0.010 / +0.0016 / +0.0006 % at 25 / 100 / 400 slices — the same
+discretisation residual Ordinary, Spencer and GLE show. The test that used
+to freeze the disagreement now asserts the agreement, which is what its own
+docstring demanded should happen.
+
+Janbu's half is still open, and now it is the only one. It needs the same
+correction plus a ``sec α`` on its driving side; together they make this gap
+exactly 0.000000 at every refinement and cost the six published Clouterre
+planes (1.76 % → 7.95 % mean). Nothing external picks between the two, so it
+stays measured and named rather than guessed — see ``janbu.py``.
+
 So what this file DOES assert about that pair is the half that is exact and
 that this feature is responsible for: the resultant and its point of
-application match to the last bit. The factor-of-safety difference is a
-measured, reported defect of the two channels, not of the wall.
+application match to the last bit. What is left of the factor-of-safety
+difference is a measured, reported defect of the two channels, not of the
+wall.
 """
 from __future__ import annotations
 
@@ -441,11 +456,7 @@ class TestTheManualsOwnComparison:
                     "lowe_karafiath"):
             assert abs(_fos(mid, pw, surf) - _fos(mid, pl, surf)) < 1e-12, mid
 
-    def test_bishop_disagrees_and_the_gap_does_not_shrink(self):
-        """The measured, reported defect. It is asserted as a FACT with a
-        band, not as a target: if it ever closes, this test fails and the
-        module docstring above has to be rewritten — which is the point.
-        """
+    def _gaps(self, mid):
         surf = _circle()
         gaps = []
         for n in (25, 100, 400):
@@ -453,11 +464,51 @@ class TestTheManualsOwnComparison:
             eff = _effect(pw, n)
             d = YW_TOP - eff.intersection_y
             pl = self._load_project(eff.intersection_y, EFP * d)
-            a, b = _fos("bishop_simplified", pw, surf, n), _fos(
-                "bishop_simplified", pl, surf, n)
+            a, b = _fos(mid, pw, surf, n), _fos(mid, pl, surf, n)
             gaps.append(100.0 * (b - a) / a)
-        assert all(-0.35 < g < -0.20 for g in gaps), gaps
-        assert abs(gaps[-1] - gaps[0]) < 0.02, gaps
+        return gaps
+
+    def test_bishop_now_agrees_and_the_gap_shrinks_on_refinement(self):
+        """v0.1.137 — this test used to assert the OPPOSITE, and said so:
+        "if it ever closes, this test fails and the module docstring has to
+        be rewritten". It closed, so it was rewritten.
+
+        Bishop used to sit at −0.276 % whatever the slice count, because a
+        support paid ``T_N·tanφ'`` outside ``m_α`` while the identical force
+        entering as a load had its normal come out of the slice's vertical
+        equilibrium. With the support resolved as the line load the
+        reference says it is, the two routes are the same statement and
+        what is left is discretisation — the chord angle of a slice against
+        the angle at the point where the force is applied — which is what
+        Ordinary, Spencer and GLE have always shown here.
+
+        Measured: −0.010 %, +0.0016 %, +0.0006 % at 25, 100 and 400 slices,
+        against a frozen −0.276 % before. The band is deliberately wider
+        than those numbers; what discriminates is the SHRINKING, which a
+        formulation defect cannot fake and a discretisation residual cannot
+        avoid.
+        """
+        gaps = self._gaps("bishop_simplified")
+        assert all(abs(g) < 0.05 for g in gaps), gaps
+        assert abs(gaps[-1]) < 0.3 * abs(gaps[0]), gaps
+
+    def test_the_two_janbu_still_disagree_by_a_gap_that_does_not_shrink(self):
+        """The half of this defect that v0.1.137 did NOT close, asserted as
+        a fact exactly as Bishop's was.
+
+        Janbu's balance is ``Σ S·sec α = Σ W·tan α``, so it owes the same
+        correction Bishop got AND a ``sec α`` on its driving side, where it
+        subtracts ``T_S`` raw. Applying both makes this gap exactly zero at
+        every refinement — and costs the six published Clouterre planes
+        (``test_support_projection_v1113``), whose mean error goes from
+        1.76 % to 7.95 %. Nothing external decides between the two, so the
+        disagreement stays, measured and named. See the note at the term in
+        ``ogr_slip2d/methods/janbu.py``.
+        """
+        for mid in ("janbu_simplified", "janbu_corrected"):
+            gaps = self._gaps(mid)
+            assert all(-0.20 < g < -0.02 for g in gaps), (mid, gaps)
+            assert abs(gaps[-1] - gaps[0]) < 0.02, (mid, gaps)
 
 
 # ======================================================================
