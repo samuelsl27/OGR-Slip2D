@@ -26,6 +26,7 @@ from typing import Callable, Optional
 from ogr_core.project import Project
 from ogr_core.project.settings import WeakLayerHandling
 
+from .failure_direction import steepest_face_index
 from .methods import LEMMethod, LEMResult
 from .rapid_drawdown import RapidDrawdownError, drawdown_gap
 from .slicer import slice_surface
@@ -1936,17 +1937,7 @@ def slope_frame(project: Project,
     H = y_max - y_min
 
     # Locate slope face (steepest segment) → toe/crest + β
-    steepest_i = 0
-    steepest = -1.0
-    for i in range(len(top) - 1):
-        ddx = top[i + 1].x - top[i].x
-        ddy = top[i + 1].y - top[i].y
-        if abs(ddx) < 1e-9:
-            continue
-        s = abs(ddy / ddx)
-        if s > steepest:
-            steepest = s
-            steepest_i = i
+    steepest_i = steepest_face_index(top, project)
     face_a = top[steepest_i]
     face_b = top[steepest_i + 1]
     beta_deg = math.degrees(math.atan2(
@@ -2939,17 +2930,7 @@ class BlockSearch(BaseSearch):
         # them on the slope face (the steepest ground segment) so the
         # sampled points fall inside the soil mass, not in the air in
         # front of the toe.
-        steepest_i = 0
-        steepest = -1.0
-        for i in range(len(top) - 1):
-            ddx = top[i + 1].x - top[i].x
-            ddy = top[i + 1].y - top[i].y
-            if abs(ddx) < 1e-9:
-                continue
-            sl = abs(ddy / ddx)
-            if sl > steepest:
-                steepest = sl
-                steepest_i = i
+        steepest_i = steepest_face_index(top, project)
         face_lo_x = min(top[steepest_i].x, top[steepest_i + 1].x)
         face_hi_x = max(top[steepest_i].x, top[steepest_i + 1].x)
         face_w = max(face_hi_x - face_lo_x, 1e-6)
@@ -3544,44 +3525,12 @@ class PathSearch(BaseSearch):
             seg_len = max(0.3 * H, (sl_x1 - sl_x0) * 0.05, 1e-3)
 
         # Locate the slope face (steepest ground segment) → defines the
-        # toe / crest and the Slope-Limits ranges.
-        #
-        # v0.1.73 — with a strict ``>`` the FIRST steepest segment won,
-        # so a symmetric embankment (two faces of equal inclination)
-        # always chose the LEFT one, by iteration order and nothing else.
-        # That is the one place in this search where the geometry really
-        # is ambiguous, and where the Failure Direction is the missing
-        # information rather than a second opinion on something already
-        # answered: everything below still derives the toe as the lower
-        # end of the chosen face, because the reference is explicit that
-        # Path Search starts at the toe regardless of the direction.
-        slopes = []
-        for i in range(len(top) - 1):
-            dx = top[i + 1].x - top[i].x
-            dy = top[i + 1].y - top[i].y
-            if abs(dx) < 1e-9:
-                continue
-            slopes.append((i, abs(dy / dx)))
-        steepest_i = 0
-        if slopes:
-            steepest = max(s for _, s in slopes)
-            # Near-ties only. A face that is genuinely the steepest keeps
-            # winning whatever the direction is set to, so an ordinary
-            # single-face slope cannot be changed by this setting.
-            tied = [i for i, s in slopes if s >= steepest * (1.0 - 1e-6)]
-            if len(tied) > 1:
-                from .failure_direction import crest_is_on_the_right
-                # The mass exits at the toe, so pick the face whose toe
-                # lies on the side it is declared to move towards: the
-                # left-hand face for a right-to-left failure.
-                def _toe_x(i):
-                    a, b = top[i], top[i + 1]
-                    return a.x if a.y <= b.y else b.x
-                steepest_i = (min(tied, key=_toe_x)
-                              if crest_is_on_the_right(project)
-                              else max(tied, key=_toe_x))
-            else:
-                steepest_i = tied[0]
+        # toe / crest and the Slope-Limits ranges. The tie-break this
+        # search has had since v0.1.73 moved to ``steepest_face_index`` in
+        # v0.1.136, unchanged, so that the three other sites that locate
+        # the face can share it instead of each deciding by iteration
+        # order (defect D34).
+        steepest_i = steepest_face_index(top, project)
         face_a = top[steepest_i]
         face_b = top[steepest_i + 1]
         # Slope angle β (magnitude) of the face
@@ -4093,17 +4042,7 @@ class SimulatedAnnealingSearch(BaseSearch):
             self._ext_poly = None
 
         # Locate the slope face (steepest ground segment) → toe / crest.
-        steepest_i = 0
-        steepest = -1.0
-        for i in range(len(top) - 1):
-            ddx = top[i + 1].x - top[i].x
-            ddy = top[i + 1].y - top[i].y
-            if abs(ddx) < 1e-9:
-                continue
-            s = abs(ddy / ddx)
-            if s > steepest:
-                steepest = s
-                steepest_i = i
+        steepest_i = steepest_face_index(top, project)
         face_a = top[steepest_i]
         face_b = top[steepest_i + 1]
         toe_pt = face_a if face_a.y <= face_b.y else face_b

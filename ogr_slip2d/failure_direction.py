@@ -99,3 +99,67 @@ def crest_end_is_on_the_right(project, ground, x_left: float,
     if abs(y_r - y_l) <= tol:
         return crest_is_on_the_right(project)
     return y_r > y_l
+
+
+def steepest_face_index(top, project) -> int:
+    """Index of the segment of ``top`` that is the slope face.
+
+    ``top`` is a ground profile sorted by x, as ``ground_surface`` builds
+    it, and the face is its steepest segment. Vertical segments are
+    skipped: they have no slope to compare, and the profile of a vertical
+    cut steps rather than climbing.
+
+    **The tie is what this function is for.** Two segments of IDENTICAL
+    inclination — a symmetric embankment, a dyke with two benches at the
+    same batter — cannot be separated by comparing steepness, and a
+    strict ``>`` hands the decision to iteration order, which is always
+    left to right. That is the one part of locating the face where the
+    geometry really is ambiguous, and where the declared failure
+    direction is the missing information rather than a second opinion on
+    something already answered: the mass exits at the toe, so the face to
+    take is the one whose toe lies on the side the mass is declared to
+    move towards. Everything downstream still derives the toe as the
+    lower end of the chosen face, because the reference is explicit that
+    Path Search starts at the toe regardless of the direction.
+
+    Two kinds of geometry the setting must NOT be able to touch, and both
+    are guarded here rather than at the call sites:
+
+    * a face that is genuinely the steepest — the near-tie band is
+      relative, ``1e-6``, so an ordinary single-face slope answers the
+      same whatever the direction is set to;
+    * flat ground — with ``steepest`` at zero every segment falls inside
+      that band, and a horizontal segment is not a face for the direction
+      to choose between. Twenty-three benchmark models are shaped like
+      that: a vertical wall whose upper envelope is entirely horizontal.
+
+    v0.1.73 wired this into Path Search alone. v0.1.136 (defect D34) made
+    it the shared rule: the three other sites that locate the face
+    — ``slope_frame``, Block Search and Simulated Annealing — were still
+    deciding it by iteration order, so on ambiguous geometry the setting
+    did nothing, which is rule 7.
+    """
+    slopes = []
+    for i in range(len(top) - 1):
+        dx = top[i + 1].x - top[i].x
+        dy = top[i + 1].y - top[i].y
+        if abs(dx) < 1e-9:
+            continue
+        slopes.append((i, abs(dy / dx)))
+    if not slopes:
+        return 0
+    steepest = max(s for _, s in slopes)
+    # No face at all: keep the first non-vertical segment, which is what
+    # the strict comparison returned and what the callers have always got.
+    if steepest <= 0.0:
+        return slopes[0][0]
+    tied = [i for i, s in slopes if s >= steepest * (1.0 - 1e-6)]
+    if len(tied) == 1:
+        return tied[0]
+
+    def _toe_x(i: int) -> float:
+        a, b = top[i], top[i + 1]
+        return a.x if a.y <= b.y else b.x
+
+    return (min(tied, key=_toe_x) if crest_is_on_the_right(project)
+            else max(tied, key=_toe_x))
