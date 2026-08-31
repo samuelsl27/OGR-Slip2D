@@ -597,6 +597,28 @@ class BaseSearch(ABC):
         if line not in notes:
             notes.append(line)
 
+    def _unsliceable_note(self, result) -> list[str]:
+        """What to say when the slicer refused surfaces whole.
+
+        Overridden where a search can be more specific about the cause;
+        this is the wording for the ones that cannot. It says the count
+        and the remedy and does NOT guess the reason, because more cuts
+        than slices is only the usual one: the same return also covers a
+        degenerate width and a failed tension-crack truncation.
+        """
+        n = getattr(self, "_unsliceable", 0)
+        total = n + getattr(result, "valid_count", 0)
+        return [
+            f"{n} of the {total} surfaces this search formed could not be "
+            f"sliced and were dropped. Every vertex of a surface is a "
+            f"mandatory slice boundary, so a surface needs at least as many "
+            f"slices as it has segments, and every material boundary and "
+            f"water table it crosses adds one more; this analysis uses "
+            f"{self.num_slices}. The surfaces lost are the ones that cross "
+            f"the most layers, so this is not an even thinning of the "
+            f"search. Use more slices, or fewer vertices per surface."
+        ]
+
     def _base_angle_ok(self, project: Project, trial, slices) -> bool:
         """Reject a clipped surface whose base turns too steeply to solve.
 
@@ -733,7 +755,20 @@ class BaseSearch(ABC):
                     if y_low is not None and y_low < self.min_elevation:
                         continue
                 slices = slice_surface(project, trial, num_slices=self.num_slices)
-                if slices is None or len(slices) < 3:
+                if slices is None:
+                    # v0.1.135 — the slicer refused this surface WHOLE, and
+                    # overwhelmingly for one reason: more mandatory cuts than
+                    # slices to spend on them (``_slice_boundaries``). Counted
+                    # HERE, where every search reaches the slicer, for the same
+                    # argument v0.1.102 used for the Surface Filters — a count
+                    # kept anywhere else would be a count some door walks past.
+                    # Until now only the non-circular Auto Refine kept it, and
+                    # it is Block and Path that need it most: their surfaces
+                    # carry a vertex per generated point plus every layer
+                    # crossing, while a circle has no kinks at all.
+                    self._unsliceable = getattr(self, "_unsliceable", 0) + 1
+                    continue
+                if len(slices) < 3:
                     continue
                 # Slope Limits — both ends of the MASS must daylight inside
                 # them. Asked here, after slicing, because that is the first
@@ -1097,10 +1132,18 @@ class BaseSearch(ABC):
         """
         self._weak_bands_cache = None
         self._pending_notes = []
+        self._unsliceable = 0
         with project.regions_frozen():
             result = self._run(project)
             if self.optimize is not None and self.optimize.enabled:
                 self._optimize_result(project, result)
+            # v0.1.135 — surfaces the slicer refused whole. Raised after the
+            # optimisation for the same reason the drain below is: the walk
+            # slices too, and a surface it could not slice is one it silently
+            # did not consider.
+            if getattr(self, "_unsliceable", 0):
+                for line in self._unsliceable_note(result):
+                    self._note(line)
             # v0.1.121 — anything the run decided it had to say. Attached
             # after the optimisation so a note raised while optimising is
             # carried too.
@@ -2608,24 +2651,30 @@ class AutoRefineNonCircularSearch(AutoRefineSearch):
         nothing said that 29 had gone. That is a biased search reported
         as a complete one, so the count is observed here and stated.
         """
-        self._unsliceable = 0
-        result = super()._run(project)
-        if self._unsliceable:
-            notes = getattr(self, "_pending_notes", None)
-            if notes is not None:
-                total = self._unsliceable + result.valid_count
-                notes.append(
-                    "%d of the %d surfaces this search formed could not be "
-                    "sliced and were dropped. Each circle is converted into "
-                    "%d vertices, which is %d straight segments, and this "
-                    "analysis uses %d slices; every vertex is a mandatory "
-                    "slice boundary, and material boundaries and the water "
-                    "table take slices of their own. The surfaces lost are "
-                    "the ones that cross the most layers, so this is not an "
-                    "even thinning of the search. Use fewer vertices or more "
-                    "slices." % (self._unsliceable, total, self.num_vertices,
-                                 self.num_vertices - 1, self.num_slices))
-        return result
+        # v0.1.135 — the counting moved to ``_best_of_masses``, the one
+        # door every search reaches the slicer through, and the wording
+        # stayed here as ``_unsliceable_note``. This search is the only
+        # one that can name the cause exactly, because it CHOSE the vertex
+        # count; the others get the general wording.
+        return super()._run(project)
+
+    # ------------------------------------------------------------------
+    def _unsliceable_note(self, result) -> list[str]:
+        """The general note, said in terms of the control that caused it."""
+        n = getattr(self, "_unsliceable", 0)
+        total = n + getattr(result, "valid_count", 0)
+        return [
+            "%d of the %d surfaces this search formed could not be "
+            "sliced and were dropped. Each circle is converted into "
+            "%d vertices, which is %d straight segments, and this "
+            "analysis uses %d slices; every vertex is a mandatory "
+            "slice boundary, and material boundaries and the water "
+            "table take slices of their own. The surfaces lost are "
+            "the ones that cross the most layers, so this is not an "
+            "even thinning of the search. Use fewer vertices or more "
+            "slices." % (n, total, self.num_vertices,
+                         self.num_vertices - 1, self.num_slices)
+        ]
 
     # ------------------------------------------------------------------
     def _evaluate_trial(self, project, circle):
@@ -2670,11 +2719,10 @@ class AutoRefineNonCircularSearch(AutoRefineSearch):
         if not polys:
             return None
         best = self._best_of_masses(project, polys)
-        if best is None:
-            # Contained, and still no answer: the slicer refused it. That
-            # is overwhelmingly the segments-against-slices rule, and it
-            # is counted rather than assumed — ``_run`` reports the count.
-            self._unsliceable = getattr(self, "_unsliceable", 0) + 1
+        # v0.1.135 — the increment that used to sit here is gone: it
+        # counted "the whole trial produced nothing", which is one step
+        # coarser than the slicer refusal it claimed to measure, and
+        # ``_best_of_masses`` now counts the refusal itself.
         return best
 
     # ------------------------------------------------------------------
@@ -3368,6 +3416,32 @@ class PathSearch(BaseSearch):
         self.convex_only = convex_only
         self.seed = seed
         self.progress_cb = progress_cb
+        # v0.1.135, defect D21b(4). LEFT AT 30 AND JUSTIFIED, which is the
+        # other half of what that defect asked for ("should be a setting or
+        # be justified"). Two ways of coupling it to the project's Number
+        # of Slices were tried and both were measured and rejected:
+        #
+        # ``= num_slices``, which is what the reference does, moves 25 bank
+        # models through nothing but the drift of the random stream — a
+        # walk that exhausts its budget returns None after consuming a
+        # different number of draws, so everything downstream shifts.
+        #
+        # ``min(max_segments, num_slices)`` looked safer and is worse. It
+        # is INERT where the problem is and ACTIVE where it is not. On
+        # verification problem 19 with a one-metre manual segment length,
+        # where the slicer refuses all 5082 surfaces the search generates,
+        # the model declares 30 slices — so the min changes nothing. On the
+        # Ej_1 fixture at 14 slices, where NO surface exceeds 7 segments and
+        # the slicer refuses NONE, it moved Spencer from 1.147928 to
+        # 1.161636 and changed the reported surface. Bought nothing, moved
+        # the answer.
+        #
+        # So this is a guard against a walk that never re-emerges, not a
+        # resolution control, and it is deliberately independent of the
+        # slice count. What the slicer refuses is now SAID rather than
+        # engineered away: see ``_unsliceable_note``. Opened to 500, the
+        # longest surface four bank models produced was 15 segments,
+        # median 8-9, against this cap of 30.
         self.max_segments = max(5, max_segments)
         # Back-compat: older callers passed num_vertices / min_area /
         # min_angle_deg / max_angle_deg. Absorb silently.

@@ -682,6 +682,98 @@ def daylight_tangent_note(result, num_slices: int) -> list[str]:
     ]
 
 
+#: Below this ``m_alpha`` the run says the reported factor leans on a
+#: denominator close to zero.
+#:
+#: ``m_alpha = cos a + s sin a tan phi / F`` divides the normal force, so
+#: 1/m_alpha is the amplification that base applies to N; 0.5 is where it
+#: doubles. In a PURELY COHESIVE material the phi term vanishes and
+#: m_alpha degenerates to ``cos a`` exactly, which turns the m-alpha check
+#: into a bare ceiling on the base angle -- 78.46 deg at the reference's
+#: limit of 0.2 -- and leaves no margin at all between "accepted" and
+#: "rejected".
+#:
+#: The value sits in a measured gap, the same way
+#: ``_DAYLIGHT_TANGENT_WARN_DEG`` does. On the four-layer dyke of
+#: verification problem 75 with an implicit block region, 3000 candidates,
+#: 1807 valid, against the 1.105 its manual publishes:
+#:
+#:     min m_alpha [0.20, 0.25)   65 surfaces   35.4 % below 1.105
+#:                 [0.30, 0.40)  142            8.5 %
+#:                 [0.40, 0.50)  207            1.0 %   lowest 1.0200
+#:                 [0.50, 0.60)  459            0.0 %   lowest 1.5775
+#:                 [0.60, 0.80)  695            0.0 %   lowest 1.6314
+#:
+#: Nothing below 1.105 survives above 0.5, and the lowest factor jumps
+#: from 1.02 to 1.58 across it. Like the other two notes here this is a
+#: REPORTING threshold and not a physical constant: the analysis is
+#: identical on either side of it.
+#:
+#: Why it is worth saying at all, and it is the part that makes this a
+#: defect rather than a curiosity: a search MINIMISES the factor, and the
+#: factor is minimised by driving m_alpha towards the limit. So the
+#: surface a search reports is systematically the one where its method is
+#: least valid. On that dyke at four groups the m-alpha check rejected
+#: 82.6 % of the worst band and the winner came out of the fraction that
+#: got through, at m_alpha 0.2115 against a limit of 0.20 -- accepted by
+#: eleven thousandths, and 0.67 deg of base angle.
+_M_ALPHA_MARGIN_WARN = 0.5
+
+
+def m_alpha_margin_note(result) -> list[str]:
+    """Warn when the reported factor rests on a near-zero ``m_alpha``.
+
+    Reporting only, like :func:`daylight_tangent_note` and
+    :func:`grid_edge_note`: the surface passed the admissibility check it
+    was asked to pass, and nothing in the analysis changes either way.
+    What the factor of safety alone cannot say is how little separated it
+    from being thrown out.
+
+    Whitman and Bailey (1967) is where the ceiling comes from; the
+    degeneracy to ``cos a`` under phi = 0 is arithmetic, not a citation.
+    """
+    from .checks import M_ALPHA_LIMIT, base_m_alphas
+
+    vals = base_m_alphas(result)
+    if not vals:
+        return []
+    worst = min(vals)
+    if worst >= _M_ALPHA_MARGIN_WARN:
+        return []
+    slices = list(getattr(result, "slices", ()) or ())
+    idx = vals.index(worst)
+    angle = None
+    if idx < len(slices):
+        try:
+            angle = abs(math.degrees(slices[idx].base_angle))
+        except Exception:  # noqa: BLE001
+            angle = None
+    where = f" on a base at {angle:.1f} deg" if angle is not None else ""
+    tail = (f", which clears the {M_ALPHA_LIMIT} limit by "
+            f"{worst - M_ALPHA_LIMIT:.4f}"
+            if worst >= M_ALPHA_LIMIT else
+            f", below the {M_ALPHA_LIMIT} limit")
+    # ``m_alpha`` divides the NORMAL FORCE, and saying by how much is the
+    # useful half of this note. It is not the factor of safety that gets
+    # amplified: which way F moves from an inflated N is model-dependent,
+    # so the note states the mechanism and does not predict the direction.
+    # Guarded because ``m_alpha`` may be zero or negative — that is worse
+    # than a small positive one, not better, and it must not divide.
+    if worst > 0.0:
+        effect = (f" That divides the normal force on that base by a number "
+                  f"near zero, inflating it {1.0 / worst:.1f}-fold.")
+    else:
+        effect = (" That denominator is zero or negative, so the normal "
+                  "force on that base is meaningless rather than merely "
+                  "large.")
+    return [
+        f"The reported surface has m_alpha down to {worst:.4f}{where}"
+        f"{tail}.{effect} A method of moments is not reliable there. "
+        f"Compare against a complete-equilibrium method such as Spencer "
+        f"before quoting it."
+    ]
+
+
 #: How close to a grid edge the critical centre must fall, as a fraction
 #: of that axis' own span, before the run says the grid may be too small.
 #:
@@ -1150,6 +1242,16 @@ def run_analysis(project, method_ids=None,
         crit = getattr(results[mid], "critical", None)
         if crit is not None:
             for note in daylight_tangent_note(crit, search.num_slices):
+                line = f"{mid}: {note}"
+                if line not in warnings:
+                    warnings.append(line)
+        # v0.1.135 — and once per method, how little separated the answer
+        # from being thrown out by the m-alpha check. Asked on the same
+        # ``crit`` as the daylight note and for the same reason: it is a
+        # statement about the surface the run REPORTS, not about the
+        # population it looked at.
+        if crit is not None:
+            for note in m_alpha_margin_note(crit):
                 line = f"{mid}: {note}"
                 if line not in warnings:
                     warnings.append(line)
