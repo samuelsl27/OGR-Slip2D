@@ -555,7 +555,7 @@ Anotado con su medida en `TestKnownDivergences` de
 
 ---
 
-## 10 · Lo que el inventario de ajustes dejó abierto (D07c) — (a) CERRADA en v0.1.132, (c) CERRADA en v0.1.133; (b) y (d) ABIERTAS (v0.1.103)
+## 10 · Lo que el inventario de ajustes dejó abierto (D07c) — (a) CERRADA en v0.1.132, (c) CERRADA en v0.1.133, (d) CERRADA en v0.1.134; (b) ABIERTA (v0.1.103)
 
 v0.1.103 colapsó los seis pares de ajustes que existían dos veces (el nombre
 que la interfaz enseñaba y el que el motor leía). El inventario que hizo falta
@@ -637,15 +637,56 @@ Y por eso no se llama `total_count`: ese nombre ya es la población
 **analizada** (`SearchResult.total_count`), la que el banco registra como
 `generadas`.
 
-### d) Un ángulo guardado en el marco viejo no se convierte al migrar
+### d) Un ángulo guardado en el marco viejo no se convierte al migrar — CERRADO en v0.1.134
 
 `path_min_angle_deg` y `path_max_angle_deg` guardaban el ángulo en el marco
 pie→cresta de la búsqueda; los campos que los sustituyen son absolutos. La
 conversión necesita la dirección de rotura, que no está en el bloque de ajustes
-que `SearchSettings.from_dict` recibe, así que un valor fuera de su defecto se
-**reporta** en vez de adivinarse. Ninguno de los 142 modelos del banco lo tiene
-fuera del defecto, de modo que hoy no hay nada que convertir; si algún día lo
-hay, la conversión tiene que hacerse donde se conoce el proyecto entero.
+que `SearchSettings.from_dict` recibe, así que **no se convierte**: se avisa.
+Esa decisión es de v0.1.103 y no ha cambiado.
+
+**Lo que sí ha cambiado en v0.1.134, y no era lo que esta entrada decía:**
+
+- **el aviso vigilaba el campo equivocado.** La interfaz de v0.1.102 escribía
+  los DOS nombres desde el mismo widget —el superviviente recibía el valor
+  tecleado `v` y el gemelo `-abs(v)`—, así que el gemelo no aporta nada y el
+  número que entra al cálculo es el del superviviente, escrito en el marco
+  viejo y leído en el nuevo;
+- **y por eso callaba en el caso más frecuente.** El defecto del gemelo (−45)
+  es el espejo del defecto de la caja (45), de modo que quien marcó la casilla
+  y la dejó como venía guardó el gemelo exactamente en su defecto y **no
+  recibía ningún aviso**. Medido: tecleado 30 → avisaba; tecleado 45 → no;
+  sin marcar → no, y eso sí era correcto;
+- **el aviso era de un solo uso**: `asdict` no reexporta el nombre retirado,
+  así que al primer guardado el gemelo desaparecía y ya nada volvía a avisar.
+
+Ahora el marcador de «archivo anterior a v0.1.103» es la **presencia** de
+cualquier gemelo retirado, nunca su valor, y el aviso sale cuando el ángulo del
+superviviente viene activado.
+
+**Cuánto costaba** (P079 y P081, Path Search, Bishop simplificado, 2 000
+superficies): el valor sin convertir deja la búsqueda con **0 superficies
+válidas** en los dos modelos, y el convertido reproduce el resultado dígito a
+dígito (FS 1,252166 y 1,095438). Barriendo el ángulo tecleado sobre P079, +v
+nunca produce resultado: el fallo es **ruidoso, no silencioso**, lo que rebaja
+la gravedad y refuerza avisar en vez de convertir — no hay número mentiroso que
+rescatar.
+
+**Dos cosas aparte:** el ángulo *superior* estaba muerto antes de v0.1.103 (la
+interfaz nunca escribía `path_upper_angle_enabled`), así que para él no hay
+nada que preservar; y la referencia, en su única página sobre abrir un formato
+anterior, **convierte en silencio** y no documenta aviso alguno por ajuste cuyo
+significado haya cambiado.
+
+Los 142 modelos del banco llevan el gemelo y los supervivientes en sus
+defectos, con los dos ángulos desactivados: ni avisan ni pueden mover un
+número. Test: `tests/test_settings_migration_v1134.py`.
+
+**Deuda anotada aquí, no resuelta**: ninguna cadena de `settings_warnings`
+tiene entrada en español, y son `f-string`s con valores interpolados, así que
+el `tr(note)` del punto de uso (`main_window.py`) no podría casar ninguna clave
+aunque existiera. Arreglarlo pide separar la parte fija de la interpolada en
+todas ellas.
 
 ---
 

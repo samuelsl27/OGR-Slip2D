@@ -549,6 +549,13 @@ class SearchSettings:
         # the failure direction — a property of the project, not of this
         # block. Dropping them silently would be the same fault this whole
         # change is about, so a value that carried intent is reported.
+        #
+        # ``pre_v1103`` is the marker that this FILE predates the change of
+        # frame, and it is the PRESENCE of a retired twin, never its value.
+        # See the block below for why the value cannot be the marker.
+        pre_v1103 = any(k in data for k in ("path_min_angle_deg",
+                                            "path_max_angle_deg",
+                                            "path_upper_angle_enabled"))
         for shadow in ("path_min_angle_deg", "path_max_angle_deg",
                        "path_upper_angle_enabled", "sa_temperature_factor"):
             if shadow not in data:
@@ -557,6 +564,15 @@ class SearchSettings:
             old_default, survivor = _SHADOW_FIELDS[shadow]
             if old == old_default:
                 continue
+            # When the surviving angle is switched ON, the twin says nothing
+            # the block below does not say better: the old dialog wrote the
+            # twin as -abs(the very value the survivor holds), so its number
+            # is redundant and only the survivor reaches a calculation.
+            if survivor is not None and survivor.startswith("path_initial"):
+                side = "upper" if "upper" in survivor else "lower"
+                if data.get(f"path_initial_angle_at_toe_{side}_enabled",
+                            defaults[f"path_initial_angle_at_toe_{side}_enabled"]):
+                    continue
             if shadow == "sa_temperature_factor":
                 why = ("it held a geometric cooling rate that no analysis "
                        "ever read; the coefficient the schedule does use is")
@@ -568,6 +584,45 @@ class SearchSettings:
             notes.append(
                 f"This model carries {shadow} = {old}, removed in v0.1.103: "
                 f"{why} {survivor}. The stored value was NOT converted.")
+
+        # ---- v0.1.134 — the note above fires on the RETIRED twin, and for
+        # the Initial Angle at Toe that is the wrong field to watch.
+        #
+        # The pre-v0.1.103 dialog wrote BOTH names from one spin box: the
+        # survivor got the typed value ``v`` and the twin got ``-abs(v)``.
+        # So the twin carries no information the survivor lacks, and the
+        # number the engine reads today — the survivor — was written in the
+        # OLD frame and is being read in the new one. Two consequences the
+        # note above cannot cover:
+        #
+        #   * its trigger is "the twin differs from ITS default", and the
+        #     twin is the negated mirror of the box, whose own default is
+        #     45. A user who ticked the box and left it at 45 stored the
+        #     twin at exactly -45, its default, and got NO note at all;
+        #   * it says "the stored value was NOT converted", which is true of
+        #     the twin and beside the point for the survivor.
+        #
+        # And the twin does not survive ``asdict``, so the first save drops
+        # it and nothing can ever warn again. Hence: warn on the presence of
+        # the twin, whatever its value, whenever the surviving angle is
+        # switched on. Still no conversion — the failure direction is not
+        # here, and that part of the v0.1.103 decision stands.
+        if pre_v1103:
+            for side in ("lower", "upper"):
+                enabled = f"path_initial_angle_at_toe_{side}_enabled"
+                value = f"path_initial_angle_at_toe_{side}_deg"
+                if not data.get(enabled, defaults[enabled]):
+                    continue
+                notes.append(
+                    f"This model was saved before v0.1.103, and its Path "
+                    f"Search {side} Initial Angle at Toe is ON at "
+                    f"{data.get(value, defaults[value])}°. That number was "
+                    f"read in the search's own toe-to-crest frame then and "
+                    f"is read as ABSOLUTE now — counter-clockwise from the "
+                    f"+x axis — so it does not describe the same limit. It "
+                    f"was NOT converted: doing so needs the failure "
+                    f"direction, which is not part of this block. Check "
+                    f"{value} before trusting this run.")
 
         # ---- path_optimize: the ONLY shadow whose note fires on the value
         # that EQUALS its old default, and the reason is that this one is
