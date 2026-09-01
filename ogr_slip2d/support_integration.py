@@ -103,9 +103,16 @@ Implementation follows Slide's convention:
     the bases are near-horizontal, and between 37° and 81° it is worth 35 %.
     Bishop no longer bolts anything on; it resolves the normal part inside the
     equilibrium exactly as this paragraph describes for the five methods
-    above, which is what closed D39/D42/D44. The two Janbu still bolt it on,
-    and for them it is an open measured defect — see :func:`support_vertical_load`
-    and the note at the term in ``janbu.py``.
+    above, which is what closed D39/D42/D44.
+
+    v0.1.142 — and neither do the two Janbu, which closes D46. They needed the
+    same move plus one more that is theirs alone: their balance is
+    ``Σ S·sec α = Σ W·tan α``, so the driving side owes ``T_S·sec α`` where it
+    subtracted ``T_S`` raw. All NINE methods now resolve a support the same
+    way, and the proof is a closed form rather than a published value — on a
+    PLANE the sliding mass is one free body, so every method that closes global
+    force equilibrium owes the Coulomb wedge. See
+    ``tests/test_janbu_wedge_v1142.py``.
 
     The reference publishes FOUR equations, not two — one pair for moment
     equilibrium and one for force equilibrium — which is precisely what says

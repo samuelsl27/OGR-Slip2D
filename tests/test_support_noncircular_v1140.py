@@ -226,6 +226,13 @@ def _gap(method_id, surface, n):
 #: The three that do NOT call ``support_vertical_load``. They are the
 #: control in the last class and the scale of the discretisation residual
 #: everywhere else: when the four move together, the cause is the mesh.
+#:
+#: v0.1.142 — the two Janbu now call it too, and on this fixture they hold
+#: the load-equals-support identity EXACTLY rather than by shrinking, for a
+#: reason that is algebra and not luck. They are asserted in
+#: ``tests/test_janbu_wedge_v1142.py``, which explains why, and they are
+#: deliberately not folded in here: a method whose residual is identically
+#: zero cannot serve as a scale for a mesh error.
 CONTROLS = ("ordinary_fellenius", "spencer", "gle_morgenstern_price")
 
 

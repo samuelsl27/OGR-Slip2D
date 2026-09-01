@@ -97,10 +97,51 @@ class JanbuSimplified(LEMMethod):
         # Measured on the six published planes of the Clouterre wall
         # (Sheahan 2003): mean error 14.96 % with the horizontal
         # projection, 1.76 % with T_S, 6.90 % with the strict per-slice
-        # weighting T_S/cos α. See tests/test_support_projection_v1113.py.
-        from ..support_integration import resolve_support_terms
+        # weighting T_S/cos α — and on the strength of those three numbers
+        # v0.1.113 kept T_S and recorded T_S/cos α as "four times worse".
+        # That reading did not survive v0.1.142: it compared against ONE of
+        # the manual's two published columns, and the manual's other column
+        # — Sheahan's own — disagrees with the first by up to 4.7 %, which
+        # is more than the gap being adjudicated. See below.
+        from ..support_integration import (resolve_support_terms,
+                                          support_vertical_load)
         sup = resolve_support_terms(project, surface, slices, slide_sign)
         s_list = slices.slices if hasattr(slices, "slices") else slices
+
+        # v0.1.142 — and the projection is weighted by sec alpha, which is
+        # the half v0.1.113 did not settle. Janbu balances SHEAR along the
+        # base: Sum S*sec a = Sum W*tan a. Putting an external force
+        # P = (P_h, P_v) on a slice into that balance gives
+        #
+        #     Sum (W - P_v)*tan a  +  Sum P_h  =  Sum S*sec a
+        #
+        # and with T_S = slide_sign*(P_h*cos a + P_v*sin a) the whole of the
+        # support's contribution to the driving side is exactly -T_S*sec a,
+        # its normal part arriving through W_eff below. Substituted into the
+        # form of this method on a PLANE the result cancels down to the
+        # closed-form Coulomb wedge, for Active and for Passive alike:
+        #
+        #     Active   F = (c'L + (W cos a + T_N) tan phi') / (W sin a - T_S)
+        #     Passive  F = (c'L + (W cos a + T_N) tan phi' + T_S) / (W sin a)
+        #
+        # which is not a convention: on a plane the sliding mass is one free
+        # body and the interslice forces cancel in the sum, so every method
+        # that closes global force equilibrium owes that number. The two
+        # Corps of Engineers, Lowe-Karafiath and Ordinary reproduce it to the
+        # last digit; until this version Janbu missed it by +1.9 % at 35 deg
+        # and -20.0 % at 50 deg while being EXACT on the same planes with no
+        # support at all. See ``tests/test_janbu_wedge_v1142.py``.
+        def _sec_weighted(column):
+            """Sum of a per-slice support column, each term over cos alpha."""
+            if not sup.present:
+                return 0.0
+            return math.fsum(
+                t / max(math.cos(s.base_angle), 1e-9)
+                for t, s in zip(column, s_list) if t
+            )
+
+        t_active_sec = _sec_weighted(sup.t_active)
+        t_passive_sec = _sec_weighted(sup.t_passive)
 
         # Driving force horizontal: Σ W·(1−kv)·tan α + Σ kh·W
         denominator = 0.0
@@ -115,9 +156,9 @@ class JanbuSimplified(LEMMethod):
             denominator += -slide_sign * f.h_water
 
         driving_no_support = denominator
-        denominator -= sup.total_active_t()
+        denominator -= t_active_sec
         active_ratio = (
-            sup.total_active_t() / driving_no_support
+            t_active_sec / driving_no_support
             if sup.present and abs(driving_no_support) > 1e-9 else 0.0
         )
         if sup.present and denominator <= 0.0:
@@ -158,6 +199,14 @@ class JanbuSimplified(LEMMethod):
                 # v0.1.61 — the base normal carries the ponded-water
                 # weight; the horizontal thrust belongs on the driving side
                 W_eff = slice_forces(s, kh, kv).w_total
+                # v0.1.142 — the support is a LINE LOAD on this slice, so it
+                # joins the vertical equilibrium n_alpha comes from instead
+                # of being bolted on outside it. Bishop made the same move in
+                # v0.1.137; the two are the same statement, and the argument
+                # for it is written at ``support_vertical_load``.
+                if sup.present:
+                    W_eff += support_vertical_load(
+                        sup, i_s, s.base_angle, slide_sign, fos)
                 b = s.width
 
                 # Estimate σ'ₙ
@@ -189,38 +238,34 @@ class JanbuSimplified(LEMMethod):
                     c * b + (W_eff - s.pore_pressure * b) * tan_phi
                 ) / n_alpha
 
-                # v0.1.64 — T_N·tanφ', the friction the support's normal
-                # component mobilises. Outside the n_α normalisation, as
-                # the reference writes it; see the note in ``bishop``.
+                # v0.1.64 to v0.1.141 a term ``T_N*tan phi'`` was added
+                # here, raw, outside the n_alpha normalisation. It is gone:
+                # the friction a support's normal component mobilises is
+                # whatever this slice's own equilibrium yields from W_eff
+                # above, and adding it again outside would be counting it
+                # twice with the wrong weight.
                 #
-                # v0.1.137 — Bishop stopped doing this and Janbu did NOT,
-                # and that asymmetry is a MEASURED, REPORTED defect, not a
-                # derivation. Janbu's balance is Σ S·sec α = Σ W·tan α, so
-                # its support handling is wrong in TWO coupled places: this
-                # term belongs inside n_α (= cos α · m_α), and the driving
-                # side owes ``T_S·sec α`` where it subtracts ``T_S`` raw.
-                # Measured, all four combinations:
-                #
-                #   this pair (n_α outside, T_S raw)   Clouterre mean 1.76 %
-                #                                      load≡support -0.096 %
-                #                                      and it does NOT shrink
-                #   n_α outside, T_S·sec α             Clouterre 6.90 % (0.1.113)
-                #   inside n_α, T_S raw                geotextiles -20 to -39 %
-                #   inside n_α, T_S·sec α  (consistent) Clouterre mean 7.95 %
-                #                                      load≡support 0.000000
-                #                                      at 25, 100 and 400 slices
-                #
-                # So the only combination that reproduces the six published
-                # Clouterre planes is the one that cannot pass its own
-                # identity, and the one that passes the identity exactly
-                # loses them. Choosing between them needs external evidence
-                # this task does not have, and guessing would be exactly the
-                # retro-fitting rule 1 exists to forbid. Left as it stands,
-                # named, with both measurements written down.
-                if sup.present and sup.n_press[i_s]:
-                    numerator += sup.n_press[i_s] * tan_phi
+                # v0.1.141 measured four combinations of that term and the
+                # driving projection and could not choose between them,
+                # because the only external evidence in hand was the six
+                # published Clouterre planes and the combination that fit
+                # them was the one that failed its own load-equals-support
+                # identity. The closed-form wedge is what decided it, and it
+                # decided against the fit: on those same six planes the two
+                # Corps methods, Lowe-Karafiath and Ordinary all reproduce
+                # the wedge to the last digit, and the residual they leave
+                # against Sheahan's own published column is FLAT (-7.1 % to
+                # -8.2 %), which is the signature of the nail geometry the
+                # manual does not publish. The combination that fit had a
+                # 4.3-point TREND across the same six angles, which is the
+                # signature of a formulation error. See
+                # ``tests/test_janbu_wedge_v1142.py`` and the header of
+                # ``tests/test_support_projection_v1113.py``.
 
-            numerator += sup.total_passive_t()
+            # v0.1.142 — sec alpha, for the reason given at the top:
+            # a PASSIVE support mobilises at T_S/F alongside the base
+            # shear, so it carries the same weighting the shear does.
+            numerator += t_passive_sec
 
             # Same backstop as Bishop's, and for the same reason: the next
             # pass computes tan(phi)/F inside n_alpha, so a zero F raises

@@ -62,6 +62,8 @@ the same arithmetic. Measured on a common fixture, same force, same point:
                                          side raw where the support enters
                                          projected on the base, a factor cos α
 
+Both rows are now history; the two paragraphs below say how each closed.
+
 v0.1.137 — BISHOP'S HALF IS CLOSED. Its row above is history: the support
 is now resolved as the line load the reference says it is, so its normal
 comes out of the same vertical equilibrium the load's does, and the gap
@@ -70,11 +72,22 @@ discretisation residual Ordinary, Spencer and GLE show. The test that used
 to freeze the disagreement now asserts the agreement, which is what its own
 docstring demanded should happen.
 
-Janbu's half is still open, and now it is the only one. It needs the same
-correction plus a ``sec α`` on its driving side; together they make this gap
-exactly 0.000000 at every refinement and cost the six published Clouterre
-planes (1.76 % → 7.95 % mean). Nothing external picks between the two, so it
-stays measured and named rather than guessed — see ``janbu.py``.
+v0.1.142 — JANBU'S HALF IS CLOSED TOO, and with it D46. Its row above is
+history as well: it needed the same correction plus a ``sec α`` on its
+driving side, and together they make this gap exactly zero at every
+refinement. What had blocked it for twenty versions was that the two
+branches were being judged against the six published Clouterre planes, and
+the branch that fit them was the one that failed this identity. A closed
+form settled it instead of a published number — on a PLANE the sliding mass
+is one free body, so every method that closes global force equilibrium owes
+the Coulomb wedge, and the two Corps methods, Lowe-Karafiath and Ordinary
+reproduce it to the last digit where the old Janbu missed it by +1.9 % to
+−20.0 %. See ``tests/test_janbu_wedge_v1142.py``, and the re-enunciated
+header of ``tests/test_support_projection_v1113.py`` for what happened to
+the Clouterre planes: the manual publishes TWO columns for them that
+disagree with each other by up to 4.7 %, and against the ORIGINAL source's
+column the corrected formulation leaves a flat −7.7 % offset where the old
+one left a 4.3-point trend.
 
 So what this file DOES assert about that pair is the half that is exact and
 that this feature is responsible for: the resultant and its point of
@@ -410,12 +423,15 @@ class TestTheIdentityThatHolds:
 
 # ======================================================================
 class TestTheManualsOwnComparison:
-    """The half of it that is exact, and the half that is not this feature.
+    """The identity the manual writes, and that OGR could not hold when
+    this feature landed.
 
-    See the module docstring: the resultant and where it acts match to the
-    last bit; the factor of safety does not, in Bishop and the two Janbu,
-    and the cause is how a support and a load enter the equilibrium — which
-    predates this version and is measured, not assumed.
+    See the module docstring. The resultant and where it acts matched to
+    the last bit from the start; the factor of safety did not, in Bishop
+    and the two Janbu, and the cause was how a support and a load enter the
+    equilibrium — older than this feature, and measured rather than
+    assumed. Bishop closed in v0.1.137 and the two Janbu in v0.1.142, so
+    every method now holds it and this class asserts the whole of it.
     """
 
     @staticmethod
@@ -492,23 +508,34 @@ class TestTheManualsOwnComparison:
         assert all(abs(g) < 0.05 for g in gaps), gaps
         assert abs(gaps[-1]) < 0.3 * abs(gaps[0]), gaps
 
-    def test_the_two_janbu_still_disagree_by_a_gap_that_does_not_shrink(self):
-        """The half of this defect that v0.1.137 did NOT close, asserted as
-        a fact exactly as Bishop's was.
+    def test_the_two_janbu_agree_exactly(self):
+        """v0.1.142 — this test used to assert the OPPOSITE, and said so.
+        It closed, so it was rewritten. D46 has no half left open.
 
-        Janbu's balance is ``Σ S·sec α = Σ W·tan α``, so it owes the same
-        correction Bishop got AND a ``sec α`` on its driving side, where it
-        subtracts ``T_S`` raw. Applying both makes this gap exactly zero at
-        every refinement — and costs the six published Clouterre planes
-        (``test_support_projection_v1113``), whose mean error goes from
-        1.76 % to 7.95 %. Nothing external decides between the two, so the
-        disagreement stays, measured and named. See the note at the term in
-        ``ogr_slip2d/methods/janbu.py``.
+        Janbu's balance is ``Σ S·sec α = Σ W·tan α``, so it owed the same
+        correction Bishop got in v0.1.137 AND a ``sec α`` on its driving
+        side, where it subtracted ``T_S`` raw. v0.1.141 had both branches
+        measured and could not choose, because the only external evidence
+        was the six published Clouterre planes and the combination that fit
+        them was the one that failed THIS identity. What decided it was a
+        closed form rather than a published number: on a plane the sliding
+        mass is one free body, and the two Corps methods, Lowe-Karafiath
+        and Ordinary all reproduce that wedge to the last digit while the
+        old Janbu missed it by up to 20 %. See
+        ``tests/test_janbu_wedge_v1142.py``.
+
+        Unlike Bishop's half the agreement here is EXACT rather than
+        shrinking, and that is stronger. Per slice a support owes the
+        driving side ``−T_S·sec α = −slide_sign·(P_h + P_v·tan α)`` while
+        the same force as a load owes ``−slide_sign·P_h`` through
+        ``h_water`` and ``−slide_sign·P_v·tan α`` through ``w_total`` — the
+        same two terms, so there is nothing left to discretise. Measured:
+        0.0, 0.0 and −1.4e-14 % at 25, 100 and 400 slices, against a frozen
+        −0.096 % before.
         """
         for mid in ("janbu_simplified", "janbu_corrected"):
             gaps = self._gaps(mid)
-            assert all(-0.20 < g < -0.02 for g in gaps), (mid, gaps)
-            assert abs(gaps[-1] - gaps[0]) < 0.02, (mid, gaps)
+            assert all(abs(g) < 1e-9 for g in gaps), (mid, gaps)
 
 
 # ======================================================================

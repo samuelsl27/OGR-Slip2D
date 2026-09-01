@@ -61,9 +61,12 @@ THE ANCHORS BEHIND THE CHANGE, WHICH LIVE ELSEWHERE
 
 WHAT THIS FILE DOES NOT CLAIM
 
-Nothing about the two Janbu. They still add the term raw, and for them
-that is an open, measured defect with both of its branches written down at
-the term in ``ogr_slip2d/methods/janbu.py`` — not this derivation.
+Nothing about the two Janbu. They added the term raw when this file was
+written, and for them that was an open, measured defect. It closed in
+v0.1.142, by the same move plus a ``sec α`` their own balance demands, and
+what settled it was the closed-form wedge on a plane rather than the
+circle this file uses — so the assertions here still deliberately leave
+them out, and ``tests/test_janbu_wedge_v1142.py`` is where they live.
 """
 from __future__ import annotations
 
