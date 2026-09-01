@@ -266,6 +266,7 @@ def settings_warnings(project, method_ids=()) -> list[str]:
     notes.extend(_optimize_notes(s_search))
     notes.extend(_undrained_profile_notes(project))
     notes.extend(_focus_notes(project))
+    notes.extend(_interslice_convention_notes(project, method_ids))
     return notes
 
 
@@ -309,6 +310,79 @@ def _focus_notes(project) -> list[str]:
         "when surfaces satisfying the focus exist; that is a limit of the "
         "search, not a statement about the slope. A Grid, Path or Block "
         "Search reaches a tightly focused region more reliably."]
+
+
+def _interslice_convention_notes(project, method_ids) -> list[str]:
+    """What TOTAL inter-slice forces cost on a slope with water over it.
+
+    v0.1.144, defect D20. The three methods that prescribe the inter-slice
+    inclination are formulated in TOTAL inter-slice forces by default, and
+    that is what reproduces every published factor of safety for the
+    family — USACE (2003) EM 1110-2-1902 §G-5a states its own worked
+    example is in total forces, and this engine reproduces that example
+    slice by slice. It has one consequence, and it is not a defect: over a
+    slope with standing water, raising the water adds a purely HORIZONTAL
+    force to every vertical face, so an assumption that forces the
+    resultant to lie at θ demands a vertical increment that the water does
+    not supply. The factor of safety then depends on the depth of the
+    pond, and on Duncan and Wright (2005) figure 6.27 the march loses its
+    root altogether.
+
+    A note and not a refusal: the analysis is the one the standard
+    describes, and the alternative is one click away. The way out is
+    published with the case — Duncan and Wright's equivalent procedure,
+    buoyant unit weights and no water at all, which removes the face
+    thrust there is nothing to do with and lands within 0.012 % of the
+    ponded analysis in effective forces.
+
+    Measured in ``tests/test_interslice_split_v1117.py``; the reasoning
+    for the default is in ``MethodsSettings.interslice_forces``.
+    """
+    from ogr_core.geometry import ground_surface
+    from ogr_core.hydraulic.ponded_water import ponded_water_level_at
+
+    if not any(m in _PRESCRIBED_THETA_METHODS for m in (method_ids or ())):
+        return []
+    if getattr(project.settings.methods, "interslice_forces",
+               "total") != "total":
+        return []
+    external = project.external_boundary()
+    if external is None:
+        return []
+    vertices = list(ground_surface(external).vertices)
+    if len(vertices) < 2:
+        return []
+    # Relative to the relief of the model, never absolute: the same
+    # millimetre is nothing in a dam and everything in a laboratory slope.
+    relief = max(v.y for v in vertices) - min(v.y for v in vertices)
+    tol = 1e-4 * max(relief, 1e-9)
+    # The vertices alone would miss a pond that covers only the middle of
+    # a long face, so the midpoints go in too.
+    probes = [(v.x, v.y) for v in vertices]
+    probes += [(0.5 * (a.x + b.x), 0.5 * (a.y + b.y))
+               for a, b in zip(vertices, vertices[1:])]
+    ponded = False
+    for x, y_ground in probes:
+        level = ponded_water_level_at(project, x)
+        if level is not None and level > y_ground + tol:
+            ponded = True
+            break
+    if not ponded:
+        return []
+    return [
+        "This model has water standing over the ground, and the "
+        "prescribed-inclination methods (Lowe-Karafiath, Corps of "
+        "Engineers #1 and #2) are set to TOTAL inter-slice forces. That "
+        "is the convention the published values of these methods are in, "
+        "but it does not hold where water stands on the slope: the factor "
+        "of safety then depends on the depth of the water, the force "
+        "balance can fail to close, and it can also close on a root that "
+        "is not a factor of safety at all — measured on a fully submerged "
+        "slope, the search returned 0.20 where every other method gives "
+        "1.61. Treat these three methods' numbers on this model as "
+        "unreliable. Use buoyant unit weights with no water surface "
+        "(Duncan and Wright 2005), or set Interslice forces = Effective "
+        "in Project Settings."]
 
 
 def _undrained_profile_notes(project) -> list[str]:
@@ -868,8 +942,13 @@ def build_method(project, method_id: str, num_slices: Optional[int] = None):
         kwargs["interslice_func"] = interslice_function(
             s.methods.interslice_function)
     if method_id in _PRESCRIBED_THETA_METHODS:
+        # v0.1.144 — the fallback is the class default, not a third
+        # opinion. It is reached only by a settings object old enough to
+        # lack the field; answering "effective" there, as this line did
+        # until the default changed, would hand that project a different
+        # analysis from every other route into the same method.
         kwargs["interslice_forces"] = getattr(
-            s.methods, "interslice_forces", "effective")
+            s.methods, "interslice_forces", "total")
 
     method = cls(**kwargs)
 

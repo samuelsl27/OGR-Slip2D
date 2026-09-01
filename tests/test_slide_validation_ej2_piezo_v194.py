@@ -425,21 +425,28 @@ class TestKnownDivergences:
     reference's +1.89 % and +0.81 %. They are now in ``TestTheSevenMethods``
     with everything else. See docs/audits/spencer_gle_interslice_v179.md.
 
-    What remains:
+    **v0.1.144 — the third one closed, and not by a fix.** Lowe-Karafiath was
+    listed here at −10.9 %, caused by ``interslice_water_thrust``
+    (``external_forces.py``), applied by this method and no other. Both
+    formulations are self-consistent; they differ in whether the prescribed
+    inclination theta = (beta+alpha)/2 applies to the TOTAL or to the
+    EFFECTIVE inter-slice force, and this entry used to say that settling it
+    needed a datum the project did not have. It did not: the datum was
+    documentary, not numerical — USACE EM 1110-2-1902 §G-5a states that the
+    inter-slice forces of its own worked example are total forces, and that
+    example is the one this engine reproduces slice by slice. The default
+    moved to TOTAL and this model lands on **+0.09 %**.
 
-    * **lowe-karafiath, −10.9 %** — ``interslice_water_thrust``
-      (``external_forces.py``), applied by this method and no other. Removing
-      it lands on +0.09 % here and BREAKS Duncan & Wright verification #70
-      (a submerged slope goes from 1.609 to 5.000 and stops being invariant
-      to water depth). Both formulations are self-consistent; they differ in
-      whether the prescribed inclination theta = (beta+alpha)/2 applies to
-      the TOTAL or to the EFFECTIVE inter-slice force. Settling it needs one
-      datum this project does not have: the reference's own Lowe-Karafiath
-      value on a model with ponded water. docs/PENDIENTES.md section 7.
+    It is a decision and not a repair, so the price is named here too: with
+    total forces the same family stops being invariant to the depth of water
+    over a submerged slope, and on Duncan & Wright verification #70 the march
+    loses its root (1.609 → 5.000, ``converged`` false). That case now runs
+    in EFFECTIVE forces, explicitly, and says why. docs/PENDIENTES.md §7.
+
+    What remains: gle_morgenstern_price, below.
     """
 
     EXPECTED = {
-        "lowe_karafiath": (-0.109, 0.02),
         # v0.1.106 — was -0.008 with the cause misattributed. GLE moved with
         # Spencer when the inter-slice forces reached the base normal, but
         # overshot: +0.0077 where Spencer lands on +0.0010. Reported, not
@@ -457,10 +464,12 @@ class TestKnownDivergences:
         "gle_morgenstern_price": (0.0077, 0.004),
     }
 
-    #: Closed in v0.1.106, kept as a two-sided tripwire: a regression that
-    #: put Spencer back on Bishop would otherwise show up only as a slightly
-    #: worse number somewhere.
-    CLOSED = ("spencer",)
+    #: Closed and kept as a two-sided tripwire: a regression that put
+    #: Spencer back on Bishop, or the prescribed-inclination family back on
+    #: effective forces by default, would otherwise show up only as a
+    #: slightly worse number somewhere. Spencer closed in v0.1.106,
+    #: lowe_karafiath in v0.1.144.
+    CLOSED = ("spencer", "lowe_karafiath")
 
     def test_each_divergence_is_the_size_it_was_measured_to_be(self):
         for method_id, ref, circle in REFERENCE_FOS:

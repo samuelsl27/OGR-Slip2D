@@ -254,9 +254,23 @@ class TestDuncanWrightEquivalence:
         """Janbu ignores inter-slice shear and Lowe-Karafiath prescribes
         the inter-slice inclination, so neither reproduces the identity
         exactly — but both must stay close, and both must be invariant to
-        the depth of water."""
+        the depth of water.
+
+        v0.1.144 — Lowe-Karafiath is asked for EFFECTIVE inter-slice
+        forces explicitly, and the word "explicitly" is the point: the
+        default became TOTAL in this version, and with total forces this
+        identity is not merely inexact, it is unavailable. Raising a pond
+        over a submerged slope adds a purely horizontal force to every
+        vertical face, so an assumption that ties X to E·tanθ cannot leave
+        the factor of safety alone, and on this very case the march loses
+        its root (F = 5.0, ``converged`` false). That is measured next
+        door, in ``test_interslice_split_v1117.py``; what this case is
+        about is the identity, and the identity is a statement in
+        effective forces.
+        """
         for name, m in (("Janbu", JanbuSimplified()),
-                        ("Lowe-Karafiath", LoweKarafiath())):
+                        ("Lowe-Karafiath",
+                         LoweKarafiath(interslice_forces="effective"))):
             a = fos(ponded(75.0), m)
             b = fos(buoyant(), m)
             assert abs(a - b) / b < 0.02, (name, a, b)

@@ -141,14 +141,29 @@ class MethodsSettings:
     # out and applied as its own horizontal load — or the TOTAL one.
     #
     # USACE (2003), EM 1110-2-1902 §C-4a treats both as legitimate and
-    # states that the computed factor of safety differs between them. It
-    # recommends effective forces for the Corps assumption, yet its own
-    # worked example in Appendix G uses total forces, "consistent with
-    # most computer software". Nothing in this program had ever offered
-    # the choice: it was effective, always, and that is the open question
-    # of D20. "effective" stays the default so no stored project moves.
+    # states that the computed factor of safety differs between them.
     # Values: "effective" | "total".
-    interslice_forces: str = "effective"
+    #
+    # v0.1.144 — the default is TOTAL, and it was a decision and not a
+    # measurement: neither value satisfies both external anchors, and that
+    # is a property of the assumption rather than a defect. With water
+    # present, TOTAL is what reproduces every published factor of safety
+    # for this family — EM §G-5a states its own worked example is in total
+    # forces, and it is the one this engine reproduces slice by slice;
+    # Pockoski and Duncan (2000) and Zhu (2003) agree, as does UTEXAS4.
+    # What it gives up is a slope with water standing over it: raising a
+    # pond adds a purely horizontal force to every vertical face, so an
+    # assumption tying X to E·tanθ cannot leave the factor of safety
+    # unchanged, and on Duncan and Wright (2005) fig. 6.27 the march loses
+    # its root altogether. EFFECTIVE is the only value that survives that
+    # case and it stays one click away, because the standard that defines
+    # these methods considers both legitimate.
+    #
+    # Changing this moves NEW projects only. Every file saved since
+    # v0.1.98 carries the field (``to_dict`` writes the whole dataclass),
+    # so a stored project keeps whatever it was analysed with.
+    # See docs/PENDIENTES.md §7 and tests/test_interslice_split_v1117.py.
+    interslice_forces: str = "total"
 
 
 @dataclass

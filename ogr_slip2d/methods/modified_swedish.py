@@ -81,7 +81,7 @@ class PrescribedInclinationMethod(LEMMethod):
     SATISFIES_MOMENT = False
 
     def __init__(self, *args,
-                 interslice_forces: str = EFFECTIVE_INTERSLICE,
+                 interslice_forces: str = TOTAL_INTERSLICE,
                  **kwargs) -> None:
         super().__init__(*args, **kwargs)
         # v0.1.98 — whether the resultant Z whose inclination is prescribed
@@ -89,10 +89,17 @@ class PrescribedInclinationMethod(LEMMethod):
         # vertical faces separated out and applied as its own horizontal
         # load) or the TOTAL one. EM 1110-2-1902 §C-4a treats both as
         # legitimate and says the computed factor of safety differs
-        # between them; it recommends effective forces for the Corps
-        # assumption, while its OWN worked example in Appendix G uses
-        # total forces "consistent with most computer software". The
-        # choice is the user's, and it is the open question of D20.
+        # between them; its OWN worked example in Appendix G uses total
+        # forces, and §G-5a says so.
+        #
+        # v0.1.144 — the default is TOTAL here as well, and deliberately
+        # the SAME value ``MethodsSettings.interslice_forces`` carries.
+        # Two defaults that disagree is the failure this project has paid
+        # for three times over (the frozen method list of v0.1.78, the two
+        # Auto Refine questions of D33): whoever instantiates the class
+        # directly would silently get a different analysis from whoever
+        # goes through ``build_method``. The reasoning for the value, and
+        # what it costs, is in ``MethodsSettings.interslice_forces``.
         self.interslice_forces = (
             TOTAL_INTERSLICE if str(interslice_forces).strip().lower()
             == TOTAL_INTERSLICE else EFFECTIVE_INTERSLICE
@@ -164,6 +171,7 @@ class PrescribedInclinationMethod(LEMMethod):
 
         normals, _mobilised, strengths = self._base_forces(
             list(slices), ctx, fos)
+        reversal = self._thrust_reversal(list(slices), ctx, fos)
         # v0.1.107 - ``base_shear_force`` is the DRIVING force in every
         # method now. This one used to publish the MOBILISED shear there,
         # which is a factor of the safety factor away and was 2.58 against
@@ -184,6 +192,7 @@ class PrescribedInclinationMethod(LEMMethod):
             details={
                 "boundary_ratios": self._boundary_ratios(slices),
                 "interslice_forces": self.interslice_forces,
+                "thrust_reversal": reversal,
             },
         )
 
@@ -323,6 +332,68 @@ class PrescribedInclinationMethod(LEMMethod):
                          h_water=h_water, v_support=v_support,
                          t_support=t_support)
         return math.nan if zs is None else zs[-1]
+
+    # ==================================================================
+    def _thrust_reversal(self, slist, ctx, F: float) -> float:
+        """How far the inter-slice thrust turns against its own sense.
+
+        ``0`` when every interior boundary pushes the same way, ``1`` when
+        the largest reversed force is as large as the largest force of the
+        dominant sense. It is a DIAGNOSTIC published in ``details``, not a
+        veto — what it is for is written below.
+
+        WHY IT EXISTS. This system has more than one root. On the submerged
+        slope of Duncan and Wright (2005) figure 6.27, analysed with TOTAL
+        inter-slice forces and the water 60 ft above the crest,
+        Lowe-Karafiath converges — ``converged = True``, no warning — to
+        F = 0.220 where every other method says 1.60. The residual there is
+        a genuine zero (|Z_n|/max|Z_i| = 9e-12), so it is not a pole the
+        admissibility guard in :meth:`_march` could have caught, and the
+        net thrust is compressive, so the criterion Spencer and GLE use
+        (:func:`ogr_slip2d.interslice.thrust_is_admissible`) does not catch
+        it either: both were measured before this one and both are blind
+        here. What IS visible is that the thrust reverses along the
+        surface: 23 of 49 boundaries push the opposite way, the largest of
+        them 28 % of the peak, where every root that reproduces a published
+        factor of safety stays under 2.2 %.
+
+        Reference:
+            Ching, R.K.H. & Fredlund, D.G. (1983). "Some difficulties
+            associated with the limit equilibrium method of slices." Can.
+            Geotech. J. 20(4), 661-672 — on multiple and spurious roots of
+            the limit-equilibrium system and on rejecting them by the sign
+            of the inter-slice forces.
+
+        SIGN-AGNOSTIC ON PURPOSE. ``Z`` comes out of a march whose
+        orientation is chosen by :meth:`_force_balance`, and the mirrored
+        one negates it, so "compression is negative" is a property of the
+        march and not of the soil. Measuring the reversal against the
+        DOMINANT sense of the same march is what keeps a legitimate
+        solution from reading as fully reversed merely because it was
+        marched from the other end — the failure ``prepare_rows`` documents
+        for the GLE recursion, where it put all 39 boundaries of
+        verification problem 26 in false tension.
+
+        Costs one extra march per surface, against the sixteen-plus the
+        root finder already spends and the one :meth:`_base_forces` spends:
+        about 1 %.
+        """
+        if ctx is None or not slist:
+            return 0.0
+        alpha_n, theta, kh, kv, h_water, v_sup, t_act, t_pas = ctx
+        t_sup = [t_act[i] + t_pas[i] / F for i in range(len(t_act))]
+        zs = self._march(slist, theta, alpha_n, kh, kv, F,
+                         h_water=h_water, v_support=v_sup, t_support=t_sup)
+        # The last entry is the closure residual, driven to zero by F; it
+        # is not a boundary force and must not set the scale.
+        interior = zs[:-1] if zs else []
+        if not interior:
+            return 0.0
+        peak = max(abs(z) for z in interior)
+        if peak <= 0.0:
+            return 0.0
+        dominant = 1.0 if math.fsum(interior) >= 0.0 else -1.0
+        return max(0.0, max(-dominant * z for z in interior)) / peak
 
     # ==================================================================
     def _base_forces(self, slist, ctx, F: float):

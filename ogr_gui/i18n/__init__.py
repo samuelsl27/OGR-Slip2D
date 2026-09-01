@@ -1413,15 +1413,23 @@ _DICTS: dict[str, dict[str, str]] = {
         "with the water pressure on the vertical faces applied "
         "separately, or the total force including it. USACE EM "
         "1110-2-1902 treats both as valid and states that the factor "
-        "of safety differs between them. Read by Lowe-Karafiath and "
+        "of safety differs between them. Total is the default and the "
+        "convention the published values of these methods are in. "
+        "Choose Effective for a slope with water standing over it, "
+        "where the total-force assumption makes the factor of safety "
+        "depend on the depth of the water. Read by Lowe-Karafiath and "
         "Corps of Engineers #1 and #2.":
             "Si la resultante entre dovelas cuya inclinación se impone "
             "representa la fuerza efectiva entre dovelas, con la presión "
             "de agua sobre las caras verticales aplicada aparte, o la "
             "fuerza total que la incluye. La EM 1110-2-1902 del USACE da "
             "las dos por válidas y advierte de que el factor de seguridad "
-            "difiere entre ellas. La leen Lowe-Karafiath y Corps of "
-            "Engineers #1 y #2.",
+            "difiere entre ellas. Totales es el predeterminado y es el "
+            "convenio en el que están publicados los valores de estos "
+            "métodos. Elige Efectivas en un talud con agua embalsada "
+            "encima, donde la hipótesis en fuerzas totales hace que el "
+            "factor de seguridad dependa del calado. La leen "
+            "Lowe-Karafiath y Corps of Engineers #1 y #2.",
         "None": "Ninguna",
         "Transient groundwater": "Filtración transitoria",
         "Staged transient seepage. Its solver options are on the "

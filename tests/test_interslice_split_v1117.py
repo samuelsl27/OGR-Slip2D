@@ -20,8 +20,16 @@ legitimate and says the answer differs. Since v0.1.98 it is
 the point of this file. It is not a defect waiting for a patch: it is a
 property of the assumption, and until v0.1.117 it was recorded as "one
 datum missing". The datum is no longer missing — see
-``docs/PENDIENTES.md`` §7 — and what is missing instead is a decision, so
-both halves are measured here so neither can drift unnoticed.
+``docs/PENDIENTES.md`` §7 — and both halves are measured here so neither
+can drift unnoticed.
+
+v0.1.144 — the decision was taken and the default is now **TOTAL**. Anchor
+1 is what a user gets by default; anchor 2 is what they get one click away,
+and the model-level note in ``analysis_runner`` tells them when they need
+it. Nothing below changed value: every case here sets the mode by hand,
+which is the only reason a default can move without this file moving with
+it. What is new at the end is the test that the default IS total and
+reaches the method — rule 7 for a setting whose value is now a claim.
 
 THE TWO ANCHORS, both external and both published.
 
@@ -317,3 +325,46 @@ class TestTheSettingMovesTheNumber:
             a = _fos55(mid, EFFECTIVE)
             b = _fos55(mid, TOTAL)
             assert (b - a) / a > 0.01, (mid, a, b)
+
+
+# ======================================================================
+class TestTheDefaultIsTotalAndReachesTheMethod:
+    """v0.1.144. The decision, pinned where it can be read.
+
+    Three separate claims, because they failed separately elsewhere in
+    this project: the stored default, the class default, and the value
+    that actually arrives at the solver. A default that is right in the
+    dataclass and wrong in the class is the shape of the v0.1.78 method
+    list and of defect D33 — two lists of the same fact, drifting apart.
+    """
+
+    def test_a_new_project_asks_for_total_forces(self):
+        assert Project("fresh").settings.methods.interslice_forces == TOTAL
+
+    def test_the_class_default_is_the_same_one(self):
+        """Instantiating the method directly must not describe a
+        different analysis from going through ``build_method``."""
+        from ogr_slip2d.methods.lowe_karafiath import LoweKarafiath
+        assert LoweKarafiath().interslice_forces == TOTAL
+
+    def test_the_default_arrives_at_the_solver(self):
+        """Rule 7 in its strict form: not that the field holds a value,
+        but that the value reaches the object that uses it. Nobody sets
+        the mode here — that is the whole test."""
+        p = _p55()
+        for mid in PRESCRIBED:
+            m = build_method(p, mid, P55_SLICES)
+            assert m is not None, mid
+            assert m.interslice_forces == TOTAL, mid
+
+    def test_and_a_project_that_stored_effective_keeps_it(self):
+        """The other half of changing a default: a file saved before the
+        change carries the field (``to_dict`` writes the whole dataclass),
+        so it must go on being analysed the way it was. 86 of the 88
+        models of the verification bank are in exactly this position."""
+        p = _p55()
+        p.settings.methods.interslice_forces = EFFECTIVE
+        stored = Project.from_dict(p.to_dict())
+        assert stored.settings.methods.interslice_forces == EFFECTIVE
+        assert build_method(
+            stored, "lowe_karafiath", P55_SLICES).interslice_forces == EFFECTIVE

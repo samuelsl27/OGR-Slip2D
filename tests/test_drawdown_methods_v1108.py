@@ -170,6 +170,32 @@ def _appendix_g(procedure="corps_2", *, undrained=True, drawdown=True,
     p.materials = [m]
     p.settings.groundwater.pore_fluid_unit_weight = GAMMA_W
     p.settings.methods.num_slices = NUM_SLICES
+    # v0.1.144 — EFFECTIVE inter-slice forces, declared on the model and
+    # not left to the default, which became TOTAL in this version.
+    #
+    # This is a reservoir standing against the face: 103 ft of water on an
+    # embankment whose crest is at 110. That is the one configuration in
+    # which the prescribed-inclination assumption cannot hold, and it is
+    # what the model-level note this version adds warns about — water
+    # standing on the slope pushes each vertical face HORIZONTALLY, and an
+    # assumption that ties the resultant to θ has to invent a vertical
+    # component for it. Measured on this circle, against the appendix's
+    # own published 1.35 and 1.44:
+    #
+    #     lowe-karafiath   Corps 2-stage  +0.71 % eff   +1.84 % total
+    #                      DWW 3-stage    +1.19 % eff   +3.85 % total
+    #     corps #1         DWW 3-stage    +3.56 % eff   +6.11 % total
+    #     corps #2         DWW 3-stage    +5.44 % eff   +7.92 % total
+    #
+    # Bishop, Spencer and GLE do not move a digit between the two, which
+    # is what says this is the assumption and not the drawdown procedure.
+    #
+    # It does NOT contradict the evidence that made total the default:
+    # that evidence is about water INSIDE the slope, where total forces
+    # reproduce every published value to 0.25 %. The two anchors divide by
+    # WHERE the water is, not by which convention is right, and both are
+    # reachable — which is the whole reason the setting exists.
+    p.settings.methods.interslice_forces = "effective"
     if drawdown:
         p.settings.groundwater.set_advanced_option("rapid_drawdown")
         p.settings.groundwater.rapid_drawdown_method = procedure
@@ -187,9 +213,25 @@ def _result(procedure, method_id):
     if key not in _CACHE:
         from ogr_slip2d.methods import method_registry
         from ogr_slip2d.rapid_drawdown import rapid_drawdown_fos
+        # v0.1.144 — the inter-slice convention comes from the PROJECT,
+        # the way it does in production. Instantiating the class bare, as
+        # this line did, silently analysed the reservoir slope in whatever
+        # the class default happened to be, and the day that default
+        # changed the model said one thing and the method did another.
+        #
+        # NOT through ``build_method``, and that is worth a line: on a
+        # drawdown project it returns the method already wrapped in the
+        # multi-stage procedure, and ``rapid_drawdown_fos`` below applies
+        # that wrapper itself. Going through it here would run the
+        # procedure twice.
+        project = _appendix_g(procedure)
+        kwargs = {}
+        if method_id in ("lowe_karafiath", "corps_engineers_1",
+                         "corps_engineers_2"):
+            kwargs["interslice_forces"] = (
+                project.settings.methods.interslice_forces)
         _CACHE[key] = rapid_drawdown_fos(
-            _appendix_g(procedure), _circle(),
-            method_registry()[method_id](),
+            project, _circle(), method_registry()[method_id](**kwargs),
             num_slices=NUM_SLICES, procedure=procedure)
     return _CACHE[key]
 

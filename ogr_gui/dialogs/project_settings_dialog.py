@@ -375,15 +375,23 @@ class _MethodsPage(QWidget):
         ):
             self.cbo_zf.addItem(label, value)
         i = self.cbo_zf.findData(
-            getattr(s.methods, "interslice_forces", "effective"))
+            getattr(s.methods, "interslice_forces", "total"))
         self.cbo_zf.setCurrentIndex(max(0, i))
+        # v0.1.144 — the tooltip says which one to pick, not only what
+        # they are. An option whose two values are both defensible and
+        # whose consequences are nowhere written is an option the user
+        # cannot use.
         self.cbo_zf.setToolTip(tr(
             "Whether the interslice resultant whose inclination is "
             "prescribed represents the effective force between slices, "
             "with the water pressure on the vertical faces applied "
             "separately, or the total force including it. USACE EM "
             "1110-2-1902 treats both as valid and states that the factor "
-            "of safety differs between them. Read by Lowe-Karafiath and "
+            "of safety differs between them. Total is the default and the "
+            "convention the published values of these methods are in. "
+            "Choose Effective for a slope with water standing over it, "
+            "where the total-force assumption makes the factor of safety "
+            "depend on the depth of the water. Read by Lowe-Karafiath and "
             "Corps of Engineers #1 and #2."))
         form.addRow(tr("Interslice forces:"), self.cbo_zf)
         root.addWidget(conv)

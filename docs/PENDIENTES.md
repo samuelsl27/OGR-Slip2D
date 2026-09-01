@@ -302,12 +302,28 @@ v0.1.74, y Auto Refine encadena iteraciones.
 
 ---
 
-## 7 · Lowe-Karafiath con agua: ¿empuje entre dovelas, sí o no? — ABIERTO (v0.1.117)
+## 7 · Lowe-Karafiath con agua: ¿empuje entre dovelas, sí o no? — CERRADO (v0.1.144)
 
-**Estado: cerrada la pregunta, abierta la decisión.** Desde v0.1.94 esta
-entrada decía «falta UN dato externo». **Ya no falta**: la evidencia está
-completa y apunta a un sitio, y lo que queda es elegir el predeterminado
-sabiendo lo que se pierde con cada opción. Remedido entero en v0.1.117.
+**Estado: decidido. El predeterminado es `total` desde v0.1.144.** Esta
+entrada dijo «falta UN dato externo» desde v0.1.94 hasta v0.1.117, cuando el
+dato apareció escrito en vez de medido; y desde entonces hasta v0.1.144 dijo
+«falta decidir». Ya está decidido, y lo que la decisión destapó es que **las
+dos formulaciones no compiten: se reparten según DÓNDE está el agua**.
+
+- agua **dentro** del talud (freática, piezométrica) → **totales**, que es lo
+  que reproduce todo valor publicado de esta familia al 0,25 %;
+- agua **encima** del talud (embalse, talud sumergido) → **efectivas**, lo
+  único que sobrevive ahí, y lo que ahora dice una nota de modelo.
+
+Ese reparto no salió del razonamiento: lo encontró la suite. Con el
+predeterminado en totales, `test_drawdown_methods_v1108` —el Apéndice G de la
+EM 1110-2-1902, **el mismo cuyo §G-5a declara fuerzas totales**— empeoró de
++1,19 % a +3,85 % en Lowe-Karafiath, y ese modelo es un embalse apoyado contra
+el paramento. Los detalles y la tabla, en `docs/changelog/CHANGELOG_v0.1.144.md`.
+
+Lo que sigue es la evidencia tal como se reunió, que es lo que sujeta la
+decisión. Remedido entero en v0.1.117 y otra vez en v0.1.143, sin que se mueva
+un dígito.
 
 Los tres métodos que **prescriben** la inclinación interdovela —Lowe y
 Karafiath (1960) y los dos Corps of Engineers, USACE (2003) EM 1110-2-1902
@@ -418,7 +434,9 @@ escrito**, que pedía a la vez relación > 1,0 en 51/55/56 (exige totales) e
 invarianza dentro del 1 % en el 70 (exige efectivas). **Ningún ajuste único
 cumple las dos.**
 
-**Abre una decisión de producto**, que es lo único que queda:
+**La decisión, tomada en v0.1.144: `total`.** Lo que sigue son las dos
+opciones tal como se plantearon, porque la que se descartó es la que hay que
+elegir a mano sobre un talud sumergido:
 
 - seguir en `effective` — físicamente coherente, y solo: se aleja del 0,2 % al
   10,9 % de todo valor publicado de esta familia con agua;
@@ -429,8 +447,11 @@ cumple las dos.**
   cambio de** quedarse sin respuesta sobre un talud sumergido, donde hoy hace
   falta además un aviso, porque el 0,22043 del caso de 105 ft converge.
 
-Sea cual sea, la alternativa tiene que seguir siendo alcanzable: la norma que
-define los métodos considera legítimas las dos.
+La alternativa sigue siendo alcanzable —la norma que define los métodos
+considera legítimas las dos— y ahora el programa dice **cuándo** hace falta:
+`_interslice_convention_notes` avisa cuando un método de esta familia se
+encuentra con agua embalsada sobre el terreno, y calla cuando el agua está
+dentro del talud, que es el caso para el que los totales existen.
 
 **La salida práctica, con fuente, mientras tanto**: sobre un talud sumergido,
 el procedimiento equivalente de Duncan y Wright —peso boyante γ' = γ − γ_w y
@@ -438,10 +459,45 @@ nada de agua— hace desaparecer la bifurcación entera, porque sin superficie d
 agua no hay empuje de cara que separar. Los dos ajustes dan entonces el mismo
 número, a 0,012 % del que da el tratamiento con agua embalsada y efectivas.
 
-Medido y sujeto en `tests/test_interslice_split_v1117.py`, 12 casos con las dos
-anclas enfrentadas y *tripwires* de dos caras: fallan si la divergencia crece y
-fallan si desaparece, porque desaparecer significaría que alguien cambió el
-predeterminado sin actualizar esta entrada.
+Medido y sujeto en `tests/test_interslice_split_v1117.py`, con las dos anclas
+enfrentadas y *tripwires* de dos caras: fallan si la divergencia crece y fallan
+si desaparece. Siguen valiendo tal cual después de v0.1.144 porque cada caso
+fija el modo a mano; lo que se les añadió es el test de que el predeterminado
+**es** totales y de que llega al solver. El guardián de la raíz espuria y la
+nota están en `tests/test_interslice_guard_v1144.py`.
+
+### El guardián que no se escribió, y por qué (v0.1.144)
+
+Sobre un talud sumergido con totales la marcha converge a una raíz que no es
+un factor de seguridad: en el problema 70 la **búsqueda entera** devuelve
+F ≈ 0,2000 —el suelo de la rejilla de arranque— donde con efectivas devuelve
+1,6087. Se midieron **cuatro** criterios para rechazarla y los cuatro fallan:
+el residuo (es un cero legítimo, 8,6e−12), la tracción neta interdovela (el de
+Spencer y GLE: negativa en la buena y en la espuria), contar bases en tracción
+(el 51 tiene raíces legítimas con 1 y 2 de 95) y la **inversión del empuje**,
+que separa 2,3 % contra 27,9 % sobre los círculos publicados pero **no** sobre
+la población: en las 22 000 superficies de los nueve modelos, un corte al 5 %
+marcaría 1087 de las 4605 del problema 55, y el 59 y el 60 tienen el percentil
+99 en 1,0 **con efectivas**, que es el ajuste validado. Como
+`SearchResult.critical` excluye las inadmisibles, vetar movería la respuesta
+en modelos sanos.
+
+La inversión se publica como diagnóstico (`details["thrust_reversal"]`) y no
+veta nada; la protección es la nota. **Lo que haría falta** para cerrar esto de
+verdad es un criterio que distinga una raíz espuria de una superficie
+simplemente mala, y ninguno de los cuatro lo es. Evidencia:
+`_auditoria/d20_traccion.json` en el banco.
+
+### Lo que queda ABIERTO de este apartado, además de lo anterior
+
+`PrescribedInclinationMethod._force_balance` **recibe `slide_sign` y no lo usa
+en ninguna línea** (v0.1.144): elige la orientación de marcha por «la primera
+que produzca cambio de signo», no por el sentido de deslizamiento que
+`compute_fos` acaba de calcular y le pasa. Ordenarlo por `slide_sign` **no** es
+el arreglo, y eso está medido: en el problema 70 la raíz buena sale de la
+orientación que **contradice** a `slide_sign` y la espuria de la que coincide.
+Antes de tocarlo hay que saber qué orientación resuelve cada caso ya validado,
+porque cambiar el orden los mueve.
 
 ### Y en v0.1.106 la misma pregunta aparece en Spencer y GLE
 
@@ -465,16 +521,15 @@ agua sobre la cara vertical es parte de `E`: sube la lámina, sube `E`, sube el
 cortante interdovela a igualdad de λ. Lo que rescata el resultado final es que
 la **raíz se mueve con ellas** y el cruce acaba casi donde estaba.
 
-**Qué haría falta**: extender `MethodsSettings.interslice_forces` —la
-bifurcación efectiva/total que la familia de inclinación prescrita tiene desde
-v0.1.98— a Spencer y GLE. No se hizo en v0.1.106 porque faltaba el dato externo
-que este pendiente pedía; ese motivo ha caído en v0.1.117, y el que queda es
-que la evidencia apunta a **totales**, que es lo que ya hacen: Fredlund y Krahn
-(1977) escriben `E` como fuerza total, y la referencia separa su Spencer de su
-Bishop un +1,888 % sobre el modelo con piezométrica, donde OGR con totales da
-+2,14 %. Con efectivas ese número se movería, y se movería alejándose. La tarea
-sigue en pie como **tarea propia**: si el predeterminado de la familia
-prescrita cambia, esto tiene que decidirse con él.
+**Qué haría falta, RE-ENUNCIADO en v0.1.144**: ya no es «decidir con la
+familia prescrita». Spencer y GLE **no cambian**: formulan en totales y eso es
+lo correcto —Fredlund y Krahn (1977) escriben `E` como fuerza total, y la
+referencia separa su Spencer de su Bishop un +1,888 % sobre el modelo con
+piezométrica, donde OGR con totales da +2,14 %; con efectivas ese número se
+movería alejándose—. Lo que queda es **ofrecerles la opción efectiva**, que hoy
+no tienen, para el mismo caso que la necesita en la familia prescrita: un talud
+con agua embalsada encima. Es una tarea de alcance, no una decisión: la
+decisión ya está tomada arriba y ésta la hereda.
 
 Medido y sujeto en `tests/test_ponded_water_v161.py`, con un tripwire de dos
 caras: falla si el residuo crece, y falla si desaparece — porque desaparecer
