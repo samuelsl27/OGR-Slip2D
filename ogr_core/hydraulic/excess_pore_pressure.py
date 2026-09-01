@@ -132,8 +132,14 @@ def _loading_bands(project: "Project", x: float, y_bottom: float,
 
     out = []
     for (lo, hi), mat, (_mx, y_mid) in zip(bands, mats, mids):
-        if mat is None:
-            mat = project.materials[0] if project.materials else None
+        # v0.1.143 — a band no region covers used to inherit the FIRST
+        # material of the project, which decided whether the band loads at
+        # all: ``weight_creates_excess`` is a per-material flag, so the
+        # substitution could switch an undrained load on or off for a band
+        # that is not made of that material. Same silent default as the one
+        # anomaly D48 left in ``ogr_slip2d.slicer._material_at``, and the
+        # same answer — where no region reaches there is no soil, and soil
+        # that is not there cannot load anything.
         if mat is None or not getattr(mat, "weight_creates_excess", False):
             continue
         below_water = wt_y is not None and wt_y > y_mid

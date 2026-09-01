@@ -338,19 +338,50 @@ def _anisotropic_surfaces(project: Project) -> dict:
     return out
 
 
-def _material_at(project: Project, point: Vertex) -> Optional[Material]:
-    """Return the material occupying ``point`` in the project.
+#: Why :func:`slice_surface` refused a surface, when the reason is that its
+#: base left the soil. It travels in the caller's ``reasons`` list because
+#: the function already returns None for several unrelated causes — more
+#: cuts than slices, a degenerate width, a failed tension-crack truncation
+#: — and the search writes a note blaming the SLICE COUNT for all of them.
+#: A surface that walked out of the model told to use more slices would be
+#: an aviso pointing at the wrong culprit, which is worse than none.
+REFUSED_OUTSIDE_MODEL = "outside_model"
 
-    v0.1.6: uses :meth:`Project.material_at` which resolves regions from
+
+def _material_at(project: Project, point: Vertex) -> Optional[Material]:
+    """The material occupying ``point``, or None where there is no soil.
+
+    v0.1.6: uses :meth:`Project.material_at`, which resolves regions from
     the planar subdivision of ``External ∪ MaterialBoundaries`` and
-    applies the user's click history (last winning assignment). Falls
-    back to the first material of the project if no assignment covers
-    the point (Slide default behaviour).
+    applies the user's click history (last winning assignment).
+
+    v0.1.143 — **None is an answer, and it used to be overwritten.** Until
+    this version a point outside every region came back as the FIRST
+    material of the project, silently. Two different questions were being
+    given the same answer:
+
+    * *"what fills this point inside the model that no region covers?"* —
+      which :meth:`Project._material_in` already answers with the first
+      material, deliberately, and which stays exactly as it was; and
+    * *"what fills this point outside the model?"* — where the honest
+      answer is that there is no soil there at all.
+
+    Conflating them is the second half of anomaly D48. Its first half was
+    fixed in v0.1.126 with a geometric guard, after an optimised surface
+    walked to y = -4.83 under a model floored at y = 0 and was rewarded
+    for it: outside the regions it was handed the project's first material,
+    which on that model was the WEAKEST of the two, so the walk returned
+    1.0902 where the same surface clipped back inside returns 1.2676 —
+    sixteen per cent, on the unsafe side.
+
+    The rule this follows is the one :func:`~ogr_core.hydraulic.
+    water_surfaces.water_surface_defined_at` established in v0.1.96 for
+    the same shape of defect: a default that cannot be told apart from a
+    measurement is invented data, so the caller has to be able to see the
+    difference and decide. Here the caller is the slicer, and what it
+    decides is to refuse the surface whole.
     """
-    mat = project.material_at(point.x, point.y)
-    if mat is not None:
-        return mat
-    return project.materials[0] if project.materials else None
+    return project.material_at(point.x, point.y)
 
 
 # ----------------------------------------------------------------------
@@ -717,14 +748,44 @@ def _column_weight(
         # point-in-polygon scan it protects.
         mats = project.materials_at(mids)
 
-    fallback = project.materials[0] if project.materials else None
-    mats = [fallback if m is None else m for m in mats]
+    # v0.1.143 — a band that no region covers used to become the FIRST
+    # material of the project, the same silent substitution D48 left behind
+    # in ``_material_at``. It happens here for a different reason, and one
+    # this function creates itself: ``y_top`` is the MEAN ground elevation
+    # over the slice (v0.1.96), so where the ground rises across the slice
+    # the topmost band reaches above the ground at ``x`` and its midpoint
+    # is in the air. Measured on the first four problems of the bank: 1 024
+    # such bands, all of them above the ground, none below the floor.
+    #
+    # The sliver is real — the mean elevation is deliberate and the column
+    # is that tall — so what is missing is only its material, and the
+    # honest answer is the material of the band BELOW it, the topmost one
+    # that is really soil. Reaching for ``materials[0]`` instead weighed
+    # the top of the column with a layer that need not be anywhere near it.
+    mats = list(mats)
+    for i, m in enumerate(mats):
+        if m is not None:
+            continue
+        below = next((mats[j] for j in range(i - 1, -1, -1)
+                      if mats[j] is not None), None)
+        if below is None:
+            below = next((mats[j] for j in range(i + 1, len(mats))
+                          if mats[j] is not None), None)
+        mats[i] = below
 
     total = 0.0
     for (lo, hi), mat, (_mx, y_mid) in zip(bands, mats, mids):
+        if mat is None:
+            # v0.1.143 — a project with no materials at all. This used to
+            # weigh the band at 20.0 kN/m3, a number belonging to nothing
+            # in the model and indistinguishable from a real unit weight;
+            # with no material there is no soil, and no soil weighs
+            # nothing. Unreachable from the slicer since the base query
+            # above refuses such a surface, and kept correct anyway
+            # because this function is called from elsewhere.
+            continue
         below_water = wt_y is not None and wt_y > y_mid
-        gamma = mat.gamma_at(below_water) if mat else 20.0
-        total += gamma * (hi - lo) * dx
+        total += mat.gamma_at(below_water) * (hi - lo) * dx
 
     # The layer top: walk up from the bottom band and stop at the first
     # band made of a DIFFERENT material. Identity is compared through the
@@ -1161,6 +1222,8 @@ def slice_surface(
     project: Project,
     surface: SurfaceProtocol,
     num_slices: int = 50,
+    *,
+    reasons: Optional[list] = None,
 ) -> Optional[Slices]:
     """Build the list of slices for a given slip surface.
 
@@ -1168,6 +1231,13 @@ def slice_surface(
     failure mass is degenerate, or — since v0.1.109 — the surface lies
     entirely inside a Tension Crack zone and so has no shear plane to
     write an equilibrium on.
+
+    v0.1.143 — and if a slice base falls outside the soil, where there is
+    no material to give it strength. ``reasons``, when a list is passed,
+    collects why: it is the only way for a caller to tell that refusal
+    apart from the others above, which it has to do because they call for
+    opposite remedies. No module-level state is used for this on purpose —
+    a counter surviving between analyses is the leak rule 5 exists for.
 
     The surface is resolved onto the mass that is actually analysed
     before slicing: ground crossings, reverse curvature, and the user's
@@ -1444,7 +1514,48 @@ def slice_surface(
         # evaluated, and both belong to the material the base cuts.
         base_y_mid = 0.5 * (y_base_l + y_base_r)
         top_y_mid = 0.5 * (y_top_l + y_top_r)
+        # The 0.01 lift moves the query off the base and into the sliding
+        # mass, so that a base running exactly along a material contact
+        # takes the material above it rather than landing on a region edge
+        # where point-in-polygon is ambiguous. It has been there, absolute,
+        # since v0.1.59.
+        #
+        # v0.1.143 — and it OVERSHOOTS. Where the base runs within 0.01 of
+        # the ground — the end slices of every surface that enters or exits
+        # near the tangent — the lift jumps clean over the ground surface
+        # and asks about a point in the air. Measured on the first four
+        # problems of the verification bank: 11 972 queries landed outside
+        # the model, every single one of them ABOVE the ground and not one
+        # below the floor, and the first material of the project was handed
+        # back for all of them. On problem 3, one Bishop search, 431 of
+        # those, and in 301 the material handed back was the WRONG one —
+        # Soil #1 where the base is cut in Soil #3.
+        #
+        # Asking again AT the base is the fix, and it is exact: it uses the
+        # same region test rather than reconstructing where the ground is,
+        # it costs a second lookup only in the rare slice that overshoots,
+        # and the lifted query keeps priority, so the material chosen on a
+        # contact is unchanged everywhere the lift already worked. Only if
+        # the base itself is outside every region is there really no soil.
         mat = _material_at(project, Vertex(xc, base_y_mid + 0.01))
+        if mat is None:
+            mat = _material_at(project, Vertex(xc, base_y_mid))
+
+        # v0.1.143 — no soil at the base is a REFUSAL, not a default.
+        #
+        # The reference discards such a surface and reports it under error
+        # code -103, "the slip surface extends past the bottom of the soil
+        # region"; the same judgement is already made for a water surface
+        # that does not reach this abscissa, eighty lines below, and for
+        # the same reason. A partial mass is not a free body, so the
+        # surface goes whole rather than the slice.
+        #
+        # This is deliberately placed BEFORE ``_column_weight``: a slice
+        # with no soil at its base must never get as far as being weighed.
+        if mat is None:
+            if reasons is not None:
+                reasons.append(REFUSED_OUTSIDE_MODEL)
+            return None
 
         # v0.1.121 — where the base runs ALONG a weak layer, the strength is
         # the joint's and not the region's. Only the material is swapped, and

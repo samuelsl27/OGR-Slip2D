@@ -29,7 +29,7 @@ from ogr_core.project.settings import WeakLayerHandling
 from .failure_direction import steepest_face_index
 from .methods import LEMMethod, LEMResult
 from .rapid_drawdown import RapidDrawdownError, drawdown_gap
-from .slicer import slice_surface
+from .slicer import REFUSED_OUTSIDE_MODEL, slice_surface
 from .surface import SlipCircle, WeakLayerSurface, lowest_elevation
 
 
@@ -620,6 +620,26 @@ class BaseSearch(ABC):
             f"search. Use more slices, or fewer vertices per surface."
         ]
 
+    def _outside_model_note(self) -> str:
+        """What to say when surfaces were refused for leaving the soil.
+
+        Separate from :meth:`_unsliceable_note` because the two faults have
+        opposite remedies, and the wrong one is actively misleading: no
+        number of slices puts a surface back inside the model. The guards
+        of v0.1.84 and v0.1.126 reject such surfaces before they are ever
+        sliced, so this note firing at all means one reached the slicer by
+        a door those guards do not watch — which is worth saying out loud
+        rather than counting in silence.
+        """
+        n = getattr(self, "_outside_model", 0)
+        return (
+            "%d surface%s were discarded because a slice base fell outside "
+            "the External Boundary, where there is no soil to give it "
+            "strength. This is not a slice-count problem: the surfaces left "
+            "the model. Check the extent of the External Boundary against "
+            "the search area." % (n, "" if n == 1 else "s")
+        )
+
     def _base_angle_ok(self, project: Project, trial, slices) -> bool:
         """Reject a clipped surface whose base turns too steeply to solve.
 
@@ -755,7 +775,19 @@ class BaseSearch(ABC):
                     y_low = lowest_elevation(trial)
                     if y_low is not None and y_low < self.min_elevation:
                         continue
-                slices = slice_surface(project, trial, num_slices=self.num_slices)
+                _why = []
+                slices = slice_surface(project, trial,
+                                       num_slices=self.num_slices,
+                                       reasons=_why)
+                if slices is None and REFUSED_OUTSIDE_MODEL in _why:
+                    # v0.1.143 — refused because a slice base left the soil,
+                    # which is a different fault from the one below and asks
+                    # for the opposite remedy: more slices cannot put a
+                    # surface back inside the model. Counted apart so the
+                    # note names the right culprit.
+                    self._outside_model = getattr(
+                        self, "_outside_model", 0) + 1
+                    continue
                 if slices is None:
                     # v0.1.135 — the slicer refused this surface WHOLE, and
                     # overwhelmingly for one reason: more mandatory cuts than
@@ -1134,6 +1166,7 @@ class BaseSearch(ABC):
         self._weak_bands_cache = None
         self._pending_notes = []
         self._unsliceable = 0
+        self._outside_model = 0
         with project.regions_frozen():
             result = self._run(project)
             if self.optimize is not None and self.optimize.enabled:
@@ -1145,6 +1178,11 @@ class BaseSearch(ABC):
             if getattr(self, "_unsliceable", 0):
                 for line in self._unsliceable_note(result):
                     self._note(line)
+            # v0.1.143 — and the surfaces refused for leaving the soil. It
+            # fires only when it happened, because a note that appears on
+            # every analysis is noise and rule 7 asks for the opposite.
+            if getattr(self, "_outside_model", 0):
+                self._note(self._outside_model_note())
             # v0.1.121 — anything the run decided it had to say. Attached
             # after the optimisation so a note raised while optimising is
             # carried too.
