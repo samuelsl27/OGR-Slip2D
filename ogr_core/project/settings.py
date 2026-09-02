@@ -299,6 +299,18 @@ class SearchSettings:
     surface. Storing an explicit pair only when the user sets one keeps a
     model portable — hard-coded limits from one geometry would be wrong
     for another.
+
+    ``slope_limit_left_2`` / ``slope_limit_right_2`` are the SECOND set,
+    also ``None`` by default, meaning there is only one. Two sets exist so
+    a model can say where a surface may daylight when that is two separate
+    windows rather than one span — a toe window and a crest window, say.
+    A model that leaves them ``None`` means exactly what it meant before
+    they existed (defect D50).
+
+    The second set alone is not a state: it is defined ON TOP of the
+    first, never instead of it. ``_slope_limits`` ignores an orphan second
+    set and ``settings_warnings`` says so out loud, because a declared
+    setting that is silently dropped is rule 7's whole argument.
     """
 
     """Search settings — aligned with Slide's Surface Options dialog
@@ -307,6 +319,11 @@ class SearchSettings:
 
     slope_limit_left: Optional[float] = None
     slope_limit_right: Optional[float] = None
+    # v0.1.146 — the optional SECOND set of Slope Limits (defect D50). Both
+    # or neither, like the moment axis below: one abscissa alone does not
+    # describe a window.
+    slope_limit_left_2: Optional[float] = None
+    slope_limit_right_2: Optional[float] = None
     # v0.1.92 — the moment axis for NON-CIRCULAR surfaces, None by default
     # meaning automatic: each surface gets its own, built from its entry-exit
     # chord. A circle needs none, having a centre already.

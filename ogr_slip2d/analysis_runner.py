@@ -252,6 +252,25 @@ def settings_warnings(project, method_ids=()) -> list[str]:
             "ground profile, so the Slope Limits you set did not steer "
             "where it looked. They were still applied as a filter, as "
             "they are for every search.")
+    # v0.1.146 — the second set of Slope Limits is defined ON TOP of the
+    # first, never instead of it, so a second set on its own describes
+    # nothing this engine can apply. Said out loud rather than dropped
+    # silently: a window the user typed and the analysis ignored is
+    # exactly the failure rule 7 exists for.
+    if ((s_search.slope_limit_left_2 is None)
+            != (s_search.slope_limit_right_2 is None)):
+        notes.append(
+            "The second set of Slope Limits has only one side set, so it "
+            "describes no window and was ignored. Set both the left and "
+            "the right limit, or clear them both.")
+    elif (s_search.slope_limit_left_2 is not None
+            and (s_search.slope_limit_left is None
+                 or s_search.slope_limit_right is None)):
+        notes.append(
+            "A second set of Slope Limits is defined but the first is "
+            "automatic, and the second set is meant to be added to the "
+            "first, not to replace it. It was ignored; set the first set "
+            "as well.")
     # Anything the stored model carried that could not be migrated. It is
     # a note and not a refusal: the analysis is valid, it simply did not
     # honour a value the file still mentions.
@@ -1233,15 +1252,30 @@ def _grid_range(lo, hi):
 
 
 def _slope_limits(s_search):
-    """Explicit slope limits, or None.
+    """Explicit slope limits as a tuple of windows, or None.
 
     v0.1.55 — None means automatic: derived from the ground surface,
     which is what keeps a model portable between geometries.
+
+    v0.1.146 — a model may declare a SECOND window (defect D50), so this
+    returns a tuple of ``(left, right)`` pairs rather than one pair. A
+    model with only the first set yields a one-element tuple, which every
+    reader treats exactly as it treated the bare pair.
+
+    An orphan second set — declared without the first — is DROPPED here
+    rather than promoted to the only window, because the two are not
+    interchangeable: the toe-side window steers where a Path Search
+    starts. ``settings_warnings`` says so; silence would be rule 7 again.
     """
     if (s_search.slope_limit_left is None
             or s_search.slope_limit_right is None):
         return None
-    return (s_search.slope_limit_left, s_search.slope_limit_right)
+    sets = [(s_search.slope_limit_left, s_search.slope_limit_right)]
+    lo2 = getattr(s_search, "slope_limit_left_2", None)
+    hi2 = getattr(s_search, "slope_limit_right_2", None)
+    if lo2 is not None and hi2 is not None:
+        sets.append((lo2, hi2))
+    return tuple(sets)
 
 
 # ======================================================================

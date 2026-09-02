@@ -206,7 +206,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.145"
+    VERSION = "0.1.146"
 
     def __init__(self) -> None:
         super().__init__()
@@ -2143,30 +2143,41 @@ class MainWindow(QMainWindow):
             % (circle.centre_x, circle.centre_y, circle.radius), 8000)
 
     def _move_slope_limits(self) -> None:
-        from PySide6.QtWidgets import QInputDialog
+        """Edit the Slope Limits — one window, or two.
+
+        v0.1.146 — a proper dialog replaces the two chained input boxes
+        this used to be. The second window of defect D50 would have made
+        them four, with no way to say the second pair is off; and the old
+        pair showed automatic limits as ``0.0``, so opening the editor and
+        accepting turned "derive them from the ground" into "limit at
+        x = 0" without anyone asking for it.
+        """
+        from ogr_gui.dialogs.slope_limits_dialog import SlopeLimitsDialog
+        dlg = SlopeLimitsDialog(self.project, self)
+        if dlg.exec() != dlg.Accepted:
+            return
+        problem = dlg.validate()
+        if problem:
+            self._info(problem)
+            return
+        left, right, left_2, right_2 = dlg.values()
         s = self.project.settings.search
-        left, ok = QInputDialog.getDouble(
-            self, tr("Move Slope Limits"), tr("Left limit (x):"),
-            float(getattr(s, "slope_limit_left", 0.0) or 0.0),
-            -1e9, 1e9, 4)
-        if not ok:
-            return
-        right, ok = QInputDialog.getDouble(
-            self, tr("Move Slope Limits"), tr("Right limit (x):"),
-            float(getattr(s, "slope_limit_right", 0.0) or 0.0),
-            -1e9, 1e9, 4)
-        if not ok:
-            return
-        if right <= left:
-            self._info(tr("The right limit must be greater than the "
-                          "left one."))
-            return
         s.slope_limit_left = left
         s.slope_limit_right = right
+        s.slope_limit_left_2 = left_2
+        s.slope_limit_right_2 = right_2
         self.project.is_dirty = True
         self.canvas.refresh_scene()
-        self.statusBar().showMessage(
-            tr("Slope limits: %.3f to %.3f") % (left, right), 6000)
+        if left is None:
+            self.statusBar().showMessage(
+                tr("Slope limits reset to automatic."), 6000)
+        elif left_2 is None:
+            self.statusBar().showMessage(
+                tr("Slope limits: %.3f to %.3f") % (left, right), 6000)
+        else:
+            self.statusBar().showMessage(
+                tr("Slope limits: %.3f to %.3f and %.3f to %.3f")
+                % (left, right, left_2, right_2), 6000)
 
     def _define_moment_axis(self) -> None:
         """The point non-circular surfaces take moments about.
@@ -2205,10 +2216,17 @@ class MainWindow(QMainWindow):
             tr("Moment axis: automatic (one per surface)."), 6000)
 
     def _reset_slope_limits(self) -> None:
-        """Back to automatic, derived from the ground surface."""
+        """Back to automatic, derived from the ground surface.
+
+        v0.1.146 — clears the SECOND set too. Leaving it behind would
+        leave a window still narrowing every search from a dialog the user
+        had just been told resets them.
+        """
         s = self.project.settings.search
         s.slope_limit_left = None
         s.slope_limit_right = None
+        s.slope_limit_left_2 = None
+        s.slope_limit_right_2 = None
         self.project.is_dirty = True
         self.canvas.refresh_scene()
         self.statusBar().showMessage(

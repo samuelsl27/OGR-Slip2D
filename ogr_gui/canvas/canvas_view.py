@@ -551,6 +551,9 @@ class CanvasView(QGraphicsView):
         # v0.1.8 — Slip-circle search grid (user-defined or auto)
         self._draw_slip_search_grid(scene)
 
+        # v0.1.146 — the Slope Limits (defect D50)
+        self._draw_slope_limits(scene)
+
         # Loads
         for load in self.project.distributed_loads:
             scene.addItem(DistributedLoadItem(load))
@@ -2234,6 +2237,92 @@ class CanvasView(QGraphicsView):
     # ==================================================================
     # v0.1.8 — Slip-circle search grid visualisation
     # ==================================================================
+    def _draw_slope_limits(self, scene) -> None:
+        """Draw the Slope Limit markers on the ground profile.
+
+        v0.1.146 — until now the Slope Limits were invisible: they were
+        editable, saved, and applied by every search, and nothing on the
+        canvas said where they were. A model narrowed to a window near the
+        toe looked exactly like one that was not.
+
+        Only EXPLICIT limits are drawn. Automatic ones sit at the ends of
+        the ground profile, where a marker would say nothing that the
+        profile does not already say, and would suggest a restriction the
+        model has not made. Defect D50 added the second window, so there
+        may be two markers or four.
+        """
+        from PySide6.QtGui import QPen, QPolygonF
+        from PySide6.QtCore import QPointF
+        from PySide6.QtWidgets import QGraphicsPolygonItem
+
+        s = self.project.settings.search
+        if s.slope_limit_left is None or s.slope_limit_right is None:
+            return
+        xs = [s.slope_limit_left, s.slope_limit_right]
+        if s.slope_limit_left_2 is not None and s.slope_limit_right_2 is not None:
+            xs += [s.slope_limit_left_2, s.slope_limit_right_2]
+
+        try:
+            from ogr_core.geometry.ground import ground_surface
+            from ogr_core.geometry import BoundaryType
+            ext = None
+            for b in self.project.boundaries:
+                if b.btype == BoundaryType.EXTERNAL:
+                    ext = b
+                    break
+            if ext is None:
+                return
+            # ``ground_surface`` returns a Polyline; the vertices are what
+            # the interpolation below walks.
+            top = list(ground_surface(ext).vertices)
+        except Exception:  # noqa: BLE001
+            return
+        if not top or len(top) < 2:
+            return
+
+        # Marker half-width in PIXELS converted to model units, not a
+        # fraction of the scene rect: the scene grows as the user pans,
+        # and a marker derived from it would swell with it. Same reasoning
+        # (and the same v0.1.85 lesson) as the search-grid crosses above.
+        half = 1.0
+        try:
+            ppu = self._pixels_per_unit()
+            if ppu > 0:
+                half = max(0.4, 5.0 / ppu)
+        except Exception:  # noqa: BLE001
+            pass
+
+        pen = QPen(QColor(30, 140, 60), 0.9)
+        pen.setCosmetic(True)
+        brush = QBrush(QColor(60, 190, 90, 200))
+        for x in xs:
+            y = self._ground_y_at(top, x)
+            if y is None:
+                continue
+            # A triangle sitting ON the profile, apex down at the limit.
+            tri = QPolygonF([QPointF(x - half, y + 2.2 * half),
+                             QPointF(x + half, y + 2.2 * half),
+                             QPointF(x, y)])
+            item = QGraphicsPolygonItem(tri)
+            item.setPen(pen)
+            item.setBrush(brush)
+            item.setZValue(12)
+            item.setToolTip(tr("Slope limit at x = %.4f") % x)
+            scene.addItem(item)
+
+    @staticmethod
+    def _ground_y_at(top, x: float):
+        """Elevation of the ground profile at ``x``, or None if off it."""
+        if x < top[0].x or x > top[-1].x:
+            return None
+        for a, b in zip(top, top[1:]):
+            if a.x <= x <= b.x:
+                if abs(b.x - a.x) < 1e-12:
+                    return max(a.y, b.y)
+                t = (x - a.x) / (b.x - a.x)
+                return a.y + t * (b.y - a.y)
+        return None
+
     def _draw_slip_search_grid(self, scene) -> None:
         """Draw the rectangular search grid as small × markers.
 

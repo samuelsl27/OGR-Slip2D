@@ -34,6 +34,68 @@ from .surface import SlipCircle, WeakLayerSurface, lowest_elevation
 
 
 # ----------------------------------------------------------------------
+def _normalise_slope_limits(value) -> Optional[tuple]:
+    """The Slope Limits as a tuple of ``(lo, hi)`` windows, left to right.
+
+    v0.1.146 (defect D50) — accepts either shape, because both are in use:
+    the bare ``(x_left, x_right)`` pair every caller wrote before this
+    existed, and a sequence of pairs for the two-window case. Returning one
+    shape means the readers below never have to ask which they got.
+
+    ``None`` in, ``None`` out: automatic limits, derived from the ground.
+    """
+    if value is None:
+        return None
+    items = list(value)
+    if not items:
+        return None
+    if not isinstance(items[0], (list, tuple)):
+        # The historic single pair.
+        lo, hi = sorted(float(v) for v in items)
+        return ((lo, hi),)
+    sets = []
+    for pair in items:
+        lo, hi = sorted(float(v) for v in pair)
+        sets.append((lo, hi))
+    sets.sort()
+    return tuple(sets) or None
+
+
+def _slope_limits_hull(sets) -> Optional[tuple]:
+    """The span from the leftmost limit to the rightmost one.
+
+    This is what GENERATION wants. The reference builds the "slope surface"
+    — the piece of ground a search samples from — between the limits, and
+    with two windows it searches "each set of limits independently, as well
+    as BETWEEN the two", so the ground worth sampling runs from one end to
+    the other. With a single window the hull IS that window, which is why
+    the five generation clips did not have to change for D50.
+    """
+    if not sets:
+        return None
+    return (sets[0][0], max(hi for _, hi in sets))
+
+
+def _within_slope_limits(x: float, sets, tol: float) -> bool:
+    """Does an abscissa daylight inside one of the Slope Limit windows?
+
+    This is FILTERING, and it is membership, not pairing: the reference
+    states that with two sets there is "no explicit logic to force slip
+    surfaces to enter and exit in the two limits" — both ends may land in
+    the same window. Defect D50 measured the two readings on the reference
+    bank's two-window problem and they gave the identical critical circle,
+    so nothing published discriminates between them; the documented one is
+    the one implemented.
+
+    ``tol`` is the caller's, deliberately. The three filter sites came into
+    v0.1.146 with three different tolerances (one relative, two absolute)
+    and unifying them would move numbers that this defect is not about.
+    """
+    if not sets:
+        return True
+    return any(lo - tol <= x <= hi + tol for lo, hi in sets)
+
+
 def _base_kwargs(legacy: dict) -> dict:
     """The :class:`BaseSearch` arguments every search takes by keyword.
 
@@ -326,7 +388,14 @@ class BaseSearch(ABC):
         #   slope surface read ``self.slope_limits`` themselves. The
         #   reference exempts exactly one from this, the Block Search,
         #   whose vertices come from user-drawn objects instead.
-        self.slope_limits = slope_limits
+        #
+        # v0.1.146 (D50) — there can now be TWO windows, and the split
+        # above is exactly what lets that be a small change: the windows
+        # are stored here, while ``slope_limits`` became the HULL of them.
+        # Generation keeps reading ``slope_limits`` and keeps being right,
+        # because the reference searches between the two windows as well as
+        # inside each; only the three filter sites ask about membership.
+        self.slope_limit_sets = _normalise_slope_limits(slope_limits)
         # v0.1.129 — the focus objects, and the split is the same one the
         # Slope Limits describe just above, only the other way round:
         #
@@ -411,6 +480,25 @@ class BaseSearch(ABC):
         self.objective = (seismic_analysis.objective()
                           if seismic_analysis is not None
                           else OBJECTIVE_FOS)
+
+    # ------------------------------------------------------------------
+    @property
+    def slope_limits(self) -> Optional[tuple]:
+        """The Slope Limits as ONE span, for surface generation.
+
+        v0.1.146 — read-only, and the hull of ``slope_limit_sets`` rather
+        than a stored second copy, so the two can never drift apart. With
+        the single window that every model had before D50 this returns that
+        window unchanged, which is why the five generation clips that read
+        it kept working verbatim.
+
+        A search asking "which ground do I sample from?" wants this. A
+        search asking "may this surface daylight here?" wants
+        ``_within_slope_limits`` with ``slope_limit_sets`` instead: the hull
+        of two windows includes the gap between them, and the gap is the
+        whole point of declaring two.
+        """
+        return _slope_limits_hull(self.slope_limit_sets)
 
     # ------------------------------------------------------------------
     def score(self, result: Optional[LEMResult]) -> float:
@@ -810,11 +898,18 @@ class BaseSearch(ABC):
                 # cuts the ground more than twice each mass has its own pair.
                 # A polyline knows its extent earlier, but answering the same
                 # question in two places is how the two answers drift apart.
-                if self.slope_limits is not None:
-                    sl_lo, sl_hi = sorted(self.slope_limits)
-                    tol = 1e-9 * max(abs(sl_hi - sl_lo), 1.0)
-                    if (slices[0].base_x_left < sl_lo - tol
-                            or slices[-1].base_x_right > sl_hi + tol):
+                # v0.1.146 — membership in ONE OF the windows, not a
+                # span: with two windows the span would include the gap
+                # between them, and excluding that gap is the only reason
+                # to declare two (D50).
+                if self.slope_limit_sets is not None:
+                    sets = self.slope_limit_sets
+                    hull = _slope_limits_hull(sets)
+                    tol = 1e-9 * max(abs(hull[1] - hull[0]), 1.0)
+                    if not (_within_slope_limits(
+                                slices[0].base_x_left, sets, tol)
+                            and _within_slope_limits(
+                                slices[-1].base_x_right, sets, tol)):
                         continue
                 # Filter by minimum "area" (here approximated as Σ w_i · h_i)
                 area = sum(s.width * max(s.height, 0.0) for s in slices)
@@ -2945,11 +3040,10 @@ class BlockSearch(BaseSearch):
         except Exception:  # noqa: BLE001
             ext_poly = None
 
-        # Slope-limits x-range (endpoints must daylight within this)
-        if self.slope_limits is not None:
-            sl_x0, sl_x1 = sorted(self.slope_limits)
-        else:
-            sl_x0, sl_x1 = top[0].x, top[-1].x
+        # Slope-limits windows (endpoints must daylight within one of them).
+        # v0.1.146 — the whole profile when the model declares none, which
+        # is the same "no limits means the ground itself" this always had.
+        sl_sets = self.slope_limit_sets or ((top[0].x, top[-1].x),)
 
         # v0.1.17 — collect user-drawn Block Search objects. Each is a
         # Boundary of type BLOCK_SEARCH_OBJECT. Their geometry kind is
@@ -3104,10 +3198,10 @@ class BlockSearch(BaseSearch):
                 continue
 
             # 4. endpoints must daylight within the Slope Limits
-            if not (sl_x0 - 1e-6 <= deduped[0].x <= sl_x1 + 1e-6):
+            if not _within_slope_limits(deduped[0].x, sl_sets, 1e-6):
                 result.invalid_count += 1
                 continue
-            if not (sl_x0 - 1e-6 <= deduped[-1].x <= sl_x1 + 1e-6):
+            if not _within_slope_limits(deduped[-1].x, sl_sets, 1e-6):
                 result.invalid_count += 1
                 continue
 
@@ -3523,13 +3617,21 @@ class PathSearch(BaseSearch):
         # daylight. Automatic (None) means the whole ground profile, which
         # is where the reference puts the two markers when the External
         # Boundary is created.
-        if self.slope_limits is not None:
-            sl_x0, sl_x1 = sorted(self.slope_limits)
-            sl_x0 = max(sl_x0, x_left)
-            sl_x1 = min(sl_x1, x_right)
-            if sl_x1 - sl_x0 <= 1e-9:
+        # v0.1.146 — ``sl_sets`` are the windows a surface may daylight in
+        # (D50); ``sl_x0/sl_x1`` stay the SPAN, because everything below
+        # that reads them — the slope height H, the segment length, the
+        # initiation range — asks about the stretch of ground being
+        # searched, not about admissibility.
+        sl_sets = self.slope_limit_sets
+        if sl_sets is not None:
+            sl_sets = tuple((max(lo, x_left), min(hi, x_right))
+                            for lo, hi in sl_sets
+                            if min(hi, x_right) - max(lo, x_left) > 1e-9)
+            if not sl_sets:
                 return result
+            sl_x0, sl_x1 = _slope_limits_hull(sl_sets)
         else:
+            sl_sets = ((x_left, x_right),)
             sl_x0, sl_x1 = x_left, x_right
 
         # v0.1.118 — H is the height of the SLOPE, not of the model, and
@@ -3603,11 +3705,26 @@ class PathSearch(BaseSearch):
         # answer starts, and its own minimum came out pinned against the
         # left edge of the window, which is what a clipped optimum looks
         # like. Defect D21 / anomaly A19-1.
-        sl_mid = 0.5 * (sl_x0 + sl_x1)
-        if toe_pt.x <= sl_mid:
-            init_x0, init_x1 = sl_x0, sl_mid
+        #
+        # v0.1.146 — the rule the reference states has two halves, and only
+        # the first was reachable before D50: "if a SINGLE set of Slope
+        # Limits is defined, [the program] will automatically divide the
+        # range in half, and use the range closest to the toe"; "if a
+        # DOUBLE set is defined, [it] will use the range closest to the toe
+        # of the slope". So with two windows the toe-side window IS the
+        # initiation range and nothing gets halved — which is also why the
+        # reference recommends the double set for this search in
+        # particular: it lets the initiation range be stated outright
+        # instead of inferred from a midpoint.
+        if len(sl_sets) > 1:
+            init_x0, init_x1 = min(
+                sl_sets, key=lambda w: abs(0.5 * (w[0] + w[1]) - toe_pt.x))
         else:
-            init_x0, init_x1 = sl_mid, sl_x1
+            sl_mid = 0.5 * (sl_x0 + sl_x1)
+            if toe_pt.x <= sl_mid:
+                init_x0, init_x1 = sl_x0, sl_mid
+            else:
+                init_x0, init_x1 = sl_mid, sl_x1
 
         # The endpoint is FILTERED by the Slope Limits and nothing else:
         # "the Slope Limits do not influence the location of the endpoint,
@@ -3676,7 +3793,7 @@ class PathSearch(BaseSearch):
                 self.progress_cb(min(result.valid_count, self.num_surfaces),
                                  self.num_surfaces)
             verts = self._generate_path_xstabl(
-                rng, top, init_x0, init_x1, sl_x0, sl_x1, crest_target,
+                rng, top, init_x0, init_x1, sl_sets, crest_target,
                 seg_len, ang_lo, ang_hi, to_right, self._y_floor,
             )
             if verts is None or len(verts) < 3:
@@ -3718,7 +3835,7 @@ class PathSearch(BaseSearch):
 
     # ------------------------------------------------------------------
     def _generate_path_xstabl(
-        self, rng, top, init_x0, init_x1, sl_x0, sl_x1, crest_target,
+        self, rng, top, init_x0, init_x1, sl_sets, crest_target,
         seg_len, ang_lo, ang_hi, to_right, y_floor,
     ):
         """Grow one irregular surface following the XSTABL method.
@@ -3809,8 +3926,9 @@ class PathSearch(BaseSearch):
         # 4. The endpoint must daylight WITHIN THE SLOPE LIMITS. That is
         #    the whole of the rule: the limits filter the endpoint, they do
         #    not place it.
+        #    v0.1.146 — one of the windows, not the span between them (D50).
         ex = pts[-1][0]
-        if not (sl_x0 - 1e-6 <= ex <= sl_x1 + 1e-6):
+        if not _within_slope_limits(ex, sl_sets, 1e-6):
             return None
 
         # Order left→right
