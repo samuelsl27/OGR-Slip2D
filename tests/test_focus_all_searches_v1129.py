@@ -40,6 +40,16 @@ Note this is NOT ``min_elevation`` restated. That filter says how deep a
 surface MAY go; the tangent focus says it must actually GET there. A
 shallow surface passes the filter and fails the focus, and that
 difference is the two cases of problem 78.
+
+**The second invariant, added in v0.1.147**: the Minimum Area filter has
+to MOVE THE NUMBER in every search, and not merely reach it. The file
+kept both halves of D51 from v0.1.129 onwards, but only the half that
+asks whether ``build_search`` hands the value over —
+``TestMinimumAreaReachesEverySearch`` — and its closure criterion asked
+for the other one, with the difference measured. Writing it turned up two
+faults in the annealing's own copy of the filter, one of which loses a
+surface the filter accepts; they are pinned in
+``TestTheAnnealingMeasuresTheMassNotTheChord``.
 """
 from __future__ import annotations
 
@@ -637,3 +647,304 @@ class TestMinimumAreaReachesEverySearch:
             p.settings.search.search_method = m
             got = build_search(p, "bishop_simplified").min_area
             assert got == expected[m], (m, got, expected[m])
+
+
+# ======================================================================
+# v0.1.147 — the half of D51 its closure criterion asked for and v0.1.129
+# did not write: the difference MEASURED. Everything below is that.
+# ======================================================================
+def _mass_area(result) -> float:
+    """The sliding mass the Minimum Area filter actually measures.
+
+    ``Σ wᵢ · max(hᵢ, 0)`` over the critical surface's slices, which is
+    literally the quantity ``BaseSearch._best_of_masses`` filters on
+    (search.py, guard "Filter by minimum area"). Deliberately not a
+    shoelace area of the closed polygon: asking the same question a
+    second way is how two answers drift apart, and this test exists to
+    compare against the filter, not against a second opinion of it.
+    """
+    return sum(s.width * max(s.height, 0.0) for s in result.critical.slices)
+
+
+class TestMinimumAreaMovesTheNumber:
+    """Rule 7 for ``min_area``, one per branch of ``build_search``. D51.
+
+    ``TestMinimumAreaReachesEverySearch`` above proves the value ARRIVES
+    at every search. That is a different claim from this one, and D51 is
+    the reason to insist on both: its closure criterion asked for a test
+    with the difference measured precisely because a setting that arrives
+    and does nothing is what rule 7 exists to catch — and for two
+    versions that is exactly what the Path Search had.
+
+    Measured before the assertions were written (Bishop, 15 slices,
+    ``_layered_slope``), and these are the numbers pinned below:
+
+        búsqueda        sin filtro (fos/masa)   umbral   con filtro
+        grid            1.404986 /  545.5        790     1.427060 /  846.0
+        slope           1.398087 /  500.5        730     1.410675 /  916.8
+        auto_refine     1.434097 /  729.9       1060     1.459480 / 1112.0
+        auto_refine_nc  1.381270 /  716.6       1040     1.395700 / 1093.7
+        block           1.353433 / 1135.2       1650     1.512543 / 1882.4
+        path            1.235715 /  833.8       1210     1.265391 / 1233.9
+        particle_swarm  1.426210 /  487.0        710     1.504052 /  772.8
+        annealing       1.304561 /  420.8        440     1.524180 /  444.4
+
+    The thresholds are not round numbers chosen for looks: each one sits
+    about 45 % above the mass its own search returns unfiltered, which is
+    the only way the filter can bind — a threshold below what the search
+    already finds is a setting that legitimately does nothing, and would
+    make this test pass while proving nothing at all.
+
+    Cost: 13 s for the eight pairs. The Path Search is the expensive one
+    (3.6 s) because it keeps drawing until it has its quota of VALID
+    surfaces and the filter rejects most draws; its ``num_surfaces`` is
+    150 here and 250 in the focus tests above for that reason alone.
+    """
+
+    def _pair(self, cls, threshold, **kw):
+        """The same search with and without the filter, same seed."""
+        base = dict(method=_method(), num_slices=15, **kw)
+        free = cls(min_area=0.0, **base).run(_layered_slope())
+        held = cls(min_area=threshold, **base).run(_layered_slope())
+        return threshold, free, held
+
+    def _assert_moved(self, threshold, free, held, label):
+        assert free.critical is not None, "%s found nothing unfiltered" % label
+        assert held.critical is not None, "%s found nothing filtered" % label
+        # The unfiltered answer is one the filter would have refused …
+        assert _mass_area(free) < threshold, (label, _mass_area(free))
+        # … the filtered one is a mass the filter accepts …
+        assert _mass_area(held) >= threshold - 1e-6, (label, _mass_area(held))
+        # … and the number the user reads is a different number.
+        assert abs(held.min_fos - free.min_fos) > 1e-6, (
+            label, free.min_fos, held.min_fos)
+
+    def test_grid_search(self):
+        from ogr_slip2d.search import GridSearch
+        self._assert_moved(*self._pair(
+            GridSearch, 790.0, grid_nx=8, grid_ny=8, radius_increment=8),
+            "grid")
+
+    def test_slope_search(self):
+        from ogr_slip2d.search import SlopeSearch
+        self._assert_moved(*self._pair(
+            SlopeSearch, 730.0, num_surfaces=250, seed=5), "slope")
+
+    def test_auto_refine_search(self):
+        from ogr_slip2d.search import AutoRefineSearch
+        self._assert_moved(*self._pair(
+            AutoRefineSearch, 1060.0, divisions=8, circles_per_division=6,
+            iterations=3), "auto_refine")
+
+    def test_auto_refine_non_circular_search(self):
+        from ogr_slip2d.search import AutoRefineNonCircularSearch
+        self._assert_moved(*self._pair(
+            AutoRefineNonCircularSearch, 1040.0, num_vertices=8, divisions=8,
+            circles_per_division=6, iterations=3), "auto_refine_nc")
+
+    def test_block_search(self):
+        from ogr_slip2d.search import BlockSearch
+        self._assert_moved(*self._pair(
+            BlockSearch, 1650.0, num_groups=3, num_surfaces=400, seed=5),
+            "block")
+
+    def test_path_search(self):
+        """The branch the defect was in: until v0.1.129 this one pinned
+        ``min_area`` at 1.0 whatever the project declared."""
+        from ogr_slip2d.search import PathSearch
+        self._assert_moved(*self._pair(
+            PathSearch, 1210.0, num_surfaces=150, seed=5), "path")
+
+    def test_particle_swarm_search(self):
+        from ogr_slip2d.particle_swarm import ParticleSwarmSearch
+        self._assert_moved(*self._pair(
+            ParticleSwarmSearch, 710.0, num_particles=12, num_iterations=8,
+            seed=5), "particle_swarm")
+
+    def test_simulated_annealing_search(self):
+        """440 and not more, and the reason is measured: this search
+        has a ceiling the other seven do not — see
+        ``TestTheAnnealingIsCutOffByItsOwnFilter`` below."""
+        from ogr_slip2d.search import SimulatedAnnealingSearch
+        self._assert_moved(*self._pair(
+            SimulatedAnnealingSearch, 440.0, initial_vertices=6,
+            generation_steps=25, seed=5), "simulated_annealing")
+
+
+# ----------------------------------------------------------------------
+def _ground_profile(project):
+    """The External boundary's upper contour, the way every search gets
+    it. Reused rather than rebuilt so the tests below measure against the
+    same profile the engine does."""
+    from ogr_core.geometry import BoundaryType
+    from ogr_slip2d.search import PathSearch
+    ext = [b for b in project.boundaries
+           if b.btype == BoundaryType.EXTERNAL][0]
+    return PathSearch._ground_profile(ext.polyline.vertices)
+
+
+def _annealing_on(project, min_area):
+    """A Simulated Annealing search wired as :meth:`run` wires it.
+
+    ``_top`` is what :meth:`run` fills in from the External boundary; a
+    candidate evaluated outside a run has to be handed the same thing, or
+    the guard falls back to the chord it used before v0.1.147.
+    """
+    from ogr_slip2d.search import SimulatedAnnealingSearch
+    s = SimulatedAnnealingSearch(method=_method(), num_slices=15,
+                                 min_area=min_area, seed=5)
+    s._top = _ground_profile(project)
+    return s
+
+
+class TestTheAnnealingMeasuresTheMassNotTheChord:
+    """v0.1.147 — the guard that filters candidates inside the annealing.
+
+    ``_evaluate_polyline`` guard (d) is the Minimum Area filter as the
+    annealing applies it, and it had two faults that closing D51 turned
+    up on the way past. They are not the same size:
+
+    **The floor.** The comparison read ``max(self.min_area, 0.5)``. A
+    project declaring 0.2 got 0.5 in this search and 0.2 in the other
+    seven, and one declaring 0 could not switch the guard off at all.
+    That is rule 7 in miniature, and it is the one that moves a number.
+
+    **The measure.** The area was integrated between the surface and the
+    ENTRY-EXIT CHORD, while the filter every other search applies — and
+    which this same candidate meets again downstream in
+    ``_best_of_masses`` — is the mass between the surface and the
+    GROUND. They agree only when the ground between the two ends is a
+    straight line, and on this slope they do not: for the deep candidate
+    below, chord 1245.0000 against ground 1416.4286, both computable by
+    hand from the profile (0,10)-(25,10)-(60,40)-(85,40).
+
+    Which direction matters took measuring to get right. When the chord
+    OVERSTATES the mass the fault is invisible: the candidate passes
+    guard (d) and ``_best_of_masses`` throws it out immediately
+    afterwards on the true mass, so the answer never changes — 75
+    combinations of seed and threshold on this model, not one of them
+    different. When the chord UNDERSTATES it, nothing downstream can
+    undo it: the surface is gone before it is ever analysed, and it is a
+    surface whose declared mass QUALIFIES. That is the case pinned here.
+    """
+
+    # Entry on the flat below the toe, exit on the crest plateau — so the
+    # ground between the two ends is anything but a straight line.
+    DEEP = [(15.0, 10.0), (30.0, 0.0), (45.0, -3.0), (60.0, 2.0),
+            (75.0, 22.0), (80.0, 40.0)]
+    CHORD_AREA = 1245.0000
+    GROUND_AREA = 1416.4286
+
+    def _verts(self, pts):
+        from ogr_core.geometry import Vertex
+        return [Vertex(x, y) for x, y in pts]
+
+    def test_the_two_measures_are_the_hand_computed_ones(self):
+        """The premise of the test below, checked and not assumed."""
+        from ogr_slip2d.search import SimulatedAnnealingSearch as SA
+
+        p = _layered_slope()
+        top = _ground_profile(p)
+        verts = self._verts(self.DEEP)
+        x0, y0 = verts[0].x, verts[0].y
+        xn, yn = verts[-1].x, verts[-1].y
+        chord = ground = 0.0
+        for a, b in zip(verts[:-1], verts[1:]):
+            t0 = (a.x - x0) / (xn - x0)
+            t1 = (b.x - x0) / (xn - x0)
+            chord += 0.5 * ((y0 + t0 * (yn - y0) - a.y)
+                            + (y0 + t1 * (yn - y0) - b.y)) * (b.x - a.x)
+            ground += 0.5 * ((SA._interp_top_y(top, a.x) - a.y)
+                             + (SA._interp_top_y(top, b.x) - b.y)) * (b.x - a.x)
+        assert abs(chord - self.CHORD_AREA) < 1e-3, chord
+        assert abs(ground - self.GROUND_AREA) < 1e-3, ground
+
+    def test_a_surface_the_filter_accepts_is_no_longer_thrown_away(self):
+        """Threshold BETWEEN the two measures: 1330.7.
+
+        Its real mass is 1416.4, so the Minimum Area filter accepts it
+        and every other search would analyse it. Measured against the
+        chord it comes to 1245.0, and the annealing discarded it.
+        """
+        p = _layered_slope()
+        verts = self._verts(self.DEEP)
+        res, _ = _annealing_on(p, 1330.7)._evaluate_polyline(p, verts)
+        assert res is not None, "the annealing still refuses a qualifying mass"
+
+        # And the chord is what refused it: ``_top`` unset is the guard as
+        # it stood before v0.1.147, which is also its fallback today.
+        old = _annealing_on(p, 1330.7)
+        old._top = None
+        assert old._evaluate_polyline(p, verts)[0] is None
+
+    def test_a_declared_value_below_the_old_floor_decides(self):
+        """The sliver's mass is ``2 · depth``, exactly.
+
+        Four vertices one metre apart on the slope face, the two inner
+        ones sunk by ``depth``: the trapezoids come to
+        ``(0+d)/2 + (d+d)/2 + (d+0)/2 = 2d``. So the pair below straddles
+        a declared 0.2 by construction — 0.30 accepted, 0.10 refused —
+        and both of them used to be refused by the 0.5 the guard applied
+        instead of the declared value.
+        """
+        p = _layered_slope()
+
+        def sliver(depth):
+            def gy(x):
+                return 10.0 + (x - 25.0) * 30.0 / 35.0
+            return self._verts([(40.0, gy(40.0)),
+                                (41.0, gy(41.0) - depth),
+                                (42.0, gy(42.0) - depth),
+                                (43.0, gy(43.0))])
+
+        assert _annealing_on(p, 0.2)._evaluate_polyline(
+            p, sliver(0.15))[0] is not None       # mass 0.30 >= 0.20
+        assert _annealing_on(p, 0.2)._evaluate_polyline(
+            p, sliver(0.05))[0] is None           # mass 0.10 <  0.20
+        # …and the declared number is what decides, not a constant: the
+        # same 0.30 sliver goes when the project asks for 0.5.
+        assert _annealing_on(p, 0.5)._evaluate_polyline(
+            p, sliver(0.15))[0] is None
+
+
+class TestTheAnnealingIsCutOffByItsOwnFilter:
+    """A measured limitation, pinned rather than papered over.
+
+    The Minimum Area filter narrows seven searches and CUTS OFF the
+    eighth, and the ceiling is the WALK and not the filter: of the 102
+    candidates the annealing builds on this model, the largest mass is
+    512, so a threshold above that leaves its first step with nothing to
+    accept and the search returns having evaluated nothing.
+
+    Same shape as ``TestGuidedSearchesCanBeCutOffByTheirFocus`` above,
+    and worth pinning for the same reason: a search that answers "none"
+    is telling the truth, and the day it answers something else that is
+    news.
+    """
+
+    def _run(self, min_area):
+        from ogr_slip2d.search import SimulatedAnnealingSearch
+        return SimulatedAnnealingSearch(
+            method=_method(), num_slices=15, initial_vertices=6,
+            generation_steps=25, seed=5, min_area=min_area,
+        ).run(_layered_slope())
+
+    def test_it_still_answers_just_below_its_ceiling(self):
+        r = self._run(420.0)
+        assert r.critical is not None
+        assert _mass_area(r) >= 420.0
+
+    def test_above_the_ceiling_it_returns_nothing_at_all(self):
+        r = self._run(450.0)
+        assert r.critical is None
+        assert r.valid_count == 0
+
+    def test_and_the_surfaces_it_cannot_reach_do_exist(self):
+        """The proof that this is the walk and not the model: another
+        search finds a qualifying mass on the same project at the same
+        threshold."""
+        from ogr_slip2d.search import PathSearch
+        r = PathSearch(method=_method(), num_slices=15, num_surfaces=150,
+                       seed=5, min_area=450.0).run(_layered_slope())
+        assert r.critical is not None
+        assert _mass_area(r) >= 450.0

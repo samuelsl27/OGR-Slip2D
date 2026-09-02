@@ -1170,10 +1170,16 @@ class ProjectSettings:
         two were declared, editable, saved to the .ogr and read by nobody
         (anomaly A37-1), which is rule 7 exactly.
 
-        ``None`` means OFF and is passed through as such. ``min_area`` is
-        deliberately NOT here: it has a different per-search default when
-        unset (``or 1.0``, ``or 0.5``, ``or 2.0``), so it cannot travel in
-        a dict that every branch expands the same way.
+        ``None`` means OFF and is passed through as such.
+
+        ``min_area`` is not here, and the reason changed in v0.1.129:
+        until then it was handed to six branches by hand and forgotten by
+        the seventh (defect D51). It now travels in ``build_search``'s
+        ``common`` like the rest, with its per-search default when unset
+        (0.5 Auto Refine, 2.0 Block, 1.0 the others) resolved once in
+        ``_MIN_AREA_FALLBACK``. That map is what keeps it out of this
+        method: the fallback depends on the SEARCH METHOD, and turning a
+        setting into a search argument is what ``analysis_runner`` is for.
         """
         s = self.search
         return {

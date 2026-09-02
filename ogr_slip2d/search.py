@@ -4145,6 +4145,11 @@ class SimulatedAnnealingSearch(BaseSearch):
                                                     temperature_coefficient))
         self.convex_only = convex_only
         self.min_area = min_area
+        # Filled in by :meth:`run` from the External boundary. Declared
+        # here because guard (d) of ``_evaluate_polyline`` reads it, and a
+        # candidate evaluated outside a run has to fall back to something
+        # deliberate rather than to a missing attribute.
+        self._top = None
         self.progress_cb = progress_cb
 
     # ==================================================================
@@ -4185,6 +4190,12 @@ class SimulatedAnnealingSearch(BaseSearch):
         top = PathSearch._ground_profile(ext.polyline.vertices)
         if len(top) < 2:
             return result
+
+        # v0.1.147 — the ground profile reaches ``_evaluate_polyline`` the
+        # same way ``_ext_poly`` does, and for the same reason: the guard
+        # measures the sliding MASS, and a mass is bounded above by the
+        # ground, not by the entry-exit chord. See guard (d) there.
+        self._top = top
 
         # External polygon for inside-tests
         self._ext_poly = None
@@ -4345,16 +4356,50 @@ class SimulatedAnnealingSearch(BaseSearch):
                 return None, None
 
         # (d) minimum area of the sliding mass (reject slivers)
+        #
+        # v0.1.147 — measured AGAINST THE GROUND, and no longer against the
+        # entry-exit chord. The two agree only when the ground between the
+        # two ends is a straight line, and the Minimum Area filter of every
+        # other search is the mass ``Σ wᵢ·max(hᵢ,0)`` between surface and
+        # ground (see ``_best_of_masses``).
+        #
+        # The direction of the old error is what decides whether this
+        # matters, and it is not symmetric. Where the chord OVERSTATED the
+        # mass nothing was lost: the candidate passed this guard and
+        # ``_best_of_masses`` refused it moments later on the true mass, so
+        # the answer never changed — A/B in one process, 75 combinations of
+        # seed and threshold, not one of them different. Where the chord
+        # UNDERSTATES it, nothing downstream can undo it: the surface is
+        # discarded before it is ever analysed, and its declared mass
+        # QUALIFIES. Measured on the slope of ``test_focus_all_searches``,
+        # for a surface entering on the flat and leaving on the crest
+        # plateau: chord 1245.0000 against a real mass of 1416.4286.
+        #
+        # The ``max(self.min_area, 0.5)`` that used to sit on the
+        # comparison went with it: a floor is a filter of its own, and this
+        # was the only search that had one. A project declaring 0.2 got
+        # 0.5 here and 0.2 everywhere else, and a project declaring 0 could
+        # not turn the guard off at all. Rule 7. Defect D51b.
+        top = getattr(self, "_top", None)
         area = 0.0
         for a, b in zip(verts[:-1], verts[1:]):
-            # area between chord-top and surface (trapezoids vs entry-exit
-            # chord); use simple |∫(chord - surface) dx|
-            tt0 = (a.x - x0v) / (xnv - x0v) if xnv > x0v else 0.0
-            tt1 = (b.x - x0v) / (xnv - x0v) if xnv > x0v else 0.0
-            c0 = y0v + tt0 * (ynv - y0v)
-            c1 = y0v + tt1 * (ynv - y0v)
-            area += 0.5 * ((c0 - a.y) + (c1 - b.y)) * (b.x - a.x)
-        if abs(area) < max(self.min_area, 0.5):
+            if top is not None:
+                g0 = self._interp_top_y(top, a.x)
+                g1 = self._interp_top_y(top, b.x)
+                # Outside the ground profile there is no mass to measure,
+                # and no surface to keep: guard (e) refuses it as well.
+                if g0 is None or g1 is None:
+                    return None, None
+            else:
+                # No run in progress (a candidate evaluated directly). Fall
+                # back to the chord, which is what this guard used until
+                # v0.1.147, rather than silently accepting everything.
+                tt0 = (a.x - x0v) / (xnv - x0v) if xnv > x0v else 0.0
+                tt1 = (b.x - x0v) / (xnv - x0v) if xnv > x0v else 0.0
+                g0 = y0v + tt0 * (ynv - y0v)
+                g1 = y0v + tt1 * (ynv - y0v)
+            area += 0.5 * ((g0 - a.y) + (g1 - b.y)) * (b.x - a.x)
+        if abs(area) < self.min_area:
             return None, None
 
         # (e) every vertex inside the External polygon (definitive guard
