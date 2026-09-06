@@ -244,6 +244,11 @@ El experimento que lo cerraría, **pendiente**:
 > radios responden las dos preguntas de arriba a la vez, más si el 5 % sigue
 > siendo 5 %.
 
+**Medido en v0.1.148** (`grid_radius_two_windows_v1148.md`): un muro con tres
+caras verticales y un solo juego de límites reproduce esta regla en 440
+centros a 9,4e-14 (modelo E del experimento D77). Lo que sí cambia la regla
+es declarar **dos** juegos, que es lo que ese documento despeja.
+
 ## 8 · `min_radius`
 
 La referencia **no tiene** control de radio mínimo; ofrece *Minimum Elevation*

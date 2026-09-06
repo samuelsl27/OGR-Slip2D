@@ -1871,6 +1871,16 @@ class GridSearch(BaseSearch):
         """
         if not slope_pts or len(slope_pts) < 2:
             return None
+        # v0.1.148 — with TWO windows the reference generates differently,
+        # and nothing above applies. Measured, not inferred: see
+        # ``_radius_bracket_two_windows``. One window keeps the rule below
+        # byte for byte; a wall with vertical faces was run in the
+        # reference with one window (model E of the D77 experiment) and
+        # reproduced it at 9e-14 over 440 centres.
+        sets = self.slope_limit_sets
+        if sets is not None and len(sets) >= 2:
+            return self._radius_bracket_two_windows(
+                xc, yc, slope_pts, sets[0], sets[-1])
         d_min = max(self._distance_to_surface(xc, yc, slope_pts),
                     self.min_radius)
         # The FIRST limit reached as the radius grows, not the farthest one:
@@ -1882,6 +1892,230 @@ class GridSearch(BaseSearch):
         d_max = max(d_max, d_min)
         delta = self.RADIUS_INSET * (d_max - d_min)
         return d_min + delta, d_max - delta
+
+    # The relative margin the reference leaves at a bracket end fixed by a
+    # profile corner when TWO windows are declared. MEASURED (v0.1.148): on
+    # the D77 wall, r_first = 1.001 * |C - corner| and r_last = 0.999 *
+    # |C - toe| at every one of 440 centres, with Radius Increment 1 and 10
+    # alike; an end fixed by a limit point carries no margin at all.
+    TWO_WINDOW_INSET = 0.001
+
+    @staticmethod
+    def _window_segments(pts, w_lo, w_hi, tol):
+        """The pieces of the profile that belong to one window's surface.
+
+        A segment belongs if its x-extent OVERLAPS the open window — so a
+        limit falling mid-segment takes the segment WHOLE, out to the next
+        vertex — and a vertical face belongs only when it stands strictly
+        INSIDE the window. Both clauses are measured, not chosen (D77,
+        2026-09-06): reading "touches the window at either end" put the
+        bench at y = 12 into the crest window and broke 16 centres of the
+        bank grid; keeping the face at x = 8.4 (the crest window's own
+        edge) collapsed the bracket at (-8.889, 15) where the reference
+        emits 61 distinct radii.
+
+        Each entry is ``(ax, ay, bx, by, nx, ny)`` with ``(nx, ny)`` the
+        normal pointing INTO the soil: the profile runs left to right with
+        the ground below it, so ``(dy, -dx)`` points down on a bench and
+        towards the retained side of a vertical face.
+        """
+        out = []
+        for a, b in zip(pts[:-1], pts[1:]):
+            lo, hi = min(a.x, b.x), max(a.x, b.x)
+            vertical = abs(b.x - a.x) <= tol
+            if vertical:
+                keep = w_lo + tol < a.x < w_hi - tol
+            else:
+                keep = hi > w_lo + tol and lo < w_hi - tol
+            if keep:
+                out.append((a.x, a.y, b.x, b.y, b.y - a.y, -(b.x - a.x)))
+        return out
+
+    @staticmethod
+    def _circle_crossings(xc, yc, r, segs):
+        """Where a circle meets the window surfaces, sorted by angle.
+
+        Each crossing is ``(theta, label, nx, ny, x)``: its polar angle
+        about the centre, the window it lies in by abscissa (0 when the
+        segment extends past the window and the crossing fell outside it),
+        the soil-side normal of the segment it lies on, and its x.
+        """
+        out = []
+        for (ax, ay, bx, by, nx, ny), label_fn in segs:
+            dx, dy = bx - ax, by - ay
+            fx, fy = ax - xc, ay - yc
+            A = dx * dx + dy * dy
+            if A <= 0.0:
+                continue
+            B = 2.0 * (fx * dx + fy * dy)
+            C = fx * fx + fy * fy - r * r
+            D = B * B - 4.0 * A * C
+            if D <= 0.0:
+                continue
+            sq = math.sqrt(D)
+            for t in ((-B - sq) / (2.0 * A), (-B + sq) / (2.0 * A)):
+                if 0.0 <= t <= 1.0:
+                    x, y = ax + t * dx, ay + t * dy
+                    out.append((math.atan2(y - yc, x - xc), label_fn(x),
+                                nx, ny, x))
+        out.sort()
+        return out
+
+    def _two_window_circle_is_valid(self, xc, yc, r, segs) -> bool:
+        """Does this circle carry a mass from window 1 to window 2?
+
+        Valid means: two CONSECUTIVE crossings of the window surfaces,
+        one inside window 1 where the arc ENTERS the soil and the next
+        inside window 2 where it LEAVES, in either sense of travel. Nothing
+        between the windows is looked at: the gap is not part of either
+        surface, which is exactly what lets the reference accept a circle
+        that cuts the second bench on its way from the toe to the crest.
+        """
+        cr = self._circle_crossings(xc, yc, r, segs)
+        n = len(cr)
+        if n < 2:
+            return False
+        for i in range(n):
+            for sense in (1, -1):
+                th, lab, nx, ny, _x = cr[i]
+                th2, lab2, nx2, ny2, _x2 = cr[(i + sense) % n]
+                if lab != 1 or lab2 != 2:
+                    continue
+                # Tangent of the arc in this sense of travel, dotted with
+                # the soil-side normal: positive means going into the soil.
+                if (-math.sin(th) * sense) * nx + (math.cos(th) * sense) * ny <= 0:
+                    continue
+                if (-math.sin(th2) * sense) * nx2 + (math.cos(th2) * sense) * ny2 > 0:
+                    continue
+                return True
+        return False
+
+    def _radius_bracket_two_windows(self, xc, yc, pts, w1, w2):
+        """The (r_min, r_max) sampled at one centre with TWO Slope Limit
+        windows declared.
+
+        v0.1.148 — READ OFF THE REFERENCE, defect D77. The bank's eight
+        tiered walls (verification problems 87-94) declare an exit window
+        on the lower bench and an entry window on the crest, and with the
+        one-window rule above no centre left of the toe could generate a
+        toe circle: ``d_max`` stopped at the model's corner (0, 6). The
+        reference's own grid, run on the same wall
+        (``referencias/Ejemplos/00_2026_09_06_Test_Muro_D77``, models A, B
+        and C, 782 centres with every generated radius listed), emits from
+        the published centre (-5.713, 20.432) the bracket [17.264, 18.568]
+        where this engine emitted [15.142, 15.502]. Model E — the same
+        wall with ONE window — reproduced the one-window rule at 9e-14,
+        so the difference is the second window, nothing else.
+
+        The rule
+        --------
+        With ``S1`` and ``S2`` the surfaces of the two windows (see
+        ``_window_segments``):
+
+        1. a radius is VALID when the circle meets ``S1`` and ``S2`` in two
+           consecutive crossings, entering the soil in window 1 and
+           leaving it in window 2 (``_two_window_circle_is_valid``);
+        2. ``[R_lo, R_hi]`` is the range of valid radii. Validity can only
+           change at a radius equal to the distance from the centre to a
+           vertex, a limit point or the foot of a perpendicular, so the
+           range is read off that candidate list without any scan;
+        3. ``r_min = R_lo * 1.001`` when ``R_lo`` is fixed by a profile
+           corner (the circle has to pass under the concave corner at the
+           end of the exit bench), ``r_min = R_lo`` when it is fixed by a
+           limit point (the crest crossing reaching the window's edge);
+           the same for ``r_max`` with ``0.999`` (the circle through the
+           toe) or none (the crossing reaching the far limit);
+        4. if the two ends cross, ``r_min`` is emitted twice; if no radius
+           is valid at all, the tangent radius to the hull surface is
+           emitted twice — a circle no slicer accepts — because the
+           population must stay ``(nx+1)(ny+1)(rinc+1)``. The reference
+           does the same in kind: at its 40 such centres of the bank grid
+           it emits 61 circles and not one of them resolves.
+
+        How it was measured
+        -------------------
+        Model A (Radius Increment 1, 440 centres) gives the bare bracket
+        at each centre; B (Increment 10, same grid) repeats its two ends
+        exactly and spaces the rest uniformly (9e-14); C is the bank's own
+        grid (342 centres, Increment 60). This rule reproduces:
+
+            A   440 of 440 centres           worst 8.9e-14
+            C   299 of 299 with valid circles  worst 5.0e-10
+                43 centres without a valid radius: the reference's 61
+                circles at each fail too (0 valid of 2623)
+
+        Readings discarded on the way, each with the centre that killed
+        it, are in ``docs/audits/grid_radius_two_windows_v1148.md``. The
+        documentation of the reference says only that with two sets it
+        "searches each set of limits independently, as well as between the
+        two"; the rule above is what that sentence turned out to mean.
+
+        What is NOT measured: an outer limit falling mid-segment (both
+        outer limits of the wall sit on vertices), and more than one
+        valid interval per centre (every measured centre has exactly
+        one). The first takes the clipped profile as given; the second
+        takes the lowest and the highest valid radius.
+        """
+        span = max(pts[-1].x - pts[0].x, 1e-300)
+        tol = 1e-9 * span
+        w1_lo, w1_hi = sorted(w1)
+        w2_lo, w2_hi = sorted(w2)
+
+        def label(x):
+            if w1_lo - tol <= x <= w1_hi + tol:
+                return 1
+            if w2_lo - tol <= x <= w2_hi + tol:
+                return 2
+            return 0
+
+        segs = [(s, label) for s in self._window_segments(pts, w1_lo, w1_hi, tol)]
+        segs += [(s, label) for s in self._window_segments(pts, w2_lo, w2_hi, tol)]
+
+        # Every radius at which the crossing pattern can change.
+        cands = set()
+        for (ax, ay, bx, by, _nx, _ny), _f in segs:
+            cands.add(math.hypot(xc - ax, yc - ay))
+            cands.add(math.hypot(xc - bx, yc - by))
+            dx, dy = bx - ax, by - ay
+            L2 = dx * dx + dy * dy
+            if L2 > 0.0:
+                t = ((xc - ax) * dx + (yc - ay) * dy) / L2
+                if 0.0 < t < 1.0:
+                    cands.add(math.hypot(xc - ax - t * dx, yc - ay - t * dy))
+        limit_distances = []
+        for bound in (w1_lo, w1_hi, w2_lo, w2_hi):
+            y = PathSearch._interpolate_top_y(pts, bound)
+            if y is not None:
+                limit_distances.append(math.hypot(xc - bound, yc - y))
+        cands.update(limit_distances)
+        cands = sorted(c for c in cands if c > tol)
+
+        # Validity is constant between consecutive candidates: probe the
+        # midpoints, and take the lowest and highest valid radius.
+        r_lo = r_hi = None
+        for a, b in zip(cands[:-1], cands[1:]):
+            if b - a <= tol:
+                continue
+            if self._two_window_circle_is_valid(xc, yc, 0.5 * (a + b), segs):
+                if r_lo is None:
+                    r_lo = a
+                r_hi = b
+        if r_lo is None:
+            d = self._distance_to_surface(xc, yc, pts)
+            d = max(d, self.min_radius)
+            return d, d
+
+        def fixed_by_a_limit(r) -> bool:
+            # The end IS a limit point's distance: the crossing sits on a
+            # window edge there, and the reference leaves it in place.
+            return any(abs(r - d) <= tol for d in limit_distances)
+
+        r_min = r_lo if fixed_by_a_limit(r_lo) else r_lo * (1.0 + self.TWO_WINDOW_INSET)
+        r_max = r_hi if fixed_by_a_limit(r_hi) else r_hi * (1.0 - self.TWO_WINDOW_INSET)
+        r_min = max(r_min, self.min_radius)
+        if r_max < r_min:
+            r_max = r_min
+        return r_min, r_max
 
     # ------------------------------------------------------------------
     def _centres(self, project: Project) -> list:
