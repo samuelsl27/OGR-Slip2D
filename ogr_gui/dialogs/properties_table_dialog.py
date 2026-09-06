@@ -142,21 +142,27 @@ class PropertiesTableDialog(QDialog):
         sups = list(getattr(self.project, "supports", []))
         if not sups:
             return [], []
+        from ogr_core.support import resolve_support_type
+        # v0.1.149 — the set each support computes with. This read
+        # ``s.support_type``, which no instance has, so the table had a
+        # blank Type column and not one parameter to compare (D66).
+        typed = [(s, getattr(s, "support_type", None)
+                  or resolve_support_type(self.project, s) or s)
+                 for s in sups]
         params: list = []
-        for s in sups:
-            stype = getattr(s, "support_type", None) or s
+        for _s, stype in typed:
             for k in (getattr(stype, "PARAMETERS", {}) or {}):
                 if k not in params:
                     params.append(k)
         headers = [tr("#"), tr("Type"), tr("Head"), tr("Tail")] + \
             [p.replace("_", " ") for p in params]
         rows = []
-        for i, s in enumerate(sups, 1):
-            stype = getattr(s, "support_type", None) or s
+        for i, (s, stype) in enumerate(typed, 1):
             head = getattr(s, "head", None)
             tail = getattr(s, "tail", None)
             row = [i,
-                   getattr(stype, "DISPLAY_NAME", None)
+                   getattr(stype, "_display_name", None)
+                   or getattr(stype, "DISPLAY_NAME", None)
                    or getattr(stype, "TYPE_ID", ""),
                    f"({head.x:.3f}, {head.y:.3f})" if head else "—",
                    f"({tail.x:.3f}, {tail.y:.3f})" if tail else "—"]

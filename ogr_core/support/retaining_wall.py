@@ -15,6 +15,7 @@ Author: Samuel Sáez López (UPCT)
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from uuid import uuid4
 from typing import ClassVar
 
 from .support import (ForceApplication, ForceOrientation, SupportType,
@@ -172,6 +173,9 @@ class RetainingWallEFP(SupportType):
     #: wall length.
     points: list = field(
         default_factory=lambda: [(0.0, 0.0), (1.0, 100.0)])
+    # v0.1.149 — the identity an instance names through ``type_ref``;
+    # see ``SupportType`` for why the class id was not enough.
+    id: str = field(default_factory=lambda: str(uuid4()), compare=False)
 
     # ------------------------------------------------------------------
     # The profile
@@ -351,6 +355,7 @@ class RetainingWallEFP(SupportType):
     def to_dict(self) -> dict:
         d = {
             "type_id": self.TYPE_ID,
+            "id": self.id,
             "profile_type": self.profile_type,
             "force_location": self.force_location,
             "pressure": self.pressure,
@@ -376,6 +381,9 @@ class RetainingWallEFP(SupportType):
             efp=data.get("efp", 25.0),
             distributed_over=data.get("distributed_over", 60.0),
             points=[tuple(p) for p in data.get("points", [])],
+            # A file older than v0.1.149 carries no id: a fresh one
+            # then, never None.
+            **({"id": data["id"]} if data.get("id") else {}),
         )
         if extras:
             inst._apply_extras(extras)

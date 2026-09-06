@@ -54,9 +54,12 @@ from .support import (
     SupportType,
     UserDefined,
     register_support,
+    resolve_support_type,
     support_from_dict,
+    support_type_pairs,
     interface_shear,
     support_registry,
+    unresolved_support_refs,
 )
 # Imported for its side effect as much as for the name: the
 # ``@register_support`` decorator runs on import, and this package
@@ -92,6 +95,9 @@ __all__ = [
     "HelicalAnchor",
     "support_registry",
     "support_from_dict",
+    "resolve_support_type",
+    "support_type_pairs",
+    "unresolved_support_refs",
     "register_support",
     "interface_shear",
     "BondProfile",

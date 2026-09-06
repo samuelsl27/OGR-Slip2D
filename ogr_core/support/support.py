@@ -136,6 +136,23 @@ class SupportType(ABC):
         - PARAMETERS: dict mapping param_name → (default, unit, description)
         - force_at(distance_from_head, total_length) → kN/m
         - to_dict / from_dict
+        - and declare ``id: str = field(default_factory=lambda:
+          str(uuid4()), compare=False)`` as their LAST dataclass
+          field, so positional constructors keep working (v0.1.149)
+
+    v0.1.149 — every property set carries an ``id`` of its own.
+    ``TYPE_ID`` names the CLASS and is shared by every set of that
+    class, which is what let two soil nails with different capacities
+    collapse into one in every place that built a ``{TYPE_ID: type}``
+    dictionary — the second set silently replaced the first in the
+    calculation while the file kept both (defect D66 of the
+    verification bank). ``compare=False`` keeps ``cls() == cls()``
+    true: two identical parameter sets are still equal, they are just
+    not the same set. A file written before this version has no id
+    and gets a fresh one on load; a :class:`SupportInstance` names a
+    set through ``type_ref`` and falls back to the class when it has
+    none — see :func:`resolve_support_type`, the ONE place that
+    answers the question.
     """
 
     TYPE_ID: ClassVar[str] = ""
@@ -324,6 +341,89 @@ def support_from_dict(data: dict) -> SupportType:
     return _SUPPORT_REGISTRY[tid].from_dict(data)
 
 
+def resolve_support_type(project, support) -> Optional[SupportType]:
+    """The property set a placed support computes with.
+
+    v0.1.149 — ONE answer to a question eight places used to answer on
+    their own, each with a ``{TYPE_ID: type}`` dictionary of its making.
+    ``project.support_types`` is a LIST, and a dictionary keyed by the class
+    id keeps the last set of each class and loses the rest without a word:
+    two soil nails with different capacities were computed, saved and
+    reloaded as if the second were the only one (defect D66).
+
+    Resolution order:
+
+    1. ``support.type_ref`` names a set by its ``id``. The class is then
+       read off THAT set and not off ``support.type_id``, so a set whose
+       class was changed in the editor still resolves to what it is now.
+    2. Otherwise the FIRST set of class ``support.type_id``. First, and not
+       last as the dictionaries did, because it is the set Add Support
+       places by default and the first row of the Define Support list —
+       the user's own reading of "the soil nail" when nothing said which.
+       With one set per class both readings are the same object, which is
+       why no file written before this version changes its number.
+    3. Otherwise a default-constructed type from the registry, as before:
+       a project may legitimately place a support without defining one.
+    4. ``None`` when the class itself is unknown.
+    """
+    types = list(getattr(project, "support_types", None) or ())
+    ref = getattr(support, "type_ref", None)
+    if ref:
+        for st in types:
+            if getattr(st, "id", None) == ref:
+                return st
+    tid = getattr(support, "type_id", "")
+    for st in types:
+        if getattr(st, "TYPE_ID", None) == tid:
+            return st
+    cls = _SUPPORT_REGISTRY.get(tid)
+    return cls() if cls is not None else None
+
+
+def support_type_pairs(project) -> list:
+    """``[(instance, resolved type)]`` for every placed support, in order.
+
+    Supports whose class is unknown are left out, as the engine leaves
+    them out. A model carries a handful of supports, and the engine asks
+    once per analysis or once per trial surface, never per slice.
+    """
+    out = []
+    for sup in (getattr(project, "supports", None) or ()):
+        st = resolve_support_type(project, sup)
+        if st is not None:
+            out.append((sup, st))
+    return out
+
+
+def unresolved_support_refs(project) -> dict:
+    """What :func:`resolve_support_type` had to GUESS, for the analysis to say.
+
+    ``{"ambiguous": [(instance, [candidate sets])],
+    "orphan": [(instance, set used or None)]}``. *Ambiguous*: the instance
+    names no set and its class has more than one, so rule 2 chose.
+    *Orphan*: it names a set the project no longer holds — a row deleted
+    in the editor, a file edited by hand — so the class decided instead.
+    Neither is an error; both are a number the user did not knowingly
+    choose, and a guess left unsaid is how a model comes to mean something
+    nobody typed.
+    """
+    types = list(getattr(project, "support_types", None) or ())
+    ids = {getattr(st, "id", None) for st in types}
+    ambiguous, orphan = [], []
+    for sup in (getattr(project, "supports", None) or ()):
+        ref = getattr(sup, "type_ref", None)
+        if ref and ref not in ids:
+            orphan.append((sup, resolve_support_type(project, sup)))
+            continue
+        if ref:
+            continue
+        tid = getattr(sup, "type_id", "")
+        same = [st for st in types if getattr(st, "TYPE_ID", None) == tid]
+        if len(same) > 1:
+            ambiguous.append((sup, same))
+    return {"ambiguous": ambiguous, "orphan": orphan}
+
+
 def _default_orientation(type_id: str) -> ForceOrientation:
     """``DEFAULT_ORIENTATION`` of a support type, by id.
 
@@ -375,6 +475,9 @@ class EndAnchored(SupportType):
 
     anchor_capacity: float = 200.0       # kN per anchor
     out_of_plane_spacing: float = 1.5    # m
+    # v0.1.149 — the identity an instance names through ``type_ref``;
+    # see ``SupportType`` for why the class id was not enough.
+    id: str = field(default_factory=lambda: str(uuid4()), compare=False)
 
     def force_at(self, distance_from_head: float, total_length: float,
                  bond=None) -> float:
@@ -468,6 +571,9 @@ class GroutedTieback(SupportType):
     bond_length_percent: float = 30.0
     out_of_plane_spacing: float = 2.0
     shear_capacity: float = 0.0
+    # v0.1.149 — the identity an instance names through ``type_ref``;
+    # see ``SupportType`` for why the class id was not enough.
+    id: str = field(default_factory=lambda: str(uuid4()), compare=False)
 
     def capacity_modes(self, distance_from_head: float,
                        total_length: float, bond=None) -> dict:
@@ -622,6 +728,9 @@ class GroutedTiebackFriction(SupportType):
     friction_angle_bond: float = 25.0
     out_of_plane_spacing: float = 2.0
     shear_capacity: float = 0.0
+    # v0.1.149 — the identity an instance names through ``type_ref``;
+    # see ``SupportType`` for why the class id was not enough.
+    id: str = field(default_factory=lambda: str(uuid4()), compare=False)
 
     def interface_tau(self, sigma_v_eff: float, **ctx) -> float:
         """Grout/soil interface strength at one point, kPa."""
@@ -763,6 +872,9 @@ class SoilNail(SupportType):
     bond_strength: float = 30.0
     out_of_plane_spacing: float = 1.5
     shear_capacity: float = 0.0
+    # v0.1.149 — the identity an instance names through ``type_ref``;
+    # see ``SupportType`` for why the class id was not enough.
+    id: str = field(default_factory=lambda: str(uuid4()), compare=False)
 
     def capacity_modes(self, distance_from_head: float,
                        total_length: float, bond=None) -> dict:
@@ -907,6 +1019,9 @@ class PileMicropile(SupportType):
     out_of_plane_spacing: float = 2.0
     pile_diameter: float = 0.6
     force_location: str = "intersection"
+    # v0.1.149 — the identity an instance names through ``type_ref``;
+    # see ``SupportType`` for why the class id was not enough.
+    id: str = field(default_factory=lambda: str(uuid4()), compare=False)
 
     # ------------------------------------------------------------------
     def _ito(self) -> bool:
@@ -1205,6 +1320,9 @@ class Geosynthetic(SupportType):
     reference_elevation: float = 0.0
     reference_depth: float = 0.0
     friction_factor_at_depth: float = 0.6
+    # v0.1.149 — the identity an instance names through ``type_ref``;
+    # see ``SupportType`` for why the class id was not enough.
+    id: str = field(default_factory=lambda: str(uuid4()), compare=False)
 
     def _friction_factor_at(self, y: float, depth: float) -> float:
         """F* at one point, constant or varying linearly with depth.
@@ -1339,6 +1457,9 @@ class UserDefined(SupportType):
     points: list = field(default_factory=lambda: [
         (0.0, 100.0), (5.0, 200.0), (10.0, 100.0),
     ])
+    # v0.1.149 — the identity an instance names through ``type_ref``;
+    # see ``SupportType`` for why the class id was not enough.
+    id: str = field(default_factory=lambda: str(uuid4()), compare=False)
 
     def force_at(self, distance_from_head: float, total_length: float,
                  bond=None) -> float:
@@ -1362,6 +1483,7 @@ class UserDefined(SupportType):
     def to_dict(self) -> dict:
         d = {
             "type_id": self.TYPE_ID,
+            "id": self.id,
             "out_of_plane_spacing": self.out_of_plane_spacing,
             "points": list(self.points),
         }
@@ -1376,6 +1498,9 @@ class UserDefined(SupportType):
         inst = cls(
             out_of_plane_spacing=data.get("out_of_plane_spacing", 1.0),
             points=[tuple(p) for p in data.get("points", [])],
+            # A file older than v0.1.149 carries no id: a fresh one
+            # then, never None.
+            **({"id": data["id"]} if data.get("id") else {}),
         )
         if extras:
             inst._apply_extras(extras)
@@ -1390,7 +1515,14 @@ class SupportInstance:
     """A concrete placement of a support in the model.
 
     Attributes:
-        type_id: ``SupportType.TYPE_ID`` of the property type used
+        type_id: ``SupportType.TYPE_ID`` of the property type used —
+            the CLASS, and the only reference a file older than
+            v0.1.149 has
+        type_ref: ``id`` of the concrete property set in
+            ``project.support_types`` (v0.1.149). ``None`` means the
+            file never said, and the class then decides — see
+            :func:`resolve_support_type` for the order and for why
+            two sets of one class used to collapse into one
         head: head end, at the slope FACE — where the plate is. Not a
             free choice: ``force_at`` measures the stripping length
             from here and the pullout length from the tail, and
@@ -1425,6 +1557,10 @@ class SupportInstance:
     name: str = ""
     color: str = "#4b0082"
     id: str = field(default_factory=lambda: str(uuid4()))
+    # v0.1.149 — WHICH property set of that class, by the set's own
+    # ``id``. ``None`` means the file never said (every file before
+    # this version), and the class then decides.
+    type_ref: Optional[str] = None
 
     def __post_init__(self) -> None:
         if self.orientation is None:
@@ -1500,7 +1636,7 @@ class SupportInstance:
         return hits[0] if hits else None
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "id": self.id,
             "name": self.name,
             "color": self.color,
@@ -1511,6 +1647,11 @@ class SupportInstance:
             "orientation": self.orientation.value,
             "user_angle_deg": self.user_angle_deg,
         }
+        # Written only when set: a project that never named a set
+        # keeps producing the JSON it produced before v0.1.149.
+        if self.type_ref:
+            d["type_ref"] = self.type_ref
+        return d
 
     @classmethod
     def from_dict(cls, data: dict) -> "SupportInstance":
@@ -1531,6 +1672,7 @@ class SupportInstance:
             name=data.get("name", ""),
             color=data.get("color", "#4b0082"),
             id=data.get("id", str(uuid4())),
+            type_ref=data.get("type_ref") or None,
         )
 
     def tooltip_html(self, stype: Optional[SupportType] = None) -> str:
@@ -1578,6 +1720,8 @@ class SupportPattern:
     force_application: Optional[ForceApplication] = None
     orientation: Optional[ForceOrientation] = None
     user_angle_deg: float = 0.0
+    # v0.1.149 — the concrete set every generated instance names.
+    type_ref: Optional[str] = None
 
     def __post_init__(self) -> None:
         if self.orientation is None:
@@ -1641,6 +1785,7 @@ class SupportPattern:
             tail_y = hy + dy
             out.append(SupportInstance(
                 type_id=self.type_id,
+                type_ref=self.type_ref,
                 head=Vertex(hx, hy),
                 tail=Vertex(tail_x, tail_y),
                 force_application=self.force_application,
@@ -1650,7 +1795,7 @@ class SupportPattern:
         return out
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "type_id": self.type_id,
             "length": self.length,
             "spacing": self.spacing,
@@ -1661,6 +1806,9 @@ class SupportPattern:
             "orientation": self.orientation.value,
             "user_angle_deg": self.user_angle_deg,
         }
+        if self.type_ref:
+            d["type_ref"] = self.type_ref
+        return d
 
     @classmethod
     def from_dict(cls, data: dict) -> "SupportPattern":
@@ -1676,4 +1824,5 @@ class SupportPattern:
             orientation=(ForceOrientation(data["orientation"])
                          if data.get("orientation") else None),
             user_angle_deg=data.get("user_angle_deg", 0.0),
+            type_ref=data.get("type_ref") or None,
         )

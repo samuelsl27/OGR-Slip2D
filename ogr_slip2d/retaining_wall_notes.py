@@ -25,23 +25,14 @@ from __future__ import annotations
 
 
 def _walls(project):
-    """``(instance, type)`` pairs for every EFP wall placed in the model."""
-    by_id = {}
-    for stype in getattr(project, "support_types", None) or []:
-        by_id[getattr(stype, "TYPE_ID", "")] = stype
-    out = []
-    for sup in getattr(project, "supports", None) or []:
-        if getattr(sup, "type_id", "") != "retaining_wall_efp":
-            continue
-        stype = by_id.get("retaining_wall_efp")
-        if stype is None:
-            from ogr_core.support import support_registry
-            cls = support_registry().get("retaining_wall_efp")
-            if cls is None:
-                continue
-            stype = cls()
-        out.append((sup, stype))
-    return out
+    """``(instance, type)`` pairs for every EFP wall placed in the model.
+
+    v0.1.149 — resolved by identity, like the engine (D66).
+    """
+    from ogr_core.support import support_type_pairs
+
+    return [(s, st) for s, st in support_type_pairs(project)
+            if getattr(st, "TYPE_ID", "") == "retaining_wall_efp"]
 
 
 def retaining_wall_notes(project, method_ids=()) -> list[str]:

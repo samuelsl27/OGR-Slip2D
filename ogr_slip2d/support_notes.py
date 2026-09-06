@@ -34,39 +34,83 @@ FORCE_METHODS = frozenset((
 ))
 
 
-def resolved_types(project) -> dict:
-    """``{type_id: support type object}`` for the types this project uses.
+def supports_by_type(project) -> list:
+    """``[(type object, [its instances])]``, one entry per resolved set.
 
-    The instance carries only a ``type_id`` — the type object itself lives
-    in ``project.support_types`` — and a project may legitimately carry
-    neither, so a missing type falls back to a default-constructed one from
-    the registry rather than to an exception.
+    v0.1.149 — grouped by the OBJECT, not by class: two sets of one class
+    are two entries, where the ``{type_id: type}`` dictionary this replaces
+    kept one and every note below saw only that one. The instance carries
+    a reference — the type object itself lives in ``project.support_types``
+    — and a project may legitimately carry neither, so a support whose
+    class has no set in the project resolves to a registry default and
+    forms an entry of its own (see ``ogr_core.support.resolve_support_type``
+    for the order, which is the engine's).
     """
-    by_id = {}
-    for stype in getattr(project, "support_types", None) or []:
-        tid = getattr(stype, "TYPE_ID", "")
-        if tid:
-            by_id[tid] = stype
-    out = {}
-    for sup in getattr(project, "supports", None) or []:
-        tid = getattr(sup, "type_id", "")
-        if not tid or tid in out:
-            continue
-        stype = by_id.get(tid)
-        if stype is None:
-            from ogr_core.support import support_registry
-            cls = support_registry().get(tid)
-            if cls is None:
-                continue
-            stype = cls()
-        out[tid] = stype
-    return out
+    from ogr_core.support import support_type_pairs
+
+    groups: list = []
+    for sup, stype in support_type_pairs(project):
+        for st, sups in groups:
+            if st is stype:
+                sups.append(sup)
+                break
+        else:
+            groups.append((stype, [sup]))
+    return groups
 
 
-def supports_of(project, type_id: str) -> list:
-    """The instances of one type placed in the model."""
-    return [s for s in (getattr(project, "supports", None) or [])
-            if getattr(s, "type_id", "") == type_id]
+def resolved_types(project) -> dict:
+    """``{set id: support type object}`` for the sets this project uses.
+
+    Keyed by the set's own ``id`` since v0.1.149; it was keyed by class,
+    which is the collapse :func:`supports_by_type` describes.
+    """
+    return {getattr(st, "id", id(st)): st
+            for st, _sups in supports_by_type(project)}
+
+
+def support_identity_notes(project, method_ids=()) -> list[str]:
+    """Where the property set of a support was GUESSED, not declared.
+
+    v0.1.149 — ``resolve_support_type`` falls back on the class when an
+    instance names no set, or names one the project no longer holds. With
+    one set per class the fallback is exact and there is nothing to say;
+    with several it is a choice the user never made, and the analysis
+    says which one it took rather than computing in silence — silence is
+    what kept defect D66 open while every file looked correct.
+    """
+    from ogr_core.support import unresolved_support_refs
+
+    def _name(st):
+        return (getattr(st, "_display_name", "")
+                or getattr(st, "DISPLAY_NAME", "")
+                or getattr(st, "TYPE_ID", ""))
+
+    refs = unresolved_support_refs(project)
+    notes: list[str] = []
+    by_class: dict = {}
+    for sup, same in refs["ambiguous"]:
+        by_class.setdefault(getattr(sup, "type_id", ""),
+                            (same, []))[1].append(sup)
+    for tid, (same, sups) in by_class.items():
+        notes.append(
+            "%d support%s of class '%s' name no property set and the "
+            "project defines %d sets of that class (%s). The first, "
+            "'%s', is used. Assign each support its set in Support "
+            "Properties if that is not the one meant."
+            % (len(sups), "" if len(sups) == 1 else "s",
+               getattr(same[0], "DISPLAY_NAME", tid), len(same),
+               ", ".join("'%s'" % _name(st) for st in same),
+               _name(same[0])))
+    for sup, used in refs["orphan"]:
+        notes.append(
+            "Support '%s' refers to a property set that is no longer in "
+            "the project; %s."
+            % (getattr(sup, "name", "") or sup.id,
+               ("'%s' is used instead, chosen by class" % _name(used))
+               if used is not None else
+               "it is left out of the analysis"))
+    return notes
 
 
 def force_location_notes(project, method_ids=()) -> list[str]:

@@ -31,6 +31,7 @@ Author: Samuel Sáez López — UPCT
 from __future__ import annotations
 
 from typing import Optional
+from uuid import uuid4
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -400,6 +401,7 @@ class _SupportRow:
         orientation: ForceOrientation = ForceOrientation.TANGENT_TO_SLIP,
         user_angle_deg: float = 0.0,
         color: str = "#4b0082",
+        set_id: Optional[str] = None,
     ) -> None:
         self.name = name
         self.support = support
@@ -407,6 +409,11 @@ class _SupportRow:
         self.orientation = orientation
         self.user_angle_deg = user_angle_deg
         self.color = color
+        # v0.1.149 — the identity survives every rebuild of ``support``
+        # this editor does (a parameter edited, the class changed): the
+        # placed instances refer to THIS, not to the object (D66).
+        self.id = set_id or getattr(support, "id", None) or str(uuid4())
+        support.id = self.id
 
 
 # ----------------------------------------------------------------------
@@ -610,6 +617,7 @@ class DefineSupportDialog(QDialog):
             return
         row = self._rows[row_idx]
         row.support = cls()
+        row.support.id = row.id   # v0.1.149 — same set, new class
         row.orientation = cls.DEFAULT_ORIENTATION
         row.force_application = cls.DEFAULT_APPLICATION
         self.lbl_desc.setText(cls.DESCRIPTION)
@@ -685,6 +693,9 @@ class DefineSupportDialog(QDialog):
             orientation=src.orientation,
             user_angle_deg=src.user_angle_deg,
             color=src.color,
+            # v0.1.149 — ``to_dict`` copies the id too, and a copy is a
+            # NEW set, not the same one twice.
+            set_id=str(uuid4()),
         )
         self._rows.append(new_row)
         self.list_widget.addItem(self._row_label(new_row))
@@ -716,6 +727,8 @@ class DefineSupportDialog(QDialog):
             # Some types like UserDefined have ``points`` only
             row.support = cls(**{k: v for k, v in values.items()
                                   if k in cls.__init__.__code__.co_varnames})
+        # v0.1.149 — a rebuilt object, the same set.
+        row.support.id = row.id
 
     def accept(self) -> None:
         # Commit the active row
@@ -726,6 +739,7 @@ class DefineSupportDialog(QDialog):
         out = []
         for row in self._rows:
             st = row.support
+            st.id = row.id
             # Stash extra metadata as private attrs (UI-only fields)
             st._display_name = row.name
             st._force_application = row.force_application
@@ -734,7 +748,25 @@ class DefineSupportDialog(QDialog):
             st._color = row.color
             out.append(st)
         self.project.support_types = out
+        # v0.1.149 — the instances follow their set. A set whose class
+        # was changed here leaves ``type_id`` stale on the supports that
+        # name it, and a deleted set leaves them naming nothing: both
+        # are put right NOW, where the change was made, rather than
+        # guessed at analysis time. The fallback by class stays for
+        # files edited outside this editor, and the analysis notes say
+        # when it fired.
+        by_id = {st.id: st for st in out}
+        for sup in (getattr(self.project, "supports", None) or []):
+            ref = getattr(sup, "type_ref", None)
+            if not ref:
+                continue
+            st = by_id.get(ref)
+            if st is None:
+                sup.type_ref = None
+            else:
+                sup.type_id = st.TYPE_ID
         self.project.is_dirty = True
         if hasattr(self.project, "_notify"):
             self.project._notify("support_types_changed")
+            self.project._notify("supports_changed")
         super().accept()

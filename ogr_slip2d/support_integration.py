@@ -773,19 +773,15 @@ def _bond_profiles(project: "Project") -> dict:
     if cached is not None and getattr(project, "_regions_freeze_depth", 0):
         return cached
 
-    from ogr_core.support import build_bond_profile, support_registry as _reg
+    from ogr_core.support import build_bond_profile, support_type_pairs
 
-    registry = _reg()
-    type_props = {st.TYPE_ID: st
-                  for st in (getattr(project, "support_types", []) or [])}
     profiles: dict = {}
-    for support in (getattr(project, "supports", None) or ()):
-        stype = type_props.get(support.type_id)
-        if stype is None:
-            cls = registry.get(support.type_id)
-            if cls is None:
-                continue
-            stype = cls()
+    # v0.1.149 — resolved by IDENTITY, in the one place that does it
+    # (``resolve_support_type``). This was a ``{TYPE_ID: type}``
+    # dictionary, which kept the last set of each class and lost the
+    # rest: the second soil nail of a project silently sampled its bond
+    # with the first one's parameters (defect D66).
+    for support, stype in support_type_pairs(project):
         if not getattr(stype, "NEEDS_BOND_PROFILE", False):
             continue
         try:
@@ -809,7 +805,7 @@ def compute_support_effects(
     Returns an empty list if the project has no supports or none of
     them intersect the slip surface.
     """
-    from ogr_core.support import support_registry
+    from ogr_core.support import support_type_pairs
 
     supports = getattr(project, "supports", []) or []
     if not supports:
@@ -828,15 +824,14 @@ def compute_support_effects(
     if len(slip_xy) < 2:
         return []
     bond_profiles = _bond_profiles(project)
-    registry = support_registry()
     s_list = slices.slices if hasattr(slices, "slices") else slices
     effects: list[SupportEffect] = []
-    # Build a lookup of support-type properties by id (project.support_types)
-    type_props = {}
-    for stype in getattr(project, "support_types", []) or []:
-        type_props[stype.TYPE_ID] = stype
-
-    for support in supports:
+    # v0.1.149 — the type arrives WITH the instance, resolved by identity
+    # (``resolve_support_type``). The second ``{TYPE_ID: type}``
+    # dictionary of this module lived here, and that there were two was
+    # part of the defect: fixing one would have left the other lying,
+    # and the one that decides the number is not always the same one.
+    for support, stype in support_type_pairs(project):
         hit = support.intersection_with_polyline(slip_xy)
         if hit is None:
             continue
@@ -849,15 +844,6 @@ def compute_support_effects(
                 break
         if slice_idx is None:
             continue
-
-        # Resolve the support-type property (force_at function)
-        stype = type_props.get(support.type_id)
-        if stype is None:
-            # Fall back to creating a default instance from registry
-            cls = registry.get(support.type_id)
-            if cls is None:
-                continue
-            stype = cls()
 
         L_total = support.length()
 

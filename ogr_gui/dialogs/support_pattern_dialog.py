@@ -71,7 +71,9 @@ class AddSupportPatternDialog(QDialog):
         if offerable:
             for st in offerable:
                 name = getattr(st, "_display_name", st.DISPLAY_NAME)
-                self.cbo_type.addItem(name, st.TYPE_ID)
+                # v0.1.149 — the set's id, so two sets of one class
+                # are two choices and not one (D66).
+                self.cbo_type.addItem(name, st.id)
         elif self.project.support_types:
             self.cbo_type.addItem(
                 tr("(no support type in this model can be patterned)"), "",
@@ -153,12 +155,15 @@ class AddSupportPatternDialog(QDialog):
         self.spn_angle.setEnabled(mode == "angle")
 
     def accept(self) -> None:
-        type_id = self.cbo_type.currentData()
-        if not type_id:
+        chosen = self.cbo_type.currentData()
+        stype = next((st for st in (self.project.support_types or [])
+                      if getattr(st, "id", None) == chosen), None)
+        if stype is None:
             self.reject()
             return
         self.pattern = SupportPattern(
-            type_id=type_id,
+            type_id=stype.TYPE_ID,
+            type_ref=stype.id,
             length=self.spn_length.value(),
             spacing=self.spn_spacing.value(),
             orientation_mode=self.cbo_orientation.currentData(),

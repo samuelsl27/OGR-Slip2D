@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import math
 
-from .support_notes import supports_of
 
 #: How far off vertical a pile may lean before it is worth saying. Two
 #: degrees is drawing noise; beyond that the integral along the shaft and
@@ -30,13 +29,16 @@ _TYPE_ID = "pile_micropile"
 
 
 def _piles(project):
-    """``(instance, type)`` pairs for the Ito-Matsui piles in the model."""
-    from .support_notes import resolved_types
+    """``(instance, type)`` pairs for the Ito-Matsui piles in the model.
 
-    stype = resolved_types(project).get(_TYPE_ID)
-    if stype is None or not getattr(stype, "NEEDS_BOND_PROFILE", False):
-        return []
-    return [(s, stype) for s in supports_of(project, _TYPE_ID)]
+    v0.1.149 — by identity: a model may carry two pile sets of the same
+    class, and until this version the second was invisible here.
+    """
+    from ogr_core.support import support_type_pairs
+
+    return [(s, st) for s, st in support_type_pairs(project)
+            if getattr(st, "TYPE_ID", "") == _TYPE_ID
+            and getattr(st, "NEEDS_BOND_PROFILE", False)]
 
 
 def ito_matsui_notes(project, method_ids=()) -> list[str]:
@@ -46,19 +48,30 @@ def ito_matsui_notes(project, method_ids=()) -> list[str]:
         return []
 
     notes: list[str] = []
-    stype = piles[0][1]
 
     # --- the piles touch -------------------------------------------------
-    d1 = float(getattr(stype, "out_of_plane_spacing", 0.0) or 0.0)
-    d = float(getattr(stype, "pile_diameter", 0.0) or 0.0)
-    if d1 <= 0.0 or d1 - d <= 0.0:
-        notes.append(
-            "The pile diameter (%.3g) is not smaller than the out-of-plane "
-            "spacing (%.3g), so there is no opening between piles. Ito and "
-            "Matsui (1975) describe soil squeezing THROUGH that opening and "
-            "their equation diverges when it closes, so the row applies no "
-            "force at all. A continuous barrier is a wall, not a pile row."
-            % (d, d1))
+    # v0.1.149 — checked once per SET, not once for the first pile's set
+    # on behalf of every pile in the model.
+    seen: list = []
+    touching: list = []
+    for _sup, stype in piles:
+        if any(stype is s for s in seen):
+            continue
+        seen.append(stype)
+        d1 = float(getattr(stype, "out_of_plane_spacing", 0.0) or 0.0)
+        d = float(getattr(stype, "pile_diameter", 0.0) or 0.0)
+        if d1 <= 0.0 or d1 - d <= 0.0:
+            notes.append(
+                "The pile diameter (%.3g) is not smaller than the out-of-plane "
+                "spacing (%.3g), so there is no opening between piles. Ito and "
+                "Matsui (1975) describe soil squeezing THROUGH that opening and "
+                "their equation diverges when it closes, so the row applies no "
+                "force at all. A continuous barrier is a wall, not a pile row."
+                % (d, d1))
+            touching.append(stype)
+    piles = [(s, st) for s, st in piles
+             if not any(st is t for t in touching)]
+    if not piles:
         return notes
 
     # --- leaning off vertical -------------------------------------------

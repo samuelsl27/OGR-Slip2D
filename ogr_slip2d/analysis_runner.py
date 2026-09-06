@@ -224,6 +224,11 @@ def settings_warnings(project, method_ids=()) -> list[str]:
     notes.extend(ito_matsui_notes(project, method_ids))
     notes.extend(helical_anchor_notes(project, method_ids))
     notes.extend(force_location_notes(project, method_ids))
+    # v0.1.149 — where a support's property set had to be guessed: an
+    # instance that names no set while its class has several, or names
+    # one the project no longer holds (D66).
+    from .support_notes import support_identity_notes
+    notes.extend(support_identity_notes(project, method_ids))
     # v0.1.127 — the seismic modes change WHICH surface is reported, so
     # anything downstream that consumes "the critical surface" is now
     # consuming a different one. The probabilistic and sensitivity runs

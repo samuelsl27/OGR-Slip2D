@@ -562,18 +562,16 @@ class CanvasView(QGraphicsView):
 
         # Supports — v0.1.15 honours DisplayOptions.show_supports
         if self.display_options.show_supports:
-            from ogr_core.support import support_registry
-            reg = support_registry()
-            # Build lookup of per-project support type defs (with their
-            # tuned parameter values), keyed by TYPE_ID. Used for tooltip
-            # force-diagram preview.
-            proj_types = {
-                st.TYPE_ID: st for st in
-                getattr(self.project, "support_types", []) or []
-            }
+            from ogr_core.support import resolve_support_type
             for s in self.project.supports:
-                display = reg[s.type_id].DISPLAY_NAME if s.type_id in reg else s.type_id
-                type_obj = proj_types.get(s.type_id)
+                # v0.1.149 — the set the ANALYSIS will use, resolved by
+                # identity, labelled with the name the user gave it. A
+                # ``{TYPE_ID: type}`` dictionary lived here and put the
+                # last set of each class in every tooltip (D66).
+                type_obj = resolve_support_type(self.project, s)
+                display = (getattr(type_obj, "_display_name", None)
+                           or getattr(type_obj, "DISPLAY_NAME", None)
+                           or s.type_id)
                 scene.addItem(SupportItem(
                     s, display, support_type_obj=type_obj,
                     project=self.project))
@@ -1072,9 +1070,10 @@ class CanvasView(QGraphicsView):
             return
         s = self.project.supports[sidx]
         menu = QMenu(self)
-        from ogr_core.support import support_registry
-        reg = support_registry()
-        type_name = reg[s.type_id].DISPLAY_NAME if s.type_id in reg else s.type_id
+        from ogr_core.support import resolve_support_type
+        st = resolve_support_type(self.project, s)
+        type_name = (getattr(st, "_display_name", None)
+                     or getattr(st, "DISPLAY_NAME", None) or s.type_id)
 
         info = QAction(f"Support — {s.name or type_name}", self)
         info.setEnabled(False)

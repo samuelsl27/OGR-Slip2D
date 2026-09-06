@@ -206,7 +206,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.148"
+    VERSION = "0.1.149"
 
     def __init__(self) -> None:
         super().__init__()
@@ -2377,7 +2377,11 @@ class MainWindow(QMainWindow):
                 self.project.materials.append(clone)
                 n_mat += 1
         if what in (tr("Supports"), tr("Both")):
+            from uuid import uuid4
             for s in getattr(other, "support_types", []) or []:
+                # v0.1.149 — a fresh identity: importing the same file
+                # twice must not leave two sets answering to one id.
+                s.id = str(uuid4())
                 self.project.support_types.append(s)
                 n_sup += 1
         self.project.is_dirty = True
@@ -2514,22 +2518,44 @@ class MainWindow(QMainWindow):
         if not types:
             self._info(tr("No support types are defined."))
             return
-        tlabels = [getattr(t, "DISPLAY_NAME", None)
-                   or getattr(t, "TYPE_ID", "?") for t in types]
+        # v0.1.149 — the user's own names, numbered so two sets of one
+        # class are two choices. Until this version the labels were the
+        # CLASS names, ``index()`` returned the first of a duplicate,
+        # and the choice was written to ``support.support_type`` — an
+        # attribute the engine never read. Modify Support could not
+        # modify a support (D66).
+        from ogr_core.support import resolve_support_type
+        tlabels = [tr("%d: %s") % (i + 1, self._type_label(t))
+                   for i, t in enumerate(types)]
+        current = resolve_support_type(self.project, support)
+        start = next((i for i, t in enumerate(types) if t is current), 0)
         tchoice, ok = QInputDialog.getItem(
             self, tr("Modify Support"), tr("Support type:"), tlabels,
-            0, False)
+            start, False)
         if not ok:
             return
-        support.support_type = types[tlabels.index(tchoice)]
+        chosen = types[tlabels.index(tchoice)]
+        support.type_ref = chosen.id
+        support.type_id = chosen.TYPE_ID
         self.project.is_dirty = True
+        self.project._notify("supports_changed")
         self.canvas.refresh_scene()
         self.statusBar().showMessage(tr("Support modified."), 5000)
 
-    def _support_label(self, support) -> str:
-        stype = getattr(support, "support_type", None) or support
-        return str(getattr(stype, "DISPLAY_NAME", None)
+    @staticmethod
+    def _type_label(stype) -> str:
+        """The name the user gave a property set, else its class name."""
+        return str(getattr(stype, "_display_name", None)
+                   or getattr(stype, "DISPLAY_NAME", None)
                    or getattr(stype, "TYPE_ID", "support"))
+
+    def _support_label(self, support) -> str:
+        from ogr_core.support import resolve_support_type
+        name = getattr(support, "name", "")
+        stype = resolve_support_type(self.project, support)
+        if stype is None:
+            return str(name or "support")
+        return str(name or self._type_label(stype))
 
     def _move_support(self) -> None:
         """Translate a support without changing its length or angle."""
@@ -3208,6 +3234,8 @@ class MainWindow(QMainWindow):
         u_ang = getattr(stype, "_user_angle_deg", 0.0)
         s = SupportInstance(
             type_id=stype.TYPE_ID,
+            # v0.1.149 — the SET, not only its class (D66).
+            type_ref=stype.id,
             head=Vertex(x0, y0), tail=Vertex(x1, y1),
             force_application=force_app,
             orientation=orient,
@@ -3268,9 +3296,9 @@ class MainWindow(QMainWindow):
             Vertex(x0, y0), Vertex(x1, y1),
         )
         # Fill in display name / color from the support type metadata
-        stype_by_id = {st.TYPE_ID: st for st in self.project.support_types}
+        from ogr_core.support import resolve_support_type
         for s in new_supports:
-            st = stype_by_id.get(s.type_id)
+            st = resolve_support_type(self.project, s)
             if st is not None:
                 s.name = getattr(st, "_display_name", st.DISPLAY_NAME)
                 s.color = getattr(st, "_color", "#4b0082")

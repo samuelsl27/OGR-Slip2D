@@ -115,13 +115,27 @@ def material_tip(material, mode: DataTipMode = DataTipMode.MAXIMUM,
     return "\n".join(lines)
 
 
-def support_tip(support, mode: DataTipMode = DataTipMode.MAXIMUM) -> str:
-    """Properties of a support instance."""
+def support_tip(support, mode: DataTipMode = DataTipMode.MAXIMUM,
+                project=None) -> str:
+    """Properties of a support instance.
+
+    v0.1.149 — the type comes from the project's own resolver when a
+    project is given. Until this version it was read off
+    ``support.support_type``, an attribute no ``SupportInstance`` has,
+    so the tip showed the class id and not one parameter. The attribute
+    is still honoured for a caller that builds its own object.
+    """
     if support is None or mode == DataTipMode.NONE:
         return ""
-    stype = getattr(support, "support_type", None) or support
-    label = getattr(stype, "DISPLAY_NAME", None) or \
-        getattr(stype, "TYPE_ID", "support")
+    stype = getattr(support, "support_type", None)
+    if stype is None and project is not None:
+        from ogr_core.support import resolve_support_type
+        stype = resolve_support_type(project, support)
+    if stype is None:
+        stype = support
+    label = (getattr(stype, "_display_name", None)
+             or getattr(stype, "DISPLAY_NAME", None)
+             or getattr(stype, "TYPE_ID", "support"))
     if mode == DataTipMode.MINIMUM:
         return str(label)
     lines = [str(label)]
@@ -222,7 +236,7 @@ def tip_at(project, x: float, y: float,
         if h is None or t is None:
             continue
         if _near_segment(x, y, t.x, t.y, h.x, h.y) <= radius:
-            return support_tip(s, mode)
+            return support_tip(s, mode, project=project)
 
     # Material region under the cursor
     try:

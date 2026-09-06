@@ -15,7 +15,7 @@ Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 
-from .support_notes import resolved_types, supports_of
+from .support_notes import supports_by_type
 
 #: The spacing-to-diameter band the reference recommends. Outside it the
 #: three failure types stop describing what they were derived for: too
@@ -30,8 +30,11 @@ def helical_anchor_notes(project, method_ids=()) -> list[str]:
     from ogr_core.support.helical_anchor import effective_spacing
 
     notes: list[str] = []
-    for type_id, stype in resolved_types(project).items():
-        if type_id != "helical_anchor":
+    # v0.1.149 — one pass per resolved SET: two helical-anchor sets of
+    # different geometry get their own notes, where before the second
+    # was invisible here.
+    for stype, sups in supports_by_type(project):
+        if getattr(stype, "TYPE_ID", "") != "helical_anchor":
             continue
         diameter = float(getattr(stype, "average_helix_diameter", 0.0))
         width = float(getattr(stype, "shaft_width", 0.0))
@@ -43,7 +46,7 @@ def helical_anchor_notes(project, method_ids=()) -> list[str]:
         # the anchor carries nothing in pullout, which reads as a support
         # that does nothing rather than as a model to correct.
         if width >= diameter > 0.0:
-            for sup in supports_of(project, type_id):
+            for sup in sups:
                 notes.append(
                     "The shaft of support '%s' is not narrower than its "
                     "helices, so the plates have no bearing area and the "
@@ -52,7 +55,7 @@ def helical_anchor_notes(project, method_ids=()) -> list[str]:
             continue
 
         if diameter > 0.0 and n >= 2:
-            for sup in supports_of(project, type_id):
+            for sup in sups:
                 length = sup.length()
                 used = effective_spacing(n, spacing, length)
                 if used <= 0.0:

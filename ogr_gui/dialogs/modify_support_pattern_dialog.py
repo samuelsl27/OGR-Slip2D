@@ -91,11 +91,17 @@ class ModifySupportPatternDialog(QDialog):
 
         anchor = project.supports[anchor_idx]
         members = [project.supports[i] for i in self._member_idxs]
+        # v0.1.149 — the SET the anchor computes with, by identity.
+        from ogr_core.support import resolve_support_type
+        current = resolve_support_type(project, anchor)
+        current_name = (getattr(current, "_display_name", None)
+                        or getattr(current, "DISPLAY_NAME", None)
+                        or anchor.type_id)
 
         root = QVBoxLayout(self)
         info = QLabel(
             f"Pattern detected: <b>{len(members)} supports</b> of type "
-            f"<b>{anchor.type_id}</b>"
+            f"<b>{current_name}</b>"
         )
         info.setStyleSheet("padding: 6px; background: #eef; border-radius: 4px;")
         root.addWidget(info)
@@ -106,8 +112,8 @@ class ModifySupportPatternDialog(QDialog):
         self.cbo_type = QComboBox()
         for st in project.support_types:
             name = getattr(st, "_display_name", st.DISPLAY_NAME)
-            self.cbo_type.addItem(name, st.TYPE_ID)
-        idx = self.cbo_type.findData(anchor.type_id)
+            self.cbo_type.addItem(name, st.id)
+        idx = self.cbo_type.findData(getattr(current, "id", None))
         if idx >= 0:
             self.cbo_type.setCurrentIndex(idx)
         f_type.addRow(tr("Type:"), self.cbo_type)
@@ -176,7 +182,9 @@ class ModifySupportPatternDialog(QDialog):
 
     def accept(self) -> None:
         from ogr_core.geometry import Vertex
-        new_type = self.cbo_type.currentData()
+        chosen = self.cbo_type.currentData()
+        new_type = next((st for st in (self.project.support_types or [])
+                         if getattr(st, "id", None) == chosen), None)
         new_len = self.spn_length.value()
         new_spacing = self.spn_spacing.value()
         new_angle_rad = math.radians(self.spn_angle.value())
@@ -191,7 +199,9 @@ class ModifySupportPatternDialog(QDialog):
         if keep_heads:
             # Modify each member: change type, force properties, length, angle
             for s in members:
-                s.type_id = new_type
+                if new_type is not None:
+                    s.type_ref = new_type.id
+                    s.type_id = new_type.TYPE_ID
                 s.force_application = new_app
                 s.orientation = new_ori
                 dx = new_len * math.cos(new_angle_rad)
@@ -219,7 +229,9 @@ class ModifySupportPatternDialog(QDialog):
                 hx = x0 + t * ux
                 hy = y0 + t * uy
                 s.head = Vertex(hx, hy)
-                s.type_id = new_type
+                if new_type is not None:
+                    s.type_ref = new_type.id
+                    s.type_id = new_type.TYPE_ID
                 s.force_application = new_app
                 s.orientation = new_ori
                 dx = new_len * math.cos(new_angle_rad)

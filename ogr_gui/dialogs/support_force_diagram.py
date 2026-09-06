@@ -53,14 +53,14 @@ SAMPLES = 401
 
 
 def _resolve_type(project, support):
-    """The support-type properties the analysis itself would use."""
-    from ogr_core.support import support_registry
+    """The support-type properties the analysis itself would use.
 
-    for st in (getattr(project, "support_types", None) or ()):
-        if st.TYPE_ID == support.type_id:
-            return st
-    cls = support_registry().get(support.type_id)
-    return cls() if cls is not None else None
+    v0.1.149 — literally: the engine's own resolver, so the diagram
+    cannot show a set the analysis is not using (D66).
+    """
+    from ogr_core.support import resolve_support_type
+
+    return resolve_support_type(project, support)
 
 
 def _cut_distance(project, support, critical) -> Optional[float]:

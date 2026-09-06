@@ -46,13 +46,19 @@ class SupportInstancePropertiesDialog(QDialog):
         self.ed_name = QLineEdit(support.name or "")
         form.addRow(tr("Name:"), self.ed_name)
 
-        # Type combobox — references the project's support_types
+        # Type combobox — references the project's support_types.
+        # v0.1.149 — the item DATA is the set's own id, not the class id.
+        # With the class id two soil nails of different capacity were
+        # one entry to this combo, and whichever the user picked, the
+        # instance got the class and the engine the last set (D66).
+        from ogr_core.support import resolve_support_type
         self.cbo_type = QComboBox()
+        current = resolve_support_type(project, support)
         active_idx = 0
         for i, st in enumerate(project.support_types):
             name = getattr(st, "_display_name", st.DISPLAY_NAME)
-            self.cbo_type.addItem(name, st.TYPE_ID)
-            if st.TYPE_ID == support.type_id:
+            self.cbo_type.addItem(name, st.id)
+            if st is current:
                 active_idx = i
         self.cbo_type.setCurrentIndex(active_idx)
         form.addRow(tr("Type:"), self.cbo_type)
@@ -137,7 +143,15 @@ class SupportInstancePropertiesDialog(QDialog):
     def accept(self) -> None:
         from ogr_core.geometry import Vertex
         self.support.name = self.ed_name.text()
-        self.support.type_id = self.cbo_type.currentData()
+        chosen = self.cbo_type.currentData()
+        for st in self.project.support_types:
+            if st.id == chosen:
+                # Both: the set by identity, and the class kept in
+                # step so a reader of ``type_id`` alone — a file older
+                # than v0.1.149, the pattern detector — is not lied to.
+                self.support.type_ref = st.id
+                self.support.type_id = st.TYPE_ID
+                break
         self.support.force_application = self.cbo_app.currentData()
         self.support.orientation = self.cbo_ori.currentData()
         self.support.user_angle_deg = self.spn_user_angle.value()

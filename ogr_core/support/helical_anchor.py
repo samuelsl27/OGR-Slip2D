@@ -66,7 +66,8 @@ Author: Samuel Sáez López — UPCT
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from uuid import uuid4
 from typing import ClassVar
 
 from .support import (
@@ -340,6 +341,9 @@ class HelicalAnchor(SupportType):
     number_of_helices: int = 3
     average_helix_diameter: float = 0.25
     helix_spacing: float = 1.5
+    # v0.1.149 — the identity an instance names through ``type_ref``;
+    # see ``SupportType`` for why the class id was not enough.
+    id: str = field(default_factory=lambda: str(uuid4()), compare=False)
 
     def __post_init__(self) -> None:
         # A count is a count. JSON round-trips and spin boxes can both hand

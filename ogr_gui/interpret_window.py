@@ -1481,9 +1481,16 @@ class InterpretWindow(QMainWindow):
             self._info(tr("No critical surface."))
             return
         rows = []
+        from ogr_core.support import resolve_support_type
         for i, sup in enumerate(getattr(self.project, "supports", []), 1):
-            stype = getattr(sup, "support_type", None) or sup
-            label = getattr(stype, "DISPLAY_NAME", None) or f"support {i}"
+            # v0.1.149 — resolved like the analysis; ``sup.support_type``
+            # never existed, so every row read "capacity not defined".
+            stype = (getattr(sup, "support_type", None)
+                     or resolve_support_type(self.project, sup) or sup)
+            label = (getattr(sup, "name", "")
+                     or getattr(stype, "_display_name", None)
+                     or getattr(stype, "DISPLAY_NAME", None)
+                     or f"support {i}")
             cap = None
             for attr in ("anchor_capacity", "tensile_capacity",
                          "plate_capacity"):
