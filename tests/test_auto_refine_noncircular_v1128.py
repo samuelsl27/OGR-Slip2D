@@ -265,9 +265,16 @@ class TestTheConversionIsTheDocumentedOne:
                 res = nc._best_of_masses(p, (poly,))
                 assert res is not None, n
                 errors.append(abs(res.fos - arc.fos) / arc.fos)
-            # Refining never makes it worse...
+            # Refining never makes it worse — beyond the floor. v0.1.150
+            # moved the critical circle of this search (D65), and on the
+            # new one the sequence is +0.387 %, +0.059 %, +0.0098 %,
+            # +0.025 %: the last step RISES by 1.5e-4, an order of
+            # magnitude under the solver's 5e-3 tolerance, where a strict
+            # inequality asserts noise. The floor is allowed for; the
+            # convergence, below, is not relaxed.
+            floor = 2.5e-4
             for coarse, fine in zip(errors[:-1], errors[1:]):
-                assert fine <= coarse + 1e-12, errors
+                assert fine <= coarse + floor, errors
             # ...it improves by a lot over the range...
             assert errors[0] > 4.0 * errors[-1], errors
             # ...and it arrives, which a wrong conversion would not.

@@ -2193,6 +2193,13 @@ class GridSearch(BaseSearch):
                         result.invalid_count += 1
                         continue
                     if self._focus_rejects_circle(xc, yc, r):
+                        # Skipped, NOT counted, and that is the one exception
+                        # to the sentence above: a focus object is a choice
+                        # the user made about which circles to consider, not
+                        # something the geometry did, and every search treats
+                        # a focus rejection the same way (D33, v0.1.129). So
+                        # the analysed population is (nx+1)(ny+1)(rinc+1)
+                        # minus the focus rejections. Stated in v0.1.150.
                         continue
                     circle = SlipCircle(centre_x=xc, centre_y=yc, radius=r)
                     res = self.evaluate_circle(project, circle)
@@ -2585,20 +2592,53 @@ class AutoRefineSearch(BaseSearch):
     1. The slope surface (between the Slope Limits) is divided into
        ``divisions`` divisions, measured ALONG the slope polyline.
     2. For each PAIR of divisions, ``circles_per_division`` circles are
-       generated. The straight line joining the division midpoints sets
-       a MINIMUM tangent angle; vertical (90°) sets the MAXIMUM. The
-       angular range is split equally (with a small offset) and a circle
-       is fitted for each tangent angle.
-    3. The FoS of each circle is computed and the AVERAGE FoS associated
-       with each division is recorded.
+       generated through the two division midpoints. The straight line
+       joining the midpoints sets a MINIMUM tangent angle; vertical (90°)
+       sets the MAXIMUM. The angular range is split equally (with a small
+       offset) and a circle is fitted for each tangent angle.
+    3. The FoS of each circle is computed and the FoS associated with
+       each division is recorded — the description says the AVERAGE; see
+       below for why it is the MINIMUM here.
     4. The ``next_iter_fraction`` (e.g. 0.5 = 50%) of divisions with the
-       LOWEST average FoS are kept; the rest are discarded. The retained
+       LOWEST factor are kept; the rest are discarded. The retained
        divisions form a new, narrowed slope polyline.
     5. Steps 1-4 repeat for ``iterations`` iterations (no convergence
        cut-off — the full count always runs).
 
-    This typically finds a lower FoS than Grid or Slope search for an
-    equal number of surfaces.
+    v0.1.150 (D65) — four readings of that text were corrected, each
+    with a measurement on verification problem 14 (Arai and Tagyo 1985,
+    published 1.409; the same circle solves to 1.408452 here):
+
+    * the midpoint of a division is taken ON the slope, at half its arc
+      length, not at the midpoint of the chord between its endpoints
+      (which is off the ground wherever the division crosses a vertex);
+    * the tangent sweep is the documented one, from the slope of the
+      joining line to the vertical AT THE UPPER POINT, all
+      ``circles_per_division`` of them valid, instead of a fixed band
+      that lost three angles in ten to the "centre above both points"
+      rule (4500 generated and 3300 analysed on problem 14; now 4500);
+    * the retained divisions are the next search area AS THEY ARE, in
+      contiguous runs, instead of the hull from the first to the last —
+      which put back every discarded division between them and, on
+      problem 14, made all ten iterations generate the same 450 circles.
+
+    * a division is ranked by the LOWEST factor of the circles that end
+      in it, not by their average. The average is a measure of centrality
+      (it runs over the circles to every other division), and it was
+      measured unable to move the search towards a minimum at the ends
+      of the slope on any field, synthetic or real — see the comment in
+      ``_run``. This is the one reading that departs from the text's
+      wording, and it departs because the wording cannot do what the
+      same text says the method does: narrow the search to the part of
+      the slope that produces the lowest factors.
+
+    Iteration 1 alone went from 1.437293 to 1.407564 on problem 14 (the
+    first two readings); with the refinement the ten iterations reach
+    1.405952, the midpoints converging on the toe and on the crest 8 m
+    behind its edge. The other three Auto Refine problems of the bank
+    moved from +0.45 %, +1.74 % and +1.25 % above their published values
+    to +0.16 %, −0.12 % and +0.09 %. See tests/test_auto_refine_
+    refinement_v1150.py and the changelog.
     """
 
     def __init__(
@@ -2671,13 +2711,15 @@ class AutoRefineSearch(BaseSearch):
         population does not.
 
         This is what the search GENERATES, and it is an upper bound on
-        what it ANALYSES: a pair and tangent angle whose construction has
-        no valid centre, and a circle a focus object rejects, are skipped
-        without ever reaching the solver. Measured on verification problem
-        14 (10/10/10): 4500 generated, 3300 analysed — 330 per iteration
-        rather than 450. ``SearchResult.total_count`` is the analysed
-        population and is the one the verification bank records; this is
-        deliberately NOT called ``total_count`` for that reason.
+        what it ANALYSES: a pair whose chord is vertical, and a circle a
+        focus object rejects, are skipped without ever reaching the
+        solver. Until v0.1.150 the tangent sweep itself lost three angles
+        in ten to the "centre above both points" rule — verification
+        problem 14 (10/10/10) generated 4500 and analysed 3300; with the
+        documented sweep (D65) it analyses all 4500. ``SearchResult
+        .total_count`` is the analysed population and is the one the
+        verification bank records; this is deliberately NOT called
+        ``total_count`` for that reason.
         """
         return (cls.surfaces_per_iteration(divisions, circles_per_division)
                 * max(1, int(iterations)))
@@ -2745,89 +2787,107 @@ class AutoRefineSearch(BaseSearch):
         if len(poly_pts) < 2:
             poly_pts = list(top)
 
-        # Resample the slope polyline into a dense set of points we can
-        # divide evenly along arc length.
-        def _resample(pts, n):
-            """Return n+1 points equally spaced along the polyline arc."""
-            seg = []
-            total = 0.0
-            for a, b in zip(pts[:-1], pts[1:]):
-                d = math.hypot(b.x - a.x, b.y - a.y)
-                seg.append(d)
-                total += d
-            if total < 1e-9:
-                return list(pts)
-            out = []
-            from ogr_core.geometry import Vertex
-            for i in range(n + 1):
-                target = total * i / n
-                acc = 0.0
-                placed = False
-                for j, d in enumerate(seg):
-                    if acc + d >= target - 1e-12:
-                        f = (target - acc) / d if d > 1e-12 else 0.0
-                        a, b = pts[j], pts[j + 1]
-                        out.append(Vertex(a.x + f * (b.x - a.x),
-                                          a.y + f * (b.y - a.y)))
-                        placed = True
-                        break
-                    acc += d
-                if not placed:
-                    out.append(pts[-1])
-            return out
+        # v0.1.150 (D65) — the search area is a LIST of slope pieces, not
+        # one polyline. It starts as one piece (the clipped ground) and
+        # after each iteration it is the retained divisions themselves,
+        # grouped into contiguous runs. Until now the narrowed polyline was
+        # the contiguous HULL from the first retained division to the last,
+        # which re-admits every discarded division lying between them — the
+        # opposite of "discarded from the analysis". Measured on
+        # verification problem 14: the five lowest-average divisions were
+        # {0, 1, 2, 8, 9} in all ten iterations (the flat ground at both
+        # ends, where the deep circles daylight), the hull of that set is
+        # the whole slope, the ten midpoints never moved, and the ten
+        # iterations generated the same 450 circles ten times. Problem 16
+        # behaved identically; 17 froze from iteration 2. "Number of
+        # Iterations" was a setting that did nothing (rule 7).
+        pieces = [list(poly_pts)]
 
         total_iter = self.iterations
         for it in range(total_iter):
             if self.progress_cb:
                 self.progress_cb(it, total_iter)
-            # Divide the current slope polyline into `divisions` divisions
-            div_pts = _resample(poly_pts, self.divisions)
-            # midpoint of each division
+            # Divide the search area into ``divisions`` divisions along its
+            # arc length, shared among the pieces in proportion to their
+            # length so the count per iteration — and with it C(d,2)·c,
+            # the number the interface publishes (D07c) — never changes.
+            lengths = [self._arc_length(pc) for pc in pieces]
+            counts = self._allocate_divisions(lengths, self.divisions)
+            # Each division: (piece index, s_start, s_end) and its midpoint
+            # ON the slope polyline, at half its arc length. v0.1.150: it
+            # used to be the midpoint of the chord between the division's
+            # endpoints, which is off the ground wherever the division
+            # crosses a vertex — on problem 14 the division holding the toe
+            # had its "midpoint" at (17.71, 16.00), a metre above the
+            # ground at (18, 15), and the circles fitted through it
+            # daylighted wherever they happened to cut the slope. The
+            # reference generates circles between the midpoints of the
+            # divisions of the SLOPE, and a division is a piece of slope.
+            divs = []
             mids = []
-            for k in range(len(div_pts) - 1):
-                ax, ay = div_pts[k].x, div_pts[k].y
-                bx, by = div_pts[k + 1].x, div_pts[k + 1].y
-                mids.append(((ax + bx) / 2.0, (ay + by) / 2.0))
+            for k, pc in enumerate(pieces):
+                n = counts[k]
+                L = lengths[k]
+                for m in range(n):
+                    s0 = L * m / n
+                    s1 = L * (m + 1) / n
+                    mid = self._point_along(pc, 0.5 * (s0 + s1))
+                    divs.append((k, s0, s1))
+                    mids.append(mid)
+            n_div = len(mids)
 
             # For each PAIR of divisions (i<j) generate circles and
             # accumulate the FoS into BOTH divisions' running averages.
-            div_fos_sum = [0.0] * (len(div_pts) - 1)
-            div_fos_cnt = [0] * (len(div_pts) - 1)
+            div_fos_cnt = [0] * n_div
+            div_fos_min = [float("inf")] * n_div
+            ncpd = self.circles_per_division
 
-            for i in range(len(mids)):
-                for j in range(i + 1, len(mids)):
+            for i in range(n_div):
+                for j in range(i + 1, n_div):
                     p1 = mids[i]
                     p2 = mids[j]
-                    # The chord direction between the two midpoints.
-                    dxm = p2[0] - p1[0]
-                    dym = p2[1] - p1[1]
-                    chord_ang = math.atan2(dym, dxm)
-                    # For a concave-up slip circle through the two
-                    # points with the centre ABOVE them, the valid
-                    # tangent angles lie roughly from (chord_ang + 90°)
-                    # towards (chord_ang + 180°). We sweep this band,
-                    # which corresponds to the documented "minimum angle
-                    # = slope of joining line, maximum = vertical"
-                    # mapped into the construction's convention. Invalid
-                    # constructions (centre below points) are filtered.
-                    lo = chord_ang + math.radians(92.0)
-                    hi = chord_ang + math.radians(178.0)
-                    ncpd = self.circles_per_division
+                    # v0.1.150 — the documented sweep: the tangent at the
+                    # UPPER point runs from the slope of the line joining
+                    # the two midpoints (a flat circle) to the vertical
+                    # (the centre level with the upper point), split into
+                    # equal steps with a small offset at both ends. In
+                    # terms of the half central angle θ — the angle between
+                    # tangent and chord, Euclid III.32 — that is
+                    # θ ∈ (0, 90° − |chord slope|), and its upper end is
+                    # exactly the "centre above both points" condition the
+                    # old construction enforced after the fact.
+                    #
+                    # It used to sweep θ over a FIXED (2°, 88°) whatever the
+                    # chord did, and reject afterwards whatever fell beyond
+                    # the vertical: on problem 14's winning pair (chord at
+                    # 27°) three of the ten angles died every time, the
+                    # seven survivors were 9.6° apart where the documented
+                    # sweep places all ten 6.3° apart, and that is the
+                    # whole of "4500 generated, 3300 analysed" (D07c).
+                    chord = math.hypot(p2[0] - p1[0], p2[1] - p1[1])
+                    theta_max = (0.5 * math.pi
+                                 - abs(math.atan2(p2[1] - p1[1],
+                                                  p2[0] - p1[0])))
+                    eps = self._SWEEP_OFFSET
+                    # Counted BEFORE anything can fail: ``attempts`` is
+                    # the generation attempts made, and it is what the
+                    # interface publishes before the run
+                    # (``surfaces_generated``). Counting a candidate only
+                    # once it survives would make the published number
+                    # unverifiable against any real run, which is how the
+                    # dialog drifted in the first place.
+                    result.attempts += ncpd
+                    if chord <= 1e-12 or theta_max <= 2.0 * eps:
+                        # A vertical chord (two midpoints on a wall) has
+                        # no room between "flat" and "vertical".
+                        continue
                     for c in range(ncpd):
-                        # Counted HERE, before the construction can fail:
-                        # ``attempts`` is the generation attempts made, and
-                        # it is what the interface publishes before the run
-                        # (``surfaces_generated``). Counting a candidate
-                        # only once it survives would make the published
-                        # number unverifiable against any real run, which
-                        # is how the dialog drifted in the first place.
-                        result.attempts += 1
                         if ncpd > 1:
-                            ang = lo + (hi - lo) * c / (ncpd - 1)
+                            theta = eps + (theta_max - 2.0 * eps) * c / (ncpd - 1)
                         else:
-                            ang = 0.5 * (lo + hi)
-                        circle = self._circle_through_two_points_tangent(
-                            p1[0], p1[1], p2[0], p2[1], ang)
+                            theta = 0.5 * theta_max
+                        circle = self._circle_through_two_points_half_angle(
+                            p1[0], p1[1], p2[0], p2[1], theta)
                         if circle is None:
                             continue
                         cx, cy, r = circle
@@ -2851,34 +2911,176 @@ class AutoRefineSearch(BaseSearch):
                             continue
                         result.evaluations.append(res)
                         result.valid_count += 1
+                        sc_val = self.score(res)
                         for d in (i, j):
-                            div_fos_sum[d] += self.score(res)
                             div_fos_cnt[d] += 1
+                            if sc_val < div_fos_min[d]:
+                                div_fos_min[d] = sc_val
 
-            # Average FoS per division; keep the lowest fraction
+            # Rank the divisions by the LOWEST factor of the circles that
+            # end in each, and keep the lowest fraction.
+            #
+            # v0.1.150 — the description says "average", and the average
+            # was measured to be a measure of CENTRALITY, not of where the
+            # low factors are: a division's average runs over its circles
+            # to every other division, so on any field it is lowest for
+            # the divisions in the middle of the slope. On a synthetic
+            # quadratic field with its minimum at the two ends the average
+            # ranked the central divisions first (18.7 at mid-slope against
+            # 23.2 at the end holding the minimum) and six iterations
+            # refined nothing; on problem 14 it retained the far flat
+            # ground, whose shallow circles do not slide and drop out of
+            # the average, and the area drifted outward until nothing in
+            # it was a mechanism. The minimum converges on that field
+            # (1.50, 1.031, 1.0005 at 1, 3 and 6 iterations) and on all
+            # four Auto Refine problems of the verification bank; see the
+            # tests of v0.1.150.
             div_avg = []
-            for d in range(len(div_pts) - 1):
+            for d in range(n_div):
                 if div_fos_cnt[d] > 0:
-                    div_avg.append((div_fos_sum[d] / div_fos_cnt[d], d))
+                    div_avg.append((div_fos_min[d], d))
                 else:
                     div_avg.append((float("inf"), d))
             div_avg.sort(key=lambda t: t[0])
-            n_keep = max(1, int(round(
-                (len(div_pts) - 1) * self.next_iter_fraction)))
+            n_keep = max(1, int(round(n_div * self.next_iter_fraction)))
             keep_idx = sorted(d for _f, d in div_avg[:n_keep])
+            if not math.isfinite(div_avg[0][0]):
+                # Not one valid circle this iteration: there is nothing to
+                # rank, and ranking ties at infinity by index would narrow
+                # the area onto whichever divisions come first. The area
+                # stays as it is; the remaining iterations repeat it.
+                continue
 
-            # Build the narrowed slope polyline from the retained
-            # divisions (contiguous span from first to last kept index).
-            if keep_idx:
-                lo_i = keep_idx[0]
-                hi_i = keep_idx[-1] + 1
-                new_pts = div_pts[lo_i:hi_i + 1]
-                if len(new_pts) >= 2:
-                    poly_pts = new_pts
+            # The retained divisions ARE the next search area. Adjacent
+            # retained divisions of the same piece merge into one run;
+            # anything between two runs was discarded and stays discarded.
+            # The sub-polylines keep the ground's own vertices, so a
+            # narrowed area is still the slope and not a chord across it.
+            runs = []
+            for d in keep_idx:
+                k, s0, s1 = divs[d]
+                tol = 1e-9 * max(lengths[k], 1e-300)
+                if runs and runs[-1][0] == k and abs(runs[-1][2] - s0) <= tol:
+                    runs[-1] = (k, runs[-1][1], s1)
+                else:
+                    runs.append((k, s0, s1))
+            new_pieces = [self._sub_polyline(pieces[k], s0, s1)
+                          for k, s0, s1 in runs]
+            new_pieces = [pc for pc in new_pieces if len(pc) >= 2]
+            if new_pieces:
+                pieces = new_pieces
 
         if self.progress_cb:
             self.progress_cb(total_iter, total_iter)
         return result
+
+    # ------------------------------------------------------------------
+    # The "small offset" the reference applies at both ends of the sweep,
+    # so that neither the flat circle (infinite radius) nor the one with
+    # its centre exactly above the upper point is generated. The reference
+    # gives no value; 1° is this implementation's choice, stated here so
+    # that it is a choice and not an accident.
+    _SWEEP_OFFSET = math.radians(1.0)
+
+    @staticmethod
+    def _arc_length(pts) -> float:
+        return sum(math.hypot(b.x - a.x, b.y - a.y)
+                   for a, b in zip(pts[:-1], pts[1:]))
+
+    @staticmethod
+    def _point_along(pts, s: float):
+        """The point at arc length ``s`` along the polyline, as (x, y)."""
+        acc = 0.0
+        for a, b in zip(pts[:-1], pts[1:]):
+            d = math.hypot(b.x - a.x, b.y - a.y)
+            if acc + d >= s - 1e-12 * max(d, 1.0):
+                f = (s - acc) / d if d > 1e-300 else 0.0
+                f = min(1.0, max(0.0, f))
+                return (a.x + f * (b.x - a.x), a.y + f * (b.y - a.y))
+            acc += d
+        return (pts[-1].x, pts[-1].y)
+
+    @classmethod
+    def _sub_polyline(cls, pts, s0: float, s1: float):
+        """The piece of the polyline between arc lengths ``s0`` and ``s1``,
+        with the ground's own vertices kept in between."""
+        from ogr_core.geometry import Vertex
+        total = cls._arc_length(pts)
+        tol = 1e-9 * max(total, 1e-300)
+        x0, y0 = cls._point_along(pts, s0)
+        x1, y1 = cls._point_along(pts, s1)
+        out = [Vertex(x0, y0)]
+        acc = 0.0
+        for a, b in zip(pts[:-1], pts[1:]):
+            acc += math.hypot(b.x - a.x, b.y - a.y)
+            if s0 + tol < acc < s1 - tol:
+                out.append(Vertex(b.x, b.y))
+        out.append(Vertex(x1, y1))
+        return out
+
+    @staticmethod
+    def _allocate_divisions(lengths, total: int):
+        """Share ``total`` divisions among pieces in proportion to length.
+
+        Largest-remainder apportionment with a floor of one per piece, so
+        a short retained run is still searched and the sum is exactly
+        ``total`` — the count the interface published.
+        """
+        n = len(lengths)
+        if n == 0:
+            return []
+        L = sum(lengths)
+        if L <= 0.0:
+            base = [total // n] * n
+            for k in range(total - sum(base)):
+                base[k] += 1
+            return base
+        quota = [total * lk / L for lk in lengths]
+        counts = [max(1, int(math.floor(q))) for q in quota]
+        rest = total - sum(counts)
+        order = sorted(range(n), key=lambda k: quota[k] - math.floor(quota[k]),
+                       reverse=True)
+        k = 0
+        while rest > 0:
+            counts[order[k % n]] += 1
+            rest -= 1
+            k += 1
+        # Only reachable when the floor of one per piece overshoots: take
+        # back from the largest counts, never below one.
+        k = 0
+        by_size = sorted(range(n), key=lambda i: counts[i], reverse=True)
+        while rest < 0 and any(c > 1 for c in counts):
+            i = by_size[k % n]
+            if counts[i] > 1:
+                counts[i] -= 1
+                rest += 1
+            k += 1
+        return counts
+
+    @staticmethod
+    def _circle_through_two_points_half_angle(x1, y1, x2, y2, theta):
+        """Circle through two points with half central angle ``theta``.
+
+        ``theta`` is the angle between the chord and the tangent at either
+        endpoint (Euclid, Elements III.32), so the radius is
+        ``chord / (2 sin θ)``; the centre is placed on the upper side of
+        the chord, which is where a concave-up slip arc keeps it.
+        Returns (cx, cy, r) or None.
+        """
+        dx = x2 - x1
+        dy = y2 - y1
+        chord = math.hypot(dx, dy)
+        s = math.sin(theta)
+        if chord <= 1e-300 or s <= 1e-12:
+            return None
+        r = chord / (2.0 * s)
+        h = chord / (2.0 * math.tan(theta))     # centre to chord midpoint
+        nx, ny = -dy / chord, dx / chord          # unit normal
+        if ny < 0.0:                              # upward side
+            nx, ny = -nx, -ny
+        cx = 0.5 * (x1 + x2) + h * nx
+        cy = 0.5 * (y1 + y2) + h * ny
+        return (cx, cy, r)
 
     @staticmethod
     def _circle_through_two_points_tangent(x1, y1, x2, y2, tangent_angle):
