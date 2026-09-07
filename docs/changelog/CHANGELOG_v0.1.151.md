@@ -204,44 +204,59 @@ todo lo que necesita— y de paso no toca un test que no va de esto.
 
 ## Banco
 
-`_tools/medir_d64.py`, nuevo: una pasada instrumentada que **no escribe
-ningún `resultados*.json`** y que, sin cambiar el comportamiento, anota en
-cada superficie si alguno de los dos cambios la habría alterado; donde anota
-algo, repite esa superficie con el cambio puesto. Fuerza la búsqueda
-secuencial, porque la instrumentación no viaja a los procesos hijos del pool,
-y corre **un método por modelo**: el troceado no depende del método, así que
-los cortes, los rechazos y los rescates salen idénticos y la pasada cuesta
-cuatro veces menos.
+`_tools/medir_d64.py`, nuevo: una pasada instrumentada que **no escribe ningún
+`resultados*.json`** y que, sin cambiar el comportamiento, anota en cada
+superficie si alguno de los dos cambios la habría alterado. Fuerza la búsqueda
+secuencial —la instrumentación no viaja a los procesos hijos del pool— y corre
+un método por modelo, porque el troceado no depende del método.
 
-Medido hasta ahora (la pasada completa queda pendiente, ver «Qué falta»):
+**194 archivos de modelo, 0 fallos.** El cambio 1 —el único que puede alterar
+una superficie que hoy se acepta— toca **6 archivos y 43 superficies**:
 
-| modelo | astillas (cambio 1) | rechazos `outside_model` | rescates (cambio 2) |
-|---|---|---|---|
-| 001–010 | **0** | 0 | 0 |
-| 014 `modelo.ogr` | 0 | 22 | **136 bases** |
-| 014 `modelo_path.ogr` | 0 | 130 | 0 |
-| 067 `modelo.ogr` | 0 | 0 | 0 |
+| problema | modelo | superficies con astilla |
+|---|---|---|
+| 016 | `modelo.ogr` | 4 |
+| 042 | `modelo.ogr` · `modelo_sin_grieta.ogr` | 3 · 1 |
+| 055 | `modelo.ogr` | 1 |
+| 107 | `modelo.ogr` | 27 |
+| 108 | `modelo.ogr` | 7 |
 
-Las 136 son bases rescatadas al repetir **sólo las 22 superficies
-rechazadas** y **sólo con el cambio 2**, que es lo que mide el instrumento.
-Corriendo el 14 entero con la versión publicada —los dos cambios— el aviso
-dice **42**: menos, porque el cambio 1 quita antes buena parte de las
-astillas cuya base llegaba a la tercera pregunta. Los dos números miden cosas
-distintas y por eso no coinciden.
+### El A/B: esos seis, más dos de control, con el motor cambiado
 
-Dos cosas que esto ya dice, y las dos importan:
+Los dos lados en el mismo árbol, intercambiando **sólo** `slicer.py` y
+`search.py` por los de 0.1.150 (`git show HEAD~1`), con paralelismo puesto en
+los dos. Un método por modelo:
 
-- **El cambio 2 no es código muerto.** Sobre el 14 una búsqueda de Bishop con
-  la versión nueva contesta 42 bases de dovela sobre el borde, y lo dice en
-  su aviso. Las 130 del `modelo_path` **no** las rescata nadie: son
-  superficies que se fueron del modelo de verdad, y se siguen rechazando.
-- **El cambio 1 no ha movido nada todavía.** Ninguno de los catorce archivos
-  de modelo medidos tiene una superficie con un corte dentro de la banda de
-  extremo. Es
-  coherente con lo que se espera: que un radio caiga a menos de 1e-6 del
-  tamaño del modelo del punto donde un contorno toca el terreno es la
-  coincidencia que en el 67 sólo ocurre porque el radio se **derivó** para
-  que ocurriera.
+| modelo | FoS antes | FoS después | descartadas antes → después | bases en el borde |
+|---|---|---|---|---|
+| 016 `modelo.ogr` | 1,1166786289902662 | **idéntico** | 3 → **0** | 10 |
+| 016 `modelo_path.ogr` | 1,0188807108803868 | **idéntico** | 107 → **106** | 1 |
+| 042 `modelo.ogr` | 1,9214502824533628 | **idéntico** | 0 → 0 | 0 |
+| 042 `modelo_sin_grieta.ogr` | 1,9155527987811856 | **idéntico** | 0 → 0 | 0 |
+| 055 `modelo.ogr` | 1,2986624655812777 | **idéntico** | 0 → 0 | 0 |
+| 107 `modelo.ogr` | 1,3736677092866260 | **idéntico** | 0 → 0 | 0 |
+| 108 `modelo.ogr` | 1,7802598882952558 | **idéntico** | 0 → 0 | 0 |
+| 014 `modelo.ogr` | 1,4059518588270135 | **idéntico** | 6 → **1** | 42 |
+
+**Idéntico quiere decir idéntico**: el mismo `float`, dígito a dígito, y el
+mismo círculo crítico en los ocho. El recuento de válidas e inválidas también
+coincide en siete de los ocho; el que cambia es `016/modelo_path.ogr`, que pasa
+de 2553 inválidas a 2552 — la superficie recuperada, que no era el mínimo.
+
+Y lo que sí cambia, que es el objeto del arreglo: **el motor deja de tirar
+superficies legítimas**. Nueve en estos tres modelos —3, 1 y 5—, ninguna de
+ellas el mínimo, y las 106 que le quedan al `016/modelo_path` se siguen
+rechazando porque de verdad se van del modelo.
+
+### Una corrección, porque el número que publiqué primero era mío y estaba mal
+
+La columna «rescatadas» de `medir_d64.py` dice **1 en los 194 modelos**, y de
+ahí salió una lectura equivocada: que la tercera consulta casi nunca se usa.
+No mide eso. El instrumento sólo vuelve a probar las superficies que el motor
+**ya arreglado** rechaza, así que no ve ninguna de las que la sonda salva antes
+de llegar al rechazo. La medida buena es el aviso del propio motor: **42 bases
+en el 14, 10 en el 016, 1 en el `016_path`**. La red se usa, y bastante más de
+lo que decía mi primera lectura.
 
 ## Fontanería: los tres números de los README estaban viejos
 
@@ -253,7 +268,11 @@ actualiza es un número que nadie cree.
 
 ## Qué falta
 
-- La corrida del banco con esta versión, y la comparativa.
+- **La corrida completa del banco con esta versión.** El A/B de arriba mide
+  los ocho modelos que podían moverse; los otros 186 siguen con sus
+  `resultados*.json` de 0.1.147, y la comparativa mezcla versiones hasta
+  que se rehaga. El 67 sí está rehecho: 1,320817 / 1,316834 / 1,316577 /
+  1,340820, sus cuatro filas en `OK` a −0,84 / −0,84 / −0,79 / −0,31 %.
 - **El `+0,01` sigue absoluto.** Moverlo cambia qué material recibe una base
   cercana a un contacto en toda dovela del banco: cambio numérico con su
   propia validación, como ya dejó escrito 0.1.143.
