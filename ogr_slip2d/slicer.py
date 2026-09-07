@@ -347,6 +347,94 @@ def _anisotropic_surfaces(project: Project) -> dict:
 #: an aviso pointing at the wrong culprit, which is worse than none.
 REFUSED_OUTSIDE_MODEL = "outside_model"
 
+#: Not a refusal: a slice whose base sat ON the edge of the model and was
+#: resolved as being inside it. It travels in the same ``reasons`` list
+#: because the caller has to be able to say so — a tolerance that decides
+#: for the user in silence is the same fault ``_material_at`` was fixed for
+#: in v0.1.143, one level up.
+TOUCHED_MODEL_EDGE = "base_on_model_edge"
+
+
+def _base_material(project: Project, xc: float, base_y_mid: float,
+                   grid_tol: float,
+                   reasons: Optional[list] = None) -> Optional[Material]:
+    """The material the base of a slice cuts, or None if there is no soil.
+
+    Three questions, asked in order, and each answers something the one
+    before it cannot:
+
+    1. **``base_y_mid + 0.01``** — the lift, absolute and unchanged since
+       v0.1.59. It moves the query off the base and into the sliding mass
+       so that a base running along a material contact takes the material
+       ABOVE it rather than landing on a region edge, where
+       point-in-polygon is ambiguous.
+    2. **``base_y_mid``** — v0.1.143, D48r. The lift OVERSHOOTS wherever
+       the base runs within 0.01 of the ground, which is the end slices of
+       every surface that enters or exits near the tangent, and then asks
+       about a point in the air. Measured on the first four problems of the
+       verification bank: 11 972 such queries, and on problem 3 alone 301
+       of them were answered with the wrong material. Asking again AT the
+       base is exact, and the lift keeps priority, so nothing that already
+       worked changed.
+    3. **``base_y_mid - grid_tol``** — v0.1.151, D64, and the one this
+       docstring exists for. Where the base sits ON the edge of the model
+       both queries above answer None, and the reason is not that the base
+       left the soil: it is that the regions being asked are snap-rounded
+       (see ``_model_grid_tol``), so within a grid cell of a corner the
+       polygon has already moved away from the point.
+
+    **DOWN, and only down.** That is what keeps this from reopening D48:
+    a base below the floor of the model is still below the floor when
+    probed further down, so no escaping surface can be rescued at any
+    tolerance — verified at a hundred times this one, and on a model whose
+    diagonal makes this probe deeper than the 0.01 lift.
+
+    The honest caveat, because it is a departure from what (1) exists to
+    enforce: where the edge it touches is a material contact, this answers
+    with the layer BELOW rather than above. It is accepted because a base
+    that reaches question 3 sits inside one snap cell of the model's own
+    geometry, so the slice it rescues is narrower than the resolution of
+    the regions it is asking about and weighs, measurably, zero. Said here
+    rather than left to be rediscovered.
+    """
+    mat = _material_at(project, Vertex(xc, base_y_mid + 0.01))
+    if mat is None:
+        mat = _material_at(project, Vertex(xc, base_y_mid))
+    if mat is None:
+        mat = _material_at(project, Vertex(xc, base_y_mid - grid_tol))
+        if mat is not None and reasons is not None:
+            reasons.append(TOUCHED_MODEL_EDGE)
+    return mat
+
+
+def _model_grid_tol(project: Project) -> float:
+    """The length below which this model's own geometry is not resolved.
+
+    A hundred times the grid ``_build_regions_shapely`` snap-rounds the
+    planar subdivision onto before polygonising — ``diag * 1e-8``, see
+    ``ogr_core.geometry.regions`` — so it is relative to the model, never
+    absolute, and it is derived rather than chosen.
+
+    v0.1.151, defect D64. The two comparisons that use it were absolute and
+    disagreed with the geometry they were judging. Measured on the model of
+    USACE (2003) example F-5 (diag 535.24, grid 5.35e-06): the corner the
+    user drew at (0, 100) is stored at (0, 99.99999733577782) in BOTH
+    regions that meet there — half a grid cell away, which is what
+    snap-rounding does. A point closer to a region edge than that is not
+    being tested against the polygon anyone drew.
+
+    Two decades of margin over that grid, and the measurement matches the
+    prediction with nothing fitted: at a tenth of a cell the surface stays
+    refused, at one cell it is resolved, and at one and a hundred cells the
+    factor agrees to six figures.
+
+    ``bounding_box`` is cached, and inside ``regions_frozen()`` — where
+    every analysis runs — it is returned without revalidating its
+    signature, so this is one attribute read per surface, not per slice.
+    """
+    x0, y0, x1, y1 = project.bounding_box()
+    return 1e-6 * math.hypot(x1 - x0, y1 - y0)
+
 
 def _material_at(project: Project, point: Vertex) -> Optional[Material]:
     """The material occupying ``point``, or None where there is no soil.
@@ -535,6 +623,11 @@ def _slice_boundaries(
     if width <= 0.0:
         return None
 
+    # v0.1.151 — derived here rather than passed in, because this function
+    # already has the project and a caller that has to be told a tolerance
+    # is a caller that can be given the wrong one. See ``_model_grid_tol``.
+    grid_tol = _model_grid_tol(project)
+
     # The y-range the slip surface spans. Used to throw away whole
     # boundaries before scanning them: a layer that runs well below the
     # failure mass cannot cut it, and checking that costs two comparisons
@@ -582,7 +675,22 @@ def _slice_boundaries(
         for x in _surface_crossings(surface, b.polyline, x_l, x_r):
             # Ignore a crossing that merely grazes an end: it would make a
             # sliver slice without separating anything.
-            if x_l + 1e-9 < x < x_r - 1e-9:
+            #
+            # v0.1.151 — RELATIVE, and to the model rather than to this
+            # surface, because what makes such a slice meaningless is that
+            # the regions its base would be looked up in are not resolved
+            # that finely (see ``_model_grid_tol``). The absolute ``1e-9``
+            # this replaces was not a graze in metres: on the model of
+            # USACE (2003) example F-5 a circle daylighting on the vertex
+            # where the Material Boundary starts crosses the ground and
+            # the contact 3.6e-06 apart — 1.1e-08 of the failure width, and
+            # a thousand times too far to be forgiven by 1e-9. The slice it
+            # made was 3.6e-06 wide, its base landed in the gap the
+            # region builder's snapping leaves at that corner, and the
+            # whole surface was refused for having no soil under it.
+            # Defect D64; the merge tolerance eleven lines below has been
+            # relative, and said so, since v0.1.66.
+            if x_l + grid_tol < x < x_r - grid_tol:
                 cuts.add(x)
 
     if not cuts:
@@ -1239,6 +1347,14 @@ def slice_surface(
     opposite remedies. No module-level state is used for this on purpose —
     a counter surviving between analyses is the leak rule 5 exists for.
 
+    v0.1.151 — ``reasons`` now carries what the slicer had to DECIDE, and
+    a refusal is only one kind of that. ``TOUCHED_MODEL_EDGE`` is reported
+    on a surface that is returned, not refused: a slice base sat on the
+    edge of the model and a tolerance ruled it inside. Callers test for
+    the reason they care about — ``REFUSED_OUTSIDE_MODEL`` is still the
+    only one that means the surface is gone — so a second string is inert
+    for anything that does not look for it.
+
     The surface is resolved onto the mass that is actually analysed
     before slicing: ground crossings, reverse curvature, and the user's
     tension crack. It is left carrying that resolution, because a drawing
@@ -1316,6 +1432,7 @@ def slice_surface(
     if x_l is None or x_r is None or x_r - x_l < 1e-6:
         return None
 
+    grid_tol = _model_grid_tol(project)
     bounds = _slice_boundaries(project, surface, x_l, x_r, num_slices)
     if bounds is None:
         # More mandatory cuts than slices to spend: the reference reports
@@ -1514,32 +1631,11 @@ def slice_surface(
         # evaluated, and both belong to the material the base cuts.
         base_y_mid = 0.5 * (y_base_l + y_base_r)
         top_y_mid = 0.5 * (y_top_l + y_top_r)
-        # The 0.01 lift moves the query off the base and into the sliding
-        # mass, so that a base running exactly along a material contact
-        # takes the material above it rather than landing on a region edge
-        # where point-in-polygon is ambiguous. It has been there, absolute,
-        # since v0.1.59.
-        #
-        # v0.1.143 — and it OVERSHOOTS. Where the base runs within 0.01 of
-        # the ground — the end slices of every surface that enters or exits
-        # near the tangent — the lift jumps clean over the ground surface
-        # and asks about a point in the air. Measured on the first four
-        # problems of the verification bank: 11 972 queries landed outside
-        # the model, every single one of them ABOVE the ground and not one
-        # below the floor, and the first material of the project was handed
-        # back for all of them. On problem 3, one Bishop search, 431 of
-        # those, and in 301 the material handed back was the WRONG one —
-        # Soil #1 where the base is cut in Soil #3.
-        #
-        # Asking again AT the base is the fix, and it is exact: it uses the
-        # same region test rather than reconstructing where the ground is,
-        # it costs a second lookup only in the rare slice that overshoots,
-        # and the lifted query keeps priority, so the material chosen on a
-        # contact is unchanged everywhere the lift already worked. Only if
-        # the base itself is outside every region is there really no soil.
-        mat = _material_at(project, Vertex(xc, base_y_mid + 0.01))
-        if mat is None:
-            mat = _material_at(project, Vertex(xc, base_y_mid))
+        # Three queries, in order, and the reason each of them exists is
+        # in ``_base_material``. The last one may report
+        # ``TOUCHED_MODEL_EDGE`` into ``reasons`` — which is NOT a refusal,
+        # and the caller has to tell the two apart.
+        mat = _base_material(project, xc, base_y_mid, grid_tol, reasons)
 
         # v0.1.143 — no soil at the base is a REFUSAL, not a default.
         #

@@ -29,7 +29,7 @@ from ogr_core.project.settings import WeakLayerHandling
 from .failure_direction import steepest_face_index
 from .methods import LEMMethod, LEMResult
 from .rapid_drawdown import RapidDrawdownError, drawdown_gap
-from .slicer import REFUSED_OUTSIDE_MODEL, slice_surface
+from .slicer import REFUSED_OUTSIDE_MODEL, TOUCHED_MODEL_EDGE, slice_surface
 from .surface import SlipCircle, WeakLayerSurface, lowest_elevation
 
 
@@ -728,6 +728,34 @@ class BaseSearch(ABC):
             "the search area." % (n, "" if n == 1 else "s")
         )
 
+    def _on_model_edge_note(self) -> str:
+        """What to say when a tolerance decided a base was inside.
+
+        v0.1.151, defect D64. These surfaces were NOT discarded — this is
+        the opposite of :meth:`_outside_model_note`, and the two must not
+        read alike. A slice base landed on the edge of the model, close
+        enough to it that the regions the analysis queries are not resolved
+        that finely, and it was taken as being in the soil.
+
+        Said out loud because a tolerance that decides in silence cannot be
+        told from a measurement, which is the rule
+        ``water_surface_defined_at`` established in v0.1.96 and the one
+        ``_material_at`` was fixed for in v0.1.143. On a model where this
+        fires in numbers, the geometry has a surface daylighting on a
+        vertex — usually a Material Boundary that starts exactly on the
+        External Boundary — and the user is the one who can say whether
+        that is what was meant.
+        """
+        n = getattr(self, "_on_model_edge", 0)
+        return (
+            "%d slice base%s sat on the edge of the model, within the "
+            "resolution of its own geometry, and %s taken as being inside "
+            "it. Nothing was discarded for this. It happens where a slip "
+            "surface daylights exactly on a vertex of the External "
+            "Boundary." % (n, "" if n == 1 else "s",
+                            "was" if n == 1 else "were")
+        )
+
     def _base_angle_ok(self, project: Project, trial, slices) -> bool:
         """Reject a clipped surface whose base turns too steeply to solve.
 
@@ -867,6 +895,15 @@ class BaseSearch(ABC):
                 slices = slice_surface(project, trial,
                                        num_slices=self.num_slices,
                                        reasons=_why)
+                if TOUCHED_MODEL_EDGE in _why:
+                    # v0.1.151 — NOT a refusal: a base on the edge of the
+                    # model that a tolerance ruled inside. Counted before
+                    # the refusal test below because it can be reported on
+                    # a surface that was sliced perfectly well, and it is
+                    # the only thing that says a tolerance was used.
+                    self._on_model_edge = getattr(
+                        self, "_on_model_edge", 0) + _why.count(
+                            TOUCHED_MODEL_EDGE)
                 if slices is None and REFUSED_OUTSIDE_MODEL in _why:
                     # v0.1.143 — refused because a slice base left the soil,
                     # which is a different fault from the one below and asks
@@ -1262,6 +1299,7 @@ class BaseSearch(ABC):
         self._pending_notes = []
         self._unsliceable = 0
         self._outside_model = 0
+        self._on_model_edge = 0
         with project.regions_frozen():
             result = self._run(project)
             if self.optimize is not None and self.optimize.enabled:
@@ -1278,6 +1316,11 @@ class BaseSearch(ABC):
             # every analysis is noise and rule 7 asks for the opposite.
             if getattr(self, "_outside_model", 0):
                 self._note(self._outside_model_note())
+            # v0.1.151 — and the bases a tolerance ruled inside. Same rule:
+            # only if it happened, because a note on every analysis is
+            # noise.
+            if getattr(self, "_on_model_edge", 0):
+                self._note(self._on_model_edge_note())
             # v0.1.121 — anything the run decided it had to say. Attached
             # after the optimisation so a note raised while optimising is
             # carried too.
