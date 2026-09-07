@@ -362,6 +362,25 @@ def solve_branch(
 
 
 # ----------------------------------------------------------------------
+def branch_pair_ok(ff, fm) -> bool:
+    """True when BOTH branches came back with a usable factor.
+
+    v0.1.152 (D56) — the guard that used to stand at each of these twelve
+    call sites was ``math.isfinite(ff) and math.isfinite(fm)``, because
+    :meth:`GLESystem.branches` signalled a dead branch with ``NaN``. It
+    signals it with ``None`` now, so that a value which is not a number
+    cannot be added, compared or averaged by accident on its way out: the
+    whole of D56 is that a NaN which survives arithmetic travels, and one
+    that raises does not.
+
+    The finiteness test is kept as well. It is redundant today —
+    ``solve_branch`` already refuses a non-finite iterate — and it costs
+    nothing to keep a second lock on the one door this defect came through.
+    """
+    return (ff is not None and fm is not None
+            and math.isfinite(ff) and math.isfinite(fm))
+
+
 def thrust_is_admissible(state: BranchState) -> bool:
     """Is the inter-slice thrust of this state a stress state soil can hold?
 
@@ -552,10 +571,11 @@ class GLESystem:
         return force, moment
 
     # ------------------------------------------------------------------
-    def branches(self, lam: float) -> tuple[float, float]:
-        """``(F_f, F_m)`` at one lambda; NaN for a branch that failed.
+    def branches(self, lam: float) -> tuple:
+        """``(F_f, F_m)`` at one lambda; ``None`` for a branch that failed.
 
-        While ``strict`` is on, NaN is also what an INADMISSIBLE lambda gets —
+        While ``strict`` is on, ``None`` is also what an INADMISSIBLE lambda
+        gets —
         see :func:`thrust_is_admissible`. That matters to the outer search,
         which brackets the sign change of ``F_f - F_m``: this system has more
         than one root once the inter-slice forces are actually formed, and the
@@ -564,16 +584,16 @@ class GLESystem:
         It is a PREFERENCE, not a veto, and the difference was measured. On
         the reinforced slope of verification problem 85 — 9000 kN/m of
         anchorage — the soil faces come out in net tension at EVERY lambda,
-        so a veto returned NaN where v0.1.105 returned 1.568. Whether that
+        so a veto returned nothing where v0.1.105 returned 1.568. Whether that
         tension is real or an artefact of concentrating the reinforcement is
-        a question this version does not answer; turning a number into a NaN
-        without answering it loses coverage for nothing. So the caller
+        a question this version does not answer; turning a number into a
+        refusal without answering it loses coverage for nothing. So the caller
         samples again with ``strict`` off when the strict pass found nothing,
         and says so in the result.
         """
         force, moment = self.states(lam)
         if force is None or moment is None:
-            return math.nan, math.nan
+            return None, None
         # An UNCONVERGED fixed point is not a value of F_f, and handing the
         # outer search its last iterate is worse than handing it nothing: on
         # the Duncan and Wright buoyant polyline the branches at lambda = -1.5
@@ -583,9 +603,9 @@ class GLESystem:
         # this could not bite, because F_m did not depend on lambda and there
         # was only ever one crossing to find.
         if not (force.converged and moment.converged):
-            return math.nan, math.nan
+            return None, None
         if not thrust_is_admissible(force):
             self.n_thrust_rejected += 1
             if self.strict:
-                return math.nan, math.nan
+                return None, None
         return force.fos, moment.fos

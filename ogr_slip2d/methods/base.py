@@ -24,17 +24,123 @@ from ..surface import SurfaceProtocol
 
 
 # ======================================================================
+# WHY A CALCULATION HAS NO FACTOR OF SAFETY.
+#
+# v0.1.152 (D56) — the reason codes, one per condition, so a caller can
+# GROUP by reason instead of matching free text. ``error_message`` keeps
+# the sentence a human reads; these are the handle a program takes.
+#
+# That split is not an invention: the reference documentation writes an
+# error CODE in place of the safety factor and prints its description
+# separately, and its own run summaries count surfaces by code — "Error
+# Code -108 reported for 256 surfaces". With only a free string here, the
+# equivalent line cannot be produced without parsing prose.
+#
+# Deliberately NOT passed through ``tr()``, for the same reason as
+# ``NO_SHEAR_STRENGTH_NOTE`` below: every engine reason is a plain English
+# string and the interface translates at the point of display.
+
+#: The surface produced no slices at all.
+REASON_NO_SLICES = "no_slices"
+#: No slice base offers any shear resistance; see NO_SHEAR_STRENGTH_NOTE.
+REASON_NO_SHEAR_STRENGTH = "no_shear_strength"
+#: The total driving moment (or force) vanishes: the mass does not slide,
+#: so there is no factor of safety to report. The reference gives this
+#: condition its own code and says it exists to keep extremely high
+#: factors from being calculated when the driving force is very small.
+REASON_ZERO_DRIVING = "zero_driving"
+#: Active support alone exceeds the driving moment.
+REASON_ACTIVE_SUPPORT_EXCEEDS_DRIVING = "active_support_exceeds_driving"
+#: m-alpha collapsed towards zero on a slice base.
+REASON_M_ALPHA_COLLAPSED = "m_alpha_collapsed"
+#: n-alpha collapsed towards zero on a slice base (the Janbu analogue).
+REASON_N_ALPHA_COLLAPSED = "n_alpha_collapsed"
+#: The arithmetic produced a factor that is not a physical one (<= 0, or
+#: not a finite number).
+REASON_NON_PHYSICAL_FOS = "non_physical_fos"
+#: The iteration ran out of passes before the factor settled. There IS a
+#: number — the last iterate — but it is where the solver happened to
+#: stop, not where it was going.
+#:
+#: v0.1.152 (D56) — this one was found by the guard rather than by the
+#: report that opened the defect. Every iterative method returned that last
+#: iterate with ``converged=False`` and NOTHING else: no message, no note.
+#: The reference gives the condition a code of its own and names the
+#: setting that causes it, which is the difference between "this surface
+#: has no answer" and "raise the iteration limit".
+REASON_NOT_CONVERGED = "not_converged"
+#: Every sampled interslice ratio diverged; no branch to solve on.
+REASON_ALL_LAMBDA_DIVERGED = "all_lambda_diverged"
+#: The sampled range never changed sign, so the root is not bracketed.
+REASON_NO_LAMBDA_BRACKET = "no_lambda_bracket"
+#: The branch diverged at the interslice ratio finally chosen.
+REASON_DIVERGENT_AT_LAMBDA = "divergent_at_lambda"
+#: The prescribed-inclination force balance found no bracket, so what it
+#: has is the sampled F of smallest residual — a fallback, not a solution.
+REASON_NO_FORCE_BRACKET = "no_force_bracket"
+#: The prescribed-inclination force balance produced no usable factor.
+REASON_FORCE_BALANCE_DIVERGED = "force_balance_diverged"
+#: The rapid-drawdown procedure does not apply to this surface. Not an
+#: engine failure: in a search most candidates are like this.
+REASON_DRAWDOWN_NOT_APPLICABLE = "drawdown_not_applicable"
+#: The surface could not be sliced at the drawn-down level.
+REASON_UNSLICEABLE_AT_DRAWDOWN = "unsliceable_at_drawdown"
+
+#: Every reason a method may give. A membership test against this set is
+#: what keeps the next reason from being born as a loose string.
+ALL_REASONS = frozenset({
+    REASON_NO_SLICES,
+    REASON_NO_SHEAR_STRENGTH,
+    REASON_ZERO_DRIVING,
+    REASON_ACTIVE_SUPPORT_EXCEEDS_DRIVING,
+    REASON_M_ALPHA_COLLAPSED,
+    REASON_N_ALPHA_COLLAPSED,
+    REASON_NON_PHYSICAL_FOS,
+    REASON_NOT_CONVERGED,
+    REASON_ALL_LAMBDA_DIVERGED,
+    REASON_NO_LAMBDA_BRACKET,
+    REASON_DIVERGENT_AT_LAMBDA,
+    REASON_NO_FORCE_BRACKET,
+    REASON_FORCE_BALANCE_DIVERGED,
+    REASON_DRAWDOWN_NOT_APPLICABLE,
+    REASON_UNSLICEABLE_AT_DRAWDOWN,
+})
+
+
+# ======================================================================
 @dataclass
 class LEMResult:
     """Result of a single FoS calculation on a specific slip surface."""
 
-    fos: float
+    # v0.1.152 (D56) — ``None`` means THERE IS NO FACTOR OF SAFETY, and it
+    # is the only way to say so: a non-finite value can no longer be
+    # stored here (see __post_init__).
+    #
+    # It used to be ``float``, and fourteen return paths put ``math.nan``
+    # or ``math.inf`` in it. Every one of them also set
+    # ``converged=False`` and an ``error_message``, so the failure WAS
+    # declared — but the field still carried a non-number, and nothing
+    # obliged a reader to consult ``is_valid`` before using it. One that
+    # did not (a benchmark script evaluating a published circle) copied a
+    # ``nan`` into a results file, from there into a comparison table and
+    # from there into a report, unremarked, for seventeen versions.
+    #
+    # ``None`` is what makes that impossible rather than merely unlikely:
+    # arithmetic on it raises where the mistake is made, instead of
+    # producing a number that propagates and compares false against
+    # everything. The reference does the same thing in its own vocabulary
+    # — it writes a code, never a number, when there is no factor.
+    fos: Optional[float]
     converged: bool
     iterations: int
     method_id: str
     surface: SurfaceProtocol
     slices: Slices
     error_message: str = ""
+    # v0.1.152 (D56) — the machine-readable half of ``error_message``: one
+    # of the REASON_* constants above, so a run can report "this reason, N
+    # surfaces" without parsing prose. Empty on a result that succeeded.
+    reason: str = ""
 
     # Per-slice arrays. ALL THREE ARE FORCES, in kN/m per unit
     # out-of-plane width, and none of them is a stress:
@@ -75,6 +181,65 @@ class LEMResult:
     # converged (but physically unreliable) factor of safety.
     admissibility_note: str = ""
 
+    # ------------------------------------------------------------------
+    def __post_init__(self) -> None:
+        """The three things a method is not allowed to hand out (D56).
+
+        All three used to be reachable, and each one has a measured case
+        behind it, taken on 0.1.151 over a circle whose sliding mass is
+        symmetric about the vertical through its centre — so the driving
+        moment cancels to 1.5e-13 against terms of 51, and there is
+        genuinely no factor of safety to report:
+
+        * **a non-number**: Bishop, both Janbus and Fellenius answered
+          ``inf``; Spencer and GLE answered ``nan``. Both survive a
+          ``float()`` and a ``round()``, and ``nan`` compares false
+          against every bound it is tested with, so a range check reads
+          it as "out of range" and a sort puts it wherever the algorithm
+          happens to look first;
+        * **no factor and no failure**: a result cannot say "there is no
+          number" and "I converged" at once;
+        * **a failure with no reason**: on the same surface the three
+          prescribed-inclination methods answered ``5.0`` — the TOP OF
+          THEIR OWN SAMPLING GRID, returned as the nearest-residual
+          fallback — with ``converged=False`` and an empty
+          ``error_message``. That is the worst of the three, because 5.0
+          looks like a factor of safety and a reader has nothing to tell
+          them otherwise.
+
+        Raising is deliberate: these are programming errors inside a
+        method, not conditions a slope can be in, and the whole lesson of
+        this defect is that the quiet ones cost seventeen versions.
+        """
+        # Two λ-sampling paths passed ``None`` to a field declared ``str``.
+        # Normalised rather than rejected: the value they meant is "no
+        # message", and that is what the empty string is for.
+        if self.error_message is None:
+            self.error_message = ""
+        if self.admissibility_note is None:
+            self.admissibility_note = ""
+        if self.reason is None:
+            self.reason = ""
+
+        if self.fos is not None and not math.isfinite(self.fos):
+            raise ValueError(
+                f"{self.method_id or 'a method'} returned {self.fos!r} as a "
+                "factor of safety. A calculation with no answer is reported "
+                "with fos=None and a reason, never with a non-number."
+            )
+        if self.fos is None and self.converged:
+            raise ValueError(
+                f"{self.method_id or 'a method'} reported no factor of "
+                "safety and converged at the same time."
+            )
+        if not self.converged and not (self.error_message
+                                       or self.admissibility_note):
+            raise ValueError(
+                f"{self.method_id or 'a method'} failed to converge without "
+                "saying why. Every failure carries its reason: that is the "
+                "whole of D56."
+            )
+
     @property
     def base_normal(self) -> list[float]:
         """Deprecated alias of :attr:`base_normal_force`.
@@ -87,14 +252,30 @@ class LEMResult:
 
     @property
     def is_valid(self) -> bool:
+        # v0.1.152 — the ``math.isfinite`` that used to stand here is gone
+        # because it can no longer fail: __post_init__ refuses to build a
+        # result with a non-finite factor at all.
         return (
             self.converged
-            and math.isfinite(self.fos)
+            and self.fos is not None
             and self.fos > 0
             and not self.error_message
         )
 
     def to_dict(self) -> dict:
+        """The result as plain data, safe to serialise as JSON.
+
+        v0.1.152 (D56) — ``fos`` comes out as ``None`` (JSON ``null``)
+        when there is no factor of safety, never as ``NaN`` or
+        ``Infinity``: neither is valid JSON, and Python's own encoder
+        emits them anyway unless asked not to, so a file written this way
+        parses in Python and nowhere else. ``json.dumps(d, allow_nan=False)``
+        on this dict is the check, and the suite runs it.
+
+        ``reason``, ``admissible`` and ``admissibility_note`` are included
+        because a factor that is missing without them is exactly the
+        unreadable row this defect is about.
+        """
         return {
             "fos": self.fos,
             "converged": self.converged,
@@ -106,6 +287,9 @@ class LEMResult:
             "base_shear_force": list(self.base_shear_force),
             "base_shear_strength": list(self.base_shear_strength),
             "error": self.error_message,
+            "reason": self.reason,
+            "admissible": self.admissible,
+            "admissibility_note": self.admissibility_note,
         }
 
 
@@ -296,6 +480,20 @@ class LEMMethod(ABC):
         "factor of safety is zero"
     )
 
+    #: What every iterative method says when it runs out of passes.
+    #:
+    #: v0.1.152 (D56) — shared for the same reason as the note above: the
+    #: five iterative solvers used to answer this condition by saying
+    #: nothing at all, each in its own place, and the number they returned
+    #: was the last iterate. It names the setting on purpose. "Did not
+    #: converge" is a fact about the surface; "within the maximum number of
+    #: iterations" is the half that tells the user there is something they
+    #: can do about it.
+    NOT_CONVERGED_NOTE: ClassVar[str] = (
+        "The factor of safety iteration did not converge within the "
+        "maximum number of iterations"
+    )
+
     @staticmethod
     def surface_has_no_shear_strength(slices) -> bool:
         """True when NO slice base offers any shear resistance.
@@ -363,6 +561,7 @@ class LEMMethod(ABC):
             surface=surface,
             slices=slices,
             error_message=self.NO_SHEAR_STRENGTH_NOTE,
+            reason=REASON_NO_SHEAR_STRENGTH,
         )
 
     # ------------------------------------------------------------------

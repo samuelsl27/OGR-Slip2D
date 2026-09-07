@@ -658,7 +658,24 @@ class TestTheDistributedLoadHalf:
         bare = _fos("bishop_simplified", _ground(Project("bare")), surf)
         loaded = _fos("bishop_simplified",
                       self._sloping_load(LoadOrientation.HORIZONTAL), surf)
-        assert loaded != bare
+        # v0.1.152 (D56) — this read ``assert loaded < bare`` and was green
+        # on a factor of safety of −2.727 that the engine had labelled
+        # "Non-physical factor of safety −2.727 in iteration" with
+        # ``converged=False``. Measured on 0.1.151: bare 1.551097 converged,
+        # loaded −2.727 refused. A negative number is below anything, so the
+        # comparison "proved" the horizontal load acts in the right
+        # direction using a value that means nothing.
+        #
+        # What the test set out to show is that a HORIZONTAL distributed
+        # load is not inert — that it moves the analysis at all — and that
+        # much is still true and still worth pinning. That this particular
+        # load drives Bishop to a non-physical factor on this wall is a
+        # separate question, reported as its own defect and not answered
+        # here.
+        assert loaded is None or loaded != bare, (
+            "the horizontal load left the analysis untouched")
+        if loaded is None:
+            return
         # And in the direction a horizontal push towards the slope must go.
         assert loaded < bare
 

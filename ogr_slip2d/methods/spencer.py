@@ -37,7 +37,15 @@ from ogr_core.project import Project
 
 from ..slicer import Slices
 from ..surface import SlipCircle, SurfaceProtocol
-from .base import LEMMethod, LEMResult, register_method
+from .base import (
+    REASON_ALL_LAMBDA_DIVERGED,
+    REASON_DIVERGENT_AT_LAMBDA,
+    REASON_NO_LAMBDA_BRACKET,
+    REASON_NOT_CONVERGED,
+    LEMMethod,
+    LEMResult,
+    register_method,
+)
 from .bishop import BishopSimplified, driving_shear_forces
 
 
@@ -84,7 +92,7 @@ class Spencer(LEMMethod):
         # v0.1.106 — the whole surface is resolved ONCE here and reused at
         # every λ. Spencer is GLE with f(x) = 1 at every boundary, and that
         # is the only line of this method that GLE does not share.
-        from ..interslice import GLESystem
+        from ..interslice import GLESystem, branch_pair_ok
         s_list = slices.slices if hasattr(slices, "slices") else list(slices)
         system = GLESystem(
             s_list, [1.0] * (len(s_list) + 1), kh, kv, slide_sign,
@@ -104,7 +112,7 @@ class Spencer(LEMMethod):
         samples: list[Tuple[float, float, float, float]] = []  # (lam, g, ff, fm)
         for lam in lam_grid:
             ff, fm = solve(lam)
-            if (math.isfinite(ff) and math.isfinite(fm)
+            if (branch_pair_ok(ff, fm)
                     and ff > 0.05 and fm > 0.05 and ff < 50 and fm < 50):
                 samples.append((lam, ff - fm, ff, fm))
                 # v0.1.93 — stop at the FIRST sign change instead of
@@ -139,15 +147,16 @@ class Spencer(LEMMethod):
             system.strict = False
             for lam in lam_grid:
                 ff, fm = solve(lam)
-                if (math.isfinite(ff) and math.isfinite(fm)
+                if (branch_pair_ok(ff, fm)
                         and 0.05 < ff < 50 and 0.05 < fm < 50):
                     samples.append((lam, ff - fm, ff, fm))
 
         if not samples:
             return LEMResult(
-                fos=math.nan, converged=False, iterations=0,
+                fos=None, converged=False, iterations=0,
                 method_id=self.METHOD_ID, surface=surface, slices=slices,
                 error_message="Spencer: all sampled λ diverged",
+                reason=REASON_ALL_LAMBDA_DIVERGED,
             )
 
         # Find a bracket (sign change in g)
@@ -166,7 +175,7 @@ class Spencer(LEMMethod):
         if bracket is None:
             for lam in self.lambda_grid_extension():
                 ff, fm = solve(lam)
-                if (math.isfinite(ff) and math.isfinite(fm)
+                if (branch_pair_ok(ff, fm)
                         and 0.05 < ff < 50 and 0.05 < fm < 50):
                     samples.append((lam, ff - fm, ff, fm))
             samples.sort(key=lambda r: r[0])
@@ -216,7 +225,9 @@ class Spencer(LEMMethod):
                 # a perfectly good bracket was thrown out with the same
                 # force as one with none.
                 error_message=("Spencer: no λ-bracket; using nearest F_f≈F_m"
-                               if abs(best[1]) >= 0.02 else None),
+                               if abs(best[1]) >= 0.02 else ""),
+                reason=(REASON_NO_LAMBDA_BRACKET
+                        if abs(best[1]) >= 0.02 else ""),
                 admissible=not inadmissible,
                 admissibility_note=(
                     "" if not inadmissible else
@@ -242,10 +253,10 @@ class Spencer(LEMMethod):
                 lam_new = 0.5 * (lam_lo + lam_hi)
 
             ff, fm = solve(lam_new)
-            if not (math.isfinite(ff) and math.isfinite(fm) and ff > 0 and fm > 0):
+            if not (branch_pair_ok(ff, fm) and ff > 0 and fm > 0):
                 lam_new = 0.5 * (lam_lo + lam_hi)
                 ff, fm = solve(lam_new)
-                if not (math.isfinite(ff) and math.isfinite(fm)):
+                if not (branch_pair_ok(ff, fm)):
                     break
             g_new = ff - fm
             if abs(g_new) < self.tolerance:
@@ -262,11 +273,12 @@ class Spencer(LEMMethod):
 
         # Final FoS at converged λ
         ff_final, fm_final = solve(lam_lo)
-        if not (math.isfinite(ff_final) and math.isfinite(fm_final)):
+        if not (branch_pair_ok(ff_final, fm_final)):
             return LEMResult(
-                fos=math.nan, converged=False, iterations=iterations,
+                fos=None, converged=False, iterations=iterations,
                 method_id=self.METHOD_ID, surface=surface, slices=slices,
                 error_message="Spencer: divergent at final λ",
+                reason=REASON_DIVERGENT_AT_LAMBDA,
             )
         force, moment = system.states(lam_lo)
         normals, _mobilised, strengths = _base_forces(system, force)
@@ -285,6 +297,8 @@ class Spencer(LEMMethod):
             fos=0.5 * (ff_final + fm_final),
             converged=converged,
             iterations=iterations,
+            error_message="" if converged else self.NOT_CONVERGED_NOTE,
+            reason="" if converged else REASON_NOT_CONVERGED,
             method_id=self.METHOD_ID, surface=surface, slices=slices,
             base_normal_force=normals,
             base_shear_force=driving,

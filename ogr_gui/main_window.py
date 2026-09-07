@@ -206,7 +206,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.151"
+    VERSION = "0.1.152"
 
     def __init__(self) -> None:
         super().__init__()
@@ -2113,6 +2113,17 @@ class MainWindow(QMainWindow):
         # The optimised surface replaces the critical one in the stored
         # result, so Interpret shows what the optimisation produced
         # rather than the surface it started from.
+        # v0.1.152 (D56) — this is the one place in the program that writes
+        # over a factor of safety that has already been published, so it is
+        # also the one place where the guard in ``LEMResult.__post_init__``
+        # cannot run. ``rep.improved`` already implies the optimiser scored
+        # this result, which means it passed ``is_valid``; the check is here
+        # because "already implies" is exactly the reasoning that let a
+        # non-number travel for seventeen versions.
+        if not res.is_valid:
+            self._info(tr("The optimised surface has no factor of safety; "
+                          "the original result is kept."))
+            return
         crit.surface = best
         crit.fos = res.fos
         crit.slices = res.slices

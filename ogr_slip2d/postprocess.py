@@ -204,7 +204,8 @@ def compute_interslice_state(result: LEMResult,
     smaller closure |E_n| wins.
     """
     st = InterSliceState()
-    if result is None or not result.slices or not math.isfinite(result.fos):
+    if (result is None or not result.slices or result.fos is None
+            or not math.isfinite(result.fos)):
         return st
     slist = list(result.slices)
     n = len(slist)

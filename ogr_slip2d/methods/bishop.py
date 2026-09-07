@@ -39,7 +39,16 @@ from ogr_core.project import Project
 from ..external_forces import slice_forces
 from ..slicer import Slice, Slices
 from ..surface import SlipCircle, SurfaceProtocol
-from .base import LEMMethod, LEMResult, register_method
+from .base import (
+    REASON_ACTIVE_SUPPORT_EXCEEDS_DRIVING,
+    REASON_M_ALPHA_COLLAPSED,
+    REASON_NON_PHYSICAL_FOS,
+    REASON_NOT_CONVERGED,
+    REASON_ZERO_DRIVING,
+    LEMMethod,
+    LEMResult,
+    register_method,
+)
 
 
 @register_method
@@ -223,11 +232,12 @@ class BishopSimplified(LEMMethod):
                 m_alpha = math.cos(alpha) + math.sin(alpha) * tan_phi / fos
                 if abs(m_alpha) < 1e-6:
                     return LEMResult(
-                        fos=math.nan, converged=False, iterations=iterations,
+                        fos=None, converged=False, iterations=iterations,
                         method_id=self.METHOD_ID, surface=surface,
                         slices=slices,
                         error_message=(f"mα collapsed to {m_alpha:.4g} "
-                                       f"at slice {s.index}"))
+                                       f"at slice {s.index}"),
+                        reason=REASON_M_ALPHA_COLLAPSED)
                 # Q = S·F, the resisting force with the factor divided out.
                 q = (c * s.width
                      + (w_n - s.pore_pressure * s.width) * tan_phi) / m_alpha
@@ -278,16 +288,18 @@ class BishopSimplified(LEMMethod):
                 couple=sup.couple if sup.present else 0.0)
             if abs(terms.driving) < 1e-9:
                 return LEMResult(
-                    fos=math.inf, converged=False, iterations=iterations,
+                    fos=None, converged=False, iterations=iterations,
                     method_id=self.METHOD_ID, surface=surface, slices=slices,
                     error_message=("Zero driving moment — surface does not "
-                                   "slide"))
+                                   "slide"),
+                    reason=REASON_ZERO_DRIVING)
             new_fos = -terms.shear / terms.driving
             if not math.isfinite(new_fos) or new_fos <= 0.0:
                 return LEMResult(
-                    fos=math.nan, converged=False, iterations=iterations,
+                    fos=None, converged=False, iterations=iterations,
                     method_id=self.METHOD_ID, surface=surface, slices=slices,
-                    error_message="Non-physical factor of safety")
+                    error_message="Non-physical factor of safety",
+                    reason=REASON_NON_PHYSICAL_FOS)
             # v0.1.100 — never on the FIRST pass. The stopping rule is a
             # STEP between two successive iterates, and the initial guess is
             # not an iterate: comparing against it measures the distance from
@@ -313,6 +325,8 @@ class BishopSimplified(LEMMethod):
             fos=fos, converged=converged, iterations=iterations,
             method_id=self.METHOD_ID, surface=surface, slices=slices,
             details={"moment_axis": axis},
+            error_message="" if converged else self.NOT_CONVERGED_NOTE,
+            reason="" if converged else REASON_NOT_CONVERGED,
         )
 
     def compute_fos(
@@ -458,7 +472,7 @@ class BishopSimplified(LEMMethod):
         # excluding it from the choice of critical surface.
         if sup.present and denominator <= 0.0:
             return LEMResult(
-                fos=math.inf,
+                fos=None,
                 converged=False,
                 iterations=0,
                 method_id=self.METHOD_ID,
@@ -469,17 +483,19 @@ class BishopSimplified(LEMMethod):
                     "Active support force exceeds the driving moment; "
                     "the factor of safety is undefined for this surface"
                 ),
+                reason=REASON_ACTIVE_SUPPORT_EXCEEDS_DRIVING,
             )
 
         if abs(denominator) < 1e-9:
             return LEMResult(
-                fos=math.inf,
+                fos=None,
                 converged=False,
                 iterations=0,
                 method_id=self.METHOD_ID,
                 surface=surface,
                 slices=slices,
                 error_message="Zero driving moment — surface does not slide",
+                reason=REASON_ZERO_DRIVING,
             )
 
         # Iterative fixed-point solve for FoS
@@ -523,7 +539,7 @@ class BishopSimplified(LEMMethod):
 
                 if abs(m_alpha) < 1e-6:
                     return LEMResult(
-                        fos=math.nan,
+                        fos=None,
                         converged=False,
                         iterations=iterations,
                         method_id=self.METHOD_ID,
@@ -532,6 +548,7 @@ class BishopSimplified(LEMMethod):
                         error_message=(
                             f"mα collapsed to {m_alpha:.4g} at slice {s.index}"
                         ),
+                        reason=REASON_M_ALPHA_COLLAPSED,
                     )
 
                 # Bishop numerator: [c'·b + (W − u·b)·tan φ'] / m_α
@@ -556,7 +573,7 @@ class BishopSimplified(LEMMethod):
             if not math.isfinite(new_fos) or new_fos <= 0.0:
                 finite = math.isfinite(new_fos)
                 return LEMResult(
-                    fos=new_fos if finite else math.nan,
+                    fos=None,
                     converged=False,
                     iterations=iterations,
                     method_id=self.METHOD_ID,
@@ -567,6 +584,7 @@ class BishopSimplified(LEMMethod):
                         f"in iteration" if finite
                         else "Non-finite FoS in iteration"
                     ),
+                    reason=REASON_NON_PHYSICAL_FOS,
                 )
 
             # See the note in ``_general_moment_fos``: the first step is
@@ -597,6 +615,8 @@ class BishopSimplified(LEMMethod):
             fos=fos,
             converged=converged,
             iterations=iterations,
+            error_message="" if converged else self.NOT_CONVERGED_NOTE,
+            reason="" if converged else REASON_NOT_CONVERGED,
             method_id=self.METHOD_ID,
             surface=surface,
             slices=slices,

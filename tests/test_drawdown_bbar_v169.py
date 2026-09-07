@@ -321,10 +321,34 @@ class TestBBarMovesTheNumber:
         reservoir_full = _fos(_full_reservoir())
         for b in (1.0, 0.5, 0.25):
             after = _fos(_slope(final_y=50.0, b_bar=b))
-            assert math.isfinite(after)
+            # v0.1.152 (D56) — this used to read ``assert
+            # math.isfinite(after)`` and then compare, and it was green on a
+            # number the engine had already refused. Measured on 0.1.151:
+            #
+            #   B̄ = 1.00   1.570997   converged
+            #   B̄ = 0.50   0.682578   converged
+            #   B̄ = 0.25  -0.034120   NOT converged, "Non-physical factor
+            #                         of safety -0.03412 in iteration"
+            #
+            # The last one passed both assertions for the wrong reason: a
+            # negative number is finite, and it is below anything. So the
+            # case that most needed looking at was the one the test was
+            # least able to see. Why B̄ = 0.25 drives this slope to a
+            # negative factor is NOT answered here — it is reported as its
+            # own defect — but a test that cannot tell the two apart is not
+            # protecting the invariant it claims to.
+            if after is None:
+                continue
             assert after < reservoir_full, (
                 f"B̄ = {b}: {after:.4f} is not below the full reservoir "
                 f"{reservoir_full:.4f}")
+        # The two B̄ that DO produce a factor still have to produce one:
+        # without this the loop above would pass on a run where every case
+        # failed to converge.
+        solved = [b for b in (1.0, 0.5, 0.25)
+                  if _fos(_slope(final_y=50.0, b_bar=b)) is not None]
+        assert solved == [1.0, 0.5], (
+            f"the set of B̄ that yield a factor of safety has moved: {solved}")
 
     def test_a_freely_draining_material_retains_no_excess(self):
         """Without the flag, the pore pressure is the final level's.

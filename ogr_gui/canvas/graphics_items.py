@@ -689,7 +689,13 @@ class SlipSurfaceItem(QGraphicsPathItem):
             self.setZValue(7.5)
         else:
             self.setZValue(8.5)
-        self.setToolTip(f"Slip surface — FoS = {fos:.3f}")
+        # v0.1.152 (D56) — the invalid-surfaces overlay draws surfaces that
+        # have NO factor of safety, and ``fos`` is None for them. The caller
+        # overwrites this tooltip with the reason in that case; this is what
+        # it says until then, and it must not be a formatted None.
+        self.setToolTip(
+            "Slip surface — FoS = %.3f" % fos if fos is not None
+            else "Slip surface — no factor of safety")
 
 
 # ======================================================================

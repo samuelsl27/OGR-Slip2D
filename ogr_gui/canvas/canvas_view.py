@@ -805,6 +805,10 @@ class CanvasView(QGraphicsView):
                     and (sd.get("x_left") is None
                          or sd.get("x_right") is None)):
                 continue
+            # v0.1.152 (D56) — these are the INVALID surfaces, so most of
+            # them have no factor of safety at all and ``ev.fos`` is None.
+            # The item only stores it; what this overlay says is the
+            # ``reason``, which goes on the tooltip below.
             item = SlipSurfaceItem(sd, ev.fos)
             pen = item.pen()
             pen.setColor(QColor("#7d3c98"))

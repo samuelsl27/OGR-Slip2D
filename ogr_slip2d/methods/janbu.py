@@ -43,7 +43,16 @@ from ogr_core.project import Project
 from ..external_forces import slice_forces
 from ..slicer import Slice, Slices
 from ..surface import SurfaceProtocol
-from .base import LEMMethod, LEMResult, register_method
+from .base import (
+    REASON_ACTIVE_SUPPORT_EXCEEDS_DRIVING,
+    REASON_N_ALPHA_COLLAPSED,
+    REASON_NON_PHYSICAL_FOS,
+    REASON_NOT_CONVERGED,
+    REASON_ZERO_DRIVING,
+    LEMMethod,
+    LEMResult,
+    register_method,
+)
 from .bishop import (  # reuse the envelope linearisation and the X = 0 base forces
     BishopSimplified,
     base_forces_no_interslice_shear,
@@ -163,12 +172,13 @@ class JanbuSimplified(LEMMethod):
         )
         if sup.present and denominator <= 0.0:
             return LEMResult(
-                fos=math.inf,
+                fos=None,
                 converged=False,
                 iterations=0,
                 method_id=self.METHOD_ID,
                 surface=surface,
                 slices=slices,
+                reason=REASON_ACTIVE_SUPPORT_EXCEEDS_DRIVING,
                 admissible=False,
                 admissibility_note=(
                     "Active support force exceeds the driving force; "
@@ -178,12 +188,13 @@ class JanbuSimplified(LEMMethod):
 
         if abs(denominator) < 1e-9:
             return LEMResult(
-                fos=math.inf,
+                fos=None,
                 converged=False,
                 iterations=0,
                 method_id=self.METHOD_ID,
                 surface=surface,
                 slices=slices,
+                reason=REASON_ZERO_DRIVING,
                 error_message="Zero driving force — surface does not slide",
             )
 
@@ -224,12 +235,13 @@ class JanbuSimplified(LEMMethod):
                 )
                 if abs(n_alpha) < 1e-6:
                     return LEMResult(
-                        fos=math.nan,
+                        fos=None,
                         converged=False,
                         iterations=iterations,
                         method_id=self.METHOD_ID,
                         surface=surface,
                         slices=slices,
+                        reason=REASON_N_ALPHA_COLLAPSED,
                         error_message=f"nα collapsed at slice {s.index}",
                     )
 
@@ -274,12 +286,13 @@ class JanbuSimplified(LEMMethod):
             if not math.isfinite(new_fos) or new_fos <= 0.0:
                 finite = math.isfinite(new_fos)
                 return LEMResult(
-                    fos=new_fos if finite else math.nan,
+                    fos=None,
                     converged=False,
                     iterations=iterations,
                     method_id=self.METHOD_ID,
                     surface=surface,
                     slices=slices,
+                    reason=REASON_NON_PHYSICAL_FOS,
                     error_message=(
                         f"Non-physical factor of safety {new_fos:.4g} "
                         f"in iteration" if finite
@@ -337,6 +350,8 @@ class JanbuSimplified(LEMMethod):
             fos=fos,
             converged=converged,
             iterations=iterations,
+            error_message="" if converged else self.NOT_CONVERGED_NOTE,
+            reason="" if converged else REASON_NOT_CONVERGED,
             method_id=self.METHOD_ID,
             surface=surface,
             slices=slices,

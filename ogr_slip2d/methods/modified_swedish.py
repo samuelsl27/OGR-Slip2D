@@ -62,7 +62,14 @@ from ogr_core.project import Project
 from ..external_forces import interslice_water_thrust, slice_forces
 from ..slicer import Slices
 from ..surface import SurfaceProtocol
-from .base import LEMMethod, LEMResult, register_method
+from .base import (
+    REASON_FORCE_BALANCE_DIVERGED,
+    REASON_NO_FORCE_BRACKET,
+    REASON_NO_SLICES,
+    LEMMethod,
+    LEMResult,
+    register_method,
+)
 from .bishop import BishopSimplified, driving_shear_forces
 
 #: Accepted values of ``interslice_forces``.
@@ -126,9 +133,10 @@ class PrescribedInclinationMethod(LEMMethod):
 
         if not slices.slices:
             return LEMResult(
-                fos=math.nan, converged=False, iterations=0,
+                fos=None, converged=False, iterations=0,
                 method_id=self.METHOD_ID, surface=surface, slices=slices,
                 error_message="No slices",
+                reason=REASON_NO_SLICES,
             )
 
         kh = project.seismic.kh if project.seismic.enabled else 0.0
@@ -162,11 +170,12 @@ class PrescribedInclinationMethod(LEMMethod):
             slices, kh, kv, slide_sign, face_thrust, sup,
         )
 
-        if not (math.isfinite(fos) and fos > 0):
+        if fos is None or not (math.isfinite(fos) and fos > 0):
             return LEMResult(
-                fos=math.nan, converged=False, iterations=iters,
+                fos=None, converged=False, iterations=iters,
                 method_id=self.METHOD_ID, surface=surface, slices=slices,
                 error_message=f"{self.DISPLAY_NAME}: force balance diverged",
+                reason=REASON_FORCE_BALANCE_DIVERGED,
             )
 
         normals, _mobilised, strengths = self._base_forces(
@@ -186,6 +195,16 @@ class PrescribedInclinationMethod(LEMMethod):
             converged=converged,
             iterations=iters,
             method_id=self.METHOD_ID, surface=surface, slices=slices,
+            # v0.1.152 (D56) - sin bracket, ``_force_balance`` devuelve el
+            # F muestreado de menor residuo. Es un valor de reserva, no una
+            # solucion, y hasta ahora salia con ``converged=False`` y sin
+            # una palabra que lo dijera: sobre una masa simetrica los tres
+            # metodos de inclinacion prescrita respondian 5.0 -el TECHO de
+            # su propia rejilla- con el motivo vacio.
+            error_message=("" if converged else
+                           f"{self.DISPLAY_NAME}: no F-bracket; reporting "
+                           f"the sampled F of smallest residual"),
+            reason="" if converged else REASON_NO_FORCE_BRACKET,
             base_normal_force=normals,
             base_shear_force=driving,
             base_shear_strength=strengths,

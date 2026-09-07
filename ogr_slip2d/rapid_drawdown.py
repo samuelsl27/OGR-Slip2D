@@ -450,7 +450,7 @@ def rapid_drawdown_fos(
         raise RapidDrawdownError(
             "The slip surface could not be sliced at the initial level")
     r1 = method.compute_fos(p1, surface, sl1)
-    if not (math.isfinite(r1.fos) and r1.fos > 0.0):
+    if r1.fos is None or not (math.isfinite(r1.fos) and r1.fos > 0.0):
         raise RapidDrawdownError(
             "Stage 1 did not produce a usable factor of safety")
     if r1.fos < 1.0:
@@ -498,7 +498,7 @@ def rapid_drawdown_fos(
 
     sl2u = _undrained_slices(sl2, tau_by_index)
     r2 = method.compute_fos(p2, surface, sl2u)
-    if not math.isfinite(r2.fos):
+    if r2.fos is None or not math.isfinite(r2.fos):
         raise RapidDrawdownError("Stage 2 did not converge")
 
     res = DrawdownResult(
@@ -660,14 +660,16 @@ class MultiStageDrawdownMethod:
                 project, surface, self.inner,
                 num_slices=self.num_slices, procedure=self.procedure)
         except RapidDrawdownError as exc:
+            from .methods.base import REASON_DRAWDOWN_NOT_APPLICABLE
             # A surface the procedure does not apply to is not a failure
             # of the run: in a search most candidates are like that. It
             # comes back invalid with the reason attached, so the Invalid
             # Surfaces report can group them.
             return LEMResult(
-                fos=math.nan, converged=False, iterations=0,
+                fos=None, converged=False, iterations=0,
                 method_id=self.METHOD_ID, surface=surface, slices=slices,
                 error_message=str(exc),
+                reason=REASON_DRAWDOWN_NOT_APPLICABLE,
             )
         # v0.1.107 - the per-slice columns of the stage that produced the
         # answer, and ITS slicing with them. Until now this built a result
@@ -794,11 +796,13 @@ class BBarDrawdownMethod:
         p2 = level_project(project, use_drawdown=True)
         sl2 = slice_surface(p2, surface, num_slices=self.num_slices)
         if sl2 is None:
+            from .methods.base import REASON_UNSLICEABLE_AT_DRAWDOWN
             return LEMResult(
-                fos=math.nan, converged=False, iterations=0,
+                fos=None, converged=False, iterations=0,
                 method_id=self.METHOD_ID, surface=surface, slices=slices,
                 error_message="The slip surface could not be sliced at "
                               "the drawn-down level",
+                reason=REASON_UNSLICEABLE_AT_DRAWDOWN,
             )
         n = b_bar_pore_pressures(project, sl2)
         res = self.inner.compute_fos(p2, surface, sl2)

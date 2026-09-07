@@ -279,6 +279,17 @@ def run_back_analysis(project, search, target_fos=1.3, elevation=0.0,
         # The converged, unsupported factor comes from the evaluation
         # itself — the only place it is actually known.
         r.unsupported_fos = ev.fos
+        # v0.1.152 (D56) — ``governing_force`` is NaN when neither
+        # assumption produced a finite force, and a NaN loses every
+        # comparison it takes part in. So a NaN reaching ``best`` first
+        # would stay there for the rest of the run: every later candidate
+        # asks ``x > nan``, which is False, and the report would publish a
+        # required force of NaN with no note at all — the "No surface could
+        # be back-analysed" message below only fires on ``best is None``.
+        # It is the same defect as D56 one level up, and it is closed the
+        # same way: a candidate with no number is not a candidate.
+        if not math.isfinite(r.governing_force):
+            continue
         if best is None or r.governing_force > best.governing_force:
             best = r
         if progress_cb and i % 20 == 0:

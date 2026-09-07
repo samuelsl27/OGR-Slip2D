@@ -201,6 +201,10 @@ _DICTS: dict[str, dict[str, str]] = {
         'Move Slope Limits...': 'Mover límites del talud',
         'No focus objects are defined.': 'No hay objetos de foco definidos.',
         'No improvement found: %s': 'No se ha encontrado mejora: %s',
+        'The optimised surface has no factor of safety; '
+        'the original result is kept.':
+            'La superficie optimizada no tiene factor de seguridad; '
+            'se conserva el resultado original.',
         'Optimisation applies to NON-CIRCULAR surfaces. The critical surface of this method is a circle; use a Block or Path Search first.': 'La optimización se aplica a superficies NO CIRCULARES. La superficie crítica de este método es un círculo; use antes una búsqueda por bloques o por trayectorias.',
         'Optimised: %s': 'Optimizada: %s',
         'Optimize Surfaces...': 'Optimizar superficies...',

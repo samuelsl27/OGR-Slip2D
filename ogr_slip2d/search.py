@@ -597,14 +597,16 @@ class BaseSearch(ABC):
         try:
             res = self.method.compute_fos(project, surface, slices)
         except ArithmeticError as exc:
+            from .methods.base import REASON_NON_PHYSICAL_FOS
             res = LEMResult(
-                fos=math.nan,
+                fos=None,
                 converged=False,
                 iterations=0,
                 method_id=self.method.METHOD_ID,
                 surface=surface,
                 slices=slices,
                 error_message=f"Arithmetic failure: {exc}",
+                reason=REASON_NON_PHYSICAL_FOS,
             )
         self._is_admissible(res)     # marks res.admissible in place
         self._solve_ky(project, surface, slices, res)

@@ -39,7 +39,14 @@ from ogr_core.project import Project
 from ..external_forces import slice_forces
 from ..slicer import Slices
 from ..surface import SlipCircle, SurfaceProtocol
-from .base import LEMMethod, LEMResult, register_method
+from .base import (
+    REASON_ACTIVE_SUPPORT_EXCEEDS_DRIVING,
+    REASON_NON_PHYSICAL_FOS,
+    REASON_ZERO_DRIVING,
+    LEMMethod,
+    LEMResult,
+    register_method,
+)
 
 
 @register_method
@@ -161,17 +168,19 @@ class OrdinaryFellenius(LEMMethod):
                              couple=sup.couple if sup.present else 0.0)
         if abs(terms.driving) < 1e-9:
             return LEMResult(
-                fos=math.inf, converged=False, iterations=0,
+                fos=None, converged=False, iterations=0,
                 method_id=self.METHOD_ID, surface=surface, slices=slices,
                 error_message="Zero driving moment — surface does not slide",
+                reason=REASON_ZERO_DRIVING,
             )
         fos = -terms.shear / terms.driving
         if not math.isfinite(fos) or fos <= 0.0:
             return LEMResult(
-                fos=fos if math.isfinite(fos) else math.nan,
+                fos=None,
                 converged=False, iterations=0, method_id=self.METHOD_ID,
                 surface=surface, slices=slices,
                 error_message="Non-physical factor of safety",
+                reason=REASON_NON_PHYSICAL_FOS,
             )
         return LEMResult(
             fos=fos, converged=True, iterations=1,
@@ -408,12 +417,13 @@ class OrdinaryFellenius(LEMMethod):
         )
         if sup.present and denominator <= 0.0:
             return LEMResult(
-                fos=math.inf,
+                fos=None,
                 converged=False,
                 iterations=0,
                 method_id=self.METHOD_ID,
                 surface=surface,
                 slices=slices,
+                reason=REASON_ACTIVE_SUPPORT_EXCEEDS_DRIVING,
                 admissible=False,
                 admissibility_note=(
                     "Active support force exceeds the driving moment; "
@@ -423,12 +433,13 @@ class OrdinaryFellenius(LEMMethod):
 
         if abs(denominator) < 1e-9:
             return LEMResult(
-                fos=math.inf,
+                fos=None,
                 converged=False,
                 iterations=0,
                 method_id=self.METHOD_ID,
                 surface=surface,
                 slices=slices,
+                reason=REASON_ZERO_DRIVING,
                 error_message="Zero driving moment — surface does not slide",
             )
 

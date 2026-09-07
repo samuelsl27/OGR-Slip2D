@@ -109,12 +109,21 @@ def save_results(
         group = f.create_group("surfaces")
         for i, res in enumerate(search_result.evaluations):
             sg = group.create_group(f"surface_{i:05d}")
-            sg.attrs["fos"] = float(res.fos) if np.isfinite(res.fos) else np.nan
+            # v0.1.152 (D56) — a surface with no factor of safety gets NO
+            # ``fos`` attribute, and its ``reason`` in place of one. That is
+            # what the reference does — it writes a code where the safety
+            # factor would go — and the point is what a reader gets when it
+            # forgets to check: a KeyError names the surface and stops,
+            # where the ``np.nan`` written here before was a number that
+            # survived every conversion and comparison on its way out.
+            if res.fos is not None:
+                sg.attrs["fos"] = float(res.fos)
             sg.attrs["converged"] = res.converged
             sg.attrs["iterations"] = res.iterations
             sg.attrs["method"] = res.method_id
             sg.attrs["is_valid"] = res.is_valid
             sg.attrs["error"] = res.error_message or ""
+            sg.attrs["reason"] = getattr(res, "reason", "") or ""
             # v0.1.127 — the seismic extras, written only when the run
             # produced them, so a file from an ordinary run is byte for
             # byte the file it always was.
@@ -158,6 +167,13 @@ def save_results(
 
         # Summary
         summary = f.create_group("summary")
+        # The one place a NaN stays, and it is not the same thing: this is a
+        # fixed-length numeric column, one cell per surface, whose whole
+        # contract is "the factor where there is one". A gap has to be
+        # SOMETHING in an f8 array, NaN is the value that propagates as a
+        # gap through every numpy reduction, and the cell is already
+        # conditioned on ``is_valid``. The per-surface group above is where
+        # a reader goes for an answer, and there the absence is an absence.
         fos_arr = np.array(
             [r.fos if r.is_valid else np.nan for r in search_result.evaluations],
             dtype="f8",
