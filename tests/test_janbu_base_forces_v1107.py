@@ -28,20 +28,46 @@ Three anchors, none of them a snapshot of what the code prints:
    makes the first anchor more than a tautology, because a normal borrowed
    from a moment method would fail it.
 
-3. **The published maximum effective normal stress** of Baker's (2003) third
-   example, which a verification manual reproduces: 36.33 kPa with a power
-   curve envelope and 30.05 kPa with Mohr-Coulomb, both for Janbu Simplified
-   on the published critical circle.
+3. **The published maximum effective normal stress** of Baker's (2003)
+   SECOND example, which a verification manual reproduces with the circle,
+   the method and the stress printed together in the same panel: 99.50 kPa
+   with a power curve envelope and 118.63 kPa with Mohr-Coulomb, both for
+   Janbu Simplified, each on ITS OWN published circle. Measured +0.003 % and
+   -0.005 %.
 
-   The tolerance is +-3 %, not the +-1 % that would look tidier, and the
-   reason is worth writing down: on that same circle the FACTOR OF SAFETY
-   already lands -1.4 % and -2.5 % from the published value, so sigma' cannot
-   be expected to do better. Measured: -1.9 % and +1.2 %. Tightening the band
-   would be pinning a discrepancy this test did not cause.
+   **v0.1.153 moved this anchor, and why is the part worth reading.** Until
+   now it used Baker's THIRD example and the pair 36.33 / 30.05, on the two
+   circles that example publishes — but those panels say ``Method: spencer``,
+   while 36.33 and 30.05 are the table's JANBU rows, measured on Janbu's own
+   critical circle, which that example does NOT publish. So the anchor ran
+   Janbu on Spencer's surface and compared the answer against Janbu's number
+   from a third one. It passed at -1.9 % and +1.2 % inside a +-3 % band, and
+   the docstring called it "the published critical circle".
 
-   Note the published value for SPENCER on the same circle is 31.21, not
-   36.33 — the inter-slice shear moves the peak — so it is a different
-   comparison and does not belong here.
+   How far apart those surfaces are, measured: the critical circle Janbu
+   finds on that model sits 3.010 m from the panel's centre with a radius
+   2.820 m smaller (power curve), and 2.579 m / 2.518 m smaller
+   (Mohr-Coulomb). Not a rounding difference — a different mechanism.
+
+   The second example has none of that trouble: its panels print centre,
+   radius, endpoints and ``Method: janbu simplified``, and the table row
+   beside them is the one being compared. Centre, radius and both published
+   endpoints agree with each other to under a millimetre.
+
+   The band is +-0.5 %, six times tighter than the one it replaces, and what
+   sets it is the mesh rather than the physics. Both surfaces are pinned at
+   30 slices, the mesh the model declares. At 50 and 100 the power-curve case
+   drifts to +0.12 % and +0.16 %, but the Mohr-Coulomb one drifts to +1.10 %
+   and +2.00 %, because its peak slice sits on the FLAT stretch where the arc
+   is clipped to the floor and refining resamples it. Measured, written down,
+   and deliberately not hidden inside a wider band.
+
+   This anchor needs Composite Surfaces: both published arcs dip below the
+   model floor — to y = -0.452 and -0.778 against a floor at y = 0 — and the
+   reference does not discard them, it makes them follow the boundary.
+   Without the option the surface is refused outright and there is nothing to
+   measure, which is what left this example with one usable panel out of
+   three for eleven versions.
 
 And two definitions this file also pins:
 
@@ -76,11 +102,27 @@ sys.path.insert(0, str(Path(__file__).parent))
 BAKER3_OUTLINE = [(0, 0), (20, 0), (20, 6), (6, 6)]
 BAKER3_GAMMA = 18.0
 BAKER3_SLICES = 50
-#: (centre_x, centre_y, radius) of the published critical circle, and the
-#: published maximum effective normal stress for Janbu Simplified on it.
+#: (centre_x, centre_y, radius) of the two circles that example PUBLISHES.
+#: Both panels read ``Method: spencer``. They are kept because the identities
+#: below are about a surface, not about whose surface it is; they are NOT an
+#: anchor for Janbu's published stress, and were used as one until v0.1.153.
+#: See anchor 3 in the module docstring.
 BAKER3 = {
-    "power_curve": ((-0.977, 9.501, 9.551), 36.33),
-    "mohr_coulomb": ((-1.665, 9.968, 10.106), 30.05),
+    "power_curve": (-0.977, 9.501, 9.551),
+    "mohr_coulomb": (-1.665, 9.968, 10.106),
+}
+
+# Baker (2003) example 2, same manual. This one publishes centre, radius,
+# endpoints AND ``Method: janbu simplified`` in the same panel as the table
+# row, which is what makes it an anchor and example 3 not one.
+BAKER2_OUTLINE = [(0, 0), (48, 12), (100, 12), (100, 0)]
+BAKER2_GAMMA = 18.0
+#: The mesh the model declares. Pinned, not incidental: see anchor 3.
+BAKER2_SLICES = 30
+#: model -> ((centre_x, centre_y, radius), published sigma'max, published FoS)
+BAKER2 = {
+    "power_curve": ((15.081, 51.981, 52.433), 99.50, 2.559),
+    "mohr_coulomb": ((18.848, 43.505, 44.283), 118.63, 2.662),
 }
 
 ALL_METHODS = ["bishop_simplified", "janbu_simplified", "janbu_corrected",
@@ -158,11 +200,57 @@ def _baker3(model_id: str):
     p.materials = [clay]
     p.assign_material_at(*p.resolve_regions()[0].centroid(), clay.id)
 
-    (cx, cy, r), published = BAKER3[model_id]
+    cx, cy, r = BAKER3[model_id]
     circle = SlipCircle(centre_x=cx, centre_y=cy, radius=r)
     slices = slice_surface(p, circle, num_slices=BAKER3_SLICES)
     assert slices is not None
-    _CACHE[key] = (p, circle, slices, published)
+    _CACHE[key] = (p, circle, slices)
+    return _CACHE[key]
+
+
+def _baker2(model_id: str):
+    """Baker's second example, on the circle ITS OWN panel publishes.
+
+    Built through ``GridSearch.evaluate_circle`` rather than by slicing the
+    circle directly, because that is the path that applies the Composite
+    Surfaces clipping, and without the clipping these two arcs are refused:
+    they dip below the model floor. Returns the LEMResult, so the caller
+    reads the stress off the same object the verification bench does.
+    """
+    key = "baker2:" + model_id
+    if key in _CACHE:
+        return _CACHE[key]
+    from ogr_core.geometry import Boundary, BoundaryType, Polyline, Vertex
+    from ogr_core.materials import Material
+    from ogr_core.materials.builtin_models import MohrCoulomb, PowerCurve
+    from ogr_core.project import Project
+    from ogr_slip2d.analysis_runner import build_method
+    from ogr_slip2d.search import GridSearch
+    from ogr_slip2d.surface import SlipCircle
+
+    ext = Polyline(vertices=[Vertex(x, y) for x, y in BAKER2_OUTLINE],
+                   closed=True)
+    ext.ensure_ccw()
+    p = Project("Baker 2003 example 2")
+    p.add_boundary(Boundary(polyline=ext, btype=BoundaryType.EXTERNAL))
+    # tau/Pa = A*(sigma_n/Pa + T)**n with A = 0.58, n = 0.86, T = 0 and
+    # Pa = 101.325 kPa, rewritten in the tau = a*(sigma_n + d)**b + c form.
+    strength = (PowerCurve(a=1.107, b=0.86, c=0.0, d=0.0, waviness=0.0)
+                if model_id == "power_curve"
+                else MohrCoulomb(cohesion=11.64, friction_angle=24.7))
+    clay = Material(name="clay", unit_weight=BAKER2_GAMMA,
+                    sat_unit_weight=BAKER2_GAMMA, strength=strength)
+    p.materials = [clay]
+    p.assign_material_at(*p.resolve_regions()[0].centroid(), clay.id)
+    p.settings.search.composite_surfaces = True
+
+    (cx, cy, r), sigma_pub, fos_pub = BAKER2[model_id]
+    ev = GridSearch(
+        method=build_method(p, "janbu_simplified", BAKER2_SLICES),
+        num_slices=BAKER2_SLICES, min_area=0.0)
+    res = ev.evaluate_circle(p, SlipCircle(centre_x=cx, centre_y=cy, radius=r))
+    assert res is not None and res.is_valid, model_id
+    _CACHE[key] = (res, sigma_pub, fos_pub)
     return _CACHE[key]
 
 
@@ -356,37 +444,74 @@ class TestGlobalVerticalEquilibrium:
 
 # ======================================================================
 class TestTheMaximumEffectiveNormalStress:
-    """Baker (2003) example 3, against the published value.
+    """Baker (2003) example 2, against the value published beside its circle.
 
     The quantity is a STRESS, ``N/l - u``, and the arrays hold FORCES.
-    Reading ``max(base_normal_force)`` as if it were kPa gives a number about
-    four times too small and plausible enough to pass unnoticed; this example
-    is where that was caught, because it publishes the stress (force 7.69,
-    stress 36.46, published 36.33).
+    Reading ``max(base_normal_force)`` as if it were kPa gives a number
+    several times too small and plausible enough to pass unnoticed, which is
+    what these tests are here to prevent.
+
+    Why example 2 and not example 3 -- which is where the confusion was
+    actually caught -- is anchor 3 in the module docstring: example 3's
+    panels publish SPENCER's circles, so running Janbu on them and comparing
+    against Janbu's published stress crosses two surfaces. Example 2 prints
+    circle, method and stress in the same panel.
     """
 
-    @staticmethod
-    def _measure(model_id):
-        p, circle, slices, published = _baker3(model_id)
-        res = _run("janbu_simplified", (p, circle, slices))
-        return _max_effective_normal(res), published
+    TOL = 0.005   # +-0.5 %; measured +0.003 % and -0.005 % at 30 slices
 
     def test_power_curve(self):
-        got, published = self._measure("power_curve")
-        assert abs(got - published) <= 0.03 * published, (got, published)
+        res, sigma_pub, _fos = _baker2("power_curve")
+        got = _max_effective_normal(res)
+        assert abs(got - sigma_pub) <= self.TOL * sigma_pub, (got, sigma_pub)
 
     def test_mohr_coulomb(self):
-        got, published = self._measure("mohr_coulomb")
-        assert abs(got - published) <= 0.03 * published, (got, published)
+        res, sigma_pub, _fos = _baker2("mohr_coulomb")
+        got = _max_effective_normal(res)
+        assert abs(got - sigma_pub) <= self.TOL * sigma_pub, (got, sigma_pub)
+
+    def test_the_factor_lands_too_so_the_stress_is_not_alone(self):
+        """Rule 1 asks for an external reference; this asks that the SAME
+        surface reproduce BOTH published magnitudes. A stress that matched
+        while its factor did not would be the interesting kind of accident,
+        and on example 3 that is exactly what the old anchor was: the stress
+        inside +-3 % with the factor 3.6 % out."""
+        for model_id in ("power_curve", "mohr_coulomb"):
+            res, _sigma, fos_pub = _baker2(model_id)
+            assert abs(res.fos - fos_pub) <= self.TOL * fos_pub, (
+                model_id, res.fos, fos_pub)
+
+    def test_the_arc_really_is_clipped_to_the_floor(self):
+        """The anchor only exists because of Composite Surfaces, so the
+        clipping is asserted rather than assumed. Both published arcs dip
+        below y = 0; if a future change stopped clipping them the surface
+        would be refused and these tests would fail with a confusing
+        message instead of this one."""
+        from ogr_slip2d.surface import CompositeSurface
+        for model_id, lowest in (("power_curve", -0.452),
+                                 ("mohr_coulomb", -0.778)):
+            (cx, cy, r), _s, _f = BAKER2[model_id]
+            assert abs((cy - r) - lowest) < 5e-4, model_id
+            res, _sigma, _fos = _baker2(model_id)
+            assert isinstance(res.surface, CompositeSurface), model_id
+            assert min(s.base_y_mid for s in res.slices) >= -1e-9, model_id
 
     def test_it_is_a_stress_and_not_the_force(self):
         """The confusion the correction exists to prevent, pinned: the
-        largest FORCE on this surface is nowhere near the published
-        stress."""
-        p, circle, slices, published = _baker3("power_curve")
-        res = _run("janbu_simplified", (p, circle, slices))
-        assert max(res.base_normal_force) < 0.5 * published, (
-            max(res.base_normal_force), published)
+        largest FORCE on this surface is nowhere near the published stress.
+
+        Stated as a distance rather than as ``force < stress``, and the
+        rewrite is itself the lesson. On example 3 the wrong reading came out
+        at about a fifth of the published stress, so the old assertion pinned
+        ``force < 0.5*stress`` and read as if "too small" were the signature.
+        It is not: the ratio is the base length, so on example 2 -- a 12 m
+        slope sliced 30 ways, bases around 1.5 m instead of 0.2 m -- the same
+        wrong reading comes out at 153.72 against 99.50, which is +54 %, too
+        LARGE. What is reliable is only that the two numbers are different.
+        """
+        res, sigma_pub, _fos = _baker2("power_curve")
+        force = max(res.base_normal_force)
+        assert abs(force - sigma_pub) > 0.2 * sigma_pub, (force, sigma_pub)
 
     def test_a_curved_envelope_closes_the_identity_only_loosely(self):
         """With a non-linear envelope the identity stops being exact, and the
@@ -394,8 +519,12 @@ class TestTheMaximumEffectiveNormalStress:
         envelope linearised at the first-pass stress and the strength is
         reported with the linearisation at the final one. Measured under
         0.2 %; pinned at 1 % so the two are known to be close and known not
-        to be equal."""
-        p, circle, slices, _pub = _baker3("power_curve")
+        to be equal.
+
+        Still on example 3: this one is about an envelope and a surface, not
+        about whose published circle it is, so the move of anchor 3 does not
+        reach it."""
+        p, circle, slices = _baker3("power_curve")
         w = _total_weight(slices)
         for mid in ("janbu_simplified", "bishop_simplified", "spencer"):
             total = _vertical_sum(_run(mid, (p, circle, slices)), slices)
