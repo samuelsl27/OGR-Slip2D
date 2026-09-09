@@ -795,15 +795,89 @@ def _bond_profiles(project: "Project") -> dict:
     return profiles
 
 
+#: Why a placed support put NO force on the surface being priced. They
+#: travel in the caller's ``reasons`` list, the way ``slice_surface``
+#: reports its own decisions: a counter kept on the module would survive
+#: between analyses, which is the leak rule 5 exists for.
+#:
+#: Every one of them is a legitimate calculation decision, and none is
+#: legitimate as SILENCE. A reinforcement left out lowers no number and
+#: raises none: the factor of safety is the one for the model WITHOUT
+#: it, which is conservative, plausible, and looks exactly like a correct
+#: answer. That is defect D62, and it is why these exist.
+
+#: The support never reaches the surface. The common case, and one of the
+#: two seen most in practice: a bolt too short to cross the critical
+#: circle.
+SUPPORT_NO_CROSSING = "no_crossing"
+
+#: It crosses, but the crossing falls in no slice, so there is no local
+#: base to attach the force to. NO surface the slicer builds reaches
+#: this: ``_slip_polyline`` is drawn from the same slice list that is
+#: then searched, and the slicer refuses any interval of non-positive
+#: width, so the slices are contiguous and monotonic in x and every point
+#: of that polyline lies inside one of them. The guard is kept because it
+#: is real and costs nothing; its test builds a deliberately holed slice
+#: list rather than pretending a model can produce one.
+SUPPORT_NO_SLICE = "no_slice"
+
+#: Its type measures its pressure diagram from the CREST, and both ends
+#: sit at the same elevation, so there is no crest to measure from.
+#: Refusing beats guessing — the number would otherwise depend on which
+#: end was clicked first — but refusing in SILENCE is this defect, and
+#: the comment on that guard already promised the analysis would report
+#: it.
+SUPPORT_NO_CREST = "no_crest"
+
+#: It crosses, and develops no capacity there: neither axial nor shear.
+#: Worded as "develops no capacity where it crosses" and never as "its
+#: type has zero capacity", because a bond profile that failed to build
+#: lands here too — ``PileMicropile`` in Ito-Matsui mode returns exactly
+#: 0.0 with no profile — and that is a different fact about a different
+#: cause.
+SUPPORT_NO_CAPACITY = "no_capacity"
+
+#: Its class is not in the registry, so ``resolve_support_type`` returned
+#: None and ``support_type_pairs`` dropped it before the loop ever saw
+#: it. Not a calculation decision at all: a file naming a support type
+#: this build does not have, read as though it were fine. Until v0.1.149
+#: this was a ``continue`` inside the loop like the four above; D66 moved
+#: where it happens, not whether it is silent.
+SUPPORT_UNKNOWN_TYPE = "unknown_type"
+
+
 def compute_support_effects(
     project: "Project",
     surface: "SurfaceProtocol",
     slices,
+    *,
+    reasons: Optional[list] = None,
 ) -> list[SupportEffect]:
     """Compute the list of per-slice support effects on a slip surface.
 
     Returns an empty list if the project has no supports or none of
     them intersect the slip surface.
+
+    v0.1.155 - when a list is passed as ``reasons``, it collects
+    ``(support id, reason)`` for every PLACED support that ends up
+    contributing nothing, each one of the ``SUPPORT_*`` constants above.
+
+    Keyword-only, and None by default, because this function runs once
+    per trial surface for every method: on the hot path the whole cost is
+    one ``is not None`` per support that was being abandoned anyway, and
+    nothing at all for a support that contributes.
+    ``uncontributing_support_notes`` is the single caller that passes a
+    list, once, on the surface the run reports.
+
+    Collecting HERE rather than re-deriving the same decisions inside the
+    note is the point: the rule that decides and the rule that counts
+    must be the same code, or one of them goes stale - the lesson written
+    at the top of ``support_notes.py``.
+
+    Two silences this cannot see, documented so the note does not claim
+    otherwise: a project with no supports at all, and a slip polyline
+    with fewer than two points. Both return before the loop, and both are
+    conditions the caller can test for itself.
     """
     from ogr_core.support import support_type_pairs
 
@@ -831,9 +905,23 @@ def compute_support_effects(
     # dictionary of this module lived here, and that there were two was
     # part of the defect: fixing one would have left the other lying,
     # and the one that decides the number is not always the same one.
-    for support, stype in support_type_pairs(project):
+    pairs = support_type_pairs(project)
+    if reasons is not None and len(pairs) != len(supports):
+        # ``support_type_pairs`` leaves out a placement whose class the
+        # registry does not have, so it never reaches the loop below.
+        # Counted here because this is the only place holding both lists.
+        # The ``reasons is not None`` test comes first so the hot path
+        # short-circuits before the length compare.
+        seen = {id(sup) for sup, _st in pairs}
+        for sup in supports:
+            if id(sup) not in seen:
+                reasons.append(
+                    (getattr(sup, "id", ""), SUPPORT_UNKNOWN_TYPE))
+    for support, stype in pairs:
         hit = support.intersection_with_polyline(slip_xy)
         if hit is None:
+            if reasons is not None:
+                reasons.append((support.id, SUPPORT_NO_CROSSING))
             continue
         ix, iy, d_from_head = hit
         # Find which slice this intersection falls into
@@ -843,6 +931,8 @@ def compute_support_effects(
                 slice_idx = i
                 break
         if slice_idx is None:
+            if reasons is not None:
+                reasons.append((support.id, SUPPORT_NO_SLICE))
             continue
 
         L_total = support.length()
@@ -863,6 +953,11 @@ def compute_support_effects(
                 # No crest to measure from. Refusing beats guessing: the
                 # analysis reports it instead of publishing a number that
                 # depends on the drawing order.
+                # v0.1.155 - and since D62 it really is reported. This
+                # comment promised it for two versions while the guard
+                # returned in silence.
+                if reasons is not None:
+                    reasons.append((support.id, SUPPORT_NO_CREST))
                 continue
 
         F = stype.force_at(d_along, L_total,
@@ -890,6 +985,8 @@ def compute_support_effects(
         # Before v0.1.124 the guard was ``F <= 0`` alone, which was right
         # only because the shear reached nothing.
         if F <= 0 and V <= 0:
+            if reasons is not None:
+                reasons.append((support.id, SUPPORT_NO_CAPACITY))
             continue
 
         # Force orientation angle
@@ -945,3 +1042,121 @@ def compute_support_effects(
         ))
 
     return effects
+
+
+#: How each reason reads: singular, plural, and once more with no count
+#: at all for the lone-support case, where "None of the 1 supports
+#: placed" would be plainly ungrammatical. Ordered most actionable
+#: first, so the two that describe BROKEN INPUT come before the three
+#: that describe a legitimate calculation decision.
+_UNCONTRIBUTING_PHRASES = (
+    (SUPPORT_UNKNOWN_TYPE,
+     "%d names a support class this build does not have",
+     "%d name a support class this build does not have",
+     "it names a support class this build does not have"),
+    (SUPPORT_NO_CREST,
+     "%d is drawn with both ends at one elevation, and its type measures "
+     "its diagram from the upper one",
+     "%d are drawn with both ends at one elevation, and their type "
+     "measures its diagram from the upper one",
+     "it is drawn with both ends at one elevation, and its type measures "
+     "its diagram from the upper one"),
+    (SUPPORT_NO_CAPACITY,
+     "%d develops no capacity where it crosses",
+     "%d develop no capacity where they cross",
+     "it develops no capacity where it crosses"),
+    (SUPPORT_NO_SLICE,
+     "%d crosses it at a point that falls in no slice",
+     "%d cross it at a point that falls in no slice",
+     "it crosses that surface at a point that falls in no slice"),
+    (SUPPORT_NO_CROSSING,
+     "%d does not cross it",
+     "%d do not cross it",
+     "it does not cross that surface"),
+)
+
+
+def uncontributing_support_notes(project, result) -> list[str]:
+    """Say how many placed supports put no force on the reported surface.
+
+    Defect D62. A reinforcement that contributes nothing lowers no number
+    and raises none: what comes out is the factor of safety of the model
+    WITHOUT it, which is conservative, plausible, and indistinguishable
+    from a correct answer. The user drew the support, sees it on the
+    canvas, and until this version nothing said the analysis had left it
+    out. Five ways in, all of them silent, and the whole point of this
+    function is that they stop being silent.
+
+    Asked per SURFACE and not per model, for the reason
+    :func:`reversed_support_notes` gives: which supports contribute is a
+    property of the surface being priced, so the same bolt can count for
+    one circle and not for another. Asked on the surface the run REPORTS
+    and not inside the search, where it would recompute the same sentence
+    for thousands of trial surfaces.
+
+    ONE aggregated line, and the aggregation IS the threshold the defect
+    asked for. Deliberately no "only warn above X %" gate: measured over
+    the eight geosynthetic walls of the verification bank, the count of
+    silent supports per method-model runs 0, 1, 7, 8 and 13 out of 15, so
+    a fraction gate would hide "none of the 15 contributed" behind "most
+    walls look like this", which is the silence this exists to break.
+    A per-support line would be the wall of warnings; a single line is
+    the same shape as every other note in ``warnings``.
+
+    Reporting only: nothing in the analysis changes either way, and no
+    number moves.
+    """
+    supports = list(getattr(project, "supports", None) or [])
+    if not supports:
+        return []
+    surface = getattr(result, "surface", None)
+    slices = getattr(result, "slices", None)
+    if surface is None or not slices:
+        return []
+
+    total = len(supports)
+    reasons: list = []
+    try:
+        compute_support_effects(project, surface, slices, reasons=reasons)
+    except Exception as exc:  # noqa: BLE001 - a note must not kill a run
+        # The sixth silence, and the worst: ``resolve_support_terms``
+        # answers any exception from here with an empty set of terms, so
+        # EVERY support disappears at once and the surface is priced with
+        # no reinforcement whatsoever. Diagnosing it costs nothing and
+        # changes nothing - the solver goes on swallowing it.
+        return ["None of the %d supports placed reached the reported "
+                "surface: computing them raised %s. The analysis prices "
+                "the surface with no reinforcement at all when that "
+                "happens, so this factor of safety is the one for the "
+                "slope without any of them."
+                % (total, type(exc).__name__)]
+
+    if not reasons:
+        return []
+
+    counts: dict = {}
+    for _sid, why in reasons:
+        counts[why] = counts.get(why, 0) + 1
+    silent = sum(counts.values())
+
+    parts = [(one if counts[key] == 1 else many) % counts[key]
+             for key, one, many, _bare in _UNCONTRIBUTING_PHRASES
+             if counts.get(key)]
+
+    if silent >= total:
+        if total == 1:
+            bare = [b for key, _o, _m, b in _UNCONTRIBUTING_PHRASES
+                    if counts.get(key)][0]
+            return ["The only support placed puts no force on the "
+                    "reported surface: %s. This factor of safety is the "
+                    "one for the slope with no reinforcement at all."
+                    % bare]
+        return ["None of the %d supports placed put any force on the "
+                "reported surface: %s. This factor of safety is the one "
+                "for the slope with no reinforcement at all."
+                % (total, ", ".join(parts))]
+    return ["%d of the %d supports placed put no force on the reported "
+            "surface: %s. A support left out lowers no number and raises "
+            "none, so the factor of safety is the one for the model "
+            "without it. Check that these are the ones meant to be left "
+            "out." % (silent, total, ", ".join(parts))]

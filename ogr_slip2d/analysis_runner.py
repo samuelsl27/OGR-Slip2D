@@ -43,7 +43,8 @@ from ogr_core.geometry import BoundaryType
 from .methods import method_registry
 from .methods.gle import interslice_function
 from .rapid_drawdown import check_drawdown_settings, wrap_for_drawdown
-from .support_integration import reversed_support_notes
+from .support_integration import (reversed_support_notes,
+                                  uncontributing_support_notes)
 from .yield_acceleration import DEFAULT_K_MAX
 
 __all__ = [
@@ -57,6 +58,7 @@ __all__ = [
     "reversed_support_notes",
     "run_analysis",
     "settings_warnings",
+    "uncontributing_support_notes",
 ]
 
 # Methods that take an interslice force function and a λ bracket. Keyed
@@ -1383,6 +1385,21 @@ def run_analysis(project, method_ids=None,
         # recompute the same sentence thousands of times.
         if crit is not None:
             for note in reversed_support_notes(project, crit):
+                line = f"{mid}: {note}"
+                if line not in warnings:
+                    warnings.append(line)
+        # v0.1.155 — and how many of the placed supports put no force
+        # on the surface this method reports, and why (D62). On the
+        # SAME ``crit`` and for the same reason as the three notes
+        # above: which supports contribute is a property of the
+        # surface being priced, so it cannot be settled once per
+        # model, and asking it inside the search would recompute the
+        # same sentence thousands of times. AFTER the D40 note on
+        # purpose — that one is the more specific claim, about a
+        # support that DOES cross — and a separate sentence from it,
+        # because the two have different criteria for staying quiet.
+        if crit is not None:
+            for note in uncontributing_support_notes(project, crit):
                 line = f"{mid}: {note}"
                 if line not in warnings:
                     warnings.append(line)

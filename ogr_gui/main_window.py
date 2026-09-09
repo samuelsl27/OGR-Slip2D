@@ -206,7 +206,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.154"
+    VERSION = "0.1.155"
 
     def __init__(self) -> None:
         super().__init__()
@@ -219,6 +219,9 @@ class MainWindow(QMainWindow):
         self.active_theme = "light"
         self.last_search_result = None
         self.last_search_results: dict = {}
+        # v0.1.155 — the notes of the last run, kept beside its results
+        # because they belong to the same run and are cleared with it.
+        self.last_compute_warnings: list[str] = []
         self.interpret_windows: list[InterpretWindow] = []
 
         # v0.1.2 — selection filter state
@@ -383,6 +386,8 @@ class MainWindow(QMainWindow):
         self._mk("project_settings", "Project Settings...", self.act_project_settings, "project_settings", "Ctrl+J")
         self._mk("compute", "Compute", self.act_compute, "compute", "Ctrl+T")
         self._mk("interpret", "Interpret", self.act_interpret, "interpret")
+        self._mk("analysis_notes", "Analysis Notes...",
+                 self.act_analysis_notes)
         self._mk("info_viewer", "Info Viewer", self.act_info_viewer, "info_viewer", "Ctrl+I")
 
         # Boundaries — v0.1.2 interactive tools
@@ -696,6 +701,7 @@ class MainWindow(QMainWindow):
         m_ana.addSeparator()
         m_ana.addAction(self._actions["compute"])
         m_ana.addAction(self._actions["interpret"])
+        m_ana.addAction(self._actions["analysis_notes"])
 
         m_bnd = mb.addMenu(tr("Boundaries"))
         # Creation
@@ -916,6 +922,7 @@ class MainWindow(QMainWindow):
         self.results_dock.show_result(None)
         self.last_search_result = None
         self.last_search_results: dict = {}
+        self.last_compute_warnings = []
         self.setWindowTitle(f"OGR Slip2D v{self.VERSION} — Untitled")
 
     def act_open(self) -> None:
@@ -2917,7 +2924,19 @@ class MainWindow(QMainWindow):
         worker = getattr(self, "worker", None)
         self.last_compute_warnings = list(getattr(worker, "warnings", []) or [])
         if self.last_compute_warnings:
-            self.ogr_status.showMessage(self.last_compute_warnings[0], 15000)
+            # v0.1.155 — still the first note, because the status bar has
+            # room for one, but no longer AS IF it were the only one: the
+            # count says how many are being withheld and where to read
+            # them. Analysis > Analysis Notes shows all of them.
+            first = self.last_compute_warnings[0]
+            rest = len(self.last_compute_warnings) - 1
+            if rest:
+                first = tr("%s  [+%d more — Analysis > Analysis Notes]") % (
+                    first, rest)
+            self.ogr_status.showMessage(first, 15000)
+            panel = getattr(self, "_analysis_notes_panel", None)
+            if panel is not None and not panel.isHidden():
+                panel.populate(self.last_compute_warnings)
         if not results:
             self.last_search_result = None
             self.ogr_status.showMessage("No methods produced results.", 6000)
@@ -2976,6 +2995,28 @@ class MainWindow(QMainWindow):
                "effective normal force; its FoS is underestimated.")
             % (n_bad, n_tot)
         )
+
+    def act_analysis_notes(self) -> None:
+        """Open (or refresh) the non-modal panel with the run's notes.
+
+        v0.1.155 — the status bar shows the first note and nothing else,
+        so every other thing the run had to say was unreachable: the
+        list was kept on the window and read by no one. Reusing the panel
+        when it is already open, rather than stacking a second window,
+        is the pattern ``_show_dxf_problems`` set.
+        """
+        from .dialogs.analysis_notes_panel import AnalysisNotesPanel
+
+        notes = list(getattr(self, "last_compute_warnings", []) or [])
+        panel = getattr(self, "_analysis_notes_panel", None)
+        if panel is not None and not panel.isHidden():
+            panel.populate(notes)
+            panel.raise_()
+            return
+        panel = AnalysisNotesPanel(notes, self)
+        panel.show()
+        # Kept on the window so Python does not collect it.
+        self._analysis_notes_panel = panel
 
     def act_interpret(self) -> None:
         results = getattr(self, "last_search_results", None)
@@ -4762,6 +4803,7 @@ class MainWindow(QMainWindow):
         self.command_stack.clear()
         self.last_search_result = None
         self.last_search_results: dict = {}
+        self.last_compute_warnings = []
         self.results_dock.show_result(None)
         self._install_demo_project()
         self.setWindowTitle(f"OGR Slip2D v{self.VERSION} — Demo slope")

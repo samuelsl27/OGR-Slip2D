@@ -1788,6 +1788,23 @@ _DICTS: dict[str, dict[str, str]] = {
             "Ningún material toma su presión intersticial del campo de "
             "filtración por elementos finitos, así que los factores por "
             "etapa ignorarían por completo las presiones calculadas.",
+
+        # --- v0.1.155 · notas del análisis -------------------------
+        "Analysis Notes": "Notas del análisis",
+        "Analysis Notes...": "Notas del análisis...",
+        "Note": "Nota",
+        "Copy all": "Copiar todo",
+        "Model": "Modelo",
+        "The last analysis produced no notes.":
+            "El último análisis no ha generado ninguna nota.",
+        "%d note(s) from the last analysis. They report what the run "
+        "decided or could not do; none of them changes a factor of "
+        "safety.":
+            "%d nota(s) del último análisis. Informan de lo que la "
+            "corrida decidió o no pudo hacer; ninguna de ellas cambia un "
+            "factor de seguridad.",
+        "%s  [+%d more — Analysis > Analysis Notes]":
+            "%s  [+%d más — Análisis > Notas del análisis]",
     },
 }
 
