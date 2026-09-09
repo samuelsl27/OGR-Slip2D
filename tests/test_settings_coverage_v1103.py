@@ -39,27 +39,33 @@ _ENGINE_PACKAGES = ("ogr_core", "ogr_slip2d", "ogr_fem2d", "ogr_cli")
 
 #: Search settings that no engine module reads yet, each with the open
 #: defect that owns it. Shrinks; never grows.
-_KNOWN_UNREAD = {
-    # The thirteen ``optimize_*`` fields were here until v0.1.104, the
-    # whole of defect D08. They are gone from this list because they now
-    # have readers: ``ProjectSettings.optimize_kwargs`` turns them into an
-    # ``OptimizeSettings``, ``build_search`` hands it to the three
-    # non-circular searches and ``BaseSearch.run`` walks the surfaces with
-    # it. The list is a budget that only shrinks, so this is what closing
-    # a defect looks like from here.
-    # D07c — found by this inventory in v0.1.103, reported and not yet
-    # fixed because each one moves a number and needs its own reference.
-    #   D07c(a) is closed in v0.1.132: the n_eps of Su (2009) section
-    #   2.1.7 reaches ``_vfsa``, which broke on a hand-written 3 while the
-    #   field declared the paper's 5. Out of the list because it has a
-    #   reader now — ``tests/test_annealing_stopping_v1132.py`` holds it.
-    #   D07c(b) is closed in v0.1.118 — ``block_num_groups`` stopped being
-    #   derived as ``num_surfaces // 1000`` and got its own control. This
-    #   field STAYS on the list, and legitimately: it enables that control
-    #   and nothing else, so the engine has nothing to read. Kept here so
-    #   the inventory keeps saying so out loud.
-    "block_multiple_groups": "UI only",
-}
+#:
+#: **It is EMPTY, since v0.1.156**, and that is the state it was built to
+#: reach rather than an oversight. The three that were here:
+#:
+#:   * the thirteen ``optimize_*`` fields, the whole of defect D08, left in
+#:     v0.1.104: ``ProjectSettings.optimize_kwargs`` turns them into an
+#:     ``OptimizeSettings``, ``build_search`` hands it to the three
+#:     non-circular searches and ``BaseSearch.run`` walks the surfaces with
+#:     it;
+#:   * ``sa_num_fos_compared_before_stopping``, D07c(a), left in v0.1.132:
+#:     the n_eps of Su (2009) section 2.1.7 reaches ``_vfsa``, which broke
+#:     on a hand-written 3 while the field declared the paper's 5.
+#:     ``tests/test_annealing_stopping_v1132.py`` holds it;
+#:   * ``block_multiple_groups``, D07c(b), left in v0.1.156 — and it left
+#:     by being DELETED, which is the other way off this list and the one
+#:     nothing had used before. It was carried here from v0.1.118 as
+#:     ``UI only``, on the argument that a field which merely enables a
+#:     widget gives the engine nothing to read. The argument was wrong in
+#:     one respect and that respect was the whole defect: the field was
+#:     written to the .ogr, so a stored model could say
+#:     ``block_multiple_groups: false`` beside ``block_num_groups: 7`` and
+#:     run seven groups. A field that reaches the file has to reach the
+#:     analysis or not exist. See ``tests/test_block_groups_v1156.py``.
+#:
+#: An empty inventory is not a licence to refill it. A new entry needs an
+#: open defect id, and the argument that lost above is not available.
+_KNOWN_UNREAD: dict = {}
 
 
 def _engine_source() -> str:
@@ -164,14 +170,18 @@ class TestTheInventoryItselfIsHonest:
             + ", ".join(stale))
 
     def test_every_entry_names_the_defect_that_owns_it(self):
-        """Or, since v0.1.118, says why there is no defect to name.
+        """A defect id, and since v0.1.156 nothing else.
 
-        ``UI only`` is the one other answer allowed, and it is a narrow
-        one: a field the interface uses to drive its own widgets and that
-        the engine therefore has nothing to read. It is not an escape
-        hatch for a setting that ought to reach the analysis and does not
-        — that is what the defect ids are for.
+        v0.1.118 widened this to allow ``UI only`` — a field the interface
+        uses to drive its own widgets, so the engine has nothing to read —
+        while warning in the same breath that it was "not an escape hatch
+        for a setting that ought to reach the analysis and does not". The
+        one field that used it turned out to be exactly such a setting,
+        because it was serialised to the .ogr, and closing it in v0.1.156
+        left the allowance with no users at all. A door held open for
+        nobody is one the next person walks through by mistake, so it is
+        shut again: an unread field has an open defect or it has no
+        business being on the list.
         """
         for name, owner in _KNOWN_UNREAD.items():
-            ok = owner == "UI only" or re.fullmatch(r"D\d+[a-z]?", owner)
-            assert ok, (name, owner)
+            assert re.fullmatch(r"D\d+[a-z]?", owner), (name, owner)

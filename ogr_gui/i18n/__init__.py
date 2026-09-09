@@ -849,7 +849,8 @@ _DICTS: dict[str, dict[str, str]] = {
         'Most influential first — ': 'Más influyente primero — ',
         'Move Down': 'Bajar',
         'Move Up': 'Subir',
-        'Multiple Groups': 'Grupos múltiples',
+        'How many vertical bands the sampling region is divided into when no Block Search object is drawn — one surface vertex per band. With objects drawn, the vertices come from them and this number does nothing.':
+            'En cuántas bandas verticales se divide la región de muestreo cuando no hay ningún objeto de Block Search dibujado — un vértice de superficie por banda. Con objetos dibujados, los vértices salen de ellos y este número no hace nada.',
         'Number of Groups:': 'Número de grupos:',
         'New type:': 'Nuevo tipo:',
         'No probabilistic result for this method.': 'Sin resultado probabilístico para este método.',

@@ -643,7 +643,6 @@ class SurfaceOptionsDialog(QDialog):
                 self._sync_optimize_boxes(_optimize_default_for(m))
             elif m == SM.BLOCK_SEARCH:
                 self._b_num.setValue(int(defaults.block_num_surfaces))
-                self._b_multi.setChecked(defaults.block_multiple_groups)
                 self._b_groups.setValue(max(1, int(defaults.block_num_groups)))
                 self._b_left_start.setValue(defaults.block_left_start_angle_deg)
                 self._b_left_end.setValue(defaults.block_left_end_angle_deg)
@@ -1047,19 +1046,26 @@ class SurfaceOptionsDialog(QDialog):
         self._b_num.setRange(10, 1000000)
         self._b_num.setValue(int(s.block_num_surfaces))
         f1.addRow(tr("Number of Surfaces:"), self._b_num)
-        self._b_multi = QCheckBox(tr("Multiple Groups"))
-        self._b_multi.setChecked(s.block_multiple_groups)
-        f1.addRow("", self._b_multi)
         # v0.1.118 — the group count is its OWN control now. It used to be
         # derived as ``Number of Surfaces // 1000``, which is two unrelated
         # magnitudes tied together: 5000 surfaces meant five groups, and a
         # user who asked for more surfaces silently got a different shape
         # of search. Defect D07c(b).
+        #
+        # v0.1.156 — and the "Multiple Groups" checkbox that used to gate it
+        # is gone, which closes the other half of the same defect. It named a
+        # feature this program does not have: there, Multiple Groups assigns
+        # a Group ID to each search object the user draws. Here the count
+        # divides an implicit region instead, so the box gated the wrong
+        # quantity, and unticking it OVERWROTE the number the user had typed.
         self._b_groups = QSpinBox()
         self._b_groups.setRange(1, 20)
         self._b_groups.setValue(max(1, int(s.block_num_groups)))
-        self._b_groups.setEnabled(self._b_multi.isChecked())
-        self._b_multi.toggled.connect(self._b_groups.setEnabled)
+        self._b_groups.setToolTip(tr(
+            "How many vertical bands the sampling region is divided into "
+            "when no Block Search object is drawn — one surface vertex per "
+            "band. With objects drawn, the vertices come from them and this "
+            "number does nothing."))
         f1.addRow(tr("Number of Groups:"), self._b_groups)
         outer.addLayout(f1)
 
@@ -1163,7 +1169,6 @@ class SurfaceOptionsDialog(QDialog):
 
         # ----- Block Search -----
         s.block_num_surfaces = int(self._b_num.value())
-        s.block_multiple_groups = self._b_multi.isChecked()
         s.block_left_start_angle_deg = self._b_left_start.value()
         s.block_left_end_angle_deg = self._b_left_end.value()
         s.block_right_start_angle_deg = self._b_right_start.value()
@@ -1173,12 +1178,11 @@ class SurfaceOptionsDialog(QDialog):
         # It used to be three, folded with an OR, which is why the
         # option could be ticked and never cleared.
         s.optimize_enabled = self._b_optimize.isChecked()
-        # v0.1.118 — read from its own box. Unticked keeps the single
-        # implicit block region the search has always used when nobody has
-        # drawn any Block Search objects; ticked says how many points to
-        # draw in it. Closes the derivation D07c(b) reported.
-        s.block_num_groups = (max(1, int(self._b_groups.value()))
-                              if self._b_multi.isChecked() else 3)
+        # v0.1.156 — written flat, the way the Path panel writes its own
+        # pair two blocks up. This used to read ``... if ticked else 3``,
+        # so unticking the box did not merely stop using the number, it
+        # DESTROYED it: type 7, untick, tick again and the 7 was a 3.
+        s.block_num_groups = max(1, int(self._b_groups.value()))
 
         # ----- Filters -----
         s.min_elevation = (

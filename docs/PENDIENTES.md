@@ -610,7 +610,7 @@ Anotado con su medida en `TestKnownDivergences` de
 
 ---
 
-## 10 · Lo que el inventario de ajustes dejó abierto (D07c) — (a) CERRADA en v0.1.132, (c) CERRADA en v0.1.133, (d) CERRADA en v0.1.134; (b) ABIERTA (v0.1.103)
+## 10 · Lo que el inventario de ajustes dejó abierto (D07c) — CERRADO ENTERO: (a) v0.1.132, (b) v0.1.156, (c) v0.1.133, (d) v0.1.134
 
 v0.1.103 colapsó los seis pares de ajustes que existían dos veces (el nombre
 que la interfaz enseñaba y el que el motor leía). El inventario que hizo falta
@@ -646,13 +646,54 @@ El test es `tests/test_annealing_stopping_v1132.py`, y contrasta 2 contra 20
 —no 3 contra 5, que no discrimina— más una comprobación determinista del
 número de pasadas.
 
-### b) `block_multiple_groups` no lo lee nadie, y lo que sí se lee se deriva mal
+### b) `block_multiple_groups` no lo lee nadie — CERRADO en v0.1.156
 
-El motor lee `block_num_groups`; el diálogo lo calcula como
-`num_surfaces // 1000` cuando la casilla *Multiple Groups* está marcada, y 3
-cuando no. Eso no es lo que la referencia llama Multiple Groups. Antes de tocar
-nada hay que leer su documentación de Block Search: el número de grupos y el
-número de superficies no son la misma magnitud dividida por mil.
+Iba en dos mitades y cada una tardó lo suyo. La **derivación** —el diálogo
+calculaba el número de grupos como `num_surfaces // 1000`, de modo que pedir
+más superficies cambiaba en silencio la forma de la búsqueda— murió en
+**v0.1.118**, cuando el contador pasó a ser su propio control. La otra mitad,
+que el booleano no tuviera **ni un lector fuera de `ogr_gui/`**, sobrevivió
+treinta y ocho versiones más: un `.ogr` con `block_multiple_groups: false` y
+`block_num_groups: 7` corría con **siete** grupos.
+
+**El campo se retira, no se cablea**, y esa decisión salió de hacer por fin lo
+que esta entrada mandaba: leer la documentación de Block Search de la
+referencia antes de tocar nada. Dice que *Multiple Groups* habilita asignar un
+**Group ID a cada objeto de búsqueda que el usuario dibuja**, que la búsqueda
+se corre **una vez por grupo** y que el *Number of Surfaces* **se reparte por
+igual** entre ellos. El número de grupos no se teclea: emerge de los objetos.
+No hay campo «Number of Groups», no hay valor por defecto publicado, y **el
+tres no aparece en ninguna parte** — era invención del diálogo de OGR.
+
+Así que las dos magnitudes no sólo no son «la misma dividida por mil»: no son
+la misma en ningún sentido. `block_num_groups` cuenta las bandas verticales de
+una región implícita que **sólo** se usa cuando el modelo no dibuja ningún
+objeto, es decir en la única disposición que la referencia **no** contempla.
+Honrar el booleano habría atado su palabra a un tres inventado y, peor, habría
+convertido `block_num_groups = 7` desde un script —que es como el banco escribe
+sus ajustes de bloque— en un no-op silencioso.
+
+**Cero dígitos movidos**: el valor del retiro es que el archivo deja de afirmar
+algo que el análisis no respeta, no que cambie un número.
+
+**Tres cosas que salieron y no estaban en el enunciado:**
+
+1. **Desmarcar la casilla no dejaba de usar el número: lo destruía.**
+   `apply()` escribía `... if marcada else 3`, así que teclear 7, desmarcar y
+   volver a marcar devolvía 3. El panel de bloque era el único de los siete que
+   pisaba el valor que su propia casilla protegía.
+2. **El rechazo por nombre retirado fechaba mal.** `_shadow_setting_problems`
+   decía «removed in v0.1.103» para todas las entradas, y ya era falso para
+   `path_optimize` (v0.1.104). La versión vive ahora en la entrada de
+   `_SHADOW_FIELDS`, no en la frase que las imprime todas.
+3. **El contador que sobrevive tampoco hace nada donde importa.** Con un objeto
+   dibujado —lo que la referencia exige y lo que hacen los cinco modelos de
+   bloque de su banco— `block_num_groups` es inerte, y nada lo decía.
+   `settings_warnings` lo dice desde v0.1.156.
+
+Con esto el inventario congelado de `tests/test_settings_coverage_v1103.py`
+queda **vacío**, y se retira de paso la salida `"UI only"` que v0.1.118 había
+abierto para este único campo.
 
 ### c) El rótulo del Auto Refine — CERRADO en v0.1.133
 

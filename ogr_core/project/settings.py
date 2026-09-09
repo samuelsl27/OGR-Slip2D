@@ -257,36 +257,65 @@ class GroundwaterSettings:
 #: "Number of Surfaces" declared 5000 and the Path Search generated 500;
 #: "Number of Iterations" declared 10 and the Auto Refine ran 5.
 #:
-#: Maps each retired name to its old default and to the field that replaced
-#: it (``None`` where nothing read it at all, so nothing replaces it).
+#: Maps each retired name to its old default, to the field that replaced it
+#: (``None`` where nothing read it at all, so nothing replaces it), and to the
+#: version that retired it.
+#:
+#: The version lives in the ENTRY and not in the sentence that reports it,
+#: which is what v0.1.156 changed: that sentence said "removed in v0.1.103"
+#: for every name on the list, and it was already wrong for ``path_optimize``
+#: — retired in v0.1.104 — before this version added a name from a third one.
+#: A fact that varies per entry cannot live in the text that prints them all.
 _SHADOW_FIELDS: dict = {
     # Same quantity under two names — the value migrates straight across.
-    "path_num_paths": (500, "path_num_surfaces"),
-    "auto_refine_iterations": (5, "auto_refine_num_iterations"),
-    "auto_refine_divisions": (10, "auto_refine_divisions_along_slope"),
+    "path_num_paths": (500, "path_num_surfaces", "v0.1.103"),
+    "auto_refine_iterations": (5, "auto_refine_num_iterations", "v0.1.103"),
+    "auto_refine_divisions": (10, "auto_refine_divisions_along_slope",
+                              "v0.1.103"),
     # Different shape: 0 meant "automatic", anything else a fixed length.
-    "path_segment_length": (5.0, "path_segment_length_manual"),
+    "path_segment_length": (5.0, "path_segment_length_manual", "v0.1.103"),
     # Different frame: these were angles in the search's toe-to-crest frame,
     # the survivors are absolute and counter-clockwise from +x.
-    "path_min_angle_deg": (-45.0, "path_initial_angle_at_toe_lower_deg"),
-    "path_max_angle_deg": (45.0, "path_initial_angle_at_toe_upper_deg"),
+    "path_min_angle_deg": (-45.0, "path_initial_angle_at_toe_lower_deg",
+                           "v0.1.103"),
+    "path_max_angle_deg": (45.0, "path_initial_angle_at_toe_upper_deg",
+                           "v0.1.103"),
     "path_upper_angle_enabled": (False,
-                                 "path_initial_angle_at_toe_upper_enabled"),
+                                 "path_initial_angle_at_toe_upper_enabled",
+                                 "v0.1.103"),
     # Different quantity: a geometric cooling rate against the c of
     # T_k = T_0 exp(-c k^(1/n)). The rate was never read by anything.
-    "sa_temperature_factor": (0.97, "sa_temperature_coefficient"),
+    "sa_temperature_factor": (0.97, "sa_temperature_coefficient", "v0.1.103"),
     # Same quantity, opposite visibility: the engine read ``path_optimize``
     # and the interface showed ``optimize_enabled``. The value is NOT
     # migrated — a field that defaulted to True in every model ever saved
     # expresses no intent, and carrying it across would tick a box the user
     # never ticked. See v0.1.104.
-    "path_optimize": (True, "optimize_enabled"),
+    "path_optimize": (True, "optimize_enabled", "v0.1.104"),
     # Read by nobody, ever. The interface wrote them and there they died.
-    "initial_angle_lower_deg": (0.0, None),
-    "initial_angle_upper_deg": (90.0, None),
-    "auto_refine_factor": (0.5, None),
-    "block_left_proj_angle_deg": (135.0, None),
-    "block_right_proj_angle_deg": (45.0, None),
+    "initial_angle_lower_deg": (0.0, None, "v0.1.103"),
+    "initial_angle_upper_deg": (90.0, None, "v0.1.103"),
+    "auto_refine_factor": (0.5, None, "v0.1.103"),
+    "block_left_proj_angle_deg": (135.0, None, "v0.1.103"),
+    "block_right_proj_angle_deg": (45.0, None, "v0.1.103"),
+    # v0.1.156, defect D07c(b) — the third block field to die this way, and
+    # the one that took longest because it looked like it did something: it
+    # gated the Number of Groups box in the dialog, so it was "UI only"
+    # rather than dead. But it was WRITTEN to the .ogr, and a model saying
+    # ``block_multiple_groups: false`` with ``block_num_groups: 7`` ran seven
+    # groups — the declaration and the run disagreeing, which is rule 7.
+    #
+    # It is retired rather than wired to the engine because the name is
+    # borrowed. What the reference calls Multiple Groups is a Group ID
+    # assigned to each search object the USER draws, with the search run once
+    # per group and Number of Surfaces split equally between them. OGR
+    # implements none of that — ``BLOCK_SEARCH_OBJECT`` carries no group id
+    # and every drawn object contributes one vertex to one surface, which is
+    # the reference's behaviour with no groups at all. Honouring the boolean
+    # would have bound that name to OGR's band count with an "off" value of
+    # three that appears nowhere in the reference, and would have made
+    # ``block_num_groups = 7`` from a script a silent no-op.
+    "block_multiple_groups": (False, None, "v0.1.156"),
 }
 
 
@@ -431,15 +460,28 @@ class SearchSettings:
 
     # ---------- Block Search (non-circular) ----------
     block_num_surfaces: int = 5000
-    block_multiple_groups: bool = False
+    # ``block_multiple_groups`` used to sit here, written to every .ogr and
+    # read by nothing outside the dialog it drove. Retired in v0.1.156; the
+    # note on ``_SHADOW_FIELDS`` says why the name could not simply be wired
+    # to the count below.
     block_left_start_angle_deg: float = 135.0
     block_left_end_angle_deg: float = 135.0
     block_right_start_angle_deg: float = 45.0
     block_right_end_angle_deg: float = 45.0
     block_convex_only: bool = False
-    # Read by the search, unlike the two projection angles that used to sit
-    # here. What the interface derives it from does not match what the
-    # reference calls Multiple Groups — see D07c.
+    # How many vertical bands OGR tiles its implicit block region into, one
+    # sampled vertex per band — so a candidate carries this many free
+    # vertices between its two projected ends. Read by the search, unlike
+    # the two projection angles that used to sit here.
+    #
+    # It is NOT what the reference calls a group, and the distance is worth
+    # stating because the name invites the confusion: there, groups are Group
+    # IDs on the search objects the user draws, and the count is whatever
+    # emerges from them. Here it configures the fallback OGR uses when the
+    # user has drawn NO objects — which the reference does not offer at all,
+    # since it requires at least one. So this number does nothing on a model
+    # built the way the reference describes, and ``settings_warnings`` says
+    # so rather than leaving the panel to imply otherwise (v0.1.156).
     block_num_groups: int = 3
 
     # ---------- Optimize Surfaces (post-processing, non-circular) ----------
@@ -550,7 +592,7 @@ class SearchSettings:
         for shadow in ("path_num_paths", "auto_refine_iterations",
                        "auto_refine_divisions"):
             if shadow in data:
-                old_default, survivor = _SHADOW_FIELDS[shadow]
+                old_default, survivor, _v = _SHADOW_FIELDS[shadow]
                 _resolve(survivor, data.pop(shadow), old_default)
 
         # ---- segment length: 0 used to mean "automatic", which is now the
@@ -593,7 +635,7 @@ class SearchSettings:
             if shadow not in data:
                 continue
             old = data.pop(shadow)
-            old_default, survivor = _SHADOW_FIELDS[shadow]
+            old_default, survivor, _v = _SHADOW_FIELDS[shadow]
             if old == old_default:
                 continue
             # When the surviving angle is switched ON, the twin says nothing
@@ -680,7 +722,7 @@ class SearchSettings:
 
         # ---- read by nobody, ever: dropped without a word, because a value
         # that never reached a calculation has nothing to say.
-        for shadow, (_old_default, survivor) in _SHADOW_FIELDS.items():
+        for shadow, (_old_default, survivor, _v) in _SHADOW_FIELDS.items():
             if survivor is None:
                 data.pop(shadow, None)
 

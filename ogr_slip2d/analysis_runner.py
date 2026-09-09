@@ -175,6 +175,12 @@ def _shadow_setting_problems(project) -> list[str]:
     without a word, so ``s.path_num_paths = 300`` would still look like a
     setting and still reach nothing. Refusing is the only answer that
     cannot be mistaken for having worked.
+
+    v0.1.156 — the version comes from the entry rather than from these two
+    sentences. They both said v0.1.103, which was already false for
+    ``path_optimize`` (v0.1.104) and would have been false again for
+    ``block_multiple_groups``. A refusal that misdates the removal sends
+    the reader to the wrong changelog.
     """
     from ogr_core.project.settings import _SHADOW_FIELDS
 
@@ -183,17 +189,17 @@ def _shadow_setting_problems(project) -> list[str]:
     for name in _SHADOW_FIELDS:
         if name not in vars(s_search):
             continue
-        _old_default, survivor = _SHADOW_FIELDS[name]
+        _old_default, survivor, version = _SHADOW_FIELDS[name]
         value = getattr(s_search, name)
         if survivor is None:
             out.append(
                 f"This project sets {name} = {value}. That setting was "
-                f"removed in v0.1.103: no analysis ever read it, and it "
+                f"removed in {version}: no analysis ever read it, and it "
                 f"has no replacement.")
         else:
             out.append(
                 f"This project sets {name} = {value}. That name was "
-                f"removed in v0.1.103 because the interface never showed "
+                f"removed in {version} because the interface never showed "
                 f"it; set {survivor} instead. Computing now would ignore "
                 f"the value and report a plausible number.")
     return out
@@ -289,11 +295,53 @@ def settings_warnings(project, method_ids=()) -> list[str]:
     notes.extend(_failure_direction_note(project))
     notes.extend(_surface_type_notes(s_search))
     notes.extend(_auto_refine_vertex_notes(project))
+    notes.extend(_block_group_notes(project))
     notes.extend(_optimize_notes(s_search))
     notes.extend(_undrained_profile_notes(project))
     notes.extend(_focus_notes(project))
     notes.extend(_interslice_convention_notes(project, method_ids))
     return notes
+
+
+def _block_group_notes(project) -> list[str]:
+    """What the Number of Groups cannot do once objects are drawn.
+
+    v0.1.156, defect D07c(b). ``block_num_groups`` is read in exactly one
+    place — the branch of ``BlockSearch._run`` that tiles OGR's implicit
+    region — and that branch runs only when the model carries no
+    ``BLOCK_SEARCH_OBJECT`` at all. With one drawn, the vertices come from
+    the objects and the count configures nothing.
+
+    Which is not a rare corner: it is the ONLY arrangement the reference
+    supports, since it requires at least one search object to be drawn, and
+    it is what all five block models of the reference bank do. So the panel
+    shows a live number that describes the run in the one case the
+    reference does not document, and describes nothing in the case it does.
+    Rule 7 asks for that to be said rather than implied.
+
+    It fires whatever the count says, including its default of three: a
+    three is as much a claim by the panel as a seven, and the control is
+    equally inert under both.
+    """
+    from ogr_core.geometry import BoundaryType
+
+    s_search = project.settings.search
+    if s_search.search_method != "block":
+        return []
+    drawn = sum(1 for b in project.boundaries
+                if b.btype == BoundaryType.BLOCK_SEARCH_OBJECT)
+    if drawn == 0:
+        return []
+    what = ("1 Block Search object, so every trial surface takes one vertex "
+            "from it" if drawn == 1 else
+            f"{drawn} Block Search objects, so every trial surface takes one "
+            f"vertex from each of them")
+    return [
+        f"This model draws {what} and the Number of Groups setting — "
+        f"{s_search.block_num_groups} here — configures nothing. That count "
+        f"only divides the region OGR falls back to when no Block Search "
+        f"object is drawn."
+    ]
 
 
 _GUIDED_SEARCHES = ("simulated_annealing", "particle_swarm")

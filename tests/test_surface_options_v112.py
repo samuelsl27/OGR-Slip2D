@@ -75,10 +75,15 @@ class TestSlidePDFAlignment:
     def test_block_defaults_match_pdf(self):
         from ogr_core.project.settings import SearchSettings
         s = SearchSettings()
-        # PDF: Number of Surfaces=5000, Multiple Groups unchecked,
-        # Left=135-135, Right=45-45
+        # PDF: Number of Surfaces=5000, Left=135-135, Right=45-45.
+        #
+        # The panel also shows a Multiple Groups checkbox, and OGR stored a
+        # ``block_multiple_groups`` mirroring it until v0.1.156. It is gone,
+        # and not because the panel changed: what that box switches on is a
+        # Group ID per drawn search object, with the search run once per
+        # group, and this program implements none of it. Matching the
+        # picture of a control is not the same as having the control.
         assert s.block_num_surfaces == 5000
-        assert s.block_multiple_groups is False
         assert s.block_left_start_angle_deg == 135.0
         assert s.block_left_end_angle_deg == 135.0
         assert s.block_right_start_angle_deg == 45.0
@@ -217,7 +222,7 @@ class TestShadowFieldsAreGone:
             _SHADOW_FIELDS, SearchSettings,
         )
         names = {f.name for f in fields(SearchSettings)}
-        for gone, (_default, survivor) in _SHADOW_FIELDS.items():
+        for gone, (_default, survivor, _version) in _SHADOW_FIELDS.items():
             assert gone not in names, gone
             if survivor is not None:
                 assert survivor in names, survivor
