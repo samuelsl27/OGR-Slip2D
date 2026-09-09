@@ -24,7 +24,7 @@ from dataclasses import dataclass, field, replace
 from typing import Callable, Optional
 
 from ogr_core.project import Project
-from ogr_core.project.settings import WeakLayerHandling
+from ogr_core.project.settings import SurfaceType, WeakLayerHandling
 
 from .failure_direction import steepest_face_index
 from .methods import LEMMethod, LEMResult
@@ -254,10 +254,40 @@ class SearchResult:
     # and a truncated case set reads exactly like full coverage unless it is
     # said out loud. ``run_analysis`` folds these into its warnings.
     notes: list = field(default_factory=list)
+    # v0.1.157 (D58) — the user's own slip surfaces, evaluated ALONGSIDE the
+    # search. A SEPARATE list from ``evaluations`` on purpose, and the reason
+    # is the counters: ``total_count`` is a checkable identity against the
+    # population the reference documents — (X+1)·(Y+1)·(R+1) — and a surface
+    # the search never generated cannot enter that count without breaking it.
+    #
+    # So the counters keep describing the SEARCH, while everything that
+    # answers "what is the lowest factor of safety here" — ``critical``,
+    # ``valid``, ``top_n``, ``min_fos`` — reads both lists. That is the
+    # reference's own definition: the global minimum is the lowest "of ALL
+    # slip surfaces analyzed", and a surface the user defined is analysed.
+    user_evaluations: list[LEMResult] = field(default_factory=list)
 
     def score(self, result) -> float:
         """This run's objective, evaluated on one of its surfaces."""
         return surface_score(result, self.objective)
+
+    def all_evaluations(self) -> list[LEMResult]:
+        """Every surface this run analysed: the search's and the user's.
+
+        The single place the two lists are joined, so a reader cannot pick
+        one of them by accident. Use ``evaluations`` alone only to say
+        something about the SEARCH population specifically.
+        """
+        if not self.user_evaluations:
+            # The common case, and worth not copying the list for: every
+            # model without user surfaces, which is all of them until
+            # someone adds one.
+            return self.evaluations
+        return self.evaluations + self.user_evaluations
+
+    def is_user_surface(self, result) -> bool:
+        """Whether ``result`` came from a surface the user defined."""
+        return any(r is result for r in self.user_evaluations)
 
     @property
     def critical(self) -> Optional[LEMResult]:
@@ -269,8 +299,14 @@ class SearchResult:
         every surface is inadmissible the checks are ignored rather than
         returning nothing, so the user always gets an answer plus the
         warning in ``inadmissible_count``.
+
+        v0.1.157 (D58) — over ``all_evaluations``, so a surface the user
+        defined competes on equal terms and wins when its factor is lower.
+        The reference is explicit that specific surfaces and a search can be
+        defined for the same analysis, and that the global minimum is the
+        lowest of ALL surfaces analysed.
         """
-        valid = [r for r in self.evaluations if r.is_valid]
+        valid = [r for r in self.all_evaluations() if r.is_valid]
         if not valid:
             return None
         ok = [r for r in valid if getattr(r, "admissible", True)]
@@ -327,7 +363,10 @@ class SearchResult:
         return c.fos if c else math.inf
 
     def valid(self) -> list[LEMResult]:
-        return [r for r in self.evaluations if r.is_valid]
+        # v0.1.157 (D58) — includes the user's surfaces, which is what makes
+        # them appear in the canvas "all surfaces" mode, in Interpret and in
+        # the exporters without a line of new plumbing in any of them.
+        return [r for r in self.all_evaluations() if r.is_valid]
 
     def top_n(self, n: int = 10) -> list[LEMResult]:
         return sorted(self.valid(), key=self.score)[:n]
@@ -1323,6 +1362,14 @@ class BaseSearch(ABC):
             # noise.
             if getattr(self, "_on_model_edge", 0):
                 self._note(self._on_model_edge_note())
+            # v0.1.157 (D58) — the surfaces the user defined by hand,
+            # analysed here and not in ``analysis_runner`` for the reason
+            # this template method exists at all: tests, scripts and
+            # ``examples/`` build their search by hand, and a door only the
+            # interface goes through is a door the other callers behave
+            # differently at. AFTER the optimisation on purpose — see the
+            # method's docstring.
+            self._evaluate_user_surfaces(project, result)
             # v0.1.121 — anything the run decided it had to say. Attached
             # after the optimisation so a note raised while optimising is
             # carried too.
@@ -1330,6 +1377,112 @@ class BaseSearch(ABC):
                 if line not in result.notes:
                     result.notes.append(line)
             return result
+
+    # ------------------------------------------------------------------
+    def _user_surface_filters(self) -> str:
+        """The configured filters that can remove a hand-drawn surface.
+
+        Named with their values because a note that says "some filter" sends
+        the reader to the settings dialog to guess; ``evaluate_circle``
+        answers None without a reason, so this is what can honestly be said
+        without threading a reason channel through the hot loop.
+        """
+        bits = []
+        if self.slope_limit_sets is not None:
+            bits.append("Slope Limits %s" % (
+                ", ".join("[%g, %g]" % (min(a, b), max(a, b))
+                          for a, b in self.slope_limit_sets)))
+        if self.min_area:
+            bits.append("Minimum Area %g" % self.min_area)
+        if self.min_depth is not None:
+            bits.append("Minimum Depth %g" % self.min_depth)
+        if self.min_elevation is not None:
+            bits.append("Minimum Elevation %g" % self.min_elevation)
+        return ", ".join(bits)
+
+    def _evaluate_user_surfaces(self, project: Project, result) -> None:
+        """Analyse the slip surfaces the user defined by hand (v0.1.157, D58).
+
+        Run AFTER the optimisation and never optimised, which is deliberate:
+        the reference has Optimize Surfaces work on "every surface generated
+        by the search", and a surface the user typed was not generated by the
+        search. Walking it would replace the very thing the user asked to
+        evaluate with a different surface.
+
+        Going through :meth:`evaluate_circle` instead of evaluating here buys
+        three behaviours, none of them obvious and all of them the
+        reference's:
+
+        * the circle comes out EXACTLY as it went in (v0.1.131), so the
+          user's own model is not modified by its own analysis;
+        * a circle that cuts the ground more than twice defines several
+          disjoint masses, and the lowest of them is the answer (v0.1.84);
+        * Slope Limits, Minimum Area and Minimum Depth are applied inside
+          ``_best_of_masses``, the shared path, so a hand-drawn circle is
+          filtered exactly like a generated one — which is what the
+          reference does, down to having an error code for a surface that
+          daylights outside the Slope Limits.
+
+        Focus objects deliberately do NOT apply. They are asked in the
+        generation loops, and they exist to narrow a SEARCH; vetoing a
+        surface the user drew on purpose is not the same act.
+        """
+        surfaces = list(getattr(project, "user_surfaces", None) or ())
+        if not surfaces:
+            return
+
+        # Only one Surface Type per analysis, which the reference states
+        # outright: circular and non-circular surfaces are not analysed
+        # together. Saying so beats analysing them anyway and beats dropping
+        # them in silence, which is the failure this whole defect was.
+        stype = getattr(project.settings.search, "surface_type", None)
+        if stype == SurfaceType.NON_CIRCULAR.value:
+            self._note(
+                "%d user-defined circular surface%s not analysed: the "
+                "Surface Type of this analysis is Non-Circular, and one "
+                "analysis carries one Surface Type. Set Surface Options -> "
+                "Surface Type = Circular to include %s."
+                % (len(surfaces), " was" if len(surfaces) == 1 else "s were",
+                   "it" if len(surfaces) == 1 else "them"))
+            return
+
+        for circle in surfaces:
+            res = self.evaluate_circle(project, circle)
+            if res is None:
+                filters = self._user_surface_filters()
+                self._note(
+                    "The user-defined surface at centre (%.4g, %.4g) with "
+                    "radius %.4g produced no result, so it is not in the "
+                    "reported population. %s"
+                    % (circle.centre_x, circle.centre_y, circle.radius,
+                       ("Filters active on this run that can remove it: %s."
+                        % filters) if filters else
+                       "No surface filter is active on this run, so the "
+                       "circle does not meet the ground twice inside the "
+                       "External Boundary."))
+                continue
+            result.user_evaluations.append(res)
+            if not res.is_valid:
+                self._note(
+                    "The user-defined surface at centre (%.4g, %.4g) with "
+                    "radius %.4g has no factor of safety: %s"
+                    % (circle.centre_x, circle.centre_y, circle.radius,
+                       res.error_message or res.admissibility_note
+                       or "no reason declared."))
+
+        # Said only when it happened, and it is the point of the note: a
+        # minimum that came from a surface the user typed reads exactly like
+        # a find of the search unless it is said out loud.
+        crit = result.critical
+        if crit is not None and result.is_user_surface(crit):
+            sd = crit.surface
+            self._note(
+                "The surface reported for this method is one the user "
+                "defined by hand (centre (%.4g, %.4g), radius %.4g), not "
+                "one the search generated."
+                % (getattr(sd, "centre_x", float("nan")),
+                   getattr(sd, "centre_y", float("nan")),
+                   getattr(sd, "radius", float("nan"))))
 
     # ------------------------------------------------------------------
     def _optimize_result(self, project: Project, result) -> None:

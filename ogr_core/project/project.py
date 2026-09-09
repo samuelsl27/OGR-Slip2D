@@ -92,6 +92,19 @@ class Project:
         # the project because they are part of how the model is analysed,
         # not a transient view setting.
         self.focus_objects = []
+        # v0.1.157 (D58) — slip surfaces the user defined by hand, analysed
+        # IN ADDITION to whatever the search generates. On the project for
+        # the same reason as the focus objects above: they are part of how
+        # the model is analysed, not a transient view setting, and the
+        # reference stores them in its model file beside the boundaries and
+        # the materials rather than beside the results.
+        #
+        # Declared HERE rather than conjured by ``hasattr`` in the interface,
+        # which is what this used to be: an attribute invented on the
+        # instance by the menu action and read by nobody, so the circle did
+        # not survive a save — while ``is_dirty`` still asked the user to
+        # save for it.
+        self.user_surfaces = []
 
         # v0.1.11 — Regions cache (avoids recomputing planar
         # subdivision for every material_at() lookup during compute).
@@ -640,6 +653,11 @@ class Project:
                                  for rv in self.random_variables],
             "annotations": self.annotations.to_list(),
             "focus_objects": [f.to_dict() for f in self.focus_objects],
+            # v0.1.157 (D58) — the surfaces the user defined by hand. Their
+            # endpoints are deliberately NOT meaningful here: x_left/x_right
+            # are where the arc meets the ground, which is a result of the
+            # analysis and not something the user typed.
+            "user_surfaces": [s.to_dict() for s in self.user_surfaces],
         }
 
     def save(self, path: Optional[Path] = None) -> Path:
@@ -778,6 +796,15 @@ class Project:
         if fos:
             from ogr_slip2d.focus import FocusObject as _FO
             proj.focus_objects = [_FO.from_dict(d) for d in fos]
+
+        # v0.1.157 (D58) — a file written before this version simply has no
+        # key, and ``get`` leaves the empty list the constructor made. No
+        # migration: there was nothing to migrate, because the attribute was
+        # never written to a file in the first place.
+        uss = data.get("user_surfaces")
+        if uss:
+            from ogr_slip2d.surface import SlipCircle as _SC
+            proj.user_surfaces = [_SC.from_dict(d) for d in uss]
 
         ann = data.get("annotations")
         if ann:

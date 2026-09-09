@@ -206,7 +206,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.156"
+    VERSION = "0.1.157"
 
     def __init__(self) -> None:
         super().__init__()
@@ -522,6 +522,9 @@ class MainWindow(QMainWindow):
                  self._optimize_surfaces, None)
         self._mk("surf_centre_radius", "Add Surface (centre and radius)...",
                  self._add_surface_centre_radius, None)
+        # v0.1.157 (D58) — adding without removing would be a one-way door.
+        self._mk("surf_manage", "Manage Surfaces...",
+                 self._manage_user_surfaces, None)
         self._mk("slope_limits_move", "Move Slope Limits...",
                  self._move_slope_limits, None)
         self._mk("slope_limits_reset", "Reset Slope Limits",
@@ -750,6 +753,7 @@ class MainWindow(QMainWindow):
         m_surf.addAction(self._actions["add_grid"])
         m_surf.addAction(self._actions["surf_3pts"])
         m_surf.addAction(self._actions["surf_centre_radius"])
+        m_surf.addAction(self._actions["surf_manage"])
         m_surf.addSeparator()
         m_focus = m_surf.addMenu(tr("Focus Search"))
         for k in ["focus_window", "focus_line", "focus_point",
@@ -2067,6 +2071,41 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(
             tr("%d focus object(s) defined.") % len(objs), 5000)
 
+    def _manage_user_surfaces(self) -> None:
+        """List and delete the slip surfaces the user defined by hand.
+
+        v0.1.157 (D58) — deleting is the only edit offered, and that is the
+        reference's own choice: its Move and Stretch commands list the
+        centre grids and the focus objects, never the individual surfaces.
+        A surface placed wrongly is removed and added again.
+
+        Without this the add action would be a one-way door: the surface is
+        written to the .ogr and competes for the global minimum, so a
+        mis-typed circle could only be undone by editing the file by hand.
+        """
+        from PySide6.QtWidgets import QInputDialog
+
+        surfaces = self.project.user_surfaces
+        if not surfaces:
+            self._info(tr("No user-defined surfaces are defined."))
+            return
+        items = [tr("%d: centre (%.3f, %.3f), radius %.3f")
+                 % (i + 1, c.centre_x, c.centre_y, c.radius)
+                 for i, c in enumerate(surfaces)]
+        items.append(tr("(delete all)"))
+        choice, ok = QInputDialog.getItem(
+            self, tr("Manage Surfaces"), tr("Delete:"), items, 0, False)
+        if not ok:
+            return
+        if choice == tr("(delete all)"):
+            surfaces.clear()
+        else:
+            surfaces.pop(items.index(choice))
+        self.project.is_dirty = True
+        self.canvas.refresh_scene()
+        self.statusBar().showMessage(
+            tr("%d user-defined surface(s) defined.") % len(surfaces), 5000)
+
     def _optimize_surfaces(self) -> None:
         """Random-walk the critical surface towards a lower factor."""
         from PySide6.QtWidgets import QInputDialog
@@ -2151,8 +2190,11 @@ class MainWindow(QMainWindow):
             return
         circle = SlipCircle(centre_x=pts[0][0], centre_y=pts[0][1],
                             radius=radius)
-        if not hasattr(self.project, "user_surfaces"):
-            self.project.user_surfaces = []
+        # v0.1.157 (D58) — ``Project`` declares the list now, so the
+        # ``hasattr``/``= []`` that used to stand here is gone. It was the
+        # whole defect: an attribute invented on the instance, saved by
+        # nobody and read by nobody, while the status bar said the circle
+        # had been added.
         self.project.user_surfaces.append(circle)
         self.project.is_dirty = True
         self.canvas.refresh_scene()
@@ -3616,6 +3658,27 @@ class MainWindow(QMainWindow):
                         == "block")
         except Exception:  # noqa: BLE001
             is_block = False
+        # v0.1.157 (D58) — the two hand-drawn-surface actions follow the
+        # Surface Type, which is what the reference does: it offers Add
+        # Surface (centre, radius) only while the type is Circular, because
+        # one analysis carries one Surface Type and a circle cannot be
+        # analysed by a non-circular run. Until now the action was
+        # conditioned by nothing at all.
+        try:
+            from ogr_core.project.settings import SurfaceType
+            is_circular = (self.project.settings.search.surface_type
+                           == SurfaceType.CIRCULAR.value)
+        except Exception:  # noqa: BLE001
+            is_circular = True
+        for key in ("surf_centre_radius", "surf_manage"):
+            if key in actions:
+                actions[key].setEnabled(is_circular)
+                actions[key].setToolTip(
+                    tr("Slip surfaces defined by hand, analysed in addition "
+                       "to the search")
+                    if is_circular else
+                    tr("Only available with Surface Options -> Surface "
+                       "Type = Circular."))
         if "surf_3pts" in actions:
             actions["surf_3pts"].setEnabled(is_block)
             actions["surf_3pts"].setToolTip(

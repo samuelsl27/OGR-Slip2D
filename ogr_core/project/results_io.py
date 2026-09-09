@@ -106,64 +106,85 @@ def save_results(
                     pass
 
         # Surfaces
-        group = f.create_group("surfaces")
-        for i, res in enumerate(search_result.evaluations):
-            sg = group.create_group(f"surface_{i:05d}")
-            # v0.1.152 (D56) — a surface with no factor of safety gets NO
-            # ``fos`` attribute, and its ``reason`` in place of one. That is
-            # what the reference does — it writes a code where the safety
-            # factor would go — and the point is what a reader gets when it
-            # forgets to check: a KeyError names the surface and stops,
-            # where the ``np.nan`` written here before was a number that
-            # survived every conversion and comparison on its way out.
-            if res.fos is not None:
-                sg.attrs["fos"] = float(res.fos)
-            sg.attrs["converged"] = res.converged
-            sg.attrs["iterations"] = res.iterations
-            sg.attrs["method"] = res.method_id
-            sg.attrs["is_valid"] = res.is_valid
-            sg.attrs["error"] = res.error_message or ""
-            sg.attrs["reason"] = getattr(res, "reason", "") or ""
-            # v0.1.127 — the seismic extras, written only when the run
-            # produced them, so a file from an ordinary run is byte for
-            # byte the file it always was.
-            for key in ("ky", "ky_fos", "newmark_displacement"):
-                value = (res.details or {}).get(key)
-                if value is not None:
-                    sg.attrs[key] = (float(value) if np.isfinite(value)
-                                     else np.nan)
+        #
+        # v0.1.157 (D58) — two populations, written to two groups. The
+        # search's own keeps the name, the attributes and the numbering it
+        # has always had, so nothing that reads one of these files today
+        # sees any difference; the user's hand-drawn surfaces go to a group
+        # of their own, created only when there are any.
+        #
+        # They cannot share ``surfaces``: ``n_surfaces`` is the search
+        # population and is checked against the count the reference
+        # documents. And they cannot be omitted either — with v0.1.157 a
+        # user surface can BE the critical one, so leaving it out would
+        # export a set that does not contain the surface the run reported.
+        # The reference makes the same choice from the other direction:
+        # detailed data for a surface the user defined is always saved,
+        # whatever the output setting says.
+        _populations = [(f.create_group("surfaces"),
+                         search_result.evaluations)]
+        _user = getattr(search_result, "user_evaluations", None) or []
+        if _user:
+            f.attrs["n_user_surfaces"] = len(_user)
+            _populations.append((f.create_group("user_surfaces"), _user))
+        for group, _population in _populations:
+            for i, res in enumerate(_population):
+                sg = group.create_group(f"surface_{i:05d}")
+                # v0.1.152 (D56) — a surface with no factor of safety gets NO
+                # ``fos`` attribute, and its ``reason`` in place of one. That is
+                # what the reference does — it writes a code where the safety
+                # factor would go — and the point is what a reader gets when it
+                # forgets to check: a KeyError names the surface and stops,
+                # where the ``np.nan`` written here before was a number that
+                # survived every conversion and comparison on its way out.
+                if res.fos is not None:
+                    sg.attrs["fos"] = float(res.fos)
+                sg.attrs["converged"] = res.converged
+                sg.attrs["iterations"] = res.iterations
+                sg.attrs["method"] = res.method_id
+                sg.attrs["is_valid"] = res.is_valid
+                sg.attrs["error"] = res.error_message or ""
+                sg.attrs["reason"] = getattr(res, "reason", "") or ""
+                # v0.1.127 — the seismic extras, written only when the run
+                # produced them, so a file from an ordinary run is byte for
+                # byte the file it always was.
+                for key in ("ky", "ky_fos", "newmark_displacement"):
+                    value = (res.details or {}).get(key)
+                    if value is not None:
+                        sg.attrs[key] = (float(value) if np.isfinite(value)
+                                         else np.nan)
 
-            sd = res.surface.to_dict()
-            sg.attrs["surface_type"] = sd["type"]
-            # v0.1.111 — "composite" as well: the type string says which of
-            # the two it is, and the centre and radius are what the surface
-            # is identified by in either case.
-            if sd["type"] in ("circle", "composite"):
-                sg.attrs["centre_x"] = sd["centre_x"]
-                sg.attrs["centre_y"] = sd["centre_y"]
-                sg.attrs["radius"] = sd["radius"]
-                if sd.get("x_left") is not None:
-                    sg.attrs["x_left"] = sd["x_left"]
-                    sg.attrs["x_right"] = sd["x_right"]
+                sd = res.surface.to_dict()
+                sg.attrs["surface_type"] = sd["type"]
+                # v0.1.111 — "composite" as well: the type string says which of
+                # the two it is, and the centre and radius are what the surface
+                # is identified by in either case.
+                if sd["type"] in ("circle", "composite"):
+                    sg.attrs["centre_x"] = sd["centre_x"]
+                    sg.attrs["centre_y"] = sd["centre_y"]
+                    sg.attrs["radius"] = sd["radius"]
+                    if sd.get("x_left") is not None:
+                        sg.attrs["x_left"] = sd["x_left"]
+                        sg.attrs["x_right"] = sd["x_right"]
 
-            # Slice table
-            rows = np.empty(len(res.slices), dtype=dtype)
-            for j, s in enumerate(res.slices):
-                d = s.to_dict()
-                rows[j] = (
-                    d["index"],
-                    d["x_centre"],
-                    d["width"],
-                    d["base_y_left"],
-                    d["base_y_right"],
-                    d["base_angle_deg"],
-                    d["base_length"],
-                    d["height"],
-                    d["weight"],
-                    d["pore_pressure"],
-                    d["surface_pressure"],
-                )
-            sg.create_dataset("slices", data=rows, compression="gzip")
+                # Slice table
+                rows = np.empty(len(res.slices), dtype=dtype)
+                for j, s in enumerate(res.slices):
+                    d = s.to_dict()
+                    rows[j] = (
+                        d["index"],
+                        d["x_centre"],
+                        d["width"],
+                        d["base_y_left"],
+                        d["base_y_right"],
+                        d["base_angle_deg"],
+                        d["base_length"],
+                        d["height"],
+                        d["weight"],
+                        d["pore_pressure"],
+                        d["surface_pressure"],
+                    )
+                sg.create_dataset("slices", data=rows, compression="gzip")
 
         # Summary
         summary = f.create_group("summary")

@@ -554,6 +554,9 @@ class CanvasView(QGraphicsView):
         # v0.1.146 — the Slope Limits (defect D50)
         self._draw_slope_limits(scene)
 
+        # v0.1.157 — the slip surfaces the user defined by hand (defect D58)
+        self._draw_user_surfaces(scene)
+
         # Loads
         for load in self.project.distributed_loads:
             scene.addItem(DistributedLoadItem(load))
@@ -2240,6 +2243,55 @@ class CanvasView(QGraphicsView):
     # ==================================================================
     # v0.1.8 — Slip-circle search grid visualisation
     # ==================================================================
+    def _draw_user_surfaces(self, scene) -> None:
+        """Draw the slip surfaces the user defined by hand (D58).
+
+        The WHOLE circle plus a mark at the centre, which is what the
+        reference shows while one is being defined, and it is not the same
+        picture as the analysed arc: the arc is bounded by where it meets
+        the ground, and those endpoints are a RESULT. Before a run there is
+        nothing to bound it with, and inventing the bound here would mean
+        two places deciding where a surface starts.
+
+        So the split is: model view draws the circle, result view draws the
+        analysed arc — the latter through the ordinary population, since
+        v0.1.157 puts the user's surfaces in ``SearchResult.valid()``.
+
+        ``SlipSurfaceItem`` cannot be reused for this. Its circular branch
+        is guarded by ``x_left is not None and x_right is not None``, so a
+        circle without endpoints yields an EMPTY path — it would draw
+        nothing at all, which is how this action spent its whole life.
+        """
+        from PySide6.QtWidgets import QGraphicsEllipseItem, QGraphicsLineItem
+
+        surfaces = getattr(self.project, "user_surfaces", None) or ()
+        if not surfaces:
+            return
+        colour = QColor("#7b2cbf")
+        for c in surfaces:
+            pen = QPen(colour, self.display_options.line_width)
+            pen.setCosmetic(True)
+            pen.setStyle(Qt.DashLine)
+            item = QGraphicsEllipseItem(QRectF(
+                c.centre_x - c.radius, c.centre_y - c.radius,
+                2.0 * c.radius, 2.0 * c.radius))
+            item.setPen(pen)
+            item.setZValue(8.0)
+            scene.addItem(item)
+            # The centre, as a small cross in model units scaled to the
+            # circle, so it stays visible at any zoom without a fixed size
+            # in pixels pretending to be a length.
+            arm = max(c.radius * 0.02, 1e-9)
+            solid = QPen(colour, self.display_options.line_width)
+            solid.setCosmetic(True)
+            for x1, y1, x2, y2 in (
+                    (c.centre_x - arm, c.centre_y, c.centre_x + arm, c.centre_y),
+                    (c.centre_x, c.centre_y - arm, c.centre_x, c.centre_y + arm)):
+                mark = QGraphicsLineItem(x1, y1, x2, y2)
+                mark.setPen(solid)
+                mark.setZValue(8.0)
+                scene.addItem(mark)
+
     def _draw_slope_limits(self, scene) -> None:
         """Draw the Slope Limit markers on the ground profile.
 

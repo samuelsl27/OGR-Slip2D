@@ -187,6 +187,19 @@ _DICTS: dict[str, dict[str, str]] = {
         'Add Surface': 'Añadir superficie',
         'Add Surface (centre and radius)...': 'Añadir superficie (centro y radio)...',
         'Capture tolerance:': 'Tolerancia de captura:',
+        # v0.1.157 (D58) — superficies definidas a mano por el usuario.
+        'Manage Surfaces...': 'Gestionar superficies...',
+        'Manage Surfaces': 'Gestionar superficies',
+        'No user-defined surfaces are defined.':
+            'No hay ninguna superficie definida por el usuario.',
+        '%d: centre (%.3f, %.3f), radius %.3f':
+            '%d: centro (%.3f, %.3f), radio %.3f',
+        '%d user-defined surface(s) defined.':
+            '%d superficie(s) definida(s) por el usuario.',
+        'Slip surfaces defined by hand, analysed in addition to the search':
+            'Superficies de deslizamiento definidas a mano, analizadas además de la búsqueda',
+        'Only available with Surface Options -> Surface Type = Circular.':
+            'Solo disponible con Opciones de superficie -> Tipo de superficie = Circular.',
         'Circle added: centre (%.3f, %.3f), radius %.3f': 'Círculo añadido: centro (%.3f, %.3f), radio %.3f',
         'Could not build the search for this method.': 'No se ha podido construir la búsqueda para este método.',
         'Enable / disable': 'Activar / desactivar',
@@ -226,6 +239,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Toggle or delete:': 'Alternar o eliminar:',
 
         'Delete': 'Eliminar',
+        'Delete:': 'Eliminar:',
         'Model': 'Modelo',
 
         # --- v0.1.54: capa de anotación y menú Tools ----------------
