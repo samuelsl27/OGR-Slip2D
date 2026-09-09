@@ -165,7 +165,11 @@ def run_sensitivity(
     from ogr_slip2d.analysis_runner import build_method
     from ogr_slip2d.search import GridSearch
 
-    from .probabilistic import _evaluate_on, _rebuild_surface
+    from .probabilistic import (
+        _cannot_reevaluate,
+        _evaluate_on,
+        _rebuild_surface,
+    )
 
     res = SensitivityResult(intervals=intervals)
 
@@ -207,9 +211,17 @@ def run_sensitivity(
         method = _make_method(mid)
         if method is None or det is None:
             continue
-        surface = _rebuild_surface(
-            det.surface.to_dict() if hasattr(det.surface, "to_dict")
-            else det.surface)
+        sd = (det.surface.to_dict() if hasattr(det.surface, "to_dict")
+              else det.surface)
+        refusal = _cannot_reevaluate(project, sd)
+        if refusal is not None:
+            # v0.1.154 (D59) — same as on the probabilistic path: a sweep
+            # that disappears without saying why is worse than one that is
+            # not run. Measured before this: ok=False, zero points and an
+            # empty ``notes``.
+            res.notes[mid] = refusal
+            continue
+        surface = _rebuild_surface(sd)
         if surface is None:
             continue
         search = GridSearch(method=method, num_slices=num_slices,
@@ -245,6 +257,11 @@ def run_sensitivity(
 
         if sweeps:
             res.by_method[mid] = sweeps
+
+    # v0.1.154 — same as ``run_global_minimum``: if no method survived,
+    # the reason rises to the only key the interface prints.
+    if not res.by_method and "error" not in res.notes and res.notes:
+        res.notes["error"] = "; ".join(str(v) for v in res.notes.values())
 
     if progress_cb:
         progress_cb(total, total)

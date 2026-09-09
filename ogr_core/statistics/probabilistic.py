@@ -108,20 +108,77 @@ class ProbabilisticResult:
 
 
 # ======================================================================
+#: The serialised surface types a statistical loop knows how to seed, and
+#: what each one is seeded FROM. ENUMERATED, never sniffed from the shape
+#: of the dictionary: dispatching on the shape IS defect D59.
+#: ``CompositeSurface.to_dict`` carries ``radius``, so ``"radius" in
+#: surface_dict`` read a composite as a circle; and
+#: ``WeakLayerSurface.to_dict`` carries neither ``radius`` nor
+#: ``polyline``, so it fell through to ``SlipSurface.from_dict`` and
+#: raised ``KeyError('polyline')`` from OUTSIDE the sample loop, taking
+#: every method and both analyses down with it.
+_CIRCLE_SEEDED = ("circle", "composite")
+_POLYLINE_SEEDED = ("polyline",)
+
+
+def _surface_type(surface_dict) -> Optional[str]:
+    """The serialised type, with the ONE fallback this module still owes.
+
+    ``run_global_minimum`` accepts a bare dictionary as ``det.surface``
+    (the ``else det.surface`` branch of its own loop), and such a
+    dictionary need not carry a ``type`` at all. A centre and a radius
+    without a type therefore still name a circle — deliberately, and not
+    as a leftover of the shape-sniffing this module just stopped doing:
+    dropping it would break that contract as a side effect rather than as
+    a decision.
+    """
+    if not isinstance(surface_dict, dict) or not surface_dict:
+        return None
+    stype = surface_dict.get("type")
+    if stype is None and "radius" in surface_dict:
+        return "circle"
+    return stype
+
+
 def _rebuild_surface(surface_dict: dict):
-    """Rebuild a surface object from its serialised form so it can be
-    re-evaluated against a modified project."""
+    """The SEED of the surface every sample re-evaluates.
+
+    What comes out is the seed of the deterministic surface, not a copy of
+    it: a circle WITHOUT endpoints, so that each sample resolves its own
+    sliding mass, applies its own reverse curvature and its own tension
+    crack and — with Composite Surfaces enabled — clips itself against the
+    floor of the model again. That is the mechanism v0.1.131 (D36) put
+    here, and the one ``CompositeSurface.to_dict`` names in its own
+    docstring: "re-clipping the same circle against the same model gives
+    the same composite, which is what the probabilistic sampler relies
+    on". Measured over the four composite models of the verification bank
+    and seven method-model pairs, the re-clipped surface is the
+    deterministic one to all seventeen digits.
+
+    A composite is therefore seeded FROM ITS CIRCLE on purpose, and not
+    for want of a ``CompositeSurface.from_dict``. Rebuilding the object
+    from the dictionary was measured and is WORSE: the dictionary does not
+    carry ``tension_crack_wall``, and endpoints that arrive already
+    truncated skip the truncation that would deduce it again, so a model
+    with a filled tension crack loses its water thrust — +0.35 % on the
+    UNSAFE side on the composite model of verification problem 57, where
+    re-clipping is exact.
+
+    Returns ``None`` for a serialised surface this loop cannot seed, so
+    the caller can say so and carry on with the other methods.
+    """
     from ogr_slip2d.surface import SlipCircle, SlipSurface
 
-    if not surface_dict:
-        return None
-    if surface_dict.get("type") == "circle" or "radius" in surface_dict:
+    stype = _surface_type(surface_dict)
+    if stype in _CIRCLE_SEEDED:
         return SlipCircle(
             centre_x=float(surface_dict["centre_x"]),
             centre_y=float(surface_dict["centre_y"]),
             radius=float(surface_dict["radius"]),
         )
-    return SlipSurface.from_dict(surface_dict)
+    if stype in _POLYLINE_SEEDED:
+        return SlipSurface.from_dict(surface_dict)
+    return None
 
 
 def _evaluate_on(project, search, surface):
@@ -131,6 +188,70 @@ def _evaluate_on(project, search, surface):
     if isinstance(surface, SlipCircle):
         return search.evaluate_circle(project, surface)
     return search.evaluate_surface(project, surface)
+
+
+def _composite_surfaces(project) -> bool:
+    """Composite Surfaces, as the project the SAMPLES run on carries it.
+
+    Read exactly as ``BaseSearch._candidate_surfaces`` reads it, missing
+    attribute included, so the two cannot disagree about what the option
+    says.
+    """
+    try:
+        return bool(project.settings.search.composite_surfaces)
+    except AttributeError:
+        return False
+
+
+def _cannot_reevaluate(project, surface_dict) -> Optional[str]:
+    """Why the samples cannot be re-evaluated on this deterministic
+    surface, or ``None`` when they can.
+
+    Two refusals, and this docstring states what they cover and nothing
+    more. They do NOT promise that every sample answers for the
+    deterministic mechanism: with Composite Surfaces on in both runs, a
+    sample whose strength falls far enough answers for a DIFFERENT sliding
+    mass of the same circle, because ``_best_of_masses`` keeps the lowest
+    factor and v0.1.131 (D36) dropped the endpoints on purpose. Measured
+    on a two-mass model, a probability of failure of 0.25 was made up
+    entirely of samples belonging to the other mass. That is a defect of
+    its own and it is reported, not covered here — a guard whose stated
+    reason is wider than what it checks is exactly what cost this project
+    two versions over m-alpha (v0.1.82-84).
+
+    THE TYPE, because ``_rebuild_surface`` seeds from a circle or from a
+    polyline and from nothing else. Until v0.1.154 a surface it could not
+    seed reached ``SlipSurface.from_dict`` and raised from outside the
+    sample loop: the user lost every method and both analyses at once, and
+    the interface printed nothing at all.
+
+    COMPOSITE SURFACES, because a composite is seeded from its circle and
+    that circle only becomes composite again while the project the samples
+    run on keeps the option on. With it off, the same circle is either
+    refused whole by the containment rule — the reference's error -103,
+    and then N samples of N are lost under a warning that blames the
+    variable ranges, which are innocent — or, when the circle defines more
+    than one sliding mass, the OTHER mass answers silently: measured
+    +142.97 % on a single evaluation, with no failed sample and no note of
+    any kind. Refusing is what v0.1.131 (D36) implies rather than a new
+    rule: a surface answers for the project it is asked about, so a
+    project that would not produce this surface cannot be handed its
+    number.
+    """
+    if not isinstance(surface_dict, dict) or not surface_dict:
+        return ("The deterministic result carries no serialised surface, "
+                "so there is nothing to re-evaluate.")
+    stype = _surface_type(surface_dict)
+    if stype not in _CIRCLE_SEEDED + _POLYLINE_SEEDED:
+        return (f"The deterministic critical surface is of type "
+                f"'{stype}', which a statistical run cannot re-evaluate; "
+                f"this method was skipped.")
+    if stype == "composite" and not _composite_surfaces(project):
+        return ("The deterministic critical surface is a composite one, "
+                "and Composite Surfaces is off in the project the samples "
+                "run on, so that surface cannot be formed again; this "
+                "method was skipped.")
+    return None
 
 
 # ======================================================================
@@ -218,9 +339,21 @@ def run_global_minimum(
         method = _make_method(mid)
         if method is None or det is None:
             continue
-        surface = _rebuild_surface(
-            det.surface.to_dict() if hasattr(det.surface, "to_dict")
-            else det.surface)
+        # ONE serialisation per method: the one the refusal reads, the one
+        # the seed is built from and the one that travels in the result.
+        # Reading the same surface three times could disagree.
+        sd = (det.surface.to_dict() if hasattr(det.surface, "to_dict")
+              else det.surface)
+        refusal = _cannot_reevaluate(project, sd)
+        if refusal is not None:
+            # v0.1.154 (D59) — said out loud, and per method, because what
+            # was measured without it are two worse things: a run that
+            # loses every sample and blames the variable ranges for it,
+            # and a run that answers for another sliding mass without a
+            # word.
+            result.notes[mid] = refusal
+            continue
+        surface = _rebuild_surface(sd)
         if surface is None:
             continue
         search = GridSearch(method=method, num_slices=num_slices,
@@ -229,8 +362,7 @@ def run_global_minimum(
         mres = MethodProbabilisticResult(
             method_id=mid,
             deterministic_fos=getattr(det, "fos", math.nan),
-            surface=(det.surface.to_dict()
-                     if hasattr(det.surface, "to_dict") else None),
+            surface=sd if isinstance(sd, dict) else None,
         )
         values: list[float] = []
         for i in range(num_samples):
@@ -259,6 +391,13 @@ def run_global_minimum(
                 f"{mres.failed_samples} of {num_samples} samples could "
                 f"not be evaluated; check the variable ranges.")
         result.by_method[mid] = mres
+
+    # v0.1.154 — if no method survived, the reason rises to the key the
+    # interface actually prints: ``_compute_statistics`` looks only at
+    # ``notes['error']``, and only when the run comes back empty.
+    if not result.by_method and "error" not in result.notes and result.notes:
+        result.notes["error"] = "; ".join(
+            str(v) for v in result.notes.values())
 
     if progress_cb:
         progress_cb(total, total)
@@ -337,16 +476,44 @@ def _surface_key(sd: dict, tol: float = 0.5) -> str:
     different iterations maps to the same key. A grid search regenerates
     an identical set of circles every time, so this groups them exactly;
     for random searches the tolerance merges near-coincident surfaces.
+
+    WHAT THIS KEY DOES NOT SEPARATE, said here because the accumulated
+    statistics are only as honest as the identity they are accumulated
+    under: a circle is keyed by centre and radius alone, so the two
+    DISJOINT sliding masses of one circle share a key, and so do a
+    composite and the uncut circle it was clipped from. Reported as a
+    defect of its own rather than fixed here — putting the extent in the
+    key would regroup the samples of every circular model.
     """
-    if not sd:
+    stype = _surface_type(sd)
+    if stype is None:
         return ""
-    if "radius" in sd:
+    if stype in _CIRCLE_SEEDED:
         return "c:%d:%d:%d" % (round(sd["centre_x"] / tol),
                                round(sd["centre_y"] / tol),
                                round(sd["radius"] / tol))
-    verts = (sd.get("polyline") or {}).get("vertices") or []
+    # Every serialised surface that is not keyed by its circle is keyed by
+    # its vertices, and they are PAIRS: ``Polyline.to_dict`` writes
+    # ``[x, y]`` and always has. Reading ``v["x"]`` off a list raised
+    # ``TypeError`` on the first valid evaluation of any non-circular
+    # search — Block, Path, Auto Refine — or of any optimised surface, and
+    # this loop sits outside the ``try`` in ``run_overall_slope``, so the
+    # public entry point died. Same root cause as D59: dispatching on the
+    # shape of the dictionary instead of on its ``type``.
+    if stype in _POLYLINE_SEEDED:
+        verts = (sd.get("polyline") or {}).get("vertices") or []
+    else:
+        # ``composite`` and ``weak_layer`` publish their drawn vertices at
+        # the root. Until now they all collapsed onto the empty key "p:",
+        # which merged surfaces that are not the same surface.
+        verts = sd.get("vertices") or []
+    if not verts:
+        # No key rather than the bare "p:" every vertexless surface used
+        # to share: the caller skips an empty key, and skipping one
+        # surface is better than merging it with all the others.
+        return ""
     return "p:" + ":".join(
-        "%d,%d" % (round(v["x"] / tol), round(v["y"] / tol))
+        "%d,%d" % (round(v[0] / tol), round(v[1] / tol))
         for v in verts)
 
 
