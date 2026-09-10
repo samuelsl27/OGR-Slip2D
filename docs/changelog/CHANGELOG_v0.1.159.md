@@ -318,6 +318,24 @@ el contador `n_passes_exhausted` y las claves nuevas de `details` no existen
 en 0.1.158— y se dice porque el proyecto pide distinguir las dos cosas y
 porque un `ImportError` no demuestra nada sobre el motor.
 
+**El banco NO se ha re-corrido, y el riesgo que eso deja está acotado.** El
+A/B se hizo contra el CÓDIGO y no regenerando los `resultados*.json`: están
+congelados en 0.1.148/0.1.153 y regenerarlos mezclaría varias versiones de
+cambios ajenos con éste — la misma decisión, y por la misma razón, que
+v0.1.154, v0.1.155 y v0.1.156.
+
+Pero aquí la garantía es más fuerte que en aquéllas, y también más estrecha
+de lo que parece, así que conviene decir las dos mitades. **Lo que la
+demostración cubre**: toda superficie cuyo resultado saliera de ramas
+convergidas es idéntica bit a bit, a cualquier tolerancia, porque esas ramas
+recorren las mismas pasadas con el mismo F. **Lo que NO cubre**: una
+superficie en la que una rama tocaba el techo y ahora converge entre la
+pasada 81 y la 400. Ésa **puede** mover un número, y moverlo es
+precisamente el objeto de la versión. Existen: cuatro círculos validados
+tocan el techo, y ninguno se movió sólo porque los λ que perdían caían fuera
+del primer bracket — lo cual está medido sobre siete modelos y no sobre los
+ciento once. Ahí es donde tendría que mirar quien re-corra el banco.
+
 **Y una lección que la versión no buscaba.** El arreglo equivocado de §3 no
 lo cazó ninguno de los tests nuevos: lo cazó la **suite entera**, con cuatro
 rojos en `test_postprocess_v122.py` y `test_checks_v132.py`, archivos de
