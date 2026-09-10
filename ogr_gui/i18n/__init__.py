@@ -507,7 +507,6 @@ _DICTS: dict[str, dict[str, str]] = {
         "Stage times and the per-stage 'Calculate SF' flags are edited in Groundwater → Transient Groundwater, next to the boundary conditions they depend on.": 'Los tiempos de etapa y las casillas «Calcular FS» por etapa se editan en Agua subterránea → Agua subterránea transitoria, junto a las condiciones de contorno de las que dependen.',
         'Stages defined:': 'Etapas definidas:',
         'Tensile stress check': 'Comprobación de tracción',
-        'The m-alpha check is deliberately NOT offered here. It rejects surfaces whose base normal denominator falls below 0.2, and measurement showed it also rejects the reference-validated critical circle, so it is a diagnostic rather than a validity criterion and stays with the search options.': 'La comprobación de m-alpha NO se ofrece aquí a propósito. Rechaza superficies cuyo denominador de la normal en la base baja de 0.2, y se midió que también rechaza el círculo crítico validado contra la referencia, así que es un diagnóstico y no un criterio de validez, y permanece en las opciones de búsqueda.',
         'Transient': 'Transitorio',
         'Unit weight:': 'Peso específico:',
         'Variable actions:': 'Acciones variables:',
@@ -1147,6 +1146,16 @@ _DICTS: dict[str, dict[str, str]] = {
             "su condicionamiento frente a ella. Se aplica a las "
             "superficies recortadas por una capa débil, donde una capa "
             "que simplemente termina deja un escalón casi vertical.",
+        # v0.1.158 — lo que el valor tecleado hace de verdad. El motor lo
+        # lee como ``0 < limite < 90``, así que los dos extremos del rango
+        # no aflojan el techo: lo quitan.
+        "At 90 deg the ceiling is switched off: no surface is discarded "
+        "for the steepness of its base.":
+            "A 90° el techo queda desactivado: ninguna superficie se "
+            "descarta por la inclinación de su base.",
+        "Applies only to surfaces a weak layer has clipped.":
+            "Se aplica sólo a las superficies recortadas por una capa "
+            "débil.",
         "Weak Layer": "Capa débil",
         "Weak layer material assigned.": "Material de la capa débil asignado.",
         # v0.1.126 — búsqueda por enjambre de partículas y mínimos

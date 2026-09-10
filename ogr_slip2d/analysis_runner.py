@@ -296,6 +296,7 @@ def settings_warnings(project, method_ids=()) -> list[str]:
     notes.extend(_surface_type_notes(s_search))
     notes.extend(_auto_refine_vertex_notes(project))
     notes.extend(_block_group_notes(project))
+    notes.extend(_base_angle_ceiling_notes(project))
     notes.extend(_optimize_notes(s_search))
     notes.extend(_undrained_profile_notes(project))
     notes.extend(_focus_notes(project))
@@ -341,6 +342,51 @@ def _block_group_notes(project) -> list[str]:
         f"{s_search.block_num_groups} here — configures nothing. That count "
         f"only divides the region OGR falls back to when no Block Search "
         f"object is drawn."
+    ]
+
+
+def _base_angle_ceiling_notes(project) -> list[str]:
+    """When the base-angle ceiling is not a loose ceiling but no ceiling.
+
+    v0.1.158, defect D106. ``_base_angle_ok`` discards a clipped surface
+    whose steepest slice base passes ``max_base_angle_deg``, but it reads
+    that setting through ``if not (0.0 < limit < 90.0): return True`` — so
+    the two ends of the spin box's own range do not loosen the ceiling,
+    they REMOVE it. The control offers 90.0 as its maximum and one
+    decimal, which makes "90" look like the laxest setting available when
+    it is the only one that switches the check off entirely.
+
+    Scoped the way :func:`_block_group_notes` is scoped, and for the same
+    reason: it says nothing unless this model's arrangement is one where
+    the setting was going to do something. ``_base_angle_ok`` only ever
+    applies to surfaces a weak layer has clipped, so on a model with no
+    weak layer the value is inert whatever it says, there is nothing to
+    switch off, and a note on every run would be noise.
+
+    Like the block-group note it fires whatever the value is within that
+    scope, because 90.0 typed by hand and 90.0 arrived at by loading a
+    file are the same silence.
+    """
+    from .weak_layers import weak_layer_bands
+
+    try:
+        limit = float(project.settings.advanced.max_base_angle_deg)
+    except (AttributeError, TypeError, ValueError):
+        return []
+    if 0.0 < limit < 90.0:
+        return []
+    bands = weak_layer_bands(project)
+    if not bands:
+        return []
+    n = len(bands)
+    what = "1 weak layer" if n == 1 else f"{n} weak layers"
+    return [
+        f"Maximum slice base angle is set to {limit:g} deg, which does not "
+        f"raise the ceiling on the base of a slice — it removes it. This "
+        f"model draws {what}, and no surface a weak layer clips will be "
+        f"discarded for the steepness of its base, however close to "
+        f"vertical the drop at the end of a layer leaves it. Any value "
+        f"strictly between 0 and 90 applies the ceiling."
     ]
 
 
@@ -869,6 +915,45 @@ def daylight_tangent_note(result, num_slices: int) -> list[str]:
 #: eleven thousandths, and 0.67 deg of base angle.
 _M_ALPHA_MARGIN_WARN = 0.5
 
+#: Methods that never form this denominator at all, and to which the note
+#: below therefore has nothing to say.
+#:
+#: v0.1.158, defect D104. ``m_alpha`` divides the base normal force in
+#: every procedure of slices that takes the slice's own vertical
+#: equilibrium — which is all of them EXCEPT the Ordinary Method of
+#: Slices, whose normal is the projection of the external forces onto the
+#: base and is formed without a denominator (see ``methods/ordinary.py``:
+#: the string ``m_alpha`` does not appear in that file). Duncan, Wright &
+#: Brandon (2014), section 14.4.2, states the same thing from the other
+#: side and makes the Ordinary Method one of its four REMEDIES for this
+#: problem: "very large or negative normal stresses at the toe of the
+#: slope do not occur in the Ordinary Method of Slices ... if problems
+#: occur in the passive zone with other limit equilibrium procedures, the
+#: Ordinary Method of Slices can be used."
+#:
+#: Until v0.1.158 the note was emitted for it anyway, telling a method
+#: that divides by nothing that it was dividing by a number near zero.
+#: Measured on problems 51 and 96 of the verification bank.
+_NO_M_ALPHA_DENOMINATOR = frozenset({"ordinary_fellenius"})
+
+
+def _method_equilibrium(method_id: str):
+    """``(force, moment)`` for a method id, or ``(None, None)``.
+
+    Read from the registry rather than listed here, so that a method
+    added later cannot silently inherit the wrong sentence.
+    """
+    if not method_id:
+        return None, None
+    try:
+        from .methods import method_registry
+        cls = method_registry().get(method_id)
+    except Exception:  # noqa: BLE001
+        return None, None
+    if cls is None:
+        return None, None
+    return bool(cls.SATISFIES_FORCE), bool(cls.SATISFIES_MOMENT)
+
 
 def m_alpha_margin_note(result) -> list[str]:
     """Warn when the reported factor rests on a near-zero ``m_alpha``.
@@ -883,6 +968,15 @@ def m_alpha_margin_note(result) -> list[str]:
     degeneracy to ``cos a`` under phi = 0 is arithmetic, not a citation.
     """
     from .checks import M_ALPHA_LIMIT, base_m_alphas
+
+    # v0.1.158 — the method has to be known BEFORE the value is measured,
+    # because for one of them the value is not a property of the run at
+    # all. Taken from the result rather than passed in, so that the call
+    # site keeps its signature and a wrong sentence shows up as a wrong
+    # sentence rather than as a TypeError.
+    method_id = getattr(result, "method_id", "") or ""
+    if method_id in _NO_M_ALPHA_DENOMINATOR:
+        return []
 
     vals = base_m_alphas(result)
     if not vals:
@@ -910,17 +1004,57 @@ def m_alpha_margin_note(result) -> list[str]:
     # Guarded because ``m_alpha`` may be zero or negative — that is worse
     # than a small positive one, not better, and it must not divide.
     if worst > 0.0:
-        effect = (f" That divides the normal force on that base by a number "
-                  f"near zero, inflating it {1.0 / worst:.1f}-fold.")
+        # v0.1.158 — it used to say "by a number near zero" whatever the
+        # value was, which contradicted the margin the same sentence had
+        # just reported: at m_alpha 0.4641 the note announced a clearance
+        # of 0.2641 — larger than the limit itself — and then called that
+        # near zero. The warning threshold is 0.5 and the limit is 0.2, so
+        # between the two this states the amplification and lets it speak.
+        effect = (f" That divides the normal force on that base by "
+                  f"{worst:.4f}, inflating it {1.0 / worst:.1f}-fold.")
     else:
         effect = (" That denominator is zero or negative, so the normal "
                   "force on that base is meaningless rather than merely "
                   "large.")
+    # v0.1.158, defect D104 — which family the method belongs to decides
+    # what can honestly be said to it. Spencer and GLE/Morgenstern-Price
+    # satisfy both equilibrium conditions, so telling them to "compare
+    # against a complete-equilibrium method such as Spencer" sent them to
+    # themselves; Janbu, Lowe-Karafiath and the two Corps procedures
+    # satisfy force equilibrium only and were being called methods of
+    # moments. Duncan, Wright & Brandon (2014), section 14.4.1, separate
+    # the two denominators explicitly — their Eq. 14.5 for Spencer, with
+    # its own interslice inclination, and Eq. 14.6 for Bishop, which is
+    # the same expression "when the interslice force inclination (theta)
+    # is set to zero". This value is always the Bishop one; see D111.
+    force, moment = _method_equilibrium(method_id)
+    complete = " Spencer and GLE/Morgenstern-Price"
+    if force and moment:
+        advice = (" This method satisfies force AND moment equilibrium, so "
+                  "there is no more complete one to check it against; what "
+                  "a base this steep costs it is the conditioning of the "
+                  "base normal, not the equilibrium it solves. Vary the "
+                  "number of slices, and compare against the other "
+                  "complete-equilibrium method, which differs from it only "
+                  "in the interslice force function.")
+    elif force:
+        advice = (" A force-equilibrium method is least reliable there, and "
+                  "this value is the Bishop denominator: the one this "
+                  "method actually divides by carries its own interslice "
+                  "inclination. Compare against a complete-equilibrium "
+                  f"method —{complete} — before quoting it.")
+    elif moment:
+        advice = (" A method of moments is not reliable there. Compare "
+                  f"against a complete-equilibrium method —{complete} — "
+                  "before quoting it.")
+    else:
+        # An unregistered or unnamed method gets no claim about its
+        # family: a getattr that failed cannot assert one.
+        advice = (" Compare against a complete-equilibrium method —"
+                  f"{complete} — before quoting it.")
     return [
         f"The reported surface has m_alpha down to {worst:.4f}{where}"
-        f"{tail}.{effect} A method of moments is not reliable there. "
-        f"Compare against a complete-equilibrium method such as Spencer "
-        f"before quoting it."
+        f"{tail}.{effect}{advice}"
     ]
 
 

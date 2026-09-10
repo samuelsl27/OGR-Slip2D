@@ -1350,6 +1350,18 @@ class _AdvancedPage(QWidget):
             "it. Applies to surfaces a weak layer has clipped, where a "
             "layer that simply stops leaves a near-vertical step."))
         form.addRow(tr("Maximum slice base angle:"), self.sp_base_angle)
+        # v0.1.158, defect D106 — the range this spin box offers ends at
+        # the one value that switches the ceiling OFF, because the engine
+        # reads it as ``0 < limit < 90``. The range is deliberately NOT
+        # narrowed to 89.9: a project already saved with 90 would then be
+        # shown clamped, and pressing OK would write 89.9 over it, turning
+        # "no ceiling" into "a ceiling" in the user's own file without
+        # anyone asking for it. Saying what the value does is the change
+        # that costs nothing.
+        self.lbl_base_angle = QLabel("")
+        self.lbl_base_angle.setWordWrap(True)
+        form.addRow("", self.lbl_base_angle)
+        self.sp_base_angle.valueChanged.connect(self._refresh)
 
         # v0.1.74 — offered, so it is reachable, but OFF by default. The
         # v0.1.84 — the note below used to explain why this diverged from
@@ -1388,6 +1400,14 @@ class _AdvancedPage(QWidget):
         self.lbl_cpu.setText(
             "%s %d %s %d" % (tr("On this computer:"), n,
                              tr("of"), total))
+        # And what the base-angle value in the box actually does. Only
+        # the open interval applies a ceiling at all; both ends remove it.
+        v = self.sp_base_angle.value()
+        self.lbl_base_angle.setText(
+            tr("At 90 deg the ceiling is switched off: no surface is "
+               "discarded for the steepness of its base.")
+            if not (0.0 < v < 90.0) else
+            tr("Applies only to surfaces a weak layer has clipped."))
 
     def apply(self) -> None:
         self.s.parallel_search = self.chk_parallel.isChecked()

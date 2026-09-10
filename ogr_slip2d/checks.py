@@ -25,15 +25,43 @@ worst case, completely invalid". The check therefore:
 
 **m-alpha Check.** ``m_alpha = cos(alpha) + s·sin(alpha)·tan(phi)/F``,
 where ``s`` is the sense of sliding, is the denominator of the base normal
-force. Whitman & Bailey (1967) showed that
-once it drops below about 0.2 the resulting safety factor becomes
-unreliable: a small positive value inflates the normal force and hence
-the shear resistance, and a negative value can produce negative
+force. It has been suggested (Whitman & Bailey, 1967) that once it drops
+below about 0.2 the resulting safety factor should not be quoted without
+looking further: a small positive value inflates the normal force and
+hence the shear resistance, and a negative value can produce negative
 resistance and meaningless factors of safety. Surfaces whose final
 iteration has ``m_alpha < 0.2`` on any slice are rejected.
 
-Both checks are **disabled by default**, matching the reference, where
-tensile normal stresses are permitted unless the user opts in.
+What the limit does **not** say, and the source is explicit about it: a
+value below 0.2 does not by itself mean the factor of safety is wrong.
+In most cases it can still be calculated and the iteration still
+converges. The limit screens out surfaces whose arithmetic has become
+untrustworthy, not surfaces known to be wrong — which is why it is a
+setting and not a law. The fuller discussion is Ching & Fredlund (1983),
+cited here because it is the source the limit's own documentation points
+to and **not** because it has been read: it is behind a paywall, no copy
+is held with this project's references, and nothing here has been
+checked against it.
+
+Under ``phi = 0`` the friction term vanishes and ``m_alpha`` degenerates
+to ``cos(alpha)`` exactly, which turns the check into a bare ceiling on
+the base angle — 78.463 deg at a limit of 0.2 — with no dependence on
+the method or on F. Anchored against a published slice table in
+``tests/test_james_bay_v1158.py`` and on this program's own arithmetic in
+``tests/test_block_population_v1135.py``. Defect D61 of the verification
+bank is open on it: no published case has been found with a non-circular
+surface in such soil and a base angle anywhere near that ceiling, so
+there is nothing external to decide the limit against.
+
+The two defaults are **not** the same, and saying "both are off" was
+false here for the seventy-four versions from v0.1.84 to v0.1.157. The Tensile Stress Check is
+**off**, matching the reference, where tensile normal stresses are
+permitted unless the user opts in. The m-alpha check is **on** since
+v0.1.84, also matching the reference, whose two worked examples filter
+with it by default and count what it rejects as error -112 (97 surfaces
+of 4851 in the first, 225 in the second). It was off before that on the
+strength of a measurement v0.1.82 found to be reading ``m_alpha`` in the
+mirror.
 
 Author: Samuel Sáez López (UPCT)
 """

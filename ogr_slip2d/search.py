@@ -471,9 +471,15 @@ class BaseSearch(ABC):
         # ``reject_tensile`` now maps onto the documented Tensile Stress
         # Check: negative effective normal stress on slice BASES, tested
         # AFTER the factor of safety has converged, over a percentage of
-        # slices measured from the toe. Both default to off, as in the
-        # reference, where tensile normal stresses are permitted unless
-        # the user opts in.
+        # slices measured from the toe. THIS one defaults to off, as in
+        # the reference, where tensile normal stresses are permitted
+        # unless the user opts in.
+        #
+        # It said "both" until v0.1.158, and had been wrong since v0.1.84
+        # flipped ``check_m_alpha`` to True — contradicted fifteen lines
+        # below, in the same function, by the v0.1.89 note that spells the
+        # asymmetry out. Two comments disagreeing inside one function is
+        # how the false half survives: whoever reads the first one stops.
         self.tensile_percent = tensile_percent
         # v0.1.89 — DEFAULT ON, matching ProjectSettings.advanced, which has
         # said True since v0.1.84. Until now the two disagreed, so the same
