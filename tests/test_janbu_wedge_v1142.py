@@ -88,14 +88,20 @@ point: it is not a support defect, it is what a method of moments does on
 a surface with no centre, and this file must not become a reason to
 "correct" it.
 
-Nothing about Spencer and GLE against the wedge, and that one IS an
-anomaly rather than a derivation. They are bound by it and they miss it,
-and the giveaway is that tightening the convergence tolerance moves them
-AWAY: on the 50° plane with NO support the error grows from +6.7e-4 at the
+Nothing about Spencer and GLE against the wedge, and that one WAS an
+anomaly rather than a derivation. They are bound by it, they missed it,
+and the giveaway was that tightening the convergence tolerance moved them
+AWAY: on the 50° plane with NO support the error grew from +6.7e-4 at the
 shipped 1e-3 to +2.8e-2 at 1e-10, forty times worse for a solve forty
-times more converged, while Corps #1 sits at 5e-10 at both. Since it is
-there unreinforced it is not this defect. It is measured and frozen in
-``TestSpencerAndGleDoNotSettleOnTheWedge`` rather than fixed here.
+times more converged, while Corps #1 sat at 5e-10 at both. This file
+recorded that as a FACT for seventeen versions, deliberately, so that
+fixing it would break these tests and force what is written here to be
+rewritten. v0.1.159 fixed it and this is that rewrite: the cause was not
+the spurious root it looked like but a hardcoded 80-pass ceiling inside
+``interslice.solve_branch`` that conflated a slow branch with a wandering
+one, so the set of λ that survived SHRANK as the tolerance tightened until
+the bracket was lost. See ``TestSpencerAndGleSettleOnTheWedge`` below and
+``ogr_slip2d/interslice.STALL_PATIENCE``.
 
 Author: Samuel Sáez López (UPCT)
 """
@@ -145,8 +151,12 @@ EXACT = ("corps_engineers_1", "corps_engineers_2", "lowe_karafiath",
          "ordinary_fellenius")
 
 #: The two that satisfy force equilibrium through a coupled (F, λ) solve.
-#: They are bound by the wedge in principle and are NOT asserted against it
-#: here — see ``TestSpencerAndGleDoNotSettleOnTheWedge`` and the header.
+#: They are bound by the wedge in principle, and since v0.1.159 they are
+#: asserted against it — see ``TestSpencerAndGleSettleOnTheWedge``. They keep
+#: their own class rather than joining :data:`EXACT` because they reach the
+#: wedge through a λ search and the four in ``EXACT`` do not, so what has to
+#: be pinned about them is the DIRECTION the error moves in, not only its
+#: size.
 COMPLETE = ("spencer", "gle_morgenstern_price")
 
 JANBU = ("janbu_simplified", "janbu_corrected")
@@ -238,12 +248,22 @@ def _slices(project, surface, n=NSLICES):
     return sl
 
 
-def _fos(method_id, project, surface, n=NSLICES, tolerance=TIGHT):
+def _method(method_id, tolerance=TIGHT):
+    """The method under the convergence settings this file solves at.
+
+    v0.1.159 — split out of :func:`_fos` because the classes that check
+    what a result SAYS (``converged``, ``error_message``, the residual in
+    ``details``) need the whole :class:`LEMResult` and not only its factor,
+    and building it twice in two ways is how the two drift apart.
+    """
     from ogr_slip2d.methods.base import method_registry
-    method = method_registry()[method_id](tolerance=tolerance,
-                                          max_iterations=MAX_IT)
-    return method.compute_fos(project, surface,
-                              _slices(project, surface, n)).fos
+    return method_registry()[method_id](tolerance=tolerance,
+                                        max_iterations=MAX_IT)
+
+
+def _fos(method_id, project, surface, n=NSLICES, tolerance=TIGHT):
+    return _method(method_id, tolerance).compute_fos(
+        project, surface, _slices(project, surface, n)).fos
 
 
 def _terms(project, surface, n=NSLICES):
@@ -410,42 +430,67 @@ class TestTheTrendIsWhatDiscriminates:
 
 
 # ======================================================================
-class TestSpencerAndGleDoNotSettleOnTheWedge:
-    """An anomaly found while writing this file, asserted as a FACT with a
-    band rather than as a target. If it is ever fixed these tests fail and
-    what is written here has to be rewritten — which is the point.
+class TestSpencerAndGleSettleOnTheWedge:
+    """What v0.1.142 froze as a FACT, rewritten in v0.1.159 as what is now
+    true. The previous version of this class is worth remembering: it
+    asserted the DEFECT, with a band, precisely so that fixing it would turn
+    these tests red and force this docstring to be rewritten. It did.
 
-    Spencer and GLE close global force equilibrium, so on a plane the wedge
-    binds them exactly as it binds the four in :data:`EXACT`. They do not
-    meet it, and the giveaway is that TIGHTENING the convergence tolerance
-    moves them AWAY from it: on the 50° plane with no support at all, the
-    error grows from +6.7e-4 at the default 1e-3 to +2.8e-2 at 1e-10 —
-    forty times worse for a solve that is supposed to be forty times more
-    converged. Corps #1 sits at 5e-10 at both, and Janbu now goes from
-    2e-5 to 2e-12.
+    What it said: Spencer and GLE close global force equilibrium, so on a
+    plane the wedge binds them exactly as it binds the four in :data:`EXACT`;
+    they did not meet it, and the giveaway was that TIGHTENING the tolerance
+    moved them AWAY — on the 50° plane with no support at all the error grew
+    from +6.7e-4 at 1e-3 to +2.8e-2 at 1e-10, forty times worse for a solve
+    forty times more converged, while Corps #1 sat at 5e-10 at both.
 
-    Two things are already known and neither is a diagnosis:
+    What it was: NOT the spurious root it was recorded as. The force branch
+    was already exact — it is constant in λ on a plane and reproduces the
+    closed form to ten figures — and the whole error lived in the λ search.
+    ``interslice.solve_branch`` carried a hardcoded ceiling of 80 passes that
+    could not tell a SLOW branch from a WANDERING one, and the moment branch
+    contracts with a ratio that tends to 1 as λ grows (0.73 at λ = 0, 0.90 at
+    the root 1.2269, 0.96 at 2.0). So the set of λ that fitted inside 80
+    passes shrank as the tolerance tightened, the bracket was lost, and the
+    "no λ-bracket" path handed back the nearest raw grid node while calling
+    it converged. See ``interslice.STALL_PATIENCE``.
 
-      * it is NOT the support. The numbers above are the UNREINFORCED
-        model, and the anomaly is there in full;
-      * it is not monotone either — at 45° with an active support, GLE runs
-        −1.9e-4, −1.0e-7, −8.3e-12 across the three tolerances while
-        Spencer runs −6.6e-4, −1.1e-3, −2.7e-3.
-
-    A coupled solve landing on a different point when the bracket tightens
-    is what a SPURIOUS ROOT looks like, and this project has met one before
-    (D10, v0.1.106). Named, measured, not touched by this version.
+    What is true now, and it is the closure criterion of that defect: the
+    error DECREASES when the tolerance is tightened, as it always did for
+    Corps #1 and Janbu.
     """
 
-    STEEP_UNREINFORCED = ((1e-3, 1e-3), (1e-10, 1e-2))
+    #: (tolerance, bound on the relative error against the closed form).
+    #: The bounds are the stopping mechanism's, not a snapshot: the λ search
+    #: stops on |F_f − F_m| < tol and returns their mean, so the answer sits
+    #: within about half that residual of either branch and the error scales
+    #: like ``tol`` itself. Each bound is two decades above its tolerance,
+    #: which is room for the slicer's own discretisation and no more.
+    LADDER = ((1e-3, 1e-1), (1e-6, 1e-4), (1e-10, 1e-8))
 
-    def test_tightening_the_tolerance_makes_them_worse_not_better(self):
+    def test_tightening_the_tolerance_moves_them_towards_it(self):
+        """The exact inverse of what this file asserted for seventeen
+        versions. Strict inequalities, because a plateau would mean the
+        ceiling is deciding the answer again."""
         for mid in COMPLETE:
-            loose = abs(_err(mid, _bare(), BETA_STEEP, tolerance=1e-3))
-            tight = abs(_err(mid, _bare(), BETA_STEEP, tolerance=1e-10))
-            assert tight > 10.0 * loose, (mid, loose, tight)
+            errs = [abs(_err(mid, _bare(), BETA_STEEP, tolerance=tol))
+                    for tol, _ in self.LADDER]
+            assert errs[0] > errs[1] > errs[2], (mid, errs)
 
-    def test_the_methods_that_do_settle_are_the_control(self):
+    def test_each_rung_is_inside_the_bound_its_tolerance_earns(self):
+        for mid in COMPLETE:
+            for tol, bound in self.LADDER:
+                e = abs(_err(mid, _bare(), BETA_STEEP, tolerance=tol))
+                assert e < bound, (mid, tol, e)
+
+    def test_every_plane_reaches_the_wedge_at_a_tight_tolerance(self):
+        """Not only the 50° one the defect was measured on. Unreinforced,
+        which is the model the defect's own numbers came from."""
+        for beta in BETAS + (BETA_STEEP,):
+            for mid in COMPLETE:
+                e = abs(_err(mid, _bare(), beta, tolerance=TIGHT))
+                assert e < 1e-8, (beta, mid, e)
+
+    def test_the_methods_that_always_settled_are_the_control(self):
         """Same fixture, same tolerances: four methods flat, and Janbu
         collapsing. Without this the test above could be the fixture."""
         for mid in EXACT + ("janbu_simplified",):
@@ -454,15 +499,126 @@ class TestSpencerAndGleDoNotSettleOnTheWedge:
             assert tight <= max(loose, 1e-8), (mid, loose, tight)
 
     def test_they_are_still_close_enough_at_the_default_to_be_quoted(self):
-        """The size of it, so the finding is not read as worse than it is:
-        at the tolerance OGR actually ships, both are within 3 % of the
-        wedge on every plane here."""
+        """The size of it at the tolerance OGR ships, kept word for word
+        from the version that recorded the defect because it is the same
+        claim either way: with support or without, on every plane here, both
+        are within 3 % of the wedge. This is the one assertion of the old
+        class that did NOT have to change, and that is worth stating — the
+        defect never invalidated a published number."""
         for name, p in _both():
             for beta in BETAS + (BETA_STEEP,):
                 for mid in COMPLETE:
                     e = _err(mid, p, beta, tolerance=1e-3)
                     assert abs(e) < 3e-2, (name, beta, mid, e)
 
+
+# ======================================================================
+class TestAWedgeWithNoRootSaysSo:
+    """The other half of the fix, and a finding the fix uncovered.
+
+    Reinforcing this wedge does not merely shift the answer: on the 50°
+    plane, with the anchor either Active or Passive, the coupled system has
+    NO λ where the force and the moment factors agree. The residual at the
+    nearest λ is 0.03 to 0.20 and it does NOT shrink when the tolerance is
+    tightened, so the reserve path there is not a failure to converge — it
+    is a correct report that there is no root to converge to. The error
+    against the closed form stays at 1 % to 3.5 % for that reason, and not
+    because of the ceiling this version removed. Which is why this class
+    exists at all: without it, someone reading the class above would take
+    those two rows for the same defect and "fix" them.
+
+    What v0.1.159 changes is that the program now says which of the two it
+    is. The reserve path used to call itself converged whenever the residual
+    was under a hardcoded 0.02 — twenty thousand times the tolerance at
+    1e-6, with an empty ``error_message`` and an empty ``reason``. On this
+    very fixture two rows sat inside that gap: the 45° plane with an anchor,
+    Spencer, residual 1.0e-3 and 1.3e-3 against a requested 1e-3.
+
+    The invariant is one-directional on purpose. "Converged" has to mean
+    inside the tolerance; "not converged" does NOT have to mean far away,
+    and on this fixture it sometimes is not.
+    """
+
+    def test_an_answer_from_a_SOLVED_root_is_inside_its_tolerance(self):
+        """Restricted to the surfaces where a bracket was actually found and
+        refined, because that is where "converged" means "solved". The
+        fallback keeps its own, looser boundary — see
+        ``interslice.FALLBACK_RESIDUAL_LIMIT`` for the measurement that says
+        tying it to the tolerance is worse than the defect — so an answer
+        from THAT path is a different claim and is checked below instead."""
+        for name, p in _both():
+            for beta in BETAS + (BETA_STEEP,):
+                for mid in COMPLETE:
+                    for tol in (1e-3, TIGHT):
+                        surface = _plane(beta)
+                        method = _method(mid, tolerance=tol)
+                        r = method.compute_fos(p, surface, _slices(p, surface))
+                        details = r.details or {}
+                        if details.get("lambda_search_fell_back") is not False:
+                            continue
+                        if not r.converged:
+                            continue
+                        w = _wedge(p, beta)
+                        e = abs((r.fos - w) / w)
+                        assert e < tol + 1e-8, (name, beta, mid, tol, e)
+
+    def test_an_answer_from_the_FALLBACK_publishes_what_it_is(self):
+        """And the fallback's job is to be legible rather than silent: every
+        one of them carries its residual and the tolerance it was asked for,
+        so the two can be compared by whoever reads the result."""
+        seen = 0
+        for name, p in _both():
+            for beta in BETAS + (BETA_STEEP,):
+                for mid in COMPLETE:
+                    for tol in (1e-3, TIGHT):
+                        surface = _plane(beta)
+                        r = _method(mid, tolerance=tol).compute_fos(
+                            p, surface, _slices(p, surface))
+                        details = r.details or {}
+                        if not details.get("lambda_search_fell_back"):
+                            continue
+                        seen += 1
+                        assert details["lambda_residual"] > 0.0
+                        assert details["lambda_tolerance"] == tol
+        assert seen, "the fixture stopped exercising the fallback"
+
+    def test_the_steep_reinforced_plane_has_no_root_and_reports_it(self):
+        """The residual does not shrink with the tolerance, which is what
+        distinguishes "no root" from "not converged yet"."""
+        for name, p in _both():
+            for mid in COMPLETE:
+                out = []
+                for tol in (1e-3, TIGHT):
+                    surface = _plane(BETA_STEEP)
+                    r = _method(mid, tolerance=tol).compute_fos(
+                        p, surface, _slices(p, surface))
+                    assert r.converged is False, (name, mid, tol)
+                    assert r.error_message, (name, mid, tol)
+                    out.append((r.details or {}).get("lambda_residual"))
+                assert all(x is not None and x > 1e-2 for x in out), \
+                    (name, mid, out)
+
+    def test_the_refusal_names_the_residual(self):
+        """A number the user cannot see is a number they cannot act on, and
+        this path used to publish none at all."""
+        surface = _plane(BETA_STEEP)
+        p = _anchored()
+        r = _method("spencer", tolerance=1e-6).compute_fos(
+            p, surface, _slices(p, surface))
+        assert r.converged is False
+        assert "no λ-bracket" in r.error_message, r.error_message
+        residual = (r.details or {})["lambda_residual"]
+        assert "%.3g" % residual in r.error_message, r.error_message
+
+    def test_and_the_note_names_both_numbers_without_vetoing(self):
+        from ogr_slip2d.analysis_runner import lambda_fallback_notes
+        surface = _plane(BETA_STEEP)
+        p = _anchored()
+        r = _method("spencer", tolerance=1e-6).compute_fos(
+            p, surface, _slices(p, surface))
+        notes = lambda_fallback_notes(r)
+        assert notes, "the fallback has to be reportable"
+        assert "1e-06" in notes[0], notes[0]
 
 # ======================================================================
 class TestTheResidualIsTheIteration:

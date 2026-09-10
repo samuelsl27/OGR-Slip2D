@@ -110,7 +110,29 @@ _BOUND = {
 #: ``max_iterations`` is stated here rather than inherited from the project
 #: so that a failure means "the fixed point moved" and never "the iteration
 #: ran out of room" — the two are indistinguishable in the result otherwise.
-#: 200 is far above what any of these need (7 to 24 passes at 1e-7).
+#:
+#: v0.1.159 — and until then that guarantee was FALSE for exactly the two
+#: methods this file gives the widest bound to, which is the sort of thing
+#: worth writing down where it was believed rather than only where it was
+#: fixed. ``max_iterations`` reaches the OUTER lambda search of Spencer and
+#: GLE and nothing else: their inner fixed point lives in
+#: ``interslice.solve_branch``, which carried its own hardcoded ceiling of
+#: 80 passes and never saw this 200. The old parenthesis here read "7 to 24
+#: passes at 1e-7"; those are the outer iteration counts. The INNER counts
+#: on this very circle run 17 to 123, so at ``_TIGHT`` the force branch at
+#: lambda = -1.5 was cut off at 80 and that lambda vanished from the
+#: sampling — nine samples where the grid has ten — with nothing said. It
+#: was benign HERE, and only by luck: g(-1.5) has the same sign as g(-1.0),
+#: so no bracket was lost and lambda* did not move. On the plane wedge of
+#: ``tests/test_janbu_wedge_v1142.py`` the same mechanism moved the answer
+#: 3 %, which is defect D63.
+#:
+#: What makes the sentence true now is not this 200 but the criterion:
+#: ``solve_branch`` stops on STALLING rather than on a count, so a branch
+#: that is still improving keeps going, and its backstop
+#: (``interslice.MAX_PASSES``) is 400 — above the 123 the slowest branch
+#: here needs, and reachable on purpose (see that constant for why a large
+#: one is not free).
 _FIXED = dict(max_iterations=200, initial_fos=1.0, iterate_steffensen=True,
               min_lambda=-1.5, max_lambda=6.0)
 

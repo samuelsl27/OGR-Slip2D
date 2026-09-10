@@ -182,7 +182,8 @@ class GLEMorgensternPrice(LEMMethod):
         # reported it that way. Until now the solver used f(x_centre) and the
         # report used f(x_boundary), so the two disagreed about the very
         # quantity the method is defined by.
-        from ..interslice import GLESystem, branch_pair_ok
+        from ..interslice import (FALLBACK_RESIDUAL_LIMIT, GLESystem,
+                                  branch_pair_ok)
         s_list = slices.slices
         shape = [self.f_func(x, x0, x1)
                  for x in self._boundary_x(slices)]
@@ -278,6 +279,13 @@ class GLEMorgensternPrice(LEMMethod):
             # v0.1.106 — see ``Spencer.compute_fos``: this path discarded the
             # λ it had and returned an EMPTY ``details``, so a surface that
             # reaches here was drawn with zero inter-slice ratios.
+            # v0.1.159 (D63) — the residual this fallback is handing back,
+            # published rather than swallowed. See
+            # ``interslice.FALLBACK_RESIDUAL_LIMIT`` for why the boundary is
+            # not the caller's tolerance; this file keeps the same λ search
+            # as ``spencer.py`` line for line, so it keeps this too.
+            residual = abs(best[1])
+            settled = residual < FALLBACK_RESIDUAL_LIMIT
             force, _moment = system.states(lam_star)
             from .spencer import _base_forces
             normals, _mobilised, strengths = _base_forces(system, force)
@@ -288,7 +296,7 @@ class GLEMorgensternPrice(LEMMethod):
             driving = driving_shear_forces(slices, kh, kv, slide_sign)
             return LEMResult(
                 fos=0.5 * (ff + fm),
-                converged=abs(best[1]) < 0.02,
+                converged=settled,
                 iterations=len(samples),
                 method_id=self.METHOD_ID, surface=surface, slices=slices,
                 base_normal_force=normals,
@@ -297,6 +305,11 @@ class GLEMorgensternPrice(LEMMethod):
                 details={
                     "lambda": lam_star,
                     "slide_sign": slide_sign,
+                    # v0.1.159 (D63) — see ``Spencer.compute_fos``.
+                    "lambda_search_fell_back": True,
+                    "lambdas_lost_to_budget": system.n_passes_exhausted,
+                    "lambda_residual": residual,
+                    "lambda_tolerance": self.tolerance,
                     "boundary_ratios": [lam_star * fb for fb in system.shape],
                     "interslice_e": ([] if force is None else
                                      system.boundaries_in_slice_order(
@@ -315,10 +328,10 @@ class GLEMorgensternPrice(LEMMethod):
                 # 91 (Spencer) reach the engine by THIS branch and do not
                 # converge, so what the bank publishes on their circle is a
                 # fallback value, not a measurement.
-                error_message=("GLE: no λ-bracket; using nearest F_f≈F_m"
-                               if abs(best[1]) >= 0.02 else ""),
-                reason=(REASON_NO_LAMBDA_BRACKET
-                        if abs(best[1]) >= 0.02 else ""),
+                error_message=("" if settled else
+                               "GLE: no λ-bracket; the nearest λ leaves "
+                               "F_f − F_m at %.3g" % residual),
+                reason=("" if settled else REASON_NO_LAMBDA_BRACKET),
                 admissible=not inadmissible,
                 admissibility_note=(
                     "" if not inadmissible else
@@ -399,6 +412,9 @@ class GLEMorgensternPrice(LEMMethod):
                 "lambda": lam_lo,
                 "thrust_admissible": not inadmissible,
                 "slide_sign": slide_sign,
+                # v0.1.159 (D63) — see ``Spencer.compute_fos``.
+                "lambda_search_fell_back": False,
+                "lambdas_lost_to_budget": system.n_passes_exhausted,
                 # Boundary ratios λ·f(x) evaluated at the n+1 slice
                 # boundaries with x normalised over the surface span. The
                 # solver uses exactly this list (v0.1.106).

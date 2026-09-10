@@ -94,6 +94,98 @@ F_MIN = 0.05
 F_MAX = 50.0
 
 
+#: How many consecutive passes a branch may fail to beat its own smallest
+#: step ``|f_new - F|`` before it is called WANDERING rather than slow. This
+#: is not a budget: a contraction drives that step down without a floor,
+#: however slowly, while an iterate that has fallen into a limit cycle never
+#: beats its record again.
+#:
+#: IT IS NOT A PERFECT SEPARATOR AND SAYING SO IS THE POINT. An accidental
+#: small step early on sets a record the genuine contraction then has to
+#: beat: on the 50 degree plane the moment branch at lambda = 2.0 drops far
+#: on pass 5 by luck, so it is abandoned on pass 85 rather than converging on
+#: pass 468. That is not a regression — the ceiling this replaces threw the
+#: same branch away on pass 80 — but it is the honest limit of the criterion,
+#: and it has the same root as the defect where a branch reports convergence
+#: in two passes at a loose tolerance and diverges at a tight one.
+#:
+#: WHY COUNTING PASSES WAS THE WRONG INSTRUMENT, which is the whole of D63.
+#: The 80 this replaces had a sound reason, written in
+#: :meth:`GLESystem.branches`: on the Duncan and Wright buoyant polyline the
+#: branches "were still wandering after 80 passes" and the pair they stopped
+#: on crossed, so the outer search took it for a root and returned 1.051
+#: where the answer is 1.60. The reason was right; the instrument conflates
+#: two things. The moment branch converges LINEARLY with a ratio that tends
+#: to 1 as lambda grows — measured on the 50 degree plane with 50 slices at
+#: a tolerance of 1e-10: 53 passes at lambda = 0, 171 at the root 1.2269 and
+#: 468 at 2.0 — so the set of lambdas that fit inside 80 passes SHRANK as
+#: the tolerance was tightened. The bracket was lost, the reserve path of
+#: ``spencer.py`` returned the nearest grid node, and Spencer answered that
+#: wedge with 0.96866 against a closed form of 0.94198. Tightening the
+#: tolerance moved the answer AWAY from the exact one, forty times over.
+#:
+#: WHY 80, AND IT IS A PROOF RATHER THAN A NOD TO THE OLD NUMBER. ``stall``
+#: cannot exceed the pass index, so it cannot reach 80 before pass 81: the
+#: first 80 passes of the loop below are those of v0.1.158 instruction for
+#: instruction, and every branch that converged then converges now to the
+#: same F in the same number of passes. Measured as well as proved: 1040
+#: comparisons of ``fos``, ``converged``, ``error_message`` and lambda over
+#: the seven cases in ``validacion/casos/`` at both shipped tolerances, zero
+#: moved.
+#: The residual ``|F_f - F_m|`` below which the "no lambda-bracket" fallback
+#: of ``spencer.py`` and ``gle.py`` still counts its answer as usable. It is
+#: NOT the caller's ``tolerance`` and it is deliberately looser, which is the
+#: opposite of what it looks like it should be, so here is the measurement
+#: that decided it.
+#:
+#: v0.1.159 tried exactly that — ``settled = residual < self.tolerance`` — on
+#: the grounds that a fallback calling itself converged with a residual
+#: twenty thousand times the requested tolerance is a reserve value wearing
+#: the clothes of an answer. The reasoning was right and the consequence was
+#: worse than the defect. ``converged`` feeds ``LEMResult.is_valid``, which
+#: ``search.surface_score`` scores at infinity, so tightening this turns a
+#: silent LIE into a silent VETO — and that is D37/C1, which v0.1.130 was
+#: written to fix: verification problems 60, 90 and 93 published a search
+#: minimum ABOVE the factor the same engine computes on the manual's own
+#: circle, because that circle was solved and then erased. Measured on the
+#: Ej_1 block search, 120 surfaces, seed 0: valid surfaces 48 -> 43 and the
+#: reported critical 0.654746 -> 1.841807, a 181 % move on the unsafe side.
+#: It also silently disabled the m-alpha post-filter, whose inadmissible
+#: count went 3 -> 0 because the surfaces it flags were vetoed before it ran.
+#:
+#: So the boundary stays where it was and gets a name and a reason instead.
+#: What WAS wrong is that the residual was never reported: the result said
+#: "converged" and nothing else, and the user had no way to tell a solved
+#: root from the nearest sample. That is fixed where it belongs, in
+#: ``details`` and in ``analysis_runner.lambda_fallback_notes``, neither of
+#: which vetoes anything.
+FALLBACK_RESIDUAL_LIMIT = 0.02
+
+STALL_PATIENCE = 80
+
+#: Backstop for a branch that keeps beating its own record, indefinitely, by
+#: less and less, and so never stalls. It is NOT unreachable and it would be
+#: wrong to write that it is: the unreinforced 55 degree plane of the wedge
+#: fixture, Spencer at a tolerance of 1e-10, loses exactly one lambda to it.
+#: Exhausting it means the same as stalling out — ``converged=False``, and
+#: the lambda disappears — but the two are told apart by
+#: ``BranchState.passes``, because only this one can move the answer with
+#: nothing whatever wrong with the slope. See ``n_passes_exhausted``.
+#:
+#: It is deliberately kept LOW, and that is a measurement rather than
+#: tidiness. ``E`` and ``X`` are not clamped the way ``F`` is, so in a
+#: divergent branch they grow geometrically until ``math.fsum`` is handed
+#: -inf and +inf together. Raising this ceiling with no stall test and
+#: nothing else changed raises ``ValueError: -inf + inf in fsum`` out of
+#: ``compute_fos`` at the SHIPPED tolerance: measured on
+#: ``006-xstabl-1999-min-depth`` at 2000 passes and on ``003-acads-1c`` at
+#: 5000, with zero failures anywhere at 500 or below. The 80 was quietly
+#: doing that job too and said so nowhere. The stall test is what actually
+#: prevents it — a branch whose thrust is running away is not shrinking its
+#: step — and this is the second lock, not the first.
+MAX_PASSES = 400
+
+
 # ----------------------------------------------------------------------
 @dataclass(slots=True)
 class SliceRow:
@@ -229,9 +321,11 @@ def solve_branch(
     moment_fos,
     tolerance: float,
     initial_fos: float = 1.0,
-    max_passes: int = 80,
+    max_passes: int = MAX_PASSES,
     f_min: float = F_MIN,
     f_max: float = F_MAX,
+    *,
+    patience: int = STALL_PATIENCE,
 ) -> Optional[BranchState]:
     """One branch of the GLE system, iterated to its OWN fixed point.
 
@@ -245,11 +339,23 @@ def solve_branch(
             differs between a circle and a polyline.
         tolerance: convergence on F.
         initial_fos: where the fixed point starts.
+        patience: passes allowed without beating the smallest step so far
+            before the branch is called wandering. See
+            :data:`STALL_PATIENCE`; a value of at least 80 keeps every
+            answer this function gave before v0.1.159 bit for bit.
 
     Returns:
         The converged :class:`BranchState`, or ``None`` if the branch is
         inadmissible (m_a collapsed, no driving term, a non-positive or
         non-finite factor of safety).
+
+    The iteration stops on one of three things and only one of them is an
+    answer: the step falling under ``tolerance`` (``converged=True``), the
+    step failing to beat its own record for ``patience`` passes (wandering),
+    or ``max_passes`` (a backstop that IS reachable at tight tolerances).
+    The last two both come back with ``converged=False``, which is what
+    :meth:`GLESystem.branches` turns into "this lambda has no value" — see
+    :data:`STALL_PATIENCE` for what conflating slow with wandering cost.
 
     The X update rides the SAME pass as F rather than being iterated to
     convergence inside it. Measured back to back at a tolerance of 1e-10, the
@@ -266,6 +372,10 @@ def solve_branch(
     E = [0.0] * (n + 1)
     converged = False
     passes = 0
+    # The smallest step seen, and how many passes have gone by without
+    # beating it. See :data:`STALL_PATIENCE`.
+    best_step = math.inf
+    stall = 0
 
     for _pass in range(max_passes):
         passes += 1
@@ -340,12 +450,26 @@ def solve_branch(
 
         if not math.isfinite(f_new) or f_new <= 0.0:
             return None
+        step = abs(f_new - F)
         # v0.1.100 — not on the first pass; see
         # ``BishopSimplified._general_moment_fos``.
-        if _pass > 0 and abs(f_new - F) < tolerance:
+        if _pass > 0 and step < tolerance:
             F = f_new
             converged = True
             break
+        # v0.1.159 (D63) — STALLING, not budget. The step of a fixed point
+        # that contracts beats its own record on every pass; the step of an
+        # iterate that wanders never beats it again. Counting passes could
+        # not tell the two apart, and the cost of that confusion ran in both
+        # directions: it threw away slow-but-converging lambdas and it let a
+        # divergent branch grind on. See :data:`STALL_PATIENCE`.
+        if step < best_step:
+            best_step = step
+            stall = 0
+        else:
+            stall += 1
+            if stall >= patience:
+                break
         # Damped, and clamped to the window the METHOD declares it will
         # consider. Those two numbers used to disagree: the iterate was
         # clamped to [0.2, 10] while the lambda search accepts any branch in
@@ -439,7 +563,7 @@ class GLESystem:
 
     __slots__ = ("rows", "forces", "s_list", "shape", "order", "reversed_",
                  "tolerance", "initial_fos", "strict", "n_thrust_rejected",
-                 "_moment_fos", "_driving")
+                 "n_passes_exhausted", "_moment_fos", "_driving")
 
     def __init__(self, s_list, shape: Sequence[float],
                  kh: float, kv: float, slide_sign: float,
@@ -467,6 +591,15 @@ class GLESystem:
         #: diverged: a surface that solves nowhere must not pay for a second
         #: sweep of the whole shape.
         self.n_thrust_rejected = 0
+        #: v0.1.159 (D63) — how many lambdas were lost because a branch ran
+        #: out of :data:`MAX_PASSES` while its step was still shrinking, as
+        #: opposed to stalling out or being inadmissible. Kept apart from
+        #: ``n_thrust_rejected`` because the two mean opposite things: that
+        #: one is a statement about the stress state, this one is a
+        #: statement about the SOLVER, and only this one can move the answer
+        #: without anything being wrong with the slope. Until v0.1.159 the
+        #: two were the same silence.
+        self.n_passes_exhausted = 0
         self._driving = None
 
         if circle_R is None:
@@ -603,6 +736,15 @@ class GLESystem:
         # this could not bite, because F_m did not depend on lambda and there
         # was only ever one crossing to find.
         if not (force.converged and moment.converged):
+            # v0.1.159 (D63) — say WHICH of the two refusals this was. A
+            # branch that used its whole budget was still making progress
+            # when it was cut; one that stopped earlier had stalled. Both
+            # lose the lambda, but only the first is the solver's own limit
+            # deciding the answer, and that is the thing that has to be
+            # reportable.
+            for state in (force, moment):
+                if not state.converged and state.passes >= MAX_PASSES:
+                    self.n_passes_exhausted += 1
             return None, None
         if not thrust_is_admissible(force):
             self.n_thrust_rejected += 1

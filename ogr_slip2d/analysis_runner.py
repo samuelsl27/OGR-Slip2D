@@ -55,6 +55,7 @@ __all__ = [
     "check_analysis_settings",
     "daylight_tangent_note",
     "grid_edge_note",
+    "lambda_fallback_notes",
     "reversed_support_notes",
     "run_analysis",
     "settings_warnings",
@@ -842,6 +843,70 @@ def _failure_direction_note(project) -> list[str]:
 _DAYLIGHT_TANGENT_WARN_DEG = 85.0
 
 
+def lambda_fallback_notes(result) -> list[str]:
+    """What the inter-slice inclination search did when it found no root.
+
+    Spencer and GLE find their answer by bracketing the lambda where the
+    force and the moment factors of safety agree. When no bracket exists the
+    method hands back the sampled lambda whose two factors are closest, and
+    for its first hundred versions it said nothing whatever about that: the
+    result carried ``converged=True`` with an empty ``error_message`` and an
+    empty ``reason`` whenever the residual was under a fixed 0.02, which at a
+    tolerance of 1e-6 is twenty thousand times what the user asked for. On
+    the 50 degree plane of ``tests/test_janbu_wedge_v1142.py`` that published
+    a factor 0.72 % off a closed form as though it had been solved for.
+
+    Both lines below are said HERE and not through ``error_message``, and
+    that is the whole design. ``error_message`` feeds ``LEMResult.is_valid``,
+    which ``search.surface_score`` scores at infinity, so it is a veto; a
+    note is not. Tying the verdict to the tolerance instead was tried in
+    v0.1.159 and measured to raise the reported minimum of the Ej_1 block
+    search from 0.654746 to 1.841807 while silently disabling the m-alpha
+    post-filter — the defect D37/C1 all over again. See
+    ``interslice.FALLBACK_RESIDUAL_LIMIT``.
+
+    Two things can be worth saying about the same fallback:
+
+    * the two branches at the lambda handed back differ by more than the
+      caller asked for, so the number is the nearest sample and not a solved
+      root. This is the one that fires in practice;
+    * a lambda was dropped because its inner iteration used its whole budget
+      of passes while still improving, which is the SOLVER's limit deciding
+      the answer rather than the slope's. Defect D63, and reachable: the
+      unreinforced 55 degree plane of the wedge fixture, Spencer at 1e-10.
+
+    Neither fires when a bracket was found and refined, because then the
+    answer is a root and there is nothing to warn about.
+    """
+    details = getattr(result, "details", None) or {}
+    if not details.get("lambda_search_fell_back"):
+        return []
+
+    notes: list[str] = []
+    residual = details.get("lambda_residual")
+    tolerance = details.get("lambda_tolerance")
+    if (residual is not None and tolerance is not None
+            and residual >= tolerance):
+        notes.append(
+            "no inclination of the inter-slice forces makes the force and "
+            "the moment factors of safety agree, so the factor reported is "
+            "the closest sampled inclination rather than a solved one: its "
+            "two factors differ by %.3g, against a convergence tolerance of "
+            "%.3g." % (residual, tolerance))
+
+    lost = int(details.get("lambdas_lost_to_budget") or 0)
+    if lost > 0:
+        notes.append(
+            "and %d %s was discarded because its inner iteration used its "
+            "whole budget of passes while still improving, so the limit that "
+            "decided this answer belongs to the solver rather than to the "
+            "slope. A looser convergence tolerance spends fewer passes per "
+            "inclination and may bracket it."
+            % (lost, "inclination" if lost == 1 else "inclinations"))
+
+    return notes
+
+
 def daylight_tangent_note(result, num_slices: int) -> list[str]:
     """Warn when a critical surface leaves the ground near-vertically.
 
@@ -1554,6 +1619,17 @@ def run_analysis(project, method_ids=None,
         # ``crit`` as the daylight note and for the same reason: it is a
         # statement about the surface the run REPORTS, not about the
         # population it looked at.
+        # v0.1.159 (D63) — and what the inter-slice inclination search did
+        # when it found no root: how far apart the two factors it averaged
+        # were, and whether a lambda was lost to the solver's own budget.
+        # Same shape and same reason as the notes around it — a property of
+        # the surface the run REPORTS — and deliberately a NOTE rather than
+        # an ``error_message``, which would be a veto.
+        if crit is not None:
+            for note in lambda_fallback_notes(crit):
+                line = f"{mid}: {note}"
+                if line not in warnings:
+                    warnings.append(line)
         if crit is not None:
             for note in m_alpha_margin_note(crit):
                 line = f"{mid}: {note}"

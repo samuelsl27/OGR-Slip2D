@@ -92,7 +92,8 @@ class Spencer(LEMMethod):
         # v0.1.106 — the whole surface is resolved ONCE here and reused at
         # every λ. Spencer is GLE with f(x) = 1 at every boundary, and that
         # is the only line of this method that GLE does not share.
-        from ..interslice import GLESystem, branch_pair_ok
+        from ..interslice import (FALLBACK_RESIDUAL_LIMIT, GLESystem,
+                                  branch_pair_ok)
         s_list = slices.slices if hasattr(slices, "slices") else list(slices)
         system = GLESystem(
             s_list, [1.0] * (len(s_list) + 1), kh, kv, slide_sign,
@@ -186,9 +187,25 @@ class Spencer(LEMMethod):
             # to F_f = F_m). Often happens for very stable slopes.
             best = min(samples, key=lambda r: abs(r[1]))
             lam_star, _, ff, fm = best
+            # v0.1.159 (D63) — how far apart the two branches actually are
+            # at the lambda being handed back, and whether that is inside
+            # what the caller asked for. This used to be compared against a
+            # hardcoded 0.02, a number with no relation to ``tolerance``:
+            # twenty thousand times it at 1e-6. On the 50 degree plane of
+            # ``tests/test_janbu_wedge_v1142.py`` at that tolerance Spencer
+            # published a factor 0.72 % off the closed form with
+            # ``converged=True``, an empty ``error_message`` and an empty
+            # ``reason`` — a reserve value wearing the clothes of an answer.
+            # Making this the caller's tolerance was tried and measured to
+            # be worse than the defect — see ``FALLBACK_RESIDUAL_LIMIT``.
+            # The residual travels in ``details`` instead, where saying it
+            # vetoes nothing.
+            residual = abs(best[1])
+            settled = residual < FALLBACK_RESIDUAL_LIMIT
             # v0.1.106 — this path used to discard ``lam_star`` and return a
             # result with an EMPTY ``details``. A surface that reaches here
-            # can still be reported as converged (|F_f − F_m| < 0.02), and
+            # can still be reported as converged (|F_f − F_m| inside the
+            # requested tolerance since v0.1.159), and
             # then the slice panel and ``compute_interslice_state`` had no λ
             # to work with and silently marched the surface with zero
             # inter-slice ratios — a Janbu picture over a Spencer number.
@@ -201,7 +218,7 @@ class Spencer(LEMMethod):
             driving = driving_shear_forces(slices, kh, kv, slide_sign)
             return LEMResult(
                 fos=0.5 * (ff + fm),
-                converged=abs(best[1]) < 0.02,
+                converged=settled,
                 iterations=len(samples),
                 method_id=self.METHOD_ID, surface=surface, slices=slices,
                 base_normal_force=normals,
@@ -210,6 +227,13 @@ class Spencer(LEMMethod):
                 details={
                     "lambda": lam_star,
                     "slide_sign": slide_sign,
+                    # v0.1.159 (D63) — this is the path where losing a λ can
+                    # decide the answer, so this is the path that has to be
+                    # able to say it did. See ``analysis_runner.lambda_budget_note``.
+                    "lambda_search_fell_back": True,
+                    "lambdas_lost_to_budget": system.n_passes_exhausted,
+                    "lambda_residual": residual,
+                    "lambda_tolerance": self.tolerance,
                     "boundary_ratios": [lam_star] * (len(slices.slices) + 1),
                     "interslice_e": ([] if force is None else
                                      system.boundaries_in_slice_order(
@@ -224,10 +248,10 @@ class Spencer(LEMMethod):
                 # moves to ``admissible``. Mixing them meant a surface with
                 # a perfectly good bracket was thrown out with the same
                 # force as one with none.
-                error_message=("Spencer: no λ-bracket; using nearest F_f≈F_m"
-                               if abs(best[1]) >= 0.02 else ""),
-                reason=(REASON_NO_LAMBDA_BRACKET
-                        if abs(best[1]) >= 0.02 else ""),
+                error_message=("" if settled else
+                               "Spencer: no λ-bracket; the nearest λ leaves "
+                               "F_f − F_m at %.3g" % residual),
+                reason=("" if settled else REASON_NO_LAMBDA_BRACKET),
                 admissible=not inadmissible,
                 admissibility_note=(
                     "" if not inadmissible else
@@ -327,6 +351,12 @@ class Spencer(LEMMethod):
                 "lambda": lam_lo,
                 "thrust_admissible": not inadmissible,
                 "slide_sign": slide_sign,
+                # v0.1.159 (D63) — false here by construction: a bracket was
+                # found and refined. Written rather than omitted so that a
+                # reader of ``details`` does not have to know which of the
+                # two exits produced it.
+                "lambda_search_fell_back": False,
+                "lambdas_lost_to_budget": system.n_passes_exhausted,
                 # Constant interslice ratio at every boundary (Spencer).
                 "boundary_ratios": [lam_lo] * (len(slices.slices) + 1),
                 # v0.1.106 — the inter-slice forces themselves, which this
