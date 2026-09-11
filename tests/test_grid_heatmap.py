@@ -80,7 +80,7 @@ class TestGridSearchHonoursUserGrid:
             num_slices=10,
         )
         result = s.run(p)
-        # v0.1.17 — Slide convention: grid_nx/grid_ny are the number of
+        # v0.1.17 — the reference's convention: grid_nx/grid_ny are the number of
         # INTERVALS, so 2 × 2 intervals → 3 × 3 = 9 distinct centres.
         centres = set()
         for r in result.evaluations:

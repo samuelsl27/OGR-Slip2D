@@ -3,7 +3,7 @@
 """
 v0.1.6 — Region assignment tests.
 
-These verify the new Slide-style material-painting flow:
+These verify the new material-painting flow:
     1. Material Boundaries are OPEN polylines (they cut the External).
     2. Regions emerge from planar subdivision (External ∪ Material Bs).
     3. Water Table / Piezometric / TensionCrack / Drawdown do NOT split
@@ -13,7 +13,7 @@ These verify the new Slide-style material-painting flow:
     6. Assignments survive boundary edits if the click-point still lies
        in a (possibly different) region.
     7. The first material of the project is the default for unassigned
-       regions (Slide convention).
+       regions (the reference's convention).
 """
 from __future__ import annotations
 

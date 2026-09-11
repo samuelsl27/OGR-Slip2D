@@ -397,7 +397,7 @@ def _janbu_correction_factor(
     # v0.1.19 — d is the maximum PERPENDICULAR distance from that chord
     # to the slip surface (Janbu's definition), NOT the max soil height
     # above the base. Using the soil height grossly overestimated d/L
-    # and the correction factor (gave +2.9 % vs Slide). The base points
+    # and the correction factor (gave +2.9 % against the reference). The base points
     # of every slice are sampled against the chord line.
     dx, dy = x1 - x0, y1 - y0
     d = 0.0

@@ -675,8 +675,7 @@ class CorpsOfEngineers2(PrescribedInclinationMethod):
     Unlike #1 the inclination VARIES from slice to slice, and it is zero
     wherever the ground surface is horizontal, so the inter-slice shear
     vanishes there. That consequence is the distinguishing mark of the
-    assumption and is stated as such in Krahn's SLOPE/W formulation
-    reference, whose table gives "inclination of ground surface at top of
+    assumption and is stated as such by Krahn (2004), whose table gives "inclination of ground surface at top of
     slice" for this variant against "inclination of a line from crest to
     toe" for #1.
 

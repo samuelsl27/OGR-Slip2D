@@ -206,7 +206,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.159"
+    VERSION = "0.1.160"
 
     def __init__(self) -> None:
         super().__init__()
@@ -1063,7 +1063,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(msg, 20000)
 
     def act_generate_report(self) -> None:
-        """Generate a Slide-style PDF analysis report from the last
+        """Generate a PDF analysis report from the last
         Compute run (all enabled methods)."""
         results = getattr(self, "last_search_results", None)
         if not results:
@@ -1151,7 +1151,7 @@ class MainWindow(QMainWindow):
     # Surfaces
     # ==================================================================
     def act_surface_options(self) -> None:
-        # v0.1.9: Slide-style Surface Options dialog (lives in grid_dialogs)
+        # v0.1.9: Surface Options dialog (lives in grid_dialogs)
         dlg = SurfaceOptionsDialog(self.project, self)
         if dlg.exec():
             dlg.apply()
@@ -3280,7 +3280,7 @@ class MainWindow(QMainWindow):
     # Support menu (v0.1.14)
     # ==================================================================
     def act_define_support(self) -> None:
-        """Open the Define Support Properties dialog (Slide-style).
+        """Open the Define Support Properties dialog.
 
         Allows the user to manage a list of named Support Types, each
         bound to one of the 7 built-in classes (End Anchored, Grouted
@@ -3318,7 +3318,7 @@ class MainWindow(QMainWindow):
     ) -> None:
         from ogr_core.geometry import Vertex
         from ogr_core.support import SupportInstance, ForceApplication, ForceOrientation
-        # First support type by default — Slide also uses the
+        # First support type by default — the reference also uses the
         # "currently active" support type
         stype = self.project.support_types[0]
         force_app = getattr(stype, "_force_application",
@@ -3345,7 +3345,7 @@ class MainWindow(QMainWindow):
         except (TypeError, RuntimeError):
             pass
         # Stay in ADD_SUPPORT mode so the user can place several in a
-        # row (Slide behaviour). Reconnect.
+        # row, as the reference does. Reconnect.
         self.canvas.segment_picked.connect(self._on_add_support_picked)
         self.canvas.refresh()
         self.ogr_status.showMessage(
@@ -3536,7 +3536,7 @@ class MainWindow(QMainWindow):
         self.refresh_action_availability()
 
     def refresh_action_availability(self) -> None:
-        """Greys out actions whose preconditions are not met (Slide-style).
+        """Greys out actions whose preconditions are not met, as the reference does.
 
         Rules:
           - Add Tension Crack: only one allowed.
@@ -3627,7 +3627,7 @@ class MainWindow(QMainWindow):
         # method does NOT use a centre grid (Slope/Auto Refine/Block/
         # Path/SA). The actions stay visible so the user always sees
         # them in the menu/toolbar; only their interactivity is
-        # disabled (Slide convention).
+        # disabled (the reference's convention).
         try:
             uses_grid = self.project.settings.search.uses_grid()
         except Exception:  # noqa: BLE001
@@ -3651,8 +3651,8 @@ class MainWindow(QMainWindow):
 
         # v0.1.17 — "Add Surface" (Block Search objects) is only
         # meaningful for the Block Search method. Enable it when Block
-        # Search is selected; grey it out otherwise (Slide convention:
-        # the action stays visible).
+        # Search is selected; grey it out otherwise (the reference's
+        # convention: the action stays visible).
         try:
             is_block = (self.project.settings.search.search_method
                         == "block")
@@ -3975,9 +3975,10 @@ class MainWindow(QMainWindow):
         )
 
     def act_define_tension_crack(self) -> None:
-        """Open the Define Tension Crack dialog (Slide-style).
+        """Open the Define Tension Crack dialog.
 
-        Slide rule: this option only makes sense if a Tension Crack
+        The reference's rule: this option only makes sense if a Tension
+        Crack
         boundary exists. Otherwise show an informational message.
         """
         has_tc = any(
@@ -4046,7 +4047,7 @@ class MainWindow(QMainWindow):
     def _on_canvas_assign_click(self, x: float, y: float) -> None:
         """Click in ASSIGN_MATERIAL mode — paint the region under cursor.
 
-        v0.1.6: uses the Slide-style click-record system. The click is
+        v0.1.6: uses the click-record system the reference describes. The click is
         recorded as a RegionAssignment on the project; every future
         refresh re-localises the click into whatever region currently
         contains (x, y). This means the assignment survives boundary
@@ -4557,9 +4558,9 @@ class MainWindow(QMainWindow):
             )
 
     def act_expand_shrink(self, preselected_idx: Optional[int] = None) -> None:
-        """Expand or shrink the External Boundary — Slide-style.
+        """Expand or shrink the External Boundary.
 
-        Workflow (matches Slide UX):
+        Workflow (matches the reference's UX):
           1. User picks the mode: Numeric offset OR Draw polyline.
           2. For draw mode:
                - FIRST click must snap onto the External (green cross)
@@ -4585,8 +4586,8 @@ class MainWindow(QMainWindow):
 
         from PySide6.QtWidgets import QInputDialog
         options = [
-            "Draw polyline (Slide-style — recommended)",
-            "Numeric offset (all edges by a fixed distance)",
+            tr("Draw polyline (recommended)"),
+            tr("Numeric offset (all edges by a fixed distance)"),
         ]
         choice, ok = QInputDialog.getItem(
             self, "Expand / Shrink External",
@@ -4598,7 +4599,7 @@ class MainWindow(QMainWindow):
         if choice == options[1]:
             self._expand_shrink_numeric(preselected_idx)
         else:
-            self._expand_shrink_slide_style(preselected_idx)
+            self._expand_shrink_draw_mode(preselected_idx)
 
     # ------------------------------------------------------------------
     def _expand_shrink_numeric(self, idx: int) -> None:
@@ -4624,8 +4625,8 @@ class MainWindow(QMainWindow):
         self.ogr_status.showMessage(f"External offset by {d:+.2f} m", 2000)
 
     # ------------------------------------------------------------------
-    def _expand_shrink_slide_style(self, idx: int) -> None:
-        """Enter the interactive Slide-style draw mode."""
+    def _expand_shrink_draw_mode(self, idx: int) -> None:
+        """Enter the interactive draw mode."""
         self._expand_shrink_target_idx = idx
         try:
             self.canvas.boundary_drawn.disconnect(self._on_boundary_drawn)

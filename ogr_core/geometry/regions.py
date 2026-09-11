@@ -252,11 +252,11 @@ def _build_regions_shapely(
 
     # ------------------------------------------------------------------
     # v0.1.17 — ENDPOINT WELDING WITH NODE INSERTION on the raw
-    # coordinates, BEFORE any extension. This reverse-engineers Slide's
-    # documented behaviour: "whenever boundaries are drawn such that
-    # they cross or intersect existing boundaries, new vertices will be
-    # inserted at all intersection points" (Automatic Boundary
-    # Intersection), combined with the Geometry-Cleanup snapping
+    # coordinates, BEFORE any extension. This reverse-engineers the
+    # behaviour the reference documents under Automatic Boundary
+    # Intersection — wherever a drawn boundary crosses or intersects an
+    # existing one, a vertex is inserted at the intersection — combined
+    # with the Geometry-Cleanup snapping
     # tolerance and the GIS rule "snap-to-vertex has priority over
     # snap-to-segment".
     #
@@ -273,7 +273,7 @@ def _build_regions_shapely(
     #      the root cause of regions silently merging.
     # Endpoints farther than weld_tol from everything are genuine
     # danglings and keep the extend-past-External behaviour.
-    weld_tol = diag * 8e-3  # ~0.8% of model diagonal (Slide-like ratio)
+    weld_tol = diag * 8e-3  # ~0.8% of model diagonal (the reference's ratio)
     ext_ring_coords: list = list(ext_poly.exterior.coords)  # closed ring
 
     def _nearest_on_polyline(pt, coords, closed):

@@ -6,7 +6,7 @@ Tests for v0.1.15 — kinematically-admissible non-circular surfaces.
 The old Path Search / Block Search produced "impossible" wavy surfaces
 (interior vertices rising above the entry-exit chord, surfaces that a
 real sliding mass cannot follow). v0.1.15 rewrites Path Search per the
-Slide2 algorithm (Greco 1996) with concave-up admissibility, and adds
+reference's algorithm (Greco 1996) with concave-up admissibility, and adds
 an admissibility filter to Block Search.
 """
 from __future__ import annotations
@@ -105,7 +105,7 @@ class TestPathSearch:
         )
 
     def test_pseudo_random_reproducible(self):
-        """Same seed → same critical FoS (Slide's Pseudo-Random mode)."""
+        """Same seed → same critical FoS (the reference's Pseudo-Random mode)."""
         from ogr_slip2d import BishopSimplified
         from ogr_slip2d.search import PathSearch
         p = _slope_project()

@@ -447,7 +447,7 @@ class CanvasView(QGraphicsView):
         # Tension Crack and Drawdown do NOT split regions — they are
         # overlays drawn on top. Material assignment is resolved from
         # the user's click history, with the first material of the
-        # project as the Slide-style default.
+        # project as the default, which is what the reference does.
         if opts.show_material:
             try:
                 regions = self.project.resolve_regions()
@@ -671,7 +671,7 @@ class CanvasView(QGraphicsView):
         if search_result is None:
             return
 
-        # FoS heat-map of the centres grid (Slide-style)
+        # FoS heat-map of the centres grid, as the reference draws it
         self._draw_fos_heatmap(scene, search_result)
 
         critical_id = None
@@ -876,7 +876,7 @@ class CanvasView(QGraphicsView):
     def _draw_fos_heatmap(self, scene, search_result) -> None:
         """Draw a coloured grid showing min-FoS per grid centre.
 
-        Colour scheme (Slide-style):
+        Colour scheme, as the reference draws it:
             FoS ≤ 1.0   → red
             1.0 < FoS ≤ 1.5 → orange
             1.5 < FoS ≤ 2.0 → yellow
@@ -955,7 +955,7 @@ class CanvasView(QGraphicsView):
 
     @staticmethod
     def _fos_to_color(fos: float):
-        """Map an FoS to a colour using the Slide convention."""
+        """Map an FoS to a colour using the reference's convention."""
         if fos <= 1.0:
             return QColor(220, 30, 30)        # red
         if fos <= 1.25:
@@ -2153,13 +2153,13 @@ class CanvasView(QGraphicsView):
         return abs(self.transform().m11())
 
     # ==================================================================
-    # v0.1.9 — Slide-style W/P/D labels on water surfaces
+    # v0.1.9 — W/P/D labels on water surfaces, as the reference draws them
     # ==================================================================
     def _draw_water_surface_label(self, scene, boundary, letter: str, color) -> None:
         """Draw a small letter label centred above a water-surface polyline.
 
-        Slide convention: W on a Water Table, P on a Piezometric Line,
-        D on a Drawdown Line. The label sits at the midpoint of the
+        The reference's convention: W on a Water Table, P on a Piezometric
+        Line, D on a Drawdown Line. The label sits at the midpoint of the
         polyline, slightly above, and uses ItemIgnoresTransformations
         so it stays a fixed size regardless of zoom.
         """
@@ -2440,8 +2440,8 @@ class CanvasView(QGraphicsView):
         except Exception:  # noqa: BLE001
             pass
 
-        # v0.1.17 — grid_nx/grid_ny are the number of INTERVALS (Slide
-        # convention), so there are (nx+1)·(ny+1) centre points.
+        # v0.1.17 — grid_nx/grid_ny are the number of INTERVALS (the
+        # reference's convention), so there are (nx+1)·(ny+1) centre points.
         nxp = nx + 1
         nyp = ny + 1
         for i in range(nxp):

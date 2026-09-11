@@ -7,7 +7,7 @@ WHAT INVARIANT THIS PROTECTS. Every iterative method here stops on an
 ABSOLUTE criterion over the factor of safety, at a default of 0.005
 (``ogr_core/project/settings.py``). On a factor of safety around 1.0 that is
 half a percentage point, which is the same order as the whole band of results
-the Slide2 verification bank flags for review — so until v0.1.97 nobody could
+the reference's verification bank flags for review — so until v0.1.97 nobody could
 say whether those were engine defects or stopping noise. This file pins the
 answer: a fixed point does not depend on when you stop iterating, so
 tightening the tolerance by four orders of magnitude must move the factor of

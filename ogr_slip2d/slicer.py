@@ -1552,7 +1552,7 @@ def slice_surface(
         # sit a few 1e-6 ABOVE the ground purely from root-finding
         # round-off. Clamp the base to the ground there instead of
         # dropping the slice; dropping it lost the first/last slice and
-        # produced 24 slices where Slide builds 25, biasing the FoS by
+        # produced 24 slices where the reference builds 25, biasing the FoS by
         # ~1%.
         #
         # v0.1.100 — on a circle the two ENDS are not a tolerance question

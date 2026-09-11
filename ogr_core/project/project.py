@@ -124,7 +124,7 @@ class Project:
         # ``ogr_slip2d.support_integration._bond_profiles``.
         self._support_bond_cache: Optional[dict] = None
 
-        # v0.1.6 — Region assignments (Slide-style material painting).
+        # v0.1.6 — Region assignments (material painting, as the reference does it).
         # Each entry: {"x": float, "y": float, "material_id": str}.
         # Represents a user click on a material region. On every
         # geometry change, regions are recomputed by planar subdivision
@@ -136,7 +136,7 @@ class Project:
         self.region_assignments: list[dict] = []
 
         # v0.1.7 — Tension Crack hydraulic properties (defaults: Filled,
-        # the worst case in Slide). Only applies if a Tension Crack
+        # the reference's worst case). Only applies if a Tension Crack
         # boundary exists in the project.
         from ..geometry.tension_crack import TensionCrackProperties
         self.tension_crack_properties: TensionCrackProperties = (
@@ -269,7 +269,7 @@ class Project:
             - ``material_id`` — resolved via user click history (last
               winning assignment whose click-point still lies inside
               the region) or the first material of the project as a
-              Slide-style default.
+              default, which is what the reference does.
             - ``region_index`` — integer index in the returned list.
 
         Returns an empty list if there is no External or if shapely is
@@ -301,7 +301,7 @@ class Project:
             return self._regions_cache
         material_bs = self.boundaries_of(BoundaryType.MATERIAL)
         regions = build_regions(external, material_bs)
-        # Default material = first in the project (Slide convention)
+        # Default material = first in the project (the reference's convention)
         default_mid = self.materials[0].id if self.materials else None
         # Resolve each region. Strategy (v0.1.14):
         #

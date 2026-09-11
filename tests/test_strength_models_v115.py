@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Samuel Sáez López — Universidad Politécnica de Cartagena
 """
 Tests for v0.1.15 — the 9 new constitutive (strength) models that
-complete the Slide2 catalogue.
+complete the reference's catalogue.
 
 Models: Barton-Bandis, Drained-Undrained, Anisotropic Linear,
 Shear/Normal Function, Discrete Function, SHANSEP, Anisotropic

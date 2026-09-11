@@ -4,8 +4,8 @@
 Define Tension Crack dialog (v0.1.7).
 
 Reactive UI: the visible & enabled fields depend on the selected
-``Water Level`` mode, exactly as described in the Slide reference
-(Define_Tension_Crack.htm). Implements:
+``Water Level`` mode, exactly as the reference's Tension Crack
+documentation describes it. Implements:
     - Dry, Filled, Percent Filled
     - Filled below Elevation, Filled to Depth
     - Use Water Table, Use Piezometric Line

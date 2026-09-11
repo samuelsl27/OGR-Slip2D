@@ -1084,7 +1084,7 @@ class BaseSearch(ABC):
         # defines several DISJOINT sliding masses, and the critical
         # mechanism is the one with the lowest factor of safety. Until now
         # the first mass from the left was taken and the rest discarded
-        # unseen; on the Ej_2 reference model that resolved Slide's own
+        # unseen; on the Ej_2 reference model that resolved the reference's own
         # critical circle onto a 62 m² lens of level ground beyond the toe
         # (driving moment ≈ 0, so no factor of safety at all) instead of
         # the 184 m² slope failure at FoS = 1.155, and the true critical
@@ -1819,9 +1819,9 @@ def _parallel_grid_run(search, project, centres, workers):
 
 # ======================================================================
 class GridSearch(BaseSearch):
-    """Grid Search (circular) — Slide2 method.
+    """Grid Search (circular) — the reference's method.
 
-    v0.1.17 — reimplemented to follow the documented Slide2 algorithm:
+    v0.1.17 — reimplemented to follow the documented algorithm:
 
     1. A rectangular grid of slip-circle CENTRES is defined (Auto Grid
        or Add Grid). With ``grid_nx`` × ``grid_ny`` intervals there are
@@ -1838,7 +1838,7 @@ class GridSearch(BaseSearch):
     The previous implementation used ``radius_increment`` as a metric
     step size and swept from a fixed minimum to the bbox diagonal,
     generating large numbers of useless circles and missing the
-    per-centre radius bracketing. This version matches Slide.
+    per-centre radius bracketing. This version matches the reference.
     """
 
     def __init__(
@@ -1879,7 +1879,7 @@ class GridSearch(BaseSearch):
         self.grid_y_used = None
         self.grid_nx = max(2, grid_nx)
         self.grid_ny = max(2, grid_ny)
-        # radius_increment is the NUMBER OF INTERVALS (Slide convention).
+        # radius_increment is the NUMBER OF INTERVALS (the reference's convention).
         # Accept floats for back-compat but use as an integer count.
         self.radius_increment = max(1, int(round(radius_increment)))
         self.min_radius = min_radius
@@ -2015,7 +2015,7 @@ class GridSearch(BaseSearch):
         How it was measured
         -------------------
         ``referencias/Ejemplos/00_2026_08_17_Test_Regla_radios`` holds six
-        Slide models run for this. Their ``.s01`` output lists, per centre,
+        reference models run for this. Their result files list, per centre,
         every generated circle as ``(r, yleft, x1, y1, x2, y2, yright,
         fs..., b1)``, so the bracket is READ rather than fitted — which is
         what unblocked this, since four fitted numbers could never have
@@ -2049,7 +2049,7 @@ class GridSearch(BaseSearch):
             Ej_2            Janbu simpl.  +0.83 %           -0.03 %
 
         The five PUBLISHED cases of ``validacion/casos/`` — an independent
-        check, since none of them is a Slide run — all stay inside their
+        check, since none of them is a reference run — all stay inside their
         declared tolerances, moving by at most 0.24 % and in both
         directions. Both facts are tabulated in
         ``docs/audits/grid_radius_rule_v188.md``.
@@ -2061,9 +2061,9 @@ class GridSearch(BaseSearch):
         therefore cannot distinguish "the limit points" from "the ends of
         the profile", nor whether ``d_min`` is measured over the clipped
         surface or the whole one. What is implemented is the documented
-        reading — "the slope surface is simply the segments of the External
-        Boundary between the Slope Limits" — so narrowing the limits
-        narrows the radii. Confirming it needs one more Slide model with
+        reading — the slope surface is the segments of the External
+        Boundary between the Slope Limits — so narrowing the limits
+        narrows the radii. Confirming it needs one more reference model with
         the limits moved inward to an abscissa that is NOT a profile
         vertex; until that exists, this paragraph is the honest statement of
         what the rule rests on.
@@ -2573,7 +2573,7 @@ def slope_frame(project: Project,
 class SlopeSearch(BaseSearch):
     """Slope Search (circular) — the documented random two-point method.
 
-    v0.1.17 — reimplemented to follow the documented Slide2 algorithm,
+    v0.1.17 — reimplemented to follow the documented algorithm,
     which is the circular analogue of the Path Search:
 
     1. The Slope Limits define the segment(s) of ground surface used
@@ -2584,7 +2584,7 @@ class SlopeSearch(BaseSearch):
     3. A circular arc is fitted through those two surface points. The
        THIRD constraint that makes the circle unique is the *Initial
        Angle at Toe* — the inclination of the slip surface where it
-       emerges at the toe. By default Slide samples this angle randomly
+       emerges at the toe. By default the reference samples this angle randomly
        within an admissible window; the circle centre is then the
        intersection of (a) the perpendicular bisector of the two
        surface points and (b) the line through the toe point normal to
@@ -2696,7 +2696,7 @@ class SlopeSearch(BaseSearch):
                 result.invalid_count += 1
 
         # v0.1.17 — local refinement (gradient-free hill-descent) on the
-        # best few circles, mirroring Slide's surface optimisation. This
+        # best few circles, mirroring the reference's surface optimisation. This
         # is what lets the Slope Search converge onto the same critical
         # circle the Grid Search finds, instead of stopping at the best
         # random sample.
@@ -2787,9 +2787,9 @@ class SlopeSearch(BaseSearch):
 # Full implementations of Block/Path/SA/AutoRefine arrive in v0.2.x.
 # ======================================================================
 class AutoRefineSearch(BaseSearch):
-    """Auto Refine Search (circular) — Slide2 method.
+    """Auto Refine Search (circular) — the reference's method.
 
-    v0.1.17 — reimplemented to follow the documented Slide2 algorithm,
+    v0.1.17 — reimplemented to follow the documented algorithm,
     which iteratively narrows the search to the part of the slope that
     produces the lowest safety factors:
 
@@ -3565,12 +3565,12 @@ class AutoRefineNonCircularSearch(AutoRefineSearch):
 
 
 class BlockSearch(BaseSearch):
-    """Block Search (non-circular) — Slide2 method.
+    """Block Search (non-circular) — the reference's method.
 
-    v0.1.17 — reimplemented to follow the documented Slide2 algorithm.
+    v0.1.17 — reimplemented to follow the documented algorithm.
     The sliding mass is treated as active / central / passive "blocks".
 
-    Method (per the Slide documentation):
+    Method (per the reference's documentation):
       1. One random point is generated for each Block Search object. The
          reference REQUIRES the user to draw them; in their absence OGR
          tiles an implicit block region with ``num_groups`` vertical
@@ -3584,7 +3584,7 @@ class BlockSearch(BaseSearch):
          ``_run`` for the two extra filters that used to sit here.
       3. The Left and Right Projection Angles project the surface up to
          the ground surface from the leftmost and rightmost block points.
-         Angles are measured CCW from the +x axis (Slide convention):
+         Angles are measured CCW from the +x axis (the reference's convention):
          the default Left = 135°, Right = 45°. A *range* (start..end)
          may be given, in which case a random angle in the range is
          drawn per surface.
@@ -3915,7 +3915,7 @@ class BlockSearch(BaseSearch):
 
     @staticmethod
     def _sample_block_object(boundary, rng):
-        """Sample one point from a Block Search object, per Slide rules.
+        """Sample one point from a Block Search object, per the reference's rules.
 
         point (1 vertex)   → the exact point
         line (2 vertices)  → random point along the segment
@@ -4055,9 +4055,9 @@ def toe_frame_angle_deg(absolute_deg: float, to_right: bool) -> float:
 class PathSearch(BaseSearch):
     """Path Search (non-circular) — XSTABL "Irregular Surface Search".
 
-    v0.1.17 — reimplemented to follow the algorithm documented by
-    Rocscience for Slide2, which is itself modelled on the "Irregular
-    Surface Search" of the slope-stability program XSTABL. The previous
+    v0.1.17 — reimplemented to follow the algorithm the reference
+    documents, which is itself modelled on the "Irregular Surface
+    Search" of the slope-stability program XSTABL. The previous
     (v0.1.15/16) implementation used a unimodal depth-profile heuristic
     that produced reasonable shapes but did not match the documented
     method. The XSTABL method is:
@@ -4073,7 +4073,7 @@ class PathSearch(BaseSearch):
        *Initial Angle at Toe*. The default angular window is
        [45° below horizontal, (β − 5°)], where β is the inclination of
        the ground-surface segment at the initiation point. Angles follow
-       Slide's convention (CCW-positive from +x axis); for a
+       the reference's convention (CCW-positive from +x axis); for a
        right-to-left failure the surface descends into the slope.
 
     3. **Subsequent segments** — each of fixed ``segment_length``
@@ -4102,8 +4102,8 @@ class PathSearch(BaseSearch):
        that checkbox, and every non-circular search reaches it the same
        way. See ``ogr_slip2d.optimize`` and defect D08.
 
-    All randomness is reproducible when ``seed`` is given (Slide's
-    Pseudo-Random mode).
+    All randomness is reproducible when ``seed`` is given (the
+    reference's Pseudo-Random mode).
     """
 
     def __init__(
@@ -4686,7 +4686,7 @@ class SimulatedAnnealingSearch(BaseSearch):
     Implements the algorithm from:
         Su, X. (2009). Global Optimization of General Failure Surfaces
         in Slope Analysis by Hybrid Simulated Annealing.
-        University of Waterloo / Rocscience Inc.
+        University of Waterloo.
 
     HSA = VFSA (Very Fast Simulated Annealing) + LMC (Local Monte-Carlo).
 

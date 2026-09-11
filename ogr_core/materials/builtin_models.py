@@ -6,7 +6,7 @@ Built-in constitutive (strength) models.
 Each class is a self-contained plugin. Adding a new one is a matter of
 writing a subclass with ``@register``; no other file needs to change.
 
-Implemented models (matching Slide's Strength Type list):
+Implemented models (matching the reference's Strength Type list):
     - MohrCoulomb            τ = c' + σ'ₙ · tan(φ')
     - Undrained              τ = cu                      (φ = 0 analysis)
     - InfiniteStrength       τ = ∞                       (rigid bedrock)
@@ -169,7 +169,7 @@ class HoekBrown(StrengthModel):
     This is the special case of the Generalized Hoek-Brown with a=0.5,
     which is mathematically equivalent to the original 1980 form.
 
-    Parameters per Slide PDF: UCS (intact), m, s.
+    Parameters as the reference documents them: UCS (intact), m, s.
     """
 
     MODEL_ID = "hoek_brown_classic"
@@ -212,7 +212,7 @@ class HoekBrown(StrengthModel):
 # ----------------------------------------------------------------------
 @register
 class PowerCurve(StrengthModel):
-    """Power-curve envelope (Slide form):
+    """Power-curve envelope, in the form the reference uses:
 
         τ = c + a · (σ'ₙ + d)^b + σ'ₙ · tan(W)
 
@@ -222,8 +222,8 @@ class PowerCurve(StrengthModel):
         d    — normal-stress offset (so the envelope can pass below σ'ₙ=0)
         W    — Waviness angle (Patton-style joint roughness contribution)
 
-    This is the form documented in Slide's PDF (Strenght_Type.pdf,
-    page 8). The Waviness angle is NOT a friction angle — it represents
+    This is the form the reference documents for this strength type.
+    The Waviness angle is NOT a friction angle — it represents
     the dilation contribution of joint surface roughness.
     """
 
@@ -273,7 +273,7 @@ class PowerCurve(StrengthModel):
 # ----------------------------------------------------------------------
 @register
 class Hyperbolic(StrengthModel):
-    """Hyperbolic strength envelope (Slide form):
+    """Hyperbolic strength envelope, in the form the reference uses:
 
         τ = (c_∞ · σ'ₙ · tan(φ_0)) / (c_∞ + σ'ₙ · tan(φ_0))
 
@@ -336,7 +336,7 @@ class VerticalStressRatio(StrengthModel):
 
 
 # ======================================================================
-# v0.1.15 — Additional strength models matching the Slide2 catalogue
+# v0.1.15 — Additional strength models matching the reference's catalogue
 # ======================================================================
 
 # ----------------------------------------------------------------------
@@ -351,7 +351,7 @@ class BartonBandis(StrengthModel):
     [Barton & Choubey, 1977; Barton & Bandis, 1990].
 
     The total friction angle (φr + JRC·log₁₀(JCS/σ'ₙ)) is capped to
-    avoid unphysical values at very low σ'ₙ (Slide caps the effective
+    avoid unphysical values at very low σ'ₙ (the reference caps the effective
     roughness contribution; we cap the total angle at 70° + φr by
     default through the ``max_angle`` parameter logic in code).
     """
@@ -394,8 +394,8 @@ class DrainedUndrained(StrengthModel):
     Below a threshold normal stress σ_t the material behaves
     drained (Mohr-Coulomb: c' + σ'ₙ·tanφ'); above σ_t it switches to a
     constant undrained strength cap (a horizontal envelope at the
-    drained strength evaluated at σ_t). This mirrors Slide's
-    "Drained-Undrained" type where the undrained cap limits the
+    drained strength evaluated at σ_t). This mirrors the reference's
+    Drained-Undrained type, where the undrained cap limits the
     available strength at high confinement.
     """
 
@@ -441,7 +441,7 @@ def _local_bedding_deg(model, ctx, fallback_param: str = "bedding_angle"):
 
 @register
 class AnisotropicLinear(StrengthModel):
-    """Anisotropic Linear strength (Mercer 2012; Snowden / Slide2).
+    """Anisotropic Linear strength (Mercer 2012; Snowden Associates).
 
     Mohr-Coulomb strength whose cohesion and friction angle vary with
     the orientation β of the slip-surface base relative to the
@@ -517,7 +517,7 @@ class ShearNormalFunction(StrengthModel):
     function of σ'ₙ, given by a table of (σ'ₙ, τ) points.
 
     Linear interpolation between points; constant extrapolation beyond
-    the table range (Slide convention).
+    the table range (the reference's convention).
     """
 
     MODEL_ID = "shear_normal_function"
@@ -813,7 +813,7 @@ class GeneralizedAnisotropic(StrengthModel):
 # ----------------------------------------------------------------------
 @register
 class SnowdenModifiedAnisotropicLinear(StrengthModel):
-    """Snowden Modified Anisotropic Linear (Snowden Associates / Slide2).
+    """Snowden Modified Anisotropic Linear (Snowden Associates).
 
     A refinement of Anisotropic Linear where, instead of a single
     linear transition, the shear strength is computed from a

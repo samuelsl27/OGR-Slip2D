@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 Samuel Sáez López — Universidad Politécnica de Cartagena
 """
-Numerical validation against the Slide reference run Slide2d_Ej_2_General.
+Numerical validation against the reference run Slide2d_Ej_2_General.
 
 WHAT INVARIANT THIS PROTECTS, and why it needed a second benchmark.
 

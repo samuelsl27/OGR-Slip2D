@@ -13,9 +13,9 @@ from __future__ import annotations
 
 
 # ======================================================================
-class TestSlidePDFAlignment:
+class TestReferenceDialogAlignment:
     """The new SearchSettings fields must match the parameters shown
-    in the Surface Options dialog screenshots from Surface_Options.pdf."""
+    in the reference's Surface Options dialog."""
 
     def test_grid_defaults_match_pdf(self):
         from ogr_core.project.settings import SearchSettings

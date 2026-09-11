@@ -28,9 +28,9 @@ force DRIVING the slice, and labelling it "mobilised shear" is wrong:
 tau_f / F, the strength divided by the factor of safety. The two differ
 by exactly the factor of safety, which is the entire point of the number.
 
-Reference: Slide Interpret > Slip Surfaces > Query > Query Slice Data —
-"Click on any slice, and the data for the slice will be displayed in the
-dialog. Force arrows will also be displayed on the slice".
+Reference: the reference's Interpret > Slip Surfaces > Query > Query Slice
+Data, where clicking a slice shows its data in the dialog and draws the
+force arrows on the slice.
 
 Author: Samuel Sáez López (UPCT)
 """

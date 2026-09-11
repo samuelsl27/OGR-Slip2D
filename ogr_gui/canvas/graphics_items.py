@@ -336,13 +336,13 @@ class SupportItem(DomainItem):
     """Reinforcement (nail, tieback, anchor) drawn from head to tail.
 
     v0.1.14 — full rendering with:
-        - Color-coded per support type (Slide convention)
+        - Color-coded per support type (the reference's convention)
         - Arrowhead at the tail to indicate the bolt direction
         - Length & angle annotation shown on hover
         - Rich HTML tooltip showing all key properties
     """
 
-    # Slide-style colors per support type
+    # Colors per support type, as the reference draws them
     _TYPE_COLORS = {
         "end_anchored": "#1f77b4",            # blue
         "grouted_tieback": "#ff7f0e",         # orange

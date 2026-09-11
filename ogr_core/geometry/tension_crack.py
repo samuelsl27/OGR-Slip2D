@@ -4,8 +4,8 @@
 Tension Crack hydraulic properties (v0.1.7).
 
 Defines how water inside a Tension Crack zone exerts hydrostatic
-pressure on the slip-surface walls. Per the Slide reference
-(Define_Tension_Crack.htm).
+pressure on the slip-surface walls. Per the reference program's
+Tension Crack documentation.
 
 Author: Samuel Sáez López (UPCT).
 """
@@ -19,7 +19,7 @@ from typing import Optional
 class WaterLevelMode(Enum):
     """How the water level inside the Tension Crack is specified."""
     DRY = "dry"                              # crack empty, no hydrostatic force
-    FILLED = "filled"                        # 100% saturated (default in Slide)
+    FILLED = "filled"                        # 100% saturated (reference default)
     PERCENT_FILLED = "percent_filled"        # 0-100 % of crack depth
     FILLED_BELOW_ELEVATION = "filled_below_elevation"  # absolute Y datum
     FILLED_TO_DEPTH = "filled_to_depth"      # depth from crack top
@@ -31,7 +31,7 @@ class WaterLevelMode(Enum):
 class TensionCrackProperties:
     """Hydraulic properties of the Tension Crack zone.
 
-    See ``Define_Tension_Crack.htm``: defines how water inside the
+    Per the reference's Tension Crack documentation: water inside the
     tension crack exerts hydrostatic pressure on slip-surface walls.
 
     The unit weight of water (γ_w) is taken from project settings

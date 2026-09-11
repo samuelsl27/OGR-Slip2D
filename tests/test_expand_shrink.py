@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 Samuel Sáez López — Universidad Politécnica de Cartagena
 """
-Tests for the Slide-style Expand/Shrink External Boundary algorithm.
+Tests for the Expand/Shrink External Boundary algorithm.
 
 Covers:
     - Expand on same edge (bulge out)

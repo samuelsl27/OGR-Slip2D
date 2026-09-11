@@ -27,7 +27,7 @@ against its own external reference:
   θ = 0 must therefore reproduce this program's own, separately
   validated, Janbu Simplified.
 
-The manual's example is the same problem the Slide verification bank
+The manual's example is the same problem the reference's verification bank
 numbers 95, whose panel names ``corp of eng#1`` as the slice method and
 which the bank had attributed to Bishop — that mis-attribution is what
 made these two methods worth writing (defect D31 of the bank audit).
@@ -78,8 +78,8 @@ EM_G7A_F = 3.49
 # Figure G-9 — second stage of the same example. All materials undrained
 # (phi = 0), no external water load and no pore pressure, cohesion equal
 # to the undrained strength Figure G-7b derived. The manual's answer, and
-# the number the Slide verification manual quotes as "Reference factor of
-# safety = 1.35 [Corps of Engineers]".
+# the number the reference's verification manual quotes as its reference
+# factor of safety, 1.35, for the Corps of Engineers method.
 EM_G9 = [
     #  W   alpha ell    c    z_pub
     (2, 61, 8, 0.15, 1),
@@ -230,7 +230,7 @@ class TestTheRecursionAgainstTheManualsOwnTable:
 
     def test_second_stage_factor_of_safety(self):
         """The manual's answer for this example is F = 1.35, and it is
-        the number the Slide verification manual quotes as the reference
+        the number the reference's verification manual quotes as the reference
         for its problem 95."""
         f_true = _root(EM_G9, False, EM_THETA_TRUE)
         f_printed = _root(EM_G9, False, EM_THETA_PRINTED)

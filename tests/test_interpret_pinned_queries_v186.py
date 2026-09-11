@@ -24,8 +24,8 @@ floating label on commit, so a surface's factor of safety disappeared at
 the exact moment it became a Query — which defeats keeping several, the
 whole point being to compare two or three at once.
 
-Reference: Slide Interpret > Slip Surfaces > Query > Add Query — "click
-the left mouse button and a Query will be created for that slip surface".
+Reference: the reference's Interpret > Slip Surfaces > Query > Add Query,
+where a left click creates a Query for that slip surface.
 
 Author: Samuel Sáez López (UPCT)
 """

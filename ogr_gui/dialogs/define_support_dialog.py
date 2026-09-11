@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 Samuel Sáez López — Universidad Politécnica de Cartagena
 """
-Define Support Properties dialog (Slide-style).
+Define Support Properties dialog, as the reference lays it out.
 
 Lets the user maintain a list of named "Support Types" — concrete
 parameter sets bound to one of the 7 built-in SupportType classes
@@ -418,7 +418,7 @@ class _SupportRow:
 
 # ----------------------------------------------------------------------
 class DefineSupportDialog(QDialog):
-    """Slide-style Define Support Properties dialog."""
+    """Define Support Properties dialog, as the reference lays it out."""
 
     def __init__(
         self,

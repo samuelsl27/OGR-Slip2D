@@ -58,7 +58,8 @@ _interp_y_on_polyline = interp_y_on_polyline
 def _auto_hu_at(polyline: Polyline, x: float) -> float:
     """Compute the Auto Hu coefficient for a Water Surface at column x.
 
-    Per Slide's Water_Parameters.htm: Hu = cos²(α), where α is the
+    Per the reference's water-parameters documentation: Hu = cos²(α),
+    where α is the
     inclination of the water-surface segment above the slice base.
     For a horizontal water table α = 0 → Hu = 1.0.
 
@@ -192,7 +193,8 @@ def pore_pressure_at(
         if h <= 0:
             return 0.0  # water below the point → suction → zero
 
-        # v0.1.7 — Hu coefficient (per Slide Water_Parameters.htm).
+        # v0.1.7 — Hu coefficient (per the reference's water-parameters
+        # documentation).
         # By default the material's own Hu is used; if Auto Hu is on
         # at the project level OR the material requests Auto, we
         # compute Hu = cos²(α), where α is the inclination of the

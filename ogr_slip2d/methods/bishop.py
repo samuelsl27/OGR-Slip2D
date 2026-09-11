@@ -21,7 +21,7 @@ Implicit FoS equation (requires fixed-point iteration):
 with:
         m_α  =  cos α + sin α · tan φ' / F
 
-For pseudo-static seismic analysis (Slide convention):
+For pseudo-static seismic analysis (the reference's convention):
     - W → W·(1 − kv)
     - kh adds a moment to the driving denominator:
         Σ kh · W · (y_g − y_centre) / R
@@ -368,9 +368,9 @@ class BishopSimplified(LEMMethod):
         # own arm, and the base normal stops pointing at the axis, so it
         # contributes a moment of its own that this form has no term for.
         # The reference's documentation is explicit that it does compute
-        # that arm ("Slide2 does account for the fact that the normal force
-        # does not pass through the center of rotation by calculating the
-        # moment arm associated with each normal force").
+        # that arm: it states that the normal force does not pass through
+        # the centre of rotation, and that a moment arm is calculated for
+        # each normal force.
         #
         # Measured on the two reference non-circular surfaces, against the
         # values the reference reports for them:

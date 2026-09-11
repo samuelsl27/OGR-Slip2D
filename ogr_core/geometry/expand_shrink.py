@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 Samuel Sáez López — Universidad Politécnica de Cartagena
 """
-Slide-style Expand/Shrink algorithm for the External Boundary.
+Expand/Shrink algorithm for the External Boundary, following the
+behaviour the reference program documents.
 
 v0.1.6 — Samuel Sáez López (UPCT).
 
@@ -16,7 +17,7 @@ This module computes:
     removed_arcs — the arc(s) of the original External that were
                    removed to make room for the polyline. These are
                    what get converted to Material Boundaries if the
-                   user picks "Yes" in the Slide dialog.
+                   user picks "Yes" when prompted.
     mode         — "expand" | "shrink" — auto-detected from whether
                    the new polyline lies outside or inside the original.
 
@@ -37,7 +38,7 @@ EXPAND — the polyline lies outside.
       into a Material Boundary if the user says Yes.
 
 SHRINK — the polyline lies inside.
-    • Same two candidates. Slide's rule: the candidate whose discarded
+    • Same two candidates. The reference's rule: the candidate whose discarded
       arc is SHORTER (in length along the original perimeter) is the
       keeper. This discards the SHORTER piece and keeps the LARGER.
       The discarded shorter arc is the Material Boundary candidate.
@@ -167,7 +168,7 @@ def expand_shrink_external(
                 "or redraw with points outside."
             )
     else:
-        # Shrink: discard the SHORTER arc (Slide rule).
+        # Shrink: discard the SHORTER arc (the reference's rule).
         len_fwd = _arc_length([cut1_v] + arc_fwd + [cut2_v])
         len_rev = _arc_length([cut1_v] + arc_rev + [cut2_v])
         if len_fwd < len_rev:

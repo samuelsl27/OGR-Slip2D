@@ -79,7 +79,7 @@ class SearchMethod(Enum):
     PARTICLE_SWARM = "particle_swarm"        # v0.1.126
 
 
-# Methods compatible with each surface type (Slide convention)
+# Methods compatible with each surface type (the reference's convention)
 CIRCULAR_METHODS = {
     SearchMethod.GRID_SEARCH,
     SearchMethod.SLOPE_SEARCH,
@@ -171,10 +171,10 @@ class GroundwaterSettings:
     method: str = GroundwaterMethod.WATER_TABLE.value
     pore_fluid_unit_weight: float = 9.81  # kN/m³
 
-    # v0.1.7 — Advanced options (Slide-style):
+    # v0.1.7 — Advanced options, as the reference groups them:
     # excess_pore_pressure: enables B-bar method on undrained materials
     # rapid_drawdown: enables Drawdown Line + drawdown-method analysis
-    # rapid_drawdown_method: which Slide-recognised method to apply
+    # rapid_drawdown_method: which of the recognised methods to apply
     excess_pore_pressure: bool = False
     rapid_drawdown: bool = False
     # v0.1.30 — Transient groundwater. The reference groups these three
@@ -342,8 +342,8 @@ class SearchSettings:
     setting that is silently dropped is rule 7's whole argument.
     """
 
-    """Search settings — aligned with Slide's Surface Options dialog
-    (Surface_Options.pdf). Each search method has its own parameters;
+    """Search settings — aligned with the reference's Surface Options
+    dialog. Each search method has its own parameters;
     the GUI shows only those relevant to the current method."""
 
     slope_limit_left: Optional[float] = None
@@ -398,7 +398,7 @@ class SearchSettings:
     sa_initial_vertices: int = 8
     sa_generation_steps: int = 1000
     # Number of consecutive FoS values that must lie within tolerance
-    # before the search stops (Slide spec). PDF default 5.
+    # before the search stops. The reference's default is 5.
     sa_num_fos_compared_before_stopping: int = 5
     sa_tolerance: float = 1e-4
     # Temperature reduction coefficient — c in T_k = T_0 · exp(-c · k^(1/n)),
@@ -742,7 +742,7 @@ class SearchSettings:
         """True if the current search method uses a centre grid.
         Used by the GUI to grey-out Auto Grid / Add Grid actions when
         a non-grid method is selected. Only Grid Search uses a grid in
-        Slide."""
+        the reference."""
         return self.search_method == SearchMethod.GRID_SEARCH.value
 
 

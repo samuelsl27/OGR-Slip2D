@@ -55,7 +55,7 @@ class TestBuiltinModels:
         assert tau2 > tau1
 
     def test_power_curve(self):
-        # v0.1.12 — Slide form: τ = c + a·(σ'ₙ + d)^b + σ'ₙ·tan(W)
+        # v0.1.12 — the reference's form: τ = c + a·(σ'ₙ + d)^b + σ'ₙ·tan(W)
         m = PowerCurve(a=2.0, b=0.5, c=1.0, d=0.0, waviness=15.0)
         # At σ'ₙ = 100: τ = 1 + 2·(100 + 0)^0.5 + 100·tan(15°)
         expected = 1.0 + 2.0 * (100.0 ** 0.5) + 100.0 * math.tan(math.radians(15.0))
@@ -68,7 +68,7 @@ class TestBuiltinModels:
         assert m.shear_strength(0.0) == pytest.approx(9.0)
 
     def test_hoek_brown_classic(self):
-        # Slide form: σ'₁ = σ'₃ + σ_ci · √(m·σ'₃/σ_ci + s)
+        # The reference's form: σ'₁ = σ'₃ + σ_ci · √(m·σ'₃/σ_ci + s)
         from ogr_core.materials import HoekBrown
         m = HoekBrown(sigci=15000.0, m=0.357, s=0.0017)
         # Should produce a positive shear strength at σ'ₙ = 1000

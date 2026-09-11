@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 Samuel Sáez López — Universidad Politécnica de Cartagena
 """
-Numerical validation against a Slide reference run (Slide2d_Ej_1_General).
+Numerical validation against a reference run (Slide2d_Ej_1_General).
 
 This is the project's first end-to-end numerical benchmark against the
 reference program. Geometry, materials and grid settings are taken
@@ -96,7 +96,7 @@ class TestSlideValidationEj1:
         assert len(p.resolve_regions()) == 3
 
     def test_bishop_reference_circle_fos(self):
-        """LEM on the EXACT reference critical circle must match Slide
+        """LEM on the EXACT reference critical circle must match the reference
         to within 0.5 %."""
         from ogr_slip2d import BishopSimplified
         from ogr_slip2d.search import GridSearch
@@ -191,7 +191,7 @@ class TestSlideValidationEj1:
 
 
 class TestAllMethodsValidationEj1:
-    """v0.1.19 — validate every available LEM method against the Slide
+    """v0.1.19 — validate every available LEM method against the reference
     reference FoS on its own global-minimum circle, plus the Janbu
     corrected fix (was +2.95 %, now +0.10 %)."""
 

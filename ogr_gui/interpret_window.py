@@ -939,7 +939,7 @@ class InterpretWindow(QMainWindow):
         m_query.addSeparator()
         m_query.addAction(QAction(tr("Show Values Along Surface..."), self,
                                   triggered=self._show_values_along))
-        # v0.1.15 — additional Slide-style queries
+        # v0.1.15 — additional queries the reference offers
         m_query.addAction(QAction(tr("Free Body Diagram of Slice..."), self,
                                   triggered=self._free_body_diagram))
         m_query.addAction(QAction(tr("Surfaces Crossing Point..."), self,
@@ -1215,7 +1215,7 @@ class InterpretWindow(QMainWindow):
         heatmap grid, draw the slip surface of the centre with the
         lowest FoS in that cell.
 
-        v0.1.12 — Slide-style preview. The grid is the array of slip-
+        v0.1.12 — preview as the reference draws it. The grid is the array of slip-
         circle centres used by Grid Search; we find the centre closest
         to (x, y), look up its best evaluated radius among
         ``search_result.evaluations`` and draw a dashed grey arc.
@@ -1331,7 +1331,7 @@ class InterpretWindow(QMainWindow):
 
         v0.1.12 — when Query Slice Data mode is NOT active, a click on
         the canvas selects the best surface of the grid cell containing
-        the click (Slide-style). The selected surface is highlighted in
+        the click, as the reference does. The selected surface is highlighted in
         purple in the canvas and the slice dock updates.
         """
         if not self.search_result:
@@ -3126,7 +3126,7 @@ class InterpretWindow(QMainWindow):
             tr("Filter active — %d of %d surfaces shown. The global "
                "minimum is always kept.") % (shown, len(valid)), 6000)
 
-    # v0.1.15 — additional Slide-style queries
+    # v0.1.15 — additional queries the reference offers
     def _free_body_diagram(self) -> None:
         """Show the free-body diagram of a selected slice with all force
         vectors drawn to a common scale and labelled with values:

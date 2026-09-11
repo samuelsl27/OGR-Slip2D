@@ -175,7 +175,10 @@ class ContourOptionsDialog(QDialog):
         fs.addRow(tr("Mode:"), self.cbo_mode)
         self.cbo_palette = QComboBox()
         for name in PALETTES:
-            self.cbo_palette.addItem(name, name)
+            # The palette name is both DATA (the key) and LABEL: translate
+            # what is shown and store the key, exactly as the mode combo
+            # two lines above already does.
+            self.cbo_palette.addItem(tr(name), name)
         k = self.cbo_palette.findData(self.settings.palette)
         self.cbo_palette.setCurrentIndex(max(0, k))
         fs.addRow(tr("Palette:"), self.cbo_palette)

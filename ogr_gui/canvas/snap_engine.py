@@ -4,8 +4,8 @@
 Snap / Ortho / OSnap engine for the 2D canvas (v0.1.3).
 
 Converts raw cursor positions (model coordinates) into *snapped* positions
-according to the user-enabled constraints. Based on the Slide-style UX
-described in the specification:
+according to the user-enabled constraints. Based on the UX described in
+the specification:
 
     SNAP (F9) — snap to vertices, line segments, grid points, and OSnap
                 extension lines.

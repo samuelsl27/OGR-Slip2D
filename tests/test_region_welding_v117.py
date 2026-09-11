@@ -14,8 +14,8 @@ per region" bug. Root cause history:
   3. Relying on an endpoint merely "touching" a segment interior is
      fragile at the 1e-16 level: GEOS noding sometimes missed it.
 
-Definitive fix (mirrors Slide's documented "Automatic Boundary
-Intersection"): weld each near-miss endpoint onto the target —
+Definitive fix (mirrors the Automatic Boundary Intersection that the
+reference documents): weld each near-miss endpoint onto the target —
 snap-to-vertex with priority, otherwise snap-to-segment AND insert the
 projection as a new vertex of the target so both lines share the node
 with identical floats.

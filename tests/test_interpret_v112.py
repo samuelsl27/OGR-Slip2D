@@ -7,7 +7,7 @@ Verifies:
     - SlipSurfaceItem renders both circular AND polyline (non-circular)
     - SlipSurfaceItem visual states: critical / selected / hover
     - canvas_view emits scene_clicked / scene_hovered signals
-    - _SliceDataDock has the extended Slide-style fields list
+    - _SliceDataDock has the extended fields list of the reference
 
 NOTE: These tests require PySide6 (the GUI framework). On sandbox
 environments without it they are skipped automatically.
@@ -138,7 +138,7 @@ class TestCanvasSignalsExist:
 # ======================================================================
 @_requires_qt
 class TestSliceDataFields:
-    """The slice data dock should expose the Slide-style field set."""
+    """The slice data dock should expose the reference's field set."""
 
     def test_field_categories_present(self):
         # We don't instantiate the dock (needs Qt) but read the FIELDS list

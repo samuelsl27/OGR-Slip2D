@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 Samuel Sáez López — Universidad Politécnica de Cartagena
 """
-Tests for v0.1.17 — Grid Search reimplemented per Slide2.
+Tests for v0.1.17 — Grid Search reimplemented per the reference.
 
-Key Slide conventions verified:
+Key conventions of the reference verified:
   - grid_nx / grid_ny are the number of INTERVALS → (nx+1)·(ny+1) centres
   - radius_increment is the number of INTERVALS between r_min and r_max
     → (radius_increment + 1) circles per centre

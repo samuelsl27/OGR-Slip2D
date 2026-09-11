@@ -28,7 +28,7 @@ class TestSearchSettingsExtended:
         # Grid
         assert s.radius_increment > 0
         assert s.composite_surfaces is False
-        # v0.1.12: Slide PDF shows this CHECKED by default
+        # v0.1.12: the reference shows this CHECKED by default
         assert s.create_tension_crack_reverse_curvature is True
         # Slope
         assert s.num_surfaces > 0

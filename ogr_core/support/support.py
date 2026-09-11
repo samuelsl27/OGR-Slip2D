@@ -3,11 +3,11 @@
 """
 Structural support (reinforcement) plugin system.
 
-v0.1.14 — complete rewrite aligned with the Slide2/Slide3 documentation.
+v0.1.14 — complete rewrite aligned with the reference's documentation.
 All support types are computed in **kN per unit width of slope** (kN/m),
 consistent with the slice-based LEM convention.
 
-Implemented support types (mirroring Slide):
+Implemented support types (mirroring the reference):
 
     1. End Anchored                   — constant force, anchor at tail
     2. Grouted Tieback                — 3 failure modes: tensile / pullout / stripping
@@ -23,7 +23,7 @@ of all applicable failure-mode capacities. When the slip surface
 intersects the bolt at distance ``d`` from the head, the available
 force is ``force_at(d, total_length)`` (per unit width of slope).
 
-Force application (Slide convention):
+Force application (the reference's convention):
     - **Active** (Method A in Duncan & Wright 2005): the support force
       acts BEFORE displacement (post-tensioned anchors, ties). Enters
       the FoS equation by REDUCING the driving moment.
@@ -31,7 +31,7 @@ Force application (Slide convention):
       displacement (untensioned dowels, piles). Enters the FoS by
       INCREASING the resisting moment, divided by F in the iteration.
 
-Force orientation at slip-surface intersection (Slide convention):
+Force orientation at slip-surface intersection (the reference's convention):
     - tangent_to_slip — force aligned with slip surface
     - parallel_to_support — force along bolt axis (default for tieback/end)
     - bisector — bisects the two above (default for soil nail)
@@ -451,10 +451,10 @@ def _default_application(type_id: str) -> ForceApplication:
 class EndAnchored(SupportType):
     """End Anchored bolt — mechanically anchored at the tail end only.
 
-    Slide: "the load applied to the sliding mass will be CONSTANT,
-    regardless of where a slip surface intersects the length of the
-    support. The applied load, PER UNIT WIDTH OF SLOPE, is simply
-    equal to the Anchor Capacity divided by the Out of Plane Spacing."
+    The reference documents a CONSTANT load on the sliding mass,
+    whatever the point at which the slip surface crosses the support:
+    PER UNIT WIDTH OF SLOPE it is the anchor capacity divided by the
+    out-of-plane spacing.
     """
     TYPE_ID: ClassVar[str] = "end_anchored"
     DISPLAY_NAME: ClassVar[str] = "End Anchored"
@@ -518,7 +518,7 @@ class EndAnchored(SupportType):
 class GroutedTieback(SupportType):
     """Grouted Tieback — tensioned cable/bar with grouted bond zone.
 
-    Implements the three Slide failure modes:
+    Implements the three failure modes the reference defines:
 
     **Pullout**  F_p = (bond_strength · L_o) / spacing
                   L_o = length of bond zone BEHIND the slip surface
@@ -818,10 +818,9 @@ class GroutedTiebackFriction(SupportType):
 class SoilNail(SupportType):
     """Soil Nail — fully-bonded grouted reinforcement (no free length).
 
-    Slide: "The Soil Nail support type is equivalent to Grouted
-    Tieback support with Bond Length = 100%." The three failure modes
-    (tensile, pullout, stripping) are computed with the bond running
-    the entire length.
+    The reference defines this type as a Grouted Tieback whose bond
+    length is 100 %. The three failure modes (tensile, pullout,
+    stripping) are computed with the bond running the entire length.
 
     Force diagram:
         Pullout:   F_p(x) = bond_strength · (L - x) / spacing
@@ -1703,7 +1702,7 @@ class SupportPattern:
         spacing: along-slope spacing between adjacent bolts (m)
         orientation_mode: 'angle' = fixed angle relative to horizontal,
             'normal' = perpendicular to slope, 'depth' = constant
-            vertical depth (Slide convention)
+            vertical depth (the reference's convention)
         angle_deg: angle from positive horizontal (used if mode=angle)
         flip_180: rotate generated bolts by 180° (head ↔ tail swap)
     """

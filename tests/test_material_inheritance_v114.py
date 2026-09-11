@@ -10,7 +10,7 @@ when a new Material Boundary subdivides that region into sub-regions,
 each sub-region inherits M because it overlaps (geometrically) the
 stored footprint.
 
-This is the algorithm used by Slide, AutoCAD, Inkscape, QGIS for
+This is the algorithm used by the reference, AutoCAD, Inkscape, QGIS for
 persistent attribute-by-region: store *what was assigned to what
 shape*, not just *what was assigned to what point*.
 """

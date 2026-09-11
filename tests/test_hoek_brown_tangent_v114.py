@@ -4,7 +4,7 @@
 Tests for v0.1.14 — analytical / high-precision tangent slopes for
 non-linear strength envelopes (Hoek-Brown, Power Curve, Hyperbolic).
 
-These models were giving FoS results different from Slide because the
+These models were giving FoS results different from the reference because the
 ``BishopSimplified._local_c_phi`` linearisation used a coarse secant
 that was inaccurate at low confining stress (slices near the slope
 surface). v0.1.14 replaces the secant with the model's analytical

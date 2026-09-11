@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 Samuel Sáez López — Universidad Politécnica de Cartagena
 """
-Tests for v0.1.17 — Slope Search (circular) reimplemented per Slide2.
+Tests for v0.1.17 — Slope Search (circular) reimplemented per the reference.
 
 The Slope Search generates circles from two ground-surface points
 (within the Slope Limits) plus an Initial Angle at Toe, then refines

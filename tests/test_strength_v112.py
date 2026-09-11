@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 Samuel Sáez López — Universidad Politécnica de Cartagena
 """
-Tests for v0.1.12 Strength Type updates aligned with Slide PDF spec.
+Tests for v0.1.12 Strength Type updates aligned with the reference's documented spec.
 
 Verifies:
     - Power Curve has the correct 5-parameter form: τ = c + a·(σ_n+d)^b + σ_n·tan(W)
@@ -15,8 +15,8 @@ import math
 
 
 # ======================================================================
-class TestPowerCurveSlideForm:
-    """Slide PDF: τ = c + a·(σ_n + d)^b + σ_n·tan(W)
+class TestPowerCurveReferenceForm:
+    """The reference's form: τ = c + a·(σ_n + d)^b + σ_n·tan(W)
     where W is the Waviness angle, NOT a friction angle."""
 
     def test_pdf_defaults_match(self):
@@ -139,7 +139,7 @@ class TestRegistrationAndExports:
 
     def test_display_names_match_pdf(self):
         """The DISPLAY_NAME shown in the GUI dropdown must match the
-        labels in Slide's Strength Type combobox."""
+        labels in the reference's Strength Type combobox."""
         from ogr_core.materials import (
             HoekBrown, Hyperbolic, GeneralizedHoekBrown, PowerCurve,
         )

@@ -56,7 +56,7 @@ PALETTES: dict[str, tuple[str, ...]] = {
     # steps, with the final band snapped to a pure 240° blue — but the
     # ramp is a description of the measurement, not its source, so the
     # measurement is what is written down.
-    "Slide rainbow": (
+    "Rainbow (24 bands)": (
         "#ff0000", "#ff2a00", "#ff5500", "#ff7f00", "#ffaa00", "#ffd400",
         "#feff00", "#d4ff00", "#a9ff00", "#7fff00", "#55ff00", "#2aff00",
         "#00ff00", "#00ff2a", "#00ff54", "#00ff7f", "#00ffa9", "#00ffd4",
@@ -78,14 +78,14 @@ PALETTES: dict[str, tuple[str, ...]] = {
                    "#DDCC77", "#CC6677", "#882255"),
 }
 
-DEFAULT_PALETTE = "Slide rainbow"
+DEFAULT_PALETTE = "Rainbow (24 bands)"
 
 # Palettes whose stops ARE the bands, one colour each, rather than a
 # continuous ramp to be sampled. When the interval count matches the stop
 # count the colour is taken straight from the list, which is the only way
 # to reproduce a reference legend exactly: sampling a 24-stop ramp at band
 # centres lands halfway between every pair of measured colours.
-DISCRETE_PALETTES = frozenset({"Slide rainbow"})
+DISCRETE_PALETTES = frozenset({"Rainbow (24 bands)"})
 
 
 def _hex_to_rgb(value: str):

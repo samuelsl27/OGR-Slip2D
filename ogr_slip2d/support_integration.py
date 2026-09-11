@@ -8,7 +8,7 @@ geosynthetic / pile / etc.) on a slip surface, and produces a list of
 ``SupportEffect`` records that the LEM solver can sum into its
 equilibrium equations.
 
-Implementation follows Slide's convention:
+Implementation follows the reference's convention:
 
   - Each support intersects the slip surface at a single point (if at
     all). At that point we evaluate ``force_at(distance_from_head)``

@@ -135,7 +135,7 @@ def _p59_project():
     from ogr_core.project import Project
     from ogr_core.project.units import FailureDirection
 
-    p = Project("Slide2 #59 - tieback wall in sand")
+    p = Project("Problem 59 - tieback wall in sand")
     ext = Polyline(vertices=_verts(_P59_EXT), closed=True)
     ext.ensure_ccw()
     p.add_boundary(Boundary(polyline=ext, btype=BoundaryType.EXTERNAL))

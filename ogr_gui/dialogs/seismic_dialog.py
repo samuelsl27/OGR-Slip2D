@@ -4,7 +4,7 @@
 Seismic Load dialog (v0.1.9).
 
 Pseudo-static seismic inertial body force applied to every slice.
-Per Slide convention:
+Per the reference's convention:
     F = W · k_h (horizontal, in failure direction)
     F = W · k_v (vertical, +ve downward)
 

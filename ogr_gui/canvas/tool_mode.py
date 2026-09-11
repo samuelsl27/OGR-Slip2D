@@ -52,7 +52,7 @@ class ToolMode(Enum):
     SCALE_BOUNDARY = "scale_boundary"
     ROTATE_BOUNDARY = "rotate_boundary"
     EXPAND_SHRINK = "expand_shrink"                # menu entry (old)
-    DRAW_EXPAND_SHRINK = "draw_expand_shrink"      # interactive draw mode (Slide-style)
+    DRAW_EXPAND_SHRINK = "draw_expand_shrink"      # interactive draw mode
     CHANGE_SLOPE_ANGLE = "change_slope_angle"
 
     # ----- Loads / supports / surfaces (placeholders for v0.1.3+) -----
@@ -86,13 +86,13 @@ class ToolMode(Enum):
 
     @property
     def draws_closed_polygon(self) -> bool:
-        """Only the External Boundary auto-closes (Slide convention).
+        """Only the External Boundary auto-closes (the reference's convention).
 
         Material Boundaries are OPEN polylines: regions emerge from their
         intersection with the External Boundary and with each other, via
         planar subdivision — not by closing each Material boundary into
-        its own polygon. See ``Add_Material_Boundary.htm`` in the Slide
-        reference.
+        its own polygon, which is what the reference documents for
+        material boundaries.
         """
         return self in (ToolMode.DRAW_EXTERNAL, ToolMode.DRAW_BLOCK_SEARCH)
 

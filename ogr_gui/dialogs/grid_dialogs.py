@@ -34,7 +34,7 @@ from ogr_gui.i18n import tr  # noqa: E402
 class AddGridDialog(QDialog):
     """Define the slip-circle centre grid used by Grid Search.
 
-    Slide convention: the grid is a rectangular array of centres above
+    The reference's convention: the grid is a rectangular array of centres above
     the slope. Each centre has multiple radii swept from a min radius
     up to a maximum determined by the geometry, in steps of the Radius
     Increment (Surface Options).
@@ -225,7 +225,7 @@ class AddGridDialog(QDialog):
 
 # ======================================================================
 class SurfaceOptionsDialog(QDialog):
-    """Full Slide-style Surface Options dialog (v0.1.10).
+    """Full Surface Options dialog, as the reference lays it out (v0.1.10).
 
     The dialog is split into:
       1. Global header — Surface Type radio + Search Method dropdown
@@ -737,8 +737,8 @@ class SurfaceOptionsDialog(QDialog):
     # Panel builders
     # ================================================================
     # ================================================================
-    # Panel builders — parameters as defined in Slide's Surface Options
-    # (Surface_Options.pdf)
+    # Panel builders — parameters as the reference defines them in its
+    # Surface Options dialog
     # ================================================================
     def _build_grid_panel(self, s):
         from PySide6.QtWidgets import (
@@ -795,7 +795,7 @@ class SurfaceOptionsDialog(QDialog):
         )
         f.addRow(tr("Number of Surfaces:"), self._sl_num)
 
-        # Initial Angle at Toe — Upper / Lower with checkboxes (Slide style)
+        # Initial Angle at Toe — Upper / Lower with checkboxes, as the reference
         def _angle_row(enabled, value, default):
             cb = QCheckBox(); cb.setChecked(bool(enabled))
             sb = QDoubleSpinBox(); sb.setRange(-180.0, 180.0)
@@ -927,10 +927,10 @@ class SurfaceOptionsDialog(QDialog):
         self._sa_tcoef = QDoubleSpinBox()
         self._sa_tcoef.setRange(0.5, 50.0); self._sa_tcoef.setDecimals(2)
         self._sa_tcoef.setSingleStep(0.5); self._sa_tcoef.setValue(s.sa_temperature_coefficient)
-        self._sa_tcoef.setToolTip(
-            "Slide spec: c-coefficient in T_k = T_0 · exp(-c · k^(1/n)).\n"
-            "Default 8.0 (paper Su 2009)."
-        )
+        self._sa_tcoef.setToolTip(tr(
+            "c-coefficient in T_k = T_0 · exp(-c · k^(1/n)). "
+            "Default 8.0, from Su (2009)."
+        ))
         f.addRow(tr("Coefficient in temperature reduction:"), self._sa_tcoef)
         self._sa_convex = QCheckBox(tr("Convex Surfaces Only"))
         self._sa_convex.setChecked(s.sa_convex_only)

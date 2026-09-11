@@ -912,7 +912,7 @@ class MaterialPropertiesDialog(QDialog):
         self._refresh_water_parameters()
 
     # Formula text shown next to each strength type — these mirror the
-    # equations displayed in Slide's Strength Parameters PDF.
+    # strength-parameter equations the reference displays.
     _FORMULA_TEXT = {
         "mohr_coulomb":         "τ = c′ + σ′ₙ · tan(φ′)",
         "undrained":            "τ = c",
@@ -923,7 +923,7 @@ class MaterialPropertiesDialog(QDialog):
         "power_curve":          "τ = c + a·(σ′ₙ + d)^b + σ′ₙ · tan(W)",
         "hyperbolic":           "τ = c_∞·σ′ₙ·tan(φ_0) / (c_∞ + σ′ₙ·tan(φ_0))",
         "vertical_stress_ratio":"τ = K · σ′_v",
-        # v0.1.15 — new Slide2 strength models
+        # v0.1.15 — strength models added to complete the catalogue
         "barton_bandis":        "τ = σ′ₙ · tan(φ_r + JRC·log₁₀(JCS/σ′ₙ))",
         "drained_undrained":    "τ = min(c′+σ′ₙ·tanφ′,  c′+σ_t·tanφ′)",
         "anisotropic_linear":   "(c, φ) vary linearly with angle to bedding",

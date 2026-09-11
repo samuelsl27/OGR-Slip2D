@@ -22,7 +22,7 @@ Meanwhile the endpoint was taken at the true ground crossing, which sits
 in the upper quadrant of the circle, while the base was drawn on the LOWER
 arc — for the circle below, 16 m beneath the ground surface.
 
-**The reference values** come from the same Slide run as the rest of the
+**The reference values** come from the same reference run as the rest of the
 Ej_1 benchmark (``referencias/Ejemplos/Ej_1/``), read off two Add Query
 screenshots of that model:
 

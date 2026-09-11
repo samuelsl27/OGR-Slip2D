@@ -63,7 +63,7 @@ against one of them and calling the result an anchor was the mistake.
 
 Applying that trend argument to both columns:
 
-    error vs             Slide's column        Sheahan's column
+    error vs             reference col.        Sheahan's column
                         mean    range         mean    range
     horizontal (v112)  14.96 %   16.2         (worse everywhere)
     T_S only (v113)     1.75 %    4.76         1.38 %    4.27

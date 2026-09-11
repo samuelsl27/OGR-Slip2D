@@ -66,7 +66,7 @@ class Units:
     time: TimeUnit = TimeUnit.DAYS
     permeability: PermeabilityUnit = PermeabilityUnit.M_S
     failure_direction: FailureDirection = FailureDirection.RIGHT_TO_LEFT
-    # v0.1.13 — full Slide-style unit system identifier.
+    # v0.1.13 — full unit-system identifier, as the reference defines it.
     # One of: metric_kpa | metric_mpa | metric_tonnes |
     #         imperial_tons | imperial_ksf | imperial_psf
     # Defaults to metric_kpa (the internal SI system).

@@ -172,7 +172,7 @@ class _GeneralPage(QWidget):
     """General settings — units, max counts, failure direction.
 
     v0.1.13 — replaces the simple metric/imperial dropdown with the
-    full Slide-style 6-system selector (Pattern A: stored as SI). The
+    full 6-system selector the reference offers (Pattern A: stored as SI). The
     selected system controls how every value is displayed and entered
     in the GUI; internal storage remains in SI (m, kN, kPa, kN/m³).
     """
@@ -192,7 +192,7 @@ class _GeneralPage(QWidget):
         ufrm = QFormLayout(ug)
 
         self.cbo_unit_system = QComboBox()
-        # Keep the systems in the canonical order shown in Slide:
+        # Keep the systems in the canonical order the reference shows:
         ordered_ids = [
             "metric_mpa", "metric_kpa", "metric_tonnes",
             "imperial_tons", "imperial_ksf", "imperial_psf",

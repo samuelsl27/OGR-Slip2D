@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 Samuel Sáez López — Universidad Politécnica de Cartagena
 """
-Tests for v0.1.14 Support system (Slide-aligned implementation).
+Tests for v0.1.14 Support system (aligned with the reference).
 
 Covers all 7 support types + SupportPattern + LEM integration.
 """

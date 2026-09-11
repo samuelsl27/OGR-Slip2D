@@ -37,7 +37,7 @@ from ogr_gui.i18n import tr  # noqa: E402
 
 
 class AddSupportPatternDialog(QDialog):
-    """Slide-style "Add Support Pattern" dialog.
+    """"Add Support Pattern" dialog, as the reference lays it out.
 
     Asks the user for length, spacing, orientation. After OK is pressed,
     the MainWindow puts the canvas into pattern-pick mode (2-point

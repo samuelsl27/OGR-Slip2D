@@ -1829,6 +1829,26 @@ _DICTS: dict[str, dict[str, str]] = {
             "factor de seguridad.",
         "%s  [+%d more — Analysis > Analysis Notes]":
             "%s  [+%d más — Análisis > Notas del análisis]",
+
+        # --- v0.1.160 · cadenas que dejan de nombrar al
+        # producto de referencia, y los nombres de paleta, que se
+        # enseñaban sin traducir. «Viridis» no lleva entrada a
+        # propósito: es nombre propio, igual que «Monte Carlo».
+        "Rainbow (24 bands)": "Arcoíris (24 bandas)",
+        "Stability": "Estabilidad",
+        "Hot to cold": "De cálido a frío",
+        "Blue to red": "De azul a rojo",
+        "Greyscale": "Escala de grises",
+        "Accessible": "Accesible",
+        "Draw polyline (recommended)":
+            "Dibujar polilínea (recomendado)",
+        "Numeric offset (all edges by a fixed distance)":
+            "Desplazamiento numérico (todos los lados una distancia "
+            "fija)",
+        "c-coefficient in T_k = T_0 · exp(-c · k^(1/n)). "
+        "Default 8.0, from Su (2009).":
+            "Coeficiente c de T_k = T_0 · exp(-c · k^(1/n)). "
+            "Por defecto 8,0, de Su (2009).",
     },
 }
 

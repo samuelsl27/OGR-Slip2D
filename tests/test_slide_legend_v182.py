@@ -64,19 +64,19 @@ _MEASURED = [
 # ======================================================================
 class TestTheMeasuredPalette:
     def test_the_palette_is_the_measurement(self):
-        assert list(PALETTES["Slide rainbow"]) == _MEASURED
+        assert list(PALETTES["Rainbow (24 bands)"]) == _MEASURED
 
     def test_it_is_the_default_for_a_factor_of_safety(self):
-        assert DEFAULT_PALETTE == "Slide rainbow"
+        assert DEFAULT_PALETTE == "Rainbow (24 bands)"
         s = ContourSettings.for_field("fos")
-        assert s.palette == "Slide rainbow"
+        assert s.palette == "Rainbow (24 bands)"
         assert (s.vmin, s.vmax, s.intervals) == (0.0, 6.0, 24)
 
     def test_bands_are_indexed_not_interpolated(self):
         """A 24-stop ramp sampled at band centres lands halfway between
         every pair of measured colours, so none of the reference colours
         would ever actually be drawn. Discrete palettes are indexed."""
-        assert "Slide rainbow" in DISCRETE_PALETTES
+        assert "Rainbow (24 bands)" in DISCRETE_PALETTES
         s = ContourSettings.for_field("fos")
         # Band i covers [0.25 i, 0.25 (i+1)).
         for i, want in enumerate(_MEASURED):
@@ -116,7 +116,7 @@ class TestRangePolicyPerField:
         for field in ("total_head", "pore_pressure", "pressure_head"):
             s = ContourSettings.for_field(field)
             assert s.auto_range is True, field
-            assert s.palette != "Slide rainbow", field
+            assert s.palette != "Rainbow (24 bands)", field
 
     def test_the_same_factor_of_safety_is_always_the_same_colour(self):
         """What a fixed range buys, and it is not extra resolution.
