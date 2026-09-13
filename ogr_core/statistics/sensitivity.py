@@ -56,6 +56,13 @@ class VariableSensitivity:
     fos: list = field(default_factory=list)        # matching factors
     mean_value: float = math.nan
     deterministic_fos: float = math.nan
+    #: Why this variable has no sweep. v0.1.164 (D91) — a variable whose
+    #: target no longer exists in the model used to be swept anyway, and
+    #: every point answered the SAME factor: a flat curve that reads as
+    #: "this parameter does not matter", which is the opposite of what
+    #: happened. A named variable with no points says the truth; dropping
+    #: it silently would only move the lie.
+    note: str = ""
 
     # ------------------------------------------------------------------
     @property
@@ -131,7 +138,11 @@ class SensitivityResult:
         if method_id is None:
             method_id = next(iter(self.by_method), None)
         sweeps = self.by_method.get(method_id, {})
-        rows = [(vs.key, vs.label, vs.fos_range) for vs in sweeps.values()]
+        # A variable with a note was never swept, so its zero span is not a
+        # measurement and may not sit at the bottom of the ranking as if it
+        # were the least influential parameter (D91).
+        rows = [(vs.key, vs.label, vs.fos_range) for vs in sweeps.values()
+                if not vs.note]
         rows.sort(key=lambda r: r[2], reverse=True)
         return rows
 
@@ -206,6 +217,11 @@ def run_sensitivity(
     n_points = max(2, int(intervals) + 1)
     total = len(usable) * n_points * max(1, len(critical_surfaces))
     done = 0
+    # v0.1.164 (D91) — gathered across the method loop and answered ONCE at
+    # the end, so the run says the sentence the probabilistic engine says
+    # instead of one sentence per variable per method. A dict for an
+    # ordered set: the same variable is refused by every method.
+    orphan_keys: dict = {}
 
     for mid, det in critical_surfaces.items():
         method = _make_method(mid)
@@ -241,7 +257,19 @@ def run_sensitivity(
                 # rebuilt from the untouched project each time, so only
                 # THIS parameter differs from the deterministic model.
                 clone = clone_project(project)
-                set_value(clone, rv, x)
+                if not set_value(clone, rv, x):
+                    # v0.1.164 (D91) — the return has always been there and
+                    # nobody read it. The target or the parameter is gone
+                    # from the model, so every remaining point would answer
+                    # the deterministic factor again: the sweep stops here
+                    # and says so instead of drawing a flat line.
+                    vs.note = "no longer matches the model: %s" % rv.key
+                    orphan_keys[rv.key] = None
+                    # The points not evaluated are still counted: the final
+                    # ``progress_cb(total, total)`` would hide the gap, but
+                    # a bar that jumps at the end is a small lie.
+                    done += n_points - i
+                    break
                 try:
                     r = _evaluate_on(clone, search, surface)
                 except Exception:  # noqa: BLE001
@@ -252,11 +280,34 @@ def run_sensitivity(
                 done += 1
                 if progress_cb and done % 20 == 0:
                     progress_cb(done, total)
-            if vs.values:
+            if vs.values or vs.note:
                 sweeps[rv.key] = vs
 
-        if sweeps:
+        # A method whose every variable was refused contributes nothing to
+        # rank, so it does not enter ``by_method`` -- and with no method in
+        # it, ``ok`` falls by itself and the roll-up below turns the reasons
+        # into the one key the interface prints. The machinery of v0.1.154
+        # is reused rather than a second one added.
+        if any(not vs.note for vs in sweeps.values()):
             res.by_method[mid] = sweeps
+
+    # v0.1.164 (D91) — one sentence for the whole run. The denominator is
+    # ``usable`` and not the stored sweeps: a variable that produced neither
+    # points nor a note never reached them. When nothing survived this goes
+    # under its own key rather than straight into ``error``, so the v0.1.154
+    # roll-up below still gathers a per-method refusal alongside it instead
+    # of finding ``error`` taken and dropping it.
+    if orphan_keys:
+        keys = ", ".join(orphan_keys)
+        if res.by_method:
+            res.notes["warning"] = (
+                "%d of the %d random variables no longer match the model "
+                "and were not swept: %s"
+                % (len(orphan_keys), len(usable), keys))
+        else:
+            res.notes["variables"] = (
+                "none of the %d random variables matches the model: %s"
+                % (len(usable), keys))
 
     # v0.1.154 — same as ``run_global_minimum``: if no method survived,
     # the reason rises to the only key the interface prints.

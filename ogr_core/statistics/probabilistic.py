@@ -34,6 +34,7 @@ from .random_variables import (
     apply_sample,
     clone_project,
     sample_project_variables,
+    unwritable_variables,
 )
 
 
@@ -255,6 +256,45 @@ def _cannot_reevaluate(project, surface_dict) -> Optional[str]:
 
 
 # ======================================================================
+def _stale_variables_stop(result, project, active, first, applied) -> bool:
+    """Record the variables that no longer match the model, and say whether
+    the run has to stop before sampling.
+
+    v0.1.164 (D91) — ``apply_sample`` has always returned how many
+    parameters it wrote, its docstring says it exists "so the caller can
+    detect a definition that no longer matches the model", and both callers
+    threw the number away. Measured on problem 12, sampling the cohesion of
+    the material the published circle actually crosses: with the target
+    intact, mean 0.996063021 / std_dev 0.190636922 / PF 0.450 / beta
+    -0.020651714 over 20 distinct values; with a ``target_id`` that no
+    longer matches, mean 1.017489184 / std_dev 0.0 / PF 0.0 / beta inf over
+    ONE value repeated 20 times — with ``ok`` true and an empty ``notes``.
+    A perfectly credible result over a sampling that sampled nothing.
+
+    The count is the TRIGGER and never the verdict. It also falls short
+    when two variables share a ``key``, because the sampling dictionary
+    collapses them into one column; so what decides is the list
+    ``unwritable_variables`` measures, and an empty list says nothing at
+    all rather than blaming an orphan that is not there.
+    """
+    if applied >= len(active):
+        return False
+    orphans = unwritable_variables(project, active, first)
+    if not orphans:
+        return False
+    if len(orphans) == len(active):
+        result.notes["error"] = (
+            "none of the %d random variables matches the model: %s"
+            % (len(active), ", ".join(orphans)))
+        return True
+    # Partial: the ones that DO write still carry a meaningful sampling, so
+    # the run goes on. What it may not do is go on quietly.
+    result.notes["warning"] = (
+        "%d of the %d random variables no longer match the model and were "
+        "not sampled: %s" % (len(orphans), len(active), ", ".join(orphans)))
+    return False
+
+
 def run_global_minimum(
     project,
     critical_surfaces: dict,
@@ -314,6 +354,18 @@ def run_global_minimum(
         # thread through every caller.
         correlate=bool(project.settings.random_numbers.lhs_correlate))
     result.samples = samples
+
+    # v0.1.164 (D91) — the count ``apply_sample`` has always returned, read
+    # at last. ONCE per run and on a throwaway clone: a definition that no
+    # longer matches is a property of the project and the variables, not of
+    # the method, so asking inside the per-method loop would repeat the same
+    # answer; and returning from HERE provably leaves ``by_method`` empty,
+    # which is what makes ``ok`` false -- there is no ``ok`` to assign.
+    probe = clone_project(project)
+    first = {k: v[0] for k, v in samples.items() if v}
+    applied = apply_sample(probe, active, first)
+    if _stale_variables_stop(result, project, active, first, applied):
+        return result
 
     def _make_method(mid):
         """The method as the PROJECT configures it, not as the registry
@@ -578,6 +630,18 @@ def run_overall_slope(
         # thread through every caller.
         correlate=bool(project.settings.random_numbers.lhs_correlate))
     result.samples = samples
+
+    # v0.1.164 (D91) — the count ``apply_sample`` has always returned, read
+    # at last. ONCE per run and on a throwaway clone: a definition that no
+    # longer matches is a property of the project and the variables, not of
+    # the method, so asking inside the per-method loop would repeat the same
+    # answer; and returning from HERE provably leaves ``by_method`` empty,
+    # which is what makes ``ok`` false -- there is no ``ok`` to assign.
+    probe = clone_project(project)
+    first = {k: v[0] for k, v in samples.items() if v}
+    applied = apply_sample(probe, active, first)
+    if _stale_variables_stop(result, project, active, first, applied):
+        return result
 
     total = num_samples * len(method_ids)
     done = 0

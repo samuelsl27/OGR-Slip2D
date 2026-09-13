@@ -2181,8 +2181,14 @@ class InterpretWindow(QMainWindow):
             return
         mid = next(iter(sens.by_method), None)
         sweeps = sens.by_method.get(mid, {})
+        # v0.1.164 (D91) — a variable whose target no longer matches
+        # the model now comes back with a note and NO points. Left in, it
+        # would put a legend entry with no curve in the window the user
+        # looks at second, which is the same silence this version removed
+        # from the engine. An all-refused run falls to the empty-series
+        # branch below and says so.
         series = [(vs.label, vs.percent_of_range(), vs.fos)
-                  for vs in sweeps.values()]
+                  for vs in sweeps.values() if vs.values]
         if not series:
             self._info(tr("No sensitivity result."))
             return

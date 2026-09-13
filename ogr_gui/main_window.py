@@ -206,7 +206,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.163"
+    VERSION = "0.1.164"
 
     def __init__(self) -> None:
         super().__init__()
@@ -222,6 +222,12 @@ class MainWindow(QMainWindow):
         # v0.1.155 — the notes of the last run, kept beside its results
         # because they belong to the same run and are cleared with it.
         self.last_compute_warnings: list[str] = []
+        # v0.1.164 (D91) — the statistics notes live in their OWN list and
+        # are not merged into the one above: that one is rewritten by every
+        # deterministic compute, and Compute Statistics runs one of those
+        # to get its critical surfaces, so merging would have the run erase
+        # its own note.
+        self.last_statistics_notes: list[str] = []
         self.interpret_windows: list[InterpretWindow] = []
 
         # v0.1.2 — selection filter state
@@ -927,6 +933,7 @@ class MainWindow(QMainWindow):
         self.last_search_result = None
         self.last_search_results: dict = {}
         self.last_compute_warnings = []
+        self.last_statistics_notes = []
         self.setWindowTitle(f"OGR Slip2D v{self.VERSION} — Untitled")
 
     def act_open(self) -> None:
@@ -1633,6 +1640,7 @@ class MainWindow(QMainWindow):
 
         self._prob_result = None
         self._sens_result = None
+        self.last_statistics_notes = []
         messages = []
 
         if st.probabilistic_analysis:
@@ -1660,6 +1668,16 @@ class MainWindow(QMainWindow):
                 messages.append(
                     f"PF = {first.probability_of_failure * 100:.2f} %, "
                     f"beta = {first.reliability_index:.3f}")
+                # v0.1.164 (D91) — a run that sampled only SOME of the
+                # declared variables is still a run, so it reports PF; what
+                # it may not do is report it as if nothing were missing.
+                # Without this the note existed and nobody showed it, which
+                # is the state ``test_the_reason_reaches_the_key_the_
+                # interface_prints`` calls a note that does not exist.
+                warning = res.notes.get("warning")
+                if warning:
+                    messages.append(warning)
+                    self.last_statistics_notes.append(warning)
             else:
                 messages.append(res.notes.get("error", "probabilistic "
                                                        "run failed"))
@@ -1674,9 +1692,17 @@ class MainWindow(QMainWindow):
                 rows = res.ranking()
                 if rows:
                     messages.append(f"most sensitive: {rows[0][1]}")
+                warning = res.notes.get("warning")
+                if warning:
+                    messages.append(warning)
+                    self.last_statistics_notes.append(warning)
             else:
                 messages.append(res.notes.get("error", "sensitivity run "
                                                        "failed"))
+
+        panel = getattr(self, "_analysis_notes_panel", None)
+        if panel is not None and not panel.isHidden():
+            panel.populate(self._analysis_notes())
 
         self._update_statistics_actions()
         if not messages:
@@ -2978,7 +3004,7 @@ class MainWindow(QMainWindow):
             self.ogr_status.showMessage(first, 15000)
             panel = getattr(self, "_analysis_notes_panel", None)
             if panel is not None and not panel.isHidden():
-                panel.populate(self.last_compute_warnings)
+                panel.populate(self._analysis_notes())
         if not results:
             self.last_search_result = None
             self.ogr_status.showMessage("No methods produced results.", 6000)
@@ -3038,6 +3064,16 @@ class MainWindow(QMainWindow):
             % (n_bad, n_tot)
         )
 
+    def _analysis_notes(self) -> list:
+        """Every note of the last run, deterministic and statistical.
+
+        v0.1.164 (D91) — one reader for both lists, because the panel is
+        refreshed from two places and either one rebuilding it from its own
+        list alone would silently drop the other's notes.
+        """
+        return (list(getattr(self, "last_compute_warnings", []) or [])
+                + list(getattr(self, "last_statistics_notes", []) or []))
+
     def act_analysis_notes(self) -> None:
         """Open (or refresh) the non-modal panel with the run's notes.
 
@@ -3049,7 +3085,7 @@ class MainWindow(QMainWindow):
         """
         from .dialogs.analysis_notes_panel import AnalysisNotesPanel
 
-        notes = list(getattr(self, "last_compute_warnings", []) or [])
+        notes = self._analysis_notes()
         panel = getattr(self, "_analysis_notes_panel", None)
         if panel is not None and not panel.isHidden():
             panel.populate(notes)
@@ -4868,6 +4904,7 @@ class MainWindow(QMainWindow):
         self.last_search_result = None
         self.last_search_results: dict = {}
         self.last_compute_warnings = []
+        self.last_statistics_notes = []
         self.results_dock.show_result(None)
         self._install_demo_project()
         self.setWindowTitle(f"OGR Slip2D v{self.VERSION} — Demo slope")

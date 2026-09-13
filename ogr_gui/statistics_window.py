@@ -194,7 +194,15 @@ class StatisticsWindow(QMainWindow):
             return
         fig = self._figure()
         ax = fig.add_subplot(111)
+        # v0.1.164 (D91) — a variable whose target no longer matches the
+        # model carries a note and NO points. Plotting it drew a flat line
+        # at the deterministic factor, which reads as "this parameter does
+        # not matter": the one thing the run cannot claim about a parameter
+        # it never applied. It is named in the status line instead.
+        refused = [vs for vs in sweeps.values() if vs.note]
         for vs in sweeps.values():
+            if vs.note:
+                continue
             ax.plot(vs.percent_of_range(), vs.fos, marker="",
                     label=vs.label)
         ax.axhline(1.0, color="crimson", lw=1.6, ls="-",
@@ -207,6 +215,9 @@ class StatisticsWindow(QMainWindow):
         rows = self.sens.ranking(mid)
         txt = "   |   ".join(f"{lab}: ΔFoS {span:.4f}"
                              for _k, lab, span in rows[:5])
+        if refused:
+            txt += ("   |   " + tr("not swept, no longer in the model: ")
+                    + ", ".join(vs.label for vs in refused))
         self.status.setText(tr("Most influential first — ") + txt)
 
     # ==================================================================

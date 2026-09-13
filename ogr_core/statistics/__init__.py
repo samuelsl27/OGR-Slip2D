@@ -20,6 +20,7 @@ from .random_variables import (  # noqa: F401
     get_value,
     sample_project_variables,
     set_value,
+    unwritable_variables,
 )
 
 from .probabilistic import (  # noqa: F401
@@ -52,7 +53,7 @@ __all__ = [
     "OverallSlopeResult", "SurfaceProbability",
     "RandomVariable", "VariableKind", "available_variables",
     "get_value", "set_value", "clone_project", "apply_sample",
-    "sample_project_variables",
+    "sample_project_variables", "unwritable_variables",
     "Distribution", "DistributionType", "SamplingMethod",
     "SampleStatistics", "uniform_samples", "sample_variables",
     "correlate_pair",

@@ -870,6 +870,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'No results to display.': 'No hay resultados que mostrar.',
         'No sensitivity result for this method.': 'Sin resultado de sensibilidad para este método.',
         'No sensitivity result.': 'Sin resultado de sensibilidad.',
+        'not swept, no longer in the model: ': 'sin barrer, ya no está en el modelo: ',
         'Node Numbers': 'Números de nodo',
         'Not yet implemented in OGR Slip2D': 'Todavía no implementado en OGR Slip2D',
         'Number of Iterations:': 'Número de iteraciones:',

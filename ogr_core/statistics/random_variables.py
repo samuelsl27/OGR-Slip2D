@@ -332,6 +332,30 @@ def apply_sample(project, variables: list, sample: dict) -> int:
     return applied
 
 
+def unwritable_variables(project, variables: list, sample: dict) -> list:
+    """Keys of ``variables`` that ``set_value`` refuses on this model.
+
+    ``apply_sample`` answers with a COUNT, which is enough to know THAT a
+    definition no longer matches the model but not enough to name it. This
+    names it, and the callers only ask once a short count has already said
+    something is wrong, so a healthy run never enters here. What a healthy
+    run DOES pay is the one probe clone its caller makes to get the count:
+    one deepcopy against ``num_samples`` of them, and the sentence is
+    written out because a docstring that rounds that to "free" is how a
+    wrong measurement survives two versions.
+
+    Measured on a throwaway clone, for two reasons and the second is not
+    the obvious one: ``set_value`` WRITES, so the caller's project cannot
+    be the probe; and the water-table variable is an OFFSET
+    (``_shift_water_table``), so asking an already-sampled clone a second
+    time would shift the table twice and answer about a model that never
+    existed.
+    """
+    probe = clone_project(project)
+    return [rv.key for rv in variables
+            if rv.key in sample and not set_value(probe, rv, sample[rv.key])]
+
+
 def sample_project_variables(variables: list, n: int, method, seed=None,
                              correlate: bool = False):
     """Generate ``n`` samples for a list of random variables, honouring
