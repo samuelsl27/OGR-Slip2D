@@ -80,6 +80,7 @@ class OrdinaryFellenius(LEMMethod):
         """
         from ..moment_balance import (axis_for, base_frame, moment_terms,
                                       rotation_sense)
+        from ..support_integration import support_failure_details
         from .bishop import BishopSimplified as _B
 
         axis = axis_for(project, surface)
@@ -188,11 +189,11 @@ class OrdinaryFellenius(LEMMethod):
             base_normal_force=normals,
             base_shear_force=driving_forces,
             base_shear_strength=resisting,
-            details={
+            details=support_failure_details(sup, {
                 "negative_effective_normal": n_negative_normal,
                 "num_slices": len(normals),
                 "moment_axis": terms.axis,
-            },
+            }),
         )
 
     def compute_fos(
@@ -230,7 +231,8 @@ class OrdinaryFellenius(LEMMethod):
         # sliding sense has to be known first, because the resisting
         # tangential component is defined against it.
         from ..moment_balance import slice_cg_y
-        from ..support_integration import resolve_support_terms
+        from ..support_integration import (resolve_support_terms,
+                                           support_failure_details)
         from .bishop import BishopSimplified as _B
         sup = resolve_support_terms(project, surface, slices, slide_sign)
         s_list = slices.slices if hasattr(slices, "slices") else slices
@@ -454,9 +456,9 @@ class OrdinaryFellenius(LEMMethod):
             base_normal_force=normals,
             base_shear_force=shears,
             base_shear_strength=strengths,
-            details={
+            details=support_failure_details(sup, {
                 "negative_effective_normal": n_negative_normal,
                 "num_slices": len(normals),
                 "active_support_ratio": active_ratio,
-            },
+            }),
         )

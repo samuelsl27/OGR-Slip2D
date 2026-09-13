@@ -136,6 +136,31 @@ pay for 50 soil samples it never reads. The engine always asks the INSTANCE,
 so a property works; read off the CLASS a property object is truthy, so do
 not read them off the class.
 
+### When a support cannot be priced at all
+
+`force_at` and `shear_at` answer with a number or raise
+`SupportEvaluationError(support_id, reason)`. Nothing else. That exception is
+the ONLY one the engine catches: `resolve_support_terms` answers it by
+leaving that one support out of the equilibrium, recording the reason, and
+carrying it back on `LEMResult.details["support_failure"]` so the analysis
+names what it left out. Every other exception propagates and the run fails
+in the open, which is the rule the rest of the solve path follows — a
+`TypeError` in a plugin is a defect in the plugin, and hiding one costs far
+more than it saves.
+
+That was not always so, and the reason it is worth a paragraph: until
+v0.1.161 the handler was a blanket `except Exception` that answered with the
+terms meaning "this model carries no reinforcement". A plugin raising
+anything at all therefore deleted EVERY support of the model at once and the
+factor of safety came back valid, admissible and silent — the factor of the
+bare slope, indistinguishable from a correct answer. Measured on a
+fifteen-sheet wall: 0.9836 became 0.9492, which is bit for bit the same
+model with its reinforcement deleted (defect D94).
+
+So: raise `SupportEvaluationError` where the MODEL cannot be priced — a
+geometry that degenerates, a parameter set that does not describe anything,
+a profile that will not build — and let a bug be a bug.
+
 ### Failure modes, and why `force_at` should not compute them twice
 
 A type whose capacity is the smallest of several failure modes implements

@@ -5,7 +5,10 @@ A placed support that contributes nothing may not vanish without saying so.
 
 Defect D62, opened on 2026-08-31 while closing D40 and still open at
 0.1.154. ``compute_support_effects`` had five ways to leave a support out
-of the equilibrium equations and not one of them left a trace. The
+of the equilibrium equations and not one of them left a trace. (v0.1.161
+added a sixth, ``not_priceable``, closing the exception silence this file
+diagnosed and did not fix; see ``TestTheSwallowedException`` below and
+``tests/test_support_failure_v1161.py``.) The
 invariant this file protects is not a number — it is that the analysis
 NAMES what it left out.
 
@@ -357,20 +360,37 @@ class TestItCannotBeMistakenForTheD40Note:
 
 # ======================================================================
 class TestTheSwallowedException:
-    """The sixth silence, and the widest: ``resolve_support_terms``
-    answers ANY exception with an empty set of terms, so every support
-    disappears at once and the surface is priced unreinforced.
+    """The sixth silence, and the widest — closed in v0.1.161 (D94).
 
-    Diagnosed here, not fixed: narrowing that ``except`` is a separate
-    defect and D62 may not move a number.
+    This class used to pin the defect rather than the invariant.
+    ``resolve_support_terms`` answered ANY exception with an empty set of
+    terms, so every support disappeared at once and the surface came back
+    priced unreinforced; the three tests here asserted exactly that, with
+    a docstring saying "diagnosed here, not fixed: narrowing that
+    ``except`` is a separate defect and D62 may not move a number".
+
+    That separate defect is D94 and it is fixed, so what is pinned here is
+    now the other half of the same rule: a support that cannot be priced
+    is answered, the others still count, and anything that is NOT a
+    modelling refusal goes on raising. The plugin below therefore raises
+    ``SupportEvaluationError`` where it used to raise ``RuntimeError``,
+    and the ``RuntimeError`` case is kept as the test that the handler
+    really is narrow.
+
+    The arithmetic of D62 is untouched: every other class in this file
+    asserts what it asserted, digit for digit. The full set of D94
+    invariants lives in ``tests/test_support_failure_v1161.py``; what
+    stays here is the link between the two defects, so that a reader of
+    D62 is not left believing the silence is still there.
     """
 
-    def _exploding_model(self):
-        from ogr_core.support import UserDefined
+    def _exploding_model(self, exc=None):
+        from ogr_core.support import SupportEvaluationError, UserDefined
 
         class _Exploding(UserDefined):
             def force_at(self, d, L, bond=None):
-                raise RuntimeError("boom")
+                raise (exc(self.id) if exc is not None
+                       else SupportEvaluationError(self.id, "boom"))
 
         blown = _Exploding(points=[(0.0, 10.0)], out_of_plane_spacing=1.0)
         # Reached by identity through ``type_ref``, so neither the
@@ -379,28 +399,43 @@ class TestTheSwallowedException:
                       [_instance("user_defined", _ACROSS,
                                  type_ref=blown.id)])
 
-    def test_the_note_says_every_support_was_lost_and_names_the_error(self):
+    def test_the_note_says_the_support_was_lost_and_names_the_reason(self):
         p = self._exploding_model()
         note = _notes(p, _result(p))[0]
-        assert "None of the 1 supports placed reached" in note, note
-        assert "RuntimeError" in note, note
+        assert "could not price" in note, note
+        assert "boom" in note, note
 
-    def test_the_solver_really_did_drop_them_all(self):
-        from ogr_slip2d.slicer import slice_surface
-        from ogr_slip2d.support_integration import resolve_support_terms
-
+    def test_the_solver_says_so_on_the_result(self):
         p = self._exploding_model()
-        sl = slice_surface(p, _circle(), num_slices=25)
-        # +1 is the right-to-left sense the fixture slope slides in; the
-        # assertion does not depend on it, since the swallow happens
-        # before any sign is used.
-        terms = resolve_support_terms(p, _circle(), sl, 1.0)
-        assert terms.present is False
+        det = _result(p).details or {}
+        # The whole point of D94: until v0.1.161 this key did not exist and
+        # the result was indistinguishable from an unreinforced model's.
+        assert "boom" in det.get("support_failure", ""), det
 
     def test_and_the_factor_is_the_unreinforced_one(self):
+        # Still true, and now for a stated reason rather than in silence:
+        # this model has ONE support and it is the one that cannot be
+        # priced, so the slope really is bare. With a second, sound
+        # support the two factors differ — that is the identity
+        # ``test_support_failure_v1161.py`` anchors on.
         p = self._exploding_model()
         bare = _model([_nail_type()], [])
         assert _result(p).fos == _result(bare).fos
+
+    def test_but_a_plain_runtime_error_is_not_swallowed(self):
+        from ogr_slip2d.slicer import slice_surface
+        from ogr_slip2d.support_integration import resolve_support_terms
+
+        p = self._exploding_model(lambda _sid: RuntimeError("boom"))
+        sl = slice_surface(p, _circle(), num_slices=25)
+        # +1 is the right-to-left sense the fixture slope slides in; the
+        # assertion does not depend on it, since the raise happens before
+        # any sign is used.
+        try:
+            resolve_support_terms(p, _circle(), sl, 1.0)
+        except RuntimeError:
+            return
+        raise AssertionError("the blanket handler is back")
 
 
 # ======================================================================

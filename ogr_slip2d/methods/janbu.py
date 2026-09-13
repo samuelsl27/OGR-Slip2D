@@ -113,6 +113,7 @@ class JanbuSimplified(LEMMethod):
         # — Sheahan's own — disagrees with the first by up to 4.7 %, which
         # is more than the gap being adjudicated. See below.
         from ..support_integration import (resolve_support_terms,
+                                          support_failure_details,
                                           support_vertical_load)
         sup = resolve_support_terms(project, surface, slices, slide_sign)
         s_list = slices.slices if hasattr(slices, "slices") else slices
@@ -358,7 +359,8 @@ class JanbuSimplified(LEMMethod):
             base_normal_force=normals,
             base_shear_force=shears,
             base_shear_strength=strengths,
-            details={"active_support_ratio": active_ratio},
+            details=support_failure_details(
+                sup, {"active_support_ratio": active_ratio}),
         )
 
 

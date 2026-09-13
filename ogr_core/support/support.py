@@ -102,6 +102,44 @@ def interface_shear(
 
 
 # ======================================================================
+# Failure to price a support
+# ======================================================================
+class SupportEvaluationError(RuntimeError):
+    """This model cannot be priced at this support, and saying so is the answer.
+
+    Defect D94. Until v0.1.161 ``resolve_support_terms`` answered ANY
+    exception raised while computing the supports with the "there is no
+    reinforcement here" terms, so every support vanished at once and the
+    surface came back priced as a bare slope — with ``is_valid`` true, no
+    error message and no note. Measured on the published circle of the
+    reference's verification problem 91: 0.9835740 became 0.9492211 with
+    Bishop, which is BIT FOR BIT the factor of the same slope with its
+    fifteen sheets deleted.
+
+    Narrowing that handler needs a way to tell the two apart, and this is
+    it: what the support layer raises ON PURPOSE where a model cannot be
+    priced — a type that will not resolve, a degenerate geometry, a
+    profile that will not build — carrying the ``id`` of the support and
+    the reason. ``resolve_support_terms`` catches THIS and nothing else.
+
+    A ``RuntimeError`` for the same reason ``RapidDrawdownError`` is one
+    (``ogr_slip2d/rapid_drawdown.py``): it is a MODELLING error the user
+    has to resolve, not a numerical hiccup, and the one handler in the
+    solve path catches ``ArithmeticError`` and not ``Exception``
+    (``ogr_slip2d/search.py``, ``BaseSearch._analyse``), so anything else
+    goes on raising loudly — which is the written policy of this project:
+    a degradation "has to fail loudly rather than quietly analyse
+    something else".
+    """
+
+    def __init__(self, support_id: str, reason: str):
+        self.support_id = str(support_id or "")
+        self.reason = str(reason or "")
+        super().__init__("support %s: %s" % (self.support_id or "?",
+                                             self.reason or "cannot be priced"))
+
+
+# ======================================================================
 # Enums
 # ======================================================================
 class ForceApplication(Enum):

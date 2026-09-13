@@ -195,7 +195,8 @@ class BishopSimplified(LEMMethod):
         reference's documentation cites for the equations of every method.
         """
         from ..moment_balance import axis_for, moment_terms
-        from ..support_integration import support_vertical_load
+        from ..support_integration import (support_failure_details,
+                                           support_vertical_load)
 
         axis = axis_for(project, surface)
 
@@ -324,7 +325,7 @@ class BishopSimplified(LEMMethod):
         return LEMResult(
             fos=fos, converged=converged, iterations=iterations,
             method_id=self.METHOD_ID, surface=surface, slices=slices,
-            details={"moment_axis": axis},
+            details=support_failure_details(sup, {"moment_axis": axis}),
             error_message="" if converged else self.NOT_CONVERGED_NOTE,
             reason="" if converged else REASON_NOT_CONVERGED,
         )
@@ -355,6 +356,7 @@ class BishopSimplified(LEMMethod):
         # sense has to be known first, which is why this moved below the
         # detection above.
         from ..support_integration import (resolve_support_terms,
+                                           support_failure_details,
                                            support_vertical_load)
         sup = resolve_support_terms(project, surface, slices, slide_sign)
 
@@ -623,7 +625,8 @@ class BishopSimplified(LEMMethod):
             base_normal_force=normals,
             base_shear_force=shears,
             base_shear_strength=strengths,
-            details={"active_support_ratio": active_ratio},
+            details=support_failure_details(
+                sup, {"active_support_ratio": active_ratio}),
         )
 
 

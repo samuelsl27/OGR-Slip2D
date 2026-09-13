@@ -163,7 +163,8 @@ class PrescribedInclinationMethod(LEMMethod):
         )
 
         # v0.1.64 — supports, as an external force on each slice.
-        from ..support_integration import resolve_support_terms
+        from ..support_integration import (resolve_support_terms,
+                                           support_failure_details)
         sup = resolve_support_terms(project, surface, slices, slide_sign)
 
         fos, converged, iters, ctx = self._force_balance(
@@ -208,11 +209,11 @@ class PrescribedInclinationMethod(LEMMethod):
             base_normal_force=normals,
             base_shear_force=driving,
             base_shear_strength=strengths,
-            details={
+            details=support_failure_details(sup, {
                 "boundary_ratios": self._boundary_ratios(slices),
                 "interslice_forces": self.interslice_forces,
                 "thrust_reversal": reversal,
-            },
+            }),
         )
 
     # ------------------------------------------------------------------

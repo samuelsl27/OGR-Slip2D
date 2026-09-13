@@ -86,7 +86,8 @@ class Spencer(LEMMethod):
             axis = axis_for(project, surface)
 
         # v0.1.64 — supports, resolved once for every inner solve below.
-        from ..support_integration import resolve_support_terms
+        from ..support_integration import (resolve_support_terms,
+                                           support_failure_details)
         sup = resolve_support_terms(project, surface, slices, slide_sign)
 
         # v0.1.106 — the whole surface is resolved ONCE here and reused at
@@ -347,7 +348,7 @@ class Spencer(LEMMethod):
                 "" if not inadmissible else
                 "Spencer: no λ leaves the inter-slice thrust in net compression; "
                 "the answer is reported with the criterion relaxed"),
-            details={
+            details=support_failure_details(sup, {
                 "lambda": lam_lo,
                 "thrust_admissible": not inadmissible,
                 "slide_sign": slide_sign,
@@ -368,7 +369,7 @@ class Spencer(LEMMethod):
                 "interslice_x": ([] if force is None else
                                  system.boundaries_in_slice_order(
                                      force.boundary_x)),
-            },
+            }),
         )
 
     # ==================================================================

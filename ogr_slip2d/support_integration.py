@@ -149,6 +149,12 @@ import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
+# Not deferred like the rest of the ``ogr_core.support`` names in this
+# module: an ``except`` clause evaluates its expression on every call, and
+# ``ogr_core.support`` is already imported by the time any surface is
+# priced -- the project that owns the supports came through it.
+from ogr_core.support import SupportEvaluationError
+
 if TYPE_CHECKING:
     from ogr_core.project import Project
     from ogr_core.support import SupportInstance, SupportType
@@ -232,6 +238,15 @@ class SupportTerms:
     #: methods that write a moment equation can honour it, and the ones that
     #: cannot say so rather than ignoring it silently.
     couple: float = 0.0
+    #: v0.1.161 -- why a support could not be priced on this surface, empty
+    #: when every one of them could. Defect D94: until this version the
+    #: answer to an exception was ``_EMPTY_TERMS``, which is the answer to
+    #: "this model carries no reinforcement", and no method could tell the
+    #: two apart. Last in the field order so the positional ``_EMPTY_TERMS``
+    #: below keeps working, and a ``str`` rather than ``Optional[str]`` for
+    #: the same reason ``LEMResult.error_message`` is one: a caller that
+    #: tests it should not have to know about None as well as "".
+    failure: str = ""
 
     def total_active_t(self) -> float:
         return sum(self.t_active)
@@ -245,6 +260,44 @@ class SupportTerms:
 # lists make ``total_*`` return 0.0 without a special case.
 _EMPTY_TERMS = SupportTerms([], [], [], [], [], [], [], [], [],
                             False, 0.0)
+
+
+def _failed_terms(reason: str) -> SupportTerms:
+    """The same empty answer, but saying why it is empty (defect D94).
+
+    A separate instance and not a mutation of ``_EMPTY_TERMS``:
+    :class:`SupportTerms` is frozen and that one is a SHARED singleton, so
+    writing a reason onto it would put this surface's failure on every
+    other surface of the run.
+
+    Reached only when the failure happens OUTSIDE the per-support loop --
+    the slip polyline, the bond profiles, the type registry -- where there
+    is no single support to blame and every one of them is lost. A support
+    that cannot be priced on its own is dropped alone, inside
+    :func:`compute_support_effects`, and the rest still count.
+    """
+    return SupportTerms([], [], [], [], [], [], [], [], [],
+                        False, 0.0, reason)
+
+
+def _failure_text(failures) -> str:
+    """One sentence for the supports that could not be priced (defect D94).
+
+    Aggregated and not one line per support, for the reason
+    ``uncontributing_support_notes`` gives about its own count: the walls
+    of the verification bank carry fifteen sheets each, and a per-support
+    line would be a wall of warnings where a single line is the same shape
+    as every other note in ``warnings``.
+    """
+    if not failures:
+        return ""
+    if len(failures) == 1:
+        sid, why = failures[0]
+        return "support %s could not be priced: %s" % (sid or "?", why)
+    return ("%d supports could not be priced: %s"
+            % (len(failures),
+               "; ".join("%s (%s)" % (sid or "?", why)
+                         for sid, why in failures)))
 
 
 def resolve_support_terms(
@@ -284,11 +337,42 @@ def resolve_support_terms(
     n = len(s_list)
     if n == 0:
         return _EMPTY_TERMS
+    # v0.1.161 -- defect D94. This was ``except Exception: return
+    # _EMPTY_TERMS``, and ``_EMPTY_TERMS`` is the answer to "this model
+    # carries no reinforcement": every support vanished at once, the
+    # surface was priced as a bare slope, and the ``LEMResult`` came back
+    # valid, admissible and silent. Measured on the published circle of
+    # the reference's verification problem 91 (15 sheets, 30 slices): the
+    # factor fell from 0.9835740 to 0.9492211 with Bishop and from
+    # 0.9641449 to 0.9295735 with Spencer, which are BIT FOR BIT the two
+    # factors of the same model with its supports deleted.
+    #
+    # Now only ``SupportEvaluationError`` is caught -- what the support
+    # layer raises ON PURPOSE where the model cannot be priced -- and the
+    # reason travels back on the terms. Anything else raises, which is the
+    # policy ``BaseSearch._analyse`` states for the solve it wraps
+    # (``ArithmeticError`` and not ``Exception``, because a TypeError is a
+    # defect in the code and hiding one costs more than it saves) and the
+    # one ``rapid_drawdown`` states for a degradation: it "has to fail
+    # loudly rather than quietly analyse something else".
+    #
+    # ``failures`` is allocated on every reinforced surface, which is one
+    # empty list against the eight this function is about to allocate
+    # anyway and a solve of a few milliseconds. Counted rather than timed,
+    # for the reason v0.1.65 wrote down: an A/B at this size measures the
+    # machine, not the change.
+    failures: list = []
     try:
-        effects = compute_support_effects(project, surface, slices)
-    except Exception:  # noqa: BLE001
-        return _EMPTY_TERMS
+        effects = compute_support_effects(project, surface, slices,
+                                          failures=failures)
+    except SupportEvaluationError as exc:
+        return _failed_terms(str(exc))
     if not effects:
+        # Still says so when the ONLY reason the list is empty is that
+        # every support failed to price: an empty answer and an empty
+        # answer with a cause are not the same fact.
+        if failures:
+            return _failed_terms(_failure_text(failures))
         return _EMPTY_TERMS
 
     from ogr_core.support import ForceApplication
@@ -354,7 +438,29 @@ def resolve_support_terms(
             y_app[i] = 0.5 * (s_list[i].base_y_left + s_list[i].base_y_right)
 
     return SupportTerms(t_active, t_passive, n_press, nf_h, nf_v,
-                        f_h, f_v, x_app, y_app, True, couple)
+                        f_h, f_v, x_app, y_app, True, couple,
+                        _failure_text(failures))
+
+
+def support_failure_details(sup: "SupportTerms", details=None) -> dict:
+    """Put the support failure of ``sup`` into a method's ``details`` dict.
+
+    Defect D94. The reason has to travel on the RESULT and not be
+    re-derived by whoever reports it: ``uncontributing_support_notes``
+    re-ran the whole computation inside its own ``try`` to find out, which
+    made it a note that only the critical surface of a search ever got.
+    A surface evaluated by hand, by the CLI or by the verification bank
+    went through none of that and came back mute.
+
+    Returns the dict to hand to ``LEMResult(details=...)``; the key is
+    absent -- not empty -- when every support could be priced, so "no key"
+    and "a failure with no text" cannot be confused.
+    """
+    if sup is None or not getattr(sup, "failure", ""):
+        return details if details is not None else {}
+    out = dict(details or {})
+    out["support_failure"] = sup.failure
+    return out
 
 
 def support_vertical_load(sup: "SupportTerms", i: int, base_angle: float,
@@ -845,6 +951,16 @@ SUPPORT_NO_CAPACITY = "no_capacity"
 #: where it happens, not whether it is silent.
 SUPPORT_UNKNOWN_TYPE = "unknown_type"
 
+#: Pricing it raised :class:`~ogr_core.support.SupportEvaluationError`, so
+#: this ONE support is left out and the others still count. v0.1.161,
+#: defect D94: until then an exception anywhere in here was answered by
+#: ``resolve_support_terms`` with "this model carries no reinforcement",
+#: which dropped ALL of them at once and said nothing. The asymmetry that
+#: made it visible is in this very loop -- ``shear_at`` had its own guard
+#: and ``force_at`` had none, so the same plugin failing in the axial
+#: capacity cost fifteen sheets and failing in the shear cost one vector.
+SUPPORT_NOT_PRICEABLE = "not_priceable"
+
 
 def compute_support_effects(
     project: "Project",
@@ -852,6 +968,7 @@ def compute_support_effects(
     slices,
     *,
     reasons: Optional[list] = None,
+    failures: Optional[list] = None,
 ) -> list[SupportEffect]:
     """Compute the list of per-slice support effects on a slip surface.
 
@@ -873,6 +990,15 @@ def compute_support_effects(
     note is the point: the rule that decides and the rule that counts
     must be the same code, or one of them goes stale - the lesson written
     at the top of ``support_notes.py``.
+
+    v0.1.161 - ``failures`` is the second collector, and it is passed by
+    ``resolve_support_terms`` on EVERY reinforced surface rather than once
+    per run: a support that cannot be priced has to reach the result, not
+    just the note. It collects ``(support id, reason)`` for the sixth
+    reason only, the one that is not a calculation decision. Two channels
+    because they answer to two readers - ``reasons`` counts what the
+    analysis decided, ``failures`` carries what it could not read - and
+    merging them would make the hot path pay for the wordy one.
 
     Two silences this cannot see, documented so the note does not claim
     otherwise: a project with no supports at all, and a slip polyline
@@ -918,128 +1044,153 @@ def compute_support_effects(
                 reasons.append(
                     (getattr(sup, "id", ""), SUPPORT_UNKNOWN_TYPE))
     for support, stype in pairs:
-        hit = support.intersection_with_polyline(slip_xy)
-        if hit is None:
-            if reasons is not None:
-                reasons.append((support.id, SUPPORT_NO_CROSSING))
-            continue
-        ix, iy, d_from_head = hit
-        # Find which slice this intersection falls into
-        slice_idx = None
-        for i, s in enumerate(s_list):
-            if s.base_x_left - 1e-9 <= ix <= s.base_x_right + 1e-9:
-                slice_idx = i
-                break
-        if slice_idx is None:
-            if reasons is not None:
-                reasons.append((support.id, SUPPORT_NO_SLICE))
-            continue
-
-        L_total = support.length()
-
-        # v0.1.122 -- some profiles are defined from the CREST of the
-        # support, not from its head. ``force_at`` never sees the instance,
-        # so it cannot tell which end is higher; a wall drawn bottom-to-top
-        # would silently invert its pressure diagram and return a plausible,
-        # wrong number. Deciding it here, by geometry, is the only place the
-        # question can be answered at all.
-        d_along = d_from_head
-        crest, other = support.head, support.tail
-        if getattr(stype, "MEASURED_FROM_TOP", False):
-            if support.tail.y > support.head.y:
-                d_along = L_total - d_from_head
-                crest, other = support.tail, support.head
-            elif support.tail.y == support.head.y:
-                # No crest to measure from. Refusing beats guessing: the
-                # analysis reports it instead of publishing a number that
-                # depends on the drawing order.
-                # v0.1.155 - and since D62 it really is reported. This
-                # comment promised it for two versions while the guard
-                # returned in silence.
+        # v0.1.161 -- defect D94. Wrapped so a support that cannot be
+        # priced is dropped ALONE and the others still count. Until this
+        # version there was no handler here at all and the one in
+        # ``resolve_support_terms`` caught everything, so a single bolt
+        # raising cost the whole reinforcement: on verification problem
+        # 91 that is fifteen sheets for one, and a factor of safety
+        # identical to the bare slope's with nothing to say so.
+        #
+        # The shape is the one ``shear_at`` below has had since
+        # v0.1.124 -- a plugin must not kill a run -- except that this
+        # one catches ONLY ``SupportEvaluationError`` and records the
+        # reason. What ``shear_at`` still swallows whole is P-D98, and
+        # it is not touched here.
+        try:
+            hit = support.intersection_with_polyline(slip_xy)
+            if hit is None:
                 if reasons is not None:
-                    reasons.append((support.id, SUPPORT_NO_CREST))
+                    reasons.append((support.id, SUPPORT_NO_CROSSING))
+                continue
+            ix, iy, d_from_head = hit
+            # Find which slice this intersection falls into
+            slice_idx = None
+            for i, s in enumerate(s_list):
+                if s.base_x_left - 1e-9 <= ix <= s.base_x_right + 1e-9:
+                    slice_idx = i
+                    break
+            if slice_idx is None:
+                if reasons is not None:
+                    reasons.append((support.id, SUPPORT_NO_SLICE))
                 continue
 
-        F = stype.force_at(d_along, L_total,
-                           bond_profiles.get(support.id))
+            L_total = support.length()
 
-        # v0.1.124 -- the SHEAR capacity, at last connected to something.
-        # Until this version ``shear_at`` and ``SUPPORTS_SHEAR`` were
-        # declared by three types, editable, serialised and read by NOBODY
-        # outside ``ogr_core/support/support.py``: a configurable control
-        # that could not move the number, which is the defect rule 7
-        # exists for. The reference says what it does, in words: "the
-        # vector perpendicular to the bolt direction, and opposite to the
-        # direction of failure, is added to the overall bolt capacity
-        # vector [...] the support force at the base of the slice is no
-        # longer parallel to the support but angled in a direction
-        # opposite to the slip direction". So it is a SECOND vector, not a
-        # bigger axial one, and the two are summed here.
-        V = 0.0
-        if getattr(stype, "SUPPORTS_SHEAR", False):
-            try:
-                V = max(0.0, float(stype.shear_at(d_along, L_total)))
-            except Exception:  # noqa: BLE001 - a plugin must not kill a run
-                V = 0.0
-        # A support with no axial capacity left but some shear still acts.
-        # Before v0.1.124 the guard was ``F <= 0`` alone, which was right
-        # only because the shear reached nothing.
-        if F <= 0 and V <= 0:
+            # v0.1.122 -- some profiles are defined from the CREST of the
+            # support, not from its head. ``force_at`` never sees the instance,
+            # so it cannot tell which end is higher; a wall drawn bottom-to-top
+            # would silently invert its pressure diagram and return a
+            # plausible, wrong number. Deciding it here, by geometry, is
+            # the only place the question can be answered at all.
+            d_along = d_from_head
+            crest, other = support.head, support.tail
+            if getattr(stype, "MEASURED_FROM_TOP", False):
+                if support.tail.y > support.head.y:
+                    d_along = L_total - d_from_head
+                    crest, other = support.tail, support.head
+                elif support.tail.y == support.head.y:
+                    # No crest to measure from. Refusing beats guessing: the
+                    # analysis reports it instead of publishing a number that
+                    # depends on the drawing order.
+                    # v0.1.155 - and since D62 it really is reported. This
+                    # comment promised it for two versions while the guard
+                    # returned in silence.
+                    if reasons is not None:
+                        reasons.append((support.id, SUPPORT_NO_CREST))
+                    continue
+
+            F = stype.force_at(d_along, L_total,
+                               bond_profiles.get(support.id))
+
+            # v0.1.124 -- the SHEAR capacity, at last connected to something.
+            # Until this version ``shear_at`` and ``SUPPORTS_SHEAR`` were
+            # declared by three types, editable, serialised and read by NOBODY
+            # outside ``ogr_core/support/support.py``: a configurable control
+            # that could not move the number, which is the defect rule 7
+            # exists for. The reference says what it does, in words: "the
+            # vector perpendicular to the bolt direction, and opposite to the
+            # direction of failure, is added to the overall bolt capacity
+            # vector [...] the support force at the base of the slice is no
+            # longer parallel to the support but angled in a direction
+            # opposite to the slip direction". So it is a SECOND vector, not a
+            # bigger axial one, and the two are summed here.
+            V = 0.0
+            if getattr(stype, "SUPPORTS_SHEAR", False):
+                try:
+                    V = max(0.0, float(stype.shear_at(d_along, L_total)))
+                # noqa: BLE001 - a plugin must not kill a run. What
+                # this one still swallows whole is P-D98.
+                except Exception:
+                    V = 0.0
+            # A support with no axial capacity left but some shear still acts.
+            # Before v0.1.124 the guard was ``F <= 0`` alone, which was right
+            # only because the shear reached nothing.
+            if F <= 0 and V <= 0:
+                if reasons is not None:
+                    reasons.append((support.id, SUPPORT_NO_CAPACITY))
+                continue
+
+            # Force orientation angle
+            slip_slope = _slip_tangent_at_x(slices, ix) or 0.0
+            ang = _support_force_angle(support, slip_slope, is_l2r)
+            Fh = F * math.cos(ang)
+            Fv = F * math.sin(ang)
+            if V > 0.0:
+                perp = _resisting_perpendicular(
+                    support.axis_angle_rad(),
+                    _resisting_tangent_angle(slip_slope, is_l2r))
+                Fh += V * math.cos(perp)
+                Fv += V * math.sin(perp)
+                # The RESULTANT replaces the axial force from here on, which is
+                # what makes the split into T_S and T_N, the Active/Passive
+                # flag and the nine methods work unchanged. With ``V = 0`` the
+                # arithmetic below is untouched, bit for bit, and that is what
+                # protects every model validated before this version.
+                F = math.hypot(Fh, Fv)
+                ang = math.atan2(Fv, Fh)
+
+            from ogr_core.support import ForceApplication
+            is_active = (support.force_application == ForceApplication.ACTIVE)
+
+            # v0.1.122 -- where the resultant acts. Every type but a retaining
+            # wall asked for the centroid acts at the cut, and then the two
+            # points coincide and the couple below is exactly zero.
+            ax, ay = ix, iy
+            if (getattr(stype, "force_location", "intersection") == "centroid"
+                    and hasattr(stype, "resultant_arm") and L_total > 0.0):
+                # v0.1.123 -- the profile goes in too. A wall knows its own
+                # diagram in closed form, but an Ito-Matsui pile does not: its
+                # diagram IS the sampled profile, so the centroid cannot be
+                # computed without it.
+                arm = stype.resultant_arm(d_along, L_total,
+                                          bond_profiles.get(support.id))
+                ux = (other.x - crest.x) / L_total
+                uy = (other.y - crest.y) / L_total
+                ax, ay = crest.x + arm * ux, crest.y + arm * uy
+
+            effects.append(SupportEffect(
+                slice_index=slice_idx,
+                intersection_x=ix,
+                intersection_y=iy,
+                force_magnitude=F,
+                force_angle_rad=ang,
+                force_h=Fh,
+                force_v=Fv,
+                is_active=is_active,
+                support_id=support.id,
+                application_x=ax,
+                application_y=ay,
+            ))
+        except SupportEvaluationError as exc:
+            # The sixth reason, and the only one that is not a
+            # legitimate calculation decision: the other five say what
+            # the model IS, this one says the model could not be read.
             if reasons is not None:
-                reasons.append((support.id, SUPPORT_NO_CAPACITY))
+                reasons.append((support.id, SUPPORT_NOT_PRICEABLE))
+            if failures is not None:
+                failures.append((support.id, exc.reason))
             continue
-
-        # Force orientation angle
-        slip_slope = _slip_tangent_at_x(slices, ix) or 0.0
-        ang = _support_force_angle(support, slip_slope, is_l2r)
-        Fh = F * math.cos(ang)
-        Fv = F * math.sin(ang)
-        if V > 0.0:
-            perp = _resisting_perpendicular(
-                support.axis_angle_rad(),
-                _resisting_tangent_angle(slip_slope, is_l2r))
-            Fh += V * math.cos(perp)
-            Fv += V * math.sin(perp)
-            # The RESULTANT replaces the axial force from here on, which is
-            # what makes the split into T_S and T_N, the Active/Passive
-            # flag and the nine methods work unchanged. With ``V = 0`` the
-            # arithmetic below is untouched, bit for bit, and that is what
-            # protects every model validated before this version.
-            F = math.hypot(Fh, Fv)
-            ang = math.atan2(Fv, Fh)
-
-        from ogr_core.support import ForceApplication
-        is_active = (support.force_application == ForceApplication.ACTIVE)
-
-        # v0.1.122 -- where the resultant acts. Every type but a retaining
-        # wall asked for the centroid acts at the cut, and then the two
-        # points coincide and the couple below is exactly zero.
-        ax, ay = ix, iy
-        if (getattr(stype, "force_location", "intersection") == "centroid"
-                and hasattr(stype, "resultant_arm") and L_total > 0.0):
-            # v0.1.123 -- the profile goes in too. A wall knows its own
-            # diagram in closed form, but an Ito-Matsui pile does not: its
-            # diagram IS the sampled profile, so the centroid cannot be
-            # computed without it.
-            arm = stype.resultant_arm(d_along, L_total,
-                                      bond_profiles.get(support.id))
-            ux = (other.x - crest.x) / L_total
-            uy = (other.y - crest.y) / L_total
-            ax, ay = crest.x + arm * ux, crest.y + arm * uy
-
-        effects.append(SupportEffect(
-            slice_index=slice_idx,
-            intersection_x=ix,
-            intersection_y=iy,
-            force_magnitude=F,
-            force_angle_rad=ang,
-            force_h=Fh,
-            force_v=Fv,
-            is_active=is_active,
-            support_id=support.id,
-            application_x=ax,
-            application_y=ay,
-        ))
 
     return effects
 
@@ -1047,9 +1198,16 @@ def compute_support_effects(
 #: How each reason reads: singular, plural, and once more with no count
 #: at all for the lone-support case, where "None of the 1 supports
 #: placed" would be plainly ungrammatical. Ordered most actionable
-#: first, so the two that describe BROKEN INPUT come before the three
-#: that describe a legitimate calculation decision.
+#: first, so the three that describe BROKEN INPUT come before the three
+#: that describe a legitimate calculation decision. v0.1.161 put
+#: ``SUPPORT_NOT_PRICEABLE`` at the head of that first group: it is the
+#: only one that means the analysis could not READ the model, and it
+#: carries its own text on the result besides (defect D94).
 _UNCONTRIBUTING_PHRASES = (
+    (SUPPORT_NOT_PRICEABLE,
+     "%d could not be priced at all",
+     "%d could not be priced at all",
+     "it could not be priced at all"),
     (SUPPORT_UNKNOWN_TYPE,
      "%d names a support class this build does not have",
      "%d name a support class this build does not have",
@@ -1115,21 +1273,39 @@ def uncontributing_support_notes(project, result) -> list[str]:
         return []
 
     total = len(supports)
+
+    # v0.1.161 - the sentence comes from the RESULT and not from a second
+    # evaluation (defect D94). Until this version the only way to learn
+    # that the supports had been lost was to run the whole computation
+    # again here, inside a ``try`` of its own, which made it a note that
+    # only the critical surface of a search could ever get: a surface
+    # evaluated by hand, by the CLI or by the verification bank went
+    # through none of this and came back mute. Now the solver writes the
+    # reason on the result it returns and this reads it.
+    said = ((getattr(result, "details", None) or {}).get("support_failure")
+            or "")
+    if said:
+        return ["The analysis could not price the reinforcement on the "
+                "reported surface: %s. A support left out lowers no "
+                "number and raises none, so this factor of safety is the "
+                "one for the slope without it." % said]
+
     reasons: list = []
     try:
         compute_support_effects(project, surface, slices, reasons=reasons)
-    except Exception as exc:  # noqa: BLE001 - a note must not kill a run
-        # The sixth silence, and the worst: ``resolve_support_terms``
-        # answers any exception from here with an empty set of terms, so
-        # EVERY support disappears at once and the surface is priced with
-        # no reinforcement whatsoever. Diagnosing it costs nothing and
-        # changes nothing - the solver goes on swallowing it.
+    except SupportEvaluationError as exc:
+        # Only reachable where the failure happens OUTSIDE the per-support
+        # loop and the caller handed a result that carries no ``details``
+        # - a hand-built one, or one from a method that predates the key.
+        # Narrowed from ``except Exception`` with the handler it mirrors:
+        # a note must not kill a run, but it must not hide a TypeError
+        # either, and the solve that produced this result already walked
+        # the same code without raising.
         return ["None of the %d supports placed reached the reported "
-                "surface: computing them raised %s. The analysis prices "
-                "the surface with no reinforcement at all when that "
-                "happens, so this factor of safety is the one for the "
-                "slope without any of them."
-                % (total, type(exc).__name__)]
+                "surface: %s. The analysis prices the surface with no "
+                "reinforcement at all when that happens, so this factor "
+                "of safety is the one for the slope without any of them."
+                % (total, exc)]
 
     if not reasons:
         return []

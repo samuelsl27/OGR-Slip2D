@@ -49,6 +49,7 @@ from .support import (
     GroutedTiebackFriction,
     PileMicropile,
     SoilNail,
+    SupportEvaluationError,
     SupportInstance,
     SupportPattern,
     SupportType,
@@ -80,6 +81,7 @@ from .helical_anchor import (
 
 __all__ = [
     "SupportType",
+    "SupportEvaluationError",
     "SupportInstance",
     "SupportPattern",
     "ForceApplication",
