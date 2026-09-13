@@ -1744,6 +1744,19 @@ _DICTS: dict[str, dict[str, str]] = {
         "force is shown.":
             "Este tipo de soporte no publica modos de rotura; sólo se "
             "muestra la fuerza aplicada.",
+        # v0.1.163, defecto D95 -- un perfil de adherencia que no se
+        # construye deja al soporte con su envolvente a tensión nula, y
+        # hasta esta versión ni el lienzo ni el diagrama lo decían.
+        "The bond profile of this support could not be built (%s): the "
+        "capacities below are its envelope at zero effective stress, not "
+        "the ones the stress state would give.":
+            "No se ha podido construir el perfil de adherencia de este "
+            "soporte (%s): las capacidades de abajo son su envolvente a "
+            "tensión efectiva nula, no las que daría el estado tensional.",
+        "Bond profile could not be built (%s): the forces above are the "
+        "envelope at zero effective stress.":
+            "No se ha podido construir el perfil de adherencia (%s): las "
+            "fuerzas de arriba son la envolvente a tensión efectiva nula.",
 
         "The helix spacing of support '%s' is %.2f times the average "
         "helix diameter. Design guides recommend 5 to 12.":

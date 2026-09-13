@@ -28,6 +28,7 @@ from ogr_core.geometry import Boundary, BoundaryType
 from ogr_core.loads import DistributedLoad, LineLoad
 from ogr_core.materials import Material
 from ogr_core.support import SupportInstance
+from ogr_gui.i18n import tr
 
 
 # ----------------------------------------------------------------------
@@ -383,20 +384,31 @@ class SupportItem(DomainItem):
             f"{support.orientation.value.replace('_', ' ')}"
         )
         if support_type_obj is not None:
-            try:
-                # v0.1.116 — the two stress-dependent pullout laws need
-                # the interface strength sampled along the bolt, so the
-                # tooltip builds one instead of falling back to the
-                # zero-stress envelope. Without it a geosynthetic in
-                # coefficient or friction-factor mode reads 0 kN/m here
-                # while the analysis uses a real number, and the two
-                # disagreeing is worse than either.
-                bond = None
-                if project is not None and getattr(
-                        support_type_obj, "NEEDS_BOND_PROFILE", False):
-                    from ogr_core.support import build_bond_profile
+            # v0.1.116 — the two stress-dependent pullout laws need
+            # the interface strength sampled along the bolt, so the
+            # tooltip builds one instead of falling back to the
+            # zero-stress envelope. Without it a geosynthetic in
+            # coefficient or friction-factor mode reads 0 kN/m here
+            # while the analysis uses a real number, and the two
+            # disagreeing is worse than either.
+            #
+            # v0.1.163, defect D95 — built in a ``try`` of its own, and
+            # the failure is NAMED. It used to share the blanket handler
+            # below, so a profile that would not build left the tooltip
+            # showing the zero-stress envelope with nothing to mark it:
+            # the same silence the analysis has stopped keeping, in the
+            # one place the user looks first.
+            bond = None
+            bond_failed = None
+            if project is not None and getattr(
+                    support_type_obj, "NEEDS_BOND_PROFILE", False):
+                from ogr_core.support import build_bond_profile
+                try:
                     bond = build_bond_profile(
                         project, support, support_type_obj)
+                except Exception as exc:  # noqa: BLE001
+                    bond_failed = type(exc).__name__
+            try:
                 F0 = support_type_obj.force_at(0, support.length(), bond)
                 Fmid = support_type_obj.force_at(
                     0.5 * support.length(), support.length(), bond
@@ -419,6 +431,11 @@ class SupportItem(DomainItem):
                     )
             except Exception:  # noqa: BLE001
                 pass
+            if bond_failed is not None:
+                tooltip += "<br><i>" + tr(
+                    "Bond profile could not be built (%s): the forces "
+                    "above are the envelope at zero effective stress.") % (
+                        bond_failed,) + "</i>"
         self.setToolTip(tooltip)
 
         self.setZValue(7.0)

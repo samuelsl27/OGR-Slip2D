@@ -82,31 +82,45 @@ def _cut_distance(project, support, critical) -> Optional[float]:
     return None if hit is None else hit[2]
 
 
-def support_bond(project, support, stype):
-    """The profile the analysis would build for this support, or None."""
+def support_bond(project, support, stype, failures: Optional[list] = None):
+    """The profile the analysis would build for this support, or None.
+
+    v0.1.163, defect D95 - ``failures`` collects the exception CLASS NAME
+    when the profile will not build, the way ``compute_support_effects``
+    collects its reasons. Until this version the diagram answered a failed
+    profile with ``None`` and drew the curves the type produces without
+    one, which for a geosynthetic in coefficient mode is a flat zero and
+    for a helical anchor is seven flat zeros: a plot of nothing, with
+    nothing on the window to say why. The engine says it now, and a
+    diagram that stayed quiet would be the one place left disagreeing.
+    """
     if not getattr(stype, "NEEDS_BOND_PROFILE", False):
         return None
     try:
         from ogr_core.support import build_bond_profile
 
         return build_bond_profile(project, support, stype)
-    except Exception:  # noqa: BLE001 - a diagram must not kill Interpret
+    except Exception as exc:  # noqa: BLE001 - a diagram must not kill Interpret
+        if failures is not None:
+            failures.append((getattr(support, "id", ""), type(exc).__name__))
         return None
 
 
-def support_series(project, support, samples: int = SAMPLES):
+def support_series(project, support, samples: int = SAMPLES,
+                   failures: Optional[list] = None):
     """``(label, xs, ys)`` per failure mode, plus the applied envelope.
 
     Separate from the widget so a test can read the numbers without a
     screen, which is also how they are checked against the published
-    capacity table.
+    capacity table. ``failures`` is passed straight through to
+    :func:`support_bond` (v0.1.163, defect D95).
     """
     stype = _resolve_type(project, support)
     length = support.length()
     if stype is None or length <= 0.0:
         return []
 
-    bond = support_bond(project, support, stype)
+    bond = support_bond(project, support, stype, failures)
     n = max(2, int(samples))
     xs = [length * i / (n - 1) for i in range(n)]
     modes: dict[str, list] = {}
@@ -173,12 +187,16 @@ class SupportForceDiagramWindow(QDialog):
             return self._supports[i]
         return None
 
-    def series(self):
-        """What is plotted, as data. The test reads this."""
+    def series(self, failures: Optional[list] = None):
+        """What is plotted, as data. The test reads this.
+
+        ``failures`` keeps the three-tuple intact while letting the caller
+        learn that a bond profile would not build (v0.1.163, defect D95).
+        """
         sup = self.current_support()
         if sup is None:
             return [], None, None
-        series = support_series(self.project, sup)
+        series = support_series(self.project, sup, failures=failures)
         cut = _cut_distance(self.project, sup, self.critical)
         applied = None
         if cut is not None:
@@ -188,7 +206,8 @@ class SupportForceDiagramWindow(QDialog):
         return series, applied, cut
 
     def refresh(self) -> None:
-        series, applied, cut = self.series()
+        failures: list = []
+        series, applied, cut = self.series(failures)
         if len(series) <= 1:
             self.note.setText(tr(
                 "This support type publishes no failure modes; only the "
@@ -197,6 +216,17 @@ class SupportForceDiagramWindow(QDialog):
             self.note.setText(tr("At the slip surface: %.4f kN/m") % applied)
         else:
             self.note.setText("")
+        if failures:
+            # v0.1.163, defect D95 -- FIRST, and it replaces nothing: the
+            # line above is about a number that was computed, and this one
+            # says the stress state behind it never was. A reader who takes
+            # the applied force at face value has to meet this first.
+            self.note.setText(
+                tr("The bond profile of this support could not be built "
+                   "(%s): the capacities below are its envelope at zero "
+                   "effective stress, not the ones the stress state would "
+                   "give.") % failures[0][1]
+                + ("  " + self.note.text() if self.note.text() else ""))
         if self._figure is None or self._canvas is None:
             return
         self._figure.clear()

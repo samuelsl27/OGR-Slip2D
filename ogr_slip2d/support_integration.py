@@ -856,6 +856,40 @@ def _support_force_angle(
     return axis_angle
 
 
+class _BondProfiles(dict):
+    """The profiles, and WHY the missing ones are missing.
+
+    v0.1.163, defect D95. A ``dict`` subclass rather than a second
+    attribute on the project because the cache is dropped in three places
+    (``project.py`` 171, 504 and 517) and a second attribute would be a
+    fourth thing to remember to drop: one object cannot let a failure
+    outlive the profiles it belongs to.
+
+    Both registers are per-INSTANCE and never class attributes, which
+    would be module state shared between analyses -- the leak rule 5
+    exists for. Defined at MODULE level because the grid search pickles
+    the project to its worker processes and pickle resolves a class by
+    qualified name.
+    """
+
+    __slots__ = ("failed", "refused")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        #: ``support.id`` -> the exception CLASS NAME. A bug in the type:
+        #: the support keeps whatever ``force_at`` makes of ``bond=None``.
+        self.failed = {}
+        #: ``support.id`` -> the ``reason`` TEXT of a
+        #: ``SupportEvaluationError``. The text and not the instance, and
+        #: not as hygiene: measured, that exception is neither
+        #: deep-copiable nor pickleable -- ``__init__`` takes two
+        #: arguments while ``args`` keeps one, so the reconstruction
+        #: raises ``TypeError: __init__() missing 1 required positional
+        #: argument: 'reason'`` -- and this cache reaches ``deepcopy`` in
+        #: the probabilistic engine and ``pickle`` in the parallel search.
+        self.refused = {}
+
+
 def _bond_profiles(project: "Project") -> dict:
     """Interface shear strength along every support, keyed by support id.
 
@@ -873,7 +907,16 @@ def _bond_profiles(project: "Project") -> dict:
     the project it is analysing (design coefficients are applied to a
     COPY, which is a different Project with its own caches), and the entry
     to the freeze clears whatever was there. Outside a freeze the only
-    caller is a canvas tooltip, with a handful of supports.
+    caller is a canvas tooltip, with a handful of supports. That contract
+    is also what makes the two failure registers of :class:`_BondProfiles`
+    safe: they are dropped with the profiles they explain, never after.
+
+    v0.1.163, defect D95 -- what could not be built is RECORDED rather
+    than passed over. The entry is simply absent from the mapping either
+    way, so every reader still gets ``None`` from ``.get()`` and no number
+    moves; what changes is that the one reader who has to diagnose the
+    support can now tell "there is no profile because this type needs
+    none" from "there is no profile because building it raised".
     """
     cached = getattr(project, "_support_bond_cache", None)
     if cached is not None and getattr(project, "_regions_freeze_depth", 0):
@@ -881,7 +924,7 @@ def _bond_profiles(project: "Project") -> dict:
 
     from ogr_core.support import build_bond_profile, support_type_pairs
 
-    profiles: dict = {}
+    profiles = _BondProfiles()
     # v0.1.149 — resolved by IDENTITY, in the one place that does it
     # (``resolve_support_type``). This was a ``{TYPE_ID: type}``
     # dictionary, which kept the last set of each class and lost the
@@ -892,11 +935,33 @@ def _bond_profiles(project: "Project") -> dict:
             continue
         try:
             profiles[support.id] = build_bond_profile(project, support, stype)
-        except Exception:  # noqa: BLE001
-            # A profile that cannot be built leaves ``force_at`` to fall
-            # back on its zero-stress envelope, which is conservative:
-            # never MORE reinforcement than the stress state would give.
-            continue
+        except SupportEvaluationError as exc:
+            # v0.1.163, defect D95, and the ORDER is the fix -- this is a
+            # ``RuntimeError``, so a wide clause placed first swallows it
+            # exactly as the single ``except Exception`` here did until
+            # this version. ``docs/plugins.md`` names "a profile that will
+            # not build" among the reasons to raise it, and measured on
+            # the tree of 0.1.162 a type that did precisely that got the
+            # same answer as one with a ``TypeError`` in it: caught here,
+            # priced off a zero-stress envelope, and then reported as a
+            # support that "develops no capacity". The written contract
+            # described the one answer that could not happen.
+            profiles.refused[support.id] = exc.reason
+        except Exception as exc:  # noqa: BLE001
+            # A bug in the type rather than a model that cannot be priced,
+            # so the support is kept and gets whatever ``force_at`` makes
+            # of ``bond=None``. What this comment used to call
+            # conservative -- "never MORE reinforcement than the stress
+            # state would give" -- was true of two of the four types that
+            # ask for a profile and false of the other two: neither
+            # ``PileMicropile`` in Ito-Matsui mode nor ``HelicalAnchor``
+            # has a zero-stress envelope to fall back on, because their
+            # strength comes from the ground rather than from a parameter
+            # of their own, and both answer exactly 0.0. Measured on the
+            # Cai and Ugai fixture: Bishop 1.5068 -> 1.1446, which is BIT
+            # FOR BIT the slope with the pile deleted. "Conservative" was
+            # not the word for it, and neither was silence.
+            profiles.failed[support.id] = type(exc).__name__
     project._support_bond_cache = profiles
     return profiles
 
@@ -937,10 +1002,12 @@ SUPPORT_NO_CREST = "no_crest"
 
 #: It crosses, and develops no capacity there: neither axial nor shear.
 #: Worded as "develops no capacity where it crosses" and never as "its
-#: type has zero capacity", because a bond profile that failed to build
-#: lands here too — ``PileMicropile`` in Ito-Matsui mode returns exactly
-#: 0.0 with no profile — and that is a different fact about a different
-#: cause.
+#: type has zero capacity", because those are different facts about
+#: different causes and only the first is a property of the MODEL.
+#: Until v0.1.163 a bond profile that failed to build landed here too --
+#: exactly the confusion this wording was guarding against, which wording
+#: alone could not prevent. It now has the two constants below, and this
+#: one means again what it says (defect D95).
 SUPPORT_NO_CAPACITY = "no_capacity"
 
 #: Its class is not in the registry, so ``resolve_support_type`` returned
@@ -963,16 +1030,34 @@ SUPPORT_NOT_PRICEABLE = "not_priceable"
 
 #: Its ``shear_at`` raised something that is NOT a
 #: :class:`~ogr_core.support.SupportEvaluationError` -- a bug in the plugin,
-#: not a model that cannot be priced. v0.1.162, defect D98, and the ONLY one
-#: of the seven that describes a support which DOES contribute: it keeps its
-#: axial capacity and loses its shear, so it has no business in the count of
-#: the ones that put no force on the surface. Hence a list, a sentence and a
-#: paragraph of its own rather than a seventh entry in
+#: not a model that cannot be priced. v0.1.162, defect D98, and one of the
+#: two that describe a support which DOES contribute: it keeps its axial
+#: capacity and loses its shear, so it has no business in the count of the
+#: ones that put no force on the surface. Hence a list, a sentence and a
+#: paragraph of its own rather than an entry in
 #: ``_UNCONTRIBUTING_PHRASES``, which would have said the opposite of what
 #: happened. The exception class name is appended after a colon, because
 #: "the shear was not counted" and "the shear was not counted BECAUSE
 #: ``TypeError``" are not the same help to whoever has to fix the plugin.
 SUPPORT_SHEAR_FAILED = "shear_failed"
+
+#: Building its bond profile raised, and what its type makes of no profile
+#: is exactly nothing: ``PileMicropile`` in Ito-Matsui mode and
+#: ``HelicalAnchor`` have no zero-stress envelope to fall back on. v0.1.163,
+#: defect D95. It really does put no force on the surface, so unlike the
+#: two above it belongs in that count -- but under its OWN reason, because
+#: "develops no capacity where it crosses" is a fact about the model and
+#: this is a fact about the type, and the two ask for different remedies.
+#: The exception class name rides after the colon, as in D98; the reader
+#: files it under the bare key and pastes the name onto that fragment.
+SUPPORT_BOND_PROFILE_NO_FORCE = "bond_profile_no_force"
+
+#: The same failure on a type that DOES have an envelope at zero effective
+#: stress -- ``GroutedTiebackFriction`` and ``Geosynthetic``. The support
+#: stays in the equilibrium, priced at less than the model carries, which
+#: makes it the second of the two reasons that describe a support which
+#: contributes: same shape as D98, and the same treatment.
+SUPPORT_BOND_PROFILE_FAILED = "bond_profile_failed"
 
 
 def compute_support_effects(
@@ -999,17 +1084,26 @@ def compute_support_effects(
     ``uncontributing_support_notes`` is the single caller that passes a
     list, once, on the surface the run reports.
 
-    v0.1.162, defect D98 - that last sentence needs one exception, and it
-    is the only one: ``SUPPORT_SHEAR_FAILED`` travels on this same channel
-    describing a support that DOES contribute, one that kept its axial
-    capacity and lost its shear vector to a plugin bug. It is written
-    ``"shear_failed:" + the exception class name`` rather than a bare
+    v0.1.162, defect D98 - that last sentence needs two exceptions.
+    ``SUPPORT_SHEAR_FAILED`` travels on this same channel describing a
+    support that DOES contribute, one that kept its axial capacity and
+    lost its shear vector to a plugin bug; ``SUPPORT_BOND_PROFILE_FAILED``
+    (v0.1.163, defect D95) describes one priced off its zero-stress
+    envelope because its profile would not build. Both are written as the
+    constant plus ``":" + the exception class name`` rather than a bare
     constant, so the note can say which bug. The hot path still pays
-    nothing for it: the branch that appends it does not exist for a
-    ``shear_at`` that answers. The single reader knows to take these out
-    before counting - a support priced at half its declared capacity is
-    not one that "puts no force on the surface", and filing it as one
-    would have said the opposite of what happened.
+    nothing for either: the branches that append them do not exist for a
+    ``shear_at`` that answers or a profile that builds. The single reader
+    knows to take these two out before counting - a support priced at less
+    than its declared capacity is not one that "puts no force on the
+    surface", and filing it as one would say the opposite of what happened.
+
+    Its sibling ``SUPPORT_BOND_PROFILE_NO_FORCE`` is the other half of
+    D95 and goes the other way: there the profile failed on a type with no
+    envelope at all, so the support genuinely put nothing on the surface
+    and is counted with the six - just not as ``SUPPORT_NO_CAPACITY``,
+    which says the model develops no capacity there rather than that the
+    program could not work out how much.
 
     Collecting HERE rather than re-deriving the same decisions inside the
     note is the point: the rule that decides and the rule that counts
@@ -1049,6 +1143,13 @@ def compute_support_effects(
     if len(slip_xy) < 2:
         return []
     bond_profiles = _bond_profiles(project)
+    # v0.1.163, defect D95 -- why a missing profile is missing, so that a
+    # support depending on one is not diagnosed as a support the model
+    # gives no capacity to. Read with ``getattr`` and not as attributes:
+    # ``test_support_pullout_v1116.py`` fixes by contract that anything may
+    # be written on that cache attribute, a plain ``dict`` included.
+    bond_failed = getattr(bond_profiles, "failed", None)
+    bond_refused = getattr(bond_profiles, "refused", None)
     s_list = slices.slices if hasattr(slices, "slices") else slices
     effects: list[SupportEffect] = []
     # v0.1.149 — the type arrives WITH the instance, resolved by identity
@@ -1099,6 +1200,23 @@ def compute_support_effects(
                 if reasons is not None:
                     reasons.append((support.id, SUPPORT_NO_SLICE))
                 continue
+
+            if bond_refused and support.id in bond_refused:
+                # v0.1.163, defect D95 -- the type asked, in the documented
+                # way, not to be priced, and until this version that ask
+                # was answered by pricing it anyway off an envelope it may
+                # not even have. Raised HERE and not at the top of the
+                # ``try``, so a support this surface does not even cross is
+                # still reported as one that does not cross it: in a grid
+                # most surfaces miss most bolts, and answering every one of
+                # them "could not be priced" would stamp ``support_failure``
+                # on nearly every surface of the run and bury the D62 note.
+                # A NEW instance and not the one that was caught, because
+                # re-raising one object accumulates a traceback across the
+                # thousands of surfaces a search evaluates -- and because
+                # that exception cannot be copied (see ``_BondProfiles``).
+                raise SupportEvaluationError(support.id,
+                                             bond_refused[support.id])
 
             L_total = support.length()
 
@@ -1173,10 +1291,27 @@ def compute_support_effects(
             # A support with no axial capacity left but some shear still acts.
             # Before v0.1.124 the guard was ``F <= 0`` alone, which was right
             # only because the shear reached nothing.
+            #
+            # v0.1.163, defect D95 -- and WHY it develops none matters. A
+            # profile that would not build lands in both branches below
+            # depending on the type, and neither of them is
+            # ``SUPPORT_NO_CAPACITY``: that one says the model gives this
+            # support nothing here, and these say the program could not
+            # work out how much. Different facts, different remedies.
+            broke = bond_failed.get(support.id) if bond_failed else None
             if F <= 0 and V <= 0:
                 if reasons is not None:
-                    reasons.append((support.id, SUPPORT_NO_CAPACITY))
+                    why = (SUPPORT_BOND_PROFILE_NO_FORCE + ":" + broke
+                           if broke else SUPPORT_NO_CAPACITY)
+                    reasons.append((support.id, why))
                 continue
+            if broke and reasons is not None:
+                # It DID contribute, off its zero-stress envelope, with
+                # less reinforcement than the model carries: the shape of
+                # D98 rather than of the six reasons above, and treated
+                # the same way -- off the count, sentence of its own.
+                reasons.append(
+                    (support.id, SUPPORT_BOND_PROFILE_FAILED + ":" + broke))
 
             # Force orientation angle
             slip_slope = _slip_tangent_at_x(slices, ix) or 0.0
@@ -1245,16 +1380,26 @@ def compute_support_effects(
 #: How each reason reads: singular, plural, and once more with no count
 #: at all for the lone-support case, where "None of the 1 supports
 #: placed" would be plainly ungrammatical. Ordered most actionable
-#: first, so the three that describe BROKEN INPUT come before the three
+#: first, so the four that describe BROKEN INPUT come before the three
 #: that describe a legitimate calculation decision. v0.1.161 put
 #: ``SUPPORT_NOT_PRICEABLE`` at the head of that first group: it is the
 #: only one that means the analysis could not READ the model, and it
-#: carries its own text on the result besides (defect D94).
+#: carries its own text on the result besides (defect D94). v0.1.163 put
+#: ``SUPPORT_BOND_PROFILE_NO_FORCE`` right behind it, in the same group
+#: and for the same reason: a profile that will not build is a defect in
+#: the type, not a property of the slope (defect D95).
 _UNCONTRIBUTING_PHRASES = (
     (SUPPORT_NOT_PRICEABLE,
      "%d could not be priced at all",
      "%d could not be priced at all",
      "it could not be priced at all"),
+    (SUPPORT_BOND_PROFILE_NO_FORCE,
+     "%d could not be given a bond profile, and its type prices nothing "
+     "without one",
+     "%d could not be given a bond profile, and their type prices nothing "
+     "without one",
+     "it could not be given a bond profile, and its type prices nothing "
+     "without one"),
     (SUPPORT_UNKNOWN_TYPE,
      "%d names a support class this build does not have",
      "%d name a support class this build does not have",
@@ -1280,11 +1425,18 @@ _UNCONTRIBUTING_PHRASES = (
      "it does not cross that surface"),
 )
 
-#: And the seventh reason, deliberately NOT in the tuple above: every entry
-#: there completes "the support puts no force on the surface", and this one
-#: says the opposite -- the support is in the equilibrium, priced at half
-#: what it declares. Sharing the table would have bought one loop at the
-#: price of a sentence that contradicts itself. v0.1.162, defect D98.
+#: The exception class, pasted onto the fragment of the reason above. It
+#: does not fit the table -- every entry there takes one ``%d`` and nothing
+#: else -- and it cannot be dropped either: naming the bug is the whole
+#: reason the reasons carry a suffix (v0.1.163, defect D95).
+_BOND_RAISED = " (building it raised %s)"
+
+#: And the two reasons deliberately NOT in the tuple above: every entry
+#: there completes "the support puts no force on the surface", and these
+#: say the opposite -- the support is in the equilibrium, priced at less
+#: than it declares. Sharing the table would have bought one loop at the
+#: price of a sentence that contradicts itself. v0.1.162, defect D98; the
+#: second one v0.1.163, defect D95.
 _SHEAR_FAILED_PHRASE = (
     "%d support contributed only its axial capacity: shear_at raised %s, so "
     "the shear it declares was not counted. That is a defect in the support "
@@ -1294,6 +1446,22 @@ _SHEAR_FAILED_PHRASE = (
     "so the shear they declare was not counted. That is a defect in the "
     "support type rather than a property of the model, and the factor of "
     "safety is the one for less reinforcement than the model carries.",
+)
+
+#: Its D95 counterpart: the profile would not build and the type HAS an
+#: envelope at zero effective stress, so the support was priced off that
+#: instead. Its own sentence rather than a share of the one above, because
+#: what was lost is different -- there one vector, here every term that
+#: depends on the stress state along the reinforcement.
+_BOND_FAILED_PHRASE = (
+    "%d support was priced off its zero-stress envelope: building its bond "
+    "profile raised %s, so it carries less reinforcement than the model "
+    "declares. That is a defect in the support type rather than a property "
+    "of the model.",
+    "%d supports were priced off their zero-stress envelopes: building "
+    "their bond profiles raised %s, so they carry less reinforcement than "
+    "the model declares. That is a defect in the support type rather than "
+    "a property of the model.",
 )
 
 
@@ -1306,7 +1474,9 @@ def uncontributing_support_notes(project, result) -> list[str]:
     from a correct answer. The user drew the support, sees it on the
     canvas, and until this version nothing said the analysis had left it
     out. Five ways in, all of them silent, and the whole point of this
-    function is that they stop being silent.
+    function is that they stop being silent. (Five when this was written:
+    D94, D98 and D95 each found another, and the count in this sentence is
+    left as it stood so that the history of it reads straight.)
 
     Asked per SURFACE and not per model, for the reason
     :func:`reversed_support_notes` gives: which supports contribute is a
@@ -1327,23 +1497,28 @@ def uncontributing_support_notes(project, result) -> list[str]:
     Reporting only: nothing in the analysis changes either way, and no
     number moves.
 
-    v0.1.162, defect D98 - it can return TWO lines now, and the second one
-    is about the opposite case: a support that DID contribute, with only
-    half of what it declares, because its ``shear_at`` raised. That fact
-    has no place in the count above - "3 of the 4 supports placed put no
-    force" must not include a support that put force - so it is taken off
-    the list before anything is counted and gets a sentence of its own.
+    v0.1.162, defect D98 - it can return more than one line now, and the
+    ones after the first are about the opposite case: a support that DID
+    contribute, with less than it declares, because its ``shear_at`` raised
+    or (v0.1.163, defect D95) because its bond profile would not build.
+    That fact has no place in the count above - "3 of the 4 supports placed
+    put no force" must not include a support that put force - so those are
+    taken off the list before anything is counted and get sentences of
+    their own.
 
-    It goes SECOND on purpose. The first line is the consequential one:
-    it ends in "this factor of safety is the one for the slope with no
+    They go AFTER on purpose. The first line is the consequential one: it
+    ends in "this factor of safety is the one for the slope with no
     reinforcement at all", and a reader who stops after one line has to
     have read that.
 
     One silence remains, and it is deliberate: if the result carries a
     ``support_failure`` from D94 this returns above without ever asking,
-    so a lost shear vector is not mentioned on a surface whose
-    reinforcement could not be priced at all. The larger fact is already
-    being reported and it subsumes this one.
+    so a lost shear vector, or a support priced off an envelope, is not
+    mentioned on a surface whose reinforcement could not be priced at all.
+    The larger fact is already being reported and it subsumes these. The
+    price is real and was weighed: a model mixing a refused profile with a
+    failed one reports only the first. Lifting it would mean evaluating
+    the surface a second time here, which is exactly what D94 removed.
     """
     supports = list(getattr(project, "supports", None) or [])
     if not supports:
@@ -1388,18 +1563,36 @@ def uncontributing_support_notes(project, result) -> list[str]:
                 "of safety is the one for the slope without any of them."
                 % (total, exc)]
 
-    # v0.1.162, defect D98 -- the seventh reason comes OFF the list before
-    # anything is counted. A support whose ``shear_at`` raised is in the
-    # equilibrium with its axial capacity, so counting it among the ones
-    # that put no force would publish a sentence that is simply false; and
-    # letting it through untouched would be worse than either, because the
-    # tail of this function reads ``silent`` against ``total``.
+    # v0.1.162, defect D98 -- the two reasons that describe a support which
+    # CONTRIBUTES come OFF the list before anything is counted. A support
+    # whose ``shear_at`` raised, or whose bond profile would not build on a
+    # type that has an envelope without one (v0.1.163, defect D95), is in
+    # the equilibrium with part of its capacity, so counting it among the
+    # ones that put no force would publish a sentence that is simply false;
+    # and letting either through untouched would be worse than that,
+    # because the tail of this function reads ``silent`` against ``total``.
     partial: dict = {}
+    fell_back: dict = {}
+    no_profile: dict = {}
     kept: list = []
     for sid, why in reasons:
         if why.startswith(SUPPORT_SHEAR_FAILED + ":"):
             exc_name = why.split(":", 1)[1]
             partial[exc_name] = partial.get(exc_name, 0) + 1
+        elif why.startswith(SUPPORT_BOND_PROFILE_FAILED + ":"):
+            # v0.1.163, defect D95 -- same treatment as the reason above
+            # and for the same reason: it contributed.
+            exc_name = why.split(":", 1)[1]
+            fell_back[exc_name] = fell_back.get(exc_name, 0) + 1
+        elif why.startswith(SUPPORT_BOND_PROFILE_NO_FORCE + ":"):
+            # And its sibling goes the other way: back on the list, under
+            # the BARE key so the table can find it, because this support
+            # really did put no force and belongs in that count. Only the
+            # exception name travels apart, to be pasted onto its own
+            # fragment below -- the table formats one ``%d`` and no more.
+            exc_name = why.split(":", 1)[1]
+            no_profile[exc_name] = no_profile.get(exc_name, 0) + 1
+            kept.append((sid, SUPPORT_BOND_PROFILE_NO_FORCE))
         else:
             kept.append((sid, why))
     reasons = kept
@@ -1412,6 +1605,13 @@ def uncontributing_support_notes(project, result) -> list[str]:
         singular, plural = _SHEAR_FAILED_PHRASE
         extra.append((singular if n == 1 else plural)
                      % (n, ", ".join(sorted(partial))))
+    if fell_back:
+        # AFTER the D98 sentence, deliberately: that one has been the first
+        # line of ``extra`` since v0.1.162 and a test reads it there.
+        n = sum(fell_back.values())
+        singular, plural = _BOND_FAILED_PHRASE
+        extra.append((singular if n == 1 else plural)
+                     % (n, ", ".join(sorted(fell_back))))
 
     if not reasons:
         # Not ``return []``: the tail below would otherwise reach
@@ -1424,14 +1624,26 @@ def uncontributing_support_notes(project, result) -> list[str]:
         counts[why] = counts.get(why, 0) + 1
     silent = sum(counts.values())
 
-    parts = [(one if counts[key] == 1 else many) % counts[key]
-             for key, one, many, _bare in _UNCONTRIBUTING_PHRASES
-             if counts.get(key)]
+    # v0.1.163 -- a loop rather than the comprehension it replaces, because
+    # one of the seven fragments carries the exception class after it and
+    # the table has nowhere to put it (defect D95).
+    raised = _BOND_RAISED % ", ".join(sorted(no_profile)) if no_profile else ""
+    parts = []
+    for key, one, many, _bare in _UNCONTRIBUTING_PHRASES:
+        n = counts.get(key)
+        if not n:
+            continue
+        text = (one if n == 1 else many) % n
+        if key == SUPPORT_BOND_PROFILE_NO_FORCE:
+            text += raised
+        parts.append(text)
 
     if silent >= total:
         if total == 1:
-            bare = [b for key, _o, _m, b in _UNCONTRIBUTING_PHRASES
-                    if counts.get(key)][0]
+            key, bare = [(k, b) for k, _o, _m, b in _UNCONTRIBUTING_PHRASES
+                         if counts.get(k)][0]
+            if key == SUPPORT_BOND_PROFILE_NO_FORCE:
+                bare += raised
             return ["The only support placed puts no force on the "
                     "reported surface: %s. This factor of safety is the "
                     "one for the slope with no reinforcement at all."

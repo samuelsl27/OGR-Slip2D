@@ -177,6 +177,23 @@ the bare slope's wearing a valid answer's clothes. Do not read the
 survival as permission: a `shear_at` that raises is a defect in the type,
 and the sentence exists to get it fixed.
 
+The same contract covers the two methods the BOND PROFILE is built from,
+`interface_tau` and `station_value`, and it did not until v0.1.163. They
+are called by `build_bond_profile`, outside the per-support handler, and
+everything they raised was caught and passed over in silence: a type that
+raised `SupportEvaluationError` there — which this page names below as the
+thing to do — got exactly the same answer as one with a `TypeError` in it.
+That answer was to price the support with `bond=None`, which for
+`GroutedTiebackFriction` and `Geosynthetic` means their envelope at zero
+effective stress and for `PileMicropile` in Ito & Matsui mode and
+`HelicalAnchor` means zero, because those two have no envelope of their
+own. Now the typed exception leaves that one support out of the
+equilibrium as above, and a bug prices it off whatever `bond=None` gives
+while the analysis says which: *"1 support was priced off its zero-stress
+envelope: building its bond profile raised TypeError"*, or, where that
+fallback is nothing, *"1 could not be given a bond profile, and its type
+prices nothing without one (building it raised TypeError)"* (defect D95).
+
 So: raise `SupportEvaluationError` where the MODEL cannot be priced — a
 geometry that degenerates, a parameter set that does not describe anything,
 a profile that will not build — and let a bug be a bug.
