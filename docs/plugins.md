@@ -157,6 +157,26 @@ bare slope, indistinguishable from a correct answer. Measured on a
 fifteen-sheet wall: 0.9836 became 0.9492, which is bit for bit the same
 model with its reinforcement deleted (defect D94).
 
+That contract covers `shear_at` too, and it did not until v0.1.162. The
+guard around it sat INSIDE the per-support handler above, so it caught
+`SupportEvaluationError` first and answered it with zero shear: a type that
+declared `SUPPORTS_SHEAR`, raised the documented exception from `shear_at`
+and expected to be left out of the equilibrium was instead priced at its
+axial capacity alone, contributing, with nothing said anywhere (defect
+D98). Now the typed exception reaches the handler from either half.
+
+The one asymmetry left is deliberate, and it is the only exception to the
+paragraph above. A bug — anything that is NOT `SupportEvaluationError` —
+raised by `force_at` propagates and the run fails in the open, while the
+same bug raised by `shear_at` costs that one vector and the analysis says
+so: *"1 support contributed only its axial capacity: shear_at raised
+TypeError, so the shear it declares was not counted"*. Losing one
+perpendicular vector is recoverable and naming it costs nothing; losing
+the axial capacity is not, and a factor of safety computed without it is
+the bare slope's wearing a valid answer's clothes. Do not read the
+survival as permission: a `shear_at` that raises is a defect in the type,
+and the sentence exists to get it fixed.
+
 So: raise `SupportEvaluationError` where the MODEL cannot be priced — a
 geometry that degenerates, a parameter set that does not describe anything,
 a profile that will not build — and let a bug be a bug.

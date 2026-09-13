@@ -961,6 +961,19 @@ SUPPORT_UNKNOWN_TYPE = "unknown_type"
 #: capacity cost fifteen sheets and failing in the shear cost one vector.
 SUPPORT_NOT_PRICEABLE = "not_priceable"
 
+#: Its ``shear_at`` raised something that is NOT a
+#: :class:`~ogr_core.support.SupportEvaluationError` -- a bug in the plugin,
+#: not a model that cannot be priced. v0.1.162, defect D98, and the ONLY one
+#: of the seven that describes a support which DOES contribute: it keeps its
+#: axial capacity and loses its shear, so it has no business in the count of
+#: the ones that put no force on the surface. Hence a list, a sentence and a
+#: paragraph of its own rather than a seventh entry in
+#: ``_UNCONTRIBUTING_PHRASES``, which would have said the opposite of what
+#: happened. The exception class name is appended after a colon, because
+#: "the shear was not counted" and "the shear was not counted BECAUSE
+#: ``TypeError``" are not the same help to whoever has to fix the plugin.
+SUPPORT_SHEAR_FAILED = "shear_failed"
+
 
 def compute_support_effects(
     project: "Project",
@@ -985,6 +998,18 @@ def compute_support_effects(
     nothing at all for a support that contributes.
     ``uncontributing_support_notes`` is the single caller that passes a
     list, once, on the surface the run reports.
+
+    v0.1.162, defect D98 - that last sentence needs one exception, and it
+    is the only one: ``SUPPORT_SHEAR_FAILED`` travels on this same channel
+    describing a support that DOES contribute, one that kept its axial
+    capacity and lost its shear vector to a plugin bug. It is written
+    ``"shear_failed:" + the exception class name`` rather than a bare
+    constant, so the note can say which bug. The hot path still pays
+    nothing for it: the branch that appends it does not exist for a
+    ``shear_at`` that answers. The single reader knows to take these out
+    before counting - a support priced at half its declared capacity is
+    not one that "puts no force on the surface", and filing it as one
+    would have said the opposite of what happened.
 
     Collecting HERE rather than re-deriving the same decisions inside the
     note is the point: the rule that decides and the rule that counts
@@ -1119,9 +1144,31 @@ def compute_support_effects(
             if getattr(stype, "SUPPORTS_SHEAR", False):
                 try:
                     V = max(0.0, float(stype.shear_at(d_along, L_total)))
-                # noqa: BLE001 - a plugin must not kill a run. What
-                # this one still swallows whole is P-D98.
-                except Exception:
+                except SupportEvaluationError:
+                    # v0.1.162, defect D98 -- up to the per-support handler
+                    # below, which is where a support that cannot be priced
+                    # is answered. This guard sat INSIDE that ``try`` and
+                    # caught it first, so ``docs/plugins.md`` promised that
+                    # "force_at AND shear_at answer with a number or raise
+                    # SupportEvaluationError [...] that exception is the ONLY
+                    # one the engine catches" while for shear it was quietly
+                    # discarded: a plugin honouring the written contract to
+                    # the letter got the one answer the contract rules out.
+                    raise
+                except Exception as exc:  # noqa: BLE001
+                    # A plugin must not kill a run -- and since D98 it does
+                    # not do it in silence either. The support KEEPS its
+                    # axial capacity and loses only this vector, so this is
+                    # not one of the six reasons a support puts no force on
+                    # the surface: it gets its own list and its own sentence
+                    # in ``uncontributing_support_notes``. Recording it is
+                    # free -- we are inside the handler already -- and the
+                    # hot path pays nothing, because this branch does not
+                    # exist for a ``shear_at`` that answers.
+                    if reasons is not None:
+                        reasons.append(
+                            (support.id,
+                             SUPPORT_SHEAR_FAILED + ":" + type(exc).__name__))
                     V = 0.0
             # A support with no axial capacity left but some shear still acts.
             # Before v0.1.124 the guard was ``F <= 0`` alone, which was right
@@ -1233,6 +1280,22 @@ _UNCONTRIBUTING_PHRASES = (
      "it does not cross that surface"),
 )
 
+#: And the seventh reason, deliberately NOT in the tuple above: every entry
+#: there completes "the support puts no force on the surface", and this one
+#: says the opposite -- the support is in the equilibrium, priced at half
+#: what it declares. Sharing the table would have bought one loop at the
+#: price of a sentence that contradicts itself. v0.1.162, defect D98.
+_SHEAR_FAILED_PHRASE = (
+    "%d support contributed only its axial capacity: shear_at raised %s, so "
+    "the shear it declares was not counted. That is a defect in the support "
+    "type rather than a property of the model, and the factor of safety is "
+    "the one for less reinforcement than the model carries.",
+    "%d supports contributed only their axial capacity: shear_at raised %s, "
+    "so the shear they declare was not counted. That is a defect in the "
+    "support type rather than a property of the model, and the factor of "
+    "safety is the one for less reinforcement than the model carries.",
+)
+
 
 def uncontributing_support_notes(project, result) -> list[str]:
     """Say how many placed supports put no force on the reported surface.
@@ -1263,6 +1326,24 @@ def uncontributing_support_notes(project, result) -> list[str]:
 
     Reporting only: nothing in the analysis changes either way, and no
     number moves.
+
+    v0.1.162, defect D98 - it can return TWO lines now, and the second one
+    is about the opposite case: a support that DID contribute, with only
+    half of what it declares, because its ``shear_at`` raised. That fact
+    has no place in the count above - "3 of the 4 supports placed put no
+    force" must not include a support that put force - so it is taken off
+    the list before anything is counted and gets a sentence of its own.
+
+    It goes SECOND on purpose. The first line is the consequential one:
+    it ends in "this factor of safety is the one for the slope with no
+    reinforcement at all", and a reader who stops after one line has to
+    have read that.
+
+    One silence remains, and it is deliberate: if the result carries a
+    ``support_failure`` from D94 this returns above without ever asking,
+    so a lost shear vector is not mentioned on a surface whose
+    reinforcement could not be priced at all. The larger fact is already
+    being reported and it subsumes this one.
     """
     supports = list(getattr(project, "supports", None) or [])
     if not supports:
@@ -1307,8 +1388,36 @@ def uncontributing_support_notes(project, result) -> list[str]:
                 "of safety is the one for the slope without any of them."
                 % (total, exc)]
 
+    # v0.1.162, defect D98 -- the seventh reason comes OFF the list before
+    # anything is counted. A support whose ``shear_at`` raised is in the
+    # equilibrium with its axial capacity, so counting it among the ones
+    # that put no force would publish a sentence that is simply false; and
+    # letting it through untouched would be worse than either, because the
+    # tail of this function reads ``silent`` against ``total``.
+    partial: dict = {}
+    kept: list = []
+    for sid, why in reasons:
+        if why.startswith(SUPPORT_SHEAR_FAILED + ":"):
+            exc_name = why.split(":", 1)[1]
+            partial[exc_name] = partial.get(exc_name, 0) + 1
+        else:
+            kept.append((sid, why))
+    reasons = kept
+
+    extra: list = []
+    if partial:
+        n = sum(partial.values())
+        # Named apart from the ``one``/``many`` of the comprehension below:
+        # that one has its own scope, so this is readability and not a bug.
+        singular, plural = _SHEAR_FAILED_PHRASE
+        extra.append((singular if n == 1 else plural)
+                     % (n, ", ".join(sorted(partial))))
+
     if not reasons:
-        return []
+        # Not ``return []``: the tail below would otherwise reach
+        # "0 of the 1 supports placed put no force", which is the one
+        # thing that did not happen.
+        return extra
 
     counts: dict = {}
     for _sid, why in reasons:
@@ -1326,13 +1435,13 @@ def uncontributing_support_notes(project, result) -> list[str]:
             return ["The only support placed puts no force on the "
                     "reported surface: %s. This factor of safety is the "
                     "one for the slope with no reinforcement at all."
-                    % bare]
+                    % bare] + extra
         return ["None of the %d supports placed put any force on the "
                 "reported surface: %s. This factor of safety is the one "
                 "for the slope with no reinforcement at all."
-                % (total, ", ".join(parts))]
+                % (total, ", ".join(parts))] + extra
     return ["%d of the %d supports placed put no force on the reported "
             "surface: %s. A support left out lowers no number and raises "
             "none, so the factor of safety is the one for the model "
             "without it. Check that these are the ones meant to be left "
-            "out." % (silent, total, ", ".join(parts))]
+            "out." % (silent, total, ", ".join(parts))] + extra
