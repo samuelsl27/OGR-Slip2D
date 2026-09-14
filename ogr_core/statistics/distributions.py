@@ -438,7 +438,32 @@ def correlate_pair(values_a: list, values_b: list, rho: float) -> list:
 # ======================================================================
 @dataclass
 class SampleStatistics:
-    """Summary statistics of a set of computed factors of safety."""
+    """Summary statistics of a set of computed factors of safety.
+
+    WITH NO SAMPLES AT ALL, every one of these answers ``None`` and not a
+    number — v0.1.169 (D127), and the policy is D56's, applied here rather
+    than reinterpreted: "``None`` raises where the mistake is made", while
+    a ``nan`` survives ``float()`` and ``round()``, compares False against
+    every bound and prints as a short lowercase word that looks like a
+    label. Until this version an empty statistic answered ``nan`` for the
+    mean, the minimum, the maximum and the probability of failure,
+    ``-inf`` for the reliability index — because ``nan >= 1.0`` is False —
+    and, worst of the three shapes, a plain ``0.0`` for the standard
+    deviation: a fallback wearing the clothes of a result, which is defect
+    D20 and which D56 names as worse than a ``nan``. The external check is
+    the one D56 wrote: ``json.dumps(..., allow_nan=False)``.
+
+    WHERE THE GUARD STOPS, said here because a guard whose stated reason
+    is wider than what it checks is what cost this project two versions
+    over m-alpha (v0.1.82-84). It covers ``n == 0`` and nothing else. With
+    ONE sample the standard deviation is still ``0.0`` and the reliability
+    index still ``±inf``; with fewer than two positive values the
+    lognormal index is still ``nan``. Those are quantities that are
+    defined and degenerate, not quantities that are missing — and the
+    ``beta inf`` of a scatterless sampling is the very signal by which
+    v0.1.164 (D91) catches a random variable that no longer writes
+    anything. Reported and not corrected.
+    """
 
     values: list = field(default_factory=list)
 
@@ -447,11 +472,13 @@ class SampleStatistics:
         return len(self.values)
 
     @property
-    def mean(self) -> float:
-        return sum(self.values) / self.n if self.n else float("nan")
+    def mean(self) -> Optional[float]:
+        return sum(self.values) / self.n if self.n else None
 
     @property
-    def std_dev(self) -> float:
+    def std_dev(self) -> Optional[float]:
+        if not self.n:
+            return None
         if self.n < 2:
             return 0.0
         m = self.mean
@@ -459,34 +486,49 @@ class SampleStatistics:
                          / (self.n - 1))
 
     @property
-    def minimum(self) -> float:
-        return min(self.values) if self.values else float("nan")
+    def minimum(self) -> Optional[float]:
+        return min(self.values) if self.values else None
 
     @property
-    def maximum(self) -> float:
-        return max(self.values) if self.values else float("nan")
+    def maximum(self) -> Optional[float]:
+        return max(self.values) if self.values else None
 
-    def probability_of_failure(self, threshold: float = 1.0) -> float:
-        """PF = fraction of samples with a factor of safety below 1."""
+    def probability_of_failure(self,
+                               threshold: float = 1.0) -> Optional[float]:
+        """PF = fraction of samples with a factor of safety below 1.
+
+        ``None`` without samples: the plan defines this as a quotient with
+        the sample count in the denominator, so with no samples there is
+        no quantity to report rather than a quantity that happens to be
+        unknown.
+        """
         if not self.n:
-            return float("nan")
+            return None
         return sum(1 for v in self.values if v < threshold) / self.n
 
-    def reliability_index(self, threshold: float = 1.0) -> float:
+    def reliability_index(self, threshold: float = 1.0) -> Optional[float]:
         """Normal reliability index beta = (mean - 1) / std_dev.
 
         The number of standard deviations separating the mean factor of
         safety from failure. Undefined when the samples show no scatter.
         """
+        # The empty case FIRST, before ``std_dev`` is read: it is ``None``
+        # now, and ``None <= 0`` is a TypeError. Reading it first is the
+        # one mistake this rewrite makes easy to make.
+        if not self.n:
+            return None
         s = self.std_dev
         if s <= 0:
             return float("inf") if self.mean >= threshold else float("-inf")
         return (self.mean - threshold) / s
 
-    def lognormal_reliability_index(self, threshold: float = 1.0) -> float:
+    def lognormal_reliability_index(
+            self, threshold: float = 1.0) -> Optional[float]:
         """Reliability index assuming the factors of safety are
         lognormally distributed, which is often the better fit because a
         factor of safety cannot be negative."""
+        if not self.n:
+            return None
         vals = [v for v in self.values if v > 0]
         if len(vals) < 2:
             return float("nan")

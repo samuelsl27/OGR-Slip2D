@@ -207,7 +207,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.168"
+    VERSION = "0.1.169"
 
     def __init__(self) -> None:
         super().__init__()
@@ -1707,7 +1707,14 @@ class MainWindow(QMainWindow):
                     num_slices=self.project.settings.methods.num_slices)
             if res.ok:
                 self._prob_result = res
-                first = next(iter(res.by_method.values()))
+                # v0.1.169 (D127) — ``reported`` is the method that has a
+                # sample, and ``ok`` is exactly the claim that it exists.
+                # ``next(iter(...))`` could hand back a method that lost
+                # every search -- in Overall Slope such a method KEEPS its
+                # entry -- and its ``probability_of_failure`` is ``None``
+                # now, so the two lines below would raise where they used
+                # to print "PF = nan %, beta = -inf".
+                first = res.reported
                 messages.append(
                     f"PF = {first.probability_of_failure * 100:.2f} %, "
                     f"beta = {first.reliability_index:.3f}")
@@ -1722,8 +1729,13 @@ class MainWindow(QMainWindow):
                     messages.append(warning)
                     self.last_statistics_notes.append(warning)
             else:
-                messages.append(res.notes.get("error", "probabilistic "
-                                                       "run failed"))
+                # v0.1.169 (D127) — and into the notes panel too, not only
+                # into the status bar, where it lasted twelve seconds and
+                # was gone. The reason a run produced nothing is the one
+                # note a user most needs to still be able to read.
+                err = res.notes.get("error", "probabilistic run failed")
+                messages.append(err)
+                self.last_statistics_notes.append(err)
 
         if st.sensitivity_analysis:
             res = run_sensitivity(

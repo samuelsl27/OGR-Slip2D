@@ -261,12 +261,51 @@ class TestSampleStatistics:
         assert abs(conv[-1][1] - st.mean) < 1e-9
 
     def test_empty_statistics_are_safe(self):
+        """v0.1.169 (D127) — what this test called "safe" was the defect.
+
+        Until this version it asserted ``math.isnan(st.mean)`` and
+        ``math.isnan(st.probability_of_failure())``, which is a snapshot of
+        the behaviour rather than a statement about it: a ``nan`` survives
+        ``float()`` and ``round()``, compares False against every bound,
+        and printed as "PF = nan %" on the status bar of a run in which
+        every sample had failed. The reliability index was worse still and
+        was not asserted here at all -- it answered ``-inf``, "failure is
+        certain", for a sampling that sampled nothing, because
+        ``nan >= 1.0`` is False. Safe is ``None``, which raises where the
+        mistake is made; the policy is D56's.
+        """
         st = SampleStatistics()
         assert st.n == 0
-        assert math.isnan(st.mean)
-        assert math.isnan(st.probability_of_failure())
+        assert st.mean is None
+        assert st.std_dev is None          # was 0.0: a number, and false
+        assert st.minimum is None
+        assert st.maximum is None
+        assert st.probability_of_failure() is None
+        assert st.reliability_index() is None
+        assert st.lognormal_reliability_index() is None
         assert st.histogram() == []
         assert st.convergence() == []
+
+    def test_one_sample_is_where_the_guard_stops(self):
+        """The fence of D127, so the next reader does not take the guard
+        for wider than it is.
+
+        With a single sample there IS data, so the mean, the minimum and
+        the maximum are that value and the standard deviation is a
+        truthful zero. The reliability index is still ``+inf`` and the
+        lognormal one still ``nan``: degenerate quantities, not missing
+        ones, and the ``beta inf`` of a scatterless sampling is the very
+        signal by which v0.1.164 (D91) catches a random variable that no
+        longer writes anything. Reported and not corrected.
+        """
+        st = SampleStatistics(values=[1.5])
+        assert st.n == 1
+        assert st.mean == 1.5
+        assert st.std_dev == 0.0
+        assert st.minimum == 1.5 and st.maximum == 1.5
+        assert st.probability_of_failure() == 0.0
+        assert st.reliability_index() == float("inf")
+        assert math.isnan(st.lognormal_reliability_index())
 
 
 class TestSerialisation:

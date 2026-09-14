@@ -2224,8 +2224,11 @@ class InterpretWindow(QMainWindow):
         if prob is None or not prob.ok:
             self._info(tr("No probabilistic result."))
             return
-        mid = next(iter(prob.by_method), None)
-        st = prob.by_method[mid].statistics
+        # v0.1.169 (D127) — ``reported`` and not ``next(iter(...))``: in
+        # Overall Slope a method that lost every search keeps its entry, so
+        # the first one need not be the one with samples, and this said
+        # "No probabilistic result" over a run that had one.
+        st = prob.reported.statistics
         conv = st.convergence(steps=60)
         if not conv:
             self._info(tr("No probabilistic result."))
@@ -2257,8 +2260,10 @@ class InterpretWindow(QMainWindow):
                 w = csv.writer(fh)
                 keys = sorted(prob.samples or {})
                 w.writerow(["sample"] + keys + ["fos"])
-                mid = next(iter(prob.by_method))
-                values = prob.by_method[mid].statistics.values
+                # v0.1.169 (D127) — same reason as the convergence plot:
+                # the first method could be one with no samples, and this
+                # wrote a CSV with a header and no rows.
+                values = prob.reported.statistics.values
                 for i, fos in enumerate(values):
                     row = [i + 1]
                     for k in keys:
@@ -2369,8 +2374,12 @@ class InterpretWindow(QMainWindow):
             if on:
                 self._info(tr("No probabilistic result."))
             return
-        mid = next(iter(prob.by_method))
-        cp = getattr(prob.by_method[mid], "critical_probabilistic", None)
+        # v0.1.169 (D127) — the method that has samples, not the first
+        # one. ``cp`` itself needs no guard: entries of ``per_surface`` are
+        # born holding a value and only surfaces with at least
+        # ``min_evaluations`` of them are eligible, so its ``pf`` is always
+        # a float and a "--" branch here would be dead code.
+        cp = getattr(prob.reported, "critical_probabilistic", None)
         if cp is None:
             if on:
                 self._info(tr(

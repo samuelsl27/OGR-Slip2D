@@ -56,16 +56,21 @@ class MethodProbabilisticResult:
     notes: dict = field(default_factory=dict)
 
     # ------------------------------------------------------------------
+    # v0.1.169 (D127) — ``Optional`` because the statistic they delegate to
+    # answers ``None`` with no samples. In THIS class the guard of
+    # ``run_global_minimum`` means such an instance never reaches a
+    # consumer; the annotation still says so, because the default-built
+    # instance exists and the type is the contract, not the itinerary.
     @property
-    def probability_of_failure(self) -> float:
+    def probability_of_failure(self) -> Optional[float]:
         return self.statistics.probability_of_failure()
 
     @property
-    def reliability_index(self) -> float:
+    def reliability_index(self) -> Optional[float]:
         return self.statistics.reliability_index()
 
     @property
-    def mean_fos(self) -> float:
+    def mean_fos(self) -> Optional[float]:
         return self.statistics.mean
 
     def summary(self) -> dict:
@@ -101,8 +106,29 @@ class ProbabilisticResult:
     notes: dict = field(default_factory=dict)
 
     @property
+    def reported(self):
+        """The method a one-line summary speaks for: the first one that
+        actually has a sample.
+
+        v0.1.169 (D127). Defined next to ``ok`` because ``ok`` is exactly
+        the claim that this is not ``None``, and the two must not be able
+        to drift apart. It is also what spares every caller a dead "--"
+        branch: past a checked ``ok`` this is never ``None``, so nothing
+        formats a missing number and nothing has to pretend it might.
+
+        It matters most in Overall Slope, where a method that lost every
+        search KEEPS its entry in ``by_method`` (see ``run_overall_slope``)
+        and ``next(iter(...))`` could hand back exactly that one.
+        """
+        return next((r for r in self.by_method.values()
+                     if r.statistics.n > 0), None)
+
+    @property
     def ok(self) -> bool:
-        return bool(self.by_method)
+        # NOT ``bool(self.by_method)`` any more: an entry with zero samples
+        # is not a result, it is the absence of one wearing the shape of
+        # one -- which is defect D127 and, in its wider form, D20.
+        return self.reported is not None
 
     def summary(self) -> list:
         return [r.summary() for r in self.by_method.values()]
@@ -295,6 +321,127 @@ def _stale_variables_stop(result, project, active, first, applied) -> bool:
     return False
 
 
+# ======================================================================
+#: How a method lost its samples, one stem per analysis type. Constants and
+#: not a boolean flag, because the two sentences differ in what they say
+#: happened and a flag would hide that behind a call site.
+_STEM_GM = "failed on the deterministic critical surface"
+_STEM_OS = "produced no valid surface"
+
+
+def _sample_failure(exc, r) -> str:
+    """Label the way ONE sample was lost, for counting.
+
+    v0.1.169 (D127). The ficha asks for "the reason of the last failed
+    sample, which the ``except`` has", and that is both less than this
+    module can say and, in one case, nothing at all: measured, a sample
+    whose ``LEMResult`` comes back with ``is_valid`` false never reaches
+    the ``except``, and before this version the two routes produced an
+    identical state — ``ok`` true, ``pf`` nan, an empty ``notes``.
+
+    They are three distinguishable outcomes, not one. And since v0.1.152
+    (D56) an invalid result carries ``reason``, one of ``ALL_REASONS``,
+    put there so a caller can "GROUP by reason instead of matching free
+    text" — which is why these are COUNTED rather than kept one at a
+    time. The reference reports exactly that shape: a code and how many
+    surfaces gave it.
+    """
+    if exc is not None:
+        return "raised %s" % type(exc).__name__
+    if r is None:
+        return "no result"
+    return getattr(r, "reason", "") or getattr(r, "error_message",
+                                               "") or "unstated"
+
+
+def _search_failure(exc, run) -> str:
+    """The same, for an Overall Slope iteration, which loses a whole
+    SEARCH and not one evaluation.
+
+    ``run is None`` and ``run.critical is None`` are not the same fault —
+    the first is a factory or a search that blew up on its own terms, the
+    second a search that ran and found nothing admissible — and today's
+    code collapses them into one counter.
+    """
+    if exc is not None:
+        return "raised %s" % type(exc).__name__
+    if run is None:
+        return "no result"
+    return "no critical surface"
+
+
+def _counted_reasons(counts: dict) -> str:
+    """``"zero_driving x 17, raised ValueError x 3"``.
+
+    Ordered by frequency and then by name, never by insertion, so two runs
+    over the same data read the same way.
+    """
+    return ", ".join("%s x %d" % (k, n) for k, n in
+                     sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])))
+
+
+def _no_sample_note(mid: str, num_samples: int, stem: str,
+                    counts: dict) -> str:
+    """Why this method has no probability of failure.
+
+    THE SENTENCE MAY NOT BLAME THE VARIABLE RANGES. That is the lesson of
+    v0.1.154 (D59), whose test demands in as many words that the reason
+    not accuse the ranges, which are innocent when the fault is a surface
+    that cannot be formed or a strength the method cannot solve. The 20 %
+    warning keeps its own wording and its own threshold; this is a
+    different sentence for a different state, and it names the measured
+    cause instead of guessing at one.
+    """
+    if not counts:
+        return ("%s: no sample was drawn, so this method has no "
+                "probability of failure." % mid)
+    return ("%s: all %d samples %s, so this method has no probability of "
+            "failure. Reasons: %s."
+            % (mid, num_samples, stem, _counted_reasons(counts)))
+
+
+def _publish_method_losses(result, lost: list) -> None:
+    """Put the lost methods where the interface actually looks.
+
+    v0.1.169 (D127). Two things the ficha gets wrong and that this
+    function is the answer to. It asks for ``mres.notes["error"]``, and
+    NOBODY in the program reads a per-method ``notes``: ``main_window``
+    reads ``res.notes``, the notes of the RESULT — so a reason written
+    there is a note that does not exist, which is what
+    ``test_statistical_rebuild_v1154`` calls the state worth avoiding.
+    And a method that does not survive has its ``mres`` discarded whole,
+    so there is nothing left to carry it.
+
+    ``lost`` is an EXPLICIT list the two loops append to, never something
+    deduced by asking which keys of ``notes`` are not ``"error"`` or
+    ``"warning"``. Dispatching on the shape of a dictionary instead of on
+    what the code knows is literally D59.
+
+    The partial case — one method answers and another loses everything —
+    is published as a ``warning`` and CONCATENATED, never assigned: the
+    stale-variable warning of v0.1.164 (D91) may already be sitting in
+    that key, and overwriting it would close one silence by opening the
+    one before it.
+    """
+    if not lost:
+        return
+    text = "; ".join(str(result.notes[mid]) for mid in lost
+                     if mid in result.notes)
+    if not text:
+        return
+    if result.ok:
+        previous = result.notes.get("warning")
+        result.notes["warning"] = (previous + "; " + text if previous
+                                   else text)
+    elif "error" not in result.notes:
+        # The v0.1.154 roll-up, now keyed on ``ok`` rather than on an
+        # empty ``by_method``: in Overall Slope the entry STAYS (see
+        # ``run_overall_slope``), so "no method survived" and "the
+        # dictionary is empty" stopped being the same statement.
+        result.notes["error"] = "; ".join(
+            str(v) for k, v in result.notes.items() if k != "warning")
+
+
 def run_global_minimum(
     project,
     critical_surfaces: dict,
@@ -386,6 +533,10 @@ def run_global_minimum(
 
     total = num_samples * max(1, len(critical_surfaces))
     done = 0
+    # v0.1.169 (D127) — the methods that come back with nothing, named as
+    # the loop loses them. See ``_publish_method_losses`` for why this is a
+    # list and not something read back off ``result.notes``.
+    lost: list = []
 
     for mid, det in critical_surfaces.items():
         method = _make_method(mid)
@@ -404,6 +555,7 @@ def run_global_minimum(
             # and a run that answers for another sliding mass without a
             # word.
             result.notes[mid] = refusal
+            lost.append(mid)
             continue
         surface = _rebuild_surface(sd)
         if surface is None:
@@ -417,14 +569,16 @@ def run_global_minimum(
             surface=sd if isinstance(sd, dict) else None,
         )
         values: list[float] = []
+        counts: dict = {}
         for i in range(num_samples):
             clone = clone_project(project)
             one = {k: v[i] for k, v in samples.items()}
             apply_sample(clone, active, one)
+            exc = None
             try:
                 r = _evaluate_on(clone, search, surface)
-            except Exception:  # noqa: BLE001
-                r = None
+            except Exception as e:  # noqa: BLE001
+                r, exc = None, e
             if r is not None and r.is_valid:
                 values.append(r.fos)
             else:
@@ -433,11 +587,39 @@ def run_global_minimum(
                 # dropped silently, because a large count means the
                 # distributions are unrealistic.
                 mres.failed_samples += 1
+                # v0.1.169 (D127) — and counted BY CAUSE, because the
+                # exception, the missing result and the declared reason of
+                # D56 are three different faults that the single counter
+                # above cannot tell apart.
+                label = _sample_failure(exc, r)
+                counts[label] = counts.get(label, 0) + 1
             done += 1
             if progress_cb and done % 25 == 0:
                 progress_cb(done, total)
 
+        if not values:
+            # v0.1.169 (D127) — nothing survived, so there is no
+            # probability of failure to publish. The method does NOT enter
+            # ``by_method``: that is what makes ``ok`` false without an
+            # ``ok`` to assign, and it is why the interface cannot reach a
+            # ``None`` where it formats a number.
+            #
+            # Before the guard, ``SampleStatistics(values=[])`` answered
+            # ``pf`` nan and ``beta`` -inf -- the latter because
+            # ``nan >= 1.0`` is False -- and the status bar printed
+            # "PF = nan %, beta = -inf" with ``ok`` true and no error at
+            # all.
+            result.notes[mid] = _no_sample_note(mid, num_samples, _STEM_GM,
+                                                counts)
+            lost.append(mid)
+            continue
+
         mres.statistics = SampleStatistics(values=values)
+        # The 20 % warning and its wording are untouched, and it is now
+        # only reached when at least one sample DID survive -- which is
+        # exactly where "check the variable ranges" still means something.
+        # With 20 of 20 lost it used to be written onto an ``mres`` nobody
+        # would ever read.
         if mres.failed_samples > 0.2 * num_samples:
             mres.notes["warning"] = (
                 f"{mres.failed_samples} of {num_samples} samples could "
@@ -447,9 +629,10 @@ def run_global_minimum(
     # v0.1.154 — if no method survived, the reason rises to the key the
     # interface actually prints: ``_compute_statistics`` looks only at
     # ``notes['error']``, and only when the run comes back empty.
-    if not result.by_method and "error" not in result.notes and result.notes:
-        result.notes["error"] = "; ".join(
-            str(v) for v in result.notes.values())
+    # v0.1.169 (D127) — and if SOME method survived, the ones that did not
+    # stop being silent: the partial case used to leave its reason under
+    # ``notes[mid]``, a key no consumer reads.
+    _publish_method_losses(result, lost)
 
     if progress_cb:
         progress_cb(total, total)
@@ -467,11 +650,11 @@ class SurfaceProbability:
     times_global_minimum: int = 0
 
     @property
-    def probability_of_failure(self) -> float:
+    def probability_of_failure(self) -> Optional[float]:
         return self.statistics.probability_of_failure()
 
     @property
-    def reliability_index(self) -> float:
+    def reliability_index(self) -> Optional[float]:
         return self.statistics.reliability_index()
 
 
@@ -488,11 +671,11 @@ class OverallSlopeResult:
     notes: dict = field(default_factory=dict)
 
     @property
-    def probability_of_failure(self) -> float:
+    def probability_of_failure(self) -> Optional[float]:
         return self.statistics.probability_of_failure()
 
     @property
-    def reliability_index(self) -> float:
+    def reliability_index(self) -> Optional[float]:
         return self.statistics.reliability_index()
 
     @property
@@ -513,10 +696,13 @@ class OverallSlopeResult:
             "pf": st.probability_of_failure(),
             "reliability_index": st.reliability_index(),
             "distinct_global_minima": self.distinct_minima,
+            # v0.1.169 (D127) — ``None`` and not ``math.nan``: no eligible
+            # surface means there is no such probability, and the same
+            # policy that governs an empty sampling governs its absence.
             "critical_probabilistic_pf": (
-                cp.probability_of_failure if cp else math.nan),
+                cp.probability_of_failure if cp else None),
             "critical_probabilistic_beta": (
-                cp.reliability_index if cp else math.nan),
+                cp.reliability_index if cp else None),
             "failed_samples": self.failed_samples,
         }
 
@@ -645,6 +831,7 @@ def run_overall_slope(
 
     total = num_samples * len(method_ids)
     done = 0
+    lost: list = []
 
     for mid in method_ids:
         det = (deterministic or {}).get(mid)
@@ -654,21 +841,28 @@ def run_overall_slope(
         per_surface: dict = {}
         minima_keys: set = set()
         values: list[float] = []
+        counts: dict = {}
 
         for i in range(num_samples):
             clone = clone_project(project)
             apply_sample(clone, active, {k: v[i] for k, v in
                                          samples.items()})
+            exc = None
             try:
                 search = search_factory(mid)
                 run = search.run(clone)
-            except Exception:  # noqa: BLE001
-                run = None
+            except Exception as e:  # noqa: BLE001
+                run, exc = None, e
             done += 1
             if progress_cb:
                 progress_cb(done, total)
             if run is None or run.critical is None:
                 ores.failed_samples += 1
+                # v0.1.169 (D127) — a search that blew up and a search that
+                # ran and found nothing admissible are not the same fault,
+                # and the counter above cannot tell them apart.
+                label = _search_failure(exc, run)
+                counts[label] = counts.get(label, 0) + 1
                 continue
 
             values.append(run.critical.fos)
@@ -716,6 +910,27 @@ def run_overall_slope(
             ores.notes["warning"] = (
                 f"{ores.failed_samples} of {num_samples} searches "
                 f"produced no valid surface.")
+        if not values:
+            # v0.1.169 (D127) — same state as in ``run_global_minimum``,
+            # said the same way, and DELIBERATELY not fixed the same way:
+            # here the entry stays in ``by_method``.
+            #
+            # ``test_overall_slope_v137.test_failed_searches_counted`` runs
+            # five searches that all raise and then asserts
+            # ``res.by_method[mid].failed_samples == 5``. That is this very
+            # state, it is green today, and the ficha for D127 lists that
+            # file as untouchable -- so removing the entry here would be a
+            # KeyError, not a fix. What turns the run off is ``ok``, which
+            # now asks for a sample and not for a key. Anyone "unifying"
+            # the two loops will break that test; this comment is why.
+            result.notes[mid] = _no_sample_note(mid, num_samples, _STEM_OS,
+                                                counts)
+            lost.append(mid)
         result.by_method[mid] = ores
+
+    # v0.1.169 (D127) — the roll-up this function never had. Until now a
+    # run in which every search of every method failed came back ``ok``
+    # with ``pf`` nan and an empty ``notes``.
+    _publish_method_losses(result, lost)
 
     return result
