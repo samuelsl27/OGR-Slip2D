@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from ogr_gui.i18n import tr  # noqa: E402
+from ogr_gui.reported_quantity import fos_label  # noqa: E402
 
 
 class ResultsDock(QDockWidget):
@@ -56,7 +57,7 @@ class ResultsDock(QDockWidget):
         self.setWidget(container)
 
     # ------------------------------------------------------------------
-    def show_result(self, search_result) -> None:
+    def show_result(self, search_result, factor_report=None) -> None:
         self.table.setRowCount(0)
         if search_result is None or not search_result.evaluations:
             self.header_label.setText(tr("No results yet."))
@@ -70,10 +71,15 @@ class ResultsDock(QDockWidget):
             # critical factor of safety printed next to it.
             n_ok = getattr(search_result, "analysed_count",
                            search_result.valid_count)
+            # v0.1.165 (D96) — this caption was hard-coded AND untranslated,
+            # so the dock said "Critical FoS" in English while the status
+            # bar three pixels below said "FS crítico", and both said it
+            # over an over-design factor. One decider, and through tr().
+            label = fos_label(factor_report)
             self.header_label.setText(
                 f"Method: <b>{search_result.method_id}</b>   "
                 f"Valid: {n_ok}   "
-                f"Critical FoS: <b>{crit.fos:.3f}</b>"
+                f"{label}: <b>{crit.fos:.3f}</b>"
             )
         else:
             self.header_label.setText(

@@ -39,6 +39,7 @@ from ogr_core.units.quantities import Quantity
 
 from .canvas import CanvasView
 from .i18n import tr
+from .reported_quantity import reported_quantity
 from .resources import icon
 
 
@@ -374,17 +375,14 @@ class _SliceDataDock(QDockWidget):
 # rather than asking the project — a window that reads the settings can
 # disagree with the results it is showing, which is how a stale panel
 # reports a number the analysis never produced.
-def _reported_quantity(result):
-    """``("fos" | "ky" | "newmark", label)`` for one search result."""
-    if result is None:
-        return "fos", tr("Factor of safety")
-    if getattr(result, "objective", "fos") != "ky":
-        return "fos", tr("Factor of safety")
-    critical = result.critical
-    details = getattr(critical, "details", None) or {} if critical else {}
-    if "newmark_displacement" in details:
-        return "newmark", tr("Newmark displacement")
-    return "ky", tr("Critical seismic coefficient")
+#
+# v0.1.165 (D96) — the body moved to ``ogr_gui.reported_quantity``, because
+# the status bar and the results dock print the same headline number and
+# were each captioning it their own way. A design standard adds a fourth
+# thing it can be called, and three widgets deciding that separately is how
+# they came to disagree in the first place. The rule above is unchanged and
+# now covers the factor report too: it is a property of the RUN.
+_reported_quantity = reported_quantity
 
 
 def _reported_value(result, item, project=None):
@@ -437,9 +435,13 @@ class _SummaryDock(QDockWidget):
         vbox.addStretch(1)
         self.setWidget(container)
 
-    def show_result(self, result, project=None) -> None:
+    def show_result(self, result, project=None, factor_report=None) -> None:
         self.project = project if project is not None else getattr(
             self, "project", None)
+        # v0.1.165 (D96) — kept beside the result it belongs to, never read
+        # back from the settings: see ``ogr_gui.reported_quantity``.
+        self.factor_report = (factor_report if factor_report is not None
+                              else getattr(self, "factor_report", None))
         if result is None or not result.evaluations:
             self.label.setText(tr("<i>No results to display.</i>"))
             return
@@ -481,7 +483,7 @@ class _SummaryDock(QDockWidget):
         # v0.1.127 - the headline number is whatever the run minimised.
         # Printing "FoS" over a Ky run would be the panel contradicting
         # the analysis, which is the fault v0.1.84 fixed one line above.
-        kind, label = _reported_quantity(result)
+        kind, label = _reported_quantity(result, self.factor_report)
         value, note = _reported_value(result, c, getattr(self, "project", None))
         extra = f"<br><i>{note}</i>" if note else ""
         self.label.setText(
@@ -548,8 +550,13 @@ class InterpretWindow(QMainWindow):
 
     closed = Signal()
 
-    def __init__(self, project: Project, search_result, parent=None) -> None:
+    def __init__(self, project: Project, search_result, parent=None, *,
+                 factor_report=None) -> None:
+        # v0.1.165 (D96) — keyword-only and defaulted: ten tests build this
+        # window positionally, and a run with no design standard has nothing
+        # to say here.
         super().__init__(parent)
+        self.factor_report = factor_report
         self.setWindowTitle(f"OGR Slip2D — Interpret — {project.name}")
         self.resize(1200, 800)
         self.project = project
@@ -588,7 +595,8 @@ class InterpretWindow(QMainWindow):
         # Docks
         self.summary_dock = _SummaryDock(self)
         self.addDockWidget(Qt.RightDockWidgetArea, self.summary_dock)
-        self.summary_dock.show_result(self.search_result, self.project)
+        self.summary_dock.show_result(self.search_result, self.project,
+                                      self.factor_report)
 
         self.results_dock = _ResultsTableDock(self)
         self.addDockWidget(Qt.RightDockWidgetArea, self.results_dock)
@@ -1119,8 +1127,15 @@ class InterpretWindow(QMainWindow):
             label = method_labels.get(mid, mid)
             crit = result.critical if result is not None else None
             if crit is not None:
+                # v0.1.165 (D96) — this one still said "FoS" when the
+                # summary dock two panels away already said "Critical
+                # seismic coefficient", so the window contradicted itself
+                # for every Ky run since v0.1.127, and would have done the
+                # same for an over-design factor.
+                _kind, _name = _reported_quantity(result, self.factor_report)
+                _shown, _tip = _reported_value(result, crit, self.project)
                 self.cb_method.addItem(
-                    f"{label}  —  FoS = {crit.fos:.3f}", mid,
+                    f"{label}  —  {_name} = {_shown}", mid,
                 )
             else:
                 self.cb_method.addItem(
@@ -1157,8 +1172,15 @@ class InterpretWindow(QMainWindow):
             return
         mid = self.active_algorithm()
         fos = self.critical_label_text()
+        # v0.1.165 (D96) — this read-out is the SINGLE-method path, so it is
+        # the one most runs land on, and it said "FS" over whatever the run
+        # reported. Left alone it would now contradict the summary dock in
+        # its own window. The separator carries no word of its own any more,
+        # so it needs no key: the word arrives already translated.
+        _kind, name = _reported_quantity(self.search_result,
+                                         self.factor_report)
         lab.setText(tr("Method: %s") % mid
-                    + (tr("   |   FS = %s") % fos if fos else ""))
+                    + ("   |   %s = %s" % (name, fos) if fos else ""))
         act = getattr(self, "_act_thrust", None)
         if act is not None:
             available = mid in self._THRUST_METHODS
@@ -1179,7 +1201,8 @@ class InterpretWindow(QMainWindow):
         self._current_method_id = mid
         self.search_result = result
         self._refresh_canvas_with_highlights()
-        self.summary_dock.show_result(result, self.project)
+        self.summary_dock.show_result(result, self.project,
+                                      self.factor_report)
         self.results_dock.show_result(result)
         # v0.1.49 — the legend range and the algorithm read-out belong to
         # the ACTIVE method: each one has its own critical surface and its

@@ -1622,6 +1622,12 @@ _DICTS: dict[str, dict[str, str]] = {
         "Ready": "Listo",
         "Computing...": "Calculando...",
         "Critical FoS": "FS crítico",
+        # v0.1.165 (D96) — con una norma activa los coeficientes
+        # parciales se aplican a los DATOS, así que lo que sale no es
+        # un factor de seguridad.
+        "Over-design factor": "Factor de sobredimensionamiento",
+        "Design standard applied: %s — the reported value is an over-design factor, not a factor of safety, and must exceed 1":
+            "Norma de diseño aplicada: %s — el valor indicado es un factor de sobredimensionamiento, no un factor de seguridad, y debe ser mayor que 1",
         "Language": "Idioma",
         "Theme": "Tema",
         "Light": "Claro",

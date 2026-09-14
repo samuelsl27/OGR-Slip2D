@@ -91,6 +91,7 @@ from .resources import icon
 from .themes import apply_theme
 from .widgets import AssignMaterialsPanel, OgrStatusBar, ResultsDock, TerminalDock
 from ogr_gui.i18n import tr  # noqa: E402
+from ogr_gui.reported_quantity import fos_label  # noqa: E402
 
 
 # ======================================================================
@@ -206,7 +207,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.164"
+    VERSION = "0.1.165"
 
     def __init__(self) -> None:
         super().__init__()
@@ -228,6 +229,12 @@ class MainWindow(QMainWindow):
         # to get its critical surfaces, so merging would have the run erase
         # its own note.
         self.last_statistics_notes: list[str] = []
+        # v0.1.165 (D96) — the design-standard report of the last run, kept
+        # here for the same reason and cleared in the same three places: it
+        # describes THAT run. Read from the settings instead and the caption
+        # would change the moment the user opened the settings dialog, while
+        # the number on screen still came from the old run.
+        self.last_factor_report = None
         self.interpret_windows: list[InterpretWindow] = []
 
         # v0.1.2 — selection filter state
@@ -934,6 +941,7 @@ class MainWindow(QMainWindow):
         self.last_search_results: dict = {}
         self.last_compute_warnings = []
         self.last_statistics_notes = []
+        self.last_factor_report = None
         self.setWindowTitle(f"OGR Slip2D v{self.VERSION} — Untitled")
 
     def act_open(self) -> None:
@@ -2990,7 +2998,13 @@ class MainWindow(QMainWindow):
         # dialog: this method runs inside the test suite, where a modal
         # blocks forever without a display.
         worker = getattr(self, "worker", None)
-        self.last_compute_warnings = list(getattr(worker, "warnings", []) or [])
+        self.last_factor_report = getattr(worker, "factor_report", None)
+        # v0.1.165 (D96) — FIRST, because it does not report what the run
+        # decided but what the reported number IS. Every other note qualifies
+        # a factor of safety; this one says it is not a factor of safety.
+        self.last_compute_warnings = (
+            self._factor_report_notes(self.last_factor_report)
+            + list(getattr(worker, "warnings", []) or []))
         if self.last_compute_warnings:
             # v0.1.155 — still the first note, because the status bar has
             # room for one, but no longer AS IF it were the only one: the
@@ -3002,9 +3016,13 @@ class MainWindow(QMainWindow):
                 first = tr("%s  [+%d more — Analysis > Analysis Notes]") % (
                     first, rest)
             self.ogr_status.showMessage(first, 15000)
-            panel = getattr(self, "_analysis_notes_panel", None)
-            if panel is not None and not panel.isHidden():
-                panel.populate(self._analysis_notes())
+        # v0.1.165 — outside the ``if``. Inside it, a run that produced no
+        # notes left the PREVIOUS run's notes on an open panel, even though
+        # the list had just been emptied two lines above: the one case where
+        # the panel is guaranteed to be wrong is the one it never refreshed.
+        panel = getattr(self, "_analysis_notes_panel", None)
+        if panel is not None and not panel.isHidden():
+            panel.populate(self._analysis_notes())
         if not results:
             self.last_search_result = None
             self.ogr_status.showMessage("No methods produced results.", 6000)
@@ -3013,7 +3031,7 @@ class MainWindow(QMainWindow):
         first_id = next(iter(results))
         first_result = results[first_id]
         self.last_search_result = first_result  # back-compat
-        self.results_dock.show_result(first_result)
+        self.results_dock.show_result(first_result, self.last_factor_report)
         self.canvas.display_search_result(first_result)
         critical = first_result.critical
         if critical:
@@ -3024,8 +3042,12 @@ class MainWindow(QMainWindow):
                 if n_methods > 1 else ""
             )
             warn = self._ordinary_pore_pressure_warning(results)
+            # v0.1.165 (D96) — and it has to be HERE and not only in the
+            # note: this message replaces the note above it (a status bar
+            # holds one temporary message), so on any run that found a
+            # critical surface the caption is the only thing the bar shows.
             self.ogr_status.showMessage(
-                f"{tr('Critical FoS')} ({first_id}): "
+                f"{fos_label(self.last_factor_report)} ({first_id}): "
                 f"{critical.fos:.3f}{extra}{warn}", 10000,
             )
             if self.project.results_path:
@@ -3063,6 +3085,35 @@ class MainWindow(QMainWindow):
                "effective normal force; its FoS is underestimated.")
             % (n_bad, n_tot)
         )
+
+    @staticmethod
+    def _factor_report_notes(report) -> list:
+        """What a design standard did, as note lines. Empty when off.
+
+        v0.1.165 (D96) — the command line has said this since v0.1.127 and
+        the interface had never said it: ``_ComputeWorker`` stored the
+        report and nothing read it.
+
+        ``report.notes`` is carried too, and it is the half that BOTH front
+        ends were dropping. It holds the one sentence that catches the
+        useless case — a standard switched on with every partial factor left
+        at 1.0 — where ``applied`` is true, the caption therefore says
+        over-design factor, and the number is an ordinary factor of safety.
+        The caption follows the command line so the two never disagree; this
+        note is what stops that caption standing alone.
+        """
+        if not bool(getattr(report, "applied", False)):
+            return []
+        # The frame is translated here; what goes INSIDE it is not. The
+        # summary and the engine's own notes are built in ``ogr_core``,
+        # which cannot import ``ogr_gui.i18n``, so they arrive in English
+        # and stay in English — the same treatment every other engine note
+        # in this list already gets.
+        lines = [tr("Design standard applied: %s — the reported value is an "
+                    "over-design factor, not a factor of safety, and must "
+                    "exceed 1") % report.summary()]
+        lines += [str(n) for n in (getattr(report, "notes", None) or [])]
+        return lines
 
     def _analysis_notes(self) -> list:
         """Every note of the last run, deterministic and statistical.
@@ -3104,7 +3155,8 @@ class MainWindow(QMainWindow):
             return
         # v0.1.9: pass the full dict so the InterpretWindow can offer
         # a method selector
-        win = InterpretWindow(self.project, results, self)
+        win = InterpretWindow(self.project, results, self,
+                              factor_report=self.last_factor_report)
         win.closed.connect(lambda: self._forget_interpret(win))
         self.interpret_windows.append(win)
         win.show()
@@ -4905,6 +4957,7 @@ class MainWindow(QMainWindow):
         self.last_search_results: dict = {}
         self.last_compute_warnings = []
         self.last_statistics_notes = []
+        self.last_factor_report = None
         self.results_dock.show_result(None)
         self._install_demo_project()
         self.setWindowTitle(f"OGR Slip2D v{self.VERSION} — Demo slope")
