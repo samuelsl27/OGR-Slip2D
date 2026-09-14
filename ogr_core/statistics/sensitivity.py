@@ -124,6 +124,19 @@ class SensitivityResult:
     by_method: dict = field(default_factory=dict)   # mid -> {key: VS}
     intervals: int = DEFAULT_INTERVALS
     notes: dict = field(default_factory=dict)
+    #: Everything the run has to say, ONE SENTENCE PER ELEMENT. ``notes``
+    #: above is the same content flattened into the two keys the status bar
+    #: prints; this is that content unflattened, which is what the notes
+    #: panel needs. ``AnalysisNotesPanel._split`` groups by a ``"<mid>: "``
+    #: prefix, so several lost methods joined into ONE string hang entirely
+    #: off the first one's identifier -- measured, and that is defect D129.
+    #:
+    #: A sentence about ONE method arrives prefixed ``"<mid>: "``; a
+    #: sentence about the run arrives bare and falls under "Model". A LIST
+    #: and not a dict keyed by method on purpose: a second sentence about
+    #: the same method -- D88 is going to add one -- is one more element,
+    #: not a ``notes[mid]`` overwritten.
+    note_lines: list = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -172,13 +185,29 @@ def run_sensitivity(
             ``analysis_runner.build_method``, which is the one place that
             configures a method from the project (v0.1.108).
         progress_cb: called as ``(done, total)``.
+
+    WHERE THE v0.1.170 (D129) NOTE STOPS, said out loud rather than left to
+    be discovered. A method REFUSED by ``_cannot_reevaluate`` now says so
+    even when another method answered. A method that entered the loop and
+    came out with zero valid points still leaves ``by_method`` without a
+    note of its own: when the cause is an orphan variable the sweep carries
+    it and the run-wide sentence says it, but when every evaluation simply
+    failed the method disappears quietly. That is not fixed here because
+    there is no measured reproduction of it, and inventing a sentence for a
+    state nobody has seen is the ajuste-que-no-hace-nada of regla 7.
+    Promising a wider cover than the guard gives is what cost this project
+    two versions over m-alpha (v0.1.82-84).
     """
     from ogr_slip2d.analysis_runner import build_method
     from ogr_slip2d.search import GridSearch
 
     from .probabilistic import (
+        _NO_DETERMINISTIC,
+        _NO_METHOD,
         _cannot_reevaluate,
         _evaluate_on,
+        _publish_method_losses,
+        _publish_note,
         _rebuild_surface,
     )
 
@@ -187,12 +216,14 @@ def run_sensitivity(
     usable = [rv for rv in variables
               if abs(rv.distribution.high - rv.distribution.low) > 1e-15]
     if not usable:
-        res.notes["error"] = (
+        _publish_note(
+            res, "error",
             "No variable has a range: enter a relative minimum and "
             "maximum for at least one parameter.")
         return res
     if not critical_surfaces:
-        res.notes["error"] = (
+        _publish_note(
+            res, "error",
             "No deterministic result: run the regular analysis first so "
             "the global minimum surface is known.")
         return res
@@ -222,10 +253,22 @@ def run_sensitivity(
     # instead of one sentence per variable per method. A dict for an
     # ordered set: the same variable is refused by every method.
     orphan_keys: dict = {}
+    # v0.1.170 (D129) — the methods this loop loses, named as it loses
+    # them. An EXPLICIT list, never something read back off the keys of
+    # ``notes``: dispatching on the shape of a dictionary instead of on
+    # what the code knows is literally D59, and here it would also be
+    # wrong -- ``"variables"`` is a key of ``notes`` and is not a method.
+    lost: list = []
 
     for mid, det in critical_surfaces.items():
         method = _make_method(mid)
         if method is None or det is None:
+            # v0.1.170 (D129) — same third route as in
+            # ``run_global_minimum``, and the same two sentences: a method
+            # that never reached the sweep used to disappear in silence.
+            res.notes[mid] = (_NO_METHOD if method is None
+                              else _NO_DETERMINISTIC)
+            lost.append(mid)
             continue
         sd = (det.surface.to_dict() if hasattr(det.surface, "to_dict")
               else det.surface)
@@ -236,6 +279,7 @@ def run_sensitivity(
             # not run. Measured before this: ok=False, zero points and an
             # empty ``notes``.
             res.notes[mid] = refusal
+            lost.append(mid)
             continue
         surface = _rebuild_surface(sd)
         if surface is None:
@@ -300,19 +344,31 @@ def run_sensitivity(
     if orphan_keys:
         keys = ", ".join(orphan_keys)
         if res.by_method:
-            res.notes["warning"] = (
+            _publish_note(
+                res, "warning",
                 "%d of the %d random variables no longer match the model "
                 "and were not swept: %s"
                 % (len(orphan_keys), len(usable), keys))
         else:
-            res.notes["variables"] = (
+            _publish_note(
+                res, "variables",
                 "none of the %d random variables matches the model: %s"
                 % (len(usable), keys))
 
-    # v0.1.154 — same as ``run_global_minimum``: if no method survived,
-    # the reason rises to the only key the interface prints.
-    if not res.by_method and "error" not in res.notes and res.notes:
-        res.notes["error"] = "; ".join(str(v) for v in res.notes.values())
+    # v0.1.154 — if no method survived, the reason rises to the only key
+    # the interface prints.
+    # v0.1.170 (D129) — and if SOME method survived, the ones that did not
+    # stop being silent. Until this version the roll-up above fired ONLY on
+    # ``not res.by_method``, so a run with one method refused and another
+    # answering left its reason under ``notes[mid]``, a key no consumer
+    # reads. The probabilistic side got this in v0.1.169; this is the half
+    # that was left.
+    #
+    # It runs AFTER the orphan block on purpose, so the concatenation reads
+    # "the D91 sentence; the lost method" -- the same order the
+    # probabilistic path produces, where ``_stale_variables_stop`` runs
+    # before the method loop.
+    _publish_method_losses(res, lost)
 
     if progress_cb:
         progress_cb(total, total)

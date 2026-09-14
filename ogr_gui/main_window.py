@@ -207,7 +207,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.169"
+    VERSION = "0.1.170"
 
     def __init__(self) -> None:
         super().__init__()
@@ -1721,21 +1721,29 @@ class MainWindow(QMainWindow):
                 # v0.1.164 (D91) — a run that sampled only SOME of the
                 # declared variables is still a run, so it reports PF; what
                 # it may not do is report it as if nothing were missing.
-                # Without this the note existed and nobody showed it, which
-                # is the state ``test_the_reason_reaches_the_key_the_
-                # interface_prints`` calls a note that does not exist.
                 warning = res.notes.get("warning")
                 if warning:
                     messages.append(warning)
-                    self.last_statistics_notes.append(warning)
             else:
-                # v0.1.169 (D127) — and into the notes panel too, not only
-                # into the status bar, where it lasted twelve seconds and
-                # was gone. The reason a run produced nothing is the one
-                # note a user most needs to still be able to read.
-                err = res.notes.get("error", "probabilistic run failed")
-                messages.append(err)
-                self.last_statistics_notes.append(err)
+                messages.append(
+                    res.notes.get("error", "probabilistic run failed"))
+            # v0.1.169 (D127) put the reason into the notes panel and not
+            # only into the status bar, where it lasted twelve seconds and
+            # was gone; that intent is unchanged and only the route moved.
+            #
+            # v0.1.170 (D129) — the panel is fed from ``note_lines`` ALONE,
+            # and ``notes`` goes only to the status bar, which takes one
+            # string. The two are the same content, so appending both would
+            # say the same sentence twice in the case this defect is about:
+            # one stale variable AND one lost method, where
+            # ``notes["warning"]`` already carries the method's line.
+            #
+            # One ``extend`` per analysis and no per-branch ``append`` is
+            # also what stops the two branches drifting apart again: the
+            # reason a run produced nothing used to reach the panel from
+            # the probabilistic side and not from the sensitivity one.
+            self.last_statistics_notes.extend(
+                getattr(res, "note_lines", None) or [])
 
         if st.sensitivity_analysis:
             res = run_sensitivity(
@@ -1750,10 +1758,13 @@ class MainWindow(QMainWindow):
                 warning = res.notes.get("warning")
                 if warning:
                     messages.append(warning)
-                    self.last_statistics_notes.append(warning)
             else:
                 messages.append(res.notes.get("error", "sensitivity run "
                                                        "failed"))
+            # v0.1.170 (D129) — the twin of the line above, and the same
+            # shape on purpose.
+            self.last_statistics_notes.extend(
+                getattr(res, "note_lines", None) or [])
 
         panel = getattr(self, "_analysis_notes_panel", None)
         if panel is not None and not panel.isHidden():

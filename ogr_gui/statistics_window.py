@@ -70,6 +70,25 @@ class StatisticsWindow(QMainWindow):
         bar.addStretch(1)
         v.addLayout(bar)
 
+        # v0.1.170 (D129) — a label of its OWN, above the plot and outside
+        # everything ``_redraw`` rewrites. It cannot share ``self.status``
+        # below: that one is reset on every redraw, so a run-wide sentence
+        # written there would survive exactly until the user changed the
+        # plot or the method. ``_redraw`` does not mention this widget in
+        # any line, which is the only guarantee that does not erode.
+        self.lbl_run_notes = QLabel("")
+        self.lbl_run_notes.setWordWrap(True)
+        self.lbl_run_notes.setStyleSheet("color: #b00020;")
+        _lines = self._run_notes()
+        if _lines:
+            self.lbl_run_notes.setText(
+                tr("What this run could not do:") + "\n"
+                + "\n".join(_lines))
+        # Regla 7 in interface form: with nothing to say, the window of a
+        # sound run is pixel for pixel the one it has always been.
+        self.lbl_run_notes.setVisible(bool(_lines))
+        v.addWidget(self.lbl_run_notes)
+
         self.canvas = None
         self._holder = QVBoxLayout()
         v.addLayout(self._holder, 1)
@@ -80,6 +99,51 @@ class StatisticsWindow(QMainWindow):
         self._redraw()
 
     # ------------------------------------------------------------------
+    def _run_notes(self) -> list:
+        """The lines the engines left, in order and without repeats.
+
+        Nothing is parsed: the window never asks what a line says or which
+        method it is about. The two engines share ``_cannot_reevaluate``,
+        so they can refuse the same method with the same sentence -- hence
+        the de-duplication, with the order kept.
+
+        The honest limit: ``_compute_statistics`` only keeps a result when
+        it is ``ok``, so a run that failed ENTIRELY never reaches this
+        window. This label is for the PARTIAL case, which is D129; the
+        total one is carried by the status bar and the notes panel.
+        """
+        lines = []
+        for res in (self.prob, self.sens):
+            lines += list(getattr(res, "note_lines", None) or [])
+        return list(dict.fromkeys(lines))
+
+    def _method_note(self, mid) -> str:
+        """What an engine said about THIS method, asked for BY NAME.
+
+        Not "which keys of ``notes`` are neither error nor warning": that
+        is dispatching on the shape of a dictionary, which is D59. The
+        method id is already in hand, so the only question asked is
+        whether the run left anything under it.
+        """
+        for res in (self.prob, self.sens):
+            note = (getattr(res, "notes", None) or {}).get(mid)
+            if note:
+                return str(note)
+        return ""
+
+    def _with_reason(self, text: str, mid) -> str:
+        """``text``, and the engine's reason behind it when there is one.
+
+        The generic sentences below are true but useless on their own: in
+        Overall Slope a method that lost every search KEEPS its entry, so
+        it is selectable, and the window answered "No probabilistic result
+        for this method" without ever saying why. ``notes[mid]`` is the
+        bare fact precisely so it can be read here, where the combo is
+        already showing the method's name.
+        """
+        note = self._method_note(mid)
+        return text + "   |   " + note if note else text
+
     def _method_ids(self):
         ids = []
         if self.prob is not None and self.prob.ok:
@@ -130,7 +194,8 @@ class StatisticsWindow(QMainWindow):
     def _plot_histogram(self, mid):
         st = self._stats_for(mid)
         if st is None or not st.values:
-            self.status.setText(tr("No probabilistic result for this method."))
+            self.status.setText(self._with_reason(
+                tr("No probabilistic result for this method."), mid))
             return
         fig = self._figure()
         ax = fig.add_subplot(111)
@@ -162,7 +227,8 @@ class StatisticsWindow(QMainWindow):
     def _plot_convergence(self, mid):
         st = self._stats_for(mid)
         if st is None or not st.values:
-            self.status.setText(tr("No probabilistic result for this method."))
+            self.status.setText(self._with_reason(
+                tr("No probabilistic result for this method."), mid))
             return
         conv = st.convergence(steps=60)
         fig = self._figure()
@@ -190,7 +256,8 @@ class StatisticsWindow(QMainWindow):
             return
         sweeps = self.sens.by_method.get(mid)
         if not sweeps:
-            self.status.setText(tr("No sensitivity result for this method."))
+            self.status.setText(self._with_reason(
+                tr("No sensitivity result for this method."), mid))
             return
         fig = self._figure()
         ax = fig.add_subplot(111)

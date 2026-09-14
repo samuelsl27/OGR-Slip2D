@@ -2296,10 +2296,16 @@ class InterpretWindow(QMainWindow):
         if out:
             return out
         prob, _sens = self._stat_results()
-        if prob is not None and prob.ok and prob.by_method:
-            mid = next(iter(prob.by_method))
-            for sd in (getattr(prob.by_method[mid], "global_minima", [])
-                       or []):
+        if prob is not None and prob.ok:
+            # v0.1.170 (D129) — the FOURTH site of the D127 migration, left
+            # behind when the other three moved. In Overall Slope a method
+            # that lost every search KEEPS its entry, so
+            # ``next(iter(by_method))`` could hand back exactly that one and
+            # its ``global_minima`` is empty: "Show GM Surfaces" drew
+            # nothing and said nothing. ``ok`` is precisely the claim that
+            # ``reported`` is not None, so the ``by_method`` test it
+            # replaces was redundant as well as wrong.
+            for sd in (getattr(prob.reported, "global_minima", []) or []):
                 if sd:
                     out.append(dict(sd))
         return out

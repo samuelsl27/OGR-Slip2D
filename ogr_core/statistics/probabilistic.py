@@ -104,6 +104,19 @@ class ProbabilisticResult:
     # computed factors of safety so a scatter plot is a plain zip.
     samples: dict = field(default_factory=dict)
     notes: dict = field(default_factory=dict)
+    #: Everything the run has to say, ONE SENTENCE PER ELEMENT. ``notes``
+    #: above is the same content flattened into the two keys the status bar
+    #: prints; this is that content unflattened, which is what the notes
+    #: panel needs. ``AnalysisNotesPanel._split`` groups by a ``"<mid>: "``
+    #: prefix, so several lost methods joined into ONE string hang entirely
+    #: off the first one's identifier -- measured, and that is defect D129.
+    #:
+    #: A sentence about ONE method arrives prefixed ``"<mid>: "``; a
+    #: sentence about the run arrives bare and falls under "Model". A LIST
+    #: and not a dict keyed by method on purpose: a second sentence about
+    #: the same method -- D88 is going to add one -- is one more element,
+    #: not a ``notes[mid]`` overwritten.
+    note_lines: list = field(default_factory=list)
 
     @property
     def reported(self):
@@ -282,6 +295,28 @@ def _cannot_reevaluate(project, surface_dict) -> Optional[str]:
 
 
 # ======================================================================
+def _publish_note(result, key: str, sentence: str) -> None:
+    """Say ``sentence`` under ``key``, and keep it as its own line.
+
+    v0.1.170 (D129). ``notes`` is what the status bar prints, and a status
+    bar takes ONE string, so several sentences under the same key have to
+    be joined. ``note_lines`` is that same content BEFORE the join, because
+    the notes panel groups by the ``"<mid>: "`` prefix and a joined string
+    hangs entirely off the first prefix in it.
+
+    CONCATENATES, never assigns. The rule is not this function's invention:
+    the stale-variable warning of v0.1.164 (D91) may already be sitting in
+    ``warning``, and overwriting it would close one silence by opening the
+    one before it. Making it a property of the WRITER rather than of each
+    call site is the whole point -- ten sites copying the same two lines is
+    exactly how the string and the list stop being the same content.
+    """
+    previous = result.notes.get(key)
+    result.notes[key] = (previous + "; " + sentence if previous
+                         else sentence)
+    result.note_lines.append(sentence)
+
+
 def _stale_variables_stop(result, project, active, first, applied) -> bool:
     """Record the variables that no longer match the model, and say whether
     the run has to stop before sampling.
@@ -309,13 +344,15 @@ def _stale_variables_stop(result, project, active, first, applied) -> bool:
     if not orphans:
         return False
     if len(orphans) == len(active):
-        result.notes["error"] = (
+        _publish_note(
+            result, "error",
             "none of the %d random variables matches the model: %s"
             % (len(active), ", ".join(orphans)))
         return True
     # Partial: the ones that DO write still carry a meaningful sampling, so
     # the run goes on. What it may not do is go on quietly.
-    result.notes["warning"] = (
+    _publish_note(
+        result, "warning",
         "%d of the %d random variables no longer match the model and were "
         "not sampled: %s" % (len(orphans), len(active), ", ".join(orphans)))
     return False
@@ -325,6 +362,20 @@ def _stale_variables_stop(result, project, active, first, applied) -> bool:
 #: How a method lost its samples, one stem per analysis type. Constants and
 #: not a boolean flag, because the two sentences differ in what they say
 #: happened and a flag would hide that behind a call site.
+#: Why a method never entered the sample loop at all. Constants because
+#: ``run_sensitivity`` says the same two things, and a second copy of a
+#: sentence is how two copies start to differ.
+#:
+#: The first reuses the words ``analysis_runner`` has published since
+#: v0.1.77 for this SAME precondition on the deterministic path -- "a
+#: method ticked but not registered leaves a trace". It does not name the
+#: method because ``_method_lines`` puts the name on; the deterministic
+#: path writes the id inside the sentence because it has no prefix
+#: convention to lean on.
+_NO_METHOD = "not a registered analysis method, so it was not computed."
+_NO_DETERMINISTIC = ("the deterministic run left no critical surface for "
+                     "this method, so there is nothing to re-evaluate.")
+
 _STEM_GM = "failed on the deterministic critical surface"
 _STEM_OS = "produced no valid surface"
 
@@ -380,8 +431,7 @@ def _counted_reasons(counts: dict) -> str:
                      sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])))
 
 
-def _no_sample_note(mid: str, num_samples: int, stem: str,
-                    counts: dict) -> str:
+def _no_sample_note(num_samples: int, stem: str, counts: dict) -> str:
     """Why this method has no probability of failure.
 
     THE SENTENCE MAY NOT BLAME THE VARIABLE RANGES. That is the lesson of
@@ -391,13 +441,41 @@ def _no_sample_note(mid: str, num_samples: int, stem: str,
     warning keeps its own wording and its own threshold; this is a
     different sentence for a different state, and it names the measured
     cause instead of guessing at one.
+
+    v0.1.170 (D129) — the ``"<mid>: "`` prefix is NOT written here any
+    more. It goes on once, in ``_method_lines``. The three sentences of
+    ``_cannot_reevaluate`` never carried it, so the panel filed them under
+    "Model" and the user read "this method was skipped" without being told
+    WHICH -- an invariant honoured by two writers out of five is not an
+    invariant. What stays under ``notes[mid]`` is the bare fact, which is
+    what ``StatisticsWindow`` needs: there the method is already the
+    combo's own label, and a sentence repeating it would be noise.
     """
     if not counts:
-        return ("%s: no sample was drawn, so this method has no "
-                "probability of failure." % mid)
-    return ("%s: all %d samples %s, so this method has no probability of "
+        return ("no sample was drawn, so this method has no probability "
+                "of failure.")
+    return ("all %d samples %s, so this method has no probability of "
             "failure. Reasons: %s."
-            % (mid, num_samples, stem, _counted_reasons(counts)))
+            % (num_samples, stem, _counted_reasons(counts)))
+
+
+def _method_lines(result, lost: list) -> list:
+    """One line per lost method, ``"<mid>: <sentence>"``.
+
+    v0.1.170 (D129). THE ONE PLACE the method's name is put on, so the
+    invariant "a sentence about a method names it" holds by construction
+    instead of depending on each writer having remembered. ``lost`` is the
+    explicit list the loops built; the dictionary is never asked which of
+    its keys look like method ids.
+
+    ``str.partition(": ")`` in the panel takes the FIRST occurrence, and
+    measured none of the three ``_cannot_reevaluate`` sentences contains
+    one while ``_no_sample_note`` only reaches its own in "Reasons: ...",
+    which comes later -- so the prefix put here is always the one that
+    decides the group.
+    """
+    return ["%s: %s" % (mid, result.notes[mid]) for mid in lost
+            if mid in result.notes]
 
 
 def _publish_method_losses(result, lost: list) -> None:
@@ -423,23 +501,78 @@ def _publish_method_losses(result, lost: list) -> None:
     that key, and overwriting it would close one silence by opening the
     one before it.
     """
-    if not lost:
-        return
-    text = "; ".join(str(result.notes[mid]) for mid in lost
-                     if mid in result.notes)
-    if not text:
-        return
+    lines = _method_lines(result, lost)
+    # First, and with no guard in front of it: a line has to reach the
+    # panel even when the roll-up below declines to publish it because
+    # ``error`` is already taken.
+    result.note_lines.extend(lines)
+
     if result.ok:
-        previous = result.notes.get("warning")
-        result.notes["warning"] = (previous + "; " + text if previous
-                                   else text)
-    elif "error" not in result.notes:
-        # The v0.1.154 roll-up, now keyed on ``ok`` rather than on an
-        # empty ``by_method``: in Overall Slope the entry STAYS (see
-        # ``run_overall_slope``), so "no method survived" and "the
-        # dictionary is empty" stopped being the same statement.
-        result.notes["error"] = "; ".join(
-            str(v) for k, v in result.notes.items() if k != "warning")
+        if lines:
+            previous = result.notes.get("warning")
+            text = "; ".join(lines)
+            result.notes["warning"] = (previous + "; " + text if previous
+                                       else text)
+        return
+
+    if "error" in result.notes:
+        return
+    # The v0.1.154 roll-up, keyed on ``ok`` rather than on an empty
+    # ``by_method``: in Overall Slope the entry STAYS (see
+    # ``run_overall_slope``), so "no method survived" and "the dictionary
+    # is empty" stopped being the same statement.
+    #
+    # v0.1.170 (D129) — ``rest`` does not CLASSIFY, it CONSERVES. It never
+    # asks what a key means; it carries whatever another writer left that
+    # this function did not render itself. That is what saves the
+    # ``"variables"`` key of ``run_sensitivity`` without this function
+    # having to know such a key exists -- and the day D88 adds another one,
+    # ``rest`` carries it unaided.
+    lost_keys = set(lost)
+    rest = [str(v) for k, v in result.notes.items()
+            if k != "warning" and k not in lost_keys]
+    joined = "; ".join(lines + rest)
+    # Structural, not defensive: with nothing lost and nothing else to say
+    # -- a healthy run -- this writes no key at all, which is what
+    # ``test_nothing_is_said_when_nothing_was_lost`` demands and what the
+    # ``if not lost: return`` used to provide. That early return had to go:
+    # a sensitivity run whose every variable is an orphan arrives here with
+    # ``lost`` EMPTY and still owes the user an ``error``.
+    if joined:
+        result.notes["error"] = joined
+
+
+def _publish_method_warnings(result) -> None:
+    """Surface what a SURVIVING method had to say.
+
+    v0.1.170 (D129). ``mres.notes`` is read by nobody in the program: the
+    20 % sentence of ``run_global_minimum`` and the failed-search sentence
+    of ``run_overall_slope`` have been written there and never shown. This
+    puts them on ``note_lines`` and NOWHERE else -- ``notes`` is the status
+    bar's one-line headline, and a per-method detail does not belong in a
+    headline. It also means every assertion that already exists about
+    ``notes`` on a partly-failed run keeps the answer it had.
+
+    Only the ``warning`` key, and only for a method that HAS samples. Both
+    limits are measured rather than tidy:
+
+    * a healthy Overall Slope run carries ``surfaces_tracked`` -- 115 and
+      116 on the two methods of the reference model -- so surfacing
+      ``mres.notes`` wholesale would turn a diagnostic count into a note on
+      every sound run, which is regla 7 with its sign flipped;
+    * a method that lost everything KEEPS its entry in Overall Slope and
+      already has a line from ``_method_lines``; without the ``n > 0``
+      filter it would be named twice for one fault.
+
+    The sentence and the threshold are NOT touched: this version opens the
+    channel, it does not rewrite the note.
+    """
+    for mid, mres in result.by_method.items():
+        if getattr(mres.statistics, "n", 0) <= 0:
+            continue
+        said = (getattr(mres, "notes", None) or {}).get("warning")
+        if said:
+            result.note_lines.append("%s: %s" % (mid, said))
 
 
 def run_global_minimum(
@@ -482,12 +615,14 @@ def run_global_minimum(
 
     active = [rv for rv in variables if rv.distribution.is_random]
     if not active:
-        result.notes["error"] = (
+        _publish_note(
+            result, "error",
             "No random variables defined. At least one model input "
             "parameter must be given a statistical distribution.")
         return result
     if not critical_surfaces:
-        result.notes["error"] = (
+        _publish_note(
+            result, "error",
             "No deterministic result: run the regular analysis first so "
             "the global minimum surface is known.")
         return result
@@ -541,6 +676,15 @@ def run_global_minimum(
     for mid, det in critical_surfaces.items():
         method = _make_method(mid)
         if method is None or det is None:
+            # v0.1.170 (D129) — a bare ``continue`` until this version, and
+            # that is a THIRD route to the same defect: a method vanishing
+            # from the results without a word. Reachable and not
+            # theoretical -- ``build_method`` answers ``None`` for a
+            # method_id that is not in the registry, which is exactly how
+            # "Janbu Corrected" could be ticked and produce nothing.
+            result.notes[mid] = (_NO_METHOD if method is None
+                                 else _NO_DETERMINISTIC)
+            lost.append(mid)
             continue
         # ONE serialisation per method: the one the refusal reads, the one
         # the seed is built from and the one that travels in the result.
@@ -609,7 +753,7 @@ def run_global_minimum(
             # ``nan >= 1.0`` is False -- and the status bar printed
             # "PF = nan %, beta = -inf" with ``ok`` true and no error at
             # all.
-            result.notes[mid] = _no_sample_note(mid, num_samples, _STEM_GM,
+            result.notes[mid] = _no_sample_note(num_samples, _STEM_GM,
                                                 counts)
             lost.append(mid)
             continue
@@ -633,6 +777,7 @@ def run_global_minimum(
     # stop being silent: the partial case used to leave its reason under
     # ``notes[mid]``, a key no consumer reads.
     _publish_method_losses(result, lost)
+    _publish_method_warnings(result)
 
     if progress_cb:
         progress_cb(total, total)
@@ -799,12 +944,13 @@ def run_overall_slope(
 
     active = [rv for rv in variables if rv.distribution.is_random]
     if not active:
-        result.notes["error"] = (
+        _publish_note(
+            result, "error",
             "No random variables defined. At least one model input "
             "parameter must be given a statistical distribution.")
         return result
     if not method_ids:
-        result.notes["error"] = "No analysis method selected."
+        _publish_note(result, "error", "No analysis method selected.")
         return result
 
     result.variables = [rv.key for rv in active]
@@ -923,7 +1069,7 @@ def run_overall_slope(
             # KeyError, not a fix. What turns the run off is ``ok``, which
             # now asks for a sample and not for a key. Anyone "unifying"
             # the two loops will break that test; this comment is why.
-            result.notes[mid] = _no_sample_note(mid, num_samples, _STEM_OS,
+            result.notes[mid] = _no_sample_note(num_samples, _STEM_OS,
                                                 counts)
             lost.append(mid)
         result.by_method[mid] = ores
@@ -932,5 +1078,6 @@ def run_overall_slope(
     # run in which every search of every method failed came back ``ok``
     # with ``pf`` nan and an empty ``notes``.
     _publish_method_losses(result, lost)
+    _publish_method_warnings(result)
 
     return result
