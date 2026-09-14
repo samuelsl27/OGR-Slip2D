@@ -207,7 +207,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.167"
+    VERSION = "0.1.168"
 
     def __init__(self) -> None:
         super().__init__()
@@ -255,6 +255,12 @@ class MainWindow(QMainWindow):
         self.canvas.vertex_moved.connect(self._on_vertex_moved)
         self.canvas.vertex_inserted.connect(self._on_vertex_inserted)
         self.canvas.vertex_deleted.connect(self._on_vertex_deleted)
+        # v0.1.168 (D101) — connected once here and not armed/disarmed at
+        # each use like ``segment_picked``: that signal is shared by five
+        # modes, which is why they connect and disconnect around every
+        # pick. This one belongs to a single mode and has nothing to
+        # collide with.
+        self.canvas.three_points_picked.connect(self._on_surface_3pt_picked)
         # v0.1.8 — right-click delete/modify on loads
         self.canvas.load_action_requested.connect(self._on_load_action)
         # v0.1.9 — drag-to-move boundary
@@ -540,6 +546,14 @@ class MainWindow(QMainWindow):
                  self._optimize_surfaces, None)
         self._mk("surf_centre_radius", "Add Surface (centre and radius)...",
                  self._add_surface_centre_radius, None)
+        # v0.1.168 (D101) — the second way the reference documents to add a
+        # circular surface. No ellipsis: it enters a draw mode and opens no
+        # dialog, and every draw-mode action in this window goes without
+        # one. No icon either, like its sibling above — and the key the old
+        # scaffolding used, ``surface_3pts``, stays out of the catalogue:
+        # v0.1.166 removed it and a test pins its absence.
+        self._mk("surf_three_points", "Add Surface (three points)",
+                 self._add_surface_three_points, None)
         # v0.1.157 (D58) — adding without removing would be a one-way door.
         self._mk("surf_manage", "Manage Surfaces...",
                  self._manage_user_surfaces, None)
@@ -771,6 +785,7 @@ class MainWindow(QMainWindow):
         m_surf.addAction(self._actions["add_grid"])
         m_surf.addAction(self._actions["block_object"])
         m_surf.addAction(self._actions["surf_centre_radius"])
+        m_surf.addAction(self._actions["surf_three_points"])
         m_surf.addAction(self._actions["surf_manage"])
         m_surf.addSeparator()
         m_focus = m_surf.addMenu(tr("Focus Search"))
@@ -2251,6 +2266,51 @@ class MainWindow(QMainWindow):
         # had been added.
         self.project.user_surfaces.append(circle)
         self.project.is_dirty = True
+        self.canvas.refresh_scene()
+        self.statusBar().showMessage(
+            tr("Circle added: centre (%.3f, %.3f), radius %.3f")
+            % (circle.centre_x, circle.centre_y, circle.radius), 8000)
+
+    # v0.1.168 (D101) — the other way round from the action above: that one
+    # types coordinates into a dialog, this one picks them on the canvas.
+    # ``ToolMode.ADD_SURFACE_3PT`` had had a cursor and a status text since
+    # v0.1.3 and nothing had ever entered it.
+    def _add_surface_three_points(self) -> None:
+        """Enter the three-point circular-surface drawing mode."""
+        # Nothing else: ``set_tool_mode`` already emits the mode's own
+        # status text. ``act_add_block_search_object`` has to print its own
+        # prompt only because DRAW_BLOCK_SEARCH carries no hint; saying it
+        # again here would give the user the same instruction twice.
+        self._set_tool(ToolMode.ADD_SURFACE_3PT)
+
+    def _on_surface_3pt_picked(self, ax: float, ay: float,
+                               bx: float, by: float,
+                               cx: float, cy: float) -> None:
+        """Add the circle through three canvas-picked points. v0.1.168."""
+        from ogr_core.geometry import Vertex
+        from ogr_slip2d.surface import SlipCircle
+        try:
+            circle = SlipCircle.from_three_points(
+                Vertex(ax, ay), Vertex(bx, by), Vertex(cx, cy))
+        except ValueError:
+            # Not unreachable, and that is the point. The canvas refuses a
+            # third click closer than _MIN_PERP_PX to the line, but that
+            # threshold is RELATIVE to the zoom (pixels / px_per_unit)
+            # while the engine's own guard is the ABSOLUTE ``abs(d) <
+            # 1e-14``. Zoomed far enough in, the canvas tolerance shrinks
+            # below the absolute one and the engine rejects first. Same
+            # sentence as the canvas: one precondition, one text.
+            self.ogr_status.showMessage(tr(
+                "Those three points are too close to a straight line to "
+                "define a circle. Click a third point further from the "
+                "line through the first two."), 8000)
+            return
+        self.project.user_surfaces.append(circle)
+        self.project.is_dirty = True
+        # Leave the mode BEFORE redrawing: refresh_scene() clears the
+        # scene, and the tool change is what discards any preview item
+        # still pending since v0.1.168.
+        self.canvas.set_tool_mode(ToolMode.SELECT)
         self.canvas.refresh_scene()
         self.statusBar().showMessage(
             tr("Circle added: centre (%.3f, %.3f), radius %.3f")
@@ -3778,7 +3838,11 @@ class MainWindow(QMainWindow):
                            == SurfaceType.CIRCULAR.value)
         except Exception:  # noqa: BLE001
             is_circular = True
-        for key in ("surf_centre_radius", "surf_manage"):
+        # v0.1.168 (D101) — the three-point action joins the tuple and
+        # inherits both tooltip branches: it adds the same kind of object
+        # to the same list, so a second sentence for the same precondition
+        # is how a tooltip ends up contradicting the one beside it.
+        for key in ("surf_centre_radius", "surf_three_points", "surf_manage"):
             if key in actions:
                 actions[key].setEnabled(is_circular)
                 actions[key].setToolTip(

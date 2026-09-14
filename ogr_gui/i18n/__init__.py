@@ -1300,7 +1300,27 @@ _DICTS: dict[str, dict[str, str]] = {
         # porque _mk pasa una VARIABLE a tr() y el escáner AST de
         # test_i18n_coverage_v141 sólo recoge literales constantes.
         "Add Grid...": "Añadir rejilla...",
+        # v0.1.168 (D101) — huérfana desde 0.1.157 hasta aquí: la acción
+        # que la usa nace en esta versión. Sin puntos suspensivos porque
+        # entra en modo de dibujo y no abre ningún diálogo, que es la
+        # convención que v0.1.166 midió — y por eso la clave casa tal cual.
         "Add Surface (three points)": "Añadir superficie (tres puntos)",
+        # v0.1.168 (D101) — el texto de estado del modo. Hasta esta versión
+        # set_tool_mode emitía los hints SIN tr(); ahora los envuelve, y
+        # éste es el único con entrada española porque es el único que esta
+        # versión hace visible. Los otros 33 siguen cayendo a la clave.
+        "Click three points to define a circular surface":
+            "Pulsa en tres puntos para definir una superficie circular",
+        # v0.1.168 (D101) — una precondición, una frase: la misma clave la
+        # emiten el lienzo (al rechazar el tercer clic) y main_window (si
+        # el motor se adelanta con su propia guarda), porque el usuario no
+        # puede distinguir cuál saltó y no tiene por qué.
+        "Those three points are too close to a straight line to define a "
+        "circle. Click a third point further from the line through the "
+        "first two.":
+            "Los tres puntos están casi alineados y no definen ningún "
+            "círculo. Pulsa en un tercer punto más alejado de la recta que "
+            "pasa por los dos primeros.",
         "Define Limits...": "Definir límites...",
         # --- Properties -----------------------------------------------
         "Define Materials...": "Definir materiales...",

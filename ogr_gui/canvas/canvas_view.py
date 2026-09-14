@@ -60,6 +60,17 @@ from ogr_gui.i18n import tr  # noqa: E402
 # Zoom All and the scene rect both need it and they must not drift apart.
 EMPTY_VIEW_RECT = QRectF(-5, -5, 60, 40)
 
+# v0.1.168 (D101) — how far off the line through the first two points the
+# third click must fall before three points count as a circle. In PIXELS
+# and converted to model units at use, so the rule does not change meaning
+# with the zoom (AGENTS.md: screen tolerances go in pixels). Two, because
+# clicks are quantised to whole device pixels and the only value below one
+# pixel is zero — the user would have no way to express anything in
+# between; and because two is strictly below every hit tolerance in this
+# file (8, 10 and 12 px), so a refused click can never be one the same
+# canvas would have treated as a deliberate pick of something else.
+_MIN_PERP_PX = 2.0
+
 
 # ----------------------------------------------------------------------
 # Helper — module-level distance function used by the hit-test methods
@@ -183,6 +194,15 @@ class CanvasView(QGraphicsView):
     point_picked = Signal(float, float)
     # v0.1.8 — emitted after the user clicks two points (distributed loads)
     segment_picked = Signal(float, float, float, float)
+    # v0.1.168 (D101) — emitted after the user clicks three points. Third
+    # member of the family above: one click, two clicks, three. Six floats
+    # and not a list, because every Signal(object) in this class carries a
+    # single domain object and never a mutable container — a list crossing
+    # a signal boundary would alias the very accumulator it came from. The
+    # name is geometric on purpose: the canvas must not be named after
+    # SlipCircle, which lives in ogr_slip2d and which this package has
+    # never imported.
+    three_points_picked = Signal(float, float, float, float, float, float)
     # v0.1.8 — load right-click action (action, kind, index)
     load_action_requested = Signal(str, str, int)
     # v0.1.9 — emitted on Move Boundary drag release (boundary_idx, dx, dy)
@@ -401,7 +421,21 @@ class CanvasView(QGraphicsView):
             self._zw_rubber = None
             self._zw_start_scene = None
 
+        previous = self._tool_mode
         self._tool_mode = mode
+
+        # v0.1.168 (D101) — a pending click does not survive a change of
+        # tool. ``_draw_points`` is shared by every picking mode and
+        # nothing used to empty it on the way out, so a single click left
+        # over from Add Support or Pick Grid Rectangle became the FIRST of
+        # the three points of a circle the user never placed. Guarded on
+        # the mode actually changing: Pick Grid Rectangle can be re-armed
+        # from a dialog that is still open, and a same-mode re-entry must
+        # not become a hidden cancel.
+        if mode is not previous and self._draw_points:
+            self._draw_points = []
+            self._clear_draw_preview()
+
         self.setDragMode(
             QGraphicsView.RubberBandDrag if mode == ToolMode.SELECT
             else QGraphicsView.NoDrag
@@ -411,7 +445,11 @@ class CanvasView(QGraphicsView):
 
         hint = mode.status_message
         if hint:
-            self.status_message.emit(hint)
+            # v0.1.168 (D101) — the hints reach the status bar untranslated
+            # until here. ``tr`` takes a variable, so the AST scanner of
+            # test_i18n_coverage_v141 cannot see these keys: the census
+            # that keeps them honest lives in this version's test file.
+            self.status_message.emit(tr(hint))
         self.tool_mode_changed.emit(mode)
 
     # ==================================================================
@@ -1559,6 +1597,42 @@ class CanvasView(QGraphicsView):
                 best = i
         return best if best_d <= tol else -1
 
+    def _is_degenerate_triangle(self, ax: float, ay: float,
+                                bx: float, by: float,
+                                cx: float, cy: float) -> bool:
+        """True when (a, b, c) are too aligned to define a circle the user
+        can be said to have aimed at. v0.1.168 (D101).
+
+        This is a rule about SCREEN RESOLUTION, not about geometry quality:
+        it does not certify that the resulting radius is sensible, and a
+        large radius is a perfectly legitimate near-planar failure. What it
+        refuses is what the pointing device cannot express.
+        ``mousePressEvent`` rounds to whole device pixels, so the set of
+        perpendicular offsets a user can produce is quantised; below a
+        couple of pixels the radius swings by orders of magnitude between
+        one pixel and the next, and the number stops being the user's.
+
+        The measure is the perpendicular to the INFINITE line through a and
+        b, not ``_point_segment_distance``: that one clamps the projection
+        to the segment, so for a=(0,0), b=(10,0), c=(20,0) — exactly
+        collinear — it answers 10 while the true perpendicular is 0, and
+        would wave the trio through.
+
+        There is deliberately no minimum separation between clicks:
+        measured, a=(0,0), b=(1e-8,0), c=(10,10) gives a perfectly
+        conditioned circle of radius 10 about (0,10). Degeneracy is
+        governed by alignment, not by proximity. Only ``a == b`` needs
+        handling, and it is refused because there is no line to be far
+        from.
+        """
+        abx, aby = bx - ax, by - ay
+        den = math.hypot(abx, aby)
+        if den == 0.0:
+            return True
+        perp = abs(abx * (cy - ay) - aby * (cx - ax)) / den
+        px_per_unit = abs(self.transform().m11()) or 1.0
+        return perp < _MIN_PERP_PX / px_per_unit
+
     def _pick_support_endpoint(
         self, x: float, y: float, tolerance_px: float = 10.0,
     ):
@@ -1860,6 +1934,60 @@ class CanvasView(QGraphicsView):
                     self._draw_points.clear()
                     self._update_draw_preview()
                     self.segment_picked.emit(x0, y0, snapped.x(), snapped.y())
+                event.accept()
+                return
+
+            # v0.1.168 (D101) — Add Surface (three points). Its own branch
+            # and not a click-count parameter on the block above: that one
+            # serves five modes which feed the search grid and the support
+            # population, and generalising it to N clicks would run all of
+            # them through new code for no gain. This flow also has a step
+            # none of them has — a conditional REFUSAL that keeps the
+            # pending points. One branch per click count is the shape this
+            # method already uses; ADD_LINE_LOAD has its own at one click.
+            if mode == ToolMode.ADD_SURFACE_3PT:
+                scene_pt = self.mapToScene(event.position().toPoint())
+                snapped = self._snap_xy(scene_pt)
+                x, y = snapped.x(), snapped.y()
+
+                if len(self._draw_points) < 2:
+                    # A repeat of the previous point gives no line, and so
+                    # no circle. This is not hypothetical: _snap_point
+                    # feeds _draw_points back to the snap engine as a
+                    # pseudo-boundary for ANY mode, so with snapping on —
+                    # the default — a second click within the vertex
+                    # tolerance lands exactly on the first. Ignoring it is
+                    # what this method already does with a click that hits
+                    # nothing; refusing it would be a dead end, since with
+                    # a == b stored every later click is refused too.
+                    if self._draw_points and (x, y) == self._draw_points[-1]:
+                        event.accept()
+                        return
+                    self._draw_points.append((x, y))
+                    self._update_draw_preview()
+                    event.accept()
+                    return
+
+                (ax, ay), (bx, by) = self._draw_points[0], self._draw_points[1]
+                if self._is_degenerate_triangle(ax, ay, bx, by, x, y):
+                    # Refuse the third click and KEEP the first two: two
+                    # good clicks are already invested, and the red dots on
+                    # screen make the correction directly actionable. Same
+                    # answer _finish_drawing gives a too-short polygon.
+                    self.status_message.emit(tr(
+                        "Those three points are too close to a straight "
+                        "line to define a circle. Click a third point "
+                        "further from the line through the first two."))
+                    event.accept()
+                    return
+
+                # Clear BEFORE emitting, exactly as the 2-click block does:
+                # the slot calls refresh_scene(), which clears the scene,
+                # and a preview item still held here would be a dead C++
+                # wrapper by the time anything touched it again.
+                self._draw_points.clear()
+                self._update_draw_preview()
+                self.three_points_picked.emit(ax, ay, bx, by, x, y)
                 event.accept()
                 return
 
