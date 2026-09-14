@@ -186,6 +186,24 @@ _DICTS: dict[str, dict[str, str]] = {
         'Add Focus Window...': 'Añadir ventana de foco...',
         'Add Surface': 'Añadir superficie',
         'Add Surface (centre and radius)...': 'Añadir superficie (centro y radio)...',
+        # v0.1.166 (D102) — «Add Surface» era el rótulo de esta acción,
+        # que no añade ninguna superficie: dibuja un objeto de Block
+        # Search. El término castellano es el que el propio diccionario
+        # ya fijó para esta misma acción (771) y para «Block Search
+        # Options» (790).
+        'Add Block Search Object': 'Añadir objeto de búsqueda por bloques',
+        # Los VALORES de los controles se quedan en inglés a propósito:
+        # el botón de radio pone «Non-Circular» (grid_dialogs.py:282) y
+        # el combo pone «Block Search» (:304), ninguno traducido, así
+        # que un nombre castellano mandaría al usuario a buscar un
+        # control que no existe con ese nombre.
+        'Add Block Search Object is only available with the Block Search '
+        'method. Set Surface Options -> Surface Type = Non-Circular, '
+        'Search Method = Block Search.':
+            'Añadir objeto de búsqueda por bloques sólo está disponible '
+            'con el método Block Search. Abre Opciones de superficie y pon '
+            'Tipo de superficie = Non-Circular, Método de búsqueda = '
+            'Block Search.',
         'Capture tolerance:': 'Tolerancia de captura:',
         # v0.1.157 (D58) — superficies definidas a mano por el usuario.
         'Manage Surfaces...': 'Gestionar superficies...',
@@ -1267,6 +1285,12 @@ _DICTS: dict[str, dict[str, str]] = {
         "Surface Options...": "Opciones de superficie...",
         "Auto Grid": "Rejilla automática",
         "Add Grid": "Añadir rejilla",
+        # v0.1.166 (D102) — la etiqueta ganó puntos suspensivos y la
+        # traducción dejó de casar en silencio: tr() cae a la clave, así
+        # que el menú decía «Add Grid...» en español. No lo vio nadie
+        # porque _mk pasa una VARIABLE a tr() y el escáner AST de
+        # test_i18n_coverage_v141 sólo recoge literales constantes.
+        "Add Grid...": "Añadir rejilla...",
         "Add Surface (three points)": "Añadir superficie (tres puntos)",
         "Define Limits...": "Definir límites...",
         # --- Properties -----------------------------------------------

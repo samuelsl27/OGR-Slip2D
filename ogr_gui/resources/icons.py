@@ -78,7 +78,7 @@ _CATALOG: dict[str, tuple[str, Optional[str]]] = {
     # --- Surfaces -----------------------------------------------------
     "surface_options":   ("fa6s.arrows-split-up-and-left", None),
     "auto_grid":         ("fa6s.border-all", None),
-    "surface_3pts":      ("fa6s.circle-dot", None),
+    "block_object":      ("fa6s.object-group", None),
     "slope_limits":      ("fa6s.left-right", None),
     # --- Properties ---------------------------------------------------
     "define_materials":  ("fa6s.layer-group", None),

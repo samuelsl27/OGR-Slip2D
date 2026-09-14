@@ -207,7 +207,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.165"
+    VERSION = "0.1.166"
 
     def __init__(self) -> None:
         super().__init__()
@@ -517,7 +517,12 @@ class MainWindow(QMainWindow):
                  self.act_surface_options, "surface_options")
         self._mk("auto_grid", "Auto Grid", self.act_auto_grid, "auto_grid")
         self._mk("add_grid", "Add Grid...", self.act_add_grid, "auto_grid")
-        self._mk("surf_3pts", "Add Surface", self.act_add_surface, "surface_3pts")
+        # v0.1.166 (D102) - the label, the key and the icon all used to say
+        # "surface": the action draws a Block Search object and adds no
+        # surface at all. No ellipsis, because every draw-mode action in
+        # this window goes without one; "..." is reserved for a dialog.
+        self._mk("block_object", "Add Block Search Object",
+                 self.act_add_block_search_object, "block_object")
         # v0.1.55 (phase M4) — focus objects, optimisation and the
         # remaining surface entries.
         from ogr_slip2d.focus import FocusKind as _FK
@@ -764,7 +769,7 @@ class MainWindow(QMainWindow):
         m_surf.addSeparator()
         m_surf.addAction(self._actions["auto_grid"])
         m_surf.addAction(self._actions["add_grid"])
-        m_surf.addAction(self._actions["surf_3pts"])
+        m_surf.addAction(self._actions["block_object"])
         m_surf.addAction(self._actions["surf_centre_radius"])
         m_surf.addAction(self._actions["surf_manage"])
         m_surf.addSeparator()
@@ -884,7 +889,7 @@ class MainWindow(QMainWindow):
             ["add_dist", "add_line", "seismic", "del_load"],
             ["add_support", "support_pattern", "stretch_support",
              "del_support"],
-            ["auto_grid", "surf_3pts", "surface_opts", "slope_limits"],
+            ["auto_grid", "block_object", "surface_opts", "slope_limits"],
             ["def_materials", "def_support", "assign"],
             ["add_text", "measure", "dim_len", "dim_ang", "mat_tab"],
             ["help", "about"],
@@ -1177,7 +1182,7 @@ class MainWindow(QMainWindow):
                 f"{self.project.settings.search.search_method}", 3000,
             )
 
-    def act_add_surface(self) -> None:
+    def act_add_block_search_object(self) -> None:
         """Add a Block Search object (a search window) on the canvas.
 
         Block Search uses one or more user-drawn search objects to
@@ -1188,9 +1193,14 @@ class MainWindow(QMainWindow):
         """
         s = self.project.settings.search
         if s.search_method != "block":
+            # v0.1.166 (D102) - the WORDS follow the action's new name. The
+            # box stays MODAL and stays outside tr(): both of those are
+            # P-D103 whole, and half-doing them here would leave that
+            # ficha's criterion unmeasurable.
             QMessageBox.information(
-                self, "Add Surface",
-                "Add Surface adds a Block Search object (search window).\n\n"
+                self, "Add Block Search Object",
+                "This adds a Block Search object (a search window), "
+                "not a slip surface.\n\n"
                 "It is only available when the Search Method is "
                 "Block Search.\nOpen Surface Options and set:\n"
                 "  • Surface Type = Non-Circular\n"
@@ -3737,10 +3747,10 @@ class MainWindow(QMainWindow):
                         "use this action."
                     )
 
-        # v0.1.17 — "Add Surface" (Block Search objects) is only
-        # meaningful for the Block Search method. Enable it when Block
-        # Search is selected; grey it out otherwise (the reference's
-        # convention: the action stays visible).
+        # v0.1.17 — the Block Search object action is only meaningful
+        # for the Block Search method. Enable it when Block Search is
+        # selected; grey it out otherwise (the reference's convention:
+        # the action stays visible).
         try:
             is_block = (self.project.settings.search.search_method
                         == "block")
@@ -3767,15 +3777,19 @@ class MainWindow(QMainWindow):
                     if is_circular else
                     tr("Only available with Surface Options -> Surface "
                        "Type = Circular."))
-        if "surf_3pts" in actions:
-            actions["surf_3pts"].setEnabled(is_block)
-            actions["surf_3pts"].setToolTip(
+        if "block_object" in actions:
+            actions["block_object"].setEnabled(is_block)
+            # v0.1.166 (D102) - the DISABLED branch is the one almost
+            # every user sees, because Block Search is not the default
+            # method, and it was the one still naming "Add Surface" and
+            # still outside tr(). A tooltip contradicting the label it
+            # describes is the same defect one step down.
+            actions["block_object"].setToolTip(
                 tr("Add a Block Search object (search window) on the model")
                 if is_block else
-                "Add Surface is only available with the Block Search\n"
-                "method. Set Surface Options → Surface Type =\n"
-                "Non-Circular, Search Method = Block Search."
-            )
+                tr("Add Block Search Object is only available with the "
+                   "Block Search method. Set Surface Options -> Surface "
+                   "Type = Non-Circular, Search Method = Block Search."))
 
     # ----- v0.1.7: Loadings (interactive in v0.1.8) ------------------
     def act_add_distributed_load(self) -> None:
