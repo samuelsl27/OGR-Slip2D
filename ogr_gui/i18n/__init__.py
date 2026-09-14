@@ -204,6 +204,15 @@ _DICTS: dict[str, dict[str, str]] = {
             'con el método Block Search. Abre Opciones de superficie y pon '
             'Tipo de superficie = Non-Circular, Método de búsqueda = '
             'Block Search.',
+        # v0.1.167 (D103) — el aviso de la rama deshabilitada REUTILIZA
+        # la clave de arriba: misma precondición, mismas palabras. Lo
+        # único nuevo es la indicación de dibujo de la rama habilitada,
+        # que hasta ahora no pasaba por tr(). «ventana de búsqueda» es el
+        # término que el propio diccionario ya fijó para este objeto.
+        'Draw a Block Search window: click the corners, '
+        'right-click or Enter to close.':
+            'Dibuja una ventana de búsqueda por bloques: pulsa en las '
+            'esquinas y cierra con el botón derecho o Intro.',
         'Capture tolerance:': 'Tolerancia de captura:',
         # v0.1.157 (D58) — superficies definidas a mano por el usuario.
         'Manage Surfaces...': 'Gestionar superficies...',

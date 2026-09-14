@@ -207,7 +207,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.166"
+    VERSION = "0.1.167"
 
     def __init__(self) -> None:
         super().__init__()
@@ -1193,24 +1193,34 @@ class MainWindow(QMainWindow):
         """
         s = self.project.settings.search
         if s.search_method != "block":
-            # v0.1.166 (D102) - the WORDS follow the action's new name. The
-            # box stays MODAL and stays outside tr(): both of those are
-            # P-D103 whole, and half-doing them here would leave that
-            # ficha's criterion unmeasurable.
-            QMessageBox.information(
-                self, "Add Block Search Object",
-                "This adds a Block Search object (a search window), "
-                "not a slip surface.\n\n"
-                "It is only available when the Search Method is "
-                "Block Search.\nOpen Surface Options and set:\n"
-                "  • Surface Type = Non-Circular\n"
-                "  • Search Method = Block Search",
+            # v0.1.167 (D103) - NOT modal, and with the same words as the
+            # tooltip. Two reasons, in this order:
+            #
+            #  * the box was reachable. The QAction is disabled outside
+            #    Block Search, so no mouse ever opened it - but View >
+            #    Terminal (Ctrl+`) hands `mainwindow` to the embedded
+            #    interpreter (widgets/terminal.py:256), and a direct call
+            #    walked straight in. Without a screen a modal never comes
+            #    back, which is what AGENTS.md forbids and what v0.1.125
+            #    already answered this way for the groundwater
+            #    diagnostic (see _compute_groundwater);
+            #  * one precondition, one text. The tooltip of the disabled
+            #    branch explains THIS same condition and is already
+            #    translated; a second sentence for one rule is how a
+            #    tooltip ends up contradicting what it describes, which
+            #    is the defect D102 repaired one step above. The key is
+            #    shared on purpose, and a test fixes that it stays shared.
+            self.ogr_status.showMessage(
+                tr("Add Block Search Object is only available with the "
+                   "Block Search method. Set Surface Options -> Surface "
+                   "Type = Non-Circular, Search Method = Block Search."),
+                8000,
             )
             return
         self._set_tool(ToolMode.DRAW_BLOCK_SEARCH)
         self.ogr_status.showMessage(
-            "Draw a Block Search window: click the corners, "
-            "right-click or Enter to close.", 5000,
+            tr("Draw a Block Search window: click the corners, "
+               "right-click or Enter to close."), 5000,
         )
 
     def act_auto_grid(self) -> None:

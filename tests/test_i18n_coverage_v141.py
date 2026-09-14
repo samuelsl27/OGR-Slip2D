@@ -56,6 +56,34 @@ _VISIBLE = [
 # must never be raised.
 _UNWRAPPED_BUDGET = 210
 
+# v0.1.167 (D103) - a SECOND list with a SECOND budget, deliberately not
+# seven more entries in _VISIBLE. The patterns above match constructors
+# and setters; none of them sees `QMessageBox.*(self, "...")` or
+# `showMessage("...")`, which is how the eight strings of the Block
+# Search action stayed invisible to this file. Folding them into the
+# count above would put 68 message strings under the same ceiling as 20
+# dialog strings and make the history of the 210 unreadable.
+#
+# EVERY PATTERN CAPTURES EXACTLY ONE GROUP, and the alternation uses
+# `(?:...)` on purpose: measured, a second capturing group makes
+# `re.findall` return TUPLES, and `_unwrapped_count` then calls
+# `.startswith("%")` on a tuple -> AttributeError. The D103 ficha
+# proposed these patterns with capturing groups.
+_VISIBLE_MESSAGES = [
+    r'showMessage\(\s*"([^"]+)"',
+    r'QMessageBox\.(?:information|warning|critical|question)'
+    r'\(\s*self,\s*"([^"]+)"',
+]
+
+# Measured the day it landed (v0.1.167): 68. It was 70 before this
+# version dropped the modal of the Block Search action and wrapped that
+# action's draw prompt. Same rule as _UNWRAPPED_BUDGET - lower it as
+# coverage improves, never raise it - but pinned to the REAL count
+# instead of a comfortable ceiling, so the next unwrapped message box
+# fails this file. The 210 above has run against a real count of 20
+# since it was written, which is a control that cannot fail.
+_UNWRAPPED_BUDGET_MESSAGES = 68
+
 
 def _gui_sources():
     for f in glob.glob(str(_GUI / "**" / "*.py"), recursive=True):
@@ -100,10 +128,19 @@ def _wrapped_keys():
     return keys
 
 
-def _unwrapped_count():
+def _unwrapped_count(patterns=None):
+    """Visible strings without ``tr()`` that ``patterns`` can see.
+
+    v0.1.167 - the argument exists so the second list is measured with
+    the SAME filter as the first: two filters would make the two
+    budgets incomparable. Called with no argument the behaviour is
+    identical to before, which is what keeps the history of the 210
+    meaningful. The default is a sentinel and not ``patterns=_VISIBLE``
+    so that the list is read at call time, not frozen at import.
+    """
     n = 0
     for _f, src in _gui_sources():
-        for pat in _VISIBLE:
+        for pat in (_VISIBLE if patterns is None else patterns):
             for m in re.findall(pat, src):
                 if len(m) > 1 and any(c.isalpha() for c in m) \
                         and not m.startswith("%") and "{" not in m:
@@ -206,6 +243,47 @@ class TestCoverageBudget:
         assert n <= _UNWRAPPED_BUDGET, (
             f"{n} user-visible strings are not wrapped in tr() "
             f"(budget {_UNWRAPPED_BUDGET}).")
+
+    def test_message_box_strings_stay_within_their_own_budget(self):
+        """v0.1.167 (D103). Modal titles and status-bar messages were
+        invisible to the seven patterns above, so the budget above never
+        counted them: wrapping one of them could not move it by a point,
+        which is why the ficha's own closing criterion -'the unwrapped
+        budget lowered by six'- was unreachable as written."""
+        n = _unwrapped_count(_VISIBLE_MESSAGES)
+        assert n <= _UNWRAPPED_BUDGET_MESSAGES, (
+            f"{n} message-box titles and status-bar messages are not "
+            f"wrapped in tr() (budget {_UNWRAPPED_BUDGET_MESSAGES}).")
+
+    def test_the_message_budget_is_not_a_ghost(self):
+        """Kept apart from the test above on purpose, so a failure says
+        WHICH of the two broke: that one means coverage decayed, this
+        one means the control went slack.
+
+        _UNWRAPPED_BUDGET has stood at 210 against a real count of 20
+        since it was written - `n <= 210` cannot fail, so it stopped
+        being a measurement. Pinning this one to the measured count is
+        what keeps it from ending up the same way.
+        """
+        n = _unwrapped_count(_VISIBLE_MESSAGES)
+        assert n == _UNWRAPPED_BUDGET_MESSAGES, (
+            f"the real count is {n}; set _UNWRAPPED_BUDGET_MESSAGES to "
+            f"{n} (it is {_UNWRAPPED_BUDGET_MESSAGES}). Lowering it is "
+            f"the point; raising it needs a reason in a changelog.")
+
+    def test_every_pattern_captures_exactly_one_group(self):
+        """Measured, not assumed: `re.findall` returns tuples for a
+        pattern with two groups, and `_unwrapped_count` then calls
+        `.startswith` on a tuple. Both lists are checked because the
+        crash does not care which list the pattern came from."""
+        for pat in _VISIBLE + _VISIBLE_MESSAGES:
+            assert re.compile(pat).groups == 1, pat
+
+    def test_the_default_scan_is_unchanged_by_the_parameter(self):
+        """The refactor that made room for the second list must not
+        have moved the first count."""
+        assert _unwrapped_count() == _unwrapped_count(_VISIBLE)
+        assert _UNWRAPPED_BUDGET == 210
 
     def test_a_useful_number_of_strings_are_wrapped(self):
         assert len(_wrapped_keys()) > 250

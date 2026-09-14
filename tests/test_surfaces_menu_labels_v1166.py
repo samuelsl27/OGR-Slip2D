@@ -136,9 +136,11 @@ class TestTheLabelSaysWhatItDoes:
         """The identity that matters: the label is checked against what
         the handler DOES, not against another string.
 
-        Block Search is set first on purpose. Triggering this action with
-        any other search method opens a modal QMessageBox, which blocks
-        for ever without a screen - that modal is P-D103, still open.
+        Block Search is set first on purpose: with any other search
+        method this action used to open a modal QMessageBox, which blocks
+        for ever without a screen. That modal was P-D103, closed in
+        v0.1.167; the method is set here anyway, because what this test
+        measures is the draw mode and not the guard.
         """
         from ogr_gui.canvas.tool_mode import ToolMode
         w = _window()
