@@ -865,7 +865,7 @@ def lambda_fallback_notes(result) -> list[str]:
     post-filter — the defect D37/C1 all over again. See
     ``interslice.FALLBACK_RESIDUAL_LIMIT``.
 
-    Two things can be worth saying about the same fallback:
+    Three things can be worth saying about the same fallback:
 
     * the two branches at the lambda handed back differ by more than the
       caller asked for, so the number is the nearest sample and not a solved
@@ -873,10 +873,14 @@ def lambda_fallback_notes(result) -> list[str]:
     * a lambda was dropped because its inner iteration used its whole budget
       of passes while still improving, which is the SOLVER's limit deciding
       the answer rather than the slope's. Defect D63, and reachable: the
-      unreinforced 55 degree plane of the wedge fixture, Spencer at 1e-10.
+      unreinforced 55 degree plane of the wedge fixture, Spencer at 1e-10;
+    * a lambda was dropped because the inter-slice thrust of its inner
+      iteration ran away, which is neither of the other two: the arithmetic
+      left the range where it means anything. Defect D118, v0.1.171, and
+      measured to fire 8 times in 5206 branch solves over 113 circles.
 
-    Neither fires when a bracket was found and refined, because then the
-    answer is a root and there is nothing to warn about.
+    None of them fires when a bracket was found and refined, because then
+    the answer is a root and there is nothing to warn about.
     """
     details = getattr(result, "details", None) or {}
     if not details.get("lambda_search_fell_back"):
@@ -903,6 +907,23 @@ def lambda_fallback_notes(result) -> list[str]:
             "slope. A looser convergence tolerance spends fewer passes per "
             "inclination and may bracket it."
             % (lost, "inclination" if lost == 1 else "inclinations"))
+
+    # v0.1.171 (D118) — the third loss, and it is worth telling apart from
+    # the one above in the text as well as in the count: a budget is the
+    # solver running out of room on a branch that was still improving, this
+    # is a branch that was not improving at all. A looser tolerance does not
+    # help here, so the sentence does not offer it.
+    from .interslice import THRUST_SCALE_LIMIT
+    overflowed = int(details.get("lambdas_lost_to_thrust_overflow") or 0)
+    if overflowed > 0:
+        notes.append(
+            "and %d %s was discarded because the inter-slice thrust of its "
+            "inner iteration ran past %g times the total force the sliding "
+            "mass has to work with, which is a runaway and not a solution "
+            "of anything."
+            % (overflowed,
+               "inclination" if overflowed == 1 else "inclinations",
+               THRUST_SCALE_LIMIT))
 
     return notes
 

@@ -233,6 +233,12 @@ class Spencer(LEMMethod):
                     # able to say it did. See ``analysis_runner.lambda_budget_note``.
                     "lambda_search_fell_back": True,
                     "lambdas_lost_to_budget": system.n_passes_exhausted,
+                    # v0.1.171 (D118) — and the lambdas whose inner
+                    # iteration was cut for a runaway thrust, which is
+                    # a different loss from the one above. See
+                    # ``interslice.THRUST_SCALE_LIMIT``.
+                    "lambdas_lost_to_thrust_overflow":
+                        system.n_thrust_overflow,
                     "lambda_residual": residual,
                     "lambda_tolerance": self.tolerance,
                     "boundary_ratios": [lam_star] * (len(slices.slices) + 1),
@@ -358,6 +364,9 @@ class Spencer(LEMMethod):
                 # two exits produced it.
                 "lambda_search_fell_back": False,
                 "lambdas_lost_to_budget": system.n_passes_exhausted,
+                # v0.1.171 (D118) — see the fallback branch above.
+                "lambdas_lost_to_thrust_overflow":
+                    system.n_thrust_overflow,
                 # Constant interslice ratio at every boundary (Spencer).
                 "boundary_ratios": [lam_lo] * (len(slices.slices) + 1),
                 # v0.1.106 — the inter-slice forces themselves, which this

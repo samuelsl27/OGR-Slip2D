@@ -309,6 +309,12 @@ class GLEMorgensternPrice(LEMMethod):
                     # v0.1.159 (D63) — see ``Spencer.compute_fos``.
                     "lambda_search_fell_back": True,
                     "lambdas_lost_to_budget": system.n_passes_exhausted,
+                    # v0.1.171 (D118) — and the lambdas whose inner
+                    # iteration was cut for a runaway thrust, which is
+                    # a different loss from the one above. See
+                    # ``interslice.THRUST_SCALE_LIMIT``.
+                    "lambdas_lost_to_thrust_overflow":
+                        system.n_thrust_overflow,
                     "lambda_residual": residual,
                     "lambda_tolerance": self.tolerance,
                     "boundary_ratios": [lam_star * fb for fb in system.shape],
@@ -416,6 +422,9 @@ class GLEMorgensternPrice(LEMMethod):
                 # v0.1.159 (D63) — see ``Spencer.compute_fos``.
                 "lambda_search_fell_back": False,
                 "lambdas_lost_to_budget": system.n_passes_exhausted,
+                # v0.1.171 (D118) — see the fallback branch above.
+                "lambdas_lost_to_thrust_overflow":
+                    system.n_thrust_overflow,
                 # Boundary ratios λ·f(x) evaluated at the n+1 slice
                 # boundaries with x normalised over the surface span. The
                 # solver uses exactly this list (v0.1.106).

@@ -264,15 +264,26 @@ class TestStallingAndRunningOutOfBudgetAreDifferentThings:
 
 # ======================================================================
 class TestTheBackstopIsBoundedOnPurpose:
-    """A large backstop is not free, and the reason is not iteration cost.
+    """A large backstop was not free, and the reason was not iteration cost.
 
-    ``E`` and ``X`` are not clamped the way ``F`` is, so a divergent branch
-    grows them geometrically until ``math.fsum`` is handed -inf and +inf
-    together and raises out of ``compute_fos``. Measured while choosing this
-    number: with the stall test removed and the ceiling forced up, that
-    ValueError appears on ``006-xstabl-1999-min-depth`` at 2000 passes and
-    on ``003-acads-1c`` at 5000, at the SHIPPED tolerance, with none at 500
-    or below. The old 80 was doing that job as well and said so nowhere.
+    ``E`` and ``X`` were not clamped the way ``F`` is, so a divergent branch
+    grew them geometrically with nothing watching. Measured while choosing
+    this number: with the stall test removed and the ceiling forced up, a
+    ``ValueError: -inf + inf in fsum`` appeared on
+    ``006-xstabl-1999-min-depth`` at 2000 passes and on ``003-acads-1c`` at
+    5000, at the SHIPPED tolerance, with none at 500 or below. The old 80
+    was doing that job as well and said so nowhere.
+
+    PAST TENSE SINCE v0.1.171 (D118), and only the tense has changed here:
+    ``interslice.THRUST_SCALE_LIMIT`` now bounds the thrust itself, so this
+    constant is no longer what stands between a divergent branch and an
+    overflow. Not one assertion below was touched — they say ``MAX_PASSES``
+    is where it was and still above what the slowest real branch needs, and
+    both are still true and still worth saying. What that version could NOT
+    reproduce is the ValueError above on the published solver, in 2960
+    direct calls at those ceilings: the measurement quoted here was taken
+    with the auto-sizing branch solver 0.1.159 was evaluating, not with the
+    one that ships. See ``tests/test_interslice_thrust_bound_v1171.py``.
     """
 
     def test_the_backstop_stays_in_the_band_that_was_measured_safe(self):

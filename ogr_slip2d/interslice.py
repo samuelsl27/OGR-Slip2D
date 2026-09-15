@@ -172,18 +172,59 @@ STALL_PATIENCE = 80
 #: ``BranchState.passes``, because only this one can move the answer with
 #: nothing whatever wrong with the slope. See ``n_passes_exhausted``.
 #:
-#: It is deliberately kept LOW, and that is a measurement rather than
-#: tidiness. ``E`` and ``X`` are not clamped the way ``F`` is, so in a
-#: divergent branch they grow geometrically until ``math.fsum`` is handed
-#: -inf and +inf together. Raising this ceiling with no stall test and
-#: nothing else changed raises ``ValueError: -inf + inf in fsum`` out of
-#: ``compute_fos`` at the SHIPPED tolerance: measured on
-#: ``006-xstabl-1999-min-depth`` at 2000 passes and on ``003-acads-1c`` at
-#: 5000, with zero failures anywhere at 500 or below. The 80 was quietly
-#: doing that job too and said so nowhere. The stall test is what actually
-#: prevents it — a branch whose thrust is running away is not shrinking its
-#: step — and this is the second lock, not the first.
+#: It was kept LOW until v0.1.171 for a reason that has moved elsewhere, and
+#: the history is worth keeping because the reason was sound and the
+#: attribution was not. ``E`` and ``X`` were not clamped the way ``F`` is, so
+#: in a divergent branch they grew geometrically with nothing whatever
+#: watching them, and v0.1.159 recorded a ``ValueError: -inf + inf in fsum``
+#: out of ``compute_fos`` when the ceiling went to 2000 on
+#: ``006-xstabl-1999-min-depth`` and to 5000 on ``003-acads-1c``, with zero
+#: failures anywhere at 500 or below. That measurement was taken with the
+#: AUTO-SIZING branch solver it was evaluating, which is not what ships, and
+#: v0.1.171 could not reproduce the exception on the published solver in
+#: 2960 direct calls at those same ceilings — the runaway is real, the
+#: particular exception it ends in is luck. What v0.1.159 also wrote here
+#: and got backwards is that "the stall test is what actually prevents it":
+#: its own sentence before that one measures the overflow WITH the stall
+#: test in place, so the stall test was not the first lock. This ceiling
+#: was, and it never said so.
+#:
+#: :data:`THRUST_SCALE_LIMIT` is the lock now, and it watches the thing that
+#: runs away instead of the number of passes it takes to do it. This
+#: constant goes back to being what its first paragraph says it is: a
+#: backstop for a branch that keeps beating its own record by less and less.
 MAX_PASSES = 400
+
+
+#: How many times the total driving force of the sliding mass the inter-slice
+#: thrust may reach before the branch is abandoned as a runaway. Defect D118.
+#:
+#: NOT A GEOTECHNICAL FORMULA — a numerical guard, and the number is a
+#: measurement. ``max|E|`` divided by :func:`_force_scale`, over a census of
+#: 64 systems at 16 lambdas, both branches and three tolerances:
+#:
+#:   * every branch that is a SOLUTION peaks at 0.16 or under, and that
+#:     includes the slow ones this package fought for in v0.1.159 — the 50
+#:     degree plane at the root 1.2269 needs 254 passes at 1e-14 and peaks at
+#:     0.035, and at lambda = 2.0 it needs 702 and peaks at 0.065;
+#:   * a runaway crosses 1 and does not come back: the same plane at
+#:     lambda = 2.5 with the stall test out of the way runs 0.021, 0.12,
+#:     0.45, 4.1e21, 2.6e70, 6.3e216 over passes 10, 50, 100, 200, 400, 1000.
+#:
+#: So the two families are separated by two hundred decades and not by one,
+#: and 10 sits 60 times (1.8 decades) above the worst branch that is an
+#: answer. It is the TIGHTEST value that keeps that margin rather than the
+#: loosest that is safe, because the looser it gets the more of the runaway
+#: it lets through: 10, 100, 1000 and 1e6 all move zero factors of safety
+#: over 113 circles and two methods, so nothing but the margin decides it.
+#:
+#: AND THE ZERO IS NOT VACUOUS, which is the measurement that matters. Over
+#: those 113 circles the guard FIRES 8 times in 5206 branch solves, four of
+#: them on branches that report ``converged=True`` carrying a thrust up to
+#: 5.1e31 times the weight of the mass — states the lambda search consumed
+#: as though they were measurements, because :func:`thrust_is_admissible`
+#: asks the SIGN of the thrust and never its size.
+THRUST_SCALE_LIMIT = 10.0
 
 
 # ----------------------------------------------------------------------
@@ -303,7 +344,16 @@ def prepare_rows(s_list, kh: float, kv: float, slide_sign: float,
 # ----------------------------------------------------------------------
 @dataclass(slots=True)
 class BranchState:
-    """The per-slice quantities a converged branch leaves behind."""
+    """The per-slice quantities a converged branch leaves behind.
+
+    ``abandoned`` is empty for every branch that ran to one of its three
+    ordinary ends. It carries a reason when the branch was thrown away
+    mid-iteration, and there is exactly one of those today — see
+    :data:`THRUST_SCALE_LIMIT`. It is a field rather than a fourth
+    ``return None`` because ``None`` cannot carry a reason, which is the
+    whole of D56: a refusal that does not say why is a refusal nobody can
+    act on. ``GLESystem.branches`` is what reads it.
+    """
 
     fos: float
     converged: bool
@@ -312,6 +362,36 @@ class BranchState:
     resisting: list[float]     # S = F * S_mobilised
     boundary_e: list[float]    # E at the n+1 boundaries
     boundary_x: list[float]    # X at the n+1 boundaries
+    abandoned: str = ""        # why the iteration was cut, or ""
+
+
+# ----------------------------------------------------------------------
+def _force_scale(rows: Sequence[SliceRow]) -> float:
+    """The total force this surface has to work with, as a magnitude.
+
+    Every term that feeds the thrust recursion of :func:`solve_branch`,
+    summed without its sign: the vertical load each slice carries, the
+    cohesion its base can offer, the external horizontal loads and the
+    reinforcement. It is a SCALE and not a bound — no equilibrium says ``E``
+    has to stay under it — and it exists so that
+    :data:`THRUST_SCALE_LIMIT` can be a pure number instead of a force,
+    which is what ``AGENTS.md`` means by a tolerance relative to the size of
+    the model rather than absolute.
+
+    Deliberately NOT ``sum(W)`` alone, which is the obvious choice and is
+    wrong for a case this package already has on record: the thin lens of
+    the disjoint-mass problem carries 0.9 ft of soil and comes out at
+    F = 34.3, so its weight is small and its cohesion is not. A limit
+    written against ``sum(W)`` would be tight there for a reason that has
+    nothing to do with the inter-slice thrust.
+
+    Zero is a legitimate answer — a surface with no load and no strength
+    anywhere — and it needs no floor: such a surface produces ``E = 0`` at
+    every boundary, so ``0 <= 0`` holds and the guard never fires. Putting a
+    floor here would be putting an absolute force back in.
+    """
+    return math.fsum(abs(r.w_eff) + r.c_l + abs(r.h_drive)
+                     + abs(r.t_active) + abs(r.t_passive) for r in rows)
 
 
 # ----------------------------------------------------------------------
@@ -349,13 +429,17 @@ def solve_branch(
         inadmissible (m_a collapsed, no driving term, a non-positive or
         non-finite factor of safety).
 
-    The iteration stops on one of three things and only one of them is an
+    The iteration stops on one of FOUR things and only one of them is an
     answer: the step falling under ``tolerance`` (``converged=True``), the
     step failing to beat its own record for ``patience`` passes (wandering),
-    or ``max_passes`` (a backstop that IS reachable at tight tolerances).
-    The last two both come back with ``converged=False``, which is what
-    :meth:`GLESystem.branches` turns into "this lambda has no value" — see
-    :data:`STALL_PATIENCE` for what conflating slow with wandering cost.
+    ``max_passes`` (a backstop that IS reachable at tight tolerances), or
+    the inter-slice thrust running away (v0.1.171, D118 — see
+    :data:`THRUST_SCALE_LIMIT`). The last three all come back with
+    ``converged=False``, which is what :meth:`GLESystem.branches` turns into
+    "this lambda has no value" — see :data:`STALL_PATIENCE` for what
+    conflating slow with wandering cost, and note that the fourth is the
+    only one that says WHY in the state it returns, through
+    ``BranchState.abandoned``.
 
     The X update rides the SAME pass as F rather than being iterated to
     convergence inside it. Measured back to back at a tolerance of 1e-10, the
@@ -376,10 +460,26 @@ def solve_branch(
     # beating it. See :data:`STALL_PATIENCE`.
     best_step = math.inf
     stall = 0
+    # v0.1.171 (D118) — the thrust bound, resolved ONCE. It depends on the
+    # rows and never on F, lambda or the pass, so evaluating it inside the
+    # loop would be a per-pass sum over every slice for an answer that
+    # cannot move.
+    abandoned = ""
+    thrust_limit = THRUST_SCALE_LIMIT * _force_scale(rows)
 
     for _pass in range(max_passes):
         passes += 1
         e = 0.0
+        # v0.1.171 (D118) — the largest |E| of THIS pass, tracked in the
+        # march that is already visiting every one of them rather than in a
+        # second loop over ``E`` afterwards. The two are the same number:
+        # ``E[0]`` is never written and stays 0.0, and ``E[1..n]`` are the
+        # successive values of ``e``. Fused because this is the hottest loop
+        # in the package — Spencer and GLE cost 50 ms a circle against
+        # Bishop's 12 — and a whole extra pass over n+1 floats per iteration
+        # is the kind of cost that is invisible per call and hours long over
+        # the verification bank.
+        peak = 0.0
         for i, r in enumerate(rows):
             m_alpha = r.cos_a + r.sin_a * r.tan_phi / F
             if abs(m_alpha) < 1e-6:
@@ -412,6 +512,33 @@ def solve_branch(
             e += (-n_i * r.sin_a + (s_i / F) * r.cos_a
                   + t_mob * r.cos_a - r.h_drive)
             E[i + 1] = e
+            ae = abs(e)
+            if not (ae <= peak):        # also True when ae is NaN
+                peak = ae
+
+        # v0.1.171 (D118) — THE THRUST, not the count. ``F`` is clamped to
+        # [f_min, f_max] and ``f_new`` is checked for finiteness below, but
+        # ``E`` had no bound at all, so a divergent branch grew it
+        # geometrically with nothing watching: measured on the 50 degree
+        # plane at lambda = 2.5 with the stall test out of the way, max|E|
+        # runs 0.021, 0.12, 0.45, 4.1e21, 2.6e70 and 6.3e216 times
+        # :func:`_force_scale` over passes 10, 50, 100, 200, 400 and 1000.
+        #
+        # WHY THE TEST SITS HERE, between the march and the X update, and it
+        # is an argument from the order of the statements rather than a
+        # measurement. ``resisting`` on pass k is built from the ``X`` of
+        # pass k-1, so a branch cut at the first pass whose ``E`` crosses
+        # the bound never reaches the pass that could hand a +-inf to the
+        # ``math.fsum`` of the moment expression. It therefore does not
+        # matter how far past the bound the runaway would have got.
+        #
+        # ``not (peak <= limit)`` and not ``peak > limit``: the second is
+        # False for a NaN, and a NaN thrust is exactly the state this
+        # refuses. ``peak`` is accumulated in the march above, and for the
+        # same reason it is written as a negated ``<=`` there.
+        if not (peak <= thrust_limit):
+            abandoned = "thrust overflow"
+            break
 
         # X_0 and X_n stay at zero: both ends of the surface are free.
         for i in range(1, n):
@@ -482,7 +609,8 @@ def solve_branch(
 
     return BranchState(fos=F, converged=converged, passes=passes,
                        normals=list(normals), resisting=list(resisting),
-                       boundary_e=list(E), boundary_x=list(X))
+                       boundary_e=list(E), boundary_x=list(X),
+                       abandoned=abandoned)
 
 
 # ----------------------------------------------------------------------
@@ -563,7 +691,8 @@ class GLESystem:
 
     __slots__ = ("rows", "forces", "s_list", "shape", "order", "reversed_",
                  "tolerance", "initial_fos", "strict", "n_thrust_rejected",
-                 "n_passes_exhausted", "_moment_fos", "_driving")
+                 "n_passes_exhausted", "n_thrust_overflow", "_moment_fos",
+                 "_driving")
 
     def __init__(self, s_list, shape: Sequence[float],
                  kh: float, kv: float, slide_sign: float,
@@ -600,6 +729,14 @@ class GLESystem:
         #: without anything being wrong with the slope. Until v0.1.159 the
         #: two were the same silence.
         self.n_passes_exhausted = 0
+        #: v0.1.171 (D118) — how many lambdas were lost because a branch's
+        #: inter-slice thrust ran away rather than because it stalled or ran
+        #: out of passes. A THIRD counter and not a bigger one, for the
+        #: reason the two above are already two: they are statements about
+        #: different things, and this one says that the arithmetic left the
+        #: range where it means anything, which is neither a statement about
+        #: the stress state nor about the pass budget.
+        self.n_thrust_overflow = 0
         self._driving = None
 
         if circle_R is None:
@@ -742,8 +879,18 @@ class GLESystem:
             # lose the lambda, but only the first is the solver's own limit
             # deciding the answer, and that is the thing that has to be
             # reportable.
+            # v0.1.171 (D118) — and a third refusal, kept apart from the
+            # other two. A branch cut for a runaway thrust has not used its
+            # budget and has not stalled; counting it as either would make
+            # both numbers mean "something went wrong" instead of what they
+            # say. ``abandoned`` wins over the pass count because a branch
+            # can cross the bound on its very last pass.
             for state in (force, moment):
-                if not state.converged and state.passes >= MAX_PASSES:
+                if state.converged:
+                    continue
+                if state.abandoned:
+                    self.n_thrust_overflow += 1
+                elif state.passes >= MAX_PASSES:
                     self.n_passes_exhausted += 1
             return None, None
         if not thrust_is_admissible(force):
