@@ -347,25 +347,62 @@ class TestTheReferenceOwnVerification:
                 bad.append(f"{method_id}: {out.fos_at_ky:.8f}")
         assert not bad, bad
 
-    def test_spencer_lands_close_but_not_exactly_and_that_is_lambda(self):
-        """Measured, and reported rather than hidden.
+    def test_the_two_lambda_methods_land_on_it_too_since_v1172(self):
+        """This case used to assert the opposite, and the note it carried
+        asked for exactly the measurement that turned it around: "Spencer
+        now lands on the target here; the λ discontinuity this documents
+        may be gone — re-measure before relaxing the note". Re-measured,
+        and it is gone.
 
-        On the Loukidis circle, Spencer's factor of safety is not a
-        continuous function of the seismic coefficient: between k = 0.4325
-        and k = 0.4330 it steps from 1.001017 to 0.996266 while the
-        converged λ jumps from 0.580 to 0.552 — the λ search changing
-        which root it lands on. The bracket is still found and Ky is still
-        right to a quarter of a percent, but the factor AT Ky misses the
-        target by that step, and pretending otherwise would mean widening
-        a tolerance until a discontinuity fitted inside it.
+        WHAT IT SAID. Spencer's factor of safety was not a continuous
+        function of the seismic coefficient on this circle: between
+        k = 0.4325 and k = 0.4330 it stepped from 1.001017 to 0.996266
+        while the converged λ jumped from 0.5804 to 0.5516 — the λ search
+        landing on a different root — so the factor AT Ky missed the
+        target by that step.
+
+        WHAT IT WAS. Not a property of the slope: the second root was
+        made of branches that did not converge but were accepted anyway,
+        because until v0.1.172 one step under the tolerance was enough
+        even where the iteration was not contracting (D116). With the
+        contraction test in, λ walks smoothly through that k — 0.5816,
+        0.5817, 0.5815, 0.5816 — and so does F.
+
+        MEASURED, on the dry circle, as the distance from the target:
+
+            Spencer   3.737e-03  ->  1.189e-07
+            GLE       1.933e-04  ->  1.730e-09
+
+        and the five methods that never had a λ to search do not move by
+        one digit, which is what says the cause is the λ search and not
+        the fixture. So the two of them join the check the reference
+        publishes about itself, instead of carrying an exception to it.
         """
-        out = _loukidis_ky("dry", "spencer")
-        assert out.found
-        miss = abs(out.fos_at_ky - 1.0)
-        assert miss > 1e-4, ("Spencer now lands on the target here; the "
-                             "λ discontinuity this documents may be gone "
-                             "— re-measure before relaxing the note")
-        assert miss < 1e-2, out.fos_at_ky
+        for method_id in ("spencer", "gle_morgenstern_price"):
+            out = _loukidis_ky("dry", method_id)
+            assert out.found, method_id
+            assert abs(out.fos_at_ky - 1.0) < 1e-5, (method_id, out.fos_at_ky)
+
+    def test_and_the_lambda_it_converges_on_walks_smoothly_through_ky(self):
+        """The cause, pinned rather than only its symptom — the same shape
+        as ``test_widening_the_range_backwards_no_longer_loses_it``. What
+        used to jump by 0.029 between two neighbouring seismic
+        coefficients now moves in the fourth decimal, so the step is gone
+        from λ itself and not merely from the factor it produces.
+        """
+        lambdas = []
+        for k in (0.4320, 0.4325, 0.4330, 0.4335):
+            project = _loukidis_project(0.0)
+            project.seismic.kh = k
+            circle = SlipCircle(**_LOUKIDIS["dry"]["arc"])
+            with project.regions_frozen():
+                slices = slice_surface(project, circle, num_slices=50)
+                r = get_method("spencer")().compute_fos(
+                    project, circle, slices)
+            assert r.converged, k
+            lambdas.append((r.details or {})["lambda"])
+        jump = max(lambdas) - min(lambdas)
+        assert jump < 1e-3, (lambdas, jump)
 
 
 # ======================================================================

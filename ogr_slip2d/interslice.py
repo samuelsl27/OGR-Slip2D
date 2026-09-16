@@ -417,7 +417,9 @@ def solve_branch(
             callable ``(normals, resisting) -> float | None`` returning the
             moment factor of safety; the caller owns that geometry because it
             differs between a circle and a polyline.
-        tolerance: convergence on F.
+        tolerance: convergence on F. Since v0.1.172 (D116) it is not enough
+            on its own — the step has to be under it AND the iteration has
+            to be CONTRACTING; see below.
         initial_fos: where the fixed point starts.
         patience: passes allowed without beating the smallest step so far
             before the branch is called wandering. See
@@ -430,7 +432,8 @@ def solve_branch(
         non-finite factor of safety).
 
     The iteration stops on one of FOUR things and only one of them is an
-    answer: the step falling under ``tolerance`` (``converged=True``), the
+    answer: the step falling under ``tolerance`` WHILE the iteration
+    contracts (``converged=True``), the
     step failing to beat its own record for ``patience`` passes (wandering),
     ``max_passes`` (a backstop that IS reachable at tight tolerances), or
     the inter-slice thrust running away (v0.1.171, D118 — see
@@ -440,6 +443,23 @@ def solve_branch(
     conflating slow with wandering cost, and note that the fourth is the
     only one that says WHY in the state it returns, through
     ``BranchState.abandoned``.
+
+    WHAT "CONVERGED" MEANS SINCE v0.1.172, and WHERE THE GUARANTEE STOPS,
+    because promising more coverage than a guard gives is what cost this
+    project two versions in v0.1.82-84. The acceptance test is the classical
+    one for a contractive fixed point (Isaacson & Keller 1966, "Analysis of
+    Numerical Methods", section 3.1): the step under ``tolerance`` AND the
+    last two step ratios below 1. What it rules out is the step that falls
+    under a loose tolerance BY LUCK in the oscillating transient of a damped
+    iterate — defect D116, measured at 18 % of F on the 50 degree plane.
+    What it does NOT rule out is an accepted value sitting far from the
+    fixed point: a contraction of ratio r stopped on a step of ``tol``
+    still sits within ``tol*r/(1-r)`` of the root, and r reaches 0.9614 on
+    that same plane, so 25 times the requested tolerance is reachable.
+    Adding that residual estimate to the test was measured and deliberately
+    NOT adopted: it turns lambdas that give a bad number into lambdas that
+    are LOST, and with ``MAX_PASSES`` where it is that is the D63 mechanism
+    running backwards. See the changelog of v0.1.172.
 
     The X update rides the SAME pass as F rather than being iterated to
     convergence inside it. Measured back to back at a tolerance of 1e-10, the
@@ -460,6 +480,15 @@ def solve_branch(
     # beating it. See :data:`STALL_PATIENCE`.
     best_step = math.inf
     stall = 0
+    # v0.1.172 (D116) — the two previous steps, for the contraction test at
+    # the bottom of the loop. Two floats and not a list: this is the hottest
+    # loop in the package.
+    #
+    # ``-inf`` and NOT ``+inf``, and the sentinel is load-bearing. With
+    # ``+inf`` the chained comparison below is already true on the SECOND
+    # pass, having seen a single ratio — which is exactly the two-pass
+    # accidental convergence this version exists to refuse.
+    prev_step = prev_step_2 = -math.inf
     # v0.1.171 (D118) — the thrust bound, resolved ONCE. It depends on the
     # rows and never on F, lambda or the pass, so evaluating it inside the
     # loop would be a per-pass sum over every slice for an answer that
@@ -578,9 +607,46 @@ def solve_branch(
         if not math.isfinite(f_new) or f_new <= 0.0:
             return None
         step = abs(f_new - F)
+        # v0.1.172 (D116) — CONTRACTION, not a single small step. The
+        # iterate is damped (``0.5*(F + f_new)`` below), so its transient
+        # OSCILLATES: the steps alternate large and small, and one of the
+        # small ones can fall under a loose tolerance by luck at a fixed
+        # point that does not contract at all. Measured on the 50 degree
+        # plane, moment branch, lambda = 2.0: the step drops to 1.8e-4 on
+        # pass 5 and the branch was published as converged at F = 0.9673,
+        # while its actual fixed point is 0.83037 and takes 585 passes to
+        # reach at 1e-12 with the stall test out of the way. See
+        # the module docstring of ``tests/test_branch_contraction_v1172.py``.
+        #
+        # ``step < prev_step < prev_step_2`` IS "the last two ratios
+        # r_k = step_k / step_{k-1} are below 1", written without the
+        # division: no zero denominator, no inf, and a NaN step makes it
+        # False, which is the right verdict. That is the classical
+        # acceptance test for a contractive fixed point (Isaacson & Keller
+        # 1966, "Analysis of Numerical Methods", section 3.1).
+        #
+        # ``step == 0.0`` is the exact fixed point and it is NOT an
+        # ornament: without it a branch that lands dead on its answer can
+        # never beat its own zero step again, so it would iterate to the
+        # stall test and lose its lambda. That is identity I5 of v0.1.141,
+        # which converges with dF = 0.
+        #
+        # The consequence, said out loud because it is the price: NO branch
+        # can converge before its THIRD pass. Seeing a ratio takes two
+        # steps and seeing two takes three.
+        #
+        # And NO fourth counter in :class:`GLESystem`, which is a decision
+        # and not an oversight: this test creates no new way out of the
+        # loop, it only delays the first one, so a lambda lost to it leaves
+        # through the stall test or the pass budget and is already counted
+        # there. The three counters keep naming the three exits.
+        contracting = step == 0.0 or step < prev_step < prev_step_2
+        # Updated before the test, so that it also happens on the passes
+        # that leave through one of the ``break``s below.
+        prev_step_2, prev_step = prev_step, step
         # v0.1.100 — not on the first pass; see
         # ``BishopSimplified._general_moment_fos``.
-        if _pass > 0 and step < tolerance:
+        if _pass > 0 and step < tolerance and contracting:
             F = f_new
             converged = True
             break

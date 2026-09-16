@@ -400,13 +400,39 @@ class TestSpuriousNegativeRoots:
         assert abs(res.fos - 1.60) / 1.60 < 0.01, res.fos
         assert res.details["lambda"] > 0.0, res.details["lambda"]
 
-    def test_widening_the_range_backwards_is_what_loses_it(self):
-        """The other half, so the cause is pinned and not just the symptom.
+    def test_widening_the_range_backwards_no_longer_loses_it(self):
+        """The other half, and v0.1.172 turned it around — which is what the
+        version that wrote it asked for in these words: "If some later change
+        makes this pass too, the clip has stopped being load-bearing and can
+        be revisited, which is a better outcome than the clip quietly
+        outliving its reason." This is that change, so the case is inverted
+        here with the measurement rather than deleted, exactly as v0.1.159
+        did to ``TestSpencerAndGleSettleOnTheWedge``, which also pinned a
+        defect with a band.
 
-        With the old -1.5 lower bound handed in explicitly, the same surface
-        returns the spurious crossing. If some later change makes this pass
-        too, the clip has stopped being load-bearing and can be revisited —
-        which is a better outcome than the clip quietly outliving its reason.
+        WHAT MOVED, measured back to back on this very surface with the
+        lower bound handed in explicitly:
+
+            0.1.171   F = 1.0657073 at lambda = -1.4816   <- the spurious one
+            0.1.172   F = 1.5983407 at lambda = +0.3073   <- the answer
+
+        and the second row is the SAME number, to the last digit, that the
+        shipped clip produces. The cause is D116 and not the range: the two
+        branches at lambda near -1.5 do not converge, they wander, and until
+        v0.1.172 a wandering branch could report a step under a loose
+        tolerance by luck and hand the outer search a pair that crossed.
+        ``solve_branch`` now requires the iteration to CONTRACT, so those two
+        branches are refused, the crossing never forms, and the first sign
+        change in ascending lambda is the real one.
+
+        WHAT THIS DOES NOT SAY. The clip of v0.1.106 is NOT removed, and
+        nothing here claims it should be: this is one surface, the range
+        decides what gets sampled on every surface in the bank, and whether
+        the clip still earns its place is a measurement over the bank rather
+        than over this fixture. It is written up as its own bank ficha. What
+        the case asserts from here on is the narrower and checkable thing —
+        that on the surface the clip was introduced for, widening the range
+        backwards no longer changes the answer.
         """
         import copy
         import sys
@@ -434,6 +460,14 @@ class TestSpuriousNegativeRoots:
         res = GridSearch(method=Spencer(min_lambda=-1.5), num_slices=50,
                          min_area=0.0).evaluate_surface(p, surface)
         assert res is not None
-        assert abs(res.fos - 1.60) / 1.60 > 0.10, (
-            f"the -1.5 lower bound no longer loses this surface "
-            f"({res.fos:.4f}); the clip of v0.1.106 may be revisitable")
+        assert abs(res.fos - 1.60) / 1.60 < 0.01, (
+            f"the -1.5 lower bound loses this surface again ({res.fos:.4f}); "
+            f"the contraction test of v0.1.172 (D116) is what keeps the "
+            f"spurious crossing at lambda = -1.48 out of the bracket")
+        assert res.details["lambda"] > 0.0, res.details["lambda"]
+        # And it is the SAME answer the clip gives, not merely a close one:
+        # an identity between two paths, which is stronger than a band.
+        clipped = GridSearch(method=Spencer(), num_slices=50,
+                             min_area=0.0).evaluate_surface(p, surface)
+        assert res.fos == clipped.fos, (res.fos, clipped.fos)
+        assert res.details["lambda"] == clipped.details["lambda"]

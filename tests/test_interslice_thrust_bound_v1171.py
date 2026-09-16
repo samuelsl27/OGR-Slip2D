@@ -93,10 +93,37 @@ RUNAWAY_LAMBDA = 2.5
 STALLING_LAMBDA = 2.2
 
 #: The plane on which the outer lambda search of Spencer actually loses a
-#: lambda to the bound, at the SHIPPED tolerance and with nothing patched.
-#: Chosen by measurement, not by taste: it is the only one of the five that
-#: reaches the guard through ``compute_fos``.
-OVERFLOW_BETA, OVERFLOW_TOL = 35.0, 1e-3
+#: lambda to the bound, at a SHIPPED tolerance and with nothing patched.
+#: Chosen by measurement, not by taste.
+#:
+#: v0.1.172 (D116) moved the cell, and the reason is worth keeping because
+#: it is NOT that the bound got weaker. The 35 degree plane at 1e-3 now
+#: FINDS a lambda bracket where before it had none — ``lambda_search_fell_
+#: back`` goes True to False — so the outer search stops sampling at the
+#: first sign change and never walks as far as the lambda that runs away.
+#: The guard did not stop firing; the search stopped reaching it.
+#:
+#: The replacement is chosen by measurement and against two requirements,
+#: neither of them taste. FIRST, it has to lose a lambda to the bound AND
+#: fall back, because the sentence only travels on the fallback path — the
+#: coverage limit v0.1.171 reported and did not fix, executable here
+#: instead of narrated. SECOND, and this is what fixes the tolerance, it
+#: has to do so on BOTH sides of D116: a gate for the D118 bound that only
+#: fires on the engine that carries D116 would quietly turn these two cases
+#: into a test of the wrong version. Swept over every bare plane from 25 to
+#: 70 degrees at four tolerances against both engines, this cell loses two
+#: lambdas either way, at 1e-4 and at 1e-6. The other candidates do not:
+#: 30 and 32.5 degrees with Spencer at 0.005 are single cells that move
+#: with the engine, and 35 at 1e-3 is the one that stopped firing.
+#:
+#: 1e-4 and not 1e-6 of the two that qualify, because 1e-4 is the tolerance
+#: the verification bank actually runs at since 0.1.160.
+OVERFLOW_BETA, OVERFLOW_TOL = 52.5, 1e-4
+
+#: And the method, for the same reason the angle is what it is: this cell
+#: is GLE's. Spencer on the same plane solves its bracket and never reaches
+#: the bound.
+OVERFLOW_MID = "gle_morgenstern_price"
 
 #: Geometry times this AND cohesion times this is the same slope in
 #: different units: weight goes as the square of a length and a cohesive
@@ -406,7 +433,7 @@ class TestTheReasonReachesTheUser:
     def test_a_real_run_publishes_the_count(self):
         """The whole path, with nothing patched: a real slope, the shipped
         tolerance, the outer lambda search losing one of its samples."""
-        r = _result("spencer", OVERFLOW_BETA, OVERFLOW_TOL)
+        r = _result(OVERFLOW_MID, OVERFLOW_BETA, OVERFLOW_TOL)
         details = r.details or {}
         # Reported by key and not by dumping ``details``: it carries the
         # n+1 thrust arrays, and a failure that prints them buries itself.
@@ -420,7 +447,7 @@ class TestTheReasonReachesTheUser:
     def test_and_the_note_says_it_without_vetoing(self):
         from ogr_slip2d.analysis_runner import lambda_fallback_notes
         from ogr_slip2d.interslice import THRUST_SCALE_LIMIT
-        r = _result("spencer", OVERFLOW_BETA, OVERFLOW_TOL)
+        r = _result(OVERFLOW_MID, OVERFLOW_BETA, OVERFLOW_TOL)
         notes = lambda_fallback_notes(r)
         said = [n for n in notes if "thrust" in n]
         assert said, notes
@@ -438,7 +465,7 @@ class TestTheReasonReachesTheUser:
         # rather than against the word False, so that it stays a statement
         # about what this change does NOT move.
         with _lifted():
-            was = _result("spencer", OVERFLOW_BETA, OVERFLOW_TOL)
+            was = _result(OVERFLOW_MID, OVERFLOW_BETA, OVERFLOW_TOL)
         assert r.admissible == was.admissible
         assert r.fos == was.fos, (r.fos, was.fos)
 

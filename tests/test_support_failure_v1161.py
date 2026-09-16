@@ -321,14 +321,40 @@ class TestNothingMoved:
 
     Verification problem 91 of the reference's bank: fifteen geosynthetic
     sheets on the circle the manual publishes (centre 4.658, 15.000,
-    R 10.934), 30 slices. These are the digits OGR 0.1.160 gives, measured
-    on 2026-09-12 before a line of this version was written, and this
-    version may not move them.
+    R 10.934), 30 slices. These were the digits OGR 0.1.160 gives, measured
+    on 2026-09-12 before a line of v0.1.161 was written, and that version
+    could not move them.
 
     Anchored to a published MODEL rather than to a fixture because the
     claim being made is about the verification bank: "cero dígitos
     movidos" in a changelog is worth what the test that can fail on it is
-    worth.
+    worth. Which is why v0.1.172 UPDATED one of the two rather than
+    quietly widening the comparison — this case is the instrument, and an
+    instrument that is relaxed the first time it reads something stops
+    being one.
+
+    WHAT MOVED IN v0.1.172 (D116) AND WHY IT IS DECLARED HERE. Spencer
+    goes 0.9641449174231770 -> 0.9641378773625315, seven parts in a
+    million. The cause is the contraction test: a branch is no longer
+    declared converged on a single step that fell under the tolerance in
+    the oscillating transient. Bishop does not move by one digit, and it
+    cannot — it never enters ``interslice.py``, which only Spencer and GLE
+    do — and that is half of what says the cause is the one claimed.
+
+    The other half is the DIRECTION, measured on this very circle by
+    tightening the tolerance until the answer stops moving:
+
+        1e-10   0.9640803604041095      <- the converged answer
+        1e-08   0.9640803660734361
+        1e-06   0.9640806409312945
+        1e-04   0.9641378773625315      <- what this case now pins
+
+    The model asks for 1e-4. At that tolerance v0.1.171 sat 6.455e-5 from
+    the converged answer and v0.1.172 sits 5.751e-5: the digit moved
+    TOWARDS it, by a tenth of the tolerance that was requested. And at
+    1e-6 and below the two versions agree to nine figures and more, which
+    is the statement that there was never anything wrong where the
+    tolerance was tight enough to see it.
     """
 
     BANCO = Path(r"C:/Samuel/OpenGeoRock_Slip2d/referencias/Ejemplos"
@@ -336,8 +362,11 @@ class TestNothingMoved:
                  r"/02_Slide2_Slope_Stability_Verification_Manual"
                  r"/02_Slide2_Problema091")
     CIRCULO = (4.658, 15.0, 10.934)
+    #: Bishop is the CONTROL and has not moved since 0.1.160. Spencer was
+    #: 0.9641449174231770 until v0.1.172; see the class docstring for the
+    #: measurement that authorised the change.
     ESPERADO = {"bishop_simplified": 0.9835740303049271,
-                "spencer": 0.9641449174231770}
+                "spencer": 0.9641378773625315}
 
     def _skip_if_absent(self):
         # The bank lives outside this repository (and outside git), so the
