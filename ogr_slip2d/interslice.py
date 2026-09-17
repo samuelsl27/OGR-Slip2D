@@ -193,6 +193,12 @@ STALL_PATIENCE = 80
 #: runs away instead of the number of passes it takes to do it. This
 #: constant goes back to being what its first paragraph says it is: a
 #: backstop for a branch that keeps beating its own record by less and less.
+#:
+#: v0.1.173 (D117) — and since it is no longer a lock it can be RAISED by the
+#: user, so this number now plays two roles: the backstop when nothing is
+#: configured, and the FLOOR under what ``max_iterations`` can buy. See
+#: :func:`branch_budget` for why those are deliberately the same number and
+#: not two constants.
 MAX_PASSES = 400
 
 
@@ -225,6 +231,50 @@ MAX_PASSES = 400
 #: as though they were measurements, because :func:`thrust_is_admissible`
 #: asks the SIGN of the thrust and never its size.
 THRUST_SCALE_LIMIT = 10.0
+
+
+# ----------------------------------------------------------------------
+def branch_budget(max_iterations: int) -> int:
+    """The inner pass budget a user's ``max_iterations`` buys. Defect D117.
+
+    v0.1.173. Until this version ``max_iterations`` reached the OUTER lambda
+    secant of Spencer and GLE and nothing else, while the fixed point those
+    two methods actually solve — one :func:`solve_branch` call per branch per
+    lambda — ran on :data:`MAX_PASSES` with no way in from the settings. The
+    name promised three loops and reached one, which is rule 7 in its
+    quietest form: a control the user believes the analysis honours.
+
+    WHY THERE IS A FLOOR AT ALL, because lowering the budget is NOT the
+    mirror of raising it. Since v0.1.172 (D116) no branch can converge
+    before its THIRD pass — seeing one step ratio costs two steps and seeing
+    two costs three — and :data:`STALL_PATIENCE` is 80, so a budget under
+    that would not trim a wasteful iteration, it would delete lambdas that
+    are answers today. ``TestPatienceCannotChangeWhatAlreadyConverged`` in
+    ``tests/test_interslice_budget_v1159.py`` is the executable form of that
+    promise and it stays green.
+
+    WHY THE FLOOR IS :data:`MAX_PASSES` ITSELF and not a second constant.
+    Keeping them equal is what makes every stored model answer the number it
+    answered before: the verification bank's 204 projects all carry
+    ``max_iterations = 50``, and ``max(50, 400)`` is the 400 they already
+    used, so zero moved digits here is an IDENTITY and not a measurement. A
+    ``MAX_PASSES_MIN`` sitting beside ``MAX_PASSES`` would be two names for
+    one number held equal by nothing but habit, and the day one of them
+    moved the other would keep the reason that used to justify both.
+
+    WHERE THIS STOPS, said out loud rather than implied, because promising
+    more than a change delivers is what cost this project two versions in
+    v0.1.82-84. Raising the budget only moves an answer where the ceiling
+    was actually reached, and that takes a tolerance far tighter than the
+    Project Settings dialog can express — its tolerance spin box floors at
+    1e-6. Measured over 24 combinations of two wedge angles, both methods
+    and six tolerances from 1e-5 to 1e-10, exactly ONE moved: the 55 degree
+    plane under Spencer at 1e-10, where a lambda lost to the ceiling had
+    pushed the answer to 2.6322 while the same solver settles on 2.59330 at
+    1e-8 and at 1e-9. Reachable from a stored file and from the API; not
+    from the dialog.
+    """
+    return max(int(max_iterations), MAX_PASSES)
 
 
 # ----------------------------------------------------------------------
@@ -756,14 +806,20 @@ class GLESystem:
     """
 
     __slots__ = ("rows", "forces", "s_list", "shape", "order", "reversed_",
-                 "tolerance", "initial_fos", "strict", "n_thrust_rejected",
-                 "n_passes_exhausted", "n_thrust_overflow", "_moment_fos",
-                 "_driving")
+                 "tolerance", "initial_fos", "max_passes", "strict",
+                 "n_thrust_rejected", "n_passes_exhausted",
+                 "n_thrust_overflow", "_moment_fos", "_driving")
 
+    # v0.1.173 (D117) — ``max_passes`` goes LAST and keyword-defaulted on
+    # purpose. Nine call sites build this class and every one of them passes
+    # nine positionals and then names ``tolerance``/``initial_fos``, so
+    # appending is the only place a new argument cannot silently land in
+    # somebody else's slot.
     def __init__(self, s_list, shape: Sequence[float],
                  kh: float, kv: float, slide_sign: float,
                  circle_R, circle_yc, sup=None, axis=None,
-                 tolerance: float = 1e-3, initial_fos: float = 1.0) -> None:
+                 tolerance: float = 1e-3, initial_fos: float = 1.0,
+                 max_passes: int = MAX_PASSES) -> None:
         self.s_list = list(s_list)
         self.rows, self.forces, self.order = prepare_rows(
             self.s_list, kh, kv, slide_sign, sup)
@@ -774,6 +830,13 @@ class GLESystem:
         self.shape = list(reversed(shape)) if self.reversed_ else list(shape)
         self.tolerance = tolerance
         self.initial_fos = initial_fos
+        #: v0.1.173 (D117) — the pass budget every branch of THIS system is
+        #: solved with. Held here rather than read from :data:`MAX_PASSES` at
+        #: the call because it is now the user's ``max_iterations``, floored
+        #: by :func:`branch_budget`; ``branches`` needs the number actually
+        #: used to tell "ran out of budget" from "stalled", and the constant
+        #: stopped being that number the moment it became configurable.
+        self.max_passes = int(max_passes)
         # Whether an inadmissible inter-slice thrust disqualifies a lambda.
         # A PREFERENCE and not a veto: the caller turns it off and samples
         # again when nothing at all survived, so a surface that has no
@@ -787,8 +850,13 @@ class GLESystem:
         #: sweep of the whole shape.
         self.n_thrust_rejected = 0
         #: v0.1.159 (D63) — how many lambdas were lost because a branch ran
-        #: out of :data:`MAX_PASSES` while its step was still shrinking, as
-        #: opposed to stalling out or being inadmissible. Kept apart from
+        #: out of its pass budget while its step was still shrinking, as
+        #: opposed to stalling out or being inadmissible. That budget was
+        #: :data:`MAX_PASSES` until v0.1.173 (D117) made it configurable, and
+        #: it is ``self.max_passes`` that this counts against: comparing to
+        #: the constant once the two can differ would call a branch that
+        #: stalled at 420 out of 500 "exhausted", which is precisely the
+        #: conflation this counter exists to end. Kept apart from
         #: ``n_thrust_rejected`` because the two mean opposite things: that
         #: one is a statement about the stress state, this one is a
         #: statement about the SOLVER, and only this one can move the answer
@@ -901,9 +969,11 @@ class GLESystem:
         """``(force_branch, moment_branch)``, either of which may be None."""
         lam_b = self.lambda_boundary(lam)
         force = solve_branch(self.rows, lam_b, None,
-                             self.tolerance, self.initial_fos)
+                             self.tolerance, self.initial_fos,
+                             max_passes=self.max_passes)
         moment = solve_branch(self.rows, lam_b, self._moment_fos,
-                              self.tolerance, self.initial_fos)
+                              self.tolerance, self.initial_fos,
+                              max_passes=self.max_passes)
         return force, moment
 
     # ------------------------------------------------------------------
@@ -956,7 +1026,7 @@ class GLESystem:
                     continue
                 if state.abandoned:
                     self.n_thrust_overflow += 1
-                elif state.passes >= MAX_PASSES:
+                elif state.passes >= self.max_passes:
                     self.n_passes_exhausted += 1
             return None, None
         if not thrust_is_admissible(force):

@@ -184,13 +184,16 @@ class GLEMorgensternPrice(LEMMethod):
         # report used f(x_boundary), so the two disagreed about the very
         # quantity the method is defined by.
         from ..interslice import (FALLBACK_RESIDUAL_LIMIT, GLESystem,
-                                  branch_pair_ok)
+                                  branch_budget, branch_pair_ok)
         s_list = slices.slices
         shape = [self.f_func(x, x0, x1)
                  for x in self._boundary_x(slices)]
         system = GLESystem(
             s_list, shape, kh, kv, slide_sign, circle_R, circle_yc, sup, axis,
             tolerance=self.tolerance, initial_fos=self.initial_fos,
+            # v0.1.173 (D117) — see the twin line in spencer.py. The floor is
+            # ``branch_budget``'s and not this call's, deliberately.
+            max_passes=branch_budget(self.max_iterations),
         )
 
         def solve(lam):

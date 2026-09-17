@@ -5444,7 +5444,13 @@ class SimulatedAnnealingSearch(BaseSearch):
             ( 1, -1), ( 1, 0), ( 1, 1),
         ]
 
-        max_passes = 15  # hard cap on outer LMC passes
+        # v0.1.173 (D117) — given a name of its own. This is a budget of the
+        # SEARCH and shares nothing with the branch solver's inner budget in
+        # ``interslice``, which is what the Maximum iterations setting now
+        # reaches; until this version the two were spelled alike, so a grep
+        # for one landed on the other. The old spelling is deliberately not
+        # written out here: a comment that names it is a grep hit again.
+        LMC_MAX_PASSES = 15  # hard cap on outer LMC passes
         max_total_evals = 2 * self.generation_steps  # hard cap on # of evals
         evals_done = 0
 
@@ -5472,7 +5478,7 @@ class SimulatedAnnealingSearch(BaseSearch):
                 return False
             return True
 
-        for pass_idx in range(max_passes):
+        for pass_idx in range(LMC_MAX_PASSES):
             improved_anywhere = False
             for i in range(len(verts)):
                 if evals_done >= max_total_evals:

@@ -94,12 +94,18 @@ class Spencer(LEMMethod):
         # every λ. Spencer is GLE with f(x) = 1 at every boundary, and that
         # is the only line of this method that GLE does not share.
         from ..interslice import (FALLBACK_RESIDUAL_LIMIT, GLESystem,
-                                  branch_pair_ok)
+                                  branch_budget, branch_pair_ok)
         s_list = slices.slices if hasattr(slices, "slices") else list(slices)
         system = GLESystem(
             s_list, [1.0] * (len(s_list) + 1), kh, kv, slide_sign,
             circle_R, circle_yc, sup, axis,
             tolerance=self.tolerance, initial_fos=self.initial_fos,
+            # v0.1.173 (D117) — until this version ``max_iterations`` bounded
+            # the λ secant below and nothing else, while the fixed point this
+            # method actually solves ran on a constant the settings could not
+            # reach. The floor lives in ``branch_budget`` and not here, so
+            # that this line and gle.py's cannot drift apart.
+            max_passes=branch_budget(self.max_iterations),
         )
 
         def solve(lam):

@@ -336,9 +336,36 @@ class _MethodsPage(QWidget):
         self.spn_slices = QSpinBox(); self.spn_slices.setRange(3, 500); self.spn_slices.setValue(s.methods.num_slices)
         self.dsp_tol = QDoubleSpinBox(); self.dsp_tol.setDecimals(6); self.dsp_tol.setRange(1e-6, 1.0); self.dsp_tol.setValue(s.methods.tolerance)
         self.spn_iter = QSpinBox(); self.spn_iter.setRange(1, 500); self.spn_iter.setValue(s.methods.max_iterations)
+        # v0.1.173 (D117) — this used to read a plain "Maximum iterations:",
+        # which names one loop and governs a different one in each family of
+        # methods. The census goes in the tooltip because a form label
+        # cannot hold it, and the pass budget is interpolated from the
+        # engine rather than spelled out here so the two cannot drift apart.
+        #
+        # The KEY is new and the old one deliberately stays alive: the
+        # Groundwater page of this same dialog and transient_stages_dialog
+        # both use 'Maximum iterations:' for the seepage solver, so renaming
+        # the key would have put a sentence about Spencer and GLE on top of
+        # two controls that have nothing to do with either.
+        from ogr_slip2d.interslice import MAX_PASSES as _BRANCH_PASSES
+        self.spn_iter.setToolTip(tr(
+            "The same number bounds a different loop in each family of "
+            "methods.\n\n"
+            "Bishop, Janbu simplified and Janbu corrected: the iteration on "
+            "the factor of safety, exactly as set.\n"
+            "Lowe-Karafiath and Corps of Engineers #1 and #2: the same "
+            "iteration, except that a value below 60 is raised to 60.\n"
+            "Ordinary/Fellenius: nothing, because it has no iteration to "
+            "run.\n"
+            "Spencer and GLE/Morgenstern-Price: the search for the "
+            "inter-slice inclination, and above %d also the budget of the "
+            "fixed point solved inside every sample of that search, which "
+            "keeps its %d passes at or below %d.")
+            % (_BRANCH_PASSES, _BRANCH_PASSES, _BRANCH_PASSES))
         form.addRow(tr("Number of slices:"), self.spn_slices)
         form.addRow(tr("Tolerance:"), self.dsp_tol)
-        form.addRow(tr("Maximum iterations:"), self.spn_iter)
+        form.addRow(tr("Maximum iterations (scope differs by method):"),
+                    self.spn_iter)
 
         # v0.1.74 — the interslice force function. GLE / Morgenstern-Price
         # has accepted one since it was written and nothing had ever

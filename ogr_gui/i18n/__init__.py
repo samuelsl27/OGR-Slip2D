@@ -880,6 +880,35 @@ _DICTS: dict[str, dict[str, str]] = {
         'Materials': 'Materiales',
         'Max Materials:': 'Máx. materiales:',
         'Max Supports:': 'Máx. soportes:',
+        # v0.1.173 (D117) — la clave de abajo sigue viva y es de la pagina
+        # Groundwater y de transient_stages_dialog (el solver de
+        # filtracion). La de la pagina Methods es la nueva: el mismo rotulo
+        # gobernaba un bucle distinto en cada familia de metodos y no lo
+        # decia.
+        'Maximum iterations (scope differs by method):':
+            'Iteraciones máximas (el alcance depende del método):',
+        'The same number bounds a different loop in each family of '
+        'methods.\n\nBishop, Janbu simplified and Janbu corrected: the '
+        'iteration on the factor of safety, exactly as set.\n'
+        'Lowe-Karafiath and Corps of Engineers #1 and #2: the same '
+        'iteration, except that a value below 60 is raised to 60.\n'
+        'Ordinary/Fellenius: nothing, because it has no iteration to run.\n'
+        'Spencer and GLE/Morgenstern-Price: the search for the inter-slice '
+        'inclination, and above %d also the budget of the fixed point '
+        'solved inside every sample of that search, which keeps its %d '
+        'passes at or below %d.':
+            'El mismo número acota un bucle distinto en cada familia de '
+            'métodos.\n\nBishop, Janbu simplificado y Janbu corregido: la '
+            'iteración sobre el factor de seguridad, tal cual se fija.\n'
+            'Lowe-Karafiath y Corps of Engineers #1 y #2: la misma '
+            'iteración, salvo que un valor por debajo de 60 se eleva a 60.\n'
+            'Ordinary/Fellenius: nada, porque no tiene ninguna iteración '
+            'que ejecutar.\n'
+            'Spencer y GLE/Morgenstern-Price: la búsqueda de la inclinación '
+            'de las fuerzas entre dovelas y, por encima de %d, también el '
+            'presupuesto del punto fijo que se resuelve dentro de cada '
+            'muestra de esa búsqueda, que conserva sus %d pasadas cuando el '
+            'ajuste es %d o menor.',
         'Maximum iterations:': 'Iteraciones máximas:',
         'Mean (deterministic):': 'Media (determinista):',
         'Method:': 'Método:',

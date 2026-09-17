@@ -302,7 +302,74 @@ def settings_warnings(project, method_ids=()) -> list[str]:
     notes.extend(_undrained_profile_notes(project))
     notes.extend(_focus_notes(project))
     notes.extend(_interslice_convention_notes(project, method_ids))
+    notes.extend(_max_iterations_scope_notes(project, method_ids))
     return notes
+
+
+def _max_iterations_scope_notes(project, method_ids) -> list[str]:
+    """What Maximum iterations does and does not reach. Defect D117.
+
+    v0.1.173. One setting, one name, and five loops that are not the same
+    loop. Spencer and GLE are where the gap was widest: until this version
+    the value bounded their OUTER search for the inter-slice inclination and
+    nothing else, while the fixed point they actually solve — one branch
+    solve per sample of that search — ran on a module constant no setting
+    could reach. It is wired now (:func:`interslice.branch_budget`), and
+    wiring it did NOT make the name true on its own: the budget is FLOORED
+    at ``MAX_PASSES``, so every value at or below the floor still leaves the
+    inner loop exactly where it was. Which of those two happened is a fact
+    about the run, and saying it is the minimum rule 7 asks.
+
+    WHY IT IS SILENT AT THE DEFAULT, which is the opposite of what
+    :func:`_block_group_notes` decided and so is worth the sentence. That
+    one fires whatever its count says, on the grounds that the control it
+    describes is equally inert at every value — "a three is as much a claim
+    by the panel as a seven". This control is not inert: above the floor it
+    is honoured. So the note belongs to a run where the user moved the
+    value, and the standing fact — which method reaches which loop — belongs
+    on the control itself, where Project Settings shows it without an
+    analysis having to be run first. A note that fires on every sound run is
+    a note nobody reads, which is what ``test_efp_wall_v1122`` asserts with
+    ``quiet == []``.
+
+    The default is read from the dataclass field and not written here: a 50
+    spelled out in this function is a sentence that starts lying the day the
+    default moves.
+    """
+    from dataclasses import fields as dataclass_fields
+
+    from ogr_core.project.settings import MethodsSettings
+
+    from .interslice import MAX_PASSES, branch_budget
+
+    if not any(m in _LAMBDA_METHODS for m in (method_ids or ())):
+        return []
+    value = int(project.settings.methods.max_iterations)
+    default = next(f.default for f in dataclass_fields(MethodsSettings)
+                   if f.name == "max_iterations")
+    if value == default:
+        return []
+    budget = branch_budget(value)
+    if budget <= MAX_PASSES:
+        return [
+            f"Maximum iterations is set to {value}, and for Spencer and "
+            f"GLE/Morgenstern-Price that bounds the outer search for the "
+            f"inter-slice inclination alone. The fixed point those two "
+            f"methods solve inside every sample of that search keeps its "
+            f"own budget of {MAX_PASSES} passes, which this setting raises "
+            f"only once it is above {MAX_PASSES}; at or below that the "
+            f"inner iteration is untouched. The methods that iterate on the "
+            f"factor of safety directly — Bishop and both Janbu — do take "
+            f"the value as written."]
+    return [
+        f"Maximum iterations is set to {value}, so for Spencer and "
+        f"GLE/Morgenstern-Price it now bounds two loops and not one: the "
+        f"outer search for the inter-slice inclination, and the fixed point "
+        f"solved inside every sample of it, whose budget rises from "
+        f"{MAX_PASSES} passes to {budget}. The extra room changes an answer "
+        f"only where a branch was being cut off while it was still "
+        f"converging, which takes a convergence tolerance far tighter than "
+        f"the default one."]
 
 
 def _block_group_notes(project) -> list[str]:
