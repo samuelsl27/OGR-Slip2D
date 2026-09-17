@@ -75,6 +75,31 @@ _INTERSLICE_METHODS = ("gle_morgenstern_price",)
 _PRESCRIBED_THETA_METHODS = (
     "lowe_karafiath", "corps_engineers_1", "corps_engineers_2")
 
+# v0.1.174 — the methods whose iteration on the factor of safety passes
+# through the Aitken extrapolator, and so are the only ones the Steffensen
+# setting can reach. Three of the nine, measured rather than read: the six
+# that are missing split into three reasons, and the note below needs all
+# three because "it does not apply" is not a reason.
+#
+# Bishop is here for its CIRCULAR branch only. ``_general_moment_fos``,
+# the path a non-circular surface takes, relaxes at 50 % instead and has
+# never mentioned Steffensen — so the "(Bishop, Janbu)" label the ficha
+# proposes says something about Bishop that only holds on circles.
+_STEFFENSEN_METHODS = ("bishop_simplified", "janbu_simplified",
+                       "janbu_corrected")
+_STEFFENSEN_CIRCULAR_ONLY = ("bishop_simplified",)
+
+# Searches that return a polyline and never a circle. Not the complement
+# of ``CIRCULAR_METHODS``: Auto Refine and the Particle Swarm are in BOTH
+# families, so for those two the answer is a property of the PAIR and the
+# question is asked through ``is_auto_refine_non_circular``. The swarm is
+# deliberately NOT treated as non-circular here even when the Surface Type
+# says so, because its particles ARE circles and the polyline is what the
+# optimisation makes of the winners afterwards (settings.py) — Bishop has
+# circles to accelerate on that run, and a note that said otherwise would
+# be false. A missing note costs less than a wrong one.
+_POLYLINE_ONLY_SEARCHES = ("block", "path", "simulated_annealing")
+
 # Searches that enumerate rather than draw at random. Seeding them would
 # mean handing an argument they can only ignore.
 _DETERMINISTIC_SEARCHES = ("grid", "auto_refine")
@@ -303,6 +328,7 @@ def settings_warnings(project, method_ids=()) -> list[str]:
     notes.extend(_focus_notes(project))
     notes.extend(_interslice_convention_notes(project, method_ids))
     notes.extend(_max_iterations_scope_notes(project, method_ids))
+    notes.extend(_steffensen_scope_notes(project, method_ids))
     return notes
 
 
@@ -370,6 +396,106 @@ def _max_iterations_scope_notes(project, method_ids) -> list[str]:
         f"only where a branch was being cut off while it was still "
         f"converging, which takes a convergence tolerance far tighter than "
         f"the default one."]
+
+
+def _run_returns_circles(s_search) -> bool:
+    """Whether the surfaces this search hands the methods are circles.
+
+    NOT the complement of ``NON_CIRCULAR_METHODS``. Auto Refine and the
+    Particle Swarm belong to both families, so for them the answer is a
+    property of the PAIR — which is the whole argument
+    :func:`is_auto_refine_non_circular` was written to hold in one place,
+    reused here rather than asked again.
+    """
+    from ogr_core.project.settings import (SearchMethod,
+                                           is_auto_refine_non_circular)
+
+    try:
+        SearchMethod(s_search.search_method)
+    except (KeyError, ValueError):
+        return True            # an unknown id is the default Grid Search's
+    if is_auto_refine_non_circular(s_search):
+        return False
+    return s_search.search_method not in _POLYLINE_ONLY_SEARCHES
+
+
+def _steffensen_honouring(project, method_ids) -> tuple:
+    """Which of ``method_ids`` actually pass the switch to an iteration.
+
+    Exposed as its own function because the note below and the test that
+    guards it must not each own a copy of the rule: a note that disagrees
+    with the engine is the defect this closes, one layer up.
+    """
+    circles = _run_returns_circles(project.settings.search)
+    return tuple(m for m in (method_ids or ())
+                 if m in _STEFFENSEN_METHODS
+                 and (circles or m not in _STEFFENSEN_CIRCULAR_ONLY))
+
+
+def _steffensen_scope_notes(project, method_ids) -> list[str]:
+    """What Accelerate convergence does and does not reach. Defect D115.
+
+    v0.1.174. The switch is saved to the .ogr, it defaults to ON, and
+    ``build_method`` hands it to all nine methods through ``lem_kwargs``.
+    Three of them read it. The other six store it in an attribute nobody
+    consults, which is rule 7 in the form that gives the user no way to
+    notice: not a control that does nothing, but a FILE that claims
+    something the analysis did not do.
+
+    It is NOT wired, and the reason is measured rather than argued
+    (changelog v0.1.159). Bishop's pattern copied literally makes the
+    branch WORSE — lambda = 1.2269 at 1e-10 goes from 171 passes to 430 —
+    and at lambda = 2.0 it kills it outright, because the state of
+    ``solve_branch`` is not F but the pair (F, X), and extrapolating F
+    leaves X behind. Extrapolating the pair together buys 1.4 to 1.6x and
+    moves 8 of 8 numbers at the shipped tolerance. So the honest close is
+    to say the scope out loud, and this note is half of it; the other half
+    is the label, which says it without an analysis having to be run.
+
+    WHY IT SPEAKS ONLY WHEN NOTHING HONOURED IT, which is narrower than the
+    ficha asks and is the same argument :func:`_max_iterations_scope_notes`
+    makes for its own silence. The ficha wants a note whenever Spencer or
+    GLE are active with the switch on; measured against the reference bank
+    that is 82 of 91 models, because the default is ON and every model in
+    the bank carries it. A note that fires on nine runs in ten is a note
+    nobody reads — ``test_efp_wall_v1122`` asserts exactly that with
+    ``quiet == []``. What is worth interrupting for is the case where the
+    setting reached NOTHING, which is the rule 7 condition itself, and the
+    standing fact — which method reaches which loop — belongs on the
+    control, where Project Settings shows it for free.
+
+    The reach is asked of :func:`_steffensen_honouring` and not restated
+    here, and the surface type is part of the question: Bishop accelerates
+    its circular branch only, so a Block or Path search reduces the three
+    methods that honour the switch to two.
+    """
+    if not project.settings.advanced.iterate_steffensen:
+        return []              # nothing is being promised, so nothing is owed
+    asked = tuple(method_ids or ())
+    if not asked or _steffensen_honouring(project, asked):
+        return []
+
+    # Said separately because it is the surprising half: Bishop IS a method
+    # that accelerates, and on this run it is not one.
+    blind = [m for m in asked if m in _STEFFENSEN_CIRCULAR_ONLY]
+    why_bishop = (
+        " Bishop simplified is in this run and does accelerate, but only on "
+        "its circular branch, and this search returns polylines." if blind
+        else "")
+
+    return [
+        "Accelerate convergence (Steffensen) is on, and not one of the "
+        "methods this run uses has an iteration it can accelerate, so the "
+        "setting reached nothing and the results are the same as they would "
+        "be with it off. The methods that ran are %s.%s Aitken extrapolation "
+        "speeds up a fixed point on the factor of safety, and only Bishop "
+        "simplified (on circular surfaces) and both Janbu solve one. Spencer "
+        "and GLE/Morgenstern-Price solve for the factor and the inter-slice "
+        "force together, and extrapolating the factor alone leaves the force "
+        "behind. Lowe-Karafiath and Corps of Engineers #1 and #2 iterate on "
+        "the factor but are not wired to it. Ordinary/Fellenius has no "
+        "iteration at all."
+        % (", ".join(asked), why_bishop)]
 
 
 def _block_group_notes(project) -> list[str]:

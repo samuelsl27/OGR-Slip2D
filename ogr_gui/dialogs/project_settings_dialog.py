@@ -1293,14 +1293,41 @@ class _AdvancedPage(QWidget):
             "has collapsed onto one region still looking elsewhere."))
         form.addRow("", self.chk_pso_enhanced)
 
+        # v0.1.174 (D115) — the label says the scope because the switch
+        # does not have one scope. Six of the nine methods store it and
+        # never consult it, and until now the only place that said so was
+        # a changelog. The old tooltip is REPLACED and not extended: its
+        # "7 passes instead of 19" was measured on Bishop and written as
+        # a property of the SETTING, which is the same promise the file
+        # was making.
+        #
+        # Nothing here is interpolated, unlike the Maximum iterations
+        # tooltip next to it, and that is a difference and not an
+        # oversight: that one quotes MAX_PASSES, an engine constant that
+        # can move, while 7 and 19 are a MEASUREMENT on one circle, pinned
+        # by ``test_project_settings_wiring_v174`` where it was taken. A
+        # ``% (7, 19)`` here would be ceremony dressed as a guard.
         self.chk_steffensen = QCheckBox(
-            tr("Accelerate convergence (Steffensen)"))
+            tr("Accelerate convergence (Steffensen, scope differs by "
+               "method)"))
         self.chk_steffensen.setChecked(bool(self.s.iterate_steffensen))
         self.chk_steffensen.setToolTip(tr(
-            "Aitken extrapolation of the fixed-point iteration. It "
-            "converges to the same root: on the reference-validated "
-            "circle both agree to 1e-11, and it needs 7 passes instead "
-            "of 19."))
+            "Aitken extrapolation of the iteration on the factor of "
+            "safety. Not every method has one to accelerate, and the "
+            "setting is stored for all of them either way.\n\n"
+            "Bishop simplified: yes, on circular surfaces. Its "
+            "non-circular branch relaxes at 50 % instead.\n"
+            "Janbu simplified and Janbu corrected: yes.\n"
+            "Lowe-Karafiath and Corps of Engineers #1 and #2: no. They "
+            "iterate on the factor of safety but are not wired to it.\n"
+            "Ordinary/Fellenius: no, it has no iteration to accelerate.\n"
+            "Spencer and GLE/Morgenstern-Price: no. They solve for the "
+            "factor and the inter-slice force together, and extrapolating "
+            "the factor alone leaves the force behind — measured, it "
+            "costs passes and can lose the branch.\n\n"
+            "Where it applies it converges to the same root: on the "
+            "reference-validated circle both agree to 1e-11, in 7 passes "
+            "instead of 19."))
         form.addRow("", self.chk_steffensen)
 
         # v0.1.97 — parallel search. Two controls and not one, because

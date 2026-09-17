@@ -492,7 +492,46 @@ _DICTS: dict[str, dict[str, str]] = {
         # --- v0.1.52: páginas nuevas de Project Settings ------------
         '%d stage(s), %d with a factor of safety': '%d etapa(s), %d con factor de seguridad',
         'A pseudo-random stream is reproducible: the same seed gives the same answer, which is what makes a probabilistic result defensible in a report and comparable between runs. A random stream is seeded from the clock, so successive runs explore differently — useful to check that a conclusion is not an artefact of one seed.': 'Un flujo pseudoaleatorio es reproducible: la misma semilla da la misma respuesta, que es lo que hace defendible un resultado probabilístico en un informe y comparable entre corridas. Un flujo aleatorio toma la semilla del reloj, así que corridas sucesivas exploran de forma distinta — útil para comprobar que una conclusión no es un artefacto de una semilla concreta.',
-        'Accelerate convergence (Steffensen)': 'Acelerar convergencia (Steffensen)',
+        # v0.1.174 (D115) - el rotulo dice el alcance porque el
+        # ajuste no tiene UN alcance: seis de los nueve metodos
+        # lo guardan y no lo consultan nunca. A diferencia de
+        # 'Maximum iterations:' en v0.1.173, la clave vieja
+        # -'Accelerate convergence (Steffensen)'- NO la comparte
+        # nadie (un solo sitio de uso en todo el repositorio),
+        # asi que aqui si se renombra en vez de convivir.
+        'Accelerate convergence (Steffensen, scope differs by method)':
+            'Acelerar convergencia (Steffensen, el alcance depende del '
+            'método)',
+        'Aitken extrapolation of the iteration on the factor of '
+        'safety. Not every method has one to accelerate, and the '
+        'setting is stored for all of them either way.\n\nBishop '
+        'simplified: yes, on circular surfaces. Its non-circular '
+        'branch relaxes at 50 % instead.\nJanbu simplified and Janbu '
+        'corrected: yes.\nLowe-Karafiath and Corps of Engineers #1 '
+        'and #2: no. They iterate on the factor of safety but are not '
+        'wired to it.\nOrdinary/Fellenius: no, it has no iteration to '
+        'accelerate.\nSpencer and GLE/Morgenstern-Price: no. They '
+        'solve for the factor and the inter-slice force together, and '
+        'extrapolating the factor alone leaves the force behind — '
+        'measured, it costs passes and can lose the branch.\n\nWhere '
+        'it applies it converges to the same root: on the '
+        'reference-validated circle both agree to 1e-11, in 7 passes '
+        'instead of 19.':
+            'Extrapolación de Aitken de la iteración sobre el factor de '
+            'seguridad. No todos los métodos tienen una que acelerar, y '
+            'el ajuste se guarda para todos igualmente.\n\nBishop '
+            'simplificado: sí, en superficies circulares. Su rama no '
+            'circular relaja al 50 % en su lugar.\nJanbu simplificado y '
+            'Janbu corregido: sí.\nLowe-Karafiath y Corps of Engineers #1 '
+            'y #2: no. Iteran sobre el factor de seguridad pero no están '
+            'conectados a ella.\nOrdinary/Fellenius: no, no tiene ninguna '
+            'iteración que acelerar.\nSpencer y GLE/Morgenstern-Price: '
+            'no. Resuelven a la vez el factor y la fuerza entre dovelas, '
+            'y extrapolar sólo el factor deja la fuerza atrás — medido, '
+            'cuesta pasadas y puede perder la rama.\n\nDonde sí se aplica '
+            'converge a la misma raíz: en el círculo validado contra la '
+            'referencia ambos coinciden hasta 1e-11, en 7 pasadas en vez '
+            'de 19.',
         'Analysis type:': 'Tipo de análisis:',
         'Apply partial factors': 'Aplicar coeficientes parciales',
         'Cohesion:': 'Cohesión:',
@@ -1488,14 +1527,6 @@ _DICTS: dict[str, dict[str, str]] = {
         "tensile check applies.":
             "Porcentaje de dovelas, contado desde el pie, sobre el que se "
             "aplica la comprobación de tracción.",
-        "Aitken extrapolation of the fixed-point iteration. It "
-        "converges to the same root: on the reference-validated "
-        "circle both agree to 1e-11, and it needs 7 passes instead "
-        "of 19.":
-            "Extrapolación de Aitken de la iteración de punto fijo. "
-            "Converge a la misma raíz: en el círculo validado contra la "
-            "referencia ambos coinciden hasta 1e-11, y necesita 7 pasadas "
-            "en lugar de 19.",
         "First trial value of the factor of safety. A starting "
         "point, not a floor.":
             "Primer valor de tanteo del factor de seguridad. Un punto de "

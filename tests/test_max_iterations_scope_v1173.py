@@ -631,8 +631,14 @@ class TestTheControlOnScreen:
         which is the ``"Add Grid"`` / ``"Add Grid..."`` defect of v0.1.166."""
         from ogr_gui.i18n import set_language, tr
         page = self._page()
+        # v0.1.174 — identified by THIS control's own words. The filter used
+        # to be "scope differs" alone, which was under-specified the day it
+        # was written and stopped being true the day a second control on the
+        # same page adopted the same phrasing for the same reason (D115).
+        # Nothing about what this case asserts has changed.
         keys = [k for k in _dialog_tr_keys()
-                if "scope differs" in k or "bounds a different loop" in k]
+                if "Maximum iterations (scope differs" in k
+                or "bounds a different loop" in k]
         assert len(keys) == 2, keys
         set_language("es")
         for key in keys:
