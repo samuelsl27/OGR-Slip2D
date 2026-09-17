@@ -132,6 +132,8 @@ F_MAX = 50.0
 #: comparisons of ``fos``, ``converged``, ``error_message`` and lambda over
 #: the seven cases in ``validacion/casos/`` at both shipped tolerances, zero
 #: moved.
+STALL_PATIENCE = 80
+
 #: The residual ``|F_f - F_m|`` below which the "no lambda-bracket" fallback
 #: of ``spencer.py`` and ``gle.py`` still counts its answer as usable. It is
 #: NOT the caller's ``tolerance`` and it is deliberately looser, which is the
@@ -153,6 +155,52 @@ F_MAX = 50.0
 #: It also silently disabled the m-alpha post-filter, whose inadmissible
 #: count went 3 -> 0 because the surfaces it flags were vetoed before it ran.
 #:
+#: WHERE 0.02 COMES FROM, which nothing in this repository said until
+#: v0.1.175 (D120). It is not derived, it never was, and the honest form of
+#: that sentence is the history rather than a shrug. The first Spencer this
+#: project had wrote ``converged = abs(g) < 0.01`` inline, in ``spencer.py``
+#: and ``gle.py`` alike, with no comment of any kind. v0.1.13 rewrote both
+#: methods FROM SCRATCH against Fredlund and Krahn (1977) — four named bugs,
+#: a bracket grid widened to [-1.5, +1.5], a validation table — and somewhere
+#: inside that rewrite the threshold was DOUBLED to 0.02, in both files at
+#: once. Its changelog documents the rewrite bug by bug and never mentions
+#: the threshold: the only 0.01 anywhere in it belongs to a unit-conversion
+#: table. So the number has a birth certificate and no derivation, and the
+#: ``git log -S`` that looks for one stops at the first public commit,
+#: which is later than the change it is looking for.
+#:
+#: Nor is there a published one to borrow. The reference formulation's
+#: iteration parameters are the m-alpha check (Whitman and Bailey 1967),
+#: the bounds on lambda, the initial trial factor, the largest change in F
+#: allowed per iteration, a minimum F and Steffensen — and no acceptable
+#: residual of any kind. Its published error codes have none for "no lambda
+#: root" either: a convergence failure is about the factor-of-safety
+#: iteration, and a surface that cannot be solved is simply refused. The
+#: fallback below is a THIRD state that formulation does not have, which is
+#: why nothing outside this file can say what this number should be.
+#:
+#: WHAT IT COSTS, counted on the verification bank in v0.1.175 because
+#: until then nothing counted it at all: 41 of 229 Spencer/GLE rows publish
+#: a minimum found down this path, in 11 problems, and every one of those 41
+#: is UNDER this limit and therefore reported as converged — they compete,
+#: and they win, in silence. Their residuals reach 0.02 itself, which is 200
+#: times the tolerance those runs asked for.
+#:
+#: And the count is what confirms the v0.1.130 decision rather than merely
+#: restating it. Excluding them from the preferred pool, recomputed over the
+#: same evaluations, moves the reported minimum UP every single time it
+#: moves at all — 24 of 32 rows measured, between 1.6 % and 15 % — while a
+#: row whose critical surface did not come from this path does not move by
+#: one digit, which is the control. Against the manual's own published
+#: factors it is a WASH: 8 rows get closer and 9 get further. Problems 90
+#: and 93 make the point on their own — same family, same mechanism,
+#: OPPOSITE directions: excluding takes 90 from -10.1 % to +1.5 % of its
+#: published factor and 93 from +4.3 % to +12.2 %. So there is no evidence
+#: that these minima are artefacts to be filtered out; they are simply the
+#: lower ones, and dropping them would publish a less conservative answer
+#: for no measured gain. The census is ``_auditoria/RESERVA_LAMBDA_*.md``
+#: in the verification bank.
+#:
 #: So the boundary stays where it was and gets a name and a reason instead.
 #: What WAS wrong is that the residual was never reported: the result said
 #: "converged" and nothing else, and the user had no way to tell a solved
@@ -160,8 +208,6 @@ F_MAX = 50.0
 #: ``details`` and in ``analysis_runner.lambda_fallback_notes``, neither of
 #: which vetoes anything.
 FALLBACK_RESIDUAL_LIMIT = 0.02
-
-STALL_PATIENCE = 80
 
 #: Backstop for a branch that keeps beating its own record, indefinitely, by
 #: less and less, and so never stalls. It is NOT unreachable and it would be
