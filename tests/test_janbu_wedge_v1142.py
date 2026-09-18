@@ -509,8 +509,8 @@ class TestSpencerAndGleSettleOnTheWedge:
         of them, rows where no bracket was found and the answer is the
         nearest sample. Their distance to the closed form is not a
         convergence error at all — it does not shrink with the tolerance,
-        which is exactly what ``TestAWedgeWithNoRootSaysSo`` asserts a few
-        classes down — so a band shared with the solved rows was bounding
+        which is exactly what the class named for it a few classes down
+        asserts — so a band shared with the solved rows was bounding
         two different quantities with one number, and bounding the solved
         eleven thirty times more loosely than they need.
 
@@ -527,7 +527,8 @@ class TestSpencerAndGleSettleOnTheWedge:
 
         The old claim survives as a consequence rather than as the
         assertion: the largest error anywhere here is still 3.5 %, and it
-        belongs to the 50 degree reinforced plane that has no root.
+        belongs to the 50 degree reinforced plane whose root the branch
+        solver cannot reach (D119, v0.1.177).
         """
         solved = fell_back = 0
         for name, p in _both():
@@ -553,19 +554,38 @@ class TestSpencerAndGleSettleOnTheWedge:
 
 
 # ======================================================================
-class TestAWedgeWithNoRootSaysSo:
+class TestAWedgeWhoseRootTheSolverCannotReachSaysSo:
     """The other half of the fix, and a finding the fix uncovered.
 
-    Reinforcing this wedge does not merely shift the answer: on the 50°
-    plane, with the anchor either Active or Passive, the coupled system has
-    NO λ where the force and the moment factors agree. The residual at the
-    nearest λ is 0.03 to 0.20 and it does NOT shrink when the tolerance is
-    tightened, so the reserve path there is not a failure to converge — it
-    is a correct report that there is no root to converge to. The error
-    against the closed form stays at 1 % to 3.5 % for that reason, and not
-    because of the ceiling this version removed. Which is why this class
-    exists at all: without it, someone reading the class above would take
-    those two rows for the same defect and "fix" them.
+    RENAMED IN v0.1.177 (D119), and the old name is the reason. It was
+    ``TestAWedgeWithNoRootSaysSo``, and it said that on the 50° plane, with
+    the anchor either Active or Passive, the coupled system has NO λ where
+    the two factors agree. **That is false, and it was measured false**: the
+    Passive cell has its root at λ = 1.3199, where F = 1.748304 — the closed
+    form of this very wedge to 8e-6, which is what a root on a plane is
+    obliged to be. The curves for the twelve combinations of β and anchor
+    are in ``docs/audits/anchored_wedge_lambda_v1177.md``; the mechanism is
+    pinned in ``tests/test_anchored_wedge_root_v1177.py``.
+
+    What is true is everything this class actually ASSERTS, which is why not
+    one assertion below moved: the search finds no bracket, the residual at
+    the nearest λ is 0.03 to 0.20, and it does NOT shrink when the tolerance
+    is tightened. What does not hold is the REASON that was written for it.
+    The residual is flat not because there is nothing to converge to, but
+    because the MOMENT branch stops being solvable before the crossing: its
+    damped iteration turns from the monotone contraction it is without the
+    anchor into a period-2 oscillation whose amplitude grows, and the orbit
+    leaves the region where F is finite and positive — ``solve_branch``
+    returns ``None`` on pass 69 at λ = 1.30, which is BEFORE
+    ``STALL_PATIENCE``, so neither the stall test nor the v0.1.176 rescue is
+    ever consulted. Hand the same solver an earlier gate and it walks to the
+    root. Reported as bank defect D148 and deliberately not fixed here.
+
+    The error against the closed form stays at 1 % to 3.5 % because of that,
+    and not because of the ceiling v0.1.159 removed — which is why this
+    class exists at all: without it, someone reading the class above would
+    take those two rows for the same defect and "fix" them. Correcting the
+    name changes WHICH defect they are, not whether they are that one.
 
     What v0.1.159 changes is that the program now says which of the two it
     is. The reserve path used to call itself converged whenever the residual
@@ -622,9 +642,10 @@ class TestAWedgeWithNoRootSaysSo:
                         assert details["lambda_tolerance"] == tol
         assert seen, "the fixture stopped exercising the fallback"
 
-    def test_the_steep_reinforced_plane_has_no_root_and_reports_it(self):
+    def test_the_steep_reinforced_plane_cannot_reach_its_root_and_says_so(self):
         """The residual does not shrink with the tolerance, which is what
-        distinguishes "no root" from "not converged yet".
+        distinguishes a root the solver cannot reach from one it has not
+        reached yet.
 
         v0.1.176 (D125) — one of the four cells moved, and it is declared
         rather than widened away: the PASSIVE anchor under GLE. The
