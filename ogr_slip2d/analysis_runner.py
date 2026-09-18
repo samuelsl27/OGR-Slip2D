@@ -1058,7 +1058,7 @@ def lambda_fallback_notes(result) -> list[str]:
     post-filter — the defect D37/C1 all over again. See
     ``interslice.FALLBACK_RESIDUAL_LIMIT``.
 
-    Three things can be worth saying about the same fallback:
+    Four things can be worth saying about the same fallback:
 
     * the two branches at the lambda handed back differ by more than the
       caller asked for, so the number is the nearest sample and not a solved
@@ -1070,7 +1070,13 @@ def lambda_fallback_notes(result) -> list[str]:
     * a lambda was dropped because the inter-slice thrust of its inner
       iteration ran away, which is neither of the other two: the arithmetic
       left the range where it means anything. Defect D118, v0.1.171, and
-      measured to fire 8 times in 5206 branch solves over 113 circles.
+      measured to fire 8 times in 5206 branch solves over 113 circles;
+    * a lambda was dropped because its inner iteration STALLED — stopped
+      beating its own smallest step for ``STALL_PATIENCE`` passes — and the
+      relaxation rescue of v0.1.176 could not settle it either. Defect D125:
+      until that version this exit was counted nowhere, and on the published
+      circle of verification problem 091 it was the whole reason behind
+      "no lambda-bracket".
 
     None of them fires when a bracket was found and refined, because then
     the answer is a root and there is nothing to warn about.
@@ -1117,6 +1123,21 @@ def lambda_fallback_notes(result) -> list[str]:
             % (overflowed,
                "inclination" if overflowed == 1 else "inclinations",
                THRUST_SCALE_LIMIT))
+
+    # v0.1.176 (D125) — the fourth loss. A stall the rescue could not
+    # recover is, like the budget, the solver's limit and not the slope's;
+    # unlike the budget, more passes do not buy it back, so the sentence
+    # offers nothing.
+    from .interslice import STALL_PATIENCE
+    stalled = int(details.get("lambdas_lost_to_stall") or 0)
+    if stalled > 0:
+        notes.append(
+            "and %d %s was discarded because its inner iteration stopped "
+            "improving for %d passes and the relaxation rescue could not "
+            "settle it either, so the limit that decided this answer "
+            "belongs to the solver rather than to the slope."
+            % (stalled, "inclination" if stalled == 1 else "inclinations",
+               STALL_PATIENCE))
 
     return notes
 

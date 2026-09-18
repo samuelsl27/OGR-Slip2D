@@ -838,3 +838,37 @@ mueve el número. `scipy.special.k0` está disponible sin añadir dependencias.
 
 Mientras tanto, el problema 12 queda con **causa nombrada y medida**, no con
 un número inexplicado.
+
+---
+
+## 12 · El brazo del soporte en la rama de momentos usa la cuerda de la dovela — ABIERTO (v0.1.176)
+
+Ficha **D144** del banco. `resolve_support_terms` descompone el soporte con el
+ángulo de la cuerda de la dovela y no con la tangente del arco en el cruce:
+en el 085 activo el momento sale 1,17 % corto y F_m pasaría de 1,556 (−1,2 %
+del publicado) a 1,569 (−0,4 %) con el brazo exacto. La rama de fuerzas es
+inmune (sec α cancela la cuerda). Mueve Bishop y los ocho muros 87–94, así
+que es versión propia con A/B sobre los 21 problemas con soporte.
+
+---
+
+## 13 · El criterio de contracción de v0.1.172 tiene dos límites medidos — ABIERTO (v0.1.176)
+
+Ficha **D145** del banco. (a) Una convergencia oscilante con dos modos no da
+dos pasos decrecientes seguidos en cien pasadas (091 a 30 dovelas: en el
+punto fijo desde la pasada 45, aceptada en la 107), en carrera con el
+estancamiento. (b) Un nodo de batido de una rama que DIVERGE pasa el
+criterio (087 GLE, λ = 3,0: aceptada en la 95 con el empuje creciendo,
+desborda en la 138). El rescate de rama exige además el residuo del empuje;
+el criterio ordinario no, y cambiarlo mueve todas las ramas.
+
+---
+
+## 14 · g(λ) discontinua por una rama de momentos biestable — ABIERTO (v0.1.176)
+
+Ficha **D146** del banco. En el 059 sin soporte a 5e-5 la rama de momentos
+tiene dos puntos fijos a 0,9 % (0,55712 / 0,55233) que se alternan entre dos
+dobles adyacentes de λ; g salta de signo sin cruzar cero, el bucle secante
+quema las 50 iteraciones y devuelve NOT_CONVERGED sin decir que lo que no
+cierra es λ. Hace falta una razón propia («g discontinua») y entender la
+biestabilidad antes de elegir un punto fijo.

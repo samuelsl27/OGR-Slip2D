@@ -624,7 +624,21 @@ class TestAWedgeWithNoRootSaysSo:
 
     def test_the_steep_reinforced_plane_has_no_root_and_reports_it(self):
         """The residual does not shrink with the tolerance, which is what
-        distinguishes "no root" from "not converged yet"."""
+        distinguishes "no root" from "not converged yet".
+
+        v0.1.176 (D125) — one of the four cells moved, and it is declared
+        rather than widened away: the PASSIVE anchor under GLE. The
+        relaxation rescue makes the lambda = 1.5 sample of that cell usable
+        (its force branch used to be lost to the stall test), and that
+        sample's residual is 0.018 — still no root, still above 1e-2, still
+        not shrinking with the tolerance, but under ``FALLBACK_RESIDUAL_LIMIT``,
+        so the method now publishes it as a settled fallback: 0.5 % from the
+        closed form where the refused sample sat 1.4 % from it. The
+        assertion therefore splits on the boundary the fallback already
+        has: a residual past it is a refusal with a reason, one under it is
+        a usable number, and BOTH keep the residual above 1e-2 and flat in
+        the tolerance, which is the claim in the title."""
+        from ogr_slip2d.interslice import FALLBACK_RESIDUAL_LIMIT
         for name, p in _both():
             for mid in COMPLETE:
                 out = []
@@ -632,9 +646,18 @@ class TestAWedgeWithNoRootSaysSo:
                     surface = _plane(BETA_STEEP)
                     r = _method(mid, tolerance=tol).compute_fos(
                         p, surface, _slices(p, surface))
-                    assert r.converged is False, (name, mid, tol)
-                    assert r.error_message, (name, mid, tol)
-                    out.append((r.details or {}).get("lambda_residual"))
+                    details = r.details or {}
+                    assert details.get("lambda_search_fell_back") is True, (
+                        name, mid, tol)
+                    residual = details.get("lambda_residual")
+                    if residual is not None and residual < FALLBACK_RESIDUAL_LIMIT:
+                        assert r.converged is True, (name, mid, tol)
+                        w = _wedge(p, BETA_STEEP)
+                        assert abs((r.fos - w) / w) < 1e-2, (name, mid, tol)
+                    else:
+                        assert r.converged is False, (name, mid, tol)
+                        assert r.error_message, (name, mid, tol)
+                    out.append(residual)
                 assert all(x is not None and x > 1e-2 for x in out), \
                     (name, mid, out)
 

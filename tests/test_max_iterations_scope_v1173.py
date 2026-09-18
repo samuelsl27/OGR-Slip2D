@@ -64,6 +64,7 @@ Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 
+import contextlib
 import ast
 import io
 import math
@@ -113,6 +114,26 @@ NOTE_MARK = "Maximum iterations is set to"
 
 def _daylight_x(beta_deg):
     return TOE + H / math.tan(math.radians(beta_deg))
+
+
+@contextlib.contextmanager
+def _unrescued():
+    """The branch solver of 0.1.175: the relaxation rescue of v0.1.176
+    (D125) switched off in-process, read at call time inside
+    ``solve_branch``. The runner has no ``monkeypatch``, so the restoring
+    is written out (rule 5). A tree without the switch has no rescue to
+    turn off, so the cases that use this mean the same thing on both
+    sides of that change."""
+    import ogr_slip2d.interslice as interslice
+    keep = getattr(interslice, "BRANCH_RESCUE", None)
+    if keep is None:
+        yield
+        return
+    interslice.BRANCH_RESCUE = False
+    try:
+        yield
+    finally:
+        interslice.BRANCH_RESCUE = keep
 
 
 def _bare():
@@ -218,9 +239,16 @@ class TestTheSettingReachesTheInnerLoop:
     """
 
     def test_raising_it_recovers_a_lambda_the_budget_was_eating(self):
-        _fos_low, lost_low = _solve("spencer", GATE_BETA, GATE_TOL,
-                                    _shipped_default())
-        _fos_high, lost_high = _solve("spencer", GATE_BETA, GATE_TOL, 500)
+        """v0.1.176 (D125) — measured with the relaxation rescue OFF. With
+        it on, the lambda this cell used to lose to the ceiling is
+        extrapolated to its fixed point inside the shipped budget, so the
+        budget no longer bites here at any setting; the wire is unchanged
+        and this is what it still buys when nothing follows the damping.
+        The fourth case of this class pins the rescued half."""
+        with _unrescued():
+            _fos_low, lost_low = _solve("spencer", GATE_BETA, GATE_TOL,
+                                        _shipped_default())
+            _fos_high, lost_high = _solve("spencer", GATE_BETA, GATE_TOL, 500)
         assert lost_low > 0, (
             "the gate does not fire: with the shipped budget this circle no "
             "longer loses a lambda to the ceiling, so the test below is "
@@ -228,9 +256,10 @@ class TestTheSettingReachesTheInnerLoop:
         assert lost_high == 0, lost_high
 
     def test_and_that_moves_the_answer(self):
-        fos_low, _ = _solve("spencer", GATE_BETA, GATE_TOL,
-                            _shipped_default())
-        fos_high, _ = _solve("spencer", GATE_BETA, GATE_TOL, 500)
+        with _unrescued():
+            fos_low, _ = _solve("spencer", GATE_BETA, GATE_TOL,
+                                _shipped_default())
+            fos_high, _ = _solve("spencer", GATE_BETA, GATE_TOL, 500)
         assert fos_low is not None and fos_high is not None
         assert abs(fos_high - fos_low) > 1e-3, (fos_low, fos_high)
 
@@ -254,10 +283,25 @@ class TestTheSettingReachesTheInnerLoop:
         spread = abs(settled[0] - settled[1])
         assert spread > 0.0, settled
 
-        near, _ = _solve("spencer", GATE_BETA, GATE_TOL, 500)
-        far, _ = _solve("spencer", GATE_BETA, GATE_TOL, _shipped_default())
+        with _unrescued():
+            near, _ = _solve("spencer", GATE_BETA, GATE_TOL, 500)
+            far, _ = _solve("spencer", GATE_BETA, GATE_TOL, _shipped_default())
         assert abs(near - limit) < 10.0 * spread, (near, limit, spread)
         assert abs(far - limit) > 100.0 * spread, (far, limit, spread)
+
+    def test_and_since_the_rescue_the_shipped_budget_loses_nothing_here(self):
+        """v0.1.176 (D125) — the half the three cases above no longer see:
+        with the relaxation rescue on, the shipped budget keeps the lambda
+        and the answer is the settled one, so the D117 wire is a reserve
+        for a branch the rescue cannot settle rather than the difference on
+        this cell. Asserted as the same identity the case above uses."""
+        settled = [_solve("spencer", GATE_BETA, tol, _shipped_default())[0]
+                   for tol in SETTLED_TOLS]
+        limit = 0.5 * (settled[0] + settled[1])
+        spread = abs(settled[0] - settled[1])
+        fos, lost = _solve("spencer", GATE_BETA, GATE_TOL, _shipped_default())
+        assert lost == 0, lost
+        assert abs(fos - limit) < 10.0 * spread, (fos, limit, spread)
 
     def test_the_wire_is_the_only_thing_that_changed_it(self):
         """Same circle, same tolerance, same method: one setting moved."""

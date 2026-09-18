@@ -63,6 +63,7 @@ Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 
+import contextlib
 import math
 
 # ----------------------------------------------------------------------
@@ -224,6 +225,26 @@ def _iterate_at(system, lam, pass_count, moment=True):
 
 def _rel(a, b):
     return abs(a - b) / abs(b)
+
+
+@contextlib.contextmanager
+def _unrescued():
+    """The branch solver of 0.1.175: the relaxation rescue of v0.1.176
+    (D125) switched off in-process, read at call time inside
+    ``solve_branch``. The runner has no ``monkeypatch``, so the restoring
+    is written out (rule 5). A tree without the switch has no rescue to
+    turn off, so the cases that use this mean the same thing on both
+    sides of that change."""
+    import ogr_slip2d.interslice as interslice
+    keep = getattr(interslice, "BRANCH_RESCUE", None)
+    if keep is None:
+        yield
+        return
+    interslice.BRANCH_RESCUE = False
+    try:
+        yield
+    finally:
+        interslice.BRANCH_RESCUE = keep
 
 
 # ======================================================================
@@ -409,10 +430,18 @@ class TestWhatThisDoesNotFix:
         record is what the genuine contraction then has to beat. At 1e-4
         this branch is still abandoned rather than converged, and it is
         abandoned by the stall test — not by the pass budget and not by the
-        thrust bound, which is what tells the three refusals apart."""
+        thrust bound, which is what tells the three refusals apart.
+
+        v0.1.176 (D125) — measured with the relaxation rescue OFF, because
+        the rescue is precisely what removes this limit: from pass 81 the
+        same branch is extrapolated to its fixed point 0.83037 inside the
+        budget (``test_branch_rescue_v1176``). The stall test and the record
+        it keeps are unchanged, and this is what they still do when nothing
+        follows them."""
         from ogr_slip2d.interslice import MAX_PASSES
         system = _system()
-        st = _branch(system, LUCKY_LAMBDA, 1e-4)
+        with _unrescued():
+            st = _branch(system, LUCKY_LAMBDA, 1e-4)
         assert st is not None
         assert st.converged is False, st.fos
         assert st.abandoned == "", st.abandoned

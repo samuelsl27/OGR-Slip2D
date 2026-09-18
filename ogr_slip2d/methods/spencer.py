@@ -231,7 +231,12 @@ class Spencer(LEMMethod):
                 base_normal_force=normals,
                 base_shear_force=driving,
                 base_shear_strength=strengths,
-                details={
+                # v0.1.176 (D125) — through ``support_failure_details`` like
+                # the bracketed exit below: until this version a reinforced
+                # surface that fell back lost the D94 ``support_failure``
+                # key, so the one exit where the reinforcement most needs
+                # explaining was the one that could not.
+                details=support_failure_details(sup, {
                     "lambda": lam_star,
                     "slide_sign": slide_sign,
                     # v0.1.159 (D63) — this is the path where losing a λ can
@@ -245,6 +250,11 @@ class Spencer(LEMMethod):
                     # ``interslice.THRUST_SCALE_LIMIT``.
                     "lambdas_lost_to_thrust_overflow":
                         system.n_thrust_overflow,
+                    # v0.1.176 (D125) — the lambdas whose branch stalled and
+                    # the ones that are a pair only thanks to the rescue.
+                    # See ``interslice.RESCUE_OMEGA_MIN``.
+                    "lambdas_lost_to_stall": system.n_stalled,
+                    "lambdas_rescued": system.n_rescued,
                     "lambda_residual": residual,
                     "lambda_tolerance": self.tolerance,
                     "boundary_ratios": [lam_star] * (len(slices.slices) + 1),
@@ -254,7 +264,7 @@ class Spencer(LEMMethod):
                     "interslice_x": ([] if force is None else
                                      system.boundaries_in_slice_order(
                                          force.boundary_x)),
-                },
+                }),
                 # v0.1.130 — the same split as the λ-bracket branch of
                 # ``gle.py``: "no λ-bracket" is a failed solve and stays a
                 # veto, the relaxed-thrust criterion is a preference and
@@ -373,6 +383,9 @@ class Spencer(LEMMethod):
                 # v0.1.171 (D118) — see the fallback branch above.
                 "lambdas_lost_to_thrust_overflow":
                     system.n_thrust_overflow,
+                # v0.1.176 (D125) — see the fallback branch above.
+                "lambdas_lost_to_stall": system.n_stalled,
+                "lambdas_rescued": system.n_rescued,
                 # Constant interslice ratio at every boundary (Spencer).
                 "boundary_ratios": [lam_lo] * (len(slices.slices) + 1),
                 # v0.1.106 — the inter-slice forces themselves, which this

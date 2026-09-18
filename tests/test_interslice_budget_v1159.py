@@ -59,6 +59,7 @@ Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 
+import contextlib
 import math
 
 #: The plane wedge fixture, built here rather than imported: the modules in
@@ -157,6 +158,26 @@ def _result(method_id, project, tolerance, beta_deg=BETA):
     return method_registry()[method_id](
         tolerance=tolerance, max_iterations=400).compute_fos(
             project, surface, sl)
+
+
+@contextlib.contextmanager
+def _unrescued():
+    """The branch solver of 0.1.175: the relaxation rescue of v0.1.176
+    (D125) switched off in-process, read at call time inside
+    ``solve_branch``. The runner has no ``monkeypatch``, so the restoring
+    is written out (rule 5). A tree without the switch has no rescue to
+    turn off, so the cases that use this mean the same thing on both
+    sides of that change."""
+    import ogr_slip2d.interslice as interslice
+    keep = getattr(interslice, "BRANCH_RESCUE", None)
+    if keep is None:
+        yield
+        return
+    interslice.BRANCH_RESCUE = False
+    try:
+        yield
+    finally:
+        interslice.BRANCH_RESCUE = keep
 
 
 # ======================================================================
@@ -359,8 +380,17 @@ class TestTheFallbackSaysWhatItIsWithoutVetoingIt:
 
     def test_the_residual_is_published_either_way(self):
         """A number the user cannot see is a number they cannot act on, and
-        this path published none at all."""
-        for tol in (1e-3, 5e-3):
+        this path published none at all.
+
+        v0.1.176 (D125) — the second tolerance was 5e-3 until the relaxation
+        rescue: at 5e-3 this plane now BRACKETS a root at lambda 1.80
+        (1.7e-3 under the closed form, where the fallback sat 1.7e-3 under
+        it too), so it stopped being a fallback and stopped measuring this.
+        At 1e-3 and 1e-4 the same plane still falls back, with the same
+        residual 1.0e-3 / 1.2e-3 at lambda -0.1, and those are the two
+        asserted now. The case that says a rescued root is inside its
+        tolerance lives in ``test_janbu_wedge_v1142``."""
+        for tol in (1e-3, 1e-4):
             _r, details = self._fallback(tol)
             assert details["lambda_residual"] > 0.0
             assert details["lambda_tolerance"] == tol
@@ -447,13 +477,29 @@ class TestTheNoteIsReachableAndSaysOnlyWhatItMeans:
     """
 
     def test_it_fires_where_it_was_measured_to_fire(self):
+        """v0.1.176 (D125) — measured with the relaxation rescue OFF, because
+        with it on this very cell loses nothing to the budget any more: the
+        lambda the backstop used to eat is extrapolated to its fixed point
+        inside the same budget (``test_branch_rescue_v1176``). The note and
+        its condition are unchanged; what changed is that the solver now
+        needs the switch off to reach the state the note was written for."""
         from ogr_slip2d.analysis_runner import lambda_fallback_notes
-        r = _result("spencer", _bare(), 1e-10, beta_deg=55.0)
+        with _unrescued():
+            r = _result("spencer", _bare(), 1e-10, beta_deg=55.0)
         details = r.details or {}
         assert details.get("lambdas_lost_to_budget", 0) > 0, details
         assert details.get("lambda_search_fell_back") is True, details
         notes = lambda_fallback_notes(r)
         assert any("budget of passes" in n for n in notes), notes
+
+    def test_and_the_rescue_is_what_now_keeps_it_quiet_there(self):
+        """The other half, so the case above cannot be read as the current
+        behaviour: with the rescue on, the same cell loses no lambda to the
+        budget, and says how many it rescued instead."""
+        r = _result("spencer", _bare(), 1e-10, beta_deg=55.0)
+        details = r.details or {}
+        assert details.get("lambdas_lost_to_budget", 0) == 0, details
+        assert details.get("lambdas_rescued", 0) > 0, details
 
     def test_it_stays_quiet_when_the_search_found_its_bracket(self):
         from ogr_slip2d.analysis_runner import lambda_fallback_notes

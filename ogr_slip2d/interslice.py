@@ -279,6 +279,86 @@ MAX_PASSES = 400
 THRUST_SCALE_LIMIT = 10.0
 
 
+#: v0.1.176 (D125) — the relaxation RESCUE of :func:`solve_branch`, and the
+#: lower of the two bounds on the relaxation it may use.
+#:
+#: WHAT IT IS FOR. The ordinary update ``F = 0.5*(F + f_new)`` is a damped
+#: Picard iteration, and a damped Picard iteration has a flip: where the
+#: slope f'(F) of the fixed-point map crosses -3 the iterate stops
+#: converging and settles on a period-2 cycle instead, with the fixed point
+#: it was after sitting UNTOUCHED between the two phases. Measured on the
+#: published Spencer circle of verification problem 091 at 50 slices: the
+#: force branch converges up to lambda 0.3669 and cycles between 0.9138 and
+#: 1.1163 at lambda 0.4, from every start value tried and at every budget
+#: from 400 to 80 000 passes (the phase it stops on is decided by the
+#: PARITY of the budget). The root of F_f = F_m sits at lambda 0.3677,
+#: exactly where the cycle opens, so the outer search only ever saw the
+#: negative half of F_f - F_m and answered "no lambda-bracket" for sixteen
+#: versions; the branch left through the stall test, which no counter
+#: reported. Same mechanism on the published arc of problem 059 at
+#: lambda 1.0 and on the slow moment branch of the 50 degree plane at
+#: lambda 2.0, whose fixed point 0.83037 the stall test abandoned at pass 85.
+#:
+#: WHAT IT DOES. From the pass after :data:`STALL_PATIENCE`, a branch that
+#: is still moving by more than the tolerance is continued with the
+#: relaxation of Wegstein (1958), "Accelerating convergence of iterative
+#: processes", Comm. ACM 1(6) 9-13: ``F = F + omega*(f_new - F)`` with
+#: ``omega = 1/(1 - s)``, ``s`` the secant slope of the map through the
+#: last two iterates. The ordinary update IS this rule with omega fixed at
+#: 0.5, which is why its flip sits at s = -3; the secant value cancels the
+#: local slope whatever it is, so ONE rule damps a cycle (s under -3, omega
+#: under 0.25) and extrapolates a crawl (s near 1, omega above 1). Only F is
+#: relaxed; the thrust X keeps its own update, and that is measured rather
+#: than chosen: relaxing X with the same omega made the accepted F depend
+#: on the start value by 1.5e-3 on the 091 branch and killed a branch
+#: outright. Acceptance inside the rescue is two consecutive passes with the
+#: residual of F AND the residual of X under the tolerance, not the
+#: contraction test: a relaxed iteration is not damped, so its steps have no
+#: reason to shrink monotonically, and a lucky small step is followed by a
+#: large one while two in a row are not luck. The thrust residual is what
+#: closes the door D116 measured — F sitting at the fixed point OF THE
+#: CURRENT X while X is still far from its own.
+#:
+#: THE BOUNDS. A secant read off two iterates can say anything, so omega is
+#: clamped. Measured on the problem-091 circle, on the published arc of
+#: problem 059 and on the wedge ladder of ``tests/test_janbu_wedge_v1142``
+#: at three tolerances: [0.1, 5], [0.05, 20] and [0.02, 100] give the same
+#: roots to 1e-7 and the same total pass count within 0.1 %; a FIXED omega
+#: of 0.25, the value that undoes the flip, cannot settle the moment branch
+#: of the 50 degree plane at lambda 2.0 inside 400 passes at 1e-10 and
+#: costs 7 % more passes, because a crawl needs extrapolation and not
+#: damping. [0.1, 5] is the tightest of the three that passes everything:
+#: 0.1 undoes a flip down to f' = -9 and 5 extrapolates a crawl up to
+#: s = 0.8. Over the ladder the rescue costs -1.0 % passes: it converges
+#: the slow branches faster than the damping did.
+#:
+#: WHAT IT DOES NOT TOUCH, said out loud because promising more than a
+#: change delivers is what cost this project two versions in v0.1.82-84.
+#: The first STALL_PATIENCE passes of every branch are those of v0.1.175
+#: instruction for instruction, so a branch that converges inside them
+#: cannot move. A branch whose last step is already under the tolerance is
+#: left to the ordinary acceptance: taking it over changes the pass it is
+#: admitted on, and with it the digit — problem 091 at 30 slices pins
+#: 0.9641378773625315 bit for bit and stays. The thrust bound of D118 fires
+#: before and regardless, the budget is the same MAX_PASSES, and a branch
+#: the rescue cannot settle leaves through the same stall test as before,
+#: now counted (``GLESystem.n_stalled``). What it cannot do is reach a
+#: branch the thrust bound cuts first: the force branch of verification
+#: problem 085 dies of thrust overflow from lambda 1.51 on, with or without
+#: the rescue, and that problem stays where it was.
+RESCUE_OMEGA_MIN = 0.1
+
+#: The upper bound of the same relaxation; see :data:`RESCUE_OMEGA_MIN`.
+RESCUE_OMEGA_MAX = 5.0
+
+#: The switch, read at call time inside :func:`solve_branch` so that a test
+#: can turn the rescue off in-process and measure what it changes against
+#: what it leaves alone (the ``_lifted`` idiom of
+#: ``tests/test_interslice_thrust_bound_v1171.py``). Off, the branch solver
+#: is v0.1.175 bit for bit.
+BRANCH_RESCUE = True
+
+
 # ----------------------------------------------------------------------
 def branch_budget(max_iterations: int) -> int:
     """The inner pass budget a user's ``max_iterations`` buys. Defect D117.
@@ -449,6 +529,12 @@ class BranchState:
     ``return None`` because ``None`` cannot carry a reason, which is the
     whole of D56: a refusal that does not say why is a refusal nobody can
     act on. ``GLESystem.branches`` is what reads it.
+
+    ``rescued`` (v0.1.176, D125) is True on a state that converged only
+    through the relaxation rescue — see :data:`RESCUE_OMEGA_MIN`. It is a
+    field and not a fifth exit because the answer it carries IS an answer;
+    what it says is that the ordinary damped iteration would not have
+    reached it, which is what ``GLESystem.n_rescued`` counts.
     """
 
     fos: float
@@ -459,6 +545,7 @@ class BranchState:
     boundary_e: list[float]    # E at the n+1 boundaries
     boundary_x: list[float]    # X at the n+1 boundaries
     abandoned: str = ""        # why the iteration was cut, or ""
+    rescued: bool = False      # converged only through the relaxation rescue
 
 
 # ----------------------------------------------------------------------
@@ -561,6 +648,17 @@ def solve_branch(
     convergence inside it. Measured back to back at a tolerance of 1e-10, the
     nested and the coupled forms agree on lambda and on F to six figures, and
     the coupled one gets there in 15 to 52 passes.
+
+    v0.1.176 (D125) — THE RESCUE. After ``patience`` passes a branch that is
+    still moving by more than ``tolerance`` is no longer left to the damped
+    update that lost it: it is continued with the bounded relaxation of
+    Wegstein (1958), whose secant-based omega undoes the period-2 cycle the
+    damping falls into past f' = -3 and extrapolates the crawl it falls
+    into near f' = 1. It creates no exit of its own — a branch the rescue
+    cannot settle leaves through the same stall test — and it changes
+    nothing for a branch that converges inside those ``patience`` passes or
+    whose last step is already under the tolerance. The whole story, with
+    the measurements, is at :data:`RESCUE_OMEGA_MIN`.
     """
     n = len(rows)
     if n == 0:
@@ -590,10 +688,54 @@ def solve_branch(
     # loop would be a per-pass sum over every slice for an answer that
     # cannot move.
     abandoned = ""
-    thrust_limit = THRUST_SCALE_LIMIT * _force_scale(rows)
+    force_scale = _force_scale(rows)
+    thrust_limit = THRUST_SCALE_LIMIT * force_scale
+    # v0.1.176 (D125) — the rescue's state: whether it is on, the last two
+    # (F used, f_new obtained) pairs the secant slope reads, the relaxation
+    # they gave, the thrust residual of the pass and whether the previous
+    # pass was already inside the tolerance. Two more floats and three
+    # names in the hottest loop of the package, updated once per pass; the
+    # same price v0.1.172 paid for its two previous steps.
+    rescuing = False
+    rescued = False
+    F_last = f_last = F_prev = f_prev = None
+    omega = 0.5
+    d_x = 0.0
+    ok_before = False
 
     for _pass in range(max_passes):
         passes += 1
+        # v0.1.176 (D125) — entry to the rescue: from the pass after
+        # ``patience``, and only for a branch still moving by more than the
+        # tolerance. Not before, because the first ``patience`` passes are
+        # the ones every stored answer was computed with, instruction for
+        # instruction (the proof STALL_PATIENCE rests on). And not for a
+        # branch already under the tolerance: that one is converged in F
+        # and waiting for the contraction test to admit it, and taking it
+        # over would change the pass it is admitted on and with it the
+        # digit — problem 091 at 30 slices pins its Spencer factor bit for
+        # bit and this is what keeps it. See RESCUE_OMEGA_MIN.
+        if (BRANCH_RESCUE and not rescuing and _pass >= patience
+                and prev_step >= tolerance):
+            rescuing = True
+            best_step = math.inf
+            stall = 0
+            ok_before = False
+        if rescuing and F_prev is not None:
+            # Wegstein (1958): omega = 1/(1 - s) with s the secant slope of
+            # the fixed-point map through the last two iterates, which
+            # cancels the map's local slope whatever it is. The ordinary
+            # update below is this with omega fixed at 0.5. Bounded, because
+            # two noisy iterates can give any s; and 0.5 when the iterates
+            # are too close to read a slope at all.
+            d_f = F_last - F_prev
+            if abs(d_f) > 1e-14 * max(1.0, abs(F_last)):
+                s = (f_last - f_prev) / d_f
+                omega = (RESCUE_OMEGA_MAX if abs(1.0 - s) < 1e-12
+                         else 1.0 / (1.0 - s))
+                omega = max(RESCUE_OMEGA_MIN, min(omega, RESCUE_OMEGA_MAX))
+            else:
+                omega = 0.5
         e = 0.0
         # v0.1.171 (D118) — the largest |E| of THIS pass, tracked in the
         # march that is already visiting every one of them rather than in a
@@ -666,8 +808,27 @@ def solve_branch(
             break
 
         # X_0 and X_n stay at zero: both ends of the surface are free.
-        for i in range(1, n):
-            X[i] = lam_boundary[i] * E[i]
+        if rescuing:
+            # v0.1.176 (D125) — the thrust residual: how far the X the march
+            # used sits from the X it produced, relative to the force scale
+            # like the thrust bound. The rescue accepts nothing while this
+            # is above the tolerance, because F can sit at the fixed point
+            # OF THE CURRENT X while X is far from its own — the lucky step
+            # of D116 seen from the other side. Fused into the update that
+            # already visits every boundary, for the reason the thrust peak
+            # above is fused into the march.
+            d_x = 0.0
+            for i in range(1, n):
+                target = lam_boundary[i] * E[i]
+                d = abs(target - X[i])
+                if d > d_x:
+                    d_x = d
+                X[i] = target
+            if force_scale > 0.0:
+                d_x /= force_scale
+        else:
+            for i in range(1, n):
+                X[i] = lam_boundary[i] * E[i]
 
         if moment_fos is None:
             num = 0.0
@@ -740,9 +901,28 @@ def solve_branch(
         # Updated before the test, so that it also happens on the passes
         # that leave through one of the ``break``s below.
         prev_step_2, prev_step = prev_step, step
+        if rescuing:
+            # v0.1.176 (D125) — two consecutive passes with BOTH residuals
+            # under the tolerance, instead of the contraction test. A
+            # relaxed iteration is not damped, so its steps have no reason
+            # to shrink monotonically; and the contraction test has an
+            # honest limit of its own, measured on problem 091 at 30 slices,
+            # where a branch sitting on its fixed point to ten figures from
+            # pass 45 was admitted on pass 107, when two decreasing steps
+            # that only floating-point noise decides finally came in a row.
+            # The repetition stands in for the contraction: a lucky small
+            # step is followed by a large one, two in a row are not luck,
+            # and the thrust residual closes the door D116 measured.
+            ok_now = step < tolerance and d_x < tolerance
+            if ok_now and ok_before:
+                F = f_new
+                converged = True
+                rescued = True
+                break
+            ok_before = ok_now
         # v0.1.100 — not on the first pass; see
         # ``BishopSimplified._general_moment_fos``.
-        if _pass > 0 and step < tolerance and contracting:
+        elif _pass > 0 and step < tolerance and contracting:
             F = f_new
             converged = True
             break
@@ -767,12 +947,19 @@ def solve_branch(
         # it. On the thin lens of the disjoint-mass case (0.9 ft of soil, F =
         # 34.3 by Bishop) that was a silent 10.0 before v0.1.106 and a NaN
         # after the convergence check went in, which is how it was found.
-        F = max(f_min, min(0.5 * (F + f_new), f_max))
+        # v0.1.176 (D125) — the two pairs the secant reads on the next
+        # pass: (F used, f_new obtained), this one and the one before.
+        F_prev, f_prev = F_last, f_last
+        F_last, f_last = F, f_new
+        if rescuing:
+            F = max(f_min, min(F + omega * (f_new - F), f_max))
+        else:
+            F = max(f_min, min(0.5 * (F + f_new), f_max))
 
     return BranchState(fos=F, converged=converged, passes=passes,
                        normals=list(normals), resisting=list(resisting),
                        boundary_e=list(E), boundary_x=list(X),
-                       abandoned=abandoned)
+                       abandoned=abandoned, rescued=rescued)
 
 
 # ----------------------------------------------------------------------
@@ -854,7 +1041,8 @@ class GLESystem:
     __slots__ = ("rows", "forces", "s_list", "shape", "order", "reversed_",
                  "tolerance", "initial_fos", "max_passes", "strict",
                  "n_thrust_rejected", "n_passes_exhausted",
-                 "n_thrust_overflow", "_moment_fos", "_driving")
+                 "n_thrust_overflow", "n_stalled", "n_rescued",
+                 "_moment_fos", "_driving")
 
     # v0.1.173 (D117) — ``max_passes`` goes LAST and keyword-defaulted on
     # purpose. Nine call sites build this class and every one of them passes
@@ -917,6 +1105,21 @@ class GLESystem:
         #: range where it means anything, which is neither a statement about
         #: the stress state nor about the pass budget.
         self.n_thrust_overflow = 0
+        #: v0.1.176 (D125) — how many lambdas were lost because a branch
+        #: STALLED: stopped beating its own smallest step for STALL_PATIENCE
+        #: passes, and the relaxation rescue could not settle it either.
+        #: v0.1.159 left this exit uncounted on purpose, reading a stall as
+        #: the slope's doing rather than the solver's; the published circle
+        #: of verification problem 091 measured the opposite — the stall
+        #: was the solver's own period-2 cycle, and it decided the answer
+        #: with every counter reading zero. A fourth counter and not a wider
+        #: one, for the reason the other three are three.
+        self.n_stalled = 0
+        #: v0.1.176 (D125) — how many lambdas came back as a usable pair
+        #: only because one of their branches was rescued. The rule-7 count
+        #: in the positive: a rescue that never fires is a setting that does
+        #: nothing, and this is where that would show.
+        self.n_rescued = 0
         self._driving = None
 
         if circle_R is None:
@@ -1044,6 +1247,33 @@ class GLESystem:
         and says so in the result.
         """
         force, moment = self.states(lam)
+        # v0.1.159 (D63) — say WHICH of the refusals this was. A branch that
+        # used its whole budget was still making progress when it was cut;
+        # one that stopped earlier had stalled. Both lose the lambda, but
+        # only the first is the solver's own limit deciding the answer, and
+        # that is the thing that has to be reportable.
+        # v0.1.171 (D118) — and a third refusal, kept apart from the other
+        # two. A branch cut for a runaway thrust has not used its budget and
+        # has not stalled; counting it as either would make both numbers
+        # mean "something went wrong" instead of what they say.
+        # ``abandoned`` wins over the pass count because a branch can cross
+        # the bound on its very last pass.
+        # v0.1.176 (D125) — counted BEFORE the early return on a missing
+        # partner, and the stall counted at last. Until this version a
+        # branch that failed while the other one came back None was never
+        # counted: on the published circle of verification problem 091,
+        # 12 of 16 lambdas were lost with all three counters at zero, and
+        # the "no lambda-bracket" the bank published rested on a stalled
+        # branch that nothing reported.
+        for state in (force, moment):
+            if state is None or state.converged:
+                continue
+            if state.abandoned:
+                self.n_thrust_overflow += 1
+            elif state.passes >= self.max_passes:
+                self.n_passes_exhausted += 1
+            else:
+                self.n_stalled += 1
         if force is None or moment is None:
             return None, None
         # An UNCONVERGED fixed point is not a value of F_f, and handing the
@@ -1055,26 +1285,9 @@ class GLESystem:
         # this could not bite, because F_m did not depend on lambda and there
         # was only ever one crossing to find.
         if not (force.converged and moment.converged):
-            # v0.1.159 (D63) — say WHICH of the two refusals this was. A
-            # branch that used its whole budget was still making progress
-            # when it was cut; one that stopped earlier had stalled. Both
-            # lose the lambda, but only the first is the solver's own limit
-            # deciding the answer, and that is the thing that has to be
-            # reportable.
-            # v0.1.171 (D118) — and a third refusal, kept apart from the
-            # other two. A branch cut for a runaway thrust has not used its
-            # budget and has not stalled; counting it as either would make
-            # both numbers mean "something went wrong" instead of what they
-            # say. ``abandoned`` wins over the pass count because a branch
-            # can cross the bound on its very last pass.
-            for state in (force, moment):
-                if state.converged:
-                    continue
-                if state.abandoned:
-                    self.n_thrust_overflow += 1
-                elif state.passes >= self.max_passes:
-                    self.n_passes_exhausted += 1
             return None, None
+        if force.rescued or moment.rescued:
+            self.n_rescued += 1
         if not thrust_is_admissible(force):
             self.n_thrust_rejected += 1
             if self.strict:

@@ -306,7 +306,9 @@ class GLEMorgensternPrice(LEMMethod):
                 base_normal_force=normals,
                 base_shear_force=driving,
                 base_shear_strength=strengths,
-                details={
+                # v0.1.176 (D125) — through ``support_failure_details``,
+                # see ``Spencer.compute_fos``.
+                details=support_failure_details(sup, {
                     "lambda": lam_star,
                     "slide_sign": slide_sign,
                     # v0.1.159 (D63) — see ``Spencer.compute_fos``.
@@ -318,6 +320,9 @@ class GLEMorgensternPrice(LEMMethod):
                     # ``interslice.THRUST_SCALE_LIMIT``.
                     "lambdas_lost_to_thrust_overflow":
                         system.n_thrust_overflow,
+                    # v0.1.176 (D125) — see ``Spencer.compute_fos``.
+                    "lambdas_lost_to_stall": system.n_stalled,
+                    "lambdas_rescued": system.n_rescued,
                     "lambda_residual": residual,
                     "lambda_tolerance": self.tolerance,
                     "boundary_ratios": [lam_star * fb for fb in system.shape],
@@ -327,7 +332,7 @@ class GLEMorgensternPrice(LEMMethod):
                     "interslice_x": ([] if force is None else
                                      system.boundaries_in_slice_order(
                                          force.boundary_x)),
-                },
+                }),
                 # v0.1.130 — the two judgements this field used to mix are
                 # now separate, because they are not the same claim. "No
                 # λ-bracket" stays in ``error_message``: there is no root,
@@ -428,6 +433,9 @@ class GLEMorgensternPrice(LEMMethod):
                 # v0.1.171 (D118) — see the fallback branch above.
                 "lambdas_lost_to_thrust_overflow":
                     system.n_thrust_overflow,
+                # v0.1.176 (D125) — see the fallback branch above.
+                "lambdas_lost_to_stall": system.n_stalled,
+                "lambdas_rescued": system.n_rescued,
                 # Boundary ratios λ·f(x) evaluated at the n+1 slice
                 # boundaries with x normalised over the surface span. The
                 # solver uses exactly this list (v0.1.106).
