@@ -199,8 +199,14 @@ class TestTheNormalTermIsInsideMAlpha:
                     ) / m_alpha
             if not inside:
                 num += sup.n_press[k] * tan_phi
+        # v0.1.178 (D144) — the driving side owes the support its MOMENT
+        # about the centre over R, not its projection on the chord. On this
+        # fixture the two are as far apart as they can be: the support is
+        # PURELY normal to the chord, so ``total_active_t()`` is zero and
+        # ``moment_active`` is not, because a force normal to a chord is
+        # not normal to the arc and does have a moment about the centre.
         den = (math.fsum(s.weight * s.weight_arm_ratio for s in sl.slices)
-               - sup.total_active_t())
+               - sup.moment_active)
         return num / den
 
     def test_the_fixture_really_is_a_pure_normal_on_a_steep_base(self):
@@ -209,6 +215,15 @@ class TestTheNormalTermIsInsideMAlpha:
         converge and the file would pass without testing anything."""
         _p, _sl, sup, fos, a = self._converged()
         assert abs(sup.total_active_t()) < 1e-9, sup.total_active_t()
+        # v0.1.178 (D144) — and its MOMENT is NOT zero, which is the same
+        # fact seen from the other side. "Normal to the base" means normal
+        # to the CHORD, and the chord's normal does not point at the centre
+        # of the arc, so this support has no tangential force and still has
+        # a moment. Before D144 the driving side of ``_rebuild`` was written
+        # with ``total_active_t()`` and therefore said this support took
+        # nothing off it, which was wrong by the whole of this term.
+        assert abs(sup.moment_active) > 1e-6 * abs(sum(sup.n_press)), (
+            sup.moment_active, sum(sup.n_press))
         assert abs(sum(sup.n_press)) > 1.0, sup.n_press
         assert math.degrees(a) > 45.0, math.degrees(a)
         tan_phi = math.tan(math.radians(PHI))
@@ -244,8 +259,19 @@ class TestTheNormalTermIsInsideMAlpha:
         bare = _fos(OrdinaryFellenius, _project())
         got = _fos(OrdinaryFellenius, p, sl).fos
         tan_phi = math.tan(math.radians(PHI))
-        expected = bare.fos * (1.0 + sum(sup.n_press) * tan_phi
-                               / sum(bare.base_shear_strength))
+        # v0.1.178 (D144) — this used to be written as a pure RATIO,
+        # ``F_bare·(1 + ΣT_N·tanφ'/ΣR)``, on the premise that a purely
+        # normal support adds to the numerator and nothing to the
+        # denominator. That premise died with D144: the support's moment
+        # about the centre is not zero even when its tangential force is
+        # (see ``test_the_fixture_really_is_a_pure_normal_on_a_steep_base``),
+        # so the driving side moves too. The bare driving sum is recovered
+        # from the bare answer itself, ``ΣR/F``, which keeps this expression
+        # free of any second geometric sum.
+        resisting = sum(bare.base_shear_strength)
+        driving = resisting / bare.fos
+        expected = ((resisting + sum(sup.n_press) * tan_phi)
+                    / (driving - sup.moment_active))
         assert abs(got - expected) / expected < 1e-6, (got, expected)
 
 

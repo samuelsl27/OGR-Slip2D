@@ -457,14 +457,20 @@ class BishopSimplified(LEMMethod):
             denominator += -slide_sign * sup.couple / circle_R
 
         driving_no_support = denominator
-        denominator -= sup.total_active_t()
+        # v0.1.178 (D144) -- the MOMENT of the reinforcement and not its
+        # projection on the chord. Everything else in this sum is a moment
+        # about the centre divided by R -- the weight's, through
+        # ``weight_arm_ratio``; the water's; the couple's -- and until this
+        # version the support's was the one term formed from an angle
+        # instead of from the geometry. See ``SupportTerms.moment_active``.
+        denominator -= sup.moment_active
         # How much of the driving moment the Active supports have taken
         # away. Reported rather than judged: as T_S approaches D the
         # factor of safety grows without bound, which is arithmetically
         # right and physically meaningless, and no threshold separating
         # the two is defensible enough to hard-code.
         active_ratio = (
-            sup.total_active_t() / driving_no_support
+            sup.moment_active / driving_no_support
             if sup.present and abs(driving_no_support) > 1e-9 else 0.0
         )
 
@@ -561,7 +567,7 @@ class BishopSimplified(LEMMethod):
             # Passive supports add their resisting tangential component
             # to the numerator; the Active ones already came off the
             # denominator before the iteration started.
-            numerator += sup.total_passive_t()
+            numerator += sup.moment_passive
 
             # ``new_fos <= 0`` has to stop the iteration, not just a
             # non-finite one. The next pass computes tan(phi)/F, so a zero

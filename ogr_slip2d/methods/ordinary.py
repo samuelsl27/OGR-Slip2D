@@ -410,11 +410,14 @@ class OrdinaryFellenius(LEMMethod):
             # CCW moment enters the driving side as -slide_sign*M/R.
             denominator += -slide_sign * sup.couple / circle_R
 
-        numerator += sup.total_passive_t()
+        # v0.1.178 (D144) -- the MOMENT about the centre divided by R, like
+        # every other term of these two sums, and not the projection on the
+        # chord of the slice. See ``SupportTerms.moment_active``.
+        numerator += sup.moment_passive
         driving_no_support = denominator
-        denominator -= sup.total_active_t()
+        denominator -= sup.moment_active
         active_ratio = (
-            sup.total_active_t() / driving_no_support
+            sup.moment_active / driving_no_support
             if sup.present and abs(driving_no_support) > 1e-9 else 0.0
         )
         if sup.present and denominator <= 0.0:

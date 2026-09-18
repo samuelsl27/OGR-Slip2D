@@ -841,14 +841,22 @@ un número inexplicado.
 
 ---
 
-## 12 · El brazo del soporte en la rama de momentos usa la cuerda de la dovela — ABIERTO (v0.1.176)
+## 12 · La dirección del soporte y el punto de la parte normal siguen siendo de cuerda — ABIERTO (v0.1.178)
 
-Ficha **D144** del banco. `resolve_support_terms` descompone el soporte con el
-ángulo de la cuerda de la dovela y no con la tangente del arco en el cruce:
-en el 085 activo el momento sale 1,17 % corto y F_m pasaría de 1,556 (−1,2 %
-del publicado) a 1,569 (−0,4 %) con el brazo exacto. La rama de fuerzas es
-inmune (sec α cancela la cuerda). Mueve Bishop y los ocho muros 87–94, así
-que es versión propia con A/B sobre los 21 problemas con soporte.
+Fichas **D150** y **D151** del banco, las dos salidas de cerrar D144, que ya
+NO está abierta: desde v0.1.178 el momento del refuerzo en el camino circular
+es el producto vectorial de la fuerza en su punto de cruce
+(`SupportTerms.moment_active`), y el 085 activo pasa de 1,556171 a 1,569188,
+de −1,195 % a −0,369 % del publicado para ese círculo.
+
+Lo que queda: (D151) `_slip_tangent_at_x` devuelve la pendiente de la CUERDA
+y orienta la fuerza en `TANGENT_TO_SLIP`, `BISECTOR` y
+`PERPENDICULAR_TO_PILE`, así que un soporte declarado tangente a la superficie
+no lo es. Hasta v0.1.177 ese error se CANCELABA con el del brazo; ahora queda
+`1 − cos Δα ≈ Δα²/2`, medido en +0,001 %. Afecta a 8 de los 36 modelos con
+soporte del banco. Y (D150) en el camino NO circular el brazo de la parte
+normal se toma en la media ponderada por |F| de los cruces de la dovela, que
+con dos soportes de orientación distinta no es donde actúa ninguna fuerza.
 
 ---
 

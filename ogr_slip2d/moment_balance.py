@@ -215,6 +215,19 @@ def moment_terms(
             non-circular surface; until v0.1.114 every caller handed the SUM
             through ``tangential`` and seven of the nine methods answered the
             same figure either way.
+
+            v0.1.178 (D144) — these two are applied at the base MIDPOINT and
+            along the chord, and on this path that is EXACT, which is why
+            D144 changed nothing here. The base of a polyline slice IS a
+            straight segment, the support crosses it ON that segment, and
+            the force is directed along it — so moving it from the crossing
+            to the midpoint slides it along its own line of action, which
+            does not change its moment about any axis. The circular path had
+            no such luck: there the chord is not the surface, and its
+            projection times R is not the moment. What IS approximate here
+            is ``sup``'s ``x_app``/``y_app``, a mean weighted by |F|: with
+            two supports of different orientation on one slice the NORMAL
+            part's arm is taken where no force acts. Reported, not fixed.
         rotation: pass the value from :func:`rotation_sense` when the caller
             already needed it; otherwise it is computed here.
         couple: a pure moment, in the same CCW sense as everything else here,

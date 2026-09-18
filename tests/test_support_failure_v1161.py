@@ -362,11 +362,23 @@ class TestNothingMoved:
                  r"/02_Slide2_Slope_Stability_Verification_Manual"
                  r"/02_Slide2_Problema091")
     CIRCULO = (4.658, 15.0, 10.934)
-    #: Bishop is the CONTROL and has not moved since 0.1.160. Spencer was
-    #: 0.9641449174231770 until v0.1.172; see the class docstring for the
-    #: measurement that authorised the change.
-    ESPERADO = {"bishop_simplified": 0.9835740303049271,
-                "spencer": 0.9641378773625315}
+    #: Bishop was the CONTROL of v0.1.172 and did not move then; Spencer was
+    #: 0.9641449174231770 until that version. See the class docstring.
+    #:
+    #: v0.1.178 (D144) -- BOTH move now, and Bishop moving is the point
+    #: rather than a problem: this model's fifteen sheets are
+    #: ``PARALLEL_TO_SUPPORT``, so their moment about the centre was formed
+    #: from the chord of the slice each sheet crosses instead of from the
+    #: point where it crosses. Bishop 0.9835740303049271 ->
+    #: 0.9829608966855081 (-0.0623 %) and Spencer 0.9641378773625315 ->
+    #: 0.9636163385716956 (-0.0541 %). The two move by nearly the same
+    #: amount and in the same direction, which is what a shared moment term
+    #: has to do -- a change that moved only one of them would not be this
+    #: defect. What v0.1.172 relied on Bishop for is still available: Bishop
+    #: does not enter ``interslice.py``, so it remains the control for
+    #: anything that happens there.
+    ESPERADO = {"bishop_simplified": 0.9829608966855081,
+                "spencer": 0.9636163385716956}
 
     def _skip_if_absent(self):
         # The bank lives outside this repository (and outside git), so the

@@ -395,8 +395,18 @@ class TestAmherstWallWithTheDocumentedOrientation:
 # the two numbers and their ORDER.
 # ======================================================================
 _DW_CIRCLE = (15.446, 37.624, 27.594)   # the panel of figure 85.2
+#: The manual's own Bishop pair, each on Bishop's own critical surface --
+#: which for the ACTIVE case it does not publish. They are the anchor of the
+#: ORDER and of the GAP below, never of a factor on a named circle.
 _DW_ACTIVE = 1.531
 _DW_PASSIVE = 1.324
+
+#: v0.1.178 (D144) -- the two circles the manual DOES publish, each with the
+#: factor it publishes FOR THAT CIRCLE. Figure 85.2 is the GLE panel and
+#: figure 85.3 is the Bishop passive one; ``referencia.json`` of the bank
+#: carries both under ``superficies``.
+_DW_PANEL_852 = (15.446, 37.624, 27.594)
+_DW_PANEL_853 = (17.169, 34.480, 24.465)
 
 
 def _duncan_wright(application):
@@ -448,12 +458,46 @@ class TestPassiveIsNotDividedByF:
     """
 
     def test_the_two_published_numbers(self):
+        """Each scenario on the circle the manual publishes FOR IT.
+
+        v0.1.178 (D144) -- this used to evaluate BOTH scenarios on figure
+        85.2 and compare them with 1.531 and 1.324, and that was wrong in a
+        way the defect had been hiding. 85.2 is the panel the manual
+        publishes for **GLE**, where it gives 1.575; 1.531 is Bishop on
+        Bishop's own active critical, which the manual does NOT draw. So
+        the old form compared a method against a factor obtained on another
+        surface, which measures two things at once -- the argument
+        ``test_support_active_passive_v1115`` already had in its header.
+
+        It passed anyway at +1.64 % because the chord arm was pulling the
+        answer down by 0.84 %. With the arm exact it goes to +2.49 % and
+        crosses the band, which is the honest signal that the comparison
+        was never the right one. The band is NOT widened. The pairing is
+        fixed instead, and both halves land closer than either did before:
+
+            active   on 85.2 vs 1.575 (GLE)     1.569188   -0.369 %
+            passive  on 85.3 vs 1.324 (Bishop)  1.321350   -0.200 %
+
+        Why Bishop may be held to a GLE figure on 85.2, and only there:
+        φ' = 0 in this problem, so the frictional term is identically zero,
+        ``N`` never enters the moment equation, and Bishop, Fellenius and
+        GLE's moment branch are the SAME ratio of two sums on any given
+        circle. The two methods below agree here to the last bit, and that
+        is asserted rather than assumed.
+        """
         from ogr_core.support import ForceApplication
-        for name, application, pub in (
-                ("active", ForceApplication.ACTIVE, _DW_ACTIVE),
-                ("passive", ForceApplication.PASSIVE, _DW_PASSIVE)):
-            f = _fos_on(_duncan_wright(application), _dw_circle(),
-                        "bishop_simplified")
+        from ogr_slip2d.surface import SlipCircle
+        for name, application, circle, pub in (
+                ("active", ForceApplication.ACTIVE, _DW_PANEL_852, 1.575),
+                ("passive", ForceApplication.PASSIVE, _DW_PANEL_853, 1.324)):
+            cx, cy, r = circle
+            surf = SlipCircle(centre_x=cx, centre_y=cy, radius=r)
+            p = _duncan_wright(application)
+            got = {mid: _fos_on(p, surf, mid)
+                   for mid in ("bishop_simplified", "ordinary_fellenius")}
+            lo, hi = min(got.values()), max(got.values())
+            assert hi - lo < 1e-12 * lo, (name, got)
+            f = got["bishop_simplified"]
             err = 100.0 * (f - pub) / pub
             assert abs(err) < 2.0, f"{name}: {f:.4f} vs {pub} ({err:+.2f} %)"
 

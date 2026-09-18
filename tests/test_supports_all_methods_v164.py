@@ -241,8 +241,18 @@ class TestTheNormalComponentDoesWork:
 
     def test_ordinary_gains_exactly_t_n_times_tan_phi(self):
         """Closed form. Ordinary is a plain ratio ΣR/ΣD, and a purely
-        normal support adds exactly ``T_N·tanφ'`` to ΣR and nothing to ΣD,
-        so the new factor of safety is ``F₀·(1 + T_N·tanφ'/ΣR)``.
+        normal support adds exactly ``T_N·tanφ'`` to ΣR.
+
+        v0.1.178 (D144) — the second half of that sentence used to read
+        "and nothing to ΣD", which made the whole thing ``F₀·(1 +
+        T_N·tanφ'/ΣR)``. It is false, and finding out why is the same
+        discovery seen from the resisting side: "purely normal" means
+        normal to the CHORD of the slice, and the chord's normal does not
+        point at the centre of the arc, so this support has no tangential
+        force on its base and still has a MOMENT about the centre. Until
+        D144 the engine formed the support term from the chord projection,
+        which is zero here, so the two agreed — both wrong in the same
+        place.
         """
         from ogr_slip2d.methods.ordinary import OrdinaryFellenius
         p, _s, _sl, _i = self._purely_normal(+1)
@@ -251,7 +261,14 @@ class TestTheNormalComponentDoesWork:
         sup, _sl2 = _terms(p)
         t_n = sum(sup.n_press)
         tan_phi = math.tan(math.radians(20.0))
-        expected = res0.fos * (1.0 + t_n * tan_phi / sum_r)
+        # The nail of this fixture is PASSIVE, so its moment joins the
+        # RESISTING side, where the reference's second equation puts it:
+        # ``F_pas = (R + T_N·tanφ' + T_S)/D``. ΣD comes from the bare answer
+        # as ``ΣR/F₀``, so this still needs no second geometric sum.
+        assert abs(sup.total_passive_t()) < 1e-9, sup.total_passive_t()
+        assert abs(sup.moment_passive) > 1e-6 * abs(t_n), sup.moment_passive
+        expected = ((sum_r + t_n * tan_phi + sup.moment_passive)
+                    / (sum_r / res0.fos))
         got = _fos(OrdinaryFellenius, p).fos
         assert abs(got - expected) / expected < 1e-6, (got, expected)
 

@@ -1164,17 +1164,26 @@ class GLESystem:
                     den += fx.h_seismic * (circle_yc - slice_cg_y(s)) / circle_R
                 den += (-slide_sign
                         * fx.water_moment_about(circle_yc) / circle_R)
-            # v0.1.115 — the reinforcement moment, and it needs no arm at
-            # all. A support resolved on the base splits into a NORMAL part,
-            # whose line of action passes through the centre and whose moment
-            # is therefore exactly zero, and a TANGENTIAL part, whose arm is
-            # exactly R — which divides out of every term of this
-            # denominator. So the whole contribution is −T_S, full stop.
-            # Until v0.1.114 it was reached the long way round, through the
-            # vertical component riding the slice's own centre-of-gravity arm
-            # plus a separate term for the horizontal one, and that arm is
-            # not the support's: the two agree only where the support crosses
-            # the slice's centre of gravity.
+            # v0.1.115 — the reinforcement moment. Until v0.1.114 it was
+            # reached the long way round, through the vertical component
+            # riding the slice's own centre-of-gravity arm plus a separate
+            # term for the horizontal one, and that arm is not the
+            # support's: the two agree only where the support crosses the
+            # slice's centre of gravity.
+            #
+            # v0.1.178 (D144) — and the sentence that stood here until this
+            # version, "it needs no arm at all", was half right in a way
+            # worth writing down, because the wrong half is not the one it
+            # looks like. Its PREMISE is exact: a base normal force has no
+            # moment about the centre, since the perpendicular bisector of
+            # a chord passes through it and N acts at the midpoint. What is
+            # false is the other half — that the TANGENTIAL part has an arm
+            # of exactly R. It would, if the chord were the tangent of the
+            # arc at the point where the support crosses; it is not, and on
+            # the reference's verification problem 85 that cost 1.170 % of
+            # the moment and 0.84 % of the factor of safety. So the fix is
+            # not to add a normal term (the whole cross product already
+            # contains it) but to take the moment where the force acts.
             m_passive = 0.0
             if has_sup:
                 # v0.1.122 -- and the couple, when the resultant does not act
@@ -1182,8 +1191,8 @@ class GLESystem:
                 # in the loop above: -slide_sign*M/R.
                 if sup.couple:
                     den += -slide_sign * sup.couple / circle_R
-                den -= math.fsum(sup.t_active)
-                m_passive = math.fsum(sup.t_passive)
+                den -= sup.moment_active
+                m_passive = sup.moment_passive
             self._driving = den
 
             def moment_fos(normals, resisting, _den=den, _pas=m_passive):

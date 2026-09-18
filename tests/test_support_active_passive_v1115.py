@@ -291,13 +291,53 @@ class TestTheClosedFormWithZeroFriction:
         r, d = self._sums()
         self._check(None, r / d, 1e-9, 1e-3)
 
+    def _moment_over_r(self, application):
+        """The support's MOMENT about the centre, over R, from the geometry.
+
+        v0.1.178 (D144) — these two cases used to write ``CAPACITY`` here,
+        and it was right for a reason that stopped holding. A
+        ``TANGENT_TO_SLIP`` support takes its direction from
+        ``_slip_tangent_at_x``, which is the slope of the slice's CHORD, so
+        its whole magnitude landed on the chord and the chord projection
+        was the capacity exactly. But the arm used with it was R, the arm
+        of the ARC, and the two errors cancelled: ``cos(a_c − θ) = 1`` with
+        θ the chord angle. With the moment taken where the force acts the
+        cancellation is gone and what is left is ``CAPACITY·cos Δα`` with
+        ``Δα`` the chord-to-tangent gap — second order, about 1e-5 here,
+        which is why the two cases missed their 1e-9 band by +0.001 % and
+        +0.000 % and not by the 1.17 % of the reference's problem 85.
+
+        That residue is the reinforcement's DIRECTION still coming from the
+        chord, which D144 does not touch and which is reported open. So the
+        expected value is computed from the force this fixture actually
+        produces rather than from the capacity it declares.
+        """
+        from ogr_slip2d.slicer import slice_surface
+        from ogr_slip2d.support_integration import compute_support_effects
+        circ = _circle()
+        p = _project(application, friction=0.0, cohesion=COHESION)
+        sl = slice_surface(p, circ, num_slices=40)
+        return math.fsum(
+            ((e.intersection_x - circ.centre_x) * e.force_v
+             - (e.intersection_y - circ.centre_y) * e.force_h) / circ.radius
+            for e in compute_support_effects(p, circ, sl))
+
     def test_active_takes_the_capacity_off_the_driving_side(self):
+        from ogr_core.support import ForceApplication
         r, d = self._sums()
-        self._check_application("active", r / (d - CAPACITY))
+        t = self._moment_over_r(ForceApplication.ACTIVE)
+        # Second order, and asserted so: if this ever grew to the size of a
+        # chord-versus-arc error the fixture would have stopped being
+        # tangential and these two cases would be measuring something else.
+        assert abs(t / CAPACITY - 1.0) < 1e-3, t
+        self._check_application("active", r / (d - t))
 
     def test_passive_adds_the_capacity_to_the_resisting_side(self):
+        from ogr_core.support import ForceApplication
         r, d = self._sums()
-        self._check_application("passive", (r + CAPACITY) / d)
+        t = self._moment_over_r(ForceApplication.PASSIVE)
+        assert abs(t / CAPACITY - 1.0) < 1e-3, t
+        self._check_application("passive", (r + t) / d)
 
     def _check_application(self, which, expected):
         from ogr_core.support import ForceApplication

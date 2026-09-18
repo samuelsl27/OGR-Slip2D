@@ -72,6 +72,18 @@ discretisation residual Ordinary, Spencer and GLE show. The test that used
 to freeze the disagreement now asserts the agreement, which is what its own
 docstring demanded should happen.
 
+v0.1.178 — AND THAT LEFTOVER IS GONE TOO, so the paragraph above is itself
+history in its last clause. What it called "the same discretisation
+residual" was not discretisation at all: the case that held it had already
+named the cause in its own docstring — "the chord angle of a slice against
+the angle at the point where the force is applied" — and that sentence was
+the whole of defect D144, written forty versions before the ficha existed
+and never followed up. A support's moment about the centre is now taken
+where the support acts, so the two routes are the same algebra and this
+identity is EXACT: 0.0, +1.4e-14, −4.1e-14 % at 25 / 100 / 400 slices. The
+case that asserted the SHRINKING had to be rewritten, because at that size
+"shrinking" reads ``4e-14 < 0``.
+
 v0.1.142 — JANBU'S HALF IS CLOSED TOO, and with it D46. Its row above is
 history as well: it needed the same correction plus a ``sec α`` on its
 driving side, and together they make this gap exactly zero at every
@@ -398,11 +410,22 @@ class TestTheIdentityThatHolds:
             assert _fos(mid, pw, surf) == _fos(mid, pe, surf), mid
 
     def test_the_closed_form_with_zero_friction(self):
-        """``F = Σc'l / (ΣW·arm − T·cos α)`` for an Active support.
+        """``F = Σc'l / (ΣW·arm − M/R)`` for an Active support.
 
         With φ' = 0 the base normal drops out of the resistance entirely,
-        so the right-hand side is two geometric sums and the integrated
-        wall force. Nothing in it comes from the solver.
+        so the right-hand side is two geometric sums and the wall force's
+        own moment. Nothing in it comes from the solver.
+
+        v0.1.178 (D144) — the support term used to be written here as
+        ``T·cos α`` with ``α`` the base angle of the slice the wall cuts,
+        mirroring what the engine did. That is the projection on the
+        CHORD, and the chord is not the tangent of the arc at the point
+        where the wall crosses: it missed by 0.009 % on this fixture and by
+        1.17 % on the reference's verification problem 85. The closed form
+        is now the moment itself, ``(x_P − x_c)·F_v − (y_P − y_c)·F_h``
+        over R, which has no angle in it at all — so this expression got
+        STRICTER, not looser: ``base_angle`` was the last thing here that
+        came out of the slicer.
         """
         from ogr_slip2d.slicer import slice_surface
         surf = _circle()
@@ -413,8 +436,9 @@ class TestTheIdentityThatHolds:
         c = 30.0
         resisting = math.fsum(c * s.base_length for s in s_list)
         driving = math.fsum(s.weight * s.weight_arm_ratio for s in s_list)
-        alpha = s_list[eff.slice_index].base_angle
-        t_s = eff.force_h * math.cos(alpha) + eff.force_v * math.sin(alpha)
+        cx, cy, r = surf.centre_x, surf.centre_y, surf.radius
+        t_s = ((eff.intersection_x - cx) * eff.force_v
+               - (eff.intersection_y - cy) * eff.force_h) / r
         expected = resisting / (driving - t_s)
         for mid in ("ordinary_fellenius", "bishop_simplified"):
             got = _fos(mid, p, surf)
@@ -498,15 +522,30 @@ class TestTheManualsOwnComparison:
         the angle at the point where the force is applied — which is what
         Ordinary, Spencer and GLE have always shown here.
 
-        Measured: −0.010 %, +0.0016 %, +0.0006 % at 25, 100 and 400 slices,
-        against a frozen −0.276 % before. The band is deliberately wider
-        than those numbers; what discriminates is the SHRINKING, which a
-        formulation defect cannot fake and a discretisation residual cannot
-        avoid.
+        Measured in v0.1.137: −0.010 %, +0.0016 %, +0.0006 % at 25, 100 and
+        400 slices, against a frozen −0.276 % before.
+
+        v0.1.178 (D144) — AND NOW IT IS EXACT, which is why this case had
+        to be rewritten rather than retuned. The paragraph above named the
+        cause of the leftover itself — "the chord angle of a slice against
+        the angle at the point where the force is applied" — forty
+        versions before the ficha that closed it existed, and it was right.
+        With the support's moment taken at the point it acts instead of
+        projected on the chord, the two routes are the same algebra: the
+        load always had the exact arm, and a HORIZONTAL force contributes
+        identically zero through ``support_vertical_load``
+        (``F_h·sin a·cos a − sin a·F_h·cos a``), so nothing is left to
+        discretise. Measured: 0.0, +1.4e-14, −4.1e-14 %.
+
+        The old assertion was ``abs(gaps[-1]) < 0.3·abs(gaps[0])``, and at
+        this size that reads ``4e-14 < 0`` — a test broken by its own
+        subject being fixed. It becomes the form its Janbu sibling below
+        has had since v0.1.142, and the comment there ("the agreement here
+        is EXACT rather than shrinking, and that is stronger") now applies
+        to both halves of D46.
         """
         gaps = self._gaps("bishop_simplified")
-        assert all(abs(g) < 0.05 for g in gaps), gaps
-        assert abs(gaps[-1]) < 0.3 * abs(gaps[0]), gaps
+        assert all(abs(g) < 1e-9 for g in gaps), gaps
 
     def test_the_two_janbu_agree_exactly(self):
         """v0.1.142 — this test used to assert the OPPOSITE, and said so.

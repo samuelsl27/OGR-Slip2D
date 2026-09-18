@@ -247,11 +247,46 @@ class SupportTerms:
     #: the same reason ``LEMResult.error_message`` is one: a caller that
     #: tests it should not have to know about None as well as "".
     failure: str = ""
+    #: v0.1.178 (D144) -- the ACTIVE supports' MOMENT about the surface's
+    #: centre of rotation, divided by R, so that it sits in the same
+    #: normalised units as every other term of the circular driving sum.
+    #:
+    #: Why this is not ``total_active_t()``, and why it does not replace
+    #: it. The pair above is the force resolved on the CHORD of the slice,
+    #: and on the chord it is EXACT: the decomposition is a rotation,
+    #: ``nf_h``/``nf_v`` recompose the force bit for bit, the slice's force
+    #: equilibrium is written on that same chord since v0.1.100, and the
+    #: force branch telescopes because of it (``Σ t_active·sec a = F_h``
+    #: whatever the angle). What is NOT exact is the ARM: a circular
+    #: moment path multiplies that projection by R, and the chord is not
+    #: the tangent of the arc at the point where the support crosses it.
+    #: Measured on the reference's verification problem 85 at 50 slices,
+    #: chord 50.8600 deg against tangent 50.3024 deg, the moment came out
+    #: 1.170 % short and the factor of safety 0.84 % low.
+    #:
+    #: This is the same split ``Slice.base_angle`` and
+    #: ``Slice.weight_arm_ratio`` already make for the WEIGHT, and for the
+    #: same reason, written there in v0.1.100: "the chord's own angle is no
+    #: longer the tangent at xc, so the moment arm is taken from the
+    #: geometry instead of from the angle". The weight got that treatment
+    #: and the reinforcement did not.
+    #:
+    #: On a surface with no centre these hold the chord sum instead, so the
+    #: field always means "what the driving side owes this reinforcement".
+    #: Zero would have deleted it in silence, which is the lesson of D94.
+    moment_active: float = 0.0
+    #: The PASSIVE half of the same quantity; it joins the resisting side.
+    moment_passive: float = 0.0
 
     def total_active_t(self) -> float:
+        """The ACTIVE tangential force on the bases, for FORCE equilibrium.
+
+        Not for a moment: see ``moment_active``.
+        """
         return sum(self.t_active)
 
     def total_passive_t(self) -> float:
+        """The PASSIVE tangential force on the bases, for FORCE equilibrium."""
         return sum(self.t_passive)
 
 
@@ -324,6 +359,26 @@ def resolve_support_terms(
     pointing out of it lifts (negative) — which is the sign the previous
     implementation had no way of expressing, since it kept only
     ``abs`` of the tangential part.
+
+    v0.1.178 (D144) — and the MOMENT is a separate quantity, not that
+    projection times an arm. The pair above is exact on the chord, because
+    the decomposition is a rotation and the slice's force equilibrium is
+    written on the chord; what is not exact is treating the chord as the
+    tangent of an arc. So a circular surface also gets
+
+        moment_active / moment_passive = slide_sign ·
+            [(x_P − x_c)·F_v − (y_P − y_c)·F_h] / R
+
+    accumulated per effect at its own crossing point ``P``. The sign is not
+    invented: the circular driving sum adds ``slide_sign·W·weight_arm_ratio``
+    for a weight ``(0, −W)`` at abscissa ``x``, which is ``−slide_sign·M_z/R``
+    with ``M_z`` anticlockwise about the centre, and the couple and the
+    water moment enter the same way. Only the three circular moment paths
+    read it — ``bishop``, ``ordinary`` and ``GLESystem``'s circular branch;
+    the force branches and the slice's vertical equilibrium keep the chord
+    pair, and a surface with no centre gets the chord sum in these fields
+    so that they always mean "what the driving side owes this
+    reinforcement".
     """
     # Every method calls this for every trial surface, so the no-support
     # case — which is most models, and all of the validation suite — must
@@ -377,8 +432,21 @@ def resolve_support_terms(
 
     from ogr_core.support import ForceApplication
 
+    # v0.1.178 (D144) -- the centre of rotation, read the way the slicer
+    # reads it for ``weight_arm_ratio`` (``getattr``, not
+    # ``isinstance(SlipCircle)``): a composite surface carries a centre too
+    # and takes the general moment path, so the guard that matters is the
+    # caller's, not a type test here. ``None`` means "no centre", and then
+    # the moment fields fall back to the chord sum below.
+    _cx = getattr(surface, "centre_x", None)
+    _cy = getattr(surface, "centre_y", None)
+    _radius = getattr(surface, "radius", 0.0) or 0.0
+    _circular = _cx is not None and _cy is not None and _radius > 0.0
+
     t_active = [0.0] * n
     t_passive = [0.0] * n
+    moment_active = 0.0
+    moment_passive = 0.0
     n_press = [0.0] * n
     f_h = [0.0] * n
     f_v = [0.0] * n
@@ -397,10 +465,39 @@ def resolve_support_terms(
         t_r = slide_sign * (eff.force_h * ca + eff.force_v * sa)
         # Pressing normal: −F·n  with  n = (−sin, cos)
         t_n = eff.force_h * sa - eff.force_v * ca
+        # v0.1.178 (D144) -- the MOMENT of this force about the centre,
+        # divided by R. The sign convention is not invented here, it is the
+        # one the weight already fixes: the circular driving sum adds
+        # ``slide_sign*W*weight_arm_ratio`` for a weight ``(0, -W)`` at
+        # abscissa ``x``, which is ``-slide_sign*M_z/R`` with ``M_z`` the
+        # anticlockwise moment about the centre. The couple below and the
+        # water moment in ``bishop``/``ordinary`` enter the same way.
+        #
+        # Taken PER EFFECT and at ``intersection_*``, and both halves of
+        # that matter. Per effect because ``x_app``/``y_app`` is a mean
+        # weighted by |F|, and the arm of a sum of forces is not the sum of
+        # arms unless the weights are the moments themselves -- with two
+        # supports of different orientation on one slice that mean is not
+        # where any force acts. At the CROSSING because ``couple`` already
+        # carries the move to ``application_*``, and taking it here too
+        # would count it twice.
+        #
+        # The whole cross product is taken, so the NORMAL part is inside
+        # it: a force normal to the CHORD is not normal to the ARC and does
+        # have a moment about the centre. Adding ``nf_h``/``nf_v`` on top
+        # would count that half twice.
+        if _circular:
+            m_r = slide_sign * ((eff.intersection_x - _cx) * eff.force_v
+                                - (eff.intersection_y - _cy) * eff.force_h
+                                ) / _radius
+        else:
+            m_r = t_r
         if eff.is_active:
             t_active[i] += t_r
+            moment_active += m_r
         else:
             t_passive[i] += t_r
+            moment_passive += m_r
         n_press[i] += t_n
         f_h[i] += eff.force_h
         f_v[i] += eff.force_v
@@ -439,7 +536,9 @@ def resolve_support_terms(
 
     return SupportTerms(t_active, t_passive, n_press, nf_h, nf_v,
                         f_h, f_v, x_app, y_app, True, couple,
-                        _failure_text(failures))
+                        _failure_text(failures),
+                        moment_active=moment_active,
+                        moment_passive=moment_passive)
 
 
 def support_failure_details(sup: "SupportTerms", details=None) -> dict:
