@@ -94,7 +94,9 @@ class Spencer(LEMMethod):
         # every λ. Spencer is GLE with f(x) = 1 at every boundary, and that
         # is the only line of this method that GLE does not share.
         from ..interslice import (FALLBACK_RESIDUAL_LIMIT, GLESystem,
-                                  branch_budget, branch_pair_ok)
+                                  branch_budget, branch_pair_ok,
+                                  refine_lambda_gap)
+        from .. import interslice
         s_list = slices.slices if hasattr(slices, "slices") else list(slices)
         system = GLESystem(
             s_list, [1.0] * (len(s_list) + 1), kh, kv, slide_sign,
@@ -189,6 +191,24 @@ class Spencer(LEMMethod):
             samples.sort(key=lambda r: r[0])
             bracket = _first_bracket(samples)
 
+        # v0.1.181 (D148) — and, still with no bracket, look INSIDE the gap a
+        # lost λ node left behind. The grid steps 0.8, 1.0, 1.5, so a root at
+        # 1.31988 with 1.5 unsolvable is invisible to every sample above:
+        # fixing the branch solver made 1.30 and 1.32 solvable and the sign
+        # change is between them, but neither is a grid node. Only a surface
+        # that bracketed nothing pays for this; see
+        # ``interslice.GAP_REFINE_STEPS``.
+        refinados = 0
+        if bracket is None and interslice.LAMBDA_GAP_REFINE:
+            extra = refine_lambda_gap(
+                samples, solve,
+                list(lam_grid) + list(self.lambda_grid_extension()))
+            if extra:
+                refinados = len(extra)
+                samples.extend(extra)
+                samples.sort(key=lambda r: r[0])
+                bracket = _first_bracket(samples)
+
         if bracket is None:
             # No bracket → return the sample with smallest |g| (closest
             # to F_f = F_m). Often happens for very stable slopes.
@@ -254,7 +274,17 @@ class Spencer(LEMMethod):
                     # the ones that are a pair only thanks to the rescue.
                     # See ``interslice.RESCUE_OMEGA_MIN``.
                     "lambdas_lost_to_stall": system.n_stalled,
+                    # v0.1.181 (D148) — and the lambdas whose branch came
+                    # back with no state at all, which until this version
+                    # left every counter above reading zero. See
+                    # ``interslice.GLESystem.n_inadmissible``.
+                    "lambdas_lost_to_inadmissible": system.n_inadmissible,
                     "lambdas_rescued": system.n_rescued,
+                    # v0.1.181 (D148) — how many extra lambdas were sampled
+                    # inside the gap a lost node left. Zero on every surface
+                    # that brackets, because the refinement only runs when
+                    # nothing did. See ``interslice.GAP_REFINE_STEPS``.
+                    "lambda_gap_refined": refinados,
                     "lambda_residual": residual,
                     "lambda_tolerance": self.tolerance,
                     "boundary_ratios": [lam_star] * (len(slices.slices) + 1),
@@ -405,7 +435,9 @@ class Spencer(LEMMethod):
                     system.n_thrust_overflow,
                 # v0.1.176 (D125) — see the fallback branch above.
                 "lambdas_lost_to_stall": system.n_stalled,
+                "lambdas_lost_to_inadmissible": system.n_inadmissible,
                 "lambdas_rescued": system.n_rescued,
+                "lambda_gap_refined": refinados,
                 # v0.1.180 (D146) — the diagnosis of the λ search itself,
                 # which this exit could not give until now. ``None`` when a
                 # root WAS closed, and that is not coyness: below the

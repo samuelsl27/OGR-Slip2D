@@ -76,6 +76,7 @@ Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 
+import contextlib
 import math
 
 #: The fixture, literally the one in ``test_interslice_budget_v1159.py`` and
@@ -210,6 +211,55 @@ def _closed_form(project, beta_deg=BETA_STEEP):
     num = COH * (H / math.sin(a)) + (W * math.cos(a) + t_n) * math.tan(
         math.radians(PHI))
     return (num + t_pas) / (W * math.sin(a) - t_act)
+
+
+@contextlib.contextmanager
+def _uncycled():
+    """The branch solver of 0.1.180: the early entry of v0.1.181 (D148)
+    switched off in-process, read at call time inside ``solve_branch``.
+
+    Every case below that still measures the DEFECT runs inside this, and
+    that is the point of keeping them: what v0.1.177 measured on this fixture
+    is still true of the engine without the guard, so the numbers this file
+    pinned -- pass 69, the residual that does not follow the tolerance -- are
+    preserved as a measurement rather than deleted as an embarrassment.
+
+    The restoring is written out with ``try/finally`` because the runner does
+    not call ``teardown_method`` (rule 5), and a tree without the switch has
+    no guard to turn off, so the CONTROL cases mean the same thing on both
+    sides of that change.
+    """
+    import ogr_slip2d.interslice as interslice
+    keep = getattr(interslice, "BRANCH_CYCLE_RESCUE", None)
+    if keep is None:
+        yield
+        return
+    interslice.BRANCH_CYCLE_RESCUE = False
+    try:
+        yield
+    finally:
+        interslice.BRANCH_CYCLE_RESCUE = keep
+
+
+@contextlib.contextmanager
+def _unrefined():
+    """The lambda search of 0.1.180: the gap refinement of v0.1.181 off.
+
+    A SECOND switch and not one, because this version changes two things --
+    which lambdas can be solved and which lambdas are looked at -- and the
+    attribution table of ``TestTheRootIsNowFoundByTheShippedSolver`` needs
+    them apart. An A/B that moves both attributes neither.
+    """
+    import ogr_slip2d.interslice as interslice
+    keep = getattr(interslice, "LAMBDA_GAP_REFINE", None)
+    if keep is None:
+        yield
+        return
+    interslice.LAMBDA_GAP_REFINE = False
+    try:
+        yield
+    finally:
+        interslice.LAMBDA_GAP_REFINE = keep
 
 
 def _moment(system, lam, **kw):
@@ -418,29 +468,56 @@ class TestTheMomentBranchStopsBeingSolvableBeforeTheCrossing:
         assert moment is not None and moment.converged, moment
         assert force.fos - moment.fos < 0.0, (force.fos, moment.fos)
 
-    def test_the_next_lambda_has_no_branch_at_all(self):
+    def test_the_next_lambda_had_no_branch_at_all(self):
         """Not stalled, not out of budget, not a runaway thrust: ``None``,
-        which is the one outcome ``branches`` cannot name."""
+        which was the one outcome ``branches`` could not name.
+
+        v0.1.181 (D148) -- and it CAN name it now, so the case says both
+        halves: the defect under ``_uncycled`` and the repair outside it.
+        Widening this to "is None or converged" would have kept it green
+        while measuring nothing, which is what the ficha means by re-anchor
+        rather than widen."""
         from ogr_core.support import ForceApplication
         system = _system(_anchored(ForceApplication.PASSIVE))
-        assert _moment(system, FIRST_LOST, max_passes=MAX_IT) is None
+        with _uncycled():
+            assert _moment(system, FIRST_LOST, max_passes=MAX_IT) is None
+        st = _moment(system, FIRST_LOST, max_passes=MAX_IT)
+        assert st is not None and st.converged, st
         assert _force(system, FIRST_LOST, max_passes=MAX_IT) is not None
 
-    def test_and_it_gives_up_before_the_rescue_could_see_it(self):
-        """The load-bearing number of this whole file. The rescue enters on
-        the pass after ``STALL_PATIENCE``; this branch is gone before that,
-        so the mechanism that cured the period-2 cycle of verification
-        problem 091 in v0.1.176 never gets the chance here."""
+    def test_and_it_gave_up_before_the_pass_gate_could_see_it(self):
+        """The load-bearing number of this whole file, and it does not move.
+
+        The gate of v0.1.176 enters on the pass after ``STALL_PATIENCE``;
+        this branch was gone before that, so the mechanism that cured the
+        period-2 cycle of verification problem 091 never got the chance
+        here. That is still exactly true of the solver without the guard,
+        which is why the number is asserted under ``_uncycled`` instead of
+        being deleted: v0.1.181 does not make pass 69 wrong, it makes the
+        rescue arrive before it.
+
+        And the second half is what the guard is FOR, stated as the same
+        inequality read the other way: the entry by cycle signature fires
+        strictly earlier than the pass gate would have."""
         from ogr_core.support import ForceApplication
         from ogr_slip2d.interslice import STALL_PATIENCE
         system = _system(_anchored(ForceApplication.PASSIVE))
-        died = _dies_on(system, FIRST_LOST)
+        with _uncycled():
+            died = _dies_on(system, FIRST_LOST)
         assert 0 < died < STALL_PATIENCE, (died, STALL_PATIENCE)
+        assert _dies_on(system, FIRST_LOST) == 0, "it still dies"
 
-    def test_so_the_shipped_search_reports_no_bracket(self):
-        """The end of the chain, through the method's own door."""
+    def test_so_the_search_of_0_1_180_reported_no_bracket(self):
+        """The end of the chain, through the method's own door.
+
+        v0.1.181 (D148) -- both cells fell back on the shipped solver of
+        0.1.180 and the Passive one does not any more, which is the whole
+        result of this version. The Active cell still does, and that is not
+        a hedge: its escape arrives before the crossing whatever gate is
+        used, as ``TestWhatIsStillOutOfReach`` measures."""
         for name, project in _both():
-            details = _result(project).details or {}
+            with _uncycled(), _unrefined():
+                details = _result(project).details or {}
             assert details.get("lambda_search_fell_back") is True, name
 
 
@@ -471,7 +548,8 @@ class TestTheRootIsThereWhenTheGateComesForward:
 
     def test_the_branch_that_had_none_solves_with_an_earlier_gate(self):
         system = _system(self._passive())
-        value, paths, _spread = _reach(system, FIRST_LOST)
+        with _uncycled():
+            value, paths, _spread = _reach(system, FIRST_LOST)
         assert value is not None and paths > 1, (value, paths)
 
     def test_and_g_changes_sign_just_above_it(self):
@@ -480,8 +558,9 @@ class TestTheRootIsThereWhenTheGateComesForward:
         solver can reach."""
         system = _system(self._passive())
         ff = _force(system, 0.0, max_passes=MAX_IT).fos
-        below, _p, _s = _reach(system, 1.315)
-        above, _p2, _s2 = _reach(system, PAST_ROOT)
+        with _uncycled():
+            below, _p, _s = _reach(system, 1.315)
+            above, _p2, _s2 = _reach(system, PAST_ROOT)
         assert below is not None and above is not None, (below, above)
         assert (ff - below) < 0.0 < (ff - above), (ff, below, above)
 
@@ -489,21 +568,39 @@ class TestTheRootIsThereWhenTheGateComesForward:
         """And this is why it is a root and not a coincidence. On a plane
         every method that closes force equilibrium owes the closed form, so
         a lambda where ``F_m`` meets ``F_f`` has to meet it AT the wedge.
-        Measured 8e-6 away from it, against the 1e-2 the published fallback
-        sits at."""
+        Measured 8e-6 away from it, against the 1e-2 the fallback of 0.1.180
+        sat at.
+
+        v0.1.181 (D148) — the comparison that used to close this case,
+        ``published > 100 * near``, is now FALSE BY SUCCESS and reversed:
+        the shipped answer is 1.6e-13 from the wedge and the experimental
+        one 8.1e-6, so what was a hundred times worse is fifty million times
+        better. It is replaced by the two halves it was standing in for —
+        the experiment reaches the wedge, and the shipped solver reaches it
+        at least as well — because an assertion kept pointing the old way
+        would be measuring that the repair had not happened."""
         project = self._passive()
         system = _system(project)
         wedge = _closed_form(project)
-        recovered, paths, _spread = _reach(system, PAST_ROOT)
+        with _uncycled():
+            recovered, paths, _spread = _reach(system, PAST_ROOT)
         assert recovered is not None, paths
         near = abs((recovered - wedge) / wedge)
-        published = abs((_result(project).fos - wedge) / wedge)
         assert near < 1e-4, near
-        assert published > 100 * near, (published, near)
+        published = abs((_result(project).fos - wedge) / wedge)
+        assert published <= near, (published, near)
 
     def test_which_gate_it_is_does_not_matter(self):
+        """The control of the whole class: a fixed point is where the
+        iteration would STAY, so gates that differ have to land on the same
+        number. Run without the guard, because ``_fixed_point`` passes
+        ``patience`` and on the shipped solver the cycle signature arms the
+        rescue first — the experiment and the repair would then be two
+        mechanisms sharing one measurement, and the spread would stop
+        meaning what this case says it means."""
         system = _system(self._passive())
-        value, paths, spread = _reach(system, PAST_ROOT, gates=self.GATES)
+        with _uncycled():
+            value, paths, spread = _reach(system, PAST_ROOT, gates=self.GATES)
         assert value is not None and paths >= 3, paths
         assert spread < 1e-8, (spread, paths)
 
@@ -512,40 +609,51 @@ class TestTheRootIsThereWhenTheGateComesForward:
         the early one reaches the same fixed point — so what the experiment
         adds is coverage, not a different answer."""
         system = _system(self._passive())
-        shipped = _fixed_point(system, LAST_SOLVED, 80)
-        early = _fixed_point(system, LAST_SOLVED, EARLY_GATE)
+        with _uncycled():
+            shipped = _fixed_point(system, LAST_SOLVED, 80)
+            early = _fixed_point(system, LAST_SOLVED, EARLY_GATE)
         assert shipped is not None and early is not None
         assert abs(shipped - early) < 1e-9, (shipped, early)
 
 
 # ======================================================================
-class TestWhatTheProgramPublishesMeanwhile:
-    """The other end of it: what a user of 0.1.176 gets on these two cells.
+class TestWhatTheProgramPublishedUntil0_1_180:
+    """The other end of it: what a user of 0.1.176 to 0.1.180 got here.
 
     A refusal, which is the right shape — ``converged`` false, a reason, the
     residual in the message — and a number 1 % to 3.5 % from the wedge. What
-    this class pins is that the distance is not the iteration: the residual
+    this class pins is that the distance was not the iteration: the residual
     is orders above the tolerance asked for and does not shrink with it,
-    while the recovered root of the class above is 8e-6 from the closed form
-    at the same settings.
+    while the root of the class below is 8e-6 from the closed form at the
+    same settings.
+
+    v0.1.181 (D148) — every case here now runs inside ``_uncycled`` and
+    ``_unrefined``, and the class is named for the versions it describes.
+    That is deliberate and it is not bookkeeping: the residual that does not
+    follow the tolerance is the measurement that told 'cannot reach the
+    root' apart from 'has not reached it yet', and it is the reason this
+    version exists. Deleting it because the defect is fixed would throw away
+    the evidence that the diagnosis was right.
     """
 
-    def test_the_two_steep_cells_publish_a_refused_fallback(self):
+    def test_the_two_steep_cells_published_a_refused_fallback(self):
         from ogr_slip2d.interslice import FALLBACK_RESIDUAL_LIMIT
         for name, project in _both():
-            r = _result(project)
+            with _uncycled(), _unrefined():
+                r = _result(project)
             details = r.details or {}
             assert details["lambda_residual"] > FALLBACK_RESIDUAL_LIMIT, name
             assert r.converged is False, name
             assert r.error_message, name
 
-    def test_and_the_residual_does_not_follow_the_tolerance(self):
+    def test_and_the_residual_did_not_follow_the_tolerance(self):
         """The signature that separates "cannot reach the root" from "has not
         reached it yet". Three decades of tolerance, same residual."""
         for name, project in _both():
             seen = []
             for tol in (1e-4, 1e-7, 1e-10):
-                details = _result(project, tolerance=tol).details or {}
+                with _uncycled(), _unrefined():
+                    details = _result(project, tolerance=tol).details or {}
                 seen.append(details["lambda_residual"])
             assert max(seen) - min(seen) < 0.01 * max(seen), (name, seen)
             assert min(seen) > 1e-2, (name, seen)

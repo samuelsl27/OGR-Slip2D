@@ -400,6 +400,66 @@ BRANCH_RESCUE = True
 BRANCH_PAIR_TIGHTEN = True
 BRANCH_PAIR_SETTLE = True
 
+#: v0.1.181 (D148) -- how many CONSECUTIVE passes a branch has to grow its own
+#: step envelope before the rescue is armed without waiting for
+#: :data:`STALL_PATIENCE`.
+#:
+#: WHY THE ENVELOPE AND NOT THE STEP. The iterate is damped, so a branch that
+#: has fallen into a period-2 cycle alternates a small step and a large one.
+#: ``step > prev_step`` therefore flickers and ``step > prev_step_2`` -- the
+#: SAME phase of the cycle, two passes back -- is what actually grows. It is
+#: the two-phase negation of the contraction test of D116, exactly as
+#: ``BRANCH_PAIR_SETTLE`` is the two-phase reading of its acceptance: on the
+#: 50 degree plane with the Passive anchor at lambda 1.30 the steps run
+#: 6.10e-2, 8.69e-2, 6.93e-2, 8.69e-2, 7.34e-2, 8.79e-2, so
+#: ``step > prev_step`` is true on alternate passes and never three in a row,
+#: while the envelope grows on every pass from 19 to the escape on 69.
+#:
+#: WHY 10, AND IT IS A MEASUREMENT AND NOT A ROUND NUMBER. Two censuses by
+#: ``_tools/ciclo_rama_d148.py``, both published in
+#: ``docs/audits/branch_cycle_v1181.md``: the sixteen cells of the wedge
+#: ladder (960 branches, 797 accepted) and the verification bank (344 rows,
+#: 79 problems, 6014 branches, 5209 accepted). The number that decides is not
+#: how many dying branches a threshold reaches but how many ACCEPTED ones it
+#: would take away from the damped iteration, split by whether that branch
+#: converges on its own or only because the rescue already takes it on pass
+#: 81. Over the bank:
+#:
+#:   K:                     3     4     5     6    10    12
+#:   dying reached:        75    59    44    38    21    18
+#:   accepted moved:       22    18    12    11     8     7
+#:     of those, RESCUED:  11    11    11    10     8     7
+#:     ORDINARY:           11     7     1     1     0     0
+#:
+#: 10 is the FIRST value at which no branch that converges by ordinary
+#: contraction is touched, on the bank and on the ladder alike -- 6 was safe
+#: on the ladder and takes one ordinary branch on the bank (problem 093 under
+#: GLE at lambda 2.5, run of 8, accepted on pass 75), which is exactly why a
+#: threshold read off one fixture would have been wrong.
+#:
+#: WHAT THE REMAINING EIGHT ARE, because "zero" above is a claim about a
+#: category and not about nothing moving: all eight have ``rescued=True``.
+#: They are branches the gate of v0.1.176 was already going to take over,
+#: reached sooner, and the fixed point they settle on is the same one -- what
+#: moves is the pass they reach it on and the last digits with it.
+#:
+#: WHAT IT DOES NOT REACH, said here because a guard that hides its own
+#: coverage is the defect this project has walked into ten times. Of the 460
+#: branches the bank loses this way the median dies on pass TWO, and 30 of
+#: the ladder's 77 die on pass 5 or earlier, with one to four passes of
+#: history: no run of any length can see those coming, and most of them are
+#: not this defect at all -- 335 of the 460 are FORCE branches, which is a
+#: vanishing driving term and not a period-2 cycle. They keep dying, and
+#: since v0.1.181 they are at least counted
+#: (:attr:`GLESystem.n_inadmissible`).
+CYCLE_RUN = 10
+
+#: The switch, read at call time inside :func:`solve_branch` with the mould of
+#: :data:`BRANCH_RESCUE`, so that a test can turn the early entry off
+#: in-process and measure what it changes against what it leaves alone. Off,
+#: the branch solver is v0.1.180 bit for bit.
+BRANCH_CYCLE_RESCUE = True
+
 
 # ----------------------------------------------------------------------
 def branch_budget(max_iterations: int) -> int:
@@ -631,6 +691,7 @@ def solve_branch(
     f_max: float = F_MAX,
     *,
     patience: int = STALL_PATIENCE,
+    rescue_gate: Optional[int] = None,
 ) -> Optional[BranchState]:
     """One branch of the GLE system, iterated to its OWN fixed point.
 
@@ -750,6 +811,19 @@ def solve_branch(
     # like this pass's number and is the previous one, and a comment
     # defending a confusing read is worth less than a float.
     prev_d_x = -math.inf
+    # v0.1.181 (D148) -- WHICH PASS THE RESCUE ENTERS ON, separated from the
+    # pass the stall test cuts on. Until this version one number governed
+    # both, so measuring an earlier rescue meant also cutting the stall
+    # earlier, and the two have nothing to do with each other: the stall
+    # test asks whether the branch is wandering, the gate asks when the
+    # damped update has had enough of a chance. ``None`` means "the same
+    # number as before", so every call that does not pass it is this
+    # function of 0.1.180, instruction for instruction.
+    gate = patience if rescue_gate is None else int(rescue_gate)
+    # v0.1.181 (D148) -- consecutive passes whose step beat the step of TWO
+    # passes ago. One int in the hottest loop, and it reuses the
+    # ``prev_step_2`` the contraction test already keeps. See CYCLE_RUN.
+    cycle_run = 0
 
     for _pass in range(max_passes):
         passes += 1
@@ -771,7 +845,22 @@ def solve_branch(
         # progress when it was cut" — a fifth way out of this loop, wearing
         # the name of a fourth. The tightening creates that state, so the
         # tightening closes it: both halves answer to the same switch.
-        if (BRANCH_RESCUE and not rescuing and _pass >= patience
+        # v0.1.181 (D148) -- and the same entry for a branch whose own step
+        # envelope has been growing for CYCLE_RUN passes, whatever pass it is
+        # on. Without it the rescue never sees the branch this defect is
+        # about: on the 50 degree plane with the Passive anchor at
+        # lambda 1.30 the orbit of the period-2 cycle leaves the region where
+        # the moment factor is positive on pass 69, and ``gate`` is 80.
+        #
+        # READ WITH ONE PASS OF DELAY, like ``prev_step`` and ``prev_d_x``
+        # above, and that is not symmetry: arming inside the pass that also
+        # evaluates the acceptance would change WHICH clause runs, and the
+        # rescue's clause can REFUSE what the contraction test was about to
+        # admit. Read from the previous pass, a branch that is being admitted
+        # is admitted before this test is ever consulted.
+        if (BRANCH_RESCUE and not rescuing
+                and (_pass >= gate
+                     or (BRANCH_CYCLE_RESCUE and cycle_run >= CYCLE_RUN))
                 and (prev_step >= tolerance
                      or (BRANCH_PAIR_TIGHTEN and prev_d_x >= tolerance))):
             rescuing = True
@@ -975,6 +1064,21 @@ def solve_branch(
         # through the stall test or the pass budget and is already counted
         # there. The three counters keep naming the three exits.
         contracting = step == 0.0 or step < prev_step < prev_step_2
+        # v0.1.181 (D148) -- and its two-phase negation, for the period-2
+        # cycle whose amplitude grows. Compared against the step of TWO
+        # passes ago and not the last one, because the two phases of the
+        # cycle are not the same size; see :data:`CYCLE_RUN`.
+        #
+        # ``prev_step_2 > -math.inf`` is NOT decoration. The sentinel makes
+        # the bare comparison TRUE on the first two passes, when there is no
+        # step two passes back to compare against, so every branch would
+        # collect two free growths and the constant would mean K-2 instead of
+        # K. It is the same reason the sentinel is ``-inf`` and not ``+inf``
+        # for the contraction test above, read from the other side: a
+        # comparison against a sentinel is not a measurement.
+        cycle_run = (cycle_run + 1
+                     if prev_step_2 > -math.inf and step > prev_step_2
+                     else 0)
         # Updated before the test, so that it also happens on the passes
         # that leave through one of the ``break``s below.
         prev_step_2, prev_step = prev_step, step
@@ -1085,6 +1189,120 @@ def branch_pair_ok(ff, fm) -> bool:
             and math.isfinite(ff) and math.isfinite(fm))
 
 
+#: v0.1.181 (D148) -- how many times the gap left by a LOST lambda node may be
+#: halved before the search gives up and hands back a reserve value.
+#:
+#: WHY THERE IS A GAP AT ALL. The lambda grid is calibrated and coarse -- it
+#: steps 0.8, 1.0, 1.5 -- and a node is dropped when either branch fails to
+#: solve there. So the sampled set can end well short of the crossing with
+#: nothing saying so: on the 50 degree plane with the Passive anchor the last
+#: usable node is 1.00 with g = -0.034328, the next node 1.50 has no branch at
+#: all, and the root sits at 1.31988 between them. Fixing the branch solver
+#: (D148) makes 1.30, 1.32 and 1.35 solvable and the sign change appears
+#: between 1.30 and 1.32 -- but the search still never looks there, because
+#: neither is a grid node. The two are independent causes of one wrong answer.
+#:
+#: WHY SIX. The bisection below walks INTO the gap from the side that solves,
+#: treating a lost sample as "too far" and a same-sign one as "keep going", so
+#: it halves the gap once per step. Six steps resolve a gap of 0.5 to 0.008,
+#: which is finer than the 0.02 the grid itself resolves anywhere. Traced on
+#: that cell: 1.25 (same sign), 1.375 (lost), 1.3125 (same sign), 1.34375
+#: (SIGN CHANGE) -- four steps, and six leaves margin without being a budget
+#: nobody can exhaust.
+#:
+#: WHAT IT COSTS, AND WHO PAYS. Two branch solves per step, and ONLY on a
+#: surface that bracketed nothing after the whole grid and the lazy extension
+#: -- which is exactly the surface that was about to publish a reserve value.
+#: A surface that brackets does not execute one instruction of this.
+GAP_REFINE_STEPS = 6
+
+#: The switch, read at call time by ``spencer.py`` and ``gle.py`` with the
+#: mould of :data:`BRANCH_RESCUE`, so that a test can turn the gap refinement
+#: off in-process. It exists because this version changes TWO things — the
+#: branch solver and the sampling — and an A/B that moves both attributes
+#: neither, which is the lesson of the ``A`` column of
+#: ``docs/audits/support_arm_v1178.md``. Off, the lambda search is v0.1.180.
+LAMBDA_GAP_REFINE = True
+
+
+# ----------------------------------------------------------------------
+def refine_lambda_gap(samples, solve, nodes, steps: int = GAP_REFINE_STEPS):
+    """Look for the sign change inside the gap a LOST lambda node left.
+
+    Args:
+        samples: the ``(lam, g, ff, fm)`` rows that survived, in any order.
+        solve: ``lam -> (F_f, F_m)``, the caller's own inner solve.
+        nodes: every lambda the caller TRIED, grid and extension together.
+            The ones missing from ``samples`` are the lost ones, and the gap
+            is between the outermost sample and the first node past it.
+
+    Returns:
+        The new rows, in the order they were sampled. Empty when there is no
+        gap to look into, when the trend does not point at one, or when the
+        budget runs out without a sign change.
+
+        AND THEY ARE RETURNED EVEN WHEN NO SIGN CHANGE WAS FOUND, which is
+        deliberate and is NOT "changes nothing except the cost": the caller
+        appends them to ``samples``, and the no-bracket fallback hands back
+        ``min(samples, key=|g|)``. A probe that got closer to the crossing
+        without reaching it therefore improves the reserve value it falls
+        back on. Measured on the 50 degree plane with the Passive anchor and
+        the branch repair switched OFF, where no bracket is reachable: the
+        published fallback goes from 1.765482 to 1.750071, i.e. from +0.98 %
+        of the closed form to +0.10 %, still declaring itself a fallback.
+
+    THE TREND TEST IS WHAT KEEPS THIS FROM BEING A FISHING TRIP. The gap is
+    only probed when ``|g|`` is SMALLER at the edge sample than at the one
+    inside it, i.e. the two branches are still closing on each other in the
+    direction of the gap. Where ``g`` is flat or diverging there is no reason
+    to believe a crossing is hiding past the edge, and this returns at once.
+
+    BOTH ENDS, upper first. A root below the lowest solvable lambda is the
+    same defect seen in a mirror, and refusing to look there would make the
+    guard depend on the sign of lambda, which nothing in the formulation does.
+    """
+    rows = sorted(samples, key=lambda r: r[0])
+    if len(rows) < 2:
+        return []
+    got = {round(r[0], 12) for r in rows}
+    todos = sorted(set(nodes))
+    found = []
+    for arriba in (True, False):
+        if arriba:
+            borde, dentro = rows[-1], rows[-2]
+            fuera = [x for x in todos
+                     if x > borde[0] and round(x, 12) not in got]
+            if not fuera:
+                continue
+            hi = fuera[0]
+        else:
+            borde, dentro = rows[0], rows[1]
+            fuera = [x for x in todos
+                     if x < borde[0] and round(x, 12) not in got]
+            if not fuera:
+                continue
+            hi = fuera[-1]
+        if not abs(borde[1]) < abs(dentro[1]):
+            continue
+        lo = borde
+        for _ in range(steps):
+            mid = 0.5 * (lo[0] + hi)
+            ff, fm = solve(mid)
+            if (branch_pair_ok(ff, fm)
+                    and F_MIN < ff < F_MAX and F_MIN < fm < F_MAX):
+                fila = (mid, ff - fm, ff, fm)
+                found.append(fila)
+                if fila[1] * lo[1] < 0.0:
+                    return found
+                lo = fila
+            else:
+                # The node is lost too: the solvable edge is nearer than
+                # this, so the gap shrinks towards the side that solves.
+                hi = mid
+    return found
+
+
+# ----------------------------------------------------------------------
 def thrust_is_admissible(state: BranchState) -> bool:
     """Is the inter-slice thrust of this state a stress state soil can hold?
 
@@ -1145,6 +1363,7 @@ class GLESystem:
                  "tolerance", "initial_fos", "max_passes", "strict",
                  "n_thrust_rejected", "n_passes_exhausted",
                  "n_thrust_overflow", "n_stalled", "n_rescued",
+                 "n_inadmissible",
                  "_moment_fos", "_driving")
 
     # v0.1.173 (D117) — ``max_passes`` goes LAST and keyword-defaulted on
@@ -1223,6 +1442,35 @@ class GLESystem:
         #: in the positive: a rescue that never fires is a setting that does
         #: nothing, and this is where that would show.
         self.n_rescued = 0
+        #: v0.1.181 (D148) — how many lambdas were lost because a branch came
+        #: back with no state at all: ``solve_branch`` returning ``None``
+        #: because m_a collapsed, the driving term vanished, or the factor of
+        #: safety left the region where it is finite and positive.
+        #:
+        #: A FIFTH counter and not a wider one, for the reason the other four
+        #: are four: it says something none of them says. The three above are
+        #: about a branch that RAN and was given up on — it wandered, it ran
+        #: out of passes, its thrust ran away — and each of those comes back
+        #: with a :class:`BranchState` that can be asked why. This one is the
+        #: branch that never produced a state, so ``None`` is all there is and
+        #: ``None`` cannot carry a reason; that is the whole of D56, and it is
+        #: why ``BranchState.abandoned`` is a field in the first place.
+        #:
+        #: Until this version it was counted NOWHERE. ``branches()`` opened
+        #: its loop with ``if state is None or state.converged: continue``, so
+        #: a lambda lost this way left every counter reading zero — measured
+        #: on the anchored 50 degree plane, Active: 11 of 21 grid nodes lost
+        #: with the moment branch returning ``None`` while the result
+        #: published ``lambdas_lost_to_stall = 0`` and
+        #: ``lambdas_lost_to_budget = 0``. The diagnosis v0.1.159, v0.1.171
+        #: and v0.1.176 built pointed, there, at somewhere else.
+        #:
+        #: The name says WHAT IS OBSERVABLE and not the mechanism: the branch
+        #: was inadmissible, which is the word ``solve_branch`` already uses
+        #: for it. Naming it after the period-2 escape would wire one of the
+        #: three causes into a counter that sees all three — the lesson
+        #: ``REASON_LAMBDA_NOT_CLOSED`` left in v0.1.180.
+        self.n_inadmissible = 0
         self._driving = None
 
         if circle_R is None:
@@ -1378,7 +1626,14 @@ class GLESystem:
         # the "no lambda-bracket" the bank published rested on a stalled
         # branch that nothing reported.
         for state in (force, moment):
-            if state is None or state.converged:
+            # v0.1.181 (D148) — the branch with no state at all, counted at
+            # last. It used to share this ``continue`` with the branch that
+            # CONVERGED, which put the one exit nobody could see in the same
+            # silence as the one that needs no explaining.
+            if state is None:
+                self.n_inadmissible += 1
+                continue
+            if state.converged:
                 continue
             if state.abandoned:
                 self.n_thrust_overflow += 1

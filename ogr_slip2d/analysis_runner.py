@@ -1093,7 +1093,15 @@ def lambda_fallback_notes(result) -> list[str]:
     details = getattr(result, "details", None) or {}
     fell_back = bool(details.get("lambda_search_fell_back"))
     not_closed = getattr(result, "reason", "") == REASON_LAMBDA_NOT_CLOSED
-    if not (fell_back or not_closed):
+    # v0.1.181 (D148) — and the search that had to look inside a gap, which
+    # opens this door too. It is the opposite case from the two above: the
+    # refinement is narrated precisely when it SUCCEEDED and the surface
+    # therefore did NOT fall back, so gating it behind ``fell_back`` would
+    # have made the one search with something new to say the one that says
+    # nothing. Same shape as the door v0.1.180 opened for
+    # ``REASON_LAMBDA_NOT_CLOSED``, and for the same reason.
+    refined = int(details.get("lambda_gap_refined") or 0)
+    if not (fell_back or not_closed or refined):
         return []
 
     notes: list[str] = []
@@ -1159,6 +1167,34 @@ def lambda_fallback_notes(result) -> list[str]:
             "belongs to the solver rather than to the slope."
             % (stalled, "inclination" if stalled == 1 else "inclinations",
                STALL_PATIENCE))
+
+    # v0.1.181 (D148) — the fifth loss, and the one that had no voice at all
+    # until this version: a branch that came back with no state, so none of
+    # the three counters above could see it. It is kept apart from the stall
+    # for the reason they are all kept apart — it says something different.
+    # A stalled branch was iterating and got nowhere; this one left the
+    # region where a factor of safety exists, and no budget buys that back.
+    lost = int(details.get("lambdas_lost_to_inadmissible") or 0)
+    if lost > 0:
+        notes.append(
+            "and %d %s discarded because one of its two equilibrium branches "
+            "had no admissible solution there at all: the factor of safety "
+            "it was iterating towards stopped being finite and positive, so "
+            "that inclination could not be compared with its neighbours."
+            % (lost, "inclination was" if lost == 1
+               else "inclinations were"))
+
+    # v0.1.181 (D148) — and the sampling, which is a statement about the
+    # SEARCH and not a loss, so it is phrased as one. It only ever appears on
+    # a surface that bracketed nothing with the calibrated grid.
+    if refined > 0:
+        notes.append(
+            "The calibrated grid of inclinations bracketed nothing, so %d "
+            "further %s sampled between the last one that solved and the "
+            "first one that did not, which is where a crossing hidden by a "
+            "lost sample would be."
+            % (refined, "inclination was" if refined == 1
+               else "inclinations were"))
 
     return notes
 

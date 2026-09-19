@@ -117,23 +117,44 @@ def _daylight_x(beta_deg):
 
 
 @contextlib.contextmanager
-def _unrescued():
-    """The branch solver of 0.1.175: the relaxation rescue of v0.1.176
-    (D125) switched off in-process, read at call time inside
-    ``solve_branch``. The runner has no ``monkeypatch``, so the restoring
-    is written out (rule 5). A tree without the switch has no rescue to
-    turn off, so the cases that use this mean the same thing on both
-    sides of that change."""
+def _without_lambda_recovery():
+    """Every mechanism that recovers a lambda, switched off in-process.
+
+    RENAMED IN v0.1.181 (D148), and the rename is the point. It was
+    ``_unrescued`` and it turned off exactly one thing, the relaxation
+    rescue of v0.1.176; this version adds two more ways a lambda comes
+    back — the entry by cycle signature and the refinement of the gap a
+    lost node leaves — and a helper still called "unrescued" that also
+    disabled those would be a name saying less than its body does. That is
+    the ``off(tighten=True)`` mistake v0.1.179 paid for out loud.
+
+    What the cases here need is not "no rescue" but "nothing recovering a
+    lambda behind my back", because every one of them counts lambdas lost
+    to the pass budget, and a mechanism that keeps a lambda alive — or that
+    samples new ones, as the gap refinement does — moves that count.
+    Measured on the 55 degree plane at 500 iterations: with the refinement
+    left on, ``lambdas_lost_to_budget`` reads 3 where this class requires 0,
+    and the 3 are branches of lambdas the refinement itself introduced.
+
+    The restoring is written out with ``try/finally`` because the runner
+    does not call ``teardown_method`` (rule 5), and a tree without a switch
+    has nothing to turn off, so the cases mean the same thing there.
+    """
     import ogr_slip2d.interslice as interslice
-    keep = getattr(interslice, "BRANCH_RESCUE", None)
-    if keep is None:
+    nombres = ("BRANCH_RESCUE", "BRANCH_CYCLE_RESCUE", "LAMBDA_GAP_REFINE")
+    keep = {n: getattr(interslice, n, None) for n in nombres}
+    if keep["BRANCH_RESCUE"] is None:
         yield
         return
-    interslice.BRANCH_RESCUE = False
+    for n, v in keep.items():
+        if v is not None:
+            setattr(interslice, n, False)
     try:
         yield
     finally:
-        interslice.BRANCH_RESCUE = keep
+        for n, v in keep.items():
+            if v is not None:
+                setattr(interslice, n, v)
 
 
 def _bare():
@@ -245,7 +266,7 @@ class TestTheSettingReachesTheInnerLoop:
         budget no longer bites here at any setting; the wire is unchanged
         and this is what it still buys when nothing follows the damping.
         The fourth case of this class pins the rescued half."""
-        with _unrescued():
+        with _without_lambda_recovery():
             _fos_low, lost_low = _solve("spencer", GATE_BETA, GATE_TOL,
                                         _shipped_default())
             _fos_high, lost_high = _solve("spencer", GATE_BETA, GATE_TOL, 500)
@@ -256,7 +277,7 @@ class TestTheSettingReachesTheInnerLoop:
         assert lost_high == 0, lost_high
 
     def test_and_that_moves_the_answer(self):
-        with _unrescued():
+        with _without_lambda_recovery():
             fos_low, _ = _solve("spencer", GATE_BETA, GATE_TOL,
                                 _shipped_default())
             fos_high, _ = _solve("spencer", GATE_BETA, GATE_TOL, 500)
@@ -274,18 +295,30 @@ class TestTheSettingReachesTheInnerLoop:
         room it asked for puts it back. Both halves are asserted, because
         only the pair says which direction the defect ran in.
         """
+        # v0.1.181 (D148) — the yardstick is computed on the SAME engine as
+        # the two values it judges. It was not: ``settled`` ran with every
+        # recovery mechanism on and ``near``/``far`` with them off, which was
+        # harmless only while none of them moved this cell. Two of them do
+        # now — on this plane the settled factor goes 2.593302 to 2.584021
+        # with the gap refinement alone and to 2.572160 with both, TOWARDS
+        # the closed form of the wedge (+5.36 % to +4.50 %) — so the
+        # mismatch stopped being harmless and became a comparison between
+        # two different solvers.
         settled = []
-        for tol in SETTLED_TOLS:
-            fos, lost = _solve("spencer", GATE_BETA, tol, _shipped_default())
-            assert lost == 0, (tol, lost)
-            settled.append(fos)
+        with _without_lambda_recovery():
+            for tol in SETTLED_TOLS:
+                fos, lost = _solve("spencer", GATE_BETA, tol,
+                                   _shipped_default())
+                assert lost == 0, (tol, lost)
+                settled.append(fos)
         limit = 0.5 * (settled[0] + settled[1])
         spread = abs(settled[0] - settled[1])
         assert spread > 0.0, settled
 
-        with _unrescued():
+        with _without_lambda_recovery():
             near, _ = _solve("spencer", GATE_BETA, GATE_TOL, 500)
-            far, _ = _solve("spencer", GATE_BETA, GATE_TOL, _shipped_default())
+            far, _ = _solve("spencer", GATE_BETA, GATE_TOL,
+                            _shipped_default())
         assert abs(near - limit) < 10.0 * spread, (near, limit, spread)
         assert abs(far - limit) > 100.0 * spread, (far, limit, spread)
 

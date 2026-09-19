@@ -107,6 +107,7 @@ Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 
+import contextlib
 import math
 import sys
 from pathlib import Path
@@ -554,8 +555,41 @@ class TestSpencerAndGleSettleOnTheWedge:
 
 
 # ======================================================================
-class TestAWedgeWhoseRootTheSolverCannotReachSaysSo:
+@contextlib.contextmanager
+def _as_0_1_180():
+    """The lambda machinery of 0.1.180: the two switches of v0.1.181 (D148)
+    off, read at call time. The runner does not call ``teardown_method``, so
+    the restoring is written out (rule 5); a tree without the switches has
+    nothing to turn off and the cases mean the same thing there.
+    """
+    import ogr_slip2d.interslice as interslice
+    keep = (getattr(interslice, "BRANCH_CYCLE_RESCUE", None),
+            getattr(interslice, "LAMBDA_GAP_REFINE", None))
+    if keep[0] is None:
+        yield
+        return
+    interslice.BRANCH_CYCLE_RESCUE = False
+    interslice.LAMBDA_GAP_REFINE = False
+    try:
+        yield
+    finally:
+        interslice.BRANCH_CYCLE_RESCUE, interslice.LAMBDA_GAP_REFINE = keep
+
+
+class TestAWedgeWhoseRootTookThreeVersionsToReach:
     """The other half of the fix, and a finding the fix uncovered.
+
+    RENAMED AGAIN IN v0.1.181 (D148), and the reason is the same one that
+    forced the first rename, which is why it is worth writing twice. It was
+    ``TestAWedgeWhoseRootTheSolverCannotReachSaysSo``, and the solver reaches
+    it now: 1.748318 at lambda 1.3199, the closed form of this wedge to
+    1.6e-13. A class called "cannot reach" would sit here green — every
+    assertion below runs under ``_as_0_1_180`` and every one of them still
+    holds of that machinery — while stating as fact something this version
+    refuted. That is precisely how ``TestAWedgeWithNoRootSaysSo`` spent two
+    versions asserting true things under a false name, and v0.1.180 paid for
+    reading it. What the class measures did not change; what it is ALLOWED
+    TO CLAIM did.
 
     RENAMED IN v0.1.177 (D119), and the old name is the reason. It was
     ``TestAWedgeWithNoRootSaysSo``, and it said that on the 50° plane, with
@@ -665,8 +699,13 @@ class TestAWedgeWhoseRootTheSolverCannotReachSaysSo:
                 out = []
                 for tol in (1e-3, TIGHT):
                     surface = _plane(BETA_STEEP)
-                    r = _method(mid, tolerance=tol).compute_fos(
-                        p, surface, _slices(p, surface))
+                    # v0.1.181 (D148) — measured on the machinery this class
+                    # describes. The Passive cell under Spencer does NOT fall
+                    # back any more; see the class docstring for why that is
+                    # asserted next door instead of by loosening this.
+                    with _as_0_1_180():
+                        r = _method(mid, tolerance=tol).compute_fos(
+                            p, surface, _slices(p, surface))
                     details = r.details or {}
                     assert details.get("lambda_search_fell_back") is True, (
                         name, mid, tol)
@@ -681,6 +720,27 @@ class TestAWedgeWhoseRootTheSolverCannotReachSaysSo:
                     out.append(residual)
                 assert all(x is not None and x > 1e-2 for x in out), \
                     (name, mid, out)
+
+    def test_and_since_v0_1_181_the_passive_cell_reaches_it(self):
+        """The rename made executable, so the name cannot go stale again.
+
+        Two independent causes had to be removed for this line to hold: the
+        branch solver escaping its own iteration before the rescue could see
+        it (the cycle entry), and the lambda grid stepping 1.0 to 1.5 over a
+        root at 1.31988 (the gap refinement). Neither alone moves this cell —
+        with only one of the two the method still falls back — which is why
+        the assertion is on the FINISHED number and not on either mechanism.
+        """
+        from ogr_core.support import ForceApplication
+        p = _anchored(ForceApplication.PASSIVE)
+        surface = _plane(BETA_STEEP)
+        r = _method("spencer", tolerance=TIGHT).compute_fos(
+            p, surface, _slices(p, surface))
+        details = r.details or {}
+        assert details.get("lambda_search_fell_back") is not True, details
+        assert r.converged is True, r.error_message
+        w = _wedge(p, BETA_STEEP)
+        assert abs((r.fos - w) / w) < 1e-6, (r.fos, w)
 
     def test_the_refusal_names_the_residual(self):
         """A number the user cannot see is a number they cannot act on, and
