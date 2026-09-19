@@ -377,8 +377,23 @@ class TestNothingMoved:
     #: defect. What v0.1.172 relied on Bishop for is still available: Bishop
     #: does not enter ``interslice.py``, so it remains the control for
     #: anything that happens there.
+    #:
+    #: v0.1.179 (D145) -- Spencer moves again and Bishop does not, which is
+    #: the opposite pattern to the line above and says so for the same
+    #: reason: this time the change is inside ``interslice.py``, where
+    #: Bishop never goes. On this circle at 30 slices the force branch of
+    #: the lambda the search settles on sits on its answer from pass 21 and
+    #: used to be admitted on pass 107, because its steps alternate instead
+    #: of shrinking and the contraction test of v0.1.172 can never fire on
+    #: an alternating sequence. It is admitted on pass 25 now, and the
+    #: factor it publishes is the same one to within the tolerance it was
+    #: asked for: 0.9636163385716956 -> 0.9636226555792213 (+0.00066 %),
+    #: which is 6.6e-6 relative against a tolerance of 1e-4. The digit is a
+    #: SNAPSHOT and not an external reference, and it is kept as a bit-for-
+    #: bit regression guard on the bank's own model; that it is a snapshot
+    #: is reported in the changelog of this version and not hidden here.
     ESPERADO = {"bishop_simplified": 0.9829608966855081,
-                "spencer": 0.9636163385716956}
+                "spencer": 0.9636226555792213}
 
     def _skip_if_absent(self):
         # The bank lives outside this repository (and outside git), so the

@@ -264,8 +264,27 @@ class TestALuckyStepIsNotConvergence:
 
     def test_and_where_it_used_to_stop_was_far_from_the_fixed_point(self):
         """Which is what makes it a defect and not a preference. The
-        iterate at the lucky pass is a sixth of the way out; what the
-        branch settles on now is inside a quarter of that."""
+        iterate at the lucky pass is a sixth of the way out; what the branch
+        settles on now is a fraction of that.
+
+        v0.1.179 (D145) — the fraction is 0.30 and was 0.25, and the cause
+        of the change is written here rather than the number quietly
+        adjusted. This version adds a second way in: two consecutive passes
+        with BOTH residuals inside the tolerance, for the converging branch
+        whose steps alternate and which the contraction test can therefore
+        never admit. On this branch, whose contraction ratio is 0.96, that
+        path fires twelve passes earlier at the loose tolerance — pass 28
+        instead of 40 — and stopping earlier on a slow contraction means
+        stopping further out: measured, 0.279 of the lucky step's error at
+        5e-3 where it was 0.168, and 0.083 at 1e-3 where nothing moved.
+
+        That is a real cost of the settle path and it is stated rather than
+        hidden. What the case still says is what it was written to say: the
+        value accepted is not the lucky one, and 0.279 is better than 1 by
+        more than three times over. The residual estimate that would make
+        this tighter, ``tol*r/(1-r)``, was considered in v0.1.172 and is
+        still not adopted — see ``TestWhatThisDoesNotFix``.
+        """
         system = _system()
         root = _fixed_point(system, LUCKY_LAMBDA)
         for tol, lucky in LUCKY_PASS.items():
@@ -273,7 +292,7 @@ class TestALuckyStepIsNotConvergence:
             assert was > 0.15, (tol, was)
             st = _branch(system, LUCKY_LAMBDA, tol)
             if st.converged:
-                assert _rel(st.fos, root) < 0.25 * was, (tol, st.fos, was)
+                assert _rel(st.fos, root) < 0.30 * was, (tol, st.fos, was)
 
     def test_the_same_thing_on_a_published_model(self):
         """ACADS 1(a), force branch, at the tolerance ``ProjectSettings``

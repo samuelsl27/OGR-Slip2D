@@ -329,15 +329,62 @@ class TestTheForceBranchIsTheWedgeWhateverLambdaIs:
         return (("bare", _bare()),) + _both()
 
     def test_it_does_not_move_with_lambda_anchor_or_not(self):
+        """v0.1.179 (D145) — swept over the lambdas where the branch is
+        ADMITTED rather than over all four, because one of the twelve cells
+        stopped being admitted and the reason is in the case below. What
+        the class asserts is unchanged and is still asserted on at least
+        three lambdas per cell: where the branch has an answer, the answer
+        does not depend on lambda, to nine figures."""
         for name, project in self._cells():
             system = _system(project)
             seen = []
             for lam in self.LAMBDAS:
                 state = _force(system, lam, max_passes=MAX_IT)
-                assert state is not None and state.converged, (name, lam)
+                if state is None or not state.converged:
+                    continue
                 seen.append(state.fos)
+            assert len(seen) >= 3, (name, len(seen))
             spread = (max(seen) - min(seen)) / seen[0]
             assert spread < 1e-9, (name, spread, seen)
+
+    def test_and_the_one_cell_the_thrust_gate_takes_away(self):
+        """v0.1.179 (D145), and the honest half of the case above.
+
+        Of the twelve cells — three anchors times four lambdas — exactly one
+        is no longer admitted: the ACTIVE anchor at lambda 1.25. Its factor
+        of safety was right. It was 2.757457925, the same nine figures as
+        the other three lambdas of the same cell and the closed form of the
+        wedge, and it was right for the reason this whole class exists to
+        state: on a plane ``F_f`` comes out of the GLOBAL force balance and
+        does not depend on the thrust at all.
+
+        What the gate refuses is the STATE, not the factor. At that lambda
+        the thrust residual is 0.0679 of the force scale per pass — six and
+        a half per cent, climbing, and with the bound of D118 waiting at
+        1.425 — so the pair (F, X) is nowhere near a fixed point even
+        though F is exactly at one. The other two anchors keep the same
+        lambda and the same factor, at 84 and 52 passes; the active cell at
+        lambda -1.0 keeps its factor too and pays 48 passes for 92.
+
+        REPORTED AND NOT CORRECTED (rule 6), as D152: a force branch whose
+        factor provably does not depend on X is refused on the state of X.
+        Exempting it would need the solver to know that ``F_f`` telescopes,
+        which is a property of the SURFACE and not of the branch, and there
+        is no cheap test for it inside the loop. It is written down here
+        with the number in front so that whoever takes it can see what it
+        cost, exactly as this file's own defect was written down for
+        v0.1.179 to find.
+        """
+        cells = dict(self._cells())
+        system = _system(cells["active"])
+        lost = _force(system, 1.25, max_passes=MAX_IT)
+        assert lost is None or not lost.converged, lost
+        kept = [_force(system, lam, max_passes=MAX_IT)
+                for lam in (-1.0, 0.0, 0.8)]
+        assert all(s is not None and s.converged for s in kept)
+        spread = ((max(s.fos for s in kept) - min(s.fos for s in kept))
+                  / kept[0].fos)
+        assert spread < 1e-9, spread
 
     def test_and_it_is_the_closed_form(self):
         for name, project in self._cells():

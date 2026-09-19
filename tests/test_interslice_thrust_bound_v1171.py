@@ -223,6 +223,30 @@ def _lifted():
         interslice.THRUST_SCALE_LIMIT = keep
 
 
+@contextlib.contextmanager
+def _pair_off():
+    """The acceptance of 0.1.178: ask about F and not about the thrust.
+
+    Same idiom and same reason as ``_lifted`` above — the runner has no
+    ``monkeypatch`` and the switches are read at call time inside
+    ``solve_branch``. A tree without them has nothing to turn off, and
+    there the case below reads as the measurement it was before v0.1.179.
+    """
+    import ogr_slip2d.interslice as interslice
+    keep_t = getattr(interslice, "BRANCH_PAIR_TIGHTEN", None)
+    keep_s = getattr(interslice, "BRANCH_PAIR_SETTLE", None)
+    if keep_t is None or keep_s is None:
+        yield
+        return
+    interslice.BRANCH_PAIR_TIGHTEN = False
+    interslice.BRANCH_PAIR_SETTLE = False
+    try:
+        yield
+    finally:
+        interslice.BRANCH_PAIR_TIGHTEN = keep_t
+        interslice.BRANCH_PAIR_SETTLE = keep_s
+
+
 def _result(method_id, beta_deg=BETA, tolerance=1e-3):
     from ogr_slip2d.methods.base import method_registry
     from ogr_slip2d.slicer import slice_surface
@@ -561,30 +585,64 @@ class TestNothingThatWasAnAnswerMoves:
 
 # ======================================================================
 class TestWhatThisDoesNotFix:
-    """EVIDENCE for P-D116, reported and not corrected (rule 6).
+    """What was EVIDENCE for P-D116 and is now the record of its repair.
 
-    ``converged`` does not mean "sane" and this version does not make it
-    mean that. ``F_f`` is a quotient whose numerator and denominator are
-    dominated by the same runaway terms, so their RATIO can settle while
-    both explode, and the branch reports a fixed point it reached on
-    nonsense. The bound removes those states from the answer; it does not
-    stop the convergence test from being fooled, which is the other defect
-    and has its own ficha.
+    ``F_f`` is a quotient whose numerator and denominator are dominated by
+    the same runaway terms, so their RATIO can settle while both explode.
+    Until v0.1.179 the convergence test looked only at that ratio, and a
+    branch could report a fixed point it had reached on nonsense: the bound
+    of this version kept those states out of the ANSWER, but it did not stop
+    the test from being fooled. This class was pinned with the number in
+    front "so that the version which fixes P-D116 can see exactly what it
+    moved", and v0.1.179 (D145) is that version.
 
-    Pinned here with the number in front so that the version which fixes
-    P-D116 can see exactly what it moved.
+    What it moved, measured on the very branch pinned here: with the bound
+    lifted, the force branch of the 55 degree plane at lambda -5.55 used to
+    be declared converged with its thrust at more than 1e9 times the force
+    scale. It is not declared converged any more, because the acceptance now
+    asks about the thrust residual as well as the step in F, and this is the
+    most extreme case in the suite of the two disagreeing.
+
+    What still is not fixed, and stays here: ``converged`` does not mean
+    "admissible". The pair test asks whether X has stopped MOVING, and
+    ``thrust_is_admissible`` asks about the sign of the thrust it settled
+    on. They remain two different questions and v0.1.179 does not merge
+    them.
     """
 
-    def test_a_converged_branch_can_still_be_built_on_a_runaway(self):
+    def test_a_converged_branch_is_no_longer_built_on_a_runaway(self):
+        """v0.1.179 (D145) — the flip this class was written to record. The
+        aserrtions are the same three facts about the same branch; the one
+        that changed is the verdict, and it changed from True to False.
+
+        The two thrust facts are asserted BEFORE the verdict and unchanged,
+        so that the case cannot go green because the fixture stopped
+        producing a runaway — which is how a test of a repaired defect
+        quietly stops measuring anything.
+        """
         from ogr_slip2d.interslice import THRUST_SCALE_LIMIT
         system = _system(55.0)
         limit = THRUST_SCALE_LIMIT * _scale(system)
-        with _lifted():
+        with _pair_off(), _lifted():
             fooled = _branch(system, -5.55, tolerance=1e-3, moment=False,
                              max_passes=400)
+        # The three facts this class was pinned with, unchanged and asserted
+        # FIRST: the branch was declared converged, and its thrust was past
+        # a billion times the force scale while it said so. Measured with
+        # the old acceptance, because they describe what v0.1.179 moved
+        # away from — and because a case that only asserted the new verdict
+        # would go green the day the fixture stopped producing a runaway.
         assert fooled is not None and fooled.converged is True
         assert _peak(fooled) > 1e9 * _scale(system), _peak(fooled)
         assert _peak(fooled) > limit
+        # And the verdict. ``None`` and not merely "not converged": with the
+        # bound lifted the branch runs on and leaves through one of the
+        # guards that refuse a state outright, which is a stronger answer
+        # than the one this class was written expecting.
+        with _lifted():
+            now = _branch(system, -5.55, tolerance=1e-3, moment=False,
+                          max_passes=400)
+        assert now is None or now.converged is False, now.fos
 
     def test_and_the_bound_is_what_keeps_it_out_of_the_answer(self):
         system = _system(55.0)

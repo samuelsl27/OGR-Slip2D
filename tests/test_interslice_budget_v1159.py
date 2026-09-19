@@ -353,6 +353,20 @@ class TestTheFallbackSaysWhatItIsWithoutVetoingIt:
 
     BETA = 45.0
 
+    #: v0.1.179 (D145) — the tolerance these cases ask for went from 1e-3
+    #: to 1e-4, and the plane, the anchor and the mechanism are the same
+    #: ones. The thrust gate of this version removes two lambda samples of
+    #: this sweep that used to be accepted while their inter-slice thrust
+    #: was still moving, and the best sample that survives is CLOSER: at
+    #: 1e-3 the residual falls from 0.00104 to 0.00069, which is now under
+    #: the tolerance itself and so no longer an example of the boundary
+    #: this class is about. One notch tighter it is 0.00117, still between
+    #: the tolerance and FALLBACK_RESIDUAL_LIMIT, and the class says the
+    #: same thing about the same plane. The band was not widened to keep a
+    #: case green — it moved because its cause moved, and the direction it
+    #: moved in is the fallback getting better.
+    BAND_TOL = 1e-4
+
     def _fallback(self, tolerance):
         from ogr_core.support import ForceApplication
         r = _result("spencer", _anchored(ForceApplication.PASSIVE),
@@ -363,7 +377,7 @@ class TestTheFallbackSaysWhatItIsWithoutVetoingIt:
 
     def test_the_boundary_is_not_the_tolerance_and_is_named(self):
         from ogr_slip2d.interslice import FALLBACK_RESIDUAL_LIMIT
-        r, details = self._fallback(1e-3)
+        r, details = self._fallback(self.BAND_TOL)
         assert details["lambda_residual"] >= details["lambda_tolerance"]
         assert details["lambda_residual"] < FALLBACK_RESIDUAL_LIMIT
         assert r.converged is True, "the boundary is not the tolerance"
@@ -372,7 +386,7 @@ class TestTheFallbackSaysWhatItIsWithoutVetoingIt:
         """Which is the whole repair: the answer stays usable and stops
         being silent about what it is."""
         from ogr_slip2d.analysis_runner import lambda_fallback_notes
-        r, details = self._fallback(1e-3)
+        r, details = self._fallback(self.BAND_TOL)
         notes = lambda_fallback_notes(r)
         assert notes, "a fallback above the tolerance has to be reportable"
         assert "%.3g" % details["lambda_residual"] in notes[0], notes[0]

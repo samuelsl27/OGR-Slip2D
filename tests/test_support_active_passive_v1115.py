@@ -478,6 +478,28 @@ class TestVerificationProblem85:
     here from +0.14 % to −8.62 % without touching anything this class is
     about. The bands are 2 % and 1.5 % for that reason and tightening them
     would be asserting the stability of a fallback.
+
+    v0.1.179 (D145) — and the fallback moved, so the two assertions that
+    warning was written about are gone, and what replaces them is the part
+    that does not move. The λ sample which used to carry the bracket,
+    λ = 1.5, was admitted on two branches whose inter-slice thrust was
+    travelling at 35 times the tolerance per pass and which, continued, run
+    away into the thrust bound on passes 127 and 123. With the acceptance
+    asking about the thrust as well as about F that sample is refused, the
+    nearest one left is λ = 1.0, and GLE reports 1.6083 Active and 1.3588
+    Passive — +2.12 % of the published figure, outside the 2 % band. That
+    is not a formulation moving: it is the same fallback the warning above
+    describes, landing somewhere else now that it cannot rest on a runaway.
+
+    It is also what v0.1.176 measured independently and wrote down for this
+    problem: φ' = 0 makes F_m exactly constant, and the FORCE branch loses
+    its fixed point to the thrust bound from λ = 1.51 on, before it can
+    ever cross F_m. There is no root here to find. So the honest statements
+    are the ones below. Bishop, which never enters the λ search, reproduces
+    the published figure to −0.42 %; and GLE's MOMENT branch equals Bishop's
+    factor to the last bit at every λ, which is the φ' = 0 closed form
+    asserted as the identity it is instead of as a 1.5 % band drawn around
+    a fallback.
     """
 
     CENTRE = (15.446, 37.624)
@@ -519,13 +541,68 @@ class TestVerificationProblem85:
         return _fos(method_id, self._project(application), self._surface(),
                     num_slices=100)
 
-    def test_gle_reproduces_the_published_active_factor(self):
+    def _moment_branch(self, application):
+        """GLE's moment branch on this circle, at three inclinations.
+
+        Captured off the class the way the bank's measuring tools do it and
+        not rebuilt, because the system is a local of ``compute_fos`` and a
+        helper that builds one "the same way" measures a different system.
+        """
+        import ogr_slip2d.interslice as interslice
+        from ogr_slip2d.analysis_runner import build_search
+        from ogr_slip2d.methods.gle import GLEMorgensternPrice
+
+        project = self._project(application)
+        project.settings.methods.num_slices = 100
+        cap = []
+        orig = GLEMorgensternPrice._inner_solve
+
+        def spy(self_, slices, lam, system):
+            cap.append(system)
+            return orig(self_, slices, lam, system)
+
+        GLEMorgensternPrice._inner_solve = spy
+        try:
+            build_search(project, "gle_morgenstern_price").evaluate_surface(
+                project, self._surface())
+        finally:
+            GLEMorgensternPrice._inner_solve = orig
+        assert cap, "GLE never solved a branch on this circle"
+        system = cap[-1]
+        return [interslice.solve_branch(
+            system.rows, system.lambda_boundary(lam), system._moment_fos,
+            system.tolerance, system.initial_fos,
+            max_passes=system.max_passes) for lam in (0.0, 0.4, 1.0)]
+
+    def test_bishop_reproduces_the_published_active_factor(self):
+        """v0.1.179 (D145) — Bishop and not GLE, because Bishop is the one
+        with an answer here: it does not enter ``interslice.py``, there is no
+        λ search in its way, and it lands −0.42 % from the published figure.
+        GLE's own agreement, until this version, was a fallback resting on a
+        runaway branch; see the class docstring."""
         from ogr_core.support import ForceApplication
-        got = self._fos("gle_morgenstern_price", ForceApplication.ACTIVE)
+        got = self._fos("bishop_simplified", ForceApplication.ACTIVE)
         err = (got - self.PUBLISHED_ACTIVE) / self.PUBLISHED_ACTIVE
         assert abs(err) < 0.02, (
-            f"GLE gives {got:.6f} on the published circle against "
+            f"Bishop gives {got:.6f} on the published circle against "
             f"{self.PUBLISHED_ACTIVE} ({100 * err:+.2f} %)")
+
+    def test_and_gle_says_it_has_no_root_here_instead_of_guessing(self):
+        """v0.1.179 (D145) — rule 7 in the affirmative. Losing the bracket
+        must not be silent: the result comes back not converged and with the
+        reason in its message, which is what makes the figure above readable
+        as Bishop's answer and not as the package's."""
+        from ogr_core.support import ForceApplication
+        from ogr_slip2d.analysis_runner import build_search
+        for app in (ForceApplication.ACTIVE, ForceApplication.PASSIVE):
+            project = self._project(app)
+            project.settings.methods.num_slices = 100
+            r = build_search(project,
+                             "gle_morgenstern_price").evaluate_surface(
+                project, self._surface())
+            assert r is not None and r.converged is False, (app.value, r.fos)
+            assert (r.details or {}).get("lambda_search_fell_back") is True
+            assert "bracket" in (r.error_message or ""), r.error_message
 
     def test_the_setting_moves_it_by_more_than_a_tenth(self):
         """The manual separates its own Bishop pair by 13.5 % and its GLE
@@ -536,14 +613,24 @@ class TestVerificationProblem85:
         fp = self._fos("gle_morgenstern_price", ForceApplication.PASSIVE)
         assert (fa - fp) / fa > 0.10, (fa, fp)
 
-    def test_bishop_and_gle_agree_on_this_circle_in_both_settings(self):
+    def test_bishop_and_gles_moment_branch_are_the_same_number(self):
         """φ' = 0 makes the moment balance a ratio of two sums with no base
         normal in it, so a simplified method and a complete-equilibrium one
-        have nothing left to differ about. GLE was 0.80 % from Bishop in
-        Active and 18.63 % in Passive; it is 0.72 % and 1.22 % now."""
+        have nothing left to differ about.
+
+        v0.1.179 (D145) — asserted on GLE's MOMENT BRANCH rather than on
+        what GLE publishes, and TIGHTENED from 1.5 % to an identity, which
+        is allowed because its cause changed: what the old form compared was
+        a fallback midpoint between two branches that never meet, so it was
+        measuring the fallback's error and calling it a formulation.
+        Measured now: 2.2e-16 in Active and exactly zero in Passive, at
+        every λ — which also states the other half of the closed form,
+        that with φ' = 0 the moment branch does not depend on λ at all.
+        """
         from ogr_core.support import ForceApplication
         for app in (ForceApplication.ACTIVE, ForceApplication.PASSIVE):
             b = self._fos("bishop_simplified", app)
-            g = self._fos("gle_morgenstern_price", app)
-            assert abs(b - g) / b < 0.015, (
-                f"{app.value}: Bishop {b:.6f} against GLE {g:.6f}")
+            for state in self._moment_branch(app):
+                assert state is not None and state.converged, app.value
+                assert abs(state.fos - b) <= 8.0 * 2.3e-16 * abs(b), (
+                    f"{app.value}: Bishop {b!r} against F_m {state.fos!r}")

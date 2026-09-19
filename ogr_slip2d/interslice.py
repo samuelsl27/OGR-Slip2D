@@ -358,6 +358,48 @@ RESCUE_OMEGA_MAX = 5.0
 #: is v0.1.175 bit for bit.
 BRANCH_RESCUE = True
 
+#: v0.1.179 (D145) — the two halves of the acceptance this version changes,
+#: each with its own switch and for the same reason ``BRANCH_RESCUE`` has
+#: one: an A/B that moves two things at once attributes neither. Read at
+#: call time so a test can turn either off in-process.
+#:
+#: ``BRANCH_PAIR_TIGHTEN`` refuses an acceptance while the thrust is still
+#: moving by more than the tolerance. It can only ever REFUSE, never admit,
+#: so with it alone no branch converges sooner than it did. Measured on the
+#: bench: the branch of verification problem 087 under GLE at lambda 3.0 is
+#: admitted on pass 45 with a thrust residual of 885 times the tolerance and
+#: its thrust still growing — a beat node of an iteration that diverges, and
+#: pass 45 is far enough ahead of ``STALL_PATIENCE`` that the rescue, which
+#: has had this gate since v0.1.176, never sees it.
+#:
+#: ``BRANCH_PAIR_SETTLE`` admits a branch whose two residuals have both been
+#: under the tolerance for two consecutive passes, without asking the
+#: contraction test for two shrinking steps. It can only ever ADMIT, never
+#: refuse. It exists because a converging branch need not contract
+#: monotonically: on the published circle of problem 091 at 30 slices the
+#: force branch alternates — 6.10e-4, 6.22e-4, 3.18e-4, 3.26e-4, 1.65e-4,
+#: 1.71e-4 — with the envelope halving every two passes and
+#: ``step < prev_step < prev_step_2`` therefore never true. That branch sits
+#: on its answer from pass 21 and is admitted on pass 107, when the pattern
+#: finally breaks by rounding; at a neighbouring lambda it is never admitted
+#: at all and the sample is lost to the stall test.
+#:
+#: Why BOTH and not one rule. The contraction path admits a cleanly
+#: contracting branch one pass EARLIER than two-consecutive can, so keeping
+#: it is what leaves those branches where they were: measured over the
+#: bench, the pass a branch is admitted on does not move unless the thrust
+#: gate refuses it. And the second path cannot be given the first one's
+#: three-pass floor by accident — hence ``_pass > 1`` below, which is not a
+#: number but the rule that a new way in may not cost LESS history than the
+#: one it is added to. Without it, the wedge of 50 degrees at lambda 0 and
+#: tolerance 5e-3 — one cell in the sixteen measured, and a cell
+#: ``tests/test_branch_contraction_v1172`` sweeps — has its first two steps
+#: already inside the tolerance (1.411e-3 and 1.029e-3) and would be
+#: admitted on pass 2, which is the two-pass accidental acceptance D116
+#: exists to refuse.
+BRANCH_PAIR_TIGHTEN = True
+BRANCH_PAIR_SETTLE = True
+
 
 # ----------------------------------------------------------------------
 def branch_budget(max_iterations: int) -> int:
@@ -702,6 +744,12 @@ def solve_branch(
     omega = 0.5
     d_x = 0.0
     ok_before = False
+    # v0.1.179 (D145) — the previous pass's thrust residual, kept
+    # explicitly beside ``prev_step`` although ``d_x`` itself still holds it
+    # at the top of the loop: a condition that reads ``d_x`` up there looks
+    # like this pass's number and is the previous one, and a comment
+    # defending a confusing read is worth less than a float.
+    prev_d_x = -math.inf
 
     for _pass in range(max_passes):
         passes += 1
@@ -715,8 +763,17 @@ def solve_branch(
         # over would change the pass it is admitted on and with it the
         # digit — problem 091 at 30 slices pins its Spencer factor bit for
         # bit and this is what keeps it. See RESCUE_OMEGA_MIN.
+        # v0.1.179 (D145) — and a branch whose F has settled while its
+        # THRUST has not is taken over too. Without this it could not be
+        # admitted (the gate below refuses it), could not be rescued (this
+        # test used to ask only about F) and need not stall, so it ran to
+        # MAX_PASSES and was counted as a branch that "was still making
+        # progress when it was cut" — a fifth way out of this loop, wearing
+        # the name of a fourth. The tightening creates that state, so the
+        # tightening closes it: both halves answer to the same switch.
         if (BRANCH_RESCUE and not rescuing and _pass >= patience
-                and prev_step >= tolerance):
+                and (prev_step >= tolerance
+                     or (BRANCH_PAIR_TIGHTEN and prev_d_x >= tolerance))):
             rescuing = True
             best_step = math.inf
             stall = 0
@@ -808,27 +865,47 @@ def solve_branch(
             break
 
         # X_0 and X_n stay at zero: both ends of the surface are free.
-        if rescuing:
-            # v0.1.176 (D125) — the thrust residual: how far the X the march
-            # used sits from the X it produced, relative to the force scale
-            # like the thrust bound. The rescue accepts nothing while this
-            # is above the tolerance, because F can sit at the fixed point
-            # OF THE CURRENT X while X is far from its own — the lucky step
-            # of D116 seen from the other side. Fused into the update that
-            # already visits every boundary, for the reason the thrust peak
-            # above is fused into the march.
-            d_x = 0.0
-            for i in range(1, n):
-                target = lam_boundary[i] * E[i]
-                d = abs(target - X[i])
-                if d > d_x:
-                    d_x = d
-                X[i] = target
-            if force_scale > 0.0:
-                d_x /= force_scale
-        else:
-            for i in range(1, n):
-                X[i] = lam_boundary[i] * E[i]
+        #
+        # v0.1.176 (D125) — the thrust residual: how far the X the march
+        # used sits from the X it produced, relative to the force scale like
+        # the thrust bound. Nothing is accepted while this is above the
+        # tolerance, because F can sit at the fixed point OF THE CURRENT X
+        # while X is far from its own — the lucky step of D116 seen from the
+        # other side. Fused into the update that already visits every
+        # boundary, for the reason the thrust peak above is fused into the
+        # march.
+        #
+        # v0.1.179 (D145) — measured on EVERY pass, where until now it was
+        # measured only after the rescue had taken the branch over. The
+        # sentence above was already written and already true; what it
+        # described was half the solver. The extra work is a subtraction, an
+        # abs and a comparison per interior boundary, against the ~170
+        # operations a slice already costs in this same pass: about +9 % of
+        # the branch solver, and 0 % of the seven methods that never enter
+        # this file. It is NOT folded into the march even though the
+        # arithmetic would allow it, because the thrust bound breaks out
+        # BETWEEN the two on purpose and ``spencer.py`` publishes
+        # ``force.boundary_x`` of abandoned states.
+        d_x = 0.0
+        for i in range(1, n):
+            target = lam_boundary[i] * E[i]
+            d = abs(target - X[i])
+            if d > d_x:
+                d_x = d
+            X[i] = target
+        if force_scale > 0.0:
+            d_x /= force_scale
+        # A surface with no load and no strength anywhere has a force scale
+        # of zero and d_x is then left unnormalised. That is right, and the
+        # reason has to be derived here rather than borrowed from
+        # ``_force_scale``, whose docstring says such a surface produces
+        # E = 0 everywhere and is wrong about it: with pore pressure and
+        # friction but no weight, n_i and s_i are not zero. What makes the
+        # gate safe is the bound above, not the scale — ``thrust_limit`` is
+        # ``THRUST_SCALE_LIMIT * 0.0 = 0.0`` and it breaks out BEFORE this
+        # loop, so every pass that reaches here has E identically zero, X
+        # already zero and d_x exactly 0.0. The gate is trivially open,
+        # never absurd.
 
         if moment_fos is None:
             num = 0.0
@@ -901,6 +978,12 @@ def solve_branch(
         # Updated before the test, so that it also happens on the passes
         # that leave through one of the ``break``s below.
         prev_step_2, prev_step = prev_step, step
+        prev_d_x = d_x
+        # v0.1.179 (D145) — the state of this loop is the PAIR (F, X), and
+        # until this version the acceptance asked about half of it. Both
+        # residuals under the tolerance is what ``ok_now`` says; what the
+        # three paths below differ in is how much history has to agree.
+        ok_now = step < tolerance and d_x < tolerance
         if rescuing:
             # v0.1.176 (D125) — two consecutive passes with BOTH residuals
             # under the tolerance, instead of the contraction test. A
@@ -913,19 +996,39 @@ def solve_branch(
             # The repetition stands in for the contraction: a lucky small
             # step is followed by a large one, two in a row are not luck,
             # and the thrust residual closes the door D116 measured.
-            ok_now = step < tolerance and d_x < tolerance
             if ok_now and ok_before:
                 F = f_new
                 converged = True
                 rescued = True
                 break
-            ok_before = ok_now
         # v0.1.100 — not on the first pass; see
         # ``BishopSimplified._general_moment_fos``.
-        elif _pass > 0 and step < tolerance and contracting:
+        # v0.1.179 (D145) — and not while the thrust is still moving. This
+        # clause can only REFUSE: a branch that contracts cleanly with its
+        # thrust already settled is admitted on exactly the pass it was
+        # admitted on before.
+        elif (_pass > 0 and step < tolerance and contracting
+                and (d_x < tolerance or not BRANCH_PAIR_TIGHTEN)):
             F = f_new
             converged = True
             break
+        # v0.1.179 (D145) — two consecutive passes with the whole state
+        # inside the tolerance, for the converging branch whose steps
+        # alternate instead of shrinking. ``_pass > 1`` gives this path the
+        # same three-pass floor the contraction test pays for its two
+        # ratios; see BRANCH_PAIR_SETTLE for the cell that proves it is
+        # load-bearing. It comes AFTER the contraction clause and not
+        # before, and that order is what keeps the pass counts: where both
+        # could fire, contraction fires one pass sooner.
+        elif BRANCH_PAIR_SETTLE and _pass > 1 and ok_now and ok_before:
+            F = f_new
+            converged = True
+            break
+        # v0.1.179 (D145) — maintained on every pass now, because the
+        # path that reads it is no longer only the rescue's. A pass that
+        # accepts leaves through one of the breaks above and never gets
+        # here, which is what it meant inside the rescue too.
+        ok_before = ok_now
         # v0.1.159 (D63) — STALLING, not budget. The step of a fixed point
         # that contracts beats its own record on every pass; the step of an
         # iterate that wanders never beats it again. Counting passes could
