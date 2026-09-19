@@ -40,8 +40,8 @@ from ..surface import SlipCircle, SurfaceProtocol
 from .base import (
     REASON_ALL_LAMBDA_DIVERGED,
     REASON_DIVERGENT_AT_LAMBDA,
+    REASON_LAMBDA_NOT_CLOSED,
     REASON_NO_LAMBDA_BRACKET,
-    REASON_NOT_CONVERGED,
     LEMMethod,
     LEMResult,
     register_method,
@@ -327,6 +327,15 @@ class Spencer(LEMMethod):
                 error_message="Spencer: divergent at final λ",
                 reason=REASON_DIVERGENT_AT_LAMBDA,
             )
+        # v0.1.180 (D146) — what the λ search actually achieved, measured on
+        # the pair that produces the factor being returned rather than on
+        # ``g_lo``, which can be one refinement stale. The width is what
+        # separates the four ways this loop fails to close: a bracket at the
+        # floor of the double has no λ left to sample, while a wide one was
+        # still being refined when the budget ran out. See
+        # ``REASON_LAMBDA_NOT_CLOSED``.
+        lam_residual = abs(ff_final - fm_final)
+        lam_width = abs(lam_hi - lam_lo)
         force, moment = system.states(lam_lo)
         normals, _mobilised, strengths = _base_forces(system, force)
         # v0.1.107 - ``base_shear_force`` is the DRIVING force in every
@@ -344,8 +353,19 @@ class Spencer(LEMMethod):
             fos=0.5 * (ff_final + fm_final),
             converged=converged,
             iterations=iterations,
-            error_message="" if converged else self.NOT_CONVERGED_NOTE,
-            reason="" if converged else REASON_NOT_CONVERGED,
+            # v0.1.180 (D146) — this used to be ``NOT_CONVERGED_NOTE`` and
+            # ``REASON_NOT_CONVERGED``, a sentence about "the factor of
+            # safety iteration" that never mentions λ and a code Bishop and
+            # Janbu give for their own, unrelated loop. What failed here is
+            # the OUTER search for λ, and the three numbers below are what
+            # tell its four failure modes apart. See
+            # ``REASON_LAMBDA_NOT_CLOSED``.
+            error_message=("" if converged else
+                           "Spencer: the λ bracket did not close; "
+                           "F_f − F_m is %.3g at λ = %.6g, with the bracket "
+                           "at %.3g after %d iterations"
+                           % (lam_residual, lam_lo, lam_width, iterations)),
+            reason="" if converged else REASON_LAMBDA_NOT_CLOSED,
             method_id=self.METHOD_ID, surface=surface, slices=slices,
             base_normal_force=normals,
             base_shear_force=driving,
@@ -386,6 +406,18 @@ class Spencer(LEMMethod):
                 # v0.1.176 (D125) — see the fallback branch above.
                 "lambdas_lost_to_stall": system.n_stalled,
                 "lambdas_rescued": system.n_rescued,
+                # v0.1.180 (D146) — the diagnosis of the λ search itself,
+                # which this exit could not give until now. ``None`` when a
+                # root WAS closed, and that is not coyness: below the
+                # tolerance the residual says nothing ``lambda_tolerance``
+                # does not already say, and writing a number there would
+                # turn 229 archived nulls in the verification bank into
+                # values for no defect. Present therefore means the same on
+                # both exits of this method — the λ search did not close a
+                # root by refinement.
+                "lambda_residual": None if converged else lam_residual,
+                "lambda_tolerance": self.tolerance,
+                "lambda_bracket_width": lam_width,
                 # Constant interslice ratio at every boundary (Spencer).
                 "boundary_ratios": [lam_lo] * (len(slices.slices) + 1),
                 # v0.1.106 — the inter-slice forces themselves, which this

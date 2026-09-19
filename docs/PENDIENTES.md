@@ -872,11 +872,38 @@ el criterio ordinario no, y cambiarlo mueve todas las ramas.
 
 ---
 
-## 14 · g(λ) discontinua por una rama de momentos biestable — ABIERTO (v0.1.176)
+## 14 · g(λ) discontinua por una rama de momentos biestable — CERRADO en v0.1.180, con la premisa REFUTADA
 
-Ficha **D146** del banco. En el 059 sin soporte a 5e-5 la rama de momentos
-tiene dos puntos fijos a 0,9 % (0,55712 / 0,55233) que se alternan entre dos
-dobles adyacentes de λ; g salta de signo sin cruzar cero, el bucle secante
-quema las 50 iteraciones y devuelve NOT_CONVERGED sin decir que lo que no
-cierra es λ. Hace falta una razón propia («g discontinua») y entender la
-biestabilidad antes de elegir un punto fijo.
+Ficha **D146** del banco. Decía que en el 059 sin soporte a 5e-5 la rama de
+momentos tiene **dos puntos fijos** a 0,9 % (0,55712 / 0,55233) que se
+alternan entre dos dobles adyacentes de λ, que g salta de signo sin cruzar
+cero y que el bucle secante quema las 50 iteraciones y devuelve
+NOT_CONVERGED sin decir que lo que no cierra es λ.
+
+**Los números reproducen; el mecanismo no.** Medido en v0.1.180:
+
+- en ese λ la rama de momentos tiene **UN** atractor. Desde nueve arranques
+  de F entre 0,3 y 3,0 cae siempre en 0,557096–0,557239, todos
+  `converged=True` y ninguno rescatado. Los nueve se agrupan treinta veces
+  más cerca entre sí de lo que cualquiera está de 0,552329138;
+- sobre **trece dobles adyacentes** de λ el motor enviado devuelve UN valor
+  de F_m, en la pasada 27 los trece. Con `BRANCH_PAIR_TIGHTEN` y
+  `BRANCH_PAIR_SETTLE` apagados devuelve DOS, y el segundo se acepta en la
+  pasada **11**: 0,55233 no es un punto fijo, es la aceptación prematura de
+  **D145** vista desde fuera;
+- y el desempate es la tolerancia: con esos interruptores apagados el fallo
+  existe a 5e-5 **y en ninguna otra** de las medidas (1e-3, 5e-4, 1e-4, 1e-5,
+  1e-6, 1e-7). Una discontinuidad de g no se arregla pidiendo más precisión;
+  una aceptación prematura sí.
+
+Así que D146 era D145 visto desde el bucle de λ, y **v0.1.179 lo cerró sin
+que nadie se diera cuenta**. Lo que v0.1.180 corrige es la mitad
+independiente del mecanismo refutado: la salida ya no responde con
+`REASON_NOT_CONVERGED` —la cadena del lazo de Bishop y Janbu— sino con
+`REASON_LAMBDA_NOT_CLOSED`, nombrando el residuo, la anchura a la que quedó
+la horquilla y las iteraciones gastadas, y `lambda_fallback_notes` la narra.
+Censo en `docs/audits/lambda_closure_v1180.md`; test
+`tests/test_lambda_closure_v1180.py`.
+
+**El corte temprano NO se implementa**: una horquilla colapsada sigue
+gastando `max_iterations` enteras antes de decirlo. Ficha aparte.

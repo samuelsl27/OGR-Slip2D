@@ -75,6 +75,26 @@ REASON_ALL_LAMBDA_DIVERGED = "all_lambda_diverged"
 REASON_NO_LAMBDA_BRACKET = "no_lambda_bracket"
 #: The branch diverged at the interslice ratio finally chosen.
 REASON_DIVERGENT_AT_LAMBDA = "divergent_at_lambda"
+#: The bracket on lambda was found and then refined, and the secant still
+#: did not close it: ``|F_f - F_m|`` is above the requested tolerance at the
+#: lambda being handed back.
+#:
+#: v0.1.180 (D146) — it used to be ``REASON_NOT_CONVERGED``, which is the
+#: string Bishop and Janbu give for a completely different loop: their
+#: factor-of-safety iteration. Two loops that fail for unrelated reasons
+#: cannot be told apart by a caller that groups by reason, and grouping is
+#: the whole point of these constants (D56). The message that travels with
+#: it names the residual, the width the bracket collapsed to and how many
+#: iterations were spent, because those three are what separate the four
+#: ways this loop can fail to close — see ``docs/audits/lambda_closure_*``.
+#:
+#: The name says what is OBSERVED and not why. The ficha that asked for it
+#: proposed "g is discontinuous", and this version's own measurement refutes
+#: that mechanism: what produced the only known jump was the premature
+#: acceptance D145 closed, not a second fixed point. Writing a mechanism
+#: into a constant is how ``TestAWedgeWithNoRootSaysSo`` spent two versions
+#: asserting true things under a false name.
+REASON_LAMBDA_NOT_CLOSED = "lambda_not_closed"
 #: The prescribed-inclination force balance found no bracket, so what it
 #: has is the sampled F of smallest residual — a fallback, not a solution.
 REASON_NO_FORCE_BRACKET = "no_force_bracket"
@@ -100,6 +120,7 @@ ALL_REASONS = frozenset({
     REASON_ALL_LAMBDA_DIVERGED,
     REASON_NO_LAMBDA_BRACKET,
     REASON_DIVERGENT_AT_LAMBDA,
+    REASON_LAMBDA_NOT_CLOSED,
     REASON_NO_FORCE_BRACKET,
     REASON_FORCE_BALANCE_DIVERGED,
     REASON_DRAWDOWN_NOT_APPLICABLE,

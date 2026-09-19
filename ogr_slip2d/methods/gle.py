@@ -35,8 +35,8 @@ from ..surface import SlipCircle, SurfaceProtocol
 from .base import (
     REASON_ALL_LAMBDA_DIVERGED,
     REASON_DIVERGENT_AT_LAMBDA,
+    REASON_LAMBDA_NOT_CLOSED,
     REASON_NO_LAMBDA_BRACKET,
-    REASON_NOT_CONVERGED,
     REASON_NO_SLICES,
     LEMMethod,
     LEMResult,
@@ -392,6 +392,11 @@ class GLEMorgensternPrice(LEMMethod):
                 error_message="GLE: divergent at final λ",
                 reason=REASON_DIVERGENT_AT_LAMBDA,
             )
+        # v0.1.180 (D146) — see ``Spencer.compute_fos``: measured on the pair
+        # that produces the factor being returned and not on ``g_lo``, which
+        # can be one refinement stale.
+        lam_residual = abs(ff_final - fm_final)
+        lam_width = abs(lam_hi - lam_lo)
         force, moment = system.states(lam_lo)
         from .spencer import _base_forces
         normals, _mobilised, strengths = _base_forces(system, force)
@@ -408,8 +413,16 @@ class GLEMorgensternPrice(LEMMethod):
             fos=0.5 * (ff_final + fm_final),
             converged=converged,
             iterations=iterations,
-            error_message="" if converged else self.NOT_CONVERGED_NOTE,
-            reason="" if converged else REASON_NOT_CONVERGED,
+            # v0.1.180 (D146) — see ``Spencer.compute_fos``: what failed here
+            # is the OUTER search for λ, and it used to answer with the code
+            # and the sentence of the factor-of-safety iteration of Bishop
+            # and Janbu. See ``REASON_LAMBDA_NOT_CLOSED``.
+            error_message=("" if converged else
+                           "GLE: the λ bracket did not close; "
+                           "F_f − F_m is %.3g at λ = %.6g, with the bracket "
+                           "at %.3g after %d iterations"
+                           % (lam_residual, lam_lo, lam_width, iterations)),
+            reason="" if converged else REASON_LAMBDA_NOT_CLOSED,
             method_id=self.METHOD_ID, surface=surface, slices=slices,
             base_normal_force=normals,
             base_shear_force=driving,
@@ -436,6 +449,11 @@ class GLEMorgensternPrice(LEMMethod):
                 # v0.1.176 (D125) — see the fallback branch above.
                 "lambdas_lost_to_stall": system.n_stalled,
                 "lambdas_rescued": system.n_rescued,
+                # v0.1.180 (D146) — see ``Spencer.compute_fos`` for why the
+                # residual is ``None`` when a root WAS closed.
+                "lambda_residual": None if converged else lam_residual,
+                "lambda_tolerance": self.tolerance,
+                "lambda_bracket_width": lam_width,
                 # Boundary ratios λ·f(x) evaluated at the n+1 slice
                 # boundaries with x normalised over the surface span. The
                 # solver uses exactly this list (v0.1.106).

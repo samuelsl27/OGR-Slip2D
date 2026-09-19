@@ -1078,17 +1078,28 @@ def lambda_fallback_notes(result) -> list[str]:
       circle of verification problem 091 it was the whole reason behind
       "no lambda-bracket".
 
-    None of them fires when a bracket was found and refined, because then
-    the answer is a root and there is nothing to warn about.
+    v0.1.180 (D146) — and a FIFTH thing, which is the one this function
+    could not say. A bracket that was found and then refined without closing
+    is not the fallback at all: it is the other exit of the same search, and
+    until this version the gate below turned it away, so the exit where the
+    solver has most to explain was the one that explained nothing. It gets
+    its own opening sentence because the fallback's would be false for it —
+    there IS an inclination where the two factors cross, and the refinement
+    is what did not reach it — while the three counters underneath mean
+    exactly the same thing on both exits, which is why they are shared.
     """
+    from .methods.base import REASON_LAMBDA_NOT_CLOSED
+
     details = getattr(result, "details", None) or {}
-    if not details.get("lambda_search_fell_back"):
+    fell_back = bool(details.get("lambda_search_fell_back"))
+    not_closed = getattr(result, "reason", "") == REASON_LAMBDA_NOT_CLOSED
+    if not (fell_back or not_closed):
         return []
 
     notes: list[str] = []
     residual = details.get("lambda_residual")
     tolerance = details.get("lambda_tolerance")
-    if (residual is not None and tolerance is not None
+    if (fell_back and residual is not None and tolerance is not None
             and residual >= tolerance):
         notes.append(
             "no inclination of the inter-slice forces makes the force and "
@@ -1096,6 +1107,16 @@ def lambda_fallback_notes(result) -> list[str]:
             "the closest sampled inclination rather than a solved one: its "
             "two factors differ by %.3g, against a convergence tolerance of "
             "%.3g." % (residual, tolerance))
+    elif not_closed and residual is not None and tolerance is not None:
+        notes.append(
+            "an inclination of the inter-slice forces where the force and "
+            "the moment factors of safety cross WAS found, and refining it "
+            "did not close the gap: the two factors still differ by %.3g "
+            "against a convergence tolerance of %.3g, with the interval "
+            "narrowed to %.3g. The factor reported is the one at that "
+            "inclination, not a solved root."
+            % (residual, tolerance,
+               details.get("lambda_bracket_width") or 0.0))
 
     lost = int(details.get("lambdas_lost_to_budget") or 0)
     if lost > 0:
