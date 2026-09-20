@@ -1302,6 +1302,105 @@ def refine_lambda_gap(samples, solve, nodes, steps: int = GAP_REFINE_STEPS):
     return found
 
 
+#: v0.1.182 (D149) -- whether a lambda the thrust criterion set aside may be
+#: put back when, and ONLY when, nothing else bracketed.
+#:
+#: WHY IT IS NOT THE SAME AS RELAXING THE CRITERION. ``thrust_is_admissible``
+#: is a PREFERENCE over which lambda the search prefers, and this version does
+#: not touch it. What it fixes is that the preference was being applied to the
+#: SCAFFOLDING: the criterion is evaluated at grid NODES, the answer is not at
+#: a node, and deleting a node deletes the bracket that node was one side of.
+#: The root that vanishes with it may itself be perfectly admissible.
+#:
+#: WHERE THE LINE FALLS, because it splits this defect in two and only one
+#: half is left. Write lam_E for where the interior thrust sum crosses zero
+#: and lam_g for where ``F_f - F_m`` does. With lam_E BELOW lam_g the root is
+#: admissible and :func:`refine_lambda_gap` already finds it -- its probes
+#: walk from the surviving edge into the lost node and land between the two.
+#: That half was cured by v0.1.181 as a side effect, four versions after the
+#: bank reported it, and the cell the ticket named is now bit-exact on the
+#: closed form. With lam_g BELOW lam_E the refinement probes AWAY from the
+#: root, towards lam_E, and burns its budget without crossing anything. That
+#: half is what this recovers.
+#:
+#: MEASURED, and the number is zero. Over the whole verification bank at
+#: 0.1.181 -- 340 rows, 334 measured -- not one takes this path: 310 have no
+#: lambda rejected at all, 3 have none left (the v0.1.106 sweep already
+#: fires), 1 brackets on its own and 20 have the shape but no sign change
+#: anywhere in grid or extension, so the recovery below rolls back on every
+#: one of them. All 24 rows that reject anything are reinforced models, which
+#: is the one thing the ticket guessed right. It ships anyway, on the evidence
+#: of a fixture where it is worth 0.243 %: on a 45 degree plane with a passive
+#: anchor, 134 kN/m publishes +0.243 % of the closed form with
+#: ``admissible`` true, and 137 kN/m -- two per cent more -- publishes the
+#: closed form exactly, because there EVERY node is inadmissible and the
+#: all-or-nothing sweep of v0.1.106 fires. A discontinuity that size, across a
+#: 2 % change of input, is not something to leave in because today's bank does
+#: not happen to stand on it.
+#:
+#: Read at call time as ``interslice.LAMBDA_EDGE_RECOVERY`` with the mould of
+#: :data:`BRANCH_RESCUE`; off, the lambda search is v0.1.181 bit for bit.
+LAMBDA_EDGE_RECOVERY = True
+
+
+# ----------------------------------------------------------------------
+def recover_thrust_edge(samples, rejected):
+    """Put back the lambdas the thrust criterion took away, and look again.
+
+    Args:
+        samples: the ``(lam, g, ff, fm)`` rows that survived, in any order.
+            Every one of them is admissible, because that is what surviving
+            means.
+        rejected: ``GLESystem.thrust_rejected_pairs`` -- ``lam -> (F_f, F_m)``
+            for each lambda whose branches SOLVED and whose thrust came out in
+            net tension.
+
+    Returns:
+        ``(rows, bracket)`` with the merged rows and the chosen pair, or
+        ``(None, None)`` when no sign change appears. Returning ``None``
+        rather than the merged rows is the whole safety of this function: the
+        caller keeps its own list untouched, so a surface that gains no
+        bracket is bit for bit what it was -- same samples, same ``min |g|``
+        reserve, same counters, same flag. **The recovery can only ever turn a
+        reserve value into a solved root; it can never move a reserve value.**
+
+    WHICH BRACKET, when more than one appears. The one NEAREST the admissible
+    span, measured in nodes, and the lower lambda breaks a tie. Not the lowest
+    lambda outright, which is what a plain scan would take: ``F_f - F_m`` has
+    more than one root once the inter-slice forces are formed and the far ones
+    are not solutions of anything -- the Talbingo circle of verification
+    problem 6 met a crossing at lam = -0.979 before the real one at +0.419 and
+    returned 1.6826 against a published 2.292. That circle cannot reach this
+    function today (its solvable lambdas are all admissible, and the default
+    grid starts at -0.1 anyway), and saying so is the point: the ordering
+    below is what protects against it, not the accident of a grid range.
+    """
+    rows = sorted(samples, key=lambda r: r[0])
+    if not rows or not rejected:
+        return None, None
+    got = {round(r[0], 12) for r in rows}
+    extra = [(lam, ff - fm, ff, fm)
+             for lam, (ff, fm) in rejected.items()
+             if round(lam, 12) not in got and branch_pair_ok(ff, fm)
+             and F_MIN < ff < F_MAX and F_MIN < fm < F_MAX]
+    if not extra:
+        return None, None
+    todos = sorted(rows + extra, key=lambda r: r[0])
+    dentro = [i for i, r in enumerate(todos) if round(r[0], 12) in got]
+    lo, hi = dentro[0], dentro[-1]
+    pares = []
+    for i in range(len(todos) - 1):
+        if todos[i][1] * todos[i + 1][1] < 0.0:
+            # Distance in nodes from the pair to the admissible span; zero
+            # for a pair that touches it on either side or lies inside it.
+            pares.append((max(lo - (i + 1), i - hi, 0), i))
+    if not pares:
+        return None, None
+    pares.sort()
+    i = pares[0][1]
+    return todos, (todos[i], todos[i + 1])
+
+
 # ----------------------------------------------------------------------
 def thrust_is_admissible(state: BranchState) -> bool:
     """Is the inter-slice thrust of this state a stress state soil can hold?
@@ -1361,7 +1460,8 @@ class GLESystem:
 
     __slots__ = ("rows", "forces", "s_list", "shape", "order", "reversed_",
                  "tolerance", "initial_fos", "max_passes", "strict",
-                 "n_thrust_rejected", "n_passes_exhausted",
+                 "n_thrust_rejected", "thrust_rejected_pairs",
+                 "n_passes_exhausted",
                  "n_thrust_overflow", "n_stalled", "n_rescued",
                  "n_inadmissible",
                  "_moment_fos", "_driving")
@@ -1404,7 +1504,35 @@ class GLESystem:
         #: reason nothing survived, and does NOT when the branches simply
         #: diverged: a surface that solves nowhere must not pay for a second
         #: sweep of the whole shape.
+        #:
+        #: v0.1.182 (D149) — it is also NOT the number to publish. The
+        #: increment below sits OUTSIDE ``if self.strict``, so the all-or-
+        #: nothing path of v0.1.106 sweeps the shape twice and doubles it,
+        #: and a secant refining across the tension side keeps adding to it.
+        #: What a reader wants is how many INCLINATIONS were set aside, and
+        #: that is ``len(thrust_rejected_pairs)``, which is keyed by lambda
+        #: and de-duplicates itself.
         self.n_thrust_rejected = 0
+        #: v0.1.182 (D149) — ``(F_f, F_m)`` at each lambda the thrust
+        #: criterion took away, keyed by lambda rounded to 12 places.
+        #:
+        #: RECORDING IS NOT RETURNING. The preference still holds: ``branches``
+        #: hands back ``(None, None)`` exactly as before and the outer search
+        #: still prefers an admissible bracket over every other answer. What
+        #: changes is that the two numbers are no longer THROWN AWAY, because
+        #: the criterion is evaluated at grid NODES and the answer is not at a
+        #: node: deleting a node can delete the bracket that node was one side
+        #: of, and the root that disappears with it may itself be admissible.
+        #: See :func:`recover_thrust_edge`, which is the only reader.
+        #:
+        #: A dict and not a list because ``branches`` is called more than once
+        #: at the same lambda — the relaxed re-sweep and the secant both do it
+        #: — and :meth:`states` is deterministic (it re-solves both branches
+        #: from ``rows``, which ``solve_branch`` never writes to), so a repeat
+        #: writes the same pair. That determinism is also what lets the reader
+        #: trust a pair recorded on an earlier pass; it holds because
+        #: ``initial_fos`` is fixed for the life of this object.
+        self.thrust_rejected_pairs: dict = {}
         #: v0.1.159 (D63) — how many lambdas were lost because a branch ran
         #: out of its pass budget while its step was still shrinking, as
         #: opposed to stalling out or being inadmissible. That budget was
@@ -1657,6 +1785,12 @@ class GLESystem:
             self.n_rescued += 1
         if not thrust_is_admissible(force):
             self.n_thrust_rejected += 1
+            # v0.1.182 (D149) — kept rather than discarded. Recorded BEFORE
+            # the ``strict`` test so the dict means the same thing on both
+            # passes, and only when the preference is actually enforced does
+            # the caller ever read it. See :data:`thrust_rejected_pairs`.
             if self.strict:
+                self.thrust_rejected_pairs[round(lam, 12)] = (force.fos,
+                                                              moment.fos)
                 return None, None
         return force.fos, moment.fos

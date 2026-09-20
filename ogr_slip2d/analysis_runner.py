@@ -1101,7 +1101,14 @@ def lambda_fallback_notes(result) -> list[str]:
     # nothing. Same shape as the door v0.1.180 opened for
     # ``REASON_LAMBDA_NOT_CLOSED``, and for the same reason.
     refined = int(details.get("lambda_gap_refined") or 0)
-    if not (fell_back or not_closed or refined):
+    # v0.1.182 (D149) — and the search that had to put back an inclination the
+    # thrust criterion had set aside, which opens this door for the same
+    # reason the refinement does: it is narrated precisely when it SUCCEEDED,
+    # so the surface did NOT fall back and a gate on ``fell_back`` would have
+    # silenced it. Third time this door has had to be widened for the same
+    # mistake (v0.1.180, v0.1.181), which is why it is written out again.
+    recovered = int(details.get("lambda_edge_recovered") or 0)
+    if not (fell_back or not_closed or refined or recovered):
         return []
 
     notes: list[str] = []
@@ -1194,6 +1201,22 @@ def lambda_fallback_notes(result) -> list[str]:
             "first one that did not, which is where a crossing hidden by a "
             "lost sample would be."
             % (refined, "inclination was" if refined == 1
+               else "inclinations were"))
+
+    # v0.1.182 (D149) — and the inclinations that were SOLVED and then set
+    # aside, which is a different sentence from the three losses above: their
+    # branches converged, and what disqualified them was the state they came
+    # back with. Saying which is the whole of it, because the crossing turned
+    # out to be among them. Whether the thrust at the root is itself
+    # admissible is not claimed here: ``admissibility_note`` says that, and
+    # the two answers are independent.
+    if recovered > 0:
+        notes.append(
+            "The calibrated grid bracketed nothing until %d %s put back "
+            "after being set aside for an inter-slice thrust in net tension: "
+            "the crossing lay among them, so the factor reported is a solved "
+            "root rather than the closest sampled inclination."
+            % (recovered, "inclination was" if recovered == 1
                else "inclinations were"))
 
     return notes

@@ -185,6 +185,7 @@ class GLEMorgensternPrice(LEMMethod):
         # quantity the method is defined by.
         from ..interslice import (FALLBACK_RESIDUAL_LIMIT, GLESystem,
                                   branch_budget, branch_pair_ok,
+                                  recover_thrust_edge,
                                   refine_lambda_gap)
         from .. import interslice
         s_list = slices.slices
@@ -297,6 +298,31 @@ class GLEMorgensternPrice(LEMMethod):
                 samples.sort(key=lambda r: r[0])
                 bracket = _first_bracket(samples)
 
+        # v0.1.182 (D149) -- and, still with no bracket, put back the lambdas
+        # the thrust criterion set aside. Last of the four steps and by far
+        # the cheapest: it re-solves NOTHING, because ``branches`` recorded
+        # the pair it was about to throw away. AFTER the gap refinement and
+        # not before, because the refinement only probes BETWEEN samples and
+        # never sees a fuller set either way -- on success this sets
+        # ``bracket`` and the refinement does not run, on failure the rows
+        # are left untouched -- while putting it first would silently rewrite
+        # ``lambda_gap_refined`` on the surfaces v0.1.181 already fixed.
+        # See ``interslice.LAMBDA_EDGE_RECOVERY``.
+        perdidos_traccion = len(system.thrust_rejected_pairs)
+        recuperados = 0
+        if (bracket is None and not inadmissible
+                and interslice.LAMBDA_EDGE_RECOVERY):
+            filas, b = recover_thrust_edge(samples,
+                                           system.thrust_rejected_pairs)
+            if b is not None:
+                recuperados = len(filas) - len(samples)
+                samples, bracket = filas, b
+                # The secant has to be able to evaluate lambda on the side
+                # the criterion rejected -- the bracket straddles it by
+                # construction -- or every iterate there comes back
+                # ``(None, None)`` and the bracket never closes.
+                system.strict = False
+
         if bracket is None:
             best = min(samples, key=lambda r: abs(r[1]))
             lam_star, _, ff, fm = best
@@ -353,6 +379,13 @@ class GLEMorgensternPrice(LEMMethod):
                     # that brackets, because the refinement only runs when
                     # nothing did. See ``interslice.GAP_REFINE_STEPS``.
                     "lambda_gap_refined": refinados,
+                    "lambda_edge_recovered": recuperados,
+                    # v0.1.182 (D149) -- how many INCLINATIONS the thrust
+                    # criterion set aside, which is NOT ``n_thrust_rejected``:
+                    # that counter increments outside the ``strict`` test, so
+                    # the all-or-nothing sweep of v0.1.106 doubles it. See
+                    # ``interslice.GLESystem.thrust_rejected_pairs``.
+                    "lambdas_lost_to_thrust_tension": perdidos_traccion,
                     "lambda_residual": residual,
                     "lambda_tolerance": self.tolerance,
                     "boundary_ratios": [lam_star * fb for fb in system.shape],
@@ -481,6 +514,13 @@ class GLEMorgensternPrice(LEMMethod):
                 "lambdas_lost_to_inadmissible": system.n_inadmissible,
                 "lambdas_rescued": system.n_rescued,
                 "lambda_gap_refined": refinados,
+                "lambda_edge_recovered": recuperados,
+                # v0.1.182 (D149) -- how many INCLINATIONS the thrust
+                # criterion set aside, which is NOT ``n_thrust_rejected``:
+                # that counter increments outside the ``strict`` test, so
+                # the all-or-nothing sweep of v0.1.106 doubles it. See
+                # ``interslice.GLESystem.thrust_rejected_pairs``.
+                "lambdas_lost_to_thrust_tension": perdidos_traccion,
                 # v0.1.180 (D146) — see ``Spencer.compute_fos`` for why the
                 # residual is ``None`` when a root WAS closed.
                 "lambda_residual": None if converged else lam_residual,

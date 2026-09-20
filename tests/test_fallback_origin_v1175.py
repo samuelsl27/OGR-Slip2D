@@ -319,6 +319,21 @@ class TestTheKeysTheBankCounts:
             assert det.get("lambda_residual") is not None, (mid, det)
             assert det.get("lambda_tolerance") is not None, (mid, det)
 
+    def test_the_two_keys_v0_1_182_added_are_there_by_name_too(self):
+        """Same contract, two keys later. ``lambda_edge_recovered`` and
+        ``lambdas_lost_to_thrust_tension`` (D149) travel on BOTH exits and on
+        every surface, so a census can count them without first asking which
+        branch produced the row — and the second one exists because
+        ``n_thrust_rejected`` is not the number anybody wants: it increments
+        outside the ``strict`` test, so the all-or-nothing sweep doubles it.
+        """
+        for mid in ("spencer", "gle_morgenstern_price"):
+            for beta in (FALLBACK_BETA, BRACKET_BETA):
+                _r, det = _details(mid, beta)
+                assert "lambda_edge_recovered" in det, (mid, beta, det)
+                assert "lambdas_lost_to_thrust_tension" in det, (mid, beta)
+                assert det["lambda_edge_recovered"] == 0, (mid, beta, det)
+
     def test_the_bracket_path_says_false_rather_than_saying_nothing(self):
         """``False`` and a missing key are not the same answer, and the
         census distinguishes them: a method with no such branch leaves
