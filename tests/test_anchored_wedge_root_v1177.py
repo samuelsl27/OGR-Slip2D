@@ -397,44 +397,78 @@ class TestTheForceBranchIsTheWedgeWhateverLambdaIs:
             spread = (max(seen) - min(seen)) / seen[0]
             assert spread < 1e-9, (name, spread, seen)
 
-    def test_and_the_one_cell_the_thrust_gate_takes_away(self):
-        """v0.1.179 (D145), and the honest half of the case above.
+    def test_and_the_cell_the_thrust_gate_used_to_take_away(self):
+        """v0.1.179 (D145) took one cell away; v0.1.183 (D152) gives it back.
 
         Of the twelve cells — three anchors times four lambdas — exactly one
-        is no longer admitted: the ACTIVE anchor at lambda 1.25. Its factor
-        of safety was right. It was 2.757457925, the same nine figures as
-        the other three lambdas of the same cell and the closed form of the
-        wedge, and it was right for the reason this whole class exists to
-        state: on a plane ``F_f`` comes out of the GLOBAL force balance and
-        does not depend on the thrust at all.
+        stopped being admitted between those two versions: the ACTIVE
+        anchor at lambda 1.25. Its factor was never wrong. It was
+        2.757457925 throughout, the same nine figures as the other three
+        lambdas of the same cell and as the closed form of the wedge, and
+        it was right for the reason this whole class exists to state: on a
+        plane ``F_f`` comes out of the GLOBAL force balance and does not
+        depend on the thrust at all (Krahn 2003, Can. Geotech. J. 40: 646).
+        What the gate refused was the STATE, not the factor.
 
-        What the gate refuses is the STATE, not the factor. At that lambda
-        the thrust residual is 0.0679 of the force scale per pass — six and
-        a half per cent, climbing, and with the bound of D118 waiting at
-        1.425 — so the pair (F, X) is nowhere near a fixed point even
-        though F is exactly at one. The other two anchors keep the same
-        lambda and the same factor, at 84 and 52 passes; the active cell at
-        lambda -1.0 keeps its factor too and pays 48 passes for 92.
+        THE PREVIOUS ACCOUNT OF WHY WAS WRONG IN BOTH HALVES, and the
+        replacement is written here because that is what this file is for.
+        It said the thrust residual was "0.0679 of the force scale per
+        pass — six and a half per cent, climbing". It is not a rate and it
+        was not climbing: ``d_x`` peaks at 0.341 on pass 2 and falls
+        monotonically from pass 8 onwards at a ratio of 0.98275, reaching
+        0.0679 ON PASS 48 and 1.4e-3 by pass 270 — so the pair WAS
+        converging, and would have needed some 1217 passes against a
+        ceiling of 400. And the branch did not die of the gate: it died on
+        pass 271 with ``abandoned`` empty and 271 < ``MAX_PASSES``, which
+        leaves only the stall break, because the stall detector watches F
+        alone and F reaching its fixed point makes its step 0.0 exactly,
+        which can never beat its own record again. A branch succeeding read
+        as a branch wandering.
 
-        REPORTED AND NOT CORRECTED (rule 6), as D152: a force branch whose
-        factor provably does not depend on X is refused on the state of X.
-        Exempting it would need the solver to know that ``F_f`` telescopes,
-        which is a property of the SURFACE and not of the branch, and there
-        is no cheap test for it inside the loop. It is written down here
-        with the number in front so that whoever takes it can see what it
-        cost, exactly as this file's own defect was written down for
-        v0.1.179 to find.
+        So the twelve cells are asserted as twelve, against the closed form
+        rather than against each other, and the two cells that were paying
+        for the gate without losing their answer are pinned by pass count:
+        the ACTIVE anchor at lambda -1.0 goes back from 92 passes to 48 and
+        the PASSIVE at 1.25 from 84 to 52.
         """
         cells = dict(self._cells())
-        system = _system(cells["active"])
-        lost = _force(system, 1.25, max_passes=MAX_IT)
-        assert lost is None or not lost.converged, lost
-        kept = [_force(system, lam, max_passes=MAX_IT)
-                for lam in (-1.0, 0.0, 0.8)]
-        assert all(s is not None and s.converged for s in kept)
-        spread = ((max(s.fos for s in kept) - min(s.fos for s in kept))
-                  / kept[0].fos)
-        assert spread < 1e-9, spread
+        for tag, project in cells.items():
+            system = _system(project)
+            closed = _closed_form(project)
+            for lam in self.LAMBDAS:
+                st = _force(system, lam, max_passes=MAX_IT)
+                assert st is not None and st.converged, (tag, lam, st)
+                assert abs(st.fos - closed) / closed < 1e-8, (
+                    tag, lam, st.fos, closed)
+
+    def test_and_the_two_cells_that_were_paying_for_it_stop_paying(self):
+        """The pass counts, which is the part a factor cannot show.
+
+        These are not reference values and do not pretend to be: they are
+        this engine's own counts, pinned so that a later version cannot
+        quietly give the passes back. What makes them meaningful is the
+        A/B beside them — the same cell, same process, switch off.
+        """
+        import ogr_slip2d.interslice as interslice
+
+        system = _system(dict(self._cells())["active"])
+        keep = getattr(interslice, "BRANCH_PLANAR_FORCE", None)
+        if keep is None:                     # the tree before D152
+            return
+        interslice.BRANCH_PLANAR_FORCE = False
+        try:
+            was = {lam: _force(system, lam, max_passes=MAX_IT)
+                   for lam in (-1.0, 1.25)}
+        finally:
+            interslice.BRANCH_PLANAR_FORCE = keep
+        now = {lam: _force(system, lam, max_passes=MAX_IT)
+               for lam in (-1.0, 1.25)}
+        # lambda 1.25 is the cell that was lost outright; -1.0 kept its
+        # answer and paid 92 passes for 48.
+        assert was[1.25].converged is False and now[1.25].converged is True
+        assert was[-1.0].passes == 92 and now[-1.0].passes == 48, (
+            was[-1.0].passes, now[-1.0].passes)
+        assert now[1.25].passes == 48, now[1.25].passes
 
     def test_and_it_is_the_closed_form(self):
         for name, project in self._cells():

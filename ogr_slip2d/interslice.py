@@ -400,6 +400,87 @@ BRANCH_RESCUE = True
 BRANCH_PAIR_TIGHTEN = True
 BRANCH_PAIR_SETTLE = True
 
+#: v0.1.183 (D152) — the widest spread of base angle, in radians, at which
+#: every slice is still taken to sit on ONE plane. Above it nothing changes.
+#:
+#: On a plane the force-equilibrium factor does not depend on the interslice
+#: forces at all. Krahn (2003, Can. Geotech. J. 40: 646, fig. 5) states it
+#: directly — "force equilibrium is completely independent of interslice
+#: shear ... the soil wedge on the planar slip surface can move without any
+#: slippage between the slices" — and USACE EM 1110-2-1902 SC-7a reaches the
+#: same place from the other side, a one-slice force-equilibrium problem
+#: with two equations and two unknowns, hence statically determinate. The
+#: arithmetic reason inside THIS loop is that with one base angle every
+#: ``m_alpha`` is the same, so the sum of normals carries ``X_i - X_{i+1}``,
+#: which telescopes to zero between two free ends.
+#:
+#: The number is not a tuning knob, and the margin is why. On a real plane
+#: the spread MEASURED here is 4.1e-15 to 7.3e-15 rad -- the angles are NOT
+#: bit for bit equal, 16 distinct values over 50 slices, which is what rules
+#: out an exact comparison -- while the gentlest polyline measured gives
+#: 3.3e-1 rad, a circle 1.4 rad, and the one planar surface the verification
+#: bench reaches with Spencer 7.1e-15. That is fourteen orders of
+#: separation: every threshold in [1e-12, 1e-3] classifies identically, so
+#: the value carries no decision. Compare ``THRUST_SCALE_LIMIT``, which is
+#: accepted on 1.8 decades of margin.
+#:
+#: A surface that is nearly but not quite planar is not a trap either: the
+#: sensitivity of the force factor to the thrust goes to zero WITH the
+#: spread, so misreading one for the other costs an error of the order of
+#: the spread itself.
+PLANAR_ALPHA_SPREAD = 1e-9
+
+#: v0.1.183 (D152) — the switch for the exemption that spread buys, read at
+#: call time with the mould of ``BRANCH_RESCUE``. It can only ever ADMIT,
+#: never refuse, like ``BRANCH_PAIR_SETTLE`` and unlike its sibling.
+#:
+#: What it does NOT relax, and this is the whole safety argument. The force
+#: branch still has to pass ``step < tolerance`` AND the contraction test,
+#: so D116's lucky step is refused exactly as before; the thrust BOUND of
+#: D118 breaks earlier in the same pass, so a branch whose thrust truly runs
+#: away is thrown out before any acceptance can be reached (measured: the
+#: 55 degree plane at lambda -5.55 dies on pass 4 with "thrust overflow",
+#: with F's step still 250 times its tolerance); and the exemption is
+#: unreachable on any surface that is not a plane, so the 5348 branches D145
+#: measured cannot move. That last one is a proof and not a census.
+#:
+#: Why NOTHING is asked of the thrust here, which is the half of this that
+#: was designed wrong first. Asking the thrust to be contracting looks
+#: prudent and fits the anchored wedge, where it contracts at 0.98275 a
+#: pass. It does not fit the bench: on problem 047 under Spencer at
+#: lambda 0.8 -- the one planar force branch in the bench -- the thrust is
+#: GROWING on the pass that accepts, 0.1875 of the scale and climbing, while
+#: F halves its step every single pass and lands on 0.9103983480295630. The
+#: shipped gate spends 151 more passes and then calls that branch stalled.
+#: If the factor does not depend on the thrust, then requiring anything of
+#: the thrust is importing a condition the mechanics says is irrelevant --
+#: and the two measurements disagreeing is what said so.
+#:
+#: What IS asked of the thrust, and why it is not a tuning number. The
+#: exemption may not be the thing that carries a runaway into the answer,
+#: and it cannot lean on the bound of D118 to stop one: with the bound
+#: lifted -- which is exactly the probe
+#: ``test_interslice_thrust_bound_v1171`` runs to prove the gate is a second
+#: line and not a coincidence -- the 55 degree plane at lambda -5.55 IS
+#: accepted on pass 16 with a peak thrust of 6.09e9 times the scale, and the
+#: factor it carries is 2.4586394312 against a closed form of 2.4613056257.
+#: That is 0.108 per cent WRONG: the telescoping holds in the algebra and
+#: fails in the arithmetic once the cancellation is that large, so "the
+#: factor does not depend on the thrust" stops being true before the bound
+#: would have said anything. The guard is therefore that the thrust may not
+#: move, in ONE pass, by more force than the whole sliding mass has to work
+#: with -- ``d_x < 1.0`` in the units ``_force_scale`` already normalises
+#: to, which is why the number is 1 and not a calibration.
+#:
+#: Its margins, both of them, because only one is comfortable: every
+#: healthy planar force branch measured stays at or below 0.444 (the
+#: anchored wedge peaks at 0.341, problem 047 of the bench reaches 0.444
+#: after 162 passes and sits at 0.1875 on the pass that accepts), so the
+#: admitting side clears by 2.25x and no more; the refusing side clears by
+#: 2.7e10. The thin side is stated rather than hidden, and it rests on one
+#: bench case and one fixture, which is the whole population that exists.
+BRANCH_PLANAR_FORCE = True
+
 #: v0.1.181 (D148) -- how many CONSECUTIVE passes a branch has to grow its own
 #: step envelope before the rescue is armed without waiting for
 #: :data:`STALL_PATIENCE`.
@@ -793,6 +874,17 @@ def solve_branch(
     abandoned = ""
     force_scale = _force_scale(rows)
     thrust_limit = THRUST_SCALE_LIMIT * force_scale
+    # v0.1.183 (D152) — and resolved once for the same reason: one plane or
+    # not is a property of the rows, and cannot change with F, lambda or the
+    # pass. One sweep of ``alpha`` against the ~170 operations a single
+    # slice already costs in a single pass of the march below, so the cost
+    # is declared rather than measured. The rows are what carry it: the
+    # defect's own ticket said exempting this branch "depends on the
+    # geometry of the SURFACE and not on the rows", and ``SliceRow.alpha``
+    # is that geometry. The switch itself is read at call time, below.
+    planar_force = (moment_fos is None and bool(rows)
+                    and (max(r.alpha for r in rows)
+                         - min(r.alpha for r in rows)) <= PLANAR_ALPHA_SPREAD)
     # v0.1.176 (D125) — the rescue's state: whether it is on, the last two
     # (F used, f_new obtained) pairs the secant slope reads, the relaxation
     # they gave, the thrust residual of the pass and whether the previous
@@ -1111,8 +1203,15 @@ def solve_branch(
         # clause can only REFUSE: a branch that contracts cleanly with its
         # thrust already settled is admitted on exactly the pass it was
         # admitted on before.
+        # v0.1.183 (D152) — except on a plane taking the FORCE branch, where
+        # the factor provably does not depend on the thrust at all, so the
+        # gate was refusing a state to withhold a number that was already
+        # right. See :data:`BRANCH_PLANAR_FORCE` for why nothing is asked of
+        # the thrust there, and :data:`PLANAR_ALPHA_SPREAD` for the reading.
         elif (_pass > 0 and step < tolerance and contracting
-                and (d_x < tolerance or not BRANCH_PAIR_TIGHTEN)):
+                and (d_x < tolerance or not BRANCH_PAIR_TIGHTEN
+                     or (BRANCH_PLANAR_FORCE and planar_force
+                         and d_x < 1.0))):
             F = f_new
             converged = True
             break

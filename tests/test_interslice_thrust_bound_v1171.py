@@ -118,7 +118,22 @@ STALLING_LAMBDA = 2.2
 #:
 #: 1e-4 and not 1e-6 of the two that qualify, because 1e-4 is the tolerance
 #: the verification bank actually runs at since 0.1.160.
-OVERFLOW_BETA, OVERFLOW_TOL = 52.5, 1e-4
+#:
+#: v0.1.183 (D152) — 53.0 and no longer 52.5, and the angle moved because
+#: the cell stopped being one. On 52.5 the planar exemption gives the
+#: lambda grid back the samples it was losing, the search brackets on its
+#: own instead of refining a gap, and the notes go silent — which is not a
+#: regression but the behaviour
+#: ``test_it_stays_quiet_when_the_search_found_its_bracket`` pins two cases
+#: below as correct. A fixture that no longer reaches the narration path
+#: cannot test it. 53.0 was chosen against the SAME criteria the paragraphs
+#: above set, re-measured on both sides of D152 rather than assumed: it
+#: loses lambdas to the bound and narrates them at 1e-4 (7 before, 6 after)
+#: AND at 1e-6 (7 and 7), it loses none to the budget on either side, its
+#: ``admissible`` and ``fos`` still match the same run with the bound
+#: lifted, and Spencer on that plane still solves its bracket without ever
+#: reaching the bound, which is what made this GLE's cell to begin with.
+OVERFLOW_BETA, OVERFLOW_TOL = 53.0, 1e-4
 
 #: And the method, for the same reason the angle is what it is: this cell
 #: is GLE's. Spencer on the same plane solves its bracket and never reaches
