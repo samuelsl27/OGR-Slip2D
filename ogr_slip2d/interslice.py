@@ -1441,6 +1441,67 @@ def refine_lambda_gap(samples, solve, nodes, steps: int = GAP_REFINE_STEPS):
 #: :data:`BRANCH_RESCUE`; off, the lambda search is v0.1.181 bit for bit.
 LAMBDA_EDGE_RECOVERY = True
 
+#: v0.1.184 (D153) -- the switch for the early cut the lambda secant takes
+#: once its bracket has no double left inside it.
+#:
+#: WHY A FLOOR TEST AND NOT A CONSTANT. The loop in ``spencer.py`` and
+#: ``gle.py`` refines a bracket on lambda and has two early exits,
+#: ``abs(g_hi - g_lo) < 1e-12`` and ``abs(g_new) < tolerance``; neither looks
+#: at the WIDTH. Once the two ends are adjacent doubles, every remaining turn
+#: computes a ``lam_new`` that rounds to one of them, re-solves both branches
+#: -- up to :data:`MAX_PASSES` passes each -- and gets back the g it already
+#: had. The test is ``0.5 * (lam_lo + lam_hi) == lam_lo`` or ``== lam_hi``,
+#: which carries no constant at all: under round-to-nearest that midpoint
+#: collapses onto an end exactly when no double lies strictly between them,
+#: and the grid of the doubles is already relative to magnitude, which is
+#: what AGENTS.md asks of a tolerance. The ficha asked for
+#: ``eps * max(1.0, abs(lam_lo))`` instead, and that is LOOSER, not tighter:
+#: with ``|lambda| < 1`` the bound is two ulps, so a lambda can still be left
+#: inside and the cut stops being an identity in order to buy one pass.
+#:
+#: WHY BOTH ENDS HAVE TO CLEAR THE TOLERANCE. Past the floor the loop state
+#: is a FIXED POINT -- lam_new rounds to an end, g_new is that end's own g,
+#: and whichever branch of the bracket update runs re-assigns the end to
+#: itself. The one exit that could still fire is ``abs(g_new) < tolerance``,
+#: and a bracket end taken straight from the grid was never tested against
+#: the tolerance: the sampling filter there is ``0.05 < F < 50``. So the
+#: guard asks, and where either end is under tolerance it does not cut and
+#: the loop runs exactly as before. That case is left alone rather than
+#: reasoned away.
+#:
+#: MEASURED, AND THE NUMBER IS ZERO -- published before the fix and not
+#: after. A whole grid search over verification problem 059, single process:
+#: 1795 surfaces, 16077 inner solves, 4 surfaces that fail to close lambda
+#: and NOT ONE with its bracket at the floor (widths 2.1e-2 to 1.3e-1). At
+#: ``max_iterations`` 200, the same 4 and the same zero. The bank census of
+#: D146 -- 344 rows over 79 problems -- is zero as well. With D145 switched
+#: off 39 fail to close and 8 reach the floor, while the other 31 grind the
+#: bracket down to 1e-9..1e-12 without ever getting there: the big waste is a
+#: discontinuous g, which D145 closed, and not this.
+#:
+#: WHAT IT IS WORTH, THEN. The floor is reached on pass 48 by GEOMETRY -- a
+#: 0.2-wide bracket halved down to the ulp of 0.54 -- and not by budget, so
+#: the waste is ``max_iterations - 47``. On the D146 witness: 50, the shipped
+#: default, wastes 3 inner solves of 57; 75 wastes 28 of 82; 200 wastes 153
+#: of 207; 400 wastes 353 of 407 -- and the factor is identical to the last
+#: bit in all five. ``max_iterations`` is a setting the user can raise, and
+#: raising it past 48 buys NOTHING on a surface that has hit the floor. That,
+#: and not today's saving, is the argument. Same shape as
+#: :data:`LAMBDA_EDGE_RECOVERY`, which also shipped on a census of zero.
+#:
+#: WHAT IT DOES NOT TOUCH. The reason stays ``REASON_LAMBDA_NOT_CLOSED``:
+#: what changes is WHEN it is said, not WHAT is said. Measured on the
+#: witness, cutting moves exactly two things -- ``LEMResult.iterations`` and
+#: the iteration count the error message quotes inside its own sentence. The
+#: factor, ``converged``, ``admissible``, ``lambda``,
+#: ``lambda_bracket_width``, ``lambda_residual`` and every counter in
+#: ``details`` -- ``lambdas_rescued`` included -- come back identical.
+#:
+#: Read at call time as ``interslice.LAMBDA_BRACKET_FLOOR_CUT`` with the
+#: mould of :data:`BRANCH_RESCUE`; off, the lambda search is v0.1.183 bit for
+#: bit. See ``docs/audits/lambda_floor_v1184.md``.
+LAMBDA_BRACKET_FLOOR_CUT = True
+
 
 # ----------------------------------------------------------------------
 def recover_thrust_edge(samples, rejected):

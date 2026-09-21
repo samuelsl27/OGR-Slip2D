@@ -426,6 +426,21 @@ class GLEMorgensternPrice(LEMMethod):
             iterations += 1
             if abs(g_hi - g_lo) < 1e-12:
                 break
+            # v0.1.184 (D153) - nothing is left between the two ends, so
+            # every remaining turn would re-solve a lambda that rounds to
+            # one of them and hand back the g it already has: the loop
+            # state past this point is a FIXED POINT, not a slow descent.
+            # The midpoint test carries no constant because the grid of the
+            # doubles is itself relative to magnitude, and both ends have to
+            # clear the tolerance first because a bracket end taken straight
+            # from the grid was never tested against it. See
+            # ``interslice.LAMBDA_BRACKET_FLOOR_CUT``.
+            if interslice.LAMBDA_BRACKET_FLOOR_CUT:
+                mid = 0.5 * (lam_lo + lam_hi)
+                if ((mid == lam_lo or mid == lam_hi)
+                        and abs(g_lo) >= self.tolerance
+                        and abs(g_hi) >= self.tolerance):
+                    break
             lam_new = lam_hi - g_hi * (lam_hi - lam_lo) / (g_hi - g_lo)
             if not (min(lam_lo, lam_hi) <= lam_new <= max(lam_lo, lam_hi)):
                 lam_new = 0.5 * (lam_lo + lam_hi)

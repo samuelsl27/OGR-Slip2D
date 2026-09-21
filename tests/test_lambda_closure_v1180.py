@@ -79,9 +79,17 @@ discrimination and is labelled rather than counted as strength.
 
 THREE of the twelve that pass are MEANT to, and would be broken if they moved:
 ``test_the_factor_does_not_move`` and ``test_the_factor_of_the_solved_root_
-does_not_move_either`` pin that neither exit's number budged, and
-``test_the_loop_keeps_solving_after_the_bracket_stops_moving`` describes
-what was NOT done.
+does_not_move_either`` pin that neither exit's number budged, and the third
+described what was NOT done — the early cut of D153.
+
+That tally is measured against 0.1.179 and stays as measured. v0.1.184 DID the
+early cut, so the third case was re-anchored and split in two,
+``test_the_bracket_floor_no_longer_re_solves_the_same_lambda`` and
+``test_the_fichas_thirty_per_cent_was_never_the_floor``, which is why this file
+now holds 19 cases and not the 18 the count above walks. The split is what says
+the two numbers were never the same one: three calls sat at the floor of the
+double and fourteen sit inside the ficha's 1e-12 window, and only the first
+three are no-ops anybody can prove.
 The three cases of ``TestTheJumpWasAPrematureAcceptance`` pass on both trees
 on purpose: they are about whose defect this was — D145's — and not about this
 version, so a difference there would mean the refutation had stopped holding.
@@ -113,10 +121,13 @@ than a change delivers is what cost this project two versions in v0.1.82-84:
 * no assertion here fixes a factor of safety against a reference value. Every
   numeric claim is an A/B in one process, an identity, a count of iterations,
   or a comparison against a number this same file computes;
-* the early cut is NOT implemented. A collapsed bracket still spends the whole
-  of ``max_iterations`` before saying so, and ``TestWhatThisDoesNotFix`` pins
-  that it does, so the day someone adds the cut this file tells them what they
-  changed;
+* the early cut is NOT implemented in THIS version. A collapsed bracket spent
+  the whole of ``max_iterations`` before saying so, and
+  ``TestWhatThisDoesNotFix`` pinned that it did, so that the day someone added
+  the cut this file would tell them what they changed. That day was v0.1.184
+  (D153), and the case below now measures what it moved -- including the fact
+  that the "17 calls, 30 %" the ficha published was a 1e-12 window and not the
+  floor of the double;
 * nothing here says which fixed point is "physical". The question the ficha
   asked has no object: there is one;
 * the mass evaluated is the FUSED one that D147 describes, not the 12.58 ft
@@ -163,7 +174,7 @@ N_DOVELAS = 50
 _CACHE: dict = {}
 
 
-def _slope(tolerance=TOL_FICHA, n=N_DOVELAS):
+def _slope(tolerance=TOL_FICHA, n=N_DOVELAS, max_it=None):
     """Problem 059 without its support.
 
     ``pore_pressure`` is passed as the ENUM and not as the string
@@ -198,10 +209,18 @@ def _slope(tolerance=TOL_FICHA, n=N_DOVELAS):
     p.settings.groundwater.pore_fluid_unit_weight = 62.4
     p.settings.methods.num_slices = n
     p.settings.methods.tolerance = tolerance
+    # v0.1.184 (D153) -- the budget, left ALONE when nothing asks for it, so
+    # that every call written before this parameter existed still builds the
+    # same project byte for byte. ``test_lambda_floor_v1184`` needs to vary it
+    # because that is where the cut it measures actually bites, and a second
+    # copy of this slope would be a second copy of the D154 trap above.
+    if max_it is not None:
+        p.settings.methods.max_iterations = max_it
     return p
 
 
-def _evaluate(tolerance=TOL_FICHA, method_id="spencer", n=N_DOVELAS):
+def _evaluate(tolerance=TOL_FICHA, method_id="spencer", n=N_DOVELAS,
+              max_it=None):
     """The circle through the SAME door the search uses.
 
     ``build_search(...).evaluate_surface(...)`` and not ``compute_fos`` on a
@@ -213,7 +232,7 @@ def _evaluate(tolerance=TOL_FICHA, method_id="spencer", n=N_DOVELAS):
     from ogr_slip2d.analysis_runner import build_search
     from ogr_slip2d.surface import SlipCircle
 
-    p = _slope(tolerance, n)
+    p = _slope(tolerance, n, max_it)
     return build_search(p, method_id).evaluate_surface(p, SlipCircle(*CIRCULO))
 
 
@@ -302,7 +321,7 @@ def _adjacent(lam, k=6):
     return out
 
 
-def _trace(tolerance=TOL_FICHA):
+def _trace(tolerance=TOL_FICHA, max_it=None):
     """``(result, every λ the engine actually solved, in order)``.
 
     The same capture ``_system`` uses, kept separate because this one wants
@@ -325,7 +344,7 @@ def _trace(tolerance=TOL_FICHA):
 
     Spencer._inner_solve = spy
     try:
-        p = _slope(tolerance)
+        p = _slope(tolerance, N_DOVELAS, max_it)
         r = build_search(p, "spencer").evaluate_surface(p, SlipCircle(*CIRCULO))
     finally:
         Spencer._inner_solve = orig
@@ -634,30 +653,54 @@ class TestASolvedRootStillSaysNothing:
 class TestWhatThisDoesNotFix:
     """The half that was reported and NOT corrected (rule 6)."""
 
-    def test_the_loop_keeps_solving_after_the_bracket_stops_moving(self):
-        """No early cut, on purpose, and pinned so the next version sees it.
+    def test_the_bracket_floor_no_longer_re_solves_the_same_lambda(self):
+        """D153, cut in v0.1.184, and measured from this side of it.
 
-        When the bracket reaches the floor of the double there is no λ left
-        between its two ends, so every remaining turn re-solves two branches
-        — up to ``MAX_PASSES`` passes each — for an answer that is settled in
-        advance. Counted on the calls the engine actually made, and NOT on
-        ``iterations``: that field is the grid samples plus the secant turns
-        here and the samples alone on the fallback exit, so a claim about the
-        budget built on it would be comparing two different quantities. This
-        is D153; cutting there needs its own A/B and its own version.
+        This case used to pin the ABSENCE of the cut. What it pins now is what
+        the cut moved -- and that is NOT the number the ficha published. D153
+        said "17 calls, 30 %", measured with a RELATIVE WINDOW OF 1e-12 on
+        lambda, which is four orders above the floor of the double (2**-52).
+        Thirteen of those seventeen are DISTINCT doubles: lambda does move
+        there, only very little. Counted on the calls that repeat a lambda
+        EXACTLY, the engine made 4 before the cut and makes 1 after it.
+
+        The one that survives is not this loop's. It is the final
+        ``solve(lam_lo)`` of ``spencer.py``, which re-computes a pair the loop
+        already holds in ``ff_lo, fm_lo`` and never reads. That is D159,
+        reported in v0.1.184 and not fixed there.
         """
         with _pair_off():
             r, traza = _trace(TOL_FICHA)
         assert not r.converged, "the fixture stopped producing the failure"
-        last = traza[-1]
-        stuck = next(i for i in range(len(traza))
-                     if all(abs(l - last) <= 1e-12 * max(1.0, abs(last))
-                            for l in traza[i:]))
-        wasted = len(traza) - stuck - 1
-        assert wasted > 10, (
-            "only %d of the %d inner solves happen after λ stops moving. If "
-            "that is the early cut of D153, this case is the one that should "
-            "have been rewritten with it." % (wasted, len(traza)))
+        ultimo = traza[-1]
+        repetidas = sum(1 for lam in traza if lam == ultimo) - 1
+        assert repetidas == 1, (
+            "%d calls repeat the final lambda exactly, not 1. There were 4 "
+            "before the cut of D153; 0 would mean the final solve of D159 "
+            "went too, and more than 1 that the floor cut stopped firing."
+            % repetidas)
+
+    def test_the_fichas_thirty_per_cent_was_never_the_floor(self):
+        """Why the cut is worth 3 calls and not 17, said with the measure.
+
+        The ficha's own script groups the tail of the trace with a relative
+        window of 1e-12 and calls the result "a lambda that cannot move". Most
+        of that tail is distinct doubles, so the sentence is false for them:
+        what grinds there is the bracket halving against a discontinuous g,
+        which is D145's subject and was closed in v0.1.179, not the floor of
+        the double. Kept as its own case because a version that ships a cut
+        has to say what the cut is NOT worth.
+        """
+        with _pair_off():
+            _r, traza = _trace(TOL_FICHA)
+        ultimo = traza[-1]
+        cola = [lam for lam in traza
+                if abs(lam - ultimo) <= 1e-12 * max(1.0, abs(ultimo))]
+        assert len(set(cola)) > 10, (
+            "only %d of the %d calls inside the ficha's 1e-12 window are "
+            "distinct doubles. If that collapses to one, the window and the "
+            "floor have become the same thing and this case is moot."
+            % (len(set(cola)), len(cola)))
 
     def test_the_exit_is_dormant_on_the_engine_as_shipped(self):
         """The ficha's own witness closes now, and the census found no other.
