@@ -552,15 +552,37 @@ class TestTheLabelDescribesTheEngineThatExists:
             assert len(wired) == 1, (rel, len(wired))
 
     def test_and_the_system_carries_it_down_to_every_branch(self):
+        """v0.1.186 (D159) — asked of the CALLS, no longer of a method name.
+
+        Until this version this case counted ``max_passes=self.max_passes``
+        inside ``GLESystem.states``. The per-λ cache moved the two branch
+        solves down into ``_solve_states`` and that count went to zero with
+        the invariant completely untouched — a case that goes red because a
+        method was split is a case anchored to the wrong thing. What D117
+        promises is that EVERY branch this system solves is solved with the
+        budget the user configured, so that is what is asked now: both
+        ``solve_branch`` calls of the class, wherever in it they live, pass
+        it. Strictly stronger than the count it replaces, and immune to the
+        next rename.
+        """
         tree = _tree("ogr_slip2d/interslice.py")
         top = {n.name: n for n in tree.body
                if isinstance(n, (ast.FunctionDef, ast.ClassDef))}
         assert "branch_budget" in top, "the floor has no single owner"
         gle = top.get("GLESystem")
+        llamadas = [n for n in ast.walk(gle)
+                    if isinstance(n, ast.Call)
+                    and getattr(n.func, "id", None) == "solve_branch"]
+        assert len(llamadas) == 2, (
+            "%d calls to ``solve_branch`` in GLESystem, not 2" % len(llamadas))
+        for c in llamadas:
+            pasado = [k for k in c.keywords if k.arg == "max_passes"]
+            assert (len(pasado) == 1
+                    and ast.unparse(pasado[0].value) == "self.max_passes"), (
+                "a branch is solved without the system's budget: %s"
+                % ast.unparse(c))
         methods = {m.name: m for m in (gle.body if gle else [])
                    if isinstance(m, ast.FunctionDef)}
-        states = ast.unparse(methods["states"])
-        assert states.count("max_passes=self.max_passes") == 2, states
         assert "self.max_passes" in ast.unparse(methods["branches"])
 
     def test_the_setting_still_bounds_the_lambda_search_as_well(self):

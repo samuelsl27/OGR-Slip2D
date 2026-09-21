@@ -486,6 +486,18 @@ class TestTheReserveExitPublishesTheDetail:
         assert "thrust_margin" in (res.details or {})
 
     def test_the_margin_is_the_state_it_returns(self):
+        """v0.1.186 (D159) — what this case stopped covering, said out loud.
+
+        Until the per-λ cache, the ``states`` call below re-solved the two
+        branches, so this comparison was also, without meaning to be, a test
+        that ``states`` is deterministic. It is a cache hit now and the two
+        sides are the SAME object, so that half has become trivial. The claim
+        it still makes — that the published margin is the margin of the state
+        the method returns, and not of some other λ — is untouched. The
+        determinism is covered on purpose in
+        ``tests/test_lambda_state_cache_v1186.py::test_two_calls_from_scratch_agree_bit_for_bit``.
+        A case that goes quietly tautological is worse than one that goes red.
+        """
         from ogr_slip2d.interslice import thrust_margin
         res, system = _witness()
         force, _moment = system.states(float(res.details["lambda"]))

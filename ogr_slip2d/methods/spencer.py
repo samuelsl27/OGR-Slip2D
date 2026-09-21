@@ -445,12 +445,34 @@ class Spencer(LEMMethod):
                 reason=REASON_DIVERGENT_AT_LAMBDA,
             )
         # v0.1.180 (D146) — what the λ search actually achieved, measured on
-        # the pair that produces the factor being returned rather than on
-        # ``g_lo``, which can be one refinement stale. The width is what
+        # the pair that produces the factor being returned. The width is what
         # separates the four ways this loop fails to close: a bracket at the
         # floor of the double has no λ left to sample, while a wide one was
         # still being refined when the budget ran out. See
         # ``REASON_LAMBDA_NOT_CLOSED``.
+        #
+        # v0.1.186 (D159) — and the half sentence that stood here until this
+        # version, "rather than on ``g_lo``, which can be one refinement
+        # stale", named an obsolescence that does not exist. ``ff_lo`` and
+        # ``fm_lo`` are only ever written in the SAME statement as ``lam_lo``
+        # — at the unpacking above, at the convergence break and at the
+        # bracket update — never apart from it, so the triple cannot come
+        # undone: the pair IS the pair of ``lam_lo``, and ``g_lo`` is their
+        # difference. What CAN lag is ``g_lo`` against ``g_hi``, the other END
+        # of the bracket, which is a different claim and not the one this
+        # comment was making. Four versions of a cost defended by a staleness
+        # the chain does not have — the shape D153 had with its "30 %".
+        #
+        # The ``solve(lam_lo)`` above stays, and so does the
+        # ``system.states(lam_lo)`` below, and that is deliberate: removing
+        # either would remove a call to ``branches`` and with it a counter
+        # increment that ``details`` publishes and the bank archives. What
+        # changed is that both now land on the per-λ cache of ``GLESystem``,
+        # so the closing pair is SOLVED once and ASKED for three times. The
+        # residual is still measured on the pair that is returned, and every
+        # counter reads what it read before. (``moment`` here is not read by
+        # anything; it is the other half of a pair that costs nothing now.)
+        # See ``interslice.LAMBDA_STATE_CACHE``.
         lam_residual = abs(ff_final - fm_final)
         lam_width = abs(lam_hi - lam_lo)
         force, moment = system.states(lam_lo)

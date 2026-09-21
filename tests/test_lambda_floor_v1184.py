@@ -475,23 +475,32 @@ class TestWhatThisDoesNotFix:
             "become the same thing." % (len(set(cola)), len(cola)))
 
     def test_one_repeat_of_the_final_lambda_survives_the_cut(self):
-        """D159, found while measuring this one and not fixed here.
+        """D159, found while measuring this one and CLOSED in v0.1.186.
 
         After the cut the only call that still repeats a λ exactly is the
-        ``solve(lam_lo)`` that follows the loop, which re-computes a pair the
-        loop already holds in ``ff_lo, fm_lo`` and never reads. Over a whole
-        Spencer search that is 1795 of 17872 branch pairs, and the
-        ``system.states(lam_lo)`` two lines below it is another 1795 — about
-        20 % of the method, re-solving what it already has. Removing them
-        moves the counters ``details`` publishes, so it needs its own A/B and
-        its own version.
+        ``solve(lam_lo)`` that follows the loop, which asks for a pair the loop
+        already holds in ``ff_lo, fm_lo`` and never reads. Over a whole Spencer
+        search that is 1795 of 17872 branch pairs, and the
+        ``system.states(lam_lo)`` two lines below it is another 1795 — 20.0 %
+        of the method, asking twice for what it already has.
+
+        v0.1.186 (D159) — and the repair KEPT BOTH CALLS, which is why this
+        count is still 1 and not 0. What it removed is the re-solve
+        underneath, with a per-λ cache in ``GLESystem.states``; the calls stay
+        because each one is a call to ``branches``, and ``branches`` is where
+        every counter ``details`` publishes gets incremented. The other repair
+        the ficha offered — dropping the call and using ``ff_lo, fm_lo`` —
+        would have moved them. So this trace is untouched by that version, and
+        the count that dropped is pinned in
+        ``tests/test_lambda_state_cache_v1186.py``.
         """
         _r, traza = _run("spencer", cut=True)
         ultimo = traza[-1]
         repetidas = sum(1 for lam in traza if lam == ultimo) - 1
         assert repetidas == 1, (
             "%d calls repeat the final λ exactly, not 1. Before the cut there "
-            "were 4; 0 would mean D159 went too." % repetidas)
+            "were 4; 0 would mean the final CALL went, which D159 deliberately "
+            "did not remove." % repetidas)
 
     def test_the_other_guard_in_this_loop_still_has_no_birth_certificate(self):
         """``abs(g_hi - g_lo) < 1e-12`` is the last bare number in here.

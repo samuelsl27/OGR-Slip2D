@@ -489,8 +489,13 @@ class GLEMorgensternPrice(LEMMethod):
                 reason=REASON_DIVERGENT_AT_LAMBDA,
             )
         # v0.1.180 (D146) — see ``Spencer.compute_fos``: measured on the pair
-        # that produces the factor being returned and not on ``g_lo``, which
-        # can be one refinement stale.
+        # that produces the factor being returned.
+        # v0.1.186 (D159) — and see there too for why "and not on ``g_lo``,
+        # which can be one refinement stale" is gone: ``ff_lo``/``fm_lo`` are
+        # written in the same statement as ``lam_lo`` and cannot lag it. The
+        # two re-solves these lines used to pay for are cache hits now; the
+        # two CALLS stay, so no counter moves. See
+        # ``interslice.LAMBDA_STATE_CACHE``.
         lam_residual = abs(ff_final - fm_final)
         lam_width = abs(lam_hi - lam_lo)
         force, moment = system.states(lam_lo)

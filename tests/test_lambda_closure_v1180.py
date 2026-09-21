@@ -665,9 +665,20 @@ class TestWhatThisDoesNotFix:
         EXACTLY, the engine made 4 before the cut and makes 1 after it.
 
         The one that survives is not this loop's. It is the final
-        ``solve(lam_lo)`` of ``spencer.py``, which re-computes a pair the loop
-        already holds in ``ff_lo, fm_lo`` and never reads. That is D159,
-        reported in v0.1.184 and not fixed there.
+        ``solve(lam_lo)`` of ``spencer.py``, which asks for a pair the loop
+        already holds in ``ff_lo, fm_lo`` and never reads.
+
+        v0.1.186 (D159) -- and D159 IS closed now, with this count still at 1,
+        which is the whole of what the repair did and did not do. The repeat
+        here is a CALL and not a solve: ``solve(lam_lo)`` still runs, still
+        goes through ``_inner_solve`` and still hands ``branches`` a pair --
+        it simply no longer re-solves the two branches, because
+        ``GLESystem.states`` remembers them. So this trace is unchanged BY
+        DESIGN, and asserting 1 keeps meaning what it meant: more than 1 would
+        say the floor cut stopped firing, and 0 would say the CALL went, which
+        is what would move the counters. The number that dropped is branch
+        PAIRS, and it is pinned in
+        ``tests/test_lambda_state_cache_v1186.py::test_the_final_lambda_is_solved_once``.
         """
         with _pair_off():
             r, traza = _trace(TOL_FICHA)
@@ -676,8 +687,9 @@ class TestWhatThisDoesNotFix:
         repetidas = sum(1 for lam in traza if lam == ultimo) - 1
         assert repetidas == 1, (
             "%d calls repeat the final lambda exactly, not 1. There were 4 "
-            "before the cut of D153; 0 would mean the final solve of D159 "
-            "went too, and more than 1 that the floor cut stopped firing."
+            "before the cut of D153; 0 would mean the final CALL went too "
+            "(D159 removed the re-solve and kept the call, on purpose), and "
+            "more than 1 that the floor cut stopped firing."
             % repetidas)
 
     def test_the_fichas_thirty_per_cent_was_never_the_floor(self):

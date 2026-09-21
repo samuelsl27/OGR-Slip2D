@@ -1688,6 +1688,107 @@ def thrust_margin(state) -> Optional[float]:
 
 
 
+#: v0.1.186 (D159) -- whether :meth:`GLESystem.states` remembers the pair it
+#: has already solved at a lambda.
+#:
+#: WHAT IT SAVES, AND HOW MUCH. Measured on a whole grid search of the 059
+#: model with Spencer in one process: 17872 calls to ``states`` for 1795
+#: surfaces, of which 3578 -- 20.0 % -- ask for a lambda this system has
+#: already solved. They are the ``solve(lam_lo)`` of ``spencer.py`` and the
+#: ``system.states(lam_lo)`` two lines below it, one of each on 1783 surfaces
+#: and one of the two on 12 more. In branch PASSES, which is what the work
+#: actually is, they are 144114 of 757378, or 19.0 %.
+#:
+#: The ficha of D159 feared that counting calls would overstate the time,
+#: because the closing pair "starts from an ``initial_fos`` next to the fixed
+#: point". It does not: ``initial_fos`` is written once in ``__init__`` and
+#: never again, so every branch of every lambda starts from the same F and a
+#: repeat costs exactly what the first one cost, to the pass. 20.0 % of the
+#: calls are 19.0 % of the passes, and the difference between those two
+#: numbers is not a warm start, it is which lambdas the repeats happen to be.
+#:
+#: WHY IT IS AN IDENTITY AND NOT AN APPROXIMATION. ``states`` is a pure
+#: function of ``rows``, ``shape``, ``tolerance``, ``initial_fos``,
+#: ``max_passes`` and lambda -- none of which is ever rewritten after
+#: ``__init__`` -- plus the module switches ``solve_branch`` reads at call
+#: time, which is what :data:`_BRANCH_SWITCH_NAMES` below is for. It does NOT
+#: read ``strict``: the only reader of that attribute in the whole package is
+#: in :meth:`branches`, downstream of here. The docstring of
+#: :data:`thrust_rejected_pairs` has been claiming this determinism since
+#: v0.1.182 and the package already leant on it; what this version adds is
+#: that there is now a TEST, measured over a whole search -- 3578 repeats of
+#: 3578 identical field by field and list by list, none different.
+#:
+#: WHY NO COUNTER MOVES, which is the whole reason the repair is this one and
+#: not the other. Every counter increments inside :meth:`branches`, from the
+#: states this method hands it. The cache sits UNDERNEATH: not one call to
+#: ``branches`` disappears -- the ``solve(lam_lo)`` of the closing lines is a
+#: cache HIT and not a deletion -- so ``branches`` is entered the same number
+#: of times with the same objects, and every key ``details`` publishes reads
+#: what it read before. The other repair the ficha offered, dropping that call
+#: and using ``ff_lo, fm_lo``, WOULD move them; that is the difference the
+#: ficha did not draw when it asked for a bank run.
+#:
+#: WHY THE KEY IS THE RAW DOUBLE. :data:`thrust_rejected_pairs` rounds to 12
+#: places because its job is to count INCLINATIONS, and two adjacent doubles
+#: are one inclination. This dict's job is the opposite -- to hand back
+#: exactly what ``solve_branch`` would -- and two lambdas one ulp apart give
+#: different ``lambda_boundary`` vectors and therefore different branches.
+#: Rounding here would fuse them, and the secant walks deliberately on
+#: adjacent doubles since the floor cut of v0.1.184:
+#: ``test_lambda_floor_v1184`` asserts that more than ten DISTINCT doubles sit
+#: inside the window D153 called "a lambda that cannot move".
+#:
+#: WHAT EMPTIES IT, AND THE CASE THAT MADE IT NECESSARY. A change in any of
+#: the switches of :data:`_BRANCH_SWITCH_NAMES`. Without that,
+#: ``tests/test_branch_rescue_v1176.py::test_a_stall_is_counted`` would
+#: measure the opposite of what it believes: it captures the system from an
+#: evaluation that ran with ``BRANCH_RESCUE`` on, lambda 0.40 is a node of
+#: ``_LAMBDA_SHAPE`` and so already in the cache, and it then asks for
+#: ``branches(0.40)`` INSIDE ``_unrescued()``. Measured on that cell the force
+#: branch is (converged, rescued, 45 passes) with the rescue on and (not
+#: converged, 81 passes) with it off -- not a rounding difference, a different
+#: answer. The switch below is NOT that guard; it is how the A/B turns the
+#: cache off in one process. Off, ``states`` is v0.1.185 bit for bit.
+LAMBDA_STATE_CACHE = True
+
+#: The module switches :func:`solve_branch` reads AT CALL TIME, and therefore
+#: the whole of what a cached pair depends on besides lambda and the system
+#: that owns it.
+#:
+#: THE BODY AND NOT THE SIGNATURE. :data:`MAX_PASSES`, :data:`F_MIN`,
+#: :data:`F_MAX` and :data:`STALL_PATIENCE` are missing on purpose. They
+#: appear only as DEFAULT EXPRESSIONS of ``solve_branch``, which Python
+#: evaluates at ``def`` time, so patching the module attribute afterwards
+#: changes nothing at all and listing them here would read like a dependency
+#: that is not one. The same distinction is already written out in
+#: ``tests/test_interslice_thrust_bound_v1171._lifted``, which is why every
+#: raised ceiling in that file is passed as an argument.
+#:
+#: A LIST IS WORTH WHAT THE ATTENTION OF ITS READER IS WORTH, which is the
+#: lesson of the seven version sites -- three of them frozen for seventeen
+#: versions behind a document that said four. So this one is not kept by hand
+#: alone: ``test_lambda_state_cache_v1186`` compares it BY AST against the
+#: globals the BODY of ``solve_branch`` actually reads, and names the
+#: difference if a switch is born and not added here.
+_BRANCH_SWITCH_NAMES = (
+    "BRANCH_CYCLE_RESCUE", "BRANCH_PAIR_SETTLE", "BRANCH_PAIR_TIGHTEN",
+    "BRANCH_PLANAR_FORCE", "BRANCH_RESCUE", "CYCLE_RUN",
+    "PLANAR_ALPHA_SPREAD", "RESCUE_OMEGA_MAX", "RESCUE_OMEGA_MIN",
+    "THRUST_SCALE_LIMIT",
+)
+
+
+def _branch_switches() -> tuple:
+    """The value of every name in :data:`_BRANCH_SWITCH_NAMES`, in order.
+
+    Read through ``globals()`` and not captured, because the whole point of
+    those switches is that they are read at CALL time.
+    """
+    g = globals()
+    return tuple(g[n] for n in _BRANCH_SWITCH_NAMES)
+
+
 # ======================================================================
 class GLESystem:
     """Everything ONE surface needs to answer F_f(lam) and F_m(lam).
@@ -1709,7 +1810,8 @@ class GLESystem:
                  "n_passes_exhausted",
                  "n_thrust_overflow", "n_stalled", "n_rescued",
                  "n_inadmissible",
-                 "_moment_fos", "_driving")
+                 "_moment_fos", "_driving",
+                 "_state_cache", "_state_cache_sig")
 
     # v0.1.173 (D117) — ``max_passes`` goes LAST and keyword-defaulted on
     # purpose. Nine call sites build this class and every one of them passes
@@ -1845,6 +1947,15 @@ class GLESystem:
         #: ``REASON_LAMBDA_NOT_CLOSED`` left in v0.1.180.
         self.n_inadmissible = 0
         self._driving = None
+        #: v0.1.186 (D159) -- lambda -> ``(force, moment)``, and the
+        #: switch signature those pairs were solved under. Eager and not
+        #: lazy: an empty dict costs 64 bytes and saves an ``is None``
+        #: test in the hottest path of the method. The signature starts
+        #: as ``None`` so that the FIRST call goes through the same
+        #: clear-and-set branch as every later one, instead of having a
+        #: start-up case of its own. See :data:`LAMBDA_STATE_CACHE`.
+        self._state_cache: dict = {}
+        self._state_cache_sig = None
 
         if circle_R is None:
             from .moment_balance import moment_terms
@@ -1947,8 +2058,13 @@ class GLESystem:
         return [lam * fb for fb in self.shape]
 
     # ------------------------------------------------------------------
-    def states(self, lam: float):
-        """``(force_branch, moment_branch)``, either of which may be None."""
+    def _solve_states(self, lam: float):
+        """``(force_branch, moment_branch)``, solved from ``rows``.
+
+        The arithmetic of :meth:`states` with the remembering taken out, so
+        that the cache can be switched off without a second copy of these
+        six lines existing anywhere -- in the module or in a measuring tool.
+        """
         lam_b = self.lambda_boundary(lam)
         force = solve_branch(self.rows, lam_b, None,
                              self.tolerance, self.initial_fos,
@@ -1957,6 +2073,34 @@ class GLESystem:
                               self.tolerance, self.initial_fos,
                               max_passes=self.max_passes)
         return force, moment
+
+    def states(self, lam: float):
+        """``(force_branch, moment_branch)``, either of which may be None.
+
+        Remembered per lambda since v0.1.186 (D159). See
+        :data:`LAMBDA_STATE_CACHE` for why that is an identity rather than an
+        approximation, why no counter moves, and what empties it.
+
+        A NaN lambda never matches itself, so it is re-solved every time and
+        can never hand back a stale pair. That is the safe direction of the
+        failure and it needs no branch of its own: a guard that cannot fire
+        is a claim nobody can check, and no NaN lambda is reachable -- the
+        grid is a list of literals, the secant step is guarded by the
+        ``abs(g_hi - g_lo) < 1e-12`` break of ``spencer.py``, and the probes
+        of :func:`refine_lambda_gap` are midpoints of finite numbers.
+        """
+        if not LAMBDA_STATE_CACHE:
+            return self._solve_states(lam)
+        sig = _branch_switches()
+        if sig != self._state_cache_sig:
+            self._state_cache.clear()
+            self._state_cache_sig = sig
+        hit = self._state_cache.get(lam)
+        if hit is not None:
+            return hit
+        pair = self._solve_states(lam)
+        self._state_cache[lam] = pair
+        return pair
 
     # ------------------------------------------------------------------
     def branches(self, lam: float) -> tuple:
