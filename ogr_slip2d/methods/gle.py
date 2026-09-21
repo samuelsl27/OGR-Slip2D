@@ -186,7 +186,8 @@ class GLEMorgensternPrice(LEMMethod):
         from ..interslice import (FALLBACK_RESIDUAL_LIMIT, GLESystem,
                                   branch_budget, branch_pair_ok,
                                   recover_thrust_edge,
-                                  refine_lambda_gap)
+                                  refine_lambda_gap,
+                                  thrust_is_admissible, thrust_margin)
         from .. import interslice
         s_list = slices.slices
         shape = [self.f_func(x, x0, x1)
@@ -337,6 +338,15 @@ class GLEMorgensternPrice(LEMMethod):
             residual = abs(best[1])
             settled = residual < FALLBACK_RESIDUAL_LIMIT
             force, _moment = system.states(lam_star)
+            # v0.1.185 (D156) — see ``Spencer.compute_fos``: the flag of this
+            # exit comes from the state it RETURNS and no longer from which
+            # pass produced the sample. See
+            # ``interslice.THRUST_FLAG_FROM_STATE``.
+            estado_inadmisible = (force is None
+                                  or not thrust_is_admissible(force))
+            flag_inadmisible = (estado_inadmisible
+                                if interslice.THRUST_FLAG_FROM_STATE
+                                else inadmissible)
             from .spencer import _base_forces
             normals, _mobilised, strengths = _base_forces(system, force)
             # v0.1.107 - ``base_shear_force`` is the DRIVING force in every
@@ -356,6 +366,11 @@ class GLEMorgensternPrice(LEMMethod):
                 # see ``Spencer.compute_fos``.
                 details=support_failure_details(sup, {
                     "lambda": lam_star,
+                    # v0.1.185 (D156) — this exit did not write the key at
+                    # all, see ``Spencer.compute_fos``.
+                    "thrust_admissible": not estado_inadmisible,
+                    # v0.1.185 (D155) — see ``interslice.thrust_margin``.
+                    "thrust_margin": thrust_margin(force),
                     "slide_sign": slide_sign,
                     # v0.1.159 (D63) — see ``Spencer.compute_fos``.
                     "lambda_search_fell_back": True,
@@ -410,9 +425,12 @@ class GLEMorgensternPrice(LEMMethod):
                                "GLE: no λ-bracket; the nearest λ leaves "
                                "F_f − F_m at %.3g" % residual),
                 reason=("" if settled else REASON_NO_LAMBDA_BRACKET),
-                admissible=not inadmissible,
+                admissible=not flag_inadmisible,
+                # v0.1.185 (D156) — the note follows the FLAG and its wording
+                # is untouched; see ``Spencer.compute_fos`` for why re-wording
+                # it would have measured something else.
                 admissibility_note=(
-                    "" if not inadmissible else
+                    "" if not flag_inadmisible else
                     "GLE: no λ leaves the inter-slice thrust in net "
                     "compression; the answer is reported with the criterion "
                     "relaxed"),
@@ -485,7 +503,6 @@ class GLEMorgensternPrice(LEMMethod):
         driving = driving_shear_forces(slices, kh, kv, slide_sign)
         # v0.1.106 — see ``Spencer.compute_fos``: the flag is a property of
         # the state returned, not of the pass that found it.
-        from ..interslice import thrust_is_admissible
         inadmissible = force is None or not thrust_is_admissible(force)
         return LEMResult(
             fos=0.5 * (ff_final + fm_final),
@@ -517,6 +534,8 @@ class GLEMorgensternPrice(LEMMethod):
             details=support_failure_details(sup, {
                 "lambda": lam_lo,
                 "thrust_admissible": not inadmissible,
+                # v0.1.185 (D155) — see ``interslice.thrust_margin``.
+                "thrust_margin": thrust_margin(force),
                 "slide_sign": slide_sign,
                 # v0.1.159 (D63) — see ``Spencer.compute_fos``.
                 "lambda_search_fell_back": False,

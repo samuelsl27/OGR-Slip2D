@@ -1502,6 +1502,49 @@ LAMBDA_EDGE_RECOVERY = True
 #: bit. See ``docs/audits/lambda_floor_v1184.md``.
 LAMBDA_BRACKET_FLOOR_CUT = True
 
+#: v0.1.185 (D156) -- the switch that makes the RESERVE exit of Spencer and
+#: GLE derive ``admissible`` from the state it RETURNS, the way the bracketed
+#: exit has done since v0.1.106.
+#:
+#: WHY THERE WERE TWO RULES. The bracketed exit writes, twelve lines above its
+#: own flag, "the flag comes from the state that was RETURNED, not from which
+#: pass produced it". The reserve exit did the opposite: ``admissible = not
+#: inadmissible``, where ``inadmissible`` was set on ENTERING the relaxed
+#: re-sweep of v0.1.106 and therefore names a PASS, not a state. Between that
+#: assignment and the flag, three more steps append rows to the same list the
+#: ``min |g|`` pick draws from -- the lazy extension, ``refine_lambda_gap``
+#: (which returns its probes even with no sign change) and, on the bracketed
+#: path only, the edge recovery -- and every one of them runs with
+#: ``system.strict`` already false, so nothing stops an ADMISSIBLE row from
+#: winning the pick after the flag has been nailed to false.
+#:
+#: WHY THE BANK COULD NOT SUPPLY THE GATE, and the number is smaller than the
+#: ficha's. Of the 48 rows that leave by the reserve exit at 0.1.182, 45 never
+#: fire the v0.1.106 block at all -- they have survivors, so ``inadmissible``
+#: is false and the two rules agree trivially -- and the 3 that do fire (047,
+#: 060, 090, all Spencer, all family A) have NO surviving node, so no
+#: admissible row exists for ``min |g|`` to land on and the discrepancy is
+#: impossible by construction rather than by luck. The honest denominator is
+#: 0 of 3, not 0 of 48, and it will stay 0 for as long as those two facts hold.
+#:
+#: WHAT THE GATE IS INSTEAD. The 45 degree plane with a passive 120 kN/m
+#: anchor under GLE -- family B1 of D149, the one case measured with the
+#: admissibility boundary BELOW the root: lam_E = 0.108, lam_g = 0.190. Put
+#: the grid at -0.05, 0.00, 0.05 and the extension at 0.15 and the engine
+#: publishes ``admissible`` FALSE over a state whose interior thrust sums to
+#: +0.78 kN/m, with a note that says "no lambda leaves the inter-slice thrust
+#: in net compression" about a lambda that does exactly that. Swept on the
+#: same family for Spencer -- 3 slope angles, 2 applications, 4 angles, 8
+#: capacities, 192 cells -- lam_E never crosses at all, so the constant shape
+#: function cannot reach this and the gate is GLE's.
+#:
+#: Read at call time as ``interslice.THRUST_FLAG_FROM_STATE`` with the mould
+#: of :data:`BRANCH_RESCUE`; off, the flag of the reserve exit is v0.1.184 bit
+#: for bit. The two ``details`` keys that came with it -- ``thrust_admissible``
+#: and ``thrust_margin`` -- are NOT switched: a measurement that can be turned
+#: off is not a measurement, and they move no number.
+THRUST_FLAG_FROM_STATE = True
+
 
 # ----------------------------------------------------------------------
 def recover_thrust_edge(samples, rejected):
@@ -1601,6 +1644,48 @@ def thrust_is_admissible(state: BranchState) -> bool:
     if not interior:
         return True
     return math.fsum(interior) > 0.0
+
+
+# ----------------------------------------------------------------------
+def thrust_margin(state) -> Optional[float]:
+    """How far the interior thrust is from the sign change, as a fraction.
+
+    ``thrust_is_admissible`` answers a yes/no on the sign of the resultant,
+    and a yes/no is all the engine needs to PREFER one lambda over another.
+    It is not enough to read an A/B with, because the quantity it tests is
+    not bounded: two answers can sit on opposite sides of it and be a
+    thousandth of a kilonewton apart, or a hundred kilonewtons apart, and the
+    flag says the same word. This returns
+    ``sum(E_interior) / sum(abs(E_interior))``, which is +1 when every
+    interior face is in compression, -1 when every one is in tension, and
+    near zero when the verdict is about to flip.
+
+    WHY IT IS PUBLISHED AT ALL, and it is new in v0.1.185 (D155). On
+    verification problem 85 the critical surface of 0.1.178 and the one of
+    0.1.181 differ by 37 % in the factor the SEARCH reports, while the two
+    surfaces themselves move 0.10 % and 0.24 %. The whole of that 37 % is
+    this sign: the older engine returned lambda = 1.0 with the resultant at
+    +2214 kN/m and the newer one returns 1.046875 with it at -22076, so the
+    surface leaves ``SearchResult.critical``'s admissible pool and a
+    different one wins. The factor is insensitive to lambda near the answer
+    and the thrust is not. With the margin published, that jump is a number a
+    reader can see coming -- the minimum published today for the same problem
+    sits at +0.0076 -- instead of a boolean that flips without warning.
+
+    Returns:
+        The fraction, or ``None`` when there is no state or no interior
+        boundary to sum -- the two cases where the question has no answer
+        rather than the answer zero.
+    """
+    if state is None:
+        return None
+    interior = state.boundary_e[1:-1]
+    escala = math.fsum(abs(v) for v in interior)
+    if not interior or escala <= 0.0:
+        return None
+    return math.fsum(interior) / escala
+
+
 
 
 # ======================================================================

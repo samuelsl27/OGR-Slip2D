@@ -96,7 +96,8 @@ class Spencer(LEMMethod):
         from ..interslice import (FALLBACK_RESIDUAL_LIMIT, GLESystem,
                                   branch_budget, branch_pair_ok,
                                   recover_thrust_edge,
-                                  refine_lambda_gap)
+                                  refine_lambda_gap,
+                                  thrust_is_admissible, thrust_margin)
         from .. import interslice
         s_list = slices.slices if hasattr(slices, "slices") else list(slices)
         system = GLESystem(
@@ -263,6 +264,20 @@ class Spencer(LEMMethod):
             # to work with and silently marched the surface with zero
             # inter-slice ratios — a Janbu picture over a Spencer number.
             force, _moment = system.states(lam_star)
+            # v0.1.185 (D156) — and the flag of THIS exit comes from that same
+            # state, like the bracketed one below. It used to be ``not
+            # inadmissible``, a variable set on ENTERING the relaxed re-sweep
+            # of v0.1.106, which names the PASS and not the state: between
+            # that assignment and here the lazy extension and
+            # ``refine_lambda_gap`` append rows to the very list ``min |g|``
+            # draws from, both with ``system.strict`` already false, so the
+            # winner can perfectly well be admissible. See
+            # ``interslice.THRUST_FLAG_FROM_STATE``.
+            estado_inadmisible = (force is None
+                                  or not thrust_is_admissible(force))
+            flag_inadmisible = (estado_inadmisible
+                                if interslice.THRUST_FLAG_FROM_STATE
+                                else inadmissible)
             normals, _mobilised, strengths = _base_forces(system, force)
             # v0.1.107 - ``base_shear_force`` is the DRIVING force in every
             # method now; it used to publish the MOBILISED shear here, which
@@ -284,6 +299,18 @@ class Spencer(LEMMethod):
                 # explaining was the one that could not.
                 details=support_failure_details(sup, {
                     "lambda": lam_star,
+                    # v0.1.185 (D156) — this exit did not write the key at
+                    # all, so the one invariant that ties the flag to the
+                    # state (``res.admissible == res.details
+                    # ["thrust_admissible"]``, in
+                    # ``tests/test_relaxed_thrust_v1130.py``) was
+                    # INEXPRESSIBLE on the exit that got it wrong. Unswitched:
+                    # it is a measurement, and it moves no number.
+                    "thrust_admissible": not estado_inadmisible,
+                    # v0.1.185 (D155) — and how far that verdict is from
+                    # flipping, which the boolean cannot say. See
+                    # ``interslice.thrust_margin``.
+                    "thrust_margin": thrust_margin(force),
                     "slide_sign": slide_sign,
                     # v0.1.159 (D63) — this is the path where losing a λ can
                     # decide the answer, so this is the path that has to be
@@ -338,9 +365,21 @@ class Spencer(LEMMethod):
                                "Spencer: no λ-bracket; the nearest λ leaves "
                                "F_f − F_m at %.3g" % residual),
                 reason=("" if settled else REASON_NO_LAMBDA_BRACKET),
-                admissible=not inadmissible,
+                admissible=not flag_inadmisible,
+                # v0.1.185 (D156) — the note follows the FLAG, and its
+                # wording is untouched. The sentence is a claim about every λ
+                # and it was written on the strength of which pass ran, so on
+                # the witness — where the sweep fires and the winner of
+                # ``min |g|`` is admissible — it denied a compression the
+                # returned state has. Tying it to the flag stops it being
+                # written there, which is the whole of the repair; re-wording
+                # it would have broken ``tests/test_relaxed_thrust_v1130.py``
+                # for a reason that has nothing to do with this defect. The
+                # fact the sentence also carried — that the grid had to be
+                # re-sampled — survives in ``lambdas_lost_to_thrust_tension``,
+                # which counts exactly the λ the strict pass set aside.
                 admissibility_note=(
-                    "" if not inadmissible else
+                    "" if not flag_inadmisible else
                     "Spencer: no λ leaves the inter-slice thrust in net "
                     "compression; the answer is reported with the criterion "
                     "relaxed"),
@@ -425,7 +464,6 @@ class Spencer(LEMMethod):
         # from which pass produced it. A bisection can land on a lambda its
         # bracketing samples did not share, so "the strict pass found this"
         # is not the same claim as "this answer is admissible".
-        from ..interslice import thrust_is_admissible
         inadmissible = force is None or not thrust_is_admissible(force)
         return LEMResult(
             fos=0.5 * (ff_final + fm_final),
@@ -471,6 +509,10 @@ class Spencer(LEMMethod):
             details=support_failure_details(sup, {
                 "lambda": lam_lo,
                 "thrust_admissible": not inadmissible,
+                # v0.1.185 (D155) — written in BOTH exits so that a reader of
+                # ``details`` never has to know which one produced them. See
+                # ``interslice.thrust_margin``.
+                "thrust_margin": thrust_margin(force),
                 "slide_sign": slide_sign,
                 # v0.1.159 (D63) — false here by construction: a bracket was
                 # found and refined. Written rather than omitted so that a
