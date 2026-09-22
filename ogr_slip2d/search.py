@@ -227,9 +227,39 @@ class SearchResult:
     evaluations: list[LEMResult] = field(default_factory=list)
     valid_count: int = 0
     invalid_count: int = 0
-    # v0.1.24 — generation attempts made (searches that count VALID
-    # surfaces, e.g. Path Search, report the true attempt count here).
+    # v0.1.24 — generation attempts made, counted BEFORE anything can
+    # fail. v0.1.187 — and every search fills it, not just the two that
+    # used to: a denominator that is 0 for five of the seven is
+    # indistinguishable from "it tried nothing", which is the shape of the
+    # defect ``_run_centres`` documents below at v0.1.83.
+    #
+    # The meaning does NOT change: it is still "candidates formed", which
+    # is what the comment at ``AutoRefineSearch`` has defined since
+    # v0.1.133. Two identities make it checkable rather than a snapshot:
+    # a Grid Search attempts exactly (nx+1)(ny+1)(rinc+1), and a Block
+    # Search exactly ``num_surfaces``.
     attempts: int = 0
+    # v0.1.187 — candidates a FOCUS OBJECT removed. It is its own counter
+    # and not part of ``invalid_count`` on purpose: the focus is a choice
+    # the user made about which surfaces to consider, not something the
+    # geometry did, so folding it in would break the identity
+    # ``total_count == valid + invalid`` that the grid population rests on
+    # (see ``_run_centres``) and change what seventeen tests measure.
+    #
+    # It counts GENERATION only. A focus rejection inside a walk — the
+    # local refinement of Slope Search, an annealing proposal, a step of
+    # the Optimize Surfaces walk — is not a member of the population and
+    # is not counted; each of those sites says so where it skips.
+    #
+    # Why it buys anything, given that Path Search already satisfies
+    # ``attempts - total_count == focus_rejected``: in Auto Refine and
+    # Grid Search a skipped focus candidate and a circle that could not be
+    # built both leave the loop without counting, so the subtraction
+    # confuses two different things. Measured on the verification bank:
+    # of the 85 reproducible non-circular ``path`` rows, 19 reach their
+    # quota WITH a focus object, and their real effort cannot be recovered
+    # from what is archived. Defect D160.
+    focus_rejected: int = 0
     # v0.1.104 — the surface Optimize Surfaces produced, when it ran and
     # improved on what the search found. It is ALSO appended to
     # ``evaluations``, so ``critical`` finds it the ordinary way; this
@@ -1491,6 +1521,43 @@ class BaseSearch(ABC):
                    getattr(sd, "radius", float("nan"))))
 
     # ------------------------------------------------------------------
+    def _optimisation_note(self, walked: int, sin_resultado: int,
+                           sin_factor: int, inadmisible: int,
+                           motivo) -> None:
+        """Say what Optimize Surfaces threw away, and only if it did.
+
+        Fires only when a walk came back unusable, for the reason the
+        notes of v0.1.143 and v0.1.151 already give: a note that appears
+        on every analysis is noise, and rule 7 asks for the opposite.
+
+        The three counts are kept apart because they are three different
+        answers. A walk with NO RESULT means the slicer refused its own
+        starting surface, so the factor is missing; a walk whose result
+        has NO FACTOR means the method has no answer for that surface,
+        which is itself the answer; and an INADMISSIBLE one was ruled out
+        on purpose by the thrust criterion. Folding them into "the
+        optimisation failed" is what let D161 be written as a defect of
+        the walk when the walk had not taken a single step.
+        """
+        perdidas = sin_resultado + sin_factor + inadmisible
+        if not perdidas:
+            return
+        partes = []
+        if sin_resultado:
+            partes.append("%d could not evaluate the starting surface at "
+                          "all" % sin_resultado)
+        if sin_factor:
+            partes.append("%d started from a surface the method has no "
+                          "factor of safety for (%s)" % (sin_factor, motivo))
+        if inadmisible:
+            partes.append("%d ended on an inadmissible surface"
+                          % inadmisible)
+        self._note(
+            "Optimize Surfaces walked %d surface(s) and %d came back "
+            "unusable: %s. Those walks contributed nothing, and what is "
+            "reported is what the search itself found."
+            % (walked, perdidas, "; ".join(partes)))
+
     def _optimize_result(self, project: Project, result) -> None:
         """Run Optimize Surfaces over what the search found.
 
@@ -1544,6 +1611,8 @@ class BaseSearch(ABC):
         # count and a different shuffle order.
         walk = replace(opts, seed=self.optimize_seed)
         best = None
+        sin_resultado = sin_factor = inadmisible = 0
+        motivo = None
         for i, start in enumerate(targets):
             # Reported BEFORE the guards below, so a walk that comes back
             # unusable still advances the bar. With "All" this loop is the
@@ -1551,15 +1620,33 @@ class BaseSearch(ABC):
             # as a hung analysis.
             if self.progress_cb is not None and len(targets) > 1:
                 self.progress_cb(i + 1, len(targets))
-            _surface, res, _rep = optimize_surface(
+            _surface, res, rep = optimize_surface(
                 project, self, start.surface, walk)
             if res is None or not res.is_valid:
+                # v0.1.187 — these were ONE silent ``continue``, and the
+                # silence is the defect: the menu action of the interface
+                # says "the optimised surface has no factor of safety; the
+                # original result is kept", and the same failure reached
+                # through the SEARCH said nothing at all. The two causes
+                # are counted apart because they mean opposite things —
+                # see ``optimize_surface``. D161.
+                if res is None:
+                    sin_resultado += 1
+                else:
+                    sin_factor += 1
+                    if motivo is None:
+                        motivo = rep.notes.get("start_invalid") or (
+                            res.error_message or res.admissibility_note
+                            or "no reason declared")
                 continue
             if not getattr(res, "admissible", True):
+                inadmisible += 1
                 continue
             if best is None or self.score(res) < self.score(best):
                 best = res
 
+        self._optimisation_note(len(targets), sin_resultado, sin_factor,
+                                inadmisible, motivo)
         if best is None:
             return
         # Only worth reporting when it beat what the search found: an
@@ -1594,13 +1681,29 @@ class BaseSearch(ABC):
         opts = replace(self.optimize, seed=self.optimize_seed)
         kept = []
         improved = None
+        sin_resultado = sin_factor = inadmisible = 0
+        motivo = None
         for i, r in enumerate(result.minima):
             if self.progress_cb is not None and len(result.minima) > 1:
                 self.progress_cb(i + 1, len(result.minima))
             start = self._as_optimisable(r.surface, opts.densify_to)
             keep = r
             if start is not None:
-                _s, res, _rep = optimize_surface(project, self, start, opts)
+                _s, res, rep = optimize_surface(project, self, start, opts)
+                # v0.1.187 — counted here too. The multimodal path had the
+                # same silence as the ordinary one, and a search that
+                # reports several minima is exactly where losing one
+                # quietly matters most. D161.
+                if res is None:
+                    sin_resultado += 1
+                elif not res.is_valid:
+                    sin_factor += 1
+                    if motivo is None:
+                        motivo = rep.notes.get("start_invalid") or (
+                            res.error_message or res.admissibility_note
+                            or "no reason declared")
+                elif not getattr(res, "admissible", True):
+                    inadmisible += 1
                 if (res is not None and res.is_valid
                         and getattr(res, "admissible", True)
                         and self.score(res) < self.score(r)):
@@ -1610,6 +1713,8 @@ class BaseSearch(ABC):
                     if improved is None or self.score(res) < self.score(improved):
                         improved = res
             kept.append(keep)
+        self._optimisation_note(len(result.minima), sin_resultado,
+                                sin_factor, inadmisible, motivo)
         result.minima = sorted(kept, key=self.score)
         # ``optimized`` means "the answer came from the walk, not the
         # search", so it is only set when the walk actually produced the
@@ -1814,6 +1919,11 @@ def _parallel_grid_run(search, project, centres, workers):
         merged.valid_count += part.valid_count
         merged.invalid_count += part.invalid_count
         merged.attempts += part.attempts
+        # v0.1.187 — summed like the other three. A counter that the
+        # sequential path fills and the parallel one silently drops is the
+        # shape of the 1697 circles that went missing in v0.1.83, and the
+        # parallel path is the DEFAULT for a grid big enough to care.
+        merged.focus_rejected += part.focus_rejected
     return merged
 
 
@@ -2382,9 +2492,16 @@ class GridSearch(BaseSearch):
                     # here. Counted rather than skipped, for the same
                     # reason as below.
                     result.invalid_count += n_circles
+                    result.attempts += n_circles
                     continue
                 r_min, r_max = bracket
                 for k in range(n_circles):
+                    # v0.1.187 — counted HERE, before anything can reject
+                    # it, so ``attempts`` is exactly (nx+1)(ny+1)(rinc+1)
+                    # and can be checked as an identity instead of against
+                    # a recorded number. That is also what makes
+                    # ``attempts - total_count == focus_rejected`` hold.
+                    result.attempts += 1
                     if n_circles > 1:
                         r = r_min + (r_max - r_min) * k / (n_circles - 1)
                     else:
@@ -2404,6 +2521,10 @@ class GridSearch(BaseSearch):
                         # a focus rejection the same way (D33, v0.1.129). So
                         # the analysed population is (nx+1)(ny+1)(rinc+1)
                         # minus the focus rejections. Stated in v0.1.150.
+                        # v0.1.187 — and since D160 that subtrahend is a
+                        # number the run publishes instead of one the
+                        # reader has to infer.
+                        result.focus_rejected += 1
                         continue
                     circle = SlipCircle(centre_x=xc, centre_y=yc, radius=r)
                     res = self.evaluate_circle(project, circle)
@@ -2648,6 +2769,14 @@ class SlopeSearch(BaseSearch):
         for i in range(self.num_surfaces):
             if self.progress_cb and (i % 50 == 0):
                 self.progress_cb(i, self.num_surfaces)
+            # v0.1.187 — the SAMPLING loop is the population, so it is
+            # what ``attempts`` counts. The local refinement below is a
+            # WALK and is deliberately left out of both counters: see
+            # there. This search generates ``num_surfaces`` candidates and
+            # keeps whichever turn out valid, which is the opposite of
+            # what Path Search does with the same setting name — the
+            # ambiguity D160 is about, now at least visible as two numbers.
+            result.attempts += 1
 
             # Two surface points: toe (exit) and crest (entry)
             xt = self.rng.uniform(toe_x0, toe_x1)
@@ -2677,6 +2806,7 @@ class SlopeSearch(BaseSearch):
                 # v0.1.129 — the reference documents the focus objects for
                 # the Grid Search AND for this one, and until now only the
                 # Grid Search had ever been handed any. Defect D33.
+                result.focus_rejected += 1
                 continue
 
             from .surface import SlipCircle
@@ -2718,6 +2848,15 @@ class SlopeSearch(BaseSearch):
                         # The refinement walk has to respect the focus too,
                         # or the search would step off it after finding a
                         # focused minimum and report the escape.
+                        #
+                        # v0.1.187 — NOT counted in ``focus_rejected``, and
+                        # this walk is not counted in ``attempts`` either.
+                        # A step of a walk is not a member of the
+                        # population: counting it would make the effort of
+                        # a run depend on how many minima happened to be
+                        # worth refining, and the excess this loop already
+                        # produces is what ``test_acads_validation_v178``
+                        # fixes as its own thing.
                         continue
                     sc = SlipCircle(centre_x=tcx, centre_y=tcy, radius=tr)
                     res = self.evaluate_circle(project, sc)
@@ -3104,6 +3243,14 @@ class AutoRefineSearch(BaseSearch):
                             # would be judged on the chords it is about to
                             # become rather than on the circle the search
                             # generated. Defect D33.
+                            # v0.1.187 — counted here and NOT subtracted
+                            # from ``attempts``, which is already ``+=
+                            # ncpd`` before anything can fail. In this
+                            # search the subtraction would be ambiguous: a
+                            # circle that could not be BUILT leaves the
+                            # loop the same silent way, so only a counter
+                            # of its own tells the two apart. D160.
+                            result.focus_rejected += 1
                             continue
                         sc = SlipCircle(centre_x=cx, centre_y=cy, radius=r)
                         res = self._evaluate_trial(project, sc)
@@ -3728,6 +3875,13 @@ class BlockSearch(BaseSearch):
         for ip in range(self.num_surfaces):
             if self.progress_cb and ip % 25 == 0:
                 self.progress_cb(ip, self.num_surfaces)
+            # v0.1.187 — ``attempts == num_surfaces`` exactly, because
+            # this loop is a FIXED GENERATION BUDGET: it cannot shorten
+            # and it cannot lengthen, whatever the evaluator decides.
+            # That is the very shape D160 weighed for Path Search and did
+            # not adopt, and having it here as an identity is what makes
+            # the two semantics comparable instead of merely described.
+            result.attempts += 1
 
             # 1. one random point per block window (or per user-drawn
             #    Block Search object). Each point must lie INSIDE the
@@ -3895,6 +4049,7 @@ class BlockSearch(BaseSearch):
                 # D33. Asked before ``evaluate_surface`` because that is
                 # where the cost is: 2.18 ms against 0.44 ms to generate,
                 # measured on verification problem 78.
+                result.focus_rejected += 1
                 continue
             res = self.evaluate_surface(project, surface)
             if res is None:
@@ -4454,6 +4609,15 @@ class PathSearch(BaseSearch):
                 # problem 78, a tangent focus passes 2.2 % of what the
                 # generator produces, and rejecting HERE rather than after
                 # the solve is what keeps that a x3 and not a x45.
+                #
+                # v0.1.187 — the budget still absorbs it; what changes is
+                # that the run now SAYS how much it absorbed. Here, and
+                # only here, ``attempts - total_count`` already equalled
+                # this counter, because every other exit of this loop
+                # touches ``valid_count`` or ``invalid_count``. Publishing
+                # it is what makes that an invariant a test can assert
+                # instead of a trace a reader has to redo. D160.
+                result.focus_rejected += 1
                 continue
             res = self.evaluate_surface(project, surface)
             if res is None:
@@ -5058,6 +5222,13 @@ class SimulatedAnnealingSearch(BaseSearch):
             # leaves the focus, or the walk would wander off it and report
             # where it landed. Rejected like any other inadmissible
             # candidate: the step is simply not taken. Defect D33.
+            #
+            # v0.1.187 — NOT counted in ``focus_rejected``: this is a
+            # PROPOSAL of the annealing walk, not a member of the
+            # population. The population of this search is K x Ngen and is
+            # fixed before the first evaluation, which is exactly why
+            # D160 does not apply to it — the factor steers WHERE it
+            # looks, never HOW MUCH.
             return None, None
         res = self.evaluate_surface(project, surface)
         if res is None or not res.is_valid:
@@ -5317,6 +5488,11 @@ class SimulatedAnnealingSearch(BaseSearch):
             Ngen = max(10, Ngen0 // (2 ** (k - 1)))
 
             for _ in range(Ngen):
+                # v0.1.187 — one candidate per inner step. K and Ngen are
+                # both fixed before the first evaluation, so this total
+                # does not depend on a single verdict: the Metropolis rule
+                # below steers the walk, it does not buy or spend effort.
+                result.attempts += 1
                 # Cauchy random walk for ALL control variables
                 cand_X = list(P_X)
                 cand_Y = list(P_Y)

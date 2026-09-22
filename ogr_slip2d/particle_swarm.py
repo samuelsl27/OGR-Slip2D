@@ -276,6 +276,9 @@ class ParticleSwarmSearch(BaseSearch):
             # particle as invalid: a focus rejection skips silently in
             # every search, which keeps the populations comparable between
             # a focused run and an unfocused one. Defect D33.
+            # v0.1.187 — counted in its own field, which is what lets the
+            # populations stay comparable AND the effort be visible. D160.
+            result.focus_rejected += 1
             return _INVALID, None
 
         res = self.evaluate_circle(
@@ -360,6 +363,13 @@ class ParticleSwarmSearch(BaseSearch):
         done = 0
         for it in range(self.num_iterations):
             for p in swarm:
+                # v0.1.187 — one candidate per particle per iteration, so
+                # ``attempts == num_iterations * num_particles``, which is
+                # the ``total`` this loop already computes for the
+                # progress bar. Fixed before the first evaluation: the
+                # swarm is steered by the factor but never resized by it,
+                # which is why D160 does not reach this search.
+                result.attempts += 1
                 p.score, p.result = self._evaluate(project, frame, result, p.u)
                 if p.score < p.best_score:
                     p.best_score = p.score

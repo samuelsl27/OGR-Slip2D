@@ -459,10 +459,50 @@ def optimize_surface(project, search, surface, settings=None):
         except Exception:  # noqa: BLE001
             return None
 
+    # v0.1.187 — ONE message used to cover two different facts, and the
+    # bank read it as a third. D161 was written as "the walk steps onto a
+    # surface it cannot evaluate": it does not, and cannot — ``_score``
+    # returns None for such a step and the loop below simply does not take
+    # it. What happens is that the walk never STARTS, and the two ways it
+    # can fail to start say opposite things about the answer:
+    #
+    #   * nothing came back at all — the slicer refused the polyline
+    #     whole, which since v0.1.100 is what happens if it rises above
+    #     the ground ANYWHERE. A ten-thousandth is enough, so this is
+    #     usually a surface that arrived degraded, and the factor is
+    #     MISSING;
+    #   * a result came back WITHOUT a factor of safety — the surface is
+    #     fine and the method has no answer for it (Spencer with no
+    #     lambda bracket, say). Nothing is missing here: that IS the
+    #     answer, and reporting it as a gap invites someone to go looking
+    #     for a number that does not exist.
+    #
+    # The ``error`` key keeps its name in both cases because the menu
+    # action short-circuits on it (``main_window._optimize_current``); the
+    # distinction goes in a key of its own.
     best_res = _evaluate(pts)
     if best_res is None or not best_res.is_valid:
-        rep.notes["error"] = "The starting surface could not be evaluated."
-        return surface, best_res, rep
+        if opts.densify_to and len(pts) > len(surface.polyline.vertices):
+            rep.notes["start_densified_to"] = len(pts)
+        if best_res is None:
+            rep.notes["error"] = (
+                "The starting surface could not be evaluated: the slicer "
+                "refused it whole. A polyline that rises above the ground "
+                "anywhere is refused entirely, so a vertex a "
+                "ten-thousandth over the profile is enough.")
+        else:
+            motivo = (best_res.error_message or best_res.admissibility_note
+                      or "no reason declared")
+            rep.notes["start_invalid"] = motivo
+            rep.notes["error"] = (
+                "The starting surface was evaluated and has no factor of "
+                "safety: %s. That is not missing data, it is the answer."
+                % motivo)
+        # The surface returned is the one that was EVALUATED, densified
+        # points and all. Handing back the undensified original described
+        # a different surface from the result beside it, and a caller that
+        # archived both stored two answers to two different questions.
+        return _make(pts), best_res, rep
     rep.initial_fos = best_res.fos
     best_fos = best_res.fos
     best_pts = list(pts)

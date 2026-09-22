@@ -281,17 +281,23 @@ def generate_report(
 
     # ---- 6. Valid / Invalid Surfaces ------------------------------
     section("Valid / Invalid Surfaces")
-    vi_rows = [["Method", "Valid", "Invalid", "Total"]]
+    # v0.1.187 (D160) — "Attempted" beside the population. Total is the
+    # population the search ANALYSED; attempted is what it cost to get
+    # it, and the two differ by the candidates a focus object removed,
+    # which belong to neither of the first two columns.
+    vi_rows = [["Method", "Valid", "Invalid", "Total", "Attempted"]]
     for mid in method_ids:
         res = results.get(mid)
         if res is None:
-            vi_rows.append([_method_name(mid), "—", "—", "—"])
+            vi_rows.append([_method_name(mid), "—", "—", "—", "—"])
         else:
             v = res.valid_count
             iv = res.invalid_count
+            at = getattr(res, "attempts", 0)
             vi_rows.append([_method_name(mid), str(v), str(iv),
-                            str(v + iv)])
-    t = Table(vi_rows, colWidths=[70 * mm, 30 * mm, 30 * mm, 30 * mm])
+                            str(v + iv), str(at) if at else "—"])
+    t = Table(vi_rows,
+              colWidths=[64 * mm, 24 * mm, 24 * mm, 24 * mm, 28 * mm])
     t.setStyle(_grid_style())
     story.append(t)
 

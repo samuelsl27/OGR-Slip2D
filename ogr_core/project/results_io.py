@@ -92,6 +92,16 @@ def save_results(
         f.attrs["n_surfaces"] = len(search_result.evaluations)
         f.attrs["n_valid"] = search_result.valid_count
         f.attrs["n_invalid"] = search_result.invalid_count
+        # v0.1.187 (D160) — the EFFORT, beside the population. Always
+        # written, because a file whose reader has to guess whether the
+        # attribute is missing or the number is zero is the defect this
+        # closes. The focus counter is written only when a focus object
+        # actually removed something, on the ``n_user_surfaces``
+        # precedent below: an ordinary file stays the file it always was.
+        f.attrs["n_attempts"] = getattr(search_result, "attempts", 0)
+        _focus = getattr(search_result, "focus_rejected", 0)
+        if _focus:
+            f.attrs["n_focus_rejected"] = _focus
         # v0.1.127 — which quantity the run minimised. A results file
         # that records only the factor of safety cannot say which surface
         # was the answer when the answer was a critical seismic

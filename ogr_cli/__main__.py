@@ -252,6 +252,15 @@ def compute(
     tbl.add_column(label)
     tbl.add_column("Valid")
     tbl.add_column("Invalid")
+    # v0.1.187 (D160) — what the run COST, which "Valid / Invalid" does
+    # not say: a focus rejection is neither, and in Path Search the
+    # budget is spent in attempts while the request is counted in valid
+    # surfaces. The focus column appears only when some run used one.
+    tbl.add_column("Attempted")
+    _focus_used = any(getattr(r, "focus_rejected", 0)
+                      for r in outcome.results.values())
+    if _focus_used:
+        tbl.add_column("Focus-rejected")
     tbl.add_column("Converged")
     for mid, result in outcome.results.items():
         critical = result.critical
@@ -266,13 +275,13 @@ def compute(
                 "ky", float("nan"))
         else:
             shown = f"[bold yellow]{critical.fos:.4f}[/bold yellow]"
-        tbl.add_row(
-            mid,
-            shown,
-            str(result.valid_count),
-            str(result.invalid_count),
-            str(critical.converged) if critical is not None else "—",
-        )
+        fila = [mid, shown, str(result.valid_count),
+                str(result.invalid_count),
+                str(getattr(result, "attempts", 0))]
+        if _focus_used:
+            fila.append(str(getattr(result, "focus_rejected", 0)))
+        fila.append(str(critical.converged) if critical is not None else "—")
+        tbl.add_row(*fila)
     console.print(tbl)
 
     if not outcome.results:

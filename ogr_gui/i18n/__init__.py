@@ -27,6 +27,9 @@ _DICTS: dict[str, dict[str, str]] = {
         # (query), «línea de empujes» (line of thrust).
         '%d more were discarded before slicing, so they carry no error code and cannot be displayed.': '%d más se descartaron antes del dovelado, así que no llevan código de error y no se pueden mostrar.',
         '%d surface(s) rejected of %d generated:': '%d superficie(s) rechazada(s) de %d generadas:',
+        'A focus object also removed %d candidate(s) before they were analysed. They are in neither count above: the population stays comparable to an unfocused run.': 'Un objeto de enfoque retiró además %d candidata(s) antes de analizarlas. No están en ninguno de los recuentos anteriores: así la población sigue siendo comparable a la de una corrida sin enfoque.',
+        'Generation attempts: %d': 'Intentos de generación: %d',
+        'Generation attempts: %d (%d rejected by the focus object)': 'Intentos de generación: %d (%d rechazados por el objeto de enfoque)',
         'All data': 'Todos los datos',
         'Data to plot:': 'Datos a representar:',
         'Error code:': 'Código de error:',

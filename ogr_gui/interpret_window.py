@@ -486,10 +486,25 @@ class _SummaryDock(QDockWidget):
         kind, label = _reported_quantity(result, self.factor_report)
         value, note = _reported_value(result, c, getattr(self, "project", None))
         extra = f"<br><i>{note}</i>" if note else ""
+        # v0.1.187 (D160) — the EFFORT, under the population. "Valid / N"
+        # says what was analysed; it does not say what it cost, and the
+        # two differ by whatever a focus object removed, which belongs to
+        # neither count. Shown only when the search reports it, so a
+        # result loaded from an older file does not grow a "0".
+        intentos = getattr(result, "attempts", 0)
+        foco = getattr(result, "focus_rejected", 0)
+        if not intentos:
+            esfuerzo = ""
+        elif foco:
+            esfuerzo = (tr("Generation attempts: %d (%d rejected by the "
+                           "focus object)") % (intentos, foco)) + "<br>"
+        else:
+            esfuerzo = (tr("Generation attempts: %d") % intentos) + "<br>"
         self.label.setText(
             f"Method: <b>{result.method_id}</b><br>"
             f"Valid surfaces: <b>{n_ok}</b> / "
             f"{getattr(result, 'total_count', len(result.evaluations))}<br>"
+            f"{esfuerzo}"
             f"<br>"
             f"<b>{tr('Critical surface')}</b><br>"
             f"{label} = <span style='color:#c0392b; font-size:14pt;'>"
@@ -2036,6 +2051,21 @@ class InterpretWindow(QMainWindow):
             lines += ["", tr("%d more were discarded before slicing, so "
                              "they carry no error code and cannot be "
                              "displayed.") % silent]
+        # v0.1.187 (D160) — and the ones a FOCUS object removed,
+        # which are in neither of the numbers above: a focus
+        # rejection skips without counting as valid or as invalid,
+        # on purpose, so that a focused run and an unfocused one
+        # keep comparable populations. Saying nothing about them
+        # made the difference between "generated" and what the
+        # search actually did invisible.
+        foco = getattr(res, "focus_rejected", 0)
+        if foco:
+            lines += ["", tr("A focus object also removed %d "
+                             "candidate(s) before they were "
+                             "analysed. They are in neither count "
+                             "above: the population stays "
+                             "comparable to an unfocused run.")
+                      % foco]
         self._info("\n".join(lines))
 
     # ---- Groundwater -------------------------------------------------

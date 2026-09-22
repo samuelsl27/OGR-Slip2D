@@ -270,13 +270,26 @@ class TestWhatNumberOfSurfacesActuallyMeans:
     ``PathSearch`` it means surfaces *accepted* — that search keeps
     generating until the requested count of valid ones is reached, and
     ``test_slide_validation_ej1.py`` pins that meaning explicitly.
-    ``attempts`` compounds it: PathSearch reports it, SlopeSearch leaves
-    it at zero.
 
     Two searches, two meanings for the same setting, and nothing in the
     interface distinguishes them. These tests fix the CURRENT behaviour
     so that whichever way it is later reconciled is a deliberate change
     with a visible diff — they are not an endorsement of it.
+
+    v0.1.187 — AND THIS IS THE DELIBERATE CHANGE, for the half of it that
+    ``attempts`` was. The paragraph above used to end "PathSearch reports
+    it, SlopeSearch leaves it at zero", and ``test_attempts_is_not_
+    reported`` asserted that zero. D160 decided the ambiguity the way the
+    reference documents it — "Number of Surfaces" stays the count of
+    VALID surfaces in Path Search — and made the effort visible instead,
+    so every search now fills ``attempts``. A denominator that is zero
+    for five of the seven searches cannot be told apart from "it tried
+    nothing", which is the same shape as the 1697 circles that went
+    missing in v0.1.83.
+
+    What is NOT reconciled, and stays reported: the two meanings of the
+    setting itself. Publishing two numbers makes the difference legible;
+    it does not remove it.
     """
 
     def test_valid_count_exceeds_the_requested_number(self):
@@ -292,7 +305,25 @@ class TestWhatNumberOfSurfacesActuallyMeans:
         assert small.valid_count - 400 <= 8 * 120
         assert big.valid_count - 1500 <= 8 * 120
 
-    def test_attempts_is_not_reported(self):
-        """PathSearch fills this in and SlopeSearch does not, so a caller
-        reading it gets 0 rather than a count."""
-        assert _slope_result().attempts == 0
+    def test_attempts_counts_the_sampling_loop_and_not_the_refinement(self):
+        """v0.1.187 (D160), and it replaces ``attempts == 0``.
+
+        The identity, not a recorded number: the sampling loop runs
+        exactly ``num_surfaces`` times and counts one attempt per turn,
+        while the local refinement that follows is a WALK and counts
+        nothing. So ``attempts`` is the request exactly, even though
+        ``valid_count`` overshoots it — which is the clearest possible
+        statement of what the two numbers mean here.
+        """
+        r = _slope_result(seed=42, n=400)
+        assert r.attempts == 400, r.attempts
+        assert r.valid_count > r.attempts, (r.valid_count, r.attempts)
+
+    def test_a_search_with_no_focus_rejects_nothing_for_focus(self):
+        """The companion counter, on a model that has no focus object.
+
+        It is not a tautology: the field could have been wired to the
+        refinement walk or to the optimisation walk by mistake, and both
+        run in this search. Zero here is what says it was not.
+        """
+        assert _slope_result(seed=42, n=400).focus_rejected == 0
