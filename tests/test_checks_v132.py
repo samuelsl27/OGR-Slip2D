@@ -135,6 +135,19 @@ class TestMAlphaCheck:
         method used inside its own iteration. Recomputing it here from
         Bishop's published expression is the only way to keep the two from
         drifting apart again.
+
+        v0.1.188 (D113) — and it drifted anyway, because this
+        recomputation was wrong in the one way this model cannot show.
+        The stress the envelope is linearised at carries the ponded water
+        (v0.1.67); the line below used the bare soil weight, which is what
+        ``base_m_alphas`` itself did until v0.1.188. Ej_1 has no water
+        table, so ``water_weight`` is zero on every slice and the identity
+        held for both the right expression and the wrong one: this test
+        passed for fifty-six versions while stating an invariant its own
+        arithmetic did not implement. The term is written out rather than
+        imported from ``checks`` on purpose — an independent
+        recomputation is the whole point, and calling the function under
+        test would make the assertion vacuous.
         """
         import math as _m
 
@@ -146,7 +159,8 @@ class TestMAlphaCheck:
         for s, got in zip(r.slices, base_m_alphas(r)):
             a = s.base_angle
             l = max(s.base_length, 1e-12)
-            sig = max(0.0, s.weight * _m.cos(a) - s.pore_pressure * l) / l
+            w = s.weight + getattr(s, "water_weight", 0.0)
+            sig = max(0.0, w * _m.cos(a) - s.pore_pressure * l) / l
             _c, tan_phi = _B._local_c_phi(s, s.material, sig)
             want = _m.cos(a) + sgn * _m.sin(a) * tan_phi / r.fos
             assert abs(got - want) < 1e-12, (got, want)

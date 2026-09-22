@@ -69,6 +69,8 @@ from __future__ import annotations
 
 import math
 
+from .external_forces import slice_forces
+
 # Strength models that can carry a genuine tensile strength. For every
 # other model the allowable tensile stress is zero.
 _TENSILE_CAPABLE = {
@@ -139,6 +141,35 @@ def _slide_sign(result) -> float:
     return 1.0 if driving >= 0 else -1.0
 
 
+def _base_load_and_sigma(s) -> tuple[float, float]:
+    """The base load and the ONE normal stress both checks linearise at.
+
+    ``W`` is :attr:`SliceForces.w_total` — soil plus the ponded water
+    standing on the slice — which is the load every method's own
+    iteration uses to estimate the stress it evaluates the envelope at
+    (see :meth:`BishopSimplified.compute_fos`). Taking it from
+    :func:`slice_forces` rather than adding the two terms here is what
+    keeps this estimate tied to the solver's instead of merely equal to
+    it today.
+
+    v0.1.188 (D113) — there used to be two estimates. v0.1.67 taught
+    ``base_effective_stresses`` to carry the ponded water, because
+    leaving it out made that check judge a reservoir-loaded slope with
+    about a third of the real normal force — "the difference between 'in
+    tension' and not". ``base_m_alphas``, the same loop fifteen lines
+    below, was not taught. It only shows where the envelope depends on
+    sigma, since ``_local_c_phi`` then returns a different ``tan phi``
+    for each estimate and the two checks judge the same slice at two
+    different stresses: exactly the case v0.1.67 was written for. One
+    function returning both quantities is what makes them unable to
+    drift apart again.
+    """
+    W = slice_forces(s).w_total
+    l = max(s.base_length, 1e-12)
+    sigma = max(0.0, W * math.cos(s.base_angle) - s.pore_pressure * l) / l
+    return W, sigma
+
+
 def base_effective_stresses(result) -> list[float]:
     """Effective normal stress on each slice base at the converged FoS.
 
@@ -165,12 +196,7 @@ def base_effective_stresses(result) -> list[float]:
         alpha = s.base_angle
         l = max(s.base_length, 1e-12)
         u = s.pore_pressure
-        # v0.1.67 — the base has to carry the ponded water standing on the
-        # slice as well as the soil. Leaving it out made this check judge
-        # a reservoir-loaded slope with about a third of the real normal
-        # force, which is the difference between "in tension" and not.
-        W = s.weight + getattr(s, "water_weight", 0.0)
-        sigma_est = max(0.0, W * math.cos(alpha) - u * l) / l
+        W, sigma_est = _base_load_and_sigma(s)
         c_loc, tan_phi = BishopSimplified._local_c_phi(s, s.material,
                                                        sigma_est)
         m_alpha = math.cos(alpha) + sgn * math.sin(alpha) * tan_phi / F
@@ -196,9 +222,7 @@ def base_m_alphas(result) -> list[float]:
     sgn = _slide_sign(result)
     for s in result.slices:
         alpha = s.base_angle
-        l = max(s.base_length, 1e-12)
-        u = s.pore_pressure
-        sigma_est = max(0.0, s.weight * math.cos(alpha) - u * l) / l
+        _W, sigma_est = _base_load_and_sigma(s)
         _c, tan_phi = BishopSimplified._local_c_phi(s, s.material,
                                                     sigma_est)
         out.append(math.cos(alpha) + sgn * math.sin(alpha) * tan_phi / F)
