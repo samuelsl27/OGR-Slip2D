@@ -312,6 +312,15 @@ class Spencer(LEMMethod):
                     # ``interslice.thrust_margin``.
                     "thrust_margin": thrust_margin(force),
                     "slide_sign": slide_sign,
+                    # v0.1.189 (D112) -- the sign the denominator of
+                    # ``interslice.py`` carried. It equals
+                    # ``slide_sign`` here and that is not a
+                    # coincidence: ``prepare_rows`` turns alpha by it
+                    # before the recursion forms ``m_alpha``, so the
+                    # expression in the true frame is Bishop's with
+                    # this sign. Written from the same local, in the
+                    # same statement, so the two cannot drift apart.
+                    "m_alpha_sign": slide_sign,
                     # v0.1.159 (D63) — this is the path where losing a λ can
                     # decide the answer, so this is the path that has to be
                     # able to say it did. See ``analysis_runner.lambda_budget_note``.
@@ -536,6 +545,15 @@ class Spencer(LEMMethod):
                 # ``interslice.thrust_margin``.
                 "thrust_margin": thrust_margin(force),
                 "slide_sign": slide_sign,
+                # v0.1.189 (D112) -- the sign the denominator of
+                # ``interslice.py`` carried. It equals
+                # ``slide_sign`` here and that is not a
+                # coincidence: ``prepare_rows`` turns alpha by it
+                # before the recursion forms ``m_alpha``, so the
+                # expression in the true frame is Bishop's with
+                # this sign. Written from the same local, in the
+                # same statement, so the two cannot drift apart.
+                "m_alpha_sign": slide_sign,
                 # v0.1.159 (D63) — false here by construction: a bracket was
                 # found and refined. Written rather than omitted so that a
                 # reader of ``details`` does not have to know which of the

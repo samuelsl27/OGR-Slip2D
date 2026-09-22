@@ -14,8 +14,15 @@ Implements and pins down the reference's two documented checks:
 * **m-alpha Check** (Whitman & Bailey, 1967) — surfaces whose final
   iteration has m_alpha < 0.2 on any slice.
 
-Both are OFF by default, matching the reference, where tensile normal
-stresses are permitted unless the user opts in.
+The two defaults are NOT the same, and this file said they were for
+fifty-seven versions. The Tensile Stress Check is off, matching the
+reference, where tensile normal stresses are permitted unless the
+user opts in. The m-alpha check is ON since v0.1.84, also matching
+it: the reference's two worked examples filter with it by default.
+``test_m_alpha_notes_v1158.py`` has forbidden that sentence in
+``checks.py`` and in ``search.py`` since v0.1.158 -- but its
+assertions did not reach the TEST files, which is exactly how this
+copy survived. v0.1.189 closed the class, not just the instance.
 
 v0.1.82 — the invariant these tests protect changed, because the checks
 were being evaluated in the wrong sign convention. ``m_alpha`` is not

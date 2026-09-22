@@ -1298,23 +1298,36 @@ _M_ALPHA_MARGIN_WARN = 0.5
 #: Methods that never form this denominator at all, and to which the note
 #: below therefore has nothing to say.
 #:
-#: v0.1.158, defect D104. ``m_alpha`` divides the base normal force in
-#: every procedure of slices that takes the slice's own vertical
-#: equilibrium — which is all of them EXCEPT the Ordinary Method of
-#: Slices, whose normal is the projection of the external forces onto the
-#: base and is formed without a denominator (see ``methods/ordinary.py``:
-#: the string ``m_alpha`` does not appear in that file). Duncan, Wright &
-#: Brandon (2014), section 14.4.2, states the same thing from the other
-#: side and makes the Ordinary Method one of its four REMEDIES for this
-#: problem: "very large or negative normal stresses at the toe of the
-#: slope do not occur in the Ordinary Method of Slices ... if problems
-#: occur in the passive zone with other limit equilibrium procedures, the
-#: Ordinary Method of Slices can be used."
+#: v0.1.189 (D111) — the set itself now lives in ``checks`` and is IMPORTED
+#: at the one place that reads it, a dozen lines below. It used to be
+#: declared here, and that is precisely how the note and the CHECK came to
+#: disagree: the note excluded the Ordinary Method with the argument set
+#: out below while ``m_alpha_check`` screened it anyway, because the check
+#: could not see a set that lived in this file. Two copies of a decision
+#: are two decisions.
+#:
+#: v0.1.158, defect D104, is where the argument was made. ``m_alpha``
+#: divides the base normal force in every procedure of slices that takes
+#: the slice's own vertical equilibrium — which is all of them EXCEPT the
+#: Ordinary Method of Slices, whose normal is the projection of the
+#: external forces onto the base and is formed without a denominator (see
+#: ``methods/ordinary.py``: the string ``m_alpha`` does not appear in that
+#: file). Duncan, Wright & Brandon (2014), section 14.4.2, states the same
+#: thing from the other side and makes the Ordinary Method one of its four
+#: REMEDIES for this problem: "very large or negative normal stresses at
+#: the toe of the slope do not occur in the Ordinary Method of Slices ...
+#: if problems occur in the passive zone with other limit equilibrium
+#: procedures, the Ordinary Method of Slices can be used."
 #:
 #: Until v0.1.158 the note was emitted for it anyway, telling a method
 #: that divides by nothing that it was dividing by a number near zero.
 #: Measured on problems 51 and 96 of the verification bank.
-_NO_M_ALPHA_DENOMINATOR = frozenset({"ordinary_fellenius"})
+#:
+#: NOTE that this is NOT the set of methods the CHECK skips: the
+#: prescribed-inclination family is not screened either (see
+#: ``checks.M_ALPHA_SCREENED``) but it DOES divide by something, so it
+#: still gets a note — and with the screen gone the note is the only thing
+#: left looking at it.
 
 
 def _method_equilibrium(method_id: str):
@@ -1347,7 +1360,8 @@ def m_alpha_margin_note(result) -> list[str]:
     Whitman and Bailey (1967) is where the ceiling comes from; the
     degeneracy to ``cos a`` under phi = 0 is arithmetic, not a citation.
     """
-    from .checks import M_ALPHA_LIMIT, base_m_alphas
+    from .checks import (M_ALPHA_LIMIT, NO_M_ALPHA_DENOMINATOR,
+                         base_m_alphas)
 
     # v0.1.158 — the method has to be known BEFORE the value is measured,
     # because for one of them the value is not a property of the run at
@@ -1355,7 +1369,7 @@ def m_alpha_margin_note(result) -> list[str]:
     # site keeps its signature and a wrong sentence shows up as a wrong
     # sentence rather than as a TypeError.
     method_id = getattr(result, "method_id", "") or ""
-    if method_id in _NO_M_ALPHA_DENOMINATOR:
+    if method_id in NO_M_ALPHA_DENOMINATOR:
         return []
 
     vals = base_m_alphas(result)

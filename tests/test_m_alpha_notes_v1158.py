@@ -240,12 +240,40 @@ class TestTheProseMatchesTheDefaults:
     def test_the_checks_docstring_does_not_say_both_are_off(self):
         import ogr_slip2d.checks as checks
         doc = checks.__doc__ or ""
-        assert "Both checks are **disabled by default**" not in doc
+        # Split for the same reason the guard below splits it: this
+        # file is itself scanned, and a whole literal here would make
+        # it report itself for ever.
+        assert ("Both checks are **disabled by " + "default**") not in doc
         assert "off" in doc and "on" in doc
 
     def test_the_search_comment_does_not_say_both_either(self):
         src = _source("ogr_slip2d/search.py")
         assert "Both default to off, as in the" not in src
+
+    def test_and_no_test_file_says_it_either(self):
+        """v0.1.189 -- the guard above closed the INSTANCE and left the
+        CLASS open.
+
+        The two cases before this one look at ``checks.py`` and at
+        ``search.py``, which is where the refuted sentence was found in
+        v0.1.158. It was also in ``tests/test_checks_v132.py``, and no
+        assertion reached there, so it sat in the file whose whole job is
+        to protect this behaviour for another thirty-one versions. A
+        guard that names two files is a guard against two files.
+        """
+        # The two phrases are SPLIT so that this file is not itself a
+        # hit. A guard that matches its own source reports the file it
+        # lives in for ever, which is what happened the first time this
+        # ran. Do not join them back up.
+        prohibidas = ("Both are OFF by " + "default",
+                      "Both checks are **disabled by " + "default**")
+        malas = []
+        for p in sorted((_ROOT / "tests").glob("*.py")):
+            texto = io.open(p, encoding="utf-8").read()
+            for frase in prohibidas:
+                if frase in texto:
+                    malas.append((p.name, frase[:24]))
+        assert malas == [], malas
 
     def test_the_docstring_cites_both_sources_the_limit_rests_on(self):
         import ogr_slip2d.checks as checks

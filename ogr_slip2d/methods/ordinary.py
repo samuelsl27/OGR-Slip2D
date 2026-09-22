@@ -193,6 +193,16 @@ class OrdinaryFellenius(LEMMethod):
                 "negative_effective_normal": n_negative_normal,
                 "num_slices": len(normals),
                 "moment_axis": terms.axis,
+                # v0.1.189 (D112) -- the sense of sliding, yes; but NOT the
+                # denominator-sign key that the screened methods publish.
+                # This method forms no such denominator at all, and the
+                # evidence is a token that occurs NOWHERE in this file --
+                # a guard in the notes test asserts exactly that absence.
+                # Which is why the token is spelled around here instead of
+                # written out: a comment explaining its absence would end
+                # it, and this comment did, once. Publishing a sign for a
+                # quantity this method never computes would invent one.
+                "slide_sign": slide_sign,
             }),
         )
 
@@ -463,5 +473,8 @@ class OrdinaryFellenius(LEMMethod):
                 "negative_effective_normal": n_negative_normal,
                 "num_slices": len(normals),
                 "active_support_ratio": active_ratio,
+                # v0.1.189 (D112) -- sense of sliding only; no
+                # denominator-sign key, for the reason at the other exit.
+                "slide_sign": slide_sign,
             }),
         )

@@ -81,6 +81,56 @@ _TENSILE_CAPABLE = {
 
 M_ALPHA_LIMIT = 0.2          # Whitman & Bailey (1967)
 
+#: The methods this criterion is APPLIED to. A WHITELIST and not a list of
+#: exceptions, for the reason D164 was closed on: an exception list adopts
+#: in silence every method born after it, and the price of that mistake
+#: here is a surface thrown away by a denominator its own method never
+#: formed.
+#:
+#: v0.1.189 (D111). Membership is not taste. The reference's two worked
+#: reports run all seven methods over the SAME population -- 4851 surfaces
+#: in the first, 4840 in the second, valid plus invalid, identical for
+#: every method -- and print error -112 for exactly these five: 97/225
+#: Bishop, 91/146 Janbu (both), 110/250 Spencer, 111/248 GLE. For the
+#: Ordinary Method and for Lowe-Karafiath the printed error codes ADD UP
+#: to the printed invalid count with no -112 term (1472 and 2401 in the
+#: first; 1411 and 2722 in the second), so the absence is an ACCOUNTING
+#: IDENTITY and not an unprinted zero. And Lowe-Karafiath is not merely
+#: absent from the run: it reports 37 and 129 surfaces under -111, so it
+#: saw the same steep-based surfaces of which Bishop discarded 97 and
+#: discarded none of them for this reason.
+#:
+#: The two Corps of Engineers procedures are NOT exercised by either
+#: report. They are here by FAMILY INFERENCE, which is a weaker claim and
+#: is written as one: the three share ``PrescribedInclinationMethod`` and
+#: form their denominator in the single line ``modified_swedish.py``
+#: builds it, differing only in the rule for theta.
+#:
+#: What is NOT decided here is the FORM. Every method that IS screened is
+#: screened with Bishop's denominator, exactly as the reference does; what
+#: that costs is measured in :func:`base_m_alphas`.
+M_ALPHA_SCREENED = frozenset({
+    "bishop_simplified",
+    "janbu_simplified",
+    "janbu_corrected",
+    "spencer",
+    "gle_morgenstern_price",
+})
+
+#: The methods that form NO such denominator at all. A STRONGER statement
+#: than "not screened", and it answers a different question: it is why
+#: :func:`ogr_slip2d.analysis_runner.m_alpha_margin_note` stays silent for
+#: them, while the prescribed-inclination family still gets a note. That
+#: family DOES divide by something -- just not by this -- and with the
+#: screen gone the note is the only thing left looking.
+#:
+#: v0.1.158 (D104) declared this in ``analysis_runner``; v0.1.189 moved it
+#: here so that the note and the check read their sets from ONE file.
+#: Duncan, Wright & Brandon (2014) 14.4.2 states it from the other side
+#: and makes the Ordinary Method one of its four REMEDIES for the problem;
+#: and the string ``m_alpha`` does not appear in ``methods/ordinary.py``.
+NO_M_ALPHA_DENOMINATOR = frozenset({"ordinary_fellenius"})
+
 
 # ----------------------------------------------------------------------
 def _material_tensile_strength(material) -> float:
@@ -117,26 +167,65 @@ def _material_tensile_strength(material) -> float:
 
 
 # ----------------------------------------------------------------------
-def _slide_sign(result) -> float:
-    """The sense of sliding, derived exactly as the solvers derive it.
+def _denominator_sign(result) -> float:
+    """The sign ``m_alpha`` was formed with, ASKED OF THE METHOD THAT FORMED IT.
 
-    v0.1.82 — this was the bug. ``m_alpha`` is not symmetric in ``alpha``,
-    so it can only be evaluated in the same sign convention the method
-    used. Every solver takes the sense of sliding from ``sign(Σ W·sin α)``
-    (see :meth:`BishopSimplified.compute_fos`) and carries it into
-    ``m_alpha = cos α + slide_sign·sin α·tan φ / F``; these checks dropped
-    the factor, which flips the branch whenever the mass slides towards
-    decreasing x.
+    v0.1.82 — this was the bug, and the diagnosis still holds. ``m_alpha``
+    is not symmetric in ``alpha``, so it means nothing unless it is read in
+    the same sign convention the method used. On the reference critical
+    circle — Ej_1, centre (88, 70.5), R = 47.212, sign −1 — reading it in
+    the other one turned min m_alpha = +0.928 into −0.010 and "rejected"
+    five perfectly ordinary slices. The criterion was never wrong, it was
+    being read in the mirror.
 
-    On the reference critical circle — Ej_1, centre (88, 70.5), R = 47.212,
-    ``slide_sign = −1`` — that turned min m_alpha = +0.928 into −0.010 and
-    "rejected" five perfectly ordinary slices. It is the anomaly recorded
-    in AGENTS.md: the criterion was never wrong, it was being read in the
-    mirror.
+    v0.1.189 (D112) — what v0.1.82 did NOT fix is that the sign was still
+    RE-DERIVED here instead of being asked for, from a sum that is
+    Bishop's. The old name said "slide sign", and that was the third
+    mistake: this was never anybody's sense of sliding, it was a guess at
+    one method's. Janbu derives its own from
+    ``sign(Σ w_total·tan α)`` — a sum in which the ponded water rides in
+    ``w_total`` and ``tan`` weights a steep base far more heavily than
+    ``sin`` does — so against Janbu the guess can come out backwards.
+
+    Against the others it cannot, and saying why is what keeps this from
+    being a bigger claim than it is: Bishop, Spencer, GLE, the Ordinary
+    Method and the prescribed-inclination family all derive theirs from
+    ``sign(Σ W(1−kv)·sin α)``, and ``(1−kv) ≥ 0`` is a constant
+    non-negative factor, which cannot invert a sum. Only at ``kv = 1.0``
+    exactly does their sum vanish identically; there the method's own
+    (degenerate) answer is now imported, which is the point.
+
+    **The fallback is not courtesy, it is necessity**, and it is measured:
+    ``tests/test_james_bay_v1158.py`` and ``tests/test_modified_swedish_v198.py``
+    build ``LEMResult`` and ``Slice`` by hand with no ``details`` at all;
+    ``MultiStageDrawdownMethod`` builds its ``details`` as a literal and
+    so DROPS the inner method's keys; and a result read back from an
+    archived ``.h5`` never carried ``details`` in the first place, since
+    ``to_dict`` does not serialise it. In every one of those the fallback
+    returns the same number it always did, because the methods that reach
+    them are the ones whose sum agrees with this one.
+
+    Methods that form no such denominator — the Ordinary Method — and the
+    prescribed-inclination family, whose denominator is
+    ``cos(α−θ) − orient·(tan φ/F)·sin(α−θ)`` and is therefore NOT this
+    expression for any sign, deliberately do not publish the key. Writing
+    one for them would have been inventing a hybrid no method computes.
     """
+    details = getattr(result, "details", None) or {}
+    declared = details.get("m_alpha_sign")
+    if declared is not None:
+        try:
+            v = float(declared)
+        except (TypeError, ValueError):
+            v = 0.0
+        if v and math.isfinite(v):
+            return math.copysign(1.0, v)
     slices = getattr(result, "slices", None)
     if not slices:
         return 1.0
+    # Bishop's sum, kept EXACTLY as it was — same builtin ``sum``, same
+    # term order. Swapping in ``fsum`` here would be a silent arithmetic
+    # change on a borderline surface, which is not what this fixes.
     driving = sum(s.weight * math.sin(s.base_angle) for s in slices)
     return 1.0 if driving >= 0 else -1.0
 
@@ -191,7 +280,7 @@ def base_effective_stresses(result) -> list[float]:
         return []
 
     out: list[float] = []
-    sgn = _slide_sign(result)
+    sgn = _denominator_sign(result)
     for s in result.slices:
         alpha = s.base_angle
         l = max(s.base_length, 1e-12)
@@ -210,7 +299,53 @@ def base_effective_stresses(result) -> list[float]:
 
 
 def base_m_alphas(result) -> list[float]:
-    """``m_alpha`` on every slice at the converged FoS."""
+    """``m_alpha`` on every slice at the converged FoS.
+
+    Bishop's denominator, ``cos a + s*sin a*tan phi / F``, for EVERY
+    method -- including the ones whose own denominator is a different
+    expression. That is a decision and not an oversight, so here is what
+    it costs and why it stands.
+
+    **This is a MEASUREMENT, not a verdict.** It is computed for every
+    method, including those :data:`M_ALPHA_SCREENED` leaves out: the
+    reporting note reads it, and so does the rapid-drawdown diagnostic in
+    ``rapid_drawdown.py``. The gate that decides admissibility lives in
+    :func:`m_alpha_check`. Silencing the measurement would have taken the
+    number away from both readers to change one of them.
+
+    **What the other denominators are.** Janbu divides by
+    ``n_alpha = cos^2 a * (1 + s*tan a*tan phi/F)``, and that is exactly
+    ``cos a * m_alpha`` -- an identity, already written down at
+    ``interslice.py``. So for Janbu the two forms never differ in SIGN,
+    only in size, and applying 0.2 to ``n_alpha`` is applying
+    ``0.2 / cos a`` to ``m_alpha``: a different criterion wearing the same
+    number. The prescribed-inclination family divides by
+    ``cos(a - t) - orient*(tan phi/F)*sin(a - t)``, which carries its own
+    interslice inclination.
+
+    **Measured, on the only published slice table this project holds**
+    (Duncan, Wright & Brandon 2014, Fig. 7.29, the James Bay dyke, theta =
+    2.7 deg, F = 1.17; the sheet is in ``tests/test_james_bay_v1158.py``):
+    the minimum is 0.7230 with Bishop's form, 0.5181 with Janbu's and
+    0.6896 with the family's -- a gap of 39.5 % and 4.8 % respectively --
+    and the governing slice is not even the same one (11 for Bishop and
+    the family, 1 for Janbu). But **all three clear 0.2 comfortably**, so
+    that case MEASURES the gap and DECIDES nothing.
+
+    **Why the form is not changed per method.** The number 0.2 is glued to
+    a form. Under ``phi = 0`` it degenerates to a bare ceiling on the base
+    angle, and each form gives a different one: 78.463 deg for Bishop's,
+    63.435 deg for Janbu's -- 15.03 deg apart, with no source saying so.
+    Picking a denominator per method would not be choosing a denominator;
+    it would be inventing a criterion. What would settle it is a published
+    case with a base in the 63.4-78.5 deg band where the two ceilings
+    disagree, or a source stating the limit for ``n_alpha``. That is
+    defect D61, still open, and the James Bay sheet does not reach it: its
+    steepest cohesive base is 43.7 deg.
+
+    What v0.1.189 DID change is which methods the criterion is applied to
+    at all; see :data:`M_ALPHA_SCREENED`.
+    """
     from .methods.bishop import BishopSimplified
 
     if result is None or not getattr(result, "slices", None):
@@ -219,7 +354,7 @@ def base_m_alphas(result) -> list[float]:
     if not (math.isfinite(F) and F > 0):
         return []
     out: list[float] = []
-    sgn = _slide_sign(result)
+    sgn = _denominator_sign(result)
     for s in result.slices:
         alpha = s.base_angle
         _W, sigma_est = _base_load_and_sigma(s)
@@ -275,7 +410,30 @@ def m_alpha_check(result, limit: float = M_ALPHA_LIMIT):
     """Reference-style m-alpha check (Whitman & Bailey, 1967).
 
     Returns ``(passed, offending_indices)``.
+
+    v0.1.189 (D111) -- the criterion is NOT applied to every method. Which
+    ones, and the published evidence that decides it, are at
+    :data:`M_ALPHA_SCREENED`.
+
+    The gate is here and not in :func:`check_surface` or in
+    ``BaseSearch._is_admissible``, for two reasons. Those two are DOORS --
+    the search is one caller of several -- and a gate on one door leaves
+    the others willing to reject a surface the first one would keep, which
+    is the shape of the defect being closed: until now the exclusion
+    existed only in the reporting note, so the check screened a method the
+    note had already declared it had nothing to say about. And
+    ``check_surface``'s subject is BOTH checks, while the evidence here
+    speaks only about this one -- the reports do not print -120 for these
+    methods either, but the Tensile Stress Check is OFF by default in both
+    worked examples, so that silence proves nothing and is not borrowed.
+
+    A result with no ``method_id`` is screened, which is what happened
+    before: this narrows behaviour for four named methods and for nothing
+    else.
     """
+    method_id = getattr(result, "method_id", "") or ""
+    if method_id and method_id not in M_ALPHA_SCREENED:
+        return True, []
     vals = base_m_alphas(result)
     if not vals:
         return True, []

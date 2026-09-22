@@ -61,5 +61,13 @@ Cita siempre la fuente original, nunca el programa que la implementa.
 - **Zona saturada en transitorio**: la forma mixta de Richards degenera
   porque θ es constante. Se resuelve con una función de almacenamiento
   generalizada W(P) con expresiones distintas para P<0 y P≥0.
-- **m-alpha**: el círculo crítico validado contra la referencia **también**
-  lo incumple. Es diagnóstico, no criterio de validez.
+- **m-alpha**: el círculo crítico validado contra la referencia **sí**
+  lo cumple — min m_alpha +0,93. La frase contraria vivía aquí desde
+  antes de v0.1.82, que midió que el criterio se estaba leyendo en el
+  espejo: `m_alpha` no es simétrica en α y sólo significa algo leída con
+  el sentido de deslizamiento que usó el método. Es **criterio de
+  admisibilidad** y está **encendido por defecto** desde v0.1.84, pero
+  **no se aplica a todos los métodos**: desde v0.1.189 criba los cinco
+  que la referencia criba y deja fuera al Ordinario y a la familia de
+  inclinación prescrita, que dividen por otra cosa o por nada. Ver
+  `checks.M_ALPHA_SCREENED`.

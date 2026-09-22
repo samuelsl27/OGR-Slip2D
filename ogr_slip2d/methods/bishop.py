@@ -325,7 +325,19 @@ class BishopSimplified(LEMMethod):
         return LEMResult(
             fos=fos, converged=converged, iterations=iterations,
             method_id=self.METHOD_ID, surface=surface, slices=slices,
-            details=support_failure_details(sup, {"moment_axis": axis}),
+            details=support_failure_details(sup, {
+                "moment_axis": axis,
+                # v0.1.189 (D112). Here ``alpha`` was already turned by
+                # ``slide_sign`` before m_alpha was formed (see above), so
+                # in the TRUE frame the denominator is
+                # ``cos a + slide_sign*sin a*tan phi/F`` -- the same
+                # expression the circular branch writes out. The two keys
+                # come from ONE local in ONE statement, because while they
+                # were two expressions they could drift apart again: that
+                # is the lesson D113 left.
+                "slide_sign": slide_sign,
+                "m_alpha_sign": slide_sign,
+            }),
             error_message="" if converged else self.NOT_CONVERGED_NOTE,
             reason="" if converged else REASON_NOT_CONVERGED,
         )
@@ -631,8 +643,13 @@ class BishopSimplified(LEMMethod):
             base_normal_force=normals,
             base_shear_force=shears,
             base_shear_strength=strengths,
-            details=support_failure_details(
-                sup, {"active_support_ratio": active_ratio}),
+            details=support_failure_details(sup, {
+                "active_support_ratio": active_ratio,
+                # v0.1.189 (D112) -- read by ``checks._denominator_sign``.
+                # This IS the sign the m_alpha of this iteration carried.
+                "slide_sign": slide_sign,
+                "m_alpha_sign": slide_sign,
+            }),
         )
 
 

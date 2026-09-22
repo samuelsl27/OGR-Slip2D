@@ -359,8 +359,20 @@ class JanbuSimplified(LEMMethod):
             base_normal_force=normals,
             base_shear_force=shears,
             base_shear_strength=strengths,
-            details=support_failure_details(
-                sup, {"active_support_ratio": active_ratio}),
+            details=support_failure_details(sup, {
+                "active_support_ratio": active_ratio,
+                # v0.1.189 (D112), and THIS is the method that moves. Janbu
+                # derives its sense from ``sign(sum w_total*tan a)`` --
+                # ponded water inside ``w_total``, and ``tan`` weighting a
+                # steep base far more than ``sin`` -- so it is the one
+                # method whose sign the checks could not guess from
+                # Bishop's sum. The key is well defined here even though
+                # this method divides by ``n_alpha``, because
+                # ``n_alpha == cos a * m_alpha`` exactly and ``cos a > 0``:
+                # the two forms never differ in SIGN, only in size.
+                "slide_sign": slide_sign,
+                "m_alpha_sign": slide_sign,
+            }),
         )
 
 

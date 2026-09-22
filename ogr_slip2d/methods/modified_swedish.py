@@ -213,6 +213,23 @@ class PrescribedInclinationMethod(LEMMethod):
                 "boundary_ratios": self._boundary_ratios(slices),
                 "interslice_forces": self.interslice_forces,
                 "thrust_reversal": reversal,
+                # v0.1.189 (D112). ``slide_sign`` is what this method
+                # derived and what it handed to the support resolution and
+                # to ``driving_shear_forces``. There is deliberately NO
+                # ``m_alpha_sign``, and the reason is a sign trap that runs
+                # the other way from the obvious one: with
+                # ``alpha_n = orient*a`` and ``theta_n = orient*t``, the
+                # denominator ``_march`` forms is, back in the true frame,
+                #
+                #     D = cos(a - t) - orient*(tan phi/F)*sin(a - t)
+                #
+                # because this family writes a MINUS where Bishop writes a
+                # plus. So ``cos a + s*sin a*tan phi/F`` is not a quantity
+                # this family forms for ANY ``s``: writing ``slide_sign``
+                # there would be false, and writing ``orient`` would be
+                # false the other way round. The march orientation itself
+                # is reported and not written; see the changelog.
+                "slide_sign": slide_sign,
             }),
         )
 

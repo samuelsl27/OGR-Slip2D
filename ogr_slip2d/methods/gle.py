@@ -372,6 +372,15 @@ class GLEMorgensternPrice(LEMMethod):
                     # v0.1.185 (D155) — see ``interslice.thrust_margin``.
                     "thrust_margin": thrust_margin(force),
                     "slide_sign": slide_sign,
+                    # v0.1.189 (D112) -- the sign the denominator of
+                    # ``interslice.py`` carried. It equals
+                    # ``slide_sign`` here and that is not a
+                    # coincidence: ``prepare_rows`` turns alpha by it
+                    # before the recursion forms ``m_alpha``, so the
+                    # expression in the true frame is Bishop's with
+                    # this sign. Written from the same local, in the
+                    # same statement, so the two cannot drift apart.
+                    "m_alpha_sign": slide_sign,
                     # v0.1.159 (D63) — see ``Spencer.compute_fos``.
                     "lambda_search_fell_back": True,
                     "lambdas_lost_to_budget": system.n_passes_exhausted,
@@ -542,6 +551,15 @@ class GLEMorgensternPrice(LEMMethod):
                 # v0.1.185 (D155) — see ``interslice.thrust_margin``.
                 "thrust_margin": thrust_margin(force),
                 "slide_sign": slide_sign,
+                # v0.1.189 (D112) -- the sign the denominator of
+                # ``interslice.py`` carried. It equals
+                # ``slide_sign`` here and that is not a
+                # coincidence: ``prepare_rows`` turns alpha by it
+                # before the recursion forms ``m_alpha``, so the
+                # expression in the true frame is Bishop's with
+                # this sign. Written from the same local, in the
+                # same statement, so the two cannot drift apart.
+                "m_alpha_sign": slide_sign,
                 # v0.1.159 (D63) — see ``Spencer.compute_fos``.
                 "lambda_search_fell_back": False,
                 "lambdas_lost_to_budget": system.n_passes_exhausted,
