@@ -1070,6 +1070,18 @@ class AdvancedSettings:
     # 80 degrees and not 90: at 80 degrees with phi = 30 and F = 1 the
     # factor m_alpha is already down to 0.235, so the last ten degrees are
     # where the conditioning is lost, not where it ends.
+    #
+    # v0.1.190 (D110) — AND THIS IS NOT THE ONLY CEILING ON A BASE ANGLE.
+    # It is the one with a name, a control and a default, and it is the one
+    # that reaches LESS: `ogr_slip2d.search._base_angle_ok` applies it only
+    # to surfaces a weak layer has clipped. Under phi = 0 the m-alpha check
+    # degenerates into a bare ceiling of acos(0.2) = 78.5 degrees over every
+    # surface of the methods `ogr_slip2d.checks.M_ALPHA_SCREENED` covers,
+    # with no control over its number — so 80 here is looser than what is
+    # already in force everywhere else, and someone who types 45 still has
+    # 78.5 over all the rest. The field NAME does not change, for file
+    # compatibility; what changed in v0.1.190 is what the dialog and the
+    # analysis notes tell the user it reaches.
     max_base_angle_deg: float = 80.0
 
     # v0.1.126 — *Use enhanced PSO algorithm*. Here rather than beside the

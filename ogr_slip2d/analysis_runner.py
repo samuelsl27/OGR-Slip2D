@@ -323,6 +323,7 @@ def settings_warnings(project, method_ids=()) -> list[str]:
     notes.extend(_auto_refine_vertex_notes(project))
     notes.extend(_block_group_notes(project))
     notes.extend(_base_angle_ceiling_notes(project))
+    notes.extend(_base_angle_scope_notes(project, method_ids))
     notes.extend(_optimize_notes(s_search))
     notes.extend(_undrained_profile_notes(project))
     notes.extend(_focus_notes(project))
@@ -582,6 +583,118 @@ def _base_angle_ceiling_notes(project) -> list[str]:
         f"vertical the drop at the end of a layer leaves it. Any value "
         f"strictly between 0 and 90 applies the ceiling."
     ]
+
+
+def _base_angle_scope_notes(project, method_ids=()) -> list[str]:
+    """Which of the TWO base-angle ceilings governs, and over what.
+
+    v0.1.190, defect D110. There are two, they have different scopes, and
+    the one with a name and a control is the one that reaches less:
+
+    * ``max_base_angle_deg`` — 80 deg by default, a spin box in Project
+      Settings > Advanced, and ``search._base_angle_ok`` applies it ONLY
+      to surfaces a weak layer has clipped. Its docstring says why, and
+      that reasoning is not being revisited here;
+    * the m-alpha check — no control over its number, and under
+      ``phi = 0`` ``m_alpha`` degenerates to ``cos(alpha)`` exactly, so
+      ``checks.M_ALPHA_LIMIT`` becomes a bare ceiling of
+      ``acos(0.2) = 78.5`` deg on EVERY surface of the methods
+      ``checks.M_ALPHA_SCREENED`` covers.
+
+    So someone who types 45 still has 78.5 over everything else, and
+    someone who types 85 over a weak layer has 78.5 there too. Nothing
+    said either, which is rule 7: a control that does not do what its
+    name says.
+
+    A SEPARATE function from :func:`_base_angle_ceiling_notes` and not a
+    widening of it, for four reasons, and the fourth is the one that
+    decides. The scopes differ (D106 speaks only when the value is
+    degenerate; this speaks at any value). The subjects differ (D106:
+    "the control switched itself off"; this: "there are two and here is
+    which governs"). The file's own precedent is one subject per function.
+    And D106's docstring is a CLOSED argument for D106 — widening it
+    would mean rewriting that argument to cover a case it does not
+    reason about.
+
+    The ceiling is CALCULATED from :data:`~ogr_slip2d.checks.M_ALPHA_LIMIT`
+    and the default is read from the dataclass field, neither is typed:
+    move either one and this note moves with it, which is the difference
+    between a sentence about the code and a sentence beside it.
+    """
+    from .checks import M_ALPHA_LIMIT, M_ALPHA_SCREENED
+    from .weak_layers import weak_layer_bands
+
+    adv = getattr(getattr(project, "settings", None), "advanced", None)
+    try:
+        limit = float(adv.max_base_angle_deg)
+    except (AttributeError, TypeError, ValueError):
+        # Same silence as ``_base_angle_ok``, which swallows a bad value
+        # and carries on. A note that raised where the engine shrugs would
+        # be a note that disagrees with the thing it describes.
+        return []
+    try:
+        default = float(type(adv).__dataclass_fields__[
+            "max_base_angle_deg"].default)
+    except Exception:                                    # noqa: BLE001
+        default = 80.0
+
+    screening = bool(getattr(adv, "check_m_alpha", False))
+    ceiling = math.degrees(math.acos(M_ALPHA_LIMIT))
+    bands = weak_layer_bands(project)
+
+    # The m-alpha clause, exact about the switch AND about which methods
+    # the screen reaches. Since v0.1.189 it does not reach all of them,
+    # and a note that said "every method" would be the shape of the defect
+    # D104 closed: a sentence aimed at the wrong family.
+    hit = sorted(set(method_ids or ()) & M_ALPHA_SCREENED)
+    miss = sorted(set(method_ids or ()) - M_ALPHA_SCREENED)
+    if not screening:
+        clause = ("The m-alpha check is off, so nothing else caps how "
+                  "steeply a base may run.")
+        governs = ("A surface no weak layer clips therefore has no "
+                   "ceiling on the inclination of its base at all in "
+                   "this run.")
+    elif method_ids and not hit:
+        clause = (f"The m-alpha check is on, but no method in this run is "
+                  f"screened by it ({', '.join(miss)}), so it caps nothing "
+                  f"here.")
+        governs = ("A surface no weak layer clips therefore has no "
+                   "ceiling on the inclination of its base at all in "
+                   "this run.")
+    else:
+        named = ", ".join(hit) if hit else ", ".join(sorted(M_ALPHA_SCREENED))
+        tail = (f" It does not screen {', '.join(miss)}." if miss else "")
+        clause = (f"The m-alpha check is on, and where phi = 0 its "
+                  f"{M_ALPHA_LIMIT:g} limit is a bare ceiling of "
+                  f"{ceiling:.1f} deg on every surface it screens "
+                  f"({named}).{tail}")
+        governs = (
+            (f"On a weak-layer clip in purely cohesive material the "
+             f"{ceiling:.1f} deg ceiling therefore governs, and the "
+             f"{limit:g} deg set here never applies.")
+            if limit >= ceiling else
+            (f"On a weak-layer clip the {limit:g} deg set here is "
+             f"therefore the tighter of the two, and {ceiling:.1f} deg "
+             f"governs everywhere else."))
+
+    if bands:
+        n = len(bands)
+        what = "1 weak layer" if n == 1 else f"{n} weak layers"
+        return [
+            f"This model draws {what}, so the Maximum base angle setting "
+            f"({limit:g} deg) reaches the surfaces they clip and nothing "
+            f"else. {clause} {governs}"
+        ]
+    if abs(limit - default) > 1e-9:
+        return [
+            f"No weak layer is drawn in this model, so the Maximum base "
+            f"angle setting ({limit:g} deg) reached nothing: it applies "
+            f"only to surfaces a weak layer has clipped. {clause}"
+        ]
+    # Default value and no weak layer: the setting was going to do nothing
+    # and nobody chose it, so there is nothing to report. A note on every
+    # run of every model is the noise D106 was scoped to avoid.
+    return []
 
 
 _GUIDED_SEARCHES = ("simulated_annealing", "particle_swarm")

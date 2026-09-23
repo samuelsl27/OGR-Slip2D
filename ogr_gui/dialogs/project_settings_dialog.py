@@ -1398,12 +1398,20 @@ class _AdvancedPage(QWidget):
         self.sp_base_angle.setSuffix(" °")
         self.sp_base_angle.setValue(
             float(getattr(self.s, "max_base_angle_deg", 80.0)))
+        # v0.1.190, defect D110 — the label and the tooltip now say WHAT
+        # THIS REACHES, because there are two ceilings on a base angle and
+        # this is the one that reaches less. The field name in the .ogr is
+        # unchanged (compatibility); only what the user is told changed.
         self.sp_base_angle.setToolTip(tr(
             "A slice base steeper than this is not a shear plane, and the "
             "limit-equilibrium equations lose their conditioning against "
-            "it. Applies to surfaces a weak layer has clipped, where a "
-            "layer that simply stops leaves a near-vertical step."))
-        form.addRow(tr("Maximum slice base angle:"), self.sp_base_angle)
+            "it. It applies ONLY to surfaces a weak layer has clipped, "
+            "where a layer that simply stops leaves a near-vertical step. "
+            "Every other surface is capped instead by the m-alpha check, "
+            "which in purely cohesive soil is a ceiling of 78.5 deg on "
+            "the base angle."))
+        form.addRow(tr("Maximum base angle on weak-layer clips:"),
+                    self.sp_base_angle)
         # v0.1.158, defect D106 — the range this spin box offers ends at
         # the one value that switches the ceiling OFF, because the engine
         # reads it as ``0 < limit < 90``. The range is deliberately NOT
@@ -1427,7 +1435,11 @@ class _AdvancedPage(QWidget):
         self.chk_m_alpha.setChecked(bool(self.s.check_m_alpha))
         self.chk_m_alpha.setToolTip(tr(
             "Rejects surfaces whose base normal denominator falls below "
-            "0.2 (Whitman and Bailey, 1967)."))
+            "0.2 (Whitman and Bailey, 1967). In purely cohesive soil that "
+            "denominator is the cosine of the base angle exactly, so the "
+            "check becomes a ceiling of 78.5 deg on it. Applied to Bishop "
+            "simplified, both Janbu, Spencer and GLE / Morgenstern-Price; "
+            "the other methods are not screened by it."))
         form.addRow("", self.chk_m_alpha)
 
         note = QLabel(tr(
@@ -1456,12 +1468,33 @@ class _AdvancedPage(QWidget):
                              tr("of"), total))
         # And what the base-angle value in the box actually does. Only
         # the open interval applies a ceiling at all; both ends remove it.
+        #
+        # v0.1.190 (D110) — three branches and not two, because between
+        # the m-alpha ceiling and 90 this setting is looser than what is
+        # already in force, so it never bites there. The threshold is
+        # COMPUTED from the limit and not typed: move M_ALPHA_LIMIT and
+        # this label moves with it.
+        import math as _math
+
+        from ogr_slip2d.checks import M_ALPHA_LIMIT as _MAL
+        ceiling = _math.degrees(_math.acos(_MAL))
         v = self.sp_base_angle.value()
-        self.lbl_base_angle.setText(
-            tr("At 90 deg the ceiling is switched off: no surface is "
-               "discarded for the steepness of its base.")
-            if not (0.0 < v < 90.0) else
-            tr("Applies only to surfaces a weak layer has clipped."))
+        if not (0.0 < v < 90.0):
+            txt = tr("At 90 deg this ceiling is switched off: no surface a "
+                     "weak layer clips is discarded for the steepness of "
+                     "its base. The m-alpha check still caps every "
+                     "screened surface at 78.5 deg where phi = 0.")
+        elif v >= ceiling:
+            txt = tr("Applies only to surfaces a weak layer has clipped. "
+                     "Where phi = 0 the m-alpha check caps the base at "
+                     "78.5 deg, which is tighter than this value, so this "
+                     "one never bites there.")
+        else:
+            txt = tr("Applies only to surfaces a weak layer has clipped, "
+                     "and there it is the tighter of the two ceilings. "
+                     "Every other surface is capped at 78.5 deg by the "
+                     "m-alpha check where phi = 0.")
+        self.lbl_base_angle.setText(txt)
 
     def apply(self) -> None:
         self.s.parallel_search = self.chk_parallel.isChecked()

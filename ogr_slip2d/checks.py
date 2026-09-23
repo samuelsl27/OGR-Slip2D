@@ -48,10 +48,68 @@ to ``cos(alpha)`` exactly, which turns the check into a bare ceiling on
 the base angle — 78.463 deg at a limit of 0.2 — with no dependence on
 the method or on F. Anchored against a published slice table in
 ``tests/test_james_bay_v1158.py`` and on this program's own arithmetic in
-``tests/test_block_population_v1135.py``. Defect D61 of the verification
-bank is open on it: no published case has been found with a non-circular
-surface in such soil and a base angle anywhere near that ceiling, so
-there is nothing external to decide the limit against.
+``tests/test_block_population_v1135.py``.
+
+**v0.1.190 (D61) — that ceiling is KEPT, and this is the decision, not a
+description of one still pending.** It is written here because this is
+where the limit is read.
+
+*The search for a published case ended negative* (v0.1.158), in the three
+sources the assignment named and in a fourth that turned up on the way.
+What was wanted: a non-circular surface in ``phi = 0`` soil with a base
+angle anywhere near 78 deg and a published factor of safety.
+
+* the 111 problems of the verification bank — 11 have ``phi = 0`` and a
+  non-circular half, and only problem 47 publishes surface coordinates:
+  a plane at **44.17 deg**. Problem 29's digitised polyline reaches
+  **43.4 deg**;
+* Duncan, Wright & Brandon (2014) §7.7.6, the James Bay dyke, Fig. 7.29 —
+  non-circular, slice by slice, F = 1.17, and its steepest cohesive base
+  is **43.7 deg**. It is in the suite;
+* USACE (2003), EM 1110-2-1902, Fig. **G-9** — ``phi = 0`` on all twelve
+  slices and a base at **+61 deg**, but the surface is **not published as
+  a non-circular one**, so it cannot be reproduced as such;
+* Ching & Fredlund (1983) — see above: **not read**, and that is why it
+  cannot decide anything here either.
+
+The two that come closest do so from opposite sides: G-9 has the steep
+base without the surface, Fig. 7.29 has the surface without the steep
+base. **No published case discriminates.**
+
+*The doctrine that would decide it, marked as doctrine and not as a
+case.* Duncan, Wright & Brandon §14.4 answers both questions directly —
+it states that the 0.2 protects against a mechanism that is explicitly
+FRICTIONAL, and it recommends constraining the inclination of a slip
+surface in an automatic non-circular search, with a starting guide of
+"**45 degrees or less**" and Fig. 14.17 (**Jumikis** 1962) for the
+passive-zone angle. Applying that here would move the validated cases,
+which is the one thing a feature is not allowed to do. It is cited and
+not applied.
+
+*What IS measured, and it does not point the other way.* On the general
+branch the ceiling still screens something real — see
+:func:`m_alpha_check` — so keeping it is not keeping an inert rule. And
+the bank's own witness has gone: on problem 75, the case the defect was
+raised on, today's model discards NOTHING for m-alpha (see the closing
+note of D61 in the bank). The 0.5354 of the original table came from an
+implicit block region the manual never draws and this model no longer
+uses.
+
+**So the limit stays at 0.2.** Without an external case, moving a
+validity limit is exactly what this project's first rule exists to
+prevent. The defences are the reporting note of v0.1.135
+(``analysis_runner.m_alpha_margin_note``) and, since v0.1.190, the note
+that says which of the two base-angle ceilings governs
+(``analysis_runner._base_angle_scope_notes``).
+
+**And what clearing 0.2 does NOT buy, measured here so nobody reads the
+decision as an endorsement.** On a synthetic ``phi = 0`` polyline whose
+scarp is stepped through its inclination, with every surface CLEARING the
+limit, the nine methods disagree by a factor of 6.8 at 70 deg
+(min ``m_alpha`` 0.342), 34.9 at 75 deg (0.259) and 1501 at 78 deg
+(0.208, i.e. admitted by eight thousandths). The original defect report
+put this spread at 44 %. The limit screens arithmetic that has become
+untrustworthy; it does not certify what survives.
 
 The two defaults are **not** the same, and saying "both are off" was
 false here for the seventy-four versions from v0.1.84 to v0.1.157. The Tensile Stress Check is
@@ -430,6 +488,53 @@ def m_alpha_check(result, limit: float = M_ALPHA_LIMIT):
     A result with no ``method_id`` is screened, which is what happened
     before: this narrows behaviour for four named methods and for nothing
     else.
+
+    v0.1.190 (D114) -- what "under ``phi = 0`` this stops being a
+    statement about the method" does and does not mean. The claim is half
+    right, and the half that is wrong is the half D61 lives in. Under
+    ``phi = 0`` this gate IS a ceiling of 78.463 deg on the base angle,
+    and the question is whether the quantity it screens by reaches the
+    answer.
+
+    **The exact half.** With ``tan phi = 0`` and ``u = 0`` the resisting
+    term is ``q = c*b / m_alpha = c*b / cos a = c*l`` EXACTLY, because on
+    a straight chord ``l`` IS ``b / cos a``. So ``m_alpha`` cancels, and
+    on the CIRCULAR Bishop branch the criterion screens by a quantity
+    that does not touch the number it screens.
+
+    **The half that is wrong, and it is the general branch.** In
+    ``methods/bishop.py::_general_moment_fos`` the normal force keeps the
+    cosine that ``q`` shed::
+
+        normal = (w_n - (q/F) sin a) / cos a          # 1/cos a = 1/m_alpha
+
+    and ``normals`` enters ``moment_balance.moment_terms`` with an arm of
+    its own, on the DENOMINATOR side: ``MomentTerms.driving`` is
+    ``weight + normal + external`` and ``F = -shear / driving`` (the
+    moment split is Fredlund & Krahn, 1977). So on a polyline the steep
+    base is not filtered out of the answer -- it is part of it.
+
+    **Measured** (``_tools/censo_techos_d114_d61.py`` in the verification
+    bank; the table is in ``docs/audits/phi_zero_ceilings_v1190.md``):
+
+    * on the PUBLISHED James Bay surface, whose steepest cohesive base is
+      43.7 deg and therefore nowhere near the ceiling, the normal force
+      of that base carries **3.66 %** of the driving moment, and removing
+      only its contribution moves the factor **-3.53 %**;
+    * stepping a synthetic ``phi = 0`` scarp from 40 to 76 deg,
+      ``terms.normal / terms.driving`` falls MONOTONICALLY from **+18.0 %
+      to -131.6 %** -- past 74 deg the term D61 treated as cancelled is
+      larger in magnitude than the whole driving moment;
+    * on a CIRCLE with the axis at the centre the same moment is **zero
+      by construction** and not merely small: ``base_frame`` takes the
+      midpoint of the chord and its perpendicular, which is the chord's
+      perpendicular bisector and passes exactly through the centre, so it
+      vanishes for ARBITRARY normals. Measured residual **2.9e-16**
+      relative, over two radii and two slice counts.
+
+    That is the contrast, and it is why the ceiling is not loosened: on
+    the branch the defect is about, it still screens something real. The
+    decision itself is at the top of this module.
     """
     method_id = getattr(result, "method_id", "") or ""
     if method_id and method_id not in M_ALPHA_SCREENED:

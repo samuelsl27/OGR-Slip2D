@@ -850,6 +850,15 @@ class BaseSearch(ABC):
         against — and a feature is not allowed to move those. The steep base
         this ceiling exists for is the one a joint creates: where a layer
         simply stops, the surface drops back to the arc down a vertical step.
+
+        v0.1.190 (D110) — so this is NOT the only ceiling on a base angle,
+        and it is the one that reaches less. Under ``phi = 0`` the m-alpha
+        check degenerates into a bare ceiling of ``acos(0.2) = 78.5`` deg
+        over every surface of the methods ``checks.M_ALPHA_SCREENED``
+        covers, applied by :meth:`_is_admissible`. Which of the two governs
+        is now said out loud by
+        ``analysis_runner._base_angle_scope_notes``; the scope here is
+        unchanged, and D61 is the decision not to unify them.
         """
         if not isinstance(trial, WeakLayerSurface):
             return True

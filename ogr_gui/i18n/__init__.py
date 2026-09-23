@@ -1236,26 +1236,55 @@ _DICTS: dict[str, dict[str, str]] = {
         # "capa débil" (una junta o interfaz con resistencia propia), no
         # "capa floja", que en obra significa otra cosa.
         "Add Weak Layer": "Añadir capa débil",
-        "Maximum slice base angle:": "Ángulo máximo de base de dovela:",
+        # v0.1.190 (D110) — el rótulo y la ayuda dicen A QUÉ ALCANZA el
+        # ajuste, porque hay dos techos de ángulo de base y éste es el
+        # que llega a menos. Las entradas viejas se SUSTITUYEN y no se
+        # duplican: una clave huérfana en el diccionario es un sitio
+        # donde una afirmación retirada sobrevive, que es D107.
+        "Maximum base angle on weak-layer clips:":
+            "Ángulo máximo de base en recortes de capa débil:",
         "A slice base steeper than this is not a shear plane, and the "
         "limit-equilibrium equations lose their conditioning against "
-        "it. Applies to surfaces a weak layer has clipped, where a "
-        "layer that simply stops leaves a near-vertical step.":
+        "it. It applies ONLY to surfaces a weak layer has clipped, "
+        "where a layer that simply stops leaves a near-vertical step. "
+        "Every other surface is capped instead by the m-alpha check, "
+        "which in purely cohesive soil is a ceiling of 78.5 deg on "
+        "the base angle.":
             "Una base de dovela más inclinada que esto no es un plano "
             "de corte, y las ecuaciones de equilibrio límite pierden "
-            "su condicionamiento frente a ella. Se aplica a las "
+            "su condicionamiento frente a ella. Se aplica SÓLO a las "
             "superficies recortadas por una capa débil, donde una capa "
-            "que simplemente termina deja un escalón casi vertical.",
+            "que simplemente termina deja un escalón casi vertical. Al "
+            "resto lo limita en su lugar la comprobación de m-alfa, que "
+            "en suelo puramente cohesivo es un techo de 78,5° sobre el "
+            "ángulo de base.",
         # v0.1.158 — lo que el valor tecleado hace de verdad. El motor lo
         # lee como ``0 < limite < 90``, así que los dos extremos del rango
-        # no aflojan el techo: lo quitan.
-        "At 90 deg the ceiling is switched off: no surface is discarded "
-        "for the steepness of its base.":
-            "A 90° el techo queda desactivado: ninguna superficie se "
-            "descarta por la inclinación de su base.",
-        "Applies only to surfaces a weak layer has clipped.":
+        # no aflojan el techo: lo quitan. v0.1.190 añade la tercera rama:
+        # entre 78,5 y 90 el techo tecleado es MÁS FLOJO que el de m-alfa,
+        # así que no llega a actuar.
+        "At 90 deg this ceiling is switched off: no surface a weak "
+        "layer clips is discarded for the steepness of its base. The "
+        "m-alpha check still caps every screened surface at 78.5 deg "
+        "where phi = 0.":
+            "A 90° este techo queda desactivado: ninguna superficie "
+            "recortada por una capa débil se descarta por la "
+            "inclinación de su base. La comprobación de m-alfa sigue "
+            "limitando a 78,5° toda superficie cribada con φ = 0.",
+        "Applies only to surfaces a weak layer has clipped. Where phi "
+        "= 0 the m-alpha check caps the base at 78.5 deg, which is "
+        "tighter than this value, so this one never bites there.":
             "Se aplica sólo a las superficies recortadas por una capa "
-            "débil.",
+            "débil. Con φ = 0 la comprobación de m-alfa limita la base "
+            "a 78,5°, más estricto que este valor, así que aquí éste no "
+            "llega a actuar.",
+        "Applies only to surfaces a weak layer has clipped, and there "
+        "it is the tighter of the two ceilings. Every other surface "
+        "is capped at 78.5 deg by the m-alpha check where phi = 0.":
+            "Se aplica sólo a las superficies recortadas por una capa "
+            "débil, y allí es el más estricto de los dos techos. Al "
+            "resto lo limita a 78,5° la comprobación de m-alfa con "
+            "φ = 0.",
         "Weak Layer": "Capa débil",
         "Weak layer material assigned.": "Material de la capa débil asignado.",
         # v0.1.126 — búsqueda por enjambre de partículas y mínimos
@@ -1511,9 +1540,19 @@ _DICTS: dict[str, dict[str, str]] = {
         # --- Project Settings wiring (v0.1.74) -------------------------
         "Check m-alpha < 0.2": "Comprobar m-alfa < 0.2",
         "Rejects surfaces whose base normal denominator falls below "
-        "0.2 (Whitman and Bailey, 1967).":
+        "0.2 (Whitman and Bailey, 1967). In purely cohesive soil that "
+        "denominator is the cosine of the base angle exactly, so the "
+        "check becomes a ceiling of 78.5 deg on it. Applied to Bishop "
+        "simplified, both Janbu, Spencer and GLE / Morgenstern-Price; "
+        "the other methods are not screened by it.":
             "Rechaza las superficies cuyo denominador de la normal de "
-            "base baja de 0.2 (Whitman y Bailey, 1967).",
+            "base baja de 0,2 (Whitman y Bailey, 1967). En suelo "
+            "puramente cohesivo ese denominador es exactamente el "
+            "coseno del ángulo de base, así que la comprobación se "
+            "convierte en un techo de 78,5° sobre él. Se aplica a "
+            "Bishop simplificado, los dos Janbu, Spencer y GLE / "
+            "Morgenstern-Price; los demás métodos no se criban con "
+            "ella.",
         "The m-alpha check is ON by default, as in the reference, "
         "which screens surfaces with it and reports them as error "
         "-112. Surfaces it rejects keep their factor of safety and "

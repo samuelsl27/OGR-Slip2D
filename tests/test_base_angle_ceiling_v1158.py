@@ -62,9 +62,27 @@ _PAGES: list = []
 
 
 def _notes(project):
+    """The note THIS file is about, selected by its own sentence.
+
+    v0.1.190 — it used to select on ``"base angle" in n.lower()``, and
+    that filter was ambiguous by accident rather than by design. When it
+    was written, ``_base_angle_ceiling_notes`` was the ONLY note in
+    ``settings_warnings`` that said "base angle", so "notes about the
+    base angle" and "the D106 note" were the same set and the filter
+    never had to choose — which means nobody had to write down which of
+    the two it meant. That it worked was a property of the rest of the
+    file, not of this helper.
+
+    v0.1.190 adds ``_base_angle_scope_notes`` (D110), a second note on
+    the same subject, and the accident surfaces: the old filter would
+    return both, and four cases below that count them would fail in a
+    file whose subject has not changed. Naming D106's own sentence is
+    what this helper always meant. The ``.lower()`` goes on purpose: it
+    now names a sentence, not a topic.
+    """
     from ogr_slip2d.analysis_runner import settings_warnings
     return [n for n in settings_warnings(project)
-            if "base angle" in n.lower()]
+            if "Maximum slice base angle is set to" in n]
 
 
 # ======================================================================
