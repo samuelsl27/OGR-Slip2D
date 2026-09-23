@@ -188,6 +188,15 @@ class LEMResult:
     #       Methods that assume X = 0 (Bishop, Janbu, Ordinary) may omit
     #       it; zeros are assumed.
     #   "lambda": converged interslice scaling (Spencer: tanθ; GLE: λ).
+    #   "m_alpha_sign": v0.1.189 (D112) — the sign the m_alpha
+    #       denominator was formed with. Published by the five methods the
+    #       m-alpha check screens, and deliberately by no other.
+    #   "kv": v0.1.191 (D167) — the vertical seismic coefficient the method
+    #       APPLIED (0 when the earthquake is disabled). Published by every
+    #       method and read by the admissibility checks; a result without it
+    #       is read as kv = 0.
+    # Not exhaustive: methods publish diagnostics of their own. These are
+    # the keys other modules rely on.
     details: dict = field(default_factory=dict)
 
     # v0.1.32 — post-analysis admissibility (anomaly A3). Surfaces that

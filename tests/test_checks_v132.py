@@ -9,8 +9,11 @@ Implements and pins down the reference's two documented checks:
   bases, tested AFTER convergence, over a percentage of slices measured
   from the toe (default 95 %; the crest slices are exempt because they
   are legitimately the tension-crack zone). Allowable tensile stress is
-  zero except for Hoek-Brown, Generalised Hoek-Brown and Shear-Normal
-  Function.
+  zero except where the strength criterion defines a finite tensile
+  strength: since v0.1.191 (D165) the two Hoek-Brown models, with
+  s*sigci/mb. The reference names the Shear-Normal Function too, gives
+  the rule for none, and it stays at zero here; see
+  ``test_tensile_strength_rock_v1191.py``.
 * **m-alpha Check** (Whitman & Bailey, 1967) — surfaces whose final
   iteration has m_alpha < 0.2 on any slice.
 

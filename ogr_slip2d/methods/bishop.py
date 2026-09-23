@@ -337,6 +337,11 @@ class BishopSimplified(LEMMethod):
                 # is the lesson D113 left.
                 "slide_sign": slide_sign,
                 "m_alpha_sign": slide_sign,
+                # v0.1.191 (D167) -- the vertical seismic coefficient this
+                # method APPLIED, read by ``checks._applied_kv``: the same
+                # ``kv`` handed to ``slice_forces``, so the checks load each
+                # slice base as the solver did.
+                "kv": kv,
             }),
             error_message="" if converged else self.NOT_CONVERGED_NOTE,
             reason="" if converged else REASON_NOT_CONVERGED,
@@ -649,6 +654,8 @@ class BishopSimplified(LEMMethod):
                 # This IS the sign the m_alpha of this iteration carried.
                 "slide_sign": slide_sign,
                 "m_alpha_sign": slide_sign,
+                # v0.1.191 (D167) -- see the non-circular exit.
+                "kv": kv,
             }),
         )
 

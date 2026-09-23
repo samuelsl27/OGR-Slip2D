@@ -17,9 +17,13 @@ worst case, completely invalid". The check therefore:
 * tests only a *percentage of slices starting from the toe* (default
   95 %), because the slices at the very crest are legitimately in tension
   — they are, in reality, the tension-crack zone;
-* allows zero tensile stress for every strength model **except**
-  Hoek-Brown, Generalised Hoek-Brown and Shear-Normal Function, which
-  have a genuine finite tensile strength;
+* allows zero tensile stress for every strength model except those whose
+  criterion defines a finite tensile strength. The reference names three
+  -- Hoek-Brown, Generalised Hoek-Brown and Shear-Normal Function -- and
+  gives the rule for none. Since v0.1.191 (D165) the two Hoek-Brown models
+  get s*sigci/mb, the root of their criterion's bracket, and the
+  Shear-Normal Function stays at zero because no source says how; see
+  :func:`_material_tensile_strength`;
 * invalidates the surface when the limit is exceeded (the reference
   writes error code -120 in place of the safety factor).
 
@@ -129,14 +133,6 @@ import math
 
 from .external_forces import slice_forces
 
-# Strength models that can carry a genuine tensile strength. For every
-# other model the allowable tensile stress is zero.
-_TENSILE_CAPABLE = {
-    "hoek_brown",
-    "generalized_hoek_brown",
-    "shear_normal_function",
-}
-
 M_ALPHA_LIMIT = 0.2          # Whitman & Bailey (1967)
 
 #: The methods this criterion is APPLIED to. A WHITELIST and not a list of
@@ -194,34 +190,47 @@ NO_M_ALPHA_DENOMINATOR = frozenset({"ordinary_fellenius"})
 def _material_tensile_strength(material) -> float:
     """Allowable tensile stress on a slice base, as a POSITIVE magnitude.
 
-    Zero for all strength criteria except Hoek-Brown, Generalised
-    Hoek-Brown and Shear-Normal Function.
+    v0.1.191 (D165) -- asked of the strength model, through
+    ``StrengthModel.tensile_strength()``, which is zero unless the model's
+    criterion defines a finite tensile strength. Today that is the two
+    Hoek-Brown models, sigma_t = s*sigci/mb; the derivation and its sources
+    are at ``GeneralizedHoekBrown.tensile_strength``.
+
+    What this replaced could return nothing but 0.0, for three independent
+    reasons, each sufficient: it read ``sigma_ci``, ``mb`` and ``s`` as
+    attributes, and a strength model keeps them in ``params`` and defines
+    no ``__getattr__``; the names did not exist either (``sigci``, and
+    ``m`` in the classic model); and its hand-typed whitelist named
+    ``generalized_hoek_brown``, which is no model's ``MODEL_ID``, while
+    leaving out ``hoek_brown_classic``, which is one. There is no list now:
+    each model answers from its own parameters, so the names cannot drift
+    away from the envelope that reads them, and a model born later starts
+    at zero.
+
+    The Shear-Normal Function stays at zero, and that is a decision, not a
+    property of the table: the reference names it among the criteria that
+    CAN carry a finite tensile strength, but no source states the rule --
+    a table starting at (-50, 0) does reach tau = 0 in tension -- and a
+    plausible formula with nothing behind it is the worst outcome here.
+
+    Any failure comes back as 0.0, the answer every other material gets.
+    Not out of politeness: ``BaseSearch._is_admissible`` swallows an
+    exception from the checks and ADMITS the surface, so raising here would
+    let a surface in tension through.
     """
     if material is None:
         return 0.0
-    strength = getattr(material, "strength", None)
-    model_id = getattr(strength, "MODEL_ID", None) or getattr(
-        strength, "model_id", None)
-    if model_id not in _TENSILE_CAPABLE:
+    ask = getattr(getattr(material, "strength", None), "tensile_strength",
+                  None)
+    if not callable(ask):
         return 0.0
-    # Hoek-Brown family: sigma_t = s*sigma_ci/mb (magnitude)
-    sci = getattr(strength, "sigma_ci", None)
-    mb = getattr(strength, "mb", None) or getattr(strength, "m_b", None)
-    sparam = getattr(strength, "s", None)
-    if sci and mb and sparam is not None and mb > 0:
-        try:
-            return abs(float(sparam) * float(sci) / float(mb))
-        except (TypeError, ValueError, ZeroDivisionError):
-            return 0.0
-    # Shear-Normal functions may declare it explicitly
-    for attr in ("tensile_strength", "sigma_t"):
-        v = getattr(strength, attr, None)
-        if v:
-            try:
-                return abs(float(v))
-            except (TypeError, ValueError):
-                return 0.0
-    return 0.0
+    try:
+        value = float(ask())
+    except Exception:                                     # noqa: BLE001
+        return 0.0
+    if not (math.isfinite(value) and value > 0.0):
+        return 0.0
+    return value
 
 
 # ----------------------------------------------------------------------
@@ -253,15 +262,19 @@ def _denominator_sign(result) -> float:
     exactly does their sum vanish identically; there the method's own
     (degenerate) answer is now imported, which is the point.
 
-    **The fallback is not courtesy, it is necessity**, and it is measured:
-    ``tests/test_james_bay_v1158.py`` and ``tests/test_modified_swedish_v198.py``
-    build ``LEMResult`` and ``Slice`` by hand with no ``details`` at all;
-    ``MultiStageDrawdownMethod`` builds its ``details`` as a literal and
-    so DROPS the inner method's keys; and a result read back from an
-    archived ``.h5`` never carried ``details`` in the first place, since
-    ``to_dict`` does not serialise it. In every one of those the fallback
-    returns the same number it always did, because the methods that reach
-    them are the ones whose sum agrees with this one.
+    **The fallback is not courtesy, it is necessity**: a result built by
+    hand carries no ``details`` at all (``tests/test_tensile_strength_rock_v1191.py``
+    builds one); ``MultiStageDrawdownMethod`` builds its ``details`` as a
+    literal and so DROPS the inner method's keys -- all of them but ``kv``
+    since v0.1.191; and a plugin method need not publish the key. In those
+    the fallback returns the same number it always did, because the methods
+    that reach them are the ones whose sum agrees with this one -- with one
+    exception, reported and not fixed here (D112b): Janbu inside the
+    multi-stage drawdown wrapper, which is D112's own case reached through
+    the wrapper. Until v0.1.191 this paragraph named two test files as
+    building ``LEMResult`` by hand; they build ``Slice`` only and never
+    reach the checks, and no code rebuilds a result from an archived
+    ``.h5``.
 
     Methods that form no such denominator — the Ordinary Method — and the
     prescribed-inclination family, whose denominator is
@@ -288,7 +301,33 @@ def _denominator_sign(result) -> float:
     return 1.0 if driving >= 0 else -1.0
 
 
-def _base_load_and_sigma(s) -> tuple[float, float]:
+def _applied_kv(result) -> float:
+    """The vertical seismic coefficient the method APPLIED, asked of it.
+
+    v0.1.191 (D167) -- read from ``details["kv"]``, which every method
+    writes from the same local it hands to ``slice_forces``: the road
+    ``m_alpha_sign`` already takes. The checks receive a result and not a
+    project, so there is nowhere else to learn it from without keeping a
+    second copy -- and two copies of one fact is how D111 and D113 came
+    about.
+
+    It is the coefficient APPLIED, not the one stored: a disabled
+    earthquake is kv = 0 to every method, whatever the project keeps.
+
+    Absent, or not a finite number, it reads as 0.0, which is what the
+    checks assumed before this existed. That covers a result built by hand
+    and a plugin method that does not publish the key; for those the load
+    is the one without a vertical earthquake, as it always was.
+    """
+    details = getattr(result, "details", None) or {}
+    try:
+        kv = float(details.get("kv", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+    return kv if math.isfinite(kv) else 0.0
+
+
+def _base_load_and_sigma(s, *, kv: float) -> tuple[float, float]:
     """The base load and the ONE normal stress both checks linearise at.
 
     ``W`` is :attr:`SliceForces.w_total` — soil plus the ponded water
@@ -310,8 +349,33 @@ def _base_load_and_sigma(s) -> tuple[float, float]:
     different stresses: exactly the case v0.1.67 was written for. One
     function returning both quantities is what makes them unable to
     drift apart again.
+
+    v0.1.191 (D167) -- they had not drifted apart; they came in apart, one
+    argument further along. This called ``slice_forces(s)`` with the
+    default ``kv = 0.0`` while every method calls
+    ``slice_forces(s, kh, kv)``, whose soil weight is ``weight * (1 - kv)``,
+    so under a vertical earthquake the check judged each slice under a load
+    the solver never applied. ``kv`` now comes from the method (see
+    :func:`_applied_kv`) and is required, by name and without a default: a
+    default of zero is precisely how this function came to miss it, and it
+    would do the same to the next caller that forgot. ``kh`` is not passed
+    because ``w_total`` does not depend on it -- the horizontal term lives
+    in ``h_seismic``. And the sign of kv is ``slice_forces``'s to decide,
+    not this function's (D170), which is why it is called and not copied.
+
+    The load enters the normal force directly, so the tensile check moved
+    with EVERY envelope; the m-alpha check only where ``tan phi`` depends
+    on the stress. With kv = 0 both are unchanged to the last bit, since
+    ``x * (1.0 - 0.0)`` is ``x``.
+
+    What even the right kv does NOT make equal to the solver's estimate,
+    reported and not fixed here (D172): with supports, Bishop and Janbu add
+    ``support_vertical_load`` to this load and Spencer, GLE and the
+    prescribed-inclination family subtract ``nf_v``; the Ordinary Method
+    estimates its stress with a form of its own; and the floor on ``l`` is
+    1e-12 here and 1e-9 in the methods.
     """
-    W = slice_forces(s).w_total
+    W = slice_forces(s, kv=kv).w_total
     l = max(s.base_length, 1e-12)
     sigma = max(0.0, W * math.cos(s.base_angle) - s.pore_pressure * l) / l
     return W, sigma
@@ -339,11 +403,12 @@ def base_effective_stresses(result) -> list[float]:
 
     out: list[float] = []
     sgn = _denominator_sign(result)
+    kv = _applied_kv(result)
     for s in result.slices:
         alpha = s.base_angle
         l = max(s.base_length, 1e-12)
         u = s.pore_pressure
-        W, sigma_est = _base_load_and_sigma(s)
+        W, sigma_est = _base_load_and_sigma(s, kv=kv)
         c_loc, tan_phi = BishopSimplified._local_c_phi(s, s.material,
                                                        sigma_est)
         m_alpha = math.cos(alpha) + sgn * math.sin(alpha) * tan_phi / F
@@ -413,9 +478,10 @@ def base_m_alphas(result) -> list[float]:
         return []
     out: list[float] = []
     sgn = _denominator_sign(result)
+    kv = _applied_kv(result)
     for s in result.slices:
         alpha = s.base_angle
-        _W, sigma_est = _base_load_and_sigma(s)
+        _W, sigma_est = _base_load_and_sigma(s, kv=kv)
         _c, tan_phi = BishopSimplified._local_c_phi(s, s.material,
                                                     sigma_est)
         out.append(math.cos(alpha) + sgn * math.sin(alpha) * tan_phi / F)

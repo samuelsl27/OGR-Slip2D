@@ -149,6 +149,49 @@ class GeneralizedHoekBrown(StrengthModel):
         tau_lo = self.shear_strength(sigma_n - delta)
         return max(0.0, (tau_hi - tau_lo) / (2.0 * delta))
 
+    def tensile_strength(self) -> float:
+        """Tensile strength of the rock mass, sigma_t = s*sigci/mb [kPa].
+
+        v0.1.191 (D165). Set sigma'1 = sigma'3 = sigma_t in the criterion,
+        sigma'1 = sigma'3 + sigci*(mb*sigma'3/sigci + s)^a, and what is left
+        is (mb*sigma_t/sigci + s)^a = 0: the root of the bracket, which does
+        not depend on a. It is biaxial tension, and Hoek, Carranza-Torres &
+        Corkum (2002) take it as the tensile strength of the rock mass,
+        citing Hoek (1983) for the uniaxial and the biaxial values being
+        equal in brittle materials. Both sources are cited and not read
+        here — no copy is held with this project's references — and the
+        anchor is the algebra of the criterion itself, which this docstring
+        states and ``tests/test_tensile_strength_rock_v1191.py`` checks.
+
+        Why the biaxial root and not the uniaxial one (sigma'1 = 0): the
+        check this feeds compares the NORMAL stress on a plane, and the
+        Mohr envelope of the criterion ends at (sigma_t, 0), the failure
+        circle of zero diameter at sigma'3 = sigma_t. The uniaxial root
+        does depend on a, and it is smaller: with this class's default
+        constants by 0.06 % at a = 0.5 and 1.2 % at a = 0.65; with the
+        classic model's (m = 0.357, s = 0.0017) by 1.3 % and 12.8 %.
+
+        That this is the tension the Tensile Stress Check should allow is
+        an inference of this program: the reference lists this criterion
+        among those that CAN carry a finite tensile strength and gives no
+        rule.
+
+        Caveat, measured and reported (D171): the envelope
+        :meth:`shear_strength` evaluates is not yet this criterion's Mohr
+        envelope — it gives tau(0) = 0 where the criterion gives 307.5 kPa
+        with the default constants — so this strength belongs to the
+        criterion, not to that approximation.
+
+        Zero when sigci, mb or s is not positive and finite: no finite
+        tensile strength follows from them.
+        """
+        sci = self.params["sigci"]
+        mb = self.params["mb"]
+        s = self.params["s"]
+        if not all(math.isfinite(v) and v > 0.0 for v in (sci, mb, s)):
+            return 0.0
+        return s * sci / mb
+
 
 # ----------------------------------------------------------------------
 @register
@@ -207,6 +250,22 @@ class HoekBrown(StrengthModel):
         tau_hi = self.shear_strength(sigma_n + delta)
         tau_lo = self.shear_strength(sigma_n - delta)
         return max(0.0, (tau_hi - tau_lo) / (2.0 * delta))
+
+    def tensile_strength(self) -> float:
+        """Tensile strength, sigma_t = s*sigci/m [kPa] — v0.1.191 (D165).
+
+        The classic criterion is the generalised one with a = 0.5, and the
+        root of its bracket is the same; the derivation, the sources (cited,
+        not read here) and the D171 caveat are at
+        :meth:`GeneralizedHoekBrown.tensile_strength` and hold for both.
+        Zero when sigci, m or s is not positive and finite.
+        """
+        sci = self.params["sigci"]
+        m = self.params["m"]
+        s = self.params["s"]
+        if not all(math.isfinite(v) and v > 0.0 for v in (sci, m, s)):
+            return 0.0
+        return s * sci / m
 
 
 # ----------------------------------------------------------------------

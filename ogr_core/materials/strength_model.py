@@ -83,6 +83,24 @@ class StrengthModel(ABC):
         SliceContext. Default False."""
         return False
 
+    # ------------------------------------------------------------------
+    def tensile_strength(self) -> float:
+        """Tensile strength of the material, as a POSITIVE magnitude [kPa].
+
+        v0.1.191 (D165) — zero unless the model's criterion defines a
+        finite tensile strength. It is the tension the Tensile Stress Check
+        allows on a slice base (``ogr_slip2d.checks``), and zero is also
+        that check's answer for every criterion without one, so a model
+        written later inherits the conservative answer instead of having to
+        be remembered in a list: a hand-typed list of capable models is
+        what went stale in D165.
+
+        Override it only with a criterion's own tensile strength, computed
+        from this instance's ``params`` — the dictionary ``shear_strength``
+        reads, so the names cannot drift apart from the envelope's.
+        """
+        return 0.0
+
     # v0.1.120 — two SliceContext fields cost real work to fill in, so the
     # slicer only fills them when some material asks for them. They are
     # CLASS attributes rather than properties because the slicer asks the

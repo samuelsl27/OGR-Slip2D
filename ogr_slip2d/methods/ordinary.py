@@ -203,6 +203,11 @@ class OrdinaryFellenius(LEMMethod):
                 # it, and this comment did, once. Publishing a sign for a
                 # quantity this method never computes would invent one.
                 "slide_sign": slide_sign,
+                # v0.1.191 (D167) -- but the vertical seismic coefficient
+                # IS published: the Tensile Stress Check runs on this method
+                # too, and loads each base with the ``kv`` handed to
+                # ``slice_forces`` here (read by ``checks._applied_kv``).
+                "kv": kv,
             }),
         )
 
@@ -476,5 +481,7 @@ class OrdinaryFellenius(LEMMethod):
                 # v0.1.189 (D112) -- sense of sliding only; no
                 # denominator-sign key, for the reason at the other exit.
                 "slide_sign": slide_sign,
+                # v0.1.191 (D167) -- see the other exit.
+                "kv": kv,
             }),
         )

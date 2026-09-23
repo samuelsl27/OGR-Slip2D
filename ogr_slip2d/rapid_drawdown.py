@@ -679,6 +679,19 @@ class MultiStageDrawdownMethod:
         # normal from stage-1 slices at a stage-2 factor of safety - two
         # different states in one expression.
         final = getattr(res, "final_result", None)
+        # v0.1.191 (D167) -- the vertical seismic coefficient the checks
+        # load each base with. Asked of the pass that produced the answer,
+        # like everything else here; when no pass did (the cycling drained
+        # cap reports a midpoint), it is the project's own, which every
+        # stage shared -- ``level_project`` is a shallow copy and keeps this
+        # very SeismicLoad. In that branch the checks still pair the
+        # caller's slices with a stage-3 factor: that mismatch predates this
+        # and is not what the key fixes. ``m_alpha_sign`` is NOT copied
+        # (D112b, reported).
+        kv = (getattr(final, "details", None) or {}).get("kv")
+        if kv is None:
+            seismic = project.seismic
+            kv = seismic.kv if seismic.enabled else 0.0
         return LEMResult(
             fos=res.fos, converged=True, iterations=3 if res.fos_stage3
             else 2,
@@ -703,6 +716,7 @@ class MultiStageDrawdownMethod:
                 "cap_passes": res.n_cap_passes,
                 "cap_converged": res.cap_converged,
                 "cap_min_m_alpha": res.cap_min_m_alpha,
+                "kv": kv,
             },
         )
 

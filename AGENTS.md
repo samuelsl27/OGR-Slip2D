@@ -240,10 +240,14 @@ lista funciones añadidas ha desperdiciado la mitad de su valor.
 
 ## Coste de los tests
 
-La suite entera tarda **entre 5 y 7½ minutos**, y esa horquilla es lo
-honesto: el mismo código, sin tocar nada, ha dado 5:55, 6:19, 6:41 y 7:22
-en la misma máquina. **El reloj total no es una medida**, es una
-comprobación de que la suite termina.
+La suite entera tarda **unos 25 minutos**: 24,9 min con 3782 casos
+(v0.1.175), 24 min 13 s con 3863 (v0.1.179), y 26 min 10 s y 25 min 29 s
+con 4175 (v0.1.191), en la misma máquina. Este párrafo decía «entre 5 y
+7½ minutos», que era cierto cuando la suite era mucho más pequeña, y siguió
+diciéndolo al menos dieciséis versiones después de dejar de serlo: en
+v0.1.191 se leyó como anomalía un tiempo normal. **El reloj total no es una
+medida**, es una comprobación de que la suite termina. Con este tiempo,
+lánzala en segundo plano y no toques el motor mientras corre.
 
 Que el tiempo suba no es un problema por sí solo. Lo que sí importa es no
 meter un test caro sin darse cuenta: los caros son los que mallan y

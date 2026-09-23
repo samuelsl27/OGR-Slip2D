@@ -230,6 +230,11 @@ class PrescribedInclinationMethod(LEMMethod):
                 # false the other way round. The march orientation itself
                 # is reported and not written; see the changelog.
                 "slide_sign": slide_sign,
+                # v0.1.191 (D167) -- the vertical seismic coefficient IS
+                # published: the Tensile Stress Check runs on this family
+                # too, and loads each base with the ``kv`` handed to
+                # ``slice_forces`` here (read by ``checks._applied_kv``).
+                "kv": kv,
             }),
         )
 

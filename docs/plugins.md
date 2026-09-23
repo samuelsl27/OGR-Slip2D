@@ -41,6 +41,19 @@ The new model appears automatically in:
 - The CLI: `ogr-slip2d-cli strength-models`
 - The Bishop / Janbu solvers (via envelope linearisation)
 
+### Tensile strength (v0.1.191)
+
+`StrengthModel.tensile_strength()` returns the tension the *Tensile Stress
+Check* allows on a slice base, as a positive magnitude in kPa. It returns
+**0.0 unless you override it**, which is the right answer for any criterion
+that does not define a finite tensile strength — and the answer every model
+got before v0.1.191, when a hand-typed list of capable models had gone
+stale (defect D165). Override it only with your criterion's own tensile
+strength, computed from `self.params` (the dictionary `shear_strength`
+reads), never from `PARAMETERS`, which holds the defaults. The two
+Hoek-Brown models are the reference implementation: σt = s·σci/mb, the root
+of the criterion's bracket.
+
 ## 2. Adding a new LEM method
 
 File: `ogr_slip2d/methods/spencer.py`
@@ -67,6 +80,20 @@ Register it in `ogr_slip2d/methods/__init__.py`:
 ```python
 from .spencer import Spencer  # noqa: F401
 ```
+
+### What the admissibility checks read from `details` (v0.1.191)
+
+The post-analysis checks (`ogr_slip2d/checks.py`) receive the result and
+not the project, so a method tells them two things through
+`LEMResult.details`:
+
+- `"kv"` — the vertical seismic coefficient the method **applied**
+  (0.0 when the earthquake is disabled), written from the same variable you
+  pass to `slice_forces(s, kh, kv)`. Every built-in method publishes it. A
+  method that does not is read as kv = 0, so under a vertical earthquake the
+  checks would load each base with a weight your solver never used (D167).
+- `"m_alpha_sign"` — only if your method forms the denominator
+  `cos α + s·sin α·tan φ/F`: the sign `s` it was formed with (D112).
 
 ## 3. Adding a new support type
 

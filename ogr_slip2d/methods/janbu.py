@@ -372,6 +372,10 @@ class JanbuSimplified(LEMMethod):
                 # the two forms never differ in SIGN, only in size.
                 "slide_sign": slide_sign,
                 "m_alpha_sign": slide_sign,
+                # v0.1.191 (D167) -- the vertical seismic coefficient this
+                # method APPLIED, read by ``checks._applied_kv``: the same
+                # ``kv`` handed to ``slice_forces``.
+                "kv": kv,
             }),
         )
 

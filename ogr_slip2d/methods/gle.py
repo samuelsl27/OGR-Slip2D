@@ -381,6 +381,10 @@ class GLEMorgensternPrice(LEMMethod):
                     # this sign. Written from the same local, in the
                     # same statement, so the two cannot drift apart.
                     "m_alpha_sign": slide_sign,
+                    # v0.1.191 (D167) -- the ``kv`` this method applied,
+                    # read by ``checks._applied_kv``; see
+                    # ``Spencer.compute_fos``.
+                    "kv": kv,
                     # v0.1.159 (D63) — see ``Spencer.compute_fos``.
                     "lambda_search_fell_back": True,
                     "lambdas_lost_to_budget": system.n_passes_exhausted,
@@ -560,6 +564,8 @@ class GLEMorgensternPrice(LEMMethod):
                 # this sign. Written from the same local, in the
                 # same statement, so the two cannot drift apart.
                 "m_alpha_sign": slide_sign,
+                # v0.1.191 (D167) -- see the fallback exit.
+                "kv": kv,
                 # v0.1.159 (D63) — see ``Spencer.compute_fos``.
                 "lambda_search_fell_back": False,
                 "lambdas_lost_to_budget": system.n_passes_exhausted,

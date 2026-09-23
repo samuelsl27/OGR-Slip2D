@@ -321,6 +321,12 @@ class Spencer(LEMMethod):
                     # this sign. Written from the same local, in the
                     # same statement, so the two cannot drift apart.
                     "m_alpha_sign": slide_sign,
+                    # v0.1.191 (D167) -- the vertical seismic coefficient
+                    # this method APPLIED, read by ``checks._applied_kv``:
+                    # the same ``kv`` that ``prepare_rows`` hands to
+                    # ``slice_forces``, so the checks load each base as the
+                    # solver did.
+                    "kv": kv,
                     # v0.1.159 (D63) — this is the path where losing a λ can
                     # decide the answer, so this is the path that has to be
                     # able to say it did. See ``analysis_runner.lambda_budget_note``.
@@ -554,6 +560,8 @@ class Spencer(LEMMethod):
                 # this sign. Written from the same local, in the
                 # same statement, so the two cannot drift apart.
                 "m_alpha_sign": slide_sign,
+                # v0.1.191 (D167) -- see the fallback exit.
+                "kv": kv,
                 # v0.1.159 (D63) — false here by construction: a bracket was
                 # found and refined. Written rather than omitted so that a
                 # reader of ``details`` does not have to know which of the
