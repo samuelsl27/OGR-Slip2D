@@ -20,10 +20,12 @@ override it with the parameters of their own instance.
 WHAT THIS FILE DOES NOT CLAIM. It does not say the Hoek-Brown shear
 envelope is right: it is not (``shear_strength`` gives tau(0) = 0 where the
 criterion's Mohr envelope gives 307.5 kPa with the default constants —
-defect D171, reported, not fixed here). And it does not claim the reach the
-defect report assumed: ``AdvancedSettings.from_dict`` switches the check
-off on every reload (D178), so the allowance reaches runs made in the same
-session, through the API or the CLI.
+defect D171, reported, not fixed here). And when it was written it did not
+claim the reach the defect report assumed: ``AdvancedSettings.from_dict``
+switched the check off on every reload (D178), so the allowance reached only
+runs made in the same session, through the API or the CLI. v0.1.192 closed
+D178 — a saved choice now survives reopening — and the allowance reaches
+reopened projects too.
 
 WHAT THIS FILE DISCRIMINATES against the v0.1.190 tree. MEASURED, by
 copying this file into a ``git worktree`` at that commit and running it

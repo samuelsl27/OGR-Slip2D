@@ -110,9 +110,19 @@ def _base_kwargs(legacy: dict) -> dict:
     Here it can only be forgotten once, and a test walks the six branches
     to make sure it has not been.
     """
+    # v0.1.192 (D179) — ``tensile_tolerance`` is RETIRED, and consumed here
+    # instead of left in ``legacy`` so that an old call passing it by name
+    # still builds. It was the tolerance of the interslice-tension filter of
+    # v0.1.24 ("5 % of max|E|"), which v0.1.32 replaced by the Tensile Stress
+    # Check on slice BASES; from then on every search stored it and none read
+    # it. Since v0.1.191 its name also reads as the tensile strength that
+    # version introduced, which is the MATERIAL's
+    # (``StrengthModel.tensile_strength``) and never was this. Discarded
+    # rather than refused, as ``temperature_factor`` is, because the defect
+    # report that retired it requires old calls passing it to keep working.
+    legacy.pop("tensile_tolerance", None)
     return {
         "reject_tensile": bool(legacy.pop("reject_tensile", False)),
-        "tensile_tolerance": float(legacy.pop("tensile_tolerance", 0.05)),
         "tensile_percent": float(legacy.pop("tensile_percent", 95.0)),
         "check_m_alpha": bool(legacy.pop("check_m_alpha", True)),
         "min_elevation": legacy.pop("min_elevation", None),
@@ -413,7 +423,6 @@ class BaseSearch(ABC):
         min_area: float = 0.5,
         progress_cb: Optional[Callable[[int, int], None]] = None,
         reject_tensile: bool = False,
-        tensile_tolerance: float = 0.05,
         tensile_percent: float = 95.0,
         check_m_alpha: bool = True,
         min_elevation: Optional[float] = None,
@@ -484,19 +493,15 @@ class BaseSearch(ABC):
         #   left alone here on purpose: changing it would move every
         #   circular row of the reference bank.
         self.focus_objects = list(focus_objects or ())
-        # v0.1.24 — optional kinematic-admissibility filter (anomaly A3).
-        # A physically acceptable limit-equilibrium mechanism requires
-        # COMPRESSIVE interslice forces; a surface whose force field
-        # needs substantial interslice TENSION is not a feasible
-        # mechanism, and the reference documentation warns that such
-        # surfaces yield a safety factor that is "usually too low".
-        # Non-circular searches can generate them (e.g. a deep wedge
-        # closed by a near-vertical rising segment), so this filter is
-        # available for all searches. Default OFF to preserve existing
-        # results; recommended ON for non-circular searches.
-        # See Krahn (2003), "The limits of limit equilibrium analyses".
+        # v0.1.24 — ``reject_tensile`` was born as a kinematic filter on
+        # INTERSLICE tension (anomaly A3; Krahn 2003, "The limits of limit
+        # equilibrium analyses"). v0.1.32 redefined it, as the next comment
+        # says, and that filter no longer exists: what the flag switches on
+        # is the Tensile Stress Check on slice BASES. The old filter's
+        # tolerance survived as ``tensile_tolerance``, stored here and read
+        # nowhere, until v0.1.192 retired it (D179). This comment described
+        # the interslice filter as the live one until then.
         self.reject_tensile = reject_tensile
-        self.tensile_tolerance = tensile_tolerance
         # v0.1.32 — reference-style post-analysis checks (anomaly A3).
         # ``reject_tensile`` now maps onto the documented Tensile Stress
         # Check: negative effective normal stress on slice BASES, tested
@@ -600,8 +605,8 @@ class BaseSearch(ABC):
         if not (self.reject_tensile or self.check_m_alpha):
             return True
         try:
-            from .checks import check_surface
-            ok, reason = check_surface(
+            from .checks import screen_surface
+            ok, screen, reason = screen_surface(
                 result,
                 tensile=self.reject_tensile,
                 tensile_percent=self.tensile_percent,
@@ -612,6 +617,9 @@ class BaseSearch(ABC):
         if not ok:
             result.admissible = False
             result.admissibility_note = reason or ""
+            # v0.1.192 (D177) — WHICH check fired, as a constant, so the
+            # export writes the reference's code without reading the note.
+            result.admissibility_reason = screen
         return ok
 
     # ------------------------------------------------------------------

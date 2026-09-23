@@ -613,6 +613,45 @@ def m_alpha_check(result, limit: float = M_ALPHA_LIMIT):
 
 
 # ----------------------------------------------------------------------
+def screen_surface(result, tensile: bool = False,
+                   tensile_percent: float = 95.0,
+                   m_alpha: bool = False,
+                   m_alpha_limit: float = M_ALPHA_LIMIT):
+    """Run the enabled post-analysis checks on a converged result.
+
+    Returns ``(passed, screen, note)``: ``screen`` is the check that
+    rejected the surface, one of ``methods.base.ALL_SCREENS`` (empty when it
+    passes), and ``note`` the short explanation for a human, None when it
+    passes.
+
+    v0.1.192 (D177) — the ``screen`` is new and the note is not: a caller
+    that needs to know WHICH check fired now reads the constant instead of
+    searching the prose, which is how the raw-data export came to file the
+    tensile rejection under the generic code. The notes are unchanged
+    character for character, because the search, Optimize Surfaces and the
+    interpretation window all read them.
+
+    The tensile check runs first and the first rejection is the answer, so
+    a surface failing both is reported — and exported — as tensile.
+    """
+    from .methods.base import SCREEN_M_ALPHA, SCREEN_TENSILE_STRESS
+
+    if result is None or not getattr(result, "is_valid", False):
+        return True, "", None
+    if tensile:
+        ok, bad = tensile_stress_check(result, tensile_percent)
+        if not ok:
+            return False, SCREEN_TENSILE_STRESS, (
+                f"tensile stress on {len(bad)} slice base(s) "
+                f"(error -120)")
+    if m_alpha:
+        ok, bad = m_alpha_check(result, m_alpha_limit)
+        if not ok:
+            return False, SCREEN_M_ALPHA, (
+                f"m_alpha < {m_alpha_limit} on {len(bad)} slice(s)")
+    return True, "", None
+
+
 def check_surface(result, tensile: bool = False,
                   tensile_percent: float = 95.0,
                   m_alpha: bool = False,
@@ -620,19 +659,11 @@ def check_surface(result, tensile: bool = False,
     """Run the enabled post-analysis checks on a converged result.
 
     Returns ``(passed, reason)`` where ``reason`` is None when the
-    surface passes, or a short explanation suitable for reporting.
+    surface passes, or a short explanation suitable for reporting. The
+    two-value form every caller written before v0.1.192 unpacks; see
+    :func:`screen_surface` for which check fired.
     """
-    if result is None or not getattr(result, "is_valid", False):
-        return True, None
-    if tensile:
-        ok, bad = tensile_stress_check(result, tensile_percent)
-        if not ok:
-            return False, (
-                f"tensile stress on {len(bad)} slice base(s) "
-                f"(error -120)")
-    if m_alpha:
-        ok, bad = m_alpha_check(result, m_alpha_limit)
-        if not ok:
-            return False, (
-                f"m_alpha < {m_alpha_limit} on {len(bad)} slice(s)")
-    return True, None
+    passed, _screen, note = screen_surface(
+        result, tensile=tensile, tensile_percent=tensile_percent,
+        m_alpha=m_alpha, m_alpha_limit=m_alpha_limit)
+    return passed, note

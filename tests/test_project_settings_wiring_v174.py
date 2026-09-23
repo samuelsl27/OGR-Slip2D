@@ -296,6 +296,15 @@ class TestTheLambdaRangeClipsACalibratedGrid:
         migrations CHAIN on purpose: 1.25 was v0.1.73's default, 1.5 was
         v0.1.74's, and 6.0 is the reference's own. A project stored back
         then must not come out on an intermediate default nobody uses.
+
+        v0.1.192 (D178) — this block still migrates, and it is worth saying
+        why, because the tensile half is no longer decided by the value: it
+        has ``min_initial_fs`` and no ``tensile_percent``, which is what a
+        pre-v0.1.74 file looks like, and the migration now looks for exactly
+        that absence. A block that DOES carry ``tensile_percent`` was saved
+        by v0.1.74 or later and keeps its True — see
+        ``test_tensile_setting_reopen_v1192.py``. The lambda half below is
+        still by value (D182).
         """
         from ogr_core.project.settings import AdvancedSettings
         old = AdvancedSettings.from_dict({

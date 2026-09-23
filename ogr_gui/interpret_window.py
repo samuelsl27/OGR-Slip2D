@@ -2512,6 +2512,8 @@ class InterpretWindow(QMainWindow):
         Dropping the invalid surfaces would throw away exactly the rows
         that explain a blank patch in the contoured grid.
         """
+        from ogr_slip2d.methods.base import SCREEN_M_ALPHA, SCREEN_TENSILE_STRESS
+
         res = self.search_result
         if res is None:
             return []
@@ -2521,12 +2523,25 @@ class InterpretWindow(QMainWindow):
             if r.is_valid and getattr(r, "admissible", True):
                 fos = f"{r.fos:.6f}"
             else:
-                # Negative codes, as the reference writes them: -111 for a
-                # factor of safety that did not converge, -112 for the
-                # m-alpha screen. Anything else is reported as -101.
+                # Negative codes, as the reference writes them: -120 for
+                # the Tensile Stress Check, -112 for the m-alpha screen,
+                # -111 for a factor of safety that did not converge.
+                # Anything else is reported as -101.
+                #
+                # v0.1.192 (D177) — the tensile screen is read from the
+                # constant the search records, not from the note. Until
+                # then this cascade had no branch for it and filed it under
+                # -101, although the note itself says "(error -120)". It
+                # goes first because the screen tests tension first, so a
+                # surface failing both is a tensile rejection. The m-alpha
+                # branch still accepts the note as well as the constant, so
+                # a result built without the new field exports as before.
+                why = getattr(r, "admissibility_reason", "") or ""
                 note = (getattr(r, "admissibility_note", "") or
                         getattr(r, "error_message", "") or "")
-                if "m_alpha" in note:
+                if why == SCREEN_TENSILE_STRESS:
+                    fos = "-120"
+                elif why == SCREEN_M_ALPHA or "m_alpha" in note:
                     fos = "-112"
                 elif not r.converged:
                     fos = "-111"

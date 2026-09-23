@@ -127,6 +127,29 @@ ALL_REASONS = frozenset({
     REASON_UNSLICEABLE_AT_DRAWDOWN,
 })
 
+# v0.1.192 (D177) — the machine-readable half of ``admissibility_note``,
+# which is to that note what ``reason`` is to ``error_message``: the handle
+# a program takes instead of parsing prose. A separate set and NOT members
+# of ``ALL_REASONS``, because those are reasons a calculation FAILED and a
+# screened surface did not fail — its factor converged and is kept; the
+# post-analysis checks judge it inadmissible afterwards.
+#
+# Needed because the raw-data export had to GUESS the code from the note:
+# "m_alpha" in it gave -112 and everything else not converged gave -101, so
+# a surface rejected by the tensile check went out as a generic failure
+# although the note itself said -120.
+
+#: The Tensile Stress Check rejected the surface. The reference's code is
+#: -120: "tensile effective normal stress on the base of a slice exceeds the
+#: tensile strength of the material".
+SCREEN_TENSILE_STRESS = "tensile_stress"
+#: The m-alpha check rejected the surface (Whitman & Bailey, 1967). The
+#: reference's code is -112.
+SCREEN_M_ALPHA = "m_alpha"
+
+#: Every screen ``checks.screen_surface`` may name.
+ALL_SCREENS = frozenset({SCREEN_TENSILE_STRESS, SCREEN_M_ALPHA})
+
 
 # ======================================================================
 @dataclass
@@ -210,6 +233,12 @@ class LEMResult:
     # ``is_valid``, whereas an inadmissible surface has a perfectly
     # converged (but physically unreliable) factor of safety.
     admissibility_note: str = ""
+    # v0.1.192 (D177) — which post-analysis check rejected the surface: one
+    # of ``ALL_SCREENS``, or empty. Set only by the search's admissibility
+    # screen; a method that marks its own result inadmissible (the relaxed
+    # interslice thrust, active support beyond the driving moment) leaves it
+    # empty, because neither is a screen the reference gives a code to.
+    admissibility_reason: str = ""
 
     # ------------------------------------------------------------------
     def __post_init__(self) -> None:
@@ -248,6 +277,8 @@ class LEMResult:
             self.error_message = ""
         if self.admissibility_note is None:
             self.admissibility_note = ""
+        if self.admissibility_reason is None:
+            self.admissibility_reason = ""
         if self.reason is None:
             self.reason = ""
 
@@ -304,7 +335,8 @@ class LEMResult:
 
         ``reason``, ``admissible`` and ``admissibility_note`` are included
         because a factor that is missing without them is exactly the
-        unreadable row this defect is about.
+        unreadable row this defect is about. ``admissibility_reason``
+        joined them in v0.1.192 (D177), for the same reason.
         """
         return {
             "fos": self.fos,
@@ -320,6 +352,7 @@ class LEMResult:
             "reason": self.reason,
             "admissible": self.admissible,
             "admissibility_note": self.admissibility_note,
+            "admissibility_reason": self.admissibility_reason,
         }
 
 

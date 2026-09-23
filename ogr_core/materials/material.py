@@ -176,6 +176,36 @@ class Material:
     id: str = field(default_factory=lambda: str(uuid4()))
 
     # ------------------------------------------------------------------
+    def __setattr__(self, name: str, value) -> None:
+        """Store ``pore_pressure`` as a :class:`PorePressureType`, always.
+
+        v0.1.192 (D154) — the constructor stored whatever it was given, so
+        ``Material(pore_pressure="water_table")`` kept a ``str``: every
+        ``== PorePressureType.WATER_TABLE`` in the pore-pressure code
+        compared False and the material was evaluated DRY, without an error
+        or a warning (+94.6 % on the published circle of problem 059), and
+        ``to_dict`` then failed on ``.value`` — at SAVE time, after the
+        wrong number had been computed. The ``.ogr`` loader always
+        converted, so a model built in code disagreed with the same model
+        read from disk.
+
+        The conversion is the loader's own, ``PorePressureType(value)``, so
+        this is not a new rule: a member comes back as itself, a valid value
+        string becomes its member, and anything else raises ``ValueError``
+        on the line that wrote it. It lives here and not in
+        ``__post_init__`` because a dataclass ``__init__`` assigns through
+        ``setattr`` — so this covers construction AND every later
+        assignment, which a ``__post_init__`` would have left open (the
+        interface and the tests assign this attribute in some twenty
+        places). ``copy``/``pickle`` restore ``__dict__`` directly and never
+        pass through here, which is fine: what they restore was converted
+        when it was first written.
+        """
+        if name == "pore_pressure":
+            value = PorePressureType(value)
+        object.__setattr__(self, name, value)
+
+    # ------------------------------------------------------------------
     def gamma_at(self, below_water: bool) -> float:
         """Return the unit weight to use at a given point.
 

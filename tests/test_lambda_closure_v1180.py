@@ -187,6 +187,12 @@ def _slope(tolerance=TOL_FICHA, n=N_DOVELAS, max_it=None):
     does not, which is why a model built in code can silently disagree with
     the same model loaded from disk. Reported in the changelog of this
     version and not fixed here.
+
+    v0.1.192 (D154) — fixed: ``Material`` now converts the string when it is
+    written, so both spellings give the wet slope. The enum stays because
+    it is the spelling that never depended on that fix;
+    ``test_material_enum_coercion_v1192.py`` borrows this very slope to show
+    the two agree bit for bit.
     """
     from ogr_core.geometry import Boundary, BoundaryType, Polyline, Vertex
     from ogr_core.materials import Material, MohrCoulomb, PorePressureType

@@ -58,6 +58,76 @@ _ANISOTROPIC_MODEL_IDS = frozenset({
 })
 
 
+def _exact_text(value: float) -> str:
+    """The shortest text that reads back as exactly ``value``.
+
+    ``repr`` of a float is that text by definition; the trailing ``.0`` of a
+    whole number is dropped because it adds nothing a reader needs.
+    """
+    text = repr(float(value))
+    return text[:-2] if text.endswith(".0") else text
+
+
+class _PreciseSpinBox(QDoubleSpinBox):
+    """A spin box that keeps the number it is given, to the last bit.
+
+    v0.1.192 (D181) — the strength-parameter editors were plain spin boxes
+    with four decimals, and ``QDoubleSpinBox.setValue`` ROUNDS to its
+    decimals. The dialog rebuilds the strength from its editors whenever a
+    material is stored, so opening it and pressing OK without touching
+    anything rewrote every parameter at four decimals: the Hoek-Brown ``s``
+    of a GSI-10 rock mass, 4.54e-5, came back 0.0 — and with it the tensile
+    strength s*sigci/mb that v0.1.191 grants rock (5.65 kPa -> 0). Every
+    GSI up to 13 was lost entirely, and GSI 20 lost 29 % of its ``s``.
+
+    The fix is not "more decimals": any fixed count loses the small values
+    of some parameter. The box stores at Qt's maximum precision, so
+    ``setValue`` no longer rounds anything a double can hold, and shows the
+    shortest text that reads back exactly (``_exact_text``) — so even a box
+    that re-reads its own text on losing focus gets the same number back.
+    Typed input accepts scientific notation (``4.54e-5``), which a
+    fixed-decimal box cannot show at all.
+    """
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        # Qt caps decimals at DBL_MAX_10_EXP + DBL_DIG = 323, which is
+        # enough for its internal round() to return every double as is.
+        self.setDecimals(323)
+
+    def _bare(self, text: str) -> str:
+        """``text`` without prefix, suffix and surrounding spaces."""
+        prefix, suffix = self.prefix(), self.suffix()
+        if prefix and text.startswith(prefix):
+            text = text[len(prefix):]
+        if suffix and text.endswith(suffix):
+            text = text[:-len(suffix)]
+        return text.strip()
+
+    def textFromValue(self, value: float) -> str:          # noqa: N802
+        return _exact_text(value).replace(".", self.locale().decimalPoint())
+
+    def valueFromText(self, text: str) -> float:           # noqa: N802
+        bare = self._bare(text).replace(self.locale().decimalPoint(), ".")
+        try:
+            return float(bare)
+        except ValueError:
+            return self.value()
+
+    def validate(self, text: str, pos: int):
+        from PySide6.QtGui import QValidator
+
+        bare = self._bare(text).replace(self.locale().decimalPoint(), ".")
+        try:
+            value = float(bare)
+        except ValueError:
+            # "", "-", "1e", "1e-" ... are on the way to a number.
+            return QValidator.State.Intermediate, text, pos
+        if not (self.minimum() <= value <= self.maximum()):
+            return QValidator.State.Intermediate, text, pos
+        return QValidator.State.Acceptable, text, pos
+
+
 class _StrengthParamPanel(QWidget):
     """Dynamically-built parameter editor for the active strength model.
 
@@ -114,6 +184,41 @@ class _StrengthParamPanel(QWidget):
         except Exception:  # noqa: BLE001
             return None
 
+    @staticmethod
+    def _si_to_user(si_value: float, quantity_id: str, sys_obj) -> float:
+        """An SI value in the unit the editor shows. One function for
+        ``set_model`` and ``set_param_values``, so the two cannot convert
+        differently."""
+        from ogr_core.units import Quantity
+        if sys_obj is not None and quantity_id != "dimensionless":
+            try:
+                return sys_obj.to_user(si_value, Quantity(quantity_id))
+            except (ValueError, KeyError):
+                pass
+        return si_value
+
+    def set_param_values(self, values: dict) -> None:
+        """Write SI ``values`` into the editors of the current model.
+
+        v0.1.192 (D176) — the parameter calculator used to look its editors
+        up in ``_widgets``, an attribute this panel never had, so
+        ``getattr(..., {})`` handed it an empty dict and every value was
+        skipped without a word: accepting the calculator changed nothing.
+        A name with no editor now RAISES instead of being skipped, because
+        skipping silently is exactly how that went unnoticed.
+        """
+        missing = sorted(k for k in values if k not in self._editors)
+        if missing:
+            raise KeyError(
+                f"no editor for {missing} in "
+                f"{getattr(self._model_cls, 'MODEL_ID', '?')}; "
+                f"editors: {sorted(self._editors)}")
+        sys_obj = self._active_system()
+        for name, si_value in values.items():
+            quantity_id = self._param_quantity.get(name, "dimensionless")
+            self._editors[name].setValue(
+                self._si_to_user(float(si_value), quantity_id, sys_obj))
+
     def set_model(
         self,
         model_cls: type[StrengthModel],
@@ -142,21 +247,18 @@ class _StrengthParamPanel(QWidget):
             # SI value (always)
             si_value = float(current_params.get(name, default))
             # Convert to display
+            user_value = self._si_to_user(si_value, quantity_id, sys_obj)
+            user_label = unit if unit != "-" else ""
             if sys_obj is not None and quantity_id != "dimensionless":
                 try:
-                    q = Quantity(quantity_id)
-                    user_value = sys_obj.to_user(si_value, q)
-                    user_label = sys_obj.label_for(q)
+                    user_label = sys_obj.label_for(Quantity(quantity_id))
                 except (ValueError, KeyError):
-                    user_value = si_value
-                    user_label = unit if unit != "-" else ""
-            else:
-                user_value = si_value
-                user_label = unit if unit != "-" else ""
+                    pass
 
-            ed = QDoubleSpinBox()
+            # v0.1.192 (D181) — was a QDoubleSpinBox with 4 decimals, which
+            # rounded every value it was given; see ``_PreciseSpinBox``.
+            ed = _PreciseSpinBox()
             ed.setRange(-1e12, 1e12)
-            ed.setDecimals(4)
             ed.setSuffix(f" {user_label}" if user_label else "")
             ed.setValue(user_value)
             ed.setToolTip(description)
@@ -240,7 +342,11 @@ class _StrengthParamPanel(QWidget):
         tbl.horizontalHeader().setStretchLastSection(True)
         for r, row in enumerate(pts):
             for c in range(ncol):
-                tbl.setItem(r, c, QTableWidgetItem(f"{row[c]:.3f}"))
+                # v0.1.192 (D181) — was f"{:.3f}", which rounded every
+                # point to three decimals on the next OK, for the same
+                # reason the spin boxes rounded; ``get_params`` reads the
+                # cell back with float(), so the exact text round-trips.
+                tbl.setItem(r, c, QTableWidgetItem(_exact_text(row[c])))
         self._form.addRow(QLabel(tr("Function points:")), tbl)
         # Add/remove buttons
         btns = QWidget()
@@ -1031,12 +1137,19 @@ class MaterialPropertiesDialog(QDialog):
         result = dlg.result_params
         if result is None:
             return
-        panel = self.param_panel
-        for key, value in (("mb", result.mb), ("s", result.s),
-                           ("a", result.a)):
-            widget = getattr(panel, "_widgets", {}).get(key)
-            if widget is not None and hasattr(widget, "setValue"):
-                widget.setValue(float(value))
+        self._apply_parameter_result(result)
+
+    def _apply_parameter_result(self, result) -> None:
+        """Write a calculator result's mb, s and a into the editors.
+
+        v0.1.192 (D176) — apart from the modal ``exec()`` above so a test
+        can drive it without a screen. The three are dimensionless, and the
+        panel converts anyway, so a future parameter with a unit would not
+        need a second path. The formulas are Hoek, Carranza-Torres & Corkum
+        (2002), in ``calculate_hoek_brown``; nothing here recomputes them.
+        """
+        self.param_panel.set_param_values(
+            {"mb": result.mb, "s": result.s, "a": result.a})
 
     def _pick_color(self) -> None:
         c = QColorDialog.getColor(QColor(self._color_hex), self, tr("Color"))

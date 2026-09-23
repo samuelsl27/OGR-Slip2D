@@ -1098,7 +1098,9 @@ class AdvancedSettings:
         A file written before v0.1.74 carries values that never reached a
         calculation, so they express no intent to preserve — which is
         exactly what makes rewriting them safe, and what would make
-        honouring them unsafe.
+        honouring them unsafe. The whole argument is about files written
+        BEFORE v0.1.74, so a migration is only right where it can tell such
+        a file apart; see the comments below for which ones can.
         """
         data = dict(data or {})
         # v0.1.97 briefly stored a raw process count before the setting was
@@ -1122,11 +1124,26 @@ class AdvancedSettings:
         if "min_initial_fs" in data and "initial_fos" not in data:
             data["initial_fos"] = data.pop("min_initial_fs")
         data.pop("min_initial_fs", None)
-        # The two migrations. Both are conditional on the value being the
-        # old default: a user who deliberately typed something else keeps
-        # it, because from v0.1.74 on it means something.
-        if data.get("check_tensile_stresses") is True:
+        # v0.1.192 (D178) — the tensile check is migrated only in a block
+        # WITHOUT ``tensile_percent``. That key entered this dataclass in the
+        # same commit that flipped the default to False (v0.1.74) and every
+        # save writes it, so its absence is exactly "written before
+        # v0.1.74", the only files whose True was a default and not a
+        # choice. Until now the test was the VALUE, and this comment said it
+        # spared "a user who deliberately typed something else" — but for a
+        # boolean the old default and the deliberate choice are the same
+        # value, so every project saved with the check on reopened with it
+        # off. Presence of a key is how the rest of this module migrates
+        # (``_SHADOW_FIELDS``, ``pre_v1103``); the .ogr records no writer
+        # version, and one added now would not help the files that exist.
+        if ("tensile_percent" not in data
+                and data.get("check_tensile_stresses") is True):
             data["check_tensile_stresses"] = False
+        # The lambda migrations below still decide by VALUE alone, and have
+        # the same flaw for the values they rewrite: a deliberate
+        # max_lambda of 1.5 reopens as 6.0 and a min_lambda of -1.5 as
+        # -0.1. Reported as D182 and deliberately not changed here.
+        #
         # Applied in order, and they CHAIN on purpose: a project stored
         # under v0.1.73 carries max_lambda 1.25, which v0.1.74 mapped to
         # 1.5 and v0.1.90 maps on to 6.0. Landing such a project on an
