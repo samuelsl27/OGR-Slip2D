@@ -11,7 +11,7 @@
 Estabilidad de taludes, flujo subterráneo y mecánica de rocas — en Python,
 legible, testeado y libre.
 
-[![tests](https://img.shields.io/badge/tests-4304%20passing-brightgreen)](#tests)
+[![tests](https://img.shields.io/badge/tests-4328%20passing-brightgreen)](#tests)
 [![licence](https://img.shields.io/badge/licencia-AGPL--3.0--or--later-blue)](LICENSE)
 [![python](https://img.shields.io/badge/python-3.11%2B-blue)](#instalación)
 [![estado](https://img.shields.io/badge/estado-en%20desarrollo%20activo-orange)](#hoja-de-ruta)
@@ -126,6 +126,15 @@ Hoek-Brown, import y export **DXF** con saneado de geometría, capa de
 anotación, informes PDF, interfaz **español / inglés** y una interfaz de
 línea de comandos.
 
+### Manejado por un agente de IA (MCP)
+
+Un **servidor MCP** permite que un agente de IA —Claude, un modelo local en
+LM Studio u Ollama, Open WebUI, BionicGPT a través de `mcpo`, el Agents SDK de
+OpenAI— construya un modelo, lo calcule, lea los resultados y vea una imagen de
+ellos sin abrir la interfaz: `pip install -e ".[mcp]"` y después
+`ogr-slip2d-mcp`. Configuración de cada cliente, seguridad y lista de
+herramientas: [docs/mcp/](docs/mcp/README.md).
+
 ---
 
 ## Comportamiento verificado, no solo tests en verde
@@ -206,9 +215,9 @@ Un patrón que no case con nada sale con código 2 en lugar de anunciar un
 éxito vacío, y una ejecución filtrada avisa con `FILTERED RUN`: no vale
 como evidencia para publicar una versión.
 
-Unas **83 400 líneas** de implementación y **90 000 de tests**, **4304 de
+Unas **84 600 líneas** de implementación y **90 700 de tests**, **4328 de
 ellos en verde**, sin fallos conocidos. La suite completa tarda unos 25
-minutos en la misma máquina (25:55 en v0.1.193, unos 28 en v0.1.194); el
+minutos en la misma máquina (25:55 en v0.1.193, 33 en v0.1.195); el
 reloj se mueve decenas de segundos entre corridas idénticas, así que es una
 comprobación de que la suite termina, no una medida.
 
@@ -223,6 +232,8 @@ comprobación de que la suite termina, no una medida.
 | `ogr_fem2d/` | Elementos finitos: mallado y solvers de filtración |
 | `ogr_gui/` | Interfaz PySide6: lienzo, diálogos, ventanas de interpretación, traducciones |
 | `ogr_cli/` | Interfaz de línea de comandos |
+| `ogr_api/` | Capa de operaciones sin Qt: ediciones validadas, deshacer, análisis en segundo plano, imagen PNG |
+| `ogr_mcp/` | Servidor MCP para agentes de IA (extra `[mcp]`) |
 | `ogr_data/` | Reserva para la base de datos de materiales (prevista para v0.2.0) |
 | `validacion/` | Casos de validación: modelo, valores esperados y su fuente |
 | `spec/` | Especificaciones (constitución del proyecto y features) |

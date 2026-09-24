@@ -11,7 +11,7 @@
 Slope stability, groundwater flow and rock mechanics — in Python, readable,
 tested and free.
 
-[![tests](https://img.shields.io/badge/tests-4304%20passing-brightgreen)](#tests)
+[![tests](https://img.shields.io/badge/tests-4328%20passing-brightgreen)](#tests)
 [![licence](https://img.shields.io/badge/licence-AGPL--3.0--or--later-blue)](LICENSE)
 [![python](https://img.shields.io/badge/python-3.11%2B-blue)](#installation)
 [![status](https://img.shields.io/badge/status-active%20development-orange)](#roadmap)
@@ -121,6 +121,15 @@ analysis, a Hoek-Brown parameter calculator, **DXF** import and export with
 geometry cleanup, an annotation layer, PDF reports, a **Spanish / English**
 interface and a command-line interface.
 
+### Driven by an AI agent (MCP)
+
+An **MCP server** lets an AI agent — Claude, a local model in LM Studio or
+Ollama, Open WebUI, BionicGPT through `mcpo`, the OpenAI Agents SDK — build a
+model, analyse it, read the results and see a picture of them, without
+opening the interface: `pip install -e ".[mcp]"`, then `ogr-slip2d-mcp`.
+Setup for each client, security and the tool list: [docs/mcp/](docs/mcp/README.md)
+(in Spanish).
+
 ---
 
 ## Verified behaviour, not just green tests
@@ -203,9 +212,9 @@ A pattern that matches nothing exits 2 rather than announcing an empty
 success, and a filtered run prints a `FILTERED RUN` warning around its
 totals — it is not evidence for a release.
 
-About **83,400 lines** of implementation and **90,000 of tests**, **4304 of
+About **84,600 lines** of implementation and **90,700 of tests**, **4328 of
 them passing**, with no known failures. The full suite takes about 25 minutes
-on the same machine (25:55 for v0.1.193, about 28 for v0.1.194); the clock
+on the same machine (25:55 for v0.1.193, 33 for v0.1.195); the clock
 moves by tens of seconds between identical runs, so it is a check that the
 suite finishes, not a measurement.
 
@@ -220,6 +229,8 @@ suite finishes, not a measurement.
 | `ogr_fem2d/` | Finite elements: meshing and seepage solvers |
 | `ogr_gui/` | PySide6 interface: canvas, dialogs, interpret windows, translations |
 | `ogr_cli/` | Command-line interface |
+| `ogr_api/` | Operations layer without Qt: validated edits, undo, background analyses, PNG render |
+| `ogr_mcp/` | MCP server for AI agents (the `[mcp]` extra) |
 | `ogr_data/` | Placeholder for the shared materials database (planned for v0.2.0) |
 | `validacion/` | Validation cases: model, expected values and their source |
 | `spec/` | Specifications (project constitution and features) |

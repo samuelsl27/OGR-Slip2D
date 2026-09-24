@@ -108,7 +108,7 @@ sys.modules["pytest"] = _FakePytest()  # type: ignore
 
 # --- Selection --------------------------------------------------------
 PACKAGES = ("ogr_core", "ogr_slip2d", "ogr_fem2d", "ogr_gui", "ogr_cli",
-            "ogr_api")
+            "ogr_api", "ogr_mcp")
 
 
 def package_origins() -> dict:

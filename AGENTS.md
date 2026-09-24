@@ -37,6 +37,8 @@ QT_QPA_PLATFORM=offscreen python tests/_runner.py   # toda la suite
 python -m ogr_gui                                    # abrir la aplicación
 python -m ogr_cli --help                             # interfaz de terminal
 pip install -e .                                     # instalar en editable
+pip install -e ".[mcp]"                              # + servidor MCP (agentes)
+python -m ogr_mcp --help                             # servidor MCP
 ```
 
 `QT_QPA_PLATFORM=offscreen` es **obligatorio** para los tests: construyen
@@ -70,14 +72,15 @@ de una versión, la suite entera y sin argumentos.
 | `ogr_gui/` | Interfaz PySide6: lienzo, ~30 diálogos, ventanas de interpretación, i18n |
 | `ogr_cli/` | Interfaz de línea de comandos |
 | `ogr_api/` | Capa de operaciones sin Qt (spec 008): *handles*, validación, deshacer, trabajos en subproceso, render PNG, `python_exec`. La usan el servidor MCP y un script; **no** importa PySide6, `ogr_gui` ni `mcp` |
-
-Capas en un solo sentido: `ogr_core → ogr_slip2d / ogr_fem2d → ogr_api →
-{ogr_gui, ogr_cli, servidor MCP}`. Una regla que hoy solo impone la
-interfaz se **mueve** a `ogr_core/project/rules.py` y la interfaz pasa a
-preguntarla; copiarla es cómo acaban diciendo cosas distintas.
+| `ogr_mcp/` | Servidor MCP para agentes de IA (extra `[mcp]`, comando `ogr-slip2d-mcp`): una herramienta por operación de `ogr_api`, stdio y HTTP con token. Guías en `docs/mcp/` |
 | `tests/` | Un archivo por área funcional |
 | `docs/` | Planes, auditorías, changelog |
 | `spec/` | Especificaciones SDD (constitución y features) |
+
+Capas en un solo sentido: `ogr_core → ogr_slip2d / ogr_fem2d → ogr_api →
+{ogr_gui, ogr_cli, ogr_mcp}`. Una regla que hoy solo impone la interfaz se
+**mueve** a `ogr_core/project/rules.py` y la interfaz pasa a preguntarla;
+copiarla es cómo acaban diciendo cosas distintas.
 
 ---
 
@@ -187,15 +190,15 @@ opción, añade también el test que demuestra que **mueve el número**.
   resultado posible aquí, porque parece que funciona.
 - **Sé escéptico con lo que te pido.** Si algo huele mal, dilo.
 - **Al terminar, lista qué probaste y qué falta por probar.**
-- Cada versión sube el número en **ocho** sitios y añade un changelog en
+- Cada versión sube el número en **nueve** sitios y añade un changelog en
   `docs/changelog/`: `pyproject.toml`, `ogr_gui/main_window.py`
   (`MainWindow.VERSION`) y el `__version__` de `ogr_core`, `ogr_slip2d`,
-  `ogr_fem2d`, `ogr_gui`, `ogr_cli` y `ogr_api` (desde v0.1.194). Esta
-  lista decía cuatro hasta v0.1.76, y los tres que omitía llevaban
-  congelados en 0.1.59 desde v0.1.59. Hay un test que falla si discrepan
-  (`tests/test_version_consistency_v176.py`, que es la lista que manda),
-  porque una lista en un documento solo vale lo que valga la atención de
-  quien la lee.
+  `ogr_fem2d`, `ogr_gui`, `ogr_cli`, `ogr_api` (desde v0.1.194) y
+  `ogr_mcp` (desde v0.1.195). Esta lista decía cuatro hasta v0.1.76, y los
+  tres que omitía llevaban congelados en 0.1.59 desde v0.1.59. Hay un test
+  que falla si discrepan (`tests/test_version_consistency_v176.py`, que es
+  la lista que manda), porque una lista en un documento solo vale lo que
+  valga la atención de quien la lee.
 
 ### Sobre los changelogs
 
@@ -224,6 +227,10 @@ lista funciones añadidas ha desperdiciado la mitad de su valor.
 - **No añadas telemetría ni llamadas de red** que no haya pedido
   explícitamente. *Check for Updates* no contacta con ningún servidor, a
   propósito.
+- **No quites el token del HTTP del servidor MCP** ni lo hagas opcional
+  fuera de *loopback*: `python_exec` está siempre disponible (decisión del
+  propietario), así que quien alcance ese puerto ejecuta código como el
+  usuario. Ver `docs/mcp/seguridad.md`.
 - **No toques los casos de validación** (`tests/test_slide_validation_*`)
   para hacer pasar un cambio. Si un caso de referencia falla, el fallo
   está en el código.

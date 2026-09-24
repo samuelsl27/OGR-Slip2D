@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ogr-slip2d"
-version = "0.1.194"
+version = "0.1.195"
 description = "OGR Slip2D — open-source slope stability and groundwater analysis (OpenGeoRock Suite)"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -42,10 +42,14 @@ dependencies = [
 fem = ["scikit-fem>=9.0", "meshpy>=2022.1"]
 dev = ["pytest>=7.4", "pytest-qt>=4.2", "black", "ruff", "mypy"]
 docs = ["sphinx>=7.0", "sphinx-rtd-theme"]
+# v0.1.195 (spec 008) — the MCP server for AI agents. MIT; its whole tree
+# (MIT, BSD-3-Clause, Apache-2.0, PSF-2.0, MIT-0) is AGPL-compatible.
+mcp = ["mcp>=2.1,<3"]
 
 [project.scripts]
 ogr-slip2d = "ogr_gui.__main__:main"
 ogr-slip2d-cli = "ogr_cli.__main__:app"
+ogr-slip2d-mcp = "ogr_mcp.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/samuelsl27/OGR-Slip2D"

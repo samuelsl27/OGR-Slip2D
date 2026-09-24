@@ -97,10 +97,16 @@ def resolve_field(root, path: str, *, retired: dict | None = None):
                     f"'{'.'.join(walked + [part])}' is not a setting any "
                     f"more.", hint=retired[part])
             hint = did_you_mean(part, names)
-            raise InvalidArgument(
-                f"'{part}' is not a field of {where}.",
-                hint=(hint + " " if hint else "")
-                + f"Fields of {where}: {', '.join(names)}.")
+            # With a suggestion, the suggestion is the answer; listing
+            # seventy fields of ``search`` after it only spends the
+            # caller's context. Without one, a bounded listing.
+            if not hint:
+                shown = ", ".join(names[:25])
+                more = (f" (+{len(names) - 25} more; settings_get lists "
+                        f"them)" if len(names) > 25 else "")
+                hint = f"Fields of {where}: {shown}{more}."
+            raise InvalidArgument(f"'{part}' is not a field of {where}.",
+                                  hint=hint)
         walked.append(part)
         if i == len(parts) - 1:
             return obj, part, type_hints(obj).get(part, Any)

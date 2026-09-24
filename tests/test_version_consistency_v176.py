@@ -36,6 +36,8 @@ _SOURCES = {
     # v0.1.194 (spec 008) — the operations layer is a sixth package, and
     # it enters this list the version it is born, not sixteen later.
     "ogr_api/__init__.py": r'^__version__\s*=\s*"([^"]+)"',
+    # v0.1.195 — and the MCP server package, the ninth site.
+    "ogr_mcp/__init__.py": r'^__version__\s*=\s*"([^"]+)"',
 }
 
 

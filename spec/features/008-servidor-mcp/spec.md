@@ -83,16 +83,16 @@ ajustes que nadie pidió es el peor resultado posible.
 
 ### Fase F1b — `ogr_mcp` (v0.1.195)
 
-- [ ] ACADS 1(a) atravesando el protocolo (cliente en memoria del SDK) da el
+- [x] ACADS 1(a) atravesando el protocolo (cliente en memoria del SDK) da el
       mismo número que por `ogr_api`.
-- [ ] Toda herramienta y todo parámetro tienen descripción; el perfil
+- [x] Toda herramienta y todo parámetro tienen descripción; el perfil
       `compact` no supera un presupuesto de tamaño congelado.
-- [ ] Un servidor stdio lanzado como subproceso sobrevive a `print`,
+- [x] Un servidor stdio lanzado como subproceso sobrevive a `print`,
       `os.write(1, …)` y a un subproceso hijo que escribe en su salida
       estándar, dentro de `python_exec`.
-- [ ] HTTP: sin token 401; con un `Origin` ajeno 403; con un host que no es
+- [x] HTTP: sin token 401; con un `Origin` ajeno 403; con un host que no es
       *loopback* y sin token, el servidor no arranca.
-- [ ] Cada una de las 136 acciones de `MainWindow._actions` está clasificada
+- [x] Cada una de las 136 acciones de `MainWindow._actions` está clasificada
       como `MAPPED`, `UI_ONLY` (con motivo) o `PENDING` (con la fase que la
       cubrirá), y `PENDING` sólo puede encoger.
 

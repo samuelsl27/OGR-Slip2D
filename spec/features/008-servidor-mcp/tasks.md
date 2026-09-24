@@ -45,16 +45,18 @@ tarea: es un deseo.
 
 ## F1b · `ogr_mcp` (v0.1.195)
 
-- [ ] 2.1 Servidor, perfiles `full`/`compact`, errores como `ToolError`.
-- [ ] 2.2 stdio y HTTP con token, `Origin`/`Host`.
-- [ ] 2.3 Recursos: guía de modelado, catálogo.
-- [ ] 2.4 Extra `[mcp]`, script `ogr-slip2d-mcp`, CI con `.[mcp]`.
-- [ ] 2.5 `docs/mcp/`: clientes, seguridad, herramientas.
-- [ ] 2.6 Tests: ACADS por el protocolo, esquemas y descripciones,
+- [x] 2.1 Servidor, perfiles `full`/`compact`, errores como `ToolError`.
+- [x] 2.2 stdio y HTTP con token, `Origin`/`Host`.
+- [x] 2.3 Recursos: guía de modelado, catálogo.
+- [x] 2.4 Extra `[mcp]`, script `ogr-slip2d-mcp`, CI con `.[mcp]`.
+- [x] 2.5 `docs/mcp/`: clientes, seguridad, herramientas.
+- [x] 2.6 Tests: ACADS por el protocolo, esquemas y descripciones,
       presupuesto de `compact`, stdio de extremo a extremo, seguridad HTTP,
       inventario de acciones.
-- [ ] 2.7 Prueba manual con Claude Code, LM Studio y `mcpo`.
-- [ ] 2.8 Suite completa, changelog.
+- [~] 2.7 Prueba manual: `mcpo` real (en su propio entorno con `mcp<2`) y
+      los clientes stdio y HTTP del SDK; Claude Code, LM Studio y Open WebUI
+      quedan para el propietario (tocan su configuración).
+- [x] 2.8 Suite completa (4328/4328) y changelog.
 
 ## F2–F4b
 
