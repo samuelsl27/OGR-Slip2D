@@ -79,8 +79,21 @@ tarea: es un deseo.
       deshacer de las 32 operaciones de edición, delegaciones por el
       manejador real.
 - [ ] 3.9 Tanda propia: cargas puntuales `normal_to_boundary` y
-      `angle_to_boundary` con validación externa (decisión del propietario).
-- [ ] 3.10 Decisión del propietario sobre *Change Slope Angle*.
+      `angle_to_boundary` con validación externa (bloque B3).
+- [x] 3.10 Decisión del propietario sobre *Change Slope Angle*: rehacerla
+      (bloque B2).
+
+## Correcciones antes de F3 (decisión del propietario, 2026-09-24)
+
+Tres defectos que F2 dejó reportados, cada uno su versión y su plan corto:
+
+- [x] B1 (v0.1.197) Lentes: regiones con huecos de verdad (consultas,
+      huellas, áreas, lienzo, ayudas, PNG, mallado); y un contorno cerrado
+      nunca guarda su vértice de cierre (DXF, al añadir, al abrir).
+- [ ] B2 (v0.1.198) *Change Slope Angle* rehecha: pie y coronación como
+      vértices, solo la cara, proyección horizontal/vertical/giro, bermas.
+- [ ] B3 (v0.1.199) Cargas puntuales `normal_to_boundary` y
+      `angle_to_boundary`, con validación externa.
 
 ## F3–F4b
 

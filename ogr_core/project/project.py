@@ -228,6 +228,11 @@ class Project:
     # Mutations (go through these so listeners get notified)
     # ------------------------------------------------------------------
     def add_boundary(self, b: Boundary) -> None:
+        # v0.1.197 — a closed boundary never stores its closing vertex
+        # (see ``drop_closing_vertex``): every path that adds one — DXF,
+        # a converted annotation, a script — goes through here.
+        from ..geometry.cleanup import drop_closing_vertex
+        drop_closing_vertex(b.polyline)
         self.boundaries.append(b)
         self._notify("boundary_added")
 
@@ -331,16 +336,18 @@ class Project:
         except ImportError:
             _HAS_SHAPELY_HERE = False
 
-        def _polygon_intersection_area(verts_a, verts_b) -> float:
-            """Intersection area of two convex/simple polygons.
+        def _polygon_intersection_area(verts_a, verts_b,
+                                       holes_a=(), holes_b=()) -> float:
+            """Intersection area of two simple polygons, each with its
+            holes (v0.1.197: a region around a lens, and its footprint).
 
             Uses shapely if available, falls back to a coarse
             point-sampling Monte-Carlo when shapely is missing.
             """
             if _HAS_SHAPELY_HERE:
                 try:
-                    pa = _SPolygon(verts_a)
-                    pb = _SPolygon(verts_b)
+                    pa = _SPolygon(verts_a, list(holes_a) or None)
+                    pb = _SPolygon(verts_b, list(holes_b) or None)
                     if not pa.is_valid:
                         pa = pa.buffer(0)
                     if not pb.is_valid:
@@ -360,7 +367,10 @@ class Project:
                     px = xmin + (xmax - xmin) * (i + 0.5) / samples
                     py = ymin + (ymax - ymin) * (j + 0.5) / samples
                     if (_point_in_polygon_verts(px, py, verts_a)
-                            and _point_in_polygon_verts(px, py, verts_b)):
+                            and _point_in_polygon_verts(px, py, verts_b)
+                            and not any(_point_in_polygon_verts(
+                                px, py, [Vertex(*q) for q in h])
+                                for h in (*holes_a, *holes_b))):
                         n_in += 1
             cell = ((xmax - xmin) * (ymax - ymin)) / (samples * samples)
             return n_in * cell
@@ -374,10 +384,13 @@ class Project:
             # wins. Because regions are disjoint polygons, a point in
             # region 5 can never fall inside region 4 — so assigning a
             # material to one region never bleeds into a sibling.
+            # v0.1.197 — "disjoint" only holds with the HOLES: without
+            # them a click in a lens also hit the region around it, and
+            # painting the lens painted the whole model.
             direct_hit = False
             for assignment in self.region_assignments:
                 ax, ay = assignment["x"], assignment["y"]
-                if _point_in_polygon_verts(ax, ay, region.polygon.vertices):
+                if _in_region(region, ax, ay):
                     region.material_id = assignment.get("material_id")
                     direct_hit = True
 
@@ -404,10 +417,19 @@ class Project:
             # measured by "intersection area ≈ region area". This stops a
             # small child footprint from bleeding into a sibling while
             # still letting a large ancestor footprint feed all children.
-            cx, cy = region.centroid()
+            # A region with a hole asks with a point that is surely in
+            # it: its centroid can sit in the hole (a ring around a
+            # centred lens). Without holes, exactly the centroid as before.
+            holes = getattr(region, "holes", None) or []
+            if holes and getattr(region, "inside_point", None) is not None:
+                cx, cy = region.inside_point
+            else:
+                cx, cy = region.centroid()
             region_verts = tuple(
                 (v.x, v.y) for v in region.polygon.vertices
             )
+            region_holes = tuple(tuple((v.x, v.y) for v in h.vertices)
+                                 for h in holes)
             region_area = region.area if hasattr(region, "area") else 0.0
             best_overlap = 0.0
             best_assignment = None
@@ -419,7 +441,17 @@ class Project:
                     Vertex(*p) for p in fp
                 ]):
                     continue
-                overlap = _polygon_intersection_area(region_verts, fp)
+                # v0.1.197 — a footprint keeps the holes of the region it
+                # was taken from: without them the footprint of the region
+                # AROUND a lens also covers the lens, and a piece of a
+                # later-split lens would inherit the surrounding material.
+                fp_holes = assignment.get("footprint_holes") or ()
+                if any(_point_in_polygon_verts(cx, cy, [Vertex(*q)
+                                                        for q in h])
+                       for h in fp_holes):
+                    continue
+                overlap = _polygon_intersection_area(region_verts, fp,
+                                                     region_holes, fp_holes)
                 # The footprint must essentially CONTAIN this region
                 # (ancestor relationship). If the overlap is much smaller
                 # than the region's own area, the footprint is a sibling
@@ -454,7 +486,9 @@ class Project:
         assign_sig = tuple(
             (round(a["x"], 6), round(a["y"], 6), a.get("material_id"),
              tuple((round(p[0], 6), round(p[1], 6))
-                   for p in a.get("footprint", ())))
+                   for p in a.get("footprint", ())),
+             tuple(tuple((round(p[0], 6), round(p[1], 6)) for p in h)
+                   for h in a.get("footprint_holes", ())))
             for a in self.region_assignments
         )
         mat_sig = tuple(m.id for m in self.materials) if self.materials else ()
@@ -537,7 +571,7 @@ class Project:
 
     def _material_in(self, regions, x: float, y: float):
         for r in regions:
-            if _point_in_polygon_verts(x, y, r.polygon.vertices):
+            if _in_region(r, x, y):
                 mid = getattr(r, "material_id", None)
                 if mid is None:
                     return self.materials[0] if self.materials else None
@@ -559,14 +593,18 @@ class Project:
         regions = self.resolve_regions()
         target = None
         for r in regions:
-            if _point_in_polygon_verts(x, y, r.polygon.vertices):
+            if _in_region(r, x, y):
                 target = r
                 break
         if target is None:
             return False
 
-        # Capture the region polygon at assignment time
+        # Capture the region polygon at assignment time — with its holes
+        # (v0.1.197), stored only when there are any so that a model
+        # without lenses saves exactly the file it always did.
         footprint = tuple((v.x, v.y) for v in target.polygon.vertices)
+        fp_holes = tuple(tuple((v.x, v.y) for v in h.vertices)
+                         for h in (getattr(target, "holes", None) or ()))
 
         # Upsert: overwrite the most recent assignment at this exact
         # click point, or append if none exists
@@ -574,14 +612,21 @@ class Project:
             if abs(a["x"] - x) < 1e-6 and abs(a["y"] - y) < 1e-6:
                 a["material_id"] = material_id
                 a["footprint"] = footprint
+                if fp_holes:
+                    a["footprint_holes"] = fp_holes
+                else:
+                    a.pop("footprint_holes", None)
                 self.is_dirty = True
                 self._notify("assignments_changed")
                 return True
-        self.region_assignments.append({
+        record = {
             "x": x, "y": y,
             "material_id": material_id,
             "footprint": footprint,
-        })
+        }
+        if fp_holes:
+            record["footprint_holes"] = fp_holes
+        self.region_assignments.append(record)
         self.is_dirty = True
         self._notify("assignments_changed")
         return True
@@ -600,8 +645,7 @@ class Project:
         kept = []
         pruned = 0
         for a in self.region_assignments:
-            if any(_point_in_polygon_verts(a["x"], a["y"], r.polygon.vertices)
-                   for r in regions):
+            if any(_in_region(r, a["x"], a["y"]) for r in regions):
                 kept.append(a)
             else:
                 pruned += 1
@@ -686,6 +730,14 @@ class Project:
         proj.id = data.get("id", proj.id)
         proj.settings = ProjectSettings.from_dict(data.get("settings", {}))
         proj.boundaries = [Boundary.from_dict(b) for b in data.get("boundaries", [])]
+        # v0.1.197 — a file saved with a closed boundary that repeats its
+        # first vertex (every DXF import since v0.1.59) is normalised on
+        # load. Pure representation, like the footprint normalisation of
+        # v0.1.14 below: idempotent, the geometry is the same polygon, and
+        # ``from_dict(to_dict())`` stays the identity afterwards.
+        from ..geometry.cleanup import drop_closing_vertex
+        for _b in proj.boundaries:
+            drop_closing_vertex(_b.polyline)
         proj.materials = [Material.from_dict(m) for m in data.get("materials", [])]
 
         # v0.1.62 — B̄ migration. Before this version the rapid-drawdown
@@ -774,6 +826,11 @@ class Project:
             fp = a.get("footprint")
             if fp is not None:
                 a["footprint"] = tuple((float(p[0]), float(p[1])) for p in fp)
+            holes = a.get("footprint_holes")
+            if holes is not None:
+                a["footprint_holes"] = tuple(
+                    tuple((float(p[0]), float(p[1])) for p in h)
+                    for h in holes)
         # v0.1.7
         from ..geometry.tension_crack import TensionCrackProperties
         if "tension_crack_properties" in data:
@@ -849,6 +906,21 @@ class Project:
 # ----------------------------------------------------------------------
 # Utilities
 # ----------------------------------------------------------------------
+def _in_region(region, x: float, y: float) -> bool:
+    """(x, y) is in ``region``: inside its outer ring and in none of its
+    holes (v0.1.197). Without holes this is exactly the single ray cast the
+    point queries have always made — one attribute read more, no other
+    work — which keeps the slicer's per-band lookups where they were."""
+    if not _point_in_polygon_verts(x, y, region.polygon.vertices):
+        return False
+    holes = getattr(region, "holes", None)
+    if holes:
+        for h in holes:
+            if _point_in_polygon_verts(x, y, h.vertices):
+                return False
+    return True
+
+
 def _point_in_polygon_verts(x: float, y: float, verts) -> bool:
     """Ray-casting point-in-polygon against a list of Vertex-like objects."""
     n = len(verts)

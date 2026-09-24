@@ -49,7 +49,9 @@ interface DISPLAYS; every value you send or receive here is SI.
 * The External boundary is one closed polygon: the whole soil/rock mass.
   Give its vertices in order; orientation is fixed for you.
 * Material boundaries are open polylines that split the mass into regions.
-  Run them from edge to edge of the External boundary.
+  Run them from edge to edge of the External boundary. A CLOSED material
+  boundary inside the mass is a lens: a region of its own, and a hole of
+  the region around it (closed=true; each point once).
 * Regions are computed, not drawn. Assign a material to a region by giving
   ONE POINT INSIDE IT (materials[].at in model_define, or material_assign).
 * A region nobody assigned takes the FIRST material of the list. This is

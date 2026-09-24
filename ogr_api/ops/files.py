@@ -110,19 +110,17 @@ def dxf_import(ws, path: str, project_id: Optional[str] = None,
                     m.anisotropic_surface_id not in alive:
                 m.anisotropic_surface_id = None
                 notes.append(f"{m.name!r} lost its anisotropic surface.")
-        # The DXF reader repeats a closed polyline's first point at its end
-        # (``reader.py``, since v0.1.59) and the boundary keeps it: every
-        # imported External carries a zero-length closing edge. Reported in
-        # v0.1.196 and NOT removed here (rule 6), so the model an agent
-        # imports is the one the interface imports; it is said instead.
+        # Duplicate vertices the drawing itself had. (Until v0.1.197 every
+        # imported closed polyline also repeated its first point — the DXF
+        # package's ring format leaking into the model; the importer now
+        # drops it, so what is counted here is the drawing's own.)
         from ogr_core.geometry.cleanup import inspect_boundaries
         dups = sum(r["duplicate_vertices"] for r in
                    inspect_boundaries(project.boundaries)["boundaries"])
         if dups:
-            notes.append(f"{dups} duplicate vertex/vertices after the "
-                         f"import (a closed DXF polyline repeats its first "
-                         f"point); geometry_cleanup(apply=true) removes "
-                         f"them.")
+            notes.append(f"{dups} duplicate vertex/vertices in the "
+                         f"imported geometry; geometry_cleanup(apply=true) "
+                         f"removes them.")
         project.invalidate_regions_cache()
         project._notify("geometry_changed")
         return {"created": created, "regions": len(project.resolve_regions()),

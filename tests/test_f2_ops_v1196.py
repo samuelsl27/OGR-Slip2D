@@ -34,9 +34,10 @@ Invariants protected:
   evaluated surface.
 
 What this file does NOT assert: that a DXF import leaves no duplicate
-vertex. It does leave one — the reader repeats a closed polyline's first
-point (reported in v0.1.196, not fixed) — and a test that pinned either
-answer would consecrate a behaviour nobody has decided on.
+vertex. In v0.1.196 it left one — the reader repeats a closed polyline's
+first point — and a test that pinned either answer would have consecrated
+a behaviour nobody had decided on. The owner decided, and v0.1.197 asserts
+it in ``test_closing_vertex_v1197.py``.
 """
 from __future__ import annotations
 
@@ -669,9 +670,13 @@ class TestAnnotations:
             rect = call(ws, "annotation_set", project_id=pid,
                         kind="rectangle",
                         points_xy=[[0, 0], [40, 20]])["annotation"]
+            # v0.1.197 — a closed shape may become a material LENS now that
+            # regions have holes (test_lens_regions_v1197); here the shape
+            # becomes the External, and a closed shape as an open line
+            # type is still refused.
             _raised(Conflict, lambda: call(
                 ws, "annotation_to_boundary", project_id=pid,
-                annotation=rect["id"], type="material"))    # a lens
+                annotation=rect["id"], type="water_table"))
             out = call(ws, "annotation_to_boundary", project_id=pid,
                        annotation=rect["id"], type="external")
             # four corners: the outline's repeated first point is gone
@@ -847,18 +852,25 @@ class TestTransforms:
         finally:
             ws.shutdown()
 
-    def test_a_closed_material_ring_is_refused(self):
-        # Regions have no holes: a lens made the WHOLE model take the
-        # lens's material (measured in v0.1.196 on the demo slope).
+    def test_an_open_material_ring_is_refused(self):
+        # v0.1.196 refused every material ring: regions had no holes, so a
+        # lens made the WHOLE model take the lens's material. v0.1.197
+        # gives regions holes and accepts a CLOSED ring as a lens
+        # (test_lens_regions_v1197); an OPEN line that returns to its start
+        # is still refused — its two ends are extended as a cut.
         from ogr_api import Conflict, call
         ws = _ws()
         try:
             pid = _slope(ws)
             before = _state(ws, pid)
+            ring = [[35, 22], [45, 22], [45, 24], [35, 24], [35, 22]]
             _raised(Conflict, lambda: call(
                 ws, "boundary_add", project_id=pid, type="material",
-                points=[[35, 22], [45, 22], [45, 24], [35, 24], [35, 22]]))
+                points=ring))
             assert _state(ws, pid) == before
+            out = call(ws, "boundary_add", project_id=pid, type="material",
+                       points=ring, closed=True)
+            assert out["boundary"]["n_vertices"] == 4
         finally:
             ws.shutdown()
 

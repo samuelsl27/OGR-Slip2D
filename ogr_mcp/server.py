@@ -257,7 +257,8 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
     def model_define(spec: Annotated[dict[str, Any], Field(description=(
             "The whole model. Keys: 'name'; 'external' [[x,y],...] closed "
             "outline (required); 'material_boundaries' [[[x,y],...],...] "
-            "open polylines edge to edge; 'materials' [{'name', 'strength': "
+            "open polylines edge to edge, or {'points': [...], 'closed': "
+            "true} for a lens; 'materials' [{'name', 'strength': "
             "{'model': 'mohr_coulomb', 'params': {'cohesion': 10, "
             "'friction_angle': 30}}, 'unit_weight': 20, 'at': [x, y] (a "
             "point inside its region), other properties...}]; "
@@ -282,7 +283,9 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
             name: Annotated[Optional[str], Field(
                 description="Optional label.")] = None,
             closed: Annotated[Optional[bool], Field(
-                description="Only for a block search window.")] = None,
+                description="Material: true for a lens (a closed boundary "
+                            "inside the mass). Block search window.")
+            ] = None,
             material: Annotated[Optional[str], Field(
                 description="Weak layer only: its material.")] = None,
             assign_to: Annotated[Any, Field(
@@ -1020,8 +1023,8 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
             description="Id of a line, polyline or closed shape.")],
             type: Annotated[Literal["external", "material", "water_table",
                                     "piezometric", "tension_crack"], Field(
-                description="Boundary it becomes (closed shapes: external "
-                            "only).")],
+                description="Boundary it becomes (closed shapes: external, "
+                            "or material as a lens).")],
             project_id: ProjectId = None,
             assign_to: Annotated[Any, Field(
                 description="Water surfaces: 'all' or material names.")

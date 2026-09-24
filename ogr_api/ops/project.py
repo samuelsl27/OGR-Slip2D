@@ -77,9 +77,12 @@ def regions_info(project) -> list[dict]:
         mid = getattr(r, "material_id", None)
         mat = project.material_by_id(mid) if mid else default
         cx, cy = r.centroid()
-        clicked = any(_point_in(a["x"], a["y"], r.polygon.vertices)
+        # v0.1.197 — a click in a lens is in the lens only, not also in
+        # the region around it (``contains`` honours the holes).
+        clicked = any(r.contains(a["x"], a["y"])
                       for a in project.region_assignments)
-        out.append({
+        ix, iy = getattr(r, "inside_point", None) or (cx, cy)
+        row = {
             "index": r.region_index,
             "material_id": mat.id if mat else None,
             "material": mat.name if mat else None,
@@ -87,8 +90,14 @@ def regions_info(project) -> list[dict]:
                     "inherited" if mid and default and mid != default.id
                     else "default_first_material"),
             "centroid": [_r(cx), _r(cy)],
+            # A point surely IN the region: the centroid of a region with
+            # a lens can sit in the lens, and of a non-convex one outside.
+            "inside_point": [_r(ix), _r(iy)],
             "area": _r(r.area, 3),
-        })
+        }
+        if getattr(r, "holes", None):
+            row["holes"] = len(r.holes)
+        out.append(row)
     return out
 
 

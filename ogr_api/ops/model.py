@@ -29,6 +29,8 @@ from __future__ import annotations
 import dataclasses
 from typing import Any, Optional
 
+from ogr_core.geometry.cleanup import closing_tolerance, drop_closing_vertex
+
 from ..coerce import coerce_enum, coerce_value, point, points, type_hints
 from ..errors import Conflict, InvalidArgument, NotFound, unknown
 from . import operation
@@ -36,6 +38,9 @@ from .project import boundary_info, material_info, regions_info
 
 #: Minimum vertices per boundary type.
 _MIN_VERTICES = {"EXTERNAL": 3, "BLOCK_SEARCH_OBJECT": 1}
+#: Boundary types a caller may ask to be closed. A closed MATERIAL
+#: boundary is a lens: since v0.1.197 it is a hole of the region around it.
+_CLOSABLE = ("EXTERNAL", "MATERIAL", "BLOCK_SEARCH_OBJECT")
 
 #: Material fields this layer edits as plain values. ``hydraulic`` and
 #: ``drawdown_envelope`` are structures, edited by the groundwater
@@ -107,26 +112,33 @@ def _make_boundary(btype, pts, *, name=None, closed=None,
         closed = True
     elif closed is None:
         closed = False
-    elif closed and btype.name != "BLOCK_SEARCH_OBJECT":
+    elif closed and btype.name not in _CLOSABLE:
         raise InvalidArgument(
             f"A {btype.display_name} is an open polyline; only the External "
-            f"boundary and a Block Search window are closed.")
-    if btype.name == "MATERIAL" and len(verts) >= 3 and verts[0] == \
-            verts[-1]:
-        # v0.1.196 — measured, and reported as an anomaly of the region
-        # builder, not fixed here (rule 6): regions have NO HOLES, so the
-        # region around a closed lens also covers the lens, a click that
-        # paints the lens lands in both, and the WHOLE model took the
-        # lens's material (the demo slope read 'Lens' at (20, 5)).
+            f"boundary, a material boundary (a lens) and a Block Search "
+            f"window are closed.")
+    if btype.name == "MATERIAL" and not closed and len(verts) >= 3 and \
+            verts[0] == verts[-1]:
+        # An OPEN line that returns to its start is not a lens: the region
+        # builder extends its two ends as a cut and makes a spurious region
+        # (measured in v0.1.196: 25 m² in a corner of the demo slope).
         raise Conflict(
-            "A material boundary that closes on itself (a lens inside the "
-            "model) is not supported: the region around it would take the "
-            "lens's material too.",
-            hint="Draw the layer edge to edge of the External boundary. "
-                 "This is a known defect of the region builder.")
+            "This open material boundary returns to its first point. A lens "
+            "is a CLOSED material boundary.",
+            hint="Pass closed=true, with each point once.")
     poly = Polyline(vertices=[Vertex(x, y) for x, y in verts],
                     closed=bool(closed))
-    if btype.name == "EXTERNAL":
+    if closed and btype.name != "BLOCK_SEARCH_OBJECT":
+        # v0.1.197 — a closed polyline never stores its closing vertex, and
+        # a lens is a region (v0.1.197: regions have holes), so it needs
+        # three distinct points like the External.
+        drop_closing_vertex(poly)
+        # ``drop_closing_vertex`` never goes below three vertices, so a
+        # ring [a, b, a] keeps its copy: two distinct points, no area.
+        if len(poly.vertices) < 3 or abs(poly.signed_area()) <=                 closing_tolerance(poly) ** 2:
+            raise InvalidArgument(
+                f"A closed {btype.display_name} needs at least three "
+                f"distinct points enclosing an area.")
         poly.ensure_ccw()
     if len(poly.vertices) >= 4 and has_self_intersections(poly):
         raise InvalidArgument(f"The {btype.display_name} crosses itself.",
@@ -330,7 +342,8 @@ def boundary_edit(ws, boundary: str, op: str,
                 raise InvalidArgument(
                     f"index {i} is outside 0..{limit - 1}.")
             if op == "delete_vertex":
-                need = _MIN_VERTICES.get(b.btype.name, 2)
+                need = 3 if b.polyline.closed else \
+                    _MIN_VERTICES.get(b.btype.name, 2)
                 if len(verts) - 1 < need:
                     raise Conflict(f"A {b.btype.display_name} needs at "
                                    f"least {need} vertices.")
@@ -390,6 +403,9 @@ def boundary_edit(ws, boundary: str, op: str,
                 new.polyline):
             raise InvalidArgument("The edit makes the boundary cross "
                                   "itself.")
+        # A vertex moved onto the first one of a closed ring is the closing
+        # vertex again (v0.1.197: never stored).
+        drop_closing_vertex(new.polyline)
         project.boundaries[idx] = new
         project._notify("boundary_modified")
         return {"boundary": boundary_info(new, with_vertices=True),
@@ -601,8 +617,8 @@ def material_assign(ws, material: str, x: float, y: float,
             regions = regions_info(project)
             raise InvalidArgument(
                 f"({px}, {py}) is not inside any region of the model.",
-                hint="Region centroids: " + "; ".join(
-                    f"#{r['index']} {r['centroid']} ({r['material']})"
+                hint="A point in each region: " + "; ".join(
+                    f"#{r['index']} {r['inside_point']} ({r['material']})"
                     for r in regions) if regions else
                 "The model has no regions yet: add an External boundary.")
         return {"material": m.name, "regions": regions_info(project)}
@@ -658,8 +674,21 @@ def model_define(ws, spec: dict, project_id: Optional[str] = None) -> dict:
                 project.boundaries[project.boundaries.index(ext)] = b
             else:
                 project.add_boundary(b)
-        for i, pts in enumerate(spec.get("material_boundaries", []) or []):
-            project.add_boundary(_make_boundary(BoundaryType.MATERIAL, pts))
+        for i, mb in enumerate(spec.get("material_boundaries", []) or []):
+            # A list of points is a layer edge; {"points": [...],
+            # "closed": true} is a lens (v0.1.197).
+            closed = None
+            if isinstance(mb, dict):
+                extra = set(mb) - {"points", "closed"}
+                if extra or "points" not in mb:
+                    raise InvalidArgument(
+                        f"material_boundaries[{i}] is a list of points or "
+                        f"{{'points': [...], 'closed': true}}.")
+                closed = coerce_value(mb.get("closed", False), bool,
+                                      f"material_boundaries[{i}].closed")
+                mb = mb["points"]
+            project.add_boundary(_make_boundary(BoundaryType.MATERIAL, mb,
+                                                closed=closed))
         if project.external_boundary() is None:
             raise InvalidArgument("The model needs an 'external' boundary.")
         if not project.resolve_regions():
@@ -692,8 +721,8 @@ def model_define(ws, spec: dict, project_id: Optional[str] = None) -> dict:
                 raise InvalidArgument(
                     f"materials: the point ({x}, {y}) for {m.name!r} is not "
                     f"inside any region.",
-                    hint="Region centroids: " + "; ".join(
-                        f"{r['centroid']}" for r in regions_info(project)))
+                    hint="A point in each region: " + "; ".join(
+                        f"{r['inside_point']}" for r in regions_info(project)))
 
         if "water_table" in spec and spec["water_table"] is not None:
             pts, to = _water_spec(spec["water_table"], "water_table")

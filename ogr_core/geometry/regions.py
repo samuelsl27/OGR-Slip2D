@@ -23,9 +23,10 @@ Implementation strategy (shapely-based):
            the user assigned (first assigned material wins)
          - otherwise None (unassigned)
 
-Shapely is a soft dependency. If not installed, ``build_regions``
-returns an empty list and ``regions_available`` returns False, so the
-rest of the application keeps working.
+Shapely is a hard dependency (``pyproject.toml``); the pure-Python
+fallback below remains for an environment without it, and does NOT handle
+lenses: a closed material boundary strictly inside a region becomes a HOLE
+of that region only on the shapely path (v0.1.197).
 
 Reference: https://shapely.readthedocs.io/en/stable/manual.html
 
@@ -58,49 +59,105 @@ def regions_available() -> bool:
 # ----------------------------------------------------------------------
 @dataclass
 class MaterialRegion:
-    """A closed polygonal region resulting from planar subdivision."""
+    """A polygonal region resulting from planar subdivision.
+
+    v0.1.197 — a region can have HOLES. A closed material boundary lying
+    strictly inside another region (a lens) is a hole of that region, and
+    until this version the hole was dropped: the surrounding region's
+    polygon covered the lens too, every point of the lens was in two
+    regions, and whichever came first answered. Painting the lens then
+    painted the whole model (measured: a weak 80 m² lens in a 550 m² slope
+    took the factor of safety from 1.6725 to 0.4030), the region areas
+    summed to more than the model, and the finite-element mesher meshed the
+    lens twice. ``contains``, ``area`` and ``centroid`` answer for the
+    region WITH its holes; a region without holes is computed exactly as
+    before.
+    """
 
     polygon: Polyline  # always closed, CCW
     material_id: Optional[str] = None
     parent_boundary_ids: List[str] = field(default_factory=list)
     """IDs of the boundaries that form the edges of this region."""
+    holes: List[Polyline] = field(default_factory=list)
+    """Closed CW rings cut out of ``polygon`` (lenses inside the region)."""
+    inside_point: Optional[Tuple[float, float]] = None
+    """A point guaranteed inside the region and outside its holes (the
+    builder's ``representative_point``). The centroid is not: it can fall
+    in a hole, or outside a non-convex region."""
 
     @property
     def area(self) -> float:
-        """Signed area via the shoelace formula."""
-        verts = self.polygon.vertices
-        n = len(verts)
-        if n < 3:
-            return 0.0
-        s = 0.0
-        for i in range(n):
-            j = (i + 1) % n
-            s += verts[i].x * verts[j].y - verts[j].x * verts[i].y
-        return abs(s) / 2.0
+        """Area via the shoelace formula, holes subtracted."""
+        a = _ring_area(self.polygon.vertices)
+        for h in self.holes:
+            a -= _ring_area(h.vertices)
+        return a
 
     def centroid(self) -> Tuple[float, float]:
-        """Polygon centroid (area-weighted)."""
-        verts = self.polygon.vertices
-        n = len(verts)
-        if n < 3:
-            if verts:
-                return (verts[0].x, verts[0].y)
-            return (0.0, 0.0)
-        cx = cy = 0.0
-        a_sum = 0.0
-        for i in range(n):
-            j = (i + 1) % n
-            cross = verts[i].x * verts[j].y - verts[j].x * verts[i].y
-            cx += (verts[i].x + verts[j].x) * cross
-            cy += (verts[i].y + verts[j].y) * cross
-            a_sum += cross
-        if abs(a_sum) < 1e-12:
-            xs = [v.x for v in verts]
-            ys = [v.y for v in verts]
-            return (sum(xs) / n, sum(ys) / n)
-        cx /= (3.0 * a_sum)
-        cy /= (3.0 * a_sum)
-        return (cx, cy)
+        """Polygon centroid (area-weighted), holes subtracted."""
+        cx, cy, a = _ring_centroid(self.polygon.vertices)
+        if not self.holes:
+            return (cx, cy)
+        # Composite figure: the outer ring minus each hole, each weighted
+        # by its area (the standard decomposition of a first moment).
+        mx, my, total = cx * a, cy * a, a
+        for h in self.holes:
+            hx, hy, ha = _ring_centroid(h.vertices)
+            mx -= hx * ha
+            my -= hy * ha
+            total -= ha
+        if total <= 1e-12:
+            return (cx, cy)
+        return (mx / total, my / total)
+
+    def contains(self, x: float, y: float) -> bool:
+        """True when (x, y) is inside the outer ring and in no hole.
+
+        The same ray cast as ``Project``'s point queries, so a region
+        without holes answers exactly as it always did.
+        """
+        if not _point_in_polygon_xy(x, y, self.polygon.vertices):
+            return False
+        for h in self.holes:
+            if _point_in_polygon_xy(x, y, h.vertices):
+                return False
+        return True
+
+
+def _ring_area(verts) -> float:
+    n = len(verts)
+    if n < 3:
+        return 0.0
+    s = 0.0
+    for i in range(n):
+        j = (i + 1) % n
+        s += verts[i].x * verts[j].y - verts[j].x * verts[i].y
+    return abs(s) / 2.0
+
+
+def _ring_centroid(verts) -> Tuple[float, float, float]:
+    """(cx, cy, area) of one ring — the centroid code MaterialRegion has
+    always used, returned with the (unsigned) area it weighed."""
+    n = len(verts)
+    if n < 3:
+        if verts:
+            return (verts[0].x, verts[0].y, 0.0)
+        return (0.0, 0.0, 0.0)
+    cx = cy = 0.0
+    a_sum = 0.0
+    for i in range(n):
+        j = (i + 1) % n
+        cross = verts[i].x * verts[j].y - verts[j].x * verts[i].y
+        cx += (verts[i].x + verts[j].x) * cross
+        cy += (verts[i].y + verts[j].y) * cross
+        a_sum += cross
+    if abs(a_sum) < 1e-12:
+        xs = [v.x for v in verts]
+        ys = [v.y for v in verts]
+        return (sum(xs) / n, sum(ys) / n, 0.0)
+    cx /= (3.0 * a_sum)
+    cy /= (3.0 * a_sum)
+    return (cx, cy, abs(a_sum) / 2.0)
 
 
 # ----------------------------------------------------------------------
@@ -244,11 +301,21 @@ def _build_regions_shapely(
     # T-junction detection: an endpoint that lies on another cut should
     # NOT be extended (touching is enough to be noded by unary_union).
     open_cut_coords: list = []
+    # v0.1.197 — the CLOSED material boundaries (lenses), as rings that
+    # repeat their first point like ``ext_ring_coords``. They are weld
+    # targets and "other cuts" too: an open line drawn to end ON a lens was
+    # taken for a dangling end and extended straight through it.
+    closed_ring_coords: list = []
     for mb in material_boundaries:
-        if (mb.btype == BoundaryType.MATERIAL
-                and not mb.polyline.closed
-                and len(mb.polyline.vertices) >= 2):
+        if mb.btype != BoundaryType.MATERIAL:
+            continue
+        if not mb.polyline.closed and len(mb.polyline.vertices) >= 2:
             open_cut_coords.append([(v.x, v.y) for v in mb.polyline.vertices])
+        elif mb.polyline.closed and len(mb.polyline.vertices) >= 3:
+            ring = [(v.x, v.y) for v in mb.polyline.vertices]
+            if ring[0] != ring[-1]:
+                ring.append(ring[0])
+            closed_ring_coords.append(ring)
 
     # ------------------------------------------------------------------
     # v0.1.17 — ENDPOINT WELDING WITH NODE INSERTION on the raw
@@ -329,6 +396,11 @@ def _build_regions_shapely(
                         ept, ext_ring_coords, True)
                     if d < best[0]:
                         best = (d, kind, idx, proj, ("ext", None))
+                    for rk, ring in enumerate(closed_ring_coords):
+                        d, kind, idx, proj = _nearest_on_polyline(
+                            ept, ring, True)
+                        if d < best[0]:
+                            best = (d, kind, idx, proj, ("ring", rk))
                     dbest, kind, idx, proj, tgt = best
                     if kind is None:
                         continue  # nothing within weld_tol
@@ -350,6 +422,8 @@ def _build_regions_shapely(
                         node_pt = (proj[0], proj[1])
                         if tgt[0] == "cut":
                             tgt_coords = open_cut_coords[tgt[1]]
+                        elif tgt[0] == "ring":
+                            tgt_coords = closed_ring_coords[tgt[1]]
                         else:
                             tgt_coords = ext_ring_coords
                         # Degenerate guard: if the projection coincides
@@ -385,7 +459,7 @@ def _build_regions_shapely(
         segment → always True → never extended). We now skip any cut
         whose coordinate sequence equals own_coords.
         """
-        for cc in open_cut_coords:
+        for cc in open_cut_coords + closed_ring_coords:
             if cc == own_coords:
                 continue
             for i in range(len(cc) - 1):
@@ -410,6 +484,7 @@ def _build_regions_shapely(
     cut_lines: list = []
     closed_polys_for_inheritance: list = []
     _open_i = 0
+    _closed_i = 0
     for mb in material_boundaries:
         if mb.btype != BoundaryType.MATERIAL:
             continue
@@ -417,6 +492,11 @@ def _build_regions_shapely(
                 and len(mb.polyline.vertices) >= 2):
             coords = [tuple(c) for c in open_cut_coords[_open_i]]
             _open_i += 1
+        elif mb.polyline.closed and len(mb.polyline.vertices) >= 3:
+            # The ring WITH the nodes the welding inserted, so a line that
+            # ends on it shares that node exactly.
+            coords = [tuple(c) for c in closed_ring_coords[_closed_i]]
+            _closed_i += 1
         else:
             coords = [(v.x, v.y) for v in mb.polyline.vertices]
         if len(coords) < 2:
@@ -483,7 +563,10 @@ def _build_regions_shapely(
         if ext_poly.buffer(snap_tol).contains(c):
             faces.append(f)
 
-    # Inheritance from closed material boundaries (smallest first → inner wins)
+    # Inheritance from closed material boundaries (smallest first → inner
+    # wins). v0.1.197 — the loop had no ``break``, so the LAST match won:
+    # the LARGEST containing polygon, the opposite of what this comment
+    # always said. Only a lens nested in another lens can tell them apart.
     closed_polys_for_inheritance.sort(key=lambda t: t[2])
 
     regions: list[MaterialRegion] = []
@@ -493,6 +576,7 @@ def _build_regions_shapely(
         for p, mid, _ in closed_polys_for_inheritance:
             if p.contains(c) or p.buffer(tolerance).contains(c):
                 mat_id = mid
+                break
         ext_ring = list(f.exterior.coords)
         if ext_ring and ext_ring[0] == ext_ring[-1]:
             ext_ring = ext_ring[:-1]
@@ -502,7 +586,26 @@ def _build_regions_shapely(
             poly.ensure_ccw()
         except Exception:  # noqa: BLE001
             pass
-        regions.append(MaterialRegion(polygon=poly, material_id=mat_id))
+        # v0.1.197 — the holes ``polygonize`` hands back (a lens inside
+        # this face) are KEPT; they were dropped here, which made this
+        # region cover the lens as well. A hole smaller than the sliver
+        # threshold is not kept: the face that filled it was discarded
+        # above, and keeping the hole would leave that area in no region.
+        holes: list = []
+        for ring in f.interiors:
+            hc = list(ring.coords)
+            if hc and hc[0] == hc[-1]:
+                hc = hc[:-1]
+            if len(hc) < 3 or Polygon(hc).area < min_area:
+                continue
+            hole = Polyline(vertices=[Vertex(x, y) for (x, y) in hc],
+                            closed=True)
+            if hole.signed_area() > 0:      # holes run clockwise
+                hole.vertices.reverse()
+            holes.append(hole)
+        regions.append(MaterialRegion(polygon=poly, material_id=mat_id,
+                                      holes=holes,
+                                      inside_point=(c.x, c.y)))
 
     return regions
 
@@ -599,7 +702,9 @@ def region_at_point(
             coords = [(v.x, v.y) for v in r.polygon.vertices]
             if len(coords) < 3:
                 continue
-            p = Polygon(coords)
+            holes = [[(v.x, v.y) for v in h.vertices]
+                     for h in getattr(r, "holes", None) or ()]
+            p = Polygon(coords, holes or None)
             if p.contains(pt):
                 return r
         return None
@@ -611,7 +716,7 @@ def region_at_point(
         verts = r.polygon.vertices
         if len(verts) < 3:
             continue
-        if _point_in_polygon_xy(x, y, verts):
+        if r.contains(x, y):
             return r
     return None
 
@@ -642,6 +747,10 @@ def _build_regions_pure(
 ) -> List[MaterialRegion]:
     """Pure-Python planar subdivision of the External by N Material
     Boundaries. Robust to arbitrary numbers of cutting lines.
+
+    Does not produce holes: a lens (a closed material boundary strictly
+    inside a region) is not handled here, only on the shapely path, and
+    shapely is a hard dependency.
 
     Strategy: for each Material Boundary segment, intersect it with the
     perimeter of every existing region. If the segment crosses a region

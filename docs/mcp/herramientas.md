@@ -26,7 +26,7 @@ publica el propio servidor (`tools/list`); aquí va para qué sirve cada una.
 | Herramienta | C | Para qué |
 |---|---|---|
 | `model_define` | C | El modelo entero en una llamada: contornos, materiales, un punto dentro de la región de cada uno, nivel freático y ajustes. |
-| `boundary_add` | | Un contorno: exterior, de material, nivel freático, piezométrica, desembalse, grieta de tracción, objeto de Block Search, capa débil o superficie anisótropa. |
+| `boundary_add` | | Un contorno: exterior, de material, nivel freático, piezométrica, desembalse, grieta de tracción, objeto de Block Search, capa débil o superficie anisótropa. Un contorno de material **cerrado** (`closed=true`) es una lente: su propia región y un hueco en la de alrededor (desde v0.1.197). |
 | `boundary_edit` | | Editar o borrar un contorno: vértices, traslación, tipo, nombre. |
 | `material_set` | | Crear o modificar un material. |
 | `material_delete` | | Borrar un material (se niega mientras lo usen regiones). |

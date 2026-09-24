@@ -101,6 +101,15 @@ def _region_to_item(region, material):
     path = QPainterPath()
     path.addPolygon(poly)
     path.closeSubpath()
+    # v0.1.197 — a region around a lens has the lens as a HOLE; with the
+    # odd-even rule each hole subpath is left unpainted, so the lens shows
+    # its own colour instead of the surrounding region's laid over it.
+    for hole in getattr(region, "holes", None) or ():
+        if len(hole.vertices) >= 3:
+            path.addPolygon(QPolygonF([QPointF(v.x, v.y)
+                                       for v in hole.vertices]))
+            path.closeSubpath()
+    path.setFillRule(Qt.OddEvenFill)
     item = QGraphicsPathItem(path)
     if material is not None:
         color = QColor(material.color) if hasattr(material, "color") else QColor("#d4a373")

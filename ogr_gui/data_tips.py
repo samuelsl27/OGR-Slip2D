@@ -238,15 +238,16 @@ def tip_at(project, x: float, y: float,
         if _near_segment(x, y, t.x, t.y, h.x, h.y) <= radius:
             return support_tip(s, mode, project=project)
 
-    # Material region under the cursor
+    # Material region under the cursor.
+    # v0.1.197 — the RESOLVED regions, the ones the analysis reads: this
+    # built its own with ``build_regions``, whose material ids only know
+    # closed boundaries, so a region the user had painted was reported as
+    # "no material assigned"; and it tested the outer ring only, so a point
+    # in a lens named the region around it.
     try:
-        from ogr_core.geometry.regions import build_regions
-        ext = next((b for b in project.boundaries
-                    if b.btype.name == "EXTERNAL"), None)
-        mats = [b for b in project.boundaries
-                if b.btype.name == "MATERIAL"]
-        if ext is not None:
-            for i, region in enumerate(build_regions(ext, mats)):
+        resolve = getattr(project, "resolve_regions", None)
+        if resolve is not None:
+            for i, region in enumerate(resolve()):
                 if not _region_contains(region, x, y):
                     continue
                 material = _material_of(project, region)
@@ -286,12 +287,15 @@ def _near_segment(px, py, ax, ay, bx, by) -> float:
 
 
 def _region_contains(region, x: float, y: float) -> bool:
-    """Point-in-region test.
+    """Point-in-region test, holes included.
 
-    ``MaterialRegion`` exposes no containment test of its own, so Shapely
-    does the work when available and a ray-casting fallback keeps the tip
-    working without it.
+    v0.1.197 — ``MaterialRegion.contains`` is the region's own test (outer
+    ring, minus its holes); the Shapely/ray-cast code below stays for an
+    object that only carries a polygon.
     """
+    contains = getattr(region, "contains", None)
+    if contains is not None:
+        return bool(contains(x, y))
     poly = getattr(region, "polygon", None)
     if poly is None:
         return False

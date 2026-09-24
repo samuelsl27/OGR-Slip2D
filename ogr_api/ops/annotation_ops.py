@@ -14,7 +14,9 @@ That bridge goes through the same checks as ``boundary_add`` — one
 External, one water table, ``ensure_ccw``, no self-crossing — which the
 interface's *Convert Tool to Boundary* skips (reported in v0.1.196). And a
 closed shape's outline repeats its first point at the end, which a closed
-polyline must not; the repeat is dropped.
+polyline must not; the repeat is dropped. A closed shape can become the
+External or, since v0.1.197, a material LENS (a hole of the region around
+it); the open line types refuse it.
 
 Author: Samuel Sáez López (UPCT)
 """
@@ -193,24 +195,27 @@ def annotation_to_boundary(ws, annotation: str, type: str,
                            hint="Lines, polylines, polygons, rectangles "
                                 "and circles can.")
         pts = [list(p) for p in pts]
+        closed = None
         if type == "external":
             if not a.closed:
                 raise Conflict("Only a closed shape can become the External "
                                "boundary.")
-            # The External is a CLOSED polyline: its closing edge is
-            # implicit, so the outline's repeated first point must go.
-            if len(pts) > 2 and pts[0] == pts[-1]:
-                pts = pts[:-1]
+        elif a.closed and type == "material":
+            # v0.1.197 — a closed shape as a material boundary is a LENS,
+            # a hole of the region around it now that regions have holes.
+            closed = True
         elif a.closed:
-            # Every other type is an OPEN polyline. A closed shape as a
-            # material boundary is a lens, which the region builder cannot
-            # hold (regions have no holes — measured in v0.1.196: the whole
-            # model took the lens's material); as a water table, a
-            # piezometric line or a crack it means nothing.
+            # A water table, a piezometric line or a crack is an OPEN
+            # polyline; a closed shape as one of them means nothing.
             raise Conflict(f"A closed {a.kind.value!r} cannot become a "
                            f"{type}; draw it as a line or polyline.")
+        if a.closed and len(pts) > 2 and pts[0] == pts[-1]:
+            # The outline repeats its first point; a closed polyline's
+            # closing edge is implicit.
+            pts = pts[:-1]
     return boundary_add(ws, type=type, points=pts, project_id=project_id,
-                        assign_to=assign_to, replace=replace)
+                        assign_to=assign_to, replace=replace,
+                        closed=closed)
 
 
 @operation("properties_table", toolset="annotations")

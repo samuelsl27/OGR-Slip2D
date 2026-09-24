@@ -229,7 +229,12 @@ def convert_boundary(boundary: Boundary, new_type: BoundaryType) -> Boundary:
         # silently making it strengthless.
         new.polyline.closed = False
     elif new_type == BoundaryType.MATERIAL:
-        new.polyline.closed = True
+        # v0.1.197 — a material boundary is open (a layer edge) OR closed
+        # (a lens, a hole of the region around it); the polyline keeps what
+        # it was. This used to force ``closed = True``, so converting an
+        # open water table into a material boundary joined its two ends
+        # with a chord across the model.
+        pass
     new.name = new_type.display_name
     return new
 

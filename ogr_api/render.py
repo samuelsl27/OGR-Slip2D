@@ -45,6 +45,21 @@ def _xy(vertices) -> tuple[list, list]:
     return [v.x for v in vertices], [v.y for v in vertices]
 
 
+def _ring_path(outer, holes):
+    """A matplotlib ``Path`` of a ring with holes: each ring a closed
+    subpath, so the even-odd fill leaves the holes unpainted."""
+    from matplotlib.path import Path
+
+    verts, codes = [], []
+    for ring in [outer] + [[(v.x, v.y) for v in h.vertices] for h in holes]:
+        if len(ring) < 3:
+            continue
+        verts += list(ring) + [ring[0]]
+        codes += ([Path.MOVETO] + [Path.LINETO] * (len(ring) - 1)
+                  + [Path.CLOSEPOLY])
+    return Path(verts, codes)
+
+
 def _surface_path(res) -> Optional[tuple[list, list]]:
     """The base of the slices, left to right: what was actually analysed."""
     slices = getattr(res, "slices", None)
@@ -71,6 +86,7 @@ def render_png(project, *, surfaces: Iterable = (), width: int = 900,
     """
     from matplotlib.backends.backend_agg import FigureCanvasAgg
     from matplotlib.figure import Figure
+    from matplotlib.patches import PathPatch
     from matplotlib.patches import Polygon as MplPolygon
 
     surfaces = list(surfaces)
@@ -94,11 +110,20 @@ def render_png(project, *, surfaces: Iterable = (), width: int = 900,
             or default
         colour = getattr(mat, "color", "#dddddd") if mat else "#dddddd"
         pts = [(v.x, v.y) for v in region.polygon.vertices]
-        if len(pts) >= 3:
+        holes = getattr(region, "holes", None) or []
+        if len(pts) >= 3 and not holes:
             ax.add_patch(MplPolygon(pts, closed=True, facecolor=colour,
                                     edgecolor="none", alpha=0.85, zorder=1))
+        elif len(pts) >= 3:
+            # v0.1.197 — a region with a lens: one path, the outer ring and
+            # each hole as its own closed subpath, so the lens is not
+            # painted over with this region's colour.
+            ax.add_patch(PathPatch(_ring_path(pts, holes), facecolor=colour,
+                                   edgecolor="none", alpha=0.85, zorder=1))
         if labels and mat is not None:
-            cx, cy = region.centroid()
+            cx, cy = (region.inside_point
+                      if holes and getattr(region, "inside_point", None)
+                      else region.centroid())
             ax.text(cx, cy, mat.name, ha="center", va="center", fontsize=8,
                     zorder=6, bbox=dict(boxstyle="round,pad=0.2",
                                         fc="white", ec="none", alpha=0.7))

@@ -74,6 +74,10 @@ class ImportPreview:
     external_area: float = 0.0
     boundaries: dict = field(default_factory=dict)   # kind -> count
     error: Optional[str] = None
+    # v0.1.197 — the sanitiser's counts are in its ring format; these are
+    # the same counts without the repeated closing points.
+    vertices_in_file: int = 0
+    vertices_stored: int = 0
 
     @property
     def ok(self) -> bool:
@@ -98,8 +102,11 @@ class ImportPreview:
         rep = self.report
         bits = [f"{sum(self.boundaries.values())} boundaries"]
         if rep is not None:
-            bits.append(f"{rep.vertices_before} → {rep.vertices_after} "
-                        f"vertices")
+            # v0.1.197 — in the vertices the model will STORE (a closed
+            # polyline's ring repeats its first point inside the DXF
+            # package), so the count shown is the count applied.
+            bits.append(f"{self.vertices_in_file} → "
+                        f"{self.vertices_stored} vertices")
         bits.append(f"{self.regions} region(s)")
         if self.external_area > 0:
             bits.append("areas match" if self.area_matches
@@ -109,11 +116,31 @@ class ImportPreview:
 
 # ======================================================================
 def _to_boundary(poly, btype) -> Boundary:
-    return Boundary(
-        btype=btype,
-        polyline=Polyline(
-            vertices=[Vertex(x, y) for x, y in poly.points],
-            closed=poly.closed))
+    """A model boundary from a sanitised DXF polyline.
+
+    v0.1.197 — inside this package a closed polyline is a RING that repeats
+    its first point (the sanitiser walks its edges without wrapping, and
+    needs the closing edge to be a real segment); a model boundary never
+    does. The repeat is dropped here, where the one format becomes the
+    other: kept, it was a zero-length closing edge in every imported model.
+    """
+    from ogr_core.geometry.cleanup import drop_closing_vertex
+    polyline = Polyline(vertices=[Vertex(x, y) for x, y in poly.points],
+                        closed=poly.closed)
+    drop_closing_vertex(polyline)
+    return Boundary(btype=btype, polyline=polyline)
+
+
+def _ring_repeats(polys) -> int:
+    """How many of these DXF polylines are closed rings repeating their
+    first point — the vertices a model boundary does not store."""
+    from ogr_core.geometry.cleanup import drop_closing_vertex
+    n = 0
+    for p in polys:
+        if p.closed and len(p.points) > 3:
+            n += drop_closing_vertex(Polyline(
+                vertices=[Vertex(x, y) for x, y in p.points], closed=True))
+    return n
 
 
 def _polygon_area(points) -> float:
@@ -157,6 +184,10 @@ def preview(path, options: ImportOptions) -> ImportPreview:
     pv.sanitised = san.run(by_kind)
     pv.report = san.report
     pv.boundaries = {k.value: len(v) for k, v in pv.sanitised.items()}
+    pv.vertices_in_file = pv.report.vertices_before - _ring_repeats(
+        p for ps in by_kind.values() for p in ps)
+    pv.vertices_stored = pv.report.vertices_after - _ring_repeats(
+        p for ps in pv.sanitised.values() for p in ps)
 
     # Region check: the decisive quality indicator
     ext = pv.sanitised.get(DxfEntityKind.EXTERNAL, [])

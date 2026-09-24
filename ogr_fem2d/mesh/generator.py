@@ -222,14 +222,35 @@ def _bowyer_watson(points: list[tuple[float, float]]):
     return [t for t in tris if all(idx < n for idx in t)]
 
 
+def _in_region(x: float, y: float, poly, holes=()) -> bool:
+    """Inside the outer ring and in none of the holes (v0.1.197). With no
+    holes this is exactly ``_point_in_poly`` — the mesh of a region without
+    a lens is built by the same calls as before."""
+    if not _point_in_poly(x, y, poly):
+        return False
+    for hole in holes:
+        if _point_in_poly(x, y, hole):
+            return False
+    return True
+
+
+def _dist_to_rings(x: float, y: float, poly, holes=()) -> float:
+    """Distance to the nearest ring, outer or hole."""
+    d = _dist_to_poly(x, y, poly)
+    for hole in holes:
+        d = min(d, _dist_to_poly(x, y, hole))
+    return d
+
+
 # ======================================================================
 # Interior point seeding
 # ======================================================================
-def _lattice_points(poly, h: float, margin: float
+def _lattice_points(poly, h: float, margin: float, holes=()
                     ) -> list[tuple[float, float]]:
     """Staggered (near-equilateral) lattice of interior points, kept at
     least ``margin`` away from the outline so they don't crowd the
-    boundary discretisation."""
+    boundary discretisation. v0.1.197 — and out of the holes, at the same
+    margin from their outline."""
     xs = [p[0] for p in poly]
     ys = [p[1] for p in poly]
     x0, x1 = min(xs), max(xs)
@@ -242,8 +263,8 @@ def _lattice_points(poly, h: float, margin: float
         offset = 0.0 if j % 2 == 0 else h * 0.5
         x = x0 + offset + h * 0.5
         while x < x1:
-            if _point_in_poly(x, y, poly) and \
-                    _dist_to_poly(x, y, poly) > margin:
+            if _in_region(x, y, poly, holes) and \
+                    _dist_to_rings(x, y, poly, holes) > margin:
                 out.append((x, y))
             x += h
         y += dy
@@ -295,11 +316,21 @@ def generate_mesh(
     Returns:
         A :class:`Mesh`. Empty if ``regions`` is empty or degenerate.
     """
+    # v0.1.197 — a region around a lens has the lens as a HOLE, and the
+    # hole is meshed by the lens's own region. Ignoring it (as every
+    # version before this one did) meshed the lens twice: overlapping
+    # elements, the mesh area larger than the model, and the lens outline
+    # counted as model boundary, so interior nodes got boundary conditions.
     polys = []
+    region_holes: dict = {}
     for idx, r in enumerate(regions):
         pts = _poly_xy(r.polygon)
         if len(pts) >= 3 and r.area > 0:
             polys.append((idx, r, pts))
+            region_holes[idx] = [
+                hp for hp in (_poly_xy(h)
+                              for h in getattr(r, "holes", None) or ())
+                if len(hp) >= 3]
     if not polys:
         return Mesh()
 
@@ -316,8 +347,14 @@ def generate_mesh(
     elements: list[Element] = []
 
     for region_index, region, poly in polys:
+        holes = region_holes[region_index]
         boundary_ids = discretize_edges(registry, poly, h)
-        interior = _lattice_points(poly, h, margin=0.45 * h)
+        for hole in holes:
+            # The hole's outline is the lens region's outline: the same
+            # edges, split the same way, so the shared registry gives both
+            # meshes the same nodes and they are conforming.
+            boundary_ids += discretize_edges(registry, hole, h)
+        interior = _lattice_points(poly, h, margin=0.45 * h, holes=holes)
 
         for _pass in range(max(1, refine_passes + 1)):
             pts_idx = list(dict.fromkeys(boundary_ids))
@@ -332,7 +369,7 @@ def generate_mesh(
                 p = [coords[i] for i in t]
                 cx = sum(q[0] for q in p) / 3.0
                 cy = sum(q[1] for q in p) / 3.0
-                if not _point_in_poly(cx, cy, poly):
+                if not _in_region(cx, cy, poly, holes):
                     continue
                 kept.append(t)
 
@@ -344,9 +381,9 @@ def generate_mesh(
                     cc = _circumcentre(*p)
                     if cc is None:
                         continue
-                    if not _point_in_poly(cc[0], cc[1], poly):
+                    if not _in_region(cc[0], cc[1], poly, holes):
                         continue
-                    if _dist_to_poly(cc[0], cc[1], poly) < 0.35 * h:
+                    if _dist_to_rings(cc[0], cc[1], poly, holes) < 0.35 * h:
                         continue
                     if any(math.hypot(cc[0] - q[0], cc[1] - q[1])
                            < 0.45 * h for q in coords):
@@ -391,7 +428,6 @@ def generate_mesh_for_project(project, **kwargs) -> Mesh:
     """Convenience wrapper: build the regions of ``project`` and mesh
     them. Returns an empty mesh when the project has no External."""
     from ogr_core.geometry import BoundaryType
-    from ogr_core.geometry.regions import build_regions
 
     external = None
     for b in project.boundaries:
@@ -400,24 +436,10 @@ def generate_mesh_for_project(project, **kwargs) -> Mesh:
             break
     if external is None:
         return Mesh()
-    mats = [b for b in project.boundaries
-            if b.btype == BoundaryType.MATERIAL]
-    regions = build_regions(external, mats)
 
-    # ``build_regions`` leaves ``material_id`` unset unless the project
-    # carries explicit region assignments. The hydraulic properties in
-    # Phase 2/3 are per material, so resolve each region's material the
-    # same way the LEM slicer does: query the project at the region
-    # centroid.
-    for r in regions:
-        if getattr(r, "material_id", None):
-            continue
-        try:
-            cx, cy = r.centroid()
-            mat = project.material_at(cx, cy)
-        except Exception:  # noqa: BLE001
-            mat = None
-        if mat is not None:
-            r.material_id = getattr(mat, "id", None) or getattr(
-                mat, "name", None)
-    return generate_mesh(regions, **kwargs)
+    # v0.1.197 — the RESOLVED regions, each with the material the limit-
+    # equilibrium analysis reads for it. This used to build its own regions
+    # and ask ``material_at`` at each region's CENTROID, which is not
+    # always in the region: a lens's surrounding region has its centroid in
+    # the lens, and a non-convex region can have it outside.
+    return generate_mesh(project.resolve_regions(), **kwargs)

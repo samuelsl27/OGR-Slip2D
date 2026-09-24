@@ -216,9 +216,10 @@ def export_dxf(project, path, options: Optional[ExportOptions] = None,
             if len(pts) < 2:
                 continue
             closed = bool(getattr(b.polyline, "closed", False))
-            # A closed polyline repeated its first point on import; drop
-            # the duplicate and use the DXF closed flag instead, so the
-            # drawing is idiomatic and the round trip is exact.
+            # A closed polyline is written once per vertex with the DXF
+            # closed flag. (Until v0.1.197 an imported one repeated its
+            # first point; the importer drops it now, and this stays as a
+            # safeguard for a model edited by hand.)
             if closed and len(pts) > 2 and \
                     math.dist(pts[0], pts[-1]) < 1e-12:
                 pts = pts[:-1]

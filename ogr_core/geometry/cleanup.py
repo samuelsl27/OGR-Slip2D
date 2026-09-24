@@ -19,10 +19,10 @@ Author: Samuel Sáez López (UPCT)
 from __future__ import annotations
 
 import math
-from typing import Iterable
+from typing import Iterable, Optional
 
 from .boundary import Boundary
-from .primitives import Polyline, Vertex
+from .primitives import Polyline, Vertex, segments_of
 
 DEFAULT_TOL = 1e-6
 
@@ -51,6 +51,49 @@ def remove_duplicate_vertices(polyline: Polyline, tol: float = DEFAULT_TOL) -> i
             removed += 1
     polyline.vertices = kept
     return removed
+
+
+def closing_tolerance(polyline: Polyline, rel: float = 1e-6) -> float:
+    """``rel`` times the diagonal of ``polyline``'s own bounding box — the
+    project's relative tolerance (see :func:`model_tolerance`), for a
+    question that only concerns one polyline."""
+    vs = polyline.vertices
+    if not vs:
+        return DEFAULT_TOL
+    xs = [v.x for v in vs]
+    ys = [v.y for v in vs]
+    return max(rel * math.hypot(max(xs) - min(xs), max(ys) - min(ys)),
+               1e-12)
+
+
+def drop_closing_vertex(polyline: Polyline,
+                        tol: Optional[float] = None) -> int:
+    """A CLOSED polyline stores each vertex once; drop a last vertex that
+    repeats the first. Returns how many were dropped.
+
+    v0.1.197 — the closing edge of a closed polyline is implicit
+    (``segments_of``, the region builder, the canvas), so a stored copy of
+    the first vertex is a zero-length closing edge. The DXF reader put one
+    on every imported closed polyline (since v0.1.59), and it was not
+    harmless: moving vertex 0 left the copy behind and cut a notch into the
+    model (575 m² for 580), a parallel offset turned the zero-length edge
+    into a spike, and the canvas drew two handles on one point.
+
+    The tolerance is relative to the polyline (:func:`closing_tolerance`),
+    the same one the inspection uses to call a vertex a duplicate. Never
+    leaves fewer than three vertices: a ring that would have to go below
+    that is left as it is for the caller's own validation to refuse.
+    """
+    if not polyline.closed:
+        return 0
+    vs = polyline.vertices
+    if tol is None:
+        tol = closing_tolerance(polyline)
+    dropped = 0
+    while len(vs) > 3 and vs[0].distance_to(vs[-1]) <= tol:
+        vs.pop()
+        dropped += 1
+    return dropped
 
 
 # ------------------------------------------------------------------
@@ -126,13 +169,18 @@ def _segment_intersection(
 
 
 def find_intersections(a: Polyline, b: Polyline) -> list[Vertex]:
-    """Find all proper intersection points between two polylines."""
+    """Find all proper intersection points between two polylines.
+
+    v0.1.197 — the closing edge of a CLOSED polyline counts: it was
+    skipped, so a line crossing the External only there was never
+    reported (the DXF import's repeated closing vertex happened to hide
+    this for imported models).
+    """
     result: list[Vertex] = []
-    for i in range(len(a) - 1):
-        for j in range(len(b) - 1):
-            p = _segment_intersection(
-                a.vertices[i], a.vertices[i + 1], b.vertices[j], b.vertices[j + 1]
-            )
+    seg_b = list(segments_of(b))
+    for p1, p2 in segments_of(a):
+        for q1, q2 in seg_b:
+            p = _segment_intersection(p1, p2, q1, q2)
             if p is not None:
                 result.append(p)
     return result
