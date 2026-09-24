@@ -43,7 +43,7 @@ Opciones completas: `ogr-slip2d-mcp --help`.
 
 ## Qué puede hacer hoy
 
-55 herramientas, descritas en [herramientas.md](herramientas.md):
+56 herramientas, descritas en [herramientas.md](herramientas.md):
 
 - abrir, crear (vacío o el talud de demostración), guardar y describir
   modelos;
@@ -72,11 +72,10 @@ vertical), `angle_deg` con una carga vertical, una tolerancia de foco en una
 ventana... Es la regla 7 del proyecto aplicada en la puerta.
 
 `server_info` dice cuánto del menú del programa cubre ya el agente
-(`program_coverage`): 98 de las 136 acciones de la ventana principal, 23 son
-sólo de interfaz (zoom, *pan*...) y quedan 15. Catorce llegan en la fase F3
-(agua con elementos finitos, estadística, retroanálisis, optimización) y una,
-*Change Slope Angle*, espera una decisión del propietario. Hasta entonces se
-alcanzan con `python_exec`.
+(`program_coverage`): 99 de las 136 acciones de la ventana principal, 23 son
+sólo de interfaz (zoom, *pan*...) y quedan 14, todas de la fase F3 (agua con
+elementos finitos, estadística, retroanálisis, optimización). Hasta entonces
+se alcanzan con `python_exec`.
 
 ## Configurar cada cliente
 

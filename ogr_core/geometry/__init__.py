@@ -23,7 +23,6 @@ from .tension_crack import TensionCrackProperties, WaterLevelMode
 from .regions import MaterialRegion, build_regions, region_at_point, regions_available
 from .transforms import (
     apply_to_many,
-    change_slope_angle,
     convert_boundary,
     offset_polygon,
     rotate,
@@ -46,7 +45,6 @@ __all__ = [
     "rotate",
     "scale",
     "offset_polygon",
-    "change_slope_angle",
     "convert_boundary",
     "apply_to_many",
     "MaterialRegion",

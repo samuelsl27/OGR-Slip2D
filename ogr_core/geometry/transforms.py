@@ -8,7 +8,6 @@ Adds the following to the geometry core:
     - rotate(b, pivot, angle_deg)
     - scale(b, pivot, sx, sy)
     - offset_polygon(polyline, distance)   (expand/shrink)
-    - change_slope_angle(external_boundary, pivot, new_angle_deg)
     - convert_boundary(b, new_type)
 
 All transformations return a *new* Boundary (never mutate in place),
@@ -146,52 +145,11 @@ def _line_intersection(
 
 
 # ----------------------------------------------------------------------
-# Change slope angle — rotates the slope face only
+# Change slope angle — v0.1.198: moved to ``slope_angle.change_slope_angle``.
+# The function that lived here rotated the WHOLE boundary about a pivot
+# (the base and the crest tilted with the face) and its sense depended on
+# which way the slope faced; it is gone rather than kept beside the new one.
 # ----------------------------------------------------------------------
-def change_slope_angle(
-    boundary: Boundary,
-    pivot: Vertex,
-    new_angle_deg: float,
-    reference_edge: tuple[int, int] | None = None,
-) -> Boundary:
-    """Rotate a slope face to a target inclination.
-
-    Args:
-        boundary: the external boundary to modify (must be closed).
-        pivot: point around which the slope rotates (typically the toe).
-        new_angle_deg: target inclination measured from horizontal.
-        reference_edge: (i, i+1) vertex indices defining the slope face;
-            if None, auto-detects the steepest edge.
-
-    The operation finds the current angle of the reference edge and
-    applies a rigid rotation of the *vertex above the pivot* to match
-    the new angle. This is an approximation suitable for regular slope
-    geometries (single slope face).
-    """
-    if reference_edge is None:
-        # Find the steepest edge (most negative slope for a typical slope)
-        steepest_idx = 0
-        max_slope = -math.inf
-        for i in range(len(boundary.polyline) - 1):
-            a = boundary.polyline.vertices[i]
-            b = boundary.polyline.vertices[i + 1]
-            dx = b.x - a.x
-            dy = b.y - a.y
-            if abs(dx) < 1e-9:
-                continue
-            slope = abs(dy / dx)
-            if slope > max_slope:
-                max_slope = slope
-                steepest_idx = i
-        reference_edge = (steepest_idx, steepest_idx + 1)
-
-    i0, i1 = reference_edge
-    a = boundary.polyline.vertices[i0]
-    b = boundary.polyline.vertices[i1]
-    current_angle = math.degrees(math.atan2(abs(b.y - a.y), abs(b.x - a.x)))
-    delta = new_angle_deg - current_angle
-
-    return rotate(boundary, pivot, delta)
 
 
 # ----------------------------------------------------------------------

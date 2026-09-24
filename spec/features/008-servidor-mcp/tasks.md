@@ -90,8 +90,10 @@ Tres defectos que F2 dejó reportados, cada uno su versión y su plan corto:
 - [x] B1 (v0.1.197) Lentes: regiones con huecos de verdad (consultas,
       huellas, áreas, lienzo, ayudas, PNG, mallado); y un contorno cerrado
       nunca guarda su vértice de cierre (DXF, al añadir, al abrir).
-- [ ] B2 (v0.1.198) *Change Slope Angle* rehecha: pie y coronación como
-      vértices, solo la cara, proyección horizontal/vertical/giro, bermas.
+- [x] B2 (v0.1.198) *Change Slope Angle* rehecha: pie y coronación como
+      vértices, solo la cara, proyección horizontal/vertical/giro, bermas;
+      en la interfaz y como `slope_angle_change`. De paso, *Insert Vertex*
+      (a `_pick_edge` le faltaba el `def` desde v0.1.59).
 - [ ] B3 (v0.1.199) Cargas puntuales `normal_to_boundary` y
       `angle_to_boundary`, con validación externa.
 

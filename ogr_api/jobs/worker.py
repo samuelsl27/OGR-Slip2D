@@ -21,17 +21,57 @@ import traceback
 from pathlib import Path
 
 
-def _write_json(path: Path, data: dict) -> None:
+#: v0.1.198 — Windows refuses to rename a file over one another process
+#: holds open (``PermissionError``, WinError 5), and the parent READS
+#: ``progress.json`` and ``status.json`` while a job runs. Measured in a
+#: full suite run: a job died with "PermissionError: [WinError 5]" on the
+#: progress file, the moment a poll caught it open. A read takes
+#: milliseconds, so a rename that waits a little always gets through.
+_REPLACE_TRIES = 40
+_REPLACE_WAIT_S = 0.025
+
+
+def _replace(tmp: Path, path: Path, tries: int = _REPLACE_TRIES) -> None:
+    for attempt in range(tries):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if attempt == tries - 1:
+                raise
+            time.sleep(_REPLACE_WAIT_S)
+
+
+def _write_json(path: Path, data: dict,
+                tries: int = _REPLACE_TRIES) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(data, allow_nan=False), encoding="utf-8")
-    os.replace(tmp, path)
+    _replace(tmp, path, tries)
 
 
 def _write_pickle(path: Path, data) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     with open(tmp, "wb") as fh:
         pickle.dump(data, fh, protocol=pickle.HIGHEST_PROTOCOL)
-    os.replace(tmp, path)
+    _replace(tmp, path)
+
+
+def _write_progress(folder: Path, done: int, total: int) -> bool:
+    """Report progress; False when this update had to be skipped.
+
+    Progress is advisory: an update that cannot be written (the parent
+    holding the file open for its poll) is dropped, never retried and never
+    raised — it used to propagate out of the progress callback and kill
+    the whole analysis (v0.1.198).
+    """
+    try:
+        _write_json(folder / "progress.json",
+                    {"done": int(done), "total": int(total),
+                     "fraction": (float(done) / total) if total else None},
+                    tries=1)
+        return True
+    except OSError:
+        return False
 
 
 def _provenance() -> dict:
@@ -57,9 +97,7 @@ def _run(folder: Path) -> None:
         if now - last[0] < 0.5 and done < total:
             return
         last[0] = now
-        _write_json(folder / "progress.json",
-                    {"done": int(done), "total": int(total),
-                     "fraction": (float(done) / total) if total else None})
+        _write_progress(folder, done, total)
 
     if kind != "analysis":
         raise ValueError(f"unknown job kind {kind!r}")

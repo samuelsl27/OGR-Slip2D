@@ -23,7 +23,7 @@ TOOLSETS: dict[str, tuple[str, ...]] = {
              "project_summary", "project_validate", "project_get"),
     "model": ("model_define", "boundary_add", "boundary_edit",
               "material_set", "material_delete", "material_assign",
-              "external_reshape", "geometry_cleanup"),
+              "external_reshape", "slope_angle_change", "geometry_cleanup"),
     "settings": ("settings_get", "settings_set", "analysis_configure"),
     "analysis": ("analysis_run", "job_get", "job_cancel", "job_list",
                  "results_get", "surface_evaluate"),

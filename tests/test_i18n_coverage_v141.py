@@ -82,7 +82,9 @@ _VISIBLE_MESSAGES = [
 # instead of a comfortable ceiling, so the next unwrapped message box
 # fails this file. The 210 above has run against a real count of 20
 # since it was written, which is a control that cannot fail.
-_UNWRAPPED_BUDGET_MESSAGES = 68
+# v0.1.198 — 68 -> 67: Change Slope Angle's unwrapped "no external"
+# message box went with the rewrite (its message now goes through tr()).
+_UNWRAPPED_BUDGET_MESSAGES = 67
 
 
 def _gui_sources():

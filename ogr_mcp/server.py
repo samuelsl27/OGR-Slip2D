@@ -618,6 +618,34 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
                    keep_removed_as_material=keep_removed_as_material,
                    snap_tolerance=snap_tolerance)
 
+    @tool("slope_angle_change", _EDIT)
+    def slope_angle_change(toe: Annotated[Any, Field(
+            description="The toe: an External vertex index or its [x, y].")],
+            crest: Annotated[Any, Field(
+                description="The crest: an External vertex index or its "
+                            "[x, y] (higher than the toe).")],
+            project_id: ProjectId = None,
+            change_deg: Annotated[Optional[float], Field(
+                description="Change of the overall angle, degrees: + "
+                            "steeper, - flatter.")] = None,
+            target_deg: Annotated[Optional[float], Field(
+                description="Or the new overall angle, degrees.")] = None,
+            mode: Annotated[Literal["horizontal", "vertical", "rotate"],
+                            Field(description=(
+                                "How the face vertices move: keep their "
+                                "elevation (horizontal), their x (vertical)"
+                                ", or turn about the toe."))] = "horizontal",
+            keep_benches: Annotated[Optional[bool], Field(
+                description="Projections only (default true): move each "
+                            "vertex relative to the crest, keeping bench "
+                            "widths.")] = None) -> dict[str, Any]:
+        """Change the overall angle of the slope face between the toe and
+        the crest; only the face moves (layers ending on it follow)."""
+        return run("slope_angle_change", toe=toe, crest=crest,
+                   project_id=project_id, change_deg=change_deg,
+                   target_deg=target_deg, mode=mode,
+                   keep_benches=keep_benches)
+
     @tool("geometry_cleanup", _EDIT)
     def geometry_cleanup(project_id: ProjectId = None,
                          apply: Annotated[bool, Field(

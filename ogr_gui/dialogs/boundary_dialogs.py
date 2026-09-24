@@ -39,6 +39,8 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QRadioButton,
+    QButtonGroup,
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
@@ -295,36 +297,96 @@ class ExpandShrinkDialog(QDialog):
 
 # ======================================================================
 class ChangeSlopeAngleDialog(QDialog):
-    """Target slope angle + pivot input."""
+    """How to change the overall slope angle between a toe and a crest.
 
-    def __init__(self, parent=None) -> None:
+    v0.1.198 — rewritten with the feature (``ogr_core.geometry.slope_angle``):
+    the toe and the crest are picked on the canvas BEFORE this opens, and
+    this asks only the change, its sense and how the face vertices move.
+    The old dialog asked for a target angle and a pivot and fed a function
+    that rotated the whole External boundary.
+    """
+
+    def __init__(self, current_angle: float, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle(tr("Change Slope Angle"))
-        self.resize(320, 200)
+        self.resize(420, 320)
+        self._current = float(current_angle)
         root = QVBoxLayout(self)
-        form = QFormLayout()
-        self.spn_angle = QDoubleSpinBox()
-        self.spn_angle.setRange(0.01, 89.99)
-        self.spn_angle.setDecimals(2)
-        self.spn_angle.setSuffix(" °")
-        self.spn_angle.setValue(30.0)
-        self.spn_px = QDoubleSpinBox(); self.spn_px.setRange(-1e6, 1e6); self.spn_px.setDecimals(3)
-        self.spn_py = QDoubleSpinBox(); self.spn_py.setRange(-1e6, 1e6); self.spn_py.setDecimals(3)
-        form.addRow(tr("Target slope angle:"), self.spn_angle)
-        form.addRow(tr("Pivot X (toe):"), self.spn_px)
-        form.addRow(tr("Pivot Y (toe):"), self.spn_py)
-        root.addLayout(form)
-        note = QLabel("<i>The steepest edge of the external boundary will be "
-                      "rotated about the pivot to match the target angle.</i>")
-        note.setWordWrap(True)
-        root.addWidget(note)
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        root.addWidget(buttons)
 
-    def parameters(self) -> tuple[float, Vertex]:
-        return self.spn_angle.value(), Vertex(self.spn_px.value(), self.spn_py.value())
+        form = QFormLayout()
+        self.lbl_current = QLabel(tr("Current overall angle: %.2f°")
+                                  % self._current)
+        form.addRow(self.lbl_current)
+        self.spn_change = QDoubleSpinBox()
+        self.spn_change.setRange(0.01, 89.99)
+        self.spn_change.setDecimals(2)
+        self.spn_change.setSuffix(" °")
+        self.spn_change.setValue(5.0)
+        form.addRow(tr("Angle change:"), self.spn_change)
+        root.addLayout(form)
+
+        self.rb_increase = QRadioButton(tr("Increase the angle (steeper)"))
+        self.rb_decrease = QRadioButton(tr("Decrease the angle (flatter)"))
+        self.rb_decrease.setChecked(True)
+        sense = QButtonGroup(self)
+        sense.addButton(self.rb_increase)
+        sense.addButton(self.rb_decrease)
+        root.addWidget(self.rb_increase)
+        root.addWidget(self.rb_decrease)
+
+        grp = QGroupBox(tr("Vertex rotation type"))
+        gl = QVBoxLayout(grp)
+        self.rb_horizontal = QRadioButton(tr("Project horizontally"))
+        self.rb_vertical = QRadioButton(tr("Project vertically"))
+        self.rb_rotate = QRadioButton(tr("Rotate"))
+        self.rb_horizontal.setChecked(True)
+        kind = QButtonGroup(self)
+        for rb in (self.rb_horizontal, self.rb_vertical, self.rb_rotate):
+            kind.addButton(rb)
+            gl.addWidget(rb)
+        self.chk_benches = QCheckBox(tr(
+            "Project only the crest and move each vertex relative to it "
+            "(keeps bench widths)"))
+        self.chk_benches.setChecked(True)
+        gl.addWidget(self.chk_benches)
+        root.addWidget(grp)
+
+        self.lbl_new = QLabel()
+        root.addWidget(self.lbl_new)
+        self.buttons = QDialogButtonBox(QDialogButtonBox.Ok
+                                        | QDialogButtonBox.Cancel)
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+        root.addWidget(self.buttons)
+
+        # The bench option is only read by the two projections (rule 7):
+        # greyed out, not silently ignored, when the face is rotated.
+        self.rb_rotate.toggled.connect(
+            lambda on: self.chk_benches.setEnabled(not on))
+        for w in (self.spn_change.valueChanged, self.rb_increase.toggled):
+            w.connect(self._refresh)
+        self._refresh()
+
+    def _signed_change(self) -> float:
+        v = self.spn_change.value()
+        return v if self.rb_increase.isChecked() else -v
+
+    def _refresh(self, *_args) -> None:
+        new = self._current + self._signed_change()
+        ok = 0.0 < new < 90.0
+        self.lbl_new.setText(
+            tr("New overall angle: %.2f°") % new if ok
+            else tr("The new overall angle must be between 0° and 90°."))
+        self.buttons.button(QDialogButtonBox.Ok).setEnabled(ok)
+
+    def parameters(self) -> dict:
+        """Keyword arguments for ``slope_angle.change_slope_angle``."""
+        mode = ("rotate" if self.rb_rotate.isChecked() else
+                "vertical" if self.rb_vertical.isChecked() else
+                "horizontal")
+        return {"change_deg": self._signed_change(), "mode": mode,
+                "keep_benches": (None if mode == "rotate"
+                                 else self.chk_benches.isChecked())}
 
 
 # ======================================================================

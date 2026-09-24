@@ -849,6 +849,38 @@ _DICTS: dict[str, dict[str, str]] = {
         'Capture as initial state': 'Capturar como estado inicial',
         'Capture current BCs': 'Capturar condiciones actuales',
         'Change Slope Angle': 'Cambiar ángulo del talud',
+        # v0.1.198 — Change Slope Angle rewritten (toe and crest picked
+        # on the canvas; only the face moves).
+        'Change Slope Angle...': 'Cambiar ángulo del talud...',
+        'Current overall angle: %.2f°': 'Ángulo global actual: %.2f°',
+        'New overall angle: %.2f°': 'Ángulo global nuevo: %.2f°',
+        'Angle change:': 'Cambio de ángulo:',
+        'Increase the angle (steeper)':
+            'Aumentar el ángulo (más empinado)',
+        'Decrease the angle (flatter)':
+            'Disminuir el ángulo (más tendido)',
+        'Vertex rotation type': 'Tipo de giro de los vértices',
+        'Project horizontally': 'Proyectar en horizontal',
+        'Project vertically': 'Proyectar en vertical',
+        'Rotate': 'Girar',
+        'Project only the crest and move each vertex relative to it '
+        '(keeps bench widths)':
+            'Proyectar solo la coronación y mover cada vértice respecto a '
+            'ella (conserva el ancho de las bermas)',
+        'The new overall angle must be between 0° and 90°.':
+            'El ángulo global nuevo debe estar entre 0° y 90°.',
+        'Click the toe vertex, then the crest vertex of the External '
+        'boundary. Esc to cancel.':
+            'Pulsa el vértice del pie y después el de coronación del '
+            'contorno exterior. Esc para cancelar.',
+        'Click a vertex of the External boundary.':
+            'Pulsa un vértice del contorno exterior.',
+        'Toe picked; now click the crest vertex.':
+            'Pie elegido; ahora pulsa el vértice de coronación.',
+        'The project has no External boundary.':
+            'El proyecto no tiene contorno exterior.',
+        'Slope angle changed from %.2f° to %.2f°.':
+            'Ángulo del talud cambiado de %.2f° a %.2f°.',
         'Circles per division:': 'Círculos por división:',
         'Close': 'Cerrar',
         'Coefficient in temperature reduction:': 'Coeficiente de reducción de temperatura:',
@@ -1035,9 +1067,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Pick…': 'Elegir…',
         'Piezo Line:': 'Línea piezométrica:',
         'Piezometric Line': 'Línea piezométrica',
-        'Pivot X (toe):': 'Pivote X (pie):',
         'Pivot X:': 'Pivote X:',
-        'Pivot Y (toe):': 'Pivote Y (pie):',
         'Pivot Y:': 'Pivote Y:',
         'Plot distribution…': 'Graficar distribución…',
         'Plot:': 'Gráfico:',
@@ -1131,7 +1161,6 @@ _DICTS: dict[str, dict[str, str]] = {
         'Sx:': 'Sx:',
         'Sy:': 'Sy:',
         'Target factor of safety:': 'Factor de seguridad objetivo:',
-        'Target slope angle:': 'Ángulo de talud objetivo:',
         'Tension Crack': 'Grieta de tracción',
         'The mean is the deterministic value defined in the model.': 'La media es el valor determinista definido en el modelo.',
         'Time Units:': 'Unidades de tiempo:',

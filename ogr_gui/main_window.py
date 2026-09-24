@@ -45,7 +45,6 @@ from ogr_core.geometry import (
     rotate as g_rotate,
     scale as g_scale,
     simplify_rdp,
-    change_slope_angle,
     convert_boundary,
 )
 from ogr_core.materials import Material, MohrCoulomb
@@ -207,7 +206,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.197"
+    VERSION = "0.1.198"
 
     def __init__(self) -> None:
         super().__init__()
@@ -261,6 +260,10 @@ class MainWindow(QMainWindow):
         # pick. This one belongs to a single mode and has nothing to
         # collide with.
         self.canvas.three_points_picked.connect(self._on_surface_3pt_picked)
+        # v0.1.198 — Change Slope Angle's toe and crest, once, like the
+        # three-point surface: a single mode, nothing to collide with.
+        self.canvas.slope_vertices_picked.connect(
+            self._on_slope_vertices_picked)
         # v0.1.8 — right-click delete/modify on loads
         self.canvas.load_action_requested.connect(self._on_load_action)
         # v0.1.9 — drag-to-move boundary
@@ -4409,8 +4412,6 @@ class MainWindow(QMainWindow):
             self.act_rotate_boundary(preselected_idx=index)
         elif mode == ToolMode.EXPAND_SHRINK:
             self.act_expand_shrink(preselected_idx=index)
-        elif mode == ToolMode.CHANGE_SLOPE_ANGLE:
-            self.act_change_slope_angle(preselected_idx=index)
         elif mode == ToolMode.MOVE_BOUNDARY:
             # Move by dx/dy input (simple for now)
             from PySide6.QtWidgets import QInputDialog
@@ -4578,7 +4579,7 @@ class MainWindow(QMainWindow):
         elif action == "expand_shrink":
             self.act_expand_shrink(preselected_idx=bidx)
         elif action == "change_slope":
-            self.act_change_slope_angle(preselected_idx=bidx)
+            self.act_change_slope_angle()
 
     def _on_vertex_action_requested(
         self, action: str, bi: int, vi: int,
@@ -4912,23 +4913,61 @@ class MainWindow(QMainWindow):
         self.ogr_status.showMessage(msg, 5000)
 
     def act_change_slope_angle(self, preselected_idx: Optional[int] = None) -> None:
-        if preselected_idx is None:
-            for i, b in enumerate(self.project.boundaries):
-                if b.btype == BoundaryType.EXTERNAL:
-                    preselected_idx = i
-                    break
-        if preselected_idx is None:
-            QMessageBox.information(self, "Change Slope Angle",
-                                    "No external boundary in the project.")
+        """Pick the toe and the crest on the canvas, then change the
+        overall angle of the face between them.
+
+        v0.1.198 — rewritten (``ogr_core.geometry.slope_angle``). This
+        asked for a target angle and a pivot and rotated the WHOLE External
+        boundary, with a sense that depended on which way the slope faced;
+        its tool mode was never entered. ``preselected_idx`` is accepted
+        for the callers that pass a boundary and not needed: the feature
+        works on the External.
+        """
+        if self.project.external_boundary() is None:
+            self._info(tr("The project has no External boundary."))
             return
-        dlg = ChangeSlopeAngleDialog(self)
-        if dlg.exec():
-            target, pivot = dlg.parameters()
-            orig = self.project.boundaries[preselected_idx]
-            new_b = change_slope_angle(orig, pivot, target)
-            new_b.id = orig.id
-            self.command_stack.do(self.project, ReplaceBoundaryCommand(index=preselected_idx, new_boundary=new_b))
-            self.ogr_status.showMessage(f"Slope set to {target:.2f}°", 2000)
+        self.canvas.set_tool_mode(ToolMode.CHANGE_SLOPE_ANGLE)
+        self.ogr_status.showMessage(tr(
+            "Click the toe vertex, then the crest vertex of the External "
+            "boundary. Esc to cancel."), 8000)
+
+    def _on_slope_vertices_picked(self, toe: int, crest: int) -> None:
+        """The canvas picked two External vertices: ask how, then apply
+        as ONE undoable step."""
+        from ogr_core.geometry.slope_angle import (change_slope_angle,
+                                                   overall_angle,
+                                                   slope_face)
+        from ogr_core.project.commands import SnapshotCommand
+
+        self.canvas.set_tool_mode(ToolMode.SELECT)
+        ext = self.project.external_boundary()
+        if ext is None:
+            return
+        try:
+            slope_face(ext, toe, crest)
+        except ValueError as exc:
+            self.ogr_status.showMessage(str(exc), 8000)
+            return
+        dlg = ChangeSlopeAngleDialog(overall_angle(ext, toe, crest), self)
+        if not dlg.exec():
+            return
+        params = dlg.parameters()
+
+        def _apply(project, _t=toe, _c=crest, _p=params):
+            return change_slope_angle(project, _t, _c, **_p)
+        try:
+            cmd = SnapshotCommand(tr("Change Slope Angle"), _apply,
+                                  attrs=("boundaries",))
+            self.command_stack.do(self.project, cmd)
+        except ValueError as exc:
+            self.ogr_status.showMessage(str(exc), 8000)
+            return
+        out = cmd.result or {}
+        msg = tr("Slope angle changed from %.2f° to %.2f°.") % (
+            out.get("old_angle_deg", 0.0), out.get("new_angle_deg", 0.0))
+        notes = out.get("notes") or []
+        self.ogr_status.showMessage(" ".join([msg] + notes), 10000)
+        self.canvas.refresh()
 
     def act_simplify_boundary(self) -> None:
         idx = self._ask_boundary_index()

@@ -87,6 +87,7 @@ MAPPED: dict[str, str] = {
     "rotate_boundary": "boundary_edit",
     "simplify_boundary": "boundary_edit",
     "expand_shrink": "external_reshape",
+    "change_slope": "slope_angle_change",         # v0.1.198
     "geometry_cleanup": "geometry_cleanup",
     "add_dist": "load_set",
     "add_line": "load_set",
@@ -162,11 +163,8 @@ UI_ONLY: dict[str, str] = {
 }
 
 PENDING: dict[str, str] = {
-    # Awaiting the owner: ``transforms.change_slope_angle`` ROTATES THE
-    # WHOLE External boundary about the pivot instead of the slope face
-    # (reported in v0.1.196), so wrapping it would hand an agent a tool
-    # that moves the model in a way nobody asked for.
-    "change_slope": "owner",
+    # ``change_slope`` waited here for the owner (v0.1.196: the old
+    # function rotated the WHOLE External); rewritten in v0.1.198.
     # F3 — groundwater FE, statistics, back analysis, optimisation.
     **{k: "F3" for k in (
         "wp_grid", "gw_hydraulic", "gen_mesh", "reset_mesh", "gw_bcs",
@@ -177,7 +175,7 @@ PENDING: dict[str, str] = {
 
 #: The most actions allowed to be pending. Lower it with every phase;
 #: never raise it (a raise needs its reason in a changelog).
-PENDING_CEILING = 15
+PENDING_CEILING = 14
 
 
 def coverage() -> dict:

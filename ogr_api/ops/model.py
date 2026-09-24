@@ -829,6 +829,50 @@ def external_reshape(ws, project_id: Optional[str] = None,
     return ws.mutate(project_id, "Reshape External boundary", edit)
 
 
+@operation("slope_angle_change", toolset="model", mutates=True)
+def slope_angle_change(ws, toe: Any, crest: Any,
+                       project_id: Optional[str] = None,
+                       change_deg: Optional[float] = None,
+                       target_deg: Optional[float] = None,
+                       mode: str = "horizontal",
+                       keep_benches: Optional[bool] = None) -> dict:
+    """Change the overall angle of the slope face between two External
+    vertices (the toe and the crest); only the face moves."""
+    from ogr_core.geometry.slope_angle import MODES, change_slope_angle
+
+    if mode not in MODES:
+        raise unknown("mode", mode, MODES)
+    kwargs = {"mode": mode}
+    for key, val in (("change_deg", change_deg), ("target_deg", target_deg)):
+        if val is not None:
+            kwargs[key] = coerce_value(val, float, key)
+    if keep_benches is not None:
+        kwargs["keep_benches"] = coerce_value(keep_benches, bool,
+                                              "keep_benches")
+
+    def _ref(v, where):
+        if isinstance(v, bool):
+            raise InvalidArgument(f"{where} is a vertex index or [x, y].")
+        if isinstance(v, int):
+            return v
+        return tuple(point(v, where))
+
+    toe_ref, crest_ref = _ref(toe, "toe"), _ref(crest, "crest")
+
+    def edit(project):
+        try:
+            out = change_slope_angle(project, toe_ref, crest_ref, **kwargs)
+        except ValueError as exc:
+            raise InvalidArgument(str(exc)) from None
+        ext = project.external_boundary()
+        return {**{k: v for k, v in out.items() if k != "face"},
+                "face_vertices": out["face"],
+                "external": boundary_info(ext, with_vertices=True),
+                "regions": regions_info(project)}
+
+    return ws.mutate(project_id, "Change slope angle", edit)
+
+
 @operation("geometry_cleanup", toolset="model", mutates=True)
 def geometry_cleanup(ws, project_id: Optional[str] = None,
                      apply: bool = False,

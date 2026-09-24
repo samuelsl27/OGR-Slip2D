@@ -126,6 +126,9 @@ EXAMPLES = {
     "external_reshape": lambda p: {"points_xy": [[50, 35], [60, 37],
                                                  [70, 35]]},
     "geometry_cleanup": lambda p: {"apply": True},
+    # v0.1.198 — the face (30, 25) -> (50, 35) of the setup model, 26.6°.
+    "slope_angle_change": lambda p: {"toe": [30, 25], "crest": [50, 35],
+                                     "target_deg": 20.0},
     "dxf_import": lambda p: {},
     "properties_import": lambda p: {},
 }

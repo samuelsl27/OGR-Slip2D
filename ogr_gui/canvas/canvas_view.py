@@ -212,6 +212,10 @@ class CanvasView(QGraphicsView):
     # SlipCircle, which lives in ogr_slip2d and which this package has
     # never imported.
     three_points_picked = Signal(float, float, float, float, float, float)
+    # v0.1.198 — Change Slope Angle: (toe, crest) as INDICES of External
+    # vertices, not coordinates: the feature works on the boundary's own
+    # vertices, and an index cannot be a point that is not one.
+    slope_vertices_picked = Signal(int, int)
     # v0.1.8 — load right-click action (action, kind, index)
     load_action_requested = Signal(str, str, int)
     # v0.1.9 — emitted on Move Boundary drag release (boundary_idx, dx, dy)
@@ -282,6 +286,9 @@ class CanvasView(QGraphicsView):
 
         # v0.1.2 — interactive drawing state
         self._draw_points: list[tuple[float, float]] = []
+        # v0.1.198 — the toe picked by the first click of Change Slope
+        # Angle; only trusted while ``_draw_points`` still holds its dot.
+        self._slope_toe_idx: Optional[int] = None
         self._draw_preview_items: list = []
         # Vertex dragging
         self._dragging_vertex: Optional[tuple[int, int]] = None  # (boundary_idx, vertex_idx)
@@ -1661,7 +1668,28 @@ class CanvasView(QGraphicsView):
                     best = (i, end_name)
         return best if best_d <= tol else None
 
+    def _pick_external_vertex(self, x: float, y: float,
+                              tolerance_px: float = 10.0) -> Optional[int]:
+        """Index of the External vertex nearest (x, y), within a tolerance
+        in PIXELS (AGENTS.md: screen tolerances do not depend on the zoom),
+        or None. v0.1.198, for Change Slope Angle."""
+        ext = self.project.external_boundary() if self.project else None
+        if ext is None:
+            return None
+        px_per_unit = abs(self.transform().m11()) or 1.0
+        tol = tolerance_px / px_per_unit
+        best, best_d = None, float("inf")
+        for i, v in enumerate(ext.polyline.vertices):
+            d = math.hypot(v.x - x, v.y - y)
+            if d < best_d:
+                best, best_d = i, d
+        return best if best_d <= tol else None
 
+    # v0.1.198 — this ``def`` line was missing: the body below sat after
+    # the ``return`` of ``_pick_support_endpoint`` as dead code, and every
+    # click in Insert Vertex mode raised AttributeError. It was already so
+    # in the first public release (v0.1.59).
+    def _pick_edge(self, x: float, y: float, tolerance_px: float = 8.0):
         """Return (boundary_idx, edge_start_vertex_idx) for the nearest edge."""
         if self.project is None:
             return None
@@ -1879,12 +1907,45 @@ class CanvasView(QGraphicsView):
                 event.accept()
                 return
 
+            # v0.1.198 — Change Slope Angle: the toe, then the crest, each
+            # a VERTEX of the External boundary (not a free point, not a
+            # vertex of another boundary). A click near none is refused and
+            # keeps the mode; a repeat of the toe is ignored.
+            if mode == ToolMode.CHANGE_SLOPE_ANGLE:
+                scene_pt = self.mapToScene(event.position().toPoint())
+                vi = self._pick_external_vertex(scene_pt.x(), scene_pt.y())
+                if vi is None:
+                    self.status_message.emit(tr(
+                        "Click a vertex of the External boundary."))
+                    event.accept()
+                    return
+                v = self.project.external_boundary().polyline.vertices[vi]
+                if not self._draw_points or self._slope_toe_idx is None:
+                    self._slope_toe_idx = vi
+                    self._draw_points = [(v.x, v.y)]
+                    self._update_draw_preview()
+                    self.status_message.emit(tr(
+                        "Toe picked; now click the crest vertex."))
+                    event.accept()
+                    return
+                toe = self._slope_toe_idx
+                if vi == toe:
+                    event.accept()
+                    return
+                # Clear BEFORE emitting, as the other pick modes do: the
+                # slot rebuilds the scene.
+                self._slope_toe_idx = None
+                self._draw_points.clear()
+                self._update_draw_preview()
+                self.slope_vertices_picked.emit(toe, vi)
+                event.accept()
+                return
+
             # one-click hit-test
             if mode in (ToolMode.DELETE_BOUNDARY, ToolMode.COPY_BOUNDARY,
                         ToolMode.CONVERT_BOUNDARY,
                         ToolMode.SCALE_BOUNDARY,
-                        ToolMode.ROTATE_BOUNDARY, ToolMode.EXPAND_SHRINK,
-                        ToolMode.CHANGE_SLOPE_ANGLE):
+                        ToolMode.ROTATE_BOUNDARY, ToolMode.EXPAND_SHRINK):
                 scene_pt = self.mapToScene(event.position().toPoint())
                 idx = self._pick_boundary(scene_pt.x(), scene_pt.y())
                 if idx >= 0:

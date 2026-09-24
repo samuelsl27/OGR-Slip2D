@@ -10,7 +10,6 @@ from ogr_core.geometry import (
     BoundaryType,
     Polyline,
     Vertex,
-    change_slope_angle,
     convert_boundary,
     offset_polygon,
     rotate,
@@ -143,15 +142,6 @@ class TestConvertBoundary:
 
 
 # ======================================================================
-class TestChangeSlopeAngle:
-    def test_change_slope_rotates_geometry(self):
-        # Simple slope: (0,0), (10,0), (10,5), (5,5), (0,0)  — a 45° face
-        pl = Polyline(
-            vertices=[Vertex(0, 0), Vertex(10, 0), Vertex(10, 5), Vertex(5, 5)],
-            closed=True,
-        )
-        b = Boundary(polyline=pl, btype=BoundaryType.EXTERNAL)
-        # Pivot at (5, 5) — the top of the slope face
-        new_b = change_slope_angle(b, Vertex(5, 5), 30.0)
-        # All vertices should still exist
-        assert len(new_b.vertices) == len(b.vertices)
+# v0.1.198 — TestChangeSlopeAngle is gone with the function it tested (it
+# only checked the vertex count survived a rotation of the whole boundary);
+# the rewrite is tested against closed forms in test_slope_angle_v1198.py.

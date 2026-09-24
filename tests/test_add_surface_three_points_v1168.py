@@ -97,14 +97,17 @@ _NEVER_ENTERED = {
     # ellos esas ramas `elif` son inalcanzables. La función en sí se
     # alcanza por otro camino: sus acciones están en el menú.
     "SCALE_BOUNDARY", "ROTATE_BOUNDARY", "EXPAND_SHRINK",
-    "CHANGE_SLOPE_ANGLE",
+    # v0.1.198 — CHANGE_SLOPE_ANGLE left this set: Change Slope Angle was
+    # rewritten and now enters its mode to pick the toe and the crest.
 }
 
 # Los textos de estado de ToolMode NO los ve el escáner AST de
 # test_i18n_coverage_v141, porque `set_tool_mode` llama a `tr()` con una
 # VARIABLE. El techo de abajo es lo único que los mide.
 _HINTS_TOTAL = 34
-_HINTS_WITHOUT_SPANISH = 33
+# v0.1.198 — 33 -> 32: the CHANGE_SLOPE_ANGLE hint was rewritten with the
+# feature and got its Spanish.
+_HINTS_WITHOUT_SPANISH = 32
 
 
 def _window():

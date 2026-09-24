@@ -1,6 +1,6 @@
 # Herramientas
 
-Las 55 herramientas del perfil `full`. Las marcadas con **C** están también
+Las 56 herramientas del perfil `full`. Las marcadas con **C** están también
 en el perfil `compact`. Los parámetros y sus descripciones exactas los
 publica el propio servidor (`tools/list`); aquí va para qué sirve cada una.
 
@@ -32,6 +32,7 @@ publica el propio servidor (`tools/list`); aquí va para qué sirve cada una.
 | `material_delete` | | Borrar un material (se niega mientras lo usen regiones). |
 | `material_assign` | | Asignar un material a la región que contiene un punto. |
 | `external_reshape` | | Expandir o encoger el contorno exterior: desplazamiento paralelo, o una polilínea de relleno o excavación con los dos extremos sobre él. |
+| `slope_angle_change` | | Cambiar el ángulo global de la cara del talud entre dos vértices del exterior (pie y coronación): solo se mueve la cara, proyectando en horizontal (por defecto), en vertical o girando; `keep_benches` conserva el ancho de las bermas. Los contornos que acaban en la cara la siguen; soportes y cargas no se mueven (se avisa). |
 | `geometry_cleanup` | | Informe de vértices duplicados, autointersecciones y cruces entre contornos; con `apply`, los corrige. |
 
 `boundary_edit` también copia, escala, rota y simplifica. Una lente de material cerrada dentro del modelo se rechaza: el constructor de regiones no la resuelve (reportado en v0.1.196).

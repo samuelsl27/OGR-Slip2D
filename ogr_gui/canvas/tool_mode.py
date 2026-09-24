@@ -182,7 +182,7 @@ class ToolMode(Enum):
             ToolMode.SCALE_BOUNDARY: "Click a boundary to scale, then enter scale factor, Esc to exit",
             ToolMode.ROTATE_BOUNDARY: "Click a boundary, then pivot point, then target angle, Esc to exit",
             ToolMode.EXPAND_SHRINK: "Click the External boundary to expand/shrink, Esc to exit",
-            ToolMode.CHANGE_SLOPE_ANGLE: "Click the External boundary, then pivot point, Esc to exit",
+            ToolMode.CHANGE_SLOPE_ANGLE: "Click the toe vertex, then the crest vertex of the External boundary. Esc to cancel.",
             ToolMode.ADD_DISTRIBUTED_LOAD: "Click start and end points on a boundary",
             ToolMode.ADD_LINE_LOAD: "Click a point to place the line load",
             ToolMode.PICK_GRID_RECT: "Click two opposite corners of the slip-circle search grid",
