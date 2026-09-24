@@ -94,8 +94,17 @@ def _not_screened():
 
 
 # ----------------------------------------------------------------------
-def _slope(kv: float = 0.0, kh: float = 0.0):
-    """A plain 2:1 homogeneous slope that all nine methods can solve."""
+def _slope():
+    """A plain 2:1 homogeneous slope that all nine methods can solve.
+
+    v0.1.193 (D174) -- it took ``kv`` and ``kh`` until this version and wrote
+    them to ``p.settings.seismic``, which holds the Ky and Newmark options and
+    is read by no method: the earthquake lives on ``p.seismic``. No case ever
+    passed them, so the branch was dead; it is gone rather than corrected,
+    because a parameter nobody passes is the kind of setting that does
+    nothing (rule 7). The ``(1 - kv)`` sweep of ``TestWhatCannotDiffer`` is
+    arithmetic on the slices and never went through here.
+    """
     from ogr_core.geometry import Boundary, BoundaryType, Polyline, Vertex
     from ogr_core.materials import Material, MohrCoulomb
     from ogr_core.project import Project
@@ -111,10 +120,6 @@ def _slope(kv: float = 0.0, kh: float = 0.0):
                             sat_unit_weight=GAMMA,
                             strength=MohrCoulomb(cohesion=12.0,
                                                  friction_angle=28.0))]
-    if kv or kh:
-        p.settings.seismic.enabled = True
-        p.settings.seismic.kh = kh
-        p.settings.seismic.kv = kv
     return p
 
 
@@ -123,18 +128,18 @@ def _circle():
     return SlipCircle(centre_x=55.0, centre_y=62.0, radius=48.0)
 
 
-def _solve(method_id: str, kv: float = 0.0):
-    """One converged result per (method, kv), shared across cases.
+def _solve(method_id: str):
+    """One converged result per method, shared across cases.
 
     Nine methods times a dozen cases would pay for the same arithmetic
     over and over; a file that did exactly that went from 48 s to 12 s
     by sharing its geometry.
     """
-    key = (method_id, kv)
+    key = method_id
     if key not in _CACHE:
         from ogr_slip2d.methods import get_method
         from ogr_slip2d.slicer import slice_surface
-        p = _slope(kv=kv)
+        p = _slope()
         surf = _circle()
         sl = slice_surface(p, surf, num_slices=25)
         assert sl is not None, key

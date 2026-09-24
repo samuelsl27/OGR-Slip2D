@@ -113,9 +113,11 @@ def _project(envelope: str, kv: float = 0.0, kh: float = 0.0,
     """A dry 2:1 slope. The earthquake goes on ``p.seismic``, which is what
     the methods read. NOT on ``p.settings.seismic``: that object holds the
     Ky and Newmark options and has no ``kh``, ``kv`` or ``enabled``, so
-    writing them there creates attributes nobody reads — the helper of
-    ``test_slide_sign_by_method_v1189.py`` does exactly that, harmlessly
-    only because it is never called with an earthquake."""
+    writing them there creates attributes nobody reads. The helper of
+    ``test_slide_sign_by_method_v1189.py`` did exactly that until v0.1.193,
+    harmlessly only because it was never called with an earthquake; it lost
+    that dead branch in D174, and ``verificar_cierres.d174`` checks by AST
+    that no test of this package writes those three names there again."""
     from ogr_core.geometry import Boundary, BoundaryType, Polyline, Vertex
     from ogr_core.materials import Material
     from ogr_core.project import Project

@@ -11,7 +11,7 @@
 Estabilidad de taludes, flujo subterráneo y mecánica de rocas — en Python,
 legible, testeado y libre.
 
-[![tests](https://img.shields.io/badge/tests-3188%20passing-brightgreen)](#tests)
+[![tests](https://img.shields.io/badge/tests-4233%20passing-brightgreen)](#tests)
 [![licence](https://img.shields.io/badge/licencia-AGPL--3.0--or--later-blue)](LICENSE)
 [![python](https://img.shields.io/badge/python-3.11%2B-blue)](#instalación)
 [![estado](https://img.shields.io/badge/estado-en%20desarrollo%20activo-orange)](#hoja-de-ruta)
@@ -206,10 +206,11 @@ Un patrón que no case con nada sale con código 2 en lugar de anunciar un
 éxito vacío, y una ejecución filtrada avisa con `FILTERED RUN`: no vale
 como evidencia para publicar una versión.
 
-Unas **71 500 líneas** de implementación y **61 800 de tests**, **3188 de
-ellos en verde**, sin fallos conocidos. La suite completa tarda entre 5 y
-7½ minutos, y esa horquilla es lo honesto: el mismo código, sin tocar nada,
-ha dado 5:55, 6:19, 6:41 y 7:22 en la misma máquina.
+Unas **79 000 líneas** de implementación y **88 300 de tests**, **4233 de
+ellos en verde**, sin fallos conocidos. La suite completa tarda unos 25
+minutos en la misma máquina (25:55 en v0.1.193); el reloj se mueve decenas de
+segundos entre corridas idénticas, así que es una comprobación de que la suite
+termina, no una medida.
 
 ---
 

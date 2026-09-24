@@ -281,14 +281,25 @@ def _flag_from_pass():
 
 
 # ----------------------------------------------------------------------
-def _reinforced(layers=4, capacity=1000.0):
-    """The reinforced circle of ``test_relaxed_thrust_v1130`` at the capacity
-    that falls OFF the bracket.
+def _reinforced(capacity, layers=4, phi=20.0, cohesion=8.0):
+    """The reinforced circle of ``test_relaxed_thrust_v1130``, with the soil
+    as a parameter so that one geometry opens both doors.
 
-    Borrowed rather than re-derived: at 200 kN/m that fixture leaves by the
-    bracketed exit and at 1000 by the reserve one, which is exactly the pair
-    this file needs to ask the same question of both doors, and it reaches
-    the reserve exit under SPENCER, where the wedge above cannot.
+    Borrowed rather than re-derived: with its default soil at 200 kN/m that
+    fixture leaves by the bracketed exit, and with the cohesive soil of its
+    ``_VETO`` (phi = 0, c = 30 kPa) at the same 200 kN/m by the one that
+    falls off the bracket. That is exactly the pair this file needs to ask
+    the same question of both doors, and it reaches the second exit under
+    SPENCER, where the wedge above cannot.
+
+    v0.1.193 (D185) -- the second door was the default soil at 1000 kN/m
+    until this version, and ``capacity`` defaulted to it. At 1000 the root
+    exists and was out of the solver's reach; the partner's retry reaches
+    it, so 1000 now leaves by the BRACKETED exit and both doors came back as
+    one. More capacity is no way back: on this same geometry every capacity
+    from 1000 to 3300 kN/m brackets, and from 3350 on every sampled lambda
+    diverges, which is a third door and not one this file asks about. Hence
+    the soil, for the reason ``_VETO`` gives, and no default capacity.
 
     Its crest is at x = 50 and NOT at the 38 of the wedge above: same relief,
     a flatter face. Copying the wedge's crest by accident moved the fixture
@@ -311,8 +322,8 @@ def _reinforced(layers=4, capacity=1000.0):
     p = Project("thrust-flag-circle")
     p.add_boundary(Boundary(polyline=ext, btype=BoundaryType.EXTERNAL))
     p.materials = [Material(name="S", unit_weight=18,
-                            strength=MohrCoulomb(cohesion=8.0,
-                                                 friction_angle=20.0))]
+                            strength=MohrCoulomb(cohesion=cohesion,
+                                                 friction_angle=phi))]
     p.support_types = [UserDefined(out_of_plane_spacing=1.0,
                                    points=[(0.0, capacity)])]
     p.supports = [SupportInstance(
@@ -324,14 +335,14 @@ def _reinforced(layers=4, capacity=1000.0):
     return p
 
 
-def _solve_circle(method_id, capacity):
+def _solve_circle(method_id, capacity, phi=20.0, cohesion=8.0):
     from ogr_slip2d.methods.base import method_registry
     from ogr_slip2d.slicer import slice_surface
     from ogr_slip2d.surface import SlipCircle
-    clave = ("c", method_id, capacity)
+    clave = ("c", method_id, capacity, phi, cohesion)
     if clave in _CACHE:
         return _CACHE[clave]
-    project = _reinforced(capacity=capacity)
+    project = _reinforced(capacity, phi=phi, cohesion=cohesion)
     surface = SlipCircle(centre_x=38.0, centre_y=26.0, radius=20.0)
     sl = slice_surface(project, surface, num_slices=25)
     clase = method_registry()[method_id]
@@ -352,8 +363,13 @@ def _solve_circle(method_id, capacity):
 
 
 _BOTH = ("spencer", "gle_morgenstern_price")
-#: 200 brackets, 1000 falls back — the two doors of the same method.
-_CAPS = (200.0, 1000.0)
+#: The two doors of the same method, as (capacity, phi, cohesion): the
+#: first brackets, the second falls off the bracket with a state. Until
+#: v0.1.193 the second was the same soil at 1000 kN; there the partner's
+#: retry (D185) reaches the root that capacity always had, so the second
+#: door is now the cohesive soil of ``test_relaxed_thrust_v1130._VETO``,
+#: where F_m does not depend on lambda and there is no root to reach.
+_CAPS = ((200.0, 20.0, 8.0), (200.0, 0.0, 30.0))
 
 
 # ======================================================================
@@ -515,7 +531,7 @@ class TestTheReserveExitPublishesTheDetail:
         comprobadas = 0
         for mid in _BOTH:
             for cap in _CAPS:
-                res, _sys = _solve_circle(mid, cap)
+                res, _sys = _solve_circle(mid, *cap)
                 d = res.details or {}
                 m = d.get("thrust_margin")
                 if m is None:
@@ -542,7 +558,7 @@ class TestTheTwoExitsAgreeOnTheSameSurface:
         vistos = set()
         for mid in _BOTH:
             for cap in _CAPS:
-                res, _sys = _solve_circle(mid, cap)
+                res, _sys = _solve_circle(mid, *cap)
                 d = res.details or {}
                 vistos.add(bool(d.get("lambda_search_fell_back")))
                 assert res.admissible == d["thrust_admissible"], (

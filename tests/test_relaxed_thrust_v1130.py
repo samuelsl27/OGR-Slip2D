@@ -66,12 +66,16 @@ _NO_BRACKET = "-bracket"
 
 
 # ----------------------------------------------------------------------
-def _project(layers=_LAYERS, capacity=_CAPACITY):
+def _project(layers=_LAYERS, capacity=_CAPACITY, phi=20.0, cohesion=8.0):
     """A homogeneous slope carrying ``layers`` passive supports.
 
     Same slope as ``test_support_active_passive_v1115``: 12 m of relief on a
     30 -> 50 face over a 10 m foundation. The reinforcement is what drives
     the inter-slice faces into net tension, which is the state under test.
+
+    ``phi`` and ``cohesion`` are parameters since v0.1.193 (D185), with the
+    values every case here used before as defaults, so that no case but the
+    veto builds anything different.
     """
     from ogr_core.geometry import Boundary, BoundaryType, Polyline, Vertex
     from ogr_core.materials import Material, MohrCoulomb
@@ -87,8 +91,8 @@ def _project(layers=_LAYERS, capacity=_CAPACITY):
     p = Project("relaxed-thrust")
     p.add_boundary(Boundary(polyline=ext, btype=BoundaryType.EXTERNAL))
     p.materials = [Material(name="S", unit_weight=18,
-                            strength=MohrCoulomb(cohesion=8.0,
-                                                 friction_angle=20.0))]
+                            strength=MohrCoulomb(cohesion=cohesion,
+                                                 friction_angle=phi))]
     # ``UserDefined`` with one table point, so the capacity is a datum of the
     # test and not the outcome of a start-up calculation — the same reason
     # verification problem 85 is modelled that way.
@@ -201,12 +205,32 @@ class TestTheNoBracketBranchIsStillAVeto:
     would have claimed a fix for rows the change cannot reach.
     """
 
-    #: Same four layers, five times the capacity. NOT ``layers=1`` with a
-    #: huge capacity, which looks like the obvious knob and is a dead one:
-    #: the lone support sits at y = 2 and the circle never crosses it, so
-    #: the factor comes out 1.5496 for 1000 kN and for 20000 alike. A
+    #: Same four layers, twenty-five times the capacity. NOT ``layers=1``
+    #: with a huge capacity, which looks like the obvious knob and is a dead
+    #: one: the lone support sits at y = 2 and the circle never crosses it,
+    #: so the factor comes out 1.5496 for 1000 kN and for 20000 alike. A
     #: fixture whose parameter moves nothing would have asserted nothing.
-    _VETO = dict(layers=4, capacity=1000.0)
+    #:
+    #: v0.1.193 (D185) -- until this version the veto was this same slope
+    #: at 1000 kN, and at 1000 the root was THERE and the solver could not
+    #: reach it: the force branch left through the inadmissible door at the
+    #: lambdas around it, and the partner's retry now finds it (Spencer at
+    #: lambda 0.5935 with 16.1284, GLE at 0.8831 with 16.1280 -- the two
+    #: agree, as they must on a circle). So 1000 stopped exercising the
+    #: veto, which is a statement about the SOLVER and not about the rule
+    #: this class protects. Swept with the retry on: 1000 to 3300 kN
+    #: bracket, and from 3350 on every sampled lambda diverges -- a
+    #: DIFFERENT door ("all sampled λ diverged"). On this slope every
+    #: no-bracket answer had been an unreachable root.
+    #:
+    #: A cohesive soil reaches the veto for a reason the retry cannot
+    #: touch. With phi = 0 the moment factor does not depend on the normals,
+    #: so F_m is the same at every lambda, and the force branch has to CROSS
+    #: that constant or there is no root -- verification problem 85 lives on
+    #: exactly that, and this is its mechanism at the scale of a fixture.
+    #: Measured at 200 kN with c = 30 kPa: both methods leave by the
+    #: no-bracket branch, with a state, the same door 1000 kN used to open.
+    _VETO = dict(layers=4, capacity=200.0, phi=0.0, cohesion=30.0)
 
     def test_a_huge_capacity_falls_off_the_other_side(self):
         p = _project(**self._VETO)

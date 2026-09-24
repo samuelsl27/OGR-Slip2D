@@ -541,6 +541,68 @@ CYCLE_RUN = 10
 #: the branch solver is v0.1.180 bit for bit.
 BRANCH_CYCLE_RESCUE = True
 
+#: v0.1.193 (D185) -- the PARTNER'S RETRY of a force branch that came back
+#: with no state at all.
+#:
+#: WHAT IT IS FOR. On the published arc of verification problem 059 (the
+#: circle of figure 59.2 with x from 0 to 12.583, grouted tieback included)
+#: Spencer bracketed its root until v0.1.177, at lambda 0.8836 with
+#: F = 0.565573. v0.1.178 (D144) corrected the moment arm of the support in
+#: the circular moment -- a correction of the PHYSICS, and measured as one:
+#: F_f(lambda) came out bit for bit identical and F_m(lambda) moved down by
+#: 1.6 to 2.1 %. The root did not disappear, it MOVED, to lambda 1.3564, and
+#: there the force branch has never converged from ``initial_fos`` = 1.0:
+#: from 1.0, and even from 0.5570 -- right next to the answer -- the damped
+#: update oscillates away (0.557, 0.610, 0.515, 0.648, 0.717...) and leaves
+#: through the inadmissible door of :func:`solve_branch` before pass 30. That
+#: is before ``STALL_PATIENCE`` arms the rescue and before :data:`CYCLE_RUN`
+#: growing passes can, so the sample was lost, the outer search saw no
+#: bracket, and the answer came from the reserve: 0.559420 at lambda 1.0
+#: from v0.1.178 to v0.1.180, and 0.558356 at lambda 1.156 from v0.1.181 to
+#: v0.1.192, 0.21 % away from the root. The bisection is archived by the
+#: bank tool ``biseccion_arco_059.py``.
+#:
+#: WHAT IT DOES. When the force branch at a lambda returns ``None`` and the
+#: moment branch at the SAME lambda converged, the force branch is solved
+#: once more, starting from the moment branch's F and with the relaxation of
+#: :data:`RESCUE_OMEGA_MIN` armed from the first pass
+#: (``rescue_gate=1``), and the new state is taken only if it CONVERGED.
+#: Measured on that arc on a grid of 0.025: without the retry the force
+#: branch is lost at every lambda from 1.175 up; the retry recovers every one
+#: of them up to 1.55, in 42 to 106 passes, and from 1.575 on the moment
+#: branch does not converge either, so there is no partner to start from.
+#: The search then brackets 0.557188 at lambda 1.3564.
+#:
+#: WHY THE MOMENT BRANCH'S F. At a root F_f = F_m, so where the two branches
+#: cross, the partner's F IS the answer the lost branch is after; and it is
+#: the only start value available WITHOUT reading another lambda. A start
+#: borrowed from a neighbouring lambda would converge just as well and would
+#: make ``states(lam)`` depend on the order the lambdas were asked in -- the
+#: purity the cache of :data:`LAMBDA_STATE_CACHE` is an identity because of.
+#: This start keeps ``states`` a pure function of the system and lambda.
+#:
+#: WHAT IT CANNOT CHANGE, and this is the whole safety argument. It runs only
+#: where ``solve_branch`` returned ``None``, so a branch that converges, or
+#: that ends with a state that says why it stopped, is never touched and
+#: cannot move by a bit. And it can only ADMIT: a retry that does not
+#: converge leaves the ``None`` exactly where it was. What it admits is
+#: accepted by the rescue's own test -- both residuals, F and the thrust,
+#: under the tolerance on two consecutive passes -- which is the stricter of
+#: the two acceptances and the one D145 did not have to tighten.
+#:
+#: WHAT IT DOES NOT DO. The MOMENT branch is not retried from the force
+#: branch's F, although the argument is symmetric: no case here needs it,
+#: and a symmetric branch with no witness is a switch nobody can show moves
+#: anything. The retried pair still has to pass :func:`thrust_is_admissible`
+#: like every other, and on the 059 arc it does not: the root it brackets is
+#: as inadmissible as the reserve was, which is physics and not this switch.
+#:
+#: Read at call time by :meth:`GLESystem._solve_states`, NOT by
+#: :func:`solve_branch`, which is why it lives in
+#: :data:`_STATES_SWITCH_NAMES` and not in :data:`_BRANCH_SWITCH_NAMES`. Off,
+#: ``states`` is v0.1.192 bit for bit.
+BRANCH_PARTNER_RETRY = True
+
 
 # ----------------------------------------------------------------------
 def branch_budget(max_iterations: int) -> int:
@@ -729,6 +791,11 @@ class BranchState:
     boundary_x: list[float]    # X at the n+1 boundaries
     abandoned: str = ""        # why the iteration was cut, or ""
     rescued: bool = False      # converged only through the relaxation rescue
+    # v0.1.193 (D185) -- True on a force state that exists only because the
+    # branch was solved again from its partner's F; see
+    # ``BRANCH_PARTNER_RETRY``. Such a state is also ``rescued``, since the
+    # retry accepts by the rescue's test; this says which door it came in by.
+    retried: bool = False
 
 
 # ----------------------------------------------------------------------
@@ -1778,15 +1845,24 @@ _BRANCH_SWITCH_NAMES = (
     "THRUST_SCALE_LIMIT",
 )
 
+#: v0.1.193 (D185) -- the module switches :meth:`GLESystem._solve_states`
+#: reads at call time, which are inputs of a cached pair exactly as the ones
+#: above are. A SECOND list and not a longer first one, because the first one
+#: is checked BY AST against the body of :func:`solve_branch` and has to stay
+#: equal to it; this one is checked the same way against the body of
+#: ``_solve_states`` (``test_partner_retry_v1193``).
+_STATES_SWITCH_NAMES = ("BRANCH_PARTNER_RETRY",)
+
 
 def _branch_switches() -> tuple:
-    """The value of every name in :data:`_BRANCH_SWITCH_NAMES`, in order.
+    """The value of every name in :data:`_BRANCH_SWITCH_NAMES` and
+    :data:`_STATES_SWITCH_NAMES`, in order.
 
     Read through ``globals()`` and not captured, because the whole point of
     those switches is that they are read at CALL time.
     """
     g = globals()
-    return tuple(g[n] for n in _BRANCH_SWITCH_NAMES)
+    return tuple(g[n] for n in _BRANCH_SWITCH_NAMES + _STATES_SWITCH_NAMES)
 
 
 # ======================================================================
@@ -1809,7 +1885,7 @@ class GLESystem:
                  "n_thrust_rejected", "thrust_rejected_pairs",
                  "n_passes_exhausted",
                  "n_thrust_overflow", "n_stalled", "n_rescued",
-                 "n_inadmissible",
+                 "n_inadmissible", "n_retried",
                  "_moment_fos", "_driving",
                  "_state_cache", "_state_cache_sig")
 
@@ -1946,6 +2022,13 @@ class GLESystem:
         #: three causes into a counter that sees all three — the lesson
         #: ``REASON_LAMBDA_NOT_CLOSED`` left in v0.1.180.
         self.n_inadmissible = 0
+        #: v0.1.193 (D185) -- how many lambdas came back as a usable pair only
+        #: because the force branch was solved again from its partner's F.
+        #: They are ALSO counted in ``n_rescued``, since the retry accepts by
+        #: the rescue's test; this one says which door they came in by, and
+        #: it is where a retry that never fires would show (rule 7). See
+        #: :data:`BRANCH_PARTNER_RETRY`.
+        self.n_retried = 0
         self._driving = None
         #: v0.1.186 (D159) -- lambda -> ``(force, moment)``, and the
         #: switch signature those pairs were solved under. Eager and not
@@ -2072,6 +2155,18 @@ class GLESystem:
         moment = solve_branch(self.rows, lam_b, self._moment_fos,
                               self.tolerance, self.initial_fos,
                               max_passes=self.max_passes)
+        # v0.1.193 (D185) -- the partner's retry, only where the force branch
+        # left no state at all and the moment branch converged at this same
+        # lambda. Taken only if it converges, so it can admit a lost lambda
+        # and cannot change one that was not lost. See BRANCH_PARTNER_RETRY.
+        if (BRANCH_PARTNER_RETRY and force is None and moment is not None
+                and moment.converged):
+            again = solve_branch(self.rows, lam_b, None,
+                                 self.tolerance, moment.fos,
+                                 max_passes=self.max_passes, rescue_gate=1)
+            if again is not None and again.converged:
+                again.retried = True
+                force = again
         return force, moment
 
     def states(self, lam: float):
@@ -2172,6 +2267,8 @@ class GLESystem:
             return None, None
         if force.rescued or moment.rescued:
             self.n_rescued += 1
+        if force.retried:
+            self.n_retried += 1
         if not thrust_is_admissible(force):
             self.n_thrust_rejected += 1
             # v0.1.182 (D149) — kept rather than discarded. Recorded BEFORE

@@ -564,6 +564,12 @@ class TestTheLabelDescribesTheEngineThatExists:
         ``solve_branch`` calls of the class, wherever in it they live, pass
         it. Strictly stronger than the count it replaces, and immune to the
         next rename.
+
+        v0.1.193 (D185) -- three calls, not two: the partner's retry of a
+        force branch lost through the inadmissible door is a third branch
+        solve, and it passes the same budget. The count stays EXACT on
+        purpose, so that the next call added to this class has to come
+        through here and be checked, as this one was.
         """
         tree = _tree("ogr_slip2d/interslice.py")
         top = {n.name: n for n in tree.body
@@ -573,8 +579,8 @@ class TestTheLabelDescribesTheEngineThatExists:
         llamadas = [n for n in ast.walk(gle)
                     if isinstance(n, ast.Call)
                     and getattr(n.func, "id", None) == "solve_branch"]
-        assert len(llamadas) == 2, (
-            "%d calls to ``solve_branch`` in GLESystem, not 2" % len(llamadas))
+        assert len(llamadas) == 3, (
+            "%d calls to ``solve_branch`` in GLESystem, not 3" % len(llamadas))
         for c in llamadas:
             pasado = [k for k in c.keywords if k.arg == "max_passes"]
             assert (len(pasado) == 1
