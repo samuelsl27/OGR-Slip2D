@@ -48,6 +48,20 @@ def _parse(argv):
                         "run code as you.")
     p.add_argument("--allow-origin", action="append", default=[],
                    help="HTTP: an extra allowed Origin (repeatable)")
+    p.add_argument("--public-url", default=None,
+                   help="HTTP: the https:// address the server is reached "
+                        "at from outside (a tunnel or reverse proxy). Turns "
+                        "on OAuth 2.1, which ChatGPT needs; access is "
+                        "approved with the server's token")
+    p.add_argument("--oauth-redirect", action="append", default=[],
+                   help="With --public-url: an extra allowed OAuth "
+                        "redirect URI (repeatable; ChatGPT's and Claude's "
+                        "are allowed already)")
+    p.add_argument("--tls-cert", default=None,
+                   help="HTTP: serve HTTPS directly with this certificate "
+                        "(PEM)")
+    p.add_argument("--tls-key", default=None,
+                   help="HTTP: the key of --tls-cert (PEM)")
     p.add_argument("--profile", choices=("full", "compact"), default=None,
                    help="Tool set: full (default) or compact for small "
                         "models; also OGR_MCP_PROFILE")
@@ -111,7 +125,39 @@ def main(argv=None) -> int:
     from .security import http_app, is_loopback, new_token
 
     token = None
+    public = None
+    if args.transport != "http" and (args.public_url or args.tls_cert
+                                     or args.tls_key or args.oauth_redirect):
+        print("--public-url, --tls-cert, --tls-key and --oauth-redirect "
+              "are HTTP options.", file=sys.stderr)
+        return 2
     if args.transport == "http":
+        # v0.1.204 (F4b) — the rules of exposure, before anything listens.
+        if bool(args.tls_cert) != bool(args.tls_key):
+            print("--tls-cert and --tls-key go together.", file=sys.stderr)
+            return 2
+        for f in (args.tls_cert, args.tls_key):
+            if f and not Path(f).is_file():
+                print(f"{f} does not exist.", file=sys.stderr)
+                return 2
+        if args.oauth_redirect and not args.public_url:
+            print("--oauth-redirect is only read with --public-url.",
+                  file=sys.stderr)
+            return 2
+        if args.public_url:
+            from urllib.parse import urlparse
+            u = urlparse(args.public_url)
+            if u.scheme not in ("https", "http") or not u.netloc or \
+                    (u.scheme == "http" and not is_loopback(u.hostname or "")):
+                print("--public-url must be an https:// address (http:// "
+                      "only for a loopback address, to test).",
+                      file=sys.stderr)
+                return 2
+            if args.no_auth:
+                print("--no-auth cannot go with --public-url: that would "
+                      "put python_exec on the Internet.", file=sys.stderr)
+                return 2
+            public = args.public_url.rstrip("/")
         token, source = _token(args)
         loop = is_loopback(args.host)
         if args.no_auth and not loop:
@@ -122,6 +168,13 @@ def main(argv=None) -> int:
             print(f"Refusing to listen on {args.host!r} without a token: "
                   f"python_exec lets anyone who reaches this port run code. "
                   f"Give --token-file or OGR_MCP_TOKEN.", file=sys.stderr)
+            return 2
+        if public is not None and token is not None and len(token) < 32:
+            # v0.1.204 (F4b) — on the Internet the token is the only thing
+            # between a stranger and python_exec, and the approval page lets
+            # anyone try it: it has to be long. The generated one has 43.
+            print("--public-url needs a token of at least 32 characters "
+                  "(or none, and one is generated).", file=sys.stderr)
             return 2
         if token is None and not args.no_auth:
             token = new_token()
@@ -153,10 +206,19 @@ def main(argv=None) -> int:
                  backend.window)
     ws = None if backend is not None else Workspace(
         workdir=args.workdir, max_concurrent_jobs=args.max_jobs)
+    oauth = None
+    if public is not None:
+        from .oauth import OwnerApprovalProvider
+        oauth = OwnerApprovalProvider(token, resource=f"{public}/mcp",
+                                      approve_url=f"{public}/approve",
+                                      extra_redirects=args.oauth_redirect)
+        log.info("OAuth on: approve access at %s/approve with the server "
+                 "token", public)
     try:
         server = build_server(ws, profile=profile, toolsets=toolsets,
                               max_wait=args.max_wait or DEFAULT_MAX_WAIT_S,
-                              backend=backend)
+                              backend=backend, oauth=oauth,
+                              public_url=public)
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 2
@@ -169,9 +231,12 @@ def main(argv=None) -> int:
             import uvicorn
             app = http_app(server, host=args.host, port=args.port,
                            token=None if args.no_auth else token,
-                           extra_origins=args.allow_origin)
+                           extra_origins=args.allow_origin,
+                           public_url=public, tls=bool(args.tls_cert))
+            tls = ({"ssl_certfile": args.tls_cert,
+                    "ssl_keyfile": args.tls_key} if args.tls_cert else {})
             uvicorn.run(app, host=args.host, port=args.port,
-                        log_level="warning")
+                        log_level="warning", **tls)
     except KeyboardInterrupt:
         pass
     finally:

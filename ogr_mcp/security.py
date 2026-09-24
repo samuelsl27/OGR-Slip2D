@@ -17,6 +17,11 @@ enforced here and in ``cli.py``:
 * **No token, no network.** A host that is not loopback needs an explicit
   token (``--token``, ``--token-file`` or ``OGR_MCP_TOKEN``); ``--no-auth``
   is accepted only on loopback. ``cli.py`` refuses to start otherwise.
+* **On the Internet, OAuth on top of the token** (spec 008, F4b,
+  v0.1.204): with ``--public-url`` the server is its own OAuth 2.1
+  authorization server (``oauth.py``), and access is handed over only by
+  the owner typing the server's token on its approval page. The public
+  host and origin join the allowed ones; nothing else does.
 
 Author: Samuel Sáez López (UPCT)
 """
@@ -68,22 +73,41 @@ class BearerAuth:
         await self.app(scope, receive, send)
 
 
-def transport_security(host: str, port: int, extra_origins=()):
+def transport_security(host: str, port: int, extra_origins=(),
+                       public_url=None, tls: bool = False):
     """The SDK's Host/Origin protection, configured for this server."""
+    from urllib.parse import urlparse
+
     from mcp.server.transport_security import TransportSecuritySettings
 
+    scheme = "https" if tls else "http"
     hosts = {f"127.0.0.1:{port}", f"localhost:{port}", f"[::1]:{port}",
              f"{host}:{port}"}
-    origins = {f"http://127.0.0.1:{port}", f"http://localhost:{port}",
+    origins = {f"{scheme}://127.0.0.1:{port}", f"{scheme}://localhost:{port}",
                *extra_origins}
+    if public_url:
+        # v0.1.204 (F4b) — behind a tunnel the Host is the public one; it
+        # would get 421 and its Origin 403.
+        u = urlparse(public_url)
+        hosts.add(u.netloc)
+        origins.add(f"{u.scheme}://{u.netloc}")
     return TransportSecuritySettings(enable_dns_rebinding_protection=True,
                                      allowed_hosts=sorted(hosts),
                                      allowed_origins=sorted(origins))
 
 
-def http_app(server, *, host: str, port: int, token, extra_origins=()):
-    """The streamable-HTTP ASGI app, stateless, behind the token."""
+def http_app(server, *, host: str, port: int, token, extra_origins=(),
+             public_url=None, tls: bool = False):
+    """The streamable-HTTP ASGI app, stateless, behind the token.
+
+    With OAuth on (``public_url``, v0.1.204) the SDK guards ``/mcp`` itself
+    — the OAuth metadata and the approval page must stay reachable without
+    a token — and the provider accepts the static token as well.
+    """
     app = server.streamable_http_app(
         json_response=True, stateless_http=True, host=host,
-        transport_security=transport_security(host, port, extra_origins))
+        transport_security=transport_security(host, port, extra_origins,
+                                              public_url, tls))
+    if public_url:
+        return app
     return BearerAuth(app, token) if token else app

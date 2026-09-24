@@ -47,6 +47,48 @@ desactives para `python_exec`.
   `python_exec`, que corre **dentro del proceso de la ventana**. Apágalo
   cuando no lo uses; se apaga solo al cerrar la ventana.
 
+## Exposición a Internet (`--public-url`)
+
+Exponer el servidor a Internet es exponer `python_exec`, es decir, tu
+máquina. Hazlo solo si lo necesitas —ChatGPT no se conecta de otra forma— y
+apágalo al terminar.
+
+- **El servidor no abre túneles por su cuenta.** Pones tú delante un túnel o
+  un proxy que termine el HTTPS (cloudflared, ngrok, Caddy…). El servidor
+  sigue escuchando en `127.0.0.1` y se le dice su dirección pública con
+  `--public-url https://…`. Alternativa: `--tls-cert` y `--tls-key` sirven
+  HTTPS directamente.
+- **Con `--public-url` el servidor es su propio servidor OAuth 2.1**
+  (PKCE S256, registro dinámico, tokens atados al recurso). La
+  autorización se concede **escribiendo el token del servidor** en su página
+  `/approve`: tener el token es ser el dueño.
+  - Los intentos fallidos se retrasan un segundo.
+  - Tras cinco intentos fallidos, la petición queda bloqueada.
+  - Tras veinte en diez minutos, contando todas las peticiones, se para
+    toda aprobación durante un rato. Cualquiera puede abrir una petición
+    nueva, así que un límite solo por petición no acotaría los intentos.
+  - Por eso mismo, con `--public-url` el token tiene que tener al menos 32
+    caracteres. El que genera el servidor tiene 43.
+  - Ninguna otra web puede enmarcar la página (`X-Frame-Options`,
+    `frame-ancestors`), y ni la página ni su procedencia se guardan
+    (`no-store`, `no-referrer`).
+- **Los tokens que emite:**
+  - son opacos y viven en memoria: reiniciar el servidor los revoca todos;
+  - el de acceso dura una hora y el de renovación, treinta días (rota en
+    cada uso).
+- **El token fijo sigue valiendo** como `Authorization: Bearer` para los
+  clientes que mandan cabeceras.
+- **Solo se registran clientes cuyas URI de retorno están en una lista
+  blanca**: las de ChatGPT, la de Claude y las de *loopback*.
+  `--oauth-redirect` añade otras.
+- **No se ofrece CIMD** (documentos de metadatos de cliente por URL):
+  obligaría al servidor a descargar un documento de otro sitio, y el
+  servidor no hace llamadas de red.
+- `--no-auth` nunca va con `--public-url`, y una `--public-url` `http://`
+  solo se acepta en *loopback*, para pruebas.
+- El `Host` y el `Origin` públicos se añaden a los permitidos; cualquier
+  otro sigue recibiendo 421 / 403.
+
 ## Archivos
 
 Las rutas relativas se resuelven contra `--workdir`. Guardar nunca

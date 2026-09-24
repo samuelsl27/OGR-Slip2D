@@ -161,10 +161,36 @@ apagar el puente o cerrar la ventana. Ver [seguridad.md](seguridad.md).
 
 ## ChatGPT
 
-ChatGPT sólo se conecta a servidores **HTTPS públicos**, con autenticación.
-Exponer este servidor a Internet es exponer `python_exec`, es decir, tu
-máquina. La fase F4b de la spec 008 prepara ese despliegue (OAuth, túnel);
-hasta entonces no se recomienda.
+ChatGPT solo se conecta a servidores **HTTPS públicos** y solo mediante
+OAuth. Antes de seguir, lee [seguridad.md](seguridad.md): exponer este
+servidor a Internet es exponer `python_exec`, es decir, tu máquina.
+
+1. Arranca el servidor en *loopback*, con un token que conozcas:
+
+   ```bash
+   ogr-slip2d-mcp --transport http --port 8765 --token-file token.txt --public-url https://TU-TUNEL.example --workdir "C:\ruta\a\mis\proyectos"
+   ```
+
+   El token tiene que tener al menos 32 caracteres. Sin `--token-file`, el
+   servidor genera uno y lo escribe en la consola.
+
+2. Pon delante un túnel que termine el HTTPS y apunte a
+   `http://127.0.0.1:8765`. Por ejemplo, `cloudflared tunnel --url
+   http://127.0.0.1:8765` te da la dirección que va en `--public-url`, y
+   entonces hay que reiniciar el servidor con ella.
+3. En ChatGPT, activa el **modo desarrollador** y crea un conector (la
+   ayuda de OpenAI, *Developer mode and MCP apps in ChatGPT*, dice dónde en
+   cada plan):
+   - dirección: `https://TU-TUNEL.example/mcp`;
+   - autenticación: **OAuth**.
+4. ChatGPT te lleva a la página `/approve` del servidor. Comprueba que el
+   cliente es el que esperas y escribe el token de `token.txt`.
+5. Al terminar, cierra el túnel y el servidor.
+
+La conexión desde chatgpt.com no la cubren los tests del repositorio: hay que
+hacerla a mano (tarea 2.7 de la spec 008). Los tests sí recorren el mismo
+flujo OAuth completo contra un servidor real en local, y HTTPS con un
+certificado propio.
 
 ## Comprobar la conexión
 

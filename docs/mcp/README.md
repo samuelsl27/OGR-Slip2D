@@ -35,6 +35,9 @@ ogr-slip2d-mcp --transport http --port 8765 --token-file token.txt
 
 # sobre la ventana abierta (Herramientas > Puente para agentes (MCP))
 ogr-slip2d-mcp --attach
+
+# en Internet, detrás de un túnel HTTPS, con OAuth (ChatGPT): ver seguridad.md
+ogr-slip2d-mcp --transport http --port 8765 --token-file token.txt --public-url https://TU-TUNEL.example
 ```
 
 `--workdir` es la carpeta contra la que se resuelven las rutas relativas
@@ -95,7 +98,8 @@ por qué. **No queda ninguna pendiente** desde v0.1.201.
 
 Ver [clientes.md](clientes.md): Claude Desktop, Claude Code, LM Studio,
 clientes de Ollama, Open WebUI, BionicGPT y otros clientes OpenAPI (con
-`mcpo`), OpenAI Agents SDK y ChatGPT.
+`mcpo`), OpenAI Agents SDK y ChatGPT (HTTPS remoto con OAuth 2.1, desde
+v0.1.204).
 
 ## Cómo trabaja un agente con él
 

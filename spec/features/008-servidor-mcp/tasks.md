@@ -54,8 +54,9 @@ tarea: es un deseo.
       presupuesto de `compact`, stdio de extremo a extremo, seguridad HTTP,
       inventario de acciones.
 - [~] 2.7 Prueba manual: `mcpo` real (en su propio entorno con `mcp<2`) y
-      los clientes stdio y HTTP del SDK; Claude Code, LM Studio y Open WebUI
-      quedan para el propietario (tocan su configuración).
+      los clientes stdio y HTTP del SDK; Claude Code, LM Studio, Open WebUI
+      y ChatGPT (con un túnel HTTPS, desde v0.1.204) quedan para el
+      propietario (tocan su configuración y su cuenta).
 - [x] 2.8 Suite completa (4328/4328) y changelog.
 
 ## F2 · cargas, soportes, búsqueda, anotaciones, archivos (v0.1.196)
@@ -132,3 +133,11 @@ Plan corto antes de cada una. Al cerrar F4, `PENDING` del inventario vacío.
       el panel y `model_render(source="window")`. Corregidos A2, la ruta del
       handle con proveedor, la fusión de tres vías de `SnapshotCommand` y el
       «sin guardar» tras guardar.
+- [x] F4b (v0.1.204) HTTPS remoto: con `--public-url` el servidor es su
+      propio servidor OAuth 2.1 (PKCE S256, DCR con lista blanca de retorno,
+      tokens opacos atados al recurso, renovación rotativa y revocación), y
+      la autorización la concede el dueño tecleando el token del servidor en
+      `/approve`. HTTPS detrás de un túnel o directo con `--tls-cert/--tls-key`.
+      Probado de extremo a extremo contra un proceso real en local. La
+      conexión real desde chatgpt.com queda en 2.7, a mano (pasos en
+      `docs/mcp/clientes.md`).

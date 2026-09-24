@@ -93,7 +93,8 @@ def _strip(kwargs: dict) -> dict:
 
 def build_server(ws, *, profile: str = "full", toolsets=None,
                  max_wait: float = DEFAULT_MAX_WAIT_S,
-                 backend=None) -> MCPServer:
+                 backend=None, oauth=None,
+                 public_url: Optional[str] = None) -> MCPServer:
     """An ``MCPServer`` publishing the tools of ``profile`` over ``ws``.
 
     With ``backend`` (an ``ogr_api.bridge.BridgeClient``, spec 008 F4)
@@ -103,11 +104,30 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
     from ogr_api import __version__ as api_version
 
     selected = select(profile, toolsets)
+    auth_kwargs = {}
+    if oauth is not None:
+        # F4b (v0.1.204): the server is its own authorization server; see
+        # ``oauth.py``. Tokens are bound to the MCP endpoint's public URL.
+        from mcp.server.auth.settings import (AuthSettings,
+                                              ClientRegistrationOptions,
+                                              RevocationOptions)
+        base = public_url.rstrip("/")
+        auth_kwargs = dict(
+            auth_server_provider=oauth,
+            auth=AuthSettings(
+                issuer_url=base, resource_server_url=f"{base}/mcp",
+                validate_token_resource=True,
+                client_registration_options=ClientRegistrationOptions(
+                    enabled=True),
+                revocation_options=RevocationOptions(enabled=True)))
     srv = MCPServer("ogr-slip2d", title="OGR Slip2D",
                     description="Slope stability by limit equilibrium: "
                                 "build, analyse and read models.",
                     instructions=INSTRUCTIONS, version=__version__,
-                    website_url=SOURCE_URL)
+                    website_url=SOURCE_URL, **auth_kwargs)
+    if oauth is not None:
+        from .oauth import install_approval_route
+        install_approval_route(srv, oauth)
     registered: list[str] = []
     pending: dict = {}
 
