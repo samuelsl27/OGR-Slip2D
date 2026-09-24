@@ -221,12 +221,10 @@ class RandomVariablesDialog(QDialog):
         src = self._by_key(key)
         if src is None:
             return
-        rv = RandomVariable.from_dict(src.to_dict())
-        # A sensible starting point: 10 % of the mean either side
-        m = abs(rv.distribution.mean) or 1.0
-        rv.distribution.std_dev = 0.1 * m
-        rv.distribution.rel_min = 0.3 * m
-        rv.distribution.rel_max = 0.3 * m
+        # v0.1.201 — the starting dispersion is the core's
+        # (``default_dispersion``), which an agent's variables get too.
+        from ogr_core.statistics.random_variables import default_dispersion
+        rv = default_dispersion(RandomVariable.from_dict(src.to_dict()))
         self.defined[key] = rv
         self._refresh_defined()
 
@@ -235,12 +233,11 @@ class RandomVariablesDialog(QDialog):
         if it is None:
             return
         key = it.data(Qt.UserRole)
-        self.defined.pop(key, None)
-        # Drop dangling correlations
-        for rv in self.defined.values():
-            if rv.correlated_with == key:
-                rv.correlated_with = None
-                rv.correlation = 0.0
+        # v0.1.201 — the core's ``forget_variable``: the variable goes and
+        # a correlation that pointed at it is cleared.
+        from ogr_core.statistics.random_variables import forget_variable
+        kept = forget_variable(list(self.defined.values()), key)
+        self.defined = {rv.key: rv for rv in kept}
         self._refresh_defined()
 
     # ------------------------------------------------------------------

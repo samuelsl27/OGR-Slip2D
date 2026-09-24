@@ -385,3 +385,61 @@ def sample_project_variables(variables: list, n: int, method, seed=None,
         samples[rv.key] = correlate_pair(
             samples[other.key], samples[rv.key], rv.correlation)
     return samples
+
+
+# ======================================================================
+# v0.1.201 (spec 008, F3b) — the dialog's rules, moved here so an agent's
+# variables follow the same ones.
+# ======================================================================
+def default_dispersion(rv: RandomVariable) -> RandomVariable:
+    """Give a new variable a starting dispersion: a standard deviation of
+    10 % of its mean and a range of 30 % either side (the dialog's comment
+    said "10 % either side", which is the deviation, not the range). With
+    a mean of zero (kh, kv, a water-table offset) the same numbers are
+    absolute: 0.1 and 0.3."""
+    m = abs(rv.distribution.mean) or 1.0
+    rv.distribution.std_dev = 0.1 * m
+    rv.distribution.rel_min = 0.3 * m
+    rv.distribution.rel_max = 0.3 * m
+    return rv
+
+
+def forget_variable(variables: list, key: str) -> list:
+    """``variables`` without the one keyed ``key``; a correlation that
+    pointed at it is cleared, not left dangling."""
+    out = [rv for rv in variables if rv.key != key]
+    for rv in out:
+        if rv.correlated_with == key:
+            rv.correlated_with = None
+            rv.correlation = 0.0
+    return out
+
+
+def variable_problems(rv: RandomVariable, keys) -> list:
+    """What makes ``rv`` unusable next to the variables keyed ``keys``;
+    empty when nothing does."""
+    from .distributions import DistributionType
+
+    d = rv.distribution
+    out = []
+    if d.std_dev < 0 or d.rel_min < 0 or d.rel_max < 0:
+        out.append("std_dev, rel_min and rel_max cannot be negative.")
+    if d.dist_type in (DistributionType.NORMAL, DistributionType.LOGNORMAL,
+                       DistributionType.BETA, DistributionType.GAMMA) \
+            and d.std_dev <= 0:
+        out.append(f"A {d.dist_type.value} distribution needs a positive "
+                   f"std_dev; with none the variable is not random.")
+    if d.dist_type != DistributionType.NONE and d.high - d.low <= 0:
+        out.append("rel_min + rel_max must be positive: a zero range is "
+                   "not random.")
+    if rv.correlated_with is not None:
+        if rv.correlated_with == rv.key:
+            out.append("A variable cannot be correlated with itself.")
+        elif rv.correlated_with not in set(keys):
+            out.append(f"correlated_with {rv.correlated_with!r} is not a "
+                       f"defined variable.")
+        if not -1.0 <= rv.correlation <= 1.0:
+            out.append("correlation must be between -1 and 1.")
+    elif rv.correlation:
+        out.append("correlation is only read with correlated_with.")
+    return out

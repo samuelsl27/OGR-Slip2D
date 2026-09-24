@@ -51,7 +51,10 @@ _COMPACT_BUDGET = 14_000
 _CONSUMED_HERE = {("analysis_run", "wait_seconds"),
                   ("job_get", "wait_seconds"),
                   ("groundwater_run", "wait_seconds"),
-                  ("drawdown_sweep_run", "wait_seconds")}
+                  ("drawdown_sweep_run", "wait_seconds"),
+                  ("statistics_run", "wait_seconds"),
+                  ("back_analysis_run", "wait_seconds"),
+                  ("optimize_run", "wait_seconds")}
 
 
 def _have_mcp() -> bool:

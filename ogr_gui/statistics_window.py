@@ -291,14 +291,11 @@ class StatisticsWindow(QMainWindow):
     def scatter_data(self, mid, variable_key):
         """(variable value, factor of safety) pairs for a scatter plot.
 
-        Exposed as a method so it can be tested without a display; the
-        engine keeps the samples in the same order as the computed
-        factors, so pairing them is a zip.
+        Exposed as a method so it can be tested without a display.
+        v0.1.201 — paired by each factor's sample index
+        (``sample_pairs``): a zip shifted every pair after the first
+        sample that failed.
         """
-        st = self._stats_for(mid)
-        if st is None or not st.values:
-            return []
-        samples = getattr(self.prob, "samples", None)
-        if not samples or variable_key not in samples:
-            return []
-        return list(zip(samples[variable_key], st.values))
+        from ogr_core.statistics import sample_pairs
+        return [(v, f) for _i, v, f in sample_pairs(self.prob, mid,
+                                                     variable_key)]

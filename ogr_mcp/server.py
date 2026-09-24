@@ -45,7 +45,9 @@ log = logging.getLogger("ogr_mcp")
 
 #: What a job's progress counts, by kind.
 _STEPS = {"analysis": "surfaces evaluated", "groundwater": "stages solved",
-          "drawdown_sweep": "searches done"}
+          "drawdown_sweep": "searches done",
+          "statistics": "evaluations done",
+          "back_analysis": "surfaces analysed", "optimize": "steps"}
 
 #: Longest a tool call waits for a job before handing back its job_id.
 #: Many clients cut a request at about 60 s whatever the protocol allows.
@@ -1449,6 +1451,154 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
                              wait_seconds, project_id=project_id,
                              methods=methods, n_levels=n_levels,
                              include_total=include_total)
+
+    # ------------------------------------------------------------------
+    # statistics (F3b): random variables, statistics, back analysis,
+    # optimisation, and questions to a stored result
+    # ------------------------------------------------------------------
+    @tool("random_variable_list", _READ)
+    def random_variable_list(project_id: ProjectId = None
+                             ) -> dict[str, Any]:
+        """The model inputs that can be random variables (with their keys
+        and current values), and the ones defined."""
+        return run("random_variable_list", project_id=project_id)
+
+    @tool("random_variable_set", _EDIT)
+    def random_variable_set(key: Annotated[str, Field(
+            description="The variable's key, from random_variable_list.")],
+            project_id: ProjectId = None,
+            distribution: Annotated[Optional[Literal[
+                "none", "normal", "uniform", "triangular", "beta",
+                "exponential", "lognormal", "gamma"]], Field(
+                description="Distribution; its mean is always the "
+                            "model's value.")] = None,
+            std_dev: Annotated[Optional[float], Field(
+                description="Standard deviation (normal, lognormal, beta, "
+                            "gamma).")] = None,
+            rel_min: Annotated[Optional[float], Field(
+                description="How far below the mean it may go.")] = None,
+            rel_max: Annotated[Optional[float], Field(
+                description="How far above the mean it may go.")] = None,
+            correlated_with: Annotated[Optional[str], Field(
+                description="Key of another defined variable ('' to "
+                            "clear).")] = None,
+            correlation: Annotated[Optional[float], Field(
+                description="Correlation coefficient, -1..1.")] = None,
+            label: Annotated[Optional[str], Field(
+                description="Display name.")] = None) -> dict[str, Any]:
+        """Make a model input a random variable, or change one. New ones
+        start at std 10 % of the mean and a 30 % range either side."""
+        return run("random_variable_set", key=key, project_id=project_id,
+                   distribution=distribution, std_dev=std_dev,
+                   rel_min=rel_min, rel_max=rel_max,
+                   correlated_with=correlated_with, correlation=correlation,
+                   label=label)
+
+    @tool("random_variable_delete", _DESTRUCTIVE)
+    def random_variable_delete(key: Annotated[str, Field(
+            description="A defined variable's key, or 'all'.")],
+            project_id: ProjectId = None) -> dict[str, Any]:
+        """Remove a random variable; correlations that pointed at it go."""
+        return run("random_variable_delete", key=key, project_id=project_id)
+
+    @tool("statistics_run", _EDIT)
+    async def statistics_run(ctx: Context, project_id: ProjectId = None,
+                             wait_seconds: WaitSeconds = 30.0
+                             ) -> dict[str, Any]:
+        """Compute Statistics as a background job: the deterministic run,
+        then the probabilistic (PF, reliability index) and/or sensitivity
+        analysis set in settings statistics.*, with the design factors
+        and seed of the model."""
+        return await run_job(ctx, "statistics_run", "statistics run",
+                             wait_seconds, project_id=project_id)
+
+    @tool("back_analysis_run", _EDIT)
+    async def back_analysis_run(ctx: Context, project_id: ProjectId = None,
+                                target_fos: Annotated[Optional[float], Field(
+                                    description="Target factor of safety "
+                                                "(default: settings).")
+                                ] = None,
+                                elevation: Annotated[Optional[float], Field(
+                                    description="y of the horizontal force "
+                                                "(m).")] = None,
+                                method_id: Annotated[Optional[Literal[
+                                    "bishop_simplified", "janbu_simplified",
+                                    "janbu_corrected"]], Field(
+                                    description="Method.")] = None,
+                                wait_seconds: WaitSeconds = 30.0
+                                ) -> dict[str, Any]:
+        """The horizontal support force needed to reach a target factor of
+        safety, over every surface of the configured search (a job)."""
+        return await run_job(ctx, "back_analysis_run", "back analysis",
+                             wait_seconds, project_id=project_id,
+                             target_fos=target_fos, elevation=elevation,
+                             method_id=method_id)
+
+    @tool("optimize_run", _EDIT)
+    async def optimize_run(ctx: Context, result_id: Annotated[str, Field(
+            description="An analysis_run result with a non-circular "
+                        "critical surface.")],
+            method_id: Annotated[Optional[str], Field(
+                description="Which method's critical surface.")] = None,
+            max_iterations: Annotated[Optional[int], Field(
+                description="Default: settings search.optimize_max_"
+                            "iterations.")] = None,
+            wait_seconds: WaitSeconds = 30.0) -> dict[str, Any]:
+        """Optimise a non-circular critical surface with the model's
+        optimisation settings and seed; the result is a NEW result_id."""
+        return await run_job(ctx, "optimize_run", "optimisation",
+                             wait_seconds, result_id=result_id,
+                             method_id=method_id,
+                             max_iterations=max_iterations)
+
+    @tool("results_query", _EDIT)
+    def results_query(result_id: Annotated[str, Field(
+            description="A stored result.")],
+            view: Annotated[Literal[
+                "error_codes", "invalid_summary", "raw_data",
+                "surfaces_through_point", "minimum_per_centre",
+                "sf_along_slope", "slices", "filter", "histogram",
+                "convergence", "samples", "sensitivity"], Field(
+                description="Analysis results: error_codes (-120 tensile, "
+                            "-112 m-alpha, -111 not converged, -101 "
+                            "other), invalid_summary, raw_data, "
+                            "surfaces_through_point, minimum_per_centre, "
+                            "sf_along_slope, slices (method's numbers), "
+                            "filter. Statistics results: histogram, "
+                            "convergence, samples, sensitivity.")],
+            method_id: Annotated[Optional[str], Field(
+                description="Which method.")] = None,
+            point_xy: Annotated[Optional[list[float]], Field(
+                description="surfaces_through_point: [x, y].")] = None,
+            tolerance: Annotated[Optional[float], Field(
+                description="surfaces_through_point: metres (0.5).")
+            ] = None,
+            bins: Annotated[Optional[int], Field(
+                description="sf_along_slope / histogram: bins.")] = None,
+            rank: Annotated[Optional[int], Field(
+                description="slices: the n-th lowest surface (default "
+                            "the critical).")] = None,
+            fos_min: Annotated[Optional[float], Field(
+                description="filter: lowest factor.")] = None,
+            fos_max: Annotated[Optional[float], Field(
+                description="filter: highest factor.")] = None,
+            code: Annotated[Optional[int], Field(
+                description="filter: only surfaces with this error code.")
+            ] = None,
+            n: Annotated[int, Field(
+                description="How many rows at most.")] = 20,
+            save_path: Annotated[Optional[str], Field(
+                description="raw_data / slices / samples: write a CSV.")
+            ] = None,
+            overwrite: Annotated[bool, Field(
+                description="Replace an existing file.")] = False
+            ) -> dict[str, Any]:
+        """Ask a stored result what the Interpret window asks it."""
+        return run("results_query", result_id=result_id, view=view,
+                   method_id=method_id, point_xy=point_xy,
+                   tolerance=tolerance, bins=bins, rank=rank,
+                   fos_min=fos_min, fos_max=fos_max, code=code, n=n,
+                   save_path=save_path, overwrite=overwrite)
 
     # ------------------------------------------------------------------
     # resources

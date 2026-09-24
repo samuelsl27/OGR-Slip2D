@@ -44,35 +44,13 @@ from .resources import icon
 
 
 # ======================================================================
-def _mc_param(slice_, name):
-    """A strength parameter of the material the slice base cuts.
-
-    Reads ``strength.params``, which is where every registered model keeps
-    them; ``getattr(strength, "cohesion")`` returns None and looks like a
-    missing value rather than a wrong lookup.
-    """
-    mat = getattr(slice_, "material", None)
-    if mat is None or getattr(mat, "strength", None) is None:
-        return None
-    return mat.strength.params.get(name)
-
-
-def _per_slice(result, name, index):
-    """One entry of a LEMResult per-slice array, or None.
-
-    The four most interesting quantities on a slice — base normal, shear
-    force, shear strength — are NOT attributes of the Slice. They are
-    computed by the method and stored on the result, so a panel handed
-    only the slice can never show them, which is why this one displayed a
-    dash where the reference prints a number.
-    """
-    if result is None:
-        return None
-    arr = getattr(result, name, None)
-    if not arr or index is None or not (0 <= index < len(arr)):
-        return None
-    v = arr[index]
-    return v if isinstance(v, (int, float)) and math.isfinite(v) else None
+# v0.1.201 — the per-slice readers moved to ``ogr_slip2d.interpretation``
+# (an agent reads slices through them too); the names stay for the panel.
+from ogr_slip2d.interpretation import (  # noqa: E402
+    base_parameter as _mc_param,
+    per_slice as _per_slice,
+    slice_stress as _slice_stress,
+)
 
 
 class _SliceDataDock(QDockWidget):
@@ -102,11 +80,7 @@ class _SliceDataDock(QDockWidget):
     # against a strength envelope.
     @staticmethod
     def _stress(res, name, s):
-        f = _per_slice(res, name, getattr(s, "index", None))
-        length = getattr(s, "base_length", 0.0) or 0.0
-        if f is None or length <= 0:
-            return None
-        return f / length
+        return _slice_stress(res, name, s)
 
     FIELDS = [
         # --- Geometry --------------------------------------------------
@@ -887,8 +861,11 @@ class InterpretWindow(QMainWindow):
                                  triggered=self._graph_sf_along_slope))
         m_data.addAction(QAction(tr("Export Raw Data..."), self,
                                  triggered=self._export_raw_data))
+        # v0.1.201 — it exported one row per SURFACE, the same file as
+        # Export Data; now the slices of the selected (or critical)
+        # surface, with the method's numbers.
         m_data.addAction(QAction(tr("Export Slice Data (CSV)..."), self,
-                                 triggered=self._export_data_csv))
+                                 triggered=self._export_slice_data_csv))
         m_data.addAction(QAction(tr("Summary of Invalid Surfaces..."), self,
                                  triggered=self._query_invalid_summary))
         # v0.1.53 (phase I3) — the remaining Data entries. Those that
@@ -1571,19 +1548,27 @@ class InterpretWindow(QMainWindow):
         if crit is None or not getattr(crit, "slices", None):
             self._info(tr("No critical surface with slice data."))
             return
+        # v0.1.201 — prefilled from the project's back-analysis settings
+        # (1.3 and 0.0 were typed in here), and with the seismic
+        # coefficients the model declares, which ``required_force`` takes
+        # and this never passed.
+        cfg = self.project.settings.back_analysis
         target, ok = QInputDialog.getDouble(
             self, tr("Back Analysis"), tr("Target factor of safety:"),
-            1.3, 0.01, 100.0, 3)
+            float(cfg.target_fos), 0.01, 100.0, 3)
         if not ok:
             return
         elevation, ok = QInputDialog.getDouble(
             self, tr("Back Analysis"), tr("Elevation of the force:"),
-            0.0, -1e6, 1e6, 3)
+            float(cfg.elevation), -1e6, 1e6, 3)
         if not ok:
             return
         mid = self._current_method_id
+        seis = self.project.seismic
+        kh = float(seis.kh) if seis.enabled else 0.0
+        kv = float(seis.kv) if seis.enabled else 0.0
         r = required_force(crit.slices, crit.surface, target, mid,
-                           elevation)
+                           elevation, kh, kv)
         if r is None:
             self._info(tr(
                 "Back analysis is only available for Bishop, Janbu and "
@@ -2003,11 +1988,10 @@ class InterpretWindow(QMainWindow):
         by the hover read-out — three places that were each deciding it
         for themselves.
         """
-        if ev.is_valid and getattr(ev, "admissible", True):
-            return None
-        return (getattr(ev, "error_message", None)
-                or getattr(ev, "admissibility_note", None)
-                or tr("did not converge"))
+        # v0.1.201 — the core's (``interpretation.invalid_reason``).
+        from ogr_slip2d.interpretation import invalid_reason
+        why = invalid_reason(ev)
+        return tr(why) if why == "did not converge" else why
 
     def _invalid_reasons(self) -> list:
         """``[(reason, count)]``, commonest first."""
@@ -2293,8 +2277,15 @@ class InterpretWindow(QMainWindow):
                 # v0.1.169 (D127) — same reason as the convergence plot:
                 # the first method could be one with no samples, and this
                 # wrote a CSV with a header and no rows.
-                values = prob.reported.statistics.values
-                for i, fos in enumerate(values):
+                # v0.1.201 — each factor with ITS sample (the index the
+                # engine now records): enumerating the factors paired every
+                # one after the first failed sample with the next sample.
+                m = prob.reported
+                idx = list(getattr(m, "sample_index", None) or [])
+                values = list(m.statistics.values)
+                if len(idx) != len(values):
+                    idx = []
+                for i, fos in zip(idx, values):
                     row = [i + 1]
                     for k in keys:
                         col = prob.samples.get(k) or []
@@ -2473,6 +2464,34 @@ class InterpretWindow(QMainWindow):
         pix.save(path)
         self.statusBar().showMessage(f"Saved {path}", 3000)
 
+    def _export_slice_data_csv(self) -> None:
+        """The slices of the selected surface, or of the critical one, with
+        the method's per-slice numbers (``interpretation.slice_rows``)."""
+        from ogr_slip2d.interpretation import slice_rows
+        target = getattr(self, "_selected_result", None)
+        if target is None and self.search_result is not None:
+            target = self.search_result.critical
+        if target is None or not getattr(target, "slices", None):
+            self._info(tr("No slices available — run a compute first."))
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, tr("Export Slice Data"), "", "CSV (*.csv)")
+        if not path:
+            return
+        rows = slice_rows(target)
+        keys = list(rows[0]) if rows else []
+        try:
+            import csv
+            with open(path, "w", newline="", encoding="utf-8") as fh:
+                w = csv.writer(fh)
+                w.writerow(keys)
+                for r in rows:
+                    w.writerow(["" if r[k] is None else r[k] for k in keys])
+            self.statusBar().showMessage(tr("Slice data exported to %s")
+                                         % path, 3000)
+        except Exception as e:  # noqa: BLE001
+            QMessageBox.critical(self, tr("Error"), str(e))
+
     def _export_data_csv(self) -> None:
         if self.search_result is None:
             self._info("No results to export.")
@@ -2512,48 +2531,12 @@ class InterpretWindow(QMainWindow):
         Dropping the invalid surfaces would throw away exactly the rows
         that explain a blank patch in the contoured grid.
         """
-        from ogr_slip2d.methods.base import SCREEN_M_ALPHA, SCREEN_TENSILE_STRESS
-
+        # v0.1.201 — ``interpretation.raw_data_rows``, whose
+        # ``error_code`` is the one mapping of -120/-112/-111/-101 (the
+        # agent's census reads it too).
+        from ogr_slip2d.interpretation import raw_data_rows
         res = self.search_result
-        if res is None:
-            return []
-        rows = []
-        for r in res.evaluations:
-            sd = r.surface.to_dict()
-            if r.is_valid and getattr(r, "admissible", True):
-                fos = f"{r.fos:.6f}"
-            else:
-                # Negative codes, as the reference writes them: -120 for
-                # the Tensile Stress Check, -112 for the m-alpha screen,
-                # -111 for a factor of safety that did not converge.
-                # Anything else is reported as -101.
-                #
-                # v0.1.192 (D177) — the tensile screen is read from the
-                # constant the search records, not from the note. Until
-                # then this cascade had no branch for it and filed it under
-                # -101, although the note itself says "(error -120)". It
-                # goes first because the screen tests tension first, so a
-                # surface failing both is a tensile rejection. The m-alpha
-                # branch still accepts the note as well as the constant, so
-                # a result built without the new field exports as before.
-                why = getattr(r, "admissibility_reason", "") or ""
-                note = (getattr(r, "admissibility_note", "") or
-                        getattr(r, "error_message", "") or "")
-                if why == SCREEN_TENSILE_STRESS:
-                    fos = "-120"
-                elif why == SCREEN_M_ALPHA or "m_alpha" in note:
-                    fos = "-112"
-                elif not r.converged:
-                    fos = "-111"
-                else:
-                    fos = "-101"
-            rows.append([
-                f"{sd.get('centre_x', '')}", f"{sd.get('centre_y', '')}",
-                f"{sd.get('radius', '')}",
-                f"{sd.get('x_left', '')}", f"{sd.get('x_right', '')}",
-                fos,
-            ])
-        return rows
+        return raw_data_rows(res) if res is not None else []
 
     def _export_raw_data(self) -> None:
         """Export the per-surface raw data, to a file or the clipboard."""
@@ -3042,32 +3025,20 @@ class InterpretWindow(QMainWindow):
         if target is None or not target.slices:
             self._info("No slices available — run a compute first.")
             return
-        # Collect quantities
-        xs = []
-        sn = []
-        tau = []
-        u = []
-        alpha = []
-        for s in target.slices:
-            xc = 0.5 * (s.base_x_left + s.base_x_right)
-            xs.append(xc)
-            b = max(s.width, 1e-9)
-            sigma_n_eff = max(
-                s.weight * math.cos(s.base_angle) / b
-                - getattr(s, "pore_pressure", 0.0),
-                0.0,
-            )
-            sn.append(sigma_n_eff)
-            mat = getattr(s, "material", None)
-            if mat is not None and hasattr(mat, "strength"):
-                try:
-                    tau.append(mat.strength.shear_strength(sigma_n_eff))
-                except Exception:  # noqa: BLE001
-                    tau.append(0.0)
-            else:
-                tau.append(0.0)
-            u.append(getattr(s, "pore_pressure", 0.0))
-            alpha.append(math.degrees(s.base_angle))
+        # v0.1.201 — the METHOD's numbers (``interpretation.slice_rows``):
+        # N / l from its base normal force and its shear strength. This
+        # recomputed sigma'n = W cos(alpha) / b - u, which is no method's
+        # answer — not even the Ordinary method's, whose N / l divides by
+        # the base length, b / cos(alpha).
+        from ogr_slip2d.interpretation import slice_rows
+        rows = slice_rows(target)
+        xs = [r["x_centre"] for r in rows]
+        sn = [r["sigma_n_eff"] if r["sigma_n_eff"] is not None else math.nan
+              for r in rows]
+        tau = [r["tau_f"] if r["tau_f"] is not None else math.nan
+               for r in rows]
+        u = [r["pore_pressure"] for r in rows]
+        alpha = [r["base_angle_deg"] for r in rows]
         # Chart in a dialog
         try:
             from .dialogs.chart_dialogs import MultiLineDialog
@@ -3356,8 +3327,13 @@ class InterpretWindow(QMainWindow):
         dlg.exec()
 
     def _surfaces_through_point(self) -> None:
-        """Highlight surfaces that pass within a tolerance of a clicked
-        point. Useful for forensic investigation of a specific zone."""
+        """Count the surfaces that pass within a tolerance of a point, and
+        name the one with the lowest factor of safety.
+
+        v0.1.201 — measured to the surface the engine PRICED
+        (``interpretation.surfaces_through_point``), not to the whole
+        circle; and the prompt no longer promises a highlight it never
+        drew."""
         if not self.search_result:
             return
         from PySide6.QtWidgets import (
@@ -3367,9 +3343,10 @@ class InterpretWindow(QMainWindow):
         dlg = QDialog(self)
         dlg.setWindowTitle(tr("Surfaces Crossing Point"))
         v = QVBoxLayout(dlg)
-        v.addWidget(QLabel("Enter the coordinates of a point. All "
-                            "surfaces passing within the tolerance will "
-                            "be highlighted."))
+        v.addWidget(QLabel(tr(
+            "Enter the coordinates of a point. The surfaces whose slip "
+            "surface passes within the tolerance are counted, and the one "
+            "with the lowest factor of safety is reported.")))
         form = QFormLayout()
         spn_x = QDoubleSpinBox()
         spn_x.setRange(-1e9, 1e9); spn_x.setDecimals(3); spn_x.setSuffix(" m")
@@ -3388,53 +3365,27 @@ class InterpretWindow(QMainWindow):
             return
         px, py = spn_x.value(), spn_y.value()
         tol = spn_tol.value()
-        # Find surfaces passing close to the point
-        hits = []
-        for r in self.search_result.evaluations:
-            if not r.is_valid or r.surface is None:
-                continue
-            d = self._distance_point_to_surface(px, py, r.surface)
-            if d <= tol:
-                hits.append((d, r))
-        hits.sort(key=lambda t: t[0])
+        from ogr_slip2d.interpretation import (slope_intercepts,
+                                               surfaces_through_point)
+        hits = surfaces_through_point(self.search_result, px, py, tol)
+        best = ""
+        if hits:
+            r = hits[0][1]
+            try:
+                xl, xr = slope_intercepts(r)
+                where = f" (x {xl:.2f} to {xr:.2f})"
+            except Exception:  # noqa: BLE001
+                where = ""
+            best = f"FoS = {r.fos:.4f}{where}"
         self._info(
             f"<b>{len(hits)}</b> surfaces pass within {tol} m of "
             f"({px:.2f}, {py:.2f}).<br>"
-            f"Best (lowest FoS) crossing: " +
-            (f"FoS = {min(h[1].fos for h in hits):.4f}" if hits else "(none)")
-        )
-
-    @staticmethod
-    def _distance_point_to_surface(px: float, py: float, surface) -> float:
-        """Min distance from point (px,py) to a surface (circle or poly)."""
-        d_min = float("inf")
-        if hasattr(surface, "polyline"):
-            vs = surface.polyline.vertices
-            for v1, v2 in zip(vs[:-1], vs[1:]):
-                # distance point-to-segment
-                ax_, ay_ = v1.x, v1.y
-                bx_, by_ = v2.x, v2.y
-                dx, dy = bx_ - ax_, by_ - ay_
-                L2 = dx * dx + dy * dy
-                if L2 < 1e-12:
-                    d = math.hypot(px - ax_, py - ay_)
-                else:
-                    t = max(0.0, min(1.0,
-                        ((px - ax_) * dx + (py - ay_) * dy) / L2))
-                    qx = ax_ + t * dx
-                    qy = ay_ + t * dy
-                    d = math.hypot(px - qx, py - qy)
-                d_min = min(d_min, d)
-        elif hasattr(surface, "radius"):
-            cx = surface.centre_x
-            cy = surface.centre_y
-            r = surface.radius
-            d_min = abs(math.hypot(px - cx, py - cy) - r)
-        return d_min
+            + tr("Lowest factor of safety among them: ")
+            + (best or tr("(none)")))
 
     def _add_result_table(self) -> None:
-        """Open a sortable table with the full results: FoS, area,
-        depth, and surface type for every valid surface."""
+        """Open a sortable table with the full results: FoS, surface type,
+        area of the sliding mass and slices, for every valid surface."""
         if not self.search_result:
             return
         valid = [r for r in self.search_result.evaluations if r.is_valid]
@@ -3451,39 +3402,28 @@ class InterpretWindow(QMainWindow):
         tbl = QTableWidget(len(valid), 5)
         tbl.setHorizontalHeaderLabels(
             ["#", "FoS", "Type", "Area (m²)", "Slices"])
-        tbl.setSortingEnabled(True)
+        # v0.1.201 — sorting switched on AFTER the rows are in: with it on,
+        # each inserted row re-sorts and the next ``setItem`` lands in a
+        # row that has moved.
+        from ogr_slip2d.interpretation import surface_area
         for i, r in enumerate(valid):
             tbl.setItem(i, 0, QTableWidgetItem(str(i)))
             it_fos = QTableWidgetItem(f"{r.fos:.4f}")
             it_fos.setData(Qt.UserRole, r.fos)
             tbl.setItem(i, 1, it_fos)
             tbl.setItem(i, 2, QTableWidgetItem(
-                "circle" if hasattr(r.surface, "radius") else "polyline"))
-            try:
-                area = sum(s.weight / max(s.unit_weight, 1e-9) for s in r.slices)
-            except Exception:  # noqa: BLE001
-                area = 0.0
-            tbl.setItem(i, 3, QTableWidgetItem(f"{area:.1f}"))
+                str(r.surface.to_dict().get("type", "?"))))
+            # v0.1.201 — the area of the sliding mass. This divided each
+            # weight by a ``unit_weight`` the slice does not have, so the
+            # exception made every row 0.0.
+            area = surface_area(r)
+            it_area = QTableWidgetItem(f"{area:.1f}")
+            it_area.setData(Qt.UserRole, area)
+            tbl.setItem(i, 3, it_area)
             tbl.setItem(i, 4, QTableWidgetItem(str(len(r.slices))))
+        tbl.setSortingEnabled(True)
         v.addWidget(tbl)
         dlg.exec()
-
-    def _scatter(self) -> None:
-        if not self.search_result:
-            return
-        valid = [r for r in self.search_result.evaluations if r.is_valid]
-        if not valid:
-            self._info("No valid surfaces to scatter.")
-            return
-        xs = [r.surface.to_dict().get("radius", 0.0) for r in valid]
-        ys = [r.fos for r in valid]
-        try:
-            from .dialogs.chart_dialogs import ScatterDialog
-            ScatterDialog(xs, ys, xlabel="Radius (m)",
-                          ylabel="Factor of Safety",
-                          title="FoS vs Radius", parent=self).exec()
-        except ImportError:
-            self._info("matplotlib not installed.")
 
     # ------------------------------------------------------------------
     # Graph SF Along Slope — v0.1.82
@@ -3512,37 +3452,13 @@ class InterpretWindow(QMainWindow):
         as None, every point is returned, which is a far more scattered
         plot and is the reference's other documented choice.
         """
+        # v0.1.201 — ``interpretation.sf_along_slope``, which also stops
+        # reading an intercept at x = 0.0 as missing.
+        from ogr_slip2d.interpretation import sf_along_slope
         res = self.search_result
         if res is None:
             return [], []
-        pts: list[tuple[float, float]] = []
-        for ev in res.valid():
-            try:
-                xl, xr = ev.surface.x_range()
-                sd = ev.surface.to_dict()
-                xl = sd.get("x_left", xl) or xl
-                xr = sd.get("x_right", xr) or xr
-            except Exception:  # noqa: BLE001
-                continue
-            if use_left and xl is not None:
-                pts.append((float(xl), ev.fos))
-            if use_right and xr is not None:
-                pts.append((float(xr), ev.fos))
-        if not pts:
-            return [], []
-        if not bins or bins < 1:
-            pts.sort()
-            return [p[0] for p in pts], [p[1] for p in pts]
-        x_lo = min(p[0] for p in pts)
-        x_hi = max(p[0] for p in pts)
-        width = (x_hi - x_lo) or 1.0
-        best: dict[int, tuple[float, float]] = {}
-        for x, f in pts:
-            i = min(bins - 1, int((x - x_lo) / width * bins))
-            if i not in best or f < best[i][1]:
-                best[i] = (x, f)
-        ordered = [best[i] for i in sorted(best)]
-        return [p[0] for p in ordered], [p[1] for p in ordered]
+        return sf_along_slope(res, use_left, use_right, bins)
 
     def _graph_sf_along_slope(self) -> None:
         """Factor of safety along the slope, from ALL valid surfaces."""

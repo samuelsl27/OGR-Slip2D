@@ -114,6 +114,12 @@ MAPPED: dict[str, str] = {
     "gw_compute": "groundwater_run",
     "gw_interpret": "groundwater_results",
     "drawdown_sweep": "drawdown_sweep_run",
+    # --- v0.1.201 (F3b): statistics, back analysis, optimisation -------
+    "stat_vars": "random_variable_set",
+    "stat_compute": "statistics_run",
+    "stat_show": "results_query",
+    "back_analysis": "back_analysis_run",
+    "optimize_surfaces": "optimize_run",
     "focus_window": "focus_set",
     "focus_line": "focus_set",
     "focus_point": "focus_set",
@@ -175,16 +181,15 @@ UI_ONLY: dict[str, str] = {
 PENDING: dict[str, str] = {
     # ``change_slope`` waited here for the owner (v0.1.196: the old
     # function rotated the WHOLE External); rewritten in v0.1.198.
-    # F3 — statistics, back analysis, optimisation (F3b). The nine
-    # groundwater actions were mapped in v0.1.200 (F3a).
-    **{k: "F3" for k in (
-        "stat_vars", "stat_compute", "stat_show", "back_analysis",
-        "optimize_surfaces")},
+    # Empty since v0.1.201: F3a mapped the nine groundwater actions and
+    # F3b the last five (statistics, back analysis, optimisation). The
+    # plan left this for F4; an action added from now on must be mapped
+    # or declared UI_ONLY with its reason.
 }
 
 #: The most actions allowed to be pending. Lower it with every phase;
 #: never raise it (a raise needs its reason in a changelog).
-PENDING_CEILING = 5
+PENDING_CEILING = 0
 
 
 def coverage() -> dict:

@@ -169,8 +169,13 @@ def run_sensitivity(
     num_slices: int = 25,
     method_factory: Optional[Callable] = None,
     progress_cb: Optional[Callable[[int, int], None]] = None,
+    prepare: Optional[Callable] = None,
 ) -> SensitivityResult:
     """Run a sensitivity analysis.
+
+    ``prepare`` (v0.1.201): ``project -> project`` applied to each swept
+    clone before it is evaluated; the analysis door passes the design
+    factors, as for the probabilistic runs.
 
     Args:
         project: the deterministic model (never modified).
@@ -315,6 +320,8 @@ def run_sensitivity(
                     done += n_points - i
                     break
                 try:
+                    if prepare is not None:
+                        clone = prepare(clone)
                     r = _evaluate_on(clone, search, surface)
                 except Exception:  # noqa: BLE001
                     r = None

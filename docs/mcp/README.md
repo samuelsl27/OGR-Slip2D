@@ -43,7 +43,7 @@ Opciones completas: `ogr-slip2d-mcp --help`.
 
 ## Qué puede hacer hoy
 
-67 herramientas, descritas en [herramientas.md](herramientas.md):
+74 herramientas, descritas en [herramientas.md](herramientas.md):
 
 - abrir, crear (vacío o el talud de demostración), guardar y describir
   modelos;
@@ -57,6 +57,12 @@ Opciones completas: `ogr-slip2d-mcp --help`.
 - agua subterránea por elementos finitos: propiedades hidráulicas, malla,
   condiciones de contorno, transitorio por etapas, rejilla de presiones,
   cálculo, lectura del campo y barrido de desembalse;
+- variables aleatorias, estadística (probabilística y de sensibilidad),
+  retroanálisis de la fuerza de sostenimiento y optimización de superficies,
+  por la misma puerta que un análisis;
+- las preguntas de la ventana de interpretación: códigos de error, censo de
+  rechazos, datos brutos, superficies por un punto, dovelas con los números
+  del método;
 - grieta de tracción y su agua, objetos de foco y superficies propias;
 - anotaciones, y su único puente a la geometría (`annotation_to_boundary`);
 - DXF de entrada y de salida, informe PDF e importar propiedades de otro
@@ -75,10 +81,9 @@ contorno al que ser normal), `angle_deg` con una carga vertical, una
 tolerancia de foco en una ventana... Es la regla 7 del proyecto aplicada en la puerta.
 
 `server_info` dice cuánto del menú del programa cubre ya el agente
-(`program_coverage`): 108 de las 136 acciones de la ventana principal, 23 son
-sólo de interfaz (zoom, *pan*...) y quedan 5, todas de la fase F3
-(estadística, retroanálisis, optimización). Hasta entonces se alcanzan con
-`python_exec`.
+(`program_coverage`): 113 de las 136 acciones de la ventana principal; las
+otras 23 son sólo de interfaz (zoom, *pan*, impresión...) y cada una dice
+por qué. **No queda ninguna pendiente** desde v0.1.201.
 
 ## Configurar cada cliente
 

@@ -328,3 +328,53 @@ def drawdown_sweep_summary(sweep, factor_report=None, warnings=()) -> dict:
         "notes": sweep.notes,
         "factor_report": factor_report_summary(factor_report),
         "warnings": list(warnings)})
+
+
+# ----------------------------------------------------------------------
+# Statistics, back analysis and optimisation (v0.1.201, spec 008 F3b)
+# ----------------------------------------------------------------------
+def statistics_summary(outcome) -> dict:
+    """What Compute Statistics found, for ``summary.json``."""
+    prob, sens = outcome.probabilistic, outcome.sensitivity
+    out = {"deterministic": {mid: _r(getattr(r, "fos", None))
+                             for mid, r in outcome.deterministic.items()},
+           "factor_report": factor_report_summary(outcome.factor_report),
+           "warnings": list(outcome.warnings)}
+    if prob is not None:
+        out["probabilistic"] = json_safe({
+            "ok": prob.ok, "analysis_type": prob.analysis_type,
+            "sampling": prob.sampling_method,
+            "num_samples": prob.num_samples, "variables": prob.variables,
+            "methods": prob.summary(), "notes": prob.notes,
+            "note_lines": list(getattr(prob, "note_lines", []) or [])})
+    if sens is not None:
+        out["sensitivity"] = json_safe({
+            "ok": sens.ok, "ranking": sens.ranking() if sens.ok else [],
+            "notes": sens.notes,
+            "note_lines": list(getattr(sens, "note_lines", []) or [])})
+    return out
+
+
+def back_analysis_summary(result, factor_report=None, warnings=()) -> dict:
+    """The support force a back analysis found, for ``summary.json``."""
+    c = result.critical
+    return json_safe({**result.summary(),
+                      "critical_surface": (surface_summary(c.surface)
+                                           if c is not None else None),
+                      "notes": result.notes,
+                      "factor_report": factor_report_summary(factor_report),
+                      "warnings": list(warnings)})
+
+
+def optimize_summary(result, report, factor_report=None, warnings=()
+                     ) -> dict:
+    """What an optimisation reached, for ``summary.json``."""
+    return json_safe({
+        "improved": report.improved, "initial_fos": report.initial_fos,
+        "final_fos": report.final_fos, "iterations": report.iterations,
+        "accepted": report.accepted, "rejected": report.rejected,
+        "report": report.summary(), "notes": report.notes,
+        "result": lem_summary(result),
+        "admissible": bool(getattr(result, "admissible", True)),
+        "factor_report": factor_report_summary(factor_report),
+        "warnings": list(warnings)})

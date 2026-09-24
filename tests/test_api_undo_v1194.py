@@ -149,7 +149,15 @@ EXAMPLES = {
                                             [45, 35, 0.0]]},
     "water_grid_delete": lambda p: {},
     "groundwater_run": lambda p: {"wait_seconds": 120},
+    # v0.1.201 (F3b): the random variables; the runs edit nothing.
+    "random_variable_set": lambda p: {"key": _cohesion_key(p),
+                                      "std_dev": 0.5},
+    "random_variable_delete": lambda p: {"key": _cohesion_key(p)},
 }
+
+
+def _cohesion_key(p):
+    return f"material_strength:{p.materials[0].id}:cohesion"
 
 
 def _prep_load(ws, pid, tmp):
@@ -251,6 +259,12 @@ def _prep_conditions(ws, pid, tmp):
              side=side, value=level)
 
 
+def _prep_variable(ws, pid, tmp):
+    from ogr_api import call
+    call(ws, "random_variable_set", project_id=pid,
+         key=_cohesion_key(ws.get(pid).project))
+
+
 def _prep_grid(ws, pid, tmp):
     from ogr_api import call
     call(ws, "water_grid_set", project_id=pid,
@@ -265,6 +279,7 @@ PREPARE = {
     "seepage_bc_clear": _prep_conditions,
     "water_grid_delete": _prep_grid,
     "groundwater_run": _prep_conditions,
+    "random_variable_delete": _prep_variable,
     "load_delete": _prep_load,
     "seismic_record_delete": _prep_record,
     "support_type_delete": _prep_type,

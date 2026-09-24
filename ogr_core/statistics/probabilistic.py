@@ -54,6 +54,12 @@ class MethodProbabilisticResult:
     failed_samples: int = 0                 # samples that could not be
     #                                         evaluated at all
     notes: dict = field(default_factory=dict)
+    #: v0.1.201 — the index, into ``ProbabilisticResult.samples``, of the
+    #: sample behind each factor of ``statistics.values``. A failed sample
+    #: produces no factor, so without this the two lists stop lining up at
+    #: the first failure: the scatter data and the CSV export zipped them
+    #: and paired every later factor with the NEXT sample's values.
+    sample_index: list = field(default_factory=list)
 
     # ------------------------------------------------------------------
     # v0.1.169 (D127) — ``Optional`` because the statistic they delegate to
@@ -585,6 +591,7 @@ def run_global_minimum(
     num_slices: int = 25,
     method_factory: Optional[Callable] = None,
     progress_cb: Optional[Callable[[int, int], None]] = None,
+    prepare: Optional[Callable] = None,
 ) -> ProbabilisticResult:
     """Run a Global Minimum probabilistic analysis.
 
@@ -602,6 +609,12 @@ def run_global_minimum(
             ``analysis_runner.build_method``, which is the one place that
             configures a method from the project (v0.1.108).
         progress_cb: called as ``(done, total)``.
+        prepare: ``project -> project`` applied to every sampled clone
+            after its sample, before it is evaluated (v0.1.201): the
+            analysis door passes the design factors here, so a sampled
+            value is factored like the deterministic one instead of
+            overwriting a factored parameter with an unfactored value.
+            None leaves the clone as sampled.
 
     Returns:
         A :class:`ProbabilisticResult`, empty when no variable is random.
@@ -720,11 +733,14 @@ def run_global_minimum(
             apply_sample(clone, active, one)
             exc = None
             try:
+                if prepare is not None:
+                    clone = prepare(clone)
                 r = _evaluate_on(clone, search, surface)
             except Exception as e:  # noqa: BLE001
                 r, exc = None, e
             if r is not None and r.is_valid:
                 values.append(r.fos)
+                mres.sample_index.append(i)
             else:
                 # A sample can make the surface unsolvable (for instance a
                 # very low strength). It is counted separately rather than
@@ -814,6 +830,8 @@ class OverallSlopeResult:
     critical_probabilistic: Optional[SurfaceProbability] = None
     failed_samples: int = 0
     notes: dict = field(default_factory=dict)
+    #: v0.1.201 — see ``MethodProbabilisticResult.sample_index``.
+    sample_index: list = field(default_factory=list)
 
     @property
     def probability_of_failure(self) -> Optional[float]:
@@ -911,8 +929,11 @@ def run_overall_slope(
     deterministic: Optional[dict] = None,
     min_evaluations: int = 5,
     progress_cb: Optional[Callable[[int, int], None]] = None,
+    prepare: Optional[Callable] = None,
 ) -> ProbabilisticResult:
     """Run an **Overall Slope** probabilistic analysis.
+
+    ``prepare`` as in :func:`run_global_minimum` (v0.1.201).
 
     The ENTIRE SEARCH is repeated ``num_samples`` times, loading a new
     set of random-variable samples each time, so the location of the
@@ -995,6 +1016,8 @@ def run_overall_slope(
                                          samples.items()})
             exc = None
             try:
+                if prepare is not None:
+                    clone = prepare(clone)
                 search = search_factory(mid)
                 run = search.run(clone)
             except Exception as e:  # noqa: BLE001
@@ -1012,6 +1035,7 @@ def run_overall_slope(
                 continue
 
             values.append(run.critical.fos)
+            ores.sample_index.append(i)
 
             # Accumulate per-surface statistics for the critical
             # probabilistic surface
@@ -1081,3 +1105,24 @@ def run_overall_slope(
     _publish_method_warnings(result)
 
     return result
+
+
+# ======================================================================
+def sample_pairs(result, method_id: str, key: str) -> list:
+    """``[(sample index, sampled value of key, factor of safety)]`` for
+    the samples of ``method_id`` that produced a factor.
+
+    v0.1.201 — paired by the sample's own index. The scatter data and the
+    statistics export zipped the samples with the factors, and a failed
+    sample shifted every later pair by one. A result without the index
+    (built before this version) cannot be paired honestly and gives [].
+    """
+    m = (getattr(result, "by_method", None) or {}).get(method_id)
+    col = (getattr(result, "samples", None) or {}).get(key)
+    if m is None or col is None:
+        return []
+    idx = list(getattr(m, "sample_index", None) or [])
+    values = list(m.statistics.values)
+    if len(idx) != len(values):
+        return []
+    return [(i, col[i], f) for i, f in zip(idx, values)]

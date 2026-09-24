@@ -850,6 +850,32 @@ _DICTS: dict[str, dict[str, str]] = {
         'alpha (1/m):': 'alfa (1/m):',
         'Suction head (m)': 'Altura de succión (m)',
         'dropped:': 'descartado:',
+        # v0.1.201 — statistics, back analysis and optimisation go through
+        # the analysis door, whose refusals the window shows through tr().
+        'Define at least one random variable first.':
+            'Defina antes al menos una variable aleatoria.',
+        'Enable a probabilistic or sensitivity analysis in Project '
+        'Settings first.':
+            'Active antes un análisis probabilístico o de sensibilidad en '
+            'la configuración del proyecto.',
+        'The deterministic analysis produced no critical surface. Check '
+        'the model and the search settings.':
+            'El análisis determinista no ha dado ninguna superficie '
+            'crítica. Revise el modelo y los ajustes de búsqueda.',
+        # v0.1.201 — Interpret: the crossing-point query, the slice export.
+        'Enter the coordinates of a point. The surfaces whose slip surface '
+        'passes within the tolerance are counted, and the one with the '
+        'lowest factor of safety is reported.':
+            'Introduzca las coordenadas de un punto. Se cuentan las '
+            'superficies cuya superficie de deslizamiento pasa a menos de '
+            'la tolerancia, y se indica la de menor factor de seguridad.',
+        'Lowest factor of safety among them: ':
+            'Menor factor de seguridad entre ellas: ',
+        '(none)': '(ninguna)',
+        'No slices available — run a compute first.':
+            'No hay dovelas: calcule primero.',
+        'Export Slice Data': 'Exportar datos de las dovelas',
+        'Slice data exported to %s': 'Datos de las dovelas exportados a %s',
         # v0.1.200 — the stage checks now live in
         # ``GroundwaterSettings.set_transient``; the dialog shows its
         # message through tr(), so each one is a key.

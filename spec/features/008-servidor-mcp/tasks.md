@@ -111,5 +111,9 @@ Plan corto antes de cada una. Al cerrar F4, `PENDING` del inventario vacío.
       por modelo (decisión del propietario, 2026-09-24). Validado contra
       Darcy 1-D, medias por capas, erfc, Charnyi y Morgenstern (1963).
       Inventario: 108 cubiertas, 5 pendientes, techo 5.
-- [ ] F3b (v0.1.201) Estadística, retroanálisis, optimización e
-      interpretación: `PENDING` a cero.
+- [x] F3b (v0.1.201) Estadística, retroanálisis, optimización e
+      interpretación: `random_variable_list/set/delete`, `statistics_run`,
+      `back_analysis_run` y `optimize_run` (trabajos, por la puerta del
+      análisis) y `results_query`; `ogr_slip2d/interpretation.py` con lo
+      que preguntaba la ventana. Inventario: 113 cubiertas, 23 de
+      interfaz, **0 pendientes**, techo 0 (el plan lo dejaba para F4).

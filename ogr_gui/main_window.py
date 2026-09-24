@@ -202,7 +202,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.200"
+    VERSION = "0.1.201"
 
     def __init__(self) -> None:
         super().__init__()
@@ -1424,9 +1424,10 @@ class MainWindow(QMainWindow):
             QDialog, QDialogButtonBox, QDoubleSpinBox, QFormLayout,
             QComboBox, QVBoxLayout,
         )
-        from ogr_slip2d.back_analysis import (
-            SUPPORTED_METHODS, run_back_analysis,
+        from ogr_slip2d.analysis_runner import (
+            AnalysisNotConfigured, run_configured_back_analysis,
         )
+        from ogr_slip2d.back_analysis import SUPPORTED_METHODS
         cfg = self.project.settings.back_analysis
 
         dlg = QDialog(self)
@@ -1467,13 +1468,14 @@ class MainWindow(QMainWindow):
         cfg.method_id = cbo.currentData()
         self.project.is_dirty = True
 
-        worker = _ComputeWorker(self.project, [cfg.method_id])
-        search = worker.build_search(cfg.method_id)
-        if search is None:
-            self._info("Could not build the search for this method.")
+        # v0.1.201 — the analysis door: design factors, the settings
+        # checks, the configured search. This searched the raw project.
+        try:
+            res, _report, _warnings = run_configured_back_analysis(
+                self.project)
+        except AnalysisNotConfigured as exc:
+            self._info("\n".join(tr(p) for p in exc.problems))
             return
-        res = run_back_analysis(self.project, search, cfg.target_fos,
-                                cfg.elevation, cfg.method_id)
         self._back_analysis_result = res
         if res.critical is None:
             self._info(res.notes.get("error", "Back analysis failed."))
@@ -1646,109 +1648,60 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(
                 f"{n} random variable(s) defined", 5000)
 
-    def _deterministic_criticals(self) -> dict:
-        """Run the configured deterministic search once, reusing the
-        very same machinery as a normal Compute."""
-        method_ids = list(
-            self.project.settings.methods.enabled_methods) or [
-            "bishop_simplified"]
-        worker = _ComputeWorker(self.project, method_ids)
-        worker.run()
-        return {mid: sr.critical
-                for mid, sr in (worker.results or {}).items()
-                if sr is not None and sr.critical is not None}
-
     def _compute_statistics(self) -> None:
-        """Run the probabilistic and/or sensitivity analysis."""
-        from ogr_core.statistics import (
-            SamplingMethod, run_global_minimum, run_overall_slope,
-            run_sensitivity,
-        )
-        st = self.project.settings.statistics
-        variables = list(getattr(self.project, "random_variables", []))
-        if not variables:
-            self._info("Define at least one random variable first.")
-            return
-        det = self._deterministic_criticals()
-        if not det:
-            self._info("The deterministic analysis produced no critical "
-                       "surface. Check the model and the search settings.")
-            return
+        """Run the probabilistic and/or sensitivity analysis.
 
+        v0.1.201 — through ``run_configured_statistics``, the analysis
+        door, which an agent's run goes through too. This ran the
+        deterministic search on the design-factored copy and every sample
+        on the raw project, so with a standard on the histogram mixed the
+        two; and a refusal of the deterministic run was swallowed and
+        reported as "no critical surface".
+        """
+        from ogr_slip2d.analysis_runner import (AnalysisNotConfigured,
+                                                run_configured_statistics)
         try:
-            sampling = SamplingMethod(st.sampling_method)
-        except ValueError:
-            sampling = SamplingMethod.MONTE_CARLO
+            out = run_configured_statistics(self.project)
+        except AnalysisNotConfigured as exc:
+            self._info("\n".join(tr(p) for p in exc.problems))
+            return
+        if not out.deterministic:
+            self._info(tr(out.warnings[-1]))
+            return
 
         self._prob_result = None
         self._sens_result = None
+        # The deterministic run's own warnings are Compute's to show; this
+        # channel carries what the statistics say (v0.1.170, D129).
         self.last_statistics_notes = []
         messages = []
 
-        if st.probabilistic_analysis:
-            if st.analysis_type == "overall_slope":
-                method_ids = list(det)
-
-                def _factory(mid, _self=self):
-                    worker = _ComputeWorker(_self.project, [mid])
-                    return worker.build_search(mid)
-
-                res = run_overall_slope(
-                    self.project, _factory, variables, method_ids,
-                    num_samples=st.num_samples, sampling=sampling,
-                    seed=self.project.settings.analysis_seed(),
-                    deterministic=det)
-            else:
-                res = run_global_minimum(
-                    self.project, det, variables,
-                    num_samples=st.num_samples, sampling=sampling,
-                    seed=self.project.settings.analysis_seed(),
-                    num_slices=self.project.settings.methods.num_slices)
+        res = out.probabilistic
+        if res is not None:
             if res.ok:
                 self._prob_result = res
                 # v0.1.169 (D127) — ``reported`` is the method that has a
                 # sample, and ``ok`` is exactly the claim that it exists.
-                # ``next(iter(...))`` could hand back a method that lost
-                # every search -- in Overall Slope such a method KEEPS its
-                # entry -- and its ``probability_of_failure`` is ``None``
-                # now, so the two lines below would raise where they used
-                # to print "PF = nan %, beta = -inf".
                 first = res.reported
                 messages.append(
                     f"PF = {first.probability_of_failure * 100:.2f} %, "
                     f"beta = {first.reliability_index:.3f}")
                 # v0.1.164 (D91) — a run that sampled only SOME of the
-                # declared variables is still a run, so it reports PF; what
-                # it may not do is report it as if nothing were missing.
+                # declared variables still reports PF, but not as if
+                # nothing were missing.
                 warning = res.notes.get("warning")
                 if warning:
                     messages.append(warning)
             else:
                 messages.append(
                     res.notes.get("error", "probabilistic run failed"))
-            # v0.1.169 (D127) put the reason into the notes panel and not
-            # only into the status bar, where it lasted twelve seconds and
-            # was gone; that intent is unchanged and only the route moved.
-            #
-            # v0.1.170 (D129) — the panel is fed from ``note_lines`` ALONE,
-            # and ``notes`` goes only to the status bar, which takes one
-            # string. The two are the same content, so appending both would
-            # say the same sentence twice in the case this defect is about:
-            # one stale variable AND one lost method, where
-            # ``notes["warning"]`` already carries the method's line.
-            #
-            # One ``extend`` per analysis and no per-branch ``append`` is
-            # also what stops the two branches drifting apart again: the
-            # reason a run produced nothing used to reach the panel from
-            # the probabilistic side and not from the sensitivity one.
+            # v0.1.170 (D129) — the panel is fed from ``note_lines`` alone;
+            # ``notes`` goes only to the status bar.
             self.last_statistics_notes.extend(
                 getattr(res, "note_lines", None) or [])
 
-        if st.sensitivity_analysis:
-            res = run_sensitivity(
-                self.project, det, variables,
-                intervals=st.sensitivity_intervals,
-                num_slices=self.project.settings.methods.num_slices)
+        res = out.sensitivity
+        if res is not None:
             if res.ok:
                 self._sens_result = res
                 rows = res.ranking()
@@ -1760,8 +1713,6 @@ class MainWindow(QMainWindow):
             else:
                 messages.append(res.notes.get("error", "sensitivity run "
                                                        "failed"))
-            # v0.1.170 (D129) — the twin of the line above, and the same
-            # shape on purpose.
             self.last_statistics_notes.extend(
                 getattr(res, "note_lines", None) or [])
 
@@ -2201,7 +2152,10 @@ class MainWindow(QMainWindow):
         """Random-walk the critical surface towards a lower factor."""
         from PySide6.QtWidgets import QInputDialog
 
-        from ogr_slip2d.optimize import OptimizeSettings, optimize_surface
+        import copy
+
+        from ogr_slip2d.analysis_runner import (
+            AnalysisNotConfigured, run_configured_optimization)
         results = getattr(self, "last_search_results", None) or {}
         candidates = {mid: sr for mid, sr in results.items()
                       if sr is not None and sr.critical is not None}
@@ -2227,19 +2181,23 @@ class MainWindow(QMainWindow):
                 "Block or Path Search first."))
             return
 
+        # v0.1.201 — prefilled from the project's setting (4000 by
+        # default), not a hard-coded 400: two doors, one default.
         iters, ok = QInputDialog.getInt(
             self, tr("Optimize Surfaces"), tr("Maximum evaluations:"),
-            400, 10, 100000)
+            int(self.project.settings.search.optimize_max_iterations),
+            10, 100000)
         if not ok:
             return
-        worker = _ComputeWorker(self.project, [mid])
-        search = worker.build_search(mid)
-        if search is None:
-            self._info(tr("Could not build the search for this method."))
+        # v0.1.201 — the analysis door, with the project's optimisation
+        # settings and seed: this read none of them and had no seed, so
+        # two runs of the same model answered differently.
+        try:
+            best, res, rep, _report, _w = run_configured_optimization(
+                self.project, mid, surface, max_iterations=iters)
+        except AnalysisNotConfigured as exc:
+            self._info("\n".join(tr(p) for p in exc.problems))
             return
-        best, res, rep = optimize_surface(
-            self.project, search, surface,
-            OptimizeSettings(max_iterations=iters))
         if "error" in rep.notes:
             self._info(rep.notes["error"])
             return
@@ -2261,10 +2219,21 @@ class MainWindow(QMainWindow):
             self._info(tr("The optimised surface has no factor of safety; "
                           "the original result is kept."))
             return
-        crit.surface = best
-        crit.fos = res.fos
-        crit.slices = res.slices
-        self.canvas.display_search_result(candidates[mid])
+        # v0.1.201 — a NEW result, as the search's own optimisation pass
+        # stores it (``optimized``, one more evaluation). This overwrote the
+        # critical surface, factor and slices in place and left its forces,
+        # details and admissibility from the old surface — and every open
+        # Interpret window shares that object.
+        new = copy.copy(candidates[mid])
+        new.evaluations = list(new.evaluations) + [res]
+        new.optimized = res
+        new.valid_count = new.valid_count + 1
+        self.last_search_results = dict(results)
+        self.last_search_results[mid] = new
+        if self.last_search_result is candidates[mid]:
+            self.last_search_result = new
+        self.results_dock.show_result(new, self.last_factor_report)
+        self.canvas.display_search_result(new)
         self.statusBar().showMessage(
             tr("Optimised: %s") % rep.summary(), 15000)
 
@@ -3713,8 +3682,19 @@ class MainWindow(QMainWindow):
         except Exception:  # noqa: BLE001
             pass
         self.canvas.set_project(project)
+        # v0.1.201 — the statistics and the back analysis belong to the
+        # project they were computed on. New, Open and the demo kept the
+        # previous project's, and Show Statistics and the Interpret
+        # statistics menus went on showing them.
+        # (The notes panel keeps its own reset sites, in step with the
+        # factor report: see test_design_factor_report_gui_v1165.)
+        self._prob_result = None
+        self._sens_result = None
+        self._back_analysis_result = None
         # Refresh the menu/toolbar enabled-state for the new project.
         self.refresh_action_availability()
+        if hasattr(self, "_actions") and "stat_show" in self._actions:
+            self._update_statistics_actions()
 
     def refresh_action_availability(self) -> None:
         """Greys out actions whose preconditions are not met, as the reference does.

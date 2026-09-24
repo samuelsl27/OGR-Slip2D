@@ -29,6 +29,7 @@ from .probabilistic import (  # noqa: F401
     ProbabilisticType,
     run_global_minimum,
     run_overall_slope,
+    sample_pairs,
     OverallSlopeResult,
     SurfaceProbability,
 )

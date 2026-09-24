@@ -188,7 +188,7 @@ def results_get(ws, result_id: str, method_id: Optional[str] = None,
     if not 1 <= n <= 100:
         raise InvalidArgument("n must be between 1 and 100.")
     handle, res = ws.find_result(result_id)
-    if res.kind not in ("analysis", "surface") and view not in (
+    if res.kind not in ("analysis", "surface", "optimized") and view not in (
             "summary", "warnings"):
         # v0.1.200 — a groundwater field or a drawdown sweep has no
         # critical surface per method to show; this used to answer with

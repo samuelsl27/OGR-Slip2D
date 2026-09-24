@@ -1,6 +1,6 @@
 # Herramientas
 
-Las 67 herramientas del perfil `full`. Las marcadas con **C** están también
+Las 74 herramientas del perfil `full`. Las marcadas con **C** están también
 en el perfil `compact`. Los parámetros y sus descripciones exactas los
 publica el propio servidor (`tools/list`); aquí va para qué sirve cada una.
 
@@ -107,6 +107,19 @@ Una carga lineal «normal al contorno» o «con ángulo respecto al contorno» t
 
 Unidades: cargas hidráulicas en m y presión intersticial en kPa; permeabilidad, infiltración y caudal nodal en una misma unidad coherente (m/s). Desde v0.1.200 cada modelo de permeabilidad toma su succión en la unidad de su propia definición: van Genuchten y Gardner en altura (α en 1/m), Brooks-Corey, Fredlund-Xing, Simple y la curva de usuario en succión matricial (kPa).
 
+## Estadística, retroanálisis y optimización (`statistics`, desde v0.1.201)
+
+| Herramienta | C | Para qué |
+|---|---|---|
+| `random_variable_list` | | Las entradas del modelo que pueden ser variables aleatorias, con su clave y su valor, y las ya definidas. |
+| `random_variable_set` | | Hacer aleatoria una entrada o cambiarla: distribución, desviación, rango, correlación. La media es siempre el valor del modelo. |
+| `random_variable_delete` | | Quitar una variable; las correlaciones que apuntaban a ella se limpian. |
+| `statistics_run` | | *Compute Statistics* en segundo plano: el determinista y luego el probabilístico (PF, índice de fiabilidad) o el de sensibilidad, con los coeficientes de diseño y la semilla del modelo. |
+| `back_analysis_run` | | La fuerza horizontal de sostenimiento necesaria para un factor objetivo, sobre la búsqueda configurada. |
+| `optimize_run` | | Optimizar la superficie crítica no circular de un resultado con los ajustes y la semilla del modelo; el resultado es uno NUEVO. |
+
+Los tres cálculos pasan por la misma puerta que `analysis_run`: sin norma de diseño dan exactamente lo mismo que antes, y con norma, el modelo factorizado.
+
 ## Ajustes (`settings`)
 
 | Herramienta | C | Para qué |
@@ -124,6 +137,7 @@ Unidades: cargas hidráulicas en m y presión intersticial en kPa; permeabilidad
 | `job_cancel` | C | Detiene un análisis y todos los procesos que arrancó. |
 | `job_list` | | Los trabajos de la sesión. |
 | `results_get` | C | Leer un resultado: resumen, superficie crítica con dovelas, mejores superficies, mínimos, avisos. |
+| `results_query` | | Lo que pregunta la ventana de interpretación (desde v0.1.201): códigos de error (−120 tracción, −112 m-alfa, −111 sin convergencia, −101 otros) y censo de superficies rechazadas, datos brutos, superficies que pasan por un punto (medido sobre la superficie que se calculó, no sobre el círculo entero), mínimo por centro, factor a lo largo del talud, dovelas con los números del método, filtros; y de un resultado de estadística, histograma, convergencia, muestras con su índice y sensibilidad. |
 | `surface_evaluate` | | El factor de seguridad de UNA superficie dada (círculo, tres puntos o polilínea), sin búsqueda. |
 
 ## Vista, historia y Python

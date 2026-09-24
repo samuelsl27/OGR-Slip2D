@@ -65,4 +65,4 @@ def call(ws, op_name: str, /, **kwargs):
 # the four operations silently never registered (found in v0.1.196).
 from . import (project, model, settings, analysis, view, history,  # noqa: E402,F401
                python, loads, supports, search_objects, annotation_ops,
-               files, groundwater)
+               files, groundwater, statistics)

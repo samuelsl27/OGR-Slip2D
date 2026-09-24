@@ -1340,12 +1340,22 @@ class ProjectSettings:
         searches. Which of the two is being built is a question about the
         pair, not the method: see ``is_auto_refine_non_circular``.
         """
+        if not optimize_enabled_for(self.search):
+            return {"optimize": None}
+        return {"optimize": self.optimize_settings()}
+
+    def optimize_settings(self):
+        """The project's Optimize Surfaces settings, ticked or not.
+
+        v0.1.201 — split out of :meth:`optimize_kwargs` for the explicit
+        *Optimize Surfaces...* action, which is itself the request to
+        optimise: it read none of these (a hard-coded 400 iterations and
+        the defaults for the rest) and had no seed.
+        """
         from ogr_slip2d.optimize import OptimizeSettings
 
         s = self.search
-        if not optimize_enabled_for(s):
-            return {"optimize": None}
-        return {"optimize": OptimizeSettings(
+        return OptimizeSettings(
             enabled=True,
             target=str(s.optimize_target),
             fos_threshold=float(s.optimize_fos_threshold),
@@ -1368,7 +1378,7 @@ class ProjectSettings:
                            else None),
             use_surface_checks=bool(
                 s.optimize_use_depth_elevation_concave_checks),
-        )}
+        )
 
     # ------------------------------------------------------------------
     def to_dict(self) -> dict:

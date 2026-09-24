@@ -894,19 +894,10 @@ class CanvasView(QGraphicsView):
         Minimum Surfaces option is documented as applying to a circular
         Grid Search only.
         """
-        best: dict = {}
-        loose: list = []
-        for r in search_result.valid():
-            sd = r.surface.to_dict()
-            cx = sd.get("centre_x")
-            cy = sd.get("centre_y")
-            if cx is None or cy is None:
-                loose.append(r)
-                continue
-            key = (round(cx, 6), round(cy, 6))
-            if key not in best or r.fos < best[key].fos:
-                best[key] = r
-        return list(best.values()) + loose
+        # v0.1.201 — ``interpretation.minimum_per_centre``, which the agent
+        # asks too.
+        from ogr_slip2d.interpretation import minimum_per_centre
+        return minimum_per_centre(search_result)
 
     @staticmethod
     def _apply_fos_filter(surfaces: list, fos_filter, critical_id) -> list:

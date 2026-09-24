@@ -2343,3 +2343,173 @@ def run_configured_drawdown_sweep(project, method_ids=None, *,
                                 include_total=bool(include_total),
                                 progress_cb=progress_cb)
     return result, report, warnings
+
+
+# ======================================================================
+# v0.1.201 (spec 008, F3b) — statistics, back analysis and optimisation
+# through the analysis door (owner's decision "una sola puerta",
+# 2026-09-24). Each refuses what ``run_analysis`` refuses, runs on the
+# design-factored copy with the project's settings and seed, and returns
+# the factor report and the settings warnings with its result. With the
+# design standard off the factored copy IS the project, so nothing moves.
+# ======================================================================
+from dataclasses import dataclass as _dataclass, field as _field  # noqa: E402
+
+
+@_dataclass
+class StatisticsOutcome:
+    """What Compute Statistics produced."""
+
+    probabilistic: object = None       # ProbabilisticResult, or None
+    sensitivity: object = None         # SensitivityResult, or None
+    #: ``method_id -> critical LEMResult`` of the deterministic run.
+    deterministic: dict = _field(default_factory=dict)
+    factor_report: object = None
+    warnings: list = _field(default_factory=list)
+
+
+def run_configured_statistics(project, method_ids=None, *,
+                              progress_cb=None) -> StatisticsOutcome:
+    """Compute Statistics: the deterministic run, then the probabilistic
+    and/or sensitivity analysis the project declares.
+
+    Until v0.1.201 the interface ran the deterministic analysis on the
+    design-factored copy and every SAMPLE on the raw project, so with a
+    standard on the histogram put over-design factors next to unfactored
+    factors of safety; and a refusal of ``run_analysis`` was swallowed and
+    reported as "no critical surface". Here each sampled clone is factored
+    AFTER its sample (``prepare``), so a sampled cohesion is factored like
+    the deterministic one instead of replacing a factored value.
+    """
+    from ogr_core.project import apply_design_factors
+    from ogr_core.statistics import (SamplingMethod, run_global_minimum,
+                                     run_overall_slope, run_sensitivity)
+
+    st = project.settings.statistics
+    problems = list(check_analysis_settings(project))
+    if not (st.probabilistic_analysis or st.sensitivity_analysis):
+        problems.append("Enable a probabilistic or sensitivity analysis "
+                        "in Project Settings first.")
+    variables = list(getattr(project, "random_variables", []) or [])
+    if not variables:
+        problems.append("Define at least one random variable first.")
+    if problems:
+        raise AnalysisNotConfigured(problems)
+    method_ids = (list(method_ids) if method_ids else
+                  list(project.settings.methods.enabled_methods)
+                  or ["bishop_simplified"])
+    base = run_analysis(project, method_ids)
+    out = StatisticsOutcome(factor_report=base.factor_report,
+                            warnings=list(base.warnings))
+    out.deterministic = {mid: sr.critical
+                         for mid, sr in (base.results or {}).items()
+                         if sr is not None and sr.critical is not None}
+    if not out.deterministic:
+        out.warnings.append("The deterministic analysis produced no "
+                            "critical surface. Check the model and the "
+                            "search settings.")
+        return out
+    factored, _rep = apply_design_factors(project)
+
+    def prepare(clone):
+        return apply_design_factors(clone)[0]
+
+    try:
+        sampling = SamplingMethod(st.sampling_method)
+    except ValueError:
+        sampling = SamplingMethod.MONTE_CARLO
+    seed = project.settings.analysis_seed()
+    num_slices = project.settings.methods.num_slices
+    if st.probabilistic_analysis:
+        if st.analysis_type == "overall_slope":
+            out.probabilistic = run_overall_slope(
+                project, lambda mid: build_search(factored, mid), variables,
+                list(out.deterministic), num_samples=st.num_samples,
+                sampling=sampling, seed=seed,
+                deterministic=out.deterministic, progress_cb=progress_cb,
+                prepare=prepare)
+        else:
+            out.probabilistic = run_global_minimum(
+                project, out.deterministic, variables,
+                num_samples=st.num_samples, sampling=sampling, seed=seed,
+                num_slices=num_slices,
+                method_factory=lambda mid: build_method(factored, mid,
+                                                        num_slices),
+                progress_cb=progress_cb, prepare=prepare)
+    if st.sensitivity_analysis:
+        out.sensitivity = run_sensitivity(
+            project, out.deterministic, variables,
+            intervals=st.sensitivity_intervals, num_slices=num_slices,
+            method_factory=lambda mid: build_method(factored, mid,
+                                                    num_slices),
+            progress_cb=progress_cb, prepare=prepare)
+    return out
+
+
+def run_configured_back_analysis(project, *, target_fos=None,
+                                 elevation=None, method_id=None,
+                                 progress_cb=None):
+    """Back Analysis of Support Force through the analysis door.
+
+    ``(BackAnalysisResult, factor_report, warnings)``. The values default
+    to ``settings.back_analysis``. v0.1.201 — the interface searched the
+    raw project with no design factors and no ``check_analysis_settings``.
+    """
+    from ogr_core.project import apply_design_factors
+
+    from .back_analysis import SUPPORTED_METHODS, run_back_analysis
+
+    cfg = project.settings.back_analysis
+    target = float(cfg.target_fos if target_fos is None else target_fos)
+    y = float(cfg.elevation if elevation is None else elevation)
+    mid = cfg.method_id if method_id is None else method_id
+    problems = list(check_analysis_settings(project))
+    if mid not in SUPPORTED_METHODS:
+        problems.append(f"The back analysis supports "
+                        f"{', '.join(SUPPORTED_METHODS)}, not {mid}.")
+    if not target > 0:
+        problems.append("The target factor of safety must be positive.")
+    if problems:
+        raise AnalysisNotConfigured(problems)
+    factored, report = apply_design_factors(project)
+    warnings = list(settings_warnings(factored, [mid]))
+    search = build_search(factored, mid)
+    if search is None:
+        raise AnalysisNotConfigured(
+            [f"Could not build the search for: {mid}"])
+    result = run_back_analysis(factored, search, target, y, mid,
+                               progress_cb=progress_cb)
+    return result, report, warnings
+
+
+def run_configured_optimization(project, method_id, surface, *,
+                                max_iterations=None):
+    """Optimize Surfaces on one surface, through the analysis door.
+
+    ``(best_surface, best_result, OptimizeReport, factor_report,
+    warnings)``. v0.1.201 — the interface's action searched the raw
+    project, read none of the project's optimisation settings (400
+    iterations typed in a box against the 4000 of the settings) and had
+    no seed, so two runs of the same model answered differently.
+    """
+    from dataclasses import replace
+
+    from ogr_core.project import apply_design_factors
+
+    from .optimize import optimize_surface
+
+    problems = list(check_analysis_settings(project))
+    if problems:
+        raise AnalysisNotConfigured(problems)
+    opts = replace(project.settings.optimize_settings(), enabled=True,
+                   seed=project.settings.analysis_seed())
+    if max_iterations is not None:
+        opts = replace(opts, max_iterations=int(max_iterations))
+    factored, report = apply_design_factors(project)
+    warnings = list(settings_warnings(factored, [method_id]))
+    search = build_search(factored, method_id)
+    if search is None:
+        raise AnalysisNotConfigured(
+            [f"Could not build the search for: {method_id}"])
+    best, res, rep = optimize_surface(factored, search, surface, opts)
+    return best, res, rep, report, warnings

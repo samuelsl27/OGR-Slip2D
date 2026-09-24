@@ -134,10 +134,57 @@ def _drawdown_sweep(project, params, progress):
             drawdown_sweep_summary(sweep, report, warnings))
 
 
+def _statistics(project, params, progress):
+    """Compute Statistics through the analysis door (v0.1.201)."""
+    from ogr_slip2d.analysis_runner import run_configured_statistics
+
+    from ..results import statistics_summary
+
+    out = run_configured_statistics(project, params.get("method_ids"),
+                                    progress_cb=progress)
+    return ({"probabilistic": out.probabilistic,
+             "sensitivity": out.sensitivity,
+             "deterministic": out.deterministic,
+             "factor_report": out.factor_report,
+             "warnings": list(out.warnings)},
+            statistics_summary(out))
+
+
+def _back_analysis(project, params, progress):
+    """Back Analysis of Support Force through the door (v0.1.201)."""
+    from ogr_slip2d.analysis_runner import run_configured_back_analysis
+
+    from ..results import back_analysis_summary
+
+    res, report, warnings = run_configured_back_analysis(
+        project, target_fos=params.get("target_fos"),
+        elevation=params.get("elevation"),
+        method_id=params.get("method_id"), progress_cb=progress)
+    return ({"back_analysis": res, "factor_report": report,
+             "warnings": list(warnings)},
+            back_analysis_summary(res, report, warnings))
+
+
+def _optimize(project, params, progress):
+    """Optimize Surfaces on one surface, through the door (v0.1.201)."""
+    from ogr_slip2d.analysis_runner import run_configured_optimization
+
+    from ..results import optimize_summary
+
+    mid = params["method_id"]
+    best, res, rep, report, warnings = run_configured_optimization(
+        project, mid, params["surface"],
+        max_iterations=params.get("max_iterations"))
+    return ({"results": {mid: res}, "report": rep, "surface": best,
+             "factor_report": report, "warnings": list(warnings)},
+            optimize_summary(res, rep, report, warnings))
+
+
 #: The job kinds a worker runs: ``fn(project, params, progress) ->
 #: (payload for result.pkl, summary for summary.json)``.
 _KINDS = {"analysis": _analysis, "groundwater": _groundwater,
-          "drawdown_sweep": _drawdown_sweep}
+          "drawdown_sweep": _drawdown_sweep, "statistics": _statistics,
+          "back_analysis": _back_analysis, "optimize": _optimize}
 
 
 def _run(folder: Path) -> None:

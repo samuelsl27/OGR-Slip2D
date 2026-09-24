@@ -43,7 +43,7 @@ macOS y Linux. Mismo formato que Cursor:
 ```
 
 **Usa `--profile compact` con modelos pequeños.** Publica 14 herramientas en
-vez de 67; `model_define` hace la geometría en una sola llamada y
+vez de 74; `model_define` hace la geometría en una sola llamada y
 `python_exec` cubre el resto. Un modelo pequeño se pierde entre muchas
 herramientas, y cada descripción ocupa contexto en cada petición.
 

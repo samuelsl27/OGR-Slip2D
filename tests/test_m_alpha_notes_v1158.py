@@ -355,10 +355,14 @@ class TestTheMinus112StringCouplingIsIntact:
         assert "m_alpha" in (why or ""), why
 
     def test_and_the_window_still_looks_for_it(self):
-        src = _source("ogr_gui/interpret_window.py")
+        # v0.1.201 — the -112 mapping moved from the Interpret window to
+        # ``ogr_slip2d.interpretation.error_code``, which the window and
+        # the agent both call; the tripwire moved with it.
+        src = _source("ogr_slip2d/interpretation.py")
         assert '"m_alpha" in note' in src, (
-            "interpret_window no longer keys -112 off this token; the "
-            "coupling moved and this tripwire has to move with it")
+            "interpretation.error_code no longer keys -112 off this token; "
+            "the coupling moved and this tripwire has to move with it")
+        assert "raw_data_rows" in _source("ogr_gui/interpret_window.py")
 
 
 # ======================================================================

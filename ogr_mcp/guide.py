@@ -95,6 +95,20 @@ stability analysis read the field.
 * A water pressure grid (water_grid_set) is another source of pore
   pressure, read with a grid_* groundwater method.
 
+## Statistics, back analysis, optimisation
+* random_variable_list gives the keys; random_variable_set makes one input
+  random (its mean is always the model's value). Turn the analysis on with
+  settings_set statistics.probabilistic_analysis (or sensitivity_analysis)
+  and statistics.num_samples, then statistics_run. results_query reads the
+  histogram, the convergence and the samples.
+* back_analysis_run: the horizontal support force for a target factor of
+  safety; optimize_run refines a NON-CIRCULAR critical surface into a new
+  result. All three use the design factors and the seed of the model.
+* results_query also asks an analysis result what the Interpret window
+  asks: error codes (-120 tensile, -112 m-alpha, -111 not converged, -101
+  other), rejected surfaces, surfaces through a point, slices with the
+  method's numbers.
+
 ## Materials
 catalog('strength_models') lists the 21 strength models with their
 parameters, units and defaults. The common ones:
