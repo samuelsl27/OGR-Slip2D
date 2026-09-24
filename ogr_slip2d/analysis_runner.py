@@ -2134,6 +2134,60 @@ def run_analysis(project, method_ids=None,
 
 
 # ----------------------------------------------------------------------
+def evaluate_surfaces(project, surface, method_ids=None, *,
+                      allow_unconfigured: bool = False) -> AnalysisOutcome:
+    """Evaluate ONE given slip surface with each method, as a run would.
+
+    v0.1.194 (spec 008). The door for "what is the factor of safety of
+    THIS surface", and it goes through exactly what :func:`run_analysis`
+    goes through, in the same order:
+
+    - the same refusal (``check_analysis_settings``);
+    - the same factored copy (``apply_design_factors``);
+    - the same configured method and search (``build_search``), so the
+      admissibility checks, the surface filters, the slope limits and the
+      seismic objective are the project's own;
+    - ``BaseSearch.evaluate_surface``, which hands a circle to
+      ``evaluate_circle`` and so walks the sliding masses — the door that
+      fixed the factor-of-24 lens of v0.1.101.
+
+    A second door with its own defaults would be a second answer to the
+    same question, which is precisely what v0.1.101 found this door had
+    been. ``results`` maps each method id to a :class:`LEMResult`, or to
+    None when the surface does not cut the model. The surface is copied
+    per method, because the evaluation writes its ground crossings on it.
+    """
+    import copy
+
+    if not allow_unconfigured:
+        problems = check_analysis_settings(project)
+        if problems:
+            raise AnalysisNotConfigured(problems)
+
+    from ogr_core.project import apply_design_factors
+    project, factor_report = apply_design_factors(project)
+
+    if method_ids is None:
+        method_ids = list(project.settings.methods.enabled_methods)
+    method_ids = list(method_ids) or ["bishop_simplified"]
+
+    known = method_registry()
+    warnings: list[str] = settings_warnings(project, method_ids)
+    results: dict = {}
+    for mid in method_ids:
+        if mid not in known:
+            warnings.append(
+                f"'{mid}' is not a registered analysis method, so it was "
+                f"not computed. Available: {', '.join(sorted(known))}.")
+            continue
+        search = build_search(project, mid)
+        with project.regions_frozen():
+            results[mid] = search.evaluate_surface(project,
+                                                   copy.deepcopy(surface))
+    return AnalysisOutcome(results, factor_report, warnings, project)
+
+
+# ----------------------------------------------------------------------
 def _seismic_notes(project, method_id: str, result) -> list:
     """Attach the Newmark displacements and report what could not be done.
 

@@ -65,10 +65,16 @@ de una versión, la suite entera y sin argumentos.
 | Ruta | Contenido |
 |---|---|
 | `ogr_core/` | Geometría, materiales, cargas, soportes, proyecto, hidráulica, estadística, anotaciones, DXF |
-| `ogr_slip2d/` | Motor LEM: 9 métodos, 6 búsquedas, rebanado, foco, optimización, retroanálisis |
+| `ogr_slip2d/` | Motor LEM: 9 métodos, 7 búsquedas, rebanado, foco, optimización, retroanálisis |
 | `ogr_fem2d/` | Elementos finitos: mallado y solvers de filtración |
 | `ogr_gui/` | Interfaz PySide6: lienzo, ~30 diálogos, ventanas de interpretación, i18n |
 | `ogr_cli/` | Interfaz de línea de comandos |
+| `ogr_api/` | Capa de operaciones sin Qt (spec 008): *handles*, validación, deshacer, trabajos en subproceso, render PNG, `python_exec`. La usan el servidor MCP y un script; **no** importa PySide6, `ogr_gui` ni `mcp` |
+
+Capas en un solo sentido: `ogr_core → ogr_slip2d / ogr_fem2d → ogr_api →
+{ogr_gui, ogr_cli, servidor MCP}`. Una regla que hoy solo impone la
+interfaz se **mueve** a `ogr_core/project/rules.py` y la interfaz pasa a
+preguntarla; copiarla es cómo acaban diciendo cosas distintas.
 | `tests/` | Un archivo por área funcional |
 | `docs/` | Planes, auditorías, changelog |
 | `spec/` | Especificaciones SDD (constitución y features) |
@@ -181,13 +187,15 @@ opción, añade también el test que demuestra que **mueve el número**.
   resultado posible aquí, porque parece que funciona.
 - **Sé escéptico con lo que te pido.** Si algo huele mal, dilo.
 - **Al terminar, lista qué probaste y qué falta por probar.**
-- Cada versión sube el número en **siete** sitios y añade un changelog en
+- Cada versión sube el número en **ocho** sitios y añade un changelog en
   `docs/changelog/`: `pyproject.toml`, `ogr_gui/main_window.py`
   (`MainWindow.VERSION`) y el `__version__` de `ogr_core`, `ogr_slip2d`,
-  `ogr_fem2d`, `ogr_gui` y `ogr_cli`. Esta lista decía cuatro hasta
-  v0.1.76, y los tres que omitía llevaban congelados en 0.1.59 desde
-  v0.1.59. Hay un test que falla si discrepan, porque una lista en un
-  documento solo vale lo que valga la atención de quien la lee.
+  `ogr_fem2d`, `ogr_gui`, `ogr_cli` y `ogr_api` (desde v0.1.194). Esta
+  lista decía cuatro hasta v0.1.76, y los tres que omitía llevaban
+  congelados en 0.1.59 desde v0.1.59. Hay un test que falla si discrepan
+  (`tests/test_version_consistency_v176.py`, que es la lista que manda),
+  porque una lista en un documento solo vale lo que valga la atención de
+  quien la lee.
 
 ### Sobre los changelogs
 

@@ -239,6 +239,126 @@ class MacroCommand(Command):
 
 
 # ----------------------------------------------------------------------
+#: The project attributes a :class:`SnapshotCommand` captures by default.
+#: They are the MODEL — what the user edits and what an analysis reads —
+#: and every one of them is small next to the three below.
+LIGHT_ATTRS: tuple[str, ...] = (
+    "name", "settings", "boundaries", "materials", "supports",
+    "support_types", "distributed_loads", "line_loads", "seismic",
+    "seismic_records", "region_assignments", "tension_crack_properties",
+    "water_pressure_grid", "seepage_bcs", "random_variables", "annotations",
+    "focus_objects", "user_surfaces",
+)
+
+#: Computed or generated state that can weigh megabytes. A snapshot only
+#: carries them when the operation says it touches them.
+HEAVY_ATTRS: tuple[str, ...] = ("fem_mesh", "seepage_result",
+                                "transient_results")
+
+
+def capture_state(project: Project, attrs=LIGHT_ATTRS) -> dict:
+    """Deep copies of ``attrs``, detached from the live project."""
+    import copy
+
+    return {a: copy.deepcopy(getattr(project, a)) for a in attrs}
+
+
+def restore_state(project: Project, state: dict) -> None:
+    """Write a :func:`capture_state` result back onto the SAME project.
+
+    Onto the same object, never a replacement: the interface, the canvas
+    and an agent's handle all hold a reference to it. Each attribute gets a
+    fresh copy so the stored state can be restored again (undo, redo, undo)
+    without aliasing what the model now holds. Region and bounding-box
+    caches are dropped, because they are keyed by content and a restored
+    list is a different list.
+    """
+    import copy
+
+    for a, value in state.items():
+        setattr(project, a, copy.deepcopy(value))
+    project.invalidate_regions_cache()
+    project._notify("model_restored")
+
+
+class SnapshotCommand(Command):
+    """Undo for any edit, by capturing the state it can touch.
+
+    v0.1.194 (spec 008). The typed commands above cover boundaries and
+    painting; loads, supports, materials, settings and everything a script
+    can do had no undo at all. This one runs ``mutate(project)`` and keeps
+    the listed attributes as they were before and after.
+
+    It is ATOMIC: if ``mutate`` raises, the state is put back before the
+    exception propagates, so ``CommandStack.do`` — which only records a
+    command whose ``execute`` returned — leaves no trace of a failed edit.
+
+    ``description`` is a plain string, set on the instance; the attribute
+    is read as a string by ``CommandStack.next_undo_description`` (see
+    :class:`PaintRegionCommand`, where it is a method by mistake).
+    """
+
+    def __init__(self, description: str, mutate: Callable[[Project], object],
+                 attrs: tuple[str, ...] = LIGHT_ATTRS) -> None:
+        self.description = str(description)
+        self.attrs = tuple(attrs)
+        self._mutate = mutate
+        self._before: Optional[dict] = None
+        self._after: Optional[dict] = None
+        #: What ``mutate`` returned the first time it ran.
+        self.result = None
+
+    def execute(self, project: Project) -> None:
+        if self._after is None:
+            self._before = capture_state(project, self.attrs)
+            try:
+                self.result = self._mutate(project)
+            except BaseException:
+                restore_state(project, self._before)
+                raise
+            self._after = capture_state(project, self.attrs)
+            self._mutate = None
+        else:
+            restore_state(project, self._after)
+
+    def undo(self, project: Project) -> None:
+        if self._before is not None:
+            restore_state(project, self._before)
+
+    @property
+    def changed(self) -> bool:
+        """Whether the edit changed anything it captured.
+
+        Compared through the serialised form where one exists, because
+        deep copies of the same model are equal in content and never equal
+        as objects.
+        """
+        if self._before is None or self._after is None:
+            return False
+        return _state_key(self._before) != _state_key(self._after)
+
+
+def _state_key(state: dict):
+    """A comparable rendering of a captured state."""
+    import json
+
+    def enc(v):
+        if hasattr(v, "to_dict"):
+            return v.to_dict()
+        if hasattr(v, "to_list"):
+            return v.to_list()
+        if isinstance(v, (list, tuple)):
+            return [enc(x) for x in v]
+        if hasattr(v, "__dataclass_fields__"):
+            from dataclasses import asdict
+            return asdict(v)
+        return v
+
+    return json.dumps({k: enc(v) for k, v in state.items()},
+                      sort_keys=True, default=str)
+
+
+# ----------------------------------------------------------------------
 class CommandStack:
     """LIFO stacks for undo/redo with optional depth limit."""
 
@@ -251,6 +371,15 @@ class CommandStack:
     # ------------------------------------------------------------------
     def do(self, project: Project, command: Command) -> None:
         command.execute(project)
+        self.record(command)
+
+    def record(self, command: Command) -> None:
+        """Push a command that has ALREADY been executed.
+
+        v0.1.194 — for a caller that has to see what the command did
+        before deciding it is worth an undo step: a script that changed
+        nothing should not leave an empty entry to undo.
+        """
         self._undo.append(command)
         if len(self._undo) > self.max_depth:
             self._undo.pop(0)
@@ -296,6 +425,19 @@ class CommandStack:
     @property
     def next_redo_description(self) -> str:
         return self._redo[-1].description if self._redo else ""
+
+    def history(self) -> tuple[list[str], list[str]]:
+        """``(undo, redo)`` descriptions, most recent LAST in each list.
+
+        v0.1.194. A description that is not a string — the method
+        ``PaintRegionCommand.description``, reported and not changed — is
+        called, so the listing reads the same text the user would.
+        """
+        def text(c):
+            d = c.description
+            return d() if callable(d) else str(d)
+
+        return [text(c) for c in self._undo], [text(c) for c in self._redo]
 
     # ------------------------------------------------------------------
     def on_changed(self, cb: Callable[[], None]) -> None:

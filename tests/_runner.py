@@ -107,7 +107,8 @@ sys.modules["pytest"] = _FakePytest()  # type: ignore
 
 
 # --- Selection --------------------------------------------------------
-PACKAGES = ("ogr_core", "ogr_slip2d", "ogr_fem2d", "ogr_gui", "ogr_cli")
+PACKAGES = ("ogr_core", "ogr_slip2d", "ogr_fem2d", "ogr_gui", "ogr_cli",
+            "ogr_api")
 
 
 def package_origins() -> dict:
@@ -341,7 +342,18 @@ def _run_method(instance, method):
     if "tmp_path" in sig.parameters:
         tmpdir = tempfile.mkdtemp()
         kwargs["tmp_path"] = Path(tmpdir)
-    bound(**kwargs)
+    result = bound(**kwargs)
+    # v0.1.194 — an ``async def`` test returns a coroutine WITHOUT RUNNING
+    # A LINE OF ITS BODY, and until now that return value was ignored, so
+    # it counted as a pass: a green test that tested nothing. The MCP
+    # server tests are the first in this suite with async code to drive,
+    # which is exactly when a slip like that stops being hypothetical.
+    if inspect.iscoroutine(result):
+        result.close()
+        raise TypeError(
+            f"{method.__name__} is `async def`, and this runner does not "
+            f"await coroutines, so its body never ran. Make it a plain "
+            f"method and drive the async part with asyncio.run(...).")
 
 
 def main(tests_dir: Path, patterns=(), k: str | None = None,

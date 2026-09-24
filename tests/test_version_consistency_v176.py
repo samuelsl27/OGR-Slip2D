@@ -33,6 +33,9 @@ _SOURCES = {
     "ogr_gui/__init__.py": r'^__version__\s*=\s*"([^"]+)"',
     "ogr_cli/__init__.py": r'^__version__\s*=\s*"([^"]+)"',
     "ogr_gui/main_window.py": r'^\s*VERSION\s*=\s*"([^"]+)"',
+    # v0.1.194 (spec 008) — the operations layer is a sixth package, and
+    # it enters this list the version it is born, not sixteen later.
+    "ogr_api/__init__.py": r'^__version__\s*=\s*"([^"]+)"',
 }
 
 

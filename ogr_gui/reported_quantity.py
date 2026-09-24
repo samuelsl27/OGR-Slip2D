@@ -44,19 +44,23 @@ def reported_quantity(result, factor_report=None):
     (``ogr_cli/__main__.py``: ``if seismic_objective and not factored``),
     which prints a Ky value under an "Over-design factor" heading; that is
     reported as a defect of the command line, not copied here.
+
+    v0.1.194 (spec 008) — WHICH caption is decided by
+    ``ogr_slip2d.reported.reported_caption``, which the operations layer
+    an agent drives asks too; only the translated words stay here.
     """
-    if getattr(result, "objective", "fos") == "ky":
-        critical = getattr(result, "critical", None)
-        details = (getattr(critical, "details", None) or {}) if critical \
-            else {}
-        if "newmark_displacement" in details:
-            return "newmark", tr("Newmark displacement")
+    from ogr_slip2d.reported import KY, NEWMARK, OVERDESIGN, reported_caption
+
+    caption = reported_caption(result, factor_report)
+    if caption == NEWMARK:
+        return "newmark", tr("Newmark displacement")
+    if caption == KY:
         return "ky", tr("Critical seismic coefficient")
     # With a design standard active the partial factors are applied to the
     # INPUTS, so what comes out is not a factor of safety: it is an
     # over-design factor, and it must exceed 1. Saying "FoS" over it is the
     # window contradicting the analysis it just ran.
-    if bool(getattr(factor_report, "applied", False)):
+    if caption == OVERDESIGN:
         return "fos", tr("Over-design factor")
     return "fos", tr("Factor of safety")
 

@@ -207,7 +207,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.193"
+    VERSION = "0.1.194"
 
     def __init__(self) -> None:
         super().__init__()
@@ -3051,9 +3051,15 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, tr("Info Viewer"), info)
 
     def act_compute(self) -> None:
-        if not self.project.boundaries:
+        # v0.1.194 (spec 008) — the two empty-model checks are asked of
+        # ``ogr_core.project.rules.compute_blockers``, which every other
+        # caller asks too. The ORDER is kept: an empty model is refused
+        # before the settings are looked at, missing materials after.
+        from ogr_core.project.rules import compute_blockers
+        _blockers = {r.code: r for r in compute_blockers(self.project)}
+        if "no_boundaries" in _blockers:
             QMessageBox.warning(self, tr("Compute"),
-                                "No model to compute. Add an external boundary first.")
+                                _blockers["no_boundaries"].message)
             return
         # v0.1.68 — a rapid drawdown that cannot run must say so instead
         # of quietly reporting the ordinary factor of safety, which looks
@@ -3069,8 +3075,9 @@ class MainWindow(QMainWindow):
         if _why:
             QMessageBox.warning(self, tr("Compute"), "\n\n".join(_why))
             return
-        if not self.project.materials:
-            QMessageBox.warning(self, tr("Compute"), "No materials defined.")
+        if "no_materials" in _blockers:
+            QMessageBox.warning(self, tr("Compute"),
+                                _blockers["no_materials"].message)
             return
 
         # v0.1.9 — pass ALL enabled methods, not just the first.
@@ -3394,28 +3401,15 @@ class MainWindow(QMainWindow):
         actually using a water surface: one on Ru, a constant or a
         finite-element field is left alone, since its pore-pressure model
         was never this dialog's to set.
-        """
-        from ogr_core.geometry import BoundaryType
-        from ogr_core.materials import PorePressureType
 
-        surface = next((b for b in self.project.boundaries if b.id == wid),
-                       None)
-        model = (PorePressureType.WATER_TABLE
-                 if surface is not None
-                 and surface.btype == BoundaryType.WATER_TABLE
-                 else PorePressureType.PIEZO_LINE)
-        picked, cleared = set(picked), set(cleared)
-        _SURFACE_MODELS = (PorePressureType.WATER_TABLE,
-                           PorePressureType.PIEZO_LINE)
-        for m in self.project.materials:
-            if m.id in picked:
-                m.water_surface_id = wid
-                m.pore_pressure = model
-            elif m.id in cleared:
-                m.water_surface_id = None
-                if m.pore_pressure in _SURFACE_MODELS:
-                    m.pore_pressure = PorePressureType.NONE
-        self.project._notify("materials_changed")
+        v0.1.194 (spec 008) — the body MOVED to
+        ``ogr_core.project.rules.assign_water_surface``, so a script or an
+        agent assigning a water surface gets the same pore-pressure model
+        this dialog sets. This method stays as the dialog's entry point.
+        """
+        from ogr_core.project.rules import assign_water_surface
+
+        assign_water_surface(self.project, wid, picked, cleared)
 
     def _maybe_prompt_assign_water_surface(self, boundary) -> None:
         """Open the Assign dialog after a water surface has been drawn.
@@ -3739,6 +3733,12 @@ class MainWindow(QMainWindow):
         actions = getattr(self, "_actions", None)
         if not actions:
             return
+        # v0.1.194 (spec 008) — WHETHER each drawing action is allowed is
+        # asked of ``ogr_core.project.rules``, the same place a script or an
+        # agent asks it; only the tooltips stay here, because they are
+        # presentation. Until now these rules existed only as greyed menu
+        # items, so any caller that was not this window could break them.
+        from ogr_core.project.rules import boundary_refusal
         boundaries = self.project.boundaries
 
         def has_btype(bt) -> bool:
@@ -3747,7 +3747,9 @@ class MainWindow(QMainWindow):
         # Tension Crack: max one
         has_tc = has_btype(BoundaryType.TENSION_CRACK)
         if "add_crack" in actions:
-            actions["add_crack"].setEnabled(not has_tc)
+            actions["add_crack"].setEnabled(
+                boundary_refusal(self.project,
+                                 BoundaryType.TENSION_CRACK) is None)
             actions["add_crack"].setToolTip(
                 "Only one Tension Crack boundary is allowed.\n"
                 "Delete the existing one to add a new one."
@@ -3770,7 +3772,8 @@ class MainWindow(QMainWindow):
 
         # Water Table: max one
         if "add_wt" in actions:
-            has_wt = has_btype(BoundaryType.WATER_TABLE)
+            has_wt = boundary_refusal(
+                self.project, BoundaryType.WATER_TABLE) is not None
             actions["add_wt"].setEnabled(not has_wt)
             actions["add_wt"].setToolTip(
                 tr("Only one Water Table is allowed.")
@@ -3782,10 +3785,9 @@ class MainWindow(QMainWindow):
             self.project.settings.groundwater, "rapid_drawdown", False
         )
         if "add_drawdown" in actions:
+            dd_refusal = boundary_refusal(self.project, BoundaryType.DRAWDOWN)
             has_dd = has_btype(BoundaryType.DRAWDOWN)
-            actions["add_drawdown"].setEnabled(
-                rapid_drawdown and not has_dd
-            )
+            actions["add_drawdown"].setEnabled(dd_refusal is None)
             if not rapid_drawdown:
                 actions["add_drawdown"].setToolTip(
                     "Drawdown Line is only available when\n"
@@ -3875,7 +3877,9 @@ class MainWindow(QMainWindow):
                     tr("Only available with Surface Options -> Surface "
                        "Type = Circular."))
         if "block_object" in actions:
-            actions["block_object"].setEnabled(is_block)
+            actions["block_object"].setEnabled(
+                boundary_refusal(self.project,
+                                 BoundaryType.BLOCK_SEARCH_OBJECT) is None)
             # v0.1.166 (D102) - the DISABLED branch is the one almost
             # every user sees, because Block Search is not the default
             # method, and it was the one still naming "Add Surface" and
