@@ -206,7 +206,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.198"
+    VERSION = "0.1.199"
 
     def __init__(self) -> None:
         super().__init__()
@@ -4164,6 +4164,21 @@ class MainWindow(QMainWindow):
                 params.get("creates_excess_pore_pressure", False)),
             name=f"Line {params['magnitude']:.1f} kN/m",
         )
+        # v0.1.199 — normal (or at an angle) to the boundary means to the
+        # GROUND SURFACE at the point; off it there is no such direction,
+        # and the analysis would refuse the load. Said now, not added.
+        from ogr_core.loads.loads import BOUNDARY_RELATIVE
+        if load.orientation in BOUNDARY_RELATIVE:
+            from ogr_core.loads.loads import line_load_direction
+            try:
+                line_load_direction(self.project, load)
+            except ValueError:
+                self.canvas.set_tool_mode(ToolMode.SELECT)
+                self.ogr_status.showMessage(tr(
+                    "A load normal or at an angle to the boundary must sit "
+                    "on the ground surface; (%.2f, %.2f) is not on it, so "
+                    "the load was not added.") % (x, y), 8000)
+                return
         self.project.line_loads.append(load)
         self.project.is_dirty = True
         self.project._notify("loads_changed")

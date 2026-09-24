@@ -159,8 +159,12 @@ def render_png(project, *, surfaces: Iterable = (), width: int = 900,
                         xytext=(px - dx * arrow, py - dy * arrow),
                         arrowprops=dict(arrowstyle="->", color="#c0392b",
                                         lw=1.0), zorder=7)
+    from ogr_core.loads.loads import line_load_direction
     for load in getattr(project, "line_loads", []):
-        dx, dy = load.direction_vector()
+        try:
+            dx, dy = line_load_direction(project, load)
+        except ValueError:      # boundary-relative, off the ground: the
+            dx, dy = 0.0, -1.0  # analysis refuses it; draw it plainly
         px, py = load.point.x, load.point.y
         ax.annotate("", xy=(px, py),
                     xytext=(px - dx * 1.6 * arrow, py - dy * 1.6 * arrow),

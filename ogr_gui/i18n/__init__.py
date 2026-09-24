@@ -852,6 +852,20 @@ _DICTS: dict[str, dict[str, str]] = {
         # v0.1.198 — Change Slope Angle rewritten (toe and crest picked
         # on the canvas; only the face moves).
         'Change Slope Angle...': 'Cambiar ángulo del talud...',
+        # v0.1.199 — line loads normal / at an angle to the boundary.
+        'A load normal or at an angle to the boundary must sit on the '
+        'ground surface; (%.2f, %.2f) is not on it, so the load was not '
+        'added.':
+            'Una carga normal o con ángulo al contorno debe estar sobre la '
+            'superficie del terreno; (%.2f, %.2f) no lo está, así que la '
+            'carga no se ha añadido.',
+        'Positive angle = counter-clockwise. From the +X axis for Angle '
+        'from Horizontal; for Angle to Boundary, from the ground surface '
+        'running left to right, so -90° is the normal into the ground.':
+            'Ángulo positivo = antihorario. Desde el eje +X en «Ángulo '
+            'desde la horizontal»; en «Ángulo al contorno», desde la '
+            'superficie del terreno recorrida de izquierda a derecha, así '
+            'que −90° es la normal hacia el terreno.',
         'Current overall angle: %.2f°': 'Ángulo global actual: %.2f°',
         'New overall angle: %.2f°': 'Ángulo global nuevo: %.2f°',
         'Angle change:': 'Cambio de ángulo:',

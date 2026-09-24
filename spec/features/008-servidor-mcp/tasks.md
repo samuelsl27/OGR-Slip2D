@@ -78,8 +78,8 @@ tarea: es un deseo.
 - [x] 3.8 Tests: regla 1 (cuña con anclaje y con sobrecarga), regla 7,
       deshacer de las 32 operaciones de edición, delegaciones por el
       manejador real.
-- [ ] 3.9 Tanda propia: cargas puntuales `normal_to_boundary` y
-      `angle_to_boundary` con validación externa (bloque B3).
+- [x] 3.9 Tanda propia: cargas puntuales `normal_to_boundary` y
+      `angle_to_boundary` con validación externa (bloque B3, v0.1.199).
 - [x] 3.10 Decisión del propietario sobre *Change Slope Angle*: rehacerla
       (bloque B2).
 
@@ -94,8 +94,9 @@ Tres defectos que F2 dejó reportados, cada uno su versión y su plan corto:
       vértices, solo la cara, proyección horizontal/vertical/giro, bermas;
       en la interfaz y como `slope_angle_change`. De paso, *Insert Vertex*
       (a `_pick_edge` le faltaba el `def` desde v0.1.59).
-- [ ] B3 (v0.1.199) Cargas puntuales `normal_to_boundary` y
-      `angle_to_boundary`, con validación externa.
+- [x] B3 (v0.1.199) Cargas puntuales `normal_to_boundary` y
+      `angle_to_boundary`: hacia el terreno, desde su superficie en el
+      punto; validadas contra la cuña de Coulomb.
 
 ## F3–F4b
 

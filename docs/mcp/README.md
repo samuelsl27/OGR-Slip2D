@@ -67,9 +67,9 @@ Opciones completas: `ogr-slip2d-mcp --help`.
   [seguridad.md](seguridad.md)).
 
 Un ajuste que el cálculo no leería se rechaza con el motivo en vez de
-guardarse: una carga puntual normal al contorno (el motor la aplicaría
-vertical), `angle_deg` con una carga vertical, una tolerancia de foco en una
-ventana... Es la regla 7 del proyecto aplicada en la puerta.
+guardarse: una carga puntual normal al contorno fuera del terreno (no tiene
+contorno al que ser normal), `angle_deg` con una carga vertical, una
+tolerancia de foco en una ventana... Es la regla 7 del proyecto aplicada en la puerta.
 
 `server_info` dice cuánto del menú del programa cubre ya el agente
 (`program_coverage`): 99 de las 136 acciones de la ventana principal, 23 son

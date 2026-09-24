@@ -433,6 +433,60 @@ def bedrock_surface(external) -> Polyline:
     return Polyline(vertices=[Vertex(x, y) for x, y in _lower_envelope(key)])
 
 
+def ground_frame(profile: Polyline, x: float, y: float,
+                 tol: float) -> Optional[tuple[float, float, float, float]]:
+    """(tx, ty, nx, ny): the tangent of the ground surface at (x, y), left
+    to right, and its normal pointing INTO the ground; None when (x, y) is
+    farther than ``tol`` from ``profile``.
+
+    v0.1.199 — for a load set "normal to the boundary" or at an angle to
+    it. The profile runs left to right, so the tangent turned 90° clockwise,
+    (ty, −tx), points into the ground on every stretch of it, vertical steps
+    included: down under a flat crest, down-slope-and-in on a face, into the
+    wall on a step. At a VERTEX the normal is undefined; it is the bisector
+    of the two neighbouring normals (their normalised sum), and the tangent
+    the one it is the clockwise turn of. The choice is ours: the
+    documentation this interface follows does not say.
+    """
+    pts = profile.vertices if profile is not None else []
+    if len(pts) < 2:
+        return None
+    best_d, hits = math.inf, []
+    for i, (a, b) in enumerate(zip(pts[:-1], pts[1:])):
+        dx, dy = b.x - a.x, b.y - a.y
+        span = dx * dx + dy * dy
+        if span <= 0.0:
+            continue
+        t = ((x - a.x) * dx + (y - a.y) * dy) / span
+        t = 0.0 if t < 0.0 else (1.0 if t > 1.0 else t)
+        d = math.hypot(x - (a.x + t * dx), y - (a.y + t * dy))
+        if d < best_d - tol:
+            best_d, hits = d, [i]
+        elif d <= best_d + tol:
+            hits.append(i)
+            best_d = min(best_d, d)
+    if not hits or best_d > tol:
+        return None
+
+    def unit_normal(i):
+        a, b = pts[i], pts[i + 1]
+        L = math.hypot(b.x - a.x, b.y - a.y)
+        tx, ty = (b.x - a.x) / L, (b.y - a.y) / L
+        return ty, -tx
+
+    segs = sorted(set(hits))
+    if len(segs) == 1:
+        nx, ny = unit_normal(segs[0])
+    else:
+        nx = sum(unit_normal(i)[0] for i in segs)
+        ny = sum(unit_normal(i)[1] for i in segs)
+        L = math.hypot(nx, ny)
+        if L <= 1e-12:           # a knife edge: no inside to point to
+            return None
+        nx, ny = nx / L, ny / L
+    return -ny, nx, nx, ny
+
+
 def distance_to_profile(profile: Polyline, x: float, y: float) -> float:
     """Shortest distance from the point ``(x, y)`` to ``profile``.
 

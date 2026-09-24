@@ -940,14 +940,22 @@ def line_loads_on(project: Project, x_left: float, x_right: float):
     return out
 
 
-def _line_load_components(load) -> tuple[float, float]:
+def _line_load_components(load, project=None) -> tuple[float, float]:
     """(downward, +x) components of a line load, in kN/m.
 
     ``direction_vector`` points the way the load pushes, with -y meaning
     downwards, so the vertical component is negated to give a downward
     positive number — the same sign convention ``weight`` uses.
+
+    v0.1.199 — with ``project``, through ``line_load_direction``, which
+    resolves a load normal (or at an angle) to the boundary against the
+    model's ground surface; both fell through to vertical before.
     """
-    dx, dy = load.direction_vector()
+    if project is not None:
+        from ogr_core.loads.loads import line_load_direction
+        dx, dy = line_load_direction(project, load)
+    else:
+        dx, dy = load.direction_vector()
     return -load.magnitude * dy, load.magnitude * dx
 
 
@@ -1755,7 +1763,7 @@ def slice_surface(
         # force channel below, once the slice exists.
         _lines = line_loads_on(project, xl, xr)
         for _load in _lines:
-            weight += _line_load_components(_load)[0]
+            weight += _line_load_components(_load, project)[0]
 
         # v0.1.122 — the horizontal half of the distributed loads, which
         # until this version was thrown away. Only the VERTICAL-segment case
@@ -1803,7 +1811,7 @@ def slice_surface(
         # about a fixed reference, so forces of opposite sign on the same
         # slice add up correctly.
         for _load in _lines:
-            _fh = _line_load_components(_load)[1]
+            _fh = _line_load_components(_load, project)[1]
             if _fh:
                 sl.add_water_force(f_h=_fh, y=_load.point.y)
         # v0.1.122 — and the same for the distributed loads, through the

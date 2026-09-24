@@ -75,7 +75,11 @@ class DistributedLoad:
             dx = self.end.x - self.start.x
             dy = self.end.y - self.start.y
             L = math.hypot(dx, dy) or 1.0
-            # Rotate -90° (into the slope, assuming CCW boundary)
+            # The start->end tangent turned 90 degrees clockwise. It points
+            # INTO the ground when the load runs left to right along the
+            # surface - NOT for "a CCW boundary", as this comment said until
+            # v0.1.199: the top of a counter-clockwise External runs right
+            # to left, so its edges turned this way point OUT.
             return (dy / L, -dx / L)
         if self.orientation == LoadOrientation.ANGLE_FROM_HORIZONTAL:
             a = math.radians(self.angle_deg)
@@ -152,7 +156,19 @@ class LineLoad:
     id: str = field(default_factory=lambda: str(uuid4()))
     name: str = ""
 
-    def direction_vector(self) -> tuple[float, float]:
+    def direction_vector(self, ground=None) -> tuple[float, float]:
+        """Unit vector the load pushes along (-y is down).
+
+        v0.1.199 - ``NORMAL_TO_BOUNDARY`` and ``ANGLE_TO_BOUNDARY`` are
+        taken from the GROUND SURFACE at the load point (``ground``, the
+        profile of ``ground.ground_surface``): the normal points into the
+        ground, and the angle turns the ground's left-to-right tangent
+        counter-clockwise, so -90 degrees is that normal (the convention of
+        the distributed load for a segment drawn left to right). Until this
+        version both fell through to vertical, silently. Without a profile,
+        or with the point off the ground, they raise ``ValueError``: a
+        direction relative to a boundary the load is not on is not one.
+        """
         if self.orientation == LoadOrientation.VERTICAL:
             return (0.0, -1.0)
         if self.orientation == LoadOrientation.HORIZONTAL:
@@ -160,7 +176,39 @@ class LineLoad:
         if self.orientation == LoadOrientation.ANGLE_FROM_HORIZONTAL:
             a = math.radians(self.angle_deg)
             return (math.cos(a), math.sin(a))
+        if self.orientation in (LoadOrientation.NORMAL_TO_BOUNDARY,
+                                LoadOrientation.ANGLE_TO_BOUNDARY):
+            tx, ty, nx, ny = self.ground_frame(ground)
+            if self.orientation == LoadOrientation.NORMAL_TO_BOUNDARY:
+                return (nx, ny)
+            a = math.radians(self.angle_deg)
+            return (tx * math.cos(a) - ty * math.sin(a),
+                    tx * math.sin(a) + ty * math.cos(a))
         return (0.0, -1.0)
+
+    def ground_frame(self, ground):
+        """(tx, ty, nx, ny) of the ground surface under the load point.
+
+        The point must be on the ground to within 0.1 % of the ground
+        profile's extent (the tolerance the operations layer uses to say a
+        load is "on the ground surface").
+        """
+        from ..geometry.ground import ground_frame
+
+        if ground is None or len(ground.vertices) < 2:
+            raise ValueError(f"Line load {self.name or self.id}: an "
+                             f"orientation relative to the boundary needs "
+                             f"the ground surface.")
+        xs = [v.x for v in ground.vertices]
+        ys = [v.y for v in ground.vertices]
+        tol = 1e-3 * math.hypot(max(xs) - min(xs), max(ys) - min(ys))
+        frame = ground_frame(ground, self.point.x, self.point.y, tol)
+        if frame is None:
+            raise ValueError(f"Line load {self.name or self.id} at "
+                             f"({self.point.x:g}, {self.point.y:g}) is not "
+                             f"on the ground surface, so it has no boundary "
+                             f"to be normal to.")
+        return frame
 
     def to_dict(self) -> dict:
         return {
@@ -231,3 +279,24 @@ class SeismicLoad:
             creates_excess_pore_pressure=bool(
                 data.get("creates_excess_pore_pressure", False)),
         )
+
+
+# ----------------------------------------------------------------------
+BOUNDARY_RELATIVE = (LoadOrientation.NORMAL_TO_BOUNDARY,
+                     LoadOrientation.ANGLE_TO_BOUNDARY)
+
+
+def line_load_direction(project, load) -> tuple[float, float]:
+    """The direction of ``load`` in ``project``: the one door every consumer
+    (slicer, excess pore pressure, drawings, DXF) goes through, so a
+    boundary-relative line load is resolved against the model's own ground
+    surface everywhere (v0.1.199). Raises ``ValueError`` for a
+    boundary-relative load that is not on the ground."""
+    if load.orientation not in BOUNDARY_RELATIVE:
+        return load.direction_vector()
+    from ..geometry.ground import ground_surface
+
+    ext = project.external_boundary() if project is not None else None
+    return load.direction_vector(
+        ground=ground_surface(ext) if ext is not None else None)
+

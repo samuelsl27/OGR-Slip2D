@@ -10,12 +10,12 @@ only against its type — the rule 7 of AGENTS.md, applied at the door:
   non-constant load WITHOUT one is silently constant (``pressure_at``), so
   the pair is enforced both ways;
 * ``angle_deg`` is only read by the two angle orientations;
-* a LINE load with ``normal_to_boundary`` or ``angle_to_boundary`` is
-  REFUSED: ``LineLoad.direction_vector`` has no branch for either and acts
-  vertically, while the interface offers both. Reported in v0.1.196; the
-  owner decided (2026-09-24) to implement them in a batch of their own,
-  with an external validation, and until then an agent cannot ask for a
-  direction the engine will not apply;
+* a LINE load with ``normal_to_boundary`` or ``angle_to_boundary`` takes
+  its direction from the GROUND SURFACE at its point (v0.1.199): the
+  normal points into the ground, and the angle turns the ground's
+  left-to-right tangent counter-clockwise (-90 degrees is the normal). A
+  point off the ground has no such direction and is refused. Until
+  v0.1.199 the engine applied both vertically and this layer refused them;
 * the seismic coefficients are only read with ``enabled``.
 
 Magnitudes are pressures (kPa) for a distributed load and forces per metre
@@ -81,13 +81,6 @@ def _ground_note(project, pts) -> list[str]:
 def _check_fields(kind, orientation, distribution, magnitude_end, angle_deg
                   ) -> None:
     ov = orientation.value
-    if kind == "line" and ov in _BOUNDARY_RELATIVE:
-        raise Conflict(
-            f"orientation {ov!r} is not implemented for a line load: the "
-            f"engine would apply it vertically.",
-            hint="Use 'vertical', 'horizontal' or 'angle_from_horizontal' "
-                 "(with angle_deg). Boundary-relative line loads are "
-                 "scheduled as a separate, validated change.")
     if angle_deg is not None and ov not in _ANGLED:
         raise Conflict(f"angle_deg is only read with an angle orientation "
                        f"({list(_ANGLED)}), not {ov!r}.")
@@ -237,6 +230,15 @@ def load_set(ws, project_id: Optional[str] = None,
                           obj.angle_deg if obj.orientation.value in _ANGLED
                           else None)
             project._notify("loads_changed")
+        if k == "line" and obj.orientation.value in _BOUNDARY_RELATIVE:
+            from ogr_core.loads.loads import line_load_direction
+            try:
+                line_load_direction(project, obj)
+            except ValueError as exc:
+                raise Conflict(str(exc),
+                               hint="Place it on the ground surface, or "
+                                    "use 'vertical', 'horizontal' or "
+                                    "'angle_from_horizontal'.") from None
         if k == "distributed" and obj.orientation.value == \
                 "normal_to_boundary":
             dx, dy = obj.direction_vector()

@@ -614,8 +614,16 @@ class CanvasView(QGraphicsView):
         # Loads
         for load in self.project.distributed_loads:
             scene.addItem(DistributedLoadItem(load))
+        # v0.1.199 — a line load normal (or at an angle) to the boundary
+        # points along the ground surface's frame, so the item is handed
+        # the profile once per redraw.
+        _ground = None
+        _ext = self.project.external_boundary()
+        if _ext is not None and self.project.line_loads:
+            from ogr_core.geometry.ground import ground_surface
+            _ground = ground_surface(_ext)
         for load in self.project.line_loads:
-            scene.addItem(LineLoadItem(load))
+            scene.addItem(LineLoadItem(load, ground=_ground))
 
         # Supports — v0.1.15 honours DisplayOptions.show_supports
         if self.display_options.show_supports:

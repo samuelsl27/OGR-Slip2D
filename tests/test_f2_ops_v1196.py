@@ -318,11 +318,14 @@ class TestLoadsRefuseWhatTheEngineWouldNotRead:
             dist = dict(kind="distributed", start=[50, 35], end=[60, 35],
                         magnitude=20.0)
             attempts = [
-                # the engine has no branch for these and acts vertically
-                (Conflict, dict(kind="line", point_xy=[55, 35],
+                # v0.1.199 — these used to be refused wherever they were
+                # (the engine applied them vertically); now they follow
+                # the ground surface, and only a point OFF it is refused
+                # (test_line_load_boundary_v1199).
+                (Conflict, dict(kind="line", point_xy=[55, 30],
                                 magnitude=5.0,
                                 orientation="normal_to_boundary")),
-                (Conflict, dict(kind="line", point_xy=[55, 35],
+                (Conflict, dict(kind="line", point_xy=[55, 30],
                                 magnitude=5.0, angle_deg=10.0,
                                 orientation="angle_to_boundary")),
                 (Conflict, dict(**dist, orientation="vertical",

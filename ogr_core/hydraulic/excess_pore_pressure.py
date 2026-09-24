@@ -179,7 +179,8 @@ def load_delta_sigma_v(project: "Project", x: float,
             if not getattr(load, "creates_excess_pore_pressure", False):
                 continue
             if abs(load.point.x - x) <= half + 1e-12:
-                total += _line_load_components(load)[0] / slice_width
+                total += _line_load_components(load, project)[0] \
+                    / slice_width
     return total
 
 

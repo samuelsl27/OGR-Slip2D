@@ -47,7 +47,7 @@ publica el propio servidor (`tools/list`); aquí va para qué sirve cada una.
 | `seismic_record_set` | | Añadir un acelerograma (archivo, texto o valores) para el análisis de Newmark, o renombrarlo. |
 | `seismic_record_delete` | | Borrar un acelerograma. |
 
-Una carga lineal «normal al contorno» o «con ángulo respecto al contorno» se rechaza: el motor la aplicaría en vertical. Está prevista una tanda propia para implementarlas.
+Una carga lineal «normal al contorno» o «con ángulo respecto al contorno» toma su dirección de la superficie del terreno en su punto (desde v0.1.199): la normal apunta hacia el terreno (en un vértice, la bisectriz), y el ángulo se mide en sentido antihorario desde el terreno recorrido de izquierda a derecha, así que −90° es la normal. Fuera del terreno se rechaza.
 
 ## Soportes (`supports`)
 

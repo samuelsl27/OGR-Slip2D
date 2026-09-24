@@ -250,15 +250,24 @@ def export_dxf(project, path, options: Optional[ExportOptions] = None,
             msp.add_line(pts[0], pts[1],
                          dxfattribs={"layer": _layer(LAYER_LOADS)})
             rep.count(LAYER_LOADS)
-            # Arrows at both ends, pointing at the loaded line
+            # Arrows at both ends, pointing at the loaded line.
+            # v0.1.199 — along the load's DIRECTION: this drew every arrow
+            # at ``angle_deg or 270``, so a horizontal load, a normal one
+            # or one at 0 degrees came out vertical (reported in v0.1.196).
+            dx, dy = ld.direction_vector()
             for p in ((start.x, start.y), (end.x, end.y)):
                 _arrow(msp, _layer(LAYER_LOADS), p,
-                       getattr(ld, "angle_deg", 270.0) or 270.0,
+                       math.degrees(math.atan2(dy, dx)),
                        length, factor, rep)
+        from ogr_core.loads.loads import line_load_direction
         for ld in getattr(project, "line_loads", []):
             p = (ld.point.x, ld.point.y)
+            try:
+                dx, dy = line_load_direction(project, ld)
+            except ValueError:
+                dx, dy = 0.0, -1.0
             _arrow(msp, _layer(LAYER_LOADS), p,
-                   getattr(ld, "angle_deg", 270.0) or 270.0,
+                   math.degrees(math.atan2(dy, dx)),
                    length, factor, rep)
 
     # ---- FE mesh ----------------------------------------------------

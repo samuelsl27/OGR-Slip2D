@@ -176,6 +176,19 @@ def check_analysis_settings(project) -> list[str]:
     # file format, which is no longer true.
     problems.extend(_shadow_setting_problems(project))
 
+    # v0.1.199 — a line load normal (or at an angle) to the boundary takes
+    # its direction from the ground surface at its point; off the ground it
+    # has none. It used to be applied vertically in silence.
+    from ogr_core.loads.loads import BOUNDARY_RELATIVE, line_load_direction
+    for _load in getattr(project, "line_loads", None) or []:
+        if _load.orientation in BOUNDARY_RELATIVE:
+            try:
+                line_load_direction(project, _load)
+            except ValueError as exc:
+                problems.append(str(exc) + " Move it onto the ground "
+                                "surface or give it an absolute "
+                                "orientation.")
+
     from ogr_core.materials import PorePressureType
     uses_fem = [m.name for m in project.materials
                 if getattr(m, "pore_pressure", None) == PorePressureType.FEM_SEEPAGE]

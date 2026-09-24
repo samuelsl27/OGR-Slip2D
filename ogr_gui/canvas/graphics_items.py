@@ -288,9 +288,11 @@ class DistributedLoadItem(DomainItem):
 class LineLoadItem(DomainItem):
     """Single-arrow line load with a magnitude label."""
 
-    def __init__(self, load: LineLoad, parent: QGraphicsItem | None = None) -> None:
+    def __init__(self, load: LineLoad, parent: QGraphicsItem | None = None,
+                 ground=None) -> None:
         super().__init__(parent)
         self.load = load
+        self.ground = ground
         self.setToolTip(load.tooltip_html())
         self.setZValue(8.0)
         pen = QPen(QColor("#d35400"), 2.0)
@@ -300,7 +302,12 @@ class LineLoadItem(DomainItem):
 
     def refresh(self) -> None:
         path = QPainterPath()
-        dx, dy = self.load.direction_vector()
+        try:
+            dx, dy = self.load.direction_vector(ground=self.ground)
+        except ValueError:
+            # Boundary-relative but off the ground: the analysis refuses
+            # it and says why; here it is drawn plainly, not hidden.
+            dx, dy = 0.0, -1.0
         L = max(abs(self.load.magnitude) / 20.0, 1.0)
         x0 = self.load.point.x - L * dx
         y0 = self.load.point.y - L * dy

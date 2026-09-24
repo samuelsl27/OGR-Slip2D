@@ -694,8 +694,11 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
                  orientation: Annotated[Optional[Literal[
                      "normal_to_boundary", "vertical", "horizontal",
                      "angle_from_horizontal", "angle_to_boundary"]], Field(
-                     description="Direction; line loads take vertical, "
-                                 "horizontal or angle_from_horizontal.")
+                     description="Direction. For a line load, "
+                                 "normal/angle_to_boundary follow the ground"
+                                 " surface at the point (normal into the "
+                                 "ground; angle CCW from the left-to-right "
+                                 "tangent, -90 = normal).")
                  ] = None,
                  angle_deg: Annotated[Optional[float], Field(
                      description="Only with an angle orientation.")] = None,

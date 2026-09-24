@@ -92,10 +92,11 @@ class _BaseLoadDialog(QDialog):
         self.sb_angle.setRange(-360.0, 360.0)
         self.sb_angle.setDecimals(2)
         self.sb_angle.setSuffix(" °")
-        self.sb_angle.setToolTip(
-            "Positive angle = counter-clockwise from the +X axis "
-            "(or from the boundary direction)."
-        )
+        self.sb_angle.setToolTip(tr(
+            "Positive angle = counter-clockwise. From the +X axis for "
+            "Angle from Horizontal; for Angle to Boundary, from the ground "
+            "surface running left to right, so -90° is the normal into "
+            "the ground."))
         form.addRow(tr("Angle:"), self.sb_angle)
 
         # Excess pore pressure (only relevant in B-bar mode)
