@@ -176,6 +176,9 @@ UI_ONLY: dict[str, str] = {
     "help": "help pages",
     "about": "about box",
     "check_updates": "contacts nothing by design",
+    # v0.1.203 (F4): it starts the transport an agent drives the window
+    # through; there is nothing to do to the model.
+    "agent_bridge": "starts the live bridge an agent talks through",
 }
 
 PENDING: dict[str, str] = {

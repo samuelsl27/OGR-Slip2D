@@ -28,10 +28,19 @@ def model_render(ws, project_id: Optional[str] = None,
                  save_path: Optional[str] = None,
                  overwrite: bool = False,
                  field: Optional[str] = None,
-                 stage: Optional[int] = None) -> dict:
+                 stage: Optional[int] = None,
+                 source: str = "model") -> dict:
     """A PNG of the model, optionally with a result's critical surface
-    or the groundwater field (contours and free surface)."""
+    or the groundwater field (contours and free surface); or, attached to
+    a window, a capture of its canvas (``source="window"``)."""
     from ..render import render_png
+
+    if source not in ("model", "window"):
+        raise unknown("source", source, ["model", "window"])
+    if source == "window":
+        return _window_capture(ws, project_id, result_id, method_id,
+                               field, stage, width, height, save_path,
+                               overwrite)
 
     width = coerce_value(width, int, "width")
     height = coerce_value(height, int, "height")
@@ -103,4 +112,35 @@ def _field_overlay(project, field, stage):
     solver = groundwater_query_solver(project)
     fs = solver.free_surface_points(result) if solver is not None else []
     return (f"{_FIELDS[field]}{label}", getattr(result, field), mesh), fs
+
+
+def _window_capture(ws, project_id, result_id, method_id, field, stage,
+                    width, height, save_path, overwrite) -> dict:
+    """The live window's canvas as it is (spec 008, F4, v0.1.203): what
+    the plan of F4 asked for instead of the Agg drawing."""
+    host = getattr(ws, "host", None)
+    if host is None:
+        raise Conflict("source='window' needs the live bridge (the MCP "
+                       "server started with --attach).")
+    stray = [n for n, v in (("result_id", result_id),
+                            ("method_id", method_id), ("field", field),
+                            ("stage", stage)) if v is not None]
+    if stray:
+        raise Conflict(f"{', '.join(stray)} are not read with "
+                       f"source='window': the capture shows what the "
+                       f"window shows.")
+    handle = ws.get(project_id)
+    if handle.id != host.handle_id:
+        raise Conflict("Only the window's model has a window to capture.")
+    width = coerce_value(width, int, "width")
+    height = coerce_value(height, int, "height")
+    target = None
+    if save_path is not None:
+        target = ws.resolve_path(save_path, for_write=True,
+                                 overwrite=overwrite, suffix=".png")
+    png = host.capture(width, height)
+    if target is not None:
+        target.write_bytes(png)
+    return {"project_id": handle.id, "png": png, "source": "window",
+            "saved_to": str(target) if target else None, "surfaces": []}
 

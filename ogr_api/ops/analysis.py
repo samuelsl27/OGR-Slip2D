@@ -54,6 +54,16 @@ def store_job_result(ws, job, handle, summary, kind: str):
 
 def _finish_analysis(ws, job, handle, summary) -> dict:
     store_job_result(ws, job, handle, summary, "analysis")
+    host = getattr(ws, "host", None)
+    if host is not None and handle.id == host.handle_id and \
+            model_hash(handle.project) == job.model_hash:
+        # v0.1.203 — attached to a window, and the model is still the one
+        # analysed: the result is shown there, as a Compute would be.
+        payload = job.load_results()
+        host.show_analysis(payload.get("results", {}),
+                           payload.get("factor_report"),
+                           payload.get("warnings", []))
+        return {"shown_in_window": True}
     return {}
 
 

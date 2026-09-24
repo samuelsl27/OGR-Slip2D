@@ -153,6 +153,18 @@ water surface when use_sat_unit_weight is true.
   `result(result_id)`. The whole script is one undo step, rolled back if it
   raises. Use it for what no tool covers yet.
 
+## Attached to a window (server started with --attach)
+server_info says so in 'attached_to_window'. Then:
+* The model IS the window's: the user sees every edit, and each edit is
+  one step of the window's Edit > Undo (the user's steps are yours to
+  undo too, and yours theirs).
+* project_new and project_open open in the window, and refuse while it has
+  unsaved changes: save them (project_save) or ask the user. project_close
+  does not close the window's model.
+* While the window is computing, an edit answers E_BUSY: retry later.
+* An analysis you run is shown in the window's results panel.
+* model_render(source='window') is a capture of the real canvas.
+
 ## Files
 Paths are absolute, or relative to the folder the server was started with
 (--workdir). Nothing is overwritten unless overwrite=true.

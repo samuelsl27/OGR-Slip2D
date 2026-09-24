@@ -356,6 +356,24 @@ def _run_method(instance, method):
             f"method and drive the async part with asyncio.run(...).")
 
 
+def run_test(cls, method):
+    """Run one test: ``(None, None)`` if it passed, else ``(why, traceback)``.
+
+    v0.1.203 — ``SystemExit`` is a failure of that test, like any other
+    exception. Code under test that calls ``sys.exit`` (argparse does, on an
+    option it does not know) used to escape the run loop and end the WHOLE
+    suite there, with no totals: one test's failure cost every file after
+    it. ``KeyboardInterrupt`` still stops the run, as it should.
+    """
+    try:
+        _run_method(cls(), method)
+        return None, None
+    except AssertionError as e:
+        return f"{e}", traceback.format_exc()
+    except (Exception, SystemExit) as e:  # noqa: BLE001
+        return f"{type(e).__name__}: {e}", traceback.format_exc()
+
+
 def main(tests_dir: Path, patterns=(), k: str | None = None,
          list_only: bool = False) -> int:
     # The ✓/✗ marks below are not printable in the console codepage Windows
@@ -475,19 +493,14 @@ def main(tests_dir: Path, patterns=(), k: str | None = None,
                 continue
             print(f"  {name}:")
             for m_name, m in methods:
-                try:
-                    instance = cls()
-                    _run_method(instance, m)
+                why, tb = run_test(cls, m)
+                if why is None:
                     passed += 1
                     print(f"    {_tag()} ✓ {m_name}")
-                except AssertionError as e:
+                else:
                     failed += 1
-                    print(f"    {_tag()} ✗ {m_name}: {e}")
-                    fail_details.append((f"{name}.{m_name}", traceback.format_exc()))
-                except Exception as e:  # noqa: BLE001
-                    failed += 1
-                    print(f"    {_tag()} ✗ {m_name}: {type(e).__name__}: {e}")
-                    fail_details.append((f"{name}.{m_name}", traceback.format_exc()))
+                    print(f"    {_tag()} ✗ {m_name}: {why}")
+                    fail_details.append((f"{name}.{m_name}", tb))
 
     print("\n" + "=" * 60)
     print(f"Total: {passed + failed}    Passed: {passed}    Failed: {failed}")

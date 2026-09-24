@@ -92,7 +92,10 @@ class ProjectHandle:
         self.id = handle_id
         self._project = project
         self._provider = provider
-        self.path = path
+        self._path = path
+        #: The project the provider gave last (v0.1.203): when the window
+        #: swaps its model, what belonged to the old one goes.
+        self._seen = None
         self.lock = threading.RLock()
         self.stack = CommandStack()
         self.results: "OrderedDict[str, StoredResult]" = OrderedDict()
@@ -105,8 +108,42 @@ class ProjectHandle:
 
     @property
     def project(self):
-        return self._provider() if self._provider is not None \
-            else self._project
+        if self._provider is None:
+            return self._project
+        p = self._provider()
+        if p is not self._seen:
+            # v0.1.203 — the window opened or created another model: the
+            # results and the script namespace were the old one's.
+            if self._seen is not None:
+                for res in self.results.values():
+                    res.evict()
+                self.results.clear()
+                self.exec_ns.clear()
+            self._seen = p
+        return p
+
+    @property
+    def path(self):
+        """The model's file. For a provider's model (the live window) it
+        is the model's own ``file_path``: a path stored at ``add`` would
+        outlive the window opening another file, and ``project_save``
+        would have written the new model over the old file (v0.1.203)."""
+        if self._provider is not None:
+            return getattr(self.project, "file_path", None)
+        return self._path
+
+    @path.setter
+    def path(self, value) -> None:
+        if self._provider is None:
+            self._path = value
+
+    def unsaved(self) -> bool:
+        """Whether the model has changes that are not in its file."""
+        from .snapshot import document_hash
+
+        if self._provider is not None:
+            return bool(getattr(self.project, "is_dirty", False))
+        return self.saved_hash != document_hash(self.project)
 
 
 class Workspace:
@@ -124,6 +161,10 @@ class Workspace:
         self.workdir = Path(workdir).expanduser().resolve() if workdir \
             else None
         self.projects: "OrderedDict[str, ProjectHandle]" = OrderedDict()
+        #: The window, when this workspace serves the live bridge (spec
+        #: 008, F4; ``ogr_gui.agent_bridge.WindowHost``): what an edit
+        #: must wait for, what to redraw, where a result is shown.
+        self.host = None
         self.max_results_per_project = int(max_results_per_project)
         self._jobs_root = jobs_root
         self._max_jobs = int(max_concurrent_jobs)
@@ -228,6 +269,10 @@ class Workspace:
         active = getattr(self._local, "active", None)
         if active is None:
             active = self._local.active = set()
+        if self.host is not None and handle.id not in active:
+            why = self.host.busy()
+            if why:
+                raise Busy(why, hint="Retry when the window has finished.")
         with self._locked(handle, description) as project:
             if handle.id in active:
                 return fn(project)
@@ -238,6 +283,8 @@ class Workspace:
                 cmd.execute(project)
                 if cmd.changed:
                     handle.stack.record(cmd)
+                    if self.host is not None:
+                        self.host.after_edit()
                 return cmd.result
             finally:
                 active.discard(handle.id)

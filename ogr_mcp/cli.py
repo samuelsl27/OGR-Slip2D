@@ -54,7 +54,14 @@ def _parse(argv):
     p.add_argument("--toolsets", default=None,
                    help="Comma-separated toolsets instead of a profile: "
                         "core,model,settings,analysis,loads,supports,search,"
-                        "annotations,files,view,history,python")
+                        "annotations,files,groundwater,statistics,view,"
+                        "history,python")
+    p.add_argument("--attach", nargs="?", const="auto", default=None,
+                   metavar="PID",
+                   help="Drive a RUNNING window instead of a model of "
+                        "your own: the one whose Tools > Agent bridge (MCP) "
+                        "is on, or the one with this process id when "
+                        "several are")
     p.add_argument("--workdir", default=None,
                    help="Folder relative paths are resolved against")
     p.add_argument("--max-wait", type=float, default=None,
@@ -128,14 +135,28 @@ def main(argv=None) -> int:
     toolsets = [t.strip() for t in args.toolsets.split(",")] \
         if args.toolsets else None
 
-    from ogr_api import Workspace
+    from ogr_api import OgrApiError, Workspace
 
     from .server import DEFAULT_MAX_WAIT_S, build_server
 
-    ws = Workspace(workdir=args.workdir, max_concurrent_jobs=args.max_jobs)
+    backend = None
+    if args.attach is not None:
+        # F4 (v0.1.203): forward every tool to a running window.
+        from ogr_api.bridge import BridgeClient
+        try:
+            pid = None if args.attach == "auto" else int(args.attach)
+            backend = BridgeClient.attach(pid)
+        except (OgrApiError, OSError, ValueError) as exc:
+            print(f"Cannot attach to a window: {exc}", file=sys.stderr)
+            return 2
+        log.info("attached to window pid %s (%s)", backend.pid,
+                 backend.window)
+    ws = None if backend is not None else Workspace(
+        workdir=args.workdir, max_concurrent_jobs=args.max_jobs)
     try:
         server = build_server(ws, profile=profile, toolsets=toolsets,
-                              max_wait=args.max_wait or DEFAULT_MAX_WAIT_S)
+                              max_wait=args.max_wait or DEFAULT_MAX_WAIT_S,
+                              backend=backend)
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 2
@@ -154,5 +175,8 @@ def main(argv=None) -> int:
     except KeyboardInterrupt:
         pass
     finally:
-        ws.shutdown()
+        if ws is not None:
+            ws.shutdown()
+        if backend is not None:
+            backend.close()
     return 0

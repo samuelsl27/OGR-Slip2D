@@ -883,6 +883,20 @@ _DICTS: dict[str, dict[str, str]] = {
             'No hay dovelas: calcule primero.',
         'Export Slice Data': 'Exportar datos de las dovelas',
         'Slice data exported to %s': 'Datos de las dovelas exportados a %s',
+        # v0.1.203 (F4) — the live bridge.
+        'Agent bridge (MCP)': 'Puente para agentes (MCP)',
+        "Let an AI agent drive this window: start the MCP server with "
+        "'ogr-slip2d-mcp --attach'. Local connections only, with a token.":
+            'Permite que un agente de IA maneje esta ventana: arranque el '
+            "servidor MCP con 'ogr-slip2d-mcp --attach'. Solo conexiones "
+            'locales, con token.',
+        'Agent bridge off.': 'Puente para agentes desactivado.',
+        'Agent bridge could not start: %s':
+            'No se pudo arrancar el puente para agentes: %s',
+        "Agent bridge on (pid %d, port %d): start the agent's server with "
+        "'ogr-slip2d-mcp --attach'.":
+            'Puente para agentes activo (pid %d, puerto %d): arranque el '
+            "servidor del agente con 'ogr-slip2d-mcp --attach'.",
         # v0.1.200 — the stage checks now live in
         # ``GroundwaterSettings.set_transient``; the dialog shows its
         # message through tr(), so each one is a key.

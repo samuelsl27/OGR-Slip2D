@@ -215,6 +215,12 @@ def project_new(ws, name: Optional[str] = None,
                                      "Demo slope")
     else:
         project = Project(name=(name or "Untitled").strip())
+    if ws.host is not None:
+        # v0.1.203 — attached to a window: the new model opens THERE.
+        ws.host.replace_project(project)
+        handle = ws.get(ws.host.handle_id)
+        return {"project_id": handle.id, "name": handle.project.name,
+                "template": template, "in_window": True}
     handle = ws.add(project)
     return {"project_id": handle.id, "name": handle.project.name,
             "template": template}
@@ -231,7 +237,12 @@ def project_open(ws, path: str) -> dict:
     except (ValueError, KeyError, TypeError) as exc:
         raise InvalidArgument(f"{p} is not a readable .ogr file: "
                               f"{type(exc).__name__}: {exc}") from None
-    handle = ws.add(project, path=p)
+    if ws.host is not None:
+        # v0.1.203 — attached to a window: the file opens THERE.
+        ws.host.replace_project(project)
+        handle = ws.get(ws.host.handle_id)
+    else:
+        handle = ws.add(project, path=p)
     notes = list(getattr(project.settings.search, "_migration_notes", [])
                  or [])
     out = {"project_id": handle.id, "summary": summary_of(handle)}
@@ -259,6 +270,8 @@ def project_save(ws, project_id: Optional[str] = None,
         project.save(target)
         handle.path = target
         handle.saved_hash = document_hash(project)
+    if ws.host is not None and handle.id == ws.host.handle_id:
+        ws.host.after_save()
     return {"project_id": handle.id, "path": str(target)}
 
 
@@ -269,7 +282,12 @@ def project_close(ws, project_id: Optional[str] = None,
     from ..errors import Conflict
 
     handle = ws.get(project_id)
-    dirty = handle.saved_hash != document_hash(handle.project)
+    if ws.host is not None and handle.id == ws.host.handle_id:
+        raise Conflict("This is the window's model; an agent does not "
+                       "close it.",
+                       hint="project_new or project_open replace it in "
+                            "the window.")
+    dirty = handle.unsaved()
     if dirty and not discard_changes:
         raise Conflict(f"Model {handle.id} has unsaved changes.",
                        hint="Save it with project_save, or pass "
@@ -284,7 +302,9 @@ def project_list(ws) -> dict:
     return {"projects": [
         {"project_id": h.id, "name": h.project.name,
          "path": str(h.path) if h.path else None,
-         "unsaved_changes": h.saved_hash != document_hash(h.project)}
+         "unsaved_changes": h.unsaved(),
+         "in_window": bool(ws.host is not None
+                           and h.id == ws.host.handle_id)}
         for h in ws.projects.values()]}
 
 

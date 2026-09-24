@@ -202,7 +202,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.202"
+    VERSION = "0.1.203"
 
     def __init__(self) -> None:
         super().__init__()
@@ -668,6 +668,14 @@ class MainWindow(QMainWindow):
 
         # Window
         self._mk("terminal", "Terminal", self.act_terminal, None, "Ctrl+`", checkable=True)
+        # v0.1.203 (spec 008, F4) — the live bridge an agent drives this
+        # window through (``ogr_gui.agent_bridge``).
+        self._mk("agent_bridge", "Agent bridge (MCP)",
+                 self._toggle_agent_bridge, None, None, checkable=True)
+        self._actions["agent_bridge"].setToolTip(tr(
+            "Let an AI agent drive this window: start the MCP server with "
+            "'ogr-slip2d-mcp --attach'. Local connections only, with a "
+            "token."))
 
         # Help
         self._mk("help", "Help Topics", self.act_help, "help", "F1")
@@ -864,6 +872,8 @@ class MainWindow(QMainWindow):
         m_tools.addSeparator()
         # The single, explicit bridge from annotation to model geometry
         m_tools.addAction(self._actions["convert_tool"])
+        m_tools.addSeparator()
+        m_tools.addAction(self._actions["agent_bridge"])
         m_tools.addSeparator()
         m_ann = m_tools.addMenu(tr("Annotations"))
         for k in ["ann_manage", "ann_show_all", "ann_hide_all",
@@ -2451,7 +2461,41 @@ class MainWindow(QMainWindow):
         """Deregister on close, or the Window menu would list windows
         that no longer exist."""
         self.unregister_session()
+        self._stop_agent_bridge()
         super().closeEvent(event)
+
+    # ------------------------------------------------------------------
+    # v0.1.203 (spec 008, F4) — the live bridge
+    # ------------------------------------------------------------------
+    def _toggle_agent_bridge(self, checked: bool) -> None:
+        if not checked:
+            self._stop_agent_bridge()
+            self.statusBar().showMessage(tr("Agent bridge off."), 5000)
+            return
+        from .agent_bridge import AgentBridge
+        try:
+            bridge = AgentBridge(self)
+            port = bridge.start()
+        except Exception as exc:  # noqa: BLE001 - said, not raised
+            self._actions["agent_bridge"].setChecked(False)
+            self.statusBar().showMessage(
+                tr("Agent bridge could not start: %s") % exc, 10000)
+            return
+        self._agent_bridge = bridge
+        import os
+        self.statusBar().showMessage(
+            tr("Agent bridge on (pid %d, port %d): start the agent's "
+               "server with 'ogr-slip2d-mcp --attach'.")
+            % (os.getpid(), port), 15000)
+
+    def _stop_agent_bridge(self) -> None:
+        bridge = getattr(self, "_agent_bridge", None)
+        if bridge is not None:
+            bridge.stop()
+            self._agent_bridge = None
+        act = getattr(self, "_actions", {}).get("agent_bridge")
+        if act is not None and act.isChecked():
+            act.setChecked(False)
 
     def _new_window(self) -> None:
         """Open a second independent session.

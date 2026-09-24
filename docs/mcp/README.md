@@ -32,6 +32,9 @@ ogr-slip2d-mcp --profile compact --workdir "C:\ruta\a\mis\proyectos"
 
 # HTTP (Open WebUI, mcpo): siempre con token
 ogr-slip2d-mcp --transport http --port 8765 --token-file token.txt
+
+# sobre la ventana abierta (Herramientas > Puente para agentes (MCP))
+ogr-slip2d-mcp --attach
 ```
 
 `--workdir` es la carpeta contra la que se resuelven las rutas relativas
@@ -72,6 +75,9 @@ Opciones completas: `ogr-slip2d-mcp --help`.
 - análisis en segundo plano, cancelables;
 - resultados, superficies críticas con sus dovelas, e imagen PNG del modelo;
 - deshacer y rehacer: cada edición es un paso;
+- trabajar **sobre la ventana abierta** (`--attach`): el mismo modelo y la
+  misma pila de deshacer que el usuario, y una captura del lienzo real
+  (ver [clientes.md](clientes.md));
 - `python_exec` para todo lo que aún no tiene herramienta (ver
   [seguridad.md](seguridad.md)).
 

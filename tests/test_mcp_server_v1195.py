@@ -85,6 +85,33 @@ async def _tools(srv):
         return (await c.list_tools()).tools
 
 
+def _value(name, schema, default=None):
+    """A NON-default value of the declared type (nested lists included:
+    ``list[float]`` and ``list[list[float]]`` differ). Module level since
+    v0.1.203: the live bridge's forwarding test uses the same values."""
+    default = schema.get("default", default)
+    options = [s for s in schema.get("anyOf", [schema])
+               if s.get("type") != "null"] or [schema]
+    s = options[0]
+    if "enum" in s:
+        return next((o for o in s["enum"] if o != default), s["enum"][0])
+    kind = s.get("type")
+    if kind == "boolean":
+        return not (default or False)
+    if kind == "integer":
+        return 7
+    if kind == "number":
+        return 2.5
+    if kind == "array":
+        item = s.get("items", {})
+        return [_value(name, item), _value(name, item)]
+    if kind == "object":
+        extra = s.get("additionalProperties")
+        return {"k": _value(name, extra)
+                if isinstance(extra, dict) and extra else 1}
+    return f"v_{name}"
+
+
 class TestTheToolsAreTheOperations:
     def test_every_operation_has_a_tool_and_back(self):
         if not _have_mcp():
@@ -114,32 +141,7 @@ class TestTheToolsAreTheOperations:
                 return {"job_id": "j_x", "state": "done"}
             return {"ok": True}
 
-        def value(name, schema, default=None):
-            """A NON-default value of the declared type (nested lists
-            included: ``list[float]`` and ``list[list[float]]`` differ)."""
-            default = schema.get("default", default)
-            options = [s for s in schema.get("anyOf", [schema])
-                       if s.get("type") != "null"] or [schema]
-            s = options[0]
-            if "enum" in s:
-                return next((o for o in s["enum"] if o != default),
-                            s["enum"][0])
-            kind = s.get("type")
-            if kind == "boolean":
-                return not (default or False)
-            if kind == "integer":
-                return 7
-            if kind == "number":
-                return 2.5
-            if kind == "array":
-                item = s.get("items", {})
-                return [value(name, item), value(name, item)]
-            if kind == "object":
-                extra = s.get("additionalProperties")
-                return {"k": value(name, extra)
-                        if isinstance(extra, dict) and extra else 1}
-            return f"v_{name}"
-
+        value = _value
         saved = S.call
         S.call = spy
         try:

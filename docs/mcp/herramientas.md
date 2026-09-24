@@ -144,7 +144,7 @@ Los tres cálculos pasan por la misma puerta que `analysis_run`: sin norma de di
 
 | Herramienta | C | Para qué |
 |---|---|---|
-| `model_render` | C | Imagen PNG del modelo, con las superficies críticas de un resultado o con los contornos del campo de agua (`field`) y su superficie libre. |
+| `model_render` | C | Imagen PNG del modelo, con las superficies críticas de un resultado o con los contornos del campo de agua (`field`) y su superficie libre; con `--attach`, `source="window"` captura el lienzo real de la ventana. |
 | `project_history` | | Deshacer, rehacer o listar las ediciones. |
 | `python_exec` | C | Python contra el modelo, para lo que aún no tiene herramienta. Ver [seguridad.md](seguridad.md). |
 

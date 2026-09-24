@@ -35,6 +35,18 @@ desactives para `python_exec`.
 - Prefiere `--token-file` o la variable `OGR_MCP_TOKEN` a `--token`: un
   argumento de la línea de órdenes lo ven los demás usuarios de la máquina.
 
+## El puente con la ventana (`--attach`)
+
+*Herramientas > Puente para agentes (MCP)* abre un puerto **solo en
+127.0.0.1**, con un token aleatorio nuevo cada vez.
+
+- **El token.** Queda en `~/.ogr-slip2d/bridges/<pid>.json`, dentro de tu
+  carpeta de usuario; en sistemas POSIX, ese archivo solo lo puedes leer tú.
+  Sin el token, la ventana cierra la conexión tras la primera línea.
+- **Lo que da.** Quien tenga el puente maneja la ventana, incluido
+  `python_exec`, que corre **dentro del proceso de la ventana**. Apágalo
+  cuando no lo uses; se apaga solo al cerrar la ventana.
+
 ## Archivos
 
 Las rutas relativas se resuelven contra `--workdir`. Guardar nunca

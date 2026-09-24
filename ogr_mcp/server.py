@@ -92,8 +92,14 @@ def _strip(kwargs: dict) -> dict:
 
 
 def build_server(ws, *, profile: str = "full", toolsets=None,
-                 max_wait: float = DEFAULT_MAX_WAIT_S) -> MCPServer:
-    """An ``MCPServer`` publishing the tools of ``profile`` over ``ws``."""
+                 max_wait: float = DEFAULT_MAX_WAIT_S,
+                 backend=None) -> MCPServer:
+    """An ``MCPServer`` publishing the tools of ``profile`` over ``ws``.
+
+    With ``backend`` (an ``ogr_api.bridge.BridgeClient``, spec 008 F4)
+    every tool is forwarded to a running window instead: the same
+    operations, run on the window's own model; ``ws`` is then unused.
+    """
     from ogr_api import __version__ as api_version
 
     selected = select(profile, toolsets)
@@ -124,6 +130,8 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
         # SDK then reported as a bare "Error executing tool". Found by the
         # forwarding test, not by a user.
         with _errors():
+            if backend is not None:
+                return backend.call(op_name, **_strip(kwargs))
             return call(ws, op_name, **_strip(kwargs))
 
     async def wait_for_job(ctx: Context, answer: dict,
@@ -136,8 +144,10 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
         last = None
         while time.monotonic() < deadline:
             await anyio.sleep(0.5)
-            with _errors():
-                st = ws.jobs.get(job_id).status()
+            # Through the operation, so that attached to a window (F4) the
+            # job is asked where it runs.
+            st = await anyio.to_thread.run_sync(
+                lambda: run("job_get", job_id=job_id, wait_seconds=0))
             prog = st.get("progress") or {}
             if prog and prog.get("done") != last:
                 last = prog.get("done")
@@ -158,14 +168,24 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
     def server_info() -> dict[str, Any]:
         """What this server is, its units and rules, and the open models.
         Call it first."""
+        if backend is not None:
+            models = [{"project_id": m["project_id"], "name": m["name"]}
+                      for m in run("project_list")["projects"]]
+        else:
+            models = [{"project_id": h.id, "name": h.project.name}
+                      for h in ws.projects.values()]
         return {
             "server": "ogr-slip2d", "version": __version__,
             "ogr_api": api_version,
             "units": "SI: m, kN, kPa, kN/m3, degrees",
             "profile": profile, "tools": list(registered),
-            "workdir": str(ws.workdir) if ws.workdir else None,
-            "open_models": [{"project_id": h.id, "name": h.project.name}
-                            for h in ws.projects.values()],
+            "workdir": (str(ws.workdir) if ws is not None and ws.workdir
+                        else None),
+            "open_models": models,
+            # F4: attached to a running window, the model IS the window's.
+            "attached_to_window": ({"pid": backend.pid,
+                                    "window": backend.window}
+                                   if backend is not None else None),
             "guide": INSTRUCTIONS,
             # How much of the desktop program's menu an agent can reach
             # today (ogr_api/inventory.py); 'pending' shrinks each phase.
@@ -576,13 +596,17 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
                      ] = None,
                      stage: Annotated[Optional[int], Field(
                          description="With field: a transient stage.")
-                     ] = None) -> list:
+                     ] = None,
+                     source: Annotated[Literal["model", "window"], Field(
+                         description="'window': the real canvas (only "
+                                     "attached to a window).")
+                     ] = "model") -> list:
         """A picture (PNG) of the model, with a result's critical surface
         or the groundwater field."""
         out = run("model_render", project_id=project_id,
                   result_id=result_id, method_id=method_id, width=width,
                   height=height, save_path=save_path, overwrite=overwrite,
-                  field=field, stage=stage)
+                  field=field, stage=stage, source=source)
         note = {k: v for k, v in out.items() if k != "png"}
         return [Image(data=out["png"], format="png"), json.dumps(note)]
 

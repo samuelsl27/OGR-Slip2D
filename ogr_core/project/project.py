@@ -158,7 +158,13 @@ class Project:
         self._listeners.append(cb)
 
     def _notify(self, event: str) -> None:
-        self.is_dirty = True
+        # v0.1.203 — not for "saved": ``save`` clears the flag and then
+        # notifies, and this set it again, so a project was "unsaved" the
+        # moment it was saved (reported in v0.1.194). The window asked to
+        # save a saved project, and the live bridge would have refused to
+        # open a file over a window with nothing to lose.
+        if event != "saved":
+            self.is_dirty = True
         # v0.1.11 — auto-invalidate caches on any model mutation that
         # could affect regions or bbox.
         if event in (

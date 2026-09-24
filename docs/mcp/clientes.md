@@ -123,6 +123,42 @@ async with MCPServerStdio(
 de pocos segundos y `analysis_run` espera hasta 30 s por defecto antes de
 devolver un `job_id`. O súbelo, o pide `wait_seconds` pequeños y usa `job_get`.
 
+## Controlar la ventana abierta (`--attach`)
+
+Por defecto el servidor trabaja con **sus propios modelos**, sin interfaz:
+lo que el agente construye no aparece en ninguna ventana hasta que se guarda
+y se abre. Si quieres ver trabajar al agente —o trabajar los dos sobre el
+mismo modelo—, conéctalo a la ventana:
+
+1. En la ventana, **Herramientas > Puente para agentes (MCP)**. La barra de
+   estado dice el `pid` de la ventana y el puerto.
+2. Arranca el servidor con `--attach`:
+
+   ```bash
+   claude mcp add ogr-slip2d -- ogr-slip2d-mcp --attach
+   ```
+
+   o, en la configuración JSON de cualquier cliente, añade `"--attach"` a
+   `args`. Con varias ventanas con el puente activo, `--attach <pid>` elige
+   una; sin él, el servidor dice cuáles hay.
+
+Así conectado:
+
+- **Es el mismo modelo.** Cada edición del agente es un paso de *Edición >
+  Deshacer* de la ventana (y al revés), y el lienzo se redibuja.
+- Un `analysis_run` del agente aparece en el panel de resultados y en el
+  lienzo, como un *Compute*.
+- `project_new` y `project_open` abren el modelo **en la ventana**. Si hay
+  cambios sin guardar, se niegan salvo con `discard_changes=true`.
+- Mientras la ventana calcula, las operaciones que editan devuelven `Busy`:
+  el cálculo de la ventana usa el modelo vivo.
+- `model_render(source="window")` devuelve una captura del lienzo real, tal
+  como lo ves.
+
+El puente escucha solo en `127.0.0.1`, con un token aleatorio que la ventana
+escribe en `~/.ogr-slip2d/bridges/<pid>.json`. Ese archivo se borra al
+apagar el puente o cerrar la ventana. Ver [seguridad.md](seguridad.md).
+
 ## ChatGPT
 
 ChatGPT sólo se conecta a servidores **HTTPS públicos**, con autenticación.

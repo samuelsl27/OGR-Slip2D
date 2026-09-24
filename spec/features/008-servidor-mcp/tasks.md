@@ -123,3 +123,12 @@ Plan corto antes de cada una. Al cerrar F4, `PENDING` del inventario vacío.
       (`lost_by_cause` en el resumen); el tipo de la rejilla de presiones es
       el del método, y `water_grid_set(value_type=…)` fija el método en el
       mismo paso de deshacer.
+- [x] F4 (v0.1.203) Puente en vivo con la ventana: *Herramientas > Puente
+      para agentes (MCP)* (TCP en 127.0.0.1 con token y archivo de
+      descubrimiento) y `ogr-slip2d-mcp --attach [PID]`, que reenvía cada
+      herramienta al mismo registro. Un modelo y una pila de deshacer
+      compartidos, `Busy` mientras la ventana calcula, `project_new/open` en
+      la ventana y nunca sobre cambios sin guardar, el análisis del agente en
+      el panel y `model_render(source="window")`. Corregidos A2, la ruta del
+      handle con proveedor, la fusión de tres vías de `SnapshotCommand` y el
+      «sin guardar» tras guardar.

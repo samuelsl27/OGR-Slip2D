@@ -58,12 +58,27 @@ class AddBoundaryCommand(Command):
 class RemoveBoundaryCommand(Command):
     boundary: Boundary
     description: str = "Remove Boundary"
+    _index: Optional[int] = field(default=None, repr=False, compare=False)
 
     def execute(self, project: Project) -> None:
+        ids = [b.id for b in project.boundaries]
+        self._index = (ids.index(self.boundary.id)
+                       if self.boundary.id in ids else None)
         project.remove_boundary(self.boundary.id)
 
     def undo(self, project: Project) -> None:
+        # v0.1.203 — back IN ITS PLACE (anomaly A2, reported in v0.1.194).
+        # ``add_boundary`` appends, so an undone deletion moved the
+        # boundary to the end of the list; the order is not cosmetic (a
+        # later edit by index lands elsewhere), and it blocked sharing this
+        # stack with an agent's snapshots, which restore the list as it
+        # was.
         project.add_boundary(self.boundary)
+        last = len(project.boundaries) - 1
+        if self._index is not None and self._index < last:
+            project.boundaries.insert(self._index,
+                                      project.boundaries.pop())
+            project._notify("boundary_modified")
 
 
 @dataclass
@@ -307,6 +322,9 @@ class SnapshotCommand(Command):
         self._after: Optional[dict] = None
         #: What ``mutate`` returned the first time it ran.
         self.result = None
+        #: Attributes the last undo or redo left alone because something
+        #: else had changed them (v0.1.203, :meth:`_restore_where`).
+        self.kept: list = []
 
     def execute(self, project: Project) -> None:
         if self._after is None:
@@ -319,11 +337,37 @@ class SnapshotCommand(Command):
             self._after = capture_state(project, self.attrs)
             self._mutate = None
         else:
-            restore_state(project, self._after)
+            self.kept = self._restore_where(project, self._before,
+                                            self._after)
 
     def undo(self, project: Project) -> None:
         if self._before is not None:
-            restore_state(project, self._before)
+            self.kept = self._restore_where(project, self._after,
+                                            self._before)
+
+    def _restore_where(self, project: Project, expect: dict,
+                       target: dict) -> list:
+        """Restore ``target`` for the attributes still as ``expect``
+        left them; return the ones something else changed since.
+
+        v0.1.203 (spec 008, F4). With the window's stack shared with an
+        agent, a snapshot is undone after edits that went through no
+        command at all — 27 sites of the interface edit the model without
+        one (materials, loads, settings...). Restoring every captured
+        attribute would silently revert those. An attribute that still
+        holds what this command left is put back; one that another hand
+        changed since is kept, and named in ``kept``. With nothing in
+        between (the usual case) it is exactly the old undo.
+        """
+        restore, kept = {}, []
+        for a in self.attrs:
+            now = _state_key({a: getattr(project, a)})
+            if now == _state_key({a: expect[a]}):
+                restore[a] = target[a]
+            else:
+                kept.append(a)
+        restore_state(project, restore)
+        return kept
 
     @property
     def changed(self) -> bool:
