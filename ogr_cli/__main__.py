@@ -34,8 +34,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from ogr_core.geometry import Boundary, BoundaryType, Polyline, Vertex
-from ogr_core.materials import REGISTRY, Material, MohrCoulomb, PorePressureType
+from ogr_core.materials import REGISTRY
 from ogr_core.project import Project, save_results
 from ogr_slip2d import method_registry
 from ogr_slip2d.analysis_runner import check_analysis_settings, run_analysis
@@ -334,29 +333,10 @@ def strength_models():
 @app.command("new-demo")
 def new_demo(output: Path = typer.Argument(..., help="Destination .ogr file")):
     """Create a small homogeneous-slope demo project and save it."""
-    p = Project("Demo slope")
-    ext = Polyline(
-        vertices=[
-            Vertex(0, 0), Vertex(50, 0), Vertex(50, 15),
-            Vertex(35, 15), Vertex(25, 25), Vertex(0, 25),
-        ],
-        closed=True,
-    )
-    ext.ensure_ccw()
-    p.add_boundary(Boundary(polyline=ext, btype=BoundaryType.EXTERNAL))
-    mat = Material(
-        name="Silty clay",
-        strength=MohrCoulomb(cohesion=10.0, friction_angle=25.0),
-        unit_weight=19.0, sat_unit_weight=20.5,
-        pore_pressure=PorePressureType.WATER_TABLE,
-    )
-    p.add_material(mat)
-    wt = Boundary(
-        polyline=Polyline(vertices=[Vertex(0, 8), Vertex(50, 8)]),
-        btype=BoundaryType.WATER_TABLE,
-    )
-    p.add_boundary(wt)
-    mat.water_surface_id = wt.id
+    # v0.1.196 — the one demo, shared with the interface and the agent
+    # layer (ogr_core.project.demo).
+    from ogr_core.project.demo import build_demo_project
+    p = build_demo_project()
 
     if not str(output).endswith(".ogr"):
         output = output.with_suffix(".ogr")

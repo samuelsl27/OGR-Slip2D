@@ -58,5 +58,11 @@ def call(ws, op_name: str, /, **kwargs):
     return op.func(ws, **kwargs)
 
 
-# Registration happens on import.
-from . import project, model, settings, analysis, view, history, python  # noqa: E402,F401
+# Registration happens on import. The annotation operations live in
+# ``annotation_ops`` and not ``annotations``: this package has
+# ``from __future__ import annotations``, so ``from . import annotations``
+# returns that __future__ feature object instead of importing the module —
+# the four operations silently never registered (found in v0.1.196).
+from . import (project, model, settings, analysis, view, history,  # noqa: E402,F401
+               python, loads, supports, search_objects, annotation_ops,
+               files)

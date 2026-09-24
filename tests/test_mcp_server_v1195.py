@@ -130,7 +130,9 @@ class TestTheToolsAreTheOperations:
                 item = s.get("items", {})
                 return [value(name, item), value(name, item)]
             if kind == "object":
-                return {"k": 1}
+                extra = s.get("additionalProperties")
+                return {"k": value(name, extra)
+                        if isinstance(extra, dict) and extra else 1}
             return f"v_{name}"
 
         saved = S.call

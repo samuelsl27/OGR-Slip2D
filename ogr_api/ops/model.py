@@ -111,6 +111,19 @@ def _make_boundary(btype, pts, *, name=None, closed=None,
         raise InvalidArgument(
             f"A {btype.display_name} is an open polyline; only the External "
             f"boundary and a Block Search window are closed.")
+    if btype.name == "MATERIAL" and len(verts) >= 3 and verts[0] == \
+            verts[-1]:
+        # v0.1.196 — measured, and reported as an anomaly of the region
+        # builder, not fixed here (rule 6): regions have NO HOLES, so the
+        # region around a closed lens also covers the lens, a click that
+        # paints the lens lands in both, and the WHOLE model took the
+        # lens's material (the demo slope read 'Lens' at (20, 5)).
+        raise Conflict(
+            "A material boundary that closes on itself (a lens inside the "
+            "model) is not supported: the region around it would take the "
+            "lens's material too.",
+            hint="Draw the layer edge to edge of the External boundary. "
+                 "This is a known defect of the region builder.")
     poly = Polyline(vertices=[Vertex(x, y) for x, y in verts],
                     closed=bool(closed))
     if btype.name == "EXTERNAL":
@@ -226,7 +239,8 @@ def boundary_add(ws, type: str, points: list,
 
 
 _EDIT_OPS = ("set_vertices", "translate", "move_vertex", "insert_vertex",
-             "delete_vertex", "rename", "change_type", "delete")
+             "delete_vertex", "rename", "change_type", "delete", "copy",
+             "scale", "rotate", "simplify")
 
 
 @operation("boundary_edit", toolset="model", mutates=True)
@@ -236,18 +250,43 @@ def boundary_edit(ws, boundary: str, op: str,
                   dy: float = 0.0, index: Optional[int] = None,
                   point_xy: Optional[list] = None,
                   name: Optional[str] = None,
-                  new_type: Optional[str] = None) -> dict:
+                  new_type: Optional[str] = None,
+                  sx: Optional[float] = None, sy: Optional[float] = None,
+                  angle: Optional[float] = None,
+                  pivot: Any = None,
+                  tolerance: Optional[float] = None) -> dict:
     """Edit or delete a boundary: set_vertices, translate, move/insert/
-    delete_vertex, rename, change_type, delete."""
+    delete_vertex, rename, change_type, delete, copy, scale, rotate,
+    simplify."""
     from ogr_core.geometry import Vertex
 
     if op not in _EDIT_OPS:
         raise unknown("boundary_edit op", op, _EDIT_OPS)
 
+    def _pivot(b):
+        if pivot is None or pivot == "centroid":
+            vs = b.polyline.vertices
+            return Vertex(sum(v.x for v in vs) / len(vs),
+                          sum(v.y for v in vs) / len(vs))
+        return Vertex(*point(pivot, "pivot"))
+
     def edit(project):
         b = find_boundary(project, boundary)
         idx = project.boundaries.index(b)
         notes = []
+        if op == "copy":
+            import uuid
+            from ogr_core.geometry.transforms import translate
+            _check_allowed(project, b.btype)
+            new = translate(b, coerce_value(dx, float, "dx"),
+                            coerce_value(dy, float, "dy"))
+            new.id = str(uuid.uuid4())
+            new.polyline = dataclasses.replace(new.polyline,
+                                               id=str(uuid.uuid4()))
+            project.add_boundary(new)
+            return {"boundary": boundary_info(new, with_vertices=True),
+                    "regions": len(project.resolve_regions()),
+                    "notes": notes}
         if op == "delete":
             project.boundaries.pop(idx)
             cleared = [m for m in project.materials
@@ -308,6 +347,32 @@ def boundary_edit(ws, boundary: str, op: str,
             if name is None:
                 raise InvalidArgument("rename needs name.")
             new.name = str(name)
+        elif op == "scale":
+            from ogr_core.geometry.transforms import scale
+            if sx is None:
+                raise InvalidArgument("scale needs sx (and sy, default sx).")
+            fx = coerce_value(sx, float, "sx")
+            fy = coerce_value(sy, float, "sy") if sy is not None else fx
+            if fx <= 0 or fy <= 0:
+                raise InvalidArgument("scale factors must be positive.")
+            new = scale(b, _pivot(b), fx, fy)
+        elif op == "rotate":
+            from ogr_core.geometry.transforms import rotate
+            if angle is None:
+                raise InvalidArgument("rotate needs angle (degrees, "
+                                      "counter-clockwise).")
+            new = rotate(b, _pivot(b), coerce_value(angle, float, "angle"))
+        elif op == "simplify":
+            from ogr_core.geometry.cleanup import simplify_boundary
+            if tolerance is None:
+                raise InvalidArgument("simplify needs tolerance (m).")
+            try:
+                new = simplify_boundary(
+                    b, coerce_value(tolerance, float, "tolerance"))
+            except ValueError as exc:
+                raise InvalidArgument(str(exc)) from None
+            notes.append(f"{len(b.polyline.vertices)} -> "
+                         f"{len(new.polyline.vertices)} vertices.")
         elif op == "change_type":
             from ogr_core.geometry.transforms import convert_boundary
             target = boundary_type(new_type)
@@ -668,3 +733,109 @@ def model_define(ws, spec: dict, project_id: Optional[str] = None) -> dict:
                 "regions": regions, "notes": notes}
 
     return ws.mutate(project_id, "Define model", edit)
+
+
+# ----------------------------------------------------------------------
+# The External boundary as a whole, and the geometry's health
+# ----------------------------------------------------------------------
+@operation("external_reshape", toolset="model", mutates=True)
+def external_reshape(ws, project_id: Optional[str] = None,
+                     offset: Optional[float] = None,
+                     points_xy: Optional[list] = None,
+                     keep_removed_as_material: bool = False,
+                     snap_tolerance: float = 1e-3) -> dict:
+    """Expand or shrink the External boundary: by a parallel offset, or by a
+    polyline whose two ends lie on it (fill or excavation)."""
+    from ogr_core.geometry import Polyline, Vertex
+    from ogr_core.geometry.cleanup import has_self_intersections
+    from ogr_core.geometry.expand_shrink import (ExpandShrinkError,
+                                                 apply_expand_shrink,
+                                                 apply_external_offset)
+
+    if (offset is None) == (points_xy is None):
+        raise InvalidArgument("Give exactly one of offset (m, + expands) "
+                              "or points_xy (a polyline from the External "
+                              "to the External).")
+
+    def edit(project):
+        from ogr_core.geometry.cleanup import model_tolerance
+        if project.external_boundary() is None:
+            raise Conflict("The model has no External boundary.")
+        try:
+            if offset is not None:
+                d = coerce_value(offset, float, "offset")
+                if d == 0:
+                    raise InvalidArgument("offset is zero.")
+                apply_external_offset(project, d)
+                mode = "expand" if d > 0 else "shrink"
+                removed = None
+            else:
+                rel = coerce_value(snap_tolerance, float, "snap_tolerance")
+                if not 0 < rel < 0.1:
+                    raise InvalidArgument("snap_tolerance is a fraction of "
+                                          "the model size, in (0, 0.1).")
+                tol = model_tolerance(project.boundaries, rel=rel)
+                drawn = Polyline(vertices=[Vertex(x, y) for x, y in
+                                           points(points_xy, "points_xy")],
+                                 closed=False)
+                res = apply_expand_shrink(
+                    project, drawn,
+                    keep_removed_as_material=coerce_value(
+                        keep_removed_as_material, bool,
+                        "keep_removed_as_material"),
+                    tolerance=tol)
+                mode, removed = res.mode, res.removed_arc
+        except (ExpandShrinkError, ValueError) as exc:
+            raise InvalidArgument(str(exc)) from None
+        ext = project.external_boundary()
+        if has_self_intersections(ext.polyline):
+            raise InvalidArgument("The result crosses itself; use a "
+                                  "smaller offset or another polyline.")
+        return {"mode": mode,
+                "external": boundary_info(ext, with_vertices=True),
+                "kept_as_material": bool(removed is not None
+                                         and keep_removed_as_material),
+                "regions": regions_info(project)}
+
+    return ws.mutate(project_id, "Reshape External boundary", edit)
+
+
+@operation("geometry_cleanup", toolset="model", mutates=True)
+def geometry_cleanup(ws, project_id: Optional[str] = None,
+                     apply: bool = False,
+                     simplify_tolerance: float = 0.0) -> dict:
+    """Report the geometry's problems (duplicates, self-crossings,
+    crossings between boundaries); with apply=true remove duplicate
+    vertices (and simplify if a tolerance is given)."""
+    from ogr_core.geometry.cleanup import (cleanup_boundaries,
+                                           inspect_boundaries)
+
+    eps = coerce_value(simplify_tolerance, float, "simplify_tolerance")
+    if eps < 0:
+        raise InvalidArgument("simplify_tolerance cannot be negative.")
+    if eps and not apply:
+        raise InvalidArgument("simplify_tolerance only acts with "
+                              "apply=true.")
+    with ws.reading(project_id, "geometry_cleanup") as project:
+        report = inspect_boundaries(project.boundaries)
+    if not coerce_value(apply, bool, "apply"):
+        return {"applied": False, **report}
+
+    def edit(project):
+        done = cleanup_boundaries(project.boundaries,
+                                  tol=report["tolerance"],
+                                  simplify_epsilon=eps)
+        for b in project.boundaries:
+            need = _MIN_VERTICES.get(b.btype.name,
+                                     3 if b.polyline.closed else 2)
+            if len(b.polyline.vertices) < need:
+                raise InvalidArgument(
+                    f"That simplification leaves {b.btype.display_name} "
+                    f"{b.id} with {len(b.polyline.vertices)} vertices; use "
+                    f"a smaller simplify_tolerance.")
+        project._notify("geometry_changed")
+        return {"applied": True,
+                "duplicates_removed": done["duplicates_removed"],
+                "after": inspect_boundaries(project.boundaries)}
+
+    return ws.mutate(project_id, "Geometry cleanup", edit)

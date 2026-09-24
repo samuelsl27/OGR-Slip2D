@@ -82,6 +82,155 @@ EXAMPLES = {
     "python_exec": lambda p: {"code": "project.name = 'renamed'\n"
                                       "project.materials[0].unit_weight"
                                       " = 17.0"},
+    # v0.1.196 (F2): loads, supports, search objects, annotations, files
+    # and the two geometry operations. What an operation needs to exist
+    # first (a load to delete, a pattern to ungroup) is made by PREPARE,
+    # outside the step being measured.
+    "load_set": lambda p: {"kind": "distributed", "start": [50, 35],
+                           "end": [70, 35], "magnitude": 20.0,
+                           "orientation": "vertical",
+                           "creates_excess_pore_pressure": True},
+    "load_delete": lambda p: {"loads": "all"},
+    "seismic_set": lambda p: {"enabled": True, "kh": 0.15, "kv": -0.05},
+    "seismic_record_set": lambda p: {"name": "Pulse", "dt": 0.01,
+                                     "accelerations": [0.0, 0.1, -0.2,
+                                                       0.05, 0.0]},
+    "seismic_record_delete": lambda p: {"record": "Rec"},
+    "support_type_set": lambda p: {"type_class": "soil_nail",
+                                   "name": "Nail",
+                                   "params": {"tensile_capacity": 150.0}},
+    "support_type_delete": lambda p: {"support_type": "Bolt"},
+    "support_set": lambda p: {"support_type": "Bolt", "head": [40, 30],
+                              "tail": [48, 26]},
+    "support_pattern_add": lambda p: {"support_type": "Bolt",
+                                      "start": [30, 25], "end": [50, 35],
+                                      "length": 6.0, "spacing": 3.0},
+    "support_delete": lambda p: {"supports": "all"},
+    "support_ungroup": lambda p: {},
+    "tension_crack_set": lambda p: {"mode": "percent_filled",
+                                    "percent_filled": 50.0},
+    "focus_set": lambda p: {"kind": "point", "points_xy": [[40, 30]],
+                            "tolerance": 0.5},
+    "focus_delete": lambda p: {"focus": "all"},
+    "user_surface_add": lambda p: {"surface": {"type": "circle",
+                                               "centre_x": 45,
+                                               "centre_y": 45,
+                                               "radius": 20}},
+    "user_surface_delete": lambda p: {"surface": "all"},
+    "annotation_set": lambda p: {"kind": "text", "points_xy": [[30, 40]],
+                                 "text": "Note"},
+    "annotation_delete": lambda p: {"annotations": "all"},
+    "annotation_to_boundary": lambda p: {
+        "annotation": p.annotations.ordered()[0].id,
+        "type": "water_table"},
+    "external_reshape": lambda p: {"points_xy": [[50, 35], [60, 37],
+                                                 [70, 35]]},
+    "geometry_cleanup": lambda p: {"apply": True},
+    "dxf_import": lambda p: {},
+    "properties_import": lambda p: {},
+}
+
+
+def _prep_load(ws, pid, tmp):
+    from ogr_api import call
+    call(ws, "load_set", project_id=pid, kind="line", point_xy=[60, 35],
+         magnitude=10.0)
+
+
+def _prep_record(ws, pid, tmp):
+    from ogr_api import call
+    call(ws, "seismic_record_set", project_id=pid, name="Rec", dt=0.02,
+         accelerations=[0.0, 0.3, 0.0])
+
+
+def _prep_type(ws, pid, tmp):
+    from ogr_api import call
+    call(ws, "support_type_set", project_id=pid, type_class="end_anchored",
+         name="Bolt")
+
+
+def _prep_support(ws, pid, tmp):
+    from ogr_api import call
+    _prep_type(ws, pid, tmp)
+    call(ws, "support_set", project_id=pid, support_type="Bolt",
+         head=[40, 30], tail=[48, 26])
+
+
+def _prep_pattern(ws, pid, tmp):
+    from ogr_api import call
+    _prep_type(ws, pid, tmp)
+    call(ws, "support_pattern_add", project_id=pid, support_type="Bolt",
+         start=[30, 25], end=[50, 35], length=6.0, spacing=3.0)
+
+
+def _prep_crack(ws, pid, tmp):
+    from ogr_api import call
+    call(ws, "boundary_add", project_id=pid, type="tension_crack",
+         points=[[50, 32], [70, 32]])
+
+
+def _prep_focus(ws, pid, tmp):
+    from ogr_api import call
+    call(ws, "focus_set", project_id=pid, kind="line",
+         points_xy=[[35, 27], [45, 32]])
+
+
+def _prep_surface(ws, pid, tmp):
+    from ogr_api import call
+    call(ws, "user_surface_add", project_id=pid,
+         surface={"type": "circle", "centre_x": 45, "centre_y": 45,
+                  "radius": 20})
+
+
+def _prep_annotation(ws, pid, tmp):
+    from ogr_api import call
+    call(ws, "annotation_set", project_id=pid, kind="line",
+         points_xy=[[20, 23], [70, 23]])
+
+
+def _prep_duplicate(ws, pid, tmp):
+    # A repeated vertex, put straight into the model: the cleanup must
+    # have something to remove, or it is (rightly) not a step.
+    import copy
+    ext = ws.get(pid).project.external_boundary()
+    ext.polyline.vertices.insert(1, copy.copy(ext.polyline.vertices[1]))
+
+
+def _prep_dxf(ws, pid, tmp):
+    from ogr_api import call
+    path = str(tmp / "model.dxf")
+    call(ws, "dxf_export", project_id=pid, path=path)
+    return {"path": path}
+
+
+def _prep_ogr(ws, pid, tmp):
+    from ogr_api import call
+    other = call(ws, "project_new", name="Source")["project_id"]
+    call(ws, "material_set", project_id=other, name="Imported",
+         strength=_SOIL, properties={"unit_weight": 16.0})
+    path = str(tmp / "source.ogr")
+    call(ws, "project_save", project_id=other, path=path)
+    return {"path": path}
+
+
+#: operation -> function(ws, project_id, tmp_dir) run BEFORE the measured
+#: step; it may return extra keyword arguments (a file path).
+PREPARE = {
+    "load_delete": _prep_load,
+    "seismic_record_delete": _prep_record,
+    "support_type_delete": _prep_type,
+    "support_set": _prep_type,
+    "support_pattern_add": _prep_type,
+    "support_delete": _prep_support,
+    "support_ungroup": _prep_pattern,
+    "tension_crack_set": _prep_crack,
+    "focus_delete": _prep_focus,
+    "user_surface_delete": _prep_surface,
+    "annotation_delete": _prep_annotation,
+    "annotation_to_boundary": _prep_annotation,
+    "geometry_cleanup": _prep_duplicate,
+    "dxf_import": _prep_dxf,
+    "properties_import": _prep_ogr,
 }
 
 #: Editing operations that are not an edit to undo.
@@ -103,15 +252,22 @@ class TestEveryEditIsOneExactStep:
         assert not stale, f"examples for non-editing ops: {sorted(stale)}"
 
     def test_do_undo_redo_restore_the_model_exactly(self):
+        import shutil
+        import tempfile
+        from pathlib import Path
+
         from ogr_api import call
         for name, make in EXAMPLES.items():
             ws, pid = _setup()
+            tmp = Path(tempfile.mkdtemp(prefix="ogr_undo_"))
             try:
                 handle = ws.get(pid)
                 obj = handle.project
+                extra = (PREPARE[name](ws, pid, tmp) or {}) \
+                    if name in PREPARE else {}
                 steps = len(handle.stack.history()[0])
                 before = _state(ws, pid)
-                out = call(ws, name, project_id=pid, **make(obj))
+                out = call(ws, name, project_id=pid, **make(obj), **extra)
                 if name == "python_exec":
                     assert out["ok"], out
                 after = _state(ws, pid)
@@ -125,6 +281,11 @@ class TestEveryEditIsOneExactStep:
                 assert handle.project is obj
             finally:
                 ws.shutdown()
+                shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_preparations_name_real_examples(self):
+        stray = set(PREPARE) - set(EXAMPLES)
+        assert not stray, f"PREPARE without an example: {sorted(stray)}"
 
 
 class TestAFailedEditLeavesNoTrace:

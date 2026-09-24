@@ -184,3 +184,23 @@ def compute_blockers(project) -> list[Refusal]:
     if not project.materials:
         out.append(Refusal("no_materials", "No materials defined."))
     return out
+
+
+# ----------------------------------------------------------------------
+def set_seismic_records(project, records) -> bool:
+    """Replace the project's strong-motion records.
+
+    Moved from ``SeismicRecordsDialog.apply`` in v0.1.196 (spec 008, F2).
+    A record the Newmark settings had selected and that is no longer in the
+    list leaves the selection EMPTY rather than pointing at nothing: the run
+    then says it has no record instead of integrating one that was deleted.
+    Returns whether the selection had to be cleared.
+    """
+    project.seismic_records = list(records)
+    settings = getattr(project.settings, "seismic", None)
+    if settings is not None and settings.record_id:
+        alive = {r.id for r in project.seismic_records}
+        if settings.record_id not in alive:
+            settings.record_id = ""
+            return True
+    return False

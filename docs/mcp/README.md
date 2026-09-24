@@ -43,24 +43,40 @@ Opciones completas: `ogr-slip2d-mcp --help`.
 
 ## Qué puede hacer hoy
 
-28 herramientas, descritas en [herramientas.md](herramientas.md):
+55 herramientas, descritas en [herramientas.md](herramientas.md):
 
-- abrir, crear, guardar y describir modelos;
+- abrir, crear (vacío o el talud de demostración), guardar y describir
+  modelos;
 - el modelo entero en una llamada (`model_define`): contornos, materiales,
   qué material ocupa cada región y el nivel freático;
+- editar contornos: mover, copiar, escalar, girar, simplificar, ampliar o
+  recortar el exterior, y revisar la geometría (vértices repetidos, cruces);
+- cargas repartidas y puntuales, sismo pseudoestático y registros de
+  aceleración;
+- tipos de soporte y soportes, sueltos o en patrón;
+- grieta de tracción y su agua, objetos de foco y superficies propias;
+- anotaciones, y su único puente a la geometría (`annotation_to_boundary`);
+- DXF de entrada y de salida, informe PDF e importar propiedades de otro
+  proyecto;
 - ajustes con validación: un nombre o valor mal escrito se rechaza con una
   sugerencia, nunca se acepta en silencio;
 - análisis en segundo plano, cancelables;
 - resultados, superficies críticas con sus dovelas, e imagen PNG del modelo;
-- deshacer y rehacer;
+- deshacer y rehacer: cada edición es un paso;
 - `python_exec` para todo lo que aún no tiene herramienta (ver
   [seguridad.md](seguridad.md)).
 
+Un ajuste que el cálculo no leería se rechaza con el motivo en vez de
+guardarse: una carga puntual normal al contorno (el motor la aplicaría
+vertical), `angle_deg` con una carga vertical, una tolerancia de foco en una
+ventana... Es la regla 7 del proyecto aplicada en la puerta.
+
 `server_info` dice cuánto del menú del programa cubre ya el agente
-(`program_coverage`). Lo que falta —cargas, soportes, DXF, informe, foco,
-anotaciones (fase F2); agua con elementos finitos, estadística,
-retroanálisis (F3)— llega en las próximas versiones, y hasta entonces se
-alcanza con `python_exec`.
+(`program_coverage`): 98 de las 136 acciones de la ventana principal, 23 son
+sólo de interfaz (zoom, *pan*...) y quedan 15. Catorce llegan en la fase F3
+(agua con elementos finitos, estadística, retroanálisis, optimización) y una,
+*Change Slope Angle*, espera una decisión del propietario. Hasta entonces se
+alcanzan con `python_exec`.
 
 ## Configurar cada cliente
 

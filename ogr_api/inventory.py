@@ -15,9 +15,10 @@ Each action (the keys of ``MainWindow._actions``) is exactly one of:
 * ``MAPPED``: the ``ogr_api`` operation that does the same to the model;
 * ``UI_ONLY``: why it has no meaning without the window (zoom, printing,
   help) — with the reason written, never left implicit;
-* ``PENDING``: the phase of spec 008 that will map it. The test holds the
-  number of pending actions to a ceiling that can only go DOWN, and phase
-  F4 closes with none left.
+* ``PENDING``: the phase of spec 008 that will map it, or ``owner`` when
+  it waits on a decision of the project's owner. The test holds the number
+  of pending actions to a ceiling that can only go DOWN, and phase F4
+  closes with none left.
 
 Only strings live here: no Qt, no interface import.
 
@@ -75,6 +76,63 @@ MAPPED: dict[str, str] = {
     "moment_axis_reset": "settings_set",
     # Window
     "terminal": "python_exec",
+    # --- v0.1.196 (F2) ---------------------------------------------
+    "load_demo": "project_new",
+    "import_dxf": "dxf_import",
+    "export_dxf": "dxf_export",
+    "generate_report": "report_generate",
+    "import_props": "properties_import",
+    "copy_boundary": "boundary_edit",
+    "scale_boundary": "boundary_edit",
+    "rotate_boundary": "boundary_edit",
+    "simplify_boundary": "boundary_edit",
+    "expand_shrink": "external_reshape",
+    "geometry_cleanup": "geometry_cleanup",
+    "add_dist": "load_set",
+    "add_line": "load_set",
+    "modify_load": "load_set",
+    "del_load": "load_delete",
+    "seismic": "seismic_set",
+    "seismic_records": "seismic_record_set",
+    "def_support": "support_type_set",
+    "add_support": "support_set",
+    "modify_support": "support_set",
+    "move_support": "support_set",
+    "stretch_support": "support_set",
+    "support_pattern": "support_pattern_add",
+    "del_support": "support_delete",
+    "ungroup_pattern": "support_ungroup",
+    "def_tension_crack": "tension_crack_set",
+    "focus_window": "focus_set",
+    "focus_line": "focus_set",
+    "focus_point": "focus_set",
+    "focus_tangent": "focus_set",
+    "focus_manage": "focus_set",
+    "surf_centre_radius": "user_surface_add",
+    "surf_three_points": "user_surface_add",
+    "surf_manage": "user_surface_delete",
+    "add_text": "annotation_set",
+    "measure": "annotation_set",
+    "dim_len": "annotation_set",
+    "dim_ang": "annotation_set",
+    "dim_x": "annotation_set",
+    "dim_y": "annotation_set",
+    "draw_line": "annotation_set",
+    "draw_arrow": "annotation_set",
+    "draw_polyline": "annotation_set",
+    "draw_polygon": "annotation_set",
+    "draw_rect": "annotation_set",
+    "draw_circle": "annotation_set",
+    "add_axes": "annotation_set",
+    "add_image": "annotation_set",
+    "ann_show_all": "annotation_set",
+    "ann_hide_all": "annotation_set",
+    "ann_manage": "annotation_set",
+    "ann_delete_all": "annotation_delete",
+    "convert_tool": "annotation_to_boundary",
+    "mat_tab": "properties_table",
+    "sup_tab": "properties_table",
+    "hyd_tab": "properties_table",
 }
 
 UI_ONLY: dict[str, str] = {
@@ -104,24 +162,11 @@ UI_ONLY: dict[str, str] = {
 }
 
 PENDING: dict[str, str] = {
-    # F2 — loads, supports, crack properties, seismic, focus, user
-    # surfaces, annotations, DXF, report, boundary transforms.
-    **{k: "F2" for k in (
-        "load_demo", "import_dxf", "export_dxf", "generate_report",
-        "import_props", "copy_boundary", "scale_boundary", "rotate_boundary",
-        "expand_shrink", "change_slope", "simplify_boundary",
-        "geometry_cleanup", "add_dist", "add_line", "seismic",
-        "seismic_records", "del_load", "modify_load", "add_support",
-        "support_pattern", "del_support", "stretch_support",
-        "modify_support", "move_support", "ungroup_pattern", "def_support",
-        "def_tension_crack", "focus_window", "focus_line", "focus_point",
-        "focus_tangent", "focus_manage", "surf_centre_radius",
-        "surf_three_points", "surf_manage", "add_text", "measure",
-        "dim_len", "dim_ang", "dim_x", "dim_y", "draw_line", "draw_arrow",
-        "draw_polyline", "draw_polygon", "draw_rect", "draw_circle",
-        "add_axes", "add_image", "convert_tool", "ann_show_all",
-        "ann_hide_all", "ann_delete_all", "ann_manage", "mat_tab",
-        "sup_tab", "hyd_tab")},
+    # Awaiting the owner: ``transforms.change_slope_angle`` ROTATES THE
+    # WHOLE External boundary about the pivot instead of the slope face
+    # (reported in v0.1.196), so wrapping it would hand an agent a tool
+    # that moves the model in a way nobody asked for.
+    "change_slope": "owner",
     # F3 — groundwater FE, statistics, back analysis, optimisation.
     **{k: "F3" for k in (
         "wp_grid", "gw_hydraulic", "gen_mesh", "reset_mesh", "gw_bcs",
@@ -132,7 +177,7 @@ PENDING: dict[str, str] = {
 
 #: The most actions allowed to be pending. Lower it with every phase;
 #: never raise it (a raise needs its reason in a changelog).
-PENDING_CEILING = 71
+PENDING_CEILING = 15
 
 
 def coverage() -> dict:

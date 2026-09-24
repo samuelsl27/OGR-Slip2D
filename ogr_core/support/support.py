@@ -462,6 +462,52 @@ def unresolved_support_refs(project) -> dict:
     return {"ambiguous": ambiguous, "orphan": orphan}
 
 
+#: v0.1.196 (spec 008, F2) — the tokens each string-valued support
+#: parameter accepts, by field name. They lived only in the interface's
+#: editor (``define_support_dialog._CHOICES``, which keeps the translatable
+#: LABELS), so nothing outside it could tell a valid value from a typo —
+#: and the engine does not either: ``PileMicropile`` treats anything that is
+#: not ``"ito_matsui"`` as shear. ``tests/test_f2_rules_v1196.py`` holds the
+#: editor's tokens equal to these.
+PARAMETER_CHOICES: dict[str, tuple[str, ...]] = {
+    "pullout_mode": ("mohr_coulomb", "coefficient", "friction_factor"),
+    "shear_strength_model": ("linear", "hyperbolic"),
+    "anchorage": ("none", "slope_face", "embedded_end", "both_ends"),
+    "friction_factor_mode": ("constant", "function"),
+    "profile_type": ("uniform", "triangular", "trapezoidal", "custom"),
+    "force_location": ("intersection", "centroid"),
+    "failure_mode": ("shear", "ito_matsui"),
+    "shaft_type": ("round", "square"),
+}
+
+
+def reconcile_support_refs(project) -> dict:
+    """Make every placed support follow its property set again.
+
+    Moved from ``DefineSupportDialog.accept`` in v0.1.196, so an edit of the
+    sets made by an agent does the same thing: a set whose CLASS changed
+    leaves ``type_id`` stale on the supports that name it (corrected here),
+    and a DELETED set leaves them naming nothing (their ``type_ref`` is
+    cleared, and the class decides, as for a file older than v0.1.149).
+    Returns how many of each.
+    """
+    by_id = {st.id: st for st in (getattr(project, "support_types", None)
+                                  or [])}
+    cleared = retyped = 0
+    for sup in (getattr(project, "supports", None) or []):
+        ref = getattr(sup, "type_ref", None)
+        if not ref:
+            continue
+        st = by_id.get(ref)
+        if st is None:
+            sup.type_ref = None
+            cleared += 1
+        elif sup.type_id != st.TYPE_ID:
+            sup.type_id = st.TYPE_ID
+            retyped += 1
+    return {"cleared": cleared, "retyped": retyped}
+
+
 def _default_orientation(type_id: str) -> ForceOrientation:
     """``DEFAULT_ORIENTATION`` of a support type, by id.
 
@@ -1598,6 +1644,12 @@ class SupportInstance:
     # ``id``. ``None`` means the file never said (every file before
     # this version), and the class then decides.
     type_ref: Optional[str] = None
+    # v0.1.196 (spec 008, F2) — the pattern this support was generated in,
+    # shared by every support of one ``generate_along_segment`` call.
+    # ``Support → Ungroup Pattern`` looked for exactly this attribute and
+    # nothing had ever set it, so ungrouping always answered "no support
+    # belongs to a pattern". It changes no number: the engine never reads it.
+    pattern_id: Optional[str] = None
 
     def __post_init__(self) -> None:
         if self.orientation is None:
@@ -1688,6 +1740,10 @@ class SupportInstance:
         # keeps producing the JSON it produced before v0.1.149.
         if self.type_ref:
             d["type_ref"] = self.type_ref
+        # Same rule: only when set, so a support outside any pattern keeps
+        # the JSON it always had.
+        if self.pattern_id:
+            d["pattern_id"] = self.pattern_id
         return d
 
     @classmethod
@@ -1710,6 +1766,7 @@ class SupportInstance:
             color=data.get("color", "#4b0082"),
             id=data.get("id", str(uuid4())),
             type_ref=data.get("type_ref") or None,
+            pattern_id=data.get("pattern_id") or None,
         )
 
     def tooltip_html(self, stype: Optional[SupportType] = None) -> str:
@@ -1795,6 +1852,8 @@ class SupportPattern:
         # How many supports fit
         n = max(1, int(seg_len // self.spacing) + 1)
         out = []
+        # v0.1.196 — one id for the whole row, so it can be ungrouped.
+        pattern_id = uuid4().hex[:12]
         for i in range(n):
             t = i * self.spacing
             if t > seg_len + 1e-6:
@@ -1828,6 +1887,7 @@ class SupportPattern:
                 force_application=self.force_application,
                 orientation=self.orientation,
                 user_angle_deg=self.user_angle_deg,
+                pattern_id=pattern_id,
             ))
         return out
 

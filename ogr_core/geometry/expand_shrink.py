@@ -372,3 +372,71 @@ def _dedupe(verts: List[Vertex], tol: float = 1e-9) -> List[Vertex]:
         if abs(out[0].x - out[-1].x) < tol and abs(out[0].y - out[-1].y) < tol:
             out = out[:-1]
     return out
+
+
+# ======================================================================
+# Applied to a project (v0.1.196, spec 008 F2)
+# ======================================================================
+#: Name of the Material Boundary an Expand/Shrink can leave behind, the
+#: removed arc of the old ground kept as a geological reference.
+REMOVED_ARC_NAME = "Original ground (from Expand/Shrink)"
+
+
+def apply_expand_shrink(project, polyline: Polyline, *,
+                        keep_removed_as_material: bool = False,
+                        tolerance: float = 1e-6) -> ExpandShrinkResult:
+    """Replace the project's External boundary by an Expand/Shrink.
+
+    v0.1.196 — the model half of the interface's draw mode, moved here so
+    the interface and an agent do the same thing. The interface built a
+    ``MacroCommand(commands=...)`` for it, but the field is ``children``, so
+    the draw mode raised a TypeError at the moment of committing and had
+    never been able to change a model.
+
+    The External keeps its id. With ``keep_removed_as_material`` the cut-out
+    arc of the old ground becomes a Material Boundary named
+    :data:`REMOVED_ARC_NAME`. The caller owns undo: the interface wraps this
+    in a ``SnapshotCommand``, the operations layer in ``Workspace.mutate``.
+    """
+    import dataclasses
+
+    from .boundary import Boundary
+    from .boundary_type import BoundaryType
+
+    ext = project.external_boundary()
+    if ext is None:
+        raise ExpandShrinkError("The model has no External boundary.")
+    result = expand_shrink_external(ext.polyline, polyline, tolerance)
+    idx = project.boundaries.index(ext)
+    project.boundaries[idx] = dataclasses.replace(
+        ext, polyline=result.new_external)
+    if (keep_removed_as_material and result.removed_arc is not None
+            and len(result.removed_arc.vertices) >= 2):
+        arc = Boundary(polyline=result.removed_arc,
+                       btype=BoundaryType.MATERIAL, name=REMOVED_ARC_NAME)
+        arc.color = BoundaryType.MATERIAL.default_color
+        project.boundaries.append(arc)
+    project._notify("boundary_modified")
+    return result
+
+
+def apply_external_offset(project, distance: float) -> Polyline:
+    """Offset the External boundary parallel to all its edges.
+
+    Positive ``distance`` expands, negative shrinks (``offset_polygon``). The
+    External keeps its id; the result may self-intersect on a concave outline,
+    which the caller should check.
+    """
+    import dataclasses
+
+    from .transforms import offset_polygon
+
+    ext = project.external_boundary()
+    if ext is None:
+        raise ExpandShrinkError("The model has no External boundary.")
+    new_poly = offset_polygon(ext.polyline, distance)
+    new_poly = dataclasses.replace(new_poly, id=ext.polyline.id)
+    idx = project.boundaries.index(ext)
+    project.boundaries[idx] = dataclasses.replace(ext, polyline=new_poly)
+    project._notify("boundary_modified")
+    return new_poly

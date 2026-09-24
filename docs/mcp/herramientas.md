@@ -1,6 +1,6 @@
 # Herramientas
 
-Las 28 herramientas del perfil `full`. Las marcadas con **C** están también
+Las 55 herramientas del perfil `full`. Las marcadas con **C** están también
 en el perfil `compact`. Los parámetros y sus descripciones exactas los
 publica el propio servidor (`tools/list`); aquí va para qué sirve cada una.
 
@@ -12,7 +12,7 @@ publica el propio servidor (`tools/list`); aquí va para qué sirve cada una.
 |---|---|---|
 | `server_info` | C | Versión, unidades, reglas de modelado, modelos abiertos y cobertura del programa. La primera llamada. |
 | `catalog` | C | Lo que ofrece el programa: modelos de resistencia con sus parámetros, métodos, búsquedas, tipos de contorno, ajustes con sus opciones. |
-| `project_new` | C | Crea un modelo vacío; devuelve su `project_id`. |
+| `project_new` | C | Crea un modelo vacío o el talud de demostración; devuelve su `project_id`. |
 | `project_open` | C | Abre un `.ogr`. |
 | `project_save` | C | Guarda en `.ogr`, el formato que abre el programa de escritorio. |
 | `project_close` | | Cierra un modelo; se niega a perder cambios sin guardar salvo que se le diga. |
@@ -31,6 +31,62 @@ publica el propio servidor (`tools/list`); aquí va para qué sirve cada una.
 | `material_set` | | Crear o modificar un material. |
 | `material_delete` | | Borrar un material (se niega mientras lo usen regiones). |
 | `material_assign` | | Asignar un material a la región que contiene un punto. |
+| `external_reshape` | | Expandir o encoger el contorno exterior: desplazamiento paralelo, o una polilínea de relleno o excavación con los dos extremos sobre él. |
+| `geometry_cleanup` | | Informe de vértices duplicados, autointersecciones y cruces entre contornos; con `apply`, los corrige. |
+
+`boundary_edit` también copia, escala, rota y simplifica. Una lente de material cerrada dentro del modelo se rechaza: el constructor de regiones no la resuelve (reportado en v0.1.196).
+
+## Cargas (`loads`)
+
+| Herramienta | C | Para qué |
+|---|---|---|
+| `load_set` | | Añadir o cambiar una carga repartida (kPa entre dos puntos) o lineal (kN/m en un punto). |
+| `load_delete` | | Borrar cargas. |
+| `seismic_set` | | Carga sísmica pseudoestática: kh, kv y si se aplica. |
+| `seismic_record_set` | | Añadir un acelerograma (archivo, texto o valores) para el análisis de Newmark, o renombrarlo. |
+| `seismic_record_delete` | | Borrar un acelerograma. |
+
+Una carga lineal «normal al contorno» o «con ángulo respecto al contorno» se rechaza: el motor la aplicaría en vertical. Está prevista una tanda propia para implementarlas.
+
+## Soportes (`supports`)
+
+| Herramienta | C | Para qué |
+|---|---|---|
+| `support_type_set` | | Definir o cambiar un tipo de soporte (conjunto de propiedades de una clase). |
+| `support_type_delete` | | Borrar un tipo (se niega mientras haya soportes que lo usan). |
+| `support_set` | | Colocar un soporte (cabeza en la cara del talud, cola dentro) o moverlo, estirarlo o editarlo. |
+| `support_pattern_add` | | Una fila de soportes a lo largo de un segmento. |
+| `support_delete` | | Borrar soportes o un patrón entero. |
+| `support_ungroup` | | Desagrupar un patrón. |
+
+## Búsqueda (`search`)
+
+| Herramienta | C | Para qué |
+|---|---|---|
+| `tension_crack_set` | | Agua en la grieta de tracción. |
+| `focus_set` | | Objetos de foco (ventana, línea, punto, tangente) que acotan la búsqueda. |
+| `focus_delete` | | Borrar objetos de foco. |
+| `user_surface_add` | | Un círculo propio que se analiza junto a la búsqueda. |
+| `user_surface_delete` | | Borrarlos. |
+
+## Anotaciones (`annotations`)
+
+| Herramienta | C | Para qué |
+|---|---|---|
+| `annotation_set` | | Dibujar líneas, flechas, textos, cotas, ejes, imágenes; cambiarlas u ocultarlas. El cálculo nunca las lee. |
+| `annotation_delete` | | Borrarlas. |
+| `annotation_to_boundary` | | El único puente, explícito, de un dibujo al modelo. |
+| `properties_table` | | Tablas de materiales, soportes o propiedades hidráulicas. |
+
+## Archivos (`files`)
+
+| Herramienta | C | Para qué |
+|---|---|---|
+| `dxf_inspect` | | Leer un DXF sin importarlo: capas, tipo propuesto, unidad y problemas. |
+| `dxf_import` | | Importar su geometría (un paso de deshacer). |
+| `dxf_export` | | Exportar el modelo y las superficies críticas de un resultado. |
+| `report_generate` | | Informe PDF de un análisis. |
+| `properties_import` | | Copiar materiales o tipos de soporte de otro `.ogr`. |
 
 ## Ajustes (`settings`)
 

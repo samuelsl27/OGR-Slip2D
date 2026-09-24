@@ -58,6 +58,30 @@ tarea: es un deseo.
       quedan para el propietario (tocan su configuración).
 - [x] 2.8 Suite completa (4328/4328) y changelog.
 
-## F2–F4b
+## F2 · cargas, soportes, búsqueda, anotaciones, archivos (v0.1.196)
+
+- [x] 3.1 Cargas repartidas y puntuales, sismo y registros; se rechaza lo
+      que el motor no leería (puntual relativa al contorno, `angle_deg` sin
+      orientación angular, `magnitude_end` sin distribución).
+- [x] 3.2 Tipos de soporte y soportes, patrón y desagrupar; parámetros contra
+      los campos y los tokens de su clase; valores por defecto de la clase.
+- [x] 3.3 Grieta de tracción, foco, superficies propias.
+- [x] 3.4 Anotaciones y `annotation_to_boundary` por `boundary_add`.
+- [x] 3.5 DXF (inspeccionar, importar en un paso, exportar), informe PDF,
+      importar propiedades.
+- [x] 3.6 `boundary_edit` copiar/escalar/girar/simplificar,
+      `external_reshape`, `geometry_cleanup`, plantilla `demo`.
+- [x] 3.7 Movido al núcleo con la interfaz llamándolo: demo, importar
+      propiedades, registros sísmicos, referencias de soporte, inspección y
+      simplificación, los dos modos de *Expand/Shrink*; siete defectos de la
+      interfaz corregidos por el camino.
+- [x] 3.8 Tests: regla 1 (cuña con anclaje y con sobrecarga), regla 7,
+      deshacer de las 32 operaciones de edición, delegaciones por el
+      manejador real.
+- [ ] 3.9 Tanda propia: cargas puntuales `normal_to_boundary` y
+      `angle_to_boundary` con validación externa (decisión del propietario).
+- [ ] 3.10 Decisión del propietario sobre *Change Slope Angle*.
+
+## F3–F4b
 
 Plan corto antes de cada una. Al cerrar F4, `PENDING` del inventario vacío.

@@ -46,13 +46,28 @@ def detached_copy(project):
 
 
 def model_hash(project) -> str:
-    """SHA-256 of the serialised model, to tell whether it changed.
+    """SHA-256 of what an ANALYSIS reads, to tell whether a result is stale.
 
-    ``is_dirty`` cannot answer that: ``Project.save`` clears it and then
-    notifies, and the notification sets it again (reported in v0.1.194).
-    Anything the analysis reads is in ``to_dict``, so equal hashes mean the
-    same model as far as a result is concerned.
+    The annotation layer is left out (v0.1.196): the solver never reads it
+    (``tech-stack.md``: "the solver never reads ``Project.annotations``"), so
+    drawing a dimension line must not mark a result as computed on another
+    model. Everything else in ``to_dict`` is in.
     """
-    text = json.dumps(project.to_dict(), sort_keys=True, default=str,
-                      ensure_ascii=True)
+    data = project.to_dict()
+    data.pop("annotations", None)
+    return _sha(data)
+
+
+def document_hash(project) -> str:
+    """SHA-256 of the WHOLE serialised model, annotations included.
+
+    What "unsaved changes" means. ``is_dirty`` cannot answer it:
+    ``Project.save`` clears it and then notifies, and the notification sets
+    it again (reported in v0.1.194).
+    """
+    return _sha(project.to_dict())
+
+
+def _sha(data) -> str:
+    text = json.dumps(data, sort_keys=True, default=str, ensure_ascii=True)
     return hashlib.sha256(text.encode("ascii")).hexdigest()

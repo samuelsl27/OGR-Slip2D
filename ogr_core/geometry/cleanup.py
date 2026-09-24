@@ -170,6 +170,92 @@ def has_self_intersections(polyline: Polyline) -> bool:
 # ------------------------------------------------------------------
 # High-level cleanup pipeline
 # ------------------------------------------------------------------
+def model_tolerance(boundaries: Iterable[Boundary], rel: float = 1e-6
+                    ) -> float:
+    """``rel`` times the diagonal of the boundaries' bounding box.
+
+    v0.1.196 — the project's convention (AGENTS.md): a geometric tolerance
+    is RELATIVE to the model, because 1e-6 means something different in a
+    model drawn in millimetres and one drawn in metres. The same factor as
+    the region snapping in ``regions.py``.
+    """
+    xs, ys = [], []
+    for b in boundaries:
+        for v in b.polyline.vertices:
+            xs.append(v.x)
+            ys.append(v.y)
+    if not xs:
+        return DEFAULT_TOL
+    diag = math.hypot(max(xs) - min(xs), max(ys) - min(ys))
+    return max(rel * diag, 1e-12)
+
+
+def inspect_boundaries(boundaries: Iterable[Boundary],
+                       tol: float | None = None) -> dict:
+    """What is wrong with the geometry, WITHOUT changing it.
+
+    v0.1.196 (spec 008, F2). The interface's Geometry Cleanup called
+    ``find_intersections`` with one argument (a TypeError it swallowed, so
+    crossings were never reported), then ran :func:`cleanup_boundaries` on
+    the LIVE boundaries — removing vertices with no undo — and reported
+    ``len()`` of the report dictionary as the number of boundaries left,
+    which is always 3. This is the read-only half; :func:`cleanup_boundaries`
+    stays the one that edits, and the caller wraps it in an undo step.
+
+    ``tol`` defaults to :func:`model_tolerance`.
+    """
+    boundaries = list(boundaries)
+    if tol is None:
+        tol = model_tolerance(boundaries)
+    rows = []
+    for b in boundaries:
+        probe = Polyline(vertices=list(b.polyline.vertices),
+                         closed=b.polyline.closed)
+        dups = remove_duplicate_vertices(probe, tol)
+        rows.append({
+            "id": b.id,
+            "type": b.btype.name.lower(),
+            "name": b.name,
+            "n_vertices": len(b.polyline.vertices),
+            "duplicate_vertices": dups,
+            "self_intersects": has_self_intersections(b.polyline),
+            "open_external": (b.btype.name == "EXTERNAL"
+                              and not b.polyline.closed),
+        })
+    crossings = []
+    for i, a in enumerate(boundaries):
+        for c in boundaries[i + 1:]:
+            pts = find_intersections(a.polyline, c.polyline)
+            if pts:
+                crossings.append({"a": a.id, "b": c.id, "count": len(pts)})
+    return {"tolerance": tol, "boundaries": rows,
+            "cross_intersections": crossings}
+
+
+def simplify_boundary(b: Boundary, epsilon: float) -> Boundary:
+    """A copy of ``b`` simplified by Ramer-Douglas-Peucker (Douglas and
+    Peucker, 1973), keeping its ids.
+
+    v0.1.196 — the interface passed a list of tuples to :func:`simplify_rdp`,
+    which takes a ``Polyline``, so *Simplify Boundary* raised on every use.
+    Refuses (``ValueError``) to leave a closed boundary with fewer than
+    three vertices or an open one with fewer than two.
+    """
+    import dataclasses
+
+    if not epsilon > 0:
+        raise ValueError("the simplification tolerance must be positive")
+    simplified = simplify_rdp(b.polyline, epsilon)
+    need = 3 if b.polyline.closed else 2
+    if len(simplified.vertices) < need:
+        raise ValueError(
+            f"a tolerance of {epsilon:g} leaves {len(simplified.vertices)} "
+            f"vertices; this boundary needs at least {need}")
+    poly = dataclasses.replace(b.polyline,
+                               vertices=list(simplified.vertices))
+    return dataclasses.replace(b, polyline=poly)
+
+
 def cleanup_boundaries(
     boundaries: Iterable[Boundary],
     tol: float = DEFAULT_TOL,

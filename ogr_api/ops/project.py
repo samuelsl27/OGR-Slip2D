@@ -16,7 +16,7 @@ from typing import Optional
 
 from ..errors import InvalidArgument
 from ..results import json_safe
-from ..snapshot import model_hash
+from ..snapshot import document_hash, model_hash
 from . import operation
 
 
@@ -163,7 +163,7 @@ def summary_of(handle, detail: str = "normal") -> dict:
         "project_id": handle.id,
         "name": p.name,
         "path": str(handle.path) if handle.path else None,
-        "unsaved_changes": handle.saved_hash != model_hash(p),
+        "unsaved_changes": handle.saved_hash != document_hash(p),
         "bounding_box": [_r(v) for v in bbox] if bbox else None,
         "boundaries": [boundary_info(
             b, with_vertices=full or len(b.polyline.vertices) <= 40)
@@ -187,14 +187,27 @@ def summary_of(handle, detail: str = "normal") -> dict:
 
 # ----------------------------------------------------------------------
 @operation("project_new", toolset="core")
-def project_new(ws, name: str = "Untitled") -> dict:
-    """Create an empty model and return its project_id."""
+def project_new(ws, name: Optional[str] = None,
+                template: str = "empty") -> dict:
+    """Create a model (empty, or the demo slope) and return its
+    project_id."""
     from ogr_core.project import Project
 
-    if not isinstance(name, str) or not name.strip():
+    if template not in ("empty", "demo"):
+        raise InvalidArgument("template is 'empty' or 'demo'.")
+    if name is not None and (not isinstance(name, str) or not name.strip()):
         raise InvalidArgument("name must be a non-empty string.")
-    handle = ws.add(Project(name=name.strip()))
-    return {"project_id": handle.id, "name": handle.project.name}
+    if template == "demo":
+        # The one demo the interface and the command line load too
+        # (ogr_core.project.demo, v0.1.196).
+        from ogr_core.project.demo import build_demo_project
+        project = build_demo_project(name.strip() if name else
+                                     "Demo slope")
+    else:
+        project = Project(name=(name or "Untitled").strip())
+    handle = ws.add(project)
+    return {"project_id": handle.id, "name": handle.project.name,
+            "template": template}
 
 
 @operation("project_open", toolset="core")
@@ -235,7 +248,7 @@ def project_save(ws, project_id: Optional[str] = None,
                                      own_file=handle.path)
         project.save(target)
         handle.path = target
-        handle.saved_hash = model_hash(project)
+        handle.saved_hash = document_hash(project)
     return {"project_id": handle.id, "path": str(target)}
 
 
@@ -246,7 +259,7 @@ def project_close(ws, project_id: Optional[str] = None,
     from ..errors import Conflict
 
     handle = ws.get(project_id)
-    dirty = handle.saved_hash != model_hash(handle.project)
+    dirty = handle.saved_hash != document_hash(handle.project)
     if dirty and not discard_changes:
         raise Conflict(f"Model {handle.id} has unsaved changes.",
                        hint="Save it with project_save, or pass "
@@ -261,7 +274,7 @@ def project_list(ws) -> dict:
     return {"projects": [
         {"project_id": h.id, "name": h.project.name,
          "path": str(h.path) if h.path else None,
-         "unsaved_changes": h.saved_hash != model_hash(h.project)}
+         "unsaved_changes": h.saved_hash != document_hash(h.project)}
         for h in ws.projects.values()]}
 
 

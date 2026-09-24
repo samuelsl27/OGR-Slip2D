@@ -207,7 +207,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.195"
+    VERSION = "0.1.196"
 
     def __init__(self) -> None:
         super().__init__()
@@ -2558,30 +2558,16 @@ class MainWindow(QMainWindow):
             [tr("Materials"), tr("Supports"), tr("Both")], 2, False)
         if not ok:
             return
-        existing = {m.name for m in self.project.materials}
-        n_mat = n_sup = 0
-        if what in (tr("Materials"), tr("Both")):
-            for m in other.materials:
-                clone = type(m).from_dict(m.to_dict()) \
-                    if hasattr(m, "from_dict") else m
-                name = clone.name
-                i = 2
-                while name in existing:
-                    name = f"{clone.name} ({i})"
-                    i += 1
-                clone.name = name
-                existing.add(name)
-                self.project.materials.append(clone)
-                n_mat += 1
-        if what in (tr("Supports"), tr("Both")):
-            from uuid import uuid4
-            for s in getattr(other, "support_types", []) or []:
-                # v0.1.149 — a fresh identity: importing the same file
-                # twice must not leave two sets answering to one id.
-                s.id = str(uuid4())
-                self.project.support_types.append(s)
-                n_sup += 1
-        self.project.is_dirty = True
+        # v0.1.196 (spec 008, F2) — moved to
+        # ``ogr_core.project.properties_import``, which an agent calls too,
+        # and fixed there: fresh material ids, water surfaces of the other
+        # project cleared instead of silently dry, the material limit kept.
+        from ogr_core.project.properties_import import import_properties
+        rep = import_properties(
+            self.project, other,
+            materials=what in (tr("Materials"), tr("Both")),
+            support_types=what in (tr("Supports"), tr("Both")))
+        n_mat, n_sup = len(rep["materials"]), len(rep["support_types"])
         self.statusBar().showMessage(
             tr("Imported %d material(s) and %d support type(s). "
                "Duplicated names were numbered rather than overwritten.")
@@ -3955,6 +3941,11 @@ class MainWindow(QMainWindow):
             orientation=params["orientation"],
             angle_deg=params["angle_deg"],
             distribution=params["distribution"],
+            # v0.1.196 — the tick was captured above and then dropped
+            # here, so every NEW load had it off whatever the dialog said;
+            # only Modify ever wrote it (spec 008, F2).
+            creates_excess_pore_pressure=bool(
+                params.get("creates_excess_pore_pressure", False)),
             name=f"Dist {params['magnitude_1']:.1f} kN/m²",
         )
         self.project.distributed_loads.append(load)
@@ -4165,6 +4156,9 @@ class MainWindow(QMainWindow):
             magnitude=params["magnitude"],
             orientation=params["orientation"],
             angle_deg=params["angle_deg"],
+            # v0.1.196 — same drop as the distributed load above.
+            creates_excess_pore_pressure=bool(
+                params.get("creates_excess_pore_pressure", False)),
             name=f"Line {params['magnitude']:.1f} kN/m",
         )
         self.project.line_loads.append(load)
@@ -4811,20 +4805,18 @@ class MainWindow(QMainWindow):
         if not dlg.exec():
             return
         d = dlg.distance()
-        orig = self.project.boundaries[idx]
+        # v0.1.196 — the same function an agent calls
+        # (``apply_external_offset``), as one undo step.
+        from ogr_core.geometry.expand_shrink import apply_external_offset
+        from ogr_core.project.commands import SnapshotCommand
         try:
-            new_poly = offset_polygon(orig.polyline, d)
+            self.command_stack.do(self.project, SnapshotCommand(
+                f"Offset External ({d:+.2f} m)",
+                lambda project, _d=d: apply_external_offset(project, _d),
+                attrs=("boundaries",)))
         except Exception as e:  # noqa: BLE001
             QMessageBox.critical(self, "Expand / Shrink", f"Failed: {e}")
             return
-        from copy import deepcopy
-        new_b = deepcopy(orig)
-        new_b.polyline = new_poly
-        new_b.id = orig.id
-        self.command_stack.do(
-            self.project,
-            ReplaceBoundaryCommand(index=idx, new_boundary=new_b),
-        )
         self.ogr_status.showMessage(f"External offset by {d:+.2f} m", 2000)
 
     # ------------------------------------------------------------------
@@ -4897,36 +4889,23 @@ class MainWindow(QMainWindow):
             )
             convert_arc = (reply == QMessageBox.Yes)
 
-        # Build the replacement External boundary
-        from copy import deepcopy
-        new_ext = deepcopy(old_ext)
-        new_ext.polyline = result.new_external
-        new_ext.id = old_ext.id
+        # v0.1.196 (spec 008, F2) — applied by
+        # ``ogr_core.geometry.expand_shrink.apply_expand_shrink``, the same
+        # function an agent calls. The Macro built here used
+        # ``MacroCommand(commands=...)``; the field is ``children``, so the
+        # draw mode raised a TypeError at the moment of committing and had
+        # never changed a model. The tolerance stays the one the canvas
+        # snaps to.
+        from ogr_core.geometry.expand_shrink import apply_expand_shrink
+        from ogr_core.project.commands import SnapshotCommand
+        drawn = polyline_boundary.polyline
 
-        commands = [
-            ReplaceBoundaryCommand(index=idx, new_boundary=new_ext),
-        ]
-
-        if convert_arc:
-            from ogr_core.geometry import Boundary as _B
-            from uuid import uuid4
-            arc_as_material = _B(
-                polyline=result.removed_arc,
-                btype=BoundaryType.MATERIAL,
-                name="Original ground (from Expand/Shrink)",
-            )
-            arc_as_material.color = BoundaryType.MATERIAL.default_color
-            arc_as_material.id = str(uuid4())
-            commands.append(AddBoundaryCommand(boundary=arc_as_material))
-
-        from ogr_core.project.commands import MacroCommand
-        self.command_stack.do(
-            self.project,
-            MacroCommand(
-                commands=commands,
-                description=f"Expand/Shrink ({result.mode})",
-            ),
-        )
+        def _apply(project, _drawn=drawn, _keep=convert_arc):
+            return apply_expand_shrink(project, _drawn,
+                                       keep_removed_as_material=_keep)
+        self.command_stack.do(self.project, SnapshotCommand(
+            f"Expand/Shrink ({result.mode})", _apply,
+            attrs=("boundaries",)))
         msg = f"External {result.mode}ed."
         if convert_arc:
             msg += " Old segment preserved as Material Boundary."
@@ -4959,51 +4938,80 @@ class MainWindow(QMainWindow):
         if dlg.exec():
             tol = dlg.tolerance()
             orig = self.project.boundaries[idx]
-            pts = [(v.x, v.y) for v in orig.polyline.vertices]
-            simplified = simplify_rdp(pts, tol)
-            from copy import deepcopy
-            new_b = deepcopy(orig)
-            new_b.polyline.vertices = [Vertex(x, y) for (x, y) in simplified]
-            new_b.id = orig.id
-            self.command_stack.do(self.project, ReplaceBoundaryCommand(index=idx, new_boundary=new_b))
+            # v0.1.196 (spec 008, F2) — this used to hand simplify_rdp a
+            # list of tuples; it takes a Polyline, so Simplify raised on
+            # every use. ``simplify_boundary`` is the one the agent layer
+            # calls too, and it refuses to leave too few vertices.
+            from ogr_core.geometry.cleanup import simplify_boundary
+            try:
+                new_b = simplify_boundary(orig, tol)
+            except ValueError as exc:
+                self.ogr_status.showMessage(str(exc), 5000)
+                return
+            self.command_stack.do(self.project, ReplaceBoundaryCommand(
+                index=idx, new_boundary=new_b))
             self.ogr_status.showMessage(
-                f"Simplified from {len(orig.vertices)} to {len(simplified)} vertices", 3000
+                f"Simplified from {len(orig.polyline.vertices)} to "
+                f"{len(new_b.polyline.vertices)} vertices", 3000
             )
 
     def act_geometry_cleanup(self) -> None:
+        """Report the geometry's problems and remove duplicate vertices.
+
+        v0.1.196 (spec 008, F2) — three defects fixed together, found while
+        giving an agent the same action:
+
+        * the crossings between boundaries were never reported, because
+          ``find_intersections`` was called with one argument instead of
+          two and the TypeError was swallowed;
+        * the duplicate removal edited the live boundaries with no undo and
+          no notification;
+        * "After cleanup: N boundaries" printed ``len()`` of the report
+          dictionary, which is always 3.
+
+        The inspection is ``ogr_core.geometry.cleanup.inspect_boundaries``,
+        read-only and with a tolerance relative to the model, and the
+        removal is one undoable step.
+        """
+        from ogr_core.geometry.cleanup import inspect_boundaries
+        from ogr_core.project.commands import SnapshotCommand
+
+        rep = inspect_boundaries(self.project.boundaries)
         report_lines = ["Geometry Cleanup Report", "=" * 40, ""]
-        report_lines.append(f"Total boundaries: {len(self.project.boundaries)}")
-        for i, b in enumerate(self.project.boundaries):
-            n = len(b.polyline.vertices)
-            has_self = False
-            try:
-                has_self = has_self_intersections(b.polyline)
-            except Exception:  # noqa: BLE001
-                pass
-            closed_ok = True
-            if b.btype == BoundaryType.EXTERNAL and not b.polyline.closed:
-                closed_ok = False
+        report_lines.append(
+            f"Total boundaries: {len(self.project.boundaries)}")
+        for i, row in enumerate(rep["boundaries"]):
             flags = []
-            if has_self:
+            if row["self_intersects"]:
                 flags.append("SELF-INTERSECTS")
-            if not closed_ok:
+            if row["open_external"]:
                 flags.append("NOT CLOSED (external)")
+            if row["duplicate_vertices"]:
+                flags.append(f"{row['duplicate_vertices']} duplicate "
+                             f"vertices")
             status = ", ".join(flags) if flags else "OK"
-            report_lines.append(f"  [{i}] {b.btype.name} '{b.name}': {n} vertices — {status}")
+            report_lines.append(
+                f"  [{i}] {row['type'].upper()} '{row['name']}': "
+                f"{row['n_vertices']} vertices — {status}")
+        if rep["cross_intersections"]:
+            report_lines.append("")
+            report_lines.append(
+                "Inter-boundary intersections: "
+                + ", ".join(f"{c['count']}" for c in
+                            rep["cross_intersections"]))
 
-        # Inter-boundary intersections
-        try:
-            inter = find_intersections(self.project.boundaries)
-            if inter:
-                report_lines.append("")
-                report_lines.append(f"Inter-boundary intersections: {len(inter)}")
-        except Exception:  # noqa: BLE001
-            pass
+        dups = sum(r["duplicate_vertices"] for r in rep["boundaries"])
+        if dups:
+            tol = rep["tolerance"]
 
+            def _clean(project, _tol=tol):
+                return cleanup_boundaries(project.boundaries, tol=_tol)
+            self.command_stack.do(self.project, SnapshotCommand(
+                "Geometry cleanup", _clean, attrs=("boundaries",)))
+            self.canvas.refresh()
         report_lines.append("")
-        report_lines.append("Running cleanup_boundaries()…")
-        cleaned = cleanup_boundaries(list(self.project.boundaries))
-        report_lines.append(f"  After cleanup: {len(cleaned)} boundaries")
+        report_lines.append(f"Duplicate vertices removed: {dups} "
+                            f"(tolerance {rep['tolerance']:.3g} m)")
 
         dlg = GeometryCleanupDialog("\n".join(report_lines), self)
         dlg.exec()
@@ -5065,7 +5073,11 @@ class MainWindow(QMainWindow):
             )
             if r != QMessageBox.Yes:
                 return
-        self._attach_project(Project("Demo slope"))
+        # v0.1.196 — the demo is built by ``ogr_core.project.demo``, the same
+        # function the command line and an agent use; this window's own copy
+        # left its water table assigned to nothing (spec 008, F2).
+        from ogr_core.project.demo import build_demo_project
+        self._attach_project(build_demo_project())
         self.terminal_dock.attach_context(self.project, self.canvas, self)
         self.command_stack.clear()
         self.last_search_result = None
@@ -5080,24 +5092,7 @@ class MainWindow(QMainWindow):
 
     # ==================================================================
     def _install_demo_project(self) -> None:
-        ext = Polyline(
-            vertices=[
-                Vertex(0, 0), Vertex(50, 0), Vertex(50, 15),
-                Vertex(35, 15), Vertex(25, 25), Vertex(0, 25),
-            ],
-            closed=True,
-        )
-        ext.ensure_ccw()
-        self.project.add_boundary(Boundary(polyline=ext, btype=BoundaryType.EXTERNAL))
-        self.project.add_material(Material(
-            name="Silty clay",
-            strength=MohrCoulomb(cohesion=10.0, friction_angle=25.0),
-            unit_weight=19.0, sat_unit_weight=20.5,
-        ))
-        wt = Boundary(
-            polyline=Polyline(vertices=[Vertex(0, 8), Vertex(50, 8)]),
-            btype=BoundaryType.WATER_TABLE,
-        )
-        self.project.add_boundary(wt)
+        """Show the demo just attached. The MODEL is built by
+        ``ogr_core.project.demo.build_demo_project`` (v0.1.196)."""
         self.project.is_dirty = False
         self.canvas.zoom_all()

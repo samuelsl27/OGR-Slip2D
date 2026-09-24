@@ -151,13 +151,13 @@ class Workspace:
     # ------------------------------------------------------------------
     def add(self, project=None, *, provider=None,
             path: Optional[Path] = None) -> ProjectHandle:
-        from .snapshot import model_hash
+        from .snapshot import document_hash
 
         handle = ProjectHandle(_new_id("p"), project=project,
                                provider=provider, path=path)
         with self._registry_lock:
             self.projects[handle.id] = handle
-        handle.saved_hash = model_hash(handle.project) if path else None
+        handle.saved_hash = document_hash(handle.project) if path else None
         return handle
 
     def get(self, project_id: Optional[str] = None) -> ProjectHandle:

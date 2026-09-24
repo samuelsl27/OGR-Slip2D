@@ -222,9 +222,7 @@ class SeismicRecordsDialog(QDialog):
         the run then says it has no record instead of integrating one the
         user deleted.
         """
-        self.project.seismic_records = list(self.records)
-        settings = getattr(self.project.settings, "seismic", None)
-        if settings is not None and settings.record_id:
-            alive = {r.id for r in self.records}
-            if settings.record_id not in alive:
-                settings.record_id = ""
+        # v0.1.196 — moved to ``ogr_core.project.rules.set_seismic_records``,
+        # which an agent's edits go through as well.
+        from ogr_core.project.rules import set_seismic_records
+        set_seismic_records(self.project, self.records)

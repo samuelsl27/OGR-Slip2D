@@ -755,16 +755,10 @@ class DefineSupportDialog(QDialog):
         # guessed at analysis time. The fallback by class stays for
         # files edited outside this editor, and the analysis notes say
         # when it fired.
-        by_id = {st.id: st for st in out}
-        for sup in (getattr(self.project, "supports", None) or []):
-            ref = getattr(sup, "type_ref", None)
-            if not ref:
-                continue
-            st = by_id.get(ref)
-            if st is None:
-                sup.type_ref = None
-            else:
-                sup.type_id = st.TYPE_ID
+        # v0.1.196 — moved to ``ogr_core.support.reconcile_support_refs``,
+        # which an agent editing the sets calls too.
+        from ogr_core.support.support import reconcile_support_refs
+        reconcile_support_refs(self.project)
         self.project.is_dirty = True
         if hasattr(self.project, "_notify"):
             self.project._notify("support_types_changed")

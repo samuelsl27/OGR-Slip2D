@@ -63,7 +63,7 @@ class TestTheInventory:
     def test_reasons_and_phases_are_written(self):
         from ogr_api.inventory import PENDING, UI_ONLY
         assert all(r.strip() for r in UI_ONLY.values())
-        assert set(PENDING.values()) <= {"F2", "F3", "F4"}
+        assert set(PENDING.values()) <= {"F3", "F4", "owner"}
 
     def test_pending_only_goes_down(self):
         from ogr_api.inventory import PENDING, PENDING_CEILING

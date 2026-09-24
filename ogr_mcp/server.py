@@ -97,14 +97,17 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
                     instructions=INSTRUCTIONS, version=__version__,
                     website_url=SOURCE_URL)
     registered: list[str] = []
+    pending: dict = {}
 
     def tool(name: str, annotations: ToolAnnotations,
              structured: Optional[bool] = None):
+        # Collected here and registered at the end IN THE PROFILE'S ORDER,
+        # so tools/list is deterministic by construction and not by the
+        # order this file happens to define them in (the 2026-07-28
+        # specification asks for a stable list, which clients cache).
         def deco(fn):
             if name in selected:
-                srv.tool(name=name, annotations=annotations,
-                         structured_output=structured)(fn)
-                registered.append(name)
+                pending[name] = (fn, annotations, structured)
             return fn
         return deco
 
@@ -177,11 +180,15 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
         return run("catalog", kind=kind)
 
     @tool("project_new", _EDIT)
-    def project_new(name: Annotated[str, Field(
-            description="Name of the new model.")] = "Untitled"
+    def project_new(name: Annotated[Optional[str], Field(
+            description="Name of the new model.")] = None,
+            template: Annotated[Literal["empty", "demo"], Field(
+                description="'demo' starts from the demo slope (with a "
+                            "water table).")] = "empty"
                     ) -> dict[str, Any]:
-        """Create an empty model; returns its project_id."""
-        return run("project_new", name=name)
+        """Create a model (empty or the demo slope); returns its
+        project_id."""
+        return run("project_new", name=name, template=template)
 
     @tool("project_open", _EDIT)
     def project_open(path: Annotated[str, Field(
@@ -298,14 +305,15 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
             op: Annotated[Literal[
                 "set_vertices", "translate", "move_vertex",
                 "insert_vertex", "delete_vertex", "rename", "change_type",
-                "delete"], Field(description="What to do.")],
+                "delete", "copy", "scale", "rotate", "simplify"], Field(
+                    description="What to do.")],
             project_id: ProjectId = None,
             points: Annotated[Optional[list[list[float]]], Field(
                 description="set_vertices: the new vertices.")] = None,
-            dx: Annotated[float, Field(description="translate: dx (m).")
-                          ] = 0.0,
-            dy: Annotated[float, Field(description="translate: dy (m).")
-                          ] = 0.0,
+            dx: Annotated[float, Field(description="translate/copy: dx "
+                                                   "(m).")] = 0.0,
+            dy: Annotated[float, Field(description="translate/copy: dy "
+                                                   "(m).")] = 0.0,
             index: Annotated[Optional[int], Field(
                 description="*_vertex: vertex index (insert goes before "
                             "it).")] = None,
@@ -314,13 +322,25 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
             name: Annotated[Optional[str], Field(
                 description="rename: new name.")] = None,
             new_type: Annotated[Optional[str], Field(
-                description="change_type: new boundary type.")] = None
+                description="change_type: new boundary type.")] = None,
+            sx: Annotated[Optional[float], Field(
+                description="scale: x factor.")] = None,
+            sy: Annotated[Optional[float], Field(
+                description="scale: y factor (default sx).")] = None,
+            angle: Annotated[Optional[float], Field(
+                description="rotate: degrees, counter-clockwise.")] = None,
+            pivot: Annotated[Any, Field(
+                description="scale/rotate: [x, y] or 'centroid' "
+                            "(default).")] = None,
+            tolerance: Annotated[Optional[float], Field(
+                description="simplify: max deviation (m).")] = None
             ) -> dict[str, Any]:
-        """Edit or delete a boundary."""
+        """Edit, transform, copy or delete a boundary."""
         return run("boundary_edit", boundary=boundary, op=op,
                    project_id=project_id, points=points, dx=dx, dy=dy,
                    index=index, point_xy=point_xy, name=name,
-                   new_type=new_type)
+                   new_type=new_type, sx=sx, sy=sy, angle=angle,
+                   pivot=pivot, tolerance=tolerance)
 
     @tool("material_set", _EDIT)
     def material_set(project_id: ProjectId = None,
@@ -567,6 +587,564 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
         return run("python_exec", code=code, project_id=project_id)
 
     # ------------------------------------------------------------------
+    # model (F2): the External as a whole, geometry health
+    # ------------------------------------------------------------------
+    @tool("external_reshape", _EDIT)
+    def external_reshape(project_id: ProjectId = None,
+                         offset: Annotated[Optional[float], Field(
+                             description="Parallel offset of every edge "
+                                         "(m): + expands, - shrinks.")
+                         ] = None,
+                         points_xy: Annotated[Optional[list[list[float]]],
+                                              Field(
+                             description="Or a polyline whose two ends lie "
+                                         "on the External: outside = fill,"
+                                         " inside = excavation.")] = None,
+                         keep_removed_as_material: Annotated[bool, Field(
+                             description="Keep the cut-out old ground as a "
+                                         "material boundary.")] = False,
+                         snap_tolerance: Annotated[float, Field(
+                             description="How far an end may be from the "
+                                         "External, as a fraction of the "
+                                         "model size.")] = 1e-3
+                         ) -> dict[str, Any]:
+        """Expand or shrink the External boundary (offset, or a fill/cut
+        polyline)."""
+        return run("external_reshape", project_id=project_id, offset=offset,
+                   points_xy=points_xy,
+                   keep_removed_as_material=keep_removed_as_material,
+                   snap_tolerance=snap_tolerance)
+
+    @tool("geometry_cleanup", _EDIT)
+    def geometry_cleanup(project_id: ProjectId = None,
+                         apply: Annotated[bool, Field(
+                             description="Remove duplicate vertices (else "
+                                         "only report).")] = False,
+                         simplify_tolerance: Annotated[float, Field(
+                             description="With apply: also simplify every "
+                                         "boundary by this deviation (m)."
+                         )] = 0.0) -> dict[str, Any]:
+        """Report duplicate vertices, self-crossings and crossings between
+        boundaries; optionally fix duplicates."""
+        return run("geometry_cleanup", project_id=project_id, apply=apply,
+                   simplify_tolerance=simplify_tolerance)
+
+    # ------------------------------------------------------------------
+    # loads
+    # ------------------------------------------------------------------
+    @tool("load_set", _EDIT)
+    def load_set(project_id: ProjectId = None,
+                 load: Annotated[Optional[str], Field(
+                     description="Id or name of a load to CHANGE; omit to "
+                                 "add one.")] = None,
+                 kind: Annotated[Optional[Literal["distributed", "line"]],
+                                 Field(description="New load: distributed "
+                                                   "(kPa along start-end) "
+                                                   "or line (kN/m at a "
+                                                   "point).")] = None,
+                 start: Annotated[Optional[list[float]], Field(
+                     description="Distributed: [x, y]; give start and end "
+                                 "left to right along the ground so a "
+                                 "normal load presses into it.")] = None,
+                 end: Annotated[Optional[list[float]], Field(
+                     description="Distributed: [x, y].")] = None,
+                 point_xy: Annotated[Optional[list[float]], Field(
+                     description="Line load: [x, y].")] = None,
+                 magnitude: Annotated[Optional[float], Field(
+                     description="kPa (distributed) or kN/m (line), >= 0; "
+                                 "direction comes from orientation.")
+                 ] = None,
+                 magnitude_end: Annotated[Optional[float], Field(
+                     description="Distributed triangular/trapezoidal: the "
+                                 "value at end.")] = None,
+                 distribution: Annotated[Optional[Literal[
+                     "constant", "triangular", "trapezoidal"]], Field(
+                     description="Distributed only.")] = None,
+                 orientation: Annotated[Optional[Literal[
+                     "normal_to_boundary", "vertical", "horizontal",
+                     "angle_from_horizontal", "angle_to_boundary"]], Field(
+                     description="Direction; line loads take vertical, "
+                                 "horizontal or angle_from_horizontal.")
+                 ] = None,
+                 angle_deg: Annotated[Optional[float], Field(
+                     description="Only with an angle orientation.")] = None,
+                 creates_excess_pore_pressure: Annotated[Optional[bool],
+                                                         Field(
+                     description="Loads undrained layers (needs the "
+                                 "excess pore pressure option).")] = None,
+                 name: Annotated[Optional[str], Field(
+                     description="Label.")] = None) -> dict[str, Any]:
+        """Add a distributed or line load, or change one."""
+        return run("load_set", project_id=project_id, load=load, kind=kind,
+                   start=start, end=end, point_xy=point_xy,
+                   magnitude=magnitude, magnitude_end=magnitude_end,
+                   distribution=distribution, orientation=orientation,
+                   angle_deg=angle_deg,
+                   creates_excess_pore_pressure=creates_excess_pore_pressure,
+                   name=name)
+
+    @tool("load_delete", _DESTRUCTIVE)
+    def load_delete(loads: Annotated[Any, Field(
+            description="List of load ids/names, or 'all'.")],
+            project_id: ProjectId = None) -> dict[str, Any]:
+        """Delete loads (distributed or line) by id or name, or all."""
+        return run("load_delete", loads=loads, project_id=project_id)
+
+    @tool("seismic_set", _EDIT)
+    def seismic_set(project_id: ProjectId = None,
+                    enabled: Annotated[Optional[bool], Field(
+                        description="Apply the pseudo-static load.")] = None,
+                    kh: Annotated[Optional[float], Field(
+                        description="Horizontal coefficient (fraction of "
+                                    "g).")] = None,
+                    kv: Annotated[Optional[float], Field(
+                        description="Vertical coefficient (fraction of g)."
+                    )] = None,
+                    creates_excess_pore_pressure: Annotated[
+                        Optional[bool], Field(
+                            description="Seismic excess pore pressure.")
+                    ] = None) -> dict[str, Any]:
+        """The pseudo-static seismic load (kh, kv)."""
+        return run("seismic_set", project_id=project_id, enabled=enabled,
+                   kh=kh, kv=kv,
+                   creates_excess_pore_pressure=creates_excess_pore_pressure)
+
+    @tool("seismic_record_set", _EDIT)
+    def seismic_record_set(project_id: ProjectId = None,
+                           record: Annotated[Optional[str], Field(
+                               description="Id or name of a record to "
+                                           "rename/re-time; omit to add.")
+                           ] = None,
+                           name: Annotated[Optional[str], Field(
+                               description="Record name.")] = None,
+                           path: Annotated[Optional[str], Field(
+                               description="Text file: time-acceleration "
+                                           "pairs or one value per line.")
+                           ] = None,
+                           text: Annotated[Optional[str], Field(
+                               description="The same, inline.")] = None,
+                           accelerations: Annotated[
+                               Optional[list[float]], Field(
+                                   description="Or the samples directly.")
+                           ] = None,
+                           dt: Annotated[Optional[float], Field(
+                               description="Time step (s).")] = None,
+                           unit: Annotated[Literal["g", "cm/s2", "m/s2"],
+                                           Field(description="Unit of the "
+                                                             "samples.")
+                                           ] = "g") -> dict[str, Any]:
+        """Add a strong-motion record for a Newmark analysis, or edit one."""
+        return run("seismic_record_set", project_id=project_id,
+                   record=record, name=name, path=path, text=text,
+                   accelerations=accelerations, dt=dt, unit=unit)
+
+    @tool("seismic_record_delete", _DESTRUCTIVE)
+    def seismic_record_delete(record: Annotated[str, Field(
+            description="Id or name.")],
+            project_id: ProjectId = None) -> dict[str, Any]:
+        """Delete a strong-motion record by id or name."""
+        return run("seismic_record_delete", record=record,
+                   project_id=project_id)
+
+    # ------------------------------------------------------------------
+    # supports
+    # ------------------------------------------------------------------
+    @tool("support_type_set", _EDIT)
+    def support_type_set(project_id: ProjectId = None,
+                         support_type: Annotated[Optional[str], Field(
+                             description="Id or name of a type to CHANGE; "
+                                         "omit to define one.")] = None,
+                         type_class: Annotated[Optional[Literal[
+                             "end_anchored", "grouted_tieback",
+                             "grouted_tieback_friction", "soil_nail",
+                             "pile_micropile", "geosynthetic",
+                             "user_defined", "retaining_wall_efp",
+                             "helical_anchor"]], Field(
+                             description="The support class.")] = None,
+                         name: Annotated[Optional[str], Field(
+                             description="Name of the type.")] = None,
+                         params: Annotated[Optional[dict[str, Any]], Field(
+                             description="Class parameters (kN, kN/m, kPa,"
+                                         " m, %); unknown names are "
+                                         "refused with the valid ones.")
+                         ] = None,
+                         force_application: Annotated[Optional[Literal[
+                             "active", "passive"]], Field(
+                             description="Default: the class's.")] = None,
+                         orientation: Annotated[Optional[Literal[
+                             "tangent_to_slip", "parallel_to_support",
+                             "bisector", "horizontal",
+                             "perpendicular_to_pile", "user_defined"]],
+                             Field(description="Force direction; default "
+                                               "the class's.")] = None,
+                         user_angle_deg: Annotated[Optional[float], Field(
+                             description="Only with user_defined.")] = None,
+                         color: Annotated[Optional[str], Field(
+                             description="Hex colour.")] = None
+                         ) -> dict[str, Any]:
+        """Define a support type (property set), or change one."""
+        return run("support_type_set", project_id=project_id,
+                   support_type=support_type, type_class=type_class,
+                   name=name, params=params,
+                   force_application=force_application,
+                   orientation=orientation, user_angle_deg=user_angle_deg,
+                   color=color)
+
+    @tool("support_type_delete", _DESTRUCTIVE)
+    def support_type_delete(support_type: Annotated[str, Field(
+            description="Id or name.")],
+            project_id: ProjectId = None,
+            reassign_to: Annotated[Optional[str], Field(
+                description="Type that takes over its placed supports.")
+            ] = None) -> dict[str, Any]:
+        """Delete a support type (refuses while supports use it)."""
+        return run("support_type_delete", support_type=support_type,
+                   project_id=project_id, reassign_to=reassign_to)
+
+    @tool("support_set", _EDIT)
+    def support_set(project_id: ProjectId = None,
+                    support: Annotated[Optional[str], Field(
+                        description="Id or name of a support to CHANGE; "
+                                    "omit to place one.")] = None,
+                    support_type: Annotated[Optional[str], Field(
+                        description="Its type (id or name); may be omitted"
+                                    " when only one exists.")] = None,
+                    head: Annotated[Optional[list[float]], Field(
+                        description="[x, y] at the slope face.")] = None,
+                    tail: Annotated[Optional[list[float]], Field(
+                        description="[x, y] inside the slope.")] = None,
+                    dx: Annotated[Optional[float], Field(
+                        description="Move an existing support by dx (m).")
+                    ] = None,
+                    dy: Annotated[Optional[float], Field(
+                        description="...and dy (m).")] = None,
+                    force_application: Annotated[Optional[Literal[
+                        "active", "passive"]], Field(
+                        description="Default: its type's.")] = None,
+                    orientation: Annotated[Optional[Literal[
+                        "tangent_to_slip", "parallel_to_support",
+                        "bisector", "horizontal", "perpendicular_to_pile",
+                        "user_defined"]], Field(
+                        description="Default: its type's.")] = None,
+                    user_angle_deg: Annotated[Optional[float], Field(
+                        description="Only with user_defined.")] = None,
+                    name: Annotated[Optional[str], Field(
+                        description="Label.")] = None,
+                    color: Annotated[Optional[str], Field(
+                        description="Hex colour.")] = None
+                    ) -> dict[str, Any]:
+        """Place a support, or move, stretch or edit one."""
+        return run("support_set", project_id=project_id, support=support,
+                   support_type=support_type, head=head, tail=tail, dx=dx,
+                   dy=dy, force_application=force_application,
+                   orientation=orientation, user_angle_deg=user_angle_deg,
+                   name=name, color=color)
+
+    @tool("support_pattern_add", _EDIT)
+    def support_pattern_add(start: Annotated[list[float], Field(
+            description="[x, y]: first head.")],
+            end: Annotated[list[float], Field(
+                description="[x, y]: the row runs start to end.")],
+            length: Annotated[float, Field(
+                description="Support length (m).")],
+            spacing: Annotated[float, Field(
+                description="Distance between heads (m).")],
+            project_id: ProjectId = None,
+            support_type: Annotated[Optional[str], Field(
+                description="Type id or name.")] = None,
+            orientation_mode: Annotated[Literal["angle", "normal", "depth"],
+                                        Field(
+                description="angle: angle_deg from horizontal; normal: "
+                            "perpendicular to the row; depth: vertical.")
+            ] = "angle",
+            angle_deg: Annotated[float, Field(
+                description="For orientation_mode='angle'.")] = -15.0,
+            flip_180: Annotated[bool, Field(
+                description="Reverse every support.")] = False,
+            force_application: Annotated[Optional[Literal[
+                "active", "passive"]], Field(
+                description="Default: the type's.")] = None,
+            orientation: Annotated[Optional[str], Field(
+                description="Force direction; default the type's.")] = None
+            ) -> dict[str, Any]:
+        """A row of supports along a segment (a pattern, ungroupable)."""
+        return run("support_pattern_add", start=start, end=end,
+                   length=length, spacing=spacing, project_id=project_id,
+                   support_type=support_type,
+                   orientation_mode=orientation_mode, angle_deg=angle_deg,
+                   flip_180=flip_180, force_application=force_application,
+                   orientation=orientation)
+
+    @tool("support_delete", _DESTRUCTIVE)
+    def support_delete(supports: Annotated[Any, Field(
+            description="List of ids/names, or 'all'.")] = None,
+            pattern: Annotated[Optional[str], Field(
+                description="Or a whole pattern by pattern_id.")] = None,
+            project_id: ProjectId = None) -> dict[str, Any]:
+        """Delete placed supports by id or name, a pattern, or all."""
+        return run("support_delete", supports=supports, pattern=pattern,
+                   project_id=project_id)
+
+    @tool("support_ungroup", _EDIT)
+    def support_ungroup(pattern: Annotated[Optional[str], Field(
+            description="pattern_id; default all patterns.")] = None,
+            project_id: ProjectId = None) -> dict[str, Any]:
+        """Break a pattern into independent supports."""
+        return run("support_ungroup", pattern=pattern,
+                   project_id=project_id)
+
+    # ------------------------------------------------------------------
+    # search objects
+    # ------------------------------------------------------------------
+    @tool("tension_crack_set", _EDIT)
+    def tension_crack_set(mode: Annotated[Literal[
+            "dry", "filled", "percent_filled", "filled_below_elevation",
+            "filled_to_depth", "use_water_table", "use_piezometric"], Field(
+                description="Water in the tension crack.")],
+            project_id: ProjectId = None,
+            percent_filled: Annotated[Optional[float], Field(
+                description="percent_filled: 0-100.")] = None,
+            elevation: Annotated[Optional[float], Field(
+                description="filled_below_elevation: y (m).")] = None,
+            depth: Annotated[Optional[float], Field(
+                description="filled_to_depth: m.")] = None,
+            piezometric_line: Annotated[Optional[str], Field(
+                description="use_piezometric: which line.")] = None
+            ) -> dict[str, Any]:
+        """How much water stands in the tension crack (needs a
+        tension_crack boundary)."""
+        return run("tension_crack_set", mode=mode, project_id=project_id,
+                   percent_filled=percent_filled, elevation=elevation,
+                   depth=depth, piezometric_line=piezometric_line)
+
+    @tool("focus_set", _EDIT)
+    def focus_set(project_id: ProjectId = None,
+                  focus: Annotated[Optional[str], Field(
+                      description="Id of a focus object to CHANGE; omit to"
+                                  " add.")] = None,
+                  kind: Annotated[Optional[Literal[
+                      "window", "line", "point", "tangent"]], Field(
+                      description="window: surfaces through it; line: "
+                                  "crossing it; point: through it; "
+                                  "tangent: touching it.")] = None,
+                  points_xy: Annotated[Optional[list[list[float]]], Field(
+                      description="window 4 (or 3), line 2, point 1, "
+                                  "tangent 2.")] = None,
+                  tolerance: Annotated[Optional[float], Field(
+                      description="point/tangent only (m).")] = None,
+                  enabled: Annotated[Optional[bool], Field(
+                      description="Switch it on or off.")] = None
+                  ) -> dict[str, Any]:
+        """Add a focus object that narrows the search, or change one."""
+        return run("focus_set", project_id=project_id, focus=focus,
+                   kind=kind, points_xy=points_xy, tolerance=tolerance,
+                   enabled=enabled)
+
+    @tool("focus_delete", _DESTRUCTIVE)
+    def focus_delete(focus: Annotated[str, Field(
+            description="Id, or 'all'.")],
+            project_id: ProjectId = None) -> dict[str, Any]:
+        """Delete a focus object by id, or all of them."""
+        return run("focus_delete", focus=focus, project_id=project_id)
+
+    @tool("user_surface_add", _EDIT)
+    def user_surface_add(surface: Annotated[dict[str, Any], Field(
+            description="{'type': 'circle', 'centre_x', 'centre_y', "
+                        "'radius'} or {'type': 'three_points', 'points': "
+                        "[[x,y]x3]}.")],
+            project_id: ProjectId = None) -> dict[str, Any]:
+        """Add a slip circle analysed alongside every search (circular
+        surface type only)."""
+        return run("user_surface_add", surface=surface,
+                   project_id=project_id)
+
+    @tool("user_surface_delete", _DESTRUCTIVE)
+    def user_surface_delete(surface: Annotated[str, Field(
+            description="Id, or 'all'.")],
+            project_id: ProjectId = None) -> dict[str, Any]:
+        """Delete a user slip surface by id, or all of them."""
+        return run("user_surface_delete", surface=surface,
+                   project_id=project_id)
+
+    # ------------------------------------------------------------------
+    # annotations
+    # ------------------------------------------------------------------
+    @tool("annotation_set", _EDIT)
+    def annotation_set(project_id: ProjectId = None,
+                       annotation: Annotated[Optional[str], Field(
+                           description="Id to CHANGE; 'all' with visible; "
+                                       "omit to add.")] = None,
+                       kind: Annotated[Optional[Literal[
+                           "line", "arrow", "polyline", "polygon",
+                           "rectangle", "circle", "text",
+                           "dimension_length", "dimension_angle",
+                           "dimension_x", "dimension_y", "axes", "image"]],
+                           Field(description="What to draw.")] = None,
+                       points_xy: Annotated[Optional[list[list[float]]],
+                                            Field(
+                           description="text/axes 1 point, "
+                                       "dimension_angle 3, others 2+; "
+                                       "image: its box corners.")] = None,
+                       text: Annotated[Optional[str], Field(
+                           description="Text; for an image, its file path."
+                       )] = None,
+                       style: Annotated[Optional[dict[str, Any]], Field(
+                           description="colour, line_width, line_style, "
+                                       "fill, fill_opacity, font_size.")
+                       ] = None,
+                       visible: Annotated[Optional[bool], Field(
+                           description="Show or hide.")] = None,
+                       dx: Annotated[Optional[float], Field(
+                           description="Move by dx (m).")] = None,
+                       dy: Annotated[Optional[float], Field(
+                           description="...and dy (m).")] = None,
+                       z: Annotated[Optional[Literal["front", "back"]],
+                                    Field(description="Drawing order.")
+                                    ] = None) -> dict[str, Any]:
+        """Draw an annotation (never read by the analysis), or change one."""
+        return run("annotation_set", project_id=project_id,
+                   annotation=annotation, kind=kind, points_xy=points_xy,
+                   text=text, style=style, visible=visible, dx=dx, dy=dy,
+                   z=z)
+
+    @tool("annotation_delete", _DESTRUCTIVE)
+    def annotation_delete(annotations: Annotated[Any, Field(
+            description="List of ids, or 'all'.")],
+            project_id: ProjectId = None) -> dict[str, Any]:
+        """Delete annotations by id, or all of them."""
+        return run("annotation_delete", annotations=annotations,
+                   project_id=project_id)
+
+    @tool("annotation_to_boundary", _EDIT)
+    def annotation_to_boundary(annotation: Annotated[str, Field(
+            description="Id of a line, polyline or closed shape.")],
+            type: Annotated[Literal["external", "material", "water_table",
+                                    "piezometric", "tension_crack"], Field(
+                description="Boundary it becomes (closed shapes: external "
+                            "only).")],
+            project_id: ProjectId = None,
+            assign_to: Annotated[Any, Field(
+                description="Water surfaces: 'all' or material names.")
+            ] = None,
+            replace: Annotated[bool, Field(
+                description="External: replace the existing one.")] = False
+            ) -> dict[str, Any]:
+        """Turn a drawn shape into a model boundary (explicit, one-way)."""
+        return run("annotation_to_boundary", annotation=annotation,
+                   type=type, project_id=project_id, assign_to=assign_to,
+                   replace=replace)
+
+    @tool("properties_table", _READ)
+    def properties_table(what: Annotated[Literal[
+            "materials", "supports", "hydraulic"], Field(
+                description="Which table.")] = "materials",
+            project_id: ProjectId = None) -> dict[str, Any]:
+        """Materials, support types or hydraulic properties as a table."""
+        return run("properties_table", what=what, project_id=project_id)
+
+    # ------------------------------------------------------------------
+    # files
+    # ------------------------------------------------------------------
+    @tool("dxf_inspect", _READ)
+    def dxf_inspect(path: Annotated[str, Field(
+            description="The .dxf file.")],
+            unit: Annotated[str, Field(
+                description="Drawing unit: m, cm, mm, ft...")] = "m",
+            layer_kinds: Annotated[Optional[dict[str, str]], Field(
+                description="Try a mapping layer -> external, material, "
+                            "water_table, piezo, drawdown, tension_crack, "
+                            "weak_layer, anisotropic_surface, ignore.")
+            ] = None) -> dict[str, Any]:
+        """Read a DXF without importing it: layers, proposed types, unit,
+        problems."""
+        return run("dxf_inspect", path=path, unit=unit,
+                   layer_kinds=layer_kinds)
+
+    @tool("dxf_import", _EDIT)
+    def dxf_import(path: Annotated[str, Field(
+            description="The .dxf file.")],
+            project_id: ProjectId = None,
+            unit: Annotated[str, Field(
+                description="Drawing unit.")] = "m",
+            layer_kinds: Annotated[Optional[dict[str, str]], Field(
+                description="layer -> boundary type (see dxf_inspect).")
+            ] = None,
+            weld_pct: Annotated[float, Field(
+                description="Weld distance, % of the drawing size.")
+            ] = 0.05,
+            simplify: Annotated[bool, Field(
+                description="Simplify dense polylines.")] = True,
+            simplify_pct: Annotated[float, Field(
+                description="Simplification, % of the drawing size.")
+            ] = 0.02,
+            replace_model: Annotated[bool, Field(
+                description="Replace boundaries of the imported types.")
+            ] = True) -> dict[str, Any]:
+        """Import DXF geometry into the model (one undo step)."""
+        return run("dxf_import", path=path, project_id=project_id, unit=unit,
+                   layer_kinds=layer_kinds, weld_pct=weld_pct,
+                   simplify=simplify, simplify_pct=simplify_pct,
+                   replace_model=replace_model)
+
+    @tool("dxf_export", _EDIT)
+    def dxf_export(path: Annotated[str, Field(
+            description="Where to write the .dxf.")],
+            project_id: ProjectId = None,
+            result_id: Annotated[Optional[str], Field(
+                description="Also draw this analysis's critical "
+                            "surfaces.")] = None,
+            overwrite: Annotated[bool, Field(
+                description="Replace an existing file.")] = False,
+            unit: Annotated[str, Field(description="Drawing unit.")] = "m",
+            boundaries: Annotated[bool, Field(
+                description="Include boundaries.")] = True,
+            supports: Annotated[bool, Field(
+                description="Include supports.")] = True,
+            loads: Annotated[bool, Field(
+                description="Include loads.")] = True,
+            slip_surface: Annotated[bool, Field(
+                description="Include the result's surfaces.")] = True,
+            annotations: Annotated[bool, Field(
+                description="Include labels.")] = True) -> dict[str, Any]:
+        """Export the model (and a result) to DXF."""
+        return run("dxf_export", path=path, project_id=project_id,
+                   result_id=result_id, overwrite=overwrite, unit=unit,
+                   boundaries=boundaries, supports=supports, loads=loads,
+                   slip_surface=slip_surface, annotations=annotations)
+
+    @tool("report_generate", _EDIT)
+    def report_generate(path: Annotated[str, Field(
+            description="Where to write the .pdf.")],
+            result_id: Annotated[str, Field(
+                description="An analysis result (analysis_run).")],
+            overwrite: Annotated[bool, Field(
+                description="Replace an existing file.")] = False,
+            author: Annotated[Optional[str], Field(
+                description="Author on the cover.")] = None,
+            company: Annotated[Optional[str], Field(
+                description="Company on the cover.")] = None,
+            title: Annotated[Optional[str], Field(
+                description="Report title.")] = None) -> dict[str, Any]:
+        """A PDF report of an analysis."""
+        return run("report_generate", path=path, result_id=result_id,
+                   overwrite=overwrite, author=author, company=company,
+                   title=title)
+
+    @tool("properties_import", _EDIT)
+    def properties_import(path: Annotated[str, Field(
+            description="Another .ogr file.")],
+            project_id: ProjectId = None,
+            what: Annotated[Literal["materials", "support_types", "both"],
+                            Field(description="What to copy.")] = "both",
+            names: Annotated[Optional[list[str]], Field(
+                description="Only these names.")] = None
+            ) -> dict[str, Any]:
+        """Copy materials and/or support types from another model (fresh
+        ids; its water surfaces are not carried over)."""
+        return run("properties_import", path=path, project_id=project_id,
+                   what=what, names=names)
+
+    # ------------------------------------------------------------------
     # resources
     # ------------------------------------------------------------------
     @srv.resource("ogr://guide", name="modelling_guide",
@@ -581,6 +1159,12 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
     def catalog_resource(kind: str) -> str:
         return json.dumps(run("catalog", kind=kind))
 
+    for name in selected:
+        if name in pending:
+            fn, ann, structured = pending[name]
+            srv.tool(name=name, annotations=ann,
+                     structured_output=structured)(fn)
+            registered.append(name)
     missing = [t for t in selected if t not in registered]
     if missing:  # pragma: no cover - a profile naming a tool never written
         raise RuntimeError(f"profile names tools that do not exist: "

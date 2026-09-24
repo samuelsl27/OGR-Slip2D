@@ -53,7 +53,8 @@ def _parse(argv):
                         "models; also OGR_MCP_PROFILE")
     p.add_argument("--toolsets", default=None,
                    help="Comma-separated toolsets instead of a profile: "
-                        "core,model,settings,analysis,view,history,python")
+                        "core,model,settings,analysis,loads,supports,search,"
+                        "annotations,files,view,history,python")
     p.add_argument("--workdir", default=None,
                    help="Folder relative paths are resolved against")
     p.add_argument("--max-wait", type=float, default=None,
