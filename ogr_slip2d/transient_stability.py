@@ -48,6 +48,7 @@ __all__ = [
     "run_transient_stability",
     "stage_boundary_conditions",
     "with_stage_water",
+    "groundwater_query_solver",
 ]
 
 
@@ -370,3 +371,29 @@ def run_transient_stability(project, method_ids=None, *,
         if stage.factors:
             r.notes["fos_min"] = min(stage.factors.values())
     return out
+
+
+# ======================================================================
+def groundwater_query_solver(project):
+    """A solver to ask the stored field questions, or None without a mesh.
+
+    v0.1.200 (spec 008, F3a). The free surface and the flux through a
+    section are methods of the solver, and the interface only had the one
+    it had just solved with (``project._gw_solver``), which is not saved:
+    after reopening a project the Interpret groundwater window drew no free
+    surface and its discharge section did nothing, in silence. Both read
+    only the mesh and the result, so a solver built on the project's mesh
+    answers them exactly as the original would.
+    """
+    mesh = getattr(project, "fem_mesh", None)
+    if mesh is None:
+        return None
+    solver = getattr(project, "_gw_solver", None)
+    if solver is not None and getattr(solver, "mesh", None) is mesh:
+        return solver
+    from ogr_fem2d.solvers import UnsaturatedSeepageSolver
+
+    gw = project.settings.groundwater
+    return UnsaturatedSeepageSolver(
+        mesh, _hydraulic_props(project),
+        gamma_w=getattr(gw, "pore_fluid_unit_weight", 9.81))

@@ -207,3 +207,28 @@ class WaterPressureGrid:
         if not self.allow_suction:
             u = max(0.0, u)
         return u
+
+
+# ----------------------------------------------------------------------
+def parse_grid_csv_text(text: str) -> list:
+    """(x, y, value) rows from CSV-like text: comma, semicolon, tab or
+    whitespace separators; headers, blank and comment lines skipped.
+
+    v0.1.200 — moved from the interface's grid dialog, so a file an agent
+    passes is read exactly as the interface reads it.
+    """
+    out = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        for sep in (",", ";", "\t"):
+            line = line.replace(sep, " ")
+        parts = [p for p in line.split() if p]
+        if len(parts) < 3:
+            continue
+        try:
+            out.append((float(parts[0]), float(parts[1]), float(parts[2])))
+        except ValueError:
+            continue  # header or non-numeric line
+    return out

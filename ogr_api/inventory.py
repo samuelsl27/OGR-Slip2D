@@ -104,6 +104,16 @@ MAPPED: dict[str, str] = {
     "del_support": "support_delete",
     "ungroup_pattern": "support_ungroup",
     "def_tension_crack": "tension_crack_set",
+    # --- v0.1.200 (F3a): groundwater ------------------------------------
+    "wp_grid": "water_grid_set",
+    "gw_hydraulic": "hydraulic_set",
+    "gen_mesh": "mesh_generate",
+    "reset_mesh": "mesh_reset",
+    "gw_bcs": "seepage_bc_set",
+    "gw_transient": "transient_set",
+    "gw_compute": "groundwater_run",
+    "gw_interpret": "groundwater_results",
+    "drawdown_sweep": "drawdown_sweep_run",
     "focus_window": "focus_set",
     "focus_line": "focus_set",
     "focus_point": "focus_set",
@@ -165,17 +175,16 @@ UI_ONLY: dict[str, str] = {
 PENDING: dict[str, str] = {
     # ``change_slope`` waited here for the owner (v0.1.196: the old
     # function rotated the WHOLE External); rewritten in v0.1.198.
-    # F3 — groundwater FE, statistics, back analysis, optimisation.
+    # F3 — statistics, back analysis, optimisation (F3b). The nine
+    # groundwater actions were mapped in v0.1.200 (F3a).
     **{k: "F3" for k in (
-        "wp_grid", "gw_hydraulic", "gen_mesh", "reset_mesh", "gw_bcs",
-        "gw_transient", "gw_compute", "gw_interpret", "drawdown_sweep",
         "stat_vars", "stat_compute", "stat_show", "back_analysis",
         "optimize_surfaces")},
 }
 
 #: The most actions allowed to be pending. Lower it with every phase;
 #: never raise it (a raise needs its reason in a changelog).
-PENDING_CEILING = 14
+PENDING_CEILING = 5
 
 
 def coverage() -> dict:

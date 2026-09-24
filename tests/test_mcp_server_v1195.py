@@ -49,7 +49,9 @@ _COMPACT_BUDGET = 14_000
 
 #: Parameters the MCP layer consumes itself instead of forwarding.
 _CONSUMED_HERE = {("analysis_run", "wait_seconds"),
-                  ("job_get", "wait_seconds")}
+                  ("job_get", "wait_seconds"),
+                  ("groundwater_run", "wait_seconds"),
+                  ("drawdown_sweep_run", "wait_seconds")}
 
 
 def _have_mcp() -> bool:

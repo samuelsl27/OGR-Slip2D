@@ -1,6 +1,6 @@
 # Herramientas
 
-Las 56 herramientas del perfil `full`. Las marcadas con **C** están también
+Las 67 herramientas del perfil `full`. Las marcadas con **C** están también
 en el perfil `compact`. Los parámetros y sus descripciones exactas los
 publica el propio servidor (`tools/list`); aquí va para qué sirve cada una.
 
@@ -28,14 +28,14 @@ publica el propio servidor (`tools/list`); aquí va para qué sirve cada una.
 | `model_define` | C | El modelo entero en una llamada: contornos, materiales, un punto dentro de la región de cada uno, nivel freático y ajustes. |
 | `boundary_add` | | Un contorno: exterior, de material, nivel freático, piezométrica, desembalse, grieta de tracción, objeto de Block Search, capa débil o superficie anisótropa. Un contorno de material **cerrado** (`closed=true`) es una lente: su propia región y un hueco en la de alrededor (desde v0.1.197). |
 | `boundary_edit` | | Editar o borrar un contorno: vértices, traslación, tipo, nombre. |
-| `material_set` | | Crear o modificar un material. |
+| `material_set` | | Crear o modificar un material, también su envolvente de desembalse rápido (`drawdown_envelope`, desde v0.1.200). Las propiedades hidráulicas van por `hydraulic_set`. |
 | `material_delete` | | Borrar un material (se niega mientras lo usen regiones). |
 | `material_assign` | | Asignar un material a la región que contiene un punto. |
 | `external_reshape` | | Expandir o encoger el contorno exterior: desplazamiento paralelo, o una polilínea de relleno o excavación con los dos extremos sobre él. |
 | `slope_angle_change` | | Cambiar el ángulo global de la cara del talud entre dos vértices del exterior (pie y coronación): solo se mueve la cara, proyectando en horizontal (por defecto), en vertical o girando; `keep_benches` conserva el ancho de las bermas. Los contornos que acaban en la cara la siguen; soportes y cargas no se mueven (se avisa). |
 | `geometry_cleanup` | | Informe de vértices duplicados, autointersecciones y cruces entre contornos; con `apply`, los corrige. |
 
-`boundary_edit` también copia, escala, rota y simplifica. Una lente de material cerrada dentro del modelo se rechaza: el constructor de regiones no la resuelve (reportado en v0.1.196).
+`boundary_edit` también copia, escala, rota y simplifica.
 
 ## Cargas (`loads`)
 
@@ -89,6 +89,24 @@ Una carga lineal «normal al contorno» o «con ángulo respecto al contorno» t
 | `report_generate` | | Informe PDF de un análisis. |
 | `properties_import` | | Copiar materiales o tipos de soporte de otro `.ogr`. |
 
+## Agua subterránea (`groundwater`, desde v0.1.200)
+
+| Herramienta | C | Para qué |
+|---|---|---|
+| `hydraulic_set` | | Propiedades hidráulicas de un material: permeabilidad saturada y anisotropía, modelo de la zona no saturada (con su biblioteca de suelos), contenidos de agua y almacenamiento. Un parámetro de otro modelo se rechaza. |
+| `mesh_generate` | | Malla de elementos finitos. Sustituye a la anterior y borra sus condiciones de contorno y sus campos, también las de las etapas del transitorio: van por número de nodo. |
+| `mesh_reset` | | Quitar la malla y todo lo calculado sobre ella. |
+| `seepage_bc_set` | | Una condición de contorno en un lado (`left`, `right`, `bottom`, `ground`), en nodos, a lo largo de una polilínea del contorno, o un embalse a una cota. |
+| `seepage_bc_clear` | | Volver a las condiciones por defecto (desconocida en la superficie, sin flujo en el resto), que no prescriben ninguna carga. |
+| `transient_set` | | El transitorio por etapas: tiempos, condiciones de cada etapa, *Calculate SF* y estado inicial. |
+| `water_grid_set` | | Rejilla de presiones de agua (puntos o un CSV) y sus opciones de interpolación. |
+| `water_grid_delete` | | Quitarla. |
+| `groundwater_run` | | Resolver el agua (permanente, o las etapas del transitorio con su factor de seguridad) en segundo plano. El campo se escribe de vuelta en el modelo en un paso de deshacer, salvo que el modelo haya cambiado mientras tanto. |
+| `groundwater_results` | | Leer el campo: resumen, valores en un punto, caudal por una sección, superficie libre, etapas con sus factores, o todos los nodos en CSV. Funciona también tras reabrir el proyecto. |
+| `drawdown_sweep_run` | | Desembalse rápido a varias cotas del embalse, porque el desembalse total no siempre es el peor; por la misma puerta que un análisis (coeficientes de diseño y comprobaciones). |
+
+Unidades: cargas hidráulicas en m y presión intersticial en kPa; permeabilidad, infiltración y caudal nodal en una misma unidad coherente (m/s). Desde v0.1.200 cada modelo de permeabilidad toma su succión en la unidad de su propia definición: van Genuchten y Gardner en altura (α en 1/m), Brooks-Corey, Fredlund-Xing, Simple y la curva de usuario en succión matricial (kPa).
+
 ## Ajustes (`settings`)
 
 | Herramienta | C | Para qué |
@@ -112,7 +130,7 @@ Una carga lineal «normal al contorno» o «con ángulo respecto al contorno» t
 
 | Herramienta | C | Para qué |
 |---|---|---|
-| `model_render` | C | Imagen PNG del modelo, con las superficies críticas de un resultado. |
+| `model_render` | C | Imagen PNG del modelo, con las superficies críticas de un resultado o con los contornos del campo de agua (`field`) y su superficie libre. |
 | `project_history` | | Deshacer, rehacer o listar las ediciones. |
 | `python_exec` | C | Python contra el modelo, para lo que aún no tiene herramienta. Ver [seguridad.md](seguridad.md). |
 

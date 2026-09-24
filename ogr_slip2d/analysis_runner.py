@@ -2297,3 +2297,49 @@ def _seismic_notes(project, method_id: str, result) -> list:
         r.details["newmark_direct"] = out.direct
         r.details["newmark_inverse"] = out.inverse
     return lines
+
+
+# ======================================================================
+def run_configured_drawdown_sweep(project, method_ids=None, *,
+                                  n_levels: int = 11,
+                                  include_total: bool = True,
+                                  progress_cb=None):
+    """The drawdown level sweep through the same door as ``run_analysis``.
+
+    v0.1.200 (spec 008, F3a; owner's decision "una sola puerta",
+    2026-09-24). The interface's sweep searched the RAW project: no design
+    factors, no ``check_analysis_settings``, no settings warnings — so with
+    a design standard on, the sweep and a plain Compute answered two
+    different models. This refuses what ``run_analysis`` refuses, runs on
+    the factored copy, and returns ``(DrawdownSweepResult, factor_report,
+    warnings)``. With the standard off the copy IS the project, so nothing
+    changes.
+    """
+    from ogr_core.project import apply_design_factors
+    from ogr_core.statistics import run_drawdown_sweep
+
+    problems = check_analysis_settings(project)
+    if not project.settings.groundwater.rapid_drawdown:
+        # The interface's precondition, moved here with the rest: without
+        # the rapid drawdown analysis there are no two reservoir levels to
+        # sweep between.
+        problems = list(problems) + [
+            "Enable Rapid Drawdown analysis in Project Settings > "
+            "Groundwater > Advanced first."]
+    if problems:
+        raise AnalysisNotConfigured(problems)
+    method_ids = (list(method_ids) if method_ids else
+                  list(project.settings.methods.enabled_methods)
+                  or ["bishop_simplified"])
+    factored, report = apply_design_factors(project)
+    warnings = list(settings_warnings(factored, method_ids))
+    searches = {mid: build_search(factored, mid) for mid in method_ids}
+    missing = [mid for mid, s in searches.items() if s is None]
+    if missing:
+        raise AnalysisNotConfigured(
+            [f"Could not build the search for: {', '.join(missing)}"])
+    result = run_drawdown_sweep(factored, searches.__getitem__, method_ids,
+                                n_levels=int(n_levels),
+                                include_total=bool(include_total),
+                                progress_cb=progress_cb)
+    return result, report, warnings

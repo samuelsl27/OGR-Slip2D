@@ -51,6 +51,7 @@ from ogr_fem2d.solvers import (
     SIDE_LEFT,
     SIDE_RIGHT,
     SeepageBoundaryConditions,
+    apply_reservoir,
     wetted_nodes,
 )
 from ogr_gui.i18n import tr  # noqa: E402
@@ -64,35 +65,21 @@ _BC_LABELS = [
     (BCType.UNKNOWN, "Unknown (P=0 or Q=0)"),
 ]
 
-_NEEDS_VALUE = {BCType.TOTAL_HEAD, BCType.PRESSURE_HEAD,
-                BCType.NODAL_FLOW, BCType.INFILTRATION}
-_ALLOWS_SEEPAGE_FACE = {BCType.NODAL_FLOW, BCType.INFILTRATION}
+
+#: The core's sides under the names this dialog shows.
+_SIDE_NAMES = {"left": "Left edge", "right": "Right edge",
+               "bottom": "Bottom edge", "ground": "Ground surface"}
 
 
 def boundary_sides(mesh) -> dict:
-    """Classify boundary nodes into named sides so conditions can be
-    assigned without interactive picking: left, right, bottom and the
-    ground surface (everything else, which includes the slope face)."""
-    out = {"Left edge": [], "Right edge": [], "Bottom edge": [],
-           "Ground surface": []}
-    bnd = sorted(mesh.boundary_node_ids())
-    if not bnd:
-        return out
-    xs = [mesh.nodes[i].x for i in bnd]
-    ys = [mesh.nodes[i].y for i in bnd]
-    x_min, x_max, y_min = min(xs), max(xs), min(ys)
-    tol = max(1e-6, 1e-4 * max(x_max - x_min, 1.0))
-    for nid in bnd:
-        nd = mesh.nodes[nid]
-        if abs(nd.x - x_min) <= tol:
-            out["Left edge"].append(nid)
-        elif abs(nd.x - x_max) <= tol:
-            out["Right edge"].append(nid)
-        elif abs(nd.y - y_min) <= tol:
-            out["Bottom edge"].append(nid)
-        else:
-            out["Ground surface"].append(nid)
-    return out
+    """Boundary nodes by side, under the dialog's names.
+
+    v0.1.200 — the classification moved to
+    ``ogr_fem2d.solvers.bc_targets.boundary_sides``, which an agent uses
+    too; this only renames its keys.
+    """
+    from ogr_fem2d.solvers.bc_targets import boundary_sides as _core
+    return {_SIDE_NAMES[k]: v for k, v in _core(mesh).items()}
 
 
 class BoundaryConditionsDialog(QDialog):
@@ -172,9 +159,13 @@ class BoundaryConditionsDialog(QDialog):
     # ------------------------------------------------------------------
     def _on_type_changed(self, _idx: int) -> None:
         t = self.cbo_type.currentData()
-        self.sp_value.setEnabled(t in _NEEDS_VALUE)
-        self.chk_seepage.setEnabled(t in _ALLOWS_SEEPAGE_FACE)
-        if t not in _ALLOWS_SEEPAGE_FACE:
+        # v0.1.200 — the core's rules (``bc_targets``), which an agent's
+        # conditions are checked against too.
+        from ogr_fem2d.solvers.bc_targets import (allows_seepage_face,
+                                                  needs_value)
+        self.sp_value.setEnabled(needs_value(t))
+        self.chk_seepage.setEnabled(allows_seepage_face(t))
+        if not allows_seepage_face(t):
             self.chk_seepage.setChecked(False)
         # Infiltration can only be applied to segments, never to nodes
         if t == BCType.INFILTRATION:
@@ -198,25 +189,12 @@ class BoundaryConditionsDialog(QDialog):
         if not ids:
             return
         t = self.cbo_type.currentData()
-        value = self.sp_value.value() if t in _NEEDS_VALUE else 0.0
-        if t == BCType.INFILTRATION:
-            # Distributed flux: assign to consecutive boundary segments
-            ordered = sorted(ids, key=lambda i: (self.mesh.nodes[i].x,
-                                                 self.mesh.nodes[i].y))
-            edges = set()
-            for u, w in self.mesh.boundary_edges():
-                if u in ids and w in ids:
-                    edges.add((u, w))
-            if not edges:
-                for a, b in zip(ordered[:-1], ordered[1:]):
-                    edges.add((a, b))
-            for a, b in edges:
-                self.bcs.add_segment(a, b, value,
-                                     self.chk_seepage.isChecked())
-        else:
-            for nid in ids:
-                self.bcs.add_node(nid, t, value,
-                                  self.chk_seepage.isChecked())
+        # v0.1.200 — ``bc_targets.assign_to_nodes``, the core's assignment
+        # (an agent uses it too). It also REPLACES infiltration already on
+        # an edge: assigning twice here used to double the flux.
+        from ogr_fem2d.solvers.bc_targets import assign_to_nodes
+        assign_to_nodes(self.bcs, self.mesh, ids, t, self.sp_value.value(),
+                        self.chk_seepage.isChecked())
         self._refresh_summary()
 
     def _assign_reservoir(self, side: str) -> None:
@@ -228,14 +206,14 @@ class BoundaryConditionsDialog(QDialog):
         answer, but it can refuse to be quiet about a suspicious one.
         """
         level = self.sp_value.value()
-        ids = wetted_nodes(self.mesh, level, side)
-        if not ids:
+        if not wetted_nodes(self.mesh, level, side):
             self.lbl_summary.setText(tr(
                 "No boundary node is below that level on that side: "
                 "nothing was assigned."))
             return
-        for nid in ids:
-            self.bcs.add_node(nid, BCType.TOTAL_HEAD, float(level))
+        # v0.1.200 — the core's ``apply_reservoir``, the one an agent's
+        # reservoir goes through (same nodes, same condition).
+        ids = apply_reservoir(self.bcs, self.mesh, level, side)
         self.cbo_type.setCurrentIndex(0)     # Total Head, to match
         self._refresh_summary()
         self.lbl_summary.setText(

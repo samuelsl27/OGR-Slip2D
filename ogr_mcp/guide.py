@@ -32,6 +32,8 @@ Rules that change the number:
   means 11 radii per centre.
 - analysis_run may return state 'running' with a job_id: poll job_get.
 - A result marked stale was computed on a model that has changed since.
+- A finite-element groundwater field (groundwater_run) reaches only the
+  materials with pore_pressure 'fem'.
 catalog('strength_models') lists every material model and its parameters.
 Full guide: resource ogr://guide.
 """
@@ -68,6 +70,30 @@ interface DISPLAYS; every value you send or receive here is SI.
 * Pointing a material at a water table sets its pore-pressure model to
   'water_table'; at a piezometric line, to 'piezometric'.
 * Give water surfaces left to right, as functions of x.
+
+## Groundwater by finite elements
+hydraulic_set (each material's permeability) -> mesh_generate ->
+seepage_bc_set (a side, nodes, a polyline of the boundary, or a
+reservoir) -> groundwater_run -> groundwater_results / model_render(field=
+'pore_pressure'). Then material_set(pore_pressure='fem') makes the
+stability analysis read the field.
+* A new mesh drops the conditions and fields of the old one: they are
+  keyed by node, so set the conditions after meshing.
+* The default conditions prescribe no head (unknown on the ground, no flow
+  elsewhere); a steady solve needs a total head, a pressure head or a zero
+  pressure somewhere. groundwater_run refuses a model with none set.
+* Units: heads in m, pore pressure in kPa; permeability, infiltration and
+  nodal flow in ONE consistent unit (m/s). van Genuchten and Gardner take
+  suction head (alpha in 1/m); Brooks-Corey, Fredlund-Xing, Simple and a
+  user curve take matric suction in kPa.
+* Transient: transient_set with stages (time, calculate_sf, their own
+  conditions); groundwater_run then gives a factor of safety per flagged
+  stage.
+* Rapid drawdown: turn it on in settings (groundwater.rapid_drawdown) with
+  a drawdown line; drawdown_sweep_run searches at several reservoir levels,
+  because the total drawdown is not always the worst.
+* A water pressure grid (water_grid_set) is another source of pore
+  pressure, read with a grid_* groundwater method.
 
 ## Materials
 catalog('strength_models') lists the 21 strength models with their

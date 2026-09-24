@@ -28,7 +28,8 @@ Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 
-from typing import Iterable
+import math
+from typing import Iterable, Optional
 
 #: Which end of the model a reservoir stands on.
 SIDE_LEFT = "left"
@@ -240,3 +241,135 @@ def _ground_surface_nodes(mesh) -> Iterable[int]:
             if not (abs(mesh.nodes[nid].x - x_min) <= tol
                     or abs(mesh.nodes[nid].x - x_max) <= tol
                     or abs(mesh.nodes[nid].y - y_min) <= tol)]
+
+
+# ======================================================================
+# v0.1.200 (spec 008, F3a) — assigning a condition to a named side, moved
+# out of ``ogr_gui/dialogs/boundary_conditions_dialog.py`` so an agent and
+# the interface assign the same way.
+# ======================================================================
+#: The sides a condition can be assigned to without picking nodes.
+SIDES = ("left", "right", "bottom", "ground")
+
+
+def boundary_sides(mesh) -> dict:
+    """Boundary node ids by side: ``left``, ``right``, ``bottom`` and
+    ``ground`` (everything else, which includes the slope face)."""
+    out = {s: [] for s in SIDES}
+    bnd = sorted(mesh.boundary_node_ids())
+    if not bnd:
+        return out
+    xs = [mesh.nodes[i].x for i in bnd]
+    ys = [mesh.nodes[i].y for i in bnd]
+    x_min, x_max, y_min = min(xs), max(xs), min(ys)
+    tol = max(1e-6, 1e-4 * max(x_max - x_min, 1.0))
+    for nid in bnd:
+        nd = mesh.nodes[nid]
+        if abs(nd.x - x_min) <= tol:
+            out["left"].append(nid)
+        elif abs(nd.x - x_max) <= tol:
+            out["right"].append(nid)
+        elif abs(nd.y - y_min) <= tol:
+            out["bottom"].append(nid)
+        else:
+            out["ground"].append(nid)
+    return out
+
+
+def needs_value(bc_type) -> bool:
+    """Whether ``bc_type`` reads a value (the others ignore it)."""
+    from .seepage import BCType
+    return bc_type in (BCType.TOTAL_HEAD, BCType.PRESSURE_HEAD,
+                       BCType.NODAL_FLOW, BCType.INFILTRATION)
+
+
+def allows_seepage_face(bc_type) -> bool:
+    """Whether ``bc_type`` reads the seepage-face flag."""
+    from .seepage import BCType
+    return bc_type in (BCType.NODAL_FLOW, BCType.INFILTRATION)
+
+
+def assign_to_nodes(bcs, mesh, ids, bc_type, value: float = 0.0,
+                    seepage_face: bool = False) -> int:
+    """Assign ``bc_type`` to the boundary nodes ``ids``; returns how many
+    nodes (or, for infiltration, segments) were set.
+
+    Infiltration is a distributed flux, so it goes on the boundary EDGES
+    whose two ends are in ``ids`` (consecutive nodes by (x, y) when the
+    mesh reports none). v0.1.200 — an edge already carrying infiltration is
+    replaced, not added to: assigning twice used to double the flux.
+    """
+    from .seepage import BCType
+
+    ids = set(ids)
+    value = float(value) if needs_value(bc_type) else 0.0
+    face = bool(seepage_face) and allows_seepage_face(bc_type)
+    if bc_type == BCType.INFILTRATION:
+        edges = {(u, w) for u, w in mesh.boundary_edges()
+                 if u in ids and w in ids}
+        if not edges:
+            ordered = sorted(ids, key=lambda i: (mesh.nodes[i].x,
+                                                 mesh.nodes[i].y))
+            edges = set(zip(ordered[:-1], ordered[1:]))
+        keys = {frozenset(e) for e in edges}
+        bcs.segments = [s for s in bcs.segments
+                        if frozenset((s.node_a, s.node_b)) not in keys]
+        for a, b in sorted(edges):
+            bcs.add_segment(a, b, value, face)
+        return len(edges)
+    for nid in sorted(ids):
+        bcs.add_node(nid, bc_type, value, face)
+    return len(ids)
+
+
+def assign_side(bcs, mesh, side: str, bc_type, value: float = 0.0,
+                seepage_face: bool = False) -> int:
+    """Assign ``bc_type`` to one of :data:`SIDES` (see
+    :func:`assign_to_nodes`)."""
+    if side not in SIDES:
+        raise ValueError(f"side is one of {SIDES}, not {side!r}.")
+    return assign_to_nodes(bcs, mesh, boundary_sides(mesh)[side], bc_type,
+                           value, seepage_face)
+
+
+def nodes_along(mesh, points, tol: Optional[float] = None) -> list[int]:
+    """Boundary nodes lying on the polyline ``points`` [(x, y), ...].
+
+    How a caller who knows COORDINATES and not node ids (an agent, a
+    script) picks part of the boundary: every boundary node within ``tol``
+    of one of the segments. The default tolerance is 1e-4 of the mesh's
+    diagonal, relative to the model as the geometry tolerances are, and
+    far below any element size a mesh of this program has.
+    """
+    bnd = sorted(mesh.boundary_node_ids())
+    if not bnd or len(points) < 2:
+        return []
+    if tol is None:
+        xs = [nd.x for nd in mesh.nodes]
+        ys = [nd.y for nd in mesh.nodes]
+        tol = 1e-4 * math.hypot(max(xs) - min(xs), max(ys) - min(ys))
+    out = []
+    for nid in bnd:
+        nd = mesh.nodes[nid]
+        for (x0, y0), (x1, y1) in zip(points[:-1], points[1:]):
+            dx, dy = x1 - x0, y1 - y0
+            L2 = dx * dx + dy * dy
+            t = 0.0 if L2 <= 0 else max(0.0, min(1.0, (
+                (nd.x - x0) * dx + (nd.y - y0) * dy) / L2))
+            if math.hypot(nd.x - (x0 + t * dx), nd.y - (y0 + t * dy)) <= tol:
+                out.append(nid)
+                break
+    return out
+
+
+def fits_mesh(bcs, mesh) -> bool:
+    """Whether every node a condition names exists in ``mesh``.
+
+    Conditions are keyed by node id, so a set made for another mesh is
+    not a set for this one; the groundwater driver replaces such a set
+    with the defaults (``_current_bcs``), and an agent is told instead.
+    """
+    n = mesh.node_count
+    ids = [b.node_id for b in bcs.nodes]
+    ids += [i for s in bcs.segments for i in (s.node_a, s.node_b)]
+    return all(0 <= i < n for i in ids)

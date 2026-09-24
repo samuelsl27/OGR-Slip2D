@@ -84,7 +84,10 @@ _VISIBLE_MESSAGES = [
 # since it was written, which is a control that cannot fail.
 # v0.1.198 — 68 -> 67: Change Slope Angle's unwrapped "no external"
 # message box went with the rewrite (its message now goes through tr()).
-_UNWRAPPED_BUDGET_MESSAGES = 67
+# v0.1.200 — 67 -> 64: the transient stages dialog's three literal
+# warnings went to ``GroundwaterSettings.set_transient``, and the dialog
+# shows the core's message through tr().
+_UNWRAPPED_BUDGET_MESSAGES = 64
 
 
 def _gui_sources():
@@ -217,7 +220,10 @@ class TestTranslationCompleteness:
                    # it ARE translated ("Critical acceleration:" ->
                    # "Aceleracion critica:"), which is what says this one
                    # is a symbol and not a forgotten entry.
-                   "Ky:"}
+                   "Ky:",
+                   # v0.1.200 - "A:" and "a:" above with their units, now
+                   # that each hydraulic parameter says which one.
+                   "A (kPa):", "a (1/m^n):"}
         same = [k for k, v in _DICTS["es"].items()
                 if k == v and k not in allowed]
         assert len(same) < 12, same[:15]

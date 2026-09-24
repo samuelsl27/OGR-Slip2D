@@ -43,6 +43,10 @@ from .profiles import TOOLSETS, select
 
 log = logging.getLogger("ogr_mcp")
 
+#: What a job's progress counts, by kind.
+_STEPS = {"analysis": "surfaces evaluated", "groundwater": "stages solved",
+          "drawdown_sweep": "searches done"}
+
 #: Longest a tool call waits for a job before handing back its job_id.
 #: Many clients cut a request at about 60 s whatever the protocol allows.
 DEFAULT_MAX_WAIT_S = 50.0
@@ -138,7 +142,8 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
                 with contextlib.suppress(Exception):
                     await ctx.report_progress(prog.get("done", 0),
                                               prog.get("total"),
-                                              message="surfaces evaluated")
+                                              message=_STEPS.get(
+                                                  st.get("kind"), "steps"))
             if st["state"] != "running":
                 break
         return await anyio.to_thread.run_sync(
@@ -363,7 +368,11 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
                                      "sat_unit_weight, use_sat_unit_weight,"
                                      " pore_pressure, ru, constant_u, "
                                      "water_surface_id, color, hu, phi_b, "
-                                     "...")] = None) -> dict[str, Any]:
+                                     "drawdown_envelope ({'kind': 'r', "
+                                     "'c_r', 'phi_r_deg'} or {'kind': "
+                                     "'kc1', 'd', 'psi_deg'}), ... "
+                                     "Permeability: hydraulic_set.")
+                     ] = None) -> dict[str, Any]:
         """Create a material, or update one."""
         return run("material_set", project_id=project_id, material=material,
                    name=name, strength=strength, properties=properties)
@@ -557,12 +566,21 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
                          description="Also save the PNG here (for clients "
                                      "that cannot show images).")] = None,
                      overwrite: Annotated[bool, Field(
-                         description="Replace an existing file.")] = False
-                     ) -> list:
-        """A picture (PNG) of the model, with a result's critical surface."""
+                         description="Replace an existing file.")] = False,
+                     field: Annotated[Optional[Literal[
+                         "total_head", "pressure_head", "pore_pressure"]],
+                         Field(description="Contour the groundwater field "
+                                           "(and its free surface).")
+                     ] = None,
+                     stage: Annotated[Optional[int], Field(
+                         description="With field: a transient stage.")
+                     ] = None) -> list:
+        """A picture (PNG) of the model, with a result's critical surface
+        or the groundwater field."""
         out = run("model_render", project_id=project_id,
                   result_id=result_id, method_id=method_id, width=width,
-                  height=height, save_path=save_path, overwrite=overwrite)
+                  height=height, save_path=save_path, overwrite=overwrite,
+                  field=field, stage=stage)
         note = {k: v for k, v in out.items() if k != "png"}
         return [Image(data=out["png"], format="png"), json.dumps(note)]
 
@@ -1177,6 +1195,260 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
         ids; its water surfaces are not carried over)."""
         return run("properties_import", path=path, project_id=project_id,
                    what=what, names=names)
+
+
+    # ------------------------------------------------------------------
+    # groundwater (F3a): finite-element seepage and the drawdown sweep
+    # ------------------------------------------------------------------
+    async def run_job(ctx: Context, op_name: str, what: str,
+                      wait_seconds: float, **kwargs) -> dict:
+        started = await anyio.to_thread.run_sync(lambda: run(
+            op_name, wait_seconds=0, **kwargs))
+        out = await wait_for_job(ctx, started, wait_seconds)
+        if out.get("state") in ("failed", "crashed"):
+            raise ToolError(f"[E_JOB_FAILED] The {what} {out['state']}: "
+                            f"{out.get('error')} "
+                            f"{json.dumps(out.get('problems') or '')}")
+        return out
+
+    BcSide = Annotated[Optional[Literal["left", "right", "bottom",
+                                        "ground"]], Field(
+        description="A whole side of the model: 'ground' is the top "
+                    "surface including the slope face.")]
+
+    @tool("hydraulic_set", _EDIT)
+    def hydraulic_set(material: Annotated[str, Field(
+            description="Material name or id.")],
+            project_id: ProjectId = None,
+            model: Annotated[Optional[Literal[
+                "constant", "simple", "brooks_corey", "fredlund_xing",
+                "gardner", "van_genuchten", "user_defined"]], Field(
+                description="Permeability model of the unsaturated zone. "
+                            "van_genuchten/gardner take suction HEAD (m): "
+                            "vg_alpha in 1/m, gardner_a in 1/m^n; the "
+                            "others matric suction (kPa): bc_psi_b, fx_a, "
+                            "user_curve suctions.")] = None,
+            library: Annotated[Optional[str], Field(
+                description="Typical soil of the model's library, e.g. "
+                            "'Sand', 'Loam', 'Clay'.")] = None,
+            properties: Annotated[Optional[dict[str, Any]], Field(
+                description="Fields: ks (saturated permeability), k2_k1, "
+                            "k1_angle_deg, kr_min, simple_soil_type, "
+                            "bc_lambda, bc_psi_b, fx_a, fx_b, fx_c, "
+                            "gardner_a, gardner_n, vg_alpha, vg_n, vg_m, "
+                            "vg_custom_m, user_curve [[suction_kPa, k], "
+                            "...], wc_sat, wc_res, specific_storage. A "
+                            "parameter of another model is refused.")
+            ] = None,
+            reset: Annotated[bool, Field(
+                description="Start from the defaults instead of the "
+                            "material's current values.")] = False
+            ) -> dict[str, Any]:
+        """Set a material's hydraulic properties for the finite-element
+        groundwater analysis (permeability, unsaturated model, water
+        contents)."""
+        return run("hydraulic_set", material=material,
+                   project_id=project_id, model=model, library=library,
+                   properties=properties, reset=reset)
+
+    @tool("mesh_generate", _DESTRUCTIVE)
+    def mesh_generate(project_id: ProjectId = None,
+                      target_elements: Annotated[Optional[int], Field(
+                          description="Approximate number of triangles "
+                                      "(default 1000).")] = None,
+                      target_size: Annotated[Optional[float], Field(
+                          description="Element edge length (m), instead "
+                                      "of target_elements.")] = None,
+                      min_angle: Annotated[float, Field(
+                          description="Quality floor, degrees.")] = 25.0,
+                      refine_passes: Annotated[int, Field(
+                          description="Maximum refinement passes.")] = 3
+                      ) -> dict[str, Any]:
+        """Generate the finite-element mesh. Replaces the old one and
+        drops its boundary conditions and fields (keyed by node)."""
+        return run("mesh_generate", project_id=project_id,
+                   target_elements=target_elements, target_size=target_size,
+                   min_angle=min_angle, refine_passes=refine_passes)
+
+    @tool("mesh_reset", _DESTRUCTIVE)
+    def mesh_reset(project_id: ProjectId = None) -> dict[str, Any]:
+        """Remove the mesh and everything computed on it."""
+        return run("mesh_reset", project_id=project_id)
+
+    @tool("seepage_bc_set", _EDIT)
+    def seepage_bc_set(project_id: ProjectId = None,
+                       bc_type: Annotated[Optional[Literal[
+                           "total_head", "pressure_head", "zero_pressure",
+                           "nodal_flow", "infiltration", "unknown"]], Field(
+                           description="total_head/pressure_head (m), "
+                                       "nodal_flow (per node), infiltration"
+                                       " (rate per length of boundary), "
+                                       "zero_pressure, unknown (seepage "
+                                       "face: P=0 or Q=0).")] = None,
+                       side: BcSide = None,
+                       nodes: Annotated[Optional[list[int]], Field(
+                           description="Node ids instead of a side.")
+                       ] = None,
+                       along: Annotated[Optional[list[list[float]]], Field(
+                           description="A polyline [[x,y],...]: the "
+                                       "boundary nodes on it.")] = None,
+                       reservoir: Annotated[Optional[dict[str, Any]], Field(
+                           description="{'level': y, 'side': 'left' or "
+                                       "'right', 'unknown_elsewhere': "
+                                       "bool}: total head = level on the "
+                                       "wetted perimeter.")] = None,
+                       value: Annotated[Optional[float], Field(
+                           description="The head, flow or rate; refused "
+                                       "for types that read none.")] = None,
+                       seepage_face: Annotated[Optional[bool], Field(
+                           description="nodal_flow/infiltration only: may "
+                                       "switch to a seepage face.")] = None
+                       ) -> dict[str, Any]:
+        """Assign a seepage boundary condition to a side, nodes, a polyline
+        of the boundary, or a reservoir. Needs a mesh."""
+        return run("seepage_bc_set", project_id=project_id, bc_type=bc_type,
+                   side=side, nodes=nodes, along=along, reservoir=reservoir,
+                   value=value, seepage_face=seepage_face)
+
+    @tool("seepage_bc_clear", _DESTRUCTIVE)
+    def seepage_bc_clear(project_id: ProjectId = None) -> dict[str, Any]:
+        """Restore the default conditions: unknown (seepage face) on the
+        ground surface, no flow on the other sides."""
+        return run("seepage_bc_clear", project_id=project_id)
+
+    @tool("transient_set", _EDIT)
+    def transient_set(project_id: ProjectId = None,
+                      enabled: Annotated[bool, Field(
+                          description="Turn the transient analysis on or "
+                                      "off.")] = True,
+                      stages: Annotated[Optional[list[dict[str, Any]]], Field(
+                          description="[{'time', 'calculate_sf', 'label', "
+                                      "'bcs'}]; bcs is 'current', or {'base':"
+                                      " 'current'|'defaults', 'assign': "
+                                      "[seepage_bc_set arguments...]}; "
+                                      "without bcs a stage uses the current "
+                                      "conditions. Omit to keep the stages.")
+                      ] = None,
+                      initial: Annotated[Any, Field(
+                          description="Conditions of the initial state: "
+                                      "same forms as a stage's bcs, or "
+                                      "'none' for the current ones.")] = None,
+                      tolerance: Annotated[Optional[float], Field(
+                          description="Convergence tolerance.")] = None,
+                      max_iterations: Annotated[Optional[int], Field(
+                          description="Picard iterations per step.")
+                      ] = None,
+                      time_steps: Annotated[Optional[int], Field(
+                          description="Steps per stage; 0 = automatic.")
+                      ] = None) -> dict[str, Any]:
+        """Configure the staged transient groundwater analysis (times,
+        per-stage conditions, Calculate SF, initial state)."""
+        return run("transient_set", project_id=project_id, enabled=enabled,
+                   stages=stages, initial=initial, tolerance=tolerance,
+                   max_iterations=max_iterations, time_steps=time_steps)
+
+    @tool("water_grid_set", _EDIT)
+    def water_grid_set(project_id: ProjectId = None,
+                       points: Annotated[Optional[list[list[float]]], Field(
+                           description="[[x, y, value], ...].")] = None,
+                       csv_path: Annotated[Optional[str], Field(
+                           description="A text file of x, y, value rows "
+                                       "instead of points.")] = None,
+                       value_type: Annotated[Optional[Literal[
+                           "total_head", "pressure_head", "pore_pressure"]],
+                           Field(description="What the values are (m, m, "
+                                             "kPa).")] = None,
+                       interpolation: Annotated[Optional[Literal[
+                           "tps", "idw"]], Field(
+                           description="Thin-plate spline or inverse "
+                                       "distance.")] = None,
+                       idw_neighbours: Annotated[Optional[int], Field(
+                           description="Points IDW averages.")] = None,
+                       allow_suction: Annotated[Optional[bool], Field(
+                           description="Keep negative pore pressure.")
+                       ] = None) -> dict[str, Any]:
+        """Define the water pressure grid, or change its options. It is read
+        with a grid_* groundwater method (settings_set)."""
+        return run("water_grid_set", project_id=project_id, points=points,
+                   csv_path=csv_path, value_type=value_type,
+                   interpolation=interpolation,
+                   idw_neighbours=idw_neighbours,
+                   allow_suction=allow_suction)
+
+    @tool("water_grid_delete", _DESTRUCTIVE)
+    def water_grid_delete(project_id: ProjectId = None) -> dict[str, Any]:
+        """Remove the water pressure grid."""
+        return run("water_grid_delete", project_id=project_id)
+
+    @tool("groundwater_run", _EDIT)
+    async def groundwater_run(ctx: Context, project_id: ProjectId = None,
+                              stage_factors: Annotated[bool, Field(
+                                  description="Transient: also the factor "
+                                              "of safety at the stages "
+                                              "flagged calculate_sf.")
+                              ] = True,
+                              methods: Methods = None,
+                              wait_seconds: WaitSeconds = 30.0
+                              ) -> dict[str, Any]:
+        """Solve the groundwater by finite elements (steady, or the
+        transient stages) as a background job. The field is written back
+        into the model; materials read it with pore_pressure='fem'."""
+        return await run_job(ctx, "groundwater_run", "groundwater analysis",
+                             wait_seconds, project_id=project_id,
+                             stage_factors=stage_factors, methods=methods)
+
+    @tool("groundwater_results", _EDIT)
+    def groundwater_results(project_id: ProjectId = None,
+                            result_id: Annotated[Optional[str], Field(
+                                description="A stored groundwater result "
+                                            "instead of the model's own "
+                                            "field.")] = None,
+                            view: Annotated[Literal[
+                                "summary", "point", "section",
+                                "free_surface", "stages", "nodes"], Field(
+                                description="What to read.")] = "summary",
+                            stage: Annotated[Optional[int], Field(
+                                description="Transient stage (0-based); "
+                                            "default the last.")] = None,
+                            point_xy: Annotated[Optional[list[float]], Field(
+                                description="view 'point': [x, y].")] = None,
+                            section: Annotated[Optional[list[list[float]]],
+                                               Field(
+                                description="view 'section': [[x0, y0], "
+                                            "[x1, y1]].")] = None,
+                            save_path: Annotated[Optional[str], Field(
+                                description="view 'nodes': write the CSV "
+                                            "here.")] = None,
+                            overwrite: Annotated[bool, Field(
+                                description="Replace an existing file.")
+                            ] = False) -> dict[str, Any]:
+        """Read the groundwater field: head, pressure and flow at a point,
+        the flow through a section, the free surface, the stages with their
+        factors, or every node as CSV."""
+        return run("groundwater_results", project_id=project_id,
+                   result_id=result_id, view=view, stage=stage,
+                   point_xy=point_xy, section=section, save_path=save_path,
+                   overwrite=overwrite)
+
+    @tool("drawdown_sweep_run", _EDIT)
+    async def drawdown_sweep_run(ctx: Context, project_id: ProjectId = None,
+                                 methods: Methods = None,
+                                 n_levels: Annotated[int, Field(
+                                     description="Reservoir levels from the "
+                                                 "initial one to the lowest "
+                                                 "ground (2-101); each is a "
+                                                 "full search.")] = 11,
+                                 include_total: Annotated[bool, Field(
+                                     description="Also the total drawdown."
+                                 )] = True,
+                                 wait_seconds: WaitSeconds = 30.0
+                                 ) -> dict[str, Any]:
+        """Rapid drawdown: search at a range of reservoir levels and report
+        the worst (the total drawdown is not always it)."""
+        return await run_job(ctx, "drawdown_sweep_run", "drawdown sweep",
+                             wait_seconds, project_id=project_id,
+                             methods=methods, n_levels=n_levels,
+                             include_total=include_total)
 
     # ------------------------------------------------------------------
     # resources

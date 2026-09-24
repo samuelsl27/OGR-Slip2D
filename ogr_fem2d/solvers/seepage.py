@@ -780,8 +780,11 @@ class UnsaturatedSeepageSolver(SeepageSolver):
             for nid in e.nodes:
                 p_mean += H[nid] - self.mesh.nodes[nid].y
             p_mean /= 3.0
-            suction = -p_mean          # positive where P < 0
-            kr.append(self.props_for(e).relative_permeability(suction))
+            # v0.1.200 — through ``kr_at_pressure_head``, which gives each
+            # model its suction in the unit it is written in (m of water
+            # or kPa). This passed -p_mean, metres, to all of them.
+            kr.append(self.props_for(e).kr_at_pressure_head(
+                p_mean, self.gamma_w))
         return kr
 
     # ------------------------------------------------------------------
@@ -1295,7 +1298,8 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
                 # and only the stages that actually advanced had it.
                 res.notes.update({"stage": k, "time": stage.time,
                                   "time_steps": 0,
-                                  "calculate_sf": stage.calculate_sf})
+                                  "calculate_sf": stage.calculate_sf,
+                                  "label": stage.label})
                 results.append(res)
                 continue
 
@@ -1325,6 +1329,10 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
                 "stored_water": w1,
                 "storage_change": w1 - w0,
                 "calculate_sf": stage.calculate_sf,
+                # v0.1.200 — the Interpret groundwater window and the
+                # agent read the label here, and it was never written: a
+                # stage's name reached nobody.
+                "label": stage.label,
             })
             if not all_ok:
                 last.notes["warning"] = (

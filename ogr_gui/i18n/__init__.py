@@ -843,6 +843,32 @@ _DICTS: dict[str, dict[str, str]] = {
         'Boundary Condition Values': 'Valores de condiciones de contorno',
         'Boundary Conditions': 'Condiciones de contorno',
         'Bubbling pressure:': 'Presión de burbujeo:',
+        # v0.1.200 — the hydraulic parameters carry their unit.
+        'Bubbling pressure (kPa):': 'Presión de burbujeo (kPa):',
+        'A (kPa):': 'A (kPa):',
+        'a (1/m^n):': 'a (1/m^n):',
+        'alpha (1/m):': 'alfa (1/m):',
+        'Suction head (m)': 'Altura de succión (m)',
+        'dropped:': 'descartado:',
+        # v0.1.200 — the stage checks now live in
+        # ``GroundwaterSettings.set_transient``; the dialog shows its
+        # message through tr(), so each one is a key.
+        "Each stage is an object with a 'time'.":
+            "Cada etapa es un objeto con un 'time'.",
+        'Define at least one stage, or switch the transient analysis off.':
+            'Defina al menos una etapa o desactive el análisis '
+            'transitorio.',
+        'Stage times must be positive.':
+            'Los tiempos de las etapas deben ser positivos.',
+        'Stage times must be distinct.':
+            'Los tiempos de las etapas deben ser distintos.',
+        'The transient tolerance must be positive.':
+            'La tolerancia del transitorio debe ser positiva.',
+        'max_iterations must be at least 1.':
+            'El número máximo de iteraciones debe ser al menos 1.',
+        'time_steps is 0 (automatic) or more.':
+            'El número de pasos de tiempo es 0 (automático) o más.',
+        'Matric suction (kPa)': 'Succión matricial (kPa)',
         'C:': 'C:',
         'Calculate Excess Pore Pressure (B-bar method)': 'Calcular exceso de presión intersticial (método B-bar)',
         'Cancel': 'Cancelar',

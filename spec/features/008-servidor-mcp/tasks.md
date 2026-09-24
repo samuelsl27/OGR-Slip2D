@@ -101,3 +101,15 @@ Tres defectos que F2 dejó reportados, cada uno su versión y su plan corto:
 ## F3–F4b
 
 Plan corto antes de cada una. Al cerrar F4, `PENDING` del inventario vacío.
+
+- [x] F3a (v0.1.200) Agua subterránea: `hydraulic_set`, `mesh_generate`,
+      `mesh_reset`, `seepage_bc_set`, `seepage_bc_clear`, `transient_set`,
+      `water_grid_set`, `water_grid_delete`, `groundwater_run` (trabajo, con
+      el campo escrito de vuelta en un paso de deshacer),
+      `groundwater_results`, `drawdown_sweep_run` (trabajo, por la puerta
+      del análisis) y `model_render(field=...)`. Las unidades hidráulicas
+      por modelo (decisión del propietario, 2026-09-24). Validado contra
+      Darcy 1-D, medias por capas, erfc, Charnyi y Morgenstern (1963).
+      Inventario: 108 cubiertas, 5 pendientes, techo 5.
+- [ ] F3b (v0.1.201) Estadística, retroanálisis, optimización e
+      interpretación: `PENDING` a cero.

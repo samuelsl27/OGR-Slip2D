@@ -82,6 +82,64 @@ def _provenance() -> dict:
             "python": sys.version.split()[0]}
 
 
+def _analysis(project, params, progress):
+    from ogr_slip2d.analysis_runner import run_analysis
+
+    from ..results import outcome_summary
+
+    outcome = run_analysis(project, params.get("method_ids"),
+                           progress_cb=progress)
+    return ({"results": outcome.results,
+             "factor_report": outcome.factor_report,
+             "warnings": list(outcome.warnings)},
+            outcome_summary(outcome.results, outcome.factor_report,
+                            outcome.warnings))
+
+
+def _groundwater(project, params, progress):
+    """Compute Groundwater: steady, or the staged transient with the
+    factor of safety at each stage flagged Calculate SF (v0.1.200)."""
+    from ogr_slip2d.transient_stability import (run_transient_stability,
+                                                solve_project_groundwater)
+
+    from ..results import groundwater_summary
+
+    gw = project.settings.groundwater
+    warnings = []
+    if gw.transient and gw.transient_stages and params.get("stage_factors"):
+        outcome = run_transient_stability(project, params.get("method_ids"),
+                                          progress_cb=progress)
+        warnings = list(outcome.warnings)
+    else:
+        solve_project_groundwater(project, progress_cb=progress)
+    payload = {"seepage_result": project.seepage_result,
+               "transient_results": list(project.transient_results or []),
+               "mesh": project.fem_mesh, "warnings": warnings}
+    return payload, groundwater_summary(project, warnings)
+
+
+def _drawdown_sweep(project, params, progress):
+    """The drawdown level sweep, through the analysis door (v0.1.200)."""
+    from ogr_slip2d.analysis_runner import run_configured_drawdown_sweep
+
+    from ..results import drawdown_sweep_summary
+
+    sweep, report, warnings = run_configured_drawdown_sweep(
+        project, params.get("method_ids"),
+        n_levels=params.get("n_levels", 11),
+        include_total=params.get("include_total", True),
+        progress_cb=progress)
+    return ({"sweep": sweep, "factor_report": report,
+             "warnings": list(warnings)},
+            drawdown_sweep_summary(sweep, report, warnings))
+
+
+#: The job kinds a worker runs: ``fn(project, params, progress) ->
+#: (payload for result.pkl, summary for summary.json)``.
+_KINDS = {"analysis": _analysis, "groundwater": _groundwater,
+          "drawdown_sweep": _drawdown_sweep}
+
+
 def _run(folder: Path) -> None:
     started = time.time()
     with open(folder / "input.pkl", "rb") as fh:
@@ -99,23 +157,12 @@ def _run(folder: Path) -> None:
         last[0] = now
         _write_progress(folder, done, total)
 
-    if kind != "analysis":
+    runner = _KINDS.get(kind)
+    if runner is None:
         raise ValueError(f"unknown job kind {kind!r}")
-
-    from ogr_slip2d.analysis_runner import run_analysis
-
-    from ..results import outcome_summary
-
-    outcome = run_analysis(project, params.get("method_ids"),
-                           progress_cb=progress)
-    results = outcome.results
-    _write_pickle(folder / "result.pkl",
-                  {"results": results,
-                   "factor_report": outcome.factor_report,
-                   "warnings": list(outcome.warnings)})
-    _write_json(folder / "summary.json",
-                outcome_summary(results, outcome.factor_report,
-                                outcome.warnings))
+    payload, summary = runner(project, params, progress)
+    _write_pickle(folder / "result.pkl", payload)
+    _write_json(folder / "summary.json", summary)
     _write_json(folder / "status.json",
                 {"state": "done", "run_s": round(time.time() - started, 2),
                  "provenance": _provenance()})

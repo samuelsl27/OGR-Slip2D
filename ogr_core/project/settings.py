@@ -192,6 +192,56 @@ class GroundwaterSettings:
     # None → the currently defined conditions are used, which means the
     # model starts already in equilibrium with them.
     transient_initial_bcs: Optional[dict] = None
+
+    def set_transient(self, enabled: bool, stages: list, *,
+                      tolerance: Optional[float] = None,
+                      max_iterations: Optional[int] = None,
+                      time_steps: Optional[int] = None) -> None:
+        """Configure the staged transient analysis, all or nothing.
+
+        v0.1.200 (spec 008, F3a) — the checks of the interface's transient
+        dialog, moved here so an agent's stages pass the same ones: with
+        the analysis on, at least one stage, every time positive and no
+        two equal. Stages are stored sorted by time. Raises ``ValueError``
+        and changes nothing when a check fails.
+        """
+        clean = []
+        for st in stages or []:
+            if not isinstance(st, dict) or "time" not in st:
+                raise ValueError("Each stage is an object with a 'time'.")
+            entry = {"time": float(st["time"]),
+                     "calculate_sf": bool(st.get("calculate_sf", False)),
+                     "label": str(st.get("label", ""))}
+            if st.get("bcs"):
+                entry["bcs"] = st["bcs"]
+            clean.append(entry)
+        clean.sort(key=lambda s: s["time"])
+        if enabled:
+            if not clean:
+                raise ValueError("Define at least one stage, or switch the "
+                                 "transient analysis off.")
+            times = [s["time"] for s in clean]
+            if any(t <= 0 for t in times):
+                raise ValueError("Stage times must be positive.")
+            if len(set(times)) != len(times):
+                raise ValueError("Stage times must be distinct.")
+        if tolerance is not None and not float(tolerance) > 0:
+            raise ValueError("The transient tolerance must be positive.")
+        if max_iterations is not None and int(max_iterations) < 1:
+            raise ValueError("max_iterations must be at least 1.")
+        if time_steps is not None and int(time_steps) < 0:
+            raise ValueError("time_steps is 0 (automatic) or more.")
+        if enabled:
+            self.set_advanced_option("transient")
+        elif self.transient:
+            self.set_advanced_option(None)
+        self.transient_stages = clean
+        if tolerance is not None:
+            self.transient_tolerance = float(tolerance)
+        if max_iterations is not None:
+            self.transient_max_iterations = int(max_iterations)
+        if time_steps is not None:
+            self.transient_time_steps = int(time_steps)
     rapid_drawdown_method: str = "b_bar"  # b_bar | duncan_wright | corps_2 | lowe_karafiath
     # v0.1.125 — the largest matric suction allowed to reach the strength
     # calculation, in kPa. ``None`` means no limit, which is both the

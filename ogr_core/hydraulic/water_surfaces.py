@@ -144,6 +144,28 @@ def resolve_water_surface(
     return None
 
 
+def materials_using_surface(project, surface) -> list:
+    """The materials whose pore pressure comes from ``surface``.
+
+    v0.1.200 — the ENGINE's answer (``resolve_water_surface``), so it
+    includes a material set to the surface's pore-pressure model with no
+    surface of its own, which takes the first surface of that type. The
+    agent's model notes asked ``m.water_surface_id == surface.id`` instead
+    and told such a model, which the analysis does give pore pressure,
+    that its water table "produces no pore pressure".
+    """
+    from ..materials import PorePressureType
+
+    kind = {BoundaryType.WATER_TABLE: PorePressureType.WATER_TABLE,
+            BoundaryType.PIEZOMETRIC: PorePressureType.PIEZO_LINE}.get(
+        surface.btype)
+    if kind is None:
+        return []
+    return [m for m in project.materials
+            if m.pore_pressure == kind and resolve_water_surface(
+                project, m.water_surface_id, surface.btype) is surface]
+
+
 def water_surface_y_at(
     project,
     water_surface_id: Optional[str],

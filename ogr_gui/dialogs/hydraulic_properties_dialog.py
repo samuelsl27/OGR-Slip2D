@@ -184,7 +184,7 @@ class HydraulicPropertiesDialog(QDialog):
         self.sp_bc_lambda = _spin(0.01, 20.0, 0.6, 4, 0.05)
         self.sp_bc_psib = _spin(0.0, 1e6, 30.0, 3, 5.0)
         f.addRow(tr("Pore size index (lambda):"), self.sp_bc_lambda)
-        f.addRow(tr("Bubbling pressure:"), self.sp_bc_psib)
+        f.addRow(tr("Bubbling pressure (kPa):"), self.sp_bc_psib)
         self._pages[PermeabilityModel.BROOKS_COREY] = w
         self.stack.addWidget(w)
 
@@ -194,7 +194,7 @@ class HydraulicPropertiesDialog(QDialog):
         self.sp_fx_a = _spin(1e-6, 1e7, 50.0, 4, 5.0)
         self.sp_fx_b = _spin(1e-6, 100.0, 2.0, 4, 0.1)
         self.sp_fx_c = _spin(1e-6, 100.0, 1.0, 4, 0.1)
-        f.addRow(tr("A:"), self.sp_fx_a)
+        f.addRow(tr("A (kPa):"), self.sp_fx_a)
         f.addRow(tr("B:"), self.sp_fx_b)
         f.addRow(tr("C:"), self.sp_fx_c)
         self._pages[PermeabilityModel.FREDLUND_XING] = w
@@ -205,7 +205,7 @@ class HydraulicPropertiesDialog(QDialog):
         f = QFormLayout(w)
         self.sp_g_a = _spin(0.0, 1e9, 0.01, 6, 0.01)
         self.sp_g_n = _spin(1e-6, 100.0, 2.0, 4, 0.1)
-        f.addRow(tr("a:"), self.sp_g_a)
+        f.addRow(tr("a (1/m^n):"), self.sp_g_a)
         f.addRow(tr("n:"), self.sp_g_n)
         self._pages[PermeabilityModel.GARDNER] = w
         self.stack.addWidget(w)
@@ -213,13 +213,13 @@ class HydraulicPropertiesDialog(QDialog):
         # van Genuchten
         w = QWidget()
         f = QFormLayout(w)
-        self.sp_vg_alpha = _spin(1e-9, 1e4, 0.036, 6, 0.005)
+        self.sp_vg_alpha = _spin(1e-9, 1e4, 3.6, 6, 0.1)
         self.sp_vg_n = _spin(1.0001, 20.0, 1.56, 4, 0.05)
         self.chk_custom_m = QCheckBox(tr("Custom m"))
         self.sp_vg_m = _spin(1e-4, 0.9999, 0.359, 4, 0.02)
         self.chk_custom_m.toggled.connect(self.sp_vg_m.setEnabled)
         self.sp_vg_m.setEnabled(False)
-        f.addRow(tr("alpha:"), self.sp_vg_alpha)
+        f.addRow(tr("alpha (1/m):"), self.sp_vg_alpha)
         f.addRow(tr("n:"), self.sp_vg_n)
         f.addRow(self.chk_custom_m, self.sp_vg_m)
         self._pages[PermeabilityModel.VAN_GENUCHTEN] = w
@@ -337,7 +337,9 @@ class HydraulicPropertiesDialog(QDialog):
         xs = [max(c[0], 1e-2) for c in curve[1:]]
         ys = [p.ks * c[1] for c in curve[1:]]
         ax.loglog(xs, ys, lw=1.8)
-        ax.set_xlabel("Matric suction")
+        # v0.1.200 — in the unit the model is written in.
+        ax.set_xlabel(tr("Suction head (m)") if p.suction_unit() == "m"
+                      else tr("Matric suction (kPa)"))
         ax.set_ylabel("Permeability k")
         ax.grid(True, which="both", alpha=0.3)
         ax.set_title(self.cbo_model.currentText())

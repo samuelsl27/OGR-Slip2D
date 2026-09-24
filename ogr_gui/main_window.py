@@ -179,26 +179,22 @@ class _DrawdownSweepWorker(QThread):
 
     def run(self) -> None:                       # noqa: D102
         try:
-            from ogr_core.statistics import run_drawdown_sweep
-
-            helper = _ComputeWorker(self.project, self.method_ids)
-            searches = {mid: helper.build_search(mid)
-                        for mid in self.method_ids}
-            missing = [mid for mid, s in searches.items() if s is None]
-            if missing:
-                self.failed.emit(
-                    f"Could not build the search for: {', '.join(missing)}")
+            # v0.1.200 — through ``run_configured_drawdown_sweep``, the door
+            # ``run_analysis`` uses: the design-factored copy, the settings
+            # checks and warnings. This searched the raw project, so with a
+            # design standard on it answered a different model from Compute.
+            from ogr_slip2d.analysis_runner import (
+                AnalysisNotConfigured, run_configured_drawdown_sweep)
+            try:
+                self.result, _report, _warnings = \
+                    run_configured_drawdown_sweep(
+                        self.project, self.method_ids,
+                        n_levels=self.n_levels,
+                        include_total=self.include_total,
+                        progress_cb=lambda d, t: self.progress.emit(d, t))
+            except AnalysisNotConfigured as exc:
+                self.failed.emit("  ".join(exc.problems))
                 return
-
-            def factory(mid):
-                # A fresh search per level would rebuild the same object;
-                # the search holds no per-project state, so one is enough.
-                return searches[mid]
-
-            self.result = run_drawdown_sweep(
-                self.project, factory, self.method_ids,
-                n_levels=self.n_levels, include_total=self.include_total,
-                progress_cb=lambda d, t: self.progress.emit(d, t))
             self.finished_result.emit(self.result)
         except Exception as e:  # noqa: BLE001
             self.failed.emit(f"{type(e).__name__}: {e}")
@@ -206,7 +202,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.199"
+    VERSION = "0.1.200"
 
     def __init__(self) -> None:
         super().__init__()
@@ -1379,33 +1375,33 @@ class MainWindow(QMainWindow):
             self._info("No mesh generated. An External boundary with a "
                        "valid closed polygon is required.")
             return
-        self.project.fem_mesh = mesh
-        self.project.seepage_bcs = None
-        self.project.seepage_result = None
-        # v0.1.78 — the transient stages have to go with it. They were
-        # left behind here and in _reset_fem_mesh, which did not show
-        # while nothing was saved: a stale list only existed until the
-        # session ended. Now that the fields are written to the .ogr, a
-        # list of results indexed by the OLD mesh's nodes would be saved
-        # alongside the new mesh.
-        self.project.transient_results = []
+        # v0.1.200 — the rule "a new mesh drops the conditions and the
+        # fields of the old one" (v0.1.78 added the transient results to
+        # it) lives in ``ogr_core.project.rules.set_fem_mesh``, which an
+        # agent's mesh goes through too.
+        from ogr_core.project.rules import set_fem_mesh
+        dropped = set_fem_mesh(self.project, mesh)
+        self._gw_solver = None
         self.project.is_dirty = True
         self.canvas.refresh_scene()
         self._update_groundwater_actions()
         q = mesh.quality_stats()
-        self.statusBar().showMessage(
-            f"FE mesh: {q['elements']} elements, {q['nodes']} nodes, "
-            f"min angle {q['min_angle']:.1f} deg", 8000)
+        msg = (f"FE mesh: {q['elements']} elements, {q['nodes']} nodes, "
+               f"min angle {q['min_angle']:.1f} deg")
+        if dropped:
+            # v0.1.200 — say what a new mesh took away: the stage
+            # conditions, now among them, are not visible from here.
+            msg += "  (" + tr("dropped:") + " " + ", ".join(dropped) + ")"
+        self.statusBar().showMessage(msg, 12000)
 
     def _reset_fem_mesh(self) -> None:
         """v0.1.25 — discard the FE mesh."""
         if getattr(self.project, "fem_mesh", None) is None:
             self.statusBar().showMessage("No FE mesh to reset", 3000)
             return
-        self.project.fem_mesh = None
-        self.project.seepage_bcs = None
-        self.project.seepage_result = None
-        self.project.transient_results = []   # see act_generate_mesh
+        from ogr_core.project.rules import reset_fem_mesh
+        reset_fem_mesh(self.project)
+        self._gw_solver = None
         self.project.is_dirty = True
         self.canvas.refresh_scene()
         self._update_groundwater_actions()
@@ -2861,18 +2857,25 @@ class MainWindow(QMainWindow):
                                           4000)
 
     def _seepage_bcs(self):
-        """The project's boundary conditions, created with the documented
-        defaults the first time (Unknown on the ground surface, zero
-        nodal flow on the sides and bottom)."""
+        """A COPY of the project's boundary conditions, or the documented
+        defaults (Unknown on the ground surface, zero nodal flow on the
+        sides and bottom) when there are none for this mesh.
+
+        v0.1.200 — a copy, and the defaults are not written: this used to
+        return the live object (so the dialog edited the project in place
+        and Cancel cancelled nothing) and to store the defaults just by
+        being asked. The caller writes back what the user accepted.
+        """
+        import copy
+
         from ogr_fem2d.solvers import default_boundary_conditions
         bcs = getattr(self.project, "seepage_bcs", None)
         mesh = self.project.fem_mesh
         node_ids = {b.node_id for b in bcs.nodes} if bcs else set()
         valid = bcs is not None and node_ids <= set(range(mesh.node_count))
         if not valid:
-            bcs = default_boundary_conditions(mesh)
-            self.project.seepage_bcs = bcs
-        return bcs
+            return default_boundary_conditions(mesh)
+        return copy.deepcopy(bcs)
 
     def _set_boundary_conditions(self) -> None:
         mesh = getattr(self.project, "fem_mesh", None)
@@ -2882,7 +2885,7 @@ class MainWindow(QMainWindow):
         from .dialogs.boundary_conditions_dialog import (
             BoundaryConditionsDialog,
         )
-        bcs = self._seepage_bcs()
+        bcs = self._seepage_bcs()                 # a copy: Cancel cancels
         if BoundaryConditionsDialog(mesh, bcs, self).exec():
             self.project.seepage_bcs = bcs
             self.project.is_dirty = True
@@ -3005,9 +3008,13 @@ class MainWindow(QMainWindow):
         from .interpret_groundwater_window import (
             InterpretGroundwaterWindow,
         )
-        w = InterpretGroundwaterWindow(self.project, result,
-                                       getattr(self, "_gw_solver", None),
-                                       self)
+        # v0.1.200 — a solver built on demand when the one of the last
+        # solve is gone (after reopening the project the free surface and
+        # the discharge section silently did nothing).
+        from ogr_slip2d.transient_stability import groundwater_query_solver
+        w = InterpretGroundwaterWindow(
+            self.project, result, groundwater_query_solver(self.project),
+            self)
         w.show()
         self._gw_interpret_window = w
 

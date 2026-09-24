@@ -15,7 +15,7 @@ from __future__ import annotations
 from typing import Optional
 
 from ..coerce import coerce_value
-from ..errors import InvalidArgument, unknown
+from ..errors import Conflict, InvalidArgument, unknown
 from . import operation
 
 
@@ -26,8 +26,11 @@ def model_render(ws, project_id: Optional[str] = None,
                  width: int = 900, height: int = 600,
                  labels: bool = True,
                  save_path: Optional[str] = None,
-                 overwrite: bool = False) -> dict:
-    """A PNG of the model, optionally with a result's critical surface."""
+                 overwrite: bool = False,
+                 field: Optional[str] = None,
+                 stage: Optional[int] = None) -> dict:
+    """A PNG of the model, optionally with a result's critical surface
+    or the groundwater field (contours and free surface)."""
     from ..render import render_png
 
     width = coerce_value(width, int, "width")
@@ -65,10 +68,39 @@ def model_render(ws, project_id: Optional[str] = None,
         target = ws.resolve_path(save_path, for_write=True,
                                  overwrite=overwrite, suffix=".png")
     with ws.reading(handle.id, "model_render") as project:
+        overlay, fs = _field_overlay(project, field, stage)
+        if overlay is not None:
+            title += f" — {overlay[0]}"
         png = render_png(project, surfaces=surfaces, width=width,
-                         height=height, labels=bool(labels), title=title)
+                         height=height, labels=bool(labels), title=title,
+                         field=overlay, free_surface=fs)
     if target is not None:
         target.write_bytes(png)
     return {"project_id": handle.id, "png": png,
             "saved_to": str(target) if target else None,
             "surfaces": [label for label, _ in surfaces]}
+
+
+#: The groundwater quantities a picture can show, with their units.
+_FIELDS = {"total_head": "total head H (m)",
+           "pressure_head": "pressure head P (m)",
+           "pore_pressure": "pore pressure u (kPa)"}
+
+
+def _field_overlay(project, field, stage):
+    """``(label, values, mesh)`` and the free surface of the model's
+    groundwater field, or ``(None, None)`` when no field was asked for.
+    v0.1.200 (spec 008, F3a)."""
+    if field is None:
+        if stage is not None:
+            raise Conflict("stage is only read together with field.")
+        return None, None
+    if field not in _FIELDS:
+        raise unknown("field", field, list(_FIELDS))
+    from .groundwater import field_of
+    result, mesh, label = field_of(project, stage)
+    from ogr_slip2d.transient_stability import groundwater_query_solver
+    solver = groundwater_query_solver(project)
+    fs = solver.free_surface_points(result) if solver is not None else []
+    return (f"{_FIELDS[field]}{label}", getattr(result, field), mesh), fs
+

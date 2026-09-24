@@ -146,8 +146,9 @@ def status_of(project) -> dict:
     water = [b for b in project.boundaries
              if b.btype in (BoundaryType.WATER_TABLE,
                             BoundaryType.PIEZOMETRIC)]
+    from ogr_core.hydraulic.water_surfaces import materials_using_surface
     for w in water:
-        if not any(m.water_surface_id == w.id for m in project.materials):
+        if not materials_using_surface(project, w):
             notes.append(
                 f"{w.btype.display_name} {w.id} is assigned to no material, "
                 f"so it produces no pore pressure. Assign it with "

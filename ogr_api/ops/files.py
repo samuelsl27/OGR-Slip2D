@@ -134,9 +134,10 @@ def _search_results(ws, result_id, project_id):
     if project_id is not None and project_id != handle.id:
         raise InvalidArgument(f"{result_id} belongs to {handle.id}.")
     if res.kind != "analysis":
-        raise Conflict(f"{result_id} is a single evaluated surface, not an "
-                       f"analysis.", hint="Use the result_id of "
-                                          "analysis_run.")
+        what = ("a single evaluated surface" if res.kind == "surface"
+                else f"a {res.kind} result")
+        raise Conflict(f"{result_id} is {what}, not an analysis.",
+                       hint="Use the result_id of analysis_run.")
     from ..snapshot import model_hash
     stale = model_hash(handle.project) != res.model_hash
     return handle, res.payload().get("results", {}), stale

@@ -42,17 +42,16 @@ _MIN_VERTICES = {"EXTERNAL": 3, "BLOCK_SEARCH_OBJECT": 1}
 #: boundary is a lens: since v0.1.197 it is a hole of the region around it.
 _CLOSABLE = ("EXTERNAL", "MATERIAL", "BLOCK_SEARCH_OBJECT")
 
-#: Material fields this layer edits as plain values. ``hydraulic`` and
-#: ``drawdown_envelope`` are structures, edited by the groundwater
-#: operations of phase F3; ``id`` and ``strength`` have their own handling.
+#: Material fields this layer edits as plain values. ``hydraulic`` has its
+#: own operation (``hydraulic_set``, v0.1.200), ``drawdown_envelope`` its
+#: own handling below; ``id`` and ``strength`` too.
 _MATERIAL_FIELDS = ("name", "unit_weight", "sat_unit_weight",
                     "use_sat_unit_weight", "pore_pressure", "ru",
                     "constant_u", "water_surface_id", "color", "hatch",
                     "phi_b", "air_entry_value", "hu", "auto_hu",
                     "undrained_behaviour", "b_bar", "weight_creates_excess",
                     "use_grid", "anisotropic_surface_id")
-_MATERIAL_LATER = {"hydraulic": "F3 (groundwater)",
-                   "drawdown_envelope": "F3 (rapid drawdown)"}
+_MATERIAL_ELSEWHERE = {"hydraulic": "hydraulic_set"}
 
 
 # ----------------------------------------------------------------------
@@ -231,8 +230,9 @@ def boundary_add(ws, type: str, points: list,
             note = _monotonic_note(b)
             if note:
                 notes.append(note)
-            if not assigned and not any(m.water_surface_id == b.id
-                                        for m in project.materials):
+            from ogr_core.hydraulic.water_surfaces import (
+                materials_using_surface)
+            if not assigned and not materials_using_surface(project, b):
                 notes.append(
                     f"This {btype.display_name} is assigned to no material "
                     f"and produces no pore pressure until one points at "
@@ -417,6 +417,53 @@ def boundary_edit(ws, boundary: str, op: str,
 # ----------------------------------------------------------------------
 # Materials
 # ----------------------------------------------------------------------
+def _drawdown_envelope(raw):
+    """A rapid-drawdown strength envelope from {'kind': 'r', 'c_r',
+    'phi_r_deg'} or {'kind': 'kc1', 'd', 'psi_deg'}; None clears it.
+    v0.1.200 (spec 008, F3a)."""
+    from ogr_core.materials.drawdown_envelopes import (Kc1Envelope,
+                                                       REnvelope)
+
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise InvalidArgument("drawdown_envelope is {'kind': 'r', 'c_r', "
+                              "'phi_r_deg'}, {'kind': 'kc1', 'd', "
+                              "'psi_deg'} or null.")
+    kind = raw.get("kind")
+    keys = {"r": ("c_r", "phi_r_deg"), "kc1": ("d", "psi_deg")}
+    if kind not in keys:
+        raise unknown("drawdown_envelope kind", kind, list(keys))
+    extra = [k for k in raw if k not in ("kind",) + keys[kind]]
+    if extra:
+        raise InvalidArgument(f"A {kind} envelope reads {keys[kind]}, not "
+                              f"{extra}.")
+    c_name, a_name = keys[kind]
+    c = coerce_value(raw.get(c_name, 0.0), float, c_name)
+    a = coerce_value(raw.get(a_name, 0.0), float, a_name)
+    if c < 0 or not 0 <= a < 90:
+        raise InvalidArgument(f"{c_name} cannot be negative and {a_name} "
+                              f"must be in [0, 90) degrees.")
+    return (REnvelope(c_r=c, phi_r_deg=a) if kind == "r"
+            else Kc1Envelope(d=c, psi_deg=a))
+
+
+def _envelope_notes(project, m) -> list[str]:
+    """Rule 7: say when the envelope just set is read by nothing."""
+    from ogr_slip2d.rapid_drawdown import MULTISTAGE_METHODS
+
+    if m.drawdown_envelope is None:
+        return []
+    gw = project.settings.groundwater
+    if (gw.rapid_drawdown and gw.rapid_drawdown_method in MULTISTAGE_METHODS
+            and m.undrained_behaviour):
+        return []
+    return [f"The drawdown envelope is read only by the multi-stage rapid "
+            f"drawdown methods ({', '.join(MULTISTAGE_METHODS)}) for a "
+            f"material with undrained_behaviour; {m.name} is not analysed "
+            f"that way now."]
+
+
 def _apply_material_fields(project, m, fields: dict, *, creating: bool
                            ) -> list[str]:
     """Write validated ``fields`` onto material ``m``; returns notes."""
@@ -426,11 +473,13 @@ def _apply_material_fields(project, m, fields: dict, *, creating: bool
     hints = type_hints(type(m))
     notes = []
     for key, raw in fields.items():
-        if key in _MATERIAL_LATER:
+        if key in _MATERIAL_ELSEWHERE:
             raise InvalidArgument(
-                f"{key} is edited by the operations of phase "
-                f"{_MATERIAL_LATER[key]}.",
-                hint="Use python_exec meanwhile.")
+                f"{key} is edited by {_MATERIAL_ELSEWHERE[key]}.",
+                hint=f"Call {_MATERIAL_ELSEWHERE[key]}(material=...).")
+        if key == "drawdown_envelope":
+            m.drawdown_envelope = _drawdown_envelope(raw)
+            continue
         if key not in _MATERIAL_FIELDS:
             from ..errors import did_you_mean
             hint = did_you_mean(key, _MATERIAL_FIELDS)
@@ -488,6 +537,8 @@ def _apply_material_fields(project, m, fields: dict, *, creating: bool
                      "when use_sat_unit_weight is true, which it is not.")
     if "b_bar" in fields and not m.undrained_behaviour:
         notes.append("b_bar only applies with undrained_behaviour=true.")
+    if "drawdown_envelope" in fields:
+        notes += _envelope_notes(project, m)
     if m.anisotropic_surface_id and not any(
             b.id == m.anisotropic_surface_id
             and b.btype == BoundaryType.ANISOTROPIC_SURFACE

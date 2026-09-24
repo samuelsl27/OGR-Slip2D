@@ -230,3 +230,101 @@ def outcome_summary(results: dict, factor_report=None,
         "factor_report": factor_report_summary(factor_report),
         "warnings": list(warnings),
     }
+
+
+# ----------------------------------------------------------------------
+# Groundwater and the drawdown sweep (v0.1.200, spec 008 F3a)
+# ----------------------------------------------------------------------
+def _span(values) -> Optional[list]:
+    vals = [v for v in values if v is not None and math.isfinite(v)]
+    return [_r(min(vals)), _r(max(vals))] if vals else None
+
+
+def seepage_field_summary(r) -> Optional[dict]:
+    """One seepage field: convergence and the range of each quantity.
+
+    Heads in metres, pore pressure in kPa, velocity in the permeability's
+    unit (Darcy flux).
+    """
+    if r is None:
+        return None
+    out = {"converged": bool(r.converged), "iterations": r.iterations}
+    if r.total_head:
+        out["total_head_m"] = _span(r.total_head)
+        out["pressure_head_m"] = _span(r.pressure_head)
+        out["pore_pressure_kpa"] = _span(r.pore_pressure)
+        out["seepage_face_nodes"] = len(r.seepage_nodes or [])
+        if r.velocity:
+            out["max_velocity"] = _r(max(math.hypot(vx, vy)
+                                         for vx, vy in r.velocity), 9)
+    notes = {k: v for k, v in (r.notes or {}).items()
+             if k in ("error", "warning", "time", "label", "calculate_sf",
+                      "fos", "fos_min", "fos_warning")}
+    if notes:
+        out["notes"] = json_safe(notes)
+    return out
+
+
+def stage_rows(results) -> list:
+    """The transient stages as rows: time, label, convergence, factors."""
+    rows = []
+    for i, r in enumerate(results or []):
+        n = r.notes or {}
+        rows.append(json_safe({
+            "stage": i, "time": n.get("time"), "label": n.get("label", ""),
+            "calculate_sf": bool(n.get("calculate_sf")),
+            "converged": bool(r.converged), "iterations": r.iterations,
+            "fos": n.get("fos"), "fos_min": n.get("fos_min"),
+            "fos_warning": n.get("fos_warning"),
+            "error": n.get("error")}))
+    return rows
+
+
+def groundwater_summary(project, warnings=()) -> dict:
+    """What a groundwater job found, for ``summary.json``."""
+    mesh = project.fem_mesh
+    stages = list(project.transient_results or [])
+    missing = [m.name for m in project.materials if m.hydraulic is None]
+    out = {"analysis": "transient" if stages else "steady",
+           "mesh": {"elements": mesh.element_count if mesh else 0,
+                    "nodes": mesh.node_count if mesh else 0},
+           "field": seepage_field_summary(project.seepage_result),
+           "warnings": list(warnings)}
+    if stages:
+        out["stages"] = stage_rows(stages)
+        out["field_is"] = "the last stage"
+    if missing:
+        out["default_hydraulic_properties"] = missing
+    return out
+
+
+def _level(lv):
+    return "total drawdown" if lv is None else _r(lv)
+
+
+def drawdown_sweep_summary(sweep, factor_report=None, warnings=()) -> dict:
+    """The drawdown level sweep, per method: every level's factor, the
+    worst level, and how much the total drawdown alone overstates it."""
+    methods = []
+    for mid, ms in sweep.by_method.items():
+        crit = ms.critical()
+        total = ms.at_total_drawdown()
+        margin = ms.unsafe_margin()
+        methods.append(json_safe({
+            "method_id": mid,
+            "levels": [_level(lv) for lv in ms.levels],
+            "fos": [(_r(f) if f is not None else None) for f in ms.fos],
+            "failed": ms.failed,
+            "critical": ({"level": _level(crit[0]), "fos": _r(crit[1]),
+                          "surface": crit[2]} if crit else None),
+            "total_drawdown_fos": _r(total[1]) if total else None,
+            "total_overstates_by": (_r(margin, 4) if margin is not None
+                                    else None)}))
+    worst = sweep.worst()
+    return json_safe({
+        "methods": methods,
+        "worst": ({"method_id": worst[0], "level": _level(worst[1]),
+                   "fos": _r(worst[2])} if worst else None),
+        "notes": sweep.notes,
+        "factor_report": factor_report_summary(factor_report),
+        "warnings": list(warnings)})

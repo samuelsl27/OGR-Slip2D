@@ -32,6 +32,33 @@ from . import operation
 
 _VIEWS = ("summary", "critical", "top", "minima", "warnings")
 
+#: What a finished job of each kind stores, and how: ``fn(ws, job, handle,
+#: summary) -> dict`` of fields added to the answer; it must set
+#: ``job.result_id``. The modules that start a kind of job register it
+#: (v0.1.200: ``groundwater`` and ``drawdown_sweep`` in ``groundwater``).
+JOB_FINISHERS: dict = {}
+
+#: How a job of each kind is named in a message.
+JOB_WORDS = {"analysis": "analysis"}
+
+
+def store_job_result(ws, job, handle, summary, kind: str):
+    """Keep a job's result under a new ``result_id``, loaded lazily from
+    the file its child wrote."""
+    res = ws.store_result(handle, kind, summary, model_hash=job.model_hash,
+                          loader=job.load_results,
+                          on_evict=lambda j=job: ws.jobs.forget(j.id))
+    job.result_id = res.id
+    return res
+
+
+def _finish_analysis(ws, job, handle, summary) -> dict:
+    store_job_result(ws, job, handle, summary, "analysis")
+    return {}
+
+
+JOB_FINISHERS["analysis"] = _finish_analysis
+
 
 def _check_runnable(project, methods) -> list:
     from ogr_core.project.rules import compute_blockers
@@ -74,15 +101,21 @@ def _job_answer(ws, job, *, raise_on_failure: bool) -> dict:
         summary = job.summary() or {}
         handle = ws.projects.get(job.project_id)
         if job.result_id is None and handle is not None:
-            res = ws.store_result(
-                handle, "analysis", summary, model_hash=job.model_hash,
-                loader=job.load_results,
-                on_evict=lambda j=job: ws.jobs.forget(j.id))
-            job.result_id = res.id
+            # Once: what a kind does with its result (a groundwater field
+            # is also written back into the model) must not happen again
+            # on every job_get.
+            job.finished_with = JOB_FINISHERS[job.kind](ws, job, handle,
+                                                        summary)
         out["result_id"] = job.result_id
         out["summary"] = summary
+        out.update(getattr(job, "finished_with", None) or {})
         if handle is not None:
-            out["stale"] = model_hash(handle.project) != job.model_hash
+            # Against the result's own fingerprint: a written-back field
+            # updates it, because the model now IS the one it describes.
+            res = handle.results.get(job.result_id)
+            fingerprint = res.model_hash if res is not None \
+                else job.model_hash
+            out["stale"] = model_hash(handle.project) != fingerprint
         return out
     out["error"] = st.get("error")
     if st.get("problems"):
@@ -90,7 +123,8 @@ def _job_answer(ws, job, *, raise_on_failure: bool) -> dict:
     if st.get("log_tail"):
         out["log_tail"] = st["log_tail"]
     if raise_on_failure and state in ("failed", "crashed"):
-        raise JobFailed(f"The analysis {state}: {st.get('error')}",
+        what = JOB_WORDS.get(job.kind, job.kind)
+        raise JobFailed(f"The {what} {state}: {st.get('error')}",
                         details=json_safe(out))
     return out
 
@@ -154,6 +188,16 @@ def results_get(ws, result_id: str, method_id: Optional[str] = None,
     if not 1 <= n <= 100:
         raise InvalidArgument("n must be between 1 and 100.")
     handle, res = ws.find_result(result_id)
+    if res.kind not in ("analysis", "surface") and view not in (
+            "summary", "warnings"):
+        # v0.1.200 — a groundwater field or a drawdown sweep has no
+        # critical surface per method to show; this used to answer with
+        # "unknown method" and an empty list.
+        from ..errors import Conflict
+        raise Conflict(f"{result_id} is a {res.kind} result; its views "
+                       f"here are 'summary' and 'warnings'.",
+                       hint=("Read the field with groundwater_results."
+                             if res.kind == "groundwater" else None))
     out = {"result_id": res.id, "kind": res.kind,
            "project_id": handle.id,
            "stale": model_hash(handle.project) != res.model_hash}

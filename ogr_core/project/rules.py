@@ -204,3 +204,55 @@ def set_seismic_records(project, records) -> bool:
             settings.record_id = ""
             return True
     return False
+
+
+# ----------------------------------------------------------------------
+# v0.1.200 (spec 008, F3a) — the finite-element mesh and what hangs on it
+# ----------------------------------------------------------------------
+def set_fem_mesh(project, mesh) -> list[str]:
+    """Install ``mesh`` and drop what belonged to the previous one; returns
+    what was dropped, in words.
+
+    Boundary conditions are keyed by NODE ID, so they cannot survive a new
+    mesh, and a seepage field or a transient history computed on another
+    mesh is not a field of this one. Moved from the interface
+    (``MainWindow._generate_fem_mesh``), where this rule lived.
+
+    v0.1.200 — the rule covered the current conditions but not the
+    conditions of each TRANSIENT STAGE nor the initial ones, which are
+    keyed by node id just the same. Measured on the demo slope: a stage
+    reservoir on the left face (8 total-head nodes at x = 0), after
+    remeshing 300 -> 600 elements, stood on 8 nodes of the CREST (y = 25),
+    and the transient would have run with it in silence. The stages keep
+    their times, labels and flags; without conditions of their own they
+    use the current ones, as a stage always has.
+    """
+    dropped = []
+    gw = project.settings.groundwater
+    for what, present in (
+            ("boundary conditions", project.seepage_bcs is not None),
+            ("seepage field", project.seepage_result is not None),
+            ("transient results", bool(project.transient_results)),
+            ("initial conditions of the transient",
+             gw.transient_initial_bcs is not None),
+            ("conditions of the transient stages",
+             any(st.get("bcs") for st in gw.transient_stages))):
+        if present:
+            dropped.append(what)
+    project.fem_mesh = mesh
+    project.seepage_bcs = None
+    project.seepage_result = None
+    project.transient_results = []
+    gw.transient_initial_bcs = None
+    for st in gw.transient_stages:
+        st.pop("bcs", None)
+    project._fea_ponding_cache = None
+    project._gw_solver = None
+    project._notify("mesh_changed")
+    return dropped
+
+
+def reset_fem_mesh(project) -> list[str]:
+    """Remove the mesh and everything computed on it (see
+    :func:`set_fem_mesh`); returns what was dropped."""
+    return set_fem_mesh(project, None)

@@ -183,7 +183,9 @@ class TransientStagesDialog(QDialog):
                 self, "Transient Groundwater",
                 "No boundary conditions defined yet.")
             return
-        self.settings.transient_initial_bcs = self._current_bcs.to_dict()
+        # v0.1.200 — kept until OK: this wrote the settings at once, so
+        # the capture survived Cancel.
+        self._initial_bcs = self._current_bcs.to_dict()
         QMessageBox.information(
             self, "Transient Groundwater",
             "Current boundary conditions stored as the initial state.")
@@ -193,6 +195,12 @@ class TransientStagesDialog(QDialog):
                       reverse=True)
         for r in rows:
             self.table.removeRow(r)
+            # v0.1.200 — the per-stage conditions are keyed by ROW; the
+            # rows below a deleted one move up, and their conditions have
+            # to move with them or they attach to the wrong stage.
+            self._stage_bcs.pop(r, None)
+            self._stage_bcs = {(k - 1 if k > r else k): v
+                               for k, v in self._stage_bcs.items()}
 
     # ------------------------------------------------------------------
     def stages(self) -> list:
@@ -217,30 +225,19 @@ class TransientStagesDialog(QDialog):
         return out
 
     def _accept(self) -> None:
-        stages = self.stages()
-        if self.chk_enabled.isChecked():
-            if not stages:
-                QMessageBox.warning(
-                    self, "Transient Groundwater",
-                    "Define at least one stage, or switch the transient "
-                    "analysis off.")
-                return
-            times = [s["time"] for s in stages]
-            if any(t <= 0 for t in times):
-                QMessageBox.warning(
-                    self, "Transient Groundwater",
-                    "Stage times must be positive.")
-                return
-            if len(set(times)) != len(times):
-                QMessageBox.warning(
-                    self, "Transient Groundwater",
-                    "Stage times must be distinct.")
-                return
-            self.settings.set_advanced_option("transient")
-        elif self.settings.transient:
-            self.settings.set_advanced_option(None)
-        self.settings.transient_stages = stages
-        self.settings.transient_tolerance = self.sp_tol.value()
-        self.settings.transient_max_iterations = self.sp_iter.value()
-        self.settings.transient_time_steps = self.sp_steps.value()
+        # v0.1.200 — the checks moved to
+        # ``GroundwaterSettings.set_transient``, which an agent's stages go
+        # through too; it changes nothing when one fails.
+        try:
+            self.settings.set_transient(
+                self.chk_enabled.isChecked(), self.stages(),
+                tolerance=self.sp_tol.value(),
+                max_iterations=self.sp_iter.value(),
+                time_steps=self.sp_steps.value())
+        except ValueError as exc:
+            QMessageBox.warning(self, tr("Transient Groundwater"),
+                                tr(str(exc)))
+            return
+        if getattr(self, "_initial_bcs", None) is not None:
+            self.settings.transient_initial_bcs = self._initial_bcs
         self.accept()

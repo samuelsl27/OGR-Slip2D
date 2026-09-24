@@ -79,19 +79,22 @@ class HydraulicProperties:
     # Brooks-Corey (1964)
     bc_lambda: float = 0.6             # pore size index
     bc_psi_b: float = 30.0             # bubbling pressure [kPa]
-    # Fredlund-Xing (1994)
+    # Fredlund-Xing (1994) — A in kPa
     fx_a: float = 50.0
     fx_b: float = 2.0
     fx_c: float = 1.0
-    # Gardner (1956)
+    # Gardner — written in suction HEAD: a in 1/m^n (v0.1.200)
     gardner_a: float = 0.01
     gardner_n: float = 2.0
-    # van Genuchten (1980)
-    vg_alpha: float = 0.036            # [1/kPa]
+    # van Genuchten (1980) — written in suction HEAD. v0.1.200: alpha is
+    # in 1/m, the unit the solver always evaluated it in; it was labelled
+    # 1/kPa, and this default was the loam of Carsel & Parrish (1988) in
+    # THEIR unit, 1/cm (0.036 1/cm = 3.6 1/m).
+    vg_alpha: float = 3.6              # [1/m]
     vg_n: float = 1.56
     vg_m: float = 0.359                # used only when vg_custom_m
     vg_custom_m: bool = False          # release m = 1 - 1/n
-    # User Defined: [(suction, permeability), ...]
+    # User Defined: [(suction [kPa], permeability), ...]
     user_curve: list = field(default_factory=list)
     # Water content / storage (Phase 6 — transient analysis)
     wc_sat: float = 0.4                # saturated water content theta_s
@@ -121,7 +124,10 @@ class HydraulicProperties:
 
     # ------------------------------------------------------------------
     def relative_permeability(self, suction: float) -> float:
-        """kr = k/Ks at matric suction ``suction`` [kPa].
+        """kr = k/Ks at ``suction``, in the unit of the MODEL'S OWN
+        definition (``permeability_models.SUCTION_UNIT``): metres of water
+        for van Genuchten and Gardner, kPa for the other four. The solver
+        goes through :meth:`kr_at_pressure_head`, which converts.
 
         Suction is positive where the pore pressure is negative. Below
         zero suction (saturated) kr = 1. The result is clamped to
@@ -136,6 +142,76 @@ class HydraulicProperties:
         if not math.isfinite(kr):
             return self.kr_min
         return min(1.0, max(self.kr_min, kr))
+
+    def problems(self) -> list[str]:
+        """What makes these properties unusable, in words; empty if none.
+
+        v0.1.200 (spec 008, F3a). The interface cannot produce most of
+        these — its spin boxes have ranges — but an agent or a file can,
+        and every one of them is silent in the solver: a non-positive Ks
+        is clamped to zero conductivity, a van Genuchten n <= 1 is nudged
+        to 1 + 1e-9, a user table whose first permeability is not
+        positive makes kr = 1 everywhere.
+        """
+        from .permeability_models import PermeabilityModel
+
+        out = []
+
+        def need(ok, text):
+            if not ok:
+                out.append(text)
+
+        need(self.ks > 0, "ks must be positive.")
+        need(self.k2_k1 >= 0, "k2_k1 cannot be negative.")
+        need(0 < self.kr_min <= 1, "kr_min must be in (0, 1].")
+        need(self.bc_lambda > 0, "bc_lambda must be positive.")
+        need(self.bc_psi_b >= 0, "bc_psi_b cannot be negative.")
+        need(self.fx_a > 0 and self.fx_b > 0 and self.fx_c > 0,
+             "fx_a, fx_b and fx_c must be positive.")
+        need(self.gardner_a >= 0, "gardner_a cannot be negative.")
+        need(self.gardner_n > 0, "gardner_n must be positive.")
+        need(self.vg_alpha > 0, "vg_alpha must be positive.")
+        need(self.vg_n > 1, "vg_n must be greater than 1.")
+        need(0 < self.vg_m < 1, "vg_m must be between 0 and 1.")
+        need(0 <= self.wc_res < self.wc_sat <= 1,
+             "The water contents need 0 <= wc_res < wc_sat <= 1.")
+        need(self.specific_storage >= 0,
+             "specific_storage cannot be negative.")
+        if self.model == PermeabilityModel.USER_DEFINED:
+            pts = sorted(self.user_curve, key=lambda t: t[0])
+            if len(pts) < 2:
+                out.append("A user-defined curve needs at least two "
+                           "(suction, permeability) points.")
+            else:
+                sucs = [s for s, _k in pts]
+                need(sucs[0] >= 0, "Suctions in user_curve cannot be "
+                                   "negative.")
+                need(len(set(sucs)) == len(sucs),
+                     "Two points of user_curve have the same suction.")
+                need(all(k > 0 for _s, k in pts),
+                     "Permeabilities in user_curve must be positive (the "
+                     "first one is the saturated value every other is "
+                     "divided by).")
+        return out
+
+    def suction_unit(self) -> str:
+        """'m' or 'kPa': the unit this model's suction is written in."""
+        from .permeability_models import SUCTION_UNIT
+        return SUCTION_UNIT.get(self.model, "m")
+
+    def kr_at_pressure_head(self, pressure_head: float,
+                            gamma_w: float) -> float:
+        """kr at a PRESSURE HEAD (m; negative above the water table).
+
+        v0.1.200 — the one door the solver uses. The suction is -P in
+        metres of water; the four models written in matric suction get
+        it in kPa, s = -P * gamma_w. Until this version they were handed
+        the metres, a factor gamma_w (about 9.81) too little suction.
+        """
+        suction = -float(pressure_head)
+        if self.suction_unit() == "kPa":
+            suction *= float(gamma_w)
+        return self.relative_permeability(suction)
 
     def k_at_suction(self, suction: float) -> float:
         """Absolute permeability at a given suction."""
@@ -153,7 +229,9 @@ class HydraulicProperties:
 
     # ------------------------------------------------------------------
     def water_content(self, suction: float) -> float:
-        """Volumetric water content theta at matric suction ``suction``.
+        """Volumetric water content theta at suction HEAD ``suction`` [m]
+        (``storage_content`` passes -P; v0.1.200 — this said "matric
+        suction", the kPa word, and van Genuchten's alpha is in 1/m).
 
         Uses the van Genuchten (1980) retention curve for every model,
         parameterised by ``vg_alpha``/``vg_n`` and the saturated and
@@ -241,7 +319,8 @@ class HydraulicProperties:
 
     def curve(self, psi_max: float = 1000.0, n: int = 60) -> list:
         """(suction, kr) samples for plotting the permeability function
-        (the reference's "Plot" button). Log-spaced from 0.1 kPa."""
+        (the reference's "Plot" button). Log-spaced from 0.1, in the
+        model's own suction unit (:meth:`suction_unit`)."""
         out = [(0.0, self.relative_permeability(0.0))]
         lo = math.log10(0.1)
         hi = math.log10(max(psi_max, 1.0))
@@ -290,6 +369,9 @@ class HydraulicProperties:
             fx_c=float(d.get("fx_c", 1.0)),
             gardner_a=float(d.get("gardner_a", 0.01)),
             gardner_n=float(d.get("gardner_n", 2.0)),
+            # NOT the dataclass default (3.6 since v0.1.200): a file
+            # without this key was written when the default was 0.036,
+            # evaluated as 1/m, and loading must keep what it meant.
             vg_alpha=float(d.get("vg_alpha", 0.036)),
             vg_n=float(d.get("vg_n", 1.56)),
             vg_m=float(d.get("vg_m", 0.359)),

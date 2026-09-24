@@ -131,6 +131,24 @@ EXAMPLES = {
                                      "target_deg": 20.0},
     "dxf_import": lambda p: {},
     "properties_import": lambda p: {},
+    # v0.1.200 (F3a): groundwater. The mesh and the conditions a step
+    # needs are made by PREPARE; ``groundwater_run``'s step is the field
+    # written back when its job ends.
+    "hydraulic_set": lambda p: {"material": "Soil", "model": "gardner",
+                                "properties": {"ks": 2e-6,
+                                               "gardner_a": 0.5}},
+    "mesh_generate": lambda p: {"target_elements": 120},
+    "mesh_reset": lambda p: {},
+    "seepage_bc_set": lambda p: {"bc_type": "total_head", "side": "left",
+                                 "value": 24.0},
+    "seepage_bc_clear": lambda p: {},
+    "transient_set": lambda p: {"stages": [{"time": 10.0,
+                                            "calculate_sf": True}]},
+    "water_grid_set": lambda p: {"points": [[20, 20, 10.0],
+                                            [70, 20, 5.0],
+                                            [45, 35, 0.0]]},
+    "water_grid_delete": lambda p: {},
+    "groundwater_run": lambda p: {"wait_seconds": 120},
 }
 
 
@@ -216,9 +234,37 @@ def _prep_ogr(ws, pid, tmp):
     return {"path": path}
 
 
+def _prep_mesh(ws, pid, tmp):
+    from ogr_api import call
+    call(ws, "mesh_generate", project_id=pid, target_elements=120)
+
+
+def _prep_conditions(ws, pid, tmp):
+    from ogr_api import call
+    call(ws, "hydraulic_set", project_id=pid, material="Soil",
+         properties={"ks": 1e-6})
+    call(ws, "hydraulic_set", project_id=pid, material="Base",
+         properties={"ks": 1e-6})
+    _prep_mesh(ws, pid, tmp)
+    for side, level in (("left", 24.0), ("right", 33.0)):
+        call(ws, "seepage_bc_set", project_id=pid, bc_type="total_head",
+             side=side, value=level)
+
+
+def _prep_grid(ws, pid, tmp):
+    from ogr_api import call
+    call(ws, "water_grid_set", project_id=pid,
+         points=[[20, 20, 10.0], [70, 20, 5.0], [45, 35, 0.0]])
+
+
 #: operation -> function(ws, project_id, tmp_dir) run BEFORE the measured
 #: step; it may return extra keyword arguments (a file path).
 PREPARE = {
+    "mesh_reset": _prep_mesh,
+    "seepage_bc_set": _prep_mesh,
+    "seepage_bc_clear": _prep_conditions,
+    "water_grid_delete": _prep_grid,
+    "groundwater_run": _prep_conditions,
     "load_delete": _prep_load,
     "seismic_record_delete": _prep_record,
     "support_type_delete": _prep_type,

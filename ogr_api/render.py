@@ -76,13 +76,18 @@ def _surface_path(res) -> Optional[tuple[list, list]]:
 def render_png(project, *, surfaces: Iterable = (), width: int = 900,
                height: int = 600, dpi: int = 100, labels: bool = True,
                title: Optional[str] = None,
-               slice_lines: bool = True) -> bytes:
+               slice_lines: bool = True, field=None,
+               free_surface=None) -> bytes:
     """PNG bytes of ``project`` with ``surfaces`` drawn on it.
 
     ``surfaces`` is a sequence of ``(label, LEMResult)``; each is drawn as
     the base of its slices, which is the surface the engine priced —
     including a tension-crack truncation or a composite segment, which a
     circle drawn from its centre and radius would not show.
+
+    ``field`` (v0.1.200) is ``(label, nodal values, mesh)``: filled
+    contours over the finite-element mesh, as the Interpret groundwater
+    window draws them; ``free_surface`` a list of (x, y), drawn dashed.
     """
     from matplotlib.backends.backend_agg import FigureCanvasAgg
     from matplotlib.figure import Figure
@@ -127,6 +132,21 @@ def render_png(project, *, surfaces: Iterable = (), width: int = 900,
             ax.text(cx, cy, mat.name, ha="center", va="center", fontsize=8,
                     zorder=6, bbox=dict(boxstyle="round,pad=0.2",
                                         fc="white", ec="none", alpha=0.7))
+
+    if field is not None:
+        from matplotlib.tri import Triangulation
+
+        label, values, mesh = field
+        tri = Triangulation([n.x for n in mesh.nodes],
+                            [n.y for n in mesh.nodes],
+                            [list(e.nodes) for e in mesh.elements])
+        cs = ax.tricontourf(tri, list(values), levels=16, cmap="viridis",
+                            alpha=0.9, zorder=2)
+        fig.colorbar(cs, ax=ax, label=label, shrink=0.8)
+    if free_surface:
+        ax.plot([p[0] for p in free_surface], [p[1] for p in free_surface],
+                color="#0b3d91", lw=2.0, ls="--", zorder=5,
+                label="free surface (P = 0)")
 
     for b in project.boundaries:
         if not getattr(b, "visible", True):
@@ -188,7 +208,7 @@ def render_png(project, *, surfaces: Iterable = (), width: int = 900,
                             [s.base_y_left, top], color=colour,
                             linewidth=0.5, alpha=0.5, zorder=8)
         ax.plot(xs, ys, color=colour, linewidth=2.2, zorder=9, label=label)
-    if surfaces:
+    if surfaces or free_surface:
         ax.legend(loc="best", fontsize=8)
 
     ax.margins(0.05)

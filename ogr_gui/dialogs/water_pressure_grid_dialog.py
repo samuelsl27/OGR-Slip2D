@@ -177,21 +177,9 @@ class WaterPressureGridDialog(QDialog):
 
 # ----------------------------------------------------------------------
 def parse_grid_csv_text(text: str) -> list[tuple[float, float, float]]:
-    """Parse (x, y, value) rows from CSV-ish text. Accepts comma,
-    semicolon, tab or whitespace separators; skips headers and blank or
-    comment lines. Exposed as a function for testability."""
-    out: list[tuple[float, float, float]] = []
-    for line in text.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        for sep in (",", ";", "\t"):
-            line = line.replace(sep, " ")
-        parts = [p for p in line.split() if p]
-        if len(parts) < 3:
-            continue
-        try:
-            out.append((float(parts[0]), float(parts[1]), float(parts[2])))
-        except ValueError:
-            continue  # header or non-numeric line
-    return out
+    """(x, y, value) rows from CSV-like text. v0.1.200 — moved to
+    ``ogr_core.hydraulic.water_pressure_grid.parse_grid_csv_text``, which
+    an agent's file goes through too; kept here under its old name."""
+    from ogr_core.hydraulic.water_pressure_grid import (
+        parse_grid_csv_text as _core)
+    return _core(text)
