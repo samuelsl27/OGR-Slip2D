@@ -114,6 +114,16 @@ def _flat_grid(p, value: float):
     return p.water_pressure_grid
 
 
+#: v0.1.202 — the grid's type is the groundwater method's and is passed to
+#: ``WaterPressureGrid.pore_pressure_at``; these grids are pore pressure.
+def _pp():
+    from ogr_core.hydraulic import GridValueType
+    return GridValueType.PORE_PRESSURE
+
+
+_PP = _pp()
+
+
 def _u(p, x: float, y: float, mat=None) -> float:
     from ogr_core.geometry import Vertex
     from ogr_core.hydraulic.pore_pressure import pore_pressure_at
@@ -141,7 +151,7 @@ class TestGridIsClippedByTheWaterTable:
         p = _slope_project()
         g = _flat_grid(p, 100.0)
         for y in (5.0, 25.0):
-            assert _u(p, 30.0, y) == g.pore_pressure_at(30.0, y, GAMMA_W)
+            assert _u(p, 30.0, y) == g.pore_pressure_at(30.0, y, GAMMA_W, _PP)
             assert abs(_u(p, 30.0, y) - 100.0) / 100.0 < 1e-12
 
     def test_water_table_forces_zero_above_and_leaves_below_intact(self):
@@ -154,9 +164,9 @@ class TestGridIsClippedByTheWaterTable:
         # exact equality — the clip is a literal ``return 0.0``.
         assert _u(p, 30.0, 20.0) == 0.0
         # Below it: the grid governs, bit for bit.
-        assert _u(p, 30.0, 10.0) == g.pore_pressure_at(30.0, 10.0, GAMMA_W)
+        assert _u(p, 30.0, 10.0) == g.pore_pressure_at(30.0, 10.0, GAMMA_W, _PP)
         # On it: not above, so not clipped.
-        assert _u(p, 30.0, 15.0) == g.pore_pressure_at(30.0, 15.0, GAMMA_W)
+        assert _u(p, 30.0, 15.0) == g.pore_pressure_at(30.0, 15.0, GAMMA_W, _PP)
 
     def test_piezometric_line_does_not_clip_a_grid(self):
         """Deliberate asymmetry: a piezometric line is a measurement, not
@@ -165,7 +175,7 @@ class TestGridIsClippedByTheWaterTable:
         p = _slope_project()
         g = _flat_grid(p, 100.0)
         _add_level(p, BoundaryType.PIEZOMETRIC, 15.0)
-        assert _u(p, 30.0, 20.0) == g.pore_pressure_at(30.0, 20.0, GAMMA_W)
+        assert _u(p, 30.0, 20.0) == g.pore_pressure_at(30.0, 20.0, GAMMA_W, _PP)
         assert _u(p, 30.0, 20.0) > 0.0
 
     def test_per_material_ru_still_overrides_the_grid(self):

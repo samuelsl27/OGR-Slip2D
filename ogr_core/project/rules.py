@@ -209,6 +209,21 @@ def set_seismic_records(project, records) -> bool:
 # ----------------------------------------------------------------------
 # v0.1.200 (spec 008, F3a) — the finite-element mesh and what hangs on it
 # ----------------------------------------------------------------------
+def grid_refusal(project) -> Optional[str]:
+    """Why the Water Pressure Grid would not be read, or None.
+
+    v0.1.202 — the reference enables the grid only with one of the three
+    grid groundwater methods, which is also where its type lives.
+    """
+    from ogr_core.hydraulic.water_pressure_grid import value_type_for_method
+
+    if value_type_for_method(project.settings.groundwater.method) is None:
+        return ("The Water Pressure Grid is read only with a grid "
+                "groundwater method (Project Settings > Groundwater > "
+                "Method), which also says what its values are.")
+    return None
+
+
 def set_fem_mesh(project, mesh) -> list[str]:
     """Install ``mesh`` and drop what belonged to the previous one; returns
     what was dropped, in words.

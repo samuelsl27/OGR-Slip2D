@@ -53,7 +53,7 @@ Author: Samuel Sáez López (UPCT)
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import InitVar, dataclass, field
 from enum import Enum
 from typing import Optional
 
@@ -69,15 +69,56 @@ class GridValueType(Enum):
     PORE_PRESSURE = "pore_pressure"
 
 
+#: What the values of the grid ARE, by groundwater method (v0.1.202).
+_METHOD_TYPES = {
+    "grid_total_head": GridValueType.TOTAL_HEAD,
+    "grid_pressure_head": GridValueType.PRESSURE_HEAD,
+    "grid_pore_pressure": GridValueType.PORE_PRESSURE,
+}
+
+
+def value_type_for_method(method) -> Optional[GridValueType]:
+    """The grid value type the groundwater ``method`` declares, or None
+    for a method that does not read the grid.
+
+    v0.1.202 — the METHOD is where the type lives, as in the reference:
+    "Set the desired Water Pressure Grid type in the Project Settings
+    dialog. Each point is defined by x and y coordinates, and a value,
+    corresponding to the Water Pressure Grid type (total head, pressure
+    head, or pore pressure) selected in Project Settings." Until this
+    version the grid carried its own ``value_type``, which did the
+    converting, and the method's kind was read by nobody (rule 7).
+    """
+    return _METHOD_TYPES.get(getattr(method, "value", method))
+
+
+def method_for_value_type(value_type) -> str:
+    """The groundwater method that reads a grid of ``value_type``."""
+    vt = value_type if isinstance(value_type, GridValueType) else \
+        GridValueType(value_type)
+    return f"grid_{vt.value}"
+
+
 @dataclass
 class WaterPressureGrid:
-    """Grid of water-pressure data points with lazy interpolation."""
+    """Grid of water-pressure data points with lazy interpolation.
+
+    The grid holds (x, y, value) only; what the values ARE is the
+    groundwater method's (:func:`value_type_for_method`, v0.1.202).
+    ``value_type`` is still accepted when a grid is BUILT, as the type the
+    caller believes it has (``declared_type``): it is never written to a
+    file and never converts anything, and the analysis refuses a model
+    whose method says otherwise (``check_analysis_settings``) instead of
+    ignoring either of them in silence.
+    """
 
     points: list[tuple[float, float, float]] = field(default_factory=list)
-    value_type: GridValueType = GridValueType.PORE_PRESSURE
+    value_type: InitVar[Optional[GridValueType]] = None
     interpolation: str = "tps"          # "tps" | "idw"
     idw_neighbours: int = 8
     allow_suction: bool = False         # keep u < 0 (unsaturated) or clamp
+    declared_type: Optional[GridValueType] = field(
+        default=None, repr=False, compare=False)
 
     # -- lazy TPS cache ------------------------------------------------
     _tps_weights: Optional["_np.ndarray"] = field(
@@ -85,13 +126,17 @@ class WaterPressureGrid:
     _tps_pts: Optional["_np.ndarray"] = field(
         default=None, repr=False, compare=False)
 
+    def __post_init__(self, value_type) -> None:
+        if value_type is not None:
+            self.declared_type = (value_type if isinstance(
+                value_type, GridValueType) else GridValueType(value_type))
+
     # ==================================================================
     # Serialisation
     # ==================================================================
     def to_dict(self) -> dict:
         return {
             "points": [list(p) for p in self.points],
-            "value_type": self.value_type.value,
             "interpolation": self.interpolation,
             "idw_neighbours": self.idw_neighbours,
             "allow_suction": self.allow_suction,
@@ -101,7 +146,10 @@ class WaterPressureGrid:
     def from_dict(cls, d: dict) -> "WaterPressureGrid":
         return cls(
             points=[tuple(p) for p in d.get("points", [])],
-            value_type=GridValueType(d.get("value_type", "pore_pressure")),
+            # A file written before v0.1.202 carries the grid's type; it is
+            # the type the grid WAS read with, which the project loader
+            # uses to keep the file's meaning (``Project.from_dict``).
+            value_type=d.get("value_type"),
             interpolation=d.get("interpolation", "tps"),
             idw_neighbours=int(d.get("idw_neighbours", 8)),
             allow_suction=bool(d.get("allow_suction", False)),
@@ -190,17 +238,19 @@ class WaterPressureGrid:
     # ==================================================================
     # Pore pressure at (x, y)
     # ==================================================================
-    def pore_pressure_at(self, x: float, y: float,
-                         gamma_w: float) -> Optional[float]:
-        """u [kPa] at (x, y), converting the grid value according to the
-        grid type. Suction (u < 0) is clamped to zero unless
-        ``allow_suction`` is set."""
+    def pore_pressure_at(self, x: float, y: float, gamma_w: float,
+                         value_type: GridValueType) -> Optional[float]:
+        """u [kPa] at (x, y), converting the grid value as ``value_type``
+        says: total head H gives gamma_w (H - y), pressure head P gives
+        gamma_w P, pore pressure is u itself. ``value_type`` is the
+        groundwater method's (:func:`value_type_for_method`). Suction
+        (u < 0) is clamped to zero unless ``allow_suction`` is set."""
         v = self.value_at(x, y)
         if v is None:
             return None
-        if self.value_type == GridValueType.TOTAL_HEAD:
+        if value_type == GridValueType.TOTAL_HEAD:
             u = gamma_w * (v - y)
-        elif self.value_type == GridValueType.PRESSURE_HEAD:
+        elif value_type == GridValueType.PRESSURE_HEAD:
             u = gamma_w * v
         else:  # PORE_PRESSURE
             u = v

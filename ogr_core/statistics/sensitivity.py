@@ -209,7 +209,9 @@ def run_sensitivity(
     from .probabilistic import (
         _NO_DETERMINISTIC,
         _NO_METHOD,
+        _admissibility_kwargs,
         _cannot_reevaluate,
+        counts_as_sample,
         _evaluate_on,
         _publish_method_losses,
         _publish_note,
@@ -289,8 +291,10 @@ def run_sensitivity(
         surface = _rebuild_surface(sd)
         if surface is None:
             continue
+        # v0.1.202 — the project's own screens, and only admissible
+        # points (``counts_as_sample``): see ``run_global_minimum``.
         search = GridSearch(method=method, num_slices=num_slices,
-                            min_area=0.0)
+                            min_area=0.0, **_admissibility_kwargs(project))
         sweeps: dict = {}
 
         for rv in usable:
@@ -325,7 +329,7 @@ def run_sensitivity(
                     r = _evaluate_on(clone, search, surface)
                 except Exception:  # noqa: BLE001
                     r = None
-                if r is not None and r.is_valid:
+                if counts_as_sample(r):
                     vs.values.append(x)
                     vs.fos.append(r.fos)
                 done += 1

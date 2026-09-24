@@ -843,8 +843,23 @@ class Project:
         # v0.1.23 — Water Pressure Grid
         wpg = data.get("water_pressure_grid")
         if wpg:
-            from ..hydraulic.water_pressure_grid import WaterPressureGrid
-            proj.water_pressure_grid = WaterPressureGrid.from_dict(wpg)
+            from ..hydraulic.water_pressure_grid import (
+                WaterPressureGrid, method_for_value_type,
+                value_type_for_method)
+            grid = WaterPressureGrid.from_dict(wpg)
+            # v0.1.202 — the method decides what the values are. A file
+            # that also carries the grid's own type was READ with that
+            # type, so when the two disagree the method takes the grid's,
+            # which keeps what the file meant (the ``vg_alpha`` criterion
+            # of v0.1.200). Measured: no stored model disagrees.
+            gw = proj.settings.groundwater
+            declared = grid.declared_type
+            if declared is not None:
+                current = value_type_for_method(gw.method)
+                if current is not None and current != declared:
+                    gw.method = method_for_value_type(declared)
+                grid.declared_type = None
+            proj.water_pressure_grid = grid
 
         # v0.1.25 — FE mesh
         fm = data.get("fem_mesh")

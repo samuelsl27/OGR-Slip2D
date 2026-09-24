@@ -804,6 +804,13 @@ _DICTS: dict[str, dict[str, str]] = {
         'Value:': 'Valor:',
         'Vertex Coordinate Table': 'Tabla de coordenadas de vértices',
         'Water Pressure Grid': 'Malla de presiones de agua',
+        # v0.1.202 — the grid's type is the groundwater method's.
+        'Total Head': 'Cabeza total',
+        'Pressure Head': 'Cabeza de presión',
+        '(not a grid method)': '(el método no es de malla)',
+        'Set by the groundwater method in Project Settings > Groundwater.':
+            'Lo fija el método de agua subterránea en Ajustes de proyecto > '
+            'Agua subterránea.',
         'Zoom': 'Zoom',
         '− Remove row': '− Quitar fila',
 

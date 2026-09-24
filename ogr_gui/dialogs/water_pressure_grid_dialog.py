@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 )
 
 from ogr_core.hydraulic import GridValueType, WaterPressureGrid
+from ogr_core.hydraulic.water_pressure_grid import value_type_for_method
 from ogr_gui.i18n import tr  # noqa: E402
 
 
@@ -46,19 +47,21 @@ class WaterPressureGridDialog(QDialog):
         v = QVBoxLayout(self)
 
         # --- type / interpolation row ---------------------------------
+        # v0.1.202 — the type is the groundwater METHOD's, as in the
+        # reference ("Set the desired Water Pressure Grid type in the
+        # Project Settings dialog"); shown here, changed there. This was a
+        # combo that stored a second, independent type on the grid.
         row = QHBoxLayout()
         row.addWidget(QLabel(tr("Grid type:")))
-        self.cbo_type = QComboBox()
-        for t, label in [
-            (GridValueType.TOTAL_HEAD, "Total Head"),
-            (GridValueType.PRESSURE_HEAD, "Pressure Head"),
-            (GridValueType.PORE_PRESSURE, "Pore Pressure"),
-        ]:
-            self.cbo_type.addItem(label, t)
-        i = self.cbo_type.findData(grid.value_type)
-        if i >= 0:
-            self.cbo_type.setCurrentIndex(i)
-        row.addWidget(self.cbo_type)
+        vt = value_type_for_method(project.settings.groundwater.method)
+        names = {GridValueType.TOTAL_HEAD: tr("Total Head"),
+                 GridValueType.PRESSURE_HEAD: tr("Pressure Head"),
+                 GridValueType.PORE_PRESSURE: tr("Pore Pressure")}
+        self.lbl_type = QLabel(names.get(vt, tr("(not a grid method)")))
+        self.lbl_type.setToolTip(tr(
+            "Set by the groundwater method in Project Settings > "
+            "Groundwater."))
+        row.addWidget(self.lbl_type)
 
         row.addWidget(QLabel(tr("Interpolation:")))
         self.cbo_interp = QComboBox()
@@ -166,7 +169,6 @@ class WaterPressureGridDialog(QDialog):
             pts.append((x, y, val))
         self.project.water_pressure_grid = WaterPressureGrid(
             points=pts,
-            value_type=self.cbo_type.currentData(),
             interpolation=self.cbo_interp.currentData(),
             idw_neighbours=self.spn_nb.value(),
             allow_suction=self.chk_suction.isChecked(),

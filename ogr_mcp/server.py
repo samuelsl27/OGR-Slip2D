@@ -1359,7 +1359,9 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
                        value_type: Annotated[Optional[Literal[
                            "total_head", "pressure_head", "pore_pressure"]],
                            Field(description="What the values are (m, m, "
-                                             "kPa).")] = None,
+                                             "kPa); sets the groundwater "
+                                             "method grid_<type>, where "
+                                             "the type lives.")] = None,
                        interpolation: Annotated[Optional[Literal[
                            "tps", "idw"]], Field(
                            description="Thin-plate spline or inverse "

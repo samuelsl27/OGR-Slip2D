@@ -202,7 +202,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.201"
+    VERSION = "0.1.202"
 
     def __init__(self) -> None:
         super().__init__()
@@ -955,12 +955,6 @@ class MainWindow(QMainWindow):
         self._attach_project(Project("Untitled"))
         self.terminal_dock.attach_context(self.project, self.canvas, self)
         self.command_stack.clear()
-        self.results_dock.show_result(None)
-        self.last_search_result = None
-        self.last_search_results: dict = {}
-        self.last_compute_warnings = []
-        self.last_statistics_notes = []
-        self.last_factor_report = None
         self.setWindowTitle(f"OGR Slip2D v{self.VERSION} — Untitled")
 
     def act_open(self) -> None:
@@ -3682,15 +3676,26 @@ class MainWindow(QMainWindow):
         except Exception:  # noqa: BLE001
             pass
         self.canvas.set_project(project)
-        # v0.1.201 — the statistics and the back analysis belong to the
-        # project they were computed on. New, Open and the demo kept the
-        # previous project's, and Show Statistics and the Interpret
-        # statistics menus went on showing them.
-        # (The notes panel keeps its own reset sites, in step with the
-        # factor report: see test_design_factor_report_gui_v1165.)
+        # v0.1.202 — everything computed on the previous project goes, in
+        # ONE place for New, Open and the demo. New and the demo cleared
+        # most of it each by hand and Open cleared none of it: after
+        # opening a file the results panel showed the previous project's
+        # result, and Interpret or Optimize Surfaces would have worked on
+        # its surfaces over the model just opened. (v0.1.201 moved the
+        # statistics here; the rest follows. The factor report and the
+        # notes are cleared together, which is what
+        # test_design_factor_report_gui_v1165 checks.)
+        self.results_dock.show_result(None)
+        self.last_search_result = None
+        self.last_search_results = {}
+        self.last_compute_warnings = []
+        self.last_statistics_notes = []
+        self.last_factor_report = None
         self._prob_result = None
         self._sens_result = None
         self._back_analysis_result = None
+        self._gw_solver = None
+        self.last_drawdown_sweep = None
         # Refresh the menu/toolbar enabled-state for the new project.
         self.refresh_action_availability()
         if hasattr(self, "_actions") and "stat_show" in self._actions:
@@ -3714,8 +3719,15 @@ class MainWindow(QMainWindow):
         # agent asks it; only the tooltips stay here, because they are
         # presentation. Until now these rules existed only as greyed menu
         # items, so any caller that was not this window could break them.
-        from ogr_core.project.rules import boundary_refusal
+        from ogr_core.project.rules import boundary_refusal, grid_refusal
         boundaries = self.project.boundaries
+
+        # v0.1.202 — the Water Pressure Grid only with a grid method, as
+        # in the reference; the method says what its values are.
+        if "wp_grid" in actions:
+            why = grid_refusal(self.project)
+            actions["wp_grid"].setEnabled(why is None)
+            actions["wp_grid"].setToolTip(tr(why) if why else "")
 
         def has_btype(bt) -> bool:
             return any(b.btype == bt for b in boundaries)
@@ -5121,12 +5133,6 @@ class MainWindow(QMainWindow):
         self._attach_project(build_demo_project())
         self.terminal_dock.attach_context(self.project, self.canvas, self)
         self.command_stack.clear()
-        self.last_search_result = None
-        self.last_search_results: dict = {}
-        self.last_compute_warnings = []
-        self.last_statistics_notes = []
-        self.last_factor_report = None
-        self.results_dock.show_result(None)
         self._install_demo_project()
         self.setWindowTitle(f"OGR Slip2D v{self.VERSION} — Demo slope")
         self.ogr_status.showMessage("Demo slope loaded.", 3000)

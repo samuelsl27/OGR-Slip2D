@@ -117,3 +117,9 @@ Plan corto antes de cada una. Al cerrar F4, `PENDING` del inventario vacío.
       análisis) y `results_query`; `ogr_slip2d/interpretation.py` con lo
       que preguntaba la ventana. Inventario: 113 cubiertas, 23 de
       interfaz, **0 pendientes**, techo 0 (el plan lo dejaba para F4).
+- [x] Bloque 4 (v0.1.202), antes de F4: *Abrir* limpia el proyecto
+      anterior; el retroanálisis con Janbu coincide con el solver; las
+      muestras de la estadística cuentan solo si son válidas y admisibles
+      (`lost_by_cause` en el resumen); el tipo de la rejilla de presiones es
+      el del método, y `water_grid_set(value_type=…)` fija el método en el
+      mismo paso de deshacer.

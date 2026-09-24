@@ -94,6 +94,7 @@ class MethodProbabilisticResult:
             "reliability_index_lognormal":
                 st.lognormal_reliability_index(),
             "failed_samples": self.failed_samples,
+            "lost_by_cause": self.notes.get("lost_by_cause"),
         }
 
 
@@ -386,6 +387,35 @@ _STEM_GM = "failed on the deterministic critical surface"
 _STEM_OS = "produced no valid surface"
 
 
+def counts_as_sample(r) -> bool:
+    """Whether an evaluated sample HAS a factor of safety.
+
+    v0.1.202 — valid AND admissible. The reference defines the probability
+    of failure over the VALID analyses only ("if the safety factor could
+    not be calculated for some analyses, then numtotal = total number of
+    VALID analyses"), and it reports a surface with m_alpha < 0.2, or with
+    a tensile base when that check is on, as an INVALID surface with an
+    error code in place of the factor (-112, -120). ``is_valid`` alone
+    counted those samples as survivors or failures.
+    """
+    return (r is not None and r.is_valid
+            and bool(getattr(r, "admissible", True)))
+
+
+def _admissibility_kwargs(project) -> dict:
+    """The project's own screens, for the search a sample is re-evaluated
+    with (v0.1.202: a bare ``GridSearch`` always screened m-alpha and
+    never the tensile check, whatever the project said)."""
+    settings = getattr(project, "settings", None)
+    if settings is None or not hasattr(settings, "admissibility_kwargs"):
+        return {}
+    return settings.admissibility_kwargs()
+
+
+_CODE_LABELS = {-120: "-120 tensile stress", -112: "-112 m-alpha",
+                -101: "inadmissible (-101)"}
+
+
 def _sample_failure(exc, r) -> str:
     """Label the way ONE sample was lost, for counting.
 
@@ -407,6 +437,11 @@ def _sample_failure(exc, r) -> str:
         return "raised %s" % type(exc).__name__
     if r is None:
         return "no result"
+    if r.is_valid and not getattr(r, "admissible", True):
+        # v0.1.202 — screened out: the reference's error code, from the
+        # one mapping (``interpretation.error_code``).
+        from ogr_slip2d.interpretation import error_code
+        return _CODE_LABELS.get(error_code(r), "inadmissible")
     return getattr(r, "reason", "") or getattr(r, "error_message",
                                                "") or "unstated"
 
@@ -424,6 +459,11 @@ def _search_failure(exc, run) -> str:
         return "raised %s" % type(exc).__name__
     if run is None:
         return "no result"
+    if run.critical is not None:
+        # v0.1.202 — ``critical`` falls back to an inadmissible surface
+        # when the search found no admissible one; that sample has no
+        # factor of safety either.
+        return "no admissible surface"
     return "no critical surface"
 
 
@@ -718,7 +758,7 @@ def run_global_minimum(
         if surface is None:
             continue
         search = GridSearch(method=method, num_slices=num_slices,
-                            min_area=0.0)
+                            min_area=0.0, **_admissibility_kwargs(project))
 
         mres = MethodProbabilisticResult(
             method_id=mid,
@@ -738,7 +778,7 @@ def run_global_minimum(
                 r = _evaluate_on(clone, search, surface)
             except Exception as e:  # noqa: BLE001
                 r, exc = None, e
-            if r is not None and r.is_valid:
+            if counts_as_sample(r):
                 values.append(r.fos)
                 mres.sample_index.append(i)
             else:
@@ -780,7 +820,14 @@ def run_global_minimum(
         # exactly where "check the variable ranges" still means something.
         # With 20 of 20 lost it used to be written onto an ``mres`` nobody
         # would ever read.
+        if mres.failed_samples:
+            # v0.1.202 — by cause, whenever any sample was lost: since
+            # samples screened out (-112, -120) have no factor of safety
+            # either, "how many, and why" is part of the answer.
+            mres.notes["lost_by_cause"] = _counted_reasons(counts)
         if mres.failed_samples > 0.2 * num_samples:
+            # The sentence stays as it was (test_probabilistic_all_failed_
+            # v1169 holds it); the causes are in ``lost_by_cause``.
             mres.notes["warning"] = (
                 f"{mres.failed_samples} of {num_samples} samples could "
                 f"not be evaluated; check the variable ranges.")
@@ -867,6 +914,7 @@ class OverallSlopeResult:
             "critical_probabilistic_beta": (
                 cp.reliability_index if cp else None),
             "failed_samples": self.failed_samples,
+            "lost_by_cause": self.notes.get("lost_by_cause"),
         }
 
 
@@ -1025,7 +1073,7 @@ def run_overall_slope(
             done += 1
             if progress_cb:
                 progress_cb(done, total)
-            if run is None or run.critical is None:
+            if run is None or not counts_as_sample(run.critical):
                 ores.failed_samples += 1
                 # v0.1.169 (D127) — a search that blew up and a search that
                 # ran and found nothing admissible are not the same fault,
@@ -1040,7 +1088,9 @@ def run_overall_slope(
             # Accumulate per-surface statistics for the critical
             # probabilistic surface
             for ev in run.evaluations:
-                if not ev.is_valid:
+                # v0.1.202 — admissible ones only: an inadmissible surface
+                # has no factor of safety to accumulate.
+                if not counts_as_sample(ev):
                     continue
                 sd = (ev.surface.to_dict()
                       if hasattr(ev.surface, "to_dict") else None)
@@ -1076,6 +1126,8 @@ def run_overall_slope(
                 key=lambda sp: (sp.probability_of_failure,
                                 -sp.reliability_index))
         ores.notes["surfaces_tracked"] = len(per_surface)
+        if ores.failed_samples:
+            ores.notes["lost_by_cause"] = _counted_reasons(counts)
         if ores.failed_samples:
             ores.notes["warning"] = (
                 f"{ores.failed_samples} of {num_samples} searches "

@@ -105,14 +105,18 @@ class TestGlobalMinimumEngine:
         # against 0.89288, a tolerance apart — which is the point of the
         # change, not a casualty of it: the engine used to ignore the
         # convergence settings the user chose.
+        # v0.1.202 — the project's own admissibility screens, and a sample
+        # counts only when valid AND admissible: the reference's "numtotal
+        # = total number of VALID analyses", where -112 / -120 are invalid.
         search = GridSearch(method=build_method(p, "bishop_simplified", 18),
-                            num_slices=18, min_area=0.0)
+                            num_slices=18, min_area=0.0,
+                            **p.settings.admissibility_kwargs())
         manual = []
         for i in range(n):
             clone = clone_project(p)
             apply_sample(clone, [v], {v.key: samples[v.key][i]})
             r = search.evaluate_circle(clone, surface)
-            if r is not None and r.is_valid:
+            if r is not None and r.is_valid and r.admissible:
                 manual.append(r.fos)
         assert len(manual) == len(engine)
         for a, b in zip(manual, engine):

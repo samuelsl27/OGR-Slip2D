@@ -128,8 +128,10 @@ def pore_pressure_at(
         and ppt not in (PorePressureType.CONSTANT,
                         PorePressureType.RU_COEFFICIENT)
     ):
+        # v0.1.202 — the method says what the values are.
+        from .water_pressure_grid import value_type_for_method
         u = project.water_pressure_grid.pore_pressure_at(
-            point.x, point.y, gamma_w)
+            point.x, point.y, gamma_w, value_type_for_method(_gw_method))
         if u is None:
             return 0.0
         # v0.1.62 — the third documented difference between a water table

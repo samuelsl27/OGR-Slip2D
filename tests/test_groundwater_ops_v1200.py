@@ -852,7 +852,8 @@ class TestTheWaterGrid:
         out = call(ws, "water_grid_set", project_id=pid,
                    points=[[0, 0, 50.0], [20, 0, 40.0], [10, 10, 0.0]])
         assert out["points"] == 3
-        assert any("grid_*" in n for n in out["notes"]), out
+        assert any("only read with a grid method" in n
+                   for n in out["notes"]), out
         folder = Path(tempfile.mkdtemp(prefix="ogr_grid_"))
         f = folder / "grid.csv"
         f.write_text("x;y;u\n0;0;50\n20;0;40\n10;10;0\n5;5;20\n",

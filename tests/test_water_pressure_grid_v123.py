@@ -61,52 +61,55 @@ class TestInterpolators:
 
 
 class TestGridTypes:
+    # v0.1.202 — the type is the groundwater METHOD's and is passed to
+    # ``pore_pressure_at``; the grid holds (x, y, value) only.
     def test_total_head_hydrostatic(self):
         # Constant total head H = 20 → u = γw·(20 − y): exact anywhere.
-        g = WaterPressureGrid(points=_plane_points(lambda x, y: 20.0),
-                              value_type=GridValueType.TOTAL_HEAD)
+        g = WaterPressureGrid(points=_plane_points(lambda x, y: 20.0))
         for y in (0.0, 5.0, 12.5, 19.0):
-            u = g.pore_pressure_at(10.0, y, GW)
+            u = g.pore_pressure_at(10.0, y, GW, GridValueType.TOTAL_HEAD)
             assert abs(u - GW * (20.0 - y)) < 1e-3, y
 
     def test_total_head_suction_clamped_by_default(self):
-        g = WaterPressureGrid(points=_plane_points(lambda x, y: 20.0),
-                              value_type=GridValueType.TOTAL_HEAD)
-        assert g.pore_pressure_at(10.0, 25.0, GW) == 0.0
+        g = WaterPressureGrid(points=_plane_points(lambda x, y: 20.0))
+        assert g.pore_pressure_at(10.0, 25.0, GW,
+                                  GridValueType.TOTAL_HEAD) == 0.0
 
     def test_total_head_suction_kept_when_allowed(self):
         g = WaterPressureGrid(points=_plane_points(lambda x, y: 20.0),
-                              value_type=GridValueType.TOTAL_HEAD,
                               allow_suction=True)
-        u = g.pore_pressure_at(10.0, 25.0, GW)
+        u = g.pore_pressure_at(10.0, 25.0, GW, GridValueType.TOTAL_HEAD)
         assert abs(u - GW * (20.0 - 25.0)) < 1e-3
         assert u < 0
 
     def test_pressure_head_conversion(self):
-        g = WaterPressureGrid(points=_plane_points(lambda x, y: 4.0),
-                              value_type=GridValueType.PRESSURE_HEAD)
-        assert abs(g.pore_pressure_at(7.0, 3.0, GW) - 4.0 * GW) < 1e-3
+        g = WaterPressureGrid(points=_plane_points(lambda x, y: 4.0))
+        assert abs(g.pore_pressure_at(7.0, 3.0, GW,
+                                      GridValueType.PRESSURE_HEAD)
+                   - 4.0 * GW) < 1e-3
 
     def test_pore_pressure_direct(self):
-        g = WaterPressureGrid(points=_plane_points(lambda x, y: 55.5),
-                              value_type=GridValueType.PORE_PRESSURE)
-        assert abs(g.pore_pressure_at(1.0, 1.0, GW) - 55.5) < 1e-3
+        g = WaterPressureGrid(points=_plane_points(lambda x, y: 55.5))
+        assert abs(g.pore_pressure_at(1.0, 1.0, GW,
+                                      GridValueType.PORE_PRESSURE)
+                   - 55.5) < 1e-3
 
     def test_empty_grid_returns_none(self):
         g = WaterPressureGrid()
         assert g.value_at(0, 0) is None
-        assert g.pore_pressure_at(0, 0, GW) is None
+        assert g.pore_pressure_at(
+            0, 0, GW, GridValueType.PORE_PRESSURE) is None
 
 
 class TestSerialisation:
     def test_round_trip(self):
         g = WaterPressureGrid(points=[(1, 2, 3.5), (4, 5, 6.5)],
-                              value_type=GridValueType.TOTAL_HEAD,
                               interpolation="idw", idw_neighbours=4,
                               allow_suction=True)
         g2 = WaterPressureGrid.from_dict(g.to_dict())
         assert g2.points == [(1, 2, 3.5), (4, 5, 6.5)]
-        assert g2.value_type == GridValueType.TOTAL_HEAD
+        # v0.1.202 — the type is not the grid's to store.
+        assert "value_type" not in g.to_dict()
         assert g2.interpolation == "idw"
         assert g2.idw_neighbours == 4
         assert g2.allow_suction is True
@@ -114,13 +117,13 @@ class TestSerialisation:
     def test_project_round_trip(self):
         from ogr_core.project import Project
         p = Project(name="wpg")
+        p.settings.groundwater.method = "grid_pressure_head"
         p.water_pressure_grid = WaterPressureGrid(
-            points=[(0, 0, 10.0), (5, 5, 12.0)],
-            value_type=GridValueType.PRESSURE_HEAD)
+            points=[(0, 0, 10.0), (5, 5, 12.0)])
         d = p.to_dict()
         p2 = Project.from_dict(d)
         assert p2.water_pressure_grid is not None
-        assert p2.water_pressure_grid.value_type == GridValueType.PRESSURE_HEAD
+        assert p2.settings.groundwater.method == "grid_pressure_head"
         assert len(p2.water_pressure_grid.points) == 2
 
     def test_project_without_grid_round_trip(self):
@@ -140,8 +143,7 @@ class TestPorePressureIntegration:
         # grid: H = 30 everywhere.
         p.water_pressure_grid = WaterPressureGrid(
             points=[(x, y, 30.0) for x in (0, 40, 80, 130)
-                    for y in (0, 20, 45)],
-            value_type=GridValueType.TOTAL_HEAD)
+                    for y in (0, 20, 45)])
         return p
 
     def test_grid_governs_water_driven_materials(self):

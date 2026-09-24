@@ -163,6 +163,26 @@ def check_analysis_settings(project) -> list[str]:
     if why:
         problems.append(why)
 
+    # v0.1.202 — a grid built with a type (``value_type=``) that the
+    # groundwater method contradicts: the method decides how the values
+    # are read, and reading them one way while the caller meant the other
+    # is the quiet wrong answer this function exists to refuse.
+    grid = getattr(project, "water_pressure_grid", None)
+    declared = getattr(grid, "declared_type", None)
+    if declared is not None:
+        from ogr_core.hydraulic.water_pressure_grid import (
+            method_for_value_type, value_type_for_method)
+        method = project.settings.groundwater.method
+        current = value_type_for_method(method)
+        if current is not None and current != declared:
+            problems.append(
+                f"The water pressure grid was built as "
+                f"{declared.value.replace('_', ' ')} values, but the "
+                f"groundwater method is {method}. The method decides how "
+                f"the grid is read: set it to "
+                f"{method_for_value_type(declared)}, or build the grid "
+                f"without a type.")
+
     # v0.1.77 — ``pore_pressure`` answers 0.0 when the finite-element
     # field is missing, so computing without one reports a dry slope in
     # silence. The guard turns that into a refusal.

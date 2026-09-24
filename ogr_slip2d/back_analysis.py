@@ -160,8 +160,17 @@ def _sums_at_fixed_fos(slices, surface, target_fos, kh, kv, elevation,
                 driving += kh * W_eff * (y_g - circle.centre_y) \
                     / max(circle.radius, 1e-9)
         else:
-            # Janbu: horizontal force equilibrium
-            resisting += term * math.cos(alpha)
+            # Janbu: horizontal force equilibrium. The solver divides each
+            # term by n_alpha = cos²(alpha)·(1 + tan(alpha)·tan(phi)/F),
+            # which is cos(alpha)·m_alpha; ``term`` is already over
+            # m_alpha, so it is DIVIDED by cos(alpha) once more.
+            #
+            # v0.1.202 — this multiplied by cos(alpha): a factor cos²
+            # (alpha) off the solver, on the unsafe side. Measured on a
+            # 10 m slope: the back analysis said a surface needed 217 kN/m
+            # to reach the factor of safety the solver gives it with no
+            # support at all (1.39263), where the answer is 0.
+            resisting += term / math.cos(alpha)
             driving += slide_sign * W_eff * math.tan(alpha) + kh * W_eff
 
     if is_bishop:
@@ -188,7 +197,23 @@ def required_force(slices, surface, target_fos, method_id="bishop_simplified",
         return None
     if not (math.isfinite(target_fos) and target_fos > 0):
         return None
-    sums = _sums_at_fixed_fos(slices, surface, target_fos, kh, kv,
+    # v0.1.202 — Janbu Corrected iterates on the UNCORRECTED factor and
+    # multiplies by Janbu's (1973) f0 at the end, so a corrected target F
+    # is an uncorrected F/f0 inside the sums and in the force below. This
+    # used the corrected target throughout: 269 kN/m "needed" where the
+    # surface already stood at the target unsupported.
+    f_eval = target_fos
+    if method_id == "janbu_corrected":
+        from types import SimpleNamespace
+
+        from ogr_slip2d.methods.janbu import _janbu_correction_factor
+        holder = (slices if hasattr(slices, "slices")
+                  else SimpleNamespace(slices=list(slices)))
+        f0 = _janbu_correction_factor(None, surface, holder)
+        if not f0 > 0:
+            return None
+        f_eval = target_fos / f0
+    sums = _sums_at_fixed_fos(slices, surface, f_eval, kh, kv,
                               elevation, method_id)
     if sums is None:
         return None
@@ -208,9 +233,9 @@ def required_force(slices, surface, target_fos, method_id="bishop_simplified",
     # search's own converged evaluation instead.
 
     # active:  F = R / (D - T·arm)   ->  T = (D - R/F) / arm
-    res.active_force = (driving - resisting / target_fos) / arm
+    res.active_force = (driving - resisting / f_eval) / arm
     # passive: F = (R + T·arm) / D   ->  T = (F·D - R) / arm
-    res.passive_force = (target_fos * driving - resisting) / arm
+    res.passive_force = (f_eval * driving - resisting) / arm
 
     # A negative value means the surface already exceeds the target and
     # needs no support; report zero rather than a meaningless negative.

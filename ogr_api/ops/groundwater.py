@@ -599,11 +599,10 @@ def water_grid_set(ws, project_id: Optional[str] = None,
                    idw_neighbours: Optional[int] = None,
                    allow_suction: Optional[bool] = None) -> dict:
     """Define the water pressure grid (points or a CSV file) or change its
-    options."""
-    from ogr_core.hydraulic.water_pressure_grid import (GridValueType,
-                                                        WaterPressureGrid,
-                                                        parse_grid_csv_text)
-    from ogr_core.hydraulic.pore_pressure import _GRID_METHODS
+    options; ``value_type`` sets the groundwater method that reads it."""
+    from ogr_core.hydraulic.water_pressure_grid import (
+        GridValueType, WaterPressureGrid, method_for_value_type,
+        parse_grid_csv_text, value_type_for_method)
 
     if points is not None and csv_path is not None:
         raise Conflict("Give points or csv_path, not both.")
@@ -636,8 +635,6 @@ def water_grid_set(ws, project_id: Optional[str] = None,
                                   "csv_path.")
         grid = WaterPressureGrid(
             points=list(rows if rows is not None else old.points),
-            value_type=vt or (old.value_type if old else
-                              GridValueType.PORE_PRESSURE),
             interpolation=interpolation or (old.interpolation if old
                                             else "tps"),
             idw_neighbours=nb or (old.idw_neighbours if old else 8),
@@ -646,16 +643,20 @@ def water_grid_set(ws, project_id: Optional[str] = None,
         project.water_pressure_grid = grid
         notes = []
         n = len(grid.points)
-        method = project.settings.groundwater.method
-        if method not in _GRID_METHODS:
-            notes.append(f"The groundwater method is {method!r}: the grid "
-                         f"is only read with a grid_* method (settings_set "
-                         f"groundwater.method).")
-        elif method != f"grid_{grid.value_type.value}":
-            notes.append(f"The method says {method!r} and the grid's "
-                         f"value_type {grid.value_type.value!r}: the grid's "
-                         f"value_type is what converts the values, the "
-                         f"method's kind is not read.")
+        gw = project.settings.groundwater
+        # v0.1.202 — the type of the values is the groundwater METHOD's, as
+        # in the reference; ``value_type`` here sets that method, in the
+        # same undo step.
+        if vt is not None and gw.method != method_for_value_type(vt):
+            notes.append(f"Groundwater method set to "
+                         f"{method_for_value_type(vt)} (was {gw.method}).")
+            gw.method = method_for_value_type(vt)
+            project._notify("settings_changed")
+        current = value_type_for_method(gw.method)
+        if current is None:
+            notes.append(f"The groundwater method is {gw.method!r}: the "
+                         f"grid is only read with a grid method; pass "
+                         f"value_type (or settings_set groundwater.method).")
         if grid.interpolation == "tps":
             if n > 300:
                 notes.append(f"{n} points: above 300 the grid is "
@@ -666,7 +667,9 @@ def water_grid_set(ws, project_id: Optional[str] = None,
             if nb is not None and n <= 300:
                 notes.append("idw_neighbours is only read when the TPS "
                              "falls back to IDW.")
-        return {"points": n, "value_type": grid.value_type.value,
+        return {"points": n,
+                "value_type": current.value if current else None,
+                "method": gw.method,
                 "interpolation": grid.interpolation,
                 "idw_neighbours": grid.idw_neighbours,
                 "allow_suction": grid.allow_suction, "notes": notes}
