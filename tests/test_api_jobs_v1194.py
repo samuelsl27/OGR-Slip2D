@@ -177,7 +177,18 @@ class TestStopAndFailure:
             out = call(ws, "job_cancel", job_id=job.id)
             assert out["state"] == "cancelled", out
             assert not _alive(job.proc.pid)
+            # v0.1.205 — a moment for the condemned to die. On POSIX the
+            # cancel SIGKILLs the whole process group and waits for the
+            # worker only; delivery to the pool's processes is asynchronous,
+            # and on GitHub's Linux with Python 3.13 one was caught between
+            # the signal and its death ("orphaned processes [3033]"; 3.11
+            # and 3.12 passed the same run). An orphan — a process outside
+            # the group, which nobody signalled — is still alive after this.
             survivors = [k for k in kids if _alive(k)]
+            deadline = time.time() + 5.0
+            while survivors and time.time() < deadline:
+                time.sleep(0.1)
+                survivors = [k for k in survivors if _alive(k)]
             assert not survivors, f"orphaned processes {survivors}"
         finally:
             ws.shutdown()

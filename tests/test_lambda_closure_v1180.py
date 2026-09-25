@@ -171,6 +171,15 @@ F_M_PREMATURO = 0.552329138
 #: The slices the bank runs this problem with.
 N_DOVELAS = 50
 
+#: How close "did not move" is (v0.1.205). The two factors this file pins
+#: were measured on Windows with Python 3.14; on GitHub's Linux with Python
+#: 3.12 the same model lands 2e-15 away (0.5592600533686019 for ...025 and
+#: 0.5559372612135633 for ...651), which is the last bits of a double moving
+#: with the platform's arithmetic, not the engine. What these cases guard is
+#: that a change to what an exit SAYS did not move what it is WORTH, and any
+#: such move would be many orders above this.
+NO_MOVE = 1e-12
+
 _CACHE: dict = {}
 
 
@@ -441,25 +450,43 @@ class TestTheJumpWasAPrematureAcceptance:
             "The engine as shipped returns one." % (len(seen), sorted(seen)))
 
     def test_the_old_acceptance_is_two_valued_and_the_extra_one_is_early(self):
+        """The premature value exists only with D145 off, and it is early.
+
+        v0.1.205 — HOW MANY of the thirteen adjacent doubles take each road
+        is a one-bit phenomenon, and it depends on the platform: on Windows
+        with Python 3.14 (where this was measured) they split between the
+        premature value and the attractor; on GitHub's Linux with Python 3.12
+        all thirteen take the premature one. This case asserted the split,
+        so it failed there for a reason that is not a defect. What it keeps
+        is what the refutation of D146 rests on, and holds on both: with the
+        acceptance off the premature value appears, it is admitted on an
+        EARLIER pass than the shipped acceptance admits the attractor, and
+        nothing else appears.
+        """
         system = _system()
+        shipped = {(round(st.fos, 9), st.passes)
+                   for st in (_moment(system, lam)
+                              for lam in _adjacent(LAMBDA_SALTO))}
         with _pair_off():
             pairs = {(round(st.fos, 9), st.passes)
                      for st in (_moment(system, lam)
                                 for lam in _adjacent(LAMBDA_SALTO))}
-        assert len(pairs) == 2, (
-            "with the D145 acceptance off, F_m takes %d values over thirteen "
-            "adjacent doubles: %s. The measurement that opened this was two."
-            % (len(pairs), sorted(pairs)))
-        by_value = dict(pairs)
-        early = min(by_value.items(), key=lambda kv: kv[1])
-        late = max(by_value.items(), key=lambda kv: kv[1])
-        assert early[1] < late[1], "both values were admitted on the same pass"
-        assert abs(early[0] - F_M_PREMATURO) < 1e-6, (
-            "the value admitted first is %.9f and not the %.9f the ficha "
-            "calls a second fixed point" % (early[0], F_M_PREMATURO))
-        assert abs(late[0] - F_M_ATRACTOR) < 1e-6, (
-            "the value admitted last is %.9f and not the attractor %.9f"
-            % (late[0], F_M_ATRACTOR))
+        stray = [v for v, _n in pairs
+                 if abs(v - F_M_PREMATURO) >= 1e-6
+                 and abs(v - F_M_ATRACTOR) >= 1e-6]
+        assert not stray, (
+            "with the D145 acceptance off, F_m takes values that are neither "
+            "the attractor nor the premature one: %s" % sorted(pairs))
+        early = [n for v, n in pairs if abs(v - F_M_PREMATURO) < 1e-6]
+        assert early, (
+            "with the D145 acceptance off, the premature %.9f never appears "
+            "over thirteen adjacent doubles: %s. The fixture has stopped "
+            "reproducing the ficha." % (F_M_PREMATURO, sorted(pairs)))
+        shipped_pass = min(n for _v, n in shipped)
+        assert max(early) < shipped_pass, (
+            "the premature value is admitted on pass %d, not before the %d "
+            "on which the shipped acceptance admits the attractor"
+            % (max(early), shipped_pass))
 
     def test_tightening_the_tolerance_undoes_it(self):
         """The tie-breaker, and the reason the word "bistable" does not fit.
@@ -620,7 +647,8 @@ class TestItVetoesExactlyAsBefore:
     def test_the_factor_does_not_move(self):
         with _pair_off():
             r = _evaluate(TOL_FICHA)
-        assert r.fos == 0.5559372612135651, (
+        assert math.isclose(r.fos, 0.5559372612135651, rel_tol=NO_MOVE,
+                            abs_tol=0.0), (
             "the factor this exit hands back moved to %r. This version was "
             "supposed to change the reason and nothing else." % (r.fos,))
 
@@ -651,7 +679,8 @@ class TestASolvedRootStillSaysNothing:
 
     def test_the_factor_of_the_solved_root_does_not_move_either(self):
         r = _evaluate(TOL_FICHA)
-        assert r.fos == 0.5592600533686025, (
+        assert math.isclose(r.fos, 0.5592600533686025, rel_tol=NO_MOVE,
+                            abs_tol=0.0), (
             "the factor on the closing path moved to %r" % (r.fos,))
 
 

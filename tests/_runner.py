@@ -98,9 +98,25 @@ def _raises(exc_type):
     raise AssertionError(f"Expected {exc_type.__name__}, no exception raised")
 
 
+class Skipped(BaseException):
+    """``pytest.skip`` in this runner: the test cannot be measured HERE.
+
+    v0.1.205 — the shim had no ``skip``, so a test that called it failed with
+    an AttributeError instead: on GitHub, where the verification bank does
+    not exist, ``test_the_fifteen_sheets_give_what_they_gave`` turned the CI
+    red for a reason that was not a defect. A ``BaseException``, as pytest's
+    own, so that a test's ``except Exception`` cannot swallow it.
+    """
+
+
+def _skip(reason: str = ""):
+    raise Skipped(reason)
+
+
 class _FakePytest:
     approx = staticmethod(_approx)
     raises = staticmethod(_raises)
+    skip = staticmethod(_skip)
 
 
 sys.modules["pytest"] = _FakePytest()  # type: ignore
@@ -357,21 +373,27 @@ def _run_method(instance, method):
 
 
 def run_test(cls, method):
-    """Run one test: ``(None, None)`` if it passed, else ``(why, traceback)``.
+    """Run one test: ``(outcome, why, traceback)``, with ``outcome`` one of
+    ``"passed"``, ``"failed"`` and ``"skipped"``.
 
     v0.1.203 — ``SystemExit`` is a failure of that test, like any other
     exception. Code under test that calls ``sys.exit`` (argparse does, on an
     option it does not know) used to escape the run loop and end the WHOLE
     suite there, with no totals: one test's failure cost every file after
     it. ``KeyboardInterrupt`` still stops the run, as it should.
+
+    v0.1.205 — ``pytest.skip`` is a third outcome, counted apart: neither a
+    pass (it measured nothing) nor a failure (nothing was wrong).
     """
     try:
         _run_method(cls(), method)
-        return None, None
+        return "passed", None, None
+    except Skipped as e:
+        return "skipped", f"{e}", None
     except AssertionError as e:
-        return f"{e}", traceback.format_exc()
+        return "failed", f"{e}", traceback.format_exc()
     except (Exception, SystemExit) as e:  # noqa: BLE001
-        return f"{type(e).__name__}: {e}", traceback.format_exc()
+        return "failed", f"{type(e).__name__}: {e}", traceback.format_exc()
 
 
 def main(tests_dir: Path, patterns=(), k: str | None = None,
@@ -453,6 +475,7 @@ def main(tests_dir: Path, patterns=(), k: str | None = None,
 
     passed = 0
     failed = 0
+    skipped = 0
     fail_details: list[tuple[str, str]] = []
 
     total_tests = len(declared) if declared is not None else 0
@@ -462,7 +485,7 @@ def main(tests_dir: Path, patterns=(), k: str | None = None,
     w = len(str(total_tests)) if total_tests else 4
 
     def _tag() -> str:
-        done = passed + failed
+        done = passed + failed + skipped
         if not total_tests:
             return f"[{done:>{w}}]"
         return f"[{done:>{w}}/{total_tests} {100.0 * done / total_tests:3.0f}%]"
@@ -493,17 +516,24 @@ def main(tests_dir: Path, patterns=(), k: str | None = None,
                 continue
             print(f"  {name}:")
             for m_name, m in methods:
-                why, tb = run_test(cls, m)
-                if why is None:
+                outcome, why, tb = run_test(cls, m)
+                if outcome == "passed":
                     passed += 1
                     print(f"    {_tag()} ✓ {m_name}")
+                elif outcome == "skipped":
+                    skipped += 1
+                    print(f"    {_tag()} ○ {m_name} — skipped: {why}")
                 else:
                     failed += 1
                     print(f"    {_tag()} ✗ {m_name}: {why}")
                     fail_details.append((f"{name}.{m_name}", tb))
 
     print("\n" + "=" * 60)
-    print(f"Total: {passed + failed}    Passed: {passed}    Failed: {failed}")
+    # A skip is counted apart and named: it is neither a pass (it measured
+    # nothing) nor a failure (nothing was wrong). Absent when there is none,
+    # so a run without skips prints exactly what it always printed.
+    print(f"Total: {passed + failed + skipped}    Passed: {passed}    "
+          f"Failed: {failed}" + (f"    Skipped: {skipped}" if skipped else ""))
     # Repeated after the totals on purpose: a green partial run pasted
     # into a changelog or a release check is indistinguishable from a
     # green full suite unless the line travels with the numbers.

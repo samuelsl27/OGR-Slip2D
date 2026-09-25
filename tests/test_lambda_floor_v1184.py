@@ -336,15 +336,26 @@ class TestItSpendsLessToSayTheSameThing:
     """Rule 7: an adjustment that changes nothing is worse than none."""
 
     def test_the_cut_saves_the_turns_at_the_floor(self):
-        for mid, ahorro in (("spencer", 3), ("gle_morgenstern_price", 3)):
+        """A few turns, and never none.
+
+        v0.1.205 — this case pinned the count: 3 for both methods, measured
+        on Windows with Python 3.14. On GitHub's Linux with Python 3.12 GLE
+        saves 4, because WHERE the bracket collapses onto adjacent doubles is
+        decided in the last bit of the arithmetic, and so is how many turns
+        remain at the floor. The count is the platform's; what the cut owes
+        is that it saves some and not many — every turn at the floor is one
+        solve — and the exact law, which holds on both platforms, is pinned
+        below: the budget beyond the floor is saved whole.
+        """
+        for mid in ("spencer", "gle_morgenstern_price"):
             _c, con = _run(mid, cut=True)
             _s, sin = _run(mid, cut=False)
-            assert len(sin) - len(con) == ahorro, (
-                "%s saves %d inner solves and not %d (%d against %d). Each "
-                "turn past the floor is exactly one solve, because the "
-                "double-solve path needs a branch pair to fail and the ends "
-                "already produced good ones."
-                % (mid, len(sin) - len(con), ahorro, len(con), len(sin)))
+            ahorro = len(sin) - len(con)
+            assert 1 <= ahorro <= 5, (
+                "%s saves %d inner solves (%d against %d): a few turns at the "
+                "floor are what the cut removes, measured 3 on Windows and "
+                "3-4 on Linux, never none and never many."
+                % (mid, ahorro, len(con), len(sin)))
 
     def test_the_published_iteration_count_drops_too(self):
         for mid in ("spencer", "gle_morgenstern_price"):
@@ -411,12 +422,18 @@ class TestTheBudgetIsWhereItBites:
                 "200. The cut is not firing." % (mid, len(corto), len(largo)))
 
     def test_the_saving_grows_with_the_budget_and_the_answer_does_not(self):
+        """The extra budget is saved WHOLE: exactly 150 more at 200 than at
+        50, on every platform (v0.1.205: this pinned 153, which is 150 plus
+        the three turns at the floor of Windows; GLE on Linux has four)."""
         for mid in ("spencer", "gle_morgenstern_price"):
+            con50, tc50 = _run(mid, cut=True, max_it=50)
+            sin50, ts50 = _run(mid, cut=False, max_it=50)
             con, tc = _run(mid, cut=True, max_it=200)
             sin, ts = _run(mid, cut=False, max_it=200)
-            assert len(ts) - len(tc) == 153, (
-                "%s saves %d inner solves at a budget of 200, not 153"
-                % (mid, len(ts) - len(tc)))
+            a50, a200 = len(ts50) - len(tc50), len(ts) - len(tc)
+            assert a200 - a50 == 150, (
+                "%s saves %d inner solves at a budget of 200 and %d at 50: "
+                "the 150 extra were not all saved" % (mid, a200, a50))
             assert con.fos == sin.fos
 
 

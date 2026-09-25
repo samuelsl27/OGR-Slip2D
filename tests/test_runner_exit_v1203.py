@@ -7,6 +7,11 @@ Invariant protected: ``tests/_runner.py::run_test`` turns a ``SystemExit``
 raised by a test into that test's failure, with its reason, just like any
 other exception. An assertion keeps its message; a pass is a pass.
 
+v0.1.205 — and ``pytest.skip`` is a third outcome, "skipped", with its
+reason: the shim had no ``skip``, so the one test that needs the
+verification bank failed on GitHub (where the bank does not exist) with an
+AttributeError. A skip is not a pass either: it is counted apart.
+
 Why this file exists. On 2026-09-24 the full suite for v0.1.202 stopped at
 44 % with no totals. The test file of the next version was already in
 ``tests/``, and one of its tests called ``ogr_mcp.cli.main(["--attach"])``
@@ -49,6 +54,18 @@ class _Cases:
     def test_exits(self):
         sys.exit(2)
 
+    # The skip of the runner UNDER TEST, not ``import pytest``: that is the
+    # shim of the runner running this file, whose Skipped is another class
+    # and would escape to it (both of these cases came out skipped that way).
+    def test_skips(self):
+        _R._FakePytest.skip("the bank is not on this machine")
+
+    def test_swallows_everything(self):
+        try:
+            _R._FakePytest.skip("still a skip")
+        except Exception:                   # noqa: BLE001 - the point
+            raise AssertionError("a test's except Exception caught the skip")
+
     def test_asserts(self):
         assert 1 == 2, "one is not two"
 
@@ -61,16 +78,32 @@ class _Cases:
 
 class TestATestThatExitsFails:
     def test_system_exit_is_that_tests_failure(self):
-        why, tb = _R.run_test(_Cases, _Cases.test_exits)
-        assert why == "SystemExit: 2", why
+        outcome, why, tb = _R.run_test(_Cases, _Cases.test_exits)
+        assert (outcome, why) == ("failed", "SystemExit: 2"), (outcome, why)
         assert "sys.exit(2)" in tb
 
     def test_the_other_outcomes_are_unchanged(self):
-        assert _R.run_test(_Cases, _Cases.test_passes) == (None, None)
-        why, _ = _R.run_test(_Cases, _Cases.test_asserts)
-        assert why == "one is not two", why
-        why, _ = _R.run_test(_Cases, _Cases.test_raises)
-        assert why == "ValueError: bad value", why
+        assert _R.run_test(_Cases, _Cases.test_passes) == ("passed", None,
+                                                          None)
+        outcome, why, _ = _R.run_test(_Cases, _Cases.test_asserts)
+        assert (outcome, why) == ("failed", "one is not two"), why
+        outcome, why, _ = _R.run_test(_Cases, _Cases.test_raises)
+        assert (outcome, why) == ("failed", "ValueError: bad value"), why
+
+
+class TestASkipIsNeitherAPassNorAFailure:
+    def test_it_is_skipped_with_its_reason(self):
+        outcome, why, tb = _R.run_test(_Cases, _Cases.test_skips)
+        assert (outcome, why, tb) == (
+            "skipped", "the bank is not on this machine", None)
+
+    def test_a_tests_except_exception_cannot_swallow_it(self):
+        outcome, why, _ = _R.run_test(_Cases, _Cases.test_swallows_everything)
+        assert (outcome, why) == ("skipped", "still a skip"), (outcome, why)
+
+    def test_the_totals_name_it(self):
+        src = (_TESTS / "_runner.py").read_text(encoding="utf-8")
+        assert 'Skipped: {skipped}' in src
 
     def test_the_loop_uses_it(self):
         """The run loop goes through ``run_test``: a helper the loop did
@@ -78,4 +111,4 @@ class TestATestThatExitsFails:
         src = (_TESTS / "_runner.py").read_text(encoding="utf-8")
         loop = src[src.index("for m_name, m in methods:"):]
         assert "run_test(cls, m)" in loop[:400]
-        assert "except Exception" not in loop[:600]
+        assert "except Exception" not in loop[:800]
