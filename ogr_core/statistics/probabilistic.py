@@ -211,6 +211,15 @@ def _rebuild_surface(surface_dict: dict):
     UNSAFE side on the composite model of verification problem 57, where
     re-clipping is exact.
 
+    v0.1.208 (D189) — the slicer now gives a crest that arrives ON the
+    crack line its wall back (``slicer.CRACK_WALL_ON_LINE``). That is what
+    rescues the POLYLINE branch below, which is rebuilt from its
+    dictionary and ends on the line: until then every sample of a critical
+    polyline under a water-filled crack was evaluated without the thrust
+    (on the phi = 0 slope of ``test_tension_crack_truncation_v1109``,
+    1.0535 against 0.9750). The circle seed stays for the reason above:
+    each sample resolves its own mass.
+
     Returns ``None`` for a serialised surface this loop cannot seed, so
     the caller can say so and carry on with the other methods.
     """

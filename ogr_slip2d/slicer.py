@@ -1187,6 +1187,36 @@ def tension_crack_boundary(project: Project):
     return None
 
 
+#: v0.1.208 (D189) — a crest ON the crack line keeps its wall.
+#:
+#: A surface the crack has truncated ends exactly on the crack line, and the
+#: wall the truncation left travels on the object as ``tension_crack_wall``.
+#: Two paths hand that same mass back WITHOUT the object: a named mass —
+#: ``x_left``/``x_right`` set by the caller, which is how a mass other than
+#: the critical one is asked about — and a polyline rebuilt from its
+#: dictionary, since ``to_dict`` does not carry the wall. Their crest sits
+#: ON the line, which the rule below reads as "not inside the zone" — the
+#: reading that keeps a second pass from cutting again — so the mass kept
+#: its geometry and lost its water thrust. Measured on the phi = 0 slope of
+#: ``test_tension_crack_truncation_v1109.py`` with the crack filled: 0.99782
+#: with the wall, 1.07140 without it, on the same slices; on ACADS 1(b)
+#: 1.59563 against 1.67246; on a rebuilt polyline 0.97496 against 1.05350.
+#:
+#: The wall belongs to the MASS, not to how the mass was handed over. A crest
+#: within the model's geometric tolerance of the crack line
+#: (:func:`_model_grid_tol`, 1e-6 of the model diagonal, the length below
+#: which this model's geometry is not resolved) is the end of a mass the
+#: crack truncated, and gets the wall at the crest — from the crack line up
+#: to the ground — without being cut again. Further below the line than that
+#: it is a different mass and still gets nothing: the discontinuity of the
+#: crack model stays, but at the scale of the model and not at zero. A wall
+#: no taller than that tolerance is not a wall, and none is recorded.
+#:
+#: Read at call time by :func:`apply_tension_crack_truncation`. Off, a crest
+#: on the line gets no wall, as in v0.1.207.
+CRACK_WALL_ON_LINE = True
+
+
 def apply_tension_crack_truncation(
     project: Project,
     surface: SurfaceProtocol,
@@ -1221,9 +1251,10 @@ def apply_tension_crack_truncation(
       keeps its strength. (Measured: on ACADS 1(b) five of twenty-five
       slices have their base inside the crack zone on the toe side, and
       the published factor is only reproduced with them resisting.)
-    * **The crest must be inside the crack zone**, or nothing happens —
-      which is also what makes this idempotent, since after truncation
-      the crest sits ON the crack line rather than above it.
+    * **The crest must be inside the crack zone** to be cut — which is
+      also what makes this idempotent, since after truncation the crest
+      sits ON the crack line rather than above it. On the line it is not
+      cut again; since v0.1.208 it only gets back the wall it had.
     * **The first crossing from the crest wins** when the surface enters
       and leaves the zone more than once.
 
@@ -1232,6 +1263,14 @@ def apply_tension_crack_truncation(
     is discarded rather than answered: a factor of safety computed on it
     would be arithmetic about a mechanism that has no shear surface. The
     reference reports the same case as its own error code.
+
+    v0.1.208 (D189) — a crest that arrives ON the crack line, within the
+    model's geometric tolerance, is the end of a mass the crack already
+    truncated. It is not cut again, but its wall is recorded at the crest,
+    so the water in the crack pushes on it exactly as it pushes on the mass
+    the truncation produced (Duncan & Wright 2005, ch. 14; the thrust is
+    Terzaghi's ½γw·h², see :func:`_apply_tension_crack`). See
+    :data:`CRACK_WALL_ON_LINE`.
     """
     from .failure_direction import crest_end_is_on_the_right
 
@@ -1287,6 +1326,26 @@ def apply_tension_crack_truncation(
     # truncating an already-truncated surface.
     tol = 1e-9 * max(x_right - x_left, 1.0)
     if y_surface_at_crest <= y_crack_at_crest + tol:
+        # Not inside the zone — but ON the line is the end of a mass the
+        # crack truncated, and that mass has a wall (CRACK_WALL_ON_LINE).
+        # A crest further below the line than the model resolves is another
+        # mass and keeps nothing.
+        if CRACK_WALL_ON_LINE:
+            eps = _model_grid_tol(project)
+            y_top = envelope_y_at(ground, x_crest)
+            if (y_surface_at_crest >= y_crack_at_crest - eps
+                    and y_top is not None
+                    and y_top - y_crack_at_crest > eps):
+                wall = (x_crest, y_crack_at_crest, y_top)
+                _remember(wall)
+                # A polyline rebuilt from its dictionary brings the drawn
+                # wall back in ``tension_cracks`` without the object, so
+                # the same tuple may already be there.
+                try:
+                    if wall not in surface.tension_cracks:
+                        surface.tension_cracks.append(wall)
+                except (AttributeError, TypeError):  # no drawing channel
+                    pass
         return (x_left, x_right)
 
     crossings = _surface_crossings(surface, tc.polyline, x_left, x_right)
