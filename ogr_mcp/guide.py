@@ -35,6 +35,8 @@ Rules that change the number:
 - A finite-element groundwater field (groundwater_run) reaches only the
   materials with pore_pressure 'fem'.
 catalog('strength_models') lists every material model and its parameters.
+If the OGR Slip2D program is open, calls work on ITS window: the user sees
+every edit and can undo it (server_info says where the next call goes).
 Full guide: resource ogr://guide.
 """
 
@@ -153,11 +155,14 @@ water surface when use_sat_unit_weight is true.
   `result(result_id)`. The whole script is one undo step, rolled back if it
   raises. Use it for what no tool covers yet.
 
-## Attached to a window (server started with --attach)
-server_info says so in 'attached_to_window'. Then:
-* The model IS the window's: the user sees every edit, and each edit is
-  one step of the window's Edit > Undo (the user's steps are yours to
-  undo too, and yours theirs).
+## When OGR Slip2D is open, you work on its window
+By default, if the program is open (its agent bridge starts with it), a
+call goes to the WINDOW; if it is not, to models of this server's own.
+server_info says which in 'attached_to_window' ('next_call_goes_to'), and
+each model in 'open_models' says 'in_window'. A project_id, job_id or
+result_id of the server's own keeps going to it. On the window:
+* The model IS the user's: they see every edit, and each edit is one step
+  of the window's Edit > Undo (the user's steps are yours to undo too).
 * project_new and project_open open in the window, and refuse while it has
   unsaved changes: save them (project_save) or ask the user. project_close
   does not close the window's model.

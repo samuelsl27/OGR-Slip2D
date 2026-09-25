@@ -97,9 +97,11 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
                  public_url: Optional[str] = None) -> MCPServer:
     """An ``MCPServer`` publishing the tools of ``profile`` over ``ws``.
 
-    With ``backend`` (an ``ogr_api.bridge.BridgeClient``, spec 008 F4)
-    every tool is forwarded to a running window instead: the same
-    operations, run on the window's own model; ``ws`` is then unused.
+    With ``backend`` every tool goes through it instead: an
+    ``ogr_api.bridge.WindowRouter`` (v0.1.207, the default of the command
+    line) sends it to the open window when there is one and to ``ws``
+    otherwise; anything with a ``call(op, **kwargs)`` works (a
+    ``BridgeClient`` alone forwards everything to one window).
     """
     from ogr_api import __version__ as api_version
 
@@ -188,12 +190,23 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
     def server_info() -> dict[str, Any]:
         """What this server is, its units and rules, and the open models.
         Call it first."""
-        if backend is not None:
-            models = [{"project_id": m["project_id"], "name": m["name"]}
-                      for m in run("project_list")["projects"]]
+        models = []
+        if ws is not None:
+            models += [{"project_id": h.id, "name": h.project.name,
+                        "in_window": False}
+                       for h in ws.projects.values()]
+        if hasattr(backend, "window_models"):
+            models += backend.window_models()
+        elif backend is not None:
+            models += [{"project_id": m["project_id"], "name": m["name"],
+                        "in_window": True}
+                       for m in run("project_list")["projects"]]
+        if hasattr(backend, "status"):
+            window = backend.status()
+        elif backend is not None:
+            window = {"pid": backend.pid, "window": backend.window}
         else:
-            models = [{"project_id": h.id, "name": h.project.name}
-                      for h in ws.projects.values()]
+            window = None
         return {
             "server": "ogr-slip2d", "version": __version__,
             "ogr_api": api_version,
@@ -202,10 +215,9 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
             "workdir": (str(ws.workdir) if ws is not None and ws.workdir
                         else None),
             "open_models": models,
-            # F4: attached to a running window, the model IS the window's.
-            "attached_to_window": ({"pid": backend.pid,
-                                    "window": backend.window}
-                                   if backend is not None else None),
+            # F4 / v0.1.207: whether an OGR Slip2D window is open, and
+            # so where a call that names nothing of this server's goes.
+            "attached_to_window": window,
             "guide": INSTRUCTIONS,
             # How much of the desktop program's menu an agent can reach
             # today (ogr_api/inventory.py); 'pending' shrinks each phase.

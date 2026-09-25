@@ -35,17 +35,25 @@ desactives para `python_exec`.
 - Prefiere `--token-file` o la variable `OGR_MCP_TOKEN` a `--token`: un
   argumento de la línea de órdenes lo ven los demás usuarios de la máquina.
 
-## El puente con la ventana (`--attach`)
+## El puente con la ventana
 
-*Herramientas > Puente para agentes (MCP)* abre un puerto **solo en
-127.0.0.1**, con un token aleatorio nuevo cada vez.
+Desde v0.1.207 el programa **abre su puente al arrancar**, por decisión del
+propietario: si OGR Slip2D está abierto, lo que pide un agente se hace en la
+ventana. El puente escucha **solo en 127.0.0.1**, con un token aleatorio
+nuevo cada vez.
 
 - **El token.** Queda en `~/.ogr-slip2d/bridges/<pid>.json`, dentro de tu
   carpeta de usuario; en sistemas POSIX, ese archivo solo lo puedes leer tú.
   Sin el token, la ventana cierra la conexión tras la primera línea.
 - **Lo que da.** Quien tenga el puente maneja la ventana, incluido
-  `python_exec`, que corre **dentro del proceso de la ventana**. Apágalo
-  cuando no lo uses; se apaga solo al cerrar la ventana.
+  `python_exec`, que corre **dentro del proceso de la ventana**.
+- **No abre acceso nuevo.** Leer ese archivo exige ser tu usuario en esta
+  máquina, y quien ya lo es puede ejecutar lo que quiera. Aun así, si no lo
+  quieres encendido, apágalo en *Herramientas > Puente para agentes (MCP)*
+  o abre el programa con `--no-agent-bridge`.
+- **Los tests nunca ven tu ventana.** El runner da a toda la corrida una
+  carpeta de descubrimiento vacía propia. Un test que arranca un servidor no
+  puede editar el modelo que tengas abierto.
 
 ## Exposición a Internet (`--public-url`)
 

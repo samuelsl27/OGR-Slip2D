@@ -59,6 +59,7 @@ import ast
 import importlib.util
 import inspect
 import math
+import os
 import sys
 import tempfile
 import traceback
@@ -425,6 +426,14 @@ def main(tests_dir: Path, patterns=(), k: str | None = None,
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except (AttributeError, ValueError):  # non-reconfigurable stream
         pass
+
+    # v0.1.207 — the MCP server now works on an OPEN WINDOW by default, and
+    # finds it through a discovery folder in the user's home. A test that
+    # starts a server (in process or as a child) must never find the
+    # user's real window and edit their model: the whole run, children
+    # included, gets an empty folder of its own. A test that wants a window
+    # makes one and points this variable at it, as before.
+    os.environ["OGR_BRIDGE_DIR"] = tempfile.mkdtemp(prefix="ogr_test_bridges_")
 
     # Before anything else: which tree is this about to measure? See
     # foreign_packages() for why a run that answers this wrongly is worse

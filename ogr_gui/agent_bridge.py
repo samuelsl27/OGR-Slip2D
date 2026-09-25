@@ -32,6 +32,7 @@ from __future__ import annotations
 import hmac
 import os
 import secrets
+from pathlib import Path
 from typing import Optional
 
 from PySide6.QtCore import QBuffer, QByteArray, QIODevice, QObject
@@ -219,6 +220,12 @@ class AgentBridge(QObject):
                     "code": "E_UNAUTHORIZED",
                     "message": "Wrong protocol or token."}}
             state["authed"] = True
+            # v0.1.207 — the MCP server's --workdir, so that a relative
+            # path means the same folder whether the call runs there or
+            # here. The last client to connect sets it.
+            wd = message.get("workdir")
+            if wd and Path(wd).is_dir():
+                self.ws.workdir = Path(wd).resolve()
             return {"hello": PROTOCOL, "ok": True,
                     "window": self.window.windowTitle(),
                     "pid": os.getpid()}

@@ -13,7 +13,13 @@ claude mcp add ogr-slip2d -- ogr-slip2d-mcp --workdir "C:\ruta\a\mis\proyectos"
 ## Claude Desktop
 
 Edita `%APPDATA%\Claude\claude_desktop_config.json` (Windows) o
-`~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
+`~/Library/Application Support/Claude/claude_desktop_config.json` (macOS).
+**La versión de la Microsoft Store** lo guarda en su propia carpeta:
+`%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Roaming\Claude\claude_desktop_config.json`.
+Comprobado el 2026-09-25: su configuración estaba allí, y lo que se añadió
+allí fue lo que cargó.
+Si el comando no está en el `PATH` de la aplicación, pon la ruta completa de
+`ogr-slip2d-mcp.exe`:
 
 ```json
 {
@@ -123,37 +129,43 @@ async with MCPServerStdio(
 de pocos segundos y `analysis_run` espera hasta 30 s por defecto antes de
 devolver un `job_id`. O súbelo, o pide `wait_seconds` pequeños y usa `job_get`.
 
-## Controlar la ventana abierta (`--attach`)
+## Ver en el programa lo que hace el agente
 
-Por defecto el servidor trabaja con **sus propios modelos**, sin interfaz:
-lo que el agente construye no aparece en ninguna ventana hasta que se guarda
-y se abre. Si quieres ver trabajar al agente —o trabajar los dos sobre el
-mismo modelo—, conéctalo a la ventana:
+**No hay nada que configurar** (desde v0.1.207). Si OGR Slip2D está
+abierto, lo que pidas al agente se hace **en su ventana**, desde cualquier
+cliente. Si no está abierto, el servidor trabaja con modelos propios, como
+antes. El orden en que abras el programa y el cliente da igual. Si cierras
+el programa y lo vuelves a abrir, el servidor lo encuentra solo.
 
-1. En la ventana, **Herramientas > Puente para agentes (MCP)**. La barra de
-   estado dice el `pid` de la ventana y el puerto.
-2. Arranca el servidor con `--attach`:
+- **El programa arranca su puente al abrirse.** Es la opción *Herramientas >
+  Puente para agentes (MCP)*, que ya sale marcada. Se apaga desde ese menú o
+  abriendo el programa con `python -m ogr_gui --no-agent-bridge`.
+- **Con la ventana abierta, es tu modelo:**
+  - cada edición del agente es un paso de *Edición > Deshacer*, y el lienzo
+    se redibuja;
+  - un `analysis_run` del agente sale en el panel de resultados y en el
+    lienzo, como un *Compute*;
+  - `model_render(source="window")` es una captura del lienzo tal como lo
+    ves.
+- **`project_new` y `project_open` abren en la ventana**, y se niegan
+  mientras haya cambios sin guardar: el agente no decide tirar tu trabajo.
+  Tiene que guardarlos o preguntarte.
+- **Mientras la ventana calcula, las operaciones que editan devuelven
+  `Busy`**: el cálculo de la ventana usa el modelo vivo.
+- **Lo que ya era del servidor sigue siendo suyo.** Un modelo que el agente
+  empezó antes de abrir el programa sigue en el servidor. `server_info` dice
+  a dónde va la siguiente llamada, y cada modelo de `open_models` dice si
+  está en la ventana.
+- **Las rutas relativas** se resuelven contra el `--workdir` del servidor
+  también en la ventana.
 
-   ```bash
-   claude mcp add ogr-slip2d -- ogr-slip2d-mcp --attach
-   ```
+Dos opciones del servidor cambian este comportamiento:
 
-   o, en la configuración JSON de cualquier cliente, añade `"--attach"` a
-   `args`. Con varias ventanas con el puente activo, `--attach <pid>` elige
-   una; sin él, el servidor dice cuáles hay.
-
-Así conectado:
-
-- **Es el mismo modelo.** Cada edición del agente es un paso de *Edición >
-  Deshacer* de la ventana (y al revés), y el lienzo se redibuja.
-- Un `analysis_run` del agente aparece en el panel de resultados y en el
-  lienzo, como un *Compute*.
-- `project_new` y `project_open` abren el modelo **en la ventana**. Si hay
-  cambios sin guardar, se niegan salvo con `discard_changes=true`.
-- Mientras la ventana calcula, las operaciones que editan devuelven `Busy`:
-  el cálculo de la ventana usa el modelo vivo.
-- `model_render(source="window")` devuelve una captura del lienzo real, tal
-  como lo ves.
+- `--headless` no usa nunca la ventana (el comportamiento anterior a
+  v0.1.207);
+- `--attach [PID]` usa **solo** una ventana, nunca modelos propios, y sin
+  ventana dice qué abrir. Con varias ventanas abiertas, el modo por defecto
+  usa la más reciente y `--attach PID` elige una.
 
 El puente escucha solo en `127.0.0.1`, con un token aleatorio que la ventana
 escribe en `~/.ogr-slip2d/bridges/<pid>.json`. Ese archivo se borra al

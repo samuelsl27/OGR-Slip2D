@@ -373,16 +373,24 @@ class TestTheMcpServerForwards:
         asyncio.run(scenario())
 
     def test_attaching_to_no_window_says_so(self):
+        """v0.1.207 — the server no longer refuses to START without a window
+        (the order the program and the client open in is free now); a call
+        is what says there is none, and what to open."""
+        from ogr_api.bridge import WindowRouter
+        from ogr_api.errors import NotConfigured
         from ogr_mcp.cli import main
         folder = tempfile.mkdtemp(prefix="ogr_bridges_")
         old = os.environ.get("OGR_BRIDGE_DIR")
         os.environ["OGR_BRIDGE_DIR"] = folder
         try:
+            with pytest.raises(NotConfigured):
+                WindowRouter(only_window=True).call("project_list")
             try:
                 import mcp  # noqa: F401
             except ImportError:
                 return
-            assert main(["--attach"]) == 2
+            assert main(["--attach", "--headless"]) == 2
+            assert main(["--attach", "not-a-pid"]) == 2
         finally:
             if old is None:
                 os.environ.pop("OGR_BRIDGE_DIR", None)

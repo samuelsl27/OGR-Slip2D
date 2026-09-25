@@ -33,8 +33,8 @@ ogr-slip2d-mcp --profile compact --workdir "C:\ruta\a\mis\proyectos"
 # HTTP (Open WebUI, mcpo): siempre con token
 ogr-slip2d-mcp --transport http --port 8765 --token-file token.txt
 
-# sobre la ventana abierta (Herramientas > Puente para agentes (MCP))
-ogr-slip2d-mcp --attach
+# si OGR Slip2D está abierto, todo lo anterior trabaja en su ventana;
+# --headless no la usa nunca y --attach solo la usa a ella
 
 # en Internet, detrás de un túnel HTTPS, con OAuth (ChatGPT): ver seguridad.md
 ogr-slip2d-mcp --transport http --port 8765 --token-file token.txt --public-url https://TU-TUNEL.example
@@ -78,9 +78,9 @@ Opciones completas: `ogr-slip2d-mcp --help`.
 - análisis en segundo plano, cancelables;
 - resultados, superficies críticas con sus dovelas, e imagen PNG del modelo;
 - deshacer y rehacer: cada edición es un paso;
-- trabajar **sobre la ventana abierta** (`--attach`): el mismo modelo y la
-  misma pila de deshacer que el usuario, y una captura del lienzo real
-  (ver [clientes.md](clientes.md));
+- trabajar **sobre la ventana abierta**, por defecto cuando el programa
+  está abierto: el mismo modelo y la misma pila de deshacer que el usuario,
+  y una captura del lienzo real (ver [clientes.md](clientes.md));
 - `python_exec` para todo lo que aún no tiene herramienta (ver
   [seguridad.md](seguridad.md)).
 

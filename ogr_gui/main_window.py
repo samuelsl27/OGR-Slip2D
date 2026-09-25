@@ -202,7 +202,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.206"
+    VERSION = "0.1.207"
 
     def __init__(self) -> None:
         super().__init__()
@@ -2472,6 +2472,8 @@ class MainWindow(QMainWindow):
             self._stop_agent_bridge()
             self.statusBar().showMessage(tr("Agent bridge off."), 5000)
             return
+        if getattr(self, "_agent_bridge", None) is not None:
+            return                      # already on: one bridge per window
         from .agent_bridge import AgentBridge
         try:
             bridge = AgentBridge(self)

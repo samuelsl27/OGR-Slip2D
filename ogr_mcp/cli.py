@@ -72,10 +72,14 @@ def _parse(argv):
                         "history,python")
     p.add_argument("--attach", nargs="?", const="auto", default=None,
                    metavar="PID",
-                   help="Drive a RUNNING window instead of a model of "
-                        "your own: the one whose Tools > Agent bridge (MCP) "
-                        "is on, or the one with this process id when "
-                        "several are")
+                   help="Only ever work on a window, never on a model of "
+                        "the server's own (the one with this process id, if "
+                        "given). By default the server already uses the "
+                        "open window when there is one")
+    p.add_argument("--headless", action="store_true",
+                   help="Never use an open window: always work on the "
+                        "server's own models (the behaviour before "
+                        "v0.1.207)")
     p.add_argument("--workdir", default=None,
                    help="Folder relative paths are resolved against")
     p.add_argument("--max-wait", type=float, default=None,
@@ -188,24 +192,32 @@ def main(argv=None) -> int:
     toolsets = [t.strip() for t in args.toolsets.split(",")] \
         if args.toolsets else None
 
-    from ogr_api import OgrApiError, Workspace
+    from ogr_api import Workspace
 
     from .server import DEFAULT_MAX_WAIT_S, build_server
 
-    backend = None
-    if args.attach is not None:
-        # F4 (v0.1.203): forward every tool to a running window.
-        from ogr_api.bridge import BridgeClient
-        try:
-            pid = None if args.attach == "auto" else int(args.attach)
-            backend = BridgeClient.attach(pid)
-        except (OgrApiError, OSError, ValueError) as exc:
-            print(f"Cannot attach to a window: {exc}", file=sys.stderr)
-            return 2
-        log.info("attached to window pid %s (%s)", backend.pid,
-                 backend.window)
-    ws = None if backend is not None else Workspace(
+    if args.attach is not None and args.headless:
+        print("--attach and --headless contradict each other.",
+              file=sys.stderr)
+        return 2
+    try:
+        pid = None if args.attach in (None, "auto") else int(args.attach)
+    except ValueError:
+        print(f"--attach takes a process id, not {args.attach!r}.",
+              file=sys.stderr)
+        return 2
+    ws = None if args.attach is not None else Workspace(
         workdir=args.workdir, max_concurrent_jobs=args.max_jobs)
+    backend = None
+    if not args.headless:
+        # v0.1.207 — the window when there is one, by default: see
+        # ``ogr_api.bridge.WindowRouter``. Connected when first needed, so
+        # the order in which the program and the client open is free.
+        from ogr_api.bridge import WindowRouter
+        backend = WindowRouter(ws, pid=pid, only_window=args.attach is not None,
+                               workdir=args.workdir)
+        log.info("open windows are used when there is one%s",
+                 " (and only them)" if args.attach is not None else "")
     oauth = None
     if public is not None:
         from .oauth import OwnerApprovalProvider

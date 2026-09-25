@@ -141,3 +141,9 @@ Plan corto antes de cada una. Al cerrar F4, `PENDING` del inventario vacío.
       Probado de extremo a extremo contra un proceso real en local. La
       conexión real desde chatgpt.com queda en 2.7, a mano (pasos en
       `docs/mcp/clientes.md`).
+- [x] v0.1.207 La ventana por defecto (decisión del propietario,
+      2026-09-25): si OGR Slip2D está abierto, cada llamada va a su ventana
+      y, si no, a los modelos propios del servidor (`WindowRouter`); el
+      programa enciende su puente al abrirse (`--no-agent-bridge`) y el
+      `--workdir` del servidor llega a la ventana. `--headless` y
+      `--attach` quedan como excepciones.
