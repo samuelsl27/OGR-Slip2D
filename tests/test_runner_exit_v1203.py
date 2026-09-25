@@ -60,6 +60,13 @@ class _Cases:
     def test_skips(self):
         _R._FakePytest.skip("the bank is not on this machine")
 
+    def test_skips_with_another_copys_pytest(self):
+        # The pytest installed in sys.modules is the one of the runner that
+        # runs THIS file: another copy, another Skipped class. That is what
+        # a test doing ``import _runner`` produced on GitHub.
+        import pytest
+        pytest.skip("raised by another copy of the runner")
+
     def test_swallows_everything(self):
         try:
             _R._FakePytest.skip("still a skip")
@@ -100,6 +107,38 @@ class TestASkipIsNeitherAPassNorAFailure:
     def test_a_tests_except_exception_cannot_swallow_it(self):
         outcome, why, _ = _R.run_test(_Cases, _Cases.test_swallows_everything)
         assert (outcome, why) == ("skipped", "still a skip"), (outcome, why)
+
+    def test_another_copys_skip_is_still_a_skip(self):
+        """The first run of v0.1.205 on GitHub: a copy of the runner made
+        by ``import _runner`` raised ITS Skipped, the running runner caught
+        only its own class, and the suite ended at 83 % with no totals."""
+        try:
+            outcome, why, _ = _R.run_test(
+                _Cases, _Cases.test_skips_with_another_copys_pytest)
+        except BaseException as exc:        # noqa: BLE001 - the defect
+            # Uncaught, it would reach the runner running THIS file and be
+            # counted as this case's skip: a defect hidden as a skip.
+            raise AssertionError(
+                "the copy under test let another copy's skip through: %r"
+                % (exc,)) from None
+        assert (outcome, why) == ("skipped",
+                                  "raised by another copy of the runner"), (
+            outcome, why)
+
+    def test_loading_the_runner_again_keeps_the_installed_shim(self):
+        """Looked at WHILE loading, not after: ``_load_runner`` puts the
+        shim back in its ``finally``, so asking after it proves nothing."""
+        before = sys.modules.get("pytest")
+        assert getattr(before, "ogr_shim", False), "no shim installed here"
+        try:
+            spec = importlib.util.spec_from_file_location(
+                "_ogr_runner_loaded_again", _TESTS / "_runner.py")
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            assert sys.modules.get("pytest") is before, (
+                "loading the runner again replaced the installed pytest")
+        finally:
+            sys.modules["pytest"] = before
 
     def test_the_totals_name_it(self):
         src = (_TESTS / "_runner.py").read_text(encoding="utf-8")

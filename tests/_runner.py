@@ -106,7 +106,15 @@ class Skipped(BaseException):
     not exist, ``test_the_fifteen_sheets_give_what_they_gave`` turned the CI
     red for a reason that was not a defect. A ``BaseException``, as pytest's
     own, so that a test's ``except Exception`` cannot swallow it.
+
+    Recognised by the ``ogr_skip`` mark and NOT by its class, on purpose: a
+    test that ``import _runner`` (to borrow a helper) executes this file a
+    second time and makes a second ``Skipped`` class. On GitHub that copy's
+    skip escaped the running runner's ``except Skipped`` and ended the suite
+    at 83 % with no totals (the first run of v0.1.205). Any copy's mark is
+    the same mark.
     """
+    ogr_skip = True
 
 
 def _skip(reason: str = ""):
@@ -117,9 +125,15 @@ class _FakePytest:
     approx = staticmethod(_approx)
     raises = staticmethod(_raises)
     skip = staticmethod(_skip)
+    #: This shim, as opposed to a real pytest (v0.1.205, see below).
+    ogr_shim = True
 
 
-sys.modules["pytest"] = _FakePytest()  # type: ignore
+# v0.1.205 — install once. A test that ``import _runner`` re-executes this
+# file, and replacing the shim then left a different one installed for every
+# file after it (rule 5); keeping the first makes a second import harmless.
+if not getattr(sys.modules.get("pytest"), "ogr_shim", False):
+    sys.modules["pytest"] = _FakePytest()  # type: ignore
 
 
 # --- Selection --------------------------------------------------------
@@ -388,12 +402,16 @@ def run_test(cls, method):
     try:
         _run_method(cls(), method)
         return "passed", None, None
-    except Skipped as e:
-        return "skipped", f"{e}", None
     except AssertionError as e:
         return "failed", f"{e}", traceback.format_exc()
     except (Exception, SystemExit) as e:  # noqa: BLE001
         return "failed", f"{type(e).__name__}: {e}", traceback.format_exc()
+    except BaseException as e:
+        # By its mark, from whichever copy of this file raised it (see
+        # ``Skipped``); anything else — KeyboardInterrupt — goes on up.
+        if getattr(e, "ogr_skip", False):
+            return "skipped", f"{e}", None
+        raise
 
 
 def main(tests_dir: Path, patterns=(), k: str | None = None,
