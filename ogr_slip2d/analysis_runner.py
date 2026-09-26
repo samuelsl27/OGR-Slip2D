@@ -1310,14 +1310,17 @@ def lambda_fallback_notes(result) -> list[str]:
     # recover is, like the budget, the solver's limit and not the slope's;
     # unlike the budget, more passes do not buy it back, so the sentence
     # offers nothing.
+    # v0.1.209 (D158) — "improving" means the factor AND the inter-slice
+    # thrust: the stall test now waits while either still beats its record.
     from .interslice import STALL_PATIENCE
     stalled = int(details.get("lambdas_lost_to_stall") or 0)
     if stalled > 0:
         notes.append(
             "and %d %s was discarded because its inner iteration stopped "
-            "improving for %d passes and the relaxation rescue could not "
-            "settle it either, so the limit that decided this answer "
-            "belongs to the solver rather than to the slope."
+            "improving for %d passes, in its factor and in its inter-slice "
+            "thrust alike, and the relaxation rescue could not settle it "
+            "either, so the limit that decided this answer belongs to the "
+            "solver rather than to the slope."
             % (stalled, "inclination" if stalled == 1 else "inclinations",
                STALL_PATIENCE))
 

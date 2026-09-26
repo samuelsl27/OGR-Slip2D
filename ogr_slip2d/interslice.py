@@ -109,6 +109,12 @@ F_MAX = 50.0
 #: and it has the same root as the defect where a branch reports convergence
 #: in two passes at a loose tolerance and diverges at a tight one.
 #:
+#: v0.1.209 (D158) — and "its record" is now the record of the PAIR, F's
+#: step and the thrust residual, either of which resets the count. That
+#: removes this limit for the branch above wherever its thrust keeps
+#: contracting: at 1e-4 with the rescue off it converges on pass 117 instead
+#: of being cut on pass 85. See :data:`BRANCH_STALL_PAIR`.
+#:
 #: WHY COUNTING PASSES WAS THE WRONG INSTRUMENT, which is the whole of D63.
 #: The 80 this replaces had a sound reason, written in
 #: :meth:`GLESystem.branches`: on the Duncan and Wright buoyant polyline the
@@ -603,6 +609,64 @@ BRANCH_CYCLE_RESCUE = True
 #: ``states`` is v0.1.192 bit for bit.
 BRANCH_PARTNER_RETRY = True
 
+#: v0.1.209 (D158) -- the stall test of :func:`solve_branch` watches the PAIR.
+#:
+#: WHAT WAS WRONG. The state the loop iterates is (F, X), and since v0.1.179
+#: (D145) the acceptance and the rescue's entry both ask about the two
+#: residuals. The stall counter did not follow: it reset only when F's step
+#: beat its own record, on the argument that a contracting fixed point "beats
+#: its own record on every pass". That is false exactly AT the fixed point. A
+#: branch whose F lands on it has ``step`` 0.0, ``0.0 < 0.0`` never holds
+#: again, and the branch was cut for having arrived while ``d_x`` -- the half
+#: of the pair still moving -- was contracting. Measured on the anchored
+#: wedge of ``tests/test_planar_force_branch_v1183`` (ACTIVE anchor, lambda
+#: 1.25, the planar exemption off): cut on pass 271 with ``|dF|`` exactly 0.0
+#: on 40 of its last 226 passes, while ``d_x`` contracted at 0.98275 a pass.
+#:
+#: WHAT IT DOES. The counter resets when EITHER residual beats its own
+#: record. ``best_step`` is updated exactly as before and the thrust can
+#: only ADD resets, so the counter is never higher than the old one on any
+#: pass; nothing else in the loop reads it, so the trajectory is the old
+#: one pass for pass until the pass the old detector broke on. A branch
+#: that did not stall under v0.1.208 cannot move by a bit -- a proof, and
+#: ``tests/test_stall_pair_v1209::TestNeutrality`` executes it call by call.
+#: A period-2 cycle still stalls: its thrust cycles with F, so neither
+#: record is beaten (problem 091 at lambda 0.40, rescue off: pass 83 instead
+#: of 81).
+#:
+#: WHAT IT BUYS, and it is rule 7 against an external value. The wedge above
+#: with the budget of ``max_iterations = 2000`` converges on pass 1218 to the
+#: closed form (Coulomb 1776; Krahn 2003 for the independence from the
+#: thrust) to 2.3e-14; with the switch off it is cut on pass 271. Inside the
+#: default budget of :data:`MAX_PASSES` it only renames that exit, as D158
+#: predicted -- 1218 passes do not fit in 400. And the slow moment branch of
+#: the 50 degree plane at lambda 2.0, the "honest limit" written under
+#: :data:`STALL_PATIENCE`, converges on pass 117 by damping alone where it
+#: was cut on pass 85; with the rescue on, as shipped, the rescue had
+#: already taken it and nothing moves.
+#:
+#: WHAT IT COSTS, measured on the verification bank and not argued: whole
+#: searches, switch on and off in one process, 73 rows of 30 problems (the
+#: 22 of the D158 census of v0.1.186 and the reinforced 085, 087-094), in
+#: ``docs/audits/branch_stall_v1209.md``. The published minimum moves in NONE
+#: of the 73, and no admissibility flag moves either. Branch passes rise
+#: +11.84 % over the whole population -- +3.3 % under Spencer and +20.8 %
+#: under GLE, a split this census measures and does not explain -- and buy
+#: 259 203 branches that now converge where they were cut; of the 897 366
+#: that used to stall, 176 699 now run out of budget instead and 461 314
+#: still stall, later. The neutrality proof was executed on the way: 3 657 568
+#: branches that did not stall under v0.1.208 came out identical bit for
+#: bit. A branch the old detector cut ON the last pass of the budget is the
+#: one near-miss, and not a break: ``GLESystem.branches`` counts it as out of
+#: budget (``passes == max_passes``), but the stall broke BEFORE the update
+#: of F, so the new detector's branch has the same passes and an F one update
+#: further on; neither converges and the lambda is lost on both sides.
+#:
+#: Read at call time with the mould of :data:`BRANCH_RESCUE`, and listed in
+#: :data:`_BRANCH_SWITCH_NAMES` so that the lambda cache keys on it. Off, the
+#: stall test is v0.1.208 bit for bit.
+BRANCH_STALL_PAIR = True
+
 
 # ----------------------------------------------------------------------
 def branch_budget(max_iterations: int) -> int:
@@ -856,9 +920,11 @@ def solve_branch(
             to be CONTRACTING; see below.
         initial_fos: where the fixed point starts.
         patience: passes allowed without beating the smallest step so far
+            -- or, since v0.1.209, the smallest thrust residual so far --
             before the branch is called wandering. See
-            :data:`STALL_PATIENCE`; a value of at least 80 keeps every
-            answer this function gave before v0.1.159 bit for bit.
+            :data:`STALL_PATIENCE` and :data:`BRANCH_STALL_PAIR`; a value
+            of at least 80 keeps every answer this function gave before
+            v0.1.159 bit for bit.
 
     Returns:
         The converged :class:`BranchState`, or ``None`` if the branch is
@@ -868,7 +934,8 @@ def solve_branch(
     The iteration stops on one of FOUR things and only one of them is an
     answer: the step falling under ``tolerance`` WHILE the iteration
     contracts (``converged=True``), the
-    step failing to beat its own record for ``patience`` passes (wandering),
+    step failing to beat its own record for ``patience`` passes (wandering;
+    since v0.1.209 neither the step NOR the thrust residual beating its own),
     ``max_passes`` (a backstop that IS reachable at tight tolerances), or
     the inter-slice thrust running away (v0.1.171, D118 — see
     :data:`THRUST_SCALE_LIMIT`). The last three all come back with
@@ -924,6 +991,9 @@ def solve_branch(
     # The smallest step seen, and how many passes have gone by without
     # beating it. See :data:`STALL_PATIENCE`.
     best_step = math.inf
+    # v0.1.209 (D158) -- and the smallest thrust residual, the other half of
+    # the pair this loop iterates. See :data:`BRANCH_STALL_PAIR`.
+    best_d_x = math.inf
     stall = 0
     # v0.1.172 (D116) — the two previous steps, for the contraction test at
     # the bottom of the loop. Two floats and not a list: this is the hottest
@@ -1024,6 +1094,7 @@ def solve_branch(
                      or (BRANCH_PAIR_TIGHTEN and prev_d_x >= tolerance))):
             rescuing = True
             best_step = math.inf
+            best_d_x = math.inf
             stall = 0
             ok_before = False
         if rescuing and F_prev is not None:
@@ -1299,14 +1370,28 @@ def solve_branch(
         # accepts leaves through one of the breaks above and never gets
         # here, which is what it meant inside the rescue too.
         ok_before = ok_now
-        # v0.1.159 (D63) — STALLING, not budget. The step of a fixed point
-        # that contracts beats its own record on every pass; the step of an
-        # iterate that wanders never beats it again. Counting passes could
-        # not tell the two apart, and the cost of that confusion ran in both
-        # directions: it threw away slow-but-converging lambdas and it let a
-        # divergent branch grind on. See :data:`STALL_PATIENCE`.
-        if step < best_step:
+        # v0.1.159 (D63) — STALLING, not budget. A fixed point that contracts
+        # keeps beating its own record; an iterate that wanders never beats
+        # it again. Counting passes could not tell the two apart, and the
+        # cost of that confusion ran in both directions: it threw away
+        # slow-but-converging lambdas and it let a divergent branch grind on.
+        # See :data:`STALL_PATIENCE`.
+        # v0.1.209 (D158) — and "its own record" is the record of the PAIR,
+        # which is what the acceptance above has asked about since D145.
+        # Watching F alone was false exactly at the fixed point: a branch
+        # whose F lands on it makes ``step`` 0.0, and ``0.0 < 0.0`` never
+        # holds again, so it was cut for having arrived while its thrust
+        # was still contracting. ``best_step`` is updated as before and the
+        # thrust can only ADD resets, so a branch that did not stall before
+        # is this loop of v0.1.208 pass for pass. See
+        # :data:`BRANCH_STALL_PAIR`.
+        beat = step < best_step
+        if beat:
             best_step = step
+        if BRANCH_STALL_PAIR and d_x < best_d_x:
+            best_d_x = d_x
+            beat = True
+        if beat:
             stall = 0
         else:
             stall += 1
@@ -1697,6 +1782,31 @@ def thrust_is_admissible(state: BranchState) -> bool:
     solver never formed ``E`` at all, and ``F_f - F_m`` really was monotone
     because ``F_m`` did not depend on lam.
 
+    WHY NO DEAD BAND, decided in v0.1.209 (bank ticket D155) with the
+    measurement in front, because the verdict is binary and sits close to its
+    edge in the reinforced problems of the bank: 14 of 230 archived criticals
+    have ``|thrust_margin| < 0.05`` in v0.1.208, five of them under 0.001. The
+    comparison with zero stays, on purpose, for three reasons:
+
+    * there is no reference for a band. Spencer (1967) and Ching & Fredlund
+      (1983) justify the SIGN of the inter-slice thrust; neither gives a
+      tolerance around it, and a number with no source is a formula that
+      only looks right;
+    * a band does not buy stability where stability was lost. The flip that
+      opened the ticket, verification problem 85, moved the margin from
+      +0.044 to -0.627 for a 0.10 % change in the factor: 0.67 of margin,
+      thirteen times the widest band considered;
+    * a band would change answers by admitting net TENSION. Estimated to
+      first order on the whole searches of ``docs/audits/branch_stall_v1209``
+      (73 rows): ``margin > -0.001`` moves no critical at all, so it would be
+      a setting that does nothing (rule 7); ``-0.01`` moves 3 rows, down to
+      -1.2 %, and ``-0.05`` moves 12, down to -7.6 %, all of them reinforced
+      and each by letting in a surface whose soil faces are pulled apart.
+
+    So the flag stays a yes/no on the sign, :func:`thrust_margin` publishes
+    how far each verdict is from flipping, and the comparison in the bank
+    labels a row whose minimum was chosen over discarded lower ones.
+
     References:
         Spencer, E. (1967). "A method of analysis of the stability of
             embankments assuming parallel inter-slice forces." Geotechnique
@@ -1840,7 +1950,7 @@ LAMBDA_STATE_CACHE = True
 #: difference if a switch is born and not added here.
 _BRANCH_SWITCH_NAMES = (
     "BRANCH_CYCLE_RESCUE", "BRANCH_PAIR_SETTLE", "BRANCH_PAIR_TIGHTEN",
-    "BRANCH_PLANAR_FORCE", "BRANCH_RESCUE", "CYCLE_RUN",
+    "BRANCH_PLANAR_FORCE", "BRANCH_RESCUE", "BRANCH_STALL_PAIR", "CYCLE_RUN",
     "PLANAR_ALPHA_SPREAD", "RESCUE_OMEGA_MAX", "RESCUE_OMEGA_MIN",
     "THRUST_SCALE_LIMIT",
 )

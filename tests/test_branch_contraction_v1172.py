@@ -247,6 +247,24 @@ def _unrescued():
         interslice.BRANCH_RESCUE = keep
 
 
+@contextlib.contextmanager
+def _stall_on_f_alone():
+    """The stall detector of v0.1.208, which watched F's step and nothing
+    else: ``BRANCH_STALL_PAIR`` (v0.1.209, D158) off in-process, restored in
+    ``finally`` (rule 5). A tree without the switch already is that
+    detector, so the idiom of ``_unrescued`` applies."""
+    import ogr_slip2d.interslice as interslice
+    keep = getattr(interslice, "BRANCH_STALL_PAIR", None)
+    if keep is None:
+        yield
+        return
+    interslice.BRANCH_STALL_PAIR = False
+    try:
+        yield
+    finally:
+        interslice.BRANCH_STALL_PAIR = keep
+
+
 # ======================================================================
 class TestALuckyStepIsNotConvergence:
     """The defect itself, on two models that share no geometry, no
@@ -456,15 +474,40 @@ class TestWhatThisDoesNotFix:
         same branch is extrapolated to its fixed point 0.83037 inside the
         budget (``test_branch_rescue_v1176``). The stall test and the record
         it keeps are unchanged, and this is what they still do when nothing
-        follows them."""
+        follows them.
+
+        v0.1.209 (D158) — and this class went red, as its docstring
+        promised, the day one of its two limits was repaired. The record was
+        F's alone; the branch's THRUST residual keeps beating its own record
+        through the passes where F's step cannot, so the detector that
+        watches the pair no longer cuts it. The limit is asserted here AS IT
+        WAS, with that detector off: pass 85, not converged, a stall."""
         from ogr_slip2d.interslice import MAX_PASSES
         system = _system()
-        with _unrescued():
+        with _unrescued(), _stall_on_f_alone():
             st = _branch(system, LUCKY_LAMBDA, 1e-4)
         assert st is not None
         assert st.converged is False, st.fos
         assert st.abandoned == "", st.abandoned
         assert st.passes < MAX_PASSES, st.passes
+
+    def test_and_the_pair_detector_takes_it_to_its_fixed_point(self):
+        """The repair, on the same branch with the rescue still off: the
+        damped iteration alone converges on pass 117 (measured) instead of
+        being cut on pass 85. It lands 11.7 tolerances from the fixed point,
+        inside the ``tol*r/(1-r)`` of the case above — r is 0.96, so about 25
+        tolerances — which is the residual the contraction criterion
+        promises and no more. With the rescue ON, as shipped, the branch is
+        the same 116 passes with the switch on or off: the rescue already
+        took it at pass 81, so nothing a user sees moves here."""
+        system = _system()
+        root = _fixed_point(system, LUCKY_LAMBDA)
+        tol = 1e-4
+        with _unrescued():
+            st = _branch(system, LUCKY_LAMBDA, tol)
+        assert st is not None and st.converged, (st.passes, st.fos)
+        assert st.rescued is False
+        assert abs(st.fos - root) < 25 * tol, (st.fos, root)
 
     def test_but_it_no_longer_decides_the_answer_at_the_looser_ones(self):
         """The half of that limit this version DOES move, and the reason it

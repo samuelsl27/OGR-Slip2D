@@ -466,21 +466,31 @@ class TestWhatThisVersionDoesNotDo:
     """Written down with the number in front, which is how D152 itself was
     found in the file that reported it."""
 
-    def test_the_stall_detector_still_watches_half_the_pair(self):
-        """It counts passes that do not beat F's own record, and F reaching
+    def test_the_stall_detector_fix_only_renames_this_exit(self):
+        """It counted passes that do not beat F's own record, and F reaching
         its fixed point makes its step 0.0 exactly — a branch succeeding
         read as a branch wandering. Not fixed here, and fixing it alone
         would not have recovered anything: the thrust of the cell above
         contracts at 0.98275 a pass and would need some 1217 passes against
         a ceiling of 400, so the branch would only have changed the name of
         its exit.
-        """
-        import inspect
 
-        from ogr_slip2d.interslice import solve_branch
-        src = inspect.getsource(solve_branch)
-        assert "if step < best_step:" in src
-        assert "if d_x < best_step" not in src
+        v0.1.209 (D158) fixed it, and this case used to read the source to
+        say it had not been. It now executes the prediction instead: with
+        the exemption off and the default budget, the detector that watches
+        the pair takes the branch past pass 271 and it leaves on pass 400
+        out of budget, not converged. The 1218 passes it does need are in
+        ``test_stall_pair_v1209``, with a user's budget and the closed form.
+        """
+        from ogr_core.support import ForceApplication
+        system = _system(_anchored(ForceApplication.ACTIVE), _plane())
+        with _off() as live:
+            if not live:
+                return
+            st = _force(system, LOST, max_passes=MAX_IT)
+        assert st is not None and st.converged is False
+        assert st.abandoned == "", st.abandoned
+        assert st.passes == MAX_IT, st.passes
 
     def test_the_recovered_branch_publishes_an_unsettled_thrust(self):
         """The exemption gives back the FACTOR, not a converged thrust.
@@ -492,6 +502,13 @@ class TestWhatThisVersionDoesNotDo:
         not converged; now, because its thrust is inadmissible — so no
         answer moves, and saying which of the two is happening is the
         point.
+
+        v0.1.209 — and the verdict is read on the WRONG thrust. Settled (the
+        pair detector of D158 reaches it on pass 1218), this cell's thrust
+        is in compression with a margin of +0.420; the thrust of the pass
+        the exemption accepts on is at -0.119. The node is out for a reason
+        its own fixed point contradicts. Reported, not fixed:
+        ``test_stall_pair_v1209::TestWhatThisVersionDoesNotDo``.
         """
         from ogr_core.support import ForceApplication
         from ogr_slip2d.interslice import thrust_is_admissible

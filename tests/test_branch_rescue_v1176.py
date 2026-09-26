@@ -246,6 +246,23 @@ def _unrescued():
         interslice.BRANCH_RESCUE = keep
 
 
+@contextlib.contextmanager
+def _stall_on_f_alone():
+    """The stall detector of v0.1.208 — ``BRANCH_STALL_PAIR`` (v0.1.209,
+    D158) off — for the cases that pin what the solver of 0.1.175 did. Same
+    idiom and same reason as ``_unrescued``."""
+    import ogr_slip2d.interslice as interslice
+    keep = getattr(interslice, "BRANCH_STALL_PAIR", None)
+    if keep is None:
+        yield
+        return
+    interslice.BRANCH_STALL_PAIR = False
+    try:
+        yield
+    finally:
+        interslice.BRANCH_STALL_PAIR = keep
+
+
 # ----------------------------------------------------------------------
 def _ground(project):
     from ogr_core.geometry import Boundary, BoundaryType, Polyline, Vertex
@@ -324,14 +341,27 @@ class TestTheRescueSettlesTheCycle:
         the switch off the branch is abandoned on pass 1 + STALL_PATIENCE
         with an empty ``abandoned`` (a stall, not an overflow and not the
         budget); with it on, the same branch converges and says it was
-        rescued."""
+        rescued.
+
+        v0.1.209 (D158) — the pass is pinned with the stall detector of
+        v0.1.208, which is what "1 + STALL_PATIENCE" was a statement about.
+        With the detector that watches the pair the same branch still leaves
+        through the stall test, two passes later (83, measured): in a
+        period-2 cycle the thrust cycles with F, so neither residual keeps
+        beating its record and the pair detector cuts it too — which is the
+        half of D158 that had to stay true."""
         from ogr_slip2d.interslice import STALL_PATIENCE
         system = _system_091()
-        with _unrescued():
+        with _unrescued(), _stall_on_f_alone():
             was = _branch(system, CYCLE_LAMBDA, 1e-4)
         assert was is not None and was.converged is False, was
         assert was.abandoned == "" and was.passes == STALL_PATIENCE + 1, (
             was.abandoned, was.passes)
+        with _unrescued():
+            pair = _branch(system, CYCLE_LAMBDA, 1e-4)
+        assert pair is not None and pair.converged is False, pair
+        assert pair.abandoned == "", pair.abandoned
+        assert STALL_PATIENCE < pair.passes < system.max_passes, pair.passes
         now = _branch(system, CYCLE_LAMBDA, 1e-4)
         assert now is not None and now.converged is True, now
         assert now.rescued is True
@@ -404,9 +434,14 @@ class TestTheSlowBranchReachesItsFixedPoint:
         return st.fos
 
     def test_the_stalled_moment_branch_now_converges_to_it(self):
+        """v0.1.209 (D158) — the "was" side is the solver of 0.1.175, so the
+        stall detector is v0.1.208's as well: with the one that watches the
+        pair, the damped iteration alone reaches this fixed point on pass
+        117 (``test_branch_contraction_v1172``), and there would be no stall
+        for the rescue to be compared against."""
         system = _wedge_system(SLOW_BETA, 1e-4)
         root = self._fixed_point(system)
-        with _unrescued():
+        with _unrescued(), _stall_on_f_alone():
             was = _branch(system, SLOW_LAMBDA, 1e-4, moment=True)
         assert was is not None and was.converged is False, was
         for tol in (1e-4, 1e-10):
