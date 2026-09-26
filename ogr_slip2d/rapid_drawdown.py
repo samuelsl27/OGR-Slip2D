@@ -160,13 +160,35 @@ CAP_MAX_PASSES = 20
 #: centre of its cycle). All three are functions of the slice geometry, the
 #: ponded water and kv, and ``_undrained_slices`` changes the material, u and
 #: the suction cohesion only; Janbu's sum, sign(sum w_total*tan a), does not
-#: see any of those. Per-slice keys are NOT here on purpose: in that branch
-#: the wrapper publishes the caller's slices, which no pass solved.
+#: see any of those. Per-slice keys are NOT here on purpose: no pass solved
+#: the centre, so no pass's per-slice numbers belong beside it (since
+#: v0.1.211 the checks judge the two horns themselves; see D200 in
+#: ``MultiStageDrawdownMethod.compute_fos``).
 PASS_INVARIANT_KEYS = ("slide_sign", "m_alpha_sign", "kv")
 
 
 class RapidDrawdownError(RuntimeError):
     """A modelling error the user has to resolve, not a numerical hiccup."""
+
+
+class DrawdownStageFailed(RapidDrawdownError):
+    """A stage whose method produced no factor of safety (v0.1.211, D194).
+
+    Not a condition of the procedure but a failure of the calculation, so it
+    carries the pass that failed: :class:`MultiStageDrawdownMethod` reports
+    that pass's own ``reason`` (an m-alpha collapse, an active support
+    beyond the driving moment, no lambda root) instead of "the procedure
+    does not apply", which is what every stage without a factor used to
+    say. A subclass of :class:`RapidDrawdownError` so that a caller that
+    already refuses a drawdown on that error keeps doing so.
+    """
+
+    def __init__(self, stage: int, result, where: str = "") -> None:
+        self.stage = stage
+        self.result = result
+        why = getattr(result, "error_message", "") or "no reason given"
+        super().__init__(
+            f"Stage {stage}{where} produced no factor of safety: {why}")
 
 
 @dataclass
@@ -211,7 +233,8 @@ class DrawdownResult:
     # ``final_result``: the ``PASS_INVARIANT_KEYS`` of the passes, and the
     # two passes whose factors the reported centre averages. A centre is
     # admitted only if both of its horns were; with no per-slice columns in
-    # either, on purpose (see ``final_result``).
+    # either, on purpose (see ``final_result``). v0.1.211 (D200): the horns
+    # are also what the post-analysis checks judge in that branch.
     invariant_details: dict = field(default_factory=dict)
     cycle_horns: tuple = ()
 
@@ -459,6 +482,23 @@ def rapid_drawdown_fos(
         Lowe-Karafiath ... K_c = 1 envelope interpolated by K_c, no cap
         Duncan-W-Wong .... the same, capped by the drained strength
         Corps of Eng. .... the R envelope directly, capped the same way
+
+    v0.1.211 (D194) -- a pass of ANY stage whose method returns no factor
+    (``fos=None``: m-alpha collapsed, an active support beyond the driving
+    moment, no lambda root) raises :class:`DrawdownStageFailed`, and the
+    surface comes back invalid with that pass's reason. The drained cap used
+    to test ``math.isfinite(r3.fos)``, which raises a TypeError on None
+    (a factor has been None since D56, v0.1.152), and nothing caught it: one
+    such surface ended the whole search. Stopping the cap at the last pass
+    that did have a factor was the alternative, and it is not taken on
+    purpose: the cap only ever LOWERS the strength (``cur[i] <= tau_ff``
+    below), so a pass before the one that failed is an upper bound on the
+    capped factor -- the unsafe side -- and reporting it would be reporting
+    a factor the procedure did not reach. Stages 1 and 2 follow the same
+    rule, because "the procedure does not apply" (``RapidDrawdownError``)
+    is for its preconditions -- a slope unstable before the drawdown, an
+    envelope it cannot carry, a surface it cannot slice -- and a method that
+    fails to produce a number is a different statement.
     """
     from .slicer import slice_surface
 
@@ -474,7 +514,9 @@ def rapid_drawdown_fos(
         raise RapidDrawdownError(
             "The slip surface could not be sliced at the initial level")
     r1 = method.compute_fos(p1, surface, sl1)
-    if r1.fos is None or not (math.isfinite(r1.fos) and r1.fos > 0.0):
+    if r1.fos is None:
+        raise DrawdownStageFailed(1, r1)
+    if not r1.fos > 0.0:
         raise RapidDrawdownError(
             "Stage 1 did not produce a usable factor of safety")
     if r1.fos < 1.0:
@@ -522,8 +564,8 @@ def rapid_drawdown_fos(
 
     sl2u = _undrained_slices(sl2, tau_by_index)
     r2 = method.compute_fos(p2, surface, sl2u)
-    if r2.fos is None or not math.isfinite(r2.fos):
-        raise RapidDrawdownError("Stage 2 did not converge")
+    if r2.fos is None:
+        raise DrawdownStageFailed(2, r2)
 
     res = DrawdownResult(
         fos=r2.fos, method=procedure, fos_stage1=r1.fos, fos_stage2=r2.fos,
@@ -582,8 +624,9 @@ def rapid_drawdown_fos(
             break
         cur = nxt
         r3 = method.compute_fos(p2, surface, _undrained_slices(sl2, cur))
-        if not math.isfinite(r3.fos):
-            break
+        if r3.fos is None:
+            raise DrawdownStageFailed(
+                3, r3, f" (drained cap, pass {passes + 1})")
         horn = last
         last = r3
         recent.append(r3.fos)
@@ -691,6 +734,26 @@ class MultiStageDrawdownMethod:
             res = rapid_drawdown_fos(
                 project, surface, self.inner,
                 num_slices=self.num_slices, procedure=self.procedure)
+        except DrawdownStageFailed as exc:
+            from .methods.base import REASON_NON_PHYSICAL_FOS
+            # v0.1.211 (D194) -- the calculation failed, and it says why in
+            # the words of the pass that failed: its own reason, so that the
+            # Invalid Surfaces report groups this surface with the same
+            # failure of an ordinary analysis. The fallback is for a method
+            # that returns no number and no reason, which D56 allows (only
+            # the message is compulsory). The slices are that pass's, the
+            # state it was asked to solve; the caller's are neither stage's.
+            inner = exc.result
+            return LEMResult(
+                fos=None, converged=False, iterations=0,
+                method_id=self.METHOD_ID, surface=surface,
+                slices=getattr(inner, "slices", None) or slices,
+                error_message=str(exc),
+                reason=(getattr(inner, "reason", "")
+                        or REASON_NON_PHYSICAL_FOS),
+                details={"drawdown_procedure": self.procedure,
+                         "drawdown_stage_failed": exc.stage},
+            )
         except RapidDrawdownError as exc:
             from .methods.base import REASON_DRAWDOWN_NOT_APPLICABLE
             # A surface the procedure does not apply to is not a failure
@@ -727,9 +790,18 @@ class MultiStageDrawdownMethod:
         # factor is the centre of its cycle -- only the keys every pass
         # shares travel (``PASS_INVARIANT_KEYS``), and the centre is admitted
         # only if both horns of the cycle were. Per-slice keys do not travel
-        # there, because the slices published in that branch are the
-        # caller's, which no pass solved: that pairing is reported, not fixed
-        # here (D200).
+        # there, because no pass solved the centre.
+        #
+        # v0.1.211 (D200) -- and the post-analysis checks judge the two
+        # horns, each exactly as its pass solved it (``screen_states``), not
+        # the result below. Until now they judged the CALLER's slices -- the
+        # full reservoir, drained materials, phi' = 30 in problem 096 --
+        # with the centre's factor: a pairing no stage computed. Judging the
+        # horns is the rule D112b wrote for the inner verdict, carried to the
+        # screen: the centre is admissible only if both of the states it
+        # averages are. The slices published beside the centre are the last
+        # horn's, the drawn-down slicing with stage-3 strengths, with no
+        # forces: the caller's belong to no stage of the procedure at all.
         #
         # ``kv`` stays a literal key below. It is the vertical seismic
         # coefficient the checks load each base with (D167); when no pass
@@ -739,6 +811,8 @@ class MultiStageDrawdownMethod:
             inner = dict(getattr(final, "details", None) or {})
             verdict = final
             horns = (final,)
+            published = getattr(final, "slices", None) or slices
+            judged = ()
         else:
             inner = dict(getattr(res, "invariant_details", None) or {})
             horns = tuple(h for h in (getattr(res, "cycle_horns", ()) or ())
@@ -746,6 +820,12 @@ class MultiStageDrawdownMethod:
             verdict = next((h for h in horns
                             if not (h.converged and h.admissible
                                     and not h.error_message)), None)
+            # The cycling branch is only reached with two capped passes
+            # behind it, so there are always two horns; the fallback is
+            # for a DrawdownResult built by hand.
+            published = (getattr(horns[-1], "slices", None) or slices
+                         if horns else slices)
+            judged = horns
         kv = inner.get("kv")
         if kv is None:
             seismic = project.seismic
@@ -764,7 +844,8 @@ class MultiStageDrawdownMethod:
         return LEMResult(
             fos=res.fos, iterations=3 if res.fos_stage3 else 2,
             method_id=self.METHOD_ID, surface=surface,
-            slices=getattr(final, "slices", None) or slices,
+            slices=published,
+            screen_states=judged,
             base_normal_force=list(getattr(final, "base_normal_force", ())
                                    or ()),
             base_shear_force=list(getattr(final, "base_shear_force", ())

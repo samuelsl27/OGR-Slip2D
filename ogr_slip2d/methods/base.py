@@ -146,9 +146,19 @@ SCREEN_TENSILE_STRESS = "tensile_stress"
 #: The m-alpha check rejected the surface (Whitman & Bailey, 1967). The
 #: reference's code is -112.
 SCREEN_M_ALPHA = "m_alpha"
+#: v0.1.211 (D184) -- the checks themselves raised, so the surface could not
+#: be judged, and it is rejected rather than let through. Until now
+#: ``BaseSearch._is_admissible`` swallowed the exception and ADMITTED the
+#: surface with no note, so a failure of the measurement read as a verdict --
+#: the shape of D94. Rejecting can raise the reported minimum if that surface
+#: was the lowest, and that is accepted on purpose: the note says why, and a
+#: critical surface nobody could screen is not one to publish. The reference
+#: gives this no code of its own, so the export writes -101 ("any other
+#: rejection"), never -112, even when the exception's text names m_alpha.
+SCREEN_ERROR = "screen_error"
 
 #: Every screen ``checks.screen_surface`` may name.
-ALL_SCREENS = frozenset({SCREEN_TENSILE_STRESS, SCREEN_M_ALPHA})
+ALL_SCREENS = frozenset({SCREEN_TENSILE_STRESS, SCREEN_M_ALPHA, SCREEN_ERROR})
 
 
 # ======================================================================
@@ -249,6 +259,15 @@ class LEMResult:
     # interslice thrust, active support beyond the driving moment) leaves it
     # empty, because neither is a screen the reference gives a code to.
     admissibility_reason: str = ""
+    # v0.1.211 (D200) -- the states the post-analysis checks judge INSTEAD
+    # of this result, when no single solve produced it. Today that is the
+    # cycling drained cap of a rapid drawdown, whose factor is the centre of
+    # a cycle and whose two horns are the passes that were actually solved:
+    # ``checks.screen_surface`` admits the centre only if both horns pass.
+    # Empty -- the result judges itself -- everywhere else. Not in
+    # ``to_dict`` on purpose: each state is a whole result of its own, and
+    # what the result IS (factor, verdict, note) is already there.
+    screen_states: tuple = field(default=(), repr=False, compare=False)
 
     # ------------------------------------------------------------------
     def __post_init__(self) -> None:
@@ -289,6 +308,8 @@ class LEMResult:
             self.admissibility_note = ""
         if self.admissibility_reason is None:
             self.admissibility_reason = ""
+        if self.screen_states is None:
+            self.screen_states = ()
         if self.reason is None:
             self.reason = ""
 

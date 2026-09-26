@@ -36,10 +36,11 @@ real disagreement cannot be picked from it. ``_FlippedJanbu`` declares the
 opposite of its own sign after solving: what is tested is that the
 DECLARATION reaches the check, whatever it says.
 
-WHAT THIS FILE DOES NOT CLAIM. Not that the slices the wrapper publishes
-in the cycling branch are the right ones: they are the caller's, which no
-pass solved (D200, reported). Not the ``TypeError`` a stage-3 pass without
-a factor raises at ``rapid_drawdown.py`` (D194, reported).
+WHAT THIS FILE DOES NOT CLAIM. Not which slices the wrapper publishes in
+the cycling branch, nor what the checks judge there: until v0.1.210 they were
+the caller's, which no pass solved (D200), and since v0.1.211 the checks
+judge the two horns -- ``test_cycle_horns_screened_v1211.py``. Not what a
+stage without a factor does (D194, ``test_drawdown_stage_failure_v1211.py``).
 
 DISCRIMINATION against the v0.1.209 tree. MEASURED, by copying this file into
 a ``git worktree`` at a6eceda and running it there -- not predicted. Of the
@@ -331,8 +332,9 @@ class TestTheCyclingBranch:
             rd.final_result.details["m_alpha_sign"], w.details
 
     def test_no_per_slice_key_travels(self):
-        """Guard: in this branch the published slices are the caller's, so
-        nothing that belongs to a pass's slicing may travel with them."""
+        """Guard: no pass solved the centre, so nothing that belongs to one
+        pass's solution may travel with it (since v0.1.211 the published
+        slices are the last horn's, with no forces -- D200)."""
         w = self._cycling()
         extra = set(w.details) - _DRAWDOWN_KEYS
         assert extra <= _SHARED_KEYS, extra

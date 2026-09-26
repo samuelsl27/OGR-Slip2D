@@ -56,8 +56,14 @@ def error_code(res) -> Optional[int]:
     so a surface failing both is a tensile rejection (v0.1.192, D177). The
     m-alpha branch also accepts the note, so a result built before
     ``admissibility_reason`` existed maps as it always did.
+
+    v0.1.211 (D184) — a surface the checks could not evaluate is -101, and
+    that branch goes BEFORE the note test: the exception's own text can say
+    ``m_alpha`` (a missing ``m_alpha_sign`` key, say), and -112 is a verdict
+    of the m-alpha screen, which is exactly what did not happen.
     """
-    from .methods.base import SCREEN_M_ALPHA, SCREEN_TENSILE_STRESS
+    from .methods.base import (SCREEN_ERROR, SCREEN_M_ALPHA,
+                               SCREEN_TENSILE_STRESS)
 
     if res.is_valid and getattr(res, "admissible", True):
         return None
@@ -66,6 +72,8 @@ def error_code(res) -> Optional[int]:
             getattr(res, "error_message", "") or "")
     if why == SCREEN_TENSILE_STRESS:
         return ERROR_TENSILE
+    if why == SCREEN_ERROR:
+        return ERROR_OTHER
     if why == SCREEN_M_ALPHA or "m_alpha" in note:
         return ERROR_M_ALPHA
     if not res.converged:

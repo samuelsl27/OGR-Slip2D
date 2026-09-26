@@ -599,21 +599,26 @@ class BaseSearch(ABC):
         iteration — exactly as the reference specifies. Surfaces failing
         the Tensile Stress Check or the m-alpha check are discarded, and
         the reason is recorded on the result for reporting.
+
+        v0.1.211 (D184) — no ``try`` here any more. It answered ``True`` to
+        any exception from the checks, so a surface nobody could screen was
+        ADMITTED with no note and could become the critical one. The checks
+        now declare that case themselves (``SCREEN_ERROR``, see
+        ``checks.screen_surface``), so it arrives here as an ordinary
+        rejection with its note, and any door that calls them says the same.
         """
+        from .checks import screen_surface
+
         if result is None:
             return True
         if not (self.reject_tensile or self.check_m_alpha):
             return True
-        try:
-            from .checks import screen_surface
-            ok, screen, reason = screen_surface(
-                result,
-                tensile=self.reject_tensile,
-                tensile_percent=self.tensile_percent,
-                m_alpha=self.check_m_alpha,
-            )
-        except Exception:  # noqa: BLE001
-            return True
+        ok, screen, reason = screen_surface(
+            result,
+            tensile=self.reject_tensile,
+            tensile_percent=self.tensile_percent,
+            m_alpha=self.check_m_alpha,
+        )
         if not ok:
             result.admissible = False
             result.admissibility_note = reason or ""

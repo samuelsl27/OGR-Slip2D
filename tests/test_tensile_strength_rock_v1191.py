@@ -202,9 +202,11 @@ class TestOnlyTheTwoRockModelsGetOne:
 
 # ======================================================================
 class TestAnAllowanceNeverBreaksTheCheck:
-    """GUARDS: ``BaseSearch._is_admissible`` swallows any exception and
-    ADMITS the surface, so a crash here would let a failing surface
-    through. Every degenerate input comes back as the conservative 0.0."""
+    """GUARDS: every degenerate input comes back as the conservative 0.0.
+    Until v0.1.210 a crash here was worse than wrong, because
+    ``BaseSearch._is_admissible`` swallowed any exception and ADMITTED the
+    surface; since v0.1.211 (D184) it would reject the surface as
+    unscreenable instead, which is still not the tensile verdict."""
 
     def test_degenerate_constants_give_zero(self):
         for over in (dict(mb=0.0), dict(mb=-1.0), dict(s=0.0), dict(s=-0.1),

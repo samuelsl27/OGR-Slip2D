@@ -218,9 +218,12 @@ def _material_tensile_strength(material) -> float:
     plausible formula with nothing behind it is the worst outcome here.
 
     Any failure comes back as 0.0, the answer every other material gets.
-    Not out of politeness: ``BaseSearch._is_admissible`` swallows an
-    exception from the checks and ADMITS the surface, so raising here would
-    let a surface in tension through.
+    Not out of politeness: zero is the strictest allowance, so a model that
+    cannot state its tensile strength is judged as if it had none. Until
+    v0.1.210 there was a second reason -- ``BaseSearch._is_admissible``
+    swallowed an exception from the checks and ADMITTED the surface -- and
+    since v0.1.211 (D184) an exception here would instead reject the
+    surface as unscreenable, which is not the verdict either.
 
     v0.1.210 (D180) -- there is NO per-material tensile strength, and that
     is a decision, written here because this is where the tolerance is
@@ -372,9 +375,12 @@ def _per_slice(result, key: str, n: int):
     None when the key is absent or holds None (a method with nothing to
     say, or a surface without a support), and ALSO when it is malformed --
     not a sequence, a string, the wrong length, a non-number, a non-finite
-    value. It never raises: ``BaseSearch._is_admissible`` swallows an
-    exception from the checks and ADMITS the surface, so a crash here would
-    let the very surface in that the check exists to judge.
+    value. It never raises: a malformed key means "the method said nothing
+    usable", and the fallback form is the answer for that. Until v0.1.210 a
+    crash here was also worse than wrong -- ``BaseSearch._is_admissible``
+    swallowed it and ADMITTED the surface; since v0.1.211 (D184) it would
+    reject the surface as unscreenable instead, which is still not the
+    verdict the checks exist to give.
     """
     details = getattr(result, "details", None) or {}
     raw = details.get(key)
@@ -774,22 +780,56 @@ def screen_surface(result, tensile: bool = False,
 
     The tensile check runs first and the first rejection is the answer, so
     a surface failing both is reported — and exported — as tensile.
-    """
-    from .methods.base import SCREEN_M_ALPHA, SCREEN_TENSILE_STRESS
 
-    if result is None or not getattr(result, "is_valid", False):
+    v0.1.211 (D200) — a result that carries ``screen_states`` is judged
+    through them and not through itself: the centre of a cycling drained
+    cap passes only if both horns of its cycle pass, each exactly as its
+    pass solved it. The order above holds across them: tension on every
+    state first, then m-alpha on every state, so "fails both" still reads
+    as tensile. Every other result has none and judges itself, as before.
+
+    v0.1.211 (D184) — and when the checks THEMSELVES raise, the surface is
+    rejected as :data:`~ogr_slip2d.methods.base.SCREEN_ERROR`, with the
+    exception named in the note. The ``try`` used to stand in
+    ``BaseSearch._is_admissible`` and answered ``True``: a surface nobody
+    could screen was admitted with no note, and could be the critical one.
+    It is here and not in that door for the reason :func:`m_alpha_check`
+    gives for its own gate -- this is the function every caller goes
+    through, so every caller says the same thing. ``Exception`` and not
+    narrower, unlike ``BaseSearch._analyse``: there a defect in the code
+    raises loudly because the alternative was a wrong NUMBER; here the
+    alternative is a wrong VERDICT, and a declared rejection is the loud
+    answer that does not end a search of hours over one surface. The
+    measured count (suite and verification problems 095-098) is in the
+    verification bank's D184 census.
+    """
+    from .methods.base import (SCREEN_ERROR, SCREEN_M_ALPHA,
+                               SCREEN_TENSILE_STRESS)
+
+    if result is None:
         return True, "", None
-    if tensile:
-        ok, bad = tensile_stress_check(result, tensile_percent)
-        if not ok:
-            return False, SCREEN_TENSILE_STRESS, (
-                f"tensile stress on {len(bad)} slice base(s) "
-                f"(error -120)")
-    if m_alpha:
-        ok, bad = m_alpha_check(result, m_alpha_limit)
-        if not ok:
-            return False, SCREEN_M_ALPHA, (
-                f"m_alpha < {m_alpha_limit} on {len(bad)} slice(s)")
+    try:
+        if not getattr(result, "is_valid", False):
+            return True, "", None
+        states = tuple(getattr(result, "screen_states", None) or ()) \
+            or (result,)
+        if tensile:
+            for state in states:
+                ok, bad = tensile_stress_check(state, tensile_percent)
+                if not ok:
+                    return False, SCREEN_TENSILE_STRESS, (
+                        f"tensile stress on {len(bad)} slice base(s) "
+                        f"(error -120)")
+        if m_alpha:
+            for state in states:
+                ok, bad = m_alpha_check(state, m_alpha_limit)
+                if not ok:
+                    return False, SCREEN_M_ALPHA, (
+                        f"m_alpha < {m_alpha_limit} on {len(bad)} slice(s)")
+    except Exception as exc:  # noqa: BLE001 - see the docstring (D184)
+        return False, SCREEN_ERROR, (
+            f"admissibility checks could not be evaluated "
+            f"({type(exc).__name__}: {exc})")
     return True, "", None
 
 
