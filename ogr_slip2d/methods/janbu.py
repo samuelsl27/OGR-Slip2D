@@ -203,9 +203,15 @@ class JanbuSimplified(LEMMethod):
         converged = False
         iterations = 0
         history: list[float] = []   # v0.1.74, for Steffensen
+        # v0.1.210 (D172) -- the support load of the LAST pass, as in
+        # Bishop. Here F is the UNCORRECTED one: Janbu Corrected multiplies
+        # by f0 only after the iteration, and a load taken at the corrected
+        # F would be one no pass used (only a passive support depends on F).
+        sigma_load = None
         for it in range(1, self.max_iterations + 1):
             iterations = it
             numerator = 0.0
+            sigma_load = [0.0] * len(s_list) if sup.present else None
 
             for i_s, s in enumerate(s_list):
                 # v0.1.61 — the base normal carries the ponded-water
@@ -217,8 +223,10 @@ class JanbuSimplified(LEMMethod):
                 # v0.1.137; the two are the same statement, and the argument
                 # for it is written at ``support_vertical_load``.
                 if sup.present:
-                    W_eff += support_vertical_load(
+                    load = support_vertical_load(
                         sup, i_s, s.base_angle, slide_sign, fos)
+                    W_eff += load
+                    sigma_load[i_s] = load
                 b = s.width
 
                 # Estimate σ'ₙ
@@ -376,6 +384,9 @@ class JanbuSimplified(LEMMethod):
                 # method APPLIED, read by ``checks._applied_kv``: the same
                 # ``kv`` handed to ``slice_forces``.
                 "kv": kv,
+                # v0.1.210 (D172) -- read by ``checks._applied_support_load``;
+                # None without a support.
+                "sigma_support_load": sigma_load,
             }),
         )
 

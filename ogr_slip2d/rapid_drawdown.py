@@ -93,7 +93,7 @@ from __future__ import annotations
 
 import copy
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from ogr_core.geometry import Vertex
@@ -154,6 +154,17 @@ CAP_TOL = 1e-4               # on the factor of safety, between passes
 CAP_MAX_PASSES = 20
 
 
+#: v0.1.210 (D112b) -- the ``details`` keys that every stage-2 and stage-3
+#: pass of ONE surface shares, and so the only ones that may travel when no
+#: pass produced the reported factor (the cycling drained cap reports the
+#: centre of its cycle). All three are functions of the slice geometry, the
+#: ponded water and kv, and ``_undrained_slices`` changes the material, u and
+#: the suction cohesion only; Janbu's sum, sign(sum w_total*tan a), does not
+#: see any of those. Per-slice keys are NOT here on purpose: in that branch
+#: the wrapper publishes the caller's slices, which no pass solved.
+PASS_INVARIANT_KEYS = ("slide_sign", "m_alpha_sign", "kv")
+
+
 class RapidDrawdownError(RuntimeError):
     """A modelling error the user has to resolve, not a numerical hiccup."""
 
@@ -196,9 +207,22 @@ class DrawdownResult:
     # is not a state any pass computed. Publishing the last iterate's
     # forces beside that number would be worse than publishing none.
     final_result: object = None
+    # v0.1.210 (D112b) -- what the wrapper may still say when there is no
+    # ``final_result``: the ``PASS_INVARIANT_KEYS`` of the passes, and the
+    # two passes whose factors the reported centre averages. A centre is
+    # admitted only if both of its horns were; with no per-slice columns in
+    # either, on purpose (see ``final_result``).
+    invariant_details: dict = field(default_factory=dict)
+    cycle_horns: tuple = ()
 
 
 # ----------------------------------------------------------------------
+def _invariant_details(result) -> dict:
+    """The ``PASS_INVARIANT_KEYS`` a pass published, and nothing else."""
+    details = getattr(result, "details", None) or {}
+    return {k: details[k] for k in PASS_INVARIANT_KEYS if k in details}
+
+
 def _effective_c_phi(material) -> tuple[float, float]:
     """Effective c' and φ' of a material, in kPa and degrees.
 
@@ -505,6 +529,7 @@ def rapid_drawdown_fos(
         fos=r2.fos, method=procedure, fos_stage1=r1.fos, fos_stage2=r2.fos,
         n_undrained_slices=len(tau_by_index),
         final_result=r2,
+        invariant_details=_invariant_details(r2),
     )
     if not drained_cap or not tau_by_index:
         return res
@@ -519,6 +544,7 @@ def rapid_drawdown_fos(
     prev_fos = r2.fos
     prev_delta = None
     last = r2
+    horn = None                 # the capped pass before ``last`` (D112b)
     recent: list[float] = []    # factors of safety of the CAPPED passes
     passes = 0
     converged = False
@@ -558,6 +584,7 @@ def rapid_drawdown_fos(
         r3 = method.compute_fos(p2, surface, _undrained_slices(sl2, cur))
         if not math.isfinite(r3.fos):
             break
+        horn = last
         last = r3
         recent.append(r3.fos)
         passes += 1
@@ -591,6 +618,11 @@ def rapid_drawdown_fos(
         # that go with it. Reported without them rather than with somebody
         # else's.
         res.final_result = None
+        # v0.1.210 (D112b) -- but the two passes the centre averages are
+        # kept, so that the wrapper can say whether both were admissible,
+        # and so are the keys every pass shares.
+        res.cycle_horns = (horn, last)
+        res.invariant_details = _invariant_details(last)
     res.n_cap_passes = passes
     res.cap_converged = converged
     if not converged:
@@ -679,22 +711,58 @@ class MultiStageDrawdownMethod:
         # normal from stage-1 slices at a stage-2 factor of safety - two
         # different states in one expression.
         final = getattr(res, "final_result", None)
-        # v0.1.191 (D167) -- the vertical seismic coefficient the checks
-        # load each base with. Asked of the pass that produced the answer,
-        # like everything else here; when no pass did (the cycling drained
-        # cap reports a midpoint), it is the project's own, which every
-        # stage shared -- ``level_project`` is a shallow copy and keeps this
-        # very SeismicLoad. In that branch the checks still pair the
-        # caller's slices with a stage-3 factor: that mismatch predates this
-        # and is not what the key fixes. ``m_alpha_sign`` is NOT copied
-        # (D112b, reported).
-        kv = (getattr(final, "details", None) or {}).get("kv")
+        # v0.1.210 (D112b) -- the wrapper says what the pass that produced
+        # the answer said, and nothing it did not. Until now it built this
+        # result from a literal: ``m_alpha_sign`` was dropped, so with Janbu
+        # inside ``checks._denominator_sign`` fell back to Bishop's sum --
+        # D112's own case, reached through the wrapper -- and ``converged``
+        # was written True and ``admissible`` left at its default, so a pass
+        # the inner method had itself declared inadmissible (Spencer and GLE
+        # on a relaxed interslice thrust) or unconverged with a factor came
+        # back admitted. The details travel WHOLE rather than by a list of
+        # keys: a list is how this came about, one key at a time (``kv`` was
+        # added in v0.1.191 and ``m_alpha_sign`` was not).
+        #
+        # When no pass produced the answer -- the cycling drained cap, whose
+        # factor is the centre of its cycle -- only the keys every pass
+        # shares travel (``PASS_INVARIANT_KEYS``), and the centre is admitted
+        # only if both horns of the cycle were. Per-slice keys do not travel
+        # there, because the slices published in that branch are the
+        # caller's, which no pass solved: that pairing is reported, not fixed
+        # here (D200).
+        #
+        # ``kv`` stays a literal key below. It is the vertical seismic
+        # coefficient the checks load each base with (D167); when no pass
+        # published it, it is the project's own, which every stage shared --
+        # ``level_project`` is a shallow copy and keeps this very SeismicLoad.
+        if final is not None:
+            inner = dict(getattr(final, "details", None) or {})
+            verdict = final
+            horns = (final,)
+        else:
+            inner = dict(getattr(res, "invariant_details", None) or {})
+            horns = tuple(h for h in (getattr(res, "cycle_horns", ()) or ())
+                          if h is not None)
+            verdict = next((h for h in horns
+                            if not (h.converged and h.admissible
+                                    and not h.error_message)), None)
+        kv = inner.get("kv")
         if kv is None:
             seismic = project.seismic
             kv = seismic.kv if seismic.enabled else 0.0
+        if verdict is None:
+            flags = dict(converged=True)
+        else:
+            flags = dict(
+                converged=bool(verdict.converged),
+                error_message=verdict.error_message or "",
+                reason=verdict.reason or "",
+                admissible=bool(verdict.admissible),
+                admissibility_note=verdict.admissibility_note or "",
+                admissibility_reason=verdict.admissibility_reason or "",
+            )
         return LEMResult(
-            fos=res.fos, converged=True, iterations=3 if res.fos_stage3
-            else 2,
+            fos=res.fos, iterations=3 if res.fos_stage3 else 2,
             method_id=self.METHOD_ID, surface=surface,
             slices=getattr(final, "slices", None) or slices,
             base_normal_force=list(getattr(final, "base_normal_force", ())
@@ -703,7 +771,9 @@ class MultiStageDrawdownMethod:
                                   or ()),
             base_shear_strength=list(
                 getattr(final, "base_shear_strength", ()) or ()),
+            **flags,
             details={
+                **inner,
                 "drawdown_procedure": res.method,
                 "fos_stage1": res.fos_stage1,
                 "fos_stage2": res.fos_stage2,

@@ -170,7 +170,8 @@ class GLEMorgensternPrice(LEMMethod):
 
         # v0.1.64 — supports, resolved once for every inner solve below.
         from ..support_integration import (resolve_support_terms,
-                                           support_failure_details)
+                                           support_failure_details,
+                                           support_normal_load)
         sup = resolve_support_terms(project, surface, slices, slide_sign)
 
         x0 = slices.slices[0].base_x_left
@@ -385,6 +386,13 @@ class GLEMorgensternPrice(LEMMethod):
                     # read by ``checks._applied_kv``; see
                     # ``Spencer.compute_fos``.
                     "kv": kv,
+                    # v0.1.210 (D172) -- what the checks read to judge this
+                    # surface as this solver solved it: the support load in the
+                    # stress estimate (``-nf_v``, as ``w_total`` minus it is what
+                    # the solver linearised at) and the base normal of its OWN
+                    # solution, which the Tensile Stress Check tests.
+                    "sigma_support_load": support_normal_load(sup),
+                    "solved_base_normal": list(normals),
                     # v0.1.159 (D63) — see ``Spencer.compute_fos``.
                     "lambda_search_fell_back": True,
                     "lambdas_lost_to_budget": system.n_passes_exhausted,
@@ -566,6 +574,13 @@ class GLEMorgensternPrice(LEMMethod):
                 "m_alpha_sign": slide_sign,
                 # v0.1.191 (D167) -- see the fallback exit.
                 "kv": kv,
+                # v0.1.210 (D172) -- what the checks read to judge this
+                # surface as this solver solved it: the support load in the
+                # stress estimate (``-nf_v``, as ``w_total`` minus it is what
+                # the solver linearised at) and the base normal of its OWN
+                # solution, which the Tensile Stress Check tests.
+                "sigma_support_load": support_normal_load(sup),
+                "solved_base_normal": list(normals),
                 # v0.1.159 (D63) — see ``Spencer.compute_fos``.
                 "lambda_search_fell_back": False,
                 "lambdas_lost_to_budget": system.n_passes_exhausted,

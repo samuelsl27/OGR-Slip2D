@@ -218,6 +218,16 @@ class LEMResult:
     #       APPLIED (0 when the earthquake is disabled). Published by every
     #       method and read by the admissibility checks; a result without it
     #       is read as kv = 0.
+    #   "sigma_support_load": v0.1.210 (D172) — per slice, the support load
+    #       the method added to ``w_total`` for the stress it linearised its
+    #       envelope at (Bishop and Janbu: ``support_vertical_load`` of the
+    #       last pass; Spencer, GLE and the prescribed-inclination family:
+    #       ``-nf_v``); None without a support. The Ordinary Method has none.
+    #   "solved_base_normal": v0.1.210 (D172) — per slice, the total base
+    #       normal of the method's OWN solution, whose N/l - u the Tensile
+    #       Stress Check tests. Published by Spencer, GLE, the family and
+    #       the Ordinary Method; Bishop and Janbu publish none because the
+    #       check's fallback form IS theirs.
     # Not exhaustive: methods publish diagnostics of their own. These are
     # the keys other modules rely on.
     details: dict = field(default_factory=dict)

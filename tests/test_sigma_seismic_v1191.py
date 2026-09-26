@@ -30,8 +30,10 @@ WHAT THIS FILE DOES NOT CLAIM. Not the sign convention of kv (D170: the
 reference documents a positive coefficient as DOWNWARDS and ``slice_forces``
 applies it upwards; the check calls ``slice_forces``, so it will follow
 whichever way that is settled). Not that the check's stress is the solver's
-for every method: with supports, and for the Ordinary Method, it is not,
-kv or no kv (D172).
+for every method: with supports, and for the Ordinary Method, it was not,
+kv or no kv (D172) -- closed in v0.1.210, where each method publishes the
+support load of its estimate and the normal of its own solution; that is
+tested in ``tests/test_own_base_stress_v1210.py``, not here.
 
 WHAT THIS FILE DISCRIMINATES against the v0.1.190 tree. MEASURED, by
 copying this file into a ``git worktree`` at that commit and running it

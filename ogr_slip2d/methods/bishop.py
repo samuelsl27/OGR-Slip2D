@@ -203,6 +203,10 @@ class BishopSimplified(LEMMethod):
         fos = max(0.05, self.initial_fos)
         converged = False
         iterations = 0
+        # v0.1.210 (D172) -- the support load each slice's stress estimate
+        # carried in the LAST pass, published so the checks linearise the
+        # envelope where this solver did. See the circular path.
+        sigma_load = None
         for it in range(1, self.max_iterations + 1):
             iterations = it
             forces = []
@@ -211,6 +215,7 @@ class BishopSimplified(LEMMethod):
             normals = []
             tangential = [0.0] * len(s_list) if sup.present else None
             tangential_passive = [0.0] * len(s_list) if sup.present else None
+            sigma_load = [0.0] * len(s_list) if sup.present else None
             for i_s, s in enumerate(s_list):
                 f = slice_forces(s, kh, kv)
                 w = f.w_total
@@ -224,8 +229,10 @@ class BishopSimplified(LEMMethod):
                 # feeding it here as well would count that force twice.
                 w_n = w
                 if sup.present:
-                    w_n += support_vertical_load(
+                    load = support_vertical_load(
                         sup, i_s, s.base_angle, slide_sign, fos)
+                    w_n += load
+                    sigma_load[i_s] = load
                 n_est = w_n * math.cos(s.base_angle)
                 sigma = max(0.0, n_est - s.pore_pressure * s.base_length)
                 sigma /= max(s.base_length, 1e-9)
@@ -342,6 +349,10 @@ class BishopSimplified(LEMMethod):
                 # ``kv`` handed to ``slice_forces``, so the checks load each
                 # slice base as the solver did.
                 "kv": kv,
+                # v0.1.210 (D172) -- the support load the last pass added
+                # to each slice's stress estimate, read by
+                # ``checks._applied_support_load``; None without a support.
+                "sigma_support_load": sigma_load,
             }),
             error_message="" if converged else self.NOT_CONVERGED_NOTE,
             reason="" if converged else REASON_NOT_CONVERGED,
@@ -532,9 +543,16 @@ class BishopSimplified(LEMMethod):
         # so the "clear after using them" step cannot half-happen.
         history: list[float] = []
 
+        # v0.1.210 (D172) -- the support load each slice's stress estimate
+        # carried in the LAST pass: the one whose sigma produced the factor
+        # returned. Published so ``checks`` linearises the envelope where
+        # this solver did; it depends on F only through a PASSIVE support
+        # (``t_passive / F``), so it is captured, not recomputed at the end.
+        sigma_load = None
         for it in range(1, self.max_iterations + 1):
             iterations = it
             numerator = 0.0
+            sigma_load = [0.0] * len(s_list) if sup.present else None
 
             for i_s, s in enumerate(s_list):
                 # v0.1.61 — the base normal follows from the VERTICAL
@@ -549,8 +567,10 @@ class BishopSimplified(LEMMethod):
                 # being bolted on outside it. See
                 # ``support_integration.support_vertical_load``.
                 if sup.present:
-                    W_eff += support_vertical_load(
+                    load = support_vertical_load(
                         sup, i_s, s.base_angle, slide_sign, fos)
+                    W_eff += load
+                    sigma_load[i_s] = load
 
                 N_est = W_eff * math.cos(s.base_angle)
                 N_eff_est = max(0.0, N_est - s.pore_pressure * s.base_length)
@@ -656,6 +676,8 @@ class BishopSimplified(LEMMethod):
                 "m_alpha_sign": slide_sign,
                 # v0.1.191 (D167) -- see the non-circular exit.
                 "kv": kv,
+                # v0.1.210 (D172) -- see above; None without a support.
+                "sigma_support_load": sigma_load,
             }),
         )
 

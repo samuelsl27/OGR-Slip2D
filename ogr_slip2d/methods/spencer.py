@@ -87,7 +87,8 @@ class Spencer(LEMMethod):
 
         # v0.1.64 — supports, resolved once for every inner solve below.
         from ..support_integration import (resolve_support_terms,
-                                           support_failure_details)
+                                           support_failure_details,
+                                           support_normal_load)
         sup = resolve_support_terms(project, surface, slices, slide_sign)
 
         # v0.1.106 — the whole surface is resolved ONCE here and reused at
@@ -327,6 +328,13 @@ class Spencer(LEMMethod):
                     # ``slice_forces``, so the checks load each base as the
                     # solver did.
                     "kv": kv,
+                    # v0.1.210 (D172) -- what the checks read to judge this
+                    # surface as this solver solved it: the support load in the
+                    # stress estimate (``-nf_v``, as ``w_total`` minus it is what
+                    # the solver linearised at) and the base normal of its OWN
+                    # solution, which the Tensile Stress Check tests.
+                    "sigma_support_load": support_normal_load(sup),
+                    "solved_base_normal": list(normals),
                     # v0.1.159 (D63) — this is the path where losing a λ can
                     # decide the answer, so this is the path that has to be
                     # able to say it did. See ``analysis_runner.lambda_budget_note``.
@@ -562,6 +570,13 @@ class Spencer(LEMMethod):
                 "m_alpha_sign": slide_sign,
                 # v0.1.191 (D167) -- see the fallback exit.
                 "kv": kv,
+                # v0.1.210 (D172) -- what the checks read to judge this
+                # surface as this solver solved it: the support load in the
+                # stress estimate (``-nf_v``, as ``w_total`` minus it is what
+                # the solver linearised at) and the base normal of its OWN
+                # solution, which the Tensile Stress Check tests.
+                "sigma_support_load": support_normal_load(sup),
+                "solved_base_normal": list(normals),
                 # v0.1.159 (D63) — false here by construction: a bracket was
                 # found and refined. Written rather than omitted so that a
                 # reader of ``details`` does not have to know which of the

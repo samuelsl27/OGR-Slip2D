@@ -97,6 +97,9 @@ class OrdinaryFellenius(LEMMethod):
         tangential = [0.0] * len(s_list) if sup.present else None
         tangential_passive = [0.0] * len(s_list) if sup.present else None
         n_negative_normal = 0
+        # v0.1.210 (D172) -- the base normal of THIS method's own solution,
+        # for the Tensile Stress Check; see where it is filled.
+        solved: list[float] = []
         for i, s in enumerate(s_list):
             f = forces[i]
             xm, ym, tx, ty, nx, ny = base_frame(axis, s)
@@ -158,6 +161,16 @@ class OrdinaryFellenius(LEMMethod):
                 tangential_passive[i] = sup.t_passive[i]
             normals.append(N)
             resisting.append(strength)
+            # v0.1.210 (D172) -- N' + u*l + T_N: the total normal whose
+            # effective part, (N' + T_N)/l, is the stress this method's own
+            # resistance is c*l + (N' + T_N)*tan(phi') of (the cos^2 form of
+            # USACE EM 1110-2-1902 (2003), Eq. C-12; Turnbull & Hvorslev
+            # 1967). NOT clipped: the check exists to see a tension.
+            # ``normals`` above is left as it was -- the uncorrected N,
+            # whose N/l - u is the form Eq. C-13 warns against -- because
+            # the drawdown stages read it (D197, reported).
+            solved.append(N_eff + s.pore_pressure * s.base_length
+                          + (sup.n_press[i] if sup.present else 0.0))
 
         # ``sup`` is not passed: like Bishop, this path splits the support
         # into a normal part (inside ``resisting``) and a tangential one
@@ -208,6 +221,11 @@ class OrdinaryFellenius(LEMMethod):
                 # too, and loads each base with the ``kv`` handed to
                 # ``slice_forces`` here (read by ``checks._applied_kv``).
                 "kv": kv,
+                # v0.1.210 (D172) -- what the Tensile Stress Check tests for
+                # this method: the normal of its own solution. There is no
+                # ``sigma_support_load``: its stress estimate carries no
+                # support (the support enters as T_N*tan(phi') only).
+                "solved_base_normal": solved,
             }),
         )
 
@@ -231,6 +249,9 @@ class OrdinaryFellenius(LEMMethod):
         shears: list[float] = []
         strengths: list[float] = []
         n_negative_normal = 0
+        # v0.1.210 (D172) -- the base normal of THIS method's own solution,
+        # for the Tensile Stress Check; see where it is filled.
+        solved: list[float] = []
 
         # Optional seismic load
         kh = project.seismic.kh if project.seismic.enabled else 0.0
@@ -397,9 +418,11 @@ class OrdinaryFellenius(LEMMethod):
             # from, so an external force on the slice reaches the base
             # divided by it. Fellenius resolves PERPENDICULAR TO THE BASE,
             # so ``N = W·cos α + T_N`` is exact and the term needs no
-            # normalisation at all. (The two Janbu still add it raw as
-            # well, but for them that is an open defect and not this
-            # derivation — see the note in ``janbu.py``.) The measurement says the same thing:
+            # normalisation at all. (The two Janbu no longer add it raw:
+            # since v0.1.142 it joins their vertical equilibrium as it does
+            # Bishop's, with a sec α on their driving side -- see the note
+            # in ``janbu.py``; this comment said otherwise until v0.1.210.)
+            # The measurement says the same thing:
             # on the published Bishop circles of the tiered geosynthetic
             # walls (verification problems 87, 92 and 94), where the bases
             # run 37° to 73°, Fellenius already sat within 1.4 % of the
@@ -414,6 +437,9 @@ class OrdinaryFellenius(LEMMethod):
             normals.append(N)
             shears.append(driving)
             strengths.append(strength)
+            # v0.1.210 (D172) -- see the general path: N' + u*l + T_N.
+            solved.append(N_eff + s.pore_pressure * s.base_length
+                          + (sup.n_press[i_s] if sup.present else 0.0))
 
         # Reference formulation, as for every other method:
         #     F_act = (R + T_N·tanφ') / (D − T_S)
@@ -483,5 +509,7 @@ class OrdinaryFellenius(LEMMethod):
                 "slide_sign": slide_sign,
                 # v0.1.191 (D167) -- see the other exit.
                 "kv": kv,
+                # v0.1.210 (D172) -- see the other exit.
+                "solved_base_normal": solved,
             }),
         )

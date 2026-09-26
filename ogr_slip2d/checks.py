@@ -25,7 +25,11 @@ worst case, completely invalid". The check therefore:
   Shear-Normal Function stays at zero because no source says how; see
   :func:`_material_tensile_strength`;
 * invalidates the surface when the limit is exceeded (the reference
-  writes error code -120 in place of the safety factor).
+  writes error code -120 in place of the safety factor);
+* since v0.1.210 (D172) tests the effective normal stress of each METHOD'S
+  OWN solution, which is what the calculated normal forces of a method are
+  (USACE EM 1110-2-1902, 2003, C-10.a; Krahn 2003); see
+  :func:`base_effective_stresses`.
 
 **m-alpha Check.** ``m_alpha = cos(alpha) + s·sin(alpha)·tan(phi)/F``,
 where ``s`` is the sense of sliding, is the denominator of the base normal
@@ -217,6 +221,40 @@ def _material_tensile_strength(material) -> float:
     Not out of politeness: ``BaseSearch._is_admissible`` swallows an
     exception from the checks and ADMITS the surface, so raising here would
     let a surface in tension through.
+
+    v0.1.210 (D180) -- there is NO per-material tensile strength, and that
+    is a decision, written here because this is where the tolerance is
+    read.
+
+    The reference offers one: an optional value per material, for every
+    strength model but four (infinite strength, no strength, hyperbolic and
+    Barton-Bandis). What its documentation says the value is FOR is a
+    SOLVER mechanism -- tensile forces are removed by adjusting the local
+    factor of safety of the slice until the effective normal stress on its
+    base vanishes, and, on another page, a tension crack is created where
+    the tension exceeds the value -- and it gives the formula for neither.
+    Its pages on this check set the allowable tension to zero for every
+    criterion except the two Hoek-Brown models and the Shear-Normal
+    Function, and never mention the per-material value; its two lists of
+    the models the value applies to disagree (eight named models on one
+    page, all but four on another); and the advanced setting that lets the
+    shear-normal criteria take tension into account changes their envelope
+    with no formula either.
+
+    So a field here would be one of two things, and neither has a source: a
+    tolerance of this check that the reference's own pages on the check do
+    not describe, or a solver mechanism nobody has written down. The first
+    would be a setting whose purpose, as the reference describes it, the
+    analysis does not honour -- rule 7 read from the other side. The second
+    would be a plausible equation with nothing behind it. OGR offers a
+    tension crack the user places, and creates none by itself.
+
+    Not to be confused with a rule this project HAS measured: clipping
+    N' >= 0 as an engine rule (D60) took verification problems 015 and 023
+    out of agreement with the reference, by +5.01 % and +22.52 %, because
+    the reference drags the tension as OGR does. That is a different rule
+    from the local adjustment above, which has been neither implemented nor
+    measured. Revisit if a source publishes the rule.
     """
     if material is None:
         return 0.0
@@ -264,17 +302,18 @@ def _denominator_sign(result) -> float:
 
     **The fallback is not courtesy, it is necessity**: a result built by
     hand carries no ``details`` at all (``tests/test_tensile_strength_rock_v1191.py``
-    builds one); ``MultiStageDrawdownMethod`` builds its ``details`` as a
-    literal and so DROPS the inner method's keys -- all of them but ``kv``
-    since v0.1.191; and a plugin method need not publish the key. In those
-    the fallback returns the same number it always did, because the methods
-    that reach them are the ones whose sum agrees with this one -- with one
-    exception, reported and not fixed here (D112b): Janbu inside the
-    multi-stage drawdown wrapper, which is D112's own case reached through
-    the wrapper. Until v0.1.191 this paragraph named two test files as
-    building ``LEMResult`` by hand; they build ``Slice`` only and never
-    reach the checks, and no code rebuilds a result from an archived
-    ``.h5``.
+    builds one), and a plugin method need not publish the key. In those the
+    fallback returns the same number it always did. Until v0.1.191 this
+    paragraph named two test files as building ``LEMResult`` by hand; they
+    build ``Slice`` only and never reach the checks, and no code rebuilds a
+    result from an archived ``.h5``.
+
+    v0.1.210 (D112b) -- the multi-stage drawdown wrapper no longer reaches
+    the fallback. It built its ``details`` as a literal and so dropped every
+    inner key but ``kv``; with Janbu inside, that was D112's own case
+    reached through the wrapper. It now passes on the whole ``details`` of
+    the pass that produced the factor, and when no pass did (a cycling
+    drained cap) the keys every pass shares, this one among them.
 
     Methods that form no such denominator — the Ordinary Method — and the
     prescribed-inclination family, whose denominator is
@@ -327,7 +366,51 @@ def _applied_kv(result) -> float:
     return kv if math.isfinite(kv) else 0.0
 
 
-def _base_load_and_sigma(s, *, kv: float) -> tuple[float, float]:
+def _per_slice(result, key: str, n: int):
+    """A per-slice list of ``n`` finite floats from ``details[key]``, or None.
+
+    None when the key is absent or holds None (a method with nothing to
+    say, or a surface without a support), and ALSO when it is malformed --
+    not a sequence, a string, the wrong length, a non-number, a non-finite
+    value. It never raises: ``BaseSearch._is_admissible`` swallows an
+    exception from the checks and ADMITS the surface, so a crash here would
+    let the very surface in that the check exists to judge.
+    """
+    details = getattr(result, "details", None) or {}
+    raw = details.get(key)
+    if raw is None or isinstance(raw, (str, bytes)):
+        return None
+    try:
+        vals = [float(v) for v in raw]
+    except (TypeError, ValueError):
+        return None
+    if len(vals) != n or not all(math.isfinite(v) for v in vals):
+        return None
+    return vals
+
+
+def _applied_support_load(result, n: int):
+    """The support load, per slice, that the method added to ``w_total``
+    for its stress estimate, asked of it (v0.1.210, D172); None without one.
+
+    The road ``kv`` takes (:func:`_applied_kv`), and for the same reason:
+    the checks receive a result and not a project, and the load depends on
+    things only the solver had in hand -- which family's rule (Bishop and
+    Janbu add ``support_vertical_load``, Spencer, GLE and the
+    prescribed-inclination family subtract ``nf_v``), its sense of sliding
+    and, for a passive support, the factor of safety of its last pass.
+    """
+    return _per_slice(result, "sigma_support_load", n)
+
+
+def _solved_normals(result, n: int):
+    """The total base normal of the method's OWN solution, per slice, or
+    None (v0.1.210, D172). See :func:`base_effective_stresses`."""
+    return _per_slice(result, "solved_base_normal", n)
+
+
+def _base_load_and_sigma(s, *, kv: float,
+                         support_load: float) -> tuple[float, float]:
     """The base load and the ONE normal stress both checks linearise at.
 
     ``W`` is :attr:`SliceForces.w_total` — soil plus the ponded water
@@ -368,30 +451,75 @@ def _base_load_and_sigma(s, *, kv: float) -> tuple[float, float]:
     on the stress. With kv = 0 both are unchanged to the last bit, since
     ``x * (1.0 - 0.0)`` is ``x``.
 
-    What even the right kv does NOT make equal to the solver's estimate,
-    reported and not fixed here (D172): with supports, Bishop and Janbu add
-    ``support_vertical_load`` to this load and Spencer, GLE and the
-    prescribed-inclination family subtract ``nf_v``; the Ordinary Method
-    estimates its stress with a form of its own; and the floor on ``l`` is
-    1e-12 here and 1e-9 in the methods.
+    v0.1.210 (D172) -- and with the right kv it was still not the solver's
+    estimate wherever a support crossed the surface. Bishop and Janbu add
+    ``support_vertical_load`` to this load, Spencer, GLE and the
+    prescribed-inclination family subtract ``nf_v``, and this function saw
+    neither. Measured on a nail crossing a base at 51.4 deg under a
+    power-curve envelope (b = 0.6): 9.457 kPa here against 23.962 in Bishop
+    and Janbu and 34.522 in Spencer, GLE and the family, so tan phi 0.825
+    against 0.571 and 0.494. The two families do not add the same load --
+    Bishop's carries the vertical component of the support's TANGENTIAL
+    part as well, the others' the NORMAL part only -- so the checks cannot
+    work it out for themselves: each method publishes the load it added,
+    per slice, and it arrives here as ``support_load`` (see
+    :func:`_applied_support_load`), by name and without a default for the
+    reason ``kv`` is. Zero adds nothing, so a surface without a support is
+    bit-identical to what it was. The Ordinary Method publishes none: its
+    estimate carries no support, which enters it as ``T_N*tan phi'`` only.
+
+    The floor on ``l`` is 1e-12 here and 1e-9 in the methods, and that is
+    documented, not changed. The two differ only for a base shorter than
+    1e-9 m, and the slicer keeps bases far from that: a cut is never nearer
+    an end than 1e-6 of the model's diagonal, and cuts closer than 1e-3 of
+    a width are merged. The shortest base over the published surfaces of
+    the verification bank is in the D172 census.
     """
     W = slice_forces(s, kv=kv).w_total
+    if support_load:
+        W += support_load
     l = max(s.base_length, 1e-12)
     sigma = max(0.0, W * math.cos(s.base_angle) - s.pore_pressure * l) / l
     return W, sigma
 
 
 def base_effective_stresses(result) -> list[float]:
-    """Effective normal stress on each slice base at the converged FoS.
+    """Effective normal stress on each slice base: what the Tensile Stress
+    Check tests.
 
-    Uses the classical limit-equilibrium expression for the base normal
-    force,
+    v0.1.210 (D172) -- the stress of the METHOD'S OWN SOLUTION. A method
+    publishes the total base normal of its solution per slice in
+    ``details["solved_base_normal"]``, and the stress is
 
-        N = [ W - (c·l·sin(alpha) - u·l·tan(phi)·sin(alpha)) / F ] / m_alpha
         sigma'_n = N / l - u
 
-    which is the quantity the reference tests for tension. Returns an
-    empty list when the result carries no usable slices.
+    with ``u`` read from the slice when the check runs. Until now every
+    method was judged with Bishop's normal force evaluated at its own factor
+    of safety, a hybrid that only Bishop and the two Janbu compute. The
+    sources that say which normal to examine name the method's own: USACE
+    EM 1110-2-1902 (2003), Appendix C, C-10.a, asks for the CALCULATED
+    normal forces to be examined, and the base normal "is consequently
+    different for the various methods" (Krahn 2003, p. 645); the reference
+    prints its effective normal stress per method. Measured on the Ej_2
+    piezometric circle, whose per-method columns are published: with the
+    check on, the hybrid put the toe slice of the Ordinary Method, Spencer,
+    GLE and Lowe-Karafiath in tension (-0.06, -0.71, -0.73 and -0.61 kPa)
+    where the published columns read +4.48, +33.2, +2.47 and +22.7, and the
+    Ordinary Method's own stress reproduces its column to 5.3e-4 kPa.
+    Spencer, GLE and the prescribed-inclination family publish their
+    ``base_normal_force``; the Ordinary Method publishes its cos^2-corrected
+    normal plus the support's ``T_N``, because its ``base_normal_force`` is
+    the uncorrected one (D197).
+
+    Bishop and both Janbu publish no such list, because the fallback below
+    IS their own normal force, from the vertical equilibrium of the slice,
+
+        N = [ W - s*(c*l*sin a - u*l*tan phi*sin a) / F ] / m_alpha
+
+    with ``W`` the load their stress estimate carried, support included
+    (see :func:`_base_load_and_sigma`). The same fallback serves a result
+    built by hand and a plugin method that publishes nothing, as before.
+    Returns an empty list when the result carries no usable slices.
     """
     from .methods.bishop import BishopSimplified
 
@@ -401,14 +529,22 @@ def base_effective_stresses(result) -> list[float]:
     if not (math.isfinite(F) and F > 0):
         return []
 
+    slices = list(result.slices)
+    solved = _solved_normals(result, len(slices))
+    if solved is not None:
+        return [N / max(s.base_length, 1e-12) - s.pore_pressure
+                for N, s in zip(solved, slices)]
+
     out: list[float] = []
     sgn = _denominator_sign(result)
     kv = _applied_kv(result)
-    for s in result.slices:
+    load = _applied_support_load(result, len(slices))
+    for i, s in enumerate(slices):
         alpha = s.base_angle
         l = max(s.base_length, 1e-12)
         u = s.pore_pressure
-        W, sigma_est = _base_load_and_sigma(s, kv=kv)
+        W, sigma_est = _base_load_and_sigma(
+            s, kv=kv, support_load=load[i] if load else 0.0)
         c_loc, tan_phi = BishopSimplified._local_c_phi(s, s.material,
                                                        sigma_est)
         m_alpha = math.cos(alpha) + sgn * math.sin(alpha) * tan_phi / F
@@ -479,9 +615,14 @@ def base_m_alphas(result) -> list[float]:
     out: list[float] = []
     sgn = _denominator_sign(result)
     kv = _applied_kv(result)
-    for s in result.slices:
+    slices = list(result.slices)
+    load = _applied_support_load(result, len(slices))
+    for i, s in enumerate(slices):
         alpha = s.base_angle
-        _W, sigma_est = _base_load_and_sigma(s, kv=kv)
+        # v0.1.210 (D172) -- tan phi where the SOLVER linearised it,
+        # support included; the denominator stays Bishop's for every method.
+        _W, sigma_est = _base_load_and_sigma(
+            s, kv=kv, support_load=load[i] if load else 0.0)
         _c, tan_phi = BishopSimplified._local_c_phi(s, s.material,
                                                     sigma_est)
         out.append(math.cos(alpha) + sgn * math.sin(alpha) * tan_phi / F)

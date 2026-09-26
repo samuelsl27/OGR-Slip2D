@@ -597,12 +597,14 @@ def support_vertical_load(sup: "SupportTerms", i: int, base_angle: float,
     tiered geosynthetic walls, Fellenius already landed within 1.4 % while
     Bishop sat 35 % high.
 
-    ``The two Janbu do not use it either``, and THAT one is not a derivation
-    but an open, measured defect: their balance is ``Σ S·sec α = Σ W·tan α``,
-    so they need this term AND a ``sec α`` on the driving side, and the pair
-    reproduces the load-equals-support identity exactly (0.000000 at 25, 100
-    and 400 slices) while losing the six published Clouterre planes (mean
-    1.76 % → 7.95 %). See the note at the term in ``janbu.py``.
+    The two Janbu DO use it, since v0.1.142, together with a ``sec α`` on
+    the driving side: their balance is ``Σ S·sec α = Σ W·tan α``, so they
+    need both, and the pair reproduces the load-equals-support identity
+    exactly. Until v0.1.210 this paragraph still said they did not and
+    called it an open defect; what settled it was the closed-form Coulomb
+    wedge on a plane, not the six published Clouterre planes the pair loses
+    (see the note at the term in ``janbu.py`` and
+    ``tests/test_janbu_wedge_v1142.py``).
 
     The split is the one every complete-equilibrium method already applies
     (see :func:`ogr_slip2d.interslice.prepare_rows`): the NORMAL part is a
@@ -621,6 +623,27 @@ def support_vertical_load(sup: "SupportTerms", i: int, base_angle: float,
     if t:
         down -= slide_sign * math.sin(base_angle) * t
     return down
+
+
+def support_normal_load(sup: "SupportTerms"):
+    """Per slice, in slice order, the load the support adds to ``w_total``
+    in the stress estimate of the complete-equilibrium methods and of the
+    prescribed-inclination family; ``None`` without a support.
+
+    v0.1.210 (D172). It is ``-nf_v``, the vertical component of the support's
+    NORMAL part only, and it is what ``interslice.prepare_rows``
+    (``w_eff -= sup.nf_v[i]``) and ``modified_swedish`` (``w_total - v_sup``)
+    subtract: the same number, so the checks can linearise the envelope where
+    those solvers did. Their TANGENTIAL part is a resistance on the base, not
+    a load (the split of v0.1.115), so it is not here -- which is why this is
+    NOT :func:`support_vertical_load`, whose Bishop/Janbu load carries the
+    vertical component of the tangential part as well. The two differ on any
+    inclined support, and a check that took either for both would be wrong
+    for one family.
+    """
+    if sup is None or not getattr(sup, "present", False):
+        return None
+    return [-v for v in sup.nf_v]
 
 
 @dataclass
