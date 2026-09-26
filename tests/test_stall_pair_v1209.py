@@ -19,8 +19,9 @@ its own record. Three things are held here:
 1. RULE 7, AGAINST AN EXTERNAL VALUE. On the anchored wedge of
    ``test_planar_force_branch_v1183`` — ACTIVE anchor, lambda 1.25, the planar
    exemption of D152 switched off so that nothing but the stall test decides
-   the branch — the switch OFF cuts it on pass 271 with ``|dF|`` exactly 0.0
-   on 40 of its last 226 passes; ON, with the budget a user's
+   the branch — the switch OFF cuts it on pass 271 (on Windows; 251 on the
+   Linux of the CI, see the note on the witness constants) with ``|dF|``
+   exactly 0.0 on 40 of its last 226 passes; ON, with the budget a user's
    ``max_iterations = 2000`` buys, it converges on pass 1218 to the closed
    form of the wedge (Coulomb 1776; Duncan & Wright 2005 §6) to 2.3e-14. The
    factor of a plane does not depend on the thrust (Krahn 2003, Can. Geotech.
@@ -47,11 +48,18 @@ that fail there fail on a MEASURED difference and are named, not counted:
 ``test_on_it_converges_to_the_closed_form`` (cut on pass 271, not
 converged), ``test_inside_the_default_budget_it_only_renames_the_exit``
 (271, not 400), ``test_the_planar_exemption_judges_an_unsettled_thrust``
-(the settled side never settles) and, on an ABSENT SYMBOL — the weak kind,
-labelled as such — ``test_it_is_in_the_signature_of_the_lambda_cache``. The
-rest pass on both trees on purpose: the neutrality sweep is the control
-(both sides are the same tree there, so it is vacuous by construction and
-is evidence only here), and the "off" cases state what v0.1.208 did.
+(the settled side never settles), ``test_off_is_the_detector_of_v0_1_208``
+(the "on" branch stops where the "off" one does: 271 and 271) and, on an
+ABSENT SYMBOL — the weak kind, labelled as such —
+``test_it_is_in_the_signature_of_the_lambda_cache``: 5 of 9. The other four
+pass on both trees on purpose: the neutrality sweep is the control (both
+sides are the same tree there, so it is vacuous by construction and is
+evidence only here), and the "off" cases state what v0.1.208 did.
+
+The first push of this file pinned the pass the old detector cuts on (271)
+and went red on the Linux of the CI, which cuts on 251; see the note on the
+witness constants. Measured before the fix on the CI's three Pythons: 4
+failures, all of them that pin.
 
 Author: Samuel Sáez López (UPCT)
 """
@@ -73,7 +81,14 @@ MAX_IT = 400
 #: The witness of D158: the ACTIVE cell of the 50 degree plane at lambda 1.25.
 BETA = 50.0
 WITNESS_LAMBDA = 1.25
-STALL_PASS = 271
+#: The pass the old detector cuts the witness on is NOT pinned, and the first
+#: push of this file said why by failing: 271 on the Windows it was measured
+#: on, 251 on the Linux of the CI (Python 3.11-3.13). The cut comes
+#: ``STALL_PATIENCE`` passes after F's step last beat its record, and which
+#: pass lands on 0.0 bit for bit is platform arithmetic -- the lesson of
+#: v0.1.205, walked into again with a pass count instead of a double. What
+#: holds on both is the law: the cut comes after ``STALL_PATIENCE`` and inside
+#: the budget, with F already on the closed form.
 #: The budget ``branch_budget`` gives a user's ``max_iterations = 2000``.
 LONG_BUDGET = 2000
 
@@ -262,8 +277,9 @@ class TestTheWitnessOfD158:
                          max_it=LONG_BUDGET)
         with _planar_off(), _pair(False):
             st = _force(system, WITNESS_LAMBDA, max_passes=system.max_passes)
+        from ogr_slip2d.interslice import STALL_PATIENCE
         assert _stalled(st, system.max_passes), (st.passes, st.converged)
-        assert st.passes == STALL_PASS, st.passes
+        assert STALL_PATIENCE < st.passes < MAX_IT, st.passes
         # F was already right: the stall cut a branch whose factor was the
         # answer and whose thrust was still on its way.
         closed = _closed_form(_anchored(ForceApplication.ACTIVE))
@@ -290,7 +306,7 @@ class TestTheWitnessOfD158:
             with _pair(False):
                 was = _force(system, WITNESS_LAMBDA, max_passes=MAX_IT)
             now = _force(system, WITNESS_LAMBDA, max_passes=MAX_IT)
-        assert _stalled(was, MAX_IT) and was.passes == STALL_PASS
+        assert _stalled(was, MAX_IT), (was.passes, was.converged)
         assert now.converged is False and now.abandoned == ""
         assert now.passes == MAX_IT, now.passes
 
@@ -405,20 +421,33 @@ class TestTheSwitchIsWiredLikeItsSiblings:
             on, _m = system.states(WITNESS_LAMBDA)
             with _pair(False):
                 off, _m = system.states(WITNESS_LAMBDA)
-        # 400 passes (out of budget) against 271 (stalled): two different
-        # answers, so a cache that ignored the switch would be caught here.
-        assert on.passes == MAX_IT and off.passes == STALL_PASS, (
+        # Out of budget against stalled (on pass 271 here, 251 on the CI):
+        # two different answers, so a cache that ignored the switch would be
+        # caught here.
+        assert on.passes == MAX_IT and _stalled(off, MAX_IT), (
             on.passes, off.passes)
 
     def test_off_is_the_detector_of_v0_1_208(self):
-        """The switch off must be the old detector, not merely a similar one:
-        the witness stalls on the very pass v0.1.208 cut it on."""
+        """The switch off must be the old detector, and what DEFINES it is the
+        property the neutrality proof rests on, not a pass number that
+        differs between platforms: the two variants are the same branch bit
+        for bit up to the pass before the old detector cuts, and only the new
+        one goes on from there."""
         from ogr_core.support import ForceApplication
         system = _system(_anchored(ForceApplication.ACTIVE), _plane(),
                          max_it=LONG_BUDGET)
-        with _planar_off(), _pair(False):
-            st = _force(system, WITNESS_LAMBDA, max_passes=system.max_passes)
-        assert st.passes == STALL_PASS and st.converged is False
+        with _planar_off():
+            with _pair(False):
+                off = _force(system, WITNESS_LAMBDA,
+                             max_passes=system.max_passes)
+                before_off = _force(system, WITNESS_LAMBDA,
+                                    max_passes=off.passes - 1)
+            before_on = _force(system, WITNESS_LAMBDA,
+                               max_passes=off.passes - 1)
+            on = _force(system, WITNESS_LAMBDA, max_passes=system.max_passes)
+        assert _stalled(off, system.max_passes), off.passes
+        assert _same(before_off, before_on), off.passes
+        assert on.passes > off.passes and on.converged, (on.passes, off.passes)
 
 
 class TestWhatThisVersionDoesNotDo:

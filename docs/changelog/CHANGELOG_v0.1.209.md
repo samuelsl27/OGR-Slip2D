@@ -292,10 +292,23 @@ ella y no consume número. No se corrige aquí.
 - D193, fijado como lo que esta versión no hace.
 
 Ejecutado contra un worktree de 0.1.208 (`PYTHONPATH` apuntando a él):
-**fallan 4**. Tres por diferencia medida: converge a la forma cerrada, solo
-renombra la salida, y el juicio del empuje sin asentar. Uno por el símbolo
-ausente (la firma de la caché). Los otros cinco pasan en los dos árboles a
-propósito: son los controles.
+**fallan 5 de 9**. Cuatro por diferencia medida: converge a la forma
+cerrada, solo renombra la salida, el juicio del empuje sin asentar, y
+«apagado es el detector de 0.1.208» (la rama encendida se para donde la
+apagada). Uno por el símbolo ausente (la firma de la caché). Los otros
+cuatro pasan en los dos árboles a propósito: son los controles.
+
+**Error propio, detectado por la CI después de publicar.** La primera
+subida de este test fijaba la pasada en que el detector viejo corta al
+testigo: 271, medida en Windows. En el Linux de la CI (Python 3.11–3.13)
+corta en la **251**, y fallaron 4 casos. La pasada la decide cuál cae en
+0,0 bit a bit, que es aritmética de la plataforma. Es la lección de v0.1.205
+(«nunca `==` sobre doubles en tests»), repetida con un recuento de pasadas
+en vez de con un double. Corregido en un commit aparte, sin subir versión:
+ahora se fija la ley (el corte llega después de `STALL_PATIENCE` y dentro
+del presupuesto, con F ya en la forma cerrada), y «apagado = 0.1.208» pasa
+a comprobar lo que lo define: las dos variantes son idénticas bit a bit
+hasta la pasada anterior al corte.
 
 **Recalibrados, cada uno con la razón escrita y sin ensanchar bandas:**
 - `test_branch_contraction_v1172::TestWhatThisDoesNotFix`. La clase se

@@ -622,6 +622,9 @@ BRANCH_PARTNER_RETRY = True
 #: wedge of ``tests/test_planar_force_branch_v1183`` (ACTIVE anchor, lambda
 #: 1.25, the planar exemption off): cut on pass 271 with ``|dF|`` exactly 0.0
 #: on 40 of its last 226 passes, while ``d_x`` contracted at 0.98275 a pass.
+#: The pass is platform arithmetic -- 271 on Windows, 251 on the Linux of the
+#: CI -- because it is decided by which pass lands on 0.0 bit for bit; the
+#: test pins the law (after the patience, inside the budget), not the pass.
 #:
 #: WHAT IT DOES. The counter resets when EITHER residual beats its own
 #: record. ``best_step`` is updated exactly as before and the thrust can
