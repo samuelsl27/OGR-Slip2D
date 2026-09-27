@@ -62,6 +62,12 @@ a ``git worktree`` at a6eceda and running it there -- not predicted. Of the
 
 The run is archived in the bank as
 ``_auditoria/D112b_desembalse/discriminacion_test_v1210_en_0.1.209.txt``.
+
+v0.1.212 (D202) -- ``_marked`` now leaves stage 1 alone (see it), and the
+cycling-branch guard lets the wrapper's new ``stage1_admissible`` through.
+Re-measured the same way against a6eceda with both changes: the SAME eight
+cases fail and ten pass; on 0.1.211 and 0.1.212 all eighteen pass. Archived
+as ``_auditoria/D202_etapa1/discriminacion_test_v1210_en_0.1.209.txt``.
 """
 from __future__ import annotations
 
@@ -73,6 +79,13 @@ _CACHE: dict = {}
 _DRAWDOWN_KEYS = {"drawdown_procedure", "fos_stage1", "fos_stage2",
                   "fos_stage3", "undrained_slices", "stage3_switched",
                   "cap_passes", "cap_converged", "cap_min_m_alpha"}
+# v0.1.212 (D202) -- a wrapper key written in every branch: the verdict
+# stage 1's own method gave, which every branch has because every branch
+# starts from stage 1. It is not a per-slice key of any pass, which is what
+# the cycling-branch guard forbids, so the guard lets it through. Kept apart
+# from ``_DRAWDOWN_KEYS`` so that the controls below keep asking only for
+# what v0.1.210 wrote.
+_WRAPPER_KEYS_SINCE_D202 = {"stage1_admissible"}
 _SHARED_KEYS = {"slide_sign", "m_alpha_sign", "kv"}
 LIMIT_BETWEEN = 0.5      # between the two minima of the fixture (0.85/0.23)
 
@@ -123,13 +136,24 @@ def _flipped_janbu():
 
 def _marked(base_cls, **flags):
     """A method whose result carries the verdict ``flags`` after solving,
-    the way Spencer and GLE mark a relaxed-thrust pass inadmissible."""
+    the way Spencer and GLE mark a relaxed-thrust pass inadmissible.
+
+    v0.1.212 (D202) -- every pass AFTER stage 1, not stage 1 as well. What
+    this file tests is the verdict of the pass that PRODUCED the factor,
+    stage 2 or 3; since D202 an unconverged stage 1 invalidates the surface
+    and an inadmissible one adds its own note, a rule of its own tested in
+    ``test_drawdown_stage1_v1212.py``. Marking stage 1 here too made these
+    two cases test both rules at once."""
 
     class _Marked(base_cls):
+        calls = 0
+
         def compute_fos(self, project, surface, slices):
+            self.calls += 1
             r = super().compute_fos(project, surface, slices)
-            for k, v in flags.items():
-                setattr(r, k, v)
+            if self.calls > 1:
+                for k, v in flags.items():
+                    setattr(r, k, v)
             return r
 
     return _Marked()
@@ -336,7 +360,7 @@ class TestTheCyclingBranch:
         pass's solution may travel with it (since v0.1.211 the published
         slices are the last horn's, with no forces -- D200)."""
         w = self._cycling()
-        extra = set(w.details) - _DRAWDOWN_KEYS
+        extra = set(w.details) - _DRAWDOWN_KEYS - _WRAPPER_KEYS_SINCE_D202
         assert extra <= _SHARED_KEYS, extra
 
     def test_the_centre_is_admitted_only_if_both_horns_were(self):

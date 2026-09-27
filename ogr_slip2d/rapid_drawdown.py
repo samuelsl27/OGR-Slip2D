@@ -16,6 +16,9 @@ actually have afterwards — and differ only in how they get it.
                   τ_fc  = (c' + σ'_fc·tan φ') / FS₁                  (3)
               τ_fc is the MOBILISED shear, not the strength: it follows
               from the definition of the factor of safety, τ = s / FS.
+              Since v0.1.212 (D202) the pass has to have CONVERGED: one
+              that stopped short is not a consolidation state, and the
+              surface is refused with that pass's reason.
 
     Stage 2   Drawn-down level. Each undrained slice gets an undrained
               strength interpolated between the two physical extremes,
@@ -191,6 +194,38 @@ class DrawdownStageFailed(RapidDrawdownError):
             f"Stage {stage}{where} produced no factor of safety: {why}")
 
 
+class DrawdownStageUnconverged(DrawdownStageFailed):
+    """A stage whose method returned a factor it did NOT converge to
+    (v0.1.212, D202).
+
+    Only stage 1 raises it, for a reason the other two stages do not share:
+    stage 1 FIXES the consolidation state, sigma'_fc and tau_fc = s / FS1 on
+    every slice (``_stage1_state``), and stage 2 builds its undrained
+    strengths from it. Stages 2 and 3 are solved, not fixed, and since D112b
+    the one that produced the factor carries its own ``converged`` into the
+    surface (a stage 2 that does not converge while the drained cap does is
+    D203, open). A pass that did not
+    converge is where its solver stopped -- the last iterate of an iteration
+    that ran out of passes, or the sampled F of smallest residual of the
+    prescribed-inclination family -- and not a state of the slope.
+
+    A subclass of :class:`DrawdownStageFailed` because what
+    :class:`MultiStageDrawdownMethod` has to say is the same: the surface is
+    invalid, in the words of the pass that failed. The message says that
+    pass HAD a number, and which, because "produced no factor" would be
+    false here.
+    """
+
+    def __init__(self, stage: int, result) -> None:
+        self.stage = stage
+        self.result = result
+        why = getattr(result, "error_message", "") or "no reason given"
+        RapidDrawdownError.__init__(
+            self,
+            f"Stage {stage} returned an unconverged factor of safety "
+            f"(F = {result.fos:.3f}, not a solution): {why}")
+
+
 @dataclass
 class DrawdownResult:
     """Outcome of a multi-stage run, with the intermediate stages kept.
@@ -237,6 +272,12 @@ class DrawdownResult:
     # are also what the post-analysis checks judge in that branch.
     invariant_details: dict = field(default_factory=dict)
     cycle_horns: tuple = ()
+    # v0.1.212 (D202) -- the stage-1 pass itself, so that the wrapper can say
+    # what its own method said about it: a stage 1 declared inadmissible
+    # (Spencer and GLE with the inter-slice thrust relaxed) makes the answer
+    # inadmissible. Kept whole for the reason the docstring gives: stage 1
+    # conditions everything after it.
+    stage1_result: object = None
 
 
 # ----------------------------------------------------------------------
@@ -391,6 +432,11 @@ def _stage1_state(project, surface, slices, result):
     is not the arithmetic but the degradation: a tenth method that forgets
     the column has to fail loudly rather than quietly analyse something
     else.
+
+    v0.1.212 (D202) — only ever called with a CONVERGED stage-1 pass.
+    ``rapid_drawdown_fos`` refuses an unconverged one before this runs: its
+    normals come from where the solver stopped, and ``fs1`` below would be
+    the top of a sampling grid as readily as a factor of safety.
     """
     normals = list(getattr(result, "base_normal_force", ()) or ())
     if len(normals) < len(slices.slices):
@@ -499,6 +545,43 @@ def rapid_drawdown_fos(
     is for its preconditions -- a slope unstable before the drawdown, an
     envelope it cannot carry, a surface it cannot slice -- and a method that
     fails to produce a number is a different statement.
+
+    v0.1.212 (D202) -- and stage 1 is held to the rule the other two already
+    follow. Until now it was asked for a factor and for FS1 >= 1 and nothing
+    else, although it is the one stage that FIXES state: sigma'_fc and
+    tau_fc = s / FS1 on every slice, from which stage 2 builds its undrained
+    strengths. Stages 2 and 3 are solved rather than fixed, and since D112b
+    the pass that produced the factor carries its own verdict into the
+    surface; stage 1 never produces the factor, so its verdict was always
+    dropped. Two rules, both the owner's decision:
+
+    * A stage-1 pass that did NOT converge raises
+      :class:`DrawdownStageUnconverged`, and the surface comes back invalid
+      with that pass's own reason. Measured on the Appendix G section of
+      EM 1110-2-1902, circle (69, 110, 89.159): Corps of Engineers #1 and #2
+      cannot bracket it at the full reservoir and hand back F1 = 5.0, the
+      top of their own sampling grid; with tau_fc = s / 5.0 the surface came
+      back VALID at 1.7093, where Bishop and Spencer, which converge on the
+      same circle at F1 ~= 1.85, give 1.947. That error has no fixed sign:
+      tau_fc is inversely proportional to FS1, so a fallback BELOW the true
+      FS1 raises the undrained strength instead. It is checked before the
+      FS1 >= 1 precondition on purpose, because an unconverged factor says
+      nothing about the slope: an unconverged FS1 < 1 is a failed
+      calculation, not a slope unstable before the drawdown. Keeping the
+      surface with a note was the alternative, and it is not taken: the
+      factor it would keep is built from a state no pass solved.
+    * A stage-1 pass that converged but that its OWN method declared
+      inadmissible (Spencer and GLE with the inter-slice thrust relaxed) is
+      kept, and ``stage1_result`` lets :class:`MultiStageDrawdownMethod`
+      make the answer inadmissible with a note, at the same factor. Here the
+      state WAS solved, and the verdict is its method's, carried as an
+      ordinary analysis carries it.
+
+    A stage 2 that does not converge while the drained cap does is left as
+    it was: what stages 2 and 3 do is D112b's, D194's and D200's, and the
+    census of D202 only measures it. It is defect D203, open: that pass
+    seeds the cap and enters the ``fos_stage3 < fos_stage2`` comparison, and
+    three search minima of the bank's problem 096 stand on one.
     """
     from .slicer import slice_surface
 
@@ -516,6 +599,10 @@ def rapid_drawdown_fos(
     r1 = method.compute_fos(p1, surface, sl1)
     if r1.fos is None:
         raise DrawdownStageFailed(1, r1)
+    # v0.1.212 (D202) -- BEFORE the two checks below, which are claims about
+    # the slope that an unconverged factor cannot support. See the docstring.
+    if not r1.converged:
+        raise DrawdownStageUnconverged(1, r1)
     if not r1.fos > 0.0:
         raise RapidDrawdownError(
             "Stage 1 did not produce a usable factor of safety")
@@ -572,6 +659,7 @@ def rapid_drawdown_fos(
         n_undrained_slices=len(tau_by_index),
         final_result=r2,
         invariant_details=_invariant_details(r2),
+        stage1_result=r1,
     )
     if not drained_cap or not tau_by_index:
         return res
@@ -735,7 +823,8 @@ class MultiStageDrawdownMethod:
                 project, surface, self.inner,
                 num_slices=self.num_slices, procedure=self.procedure)
         except DrawdownStageFailed as exc:
-            from .methods.base import REASON_NON_PHYSICAL_FOS
+            from .methods.base import (REASON_NON_PHYSICAL_FOS,
+                                       REASON_NOT_CONVERGED)
             # v0.1.211 (D194) -- the calculation failed, and it says why in
             # the words of the pass that failed: its own reason, so that the
             # Invalid Surfaces report groups this surface with the same
@@ -743,16 +832,29 @@ class MultiStageDrawdownMethod:
             # that returns no number and no reason, which D56 allows (only
             # the message is compulsory). The slices are that pass's, the
             # state it was asked to solve; the caller's are neither stage's.
+            #
+            # v0.1.212 (D202) -- a stage-1 pass that DID return a number, but
+            # not a converged one, falls back on "not converged", and the
+            # number it stopped at is kept in ``drawdown_stage_fos``: the
+            # surface is invalid, and it can still be traced to the F1 (5.0,
+            # the top of a sampling grid, on the witness) it would have been
+            # built from. The D194 path is untouched: no new key, the same
+            # fallback.
             inner = exc.result
+            unconverged = isinstance(exc, DrawdownStageUnconverged)
+            details = {"drawdown_procedure": self.procedure,
+                       "drawdown_stage_failed": exc.stage}
+            if unconverged:
+                details["drawdown_stage_fos"] = inner.fos
             return LEMResult(
                 fos=None, converged=False, iterations=0,
                 method_id=self.METHOD_ID, surface=surface,
                 slices=getattr(inner, "slices", None) or slices,
                 error_message=str(exc),
                 reason=(getattr(inner, "reason", "")
-                        or REASON_NON_PHYSICAL_FOS),
-                details={"drawdown_procedure": self.procedure,
-                         "drawdown_stage_failed": exc.stage},
+                        or (REASON_NOT_CONVERGED if unconverged
+                            else REASON_NON_PHYSICAL_FOS)),
+                details=details,
             )
         except RapidDrawdownError as exc:
             from .methods.base import REASON_DRAWDOWN_NOT_APPLICABLE
@@ -841,6 +943,24 @@ class MultiStageDrawdownMethod:
                 admissibility_note=verdict.admissibility_note or "",
                 admissibility_reason=verdict.admissibility_reason or "",
             )
+        # v0.1.212 (D202) -- and what stage 1's OWN method said about it. A
+        # stage 1 that method declared inadmissible (Spencer and GLE with the
+        # inter-slice thrust relaxed) is the consolidation state every later
+        # stage stands on, so the answer is inadmissible too: same factor, a
+        # note that names the stage, ahead of whatever the verdict above
+        # already said. ``admissibility_reason`` is not touched, because this
+        # is a method's verdict and not a post-analysis screen (D177). With an
+        # admissible stage 1 -- every published case -- nothing here runs.
+        stage1 = getattr(res, "stage1_result", None)
+        stage1_admissible = bool(getattr(stage1, "admissible", True))
+        if not stage1_admissible:
+            why = (getattr(stage1, "admissibility_note", "")
+                   or "declared inadmissible by its own method")
+            note = f"Stage 1 (full reservoir): {why}"
+            earlier = flags.get("admissibility_note") or ""
+            flags["admissible"] = False
+            flags["admissibility_note"] = (f"{note}; {earlier}" if earlier
+                                           else note)
         return LEMResult(
             fos=res.fos, iterations=3 if res.fos_stage3 else 2,
             method_id=self.METHOD_ID, surface=surface,
@@ -867,6 +987,9 @@ class MultiStageDrawdownMethod:
                 "cap_passes": res.n_cap_passes,
                 "cap_converged": res.cap_converged,
                 "cap_min_m_alpha": res.cap_min_m_alpha,
+                # v0.1.212 (D202) -- the machine-readable half of the note
+                # above: ``admissibility_reason`` is for screens only.
+                "stage1_admissible": stage1_admissible,
                 "kv": kv,
             },
         )
