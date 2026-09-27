@@ -24,9 +24,17 @@ Cabeza del paquete P4 del banco de verificación. Dos cambios de motor.
     +4,9 / +2,2 %.
   - Mohr-Coulomb y los demás modelos lineales quedan bit a bit iguales.
 
+- **D38 — el +8,5 % del σ′max del 44 y el +11,5/12,5 % del 61 tienen causa: la
+  masa.** Es solo de banco; sección 5.
+  - Un único factor sobre el peso específico cierra a la vez el σ′max y el
+    factor. En el 44 el manual calculó con γ = 18 kN/m³ y su tabla imprime 19,5:
+    con 18, los seis factores publicados caen a ≤ 0,12 % y los dos σ′ de panel a
+    ≤ 0,22 %.
+  - En el 61 la masa explica la mayor parte, y queda un ~1 % sin causa.
+  - No se toca ningún modelo.
+
 Lo que cambia en el banco de verificación (`_tools/`, `_auditoria/`, fichas)
-está fuera de git. D38, la tercera ficha de la tanda, es solo de banco y se
-documenta en esta misma versión en un commit posterior.
+está fuera de git.
 
 ---
 
@@ -299,10 +307,19 @@ sale negativa arreglaba el síntoma del 41 y dejaba la sobreestimación del rest
 - **D204 — el retroanálisis (`back_analysis.py`) sigue linealizando en la
   estimación de Fellenius.** Es otro planteamiento (el F objetivo es un dato), y
   llevarle el punto fijo es una decisión propia, no un arrastre de D84.
+  - Lo que rompe es la identidad de v0.1.202: la fuerza requerida en el factor
+    propio del método es cero.
+  - Medido con Janbu y sin el recorte a 0 de `required_force`: en el 041 del
+    banco sale −48 y −107 kN/m (−1,8 y −2,6 % de la suma motora). Es el lado
+    inseguro: por encima del factor propio, la fuerza sale corta en esa cantidad.
+  - En la geometría del 41 del test de D84 (ru = 0,3) sale +2096 kN/m.
+  - El único retroanálisis del banco, el 37, es Mohr-Coulomb y no se mueve.
 - **D205 — la tabla de dovelas del informe PDF rotula «Base σ [kPa]» y «Shear
   str. [kPa]», pero imprime las FUERZAS en kN/m** (`report_generator.py`). Es
   anterior a esta versión, y D81 lo extiende a Bishop no circular porque ahora
   tiene columnas.
+  - En el 44 la fila 13 imprime 5,62 donde σ_n vale 17,08 kPa.
+  - Con la curva de potencia, las columnas c y φ salen «0» y «0».
 - **La etapa 2 del desembalse en el arco se mueve con el número de dovelas** (un
   0,18 % entre 200 y 400). Lo enseñó la poligonal inscrita del test de D81, que
   se mantiene a 10⁻⁴. Solo medido.
@@ -325,3 +342,52 @@ sale negativa arreglaba el síntoma del 41 y dejaba la sobreestimación del rest
     todas de curva de potencia.
 - Cierres del banco `d81()` y `d84()`: CUBIERTO POR TEST con este árbol, y NO SE
   SOSTIENE contra 0.1.212, por comportamiento.
+
+## 5. D38 — la causa del σ′max del 44 y del 61 es la masa (banco)
+
+### Lo que estaba mal en el encargo
+
+- La ficha pedía tabular en la dovela del pico `γ·h·cos²α` y concluir, si el
+  publicado quedaba por debajo, que no podía ser la tensión normal. **La
+  estática no es una cota.** Con fuerzas entre dovelas no lo es, y ni siquiera
+  con X = 0:
+
+      σ′/(γh·cos²α) = (1 − s·c·l·sin α/(F·W)) / (cos²α + s·sin α·cos α·tan φ/F)
+
+  baja de 1 con cohesión o con tan φ/F grande. La identidad se comprobó contra el
+  motor en 15 filas de Janbu, con un residuo ≤ 8·10⁻¹⁶. El propio OGR da 0,98–0,99
+  en el 44.
+- La fila 44.2 del encargo citaba 42,26 / 41,88, que son las cifras del 44.3.
+- El 45.4 vale 2,695848 / 82,2541 desde la tolerancia 1e-4 de 0.1.160, no
+  2,695564 / 82,2604.
+
+### Lo que sí distingue: un único factor sobre γ
+
+Es el k sobre el peso específico que lleva el σ′max de OGR al publicado, y el
+factor que da ese mismo k (herramientas del banco `medir_d38_estatica.py` y
+`medir_d38_escala_busquedas.py`).
+
+- **44:** las dos filas de panel piden el mismo k (0,9219 y 0,9210; 19,5 × 0,921 =
+  17,97). Con γ = 18 los **seis** factores publicados caen a ≤ 0,12 %, cuatro de
+  ellos de búsqueda, frente a −0,57 / −1,18 % con 19,5. Los σ′max de panel pasan
+  de +8,47 / +8,49 % a +0,13 / +0,22 %.
+- **45:** k = 1,0000 en sus tres paneles. Es el control: su tabla imprime 18.
+- **61:** los σ′ de panel piden γ ≈ 16,1 y los factores ≈ 16,5–16,7. La masa
+  explica la mayor parte: de −3,5 % a ±1 % en el factor y de +11–12 % a ≤ 0,5 % en
+  σ′. Pero ningún γ único cierra las ocho magnitudes, y queda un residuo del ~1 %.
+- **Baker (2003)** publica otros σ′max (8,7 / 78,1 / 21,4). Su artículo no se
+  ha podido leer.
+
+### Decisión
+
+No se toca ningún modelo: el banco modela lo que el manual imprime, como en el 28
+(D83) y en la fila Mohr-Coulomb del 44 (D38b).
+
+- Los `referencia.json` del 44, 45 y 61 declaran por figura la comparación de
+  σ′max (`sigma_max_comparacion`): CAUSA NOMBRADA en 44.2 y 44.4, NO
+  REPRODUCIBLE en 44.3 y NO CONCLUYENTE en 61.2 y 61.3.
+- La comparativa las enseña en una sección propia, no en una columna, porque
+  `balance_evaluaciones` lee la tabla por posición.
+- D38 no mueve ningún factor.
+- Si se prefiere que el 44 reproduzca el cálculo de la referencia, basta con
+  γ = 18 en su `construir_modelo.py`.
