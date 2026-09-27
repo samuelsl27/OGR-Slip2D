@@ -151,12 +151,23 @@ def _solve(method_id: str, envelope: str = "mc", kv: float = 0.0,
     that changes ``details`` does it on a copy."""
     key = (method_id, envelope, kv, kh, enabled)
     if key not in _CACHE:
-        from ogr_slip2d.methods import get_method
+        from ogr_slip2d.methods import base, get_method
         from ogr_slip2d.slicer import slice_surface
         p = _project(envelope, kv=kv, kh=kh, enabled=enabled)
         sl = slice_surface(p, _circle(), num_slices=N_SLICES)
         assert sl is not None, key
-        res = get_method(method_id)().compute_fos(p, _circle(), sl)
+        # v0.1.213 (D84) -- at the Fellenius point, switch off: the kv this
+        # file follows is the one in the checks' stress ESTIMATE, which
+        # since then is the first pass and the switch-off path of a curved
+        # envelope; the rest is read at the method's own stress, published
+        # in ``details["envelope_stress"]`` (pinned in
+        # ``test_envelope_own_stress_v1213.py``). Restored in ``finally``.
+        old = base.ENVELOPE_AT_OWN_STRESS
+        base.ENVELOPE_AT_OWN_STRESS = False
+        try:
+            res = get_method(method_id)().compute_fos(p, _circle(), sl)
+        finally:
+            base.ENVELOPE_AT_OWN_STRESS = old
         assert res.is_valid, (key, res.error_message)
         _CACHE[key] = res
     return _CACHE[key]

@@ -741,11 +741,16 @@ class SliceRow:
     arm_ratio: float       # slide_sign * weight_arm_ratio (circle only)
     t_active: float        # resisting tangential force, ACTIVE supports
     t_passive: float       # the same for PASSIVE supports
+    # v0.1.213 (D84) -- the strength estimate was clipped and left the slice
+    # with none; see ``BishopSimplified._zero_strength``. Last and defaulted
+    # so no existing construction of a row changes.
+    zero_strength: bool = False
 
 
 # ----------------------------------------------------------------------
 def prepare_rows(s_list, kh: float, kv: float, slide_sign: float,
-                 sup=None) -> tuple[list[SliceRow], list, list[int]]:
+                 sup=None, envelope_stress=None
+                 ) -> tuple[list[SliceRow], list, list[int]]:
     """Resolve the loop-invariant part of every slice.
 
     ``alpha`` is flipped by ``slide_sign`` so the up-slope side is always
@@ -810,8 +815,21 @@ def prepare_rows(s_list, kh: float, kv: float, slide_sign: float,
         # changing it would move every non-linear material (Hoek-Brown,
         # SHANSEP, anisotropic) for a reason that has nothing to do with
         # inter-slice forces.
-        sigma_est = max(0.0, w_eff * ca - u * length) / max(length, 1e-9)
+        #
+        # v0.1.213 (D84) -- and that is still the FIRST pass. When the
+        # envelope depends on the stress, ``base.self_consistent_envelope``
+        # re-solves the surface with ``envelope_stress``, the effective
+        # normal stress of the previous solution, until the two agree: the
+        # recursion is untouched, only the straight line it is given moves.
+        raw = w_eff * ca - u * length
+        sigma_est = max(0.0, raw) / max(length, 1e-9)
+        imposed = (envelope_stress[i] if envelope_stress is not None
+                   and i < len(envelope_stress) else None)
+        if imposed is not None:
+            raw, sigma_est = imposed, max(0.0, imposed)
         c_loc, tan_phi = BishopSimplified._local_c_phi(s, s.material, sigma_est)
+        zero = raw < 0.0 and BishopSimplified._zero_strength(
+            s, raw, c_loc, tan_phi)
 
         rows.append(SliceRow(
             alpha=alpha, sin_a=sa, cos_a=ca,
@@ -821,6 +839,7 @@ def prepare_rows(s_list, kh: float, kv: float, slide_sign: float,
             w_eff=w_eff, w_soil=fx.w_total, h_drive=h_drive,
             arm_ratio=slide_sign * s.weight_arm_ratio,
             t_active=t_act, t_passive=t_pas,
+            zero_strength=zero,
         ))
     order = list(range(len(rows)))
     if slide_sign < 0.0:
@@ -2011,10 +2030,14 @@ class GLESystem:
                  kh: float, kv: float, slide_sign: float,
                  circle_R, circle_yc, sup=None, axis=None,
                  tolerance: float = 1e-3, initial_fos: float = 1.0,
-                 max_passes: int = MAX_PASSES) -> None:
+                 max_passes: int = MAX_PASSES,
+                 envelope_stress=None) -> None:
+        # v0.1.213 (D84) -- ``envelope_stress`` last and keyword-defaulted
+        # for the reason ``max_passes`` is: see ``prepare_rows``.
         self.s_list = list(s_list)
         self.rows, self.forces, self.order = prepare_rows(
-            self.s_list, kh, kv, slide_sign, sup)
+            self.s_list, kh, kv, slide_sign, sup,
+            envelope_stress=envelope_stress)
         self.reversed_ = slide_sign < 0.0
         # ``shape`` arrives in slice-boundary order; the solver marches in
         # ``rows`` order, and boundary k of the reversed march is boundary
@@ -2242,6 +2265,14 @@ class GLESystem:
         for k, v in enumerate(marching):
             out[self.order[k]] = v
         return out
+
+    # ------------------------------------------------------------------
+    def zero_strength_slices(self) -> list[int]:
+        """Slicer indices of the rows whose strength estimate was clipped to
+        nothing (v0.1.213, D84). The rows are resolved once per surface, so
+        this is the same at every lambda."""
+        flags = self.to_slice_order([r.zero_strength for r in self.rows])
+        return [i for i, z in enumerate(flags) if z]
 
     # ------------------------------------------------------------------
     def boundaries_in_slice_order(self, marching: Sequence[float]):

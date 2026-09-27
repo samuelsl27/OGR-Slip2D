@@ -409,6 +409,33 @@ def _applied_support_load(result, n: int):
     return _per_slice(result, "sigma_support_load", n)
 
 
+def _applied_envelope_stress(result, n: int):
+    """The stress, per slice, the method linearised the envelope at, asked
+    of it (v0.1.213, D84); None when it used the Fellenius estimate
+    everywhere.
+
+    Same road as ``sigma_support_load`` and for the same reason: a curved
+    envelope is now read at the stress each method resolves (see
+    ``methods.base.self_consistent_envelope``), and only the solver knows
+    which. Unlike that key an entry may be None -- a slice whose envelope
+    does not depend on the stress keeps the Fellenius point -- so this
+    reads it itself rather than through :func:`_per_slice`. Malformed means
+    "said nothing usable", never an exception, as there.
+    """
+    details = getattr(result, "details", None) or {}
+    raw = details.get("envelope_stress")
+    if raw is None or isinstance(raw, (str, bytes)):
+        return None
+    try:
+        vals = [None if v is None else float(v) for v in raw]
+    except (TypeError, ValueError):
+        return None
+    if len(vals) != n or not all(v is None or math.isfinite(v)
+                                 for v in vals):
+        return None
+    return vals
+
+
 def _solved_normals(result, n: int):
     """The total base normal of the method's OWN solution, per slice, or
     None (v0.1.210, D172). See :func:`base_effective_stresses`."""
@@ -545,12 +572,16 @@ def base_effective_stresses(result) -> list[float]:
     sgn = _denominator_sign(result)
     kv = _applied_kv(result)
     load = _applied_support_load(result, len(slices))
+    env = _applied_envelope_stress(result, len(slices))
     for i, s in enumerate(slices):
         alpha = s.base_angle
         l = max(s.base_length, 1e-12)
         u = s.pore_pressure
         W, sigma_est = _base_load_and_sigma(
             s, kv=kv, support_load=load[i] if load else 0.0)
+        # v0.1.213 (D84) -- where the solver linearised, if not there.
+        if env is not None and env[i] is not None:
+            sigma_est = max(0.0, env[i])
         c_loc, tan_phi = BishopSimplified._local_c_phi(s, s.material,
                                                        sigma_est)
         m_alpha = math.cos(alpha) + sgn * math.sin(alpha) * tan_phi / F
@@ -623,12 +654,17 @@ def base_m_alphas(result) -> list[float]:
     kv = _applied_kv(result)
     slices = list(result.slices)
     load = _applied_support_load(result, len(slices))
+    env = _applied_envelope_stress(result, len(slices))
     for i, s in enumerate(slices):
         alpha = s.base_angle
         # v0.1.210 (D172) -- tan phi where the SOLVER linearised it,
         # support included; the denominator stays Bishop's for every method.
         _W, sigma_est = _base_load_and_sigma(
             s, kv=kv, support_load=load[i] if load else 0.0)
+        # v0.1.213 (D84) -- and with a curved envelope, where the solver
+        # finally read it; see ``_applied_envelope_stress``.
+        if env is not None and env[i] is not None:
+            sigma_est = max(0.0, env[i])
         _c, tan_phi = BishopSimplified._local_c_phi(s, s.material,
                                                     sigma_est)
         out.append(math.cos(alpha) + sgn * math.sin(alpha) * tan_phi / F)

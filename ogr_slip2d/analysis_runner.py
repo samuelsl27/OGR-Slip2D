@@ -1601,6 +1601,48 @@ def m_alpha_margin_note(result) -> list[str]:
     ]
 
 
+def zero_strength_note(result) -> list[str]:
+    """Say how many slices entered the solver with NO shear strength
+    because their estimate was clipped (v0.1.213, D84).
+
+    Reporting only, like :func:`m_alpha_margin_note`: the factor of safety
+    is the one the method computed, and this does not change it. What the
+    number alone cannot say is that some slices resisted nothing. Every
+    method reads the strength envelope at an effective normal stress and
+    clips a negative one to zero, and an envelope through the origin has no
+    strength there.
+
+    Which stress that is changed in the same version. Until then it was
+    the Fellenius estimate, which on verification problem 41 (a power curve
+    with ru = 0.3) came out negative on the four slices at the head of the
+    critical Path Search surface, exactly where cos^2(alpha) < ru, while
+    the method's own solution put +30 to +215 kPa on them. Since then a
+    curved envelope is read at the stress the method resolves
+    (``methods.base.self_consistent_envelope``), so a slice flagged here is
+    a base in tension at the solution itself; problem 41 flags none.
+
+    The slices are numbered from 1, left to right, as the interpretation
+    windows number them. Each method publishes the ones of its own last
+    pass in ``details["zero_strength_slices"]``.
+    """
+    details = getattr(result, "details", None) or {}
+    idx = list(details.get("zero_strength_slices") or ())
+    if not idx:
+        return []
+    n = len(idx)
+    shown = ", ".join(str(i + 1) for i in idx[:8])
+    if n > 8:
+        shown += ", ..."
+    plural = "s" if n != 1 else ""
+    return [
+        f"{n} slice{plural} entered with zero shear strength (slice{plural} "
+        f"{shown}): the effective normal stress the strength envelope was "
+        f"read at was negative, and the envelope has no strength at zero "
+        f"stress. The factor of safety counts no resistance on "
+        f"{'those bases' if n != 1 else 'that base'}."
+    ]
+
+
 #: How close to a grid edge the critical centre must fall, as a fraction
 #: of that axis' own span, before the run says the grid may be too small.
 #:
@@ -2110,6 +2152,14 @@ def run_analysis(project, method_ids=None,
                     warnings.append(line)
         if crit is not None:
             for note in m_alpha_margin_note(crit):
+                line = f"{mid}: {note}"
+                if line not in warnings:
+                    warnings.append(line)
+        # v0.1.213 (D84) -- and whether any slice of it resisted nothing
+        # because its strength estimate was clipped. On the same ``crit``
+        # and for the same reason as the two above.
+        if crit is not None:
+            for note in zero_strength_note(crit):
                 line = f"{mid}: {note}"
                 if line not in warnings:
                     warnings.append(line)

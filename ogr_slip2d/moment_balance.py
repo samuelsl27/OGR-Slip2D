@@ -201,9 +201,11 @@ def moment_terms(
         sup: :class:`~ogr_slip2d.support_integration.SupportTerms`. Only its
             NORMAL part is read — ``nf_h`` / ``nf_v`` applied at
             ``(x_app, y_app)`` — and only by the methods that resolve that
-            part inside the slice equilibrium (Spencer, GLE). Bishop and
-            Ordinary put the same normal part inside ``resisting`` as
-            ``T_N·tan φ'`` and pass no ``sup`` at all.
+            part inside the slice equilibrium. Spencer and GLE have passed it
+            since v0.1.115, and Bishop since v0.1.137, when its support load
+            moved into the slice's vertical equilibrium instead of being
+            added to ``resisting`` as ``T_N·tan φ'``. Ordinary still adds it
+            that way and passes no ``sup``.
         tangential: extra force along each base that follows the SHEAR's own
             sign, from ACTIVE supports. It joins the DRIVING side, which is
             the reference's Eqn. 1: ``F = M_resisting / (M_overturning −

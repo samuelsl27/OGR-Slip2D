@@ -105,6 +105,11 @@ REASON_FORCE_BALANCE_DIVERGED = "force_balance_diverged"
 REASON_DRAWDOWN_NOT_APPLICABLE = "drawdown_not_applicable"
 #: The surface could not be sliced at the drawn-down level.
 REASON_UNSLICEABLE_AT_DRAWDOWN = "unsliceable_at_drawdown"
+#: v0.1.213 (D84) -- the strength envelope depends on the normal stress and
+#: the stress it was read at never settled on the stress the method resolved
+#: (see :func:`self_consistent_envelope`), so the factor of safety is not the
+#: one of that envelope.
+REASON_ENVELOPE_NOT_CONVERGED = "envelope_not_converged"
 
 #: Every reason a method may give. A membership test against this set is
 #: what keeps the next reason from being born as a loose string.
@@ -125,6 +130,7 @@ ALL_REASONS = frozenset({
     REASON_FORCE_BALANCE_DIVERGED,
     REASON_DRAWDOWN_NOT_APPLICABLE,
     REASON_UNSLICEABLE_AT_DRAWDOWN,
+    REASON_ENVELOPE_NOT_CONVERGED,
 })
 
 # v0.1.192 (D177) — the machine-readable half of ``admissibility_note``,
@@ -388,6 +394,159 @@ class LEMResult:
 
 
 # ======================================================================
+# v0.1.213 (D84) -- the strength envelope is read at the normal stress the
+# method RESOLVES on each slice base, not at the Fellenius estimate.
+#
+# Every method linearises the envelope once per slice, ``tau ~ c + sigma'
+# tan phi``, and then applies that straight line to the stress its own
+# equilibrium puts on the base. Until v0.1.213 the line was always the
+# tangent at the Fellenius estimate ``max(0, W cos a - u l) / l``. For
+# Mohr-Coulomb the point does not matter. For a curved envelope it does, and
+# in both directions. A tangent taken anywhere but at the resolved stress
+# lies ABOVE a concave curve there, and one taken at a clipped estimate of
+# zero, on a curve through the origin, is ZERO. Measured as the strength the
+# solver used against the envelope at the stress of its own solution:
+#
+#     Perry (1993), the given five-slice surface   +2.0 to +2.2 % in the sum
+#                                                  (+10 to +11 % on a slice)
+#     problem 41, the critical Path Search surface -21 % in the sum
+#                                                  (-100 % on four slices)
+#
+# So the method was not solving limit equilibrium with the material's
+# envelope. At the fixed point, where the stress the envelope is read at is
+# the stress the method resolves, it is: the tangent there gives the curve's
+# own value. That is also how the one other program whose documentation is
+# public describes it (the envelope's tangent at the base normal stress of
+# each slice, the first iteration being the ordinary one).
+#
+# The Ordinary Method is not wrapped. Its normal does not depend on c or
+# tan phi, so reading the envelope at it is already the fixed point.
+#
+# A module switch, as ``interslice.BRANCH_STALL_PAIR`` is, so an A/B can
+# turn it off and a test can demand that it moves the number (rule 7).
+ENVELOPE_AT_OWN_STRESS = True
+#: The fixed point stops when no slice's stress moves by more than this,
+#: relative to max(1 kPa, |sigma'|). Measured on the 23 surfaces of the
+#: verification bank with a curved envelope: 3 to 5 passes.
+ENVELOPE_STRESS_TOL = 1e-6
+#: And gives up after this many solves, reporting the surface unconverged.
+ENVELOPE_MAX_PASSES = 50
+#: The two stresses [kPa] at which an envelope is asked whether its tangent
+#: depends on the stress at all; the verification bench's census of D172
+#: used the same two.
+_ENVELOPE_PROBES = (5.0, 500.0)
+
+ENVELOPE_NOT_CONVERGED_NOTE = (
+    "The strength envelope depends on the normal stress, and the stress it "
+    "was read at did not settle on the stress the method resolved within "
+    "the maximum number of passes")
+
+
+def _envelope_depends_on_stress(slice_, cache: dict) -> bool:
+    """Whether the envelope of this slice's material has a tangent that
+    changes with sigma'n. Cached per material when the model needs no slice
+    context; a model that does is asked on its own slice."""
+    mat = getattr(slice_, "material", None)
+    if mat is None:
+        return False
+    strength = getattr(mat, "strength", None)
+    per_slice = bool(getattr(strength, "needs_context", False))
+    key = id(mat)
+    if not per_slice and key in cache:
+        return cache[key]
+    from .bishop import BishopSimplified
+    try:
+        _c1, t1 = BishopSimplified._local_c_phi(slice_, mat,
+                                                _ENVELOPE_PROBES[0])
+        _c2, t2 = BishopSimplified._local_c_phi(slice_, mat,
+                                                _ENVELOPE_PROBES[1])
+        depends = (math.isfinite(t1) and math.isfinite(t2)
+                   and abs(t1 - t2) > 1e-6 * max(1.0, abs(t1), abs(t2)))
+    except Exception:  # noqa: BLE001
+        # An envelope that cannot be probed keeps the old reading rather
+        # than getting a new one on a guess.
+        depends = False
+    if not per_slice:
+        cache[key] = depends
+    return depends
+
+
+def self_consistent_envelope(compute):
+    """Wrap a method's ``compute_fos`` so a curved envelope is read at the
+    stress the method resolves (v0.1.213, D84; see the note above).
+
+    Solves once. With no slice whose envelope depends on the stress, or no
+    factor of safety, that is the answer, bit for bit as before. Otherwise
+    it iterates: the effective normal stress of the method's own solution
+    (``checks.base_effective_stresses``, which since v0.1.210 is each
+    method's own, support included) is imposed as the point every
+    stress-dependent slice is linearised at, and the surface is solved
+    again, until the stress it was read at and the stress it resolved agree
+    to ``ENVELOPE_STRESS_TOL``. Slices whose envelope does not depend on the
+    stress keep the Fellenius point, so they are treated exactly as before.
+
+    Published in ``details``: ``envelope_stress`` (the signed stresses the
+    returned solve was linearised at, None on a slice that kept the
+    Fellenius point), ``envelope_passes`` and ``envelope_converged``. The
+    checks read the first to judge the surface where the solver read it.
+    """
+    import functools
+
+    @functools.wraps(compute)
+    def wrapper(self, project, surface, slices):
+        res = compute(self, project, surface, slices)
+        if (not ENVELOPE_AT_OWN_STRESS or res is None or res.fos is None
+                or not res.converged or slices is None):
+            return res
+        s_list = list(slices.slices if hasattr(slices, "slices") else slices)
+        cache: dict = {}
+        depends = [_envelope_depends_on_stress(s, cache) for s in s_list]
+        if not any(depends):
+            return res
+        from ..checks import base_effective_stresses
+
+        imposed = None
+        passes, settled = 1, False
+        try:
+            while True:
+                own = base_effective_stresses(res)
+                if len(own) != len(s_list) or not all(
+                        math.isfinite(v) for v, d in zip(own, depends) if d):
+                    break
+                target = [v if d else None for v, d in zip(own, depends)]
+                if imposed is not None and max(
+                        abs(t - p) / max(1.0, abs(t))
+                        for t, p in zip(target, imposed)
+                        if t is not None) < ENVELOPE_STRESS_TOL:
+                    settled = True
+                    break
+                if passes >= ENVELOPE_MAX_PASSES:
+                    break
+                self._envelope_stress = target
+                nxt = compute(self, project, surface, slices)
+                passes += 1
+                if nxt is None or nxt.fos is None:
+                    return nxt
+                nxt.details["envelope_stress"] = list(target)
+                res, imposed = nxt, target
+                if not res.converged:
+                    # The method's own iteration failed at this point; its
+                    # reason says why, and there is no fixed point to chase.
+                    break
+        finally:
+            self._envelope_stress = None
+        res.details["envelope_passes"] = passes
+        res.details["envelope_converged"] = settled
+        if not settled and res.converged:
+            res.converged = False
+            res.error_message = ENVELOPE_NOT_CONVERGED_NOTE
+            res.reason = REASON_ENVELOPE_NOT_CONVERGED
+        return res
+
+    return wrapper
+
+
+# ======================================================================
 class LEMMethod(ABC):
     """Abstract Limit Equilibrium Method.
 
@@ -399,6 +558,22 @@ class LEMMethod(ABC):
     DISPLAY_NAME: ClassVar[str] = ""
     SATISFIES_FORCE: ClassVar[bool] = False
     SATISFIES_MOMENT: ClassVar[bool] = False
+
+    #: v0.1.213 (D84) -- the effective normal stress [kPa] each slice's
+    #: envelope is linearised at, imposed by :func:`self_consistent_envelope`
+    #: for one solve and put back to None after it; None on a slice keeps
+    #: the Fellenius estimate. A class default so every instance, a plugin's
+    #: included, has it.
+    _envelope_stress: Optional[list] = None
+
+    def _imposed_stress(self, i: int) -> Optional[float]:
+        """The stress slice ``i`` is to be linearised at, or None for the
+        Fellenius estimate (v0.1.213, D84). Signed: the caller clips it at
+        zero, and a negative one is a base in tension at the solution."""
+        env = self._envelope_stress
+        if env is None or i >= len(env):
+            return None
+        return env[i]
 
     def __init__(
         self,

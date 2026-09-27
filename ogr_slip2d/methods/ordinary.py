@@ -97,6 +97,8 @@ class OrdinaryFellenius(LEMMethod):
         tangential = [0.0] * len(s_list) if sup.present else None
         tangential_passive = [0.0] * len(s_list) if sup.present else None
         n_negative_normal = 0
+        # v0.1.213 (D84) -- see ``_B._zero_strength``.
+        zero: list[int] = []
         # v0.1.210 (D172) -- the base normal of THIS method's own solution,
         # for the Tensile Stress Check; see where it is filled.
         solved: list[float] = []
@@ -146,6 +148,8 @@ class OrdinaryFellenius(LEMMethod):
             # profiles and the matric-suction cohesion. See the note in
             # the circular path for the measurement.
             c_loc, tan_phi = _B._local_c_phi(s, s.material, sigma_n_eff)
+            if N_eff < 0.0 and _B._zero_strength(s, N_eff, c_loc, tan_phi):
+                zero.append(i)
             strength = (c_loc + sigma_n_eff * tan_phi) * s.base_length
             if sup.present:
                 if sup.n_press[i]:
@@ -204,6 +208,7 @@ class OrdinaryFellenius(LEMMethod):
             base_shear_strength=resisting,
             details=support_failure_details(sup, {
                 "negative_effective_normal": n_negative_normal,
+                "zero_strength_slices": zero,
                 "num_slices": len(normals),
                 "moment_axis": terms.axis,
                 # v0.1.189 (D112) -- the sense of sliding, yes; but NOT the
@@ -249,6 +254,8 @@ class OrdinaryFellenius(LEMMethod):
         shears: list[float] = []
         strengths: list[float] = []
         n_negative_normal = 0
+        # v0.1.213 (D84) -- see ``_B._zero_strength``.
+        zero: list[int] = []
         # v0.1.210 (D172) -- the base normal of THIS method's own solution,
         # for the Tensile Stress Check; see where it is filled.
         solved: list[float] = []
@@ -372,6 +379,8 @@ class OrdinaryFellenius(LEMMethod):
             # 1.370 while Bishop moved 0.3 %, because the bands were plain
             # ``undrained`` and needed no context.
             c_loc, tan_phi = _B._local_c_phi(s, s.material, sigma_n_eff)
+            if N_eff < 0.0 and _B._zero_strength(s, N_eff, c_loc, tan_phi):
+                zero.append(i_s)
             tau = c_loc + sigma_n_eff * tan_phi
             strength = tau * s.base_length
 
@@ -502,6 +511,7 @@ class OrdinaryFellenius(LEMMethod):
             base_shear_strength=strengths,
             details=support_failure_details(sup, {
                 "negative_effective_normal": n_negative_normal,
+                "zero_strength_slices": zero,
                 "num_slices": len(normals),
                 "active_support_ratio": active_ratio,
                 # v0.1.189 (D112) -- sense of sliding only; no

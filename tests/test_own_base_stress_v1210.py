@@ -186,10 +186,22 @@ def _solve(method_id, active=True, surface="circle", power=True):
         from ogr_slip2d.methods import method_registry
         from ogr_slip2d.slicer import slice_surface
         from test_support_normal_v1137 import NSLICES, _circle
+        from ogr_slip2d.methods import base
         p = _support_project(active, power=power)
         surf = _circle() if surface == "circle" else _polyline_of(_circle())
         sl = slice_surface(p, surf, num_slices=NSLICES)
-        res = method_registry()[method_id]().compute_fos(p, surf, sl)
+        # v0.1.213 (D84) -- at the Fellenius point, switch off: this file
+        # rebuilds the solver's stress ESTIMATE from its support load, which
+        # since then is the first pass and the switch-off path of a curved
+        # envelope (the rest is read at the method's own stress, and the
+        # checks follow ``details["envelope_stress"]``; that half is pinned
+        # in ``test_envelope_own_stress_v1213.py``). Restored in ``finally``.
+        old = base.ENVELOPE_AT_OWN_STRESS
+        base.ENVELOPE_AT_OWN_STRESS = False
+        try:
+            res = method_registry()[method_id]().compute_fos(p, surf, sl)
+        finally:
+            base.ENVELOPE_AT_OWN_STRESS = old
         assert res.is_valid, (method_id, res.error_message)
         _CACHE[key] = (p, surf, sl, res)
     return _CACHE[key]

@@ -41,6 +41,7 @@ from .base import (
     LEMMethod,
     LEMResult,
     register_method,
+    self_consistent_envelope,
 )
 from .bishop import BishopSimplified, driving_shear_forces
 
@@ -135,6 +136,7 @@ class GLEMorgensternPrice(LEMMethod):
                          min_lambda, max_lambda, iterate_steffensen)
         self.f_func = interslice_func
 
+    @self_consistent_envelope
     def compute_fos(self, project: Project, surface, slices) -> LEMResult:
         # A surface with no shear strength anywhere has F = 0 exactly and
         # no iteration to run; see LEMMethod.NO_SHEAR_STRENGTH_NOTE for why
@@ -199,6 +201,8 @@ class GLEMorgensternPrice(LEMMethod):
             # v0.1.173 (D117) — see the twin line in spencer.py. The floor is
             # ``branch_budget``'s and not this call's, deliberately.
             max_passes=branch_budget(self.max_iterations),
+            # v0.1.213 (D84) -- see ``base.self_consistent_envelope``.
+            envelope_stress=self._envelope_stress,
         )
 
         def solve(lam):
@@ -393,6 +397,8 @@ class GLEMorgensternPrice(LEMMethod):
                     # solution, which the Tensile Stress Check tests.
                     "sigma_support_load": support_normal_load(sup),
                     "solved_base_normal": list(normals),
+                    # v0.1.213 (D84) -- see ``zero_strength_note``.
+                    "zero_strength_slices": system.zero_strength_slices(),
                     # v0.1.159 (D63) — see ``Spencer.compute_fos``.
                     "lambda_search_fell_back": True,
                     "lambdas_lost_to_budget": system.n_passes_exhausted,
@@ -581,6 +587,8 @@ class GLEMorgensternPrice(LEMMethod):
                 # solution, which the Tensile Stress Check tests.
                 "sigma_support_load": support_normal_load(sup),
                 "solved_base_normal": list(normals),
+                # v0.1.213 (D84) -- see ``zero_strength_note``.
+                "zero_strength_slices": system.zero_strength_slices(),
                 # v0.1.159 (D63) — see ``Spencer.compute_fos``.
                 "lambda_search_fell_back": False,
                 "lambdas_lost_to_budget": system.n_passes_exhausted,

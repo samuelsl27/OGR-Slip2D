@@ -45,6 +45,7 @@ from .base import (
     LEMMethod,
     LEMResult,
     register_method,
+    self_consistent_envelope,
 )
 from .bishop import BishopSimplified, driving_shear_forces
 
@@ -57,6 +58,7 @@ class Spencer(LEMMethod):
     SATISFIES_MOMENT = True
 
     # ------------------------------------------------------------------
+    @self_consistent_envelope
     def compute_fos(
         self, project: Project, surface: SurfaceProtocol, slices: Slices,
     ) -> LEMResult:
@@ -111,6 +113,8 @@ class Spencer(LEMMethod):
             # reach. The floor lives in ``branch_budget`` and not here, so
             # that this line and gle.py's cannot drift apart.
             max_passes=branch_budget(self.max_iterations),
+            # v0.1.213 (D84) -- see ``base.self_consistent_envelope``.
+            envelope_stress=self._envelope_stress,
         )
 
         def solve(lam):
@@ -335,6 +339,8 @@ class Spencer(LEMMethod):
                     # solution, which the Tensile Stress Check tests.
                     "sigma_support_load": support_normal_load(sup),
                     "solved_base_normal": list(normals),
+                    # v0.1.213 (D84) -- see ``zero_strength_note``.
+                    "zero_strength_slices": system.zero_strength_slices(),
                     # v0.1.159 (D63) — this is the path where losing a λ can
                     # decide the answer, so this is the path that has to be
                     # able to say it did. See ``analysis_runner.lambda_budget_note``.
@@ -577,6 +583,8 @@ class Spencer(LEMMethod):
                 # solution, which the Tensile Stress Check tests.
                 "sigma_support_load": support_normal_load(sup),
                 "solved_base_normal": list(normals),
+                # v0.1.213 (D84) -- see ``zero_strength_note``.
+                "zero_strength_slices": system.zero_strength_slices(),
                 # v0.1.159 (D63) — false here by construction: a bracket was
                 # found and refined. Written rather than omitted so that a
                 # reader of ``details`` does not have to know which of the

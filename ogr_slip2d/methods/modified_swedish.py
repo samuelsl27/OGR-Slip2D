@@ -69,6 +69,7 @@ from .base import (
     LEMMethod,
     LEMResult,
     register_method,
+    self_consistent_envelope,
 )
 from .bishop import BishopSimplified, driving_shear_forces
 
@@ -121,6 +122,7 @@ class PrescribedInclinationMethod(LEMMethod):
         raise NotImplementedError
 
     # ------------------------------------------------------------------
+    @self_consistent_envelope
     def compute_fos(
         self, project: Project, surface: SurfaceProtocol, slices: Slices,
     ) -> LEMResult:
@@ -243,8 +245,42 @@ class PrescribedInclinationMethod(LEMMethod):
                 # solution, which the Tensile Stress Check tests.
                 "sigma_support_load": support_normal_load(sup),
                 "solved_base_normal": list(normals),
+                # v0.1.213 (D84) -- see ``_zero_strength_slices``.
+                "zero_strength_slices": self._zero_strength_slices(
+                    list(slices), ctx),
             }),
         )
+
+    # ------------------------------------------------------------------
+    def _zero_strength_slices(self, slist, ctx) -> list[int]:
+        """The slices ``_march`` linearised at a clipped estimate that left
+        them with no strength (v0.1.213, D84; see
+        ``BishopSimplified._zero_strength``).
+
+        Counted here once, not inside ``_march``, which runs dozens of times
+        per surface: its estimate does not depend on F, so every march of a
+        surface clips the same slices. The expression is the one in
+        ``_march``, term for term, with the same loads from ``ctx``.
+        """
+        if ctx is None:
+            return []
+        alpha_n, _theta, kh, kv, _h_water, v_sup, _t_act, _t_pas = ctx
+        out: list[int] = []
+        for i, s in enumerate(slist):
+            W_eff = slice_forces(s, kh, kv).w_total - v_sup[i]
+            l = s.base_length
+            raw = W_eff * math.cos(alpha_n[i]) - s.pore_pressure * l
+            imposed = self._imposed_stress(i)
+            if imposed is not None:
+                raw = imposed
+            if raw >= 0.0:
+                continue
+            c_loc, tan_phi = BishopSimplified._local_c_phi(
+                s, s.material, max(0.0, raw) / (
+                    1.0 if imposed is not None else max(l, 1e-9)))
+            if BishopSimplified._zero_strength(s, raw, c_loc, tan_phi):
+                out.append(i)
+        return out
 
     # ------------------------------------------------------------------
     def _boundary_ratios(self, slices: Slices) -> list[float]:
@@ -323,8 +359,8 @@ class PrescribedInclinationMethod(LEMMethod):
         if t_support is None:
             t_support = [0.0] * len(slices_list)
 
-        for s, alpha, th, hw, vs, ts in zip(slices_list, alpha_n, theta,
-                                            h_water, v_support, t_support):
+        for i, (s, alpha, th, hw, vs, ts) in enumerate(zip(
+                slices_list, alpha_n, theta, h_water, v_support, t_support)):
             # v0.1.61 — the ponded water rides in the vertical term (it is
             # a load the base has to carry) and its horizontal thrust joins
             # the seismic force in the horizontal slot. This is a
@@ -338,6 +374,11 @@ class PrescribedInclinationMethod(LEMMethod):
             u = s.pore_pressure
 
             sigma_est = max(0.0, W_eff * math.cos(alpha) - u * l) / max(l, 1e-9)
+            # v0.1.213 (D84) -- or where the method's own solution put this
+            # base; see ``base.self_consistent_envelope``.
+            imposed = self._imposed_stress(i)
+            if imposed is not None:
+                sigma_est = max(0.0, imposed)
             c_loc, tan_phi = BishopSimplified._local_c_phi(
                 s, s.material, sigma_est
             )
@@ -498,6 +539,9 @@ class PrescribedInclinationMethod(LEMMethod):
             l = max(s.base_length, 1e-9)
             u = s.pore_pressure
             sigma_est = max(0.0, W_eff * math.cos(alpha) - u * l) / l
+            imposed = self._imposed_stress(i)       # v0.1.213 (D84)
+            if imposed is not None:
+                sigma_est = max(0.0, imposed)
             c_loc, tan_phi = BishopSimplified._local_c_phi(
                 s, s.material, sigma_est)
             a = tan_phi / F

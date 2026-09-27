@@ -119,6 +119,12 @@ def lem_summary(res, *, with_slices: bool = False) -> Optional[dict]:
     extras = {k: _r(details[k]) for k in ("lambda", "ky", "ky_fos",
                                          "newmark_displacement")
               if k in details and isinstance(details[k], (int, float))}
+    # v0.1.213 (D84) -- the slices that resisted nothing because their
+    # strength estimate was clipped, only when there are any (0-based, in
+    # the slicer's order, as the method published them).
+    zero = details.get("zero_strength_slices")
+    if zero:
+        extras["zero_strength_slices"] = [int(i) for i in zero]
     if extras:
         out["details"] = extras
     if with_slices:

@@ -48,6 +48,7 @@ from .base import (
     LEMMethod,
     LEMResult,
     register_method,
+    self_consistent_envelope,
 )
 
 
@@ -77,6 +78,39 @@ class BishopSimplified(LEMMethod):
 
         Returns (c_local, tan φ_local) such that locally
             τ ≈ c_local + σ'ₙ · tan φ_local
+
+        v0.1.213 (D84) — WHERE the callers linearise. This function takes
+        whatever stress it is given; the methods used to give it the
+        Fellenius estimate ``max(0, W cos a - u l) / l`` once per slice, and
+        applied the resulting straight line to the stress their own
+        equilibrium resolved. For a curved envelope that is not the
+        envelope: a tangent taken elsewhere lies above a concave curve, and
+        one taken at a clipped zero on a curve through the origin is zero.
+        Since v0.1.213 a stress-dependent envelope is read at the stress the
+        method resolves, iterated to the fixed point
+        (``base.self_consistent_envelope``); the Fellenius estimate is only
+        the first pass.
+
+        The case that settled it was misread for five versions. Perry
+        (1993), the given five-slice surface of verification problem 40, is
+        published at 0.944 (Janbu simplified) in the verification manual and
+        0.98 in Perry's own paper:
+
+            linearised at          Fellenius    own stress
+            5 slices (the statement) 0.97388      0.94889
+            100 slices               0.95454      0.92947
+
+        Measured in v0.1.153, the 100-slice figures were set against the
+        five-slice publication and read as "re-linearising is worse on Perry
+        1993". At the discretisation the number was published for, the own
+        stress is +0.52 % from the manual and the Fellenius point +3.17 %;
+        against Perry's own 0.98 the order reverses (-3.17 % and -0.62 %),
+        and that paper was not available to say how it read the envelope.
+        What decided was the identity, not the fit: the strength the solver
+        used against the envelope at the stress of its own solution was off
+        by +2.0 to +2.2 % in the sum on that surface, and by -21 % on the
+        critical surface of problem 41 (Jiang, Baker & Yamagami 2003), where
+        four slices entered with nothing; at the fixed point it is exact.
         """
         if material is None:
             return 0.0, 0.0
@@ -167,6 +201,48 @@ class BishopSimplified(LEMMethod):
         return c + c_suction, tan_phi
 
     # ------------------------------------------------------------------
+    #: The two stresses [kPa] at which an envelope is asked whether it has
+    #: any strength at all (:meth:`_zero_strength`). Two, because one point
+    #: can sit on a flat stretch of a user-defined function.
+    _STRENGTH_PROBES = (1.0, 100.0)
+
+    @staticmethod
+    def _zero_strength(slice_: Slice, raw_estimate: float, c: float,
+                       tan_phi: float) -> bool:
+        """True when the slice enters its solver with NO shear strength
+        because the stress its envelope was read at is negative (v0.1.213,
+        D84).
+
+        Every method reads the envelope once per slice at an effective
+        normal stress and clips a negative one to zero (see the docstring of
+        :meth:`_local_c_phi`). With Mohr-Coulomb that is harmless, since c'
+        and tan(phi') do not depend on the point. With a curve through the
+        origin, a power curve with ``c = d = 0``, the tangent at zero is
+        zero and the slice resists nothing. On a first pass that stress is
+        the Fellenius estimate, which can be negative where the solution is
+        not; on the passes of ``base.self_consistent_envelope`` it is the
+        stress of the method's own solution, and a flagged slice is then a
+        base in tension.
+
+        ``raw_estimate`` is the stress (or force) BEFORE the clip; only its
+        sign is read. ``c`` and ``tan_phi`` are what the linearisation
+        returned, suction cohesion included. A material with no strength at
+        either probe stress is strengthless by definition and is not
+        flagged: the note this feeds is about strength LOST to the stress it
+        was read at, not about a soil that never had any.
+        """
+        if raw_estimate >= 0.0 or c > 0.0 or tan_phi > 0.0:
+            return False
+        material = getattr(slice_, "material", None)
+        if material is None:
+            return False
+        for probe in BishopSimplified._STRENGTH_PROBES:
+            c1, t1 = BishopSimplified._local_c_phi(slice_, material, probe)
+            if c1 > 0.0 or t1 > 0.0:
+                return True
+        return False
+
+    # ------------------------------------------------------------------
     # ------------------------------------------------------------------
     def _general_moment_fos(self, project, surface, slices, s_list,
                             kh, kv, slide_sign, sup) -> LEMResult:
@@ -207,6 +283,9 @@ class BishopSimplified(LEMMethod):
         # carried in the LAST pass, published so the checks linearise the
         # envelope where this solver did. See the circular path.
         sigma_load = None
+        # v0.1.213 (D84) -- the slices of the LAST pass that entered with no
+        # strength because their estimate was clipped; see ``_zero_strength``.
+        zero: list[int] = []
         for it in range(1, self.max_iterations + 1):
             iterations = it
             forces = []
@@ -216,6 +295,7 @@ class BishopSimplified(LEMMethod):
             tangential = [0.0] * len(s_list) if sup.present else None
             tangential_passive = [0.0] * len(s_list) if sup.present else None
             sigma_load = [0.0] * len(s_list) if sup.present else None
+            zero = []
             for i_s, s in enumerate(s_list):
                 f = slice_forces(s, kh, kv)
                 w = f.w_total
@@ -234,9 +314,19 @@ class BishopSimplified(LEMMethod):
                     w_n += load
                     sigma_load[i_s] = load
                 n_est = w_n * math.cos(s.base_angle)
-                sigma = max(0.0, n_est - s.pore_pressure * s.base_length)
+                raw = n_est - s.pore_pressure * s.base_length
+                sigma = max(0.0, raw)
                 sigma /= max(s.base_length, 1e-9)
+                # v0.1.213 (D84) -- or where the method's own solution put
+                # this base, on the passes of ``self_consistent_envelope``.
+                imposed = self._imposed_stress(i_s)
+                if imposed is not None:
+                    raw, sigma = imposed, max(0.0, imposed)
                 c, tan_phi = self._local_c_phi(s, s.material, sigma)
+                # v0.1.213 (D84) -- reported, not changed; see
+                # ``_zero_strength``.
+                if raw < 0.0 and self._zero_strength(s, raw, c, tan_phi):
+                    zero.append(i_s)
                 m_alpha = math.cos(alpha) + math.sin(alpha) * tan_phi / fos
                 if abs(m_alpha) < 1e-6:
                     return LEMResult(
@@ -329,9 +419,42 @@ class BishopSimplified(LEMMethod):
                 break
             fos = 0.5 * fos + 0.5 * new_fos
 
+        # v0.1.213 (D81) -- the per-slice columns, which this branch left
+        # EMPTY from v0.1.92, when it was split off the circular formula,
+        # until now: every surface that is not a ``SlipCircle`` -- composite,
+        # polyline, weak layer -- published no base normal. Three readers
+        # noticed, one of them loudly. The interpretation windows showed a
+        # dash, the verification bank published no maximum effective normal
+        # stress for 32 of its archived Bishop surfaces, and
+        # ``rapid_drawdown._stage1_state`` REFUSES a short list since
+        # v0.1.108, so Bishop with a multi-stage drawdown on any non-circular
+        # surface came out invalid ("drawdown_not_applicable") every time.
+        # From v0.1.92 to v0.1.107, before that guard, it quietly re-solved
+        # stage 1 instead.
+        #
+        # The same function as the circular branch and both Janbu, and not the
+        # ``normals`` the loop above just used. They are the same force: the
+        # vertical equilibrium of the slice with no inter-slice shear, which
+        # is exactly what ``normal`` solves. They differ in two things only.
+        # The loop carries the support's line load and the column does not,
+        # which is the known limitation all four share (see the docstring
+        # below). And the loop's F is the one that ENTERED the last pass,
+        # while this is the F returned. One function keeps one meaning for
+        # the column on a circle and on a polyline. Fed back into the moment
+        # balance about the same axis, Sigma N*f term included (Fredlund and
+        # Krahn 1977), the published normals and strengths return the factor
+        # of safety: tests/test_bishop_general_base_forces_v1213.py.
+        pub_normals, pub_shears, pub_strengths = (
+            base_forces_no_interslice_shear(
+                s_list, kh, kv, slide_sign, fos,
+                envelope_stress=self._envelope_stress))
+
         return LEMResult(
             fos=fos, converged=converged, iterations=iterations,
             method_id=self.METHOD_ID, surface=surface, slices=slices,
+            base_normal_force=pub_normals,
+            base_shear_force=pub_shears,
+            base_shear_strength=pub_strengths,
             details=support_failure_details(sup, {
                 "moment_axis": axis,
                 # v0.1.189 (D112). Here ``alpha`` was already turned by
@@ -353,11 +476,15 @@ class BishopSimplified(LEMMethod):
                 # to each slice's stress estimate, read by
                 # ``checks._applied_support_load``; None without a support.
                 "sigma_support_load": sigma_load,
+                # v0.1.213 (D84) -- read by
+                # ``analysis_runner.zero_strength_note``.
+                "zero_strength_slices": zero,
             }),
             error_message="" if converged else self.NOT_CONVERGED_NOTE,
             reason="" if converged else REASON_NOT_CONVERGED,
         )
 
+    @self_consistent_envelope
     def compute_fos(
         self,
         project: Project,
@@ -549,10 +676,13 @@ class BishopSimplified(LEMMethod):
         # this solver did; it depends on F only through a PASSIVE support
         # (``t_passive / F``), so it is captured, not recomputed at the end.
         sigma_load = None
+        # v0.1.213 (D84) -- as in ``_general_moment_fos``.
+        zero: list[int] = []
         for it in range(1, self.max_iterations + 1):
             iterations = it
             numerator = 0.0
             sigma_load = [0.0] * len(s_list) if sup.present else None
+            zero = []
 
             for i_s, s in enumerate(s_list):
                 # v0.1.61 — the base normal follows from the VERTICAL
@@ -573,10 +703,17 @@ class BishopSimplified(LEMMethod):
                     sigma_load[i_s] = load
 
                 N_est = W_eff * math.cos(s.base_angle)
-                N_eff_est = max(0.0, N_est - s.pore_pressure * s.base_length)
+                raw = N_est - s.pore_pressure * s.base_length
+                N_eff_est = max(0.0, raw)
                 sigma_n_eff = N_eff_est / max(s.base_length, 1e-9)
+                # v0.1.213 (D84) -- see ``_general_moment_fos``.
+                imposed = self._imposed_stress(i_s)
+                if imposed is not None:
+                    raw, sigma_n_eff = imposed, max(0.0, imposed)
 
                 c, tan_phi = self._local_c_phi(s, s.material, sigma_n_eff)
+                if raw < 0.0 and self._zero_strength(s, raw, c, tan_phi):
+                    zero.append(i_s)
 
                 m_alpha = math.cos(s.base_angle) + (
                     slide_sign * math.sin(s.base_angle) * tan_phi / fos
@@ -654,7 +791,8 @@ class BishopSimplified(LEMMethod):
 
         # ---- Post-processing per slice (diagnostics) ---------------
         normals, shears, strengths = base_forces_no_interslice_shear(
-            s_list, kh, kv, slide_sign, fos)
+            s_list, kh, kv, slide_sign, fos,
+            envelope_stress=self._envelope_stress)
 
         return LEMResult(
             fos=fos,
@@ -678,6 +816,8 @@ class BishopSimplified(LEMMethod):
                 "kv": kv,
                 # v0.1.210 (D172) -- see above; None without a support.
                 "sigma_support_load": sigma_load,
+                # v0.1.213 (D84) -- see the non-circular exit.
+                "zero_strength_slices": zero,
             }),
         )
 
@@ -689,6 +829,7 @@ def base_forces_no_interslice_shear(
     kv: float,
     slide_sign: float,
     fos: float,
+    envelope_stress: Optional[list] = None,
 ) -> tuple[list[float], list[float], list[float]]:
     """Per-slice base normal, driving shear and available strength, with X = 0.
 
@@ -716,6 +857,9 @@ def base_forces_no_interslice_shear(
     kN/m: the base normal N, the driving force ``s*W*sin(alpha)`` and the
     available shear resistance ``tau_f*l``.
 
+    Four callers since v0.1.213: Bishop on a circle and on any other surface
+    (D81), and both Janbu.
+
     Known limitation, carried over unchanged from where this code used to
     live: support forces do not enter ``N``. They enter the factor of
     safety through their own terms, but the reported normal is the one the
@@ -742,7 +886,7 @@ def base_forces_no_interslice_shear(
     # which had it right. Note that the ``u*b`` inside Bishop's FoS
     # numerator is NOT the same quantity and is correct as it stands: it
     # comes from the equilibrium algebra, not from a stress definition.
-    for s in slices:
+    for i, s in enumerate(slices):
         f = slice_forces(s, kh, kv)
         W_eff = f.w_total
         l = max(s.base_length, 1e-9)
@@ -750,15 +894,34 @@ def base_forces_no_interslice_shear(
         N_est = W_eff * math.cos(alpha)
         N_eff_est = max(0.0, N_est - s.pore_pressure * l)
         sigma_n_eff = N_eff_est / l
+        # v0.1.213 (D84) -- the point the solver itself linearised at, when
+        # ``self_consistent_envelope`` imposed one: this N has to be the one
+        # of the same straight line.
+        imposed = (envelope_stress[i] if envelope_stress is not None
+                   and i < len(envelope_stress) else None)
+        if imposed is not None:
+            sigma_n_eff = max(0.0, imposed)
         c, tan_phi = BishopSimplified._local_c_phi(s, s.material, sigma_n_eff)
         m_alpha = math.cos(alpha) + (
             slide_sign * math.sin(alpha) * tan_phi / fos
         )
+        # v0.1.213 (D81) - divided by m_alpha WITH ITS SIGN. It was
+        # ``max(abs(m_alpha), 1e-6)``, carried over without a reason from
+        # where this code used to live. On a slice with m_alpha < 0, a steep
+        # toe base with a large tan(phi')/F, that published a normal of the
+        # OPPOSITE sign to the one the vertical equilibrium in the docstring
+        # gives. It was also opposite to the one ``checks.base_effective_
+        # stresses`` rebuilds, and to the one ``_general_moment_fos`` puts in
+        # its own moment balance. The stage-1 state of the multi-stage
+        # drawdown reads this column, so there the flipped sign turned a
+        # base in tension into a consolidated one. The floor keeps its size
+        # and takes the sign; the solvers stop well before it, on
+        # |m_alpha| < 1e-6.
         N = (W_eff
              - slide_sign * (c * l * math.sin(alpha)) / fos
              + slide_sign * (s.pore_pressure * l * tan_phi
                              * math.sin(alpha)) / fos
-             ) / max(abs(m_alpha), 1e-6)
+             ) / math.copysign(max(abs(m_alpha), 1e-6), m_alpha)
         # v0.1.96 - sigma' is reported WITH ITS SIGN, and the envelope is
         # read at that signed value. It used to be clamped at zero here,
         # and again inside ``MohrCoulomb.shear_strength``, so a base in

@@ -52,6 +52,7 @@ from .base import (
     LEMMethod,
     LEMResult,
     register_method,
+    self_consistent_envelope,
 )
 from .bishop import (  # reuse the envelope linearisation and the X = 0 base forces
     BishopSimplified,
@@ -67,6 +68,7 @@ class JanbuSimplified(LEMMethod):
     SATISFIES_MOMENT = False
     _CORRECTION: bool = False
 
+    @self_consistent_envelope
     def compute_fos(
         self,
         project: Project,
@@ -208,10 +210,15 @@ class JanbuSimplified(LEMMethod):
         # by f0 only after the iteration, and a load taken at the corrected
         # F would be one no pass used (only a passive support depends on F).
         sigma_load = None
+        # v0.1.213 (D84) -- the slices of the LAST pass that entered with no
+        # strength because their estimate was clipped; see
+        # ``BishopSimplified._zero_strength``.
+        zero: list[int] = []
         for it in range(1, self.max_iterations + 1):
             iterations = it
             numerator = 0.0
             sigma_load = [0.0] * len(s_list) if sup.present else None
+            zero = []
 
             for i_s, s in enumerate(s_list):
                 # v0.1.61 — the base normal carries the ponded-water
@@ -231,12 +238,21 @@ class JanbuSimplified(LEMMethod):
 
                 # Estimate σ'ₙ
                 N_est = W_eff * math.cos(s.base_angle)
-                N_eff_est = max(0.0, N_est - s.pore_pressure * s.base_length)
+                raw = N_est - s.pore_pressure * s.base_length
+                N_eff_est = max(0.0, raw)
                 sigma_n_eff = N_eff_est / max(s.base_length, 1e-9)
+                # v0.1.213 (D84) -- or where the method's own solution put
+                # this base; see ``base.self_consistent_envelope``.
+                imposed = self._imposed_stress(i_s)
+                if imposed is not None:
+                    raw, sigma_n_eff = imposed, max(0.0, imposed)
 
                 c, tan_phi = BishopSimplified._local_c_phi(
                     s, s.material, sigma_n_eff
                 )
+                if raw < 0.0 and BishopSimplified._zero_strength(
+                        s, raw, c, tan_phi):
+                    zero.append(i_s)
 
                 # n_α = cos²α · (1 + tan α · tan φ' / F)  (with sliding sign)
                 n_alpha = (math.cos(s.base_angle) ** 2) * (
@@ -353,7 +369,8 @@ class JanbuSimplified(LEMMethod):
         # does, to 1e-5 of the forces involved. Each slice still satisfies
         # its own vertical equilibrium in both.
         normals, shears, strengths = base_forces_no_interslice_shear(
-            s_list, kh, kv, slide_sign, fos)
+            s_list, kh, kv, slide_sign, fos,
+            envelope_stress=self._envelope_stress)
 
         return LEMResult(
             fos=fos,
@@ -387,6 +404,9 @@ class JanbuSimplified(LEMMethod):
                 # v0.1.210 (D172) -- read by ``checks._applied_support_load``;
                 # None without a support.
                 "sigma_support_load": sigma_load,
+                # v0.1.213 (D84) -- read by
+                # ``analysis_runner.zero_strength_note``.
+                "zero_strength_slices": zero,
             }),
         )
 

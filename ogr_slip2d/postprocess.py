@@ -106,7 +106,8 @@ def _quad_centroid_y(s) -> float:
 
 
 # ----------------------------------------------------------------------
-def _march(slist, ratios, F, kh, kv) -> InterSliceState:
+def _march(slist, ratios, F, kh, kv,
+           envelope_stress=None) -> InterSliceState:
     """Single left→right equilibrium march with the given boundary
     ratios. Returns the full state (E, X, N, S, thrust line)."""
     n = len(slist)
@@ -135,6 +136,10 @@ def _march(slist, ratios, F, kh, kv) -> InterSliceState:
         H = h_dir * kh * W_eff
 
         sigma_est = max(0.0, W_eff * math.cos(alpha) - u * l) / max(l, 1e-9)
+        # v0.1.213 (D84) -- the stress the method read a curved envelope at,
+        # so the displayed state is built from the same straight line.
+        if envelope_stress is not None and envelope_stress[i] is not None:
+            sigma_est = max(0.0, envelope_stress[i])
         c_loc, tan_phi = BishopSimplified._local_c_phi(s, s.material, sigma_est)
 
         a = tan_phi / F
@@ -212,11 +217,16 @@ def compute_interslice_state(result: LEMResult,
     ratios = result.details.get("boundary_ratios") if result.details else None
     if not ratios or len(ratios) != n + 1:
         ratios = [0.0] * (n + 1)
+    env = result.details.get("envelope_stress") if result.details else None
+    if env is not None and len(env) != n:
+        env = None
 
-    st_pos = _march(slist, ratios, result.fos, kh, kv)
+    st_pos = _march(slist, ratios, result.fos, kh, kv,
+                    envelope_stress=env)
     if all(abs(r) < 1e-12 for r in ratios):
         return st_pos
-    st_neg = _march(slist, [-r for r in ratios], result.fos, kh, kv)
+    st_neg = _march(slist, [-r for r in ratios], result.fos, kh, kv,
+                    envelope_stress=env)
     if not st_pos.ok:
         best, sgn = st_neg, -1.0
     elif not st_neg.ok:
@@ -233,7 +243,8 @@ def compute_interslice_state(result: LEMResult,
     # so the displayed interslice state is self-equilibrated. This is a
     # display-consistency refinement; it never alters the FoS.
     def closure_signed(k: float) -> float:
-        stk = _march(slist, [sgn * k * r for r in ratios], result.fos, kh, kv)
+        stk = _march(slist, [sgn * k * r for r in ratios], result.fos, kh,
+                     kv, envelope_stress=env)
         return stk.E[n] if stk.ok else math.nan
 
     k_lo, k_hi = 0.0, 2.0
@@ -256,7 +267,7 @@ def compute_interslice_state(result: LEMResult,
             else:
                 k_lo, f_lo = k_mid, f_mid
         st_ref = _march(slist, [sgn * k_lo * r for r in ratios],
-                        result.fos, kh, kv)
+                        result.fos, kh, kv, envelope_stress=env)
         if st_ref.ok and st_ref.closure < best.closure:
             return st_ref
     return best

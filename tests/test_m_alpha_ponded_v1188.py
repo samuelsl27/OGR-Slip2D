@@ -140,13 +140,28 @@ def _result(power: bool = True, ponded: bool = True):
     """
     key = (power, ponded)
     if key not in _CACHE:
+        from ogr_slip2d.methods import base
         from ogr_slip2d.methods.bishop import BishopSimplified
         from ogr_slip2d.slicer import slice_surface
         p = _project(power, ponded)
         surf = _surface()
         sl = slice_surface(p, surf, num_slices=N_SLICES)
         assert sl is not None, (power, ponded)
-        res = BishopSimplified().compute_fos(p, surf, sl)
+        # v0.1.213 (D84) -- solved at the Fellenius point, with the switch
+        # off. Since then a curved envelope is read at the stress the
+        # method resolves and the checks follow it
+        # (``details["envelope_stress"]``), so the estimate this file pins
+        # is the one of the FIRST pass and of the switch-off path, which is
+        # where it can still be wrong in the way D113 was. The checks'
+        # reading of the solver's own stress is pinned in
+        # ``test_envelope_own_stress_v1213.py``. Put back in ``finally``:
+        # the runner has no teardown.
+        old = base.ENVELOPE_AT_OWN_STRESS
+        base.ENVELOPE_AT_OWN_STRESS = False
+        try:
+            res = BishopSimplified().compute_fos(p, surf, sl)
+        finally:
+            base.ENVELOPE_AT_OWN_STRESS = old
         assert res.fos is not None and res.is_valid, (power, ponded,
                                                       res.error_message)
         _CACHE[key] = res
