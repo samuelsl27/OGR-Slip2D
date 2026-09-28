@@ -728,6 +728,18 @@ class AnisotropicStrengthFunction(StrengthModel):
     given as functions of the slice base orientation via a table of
     (angle_deg, c, phi) points. Linear interpolation in angle.
 
+    The angle is the INCLINATION OF THE SLICE BASE itself, measured
+    counter-clockwise from the horizontal, in [-90, 90] degrees: the
+    slicer's ``alpha = atan2(dy, dx)`` with ``dx > 0``, in degrees. No
+    bedding is involved. That is what separates this model from
+    ``anisotropic_linear``, Snowden's and the generalized one, which read
+    the angle BETWEEN the base and a bedding direction: here the table
+    itself is the anisotropy, written against the base inclination, as
+    the reference program documents this strength type ("angular ranges
+    of slice base inclination ... ordered counter-clockwise from -90 to
+    +90"). Nor does the material dialog offer to link an anisotropic
+    surface to it (``_ANISOTROPIC_MODEL_IDS`` in ``ogr_gui``).
+
     Needs the slice base angle → ``needs_context = True``.
     """
 
@@ -774,8 +786,13 @@ class AnisotropicStrengthFunction(StrengthModel):
     def shear_strength_ctx(self, sigma_n_eff, ctx: SliceContext | None = None):
         if ctx is None:
             return self.shear_strength(sigma_n_eff)
-        c, phi = self._c_phi(math.degrees(ctx.base_angle_rad),
-                             _local_bedding_deg(self, ctx))
+        # v0.1.215 (D195) -- the ABSOLUTE base inclination, see the class
+        # docstring. v0.1.126 passed the local bedding here as a second
+        # argument, which ``_c_phi`` does not take: every method raised
+        # TypeError on the first slice of such a material. The argument
+        # belonged to Snowden's call further down, which still lacks it
+        # (reported as its own defect, not changed here).
+        c, phi = self._c_phi(math.degrees(ctx.base_angle_rad))
         return c + max(sigma_n_eff, 0.0) * math.tan(math.radians(phi))
 
     def to_dict(self) -> dict:

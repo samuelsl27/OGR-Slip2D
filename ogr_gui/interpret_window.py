@@ -1574,6 +1574,15 @@ class InterpretWindow(QMainWindow):
                 "Back analysis is only available for Bishop, Janbu and "
                 "Janbu Corrected, and the force must have a moment arm."))
             return
+        # v0.1.215 (D204) -- a curved envelope whose point did not settle:
+        # no force at all, and it says why instead of printing "nan".
+        if r.notes.get("envelope_not_settled"):
+            self._info(tr(
+                "The strength envelope depends on the normal stress, and on "
+                "at least one slice the stress it is read at did not settle "
+                "on the stress the method resolves at the target factor of "
+                "safety. No support force is reported for this surface."))
+            return
         self._info(
             tr("Required support force for FS = %g") % target + "\n\n"
             + tr("active: %.2f") % r.active_force + "\n"

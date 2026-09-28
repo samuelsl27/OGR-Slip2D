@@ -587,14 +587,43 @@ def base_effective_stresses(result) -> list[float]:
             sigma_est = max(0.0, env[i])
         c_loc, tan_phi = BishopSimplified._local_c_phi(s, s.material,
                                                        sigma_est)
-        m_alpha = math.cos(alpha) + sgn * math.sin(alpha) * tan_phi / F
-        if abs(m_alpha) < 1e-9:
+        N, _m = x0_base_normal(W, alpha, l, u, c_loc, tan_phi, F, sgn,
+                               m_floor=1e-9)
+        if N is None:
             out.append(float("-inf"))     # degenerate: treat as failing
             continue
-        N = (W - sgn * (c_loc * l * math.sin(alpha)
-                        - u * l * tan_phi * math.sin(alpha)) / F) / m_alpha
         out.append(N / l - u)
     return out
+
+
+def x0_base_normal(W: float, alpha: float, l: float, u: float, c: float,
+                   tan_phi: float, fos: float, sign: float, *,
+                   m_floor: float):
+    """Base normal force of a slice with NO inter-slice shear, from its
+    vertical equilibrium at the factor of safety ``fos``:
+
+        N = [ W - s*(c*l*sin a - u*l*tan phi*sin a) / F ] / m_alpha
+        m_alpha = cos a + s*sin a*tan phi / F
+
+    (Bishop 1955; the same expression serves Janbu 1954, which also sets
+    X = 0.) ``s`` is the sign ``m_alpha`` is formed with, ``W`` the vertical
+    load on the slice. Returns ``(N, m_alpha)``, with ``N`` None when
+    ``|m_alpha| < m_floor``: what a vanishing denominator means is the
+    caller's to say, and the check and the back analysis say it differently.
+
+    v0.1.215 (D204) -- one function for the two places that need this normal
+    outside a solver: the checks' fallback above, which is the stress Bishop
+    and Janbu read a curved envelope at, and the back analysis, which has to
+    read it at that same stress for its force to be zero at the method's own
+    factor. Written out twice, the two could drift apart the way the two
+    estimates of D113 did.
+    """
+    m_alpha = math.cos(alpha) + sign * math.sin(alpha) * tan_phi / fos
+    if abs(m_alpha) < m_floor:
+        return None, m_alpha
+    N = (W - sign * (c * l * math.sin(alpha)
+                     - u * l * tan_phi * math.sin(alpha)) / fos) / m_alpha
+    return N, m_alpha
 
 
 def base_m_alphas(result) -> list[float]:

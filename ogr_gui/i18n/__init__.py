@@ -353,6 +353,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'At (%.3f, %.3f)': 'En (%.3f, %.3f)',
         'Back Analysis': 'Retroanálisis',
         'Back analysis is only available for Bishop, Janbu and Janbu Corrected, and the force must have a moment arm.': 'El retroanálisis solo está disponible para Bishop, Janbu y Janbu Corregido, y la fuerza debe tener brazo de momento.',
+        'The strength envelope depends on the normal stress, and on at least one slice the stress it is read at did not settle on the stress the method resolves at the target factor of safety. No support force is reported for this surface.': 'La envolvente de resistencia depende de la tensión normal, y en al menos una dovela la tensión a la que se lee no converge a la que resuelve el método con el factor de seguridad objetivo. No se da fuerza de soporte para esta superficie.',
         'Convergence': 'Convergencia',
         'Could not write the file: %s': 'No se ha podido escribir el archivo: %s',
         'Critical probabilistic surface: PF = %.2f %%, reliability index = %.3f': 'Superficie probabilística crítica: PF = %.2f %%, índice de fiabilidad = %.3f',
