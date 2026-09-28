@@ -379,7 +379,8 @@ class JanbuSimplified(LEMMethod):
         # its own vertical equilibrium in both.
         normals, shears, strengths = base_forces_no_interslice_shear(
             s_list, kh, kv, slide_sign, fos,
-            envelope_stress=self._envelope_stress)
+            envelope_stress=self._envelope_stress,
+            support_load=sigma_load)
 
         return LEMResult(
             fos=fos,

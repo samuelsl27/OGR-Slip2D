@@ -501,8 +501,9 @@ def _base_load_and_sigma(s, *, kv: float,
     per slice, and it arrives here as ``support_load`` (see
     :func:`_applied_support_load`), by name and without a default for the
     reason ``kv`` is. Zero adds nothing, so a surface without a support is
-    bit-identical to what it was. The Ordinary Method publishes none: its
-    estimate carries no support, which enters it as ``T_N*tan phi'`` only.
+    bit-identical to what it was. The Ordinary Method publishes none: it
+    publishes its solved normal instead (see below), where since v0.1.216
+    (D198) ``T_N`` sits inside the effective normal its strength is read at.
 
     The floor on ``l`` is 1e-12 here and 1e-9 in the methods, and that is
     documented, not changed. The two differ only for a base shorter than
@@ -544,8 +545,8 @@ def base_effective_stresses(result) -> list[float]:
     Ordinary Method's own stress reproduces its column to 5.3e-4 kPa.
     Spencer, GLE and the prescribed-inclination family publish their
     ``base_normal_force``; the Ordinary Method publishes its cos^2-corrected
-    normal plus the support's ``T_N``, because its ``base_normal_force`` is
-    the uncorrected one (D197).
+    normal plus the support's ``T_N``. Since v0.1.216 that is ALSO its
+    ``base_normal_force`` (D197), which until then was the uncorrected one.
 
     Bishop and both Janbu publish no such list, because the fallback below
     IS their own normal force, from the vertical equilibrium of the slice,
@@ -553,8 +554,11 @@ def base_effective_stresses(result) -> list[float]:
         N = [ W - s*(c*l*sin a - u*l*tan phi*sin a) / F ] / m_alpha
 
     with ``W`` the load their stress estimate carried, support included
-    (see :func:`_base_load_and_sigma`). The same fallback serves a result
-    built by hand and a plugin method that publishes nothing, as before.
+    (see :func:`_base_load_and_sigma`). Since v0.1.216 (D196) the
+    ``base_normal_force`` they publish is this same normal, support
+    included, so the column and the check are one number; until then the
+    column left the support out. The same fallback serves a result built by
+    hand and a plugin method that publishes nothing, as before.
     Returns an empty list when the result carries no usable slices.
     """
     from .methods.bishop import BishopSimplified

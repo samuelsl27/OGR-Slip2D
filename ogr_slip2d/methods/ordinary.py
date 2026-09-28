@@ -48,6 +48,24 @@ from .base import (
     register_method,
 )
 
+# v0.1.216 -- two module switches, so an A/B can rebuild the method as it
+# was and a test can demand that each one moves its number (rule 7).
+#
+# D197: ``base_normal_force`` publishes the normal of this method's own
+# solution, ``N' + u*l + T_N`` -- the one the Tensile Stress Check reads
+# since v0.1.210 -- instead of the uncorrected ``N``, whose ``N/l - u`` is
+# the form Eq. C-13 of USACE EM 1110-2-1902 (2003) and Eq. 6.48 of Duncan,
+# Wright & Brandon (2014) warn against. The moment balance of the general
+# path keeps reading its own list; only what is PUBLISHED changes.
+PUBLISH_OWN_NORMAL = True
+# D198: a support's normal force ``T_N`` joins the soil's effective normal
+# BEFORE it is clipped at zero and before the envelope is linearised, as
+# every known force resolved perpendicular to the base does in this method.
+# Until v0.1.215 the envelope was read at the soil's stress alone and
+# ``T_N*tan(phi')`` was added afterwards, so a support that lifts the base
+# could take the strength below ``c*l``.
+SUPPORT_IN_EFFECTIVE_NORMAL = True
+
 
 @register_method
 class OrdinaryFellenius(LEMMethod):
@@ -137,9 +155,16 @@ class OrdinaryFellenius(LEMMethod):
             # circular path; see the note there for what it cost to omit.
             cos_a = math.cos(s.base_angle)
             N_eff = N - s.pore_pressure * s.base_length * cos_a * cos_a
-            if N_eff < 0.0:
+            # v0.1.216 (D198) -- the support's normal force inside the
+            # effective normal, before the clip and the linearisation; see
+            # the circular path.
+            t_n = (sup.n_press[i] if sup.present and sup.n_press[i]
+                   else 0.0)
+            n_eff = (N_eff + t_n if SUPPORT_IN_EFFECTIVE_NORMAL
+                     else N_eff)
+            if n_eff < 0.0:
                 n_negative_normal += 1
-            sigma_n_eff = max(0.0, N_eff) / max(s.base_length, 1e-9)
+            sigma_n_eff = max(0.0, n_eff) / max(s.base_length, 1e-9)
             # v0.1.120 — through ``_local_c_phi``, like the other eight
             # methods. It used to be ``self._shear_strength``, which asked
             # the model for tau WITHOUT a SliceContext: Ordinary was the
@@ -148,12 +173,12 @@ class OrdinaryFellenius(LEMMethod):
             # profiles and the matric-suction cohesion. See the note in
             # the circular path for the measurement.
             c_loc, tan_phi = _B._local_c_phi(s, s.material, sigma_n_eff)
-            if N_eff < 0.0 and _B._zero_strength(s, N_eff, c_loc, tan_phi):
+            if n_eff < 0.0 and _B._zero_strength(s, n_eff, c_loc, tan_phi):
                 zero.append(i)
             strength = (c_loc + sigma_n_eff * tan_phi) * s.base_length
             if sup.present:
-                if sup.n_press[i]:
-                    strength += sup.n_press[i] * tan_phi
+                if t_n and not SUPPORT_IN_EFFECTIVE_NORMAL:
+                    strength += t_n * tan_phi
                 # Its own branch: a support can be purely tangential to the
                 # base, and then ``n_press`` is zero while the force that
                 # actually holds the slice back is not.
@@ -170,9 +195,9 @@ class OrdinaryFellenius(LEMMethod):
             # resistance is c*l + (N' + T_N)*tan(phi') of (the cos^2 form of
             # USACE EM 1110-2-1902 (2003), Eq. C-12; Turnbull & Hvorslev
             # 1967). NOT clipped: the check exists to see a tension.
-            # ``normals`` above is left as it was -- the uncorrected N,
-            # whose N/l - u is the form Eq. C-13 warns against -- because
-            # the drawdown stages read it (D197, reported).
+            # ``normals`` above stays the uncorrected N, because it is also
+            # the normal whose moment ``moment_terms`` takes below; since
+            # v0.1.216 (D197) it is no longer what is PUBLISHED.
             solved.append(N_eff + s.pore_pressure * s.base_length
                           + (sup.n_press[i] if sup.present else 0.0))
 
@@ -203,7 +228,9 @@ class OrdinaryFellenius(LEMMethod):
         return LEMResult(
             fos=fos, converged=True, iterations=1,
             method_id=self.METHOD_ID, surface=surface, slices=slices,
-            base_normal_force=normals,
+            # v0.1.216 (D197) -- the normal of this method's own solution.
+            base_normal_force=(list(solved) if PUBLISH_OWN_NORMAL
+                               else normals),
             base_shear_force=driving_forces,
             base_shear_strength=resisting,
             details=support_failure_details(sup, {
@@ -352,9 +379,27 @@ class OrdinaryFellenius(LEMMethod):
             # of the 25 comes out negative. The negative normals were made
             # by the uncorrected water term, and a citation was covering
             # for them.
-            if N_eff < 0.0:
+            #
+            # v0.1.216 (D198) -- and a support's normal force ``T_N`` is
+            # resolved perpendicular to the base like every other known
+            # force of this method (EM 1110-2-1902 derives Eq. C-12 by
+            # resolving the effective weight in that direction; the note on
+            # ``T_N`` further down says why no normalisation is needed), so
+            # it belongs INSIDE the effective normal, before the clip and
+            # before the envelope is read. Until v0.1.215 the envelope was
+            # linearised at the soil's stress alone, already clipped, and
+            # ``T_N*tan(phi')`` was added afterwards: where N' < 0 < N' +
+            # T_N the resistance was not c*l + (N' + T_N)*tan(phi'); a
+            # support that LIFTS the base (T_N < 0) could take it below
+            # c*l, since nothing clipped the sum; and the counter below did
+            # not see the support at all.
+            t_n = (sup.n_press[i_s] if sup.present and sup.n_press[i_s]
+                   else 0.0)
+            n_eff = (N_eff + t_n if SUPPORT_IN_EFFECTIVE_NORMAL
+                     else N_eff)
+            if n_eff < 0.0:
                 n_negative_normal += 1
-            sigma_n_eff = max(0.0, N_eff) / max(s.base_length, 1e-9)
+            sigma_n_eff = max(0.0, n_eff) / max(s.base_length, 1e-9)
 
             # v0.1.120 — ORDINARY READS THE ENVELOPE THROUGH THE SAME
             # LINEARISATION AS EVERY OTHER METHOD.
@@ -387,7 +432,7 @@ class OrdinaryFellenius(LEMMethod):
             # 1.370 while Bishop moved 0.3 %, because the bands were plain
             # ``undrained`` and needed no context.
             c_loc, tan_phi = _B._local_c_phi(s, s.material, sigma_n_eff)
-            if N_eff < 0.0 and _B._zero_strength(s, N_eff, c_loc, tan_phi):
+            if n_eff < 0.0 and _B._zero_strength(s, n_eff, c_loc, tan_phi):
                 zero.append(i_s)
             tau = c_loc + sigma_n_eff * tan_phi
             strength = tau * s.base_length
@@ -445,8 +490,17 @@ class OrdinaryFellenius(LEMMethod):
             # run 37° to 73°, Fellenius already sat within 1.4 % of the
             # published value while Bishop was 35 % high with the identical
             # support force.
-            if sup.present and sup.n_press[i_s]:
-                strength += sup.n_press[i_s] * tan_phi
+            #
+            # v0.1.216 (D198) -- the same derivation, taken one step
+            # further: if ``N = W·cos α + T_N`` is exact, then ``T_N`` is
+            # part of the effective normal the strength is read at, and it
+            # now enters ``sigma_n_eff`` above, before the clip. For
+            # Mohr-Coulomb where neither ``N'`` nor ``N' + T_N`` is negative
+            # the number is the same up to rounding; what changes is the
+            # clip, a curved envelope's tangent and the counter. Added here
+            # only on the old path the switch rebuilds.
+            if t_n and not SUPPORT_IN_EFFECTIVE_NORMAL:
+                strength += t_n * tan_phi
 
             numerator += strength
             denominator += driving
@@ -514,7 +568,10 @@ class OrdinaryFellenius(LEMMethod):
             method_id=self.METHOD_ID,
             surface=surface,
             slices=slices,
-            base_normal_force=normals,
+            # v0.1.216 (D197) -- the normal of this method's own solution;
+            # see ``PUBLISH_OWN_NORMAL``.
+            base_normal_force=(list(solved) if PUBLISH_OWN_NORMAL
+                               else normals),
             base_shear_force=shears,
             base_shear_strength=strengths,
             details=support_failure_details(sup, {

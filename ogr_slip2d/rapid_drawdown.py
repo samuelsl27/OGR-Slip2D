@@ -439,6 +439,22 @@ def _stage1_state(project, surface, slices, result):
     ``rapid_drawdown_fos`` refuses an unconverged one before this runs: its
     normals come from where the solver stopped, and ``fs1`` below would be
     the top of a sampling grid as readily as a factor of safety.
+
+    v0.1.216 (D197) — the normal read here is the method's OWN, for the
+    Ordinary Method too. The stage-1 state is a pair (sigma'_fc, tau_fc) of
+    ONE equilibrium solution: Duncan, Wright & Brandon (2014) write it
+    either as tau_fc = (c' + sigma'_fc*tan(phi'))/F, Eq. 9.3, or as the
+    mobilised shear S/l of the same solution, Eq. 9.4, with sigma'_fc =
+    N/l - u from the total normal on the base, Eq. 9.2. The two agree only
+    if N is the normal the method built its resistance from. The Ordinary
+    Method builds it from N' = W*cos(a) - u*l*cos^2(a) (EM 1110-2-1902,
+    Eq. C-12; Duncan, Wright & Brandon, Eq. 6.59), so its total normal is
+    N' + u*l. Until v0.1.215 it published the uncorrected W*cos(a), and
+    this line turned it into the C-13 form both sources warn "can lead to
+    unrealistically low or negative stresses": on the given circle of
+    Appendix G the Ordinary Method's drawdown factor came out 1.1456 (Corps
+    two stage) and 1.1098 (Duncan-Wright) where its own normal gives 1.2357
+    and 1.2799 (published, by other methods, 1.35 and 1.44).
     """
     normals = list(getattr(result, "base_normal_force", ()) or ())
     if len(normals) < len(slices.slices):

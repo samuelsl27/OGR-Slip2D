@@ -454,11 +454,11 @@ class BishopSimplified(LEMMethod):
         # The same function as the circular branch and both Janbu, and not the
         # ``normals`` the loop above just used. They are the same force: the
         # vertical equilibrium of the slice with no inter-slice shear, which
-        # is exactly what ``normal`` solves. They differ in two things only.
-        # The loop carries the support's line load and the column does not,
-        # which is the known limitation all four share (see the docstring
-        # below). And the loop's F is the one that ENTERED the last pass,
-        # while this is the F returned. One function keeps one meaning for
+        # is exactly what ``normal`` solves. Since v0.1.216 (D196) they
+        # carry the same support load (the column used to leave it out, a
+        # limitation all four callers shared; see the docstring below), and
+        # they differ in one thing only: the loop's F is the one that
+        # ENTERED the last pass, while this is the F returned. One function keeps one meaning for
         # the column on a circle and on a polyline. Fed back into the moment
         # balance about the same axis, Sigma N*f term included (Fredlund and
         # Krahn 1977), the published normals and strengths return the factor
@@ -466,7 +466,8 @@ class BishopSimplified(LEMMethod):
         pub_normals, pub_shears, pub_strengths = (
             base_forces_no_interslice_shear(
                 s_list, kh, kv, slide_sign, fos,
-                envelope_stress=self._envelope_stress))
+                envelope_stress=self._envelope_stress,
+                support_load=sigma_load))
 
         return LEMResult(
             fos=fos, converged=converged, iterations=iterations,
@@ -816,7 +817,8 @@ class BishopSimplified(LEMMethod):
         # ---- Post-processing per slice (diagnostics) ---------------
         normals, shears, strengths = base_forces_no_interslice_shear(
             s_list, kh, kv, slide_sign, fos,
-            envelope_stress=self._envelope_stress)
+            envelope_stress=self._envelope_stress,
+            support_load=sigma_load)
 
         return LEMResult(
             fos=fos,
@@ -851,6 +853,14 @@ class BishopSimplified(LEMMethod):
 
 
 # ======================================================================
+# v0.1.216 (D196) -- whether the published normal carries the vertical load
+# a support puts on the slice, the load the method's own iteration and, since
+# v0.1.210, its checks put there (``sigma_support_load``). A module switch,
+# like ``base.ENVELOPE_AT_OWN_STRESS``, so an A/B can rebuild the column as
+# it was and a test can demand that it moves (rule 7).
+SUPPORT_IN_PUBLISHED_NORMAL = True
+
+
 def base_forces_no_interslice_shear(
     slices,
     kh: float,
@@ -858,6 +868,7 @@ def base_forces_no_interslice_shear(
     slide_sign: float,
     fos: float,
     envelope_stress: Optional[list] = None,
+    support_load: Optional[list] = None,
 ) -> tuple[list[float], list[float], list[float]]:
     """Per-slice base normal, driving shear and available strength, with X = 0.
 
@@ -888,10 +899,18 @@ def base_forces_no_interslice_shear(
     Four callers since v0.1.213: Bishop on a circle and on any other surface
     (D81), and both Janbu.
 
-    Known limitation, carried over unchanged from where this code used to
-    live: support forces do not enter ``N``. They enter the factor of
-    safety through their own terms, but the reported normal is the one the
-    soil alone carries.
+    ``support_load`` (v0.1.216, D196) is the vertical load each support put
+    on each slice in the method's last pass, the list it publishes as
+    ``details["sigma_support_load"]``. It is handed over, never recomputed
+    here, because a passive support's load depends on F. With
+    ``SUPPORT_IN_PUBLISHED_NORMAL`` it joins ``W`` in the stress estimate
+    and in ``N``, so the column is the normal of the method's own
+    equilibrium and the one the checks read. Until v0.1.215 "support forces
+    do not enter N" was a known limitation carried over from where this
+    code used to live: on a nail at -15 deg the crossed slice published
+    ``N/l - u`` = 12.83 kPa where the method's own normal gives 32.35. The
+    driving column keeps the soil's ``W*sin(alpha)``: the support's
+    tangential effect is in the method's own terms, not in a slice's shear.
 
     References: Bishop, A.W. (1955), Geotechnique 5(1), 7-17; Janbu, N.
     (1954, 1973).
@@ -914,12 +933,17 @@ def base_forces_no_interslice_shear(
     # which had it right. Note that the ``u*b`` inside Bishop's FoS
     # numerator is NOT the same quantity and is correct as it stands: it
     # comes from the equilibrium algebra, not from a stress definition.
+    with_support = (SUPPORT_IN_PUBLISHED_NORMAL and support_load is not None)
     for i, s in enumerate(slices):
         f = slice_forces(s, kh, kv)
         W_eff = f.w_total
+        # v0.1.216 (D196) -- the load the iteration and the checks carry.
+        W_n = W_eff
+        if with_support and i < len(support_load) and support_load[i]:
+            W_n = W_eff + support_load[i]
         l = max(s.base_length, 1e-9)
         alpha = s.base_angle
-        N_est = W_eff * math.cos(alpha)
+        N_est = W_n * math.cos(alpha)
         N_eff_est = max(0.0, N_est - s.pore_pressure * l)
         sigma_n_eff = N_eff_est / l
         # v0.1.213 (D84) -- the point the solver itself linearised at, when
@@ -945,7 +969,7 @@ def base_forces_no_interslice_shear(
         # base in tension into a consolidated one. The floor keeps its size
         # and takes the sign; the solvers stop well before it, on
         # |m_alpha| < 1e-6.
-        N = (W_eff
+        N = (W_n
              - slide_sign * (c * l * math.sin(alpha)) / fos
              + slide_sign * (s.pore_pressure * l * tan_phi
                              * math.sin(alpha)) / fos

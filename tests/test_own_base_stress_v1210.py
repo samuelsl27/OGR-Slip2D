@@ -462,25 +462,24 @@ class TestTheOrdinaryMethodsOwnForm:
     def test_its_strength_is_c_plus_its_stress_times_tan_phi(self):
         """Internal identity with a support and Mohr-Coulomb: the published
         normal is the one the method's own resistance was built from,
-        ``tau*l = c*l + (N - u*l)*tan(phi')`` wherever N' >= 0."""
+        ``tau*l = c*l + max(0, N/l - u)*l*tan(phi')`` on EVERY slice.
+
+        v0.1.216 (D198) -- on every slice, and with the clip on the sum.
+        Until v0.1.215 this skipped the slices whose soil part N' was
+        negative, because the method clipped that part alone and kept T_N
+        on top of it; the support now joins the effective normal before the
+        clip, so the published normal gives the strength everywhere.
+        """
         from ogr_slip2d.methods.bishop import BishopSimplified
-        p, surf, sl, res = _solve("ordinary_fellenius", power=False)
-        sup = _terms(p, surf, sl, res)
+        _p, _surf, _sl, res = _solve("ordinary_fellenius", power=False)
         n = res.details["solved_base_normal"]
-        checked = 0
         for k, s in enumerate(res.slices):
-            sig = n[k] / s.base_length - s.pore_pressure
-            # Only where the soil's own N' is in compression: below zero the
-            # method clips the soil part and keeps T_N (D198, reported).
-            if n[k] - s.pore_pressure * s.base_length - sup.n_press[k] < 0.0:
-                continue
+            sig = max(0.0, n[k] / s.base_length - s.pore_pressure)
             c, t = BishopSimplified._local_c_phi(s, s.material, sig)
             want = c * s.base_length + sig * s.base_length * t
             got = res.base_shear_strength[k]
             assert abs(got - want) <= 1e-9 * max(1.0, abs(want)), (k, got,
                                                                   want)
-            checked += 1
-        assert checked >= len(res.slices) // 2
 
     def test_it_publishes_no_support_load(self):
         _p, _surf, _sl, res = _solve("ordinary_fellenius")
