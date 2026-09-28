@@ -17,14 +17,17 @@ Janbu Corrected applies an empirical factor fo:
         F_corrected = fo · F
 where fo depends on the depth-to-length ratio and soil type.
 
-For pseudo-static seismic analysis:
-    - W → W·(1 − kv)
-    - kh adds a horizontal driving force:
-        Σ W·tan α  →  Σ W·(1−kv)·tan α + Σ kh·W·(1 − tan α · tan α)
-                      ≈ Σ W·(1−kv)·tan α + Σ kh·W
-      (we use the simpler approximation Σ kh·W · tan α since the
-      surface is steep — this is what most practical implementations
-      do for Janbu).
+For pseudo-static seismic analysis, both inertial forces on the static
+weight (Terzaghi 1950; Kramer 1996), with ``kv`` positive DOWN:
+    - W → W·(1 + kv)
+    - kh adds a horizontal driving force, unscaled:
+        Σ W·tan α  →  Σ W·(1 + kv)·tan α + Σ kh·W
+      That is exact, not an approximation: the balance is written in the
+      horizontal direction, where ``kh·W`` enters as it stands, and on a
+      plane it returns the pseudo-static Coulomb wedge to the last digit
+      (``tests/test_seismic_convention_v1214.py``). Until v0.1.214 this
+      docstring offered ``kh·W·(1 − tan²α)`` and an "approximation" the code
+      never made, and the vertical factor was ``(1 − kv)`` (D170).
 
 References:
     - Janbu, N. (1954, 1973).
@@ -155,7 +158,7 @@ class JanbuSimplified(LEMMethod):
         t_active_sec = _sec_weighted(sup.t_active)
         t_passive_sec = _sec_weighted(sup.t_passive)
 
-        # Driving force horizontal: Σ W·(1−kv)·tan α + Σ kh·W
+        # Driving force horizontal: Σ W·(1+kv)·tan α + Σ kh·W
         denominator = 0.0
         for s in slices:
             f = slice_forces(s, kh, kv)
@@ -344,8 +347,14 @@ class JanbuSimplified(LEMMethod):
                     if accelerated is not None:
                         fos = accelerated
 
+        correction = None
         if self._CORRECTION:
-            fos *= _janbu_correction_factor(project, surface, slices)
+            # v0.1.214 (D80) -- ``b1`` from the soil type of the bases; see
+            # :func:`janbu_correction`. Published below so the factor a
+            # user reads can be traced to the curve it came from.
+            f0, b1 = janbu_correction(slices)
+            fos *= f0
+            correction = {"janbu_b1": b1, "janbu_f0": f0}
 
         # v0.1.107 - the per-slice columns, which this method left EMPTY
         # until now. Janbu neglects the inter-slice shear exactly as
@@ -400,6 +409,10 @@ class JanbuSimplified(LEMMethod):
                 # v0.1.191 (D167) -- the vertical seismic coefficient this
                 # method APPLIED, read by ``checks._applied_kv``: the same
                 # ``kv`` handed to ``slice_forces``.
+                # v0.1.214 (D173) -- and the horizontal one, so the
+                # interslice march of the interpretation applies the
+                # loads this method did (``compute_interslice_state``).
+                "kh": kh,
                 "kv": kv,
                 # v0.1.210 (D172) -- read by ``checks._applied_support_load``;
                 # None without a support.
@@ -407,6 +420,7 @@ class JanbuSimplified(LEMMethod):
                 # v0.1.213 (D84) -- read by
                 # ``analysis_runner.zero_strength_note``.
                 "zero_strength_slices": zero,
+                **(correction or {}),
             }),
         )
 
@@ -419,30 +433,139 @@ class JanbuCorrected(JanbuSimplified):
 
 
 # ----------------------------------------------------------------------
-def _janbu_correction_factor(
-    project: Project, surface: SurfaceProtocol, slices: Slices
-) -> float:
-    """Janbu (1973) empirical correction factor fo.
+# v0.1.214 (D80) -- the ``b1`` of Janbu's correction follows the soil type.
+#
+# WHAT WAS WRONG. The docstring below offered three values, a comment told
+# the reader to take the one of the material that dominates the base, and
+# the code wrote ``b1 = 0.50`` always: a documented choice that was never
+# made (rule 7).
+#
+# WHAT IT DOES. Janbu computed his curves for HOMOGENEOUS slopes, one per
+# soil type; for a surface through several types the reference
+# documentation takes the c-φ curve. So the type is read on EVERY base: one
+# type throughout gives its own ``b1``, two or more give 0.50. Not the
+# "dominant" material: measured on the 38 Janbu-corrected rows of the
+# verification bank, the dominant type by base length or by slice area
+# worsens five rows (006, 008, 009, 065, 074) that the all-bases rule
+# leaves where they were, and the all-bases rule improves seven rows with a
+# published value against one it worsens (050, a reinforced slope).
+#
+# A module switch, read at call time as ``base.ENVELOPE_AT_OWN_STRESS`` is,
+# so an A/B can turn it off and a test can demand that it moves the number.
+# Off, every surface gets 0.50, as before v0.1.214.
+B1_BY_SOIL_TYPE = True
 
-    Approximates the effect of inter-slice shear forces neglected in
-    Janbu Simplified:
+#: Janbu (1973): c only (φ = 0), φ only (c = 0), and c and φ.
+JANBU_B1 = {"c": 0.69, "phi": 0.31, "c-phi": 0.50}
 
-        fo = 1 + b1 · [(d/L) − 1.4·(d/L)²]
+#: The stresses [kPa] an envelope with no Mohr-Coulomb parameters is read at
+#: to tell its type: zero (is there strength with no normal stress?) and two
+#: far apart to see whether it is flat. The low one is 10 and not 100 so
+#: that a drained-undrained envelope, frictional at low stress and capped
+#: above, is not read as flat.
+_TYPE_PROBES = (0.0, 10.0, 200.0)
 
-    with b1 depending on the soil type:
-        - Purely cohesive (φ=0):  b1 ≈ 0.69
-        - Mixed c-φ:              b1 ≈ 0.50  (default)
-        - Cohesionless (c=0):     b1 ≈ 0.31
+
+def base_soil_type(material) -> Optional[str]:
+    """The soil type of Janbu's curves for one base material.
+
+    ``"c"`` (strength independent of the normal stress: φ = 0),
+    ``"phi"`` (no strength without normal stress: c = 0), ``"c-phi"``, or
+    None for a base that has no type — no material, no strength at all, or
+    infinite strength — which then does not take part in the choice.
+
+    The classes that say what they are answer by their parameters: Mohr-
+    Coulomb by its c and φ; the undrained models (constant, with depth, and
+    SHANSEP) are φ = 0 by construction, and SHANSEP must be named because
+    without its context it would read as φ only. Every other envelope is
+    classified by its SHAPE (decision of the owner, 2026-09-27): a curve
+    through the origin is a frictional soil and gets the φ-only curve, not
+    the c-φ one, which is 0.50 against 0.31 and the unsafe side (a power
+    curve with c = d = 0, Barton-Bandis, a hyperbolic envelope).
     """
-    if not slices.slices:
-        return 1.0
-    first, last = slices.slices[0], slices.slices[-1]
+    from ogr_core.materials import (InfiniteStrength, MohrCoulomb,
+                                    NoStrength, Undrained)
+    from ogr_core.materials.builtin_models import (SHANSEP,
+                                                   _UndrainedLinearBase)
+    if material is None:
+        return None
+    st = material.strength
+    if isinstance(st, (NoStrength, InfiniteStrength)):
+        return None
+    if isinstance(st, (Undrained, SHANSEP, _UndrainedLinearBase)):
+        return "c"
+    if isinstance(st, MohrCoulomb):
+        c = float(st.params.get("cohesion", 0.0) or 0.0)
+        phi = float(st.params.get("friction_angle", 0.0) or 0.0)
+        if c > 0.0 and phi > 0.0:
+            return "c-phi"
+        if c > 0.0:
+            return "c"
+        if phi > 0.0:
+            return "phi"
+        return None
+    try:
+        t0, t1, t2 = (float(st.shear_strength(p)) for p in _TYPE_PROBES)
+    except (ArithmeticError, ValueError):
+        # An envelope that cannot be read at a probe keeps the c-φ curve,
+        # which is what every surface got before v0.1.214.
+        return "c-phi"
+    if not all(math.isfinite(t) for t in (t0, t1, t2)):
+        return None
+    scale = max(1.0, abs(t2))
+    if max(abs(t0), abs(t1), abs(t2)) <= 1e-12 * scale:
+        return None                     # no strength at all
+    if abs(t2 - t1) <= 1e-9 * scale:
+        return "c"
+    # 1e-6 and not 1e-12: a model may clamp the stress away from zero
+    # before a logarithm (Barton-Bandis reads 1e-6 kPa) and still be a
+    # curve through the origin.
+    if abs(t0) <= 1e-6 * scale:
+        return "phi"
+    return "c-phi"
+
+
+def janbu_correction(slices) -> tuple[float, float]:
+    """Janbu (1973) empirical correction factor f0, and the ``b1`` used.
+
+    Approximates the effect of the inter-slice shear forces that Janbu
+    Simplified neglects:
+
+        f0 = 1 + b1 · [(d/L) − 1.4·(d/L)²]
+
+    with L the chord between the two ends of the slip surface and d the
+    largest perpendicular distance from that chord to the surface. ``b1``
+    is read off Janbu's curves for the soil type: 0.69 with c only, 0.31
+    with φ only, 0.50 with c and φ. Janbu computed them for homogeneous
+    slopes; a surface whose bases are of more than one type takes the c-φ
+    value, the rule of the reference documentation (see the block above and
+    :func:`base_soil_type`). With ``B1_BY_SOIL_TYPE`` off, 0.50 always.
+
+    References:
+        Janbu, N. (1973). "Slope stability computations." In Hirschfeld &
+            Poulos (eds.), Embankment-Dam Engineering, Casagrande Volume,
+            Wiley, 47-86.
+        Abramson, L.W., Lee, T.S., Sharma, S. & Boyce, G.M. (2002). "Slope
+            Stability and Stabilization Methods", 2nd ed., Wiley, §5.5.
+
+    Takes the slices alone — a :class:`Slices` or a plain list — because
+    the back analysis calls it with no project.
+    """
+    s_list = slices.slices if hasattr(slices, "slices") else list(slices)
+    b1 = JANBU_B1["c-phi"]
+    if B1_BY_SOIL_TYPE:
+        kinds = {base_soil_type(s.material) for s in s_list} - {None}
+        if len(kinds) == 1:
+            b1 = JANBU_B1[kinds.pop()]
+    if not s_list:
+        return 1.0, b1
+    first, last = s_list[0], s_list[-1]
     # Chord joining the two slip-surface endpoints
     x0, y0 = first.base_x_left, first.base_y_left
     x1, y1 = last.base_x_right, last.base_y_right
     L = math.hypot(x1 - x0, y1 - y0)
     if L < 1e-6:
-        return 1.0
+        return 1.0, b1
     # v0.1.19 — d is the maximum PERPENDICULAR distance from that chord
     # to the slip surface (Janbu's definition), NOT the max soil height
     # above the base. Using the soil height grossly overestimated d/L
@@ -451,7 +574,7 @@ def _janbu_correction_factor(
     dx, dy = x1 - x0, y1 - y0
     d = 0.0
     pts = [(first.base_x_left, first.base_y_left)]
-    for s in slices.slices:
+    for s in s_list:
         pts.append((s.base_x_right, s.base_y_right))
     for px, py in pts:
         # perpendicular distance from (px,py) to the chord
@@ -459,7 +582,15 @@ def _janbu_correction_factor(
         if dist > d:
             d = dist
     r = d / L
-    # b1 depends on soil type; pick from the dominant base material's
-    # strength (cohesive / mixed / frictional).
-    b1 = 0.50  # mixed c-φ soil (default)
-    return 1.0 + b1 * (r - 1.4 * r * r)
+    return 1.0 + b1 * (r - 1.4 * r * r), b1
+
+
+def _janbu_correction_factor(
+    project: Project, surface: SurfaceProtocol, slices: Slices
+) -> float:
+    """The factor f0 alone; see :func:`janbu_correction`.
+
+    Kept under its old name for the back analysis, which calls it with
+    ``project=None``: the soil type is read from the slices.
+    """
+    return janbu_correction(slices)[0]

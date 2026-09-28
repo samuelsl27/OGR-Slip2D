@@ -173,9 +173,11 @@ class SliceContext:
         base_angle_rad: inclination of the slice base from horizontal
             (α). Used by anisotropic models (the angle between the slip
             direction and the bedding orientation).
-        sigma_v_eff: vertical effective stress at the base centre [kPa]
-            (overburden minus pore pressure). Used by SHANSEP and
-            Vertical-Stress-Ratio models.
+        sigma_v_eff: vertical effective stress at the base centre [kPa]:
+            overburden, PLUS any water standing on the ground (v0.1.214,
+            D166), minus pore pressure; no seismic coefficient. Read by
+            SHANSEP. (The Vertical Stress Ratio model does not ask for a
+            context and uses σ'ₙ in its place — recorded as D207.)
         depth: vertical depth below the ground surface at the slice
             base [m]. Used by Barton-Bandis (JCS scaling) and others.
         pore_pressure: pore water pressure at the base [kPa].

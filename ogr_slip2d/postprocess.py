@@ -20,8 +20,21 @@ Formulation (per slice, raw signed geometry, no slide-sign flip):
 with  t = (cos α, sin α),  n = (−sin α, cos α),
       S = (c·l + (N − u·l)·tanφ)/F = k0 + a·N   (mobilised shear),
       s = ±1 the resisting direction (opposes sliding),
-      H  the horizontal seismic pseudo-force (in the sliding direction),
-      W_eff = W·(1 − kv).
+      H  the horizontal seismic pseudo-force (in the sliding direction)
+         plus the horizontal water force (signed in +x),
+      W_eff the total vertical load of the slice, soil and ponded water.
+
+v0.1.214 (D173) — ``H`` and ``W_eff`` come from
+:func:`~ogr_slip2d.external_forces.slice_forces`, the loads every method
+applied. They were rebuilt here by hand as ``W·(1 − kv)`` and
+``kh·W·(1 − kv)``: no ponded water, no horizontal water force, and the
+vertical coefficient in the opposite sense to the solvers' (D170). On the
+upstream face of a dam, with four times the soil weight in water standing on
+the slices, the march returned exactly the same N and E with the water as
+without it. The earthquake itself comes from the result
+(``details["kh"]``/``details["kv"]``, what the method applied) unless the
+caller passes it, so a caller with no project — the slice-data panel of the
+interpretation window — no longer marches without it.
 
 Substituting S the system is linear in (N, E_R) and solved in closed
 form. The application height of E_R (line of thrust) then follows from
@@ -47,6 +60,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
+from .external_forces import slice_forces
 from .methods.base import LEMResult
 from .methods.bishop import BishopSimplified
 
@@ -107,9 +121,12 @@ def _quad_centroid_y(s) -> float:
 
 # ----------------------------------------------------------------------
 def _march(slist, ratios, F, kh, kv,
-           envelope_stress=None) -> InterSliceState:
+           envelope_stress=None, slide_sign=None) -> InterSliceState:
     """Single left→right equilibrium march with the given boundary
-    ratios. Returns the full state (E, X, N, S, thrust line)."""
+    ratios. Returns the full state (E, X, N, S, thrust line).
+
+    ``slide_sign`` is the sense of sliding the method solved with
+    (``details["slide_sign"]``); None falls back to the soil-weight sum."""
     n = len(slist)
     st = InterSliceState()
     st.E = [0.0] * (n + 1)
@@ -118,9 +135,22 @@ def _march(slist, ratios, F, kh, kv,
     st.S = [0.0] * n
     st.y_thrust = [0.0] * (n + 1)
 
-    # Resisting direction: opposes the along-base gravity drive.
-    drive = sum(-s.weight * math.sin(s.base_angle) for s in slist)
-    s_dir = -1.0 if drive > 0 else 1.0
+    # Resisting direction: opposes the sliding the METHOD assumed.
+    #
+    # v0.1.214 (D173) -- read from the method, not re-guessed. The march
+    # re-solves the method's own slice equations at its F and its λ, so the
+    # shear has to point where the method's did; with X = 0 the N below is
+    # then the ``base_normal_force`` Bishop and Janbu publish, exactly. The
+    # guess below agrees with every method that derives its sense from
+    # ``Σ W·sin α`` (all but the two Janbu), and Janbu derives it from
+    # ``Σ w_total·tan α``, which can disagree when water stands on a steep
+    # passive base (defect D112's witness). The guess stays as the fallback
+    # for a result that does not carry the key.
+    if slide_sign in (1.0, -1.0):
+        s_dir = float(slide_sign)
+    else:
+        drive = sum(-s.weight * math.sin(s.base_angle) for s in slist)
+        s_dir = -1.0 if drive > 0 else 1.0
     # Horizontal pseudo-force acts in the movement direction (−s_dir·t̄,
     # whose horizontal sign is −s_dir since cos α > 0).
     h_dir = -s_dir
@@ -132,8 +162,11 @@ def _march(slist, ratios, F, kh, kv,
         alpha = s.base_angle
         l = s.base_length
         u = s.pore_pressure
-        W_eff = s.weight * (1.0 - kv)
-        H = h_dir * kh * W_eff
+        # v0.1.214 (D173) -- the loads the solver applied, water included.
+        fx = slice_forces(s, kh, kv)
+        W_eff = fx.w_total
+        H_seis = h_dir * fx.h_seismic
+        H = H_seis + fx.h_water
 
         sigma_est = max(0.0, W_eff * math.cos(alpha) - u * l) / max(l, 1e-9)
         # v0.1.213 (D84) -- the stress the method read a curved envelope at,
@@ -180,9 +213,16 @@ def _march(slist, ratios, F, kh, kv,
         # M_z of F=(Fx,Fy) applied at (px,py) about (x_cb,y_cb):
         #     (px−x_cb)·Fy − (py−y_cb)·Fx
         M_L = (x_L - x_cb) * st.X[i] - (y_tL - y_cb) * st.E[i]
-        M_W = -(x_g - x_cb) * W_eff
-        M_H = -(y_g - y_cb) * H
-        known = M_L + M_W + M_H
+        # The soil at its centroid; the ponded water's vertical resultant
+        # at the middle of the slice top, which shares its x with the base
+        # midpoint (``slicer._apply_ponded_water``), so it has no arm here;
+        # the seismic force at the soil centroid; the horizontal water
+        # forces at their own elevation, through the moment the slicer
+        # stored about y = 0 because two of them can have opposite signs.
+        M_W = -(x_g - x_cb) * fx.w_soil
+        M_H = -(y_g - y_cb) * H_seis
+        M_Hw = y_cb * fx.h_water - fx.m_water_ref0
+        known = M_L + M_W + M_H + M_Hw
         if abs(E_R) > 1e-9:
             y_tR = y_cb + ((x_R - x_cb) * st.X[i + 1] + known) / E_R
         else:
@@ -198,8 +238,8 @@ def _march(slist, ratios, F, kh, kv,
 
 # ----------------------------------------------------------------------
 def compute_interslice_state(result: LEMResult,
-                             kh: float = 0.0,
-                             kv: float = 0.0) -> InterSliceState:
+                             kh: float | None = None,
+                             kv: float | None = None) -> InterSliceState:
     """Interslice forces E/X, base N/S and line of thrust for a
     converged LEM result.
 
@@ -207,11 +247,21 @@ def compute_interslice_state(result: LEMResult,
     them, zeros otherwise. Both sign conventions of the ratios are tried
     (some methods solve λ in a flipped frame); the march with the
     smaller closure |E_n| wins.
+
+    ``kh``/``kv`` default to the coefficients the method APPLIED,
+    ``details["kh"]`` and ``details["kv"]`` (v0.1.214, D173): the loads of
+    the march must be the solver's, and a caller that has no project to
+    read them from is exactly the one that marched without them.
     """
     st = InterSliceState()
     if (result is None or not result.slices or result.fos is None
             or not math.isfinite(result.fos)):
         return st
+    details = result.details or {}
+    if kh is None:
+        kh = float(details.get("kh", 0.0) or 0.0)
+    if kv is None:
+        kv = float(details.get("kv", 0.0) or 0.0)
     slist = list(result.slices)
     n = len(slist)
     ratios = result.details.get("boundary_ratios") if result.details else None
@@ -220,13 +270,16 @@ def compute_interslice_state(result: LEMResult,
     env = result.details.get("envelope_stress") if result.details else None
     if env is not None and len(env) != n:
         env = None
+    sense = details.get("slide_sign")
+    if sense not in (1.0, -1.0):
+        sense = None
 
     st_pos = _march(slist, ratios, result.fos, kh, kv,
-                    envelope_stress=env)
+                    envelope_stress=env, slide_sign=sense)
     if all(abs(r) < 1e-12 for r in ratios):
         return st_pos
     st_neg = _march(slist, [-r for r in ratios], result.fos, kh, kv,
-                    envelope_stress=env)
+                    envelope_stress=env, slide_sign=sense)
     if not st_pos.ok:
         best, sgn = st_neg, -1.0
     elif not st_neg.ok:
@@ -244,7 +297,7 @@ def compute_interslice_state(result: LEMResult,
     # display-consistency refinement; it never alters the FoS.
     def closure_signed(k: float) -> float:
         stk = _march(slist, [sgn * k * r for r in ratios], result.fos, kh,
-                     kv, envelope_stress=env)
+                     kv, envelope_stress=env, slide_sign=sense)
         return stk.E[n] if stk.ok else math.nan
 
     k_lo, k_hi = 0.0, 2.0
@@ -267,7 +320,8 @@ def compute_interslice_state(result: LEMResult,
             else:
                 k_lo, f_lo = k_mid, f_mid
         st_ref = _march(slist, [sgn * k_lo * r for r in ratios],
-                        result.fos, kh, kv, envelope_stress=env)
+                        result.fos, kh, kv, envelope_stress=env,
+                        slide_sign=sense)
         if st_ref.ok and st_ref.closure < best.closure:
             return st_ref
     return best

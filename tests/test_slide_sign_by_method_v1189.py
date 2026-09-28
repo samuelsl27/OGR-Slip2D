@@ -20,9 +20,12 @@ fixed the mirror for Bishop and left the guess in place.
 WHY IT CANNOT REACH THE OTHER METHODS, WHICH IS HALF THE CLAIM
 --------------------------------------------------------------
 Bishop, Spencer, GLE, the Ordinary Method and the prescribed-inclination
-family all derive theirs from ``sign(sum W*(1-kv)*sin a)``, and
-``(1-kv) >= 0`` is a constant non-negative factor, which cannot invert a
-sum. ``TestWhatCannotDiffer`` sweeps ``kv`` and shows it. A ficha that
+family all derive theirs from ``sign(sum W*(1+kv)*sin a)``, and
+``(1+kv) >= 0`` is a constant non-negative factor, which cannot invert a
+sum. ``TestWhatCannotDiffer`` sweeps ``kv`` and shows it. (v0.1.214, D170:
+the factor was ``(1-kv)`` until then, the opposite sense to the one the
+program documents; the argument is the same with the degenerate end at
+``kv = -1`` instead of ``+1``.) A ficha that
 exaggerates gets discounted whole, so the reach is stated exactly:
 ``janbu_simplified`` and ``janbu_corrected``, and nothing else.
 
@@ -38,7 +41,7 @@ what this code prints today. The anchors are:
   and Bishop's, recomputed here from the two expressions as the two
   solvers write them, never imported — it is what licenses reading
   Janbu's sign inside Bishop's form at all;
-* the ALGEBRA of ``(1-kv)``, which bounds the defect's reach;
+* the ALGEBRA of ``(1+kv)``, which bounds the defect's reach;
 * an arithmetic WITNESS, three slices whose numbers are computed here
   from ``math.cos/sin/tan`` and not pasted, where the two sums disagree
   and the verdict flips;
@@ -65,7 +68,7 @@ dictionary key, and two more on a missing module symbol.
 
 The 13 that PASS do so BY DESIGN, because they state what the defect IS
 by reading the engine rather than the fix: the closed form, the two
-identities, the ``(1-kv)`` sweep, the witness arithmetic, the family's
+identities, the ``(1+kv)`` sweep, the witness arithmetic, the family's
 sign trap and the fallback. A test that passes on both trees is not
 evidence of the fix, and it is labelled here rather than left to look
 like one.
@@ -102,7 +105,7 @@ def _slope():
     is read by no method: the earthquake lives on ``p.seismic``. No case ever
     passed them, so the branch was dead; it is gone rather than corrected,
     because a parameter nobody passes is the kind of setting that does
-    nothing (rule 7). The ``(1 - kv)`` sweep of ``TestWhatCannotDiffer`` is
+    nothing (rule 7). The ``(1 + kv)`` sweep of ``TestWhatCannotDiffer`` is
     arithmetic on the slices and never went through here.
     """
     from ogr_core.geometry import Boundary, BoundaryType, Polyline, Vertex
@@ -153,7 +156,9 @@ def _solve(method_id: str):
 # solver's would make every assertion below a tautology.
 # ----------------------------------------------------------------------
 def _bishop_sum(slices, kv: float = 0.0) -> float:
-    return sum(s.weight * (1.0 - kv) * math.sin(s.base_angle)
+    # ``kv`` positive DOWN, so the soil carries ``W*(1 + kv)`` (v0.1.214,
+    # D170; ``(1 - kv)`` until then).
+    return sum(s.weight * (1.0 + kv) * math.sin(s.base_angle)
                for s in slices)
 
 
@@ -352,15 +357,16 @@ class TestWhatCannotDiffer:
     """The algebra that bounds the defect's reach."""
 
     def test_a_non_negative_factor_cannot_invert_a_sum(self):
-        """``(1-kv)`` scales Bishop's sum and never flips it."""
+        """``(1+kv)`` scales Bishop's sum and never flips it."""
         res = _solve("bishop_simplified")
         base = _sgn(_bishop_sum(res.slices, kv=0.0))
-        for kv in (-1.0, -0.5, -0.1, 0.0, 0.1, 0.5, 0.9, 0.999):
+        for kv in (-0.999, -0.9, -0.5, -0.1, 0.0, 0.1, 0.5, 1.0):
             assert _sgn(_bishop_sum(res.slices, kv=kv)) == base, kv
 
-    def test_only_kv_exactly_one_degenerates(self):
+    def test_only_kv_exactly_minus_one_degenerates(self):
+        """A downward-positive coefficient of -1 cancels gravity."""
         res = _solve("bishop_simplified")
-        assert abs(_bishop_sum(res.slices, kv=1.0)) < 1e-9
+        assert abs(_bishop_sum(res.slices, kv=-1.0)) < 1e-9
 
     def test_janbus_denominator_is_bishops_times_cos(self):
         """``n_alpha == cos(a) * m_alpha``, exactly.

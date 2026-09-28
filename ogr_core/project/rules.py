@@ -187,6 +187,35 @@ def compute_blockers(project) -> list[Refusal]:
 
 
 # ----------------------------------------------------------------------
+#: A pseudo-static coefficient is a fraction of g, and the vertical one
+#: cancels gravity at the end of its range: with ``kv`` positive DOWN the
+#: soil carries ``W·(1 + kv)`` (v0.1.214, D170), so ``kv = −1`` leaves a mass
+#: with no weight and every method's driving sum identically zero. Strictly
+#: inside, for both coefficients.
+SEISMIC_COEFFICIENT_LIMIT = 1.0
+
+
+def seismic_coefficient_refusal(name: str, value) -> Optional[Refusal]:
+    """Why ``value`` cannot be the seismic coefficient ``name``, or None.
+
+    v0.1.214 — moved here from ``ogr_api.ops.loads.seismic_set``, the only
+    place that enforced it: the seismic dialog accepted ±1 exactly, and
+    with the downward-positive convention of D170 ``kv = −1`` is the
+    weightless case. The API and the dialog now ask this function.
+    """
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return Refusal("seismic_coefficient_not_a_number",
+                       f"{name} must be a number, got {value!r}.")
+    if not abs(v) < SEISMIC_COEFFICIENT_LIMIT:
+        return Refusal("seismic_coefficient_out_of_range",
+                       f"|{name}| must be below 1 (a fraction of g), "
+                       f"got {v}.")
+    return None
+
+
+# ----------------------------------------------------------------------
 def set_seismic_records(project, records) -> bool:
     """Replace the project's strong-motion records.
 

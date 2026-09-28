@@ -146,7 +146,7 @@ Author: Samuel Sáez López — UPCT
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional
 
 # Not deferred like the rest of the ``ogr_core.support`` names in this
@@ -277,6 +277,18 @@ class SupportTerms:
     moment_active: float = 0.0
     #: The PASSIVE half of the same quantity; it joins the resisting side.
     moment_passive: float = 0.0
+    #: v0.1.214 (D150) -- per slice, the COUPLE the normal parts of the
+    #: supports crossing it leave about ``(x_app, y_app)``, CCW. The normal
+    #: parts of one slice are parallel (all normal to its chord), so their
+    #: resultant ``(nf_h, nf_v)`` applied at the |F|-weighted mean point is
+    #: the right FORCE but not the right MOMENT: the arm of a sum of forces
+    #: is not the sum of the arms unless the weights are the moments. This
+    #: is the difference, ``Σ (P_j − P_app) × n_j``, and a couple has the
+    #: same value about every axis, so ``moment_terms`` adds it whatever axis
+    #: it was given. Filled only for slices crossed by two or more supports
+    #: (one support: ``P_j`` IS ``P_app`` and the list stays empty, bit for
+    #: bit as before) and only while ``NORMAL_PART_PER_EFFECT`` is on.
+    normal_couple: list = field(default_factory=list)
 
     def total_active_t(self) -> float:
         """The ACTIVE tangential force on the bases, for FORCE equilibrium.
@@ -288,6 +300,47 @@ class SupportTerms:
     def total_passive_t(self) -> float:
         """The PASSIVE tangential force on the bases, for FORCE equilibrium."""
         return sum(self.t_passive)
+
+
+# ======================================================================
+# v0.1.214 (D151) -- a support declared tangent to the slip surface is, on a
+# circle, one more BASE SHEAR.
+#
+# WHAT WAS WRONG, AND WHAT THE RECORD HAD WRONG. D144 (v0.1.178) took the
+# moment of every support about the centre as the cross product at its
+# crossing, which fixed a first-order error for inclined supports. For a
+# ``TANGENT_TO_SLIP`` support it left a second-order one: the force runs
+# along the slice's CHORD, the crossing lies ON the chord (``|P − C| < R``),
+# and the moment came out ``|F|·a`` with ``a`` the chord's apothem. The
+# record read that as a DIRECTION error; measured on the tangential fixture
+# of ``tests/test_support_active_passive_v1115.py`` at 40 slices, the arm
+# accounts for −3.45e-5 of the moment and the direction for −6.4e-7, so
+# pointing the force along the arc's tangent would have left it at
+# ``|F|·|P − C|`` and given it a component normal to the chord.
+#
+# WHAT IT DOES (the owner's decision, 2026-09-27). The circular moment
+# equation (Bishop 1955) takes every base shear with arm R — on the arc the
+# shear is tangent at every point, so its moment is R times its magnitude
+# wherever it acts — while the slice's force balance is written on the
+# chord. A support tangent to the surface gets exactly that treatment: its
+# axial part keeps the chord's direction in the force balance
+# (``n_press = 0``, ``t_active = |F|``) and gets the arm R in the moment,
+# ``|F|·R``, which is what the pre-v0.1.178 code gave by the cancellation
+# of two errors. A shear vector added to it (``SUPPORTS_SHEAR``) is not
+# tangent and keeps the cross product at the crossing, and so does every
+# other orientation, bit for bit.
+#
+# Read at call time by :func:`resolve_support_terms`. Off, the tangent part
+# takes D144's cross product again.
+TANGENT_AS_BASE_SHEAR = True
+
+# v0.1.214 (D150) -- on a surface with no centre, the moment of the NORMAL
+# part of the reinforcement is taken support by support, each at its own
+# crossing, through ``SupportTerms.normal_couple``. Off, from the |F|-
+# weighted mean of the crossings of each slice, as before v0.1.214. Only a
+# slice crossed by two or more supports can differ, and no critical surface
+# of the verification bank has one.
+NORMAL_PART_PER_EFFECT = True
 
 
 # Shared "there is no reinforcement here" answer. Immutable in practice:
@@ -453,6 +506,7 @@ def resolve_support_terms(
     x_app = [0.0] * n
     y_app = [0.0] * n
     w_app = [0.0] * n  # |F| weights for the application point
+    crossings = [0] * n  # supports per slice, for ``normal_couple`` (D150)
     couple = 0.0
 
     for eff in effects:
@@ -486,7 +540,21 @@ def resolve_support_terms(
         # it: a force normal to the CHORD is not normal to the ARC and does
         # have a moment about the centre. Adding ``nf_h``/``nf_v`` on top
         # would count that half twice.
-        if _circular:
+        if _circular and TANGENT_AS_BASE_SHEAR and (eff.tangent_h
+                                                    or eff.tangent_v):
+            # v0.1.214 (D151) -- the part along the slip surface is a base
+            # shear: its projection on the chord, which is ±|F|, times the
+            # shear's arm R (over R, as everything here). Whatever is left
+            # (a nail's dowel vector) is not tangent and keeps the cross
+            # product at the crossing.
+            m_r = slide_sign * (eff.tangent_h * ca + eff.tangent_v * sa)
+            rest_h = eff.force_h - eff.tangent_h
+            rest_v = eff.force_v - eff.tangent_v
+            if rest_h or rest_v:
+                m_r += slide_sign * ((eff.intersection_x - _cx) * rest_v
+                                     - (eff.intersection_y - _cy) * rest_h
+                                     ) / _radius
+        elif _circular:
             m_r = slide_sign * ((eff.intersection_x - _cx) * eff.force_v
                                 - (eff.intersection_y - _cy) * eff.force_h
                                 ) / _radius
@@ -511,6 +579,7 @@ def resolve_support_terms(
         x_app[i] += w * eff.intersection_x
         y_app[i] += w * eff.intersection_y
         w_app[i] += w
+        crossings[i] += 1
         couple += eff.couple()
 
     # The normal part alone, back in Cartesian components. Written from
@@ -534,11 +603,31 @@ def resolve_support_terms(
             x_app[i] = 0.5 * (s_list[i].base_x_left + s_list[i].base_x_right)
             y_app[i] = 0.5 * (s_list[i].base_y_left + s_list[i].base_y_right)
 
+    # v0.1.214 (D150) -- the couple the normal parts leave about the mean
+    # point, support by support, on the slices crossed by more than one.
+    # Each normal part is ``t_n·(sin a, −cos a)``, the decomposition above;
+    # its moment about ``(x_app, y_app)`` is the cross product from there to
+    # its own crossing. See ``SupportTerms.normal_couple``.
+    normal_couple: list = []
+    if NORMAL_PART_PER_EFFECT and any(k > 1 for k in crossings):
+        normal_couple = [0.0] * n
+        for eff in effects:
+            i = eff.slice_index
+            if i < 0 or i >= n or crossings[i] < 2:
+                continue
+            a = s_list[i].base_angle
+            ca, sa = math.cos(a), math.sin(a)
+            t_n = eff.force_h * sa - eff.force_v * ca
+            nfh_k, nfv_k = t_n * sa, -t_n * ca
+            normal_couple[i] += ((eff.intersection_x - x_app[i]) * nfv_k
+                                 - (eff.intersection_y - y_app[i]) * nfh_k)
+
     return SupportTerms(t_active, t_passive, n_press, nf_h, nf_v,
                         f_h, f_v, x_app, y_app, True, couple,
                         _failure_text(failures),
                         moment_active=moment_active,
-                        moment_passive=moment_passive)
+                        moment_passive=moment_passive,
+                        normal_couple=normal_couple)
 
 
 def support_failure_details(sup: "SupportTerms", details=None) -> dict:
@@ -668,6 +757,12 @@ class SupportEffect:
             (v0.1.122). Translating a force does not change the force, so
             the two points differ by a pure COUPLE and nothing else --
             which is exactly how it enters the solvers.
+        tangent_h, tangent_v: the part of the force directed along the
+            slip surface, +x and +y (v0.1.214, D151): the axial force of a
+            ``TANGENT_TO_SLIP`` support, before any shear vector is added;
+            zero for every other orientation. On a circle it is one more
+            base shear and takes the shear's arm; see
+            :func:`resolve_support_terms`.
     """
     slice_index: int
     intersection_x: float
@@ -680,6 +775,8 @@ class SupportEffect:
     support_id: str
     application_x: float = float("nan")
     application_y: float = float("nan")
+    tangent_h: float = 0.0
+    tangent_v: float = 0.0
 
     def __post_init__(self) -> None:
         if self.application_x != self.application_x:      # NaN
@@ -716,20 +813,36 @@ def _slip_polyline(surface, slices) -> list[tuple[float, float]]:
     return pts
 
 
-def _slip_tangent_at_x(slices, x: float) -> Optional[float]:
-    """Return the slope (dy/dx) of the slip surface at x.
+def _chord_slope(s) -> float:
+    """The slope ``dy/dx`` of one slice base: its chord.
 
-    Approximates by linear interpolation between adjacent base
-    endpoints. Returns None if x is outside the surface range.
+    The base of a slice IS its chord in every force balance the methods
+    write (since v0.1.100), so this is the direction a support "along the
+    slip surface" is given there. On a circle the moment of that part is
+    taken with the arc's arm instead; see ``TANGENT_AS_BASE_SHEAR``.
+    """
+    dx = s.base_x_right - s.base_x_left
+    if abs(dx) < 1e-12:
+        return 0.0
+    return (s.base_y_right - s.base_y_left) / dx
+
+
+def _slip_tangent_at_x(slices, x: float) -> Optional[float]:
+    """Return the slope (dy/dx) of the slip surface at x: the chord of the
+    slice whose base contains x. None if x is outside the surface range.
+
+    v0.1.214 (D151) -- with the same 1e-9 on the left as on the right, the
+    tolerance ``compute_support_effects`` finds the crossed slice with:
+    without it a crossing on the left edge of the first slice found a slice
+    and no slope, and the ``or 0.0`` at the old call site turned that into a
+    horizontal surface in silence. That call site now reads the slope of
+    the slice it found (:func:`_chord_slope`); this one serves
+    ``reversed_support_notes``.
     """
     s_list = slices.slices if hasattr(slices, "slices") else slices
     for s in s_list:
-        if s.base_x_left <= x <= s.base_x_right + 1e-9:
-            dx = s.base_x_right - s.base_x_left
-            if abs(dx) < 1e-12:
-                return 0.0
-            dy = s.base_y_right - s.base_y_left
-            return dy / dx
+        if s.base_x_left - 1e-9 <= x <= s.base_x_right + 1e-9:
+            return _chord_slope(s)
     return None
 
 
@@ -1435,11 +1548,20 @@ def compute_support_effects(
                 reasons.append(
                     (support.id, SUPPORT_BOND_PROFILE_FAILED + ":" + broke))
 
-            # Force orientation angle
-            slip_slope = _slip_tangent_at_x(slices, ix) or 0.0
+            # Force orientation angle. v0.1.214 (D151) -- the slope of the
+            # slice just found, not a second search that could miss it.
+            slip_slope = _chord_slope(s_list[slice_idx])
             ang = _support_force_angle(support, slip_slope, is_l2r)
             Fh = F * math.cos(ang)
             Fv = F * math.sin(ang)
+            # v0.1.214 (D151) -- the part directed along the slip surface,
+            # kept apart before a shear vector joins it: on a circle it is
+            # a base shear (see ``TANGENT_AS_BASE_SHEAR``).
+            from ogr_core.support import ForceOrientation
+            if support.orientation == ForceOrientation.TANGENT_TO_SLIP:
+                t_h, t_v = Fh, Fv
+            else:
+                t_h = t_v = 0.0
             if V > 0.0:
                 perp = _resisting_perpendicular(
                     support.axis_angle_rad(),
@@ -1485,6 +1607,8 @@ def compute_support_effects(
                 support_id=support.id,
                 application_x=ax,
                 application_y=ay,
+                tangent_h=t_h,
+                tangent_v=t_v,
             ))
         except SupportEvaluationError as exc:
             # The sixth reason, and the only one that is not a

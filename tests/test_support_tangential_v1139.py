@@ -160,7 +160,8 @@ def _slide_sign(s_list):
     """The sense the method derives, from the same expression it uses.
 
     There is no seismic loading anywhere in this problem, so the
-    ``(1 − kv)`` factor of the original is 1.
+    ``(1 + kv)`` factor of the original is 1 (``(1 − kv)`` until
+    v0.1.214, D170).
     """
     return 1.0 if math.fsum(s.weight * math.sin(s.base_angle)
                             for s in s_list) >= 0 else -1.0

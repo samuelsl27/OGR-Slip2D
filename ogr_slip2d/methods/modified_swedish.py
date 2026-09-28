@@ -59,7 +59,8 @@ import math
 
 from ogr_core.project import Project
 
-from ..external_forces import interslice_water_thrust, slice_forces
+from ..external_forces import (interslice_water_thrust,
+                               seismic_soil_weight, slice_forces)
 from ..slicer import Slices
 from ..surface import SurfaceProtocol
 from .base import (
@@ -148,7 +149,8 @@ class PrescribedInclinationMethod(LEMMethod):
         # up-slope side is consistently positive (same convention as the
         # rigorous methods).
         driving_raw = sum(
-            s.weight * (1.0 - kv) * math.sin(s.base_angle) for s in slices
+            seismic_soil_weight(s.weight, kv) * math.sin(s.base_angle)
+            for s in slices
         )
         slide_sign = 1.0 if driving_raw >= 0 else -1.0
 
@@ -237,6 +239,10 @@ class PrescribedInclinationMethod(LEMMethod):
                 # published: the Tensile Stress Check runs on this family
                 # too, and loads each base with the ``kv`` handed to
                 # ``slice_forces`` here (read by ``checks._applied_kv``).
+                # v0.1.214 (D173) -- and the horizontal one, so the
+                # interslice march of the interpretation applies the
+                # loads this method did (``compute_interslice_state``).
+                "kh": kh,
                 "kv": kv,
                 # v0.1.210 (D172) -- what the checks read to judge this
                 # surface as this solver solved it: the support load in the
@@ -369,7 +375,8 @@ class PrescribedInclinationMethod(LEMMethod):
             # v0.1.64 — the support's vertical component joins the load
             # the base carries (``f_v`` is +y, ``W_eff`` is +down), so the
             # friction it mobilises comes out of the recursion itself.
-            W_eff = slice_forces(s, kh, kv).w_total - vs
+            fx = slice_forces(s, kh, kv)
+            W_eff = fx.w_total - vs
             l = s.base_length
             u = s.pore_pressure
 
@@ -401,8 +408,12 @@ class PrescribedInclinationMethod(LEMMethod):
             if D_i <= 1e-6 or D_prev <= 1e-6:
                 return None
 
+            # v0.1.214 (D170) -- the seismic force from ``slice_forces``,
+            # ``kh·W`` on the static weight, and not written out here: this
+            # was ``kh·W·(1 − kv)``, the last copy of a coupling the
+            # pseudo-static formulation does not have.
             const_i = (
-                (kh * s.weight * (1.0 - kv) + hw - k0 * ca) * (ca - a * sa)
+                (fx.h_seismic + hw - k0 * ca) * (ca - a * sa)
                 - (W_eff + k0 * sa) * (sa + a * ca)
             )
             Z = (Z * D_prev + const_i) / D_i

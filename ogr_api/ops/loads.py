@@ -288,7 +288,14 @@ def seismic_set(ws, project_id: Optional[str] = None,
                 enabled: Optional[bool] = None, kh: Optional[float] = None,
                 kv: Optional[float] = None,
                 creates_excess_pore_pressure: Optional[bool] = None) -> dict:
-    """The pseudo-static seismic load: kh, kv and whether it applies."""
+    """The pseudo-static seismic load: kh, kv and whether it applies.
+
+    Both coefficients are fractions of g on the static weight; ``kh``
+    positive acts in the direction of failure and ``kv`` positive DOWNWARD
+    (the soil carries ``W·(1 + kv)``).
+    """
+    from ogr_core.project.rules import seismic_coefficient_refusal
+
     def edit(project):
         s = project.seismic
         if enabled is not None:
@@ -296,9 +303,9 @@ def seismic_set(ws, project_id: Optional[str] = None,
         for key, val in (("kh", kh), ("kv", kv)):
             if val is not None:
                 v = coerce_value(val, float, key)
-                if abs(v) >= 1.0:
-                    raise InvalidArgument(f"|{key}| must be below 1 (a "
-                                          f"fraction of g), got {v}.")
+                refusal = seismic_coefficient_refusal(key, v)
+                if refusal is not None:
+                    raise InvalidArgument(refusal.message)
                 setattr(s, key, v)
         if creates_excess_pore_pressure is not None:
             s.creates_excess_pore_pressure = coerce_value(

@@ -117,6 +117,7 @@ def _sums_at_fixed_fos(slices, surface, target_fos, kh, kv, elevation,
     horizontal force into the same units as the driving term (a moment
     arm divided by the radius for Bishop, 1 for Janbu).
     """
+    from ogr_slip2d.external_forces import seismic_soil_weight
     from ogr_slip2d.methods.bishop import BishopSimplified
     from ogr_slip2d.surface import SlipCircle
 
@@ -124,8 +125,8 @@ def _sums_at_fixed_fos(slices, surface, target_fos, kh, kv, elevation,
     if not s_list:
         return None
 
-    driving_raw = sum(s.weight * (1.0 - kv) * math.sin(s.base_angle)
-                      for s in s_list)
+    driving_raw = sum(seismic_soil_weight(s.weight, kv)
+                      * math.sin(s.base_angle) for s in s_list)
     slide_sign = 1.0 if driving_raw >= 0 else -1.0
 
     is_bishop = (method_id == "bishop_simplified")
@@ -136,7 +137,11 @@ def _sums_at_fixed_fos(slices, surface, target_fos, kh, kv, elevation,
     resisting = 0.0
     driving = 0.0
     for s in s_list:
-        W_eff = s.weight * (1.0 - kv)
+        # v0.1.214 (D170) -- the vertical load under ``kv`` positive DOWN,
+        # and below the horizontal seismic force on the STATIC weight, as
+        # the solvers apply them through ``slice_forces``. This wrote
+        # ``W·(1 − kv)`` and ``kh·W·(1 − kv)`` by hand.
+        W_eff = seismic_soil_weight(s.weight, kv)
         b = s.width
         alpha = s.base_angle
         N_est = W_eff * math.cos(alpha)
@@ -155,9 +160,17 @@ def _sums_at_fixed_fos(slices, surface, target_fos, kh, kv, elevation,
             resisting += term
             driving += slide_sign * W_eff * math.sin(alpha)
             if kh:
+                # v0.1.214 (D170) -- the arm the solver uses,
+                # ``(y_c − y_g)/R``: the horizontal force of a slice below
+                # the centre drives the rotation. This read
+                # ``(y_g − y_c)``, so the earthquake REDUCED the driving sum
+                # (4532 → 3093 on a 2:1 slope at kh = 0.1) and the force
+                # needed at the method's own factor came out −7599 kN/m
+                # where it is ~0 (Janbu, whose balance has no arm, was
+                # right). See ``tests/test_seismic_convention_v1214.py``.
                 y_g = 0.5 * (s.base_y_mid + s.top_y_mid) \
                     if hasattr(s, "top_y_mid") else s.base_y_mid
-                driving += kh * W_eff * (y_g - circle.centre_y) \
+                driving += kh * s.weight * (circle.centre_y - y_g) \
                     / max(circle.radius, 1e-9)
         else:
             # Janbu: horizontal force equilibrium. The solver divides each
@@ -171,7 +184,8 @@ def _sums_at_fixed_fos(slices, surface, target_fos, kh, kv, elevation,
             # to reach the factor of safety the solver gives it with no
             # support at all (1.39263), where the answer is 0.
             resisting += term / math.cos(alpha)
-            driving += slide_sign * W_eff * math.tan(alpha) + kh * W_eff
+            driving += (slide_sign * W_eff * math.tan(alpha)
+                        + kh * s.weight)
 
     if is_bishop:
         # Moment of a horizontal force about the centre is T·(y_c − y_T);

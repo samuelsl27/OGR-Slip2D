@@ -35,6 +35,7 @@ from typing import Tuple
 
 from ogr_core.project import Project
 
+from ..external_forces import seismic_soil_weight
 from ..slicer import Slices
 from ..surface import SlipCircle, SurfaceProtocol
 from .base import (
@@ -73,7 +74,8 @@ class Spencer(LEMMethod):
         kv = project.seismic.kv if project.seismic.enabled else 0.0
 
         driving_raw = sum(
-            s.weight * (1.0 - kv) * math.sin(s.base_angle) for s in slices
+            seismic_soil_weight(s.weight, kv) * math.sin(s.base_angle)
+            for s in slices
         )
         slide_sign = 1.0 if driving_raw >= 0 else -1.0
 
@@ -331,6 +333,10 @@ class Spencer(LEMMethod):
                     # the same ``kv`` that ``prepare_rows`` hands to
                     # ``slice_forces``, so the checks load each base as the
                     # solver did.
+                    # v0.1.214 (D173) -- and the horizontal one, so the
+                    # interslice march of the interpretation applies the
+                    # loads this method did (``compute_interslice_state``).
+                    "kh": kh,
                     "kv": kv,
                     # v0.1.210 (D172) -- what the checks read to judge this
                     # surface as this solver solved it: the support load in the
@@ -575,6 +581,10 @@ class Spencer(LEMMethod):
                 # same statement, so the two cannot drift apart.
                 "m_alpha_sign": slide_sign,
                 # v0.1.191 (D167) -- see the fallback exit.
+                # v0.1.214 (D173) -- and the horizontal one, so the
+                # interslice march of the interpretation applies the
+                # loads this method did (``compute_interslice_state``).
+                "kh": kh,
                 "kv": kv,
                 # v0.1.210 (D172) -- what the checks read to judge this
                 # surface as this solver solved it: the support load in the

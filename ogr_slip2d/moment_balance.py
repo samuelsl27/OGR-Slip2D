@@ -226,10 +226,12 @@ def moment_terms(
             to the midpoint slides it along its own line of action, which
             does not change its moment about any axis. The circular path had
             no such luck: there the chord is not the surface, and its
-            projection times R is not the moment. What IS approximate here
-            is ``sup``'s ``x_app``/``y_app``, a mean weighted by |F|: with
-            two supports of different orientation on one slice the NORMAL
-            part's arm is taken where no force acts. Reported, not fixed.
+            projection times R is not the moment. What WAS approximate
+            here is ``sup``'s ``x_app``/``y_app``, a mean weighted by |F|:
+            with two supports of different orientation on one slice the
+            NORMAL part's arm was taken where no force acts. Since v0.1.214
+            (D150) ``sup.normal_couple`` adds the difference, support by
+            support, so the normal part's moment is exact too.
         rotation: pass the value from :func:`rotation_sense` when the caller
             already needed it; otherwise it is computed here.
         couple: a pure moment, in the same CCW sense as everything else here,
@@ -304,6 +306,14 @@ def moment_terms(
             # here instead of being assumed away.
             m_extra += moment(sup.x_app[i], sup.y_app[i],
                               sup.nf_h[i], sup.nf_v[i])
+        if sup is not None and sup.present:
+            # v0.1.214 (D150) -- and what the mean point leaves out when two
+            # or more supports cross this slice: the couple of their normal
+            # parts about it. Outside the guard above on purpose: two normal
+            # parts that cancel leave a pure couple and no resultant.
+            nc = getattr(sup, "normal_couple", None)
+            if nc and nc[i]:
+                m_extra += nc[i]
 
     # The couple, added once and outside the loop because it belongs to no
     # slice in particular.

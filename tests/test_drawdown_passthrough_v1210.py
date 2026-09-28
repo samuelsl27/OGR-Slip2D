@@ -86,7 +86,13 @@ _DRAWDOWN_KEYS = {"drawdown_procedure", "fos_stage1", "fos_stage2",
 # from ``_DRAWDOWN_KEYS`` so that the controls below keep asking only for
 # what v0.1.210 wrote.
 _WRAPPER_KEYS_SINCE_D202 = {"stage1_admissible"}
-_SHARED_KEYS = {"slide_sign", "m_alpha_sign", "kv"}
+# v0.1.214 (D173) -- ``kh`` joined ``kv``: the horizontal coefficient the
+# method applied, a scalar of the project the same in every pass and not a
+# per-slice key, published so that the interslice march of the
+# interpretation applies the solver's loads. What this set guards is
+# unchanged: no PER-SLICE key travels from a pass that did not solve the
+# reported centre.
+_SHARED_KEYS = {"slide_sign", "m_alpha_sign", "kh", "kv"}
 LIMIT_BETWEEN = 0.5      # between the two minima of the fixture (0.85/0.23)
 
 

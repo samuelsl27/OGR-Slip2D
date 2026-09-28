@@ -21,7 +21,16 @@ from PySide6.QtWidgets import (
     QLabel,
     QVBoxLayout,
 )
+from ogr_core.project.rules import SEISMIC_COEFFICIENT_LIMIT
 from ogr_gui.i18n import tr  # noqa: E402
+
+#: Decimals of the two spin boxes, and the largest magnitude they can hold:
+#: one step inside the limit that ``rules.seismic_coefficient_refusal``
+#: enforces for the API, so the two cannot disagree. v0.1.214 — the range
+#: was ±1 exactly, which the API refused and which, with ``kv`` positive
+#: downward (D170), is a soil with no weight at ``kv = −1``.
+_DECIMALS = 3
+_K_MAX = SEISMIC_COEFFICIENT_LIMIT - 10.0 ** -_DECIMALS
 
 
 class SeismicLoadDialog(QDialog):
@@ -49,8 +58,8 @@ class SeismicLoadDialog(QDialog):
         form = QFormLayout()
 
         self.sb_kh = QDoubleSpinBox()
-        self.sb_kh.setRange(-1.0, 1.0)
-        self.sb_kh.setDecimals(3)
+        self.sb_kh.setDecimals(_DECIMALS)
+        self.sb_kh.setRange(-_K_MAX, _K_MAX)
         self.sb_kh.setSingleStep(0.01)
         self.sb_kh.setValue(seismic.kh)
         self.sb_kh.setToolTip(
@@ -63,8 +72,8 @@ class SeismicLoadDialog(QDialog):
         form.addRow(tr("k_h (horizontal):"), self.sb_kh)
 
         self.sb_kv = QDoubleSpinBox()
-        self.sb_kv.setRange(-1.0, 1.0)
-        self.sb_kv.setDecimals(3)
+        self.sb_kv.setDecimals(_DECIMALS)
+        self.sb_kv.setRange(-_K_MAX, _K_MAX)
         self.sb_kv.setSingleStep(0.01)
         self.sb_kv.setValue(seismic.kv)
         self.sb_kv.setToolTip(

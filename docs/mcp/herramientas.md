@@ -43,7 +43,7 @@ publica el propio servidor (`tools/list`); aquí va para qué sirve cada una.
 |---|---|---|
 | `load_set` | | Añadir o cambiar una carga repartida (kPa entre dos puntos) o lineal (kN/m en un punto). |
 | `load_delete` | | Borrar cargas. |
-| `seismic_set` | | Carga sísmica pseudoestática: kh, kv y si se aplica. |
+| `seismic_set` | | Carga sísmica pseudoestática: kh, kv y si se aplica. Las dos fuerzas sobre el peso estático; kv positivo hacia abajo (el suelo pesa W·(1 + kv)) y \|k\| < 1. |
 | `seismic_record_set` | | Añadir un acelerograma (archivo, texto o valores) para el análisis de Newmark, o renombrarlo. |
 | `seismic_record_delete` | | Borrar un acelerograma. |
 

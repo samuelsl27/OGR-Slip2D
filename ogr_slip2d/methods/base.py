@@ -231,9 +231,14 @@ class LEMResult:
     #       denominator was formed with. Published by the five methods the
     #       m-alpha check screens, and deliberately by no other.
     #   "kv": v0.1.191 (D167) — the vertical seismic coefficient the method
-    #       APPLIED (0 when the earthquake is disabled). Published by every
-    #       method and read by the admissibility checks; a result without it
-    #       is read as kv = 0.
+    #       APPLIED (0 when the earthquake is disabled), positive DOWNWARD
+    #       since v0.1.214 (D170). Published by every method and read by the
+    #       admissibility checks; a result without it is read as kv = 0.
+    #   "kh": v0.1.214 (D173) — the horizontal one, likewise; read by the
+    #       interslice march of ``postprocess.compute_interslice_state``, so
+    #       the interpretation applies the loads the method did.
+    #   "janbu_b1", "janbu_f0": v0.1.214 (D80) — Janbu Corrected only: the
+    #       ``b1`` read off the soil type of the bases and the factor f0.
     #   "sigma_support_load": v0.1.210 (D172) — per slice, the support load
     #       the method added to ``w_total`` for the stress it linearised its
     #       envelope at (Bishop and Janbu: ``support_vertical_load`` of the

@@ -25,6 +25,32 @@ Sign conventions, all shared with :mod:`ogr_slip2d.slicer`:
   * Vertical forces are stored as magnitudes acting DOWNWARD.
   * ``kh`` is applied in the direction of failure by the caller, which
     knows the sliding sense; ``H_seismic`` here is the unsigned magnitude.
+  * ``kv`` POSITIVE is a vertical seismic force pointing DOWN, so the soil
+    carries ``W·(1 + kv)``. :func:`seismic_soil_weight` is the one place that
+    says so; every method, the checks and the post-processing go through it
+    or through :func:`slice_forces`.
+
+v0.1.214 (D170) — the pseudo-static earthquake is the inertial force of the
+sliding mass, mass times acceleration in each direction, and BOTH components
+are proportional to the STATIC weight: ``F_h = kh·W`` and ``F_v = kv·W``
+(Terzaghi 1950; Kramer 1996, §10.6.1; EN 1998-5:2004, §4.1.3.3, where
+``F_H = 0.5·α·S·W`` and ``F_V = ±0.5·F_H``). What the sign of ``kv`` means is
+a definition, and OGR states it where the user types it — ``SeismicLoad``,
+the seismic dialog — as the reference documentation does: positive is a
+force directed downwards. Until v0.1.213 this function applied the opposite
+sense, ``W·(1 − kv)``, while ``ogr_core.hydraulic.excess_pore_pressure``
+added ``kv·σ_v`` as the text says: one coefficient, two physical senses.
+
+It also scaled the horizontal force with the vertical one,
+``kh·W·(1 − kv)``, and that is wrong with EITHER sign: the horizontal
+inertial force of a mass does not depend on its vertical acceleration.
+Mononobe-Okabe and EN 1998-5 Annex E write the inclination of the resultant
+body force as ``tan θ = kh / (1 ± kv)``, which only follows from
+``F_h = kh·W``; a coupled ``F_h`` would make it ``kh`` whatever ``kv``.
+Measured on a 40° plane through a 56° slope (c = 5 kPa, φ = 30°),
+kh = 0.15 and kv = +0.1: 0.711390 before, against the closed-form wedge
+0.691024 with kv down and 0.691573 with kv up. See
+``tests/test_seismic_convention_v1214.py``.
 
 Author: Samuel Sáez López (UPCT)
 """
@@ -33,19 +59,33 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
+def seismic_soil_weight(weight: float, kv: float) -> float:
+    """The soil weight under the vertical seismic coefficient, ``W·(1 + kv)``.
+
+    ``kv`` positive points DOWN (see the module docstring). The one place
+    that sign lives: a method that needs the vertical load without building
+    a :class:`SliceForces` — the sliding-sense sums, the back analysis —
+    calls this instead of writing the factor out, which is how seven copies
+    of ``(1 − kv)`` came to disagree with the documentation together.
+    """
+    return weight * (1.0 + kv)
+
+
 @dataclass(frozen=True)
 class SliceForces:
     """Resolved force quantities for one slice.
 
     Attributes:
-        w_soil: soil weight after the vertical seismic coefficient,
-            ``weight · (1 − kv)`` [kN/m]. This is what a seismic force is
-            proportional to, and what the surcharge is already folded into.
+        w_soil: soil weight under the vertical seismic coefficient,
+            ``weight · (1 + kv)`` with ``kv`` positive downward [kN/m]
+            (:func:`seismic_soil_weight`). The surcharge is already folded
+            into ``weight``.
         w_total: total vertical load carried by the base, soil plus ponded
             water [kN/m]. This is what the base normal and the gravity
             driving term must use.
         h_seismic: magnitude of the pseudo-static horizontal force,
-            ``kh · w_soil`` [kN/m]. Deliberately proportional to the SOIL
+            ``kh · weight`` [kN/m]: on the STATIC weight, so the vertical
+            coefficient does not scale it (v0.1.214, D170), and on the SOIL
             weight only, so ponded water contributes no inertial force.
         h_water: net horizontal external water force, signed in +x [kN/m].
         m_water_ref0: moment of the horizontal water forces about y = 0,
@@ -74,7 +114,7 @@ def slice_forces(s, kh: float = 0.0, kv: float = 0.0) -> SliceForces:
     Returns:
         The :class:`SliceForces` for that slice.
     """
-    w_soil = s.weight * (1.0 - kv)
+    w_soil = seismic_soil_weight(s.weight, kv)
     water_v = getattr(s, "water_weight", 0.0)
     return SliceForces(
         w_soil=w_soil,
@@ -82,8 +122,10 @@ def slice_forces(s, kh: float = 0.0, kv: float = 0.0) -> SliceForces:
         # kh multiplies the SOIL weight, not the ponded water: the seismic
         # force is "seismic coefficient × area of slice × unit weight of
         # the slice material". Water has no shear strength, so its motion
-        # develops no force the sliding mass has to carry.
-        h_seismic=kh * w_soil,
+        # develops no force the sliding mass has to carry. And the STATIC
+        # weight, not ``w_soil``: the horizontal inertial force of a mass
+        # does not depend on its vertical acceleration (D170).
+        h_seismic=kh * s.weight,
         h_water=getattr(s, "water_force_h", 0.0),
         m_water_ref0=getattr(s, "water_force_h_moment", 0.0),
     )

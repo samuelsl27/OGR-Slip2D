@@ -260,6 +260,7 @@ def sigma_v_effective_at(
 
     from ..geometry import Vertex
     from ..geometry.ground import envelope_y_at, ground_surface
+    from ..hydraulic.ponded_water import ponded_depth_at
     from ..hydraulic.pore_pressure import pore_pressure_at
 
     if ground_y is None:
@@ -278,6 +279,17 @@ def sigma_v_effective_at(
         # bottom of the column sits in as well; here only the weight is
         # wanted. See ``_layer_top_at`` below for the reader of the other.
         sigma_v = _column_weight(project, x, y, ground_y, 1.0)[0]
+        # v0.1.214 (D166) -- and the water standing on the ground. The pore
+        # pressure subtracted below carries the head of that water, so
+        # without its weight a point under a reservoir came out ``γ_w·d``
+        # short and clipped to zero: no bond at all under 30 m of water.
+        # With it, a submerged column gives ``γ'·h`` whatever the depth of
+        # the water (Terzaghi's principle). Only inside the ground: above
+        # it there is no soil column and no pore pressure to balance.
+        pond = ponded_depth_at(project, x, ground_y)
+        if pond > 0.0:
+            sigma_v += (project.settings.groundwater.pore_fluid_unit_weight
+                        * pond)
 
     sigma_v += _surface_pressure_at(project, x)
 

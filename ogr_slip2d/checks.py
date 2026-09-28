@@ -298,10 +298,13 @@ def _denominator_sign(result) -> float:
     Against the others it cannot, and saying why is what keeps this from
     being a bigger claim than it is: Bishop, Spencer, GLE, the Ordinary
     Method and the prescribed-inclination family all derive theirs from
-    ``sign(Σ W(1−kv)·sin α)``, and ``(1−kv) ≥ 0`` is a constant
-    non-negative factor, which cannot invert a sum. Only at ``kv = 1.0``
-    exactly does their sum vanish identically; there the method's own
-    (degenerate) answer is now imported, which is the point.
+    ``sign(Σ W(1+kv)·sin α)``, and ``(1+kv) ≥ 0`` for ``kv ≥ −1`` is a
+    constant non-negative factor, which cannot invert a sum. Only at
+    ``kv = −1.0`` exactly — a downward-positive coefficient of −1 cancels
+    gravity — does their sum vanish identically; there the method's own
+    (degenerate) answer is now imported, which is the point. (Until
+    v0.1.214 the factor was ``(1−kv)`` and the degenerate end ``kv = +1``:
+    the sign convention of D170, not a different argument.)
 
     **The fallback is not courtesy, it is necessity**: a result built by
     hand carries no ``details`` at all (``tests/test_tensile_strength_rock_v1191.py``
@@ -469,7 +472,7 @@ def _base_load_and_sigma(s, *, kv: float,
     v0.1.191 (D167) -- they had not drifted apart; they came in apart, one
     argument further along. This called ``slice_forces(s)`` with the
     default ``kv = 0.0`` while every method calls
-    ``slice_forces(s, kh, kv)``, whose soil weight is ``weight * (1 - kv)``,
+    ``slice_forces(s, kh, kv)``, whose soil weight is ``weight * (1 + kv)``,
     so under a vertical earthquake the check judged each slice under a load
     the solver never applied. ``kv`` now comes from the method (see
     :func:`_applied_kv`) and is required, by name and without a default: a

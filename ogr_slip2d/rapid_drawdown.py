@@ -160,14 +160,16 @@ CAP_MAX_PASSES = 20
 #: v0.1.210 (D112b) -- the ``details`` keys that every stage-2 and stage-3
 #: pass of ONE surface shares, and so the only ones that may travel when no
 #: pass produced the reported factor (the cycling drained cap reports the
-#: centre of its cycle). All three are functions of the slice geometry, the
-#: ponded water and kv, and ``_undrained_slices`` changes the material, u and
-#: the suction cohesion only; Janbu's sum, sign(sum w_total*tan a), does not
-#: see any of those. Per-slice keys are NOT here on purpose: no pass solved
-#: the centre, so no pass's per-slice numbers belong beside it (since
-#: v0.1.211 the checks judge the two horns themselves; see D200 in
+#: centre of its cycle). The two signs are functions of the slice geometry,
+#: the ponded water and kv, and ``_undrained_slices`` changes the material, u
+#: and the suction cohesion only; Janbu's sum, sign(sum w_total*tan a), does
+#: not see any of those. The two seismic coefficients are the project's, the
+#: same in every pass (``kh`` joined in v0.1.214, D173, for the interslice
+#: march of the interpretation). Per-slice keys are NOT here on purpose: no
+#: pass solved the centre, so no pass's per-slice numbers belong beside it
+#: (since v0.1.211 the checks judge the two horns themselves; see D200 in
 #: ``MultiStageDrawdownMethod.compute_fos``).
-PASS_INVARIANT_KEYS = ("slide_sign", "m_alpha_sign", "kv")
+PASS_INVARIANT_KEYS = ("slide_sign", "m_alpha_sign", "kh", "kv")
 
 
 class RapidDrawdownError(RuntimeError):
@@ -932,6 +934,10 @@ class MultiStageDrawdownMethod:
         if kv is None:
             seismic = project.seismic
             kv = seismic.kv if seismic.enabled else 0.0
+        kh = inner.get("kh")
+        if kh is None:
+            seismic = project.seismic
+            kh = seismic.kh if seismic.enabled else 0.0
         if verdict is None:
             flags = dict(converged=True)
         else:
@@ -990,6 +996,7 @@ class MultiStageDrawdownMethod:
                 # v0.1.212 (D202) -- the machine-readable half of the note
                 # above: ``admissibility_reason`` is for screens only.
                 "stage1_admissible": stage1_admissible,
+                "kh": kh,
                 "kv": kv,
             },
         )

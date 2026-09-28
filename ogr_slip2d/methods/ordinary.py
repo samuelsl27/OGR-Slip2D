@@ -36,7 +36,7 @@ import math
 
 from ogr_core.project import Project
 
-from ..external_forces import slice_forces
+from ..external_forces import seismic_soil_weight, slice_forces
 from ..slicer import Slices
 from ..surface import SlipCircle, SurfaceProtocol
 from .base import (
@@ -225,6 +225,10 @@ class OrdinaryFellenius(LEMMethod):
                 # IS published: the Tensile Stress Check runs on this method
                 # too, and loads each base with the ``kv`` handed to
                 # ``slice_forces`` here (read by ``checks._applied_kv``).
+                # v0.1.214 (D173) -- and the horizontal one, so the
+                # interslice march of the interpretation applies the
+                # loads this method did (``compute_interslice_state``).
+                "kh": kh,
                 "kv": kv,
                 # v0.1.210 (D172) -- what the Tensile Stress Check tests for
                 # this method: the normal of its own solution. There is no
@@ -266,7 +270,8 @@ class OrdinaryFellenius(LEMMethod):
 
         # Determine sliding direction from the un-seismic driving moment
         driving_raw = sum(
-            s.weight * (1.0 - kv) * math.sin(s.base_angle) for s in slices
+            seismic_soil_weight(s.weight, kv) * math.sin(s.base_angle)
+            for s in slices
         )
         slide_sign = 1.0 if driving_raw >= 0 else -1.0
 
@@ -300,12 +305,15 @@ class OrdinaryFellenius(LEMMethod):
         for i_s, s in enumerate(s_list):
             f = slice_forces(s, kh, kv)
             W = f.w_total
-            # v0.1.105 — ``f.h_seismic`` rather than ``s.weight · kh``: the
-            # inertial force is proportional to the weight AFTER the vertical
-            # coefficient, ``kh·W·(1 − kv)``, which is what every other method
-            # in this project uses and what the pseudo-static formulation
-            # says. With kv = 0 — every seismic model in the benchmark — the
-            # two are the same number, which is why it went unnoticed.
+            # v0.1.105 — ``f.h_seismic``, the one definition every method
+            # shares. This comment then said the inertial force was
+            # proportional to the weight AFTER the vertical coefficient,
+            # ``kh·W·(1 − kv)``, "what the pseudo-static formulation says".
+            # It is not: the horizontal inertial force of a mass is ``kh·W``
+            # on its static weight whatever its vertical acceleration, and
+            # since v0.1.214 (D170) that is what ``h_seismic`` holds. With
+            # kv = 0 — every seismic model in the benchmark — the two are
+            # the same number, which is why it went unnoticed.
             H = f.h_seismic * slide_sign
             # A horizontal force resolved on the base: the inward normal
             # is (−sin α, cos α), so it adds ``+F_h·sin α`` to the base
@@ -518,6 +526,10 @@ class OrdinaryFellenius(LEMMethod):
                 # denominator-sign key, for the reason at the other exit.
                 "slide_sign": slide_sign,
                 # v0.1.191 (D167) -- see the other exit.
+                # v0.1.214 (D173) -- and the horizontal one, so the
+                # interslice march of the interpretation applies the
+                # loads this method did (``compute_interslice_state``).
+                "kh": kh,
                 "kv": kv,
                 # v0.1.210 (D172) -- see the other exit.
                 "solved_base_normal": solved,

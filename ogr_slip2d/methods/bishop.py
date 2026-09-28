@@ -21,10 +21,13 @@ Implicit FoS equation (requires fixed-point iteration):
 with:
         m_α  =  cos α + sin α · tan φ' / F
 
-For pseudo-static seismic analysis (the reference's convention):
-    - W → W·(1 − kv)
+For pseudo-static seismic analysis, both inertial forces on the static
+weight (Terzaghi 1950; Kramer 1996), with ``kv`` positive DOWN:
+    - W → W·(1 + kv)
     - kh adds a moment to the driving denominator:
-        Σ kh · W · (y_g − y_centre) / R
+        Σ kh · W · (y_centre − y_g) / R
+    (``external_forces.slice_forces`` applies both; see its module
+    docstring for the convention and for what it replaced in v0.1.214.)
 
 Author: Samuel Sáez López (UPCT)
 """
@@ -36,7 +39,7 @@ from typing import Optional
 from ogr_core.materials import Material
 from ogr_core.project import Project
 
-from ..external_forces import slice_forces
+from ..external_forces import seismic_soil_weight, slice_forces
 from ..slicer import Slice, Slices
 from ..surface import SlipCircle, SurfaceProtocol
 from .base import (
@@ -125,11 +128,27 @@ class BishopSimplified(LEMMethod):
         ctx = None
         if getattr(strength, "needs_context", False):
             from ogr_core.materials.strength_model import SliceContext
-            # vertical effective stress at the base ≈ W/b − u  (per unit
-            # width). Use slice attributes when available.
+            # vertical effective stress at the base ≈ (W + W_w)/b − u (per
+            # unit width). Use slice attributes when available.
+            #
+            # v0.1.214 (D166) -- ``+ water_weight``, the ponded water
+            # standing on the slice, which the slicer keeps out of
+            # ``weight`` so the seismic coefficients cannot reach it. The
+            # pore pressure at the base carries the head of that water, so
+            # without its weight the estimate fell by ``γ_w·d`` under a
+            # reservoir and was clipped to zero -- and SHANSEP, the model
+            # that reads it, then fell back to ``su(σ'_n)`` in silence. With
+            # it, a submerged column gives ``γ'·h`` whatever the depth of the
+            # water: Terzaghi's principle, and the sum the reference
+            # documentation writes for its own excess-pore-pressure example.
+            # NO seismic coefficient here: this is the consolidation stress
+            # a strength model reads, not a load the earthquake applies.
+            # By ``getattr`` because ``ogr_core.support.bond`` hands in a
+            # stand-in with no water field.
             try:
                 b = max(slice_.width, 1e-9)
-                sigma_v_total = slice_.weight / b
+                sigma_v_total = (slice_.weight
+                                 + getattr(slice_, "water_weight", 0.0)) / b
                 u = getattr(slice_, "pore_pressure", 0.0)
                 sigma_v_eff = max(sigma_v_total - u, 0.0)
             except Exception:  # noqa: BLE001
@@ -471,6 +490,10 @@ class BishopSimplified(LEMMethod):
                 # method APPLIED, read by ``checks._applied_kv``: the same
                 # ``kv`` handed to ``slice_forces``, so the checks load each
                 # slice base as the solver did.
+                # v0.1.214 (D173) -- and the horizontal one, so the
+                # interslice march of the interpretation applies the
+                # loads this method did (``compute_interslice_state``).
+                "kh": kh,
                 "kv": kv,
                 # v0.1.210 (D172) -- the support load the last pass added
                 # to each slice's stress estimate, read by
@@ -503,7 +526,8 @@ class BishopSimplified(LEMMethod):
 
         # Detect sliding direction from the un-seismic driving moment
         driving_raw = sum(
-            s.weight * (1.0 - kv) * math.sin(s.base_angle) for s in slices
+            seismic_soil_weight(s.weight, kv) * math.sin(s.base_angle)
+            for s in slices
         )
         slide_sign = 1.0 if driving_raw >= 0 else -1.0
 
@@ -557,7 +581,7 @@ class BishopSimplified(LEMMethod):
                 project, surface, slices, s_list, kh, kv, slide_sign, sup)
 
         # Driving moment (denominator of Bishop's FoS expression).
-        # Σ W·(1 − kv)·sin α + Σ kh·W·(y_g − y_c)/R
+        # Σ W·(1 + kv)·sin α + Σ kh·W·(y_c − y_g)/R
         # Only a circle reaches this point, so these are never None and
         # the terms below are never skipped. Before v0.1.105 they were
         # guarded by ``circle_R is not None`` here AND the non-circular
@@ -813,6 +837,10 @@ class BishopSimplified(LEMMethod):
                 "slide_sign": slide_sign,
                 "m_alpha_sign": slide_sign,
                 # v0.1.191 (D167) -- see the non-circular exit.
+                # v0.1.214 (D173) -- and the horizontal one, so the
+                # interslice march of the interpretation applies the
+                # loads this method did (``compute_interslice_state``).
+                "kh": kh,
                 "kv": kv,
                 # v0.1.210 (D172) -- see above; None without a support.
                 "sigma_support_load": sigma_load,
@@ -847,7 +875,7 @@ def base_forces_no_interslice_shear(
         m_alpha = cos(alpha) + s*sin(alpha)*tan(phi') / F
 
     ``slide_sign`` is a PARAMETER and is deliberately not recomputed here.
-    Bishop takes it from ``sign(sum W*(1-kv)*sin alpha)`` and Janbu from
+    Bishop takes it from ``sign(sum W*(1+kv)*sin alpha)`` and Janbu from
     ``sign(sum W_total*tan alpha)``; each has to hand over the one its own
     iteration used, because ``m_alpha`` is not symmetric in alpha and only
     means something read in the same sense of sliding (the v0.1.82

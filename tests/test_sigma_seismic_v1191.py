@@ -22,14 +22,15 @@ WHAT THE DEFECT REPORT GOT WRONG, executed here rather than argued:
   no analytic tangent, so its secant carries rounding). For the tensile
   check it is false outright: the load enters the normal force directly,
   so the effective stress moves with EVERY envelope, Undrained included.
-* ``kh`` is not carried, because ``w_total`` does not depend on it; a key
-  nobody reads would be rule 7 in miniature. That is what keeps the seven
-  bank models with a horizontal earthquake bit-identical.
+* ``kh`` is not carried INTO THE CHECK, because ``w_total`` does not
+  depend on it. That is what keeps the seven bank models with a horizontal
+  earthquake bit-identical. (Since v0.1.214, D173, the methods do publish
+  ``details["kh"]``: the interslice march of the interpretation reads it,
+  so it is not a key nobody reads.)
 
-WHAT THIS FILE DOES NOT CLAIM. Not the sign convention of kv (D170: the
-reference documents a positive coefficient as DOWNWARDS and ``slice_forces``
-applies it upwards; the check calls ``slice_forces``, so it will follow
-whichever way that is settled). Not that the check's stress is the solver's
+WHAT THIS FILE DOES NOT CLAIM. Not the sign convention of kv (D170,
+settled in v0.1.214: positive DOWNWARD, ``W·(1 + kv)``; the check calls
+``slice_forces``, so it followed without a change here). Not that the check's stress is the solver's
 for every method: with supports, and for the Ordinary Method, it was not,
 kv or no kv (D172) -- closed in v0.1.210, where each method publishes the
 support load of its estimate and the normal of its own solution; that is

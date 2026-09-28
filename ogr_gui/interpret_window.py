@@ -2618,11 +2618,11 @@ class InterpretWindow(QMainWindow):
             return
 
         from ogr_slip2d.postprocess import compute_interslice_state
-        kh = kv = 0.0
-        seis = getattr(self.project, "seismic", None)
-        if seis is not None and getattr(seis, "enabled", False):
-            kh, kv = seis.kh, seis.kv
-        st = compute_interslice_state(target, kh=kh, kv=kv)
+        # v0.1.214 (D173) -- the earthquake the method APPLIED, which the
+        # result carries (``details["kh"]``/``["kv"]``); the project's may
+        # have changed since the run, and the slice-data panel, which has
+        # no project, reads the same thing.
+        st = compute_interslice_state(target)
         if not st.ok:
             self.statusBar().showMessage(
                 "Line of thrust unavailable for this result", 3000)
@@ -3227,11 +3227,11 @@ class InterpretWindow(QMainWindow):
             return
 
         from ogr_slip2d.postprocess import compute_interslice_state
-        kh = kv = 0.0
-        seis = getattr(self.project, "seismic", None)
-        if seis is not None and getattr(seis, "enabled", False):
-            kh, kv = seis.kh, seis.kv
-        st = compute_interslice_state(target, kh=kh, kv=kv)
+        # v0.1.214 (D173) -- the earthquake the method APPLIED, which the
+        # result carries (``details["kh"]``/``["kv"]``); the project's may
+        # have changed since the run, and the slice-data panel, which has
+        # no project, reads the same thing.
+        st = compute_interslice_state(target)
 
         slist = list(target.slices)
         s = slist[idx]

@@ -808,8 +808,9 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
                         description="Horizontal coefficient (fraction of "
                                     "g).")] = None,
                     kv: Annotated[Optional[float], Field(
-                        description="Vertical coefficient (fraction of g)."
-                    )] = None,
+                        description="Vertical coefficient (fraction of g), "
+                                    "positive DOWNWARD: the soil carries "
+                                    "W·(1 + kv).")] = None,
                     creates_excess_pore_pressure: Annotated[
                         Optional[bool], Field(
                             description="Seismic excess pore pressure.")

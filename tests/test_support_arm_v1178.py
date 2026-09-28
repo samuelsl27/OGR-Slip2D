@@ -100,9 +100,11 @@ CIRCLE = (38.0, 26.0, 20.0)
 TILT_DEG = 25.0
 
 #: NO support here is ``TANGENT_TO_SLIP``, and that is deliberate: that
-#: orientation takes its DIRECTION from ``_slip_tangent_at_x``, which is the
-#: chord's slope too, so today its direction error and its arm error cancel.
-#: Measuring D144 through it would measure the cancellation, not the arm.
+#: orientation's direction is the chord's slope, and until v0.1.213 its
+#: direction error and its arm error cancelled. Since v0.1.214 (D151) its
+#: tangent part is a base shear with the arm R by rule
+#: (``TANGENT_AS_BASE_SHEAR``), which is not the cross product D144 measures;
+#: see ``test_support_tangent_v1214.py``.
 CAP = 120.0
 
 
