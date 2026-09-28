@@ -175,9 +175,10 @@ class SliceContext:
             direction and the bedding orientation).
         sigma_v_eff: vertical effective stress at the base centre [kPa]:
             overburden, PLUS any water standing on the ground (v0.1.214,
-            D166), minus pore pressure; no seismic coefficient. Read by
-            SHANSEP. (The Vertical Stress Ratio model does not ask for a
-            context and uses σ'ₙ in its place — recorded as D207.)
+            D166), minus pore pressure; no seismic coefficient; clipped at
+            zero by the solver that fills it. Read by SHANSEP and, since
+            v0.1.218 (D207), by Vertical Stress Ratio, which until then used
+            σ'ₙ in its place.
         depth: vertical depth below the ground surface at the slice
             base [m]. Used by Barton-Bandis (JCS scaling) and others.
         pore_pressure: pore water pressure at the base [kPa].

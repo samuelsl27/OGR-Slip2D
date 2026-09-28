@@ -478,7 +478,12 @@ def base_soil_type(material) -> Optional[str]:
     The classes that say what they are answer by their parameters: Mohr-
     Coulomb by its c and φ; the undrained models (constant, with depth, and
     SHANSEP) are φ = 0 by construction, and SHANSEP must be named because
-    without its context it would read as φ only. Every other envelope is
+    without its context it would read as φ only. So must Vertical Stress
+    Ratio since v0.1.218 (D207): it reads the vertical stress of the slice,
+    not σ'ₙ, so on a base its strength is a constant and the method reads
+    it as a cohesion, while its context-free envelope (K·σ'ₙ, the stand-in
+    for a caller with no slice) is a line through the origin that the probes
+    below would call φ only. Every other envelope is
     classified by its SHAPE (decision of the owner, 2026-09-27): a curve
     through the origin is a frictional soil and gets the φ-only curve, not
     the c-φ one, which is 0.50 against 0.31 and the unsafe side (a power
@@ -487,13 +492,15 @@ def base_soil_type(material) -> Optional[str]:
     from ogr_core.materials import (InfiniteStrength, MohrCoulomb,
                                     NoStrength, Undrained)
     from ogr_core.materials.builtin_models import (SHANSEP,
+                                                   VerticalStressRatio,
                                                    _UndrainedLinearBase)
     if material is None:
         return None
     st = material.strength
     if isinstance(st, (NoStrength, InfiniteStrength)):
         return None
-    if isinstance(st, (Undrained, SHANSEP, _UndrainedLinearBase)):
+    if isinstance(st, (Undrained, SHANSEP, VerticalStressRatio,
+                       _UndrainedLinearBase)):
         return "c"
     if isinstance(st, MohrCoulomb):
         c = float(st.params.get("cohesion", 0.0) or 0.0)

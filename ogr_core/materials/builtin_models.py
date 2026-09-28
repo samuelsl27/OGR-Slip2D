@@ -381,7 +381,26 @@ class Hyperbolic(StrengthModel):
 # ----------------------------------------------------------------------
 @register
 class VerticalStressRatio(StrengthModel):
-    """τ = K · σ'v (assumes σ'ₙ ≈ σ'v). Minimum shear strength floor."""
+    """τ = max(K · σ'v, min_strength): the shear strength at a slice base is
+    a constant K times the effective VERTICAL (overburden) stress there.
+
+    v0.1.218 (D207) — the vertical stress is read from the slice context,
+    ``ctx.sigma_v_eff``, as SHANSEP reads it. Until this version the model
+    declared no context and multiplied K by σ'ₙ instead ("assumes
+    σ'ₙ ≈ σ'v"), which made it a frictional soil through the origin with
+    tan φ = K: a strength that grew with the normal stress the method
+    resolved, and that Janbu's correction classed as φ-only (D80). The
+    reference documentation defines the model with the vertical stress
+    "computed from the total weight of each slice, and the pore pressure
+    acting at the center of the base of each slice"; that is the context's
+    ``(W + W_water)/b − u`` (v0.1.214, D166), with no seismic coefficient.
+    With the context the strength no longer depends on σ'ₙ, so the method
+    reads it as a cohesion (c = τ, tan φ = 0), the same way it reads SHANSEP.
+
+    ``min_strength`` is a floor OGR adds; the reference model has none.
+    Without a context (a caller that has no slice) σ'ₙ still stands in for
+    σ'v, as it always did.
+    """
 
     MODEL_ID = "vertical_stress_ratio"
     DISPLAY_NAME = "Vertical Stress Ratio"
@@ -390,8 +409,18 @@ class VerticalStressRatio(StrengthModel):
         "min_strength": (0.0, "kPa", "Minimum shear strength"),
     }
 
+    @property
+    def needs_context(self) -> bool:
+        return True
+
     def shear_strength(self, sigma_n_eff: float) -> float:
         return max(self.params["K"] * sigma_n_eff, self.params["min_strength"])
+
+    def shear_strength_ctx(self, sigma_n_eff, ctx: SliceContext | None = None):
+        if ctx is None:
+            return self.shear_strength(sigma_n_eff)
+        return max(self.params["K"] * max(ctx.sigma_v_eff, 0.0),
+                   self.params["min_strength"])
 
 
 # ======================================================================
@@ -681,12 +710,42 @@ class DiscreteFunction(StrengthModel):
 class SHANSEP(StrengthModel):
     """SHANSEP undrained strength (Ladd & Foott 1974).
 
-        su = σ'v · S · OCR^m
+        su = max(A + σ'v · S · OCR^m, su_min)
 
-    where S is the normally-consolidated strength ratio, OCR the
-    over-consolidation ratio, m the SHANSEP exponent. The undrained
-    strength su is the available shear strength (φ = 0 in total-stress
-    terms), so τ = su independent of σ'ₙ but dependent on σ'v.
+    where S is the normally-consolidated strength ratio su/σ'v, OCR the
+    over-consolidation ratio, m the SHANSEP exponent and σ'v the in-situ
+    vertical effective stress at the slice base. The undrained strength su
+    is the available shear strength (φ = 0 in total-stress terms), so
+    τ = su, independent of σ'ₙ but dependent on σ'v.
+
+    v0.1.218 (D207) — three decisions, each with its reason:
+
+    * ``A`` is ADDED, the formula the reference documentation writes,
+      ``τ = A + σ'v·S·(OCR)^m``, where it calls A the "minimum undrained
+      shear strength". Until this version OGR had only ``su_min`` and took
+      ``max(σ'v·S·OCR^m, su_min)``, which differs from the published formula
+      whenever A > 0. ``su_min`` stays, as the floor it always was (decision
+      of the owner, 2026-09-28): an existing project keeps its number, a
+      random variable on it keeps applying, and A = 0 by default gives, bit
+      for bit, what v0.1.217 gave.
+    * With σ'v ≤ 0 (an artesian or empty column: the context clips it at
+      zero) the formula is evaluated AT zero, τ = max(A, su_min). Until this
+      version the model switched in silence to ``su(σ'ₙ)``, a frictional
+      soil with tan φ = S·OCR^m, which is not the published model at any
+      stress. The consolidation term of a soil under no effective
+      overburden is zero; what is left is A.
+    * σ'v subtracts the pore pressure of the slice INCLUDING any B-bar
+      excess, on purpose. SHANSEP reads the consolidation stress, and an
+      undrained load does not consolidate: with B-bar = 1 the load raises
+      the total stress and the pore pressure by the same amount and leaves
+      σ'v where it was before the load, which is exactly the stress the
+      strength was consolidated under. The reference documentation's own
+      excess-pore-pressure example keeps σ'v at 1872 lb/ft² before and after
+      a drawdown for the same reason. (The support bond laws of
+      ``ogr_core.support.bond`` compute their σ'v without the excess; that
+      path is not this one.)
+
+    Without a context (a caller that has no slice) σ'ₙ stands in for σ'v.
 
     Needs the vertical effective stress → ``needs_context = True``.
     """
@@ -697,6 +756,9 @@ class SHANSEP(StrengthModel):
         "S": (0.25, "-", "Normally-consolidated strength ratio su/σ'v"),
         "m": (0.8, "-", "SHANSEP exponent"),
         "OCR": (1.0, "-", "Over-consolidation ratio"),
+        "A": (0.0, "kPa",
+              "Strength added to σ'v·S·OCR^m (the published formula's "
+              "'minimum undrained strength')"),
         "su_min": (0.0, "kPa", "Minimum undrained strength floor"),
     }
 
@@ -712,33 +774,100 @@ class SHANSEP(StrengthModel):
         S = self.params["S"]
         m = self.params["m"]
         ocr = max(self.params["OCR"], 1e-6)
-        su = max(sigma_v, 0.0) * S * (ocr ** m)
+        # The product is formed exactly as before v0.1.218 and A is added
+        # in front of it, so A = 0 leaves every value bit for bit.
+        su = self.params["A"] + max(sigma_v, 0.0) * S * (ocr ** m)
         return max(su, self.params["su_min"])
 
     def shear_strength_ctx(self, sigma_n_eff, ctx: SliceContext | None = None):
-        if ctx is None or ctx.sigma_v_eff <= 0:
+        if ctx is None:
             return self._su(sigma_n_eff)
-        return self._su(ctx.sigma_v_eff)
+        # v0.1.218 (D207) -- at σ'v ≤ 0 the formula at zero, not su(σ'ₙ).
+        return self._su(max(ctx.sigma_v_eff, 0.0))
 
 
 # ----------------------------------------------------------------------
+#: v0.1.218 (D209) -- what the analysis says about an Anisotropic Strength
+#: Function saved as interpolated POINTS, and what the model raises if an
+#: analysis reaches one anyway. One text, so the two cannot drift apart.
+ANISOTROPIC_FUNCTION_LEGACY_NOTE = (
+    "The Anisotropic Strength Function of material {name!r} was saved as "
+    "interpolated points by a version before 0.1.218. Its table is now a "
+    "list of angular RANGES (angle to, c, phi), as the reference documents "
+    "this strength type, so the same rows would mean something else. Open "
+    "the material, review the table as ranges and accept it.")
+
+
+class LegacyAnisotropicTable(ValueError):
+    """An Anisotropic Strength Function still holding the interpolated
+    points of a file saved before v0.1.218 (D209). Never computed with."""
+
+
+def fold_plane_angle_deg(angle_deg: float) -> float:
+    """A plane inclination folded into (-90, 90] degrees.
+
+    A plane has no sense: 165 degrees and -15 degrees are the same plane.
+    The slicer's base angles already lie in (-90, 90); a support hands in
+    the angle of its axis, ``atan2`` of head to tail, which spans
+    (-180, 180] (v0.1.218, D209). The vertical, ±90, is +90.
+    """
+    a = float(angle_deg)
+    while a > 90.0:
+        a -= 180.0
+    while a <= -90.0:
+        a += 180.0
+    return a
+
+
 @register
 class AnisotropicStrengthFunction(StrengthModel):
-    """Anisotropic Strength Function — cohesion and friction angle are
-    given as functions of the slice base orientation via a table of
-    (angle_deg, c, phi) points. Linear interpolation in angle.
+    """Anisotropic Strength Function — cohesion and friction angle given
+    per RANGE of slice base inclination.
 
     The angle is the INCLINATION OF THE SLICE BASE itself, measured
-    counter-clockwise from the horizontal, in [-90, 90] degrees: the
+    counter-clockwise from the horizontal, in (-90, 90] degrees: the
     slicer's ``alpha = atan2(dy, dx)`` with ``dx > 0``, in degrees. No
     bedding is involved. That is what separates this model from
     ``anisotropic_linear``, Snowden's and the generalized one, which read
     the angle BETWEEN the base and a bedding direction: here the table
-    itself is the anisotropy, written against the base inclination, as
-    the reference program documents this strength type ("angular ranges
-    of slice base inclination ... ordered counter-clockwise from -90 to
-    +90"). Nor does the material dialog offer to link an anisotropic
-    surface to it (``_ANISOTROPIC_MODEL_IDS`` in ``ogr_gui``).
+    itself is the anisotropy, written against the base inclination. Nor
+    does the material dialog offer to link an anisotropic surface to it
+    (``_ANISOTROPIC_MODEL_IDS`` in ``ogr_gui``).
+
+    v0.1.218 (D209) — the table is a list of RANGES, ``rows`` of
+    ``(angle_to, c, phi)``, as the reference documentation defines this
+    strength type: "discrete angular ranges of slice base inclination, each
+    with its own cohesion and friction angle", entered as "Angle To, c and
+    phi"; the first range starts at -90 and the last must end at +90. So a
+    row holds from the previous row's angle (exclusive; -90 for the first)
+    up to its own (inclusive):
+
+        [-90, a1] → (c1, φ1),   (a1, a2] → (c2, φ2),   …,   (a_{n-1}, 90]
+
+    c and φ are CONSTANT inside a range. The documentation does not say
+    which range owns an angle that falls exactly on a limit; the lower one
+    does, the convention of ``GeneralizedAnisotropic._model_for_angle``
+    (first rule that fits), written here as a decision. Until this version
+    the same numbers were POINTS interpolated linearly, so one table meant
+    two different materials in the two programs. What a valid table is
+    (strictly increasing, the first above -90, the last +90) lives in
+    ``ogr_core.project.rules.anisotropic_function_rows_refusal``; the model
+    itself computes with any table it is given, and above the last "angle
+    to" (only an invalid table can have one) it takes the last row.
+
+    The rows are a new key, ``rows``, and not the old ``points``, on
+    purpose (decision of the owner, 2026-09-28): the model interpolated
+    from v0.1.15 to v0.1.125 and from v0.1.215 to v0.1.217, and a .ogr does
+    not record the version that wrote it. A file that still holds
+    ``points`` opens, keeps them (``legacy_points``) and round-trips them
+    untouched, but is never computed with: the analysis refuses it
+    (``ANISOTROPIC_FUNCTION_LEGACY_NOTE``) and ``_c_phi`` raises
+    :class:`LegacyAnisotropicTable` if a caller gets past that. Reading the
+    old points as ranges would change the number in silence.
+
+    The angle is folded into (-90, 90] (:func:`fold_plane_angle_deg`): a
+    support reads this model at the angle of its axis, which can point to
+    -x, and a plane at 165 degrees is the plane at -15 (v0.1.218).
 
     Needs the slice base angle → ``needs_context = True``.
     """
@@ -747,39 +876,56 @@ class AnisotropicStrengthFunction(StrengthModel):
     DISPLAY_NAME = "Anisotropic Strength Function"
     PARAMETERS = {}
 
+    #: The example the reference documentation draws for this strength type:
+    #: -90 to -30 with c = 10, phi = 35; -30 to 0 with c = 1, phi = 20; 0 to
+    #: 90 with c = 5, phi = 10.
+    DEFAULT_ROWS = ((-30.0, 10.0, 35.0), (0.0, 1.0, 20.0), (90.0, 5.0, 10.0))
+
     def __init__(self, **params):
-        pts = params.pop("points", None)
+        rows = params.pop("rows", None)
+        legacy = params.pop("points", None)
         super().__init__(**params)
-        # points: list of (angle_deg, c, phi)
-        if pts is None:
-            pts = [(-90.0, 20.0, 30.0), (0.0, 5.0, 15.0),
-                   (90.0, 20.0, 30.0)]
-        self.points = [(float(a), float(c), float(p)) for (a, c, p) in pts]
-        self.points.sort()
+        self.legacy_points = None
+        if rows is None and legacy is not None:
+            # Kept as they were written; see the class docstring.
+            self.legacy_points = [tuple(float(v) for v in p) for p in legacy]
+            self.rows = []
+            return
+        if rows is None:
+            rows = self.DEFAULT_ROWS
+        # Not sorted: the order IS the table, and an unordered one is
+        # refused by the rule rather than silently rearranged.
+        self.rows = [(float(a), float(c), float(p)) for (a, c, p) in rows]
 
     @property
     def needs_context(self) -> bool:
         return True
 
     def _c_phi(self, angle_deg: float):
-        pts = self.points
-        if not pts:
+        if self.legacy_points is not None:
+            raise LegacyAnisotropicTable(
+                ANISOTROPIC_FUNCTION_LEGACY_NOTE.format(name="?"))
+        rows = self.rows
+        if not rows:
             return 0.0, 0.0
-        if angle_deg <= pts[0][0]:
-            return pts[0][1], pts[0][2]
-        if angle_deg >= pts[-1][0]:
-            return pts[-1][1], pts[-1][2]
-        for i in range(len(pts) - 1):
-            a0, c0, p0 = pts[i]
-            a1, c1, p1 = pts[i + 1]
-            if a0 <= angle_deg <= a1:
-                f = (angle_deg - a0) / (a1 - a0) if a1 > a0 else 0.0
-                return c0 + f * (c1 - c0), p0 + f * (p1 - p0)
-        return pts[-1][1], pts[-1][2]
+        a = fold_plane_angle_deg(angle_deg)
+        for angle_to, c, phi in rows:
+            # The limit belongs to the lower range. Within 1e-9 degree
+            # because the angle arrives in radians: degrees(radians(-30))
+            # is -29.999999999999996, and without the margin the documented
+            # limit would change hands on the round trip.
+            if a <= angle_to + 1e-9:
+                return c, phi
+        return rows[-1][1], rows[-1][2]
 
     def shear_strength(self, sigma_n_eff: float) -> float:
-        # No context → use the minimum-strength entry
-        c_min = min(self.points, key=lambda t: t[1])
+        # No context → use the row with the least cohesion
+        if self.legacy_points is not None:
+            raise LegacyAnisotropicTable(
+                ANISOTROPIC_FUNCTION_LEGACY_NOTE.format(name="?"))
+        if not self.rows:
+            return 0.0
+        c_min = min(self.rows, key=lambda t: t[1])
         return c_min[1] + max(sigma_n_eff, 0.0) * math.tan(
             math.radians(c_min[2]))
 
@@ -790,18 +936,22 @@ class AnisotropicStrengthFunction(StrengthModel):
         # docstring. v0.1.126 passed the local bedding here as a second
         # argument, which ``_c_phi`` does not take: every method raised
         # TypeError on the first slice of such a material. The argument
-        # belonged to Snowden's call further down, which still lacks it
-        # (reported as its own defect, not changed here).
+        # belonged to Snowden's call, which v0.1.218 (D208) gave it.
         c, phi = self._c_phi(math.degrees(ctx.base_angle_rad))
         return c + max(sigma_n_eff, 0.0) * math.tan(math.radians(phi))
 
     def to_dict(self) -> dict:
         d = super().to_dict()
-        d["points"] = list(self.points)
+        if self.legacy_points is not None:
+            d["points"] = [list(p) for p in self.legacy_points]
+        else:
+            d["rows"] = [list(r) for r in self.rows]
         return d
 
     @classmethod
     def from_dict(cls, data: dict) -> "AnisotropicStrengthFunction":
+        if data.get("rows") is not None:
+            return cls(rows=data["rows"], **data.get("params", {}))
         return cls(points=data.get("points"), **data.get("params", {}))
 
 
@@ -940,7 +1090,16 @@ class SnowdenModifiedAnisotropicLinear(StrengthModel):
     def shear_strength_ctx(self, sigma_n_eff, ctx: SliceContext | None = None):
         if ctx is None:
             return self.shear_strength(sigma_n_eff)
-        c, phi = self._c_phi(math.degrees(ctx.base_angle_rad))
+        # v0.1.218 (D208) -- the LOCAL bedding, as Anisotropic Linear reads
+        # it. v0.1.126 taught ``_c_phi`` to take it and put the argument in
+        # the Anisotropic Strength Function's call instead of this one, so
+        # an anisotropic surface linked to a Snowden material was offered by
+        # the dialog and read by nothing: the global ``bedding_angle`` won
+        # everywhere (rule 7). Without a surface the context carries None
+        # and ``_local_bedding_deg`` answers that same global angle, so a
+        # material with no surface is bit for bit what it was.
+        c, phi = self._c_phi(math.degrees(ctx.base_angle_rad),
+                             _local_bedding_deg(self, ctx))
         return c + max(sigma_n_eff, 0.0) * math.tan(math.radians(phi))
 
 

@@ -65,9 +65,15 @@ class BishopSimplified(LEMMethod):
     # ------------------------------------------------------------------
     @staticmethod
     def _local_c_phi(
-        slice_: Slice, material: Optional[Material], sigma_n_eff: float
+        slice_: Slice, material: Optional[Material], sigma_n_eff: float,
+        sigma_v_probe: Optional[float] = None,
     ) -> tuple[float, float]:
         """Linearise the constitutive envelope at σ'ₙ.
+
+        ``sigma_v_probe`` replaces the slice's own vertical effective stress
+        in the context, and is for :meth:`_zero_strength` alone (v0.1.218,
+        D207): it asks whether a model that reads σ'v has strength at SOME
+        stress, which varying σ'ₙ cannot tell. Every solver leaves it None.
 
         v0.1.14 — uses the model's analytical tangent ``dτ/dσ`` when
         available (any StrengthModel may implement ``tangent_slope``).
@@ -153,6 +159,8 @@ class BishopSimplified(LEMMethod):
                 sigma_v_eff = max(sigma_v_total - u, 0.0)
             except Exception:  # noqa: BLE001
                 sigma_v_eff = sn
+            if sigma_v_probe is not None:
+                sigma_v_eff = max(float(sigma_v_probe), 0.0)
             depth = 0.0
             try:
                 depth = 0.5 * (slice_.top_y_left + slice_.top_y_right) \
@@ -249,6 +257,15 @@ class BishopSimplified(LEMMethod):
         either probe stress is strengthless by definition and is not
         flagged: the note this feeds is about strength LOST to the stress it
         was read at, not about a soil that never had any.
+
+        v0.1.218 (D207) -- the probes set the VERTICAL effective stress too.
+        SHANSEP and Vertical Stress Ratio read σ'v, not σ'ₙ, and since this
+        version a slice whose σ'v is zero or negative (an artesian column)
+        gets τ = A, or ``min_strength``, instead of the frictional su(σ'ₙ)
+        SHANSEP used to fall back to. With both at zero that is no strength
+        at all, and probing σ'ₙ alone would have read the soil as
+        strengthless by definition and said nothing. The models that do not
+        read σ'v ignore it, so their answer does not change.
         """
         if raw_estimate >= 0.0 or c > 0.0 or tan_phi > 0.0:
             return False
@@ -256,7 +273,8 @@ class BishopSimplified(LEMMethod):
         if material is None:
             return False
         for probe in BishopSimplified._STRENGTH_PROBES:
-            c1, t1 = BishopSimplified._local_c_phi(slice_, material, probe)
+            c1, t1 = BishopSimplified._local_c_phi(slice_, material, probe,
+                                                   sigma_v_probe=probe)
             if c1 > 0.0 or t1 > 0.0:
                 return True
         return False

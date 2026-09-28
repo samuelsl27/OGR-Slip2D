@@ -2142,6 +2142,42 @@ _DICTS: dict[str, dict[str, str]] = {
         "Default 8.0, from Su (2009).":
             "Coeficiente c de T_k = T_0 · exp(-c · k^(1/n)). "
             "Por defecto 8,0, de Su (2009).",
+
+        # --- v0.1.218 · D209: la función anisótropa por tramos --------
+        "Angle to (°)": "Ángulo hasta (°)",
+        "c (kPa)": "c (kPa)",
+        "φ (°)": "φ (°)",
+        "This table was saved as interpolated points by a version "
+        "before 0.1.218. Each row is now a range (angle to, c, φ), as the "
+        "reference documents this strength type: review it before "
+        "accepting.":
+            "Esta tabla se guardó como puntos interpolados con una versión "
+            "anterior a la 0.1.218. Cada fila es ahora un tramo (ángulo "
+            "hasta, c, φ), como documenta la referencia este tipo de "
+            "resistencia: revísela antes de aceptar.",
+        "Row %d of the table is not three numbers.":
+            "La fila %d de la tabla no son tres números.",
+        "In material %s:": "En el material %s:",
+        "The table has no rows: at least one range, ending at +90°, "
+        "is needed.":
+            "La tabla no tiene filas: hace falta al menos un tramo, que "
+            "termine en +90°.",
+        "Every row must be three numbers: angle to, c and φ.":
+            "Cada fila tiene que ser tres números: ángulo hasta, c y φ.",
+        "The cohesion must be zero or more and the friction angle "
+        "between 0° and 90°.":
+            "La cohesión tiene que ser cero o mayor y el ángulo de "
+            "rozamiento estar entre 0° y 90°.",
+        "The first range starts at −90°, so its «angle to» must be "
+        "greater than −90°.":
+            "El primer tramo empieza en −90°, así que su «ángulo hasta» "
+            "tiene que ser mayor que −90°.",
+        "The ranges must be in order: each «angle to» greater than the "
+        "one before.":
+            "Los tramos tienen que ir en orden: cada «ángulo hasta» mayor "
+            "que el anterior.",
+        "The last range must end at +90°.":
+            "El último tramo tiene que terminar en +90°.",
     },
 }
 

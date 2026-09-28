@@ -284,11 +284,14 @@ class _StrengthParamPanel(QWidget):
                 default=[(0.0, 5.0), (100.0, 45.0), (300.0, 110.0)],
             )
         elif mid == "anisotropic_strength_function":
+            # v0.1.218 (D209) — each row is a RANGE, (angle to, c, φ), as
+            # the reference documents the strength type; the default is
+            # the model's own, not a second copy of it.
             self._build_points_table(
-                current_params, columns=["Angle (°)", "c (kPa)", "φ (°)"],
-                kind="points3",
-                default=[(-90.0, 20.0, 30.0), (0.0, 5.0, 15.0),
-                         (90.0, 20.0, 30.0)],
+                current_params,
+                columns=[tr("Angle to (°)"), tr("c (kPa)"), tr("φ (°)")],
+                kind="rows3",
+                default=list(model_cls.DEFAULT_ROWS),
             )
 
         # v0.1.120 — the depth-dependent undrained models carry ONE piece
@@ -326,14 +329,22 @@ class _StrengthParamPanel(QWidget):
         self._form.addRow("", chk)
         self._chk_cutoff = chk
 
+    @staticmethod
+    def _table_key(kind) -> str:
+        """The stored field a table kind edits: the anisotropic function's
+        ranges live in ``rows`` since v0.1.218 (D209), the functions of
+        σ'ₙ in ``points``."""
+        return "rows" if kind == "rows3" else "points"
+
     def _build_points_table(self, current_params, columns, kind, default):
         """Build an editable table for function-based models."""
         from PySide6.QtWidgets import (
             QPushButton, QTableWidget, QTableWidgetItem, QHBoxLayout, QWidget,
         )
+        key = self._table_key(kind)
         pts = None
-        if current_params and "points" in current_params:
-            pts = current_params["points"]
+        if current_params and key in current_params:
+            pts = current_params[key]
         if not pts:
             pts = default
         ncol = len(columns)
@@ -375,6 +386,23 @@ class _StrengthParamPanel(QWidget):
         self._table_kind = kind
         self._table_ncol = ncol
 
+    def unparsed_table_rows(self) -> list[int]:
+        """The rows (1-based) of the anisotropic function's table that are
+        not three numbers. ``get_params`` skips them, which for a table of
+        RANGES would silently merge two ranges into one (v0.1.218, D209),
+        so the dialog asks before accepting."""
+        tbl = getattr(self, "_table", None)
+        if tbl is None or self._table_kind != "rows3":
+            return []
+        bad = []
+        for r in range(tbl.rowCount()):
+            try:
+                for c in range(self._table_ncol):
+                    float(tbl.item(r, c).text())
+            except (ValueError, AttributeError):
+                bad.append(r + 1)
+        return bad
+
     def get_params(self) -> dict:
         """Return the editor values converted to SI (the storage unit)."""
         from ogr_core.units import Quantity
@@ -404,7 +432,7 @@ class _StrengthParamPanel(QWidget):
                     pts.append(vals)
                 except (ValueError, AttributeError):
                     continue
-            out["points"] = pts
+            out[self._table_key(self._table_kind)] = pts
         # v0.1.120 — the cutoff switch, for the models that have one.
         chk = getattr(self, "_chk_cutoff", None)
         if chk is not None:
@@ -624,6 +652,16 @@ class MaterialPropertiesDialog(QDialog):
         _aniso_lay.addWidget(self.cbo_aniso, 1)
         str_layout.addWidget(self._aniso_row)
         self._aniso_row.setVisible(False)
+
+        # v0.1.218 (D209) — what is wrong with the strength table on screen:
+        # a table saved as interpolated points before 0.1.218, or ranges
+        # that OK refuses. A label and not a message box, so nothing modal
+        # stands between a test and the dialog.
+        self.lbl_strength_problem = QLabel("")
+        self.lbl_strength_problem.setWordWrap(True)
+        self.lbl_strength_problem.setStyleSheet("color: #b00020;")
+        self.lbl_strength_problem.setVisible(False)
+        str_layout.addWidget(self.lbl_strength_problem)
 
         right.addWidget(str_grp)
 
@@ -970,11 +1008,27 @@ class MaterialPropertiesDialog(QDialog):
         self.param_panel.set_model(type(m.strength), _params)
         # v0.1.15 — for function/table-based models, also pass the
         # ``points`` so the table editor pre-fills.
-        if hasattr(m.strength, "points") and self.param_panel._table is not None:
-            # Rebuild with points included
+        #
+        # v0.1.218 (D209) — the anisotropic function keeps its ranges in
+        # ``rows``. A table it still holds as interpolated points (a file
+        # saved before 0.1.218) is shown as it was written, for the user to
+        # review as ranges: the analysis refuses it until then, and the
+        # label says why. Accepting the dialog stores what is on screen.
+        legacy = getattr(m.strength, "legacy_points", None)
+        if self.param_panel._table is not None:
             params_with_pts = dict(m.strength.params)
-            params_with_pts["points"] = list(m.strength.points)
-            self.param_panel.set_model(type(m.strength), params_with_pts)
+            if hasattr(m.strength, "rows"):
+                params_with_pts["rows"] = list(
+                    legacy if legacy is not None else m.strength.rows)
+                self.param_panel.set_model(type(m.strength), params_with_pts)
+            elif hasattr(m.strength, "points"):
+                params_with_pts["points"] = list(m.strength.points)
+                self.param_panel.set_model(type(m.strength), params_with_pts)
+        self._show_strength_problem(
+            tr("This table was saved as interpolated points by a version "
+               "before 0.1.218. Each row is now a range (angle to, c, φ), "
+               "as the reference documents this strength type: review it "
+               "before accepting.") if legacy is not None else "")
 
         # v0.1.126 — the anisotropic surface, restored before the pore
         # pressure so it sits with the strength it belongs to. An id that
@@ -1035,9 +1089,12 @@ class MaterialPropertiesDialog(QDialog):
         "anisotropic_linear":   "(c, φ) vary linearly with angle to bedding",
         "shear_normal_function":"τ = f(σ′ₙ)  (piecewise-linear table)",
         "discrete_function":    "τ = f(σ′ₙ)  (step function table)",
-        "shansep":              "s_u = σ′_v · S · OCR^m",
+        # v0.1.218 (D207) — A is added, as the published formula writes it;
+        # su_min stays the floor it always was.
+        "shansep":              "τ = A + σ′_v · S · OCR^m  (≥ su_min)",
+        # v0.1.218 (D209) — constant within each range of base angle.
         "anisotropic_strength_function":
-                                "(c, φ) = f(base angle)  (table)",
+                                "(c, φ) per range of base angle, −90° to +90°",
         "generalized_anisotropic":
                                 "model assigned per base-angle range",
         "snowden_anisotropic_linear":
@@ -1115,6 +1172,7 @@ class MaterialPropertiesDialog(QDialog):
             return
         cls = REGISTRY.get(mid)
         self.param_panel.set_model(cls)
+        self._show_strength_problem("")
         # Update formula label
         self.lbl_strength_formula.setText(self._FORMULA_TEXT.get(mid, ""))
         # v0.1.57 — the GSI calculator only makes sense for the
@@ -1210,8 +1268,57 @@ class MaterialPropertiesDialog(QDialog):
             item.setText(m.name)
             item.setForeground(QColor(m.color))
 
+    #: v0.1.218 (D209) — what the dialog says for each refusal of
+    #: ``rules.anisotropic_function_rows_refusal``. The rule's own messages
+    #: are English, like every message of the engine; the interface
+    #: translates its own, keyed by the code that never changes wording.
+    _TABLE_REFUSALS = {
+        "anisotropic_table_empty":
+            "The table has no rows: at least one range, ending at +90°, "
+            "is needed.",
+        "anisotropic_table_not_rows":
+            "Every row must be three numbers: angle to, c and φ.",
+        "anisotropic_table_strength":
+            "The cohesion must be zero or more and the friction angle "
+            "between 0° and 90°.",
+        "anisotropic_table_start":
+            "The first range starts at −90°, so its «angle to» must be "
+            "greater than −90°.",
+        "anisotropic_table_order":
+            "The ranges must be in order: each «angle to» greater than the "
+            "one before.",
+        "anisotropic_table_end":
+            "The last range must end at +90°.",
+    }
+
+    def _show_strength_problem(self, text: str) -> None:
+        self.lbl_strength_problem.setText(text)
+        self.lbl_strength_problem.setVisible(bool(text))
+
     def _ok(self) -> None:
+        # v0.1.218 (D209) — a table of ranges that is not one is refused
+        # here, with the reason on screen, instead of being accepted and
+        # refused later by the analysis. A row that is not three numbers
+        # first: storing would drop it, and two ranges would become one.
+        bad = self.param_panel.unparsed_table_rows()
+        if bad:
+            self._show_strength_problem(
+                tr("Row %d of the table is not three numbers.") % bad[0])
+            return
         self._store(self._current_row)
+        from ogr_core.project.rules import strength_model_refusal
+        for row, m in enumerate(self.materials):
+            why = strength_model_refusal(m.strength, m.name)
+            # A table still held as points was not shown or not touched:
+            # it stays as it was and the analysis says why it refuses it.
+            if why is None or why.code == "anisotropic_table_legacy":
+                continue
+            if row != self._current_row:
+                self.list.setCurrentRow(row)
+            self._show_strength_problem(
+                tr("In material %s:") % m.name + " "
+                + tr(self._TABLE_REFUSALS.get(why.code, why.message)))
+            return
         self.accept()
 
     # ------------------------------------------------------------------

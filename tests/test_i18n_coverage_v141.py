@@ -223,7 +223,13 @@ class TestTranslationCompleteness:
                    "Ky:",
                    # v0.1.200 - "A:" and "a:" above with their units, now
                    # that each hydraulic parameter says which one.
-                   "A (kPa):", "a (1/m^n):"}
+                   "A (kPa):", "a (1/m^n):",
+                   # v0.1.218 - the columns of the anisotropic function's
+                   # table: a symbol and its unit, like "A (kPa):" above.
+                   # The third column IS translated ("Angle to (°)" ->
+                   # "Ángulo hasta (°)"), which is what says these two are
+                   # notation and not forgotten entries.
+                   "c (kPa)", "φ (°)"}
         same = [k for k, v in _DICTS["es"].items()
                 if k == v and k not in allowed]
         assert len(same) < 12, same[:15]

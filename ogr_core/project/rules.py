@@ -187,6 +187,111 @@ def compute_blockers(project) -> list[Refusal]:
 
 
 # ----------------------------------------------------------------------
+def anisotropic_function_rows_refusal(rows) -> Optional[Refusal]:
+    """Why ``rows`` cannot be the table of an Anisotropic Strength Function,
+    or None.
+
+    v0.1.218 (D209) — the table is a list of angular RANGES of slice base
+    inclination, ``(angle to, c, phi)``, as the reference documents the
+    strength type: ordered counter-clockwise from -90 to +90, the first
+    range starting at -90 (so the first "angle to" lies above it) and the
+    last ending at +90, which has to be entered. Each row is a range, so
+    the angles must strictly increase; c is a cohesion and phi a friction
+    angle, so c ≥ 0 and 0 ≤ phi < 90.
+
+    The model computes with whatever it is given; this is the one place
+    that says what it may be given, asked by the material dialog, the API
+    and the analysis (``strength_model_refusal``).
+    """
+    import math
+
+    try:
+        rows = [tuple(r) for r in rows]
+    except TypeError:
+        return Refusal("anisotropic_table_not_rows",
+                       "The table must be a list of (angle to, c, phi) "
+                       "rows.")
+    if not rows:
+        return Refusal("anisotropic_table_empty",
+                       "The table has no rows: at least one range, ending "
+                       "at +90 degrees, is needed.")
+    angles = []
+    for i, row in enumerate(rows, start=1):
+        try:
+            a, c, phi = (float(v) for v in row)
+        except (TypeError, ValueError):
+            return Refusal("anisotropic_table_not_rows",
+                           f"Row {i} is not three numbers (angle to, c, "
+                           f"phi): {row!r}.")
+        if not all(math.isfinite(v) for v in (a, c, phi)):
+            return Refusal("anisotropic_table_not_rows",
+                           f"Row {i} holds a value that is not finite.")
+        if c < 0.0 or not 0.0 <= phi < 90.0:
+            return Refusal("anisotropic_table_strength",
+                           f"Row {i}: the cohesion must be ≥ 0 and the "
+                           f"friction angle in [0, 90), got c = {c:g}, "
+                           f"phi = {phi:g}.")
+        angles.append(a)
+    if angles[0] <= -90.0:
+        return Refusal("anisotropic_table_start",
+                       f"The first range starts at -90 degrees, so its "
+                       f"'angle to' must be above -90; got {angles[0]:g}.")
+    for i in range(1, len(angles)):
+        if not angles[i] > angles[i - 1]:
+            return Refusal("anisotropic_table_order",
+                           f"The ranges must be ordered counter-clockwise: "
+                           f"row {i + 1} ends at {angles[i]:g} degrees, not "
+                           f"after row {i} ({angles[i - 1]:g}).")
+    if abs(angles[-1] - 90.0) > 1e-9:
+        return Refusal("anisotropic_table_end",
+                       f"The last range must end at +90 degrees; it ends "
+                       f"at {angles[-1]:g}.")
+    return None
+
+
+def strength_model_refusal(strength, name: Optional[str] = None
+                           ) -> Optional[Refusal]:
+    """Why a material's strength model cannot be computed with, or None.
+
+    v0.1.218 (D209) — only the Anisotropic Strength Function can say no
+    today: a table saved as interpolated points by a version before 0.1.218
+    (``legacy_points``), or rows that are not a valid set of ranges. A
+    Generalized Anisotropic model is asked about the models of its rules,
+    since one of them can be such a table. ``name`` is the material's, for
+    the message.
+    """
+    from ..materials.builtin_models import (ANISOTROPIC_FUNCTION_LEGACY_NOTE,
+                                            AnisotropicStrengthFunction,
+                                            GeneralizedAnisotropic)
+    from ..materials.strength_model import StrengthModel
+
+    label = name if name is not None else "?"
+    if isinstance(strength, AnisotropicStrengthFunction):
+        if strength.legacy_points is not None:
+            return Refusal("anisotropic_table_legacy",
+                           ANISOTROPIC_FUNCTION_LEGACY_NOTE.format(
+                               name=label))
+        why = anisotropic_function_rows_refusal(strength.rows)
+        if why is None:
+            return None
+        return Refusal(why.code, f"Material {label!r}, Anisotropic Strength "
+                                 f"Function: {why.message}")
+    if isinstance(strength, GeneralizedAnisotropic):
+        for rule in strength.rules or []:
+            data = rule.get("model") if isinstance(rule, dict) else None
+            if not data:
+                continue
+            try:
+                sub = StrengthModel.from_dict(data)
+            except Exception:  # noqa: BLE001 - reported as its own defect
+                continue
+            why = strength_model_refusal(sub, name)
+            if why is not None:
+                return why
+    return None
+
+
+# ----------------------------------------------------------------------
 #: A pseudo-static coefficient is a fraction of g, and the vertical one
 #: cancels gravity at the end of its range: with ``kv`` positive DOWN the
 #: soil carries ``W·(1 + kv)`` (v0.1.214, D170), so ``kv = −1`` leaves a mass

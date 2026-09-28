@@ -99,9 +99,16 @@ def strength_from_spec(spec) -> object:
                 hint=f"Extra fields of {mid}: {list(extras) or 'none'}.")
     data = {"model_id": mid, "params": clean, **spec}
     try:
-        return StrengthModel.from_dict(data)
+        model = StrengthModel.from_dict(data)
     except (ValueError, TypeError, KeyError) as exc:
         raise InvalidArgument(f"{mid}: {exc}") from None
+    # v0.1.218 (D209) — the one rule for what a model may hold; the dialog
+    # and the analysis ask the same function.
+    from ogr_core.project.rules import strength_model_refusal
+    why = strength_model_refusal(model, None)
+    if why is not None:
+        raise InvalidArgument(f"{mid}: {why.message}")
+    return model
 
 
 def catalog(kind: str, project=None):

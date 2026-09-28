@@ -25,9 +25,7 @@ it is the decision the fix embodies.
 
 THE REFERENCES (rule 1):
 
-* the function written by hand: linear interpolation between the default
-  points (-90, 20, 30), (0, 5, 15), (90, 20, 30) gives c = 10, phi = 20 at
-  +30 deg and c = 12.5, phi = 22.5 at -45 deg;
+* the function written by hand (see v0.1.218 below);
 * an identity: a table whose every row holds the same (c, phi) IS
   Mohr-Coulomb, so the nine methods must return exactly Mohr-Coulomb's
   factor on the same circle;
@@ -41,15 +39,29 @@ table and a constant one give different factors on the same circle.
 DISCRIMINATION, measured on the v0.1.214 tree: 8 of the 9 cases fail with
 the TypeError. The ninth is the guard that the hand-written function gives
 the two anchor values, which does not touch the engine.
+
+v0.1.218 (D209) -- CHANGED ON PURPOSE. The table is now a list of RANGES,
+``rows`` of (angle to, c, phi), as the reference documents the strength
+type, and no longer points interpolated linearly: so the hand-written
+function, the default table and the two anchors had to change with it.
+What this file protects is unchanged -- the angle is the ABSOLUTE base
+inclination, a bedding in the context changes nothing, a slope of the model
+can be analysed by the nine methods -- and the ranges themselves are pinned
+in ``test_anisotropic_function_ranges_v1218``. The old anchors were c = 10,
+phi = 20 at +30 deg and c = 12.5, phi = 22.5 at -45 deg on the old default
+points (-90, 20, 30), (0, 5, 15), (90, 20, 30); on the new default table,
+the example the reference documentation draws, they are the ranges
+(0, 90] -> (5, 10) and [-90, -30] -> (10, 35).
 """
 from __future__ import annotations
 
 import math
 
-#: The default table of the model (also the dialog's default).
-DEFAULT_POINTS = [(-90.0, 20.0, 30.0), (0.0, 5.0, 15.0), (90.0, 20.0, 30.0)]
+#: The default table of the model (also the dialog's default): the example
+#: the reference documentation draws for this strength type.
+DEFAULT_ROWS = [(-30.0, 10.0, 35.0), (0.0, 1.0, 20.0), (90.0, 5.0, 10.0)]
 #: A dry circle on the slope below whose bases run from about -18 to +62
-#: degrees, so both halves of the table are read.
+#: degrees, so two ranges of the table are read.
 CIRCLE = (38.0, 22.0, 23.0)
 N_SLICES = 30
 
@@ -57,24 +69,18 @@ _CACHE: dict = {}
 
 
 # ======================================================================
-def _by_hand(angle_deg, points=DEFAULT_POINTS):
-    """The table interpolated linearly, written out independently of
-    the class: clamped at the ends, straight between neighbours."""
-    pts = sorted(points)
-    if angle_deg <= pts[0][0]:
-        return pts[0][1], pts[0][2]
-    if angle_deg >= pts[-1][0]:
-        return pts[-1][1], pts[-1][2]
-    for (a0, c0, p0), (a1, c1, p1) in zip(pts, pts[1:]):
-        if a0 <= angle_deg <= a1:
-            f = (angle_deg - a0) / (a1 - a0)
-            return c0 + f * (c1 - c0), p0 + f * (p1 - p0)
+def _by_hand(angle_deg, rows=DEFAULT_ROWS):
+    """The table read as ranges, written out independently of the class:
+    the first row whose 'angle to' is at or above the angle."""
+    for angle_to, c, phi in rows:
+        if angle_deg <= angle_to:
+            return c, phi
     raise AssertionError(angle_deg)
 
 
-def _model(points=None):
+def _model(rows=None):
     from ogr_core.materials.builtin_models import AnisotropicStrengthFunction
-    return AnisotropicStrengthFunction(points=points)
+    return AnisotropicStrengthFunction(rows=rows)
 
 
 def _ctx(angle_deg, bedding_deg=None):
@@ -134,19 +140,19 @@ class TestTheTableIsReadAtTheBaseInclination:
 
     def test_at_plus_30_degrees(self):
         tau = _model().shear_strength_ctx(50.0, _ctx(30.0))
-        want = 10.0 + 50.0 * math.tan(math.radians(20.0))
+        want = 5.0 + 50.0 * math.tan(math.radians(10.0))
         assert math.isclose(tau, want, rel_tol=1e-12), (tau, want)
 
     def test_at_minus_45_degrees(self):
         tau = _model().shear_strength_ctx(50.0, _ctx(-45.0))
-        want = 12.5 + 50.0 * math.tan(math.radians(22.5))
+        want = 10.0 + 50.0 * math.tan(math.radians(35.0))
         assert math.isclose(tau, want, rel_tol=1e-12), (tau, want)
 
     def test_the_hand_function_agrees_with_those_two_values(self):
-        """Guard: the independent interpolation the slope tests rely on
-        is the one the two anchors above were worked out with."""
-        assert _by_hand(30.0) == (10.0, 20.0)
-        assert _by_hand(-45.0) == (12.5, 22.5)
+        """Guard: the independent reading the slope tests rely on is the
+        one the two anchors above were worked out with."""
+        assert _by_hand(30.0) == (5.0, 10.0)
+        assert _by_hand(-45.0) == (10.0, 35.0)
 
     def test_a_bedding_direction_changes_nothing(self):
         """The angle is the ABSOLUTE base inclination: the model has no
@@ -184,7 +190,7 @@ class TestASlopeOfItCanBeAnalysed:
         """Identity: with the same (c, phi) in every row the model IS
         Mohr-Coulomb, so every method returns Mohr-Coulomb's factor."""
         from ogr_core.materials.builtin_models import MohrCoulomb
-        flat = [(-90.0, 8.0, 25.0), (0.0, 8.0, 25.0), (90.0, 8.0, 25.0)]
+        flat = [(0.0, 8.0, 25.0), (90.0, 8.0, 25.0)]
         for mid in _nine():
             a = _solve("flat", _model(flat), mid).fos
             b = _solve("mc", MohrCoulomb(cohesion=8.0, friction_angle=25.0),
@@ -195,7 +201,7 @@ class TestASlopeOfItCanBeAnalysed:
     def test_the_table_moves_the_factor(self):
         """Rule 7: the default table and a constant one are different
         materials, and every method must see that."""
-        flat = [(-90.0, 8.0, 25.0), (0.0, 8.0, 25.0), (90.0, 8.0, 25.0)]
+        flat = [(0.0, 8.0, 25.0), (90.0, 8.0, 25.0)]
         for mid in _nine():
             a = _solve("default", _model(), mid).fos
             b = _solve("flat", _model(flat), mid).fos

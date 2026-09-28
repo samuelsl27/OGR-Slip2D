@@ -221,6 +221,17 @@ def check_analysis_settings(project) -> list[str]:
             "analysis first — computing now would report u = 0 "
             "everywhere, which looks like a dry slope.")
 
+    # v0.1.218 (D209) — a strength model that cannot be computed with: an
+    # Anisotropic Strength Function saved as interpolated points before
+    # v0.1.218, whose rows would now be read as ranges, or a table of ranges
+    # that is not one. The rule lives in ``ogr_core.project.rules``.
+    from ogr_core.project.rules import strength_model_refusal
+    for _mat in project.materials:
+        _why = strength_model_refusal(getattr(_mat, "strength", None),
+                                      getattr(_mat, "name", None))
+        if _why is not None:
+            problems.append(_why.message)
+
     return problems
 
 
