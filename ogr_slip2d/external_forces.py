@@ -90,6 +90,9 @@ class SliceForces:
         h_water: net horizontal external water force, signed in +x [kN/m].
         m_water_ref0: moment of the horizontal water forces about y = 0,
             ``Σ F_h · y`` [kN]. Combine with :meth:`water_moment_about`.
+        h_pond: the part of ``h_water`` that is the ponded water's pressure
+            on the slice top, signed in +x [kN/m] (v0.1.217, D199). Already
+            inside ``h_water``.
     """
 
     w_soil: float
@@ -97,6 +100,7 @@ class SliceForces:
     h_seismic: float
     h_water: float
     m_water_ref0: float
+    h_pond: float = 0.0
 
     def water_moment_about(self, y_c: float) -> float:
         """Moment of the horizontal water forces about elevation ``y_c``."""
@@ -128,6 +132,7 @@ def slice_forces(s, kh: float = 0.0, kv: float = 0.0) -> SliceForces:
         h_seismic=kh * s.weight,
         h_water=getattr(s, "water_force_h", 0.0),
         m_water_ref0=getattr(s, "water_force_h_moment", 0.0),
+        h_pond=getattr(s, "pond_force_h", 0.0),
     )
 
 

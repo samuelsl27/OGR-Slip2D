@@ -65,6 +65,33 @@ PUBLISH_OWN_NORMAL = True
 # ``T_N*tan(phi')`` was added afterwards, so a support that lifts the base
 # could take the strength below ``c*l``.
 SUPPORT_IN_EFFECTIVE_NORMAL = True
+# v0.1.217 (D199): the horizontal component of the ponded water's pressure
+# on the slice top stays OUT of the base normal the strength is read at.
+# Eq. C-12 takes the slice's effective weight, W - u*b, the VERTICAL part of
+# the pore force on the base, and resolves it on the base; resolving the
+# top's water pressure whole, P*cos(a - b) (Eq. C-14), keeps a horizontal
+# component whose counterpart on the base C-12 already dropped. Kept
+# consistently, the water enters by its vertical components only, W + P_v -
+# u*b, which under a still reservoir is the buoyant weight: a submerged
+# slope then has the factor of the same slope dry with gamma - gamma_w
+# (Duncan, Wright & Brandon 2014, Section 14.6, and their Bishop, Eq. 6.77,
+# which takes P*cos(beta) only). The moment side keeps every water force.
+POND_THRUST_OUT_OF_NORMAL = True
+# v0.1.217 (D213): on a surface that is not a circle the base normals
+# have a moment about the axis, and the one that moment is taken of is
+# the soil's total normal of THIS method, N' + u*l: the effective normal
+# its strength is read at plus the whole pore force, which acts normal to
+# the base. Until v0.1.216 the moment took the uncorrected N, whose pore
+# part is C-13's, so the moment balance and the strength described two
+# different normals -- the inconsistency D197 removed from the published
+# column. Bishop's general branch already takes its own normal. Measured
+# on the submerged slope of Duncan & Wright (2005, Fig. 6.27) as a
+# polyline: with only D199 the factor still grew with the water depth
+# (1.749 at 30 ft, 1.981 at 60 ft); with this it is the buoyant one at
+# both (1.514656 against 1.514655). The support stays out of it, as it
+# always has on this path: its effect enters through its own terms, and
+# putting it in N counted it twice (v0.1.115).
+MOMENT_NORMAL_OWN = True
 
 
 @register_method
@@ -140,6 +167,13 @@ class OrdinaryFellenius(LEMMethod):
             # strength and nothing else. Two paths of one method disagreeing
             # about a free body is the defect, whichever of them is nicer.
             N = -(fx * nx + fy * ny)
+            # v0.1.217 (D199) -- the normal the strength is read at leaves
+            # the pond's horizontal thrust out (see
+            # ``POND_THRUST_OUT_OF_NORMAL``); ``N`` itself stays the
+            # resolution of every external force, as the published driving
+            # force below needs.
+            N_str = (N + f.h_pond * nx if POND_THRUST_OUT_OF_NORMAL
+                     else N)
             # The DOWNSLOPE tangent, for the reported driving force: the base
             # moves with the rotation, and the shear opposes that motion, so
             # downslope is the direction of the motion itself. Same rule as
@@ -154,7 +188,7 @@ class OrdinaryFellenius(LEMMethod):
             # u·l·cos²α — Turnbull & Hvorslev (1967). Same term as the
             # circular path; see the note there for what it cost to omit.
             cos_a = math.cos(s.base_angle)
-            N_eff = N - s.pore_pressure * s.base_length * cos_a * cos_a
+            N_eff = N_str - s.pore_pressure * s.base_length * cos_a * cos_a
             # v0.1.216 (D198) -- the support's normal force inside the
             # effective normal, before the clip and the linearisation; see
             # the circular path.
@@ -188,16 +222,18 @@ class OrdinaryFellenius(LEMMethod):
                 # so this path answered the same figure for both settings.
                 tangential[i] = sup.t_active[i]
                 tangential_passive[i] = sup.t_passive[i]
-            normals.append(N)
+            normals.append(N_eff + s.pore_pressure * s.base_length
+                           if MOMENT_NORMAL_OWN else N)
             resisting.append(strength)
             # v0.1.210 (D172) -- N' + u*l + T_N: the total normal whose
             # effective part, (N' + T_N)/l, is the stress this method's own
             # resistance is c*l + (N' + T_N)*tan(phi') of (the cos^2 form of
             # USACE EM 1110-2-1902 (2003), Eq. C-12; Turnbull & Hvorslev
             # 1967). NOT clipped: the check exists to see a tension.
-            # ``normals`` above stays the uncorrected N, because it is also
-            # the normal whose moment ``moment_terms`` takes below; since
-            # v0.1.216 (D197) it is no longer what is PUBLISHED.
+            # ``normals`` is the normal whose moment ``moment_terms`` takes
+            # below: since v0.1.217 (D213) the soil's own total N' + u*l, see
+            # ``MOMENT_NORMAL_OWN``. Since v0.1.216 (D197) the PUBLISHED
+            # column is ``solved``.
             solved.append(N_eff + s.pore_pressure * s.base_length
                           + (sup.n_press[i] if sup.present else 0.0))
 
@@ -346,6 +382,11 @@ class OrdinaryFellenius(LEMMethod):
             # is (−sin α, cos α), so it adds ``+F_h·sin α`` to the base
             # reaction.
             Hw = f.h_water
+            # v0.1.217 (D199) -- without the pond's horizontal thrust; see
+            # ``POND_THRUST_OUT_OF_NORMAL``. Only the base normal: the
+            # driving side below keeps the whole water moment.
+            if POND_THRUST_OUT_OF_NORMAL:
+                Hw = f.h_water - f.h_pond
             # Base-normal effective stress
             N = (W * math.cos(s.base_angle)
                  - H * math.sin(s.base_angle)

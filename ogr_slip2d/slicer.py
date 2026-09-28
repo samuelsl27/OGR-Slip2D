@@ -119,6 +119,14 @@ class Slice:
     water_weight: float = 0.0
     water_force_h: float = 0.0
     water_force_h_moment: float = 0.0
+    # v0.1.217 (D199) -- the part of ``water_force_h`` that is the ponded
+    # water's pressure on the slice TOP, kept apart because the tension
+    # crack's water and the horizontal component of line and distributed
+    # loads share the same accumulator. Only the Ordinary Method reads it,
+    # to take the pond's horizontal thrust out of its base normal (see
+    # ``methods.ordinary.POND_THRUST_OUT_OF_NORMAL``). Included in
+    # ``water_force_h``, never added to it.
+    pond_force_h: float = 0.0
     material: Optional[Material] = None
     # v0.1.120 — geometry that only the SLICER can measure, kept here so
     # that every LEM method reads it through the one place that builds a
@@ -306,6 +314,8 @@ def _apply_ponded_water(project: Project, s: "Slice") -> None:
     slope = (s.top_y_right - s.top_y_left) / dx
     column = gamma_w * depth * dx        # kN/m, the water column weight
     s.add_water_force(f_h=column * slope, y=top, f_v=column)
+    # v0.1.217 (D199) -- and remembered as the pond's, see ``pond_force_h``.
+    s.pond_force_h += column * slope
 
 
 def _anisotropic_surfaces(project: Project) -> dict:
