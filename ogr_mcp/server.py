@@ -806,7 +806,10 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
                         description="Apply the pseudo-static load.")] = None,
                     kh: Annotated[Optional[float], Field(
                         description="Horizontal coefficient (fraction of "
-                                    "g).")] = None,
+                                    "g), >= 0: a magnitude that always acts "
+                                    "in the direction of failure. Acts on "
+                                    "the soil only, not on loads or "
+                                    "ponded water.")] = None,
                     kv: Annotated[Optional[float], Field(
                         description="Vertical coefficient (fraction of g), "
                                     "positive DOWNWARD: the soil carries "

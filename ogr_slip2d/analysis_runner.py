@@ -221,6 +221,19 @@ def check_analysis_settings(project) -> list[str]:
             "analysis first — computing now would report u = 0 "
             "everywhere, which looks like a dry slope.")
 
+    # v0.1.219 (D206) — the seismic coefficients of a model that did not come
+    # through the API or the dialog (a file, a script): the same rule those
+    # two ask, so a negative kh, which the methods would apply as a force
+    # into the slope, is refused with its reason rather than computed.
+    from ogr_core.project.rules import seismic_coefficient_refusal
+    _seis = getattr(project, "seismic", None)
+    if _seis is not None and getattr(_seis, "enabled", False):
+        for _name in ("kh", "kv"):
+            _why = seismic_coefficient_refusal(_name,
+                                               getattr(_seis, _name, 0.0))
+            if _why is not None:
+                problems.append(_why.message)
+
     # v0.1.218 (D209) — a strength model that cannot be computed with: an
     # Anisotropic Strength Function saved as interpolated points before
     # v0.1.218, whose rows would now be read as ranges, or a table of ranges

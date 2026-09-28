@@ -189,8 +189,11 @@ def seismic_delta_sigma_v(project: "Project", soil_sigma_v: float) -> float:
 
     ``kv`` scales the weight of the soil above, so it acts on the same
     stress the material bands contribute — and on nothing else, since a
-    surcharge is not part of the accelerated mass in this formulation,
-    the same convention ``slice_forces`` already uses for ``kh``.
+    surcharge is not part of the accelerated mass in this formulation: the
+    convention ``ogr_slip2d.external_forces.slice_forces`` uses for ``kh``
+    and ``kv`` alike. Until v0.1.219 this sentence claimed that agreement
+    while ``slice_forces`` multiplied the surcharge folded into the slice
+    weight too; it multiplies the soil only since then (D206).
 
     The horizontal coefficient is deliberately absent: it changes no
     vertical stress, so it can generate no excess pore pressure.

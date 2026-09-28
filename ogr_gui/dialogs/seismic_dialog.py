@@ -43,13 +43,17 @@ class SeismicLoadDialog(QDialog):
         self.seismic = seismic
 
         root = QVBoxLayout(self)
-        root.addWidget(QLabel(
+        # v0.1.219 (D206) — the force is proportional to the weight of the
+        # slice's SOIL (loads and ponded water carry none), and k_h is a
+        # magnitude: it always acts in the direction of failure, so it is
+        # never negative (``rules.seismic_coefficient_refusal``).
+        root.addWidget(QLabel(tr(
             "<b>Pseudo-static seismic load.</b><br>"
-            "Applied to every slice as a body force proportional to "
-            "the slice weight.<br><br>"
-            "<i>k_h positive → in the direction of failure</i><br>"
-            "<i>k_v positive → downward (gravity-like)</i>"
-        ))
+            "Applied to every slice as a body force proportional to the "
+            "weight of its soil; distributed and line loads and ponded "
+            "water carry none.<br><br>"
+            "<i>k_h ≥ 0 → always in the direction of failure</i><br>"
+            "<i>k_v positive → downward (gravity-like)</i>")))
 
         self.cb_enabled = QCheckBox(tr("Apply seismic load to compute"))
         self.cb_enabled.setChecked(seismic.enabled)
@@ -59,9 +63,17 @@ class SeismicLoadDialog(QDialog):
 
         self.sb_kh = QDoubleSpinBox()
         self.sb_kh.setDecimals(_DECIMALS)
-        self.sb_kh.setRange(-_K_MAX, _K_MAX)
+        # v0.1.219 (D206) — from zero: k_h is a magnitude.
+        self.sb_kh.setRange(0.0, _K_MAX)
         self.sb_kh.setSingleStep(0.01)
         self.sb_kh.setValue(seismic.kh)
+        # A negative k_h stored by an older version, a file or a script is
+        # not silently turned into zero: the dialog says what it found.
+        if float(seismic.kh) < 0.0:
+            root.addWidget(QLabel(tr(
+                "The stored k_h was negative (%g). k_h is a magnitude that "
+                "always acts in the direction of failure: enter it positive."
+            ) % float(seismic.kh)))
         self.sb_kh.setToolTip(
             "Horizontal seismic coefficient. Typical values:\n"
             "  0.05 — light shaking\n"

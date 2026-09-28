@@ -95,6 +95,13 @@ class Slice:
     weight_arm_ratio: float = 0.0
     # Derived scalars
     weight: float = 0.0          # kN/m (per unit out-of-plane width)
+    # v0.1.219 (D206) -- the part of ``weight`` that is SOIL, set before the
+    # vertical component of the distributed and line loads is added to it.
+    # The seismic coefficients act on this and not on the loads
+    # (``external_forces.seismic_vertical_load``). Part of ``weight``, never
+    # added to it. None -- a slice built by hand -- means all soil, as every
+    # slice was before v0.1.219.
+    soil_weight: Optional[float] = None
     pore_pressure: float = 0.0   # kPa (at the midpoint of the base)
     # v0.1.28 — extra cohesion from matric suction beyond the air entry
     # value (extended Mohr-Coulomb). Zero unless the material declares a
@@ -106,7 +113,8 @@ class Slice:
     # on purpose. Water has no shear strength, so the pseudo-static seismic
     # coefficients must not act on it; folding this into ``weight`` (as the
     # distributed-load surcharge is folded) would make kh and kv multiply
-    # the water too.
+    # the water too. (Since v0.1.219 the surcharge does not take them either:
+    # the soil part of ``weight`` is kept in ``soil_weight``, D206.)
     #   water_weight         vertical resultant, downward positive [kN/m]
     #   water_force_h        horizontal resultant, +x positive     [kN/m]
     #   water_force_h_moment Σ F_h · y about y = 0                 [kN]
@@ -1820,6 +1828,11 @@ def slice_surface(
             if du:
                 u += du
 
+        # v0.1.219 (D206) -- the soil alone, before any load joins it: what
+        # the seismic coefficients act on. Kept exactly, not rebuilt later as
+        # ``weight - loads``, which is not bit for bit the soil weight.
+        soil_weight = weight
+
         q = _surface_pressure_at(project, xc)
         weight += q * dx  # add the distributed-load surcharge
 
@@ -1857,6 +1870,7 @@ def slice_surface(
             top_y_right=y_top_r,
             top_y_mean=top_y_w,
             weight=weight,
+            soil_weight=soil_weight,
             pore_pressure=u,
             raw_pore_pressure=u_raw,
             suction_cohesion=c_suction,

@@ -2214,7 +2214,10 @@ class GLESystem:
             for i, (r, s) in enumerate(zip(by_slice, self.s_list)):
                 fx = self.forces[i]
                 den += r.w_soil * r.arm_ratio
-                if kh > 0:
+                # v0.1.219 (D206) -- any non-zero kh, as the force sums of
+                # this same system apply it (``h_drive`` above); ``kh > 0``
+                # skipped a negative one in the moment only.
+                if kh:
                     den += fx.h_seismic * (circle_yc - slice_cg_y(s)) / circle_R
                 den += (-slide_sign
                         * fx.water_moment_about(circle_yc) / circle_R)

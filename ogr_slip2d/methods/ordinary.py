@@ -36,7 +36,7 @@ import math
 
 from ogr_core.project import Project
 
-from ..external_forces import seismic_soil_weight, slice_forces
+from ..external_forces import seismic_vertical_load, slice_forces
 from ..slicer import Slices
 from ..surface import SlipCircle, SurfaceProtocol
 from .base import (
@@ -333,7 +333,7 @@ class OrdinaryFellenius(LEMMethod):
 
         # Determine sliding direction from the un-seismic driving moment
         driving_raw = sum(
-            seismic_soil_weight(s.weight, kv) * math.sin(s.base_angle)
+            seismic_vertical_load(s, kv) * math.sin(s.base_angle)
             for s in slices
         )
         slide_sign = 1.0 if driving_raw >= 0 else -1.0

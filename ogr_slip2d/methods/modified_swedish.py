@@ -60,7 +60,7 @@ import math
 from ogr_core.project import Project
 
 from ..external_forces import (interslice_water_thrust,
-                               seismic_soil_weight, slice_forces)
+                               seismic_vertical_load, slice_forces)
 from ..slicer import Slices
 from ..surface import SurfaceProtocol
 from .base import (
@@ -149,7 +149,7 @@ class PrescribedInclinationMethod(LEMMethod):
         # up-slope side is consistently positive (same convention as the
         # rigorous methods).
         driving_raw = sum(
-            seismic_soil_weight(s.weight, kv) * math.sin(s.base_angle)
+            seismic_vertical_load(s, kv) * math.sin(s.base_angle)
             for s in slices
         )
         slide_sign = 1.0 if driving_raw >= 0 else -1.0

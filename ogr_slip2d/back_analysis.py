@@ -220,7 +220,8 @@ def _sums_at_fixed_fos(slices, surface, target_fos, kh, kv, elevation,
     methods' own fixed point answers to, so an A/B that turns it off
     rebuilds the old reading on both sides at once.
     """
-    from ogr_slip2d.external_forces import seismic_soil_weight
+    from ogr_slip2d.external_forces import (seismic_soil_part,
+                                            seismic_vertical_load)
     from ogr_slip2d.methods import base as _base
     from ogr_slip2d.methods.bishop import BishopSimplified
     from ogr_slip2d.surface import SlipCircle
@@ -231,7 +232,7 @@ def _sums_at_fixed_fos(slices, surface, target_fos, kh, kv, elevation,
     if stress_fos is None:
         stress_fos = target_fos
 
-    driving_raw = sum(seismic_soil_weight(s.weight, kv)
+    driving_raw = sum(seismic_vertical_load(s, kv)
                       * math.sin(s.base_angle) for s in s_list)
     slide_sign = 1.0 if driving_raw >= 0 else -1.0
 
@@ -252,7 +253,10 @@ def _sums_at_fixed_fos(slices, surface, target_fos, kh, kv, elevation,
         # and below the horizontal seismic force on the STATIC weight, as
         # the solvers apply them through ``slice_forces``. This wrote
         # ``W·(1 − kv)`` and ``kh·W·(1 − kv)`` by hand.
-        W_eff = seismic_soil_weight(s.weight, kv)
+        #
+        # v0.1.219 (D206) -- both on the SOIL only: the loads folded into
+        # ``weight`` carry no seismic force, as in the solvers.
+        W_eff = seismic_vertical_load(s, kv)
         b = s.width
         alpha = s.base_angle
         N_est = W_eff * math.cos(alpha)
@@ -287,7 +291,8 @@ def _sums_at_fixed_fos(slices, surface, target_fos, kh, kv, elevation,
                 # right). See ``tests/test_seismic_convention_v1214.py``.
                 y_g = 0.5 * (s.base_y_mid + s.top_y_mid) \
                     if hasattr(s, "top_y_mid") else s.base_y_mid
-                driving += kh * s.weight * (circle.centre_y - y_g) \
+                driving += kh * seismic_soil_part(s) \
+                    * (circle.centre_y - y_g) \
                     / max(circle.radius, 1e-9)
         else:
             # Janbu: horizontal force equilibrium. The solver divides each
@@ -302,7 +307,7 @@ def _sums_at_fixed_fos(slices, surface, target_fos, kh, kv, elevation,
             # support at all (1.39263), where the answer is 0.
             resisting += term / math.cos(alpha)
             driving += (slide_sign * W_eff * math.tan(alpha)
-                        + kh * s.weight)
+                        + kh * seismic_soil_part(s))
 
     if is_bishop:
         # Moment of a horizontal force about the centre is T·(y_c − y_T);

@@ -2178,6 +2178,25 @@ _DICTS: dict[str, dict[str, str]] = {
             "que el anterior.",
         "The last range must end at +90°.":
             "El último tramo tiene que terminar en +90°.",
+
+        # --- v0.1.219 · D206: el sismo, sólo sobre el suelo -------------
+        "<b>Pseudo-static seismic load.</b><br>"
+        "Applied to every slice as a body force proportional to the "
+        "weight of its soil; distributed and line loads and ponded "
+        "water carry none.<br><br>"
+        "<i>k_h ≥ 0 → always in the direction of failure</i><br>"
+        "<i>k_v positive → downward (gravity-like)</i>":
+            "<b>Carga sísmica pseudoestática.</b><br>"
+            "Se aplica a cada dovela como una fuerza de masa proporcional "
+            "al peso de su suelo; las cargas repartidas y lineales y el "
+            "agua embalsada no llevan ninguna.<br><br>"
+            "<i>k_h ≥ 0 → siempre en el sentido de la rotura</i><br>"
+            "<i>k_v positivo → hacia abajo (como la gravedad)</i>",
+        "The stored k_h was negative (%g). k_h is a magnitude that "
+        "always acts in the direction of failure: enter it positive.":
+            "El k_h guardado era negativo (%g). k_h es una magnitud que "
+            "actúa siempre en el sentido de la rotura: introdúzcalo "
+            "positivo.",
     },
 }
 

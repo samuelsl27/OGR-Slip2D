@@ -39,7 +39,7 @@ from typing import Optional
 from ogr_core.materials import Material
 from ogr_core.project import Project
 
-from ..external_forces import seismic_soil_weight, slice_forces
+from ..external_forces import seismic_vertical_load, slice_forces
 from ..slicer import Slice, Slices
 from ..surface import SlipCircle, SurfaceProtocol
 from .base import (
@@ -545,7 +545,7 @@ class BishopSimplified(LEMMethod):
 
         # Detect sliding direction from the un-seismic driving moment
         driving_raw = sum(
-            seismic_soil_weight(s.weight, kv) * math.sin(s.base_angle)
+            seismic_vertical_load(s, kv) * math.sin(s.base_angle)
             for s in slices
         )
         slide_sign = 1.0 if driving_raw >= 0 else -1.0
@@ -619,7 +619,12 @@ class BishopSimplified(LEMMethod):
             # only while the base is the tangent at the slice's own x.
             # See ``Slice.weight_arm_ratio``.
             denominator += slide_sign * f.w_total * s.weight_arm_ratio
-            if kh > 0:
+            # v0.1.219 (D206) -- ``if kh``, not ``if kh > 0``: a negative
+            # coefficient was skipped here while every force sum applied it,
+            # so one model gave a method-dependent answer. The input refuses
+            # kh < 0 (``rules.seismic_coefficient_refusal``); a value that
+            # arrives anyway is applied the same way everywhere.
+            if kh:
                 y_cg = 0.5 * (
                     0.5 * (s.top_y_left + s.top_y_right)
                     + 0.5 * (s.base_y_left + s.base_y_right)

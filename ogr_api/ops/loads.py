@@ -293,6 +293,11 @@ def seismic_set(ws, project_id: Optional[str] = None,
     Both coefficients are fractions of g on the static weight; ``kh``
     positive acts in the direction of failure and ``kv`` positive DOWNWARD
     (the soil carries ``W·(1 + kv)``).
+
+    v0.1.219 (D206) — both act on the SOIL of each slice: distributed and
+    line loads and ponded water carry no seismic force. And ``kh`` is a
+    magnitude, never negative: it always acts in the sliding direction of
+    each surface, so its sign chooses nothing.
     """
     from ogr_core.project.rules import seismic_coefficient_refusal
 

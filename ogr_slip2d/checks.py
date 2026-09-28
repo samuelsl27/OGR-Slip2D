@@ -306,6 +306,13 @@ def _denominator_sign(result) -> float:
     v0.1.214 the factor was ``(1−kv)`` and the degenerate end ``kv = +1``:
     the sign convention of D170, not a different argument.)
 
+    v0.1.219 (D206) — with a distributed or line load and ``kv ≠ 0`` the
+    factor is no longer constant: their sum is
+    ``Σ [W_soil(1+kv) + W_load]·sin α``, the load carrying no seismic
+    factor, so it CAN differ in sign from the ``Σ W·sin α`` below. That is
+    one more reason the fallback is only a fallback: the methods publish
+    their sign, and a result that does not is built by hand.
+
     **The fallback is not courtesy, it is necessity**: a result built by
     hand carries no ``details`` at all (``tests/test_tensile_strength_rock_v1191.py``
     builds one), and a plugin method need not publish the key. In those the

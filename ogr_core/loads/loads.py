@@ -249,11 +249,14 @@ class LineLoad:
 class SeismicLoad:
     """Pseudo-static seismic inertial body force.
 
-    Applied to every slice as F = W · k, where W is the slice weight
-    and k the seismic coefficient.
+    Applied to every slice as F = W · k, where W is the weight of the
+    slice's SOIL and k the seismic coefficient: distributed and line loads
+    and ponded water carry no seismic force (v0.1.219, D206).
 
     Convention:
-        kh positive → in the direction of failure
+        kh ≥ 0 → a magnitude, always in the direction of failure; a
+                 negative value is refused (``rules.
+                 seismic_coefficient_refusal``)
         kv positive → downward
     """
 

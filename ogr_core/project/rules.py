@@ -307,6 +307,18 @@ def seismic_coefficient_refusal(name: str, value) -> Optional[Refusal]:
     place that enforced it: the seismic dialog accepted ±1 exactly, and
     with the downward-positive convention of D170 ``kv = −1`` is the
     weightless case. The API and the dialog now ask this function.
+
+    v0.1.219 (D206) — ``kh`` may not be negative. It is the MAGNITUDE of the
+    horizontal inertial force, which every method applies in the sliding
+    sense of its own surface, out of the slope: the reference documents the
+    horizontal coefficient as "always POSITIVE", Eurocode 8 gives it as
+    ``0.5·α·S`` against ``F_V = ±0.5·F_H`` for the vertical one, and the
+    pseudo-static check is the unfavourable direction (Kramer 1996, §10.6.1;
+    Duncan, Wright & Brandon 2014, §10.1). The sign therefore chooses no
+    direction, and a negative value can only be a force into the slope,
+    which no pseudo-static check uses, or a sign typed to mean "to the
+    left", which would raise the factor of safety without a word. ``kv``
+    keeps both signs: up and down are both real cases.
     """
     try:
         v = float(value)
@@ -317,6 +329,13 @@ def seismic_coefficient_refusal(name: str, value) -> Optional[Refusal]:
         return Refusal("seismic_coefficient_out_of_range",
                        f"|{name}| must be below 1 (a fraction of g), "
                        f"got {v}.")
+    if name == "kh" and v < 0.0:
+        return Refusal("seismic_kh_negative",
+                       f"kh must not be negative, got {v}. It is the "
+                       f"magnitude of the horizontal seismic force, which "
+                       f"always acts in the sliding direction of each "
+                       f"surface, out of the slope; its sign does not "
+                       f"choose a direction.")
     return None
 
 
