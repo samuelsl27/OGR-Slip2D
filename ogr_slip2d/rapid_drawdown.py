@@ -464,7 +464,10 @@ def _stage1_state(project, surface, slices, result):
             f"slices, so the stage-1 consolidation state cannot be "
             f"recovered. Without it the procedure would apply no undrained "
             f"strength at all and report the drained factor of safety.")
-    fs1 = result.fos
+    # v0.1.220 (D211) -- the F of the solution the normals belong to, which
+    # is the reported one for every method but Janbu Corrected.
+    from .checks import equilibrium_fos
+    fs1 = equilibrium_fos(result)
     out = []
     for i, s in enumerate(slices.slices):
         l = max(s.base_length, 1e-9)

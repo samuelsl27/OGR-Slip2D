@@ -60,6 +60,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
+from .checks import equilibrium_fos
 from .external_forces import slice_forces
 from .methods.base import LEMResult
 from .methods.bishop import BishopSimplified
@@ -273,12 +274,15 @@ def compute_interslice_state(result: LEMResult,
     sense = details.get("slide_sign")
     if sense not in (1.0, -1.0):
         sense = None
+    # v0.1.220 (D211) -- the F the method's state was solved at, which is
+    # the reported one for every method but Janbu Corrected.
+    F = equilibrium_fos(result)
 
-    st_pos = _march(slist, ratios, result.fos, kh, kv,
+    st_pos = _march(slist, ratios, F, kh, kv,
                     envelope_stress=env, slide_sign=sense)
     if all(abs(r) < 1e-12 for r in ratios):
         return st_pos
-    st_neg = _march(slist, [-r for r in ratios], result.fos, kh, kv,
+    st_neg = _march(slist, [-r for r in ratios], F, kh, kv,
                     envelope_stress=env, slide_sign=sense)
     if not st_pos.ok:
         best, sgn = st_neg, -1.0
@@ -296,7 +300,7 @@ def compute_interslice_state(result: LEMResult,
     # so the displayed interslice state is self-equilibrated. This is a
     # display-consistency refinement; it never alters the FoS.
     def closure_signed(k: float) -> float:
-        stk = _march(slist, [sgn * k * r for r in ratios], result.fos, kh,
+        stk = _march(slist, [sgn * k * r for r in ratios], F, kh,
                      kv, envelope_stress=env, slide_sign=sense)
         return stk.E[n] if stk.ok else math.nan
 
@@ -320,7 +324,7 @@ def compute_interslice_state(result: LEMResult,
             else:
                 k_lo, f_lo = k_mid, f_mid
         st_ref = _march(slist, [sgn * k_lo * r for r in ratios],
-                        result.fos, kh, kv, envelope_stress=env,
+                        F, kh, kv, envelope_stress=env,
                         slide_sign=sense)
         if st_ref.ok and st_ref.closure < best.closure:
             return st_ref

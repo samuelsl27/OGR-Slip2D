@@ -344,9 +344,10 @@ class TestKvZeroIsUntouched:
 
 
 class TestTheBackAnalysisShakesTheSameWay:
-    """The back analysis of support force (``back_analysis``) rebuilds the
-    driving sum by hand, so it has to apply the earthquake as the solver
-    does. Its identity, from v0.1.202: at the method's OWN factor of safety
+    """The back analysis of support force (``back_analysis``) rebuilt the
+    driving sum by hand until v0.1.220 (since then it calls the solver's
+    own, D210), so it had to apply the earthquake as the solver does. Its
+    identity, from v0.1.202: at the method's OWN factor of safety
     the force needed is zero. Read unclipped — ``required_force`` clips
     negatives to zero and would hide exactly this (see D204).
 
@@ -374,11 +375,15 @@ class TestTheBackAnalysisShakesTheSameWay:
         for kh, kv in ((0.1, 0.0), (0.1, 0.1), (0.1, -0.1)):
             force, _d = self._force_at_own_factor("janbu_simplified", kh, kv)
             assert abs(force) < 1e-6, (kh, kv, force)
-            # Bishop keeps the residual of its normal-force estimate, a few
-            # tenths of a percent of the driving sum; the sign error was
+            # v0.1.220 (D210), changed on purpose: Bishop to 1e-9 of the
+            # driving sum. It kept a residual of a few tenths of a percent
+            # until then, which this comment put down to "its normal-force
+            # estimate"; it was the back analysis taking ``sin a`` as the
+            # weight's arm where the solver takes ``weight_arm_ratio``, and
+            # the sums are now the solver's own. The sign error of D170 was
             # 2.5 times the whole sum.
             force, d = self._force_at_own_factor("bishop_simplified", kh, kv)
-            assert abs(force) < 5e-3 * abs(d), (kh, kv, force, d)
+            assert abs(force) < 1e-9 * abs(d), (kh, kv, force, d)
 
     def test_the_earthquake_adds_to_the_driving_sum(self):
         _f, still = self._force_at_own_factor("bishop_simplified", 0.0, 0.0)

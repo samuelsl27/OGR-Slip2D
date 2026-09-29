@@ -514,6 +514,9 @@ def self_consistent_envelope(compute):
         passes, settled = 1, False
         try:
             while True:
+                # v0.1.220 (D211) -- at the factor the method's equilibrium
+                # was solved at (``checks.equilibrium_fos``): F0, not f0*F0,
+                # for Janbu Corrected.
                 own = base_effective_stresses(res)
                 if len(own) != len(s_list) or not all(
                         math.isfinite(v) for v, d in zip(own, depends) if d):
@@ -579,6 +582,15 @@ class LEMMethod(ABC):
         if env is None or i >= len(env):
             return None
         return env[i]
+
+    def _imposed_reader(self):
+        """The ``imposed`` argument of ``bishop.x0_resisting_pass`` for one
+        solve (v0.1.220, D210): None when no stress is imposed, which is
+        every first solve and every envelope that does not depend on the
+        stress, so the common pass asks nothing per slice."""
+        if self._envelope_stress is None:
+            return None
+        return lambda i, _slice, _load, _sigma: self._imposed_stress(i)
 
     def __init__(
         self,

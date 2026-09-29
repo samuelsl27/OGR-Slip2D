@@ -128,8 +128,11 @@ class TestTheBackAnalysisAgreesWithTheSolver:
     def test_no_support_is_needed_at_the_unsupported_factor(self):
         """For the three methods: the force needed to reach the factor the
         solver gives the surface unsupported is zero (to a small fraction
-        of the sliding weight; Bishop keeps a 0.2 kN/m residual from its
-        normal-force estimate). The old Janbu sums said 217 kN/m."""
+        of the sliding weight, the solver's own tolerance on F). The old
+        Janbu sums said 217 kN/m. Bishop kept a 0.2 kN/m residual until
+        v0.1.220, put down here to "its normal-force estimate"; it was the
+        ``sin a`` its back analysis took as the weight's arm, and the sums
+        are the solver's own since then (D210)."""
         from ogr_slip2d.back_analysis import required_force
         from ogr_slip2d.methods import get_method
         from ogr_slip2d.search import GridSearch

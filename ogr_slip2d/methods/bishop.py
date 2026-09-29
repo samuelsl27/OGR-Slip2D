@@ -34,6 +34,7 @@ Author: Samuel Sáez López (UPCT)
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass, field
 from typing import Optional
 
 from ogr_core.materials import Material
@@ -544,18 +545,13 @@ class BishopSimplified(LEMMethod):
         kv = project.seismic.kv if project.seismic.enabled else 0.0
 
         # Detect sliding direction from the un-seismic driving moment
-        driving_raw = sum(
-            seismic_vertical_load(s, kv) * math.sin(s.base_angle)
-            for s in slices
-        )
-        slide_sign = 1.0 if driving_raw >= 0 else -1.0
+        slide_sign = slide_sense(slices, kv)
 
         # v0.1.64 — support terms, resolved with their SIGNS. The sliding
         # sense has to be known first, which is why this moved below the
         # detection above.
         from ..support_integration import (resolve_support_terms,
-                                           support_failure_details,
-                                           support_vertical_load)
+                                           support_failure_details)
         sup = resolve_support_terms(project, surface, slices, slide_sign)
 
         s_list = slices.slices if hasattr(slices, "slices") else slices
@@ -599,74 +595,12 @@ class BishopSimplified(LEMMethod):
             return self._general_moment_fos(
                 project, surface, slices, s_list, kh, kv, slide_sign, sup)
 
-        # Driving moment (denominator of Bishop's FoS expression).
-        # Σ W·(1 + kv)·sin α + Σ kh·W·(y_c − y_g)/R
-        # Only a circle reaches this point, so these are never None and
-        # the terms below are never skipped. Before v0.1.105 they were
-        # guarded by ``circle_R is not None`` here AND the non-circular
-        # surface still ran the loop, which is how a polyline came to lose
-        # its seismic and water moments without anything saying so.
-        denominator = 0.0
-        circle_R = surface.radius
-        circle_yc = surface.centre_y
-        for s in slices:
-            f = slice_forces(s, kh, kv)
-            # v0.1.61 — the gravity driving term uses the TOTAL vertical
-            # load (soil + ponded water); both act at the slice's x, so
-            # they share the moment arm R·sin α.
-            # v0.1.100 — the arm of this vertical load is a GEOMETRIC
-            # quantity, not the sine of the base angle; the two coincide
-            # only while the base is the tangent at the slice's own x.
-            # See ``Slice.weight_arm_ratio``.
-            denominator += slide_sign * f.w_total * s.weight_arm_ratio
-            # v0.1.219 (D206) -- ``if kh``, not ``if kh > 0``: a negative
-            # coefficient was skipped here while every force sum applied it,
-            # so one model gave a method-dependent answer. The input refuses
-            # kh < 0 (``rules.seismic_coefficient_refusal``); a value that
-            # arrives anyway is applied the same way everywhere.
-            if kh:
-                y_cg = 0.5 * (
-                    0.5 * (s.top_y_left + s.top_y_right)
-                    + 0.5 * (s.base_y_left + s.base_y_right)
-                )
-                arm = (circle_yc - y_cg) / circle_R
-                denominator += f.h_seismic * arm
-            # v0.1.61 — horizontal water forces (ponded water on the slope,
-            # water in a tension crack). A force F_h at elevation y has CCW
-            # moment (y_c − y)·F_h about the centre; the driving moment is
-            # measured as −slide_sign·M/R in the same normalised units as
-            # Σ W sin α, which is what makes the seismic term above take the
-            # form it has.
-            denominator += (
-                -slide_sign * f.water_moment_about(circle_yc) / circle_R
-            )
-
-        # v0.1.64 — Active supports subtract their resisting tangential
-        # component from the DRIVING side, per the reference:
-        #     F_act = (R + T_N·tanφ') / (D − T_S)
-        #     F_pas = (R + T_N·tanφ' + T_S) / D
-        # This replaces the v0.1.15 convention, which added abs(T_S) to
-        # the numerator for both kinds. That was numerically stable but
-        # it made the factor of safety symmetric under a 180° flip of the
-        # support: a bolt pushing the mass downhill improved it by exactly
-        # as much as one holding it back. The instability it was avoiding
-        # is real, and is handled below by marking the surface
-        # INADMISSIBLE rather than by discarding the sign.
-        if sup.present and sup.couple:
-            # v0.1.122 -- the couple left over when a support's resultant
-            # acts somewhere other than where it crosses the surface. Same
-            # normalisation as the horizontal water moment two lines up: a
-            # CCW moment enters the driving side as -slide_sign*M/R.
-            denominator += -slide_sign * sup.couple / circle_R
-
-        driving_no_support = denominator
-        # v0.1.178 (D144) -- the MOMENT of the reinforcement and not its
-        # projection on the chord. Everything else in this sum is a moment
-        # about the centre divided by R -- the weight's, through
-        # ``weight_arm_ratio``; the water's; the couple's -- and until this
-        # version the support's was the one term formed from an angle
-        # instead of from the geometry. See ``SupportTerms.moment_active``.
-        denominator -= sup.moment_active
+        # Driving moment (denominator of Bishop's FoS expression), without
+        # and with the Active supports. v0.1.220 (D210) -- written once, in
+        # :func:`circle_driving_sum`, for this solver and for the back
+        # analysis, which rebuilt it by hand and drifted from it.
+        driving_no_support, denominator = circle_driving_sum(
+            s_list, surface, kh, kv, slide_sign, sup)
         # How much of the driving moment the Active supports have taken
         # away. Reported rather than judged: as T_S approaches D the
         # factor of safety grows without bound, which is arithmetically
@@ -726,70 +660,34 @@ class BishopSimplified(LEMMethod):
         sigma_load = None
         # v0.1.213 (D84) -- as in ``_general_moment_fos``.
         zero: list[int] = []
+        imposed = self._imposed_reader()
         for it in range(1, self.max_iterations + 1):
             iterations = it
-            numerator = 0.0
-            sigma_load = [0.0] * len(s_list) if sup.present else None
-            zero = []
-
-            for i_s, s in enumerate(s_list):
-                # v0.1.61 — the base normal follows from the VERTICAL
-                # equilibrium of the slice, so it carries the ponded-water
-                # weight but not the horizontal thrust, exactly as the
-                # horizontal seismic force is absent from this side too.
-                W_eff = slice_forces(s, kh, kv).w_total
-                b = s.width
-
-                # v0.1.137 — the support is a LINE LOAD on this slice, so it
-                # joins the vertical equilibrium m_alpha comes from instead of
-                # being bolted on outside it. See
-                # ``support_integration.support_vertical_load``.
-                if sup.present:
-                    load = support_vertical_load(
-                        sup, i_s, s.base_angle, slide_sign, fos)
-                    W_eff += load
-                    sigma_load[i_s] = load
-
-                N_est = W_eff * math.cos(s.base_angle)
-                raw = N_est - s.pore_pressure * s.base_length
-                N_eff_est = max(0.0, raw)
-                sigma_n_eff = N_eff_est / max(s.base_length, 1e-9)
-                # v0.1.213 (D84) -- see ``_general_moment_fos``.
-                imposed = self._imposed_stress(i_s)
-                if imposed is not None:
-                    raw, sigma_n_eff = imposed, max(0.0, imposed)
-
-                c, tan_phi = self._local_c_phi(s, s.material, sigma_n_eff)
-                if raw < 0.0 and self._zero_strength(s, raw, c, tan_phi):
-                    zero.append(i_s)
-
-                m_alpha = math.cos(s.base_angle) + (
-                    slide_sign * math.sin(s.base_angle) * tan_phi / fos
+            # v0.1.220 (D210) -- the resisting sum at this F, from the one
+            # function the back analysis also calls; see
+            # :func:`x0_resisting_pass` for what enters each term.
+            pas = x0_resisting_pass(s_list, kh, kv, slide_sign, sup, fos,
+                                    imposed)
+            sigma_load, zero = pas.sigma_load, pas.zero
+            if pas.collapsed is not None:
+                index, m_alpha = pas.collapsed
+                return LEMResult(
+                    fos=None,
+                    converged=False,
+                    iterations=iterations,
+                    method_id=self.METHOD_ID,
+                    surface=surface,
+                    slices=slices,
+                    error_message=(
+                        f"mα collapsed to {m_alpha:.4g} at slice {index}"
+                    ),
+                    reason=REASON_M_ALPHA_COLLAPSED,
                 )
-
-                if abs(m_alpha) < 1e-6:
-                    return LEMResult(
-                        fos=None,
-                        converged=False,
-                        iterations=iterations,
-                        method_id=self.METHOD_ID,
-                        surface=surface,
-                        slices=slices,
-                        error_message=(
-                            f"mα collapsed to {m_alpha:.4g} at slice {s.index}"
-                        ),
-                        reason=REASON_M_ALPHA_COLLAPSED,
-                    )
-
-                # Bishop numerator: [c'·b + (W − u·b)·tan φ'] / m_α
-                numerator += (
-                    c * b + (W_eff - s.pore_pressure * b) * tan_phi
-                ) / m_alpha
 
             # Passive supports add their resisting tangential component
             # to the numerator; the Active ones already came off the
             # denominator before the iteration started.
-            numerator += sup.moment_passive
+            numerator = pas.total + sup.moment_passive
 
             # ``new_fos <= 0`` has to stop the iteration, not just a
             # non-finite one. The next pass computes tan(phi)/F, so a zero
@@ -873,6 +771,220 @@ class BishopSimplified(LEMMethod):
                 "zero_strength_slices": zero,
             }),
         )
+
+
+# ======================================================================
+# v0.1.220 (D210) -- the sums of the two methods with no inter-slice shear,
+# at a FIXED factor of safety, written once.
+#
+# The back analysis of support force (``ogr_slip2d.back_analysis``) holds F
+# at the target and solves the balance for a force. It used to rebuild the
+# two sums by hand, and each rebuild drifted from the solver it copied: the
+# earthquake's arm (D170), the n_alpha of Janbu (v0.1.202), where a curved
+# envelope is read (D204) and, reported in D210, the ponded water and its
+# thrust, Bishop's weight arm and Janbu's sense of sliding. Measured with
+# Bishop at its own factor of safety: +3.40 kN/m on the circle of problem 41
+# with a power curve and +7 kN/m on a 2:1 slope, where the force must be
+# zero. So the solvers expose their sums here and the back analysis calls
+# the same functions: what the method does is what the back analysis
+# undoes, supports included (decision of the owner, 2026-09-28: the force
+# found is the one ADDED to the model's own reinforcement).
+
+
+def slide_sense(slices, kv: float) -> float:
+    """Bishop's sense of sliding: the sign of ``sum W(1 + kv) sin a`` over
+    the soil, loads included and ponded water not (v0.1.220, D210: out of
+    ``compute_fos`` so the back analysis asks the method instead of
+    guessing). Janbu has its own rule, :func:`janbu.slide_sense`."""
+    driving_raw = sum(
+        seismic_vertical_load(s, kv) * math.sin(s.base_angle)
+        for s in slices
+    )
+    return 1.0 if driving_raw >= 0 else -1.0
+
+
+def circle_driving_sum(slices, circle, kh: float, kv: float,
+                       slide_sign: float, sup) -> tuple[float, float]:
+    """Bishop's driving moment on a circle over R, as ``(without the Active
+    supports, with them)`` (v0.1.220, D210; moved out of ``compute_fos``
+    unchanged, so the solver's factor is bit for bit what it was).
+
+        sum s*W_total*weight_arm_ratio + sum kh*W_soil*(y_c - y_g)/R
+            - s*M_water/R - s*couple/R  [- moment_active]
+
+    Only a circle reaches this, so the terms are never skipped. Before
+    v0.1.105 they were guarded by ``circle_R is not None`` AND the
+    non-circular surface still ran the loop, which is how a polyline came to
+    lose its seismic and water moments without anything saying so.
+    """
+    denominator = 0.0
+    circle_R = circle.radius
+    circle_yc = circle.centre_y
+    for s in slices:
+        f = slice_forces(s, kh, kv)
+        # v0.1.61 — the gravity driving term uses the TOTAL vertical
+        # load (soil + ponded water); both act at the slice's x, so
+        # they share the moment arm R·sin α.
+        # v0.1.100 — the arm of this vertical load is a GEOMETRIC
+        # quantity, not the sine of the base angle; the two coincide
+        # only while the base is the tangent at the slice's own x.
+        # See ``Slice.weight_arm_ratio``.
+        denominator += slide_sign * f.w_total * s.weight_arm_ratio
+        # v0.1.219 (D206) -- ``if kh``, not ``if kh > 0``: a negative
+        # coefficient was skipped here while every force sum applied it,
+        # so one model gave a method-dependent answer. The input refuses
+        # kh < 0 (``rules.seismic_coefficient_refusal``); a value that
+        # arrives anyway is applied the same way everywhere.
+        if kh:
+            y_cg = 0.5 * (
+                0.5 * (s.top_y_left + s.top_y_right)
+                + 0.5 * (s.base_y_left + s.base_y_right)
+            )
+            arm = (circle_yc - y_cg) / circle_R
+            denominator += f.h_seismic * arm
+        # v0.1.61 — horizontal water forces (ponded water on the slope,
+        # water in a tension crack). A force F_h at elevation y has CCW
+        # moment (y_c − y)·F_h about the centre; the driving moment is
+        # measured as −slide_sign·M/R in the same normalised units as
+        # Σ W sin α, which is what makes the seismic term above take the
+        # form it has.
+        denominator += (
+            -slide_sign * f.water_moment_about(circle_yc) / circle_R
+        )
+
+    # v0.1.64 — Active supports subtract their resisting tangential
+    # component from the DRIVING side, per the reference:
+    #     F_act = (R + T_N·tanφ') / (D − T_S)
+    #     F_pas = (R + T_N·tanφ' + T_S) / D
+    # This replaces the v0.1.15 convention, which added abs(T_S) to
+    # the numerator for both kinds. That was numerically stable but
+    # it made the factor of safety symmetric under a 180° flip of the
+    # support: a bolt pushing the mass downhill improved it by exactly
+    # as much as one holding it back. The instability it was avoiding
+    # is real, and is handled by the solver by marking the surface
+    # INADMISSIBLE rather than by discarding the sign.
+    if sup.present and sup.couple:
+        # v0.1.122 -- the couple left over when a support's resultant
+        # acts somewhere other than where it crosses the surface. Same
+        # normalisation as the horizontal water moment two lines up: a
+        # CCW moment enters the driving side as -slide_sign*M/R.
+        denominator += -slide_sign * sup.couple / circle_R
+
+    driving_no_support = denominator
+    # v0.1.178 (D144) -- the MOMENT of the reinforcement and not its
+    # projection on the chord. Everything else in this sum is a moment
+    # about the centre divided by R -- the weight's, through
+    # ``weight_arm_ratio``; the water's; the couple's -- and until this
+    # version the support's was the one term formed from an angle
+    # instead of from the geometry. See ``SupportTerms.moment_active``.
+    denominator -= sup.moment_active
+    return driving_no_support, denominator
+
+
+@dataclass(slots=True)
+class X0Pass:
+    """One pass of :func:`x0_resisting_pass` (v0.1.220, D210)."""
+
+    #: The sum of the per-slice terms, WITHOUT the Passive supports' term,
+    #: which each method writes in its own units (a moment over R in
+    #: Bishop, a force over cos a in Janbu).
+    total: float = 0.0
+    #: The support load each slice's stress estimate carried, published as
+    #: ``details["sigma_support_load"]`` (D172); None without a support.
+    sigma_load: Optional[list] = None
+    #: The slices that entered with no strength because the stress their
+    #: envelope was read at is negative (D84).
+    zero: list = field(default_factory=list)
+    #: ``(slice index, denominator)`` when a denominator vanished; the sum
+    #: is then incomplete, and each caller says so in its own words.
+    collapsed: Optional[tuple] = None
+
+
+def x0_resisting_pass(slices, kh: float, kv: float, slide_sign: float, sup,
+                      fos: float, imposed=None, *,
+                      janbu: bool = False) -> X0Pass:
+    """The resisting sum of Bishop (1955) or Janbu (1954) at the factor of
+    safety ``fos``, held fixed:
+
+        sum [c*b + (W - u*b)*tan phi] / m_alpha        (Bishop)
+        sum [c*b + (W - u*b)*tan phi] / n_alpha        (Janbu, ``janbu``)
+
+    with ``W`` the slice's total vertical load (soil, loads and ponded
+    water, ``SliceForces.w_total``) plus the vertical load its supports put
+    on it (``support_vertical_load``: a line load joins the vertical
+    equilibrium m_alpha comes from, v0.1.137), and the envelope linearised
+    at the Fellenius estimate of the stress, or where ``imposed`` says.
+
+    ``imposed(i, slice, W, sigma)`` returns the signed stress to linearise
+    slice ``i`` at, or None to keep the estimate ``sigma``; the solvers pass
+    the point of their own fixed point (``base.self_consistent_envelope``)
+    and the back analysis the slice's own point at ``fos``. It may raise:
+    that is the caller's way out, and it propagates.
+
+    v0.1.220 (D210) -- the loops of the two solvers, moved here unchanged so
+    that the back analysis evaluates the very sum the method solves.
+    """
+    s_list = slices.slices if hasattr(slices, "slices") else slices
+    out = X0Pass(sigma_load=[0.0] * len(s_list) if sup.present else None)
+    if sup.present:
+        # Only a reinforced surface pays for the import (every pass).
+        from ..support_integration import support_vertical_load
+    total = 0.0
+    for i_s, s in enumerate(s_list):
+        # v0.1.61 — the base normal follows from the VERTICAL
+        # equilibrium of the slice, so it carries the ponded-water
+        # weight but not the horizontal thrust, exactly as the
+        # horizontal seismic force is absent from this side too.
+        W_eff = slice_forces(s, kh, kv).w_total
+        b = s.width
+
+        # v0.1.137 — the support is a LINE LOAD on this slice, so it
+        # joins the vertical equilibrium m_alpha comes from instead of
+        # being bolted on outside it. See
+        # ``support_integration.support_vertical_load``.
+        if sup.present:
+            load = support_vertical_load(
+                sup, i_s, s.base_angle, slide_sign, fos)
+            W_eff += load
+            out.sigma_load[i_s] = load
+
+        N_est = W_eff * math.cos(s.base_angle)
+        raw = N_est - s.pore_pressure * s.base_length
+        N_eff_est = max(0.0, raw)
+        sigma_n_eff = N_eff_est / max(s.base_length, 1e-9)
+        # v0.1.213 (D84) -- or where the method's own solution put this
+        # base, on the passes of ``self_consistent_envelope``.
+        if imposed is not None:
+            forced = imposed(i_s, s, W_eff, sigma_n_eff)
+            if forced is not None:
+                raw, sigma_n_eff = forced, max(0.0, forced)
+
+        c, tan_phi = BishopSimplified._local_c_phi(s, s.material,
+                                                   sigma_n_eff)
+        # v0.1.213 (D84) -- reported, not changed; see ``_zero_strength``.
+        if raw < 0.0 and BishopSimplified._zero_strength(s, raw, c, tan_phi):
+            out.zero.append(i_s)
+
+        if janbu:
+            # n_α = cos²α · (1 + tan α · tan φ' / F)  (with sliding sign)
+            den = (math.cos(s.base_angle) ** 2) * (
+                1.0 + slide_sign * math.tan(s.base_angle) * tan_phi / fos
+            )
+        else:
+            den = math.cos(s.base_angle) + (
+                slide_sign * math.sin(s.base_angle) * tan_phi / fos
+            )
+        if abs(den) < 1e-6:
+            out.collapsed = (s.index, den)
+            out.total = total
+            return out
+
+        # [c'·b + (W − u·b)·tan φ'] / m_α   (or / n_α)
+        total += (
+            c * b + (W_eff - s.pore_pressure * b) * tan_phi
+        ) / den
+    out.total = total
+    return out
 
 
 # ======================================================================

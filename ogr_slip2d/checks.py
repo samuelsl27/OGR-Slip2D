@@ -452,6 +452,29 @@ def _solved_normals(result, n: int):
     return _per_slice(result, "solved_base_normal", n)
 
 
+def equilibrium_fos(result) -> float:
+    """The factor of safety the method's per-slice STATE was solved at.
+
+    ``result.fos`` for every method but one: Janbu Corrected reports
+    ``f0*F`` and solves its equilibrium at ``F`` (Janbu 1973), and with
+    ``methods.janbu.STATE_AT_EQUILIBRIUM_FOS`` on it says so in
+    ``details["equilibrium_fos"]`` (v0.1.220, D211). The same road as
+    ``kv`` and the support load, and for the same reason: the checks receive
+    a result, and only the solver knows. Malformed means "said nothing
+    usable", so the reported factor, as for a result built by hand.
+    """
+    F = getattr(result, "fos", math.nan)
+    details = getattr(result, "details", None) or {}
+    raw = details.get("equilibrium_fos")
+    if raw is None or isinstance(raw, (str, bytes, bool)):
+        return F
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return F
+    return value if math.isfinite(value) and value > 0.0 else F
+
+
 def _base_load_and_sigma(s, *, kv: float,
                          support_load: float) -> tuple[float, float]:
     """The base load and the ONE normal stress both checks linearise at.
@@ -531,6 +554,10 @@ def base_effective_stresses(result) -> list[float]:
     """Effective normal stress on each slice base: what the Tensile Stress
     Check tests.
 
+    v0.1.220 (D211) -- the fallback below forms the normal at
+    :func:`equilibrium_fos`, the factor the method's equilibrium was solved
+    at; for Janbu Corrected that is F0 and not the reported f0*F0.
+
     v0.1.210 (D172) -- the stress of the METHOD'S OWN SOLUTION. A method
     publishes the total base normal of its solution per slice in
     ``details["solved_base_normal"]``, and the stress is
@@ -575,6 +602,7 @@ def base_effective_stresses(result) -> list[float]:
     F = getattr(result, "fos", math.nan)
     if not (math.isfinite(F) and F > 0):
         return []
+    F = equilibrium_fos(result)
 
     slices = list(result.slices)
     solved = _solved_normals(result, len(slices))
@@ -692,6 +720,8 @@ def base_m_alphas(result) -> list[float]:
     F = getattr(result, "fos", math.nan)
     if not (math.isfinite(F) and F > 0):
         return []
+    # v0.1.220 (D211) -- see :func:`equilibrium_fos`.
+    F = equilibrium_fos(result)
     out: list[float] = []
     sgn = _denominator_sign(result)
     kv = _applied_kv(result)

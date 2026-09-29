@@ -30,17 +30,21 @@ fixed point sigma' -> (c, tan phi) -> N(F) -> sigma' closes slice by slice.
 It must land on the point the method settled on: pinned below against the
 method's published ``details["envelope_stress"]``.
 
-JANBU CORRECTED is found at the CORRECTED factor and summed at F/f0: its
-solver iterates on the uncorrected factor, but its fixed point reads its
-own stress from the published result, whose factor is the corrected one.
-The case that shows the point at F/f0 missing is the proof that the choice
-matters, not a preference.
+JANBU CORRECTED is found where the method reads it. Until v0.1.219 that
+was the CORRECTED factor (its fixed point read its stress from the published
+result), and a case here proved the point at F/f0 missed. Since v0.1.220
+(D211) the method forms its whole state at F/f0, the factor its equilibrium
+is solved at, and CHANGED ON PURPOSE the same case now proves the other
+side: the point at the corrected factor misses. The sums read the factor
+from the result (``details["equilibrium_fos"]``), so they follow the method
+on either tree.
 
-BISHOP keeps a residual that is NOT this defect: its back-analysis driving
-sum takes ``sin a`` where the solver takes the weight's own moment arm
-(``weight_arm_ratio``), reported as a defect of its own. The Bishop case
-subtracts that gap explicitly, computed from the slices, so what remains is
-the envelope alone.
+BISHOP kept a residual here until v0.1.219 that was NOT this defect: its
+back-analysis driving sum took ``sin a`` where the solver takes the
+weight's own moment arm (``weight_arm_ratio``), and the case subtracted
+that gap. Since v0.1.220 (D210) the back analysis asks the method for its
+sums, and CHANGED ON PURPOSE the case asserts the identity with no discount
+(the gap was 3.40 kN/m on this circle).
 
 CONTROLS: with ``methods.base.ENVELOPE_AT_OWN_STRESS`` off the identity
 holds too (the old reading on both sides); with Mohr-Coulomb the sums are
@@ -158,6 +162,13 @@ def _sums(slices, surface, f_eval, method_id, stress_fos):
                                   method_id)
 
 
+def _stress_fos(res):
+    """The factor the method's own point is found at: the factor its
+    equilibrium was solved at, which the result publishes since v0.1.220
+    (D211); the reported one on a tree that does not."""
+    return res.details.get("equilibrium_fos", res.fos)
+
+
 def _solve(key, strength, method_id, own_stress=True):
     """The method's own factor on its surface, with no support, and the
     back-analysis sums at that factor -- both under the same switch."""
@@ -178,7 +189,8 @@ def _solve(key, strength, method_id, own_stress=True):
             method_id, res.reason, res.error_message)
         f_eval = res.fos / _f0(res) if method_id == "janbu_corrected" \
             else res.fos
-        sums = _sums(slices.slices, surf, f_eval, method_id, res.fos)
+        sums = _sums(slices.slices, surf, f_eval, method_id,
+                     _stress_fos(res))
     assert sums is not None, method_id
     out = (res, f_eval, sums)
     _CACHE[k] = out
@@ -196,16 +208,6 @@ def _passive_unclipped(f_eval, sums):
 
 def _total_weight(res):
     return sum(s.weight for s in res.slices.slices)
-
-
-def _bishop_arm_gap(res, f_eval, arm):
-    """What Bishop's back analysis owes to ``sin a`` against the solver's
-    ``weight_arm_ratio`` (a separate defect), as a passive force."""
-    slices = res.slices.slices
-    sign = res.details["slide_sign"]
-    gap = sum(sign * s.weight * (math.sin(s.base_angle) - s.weight_arm_ratio)
-              for s in slices)
-    return f_eval * gap / arm
 
 
 # ======================================================================
@@ -236,10 +238,11 @@ class TestZeroForceAtTheMethodsOwnFactor:
             t = _passive_unclipped(f_eval, sums)
             assert abs(t) < TOL_W * _total_weight(res), (mid, t)
 
-    def test_bishop_up_to_its_moment_arm_gap(self):
+    def test_bishop_with_no_discount(self):
+        """v0.1.220 (D210), changed on purpose: until then the arm gap was
+        subtracted here, 3.40 kN/m on this circle."""
         res, f_eval, sums = _solve("power", _power(), "bishop_simplified")
-        t = _passive_unclipped(f_eval, sums) \
-            - _bishop_arm_gap(res, f_eval, sums[2])
+        t = _passive_unclipped(f_eval, sums)
         assert abs(t) < TOL_W * _total_weight(res), t
 
     def test_required_force_agrees_and_is_not_refused(self):
@@ -276,16 +279,18 @@ class TestThePointIsTheMethodsPoint:
             worst = max(worst, abs(got - want) / max(1.0, abs(want)))
         return worst
 
-    def test_the_three_methods_at_the_published_factor(self):
+    def test_the_three_methods_at_the_factor_of_their_equilibrium(self):
         for mid in THREE:
-            worst = self._points(mid, lambda res, f_eval: res.fos)
+            worst = self._points(mid, lambda res, f_eval: _stress_fos(res))
             assert worst < 1e-5, (mid, worst)
 
-    def test_janbu_corrected_at_the_uncorrected_factor_misses(self):
-        """The choice of F is forced by the method, not by taste: at F/f0
-        the points do NOT match what Janbu Corrected read."""
+    def test_janbu_corrected_at_the_corrected_factor_misses(self):
+        """The choice of F is forced by the method, not by taste: at the
+        corrected f0*F0 the points do NOT match what Janbu Corrected read.
+        v0.1.220 (D211), changed on purpose: until then it read its stress
+        at the corrected factor, and this case asserted that F/f0 missed."""
         worst = self._points("janbu_corrected",
-                             lambda res, f_eval: f_eval)
+                             lambda res, f_eval: res.fos)
         assert worst > 1e-3, worst
 
 

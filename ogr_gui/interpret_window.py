@@ -46,6 +46,7 @@ from .resources import icon
 # ======================================================================
 # v0.1.201 — the per-slice readers moved to ``ogr_slip2d.interpretation``
 # (an agent reads slices through them too); the names stay for the panel.
+from ogr_slip2d.checks import equilibrium_fos as _equilibrium_fos  # noqa: E402
 from ogr_slip2d.interpretation import (  # noqa: E402
     base_parameter as _mc_param,
     per_slice as _per_slice,
@@ -131,15 +132,28 @@ class _SliceDataDock(QDockWidget):
         ("Shear strength τ_f (kPa)",
          lambda s, r: _SliceDataDock._r(
              _SliceDataDock._stress(r, "base_shear_strength", s), 2)),
+        # v0.1.220 (D211) -- the F of the row below: the factor the
+        # method's equilibrium was solved at. It is the reported factor for
+        # every method but Janbu Corrected, whose equilibrium is solved at
+        # F0 and reported as f0*F0; shown so the row below can be read.
+        ("Equilibrium factor of safety F",
+         lambda s, r: _SliceDataDock._r(
+             _equilibrium_fos(r) if r is not None and r.fos else None, 4)),
         # τ_f / F, which is what the reference's report calls "Shear
         # Stress". Verified against its own table: slice 1 of the Ej_2
         # global minimum has τ_f = 31.082 and F = 1.11442, and the report
         # prints 27.8907 = 31.082 / 1.11442.
+        #
+        # v0.1.220 (D211) -- with the F of the EQUILIBRIUM, the one above:
+        # the mobilised shear is the equilibrium shear stress, tau = s/F
+        # (Duncan, Wright & Brandon 2014, Eqs. 6.1-6.2), and only with that
+        # F does it close the slice with the published normal.
         ("Mobilised shear τ_m = τ_f/F (kPa)",
          lambda s, r: _SliceDataDock._r(
              None if (_SliceDataDock._stress(r, "base_shear_strength", s)
                       is None or not r or not r.fos)
-             else _SliceDataDock._stress(r, "base_shear_strength", s) / r.fos,
+             else _SliceDataDock._stress(r, "base_shear_strength", s)
+             / _equilibrium_fos(r),
              2)),
         # --- Material --------------------------------------------------
         ("─ Material ─", lambda s, r: ""),
@@ -1567,8 +1581,14 @@ class InterpretWindow(QMainWindow):
         seis = self.project.seismic
         kh = float(seis.kh) if seis.enabled else 0.0
         kv = float(seis.kv) if seis.enabled else 0.0
+        # v0.1.220 (D210) -- the model's own supports enter the sums, as the
+        # method applied them, so the project goes too: the FACTORED copy,
+        # which is the one the analysis ran on (the original when no design
+        # standard is on).
+        from ogr_core.project import apply_design_factors
+        factored, _report = apply_design_factors(self.project)
         r = required_force(crit.slices, crit.surface, target, mid,
-                           elevation, kh, kv)
+                           elevation, kh, kv, project=factored)
         if r is None:
             self._info(tr(
                 "Back analysis is only available for Bishop, Janbu and "
@@ -1965,7 +1985,8 @@ class InterpretWindow(QMainWindow):
             return (vals[i] / length) if i < len(vals) else 0.0
         if key == "shear_stress":
             vals = result.base_shear_strength or []
-            f = result.fos if result.fos else 1.0
+            # v0.1.220 (D211) -- the equilibrium's F, as the slice panel.
+            f = _equilibrium_fos(result) if result.fos else 1.0
             return (vals[i] / length / f) if i < len(vals) else 0.0
         return 0.0
 

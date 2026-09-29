@@ -437,6 +437,9 @@ _DICTS: dict[str, dict[str, str]] = {
         'Shear strength τ_f (kPa)': 'Resistencia al corte τ_f (kPa)',
         'Mobilised shear τ_m = τ_f/F (kPa)':
             'Cortante movilizado τ_m = τ_f/F (kPa)',
+        # v0.1.220 (D211)
+        'Equilibrium factor of safety F':
+            'Factor de seguridad del equilibrio F',
         'Material': 'Material',
         'Strength model': 'Modelo de resistencia',
         'Unit weight γ (kN/m³)': 'Peso específico γ (kN/m³)',

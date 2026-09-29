@@ -65,8 +65,11 @@ class BackAnalysisSurfaceResult:
     active_force: float = math.nan
     passive_force: float = math.nan
     target_fos: float = 1.3
-    # Converged factor of safety WITHOUT support, filled in by the
-    # driver from the real evaluation (see required_force).
+    # Converged factor of safety WITHOUT the back-analysed force, filled in
+    # by the driver from the real evaluation (see required_force). The name
+    # is kept for the API. It has always carried the model's own supports,
+    # being the search's own factor; since v0.1.220 (D210) the sums the
+    # force is found from carry them too.
     unsupported_fos: float = math.nan
     notes: dict = field(default_factory=dict)
 
@@ -121,6 +124,21 @@ class EnvelopeNotSettled(Exception):
     """A slice's envelope point did not converge (see ``_own_stress``)."""
 
 
+class _NoOwnNormal(Exception):
+    """``m_alpha`` vanished while finding a slice's own point: the surface
+    is not back-analysed, as when the sum's own denominator vanishes."""
+
+
+# v0.1.220 (D210) -- the two sums are the METHOD'S, asked of it
+# (``bishop.circle_driving_sum``, ``janbu.horizontal_driving_sum`` and
+# ``bishop.x0_resisting_pass``), supports included; see
+# :func:`_sums_at_fixed_fos`. A module switch, like
+# ``methods.base.ENVELOPE_AT_OWN_STRESS``, so an A/B can rebuild the sums
+# the back analysis wrote by hand until v0.1.219 and a test can demand that
+# it moves the number (rule 7).
+LOADS_FROM_METHOD = True
+
+
 def _own_stress(s, W, sigma, fos, sign):
     """The effective normal stress of one slice at ITS OWN fixed point:
     the stress at which the envelope, read there, gives a normal force
@@ -158,7 +176,7 @@ def _own_stress(s, W, sigma, fos, sign):
 
 # ======================================================================
 def _sums_at_fixed_fos(slices, surface, target_fos, kh, kv, elevation,
-                       method_id, stress_fos=None):
+                       method_id, stress_fos=None, project=None):
     """Resisting and driving sums evaluated at a FIXED factor of safety.
 
     Returns ``(resisting, driving, arm)`` where ``arm`` converts a
@@ -203,15 +221,28 @@ def _sums_at_fixed_fos(slices, surface, target_fos, kh, kv, elevation,
     WHICH F THE POINT IS FOUND AT: ``stress_fos``, default ``target_fos``.
     They differ only for Janbu Corrected. Its solver iterates on the
     UNCORRECTED factor and multiplies by Janbu's (1973) f0 at the end, so
-    the sums below are formed at ``target/f0`` (v0.1.202). But its fixed
-    point reads its own stress from the published result, whose factor is
-    the CORRECTED one (``checks.base_effective_stresses`` uses
-    ``result.fos``), so the point that reproduces the method is found at
-    the corrected target. Measured: at target/f0 the stresses miss the
-    method's ``envelope_stress`` by 2.4e-2 relative; at the target, by
-    5.7e-10. Whether the method should read its stress at the uncorrected
-    factor is a question about the method, reported on its own and not
-    decided here.
+    the sums below are formed at ``target/f0`` (v0.1.202). Until v0.1.219
+    its fixed point read its stress at the CORRECTED factor, and the point
+    that reproduced it was found at the corrected target (at target/f0 the
+    stresses missed the method's ``envelope_stress`` by 2.4e-2 relative).
+    Since v0.1.220 (D211) the method forms its whole state at the factor its
+    equilibrium is solved at (``methods.janbu.STATE_AT_EQUILIBRIUM_FOS``),
+    and ``required_force`` finds the point there too, at ``target/f0``.
+
+    WHAT THE SUMS ARE (v0.1.220, D210): the METHOD'S, asked of it --
+    ``bishop.circle_driving_sum`` or ``janbu.horizontal_driving_sum`` and
+    ``bishop.x0_resisting_pass``, the very functions its solver iterates
+    with -- so the loads, the arms and the sense of sliding cannot drift from
+    it again. Rebuilt here by hand they had: no ponded water nor its thrust,
+    ``sin a`` where Bishop takes ``weight_arm_ratio``, and Bishop's sense of
+    sliding for Janbu too. Measured at the method's own factor on the 335
+    archived surfaces of the verification bank, the force that must be zero
+    came out above 1e-9 of the weight on 208 (up to 1.44 times the weight
+    under a reservoir); with the method's sums, on none. The model's
+    supports enter as the method applies them when ``project`` is given
+    (decision of the owner, 2026-09-28): the force found is the one to ADD
+    to the reinforcement already there. ``LOADS_FROM_METHOD`` off rebuilds
+    the old sums (:func:`_sums_by_hand`), for an A/B.
 
     Unchanged, bit for bit: every envelope whose tangent does not depend
     on the stress (``methods.base._envelope_depends_on_stress``), so every
@@ -219,6 +250,85 @@ def _sums_at_fixed_fos(slices, surface, target_fos, kh, kv, elevation,
     ``methods.base.ENVELOPE_AT_OWN_STRESS`` off, which is the switch the
     methods' own fixed point answers to, so an A/B that turns it off
     rebuilds the old reading on both sides at once.
+    """
+    if not LOADS_FROM_METHOD:
+        return _sums_by_hand(slices, surface, target_fos, kh, kv, elevation,
+                             method_id, stress_fos)
+    from ogr_slip2d.methods import base as _base
+    from ogr_slip2d.methods import bishop as _bishop
+    from ogr_slip2d.methods import janbu as _janbu
+    from ogr_slip2d.support_integration import resolve_support_terms
+    from ogr_slip2d.surface import SlipCircle
+
+    s_list = list(slices)
+    if not s_list:
+        return None
+    if stress_fos is None:
+        stress_fos = target_fos
+
+    is_bishop = (method_id == "bishop_simplified")
+    circle = surface if isinstance(surface, SlipCircle) else None
+    if is_bishop and circle is None:
+        return None
+
+    # Each method's own sense of sliding: Bishop's from sum W(1+kv) sin a,
+    # Janbu's from sum W_total tan a (D112). Until v0.1.219 both were
+    # Bishop's.
+    slide_sign = (_bishop.slide_sense(s_list, kv) if is_bishop
+                  else _janbu.slide_sense(s_list, kh, kv))
+    # The model's own reinforcement, as the method applies it; with no
+    # project, none (``resolve_support_terms`` answers a model without
+    # supports with the empty terms, which add nothing anywhere).
+    sup = resolve_support_terms(project, surface, s_list, slide_sign)
+
+    # Read at call time, like the methods read it, so a test or an A/B
+    # that turns it off reaches this function too.
+    imposed = None
+    if _base.ENVELOPE_AT_OWN_STRESS:
+        depends_cache: dict = {}
+
+        def imposed(i, s, W, sigma):
+            # v0.1.215 (D204) -- where the method reads it; see above.
+            if not _base._envelope_depends_on_stress(s, depends_cache):
+                return None
+            own = _own_stress(s, W, sigma, stress_fos, slide_sign)
+            if own is None:
+                raise _NoOwnNormal
+            return own
+
+    try:
+        if is_bishop:
+            _free, driving = _bishop.circle_driving_sum(
+                s_list, circle, kh, kv, slide_sign, sup)
+            pas = _bishop.x0_resisting_pass(s_list, kh, kv, slide_sign, sup,
+                                            target_fos, imposed)
+            passive = sup.moment_passive
+            # Moment of a horizontal force about the centre is
+            # T·(y_c − y_T); dividing by R keeps it commensurate with the
+            # driving sum, which is a moment over R.
+            arm = (circle.centre_y - elevation) / max(circle.radius, 1e-9)
+        else:
+            _free, driving, _active, passive = _janbu.horizontal_driving_sum(
+                s_list, kh, kv, slide_sign, sup)
+            pas = _bishop.x0_resisting_pass(s_list, kh, kv, slide_sign, sup,
+                                            target_fos, imposed, janbu=True)
+            # Force equilibrium: a horizontal force enters directly, and
+            # its elevation is irrelevant — exactly as the reference states.
+            arm = 1.0
+    except _NoOwnNormal:
+        return None
+    if pas.collapsed is not None:
+        return None
+    return pas.total + passive, driving, arm
+
+
+def _sums_by_hand(slices, surface, target_fos, kh, kv, elevation, method_id,
+                  stress_fos=None):
+    """The two sums as the back analysis wrote them by hand until v0.1.219,
+    kept only so that ``LOADS_FROM_METHOD`` off rebuilds them for an A/B
+    (D210): the soil and its loads without the ponded water or its thrust,
+    ``sin a`` as Bishop's weight arm, Bishop's sense of sliding for Janbu
+    too, and no supports.
     """
     from ogr_slip2d.external_forces import (seismic_soil_part,
                                             seismic_vertical_load)
@@ -321,13 +431,19 @@ def _sums_at_fixed_fos(slices, surface, target_fos, kh, kv, elevation,
 
 
 def required_force(slices, surface, target_fos, method_id="bishop_simplified",
-                   elevation=0.0, kh=0.0, kv=0.0
+                   elevation=0.0, kh=0.0, kv=0.0, project=None
                    ) -> Optional[BackAnalysisSurfaceResult]:
     """Support force needed to bring ONE surface to ``target_fos``.
 
     Returns None when the surface cannot be evaluated, or when the
     geometry makes the force indeterminate (a Bishop force applied
     exactly at the centre elevation has no moment arm).
+
+    ``project`` (v0.1.220, D210) is the model the slices were cut from, the
+    FACTORED copy when a design standard is on: its supports enter the sums
+    as the method applies them, so the force found is the one to ADD to the
+    reinforcement already there. Without it no support is counted, which is
+    right only for a model that has none.
     """
     if method_id not in SUPPORTED_METHODS:
         return None
@@ -339,16 +455,22 @@ def required_force(slices, surface, target_fos, method_id="bishop_simplified",
     # used the corrected target throughout: 269 kN/m "needed" where the
     # surface already stood at the target unsupported.
     f_eval = target_fos
+    stress_fos = target_fos
     if method_id == "janbu_corrected":
         from types import SimpleNamespace
 
-        from ogr_slip2d.methods.janbu import _janbu_correction_factor
+        from ogr_slip2d.methods import janbu as _janbu
         holder = (slices if hasattr(slices, "slices")
                   else SimpleNamespace(slices=list(slices)))
-        f0 = _janbu_correction_factor(None, surface, holder)
+        f0 = _janbu._janbu_correction_factor(None, surface, holder)
         if not f0 > 0:
             return None
         f_eval = target_fos / f0
+        # v0.1.220 (D211) -- the point is found where the method finds it,
+        # at the factor its equilibrium is solved at (the switch that says
+        # so is the method's own).
+        if _janbu.STATE_AT_EQUILIBRIUM_FOS:
+            stress_fos = f_eval
     surface_dict = (surface.to_dict() if hasattr(surface, "to_dict")
                     else None)
     try:
@@ -357,7 +479,7 @@ def required_force(slices, surface, target_fos, method_id="bishop_simplified",
         # (the target itself; see ``_sums_at_fixed_fos``).
         sums = _sums_at_fixed_fos(slices, surface, f_eval, kh, kv,
                                   elevation, method_id,
-                                  stress_fos=target_fos)
+                                  stress_fos=stress_fos, project=project)
     except EnvelopeNotSettled:
         # No force rather than a force at a point the method never uses;
         # ``run_back_analysis`` counts these and says so.
@@ -445,7 +567,7 @@ def run_back_analysis(project, search, target_fos=1.3, elevation=0.0,
             n_composite += 1
             continue
         r = required_force(ev.slices, ev.surface, target_fos, method_id,
-                           elevation, kh, kv)
+                           elevation, kh, kv, project=project)
         out.surfaces_analysed += 1
         if r is None:
             continue

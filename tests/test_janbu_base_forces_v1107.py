@@ -269,8 +269,14 @@ def _slide_sign(slices) -> float:
 
 
 def _mobilised(res):
-    """``tau_f*l / F``, the shear force equilibrium actually mobilises."""
-    return [t / res.fos for t in res.base_shear_strength]
+    """``tau_f*l / F``, the shear force equilibrium actually mobilises.
+
+    v0.1.220 (D211) -- with F the factor the equilibrium was SOLVED at,
+    which the result publishes as ``details["equilibrium_fos"]``: F0 for
+    Janbu Corrected, which reports f0*F0. Until then its state was formed
+    at the corrected factor and this divided by it."""
+    f = res.details.get("equilibrium_fos", res.fos)
+    return [t / f for t in res.base_shear_strength]
 
 
 def _total_weight(slices, kh=0.0, kv=0.0):
@@ -319,9 +325,10 @@ class TestEveryMethodPublishesTheColumns:
 class TestVerticalEquilibriumOfEachSlice:
     """``N*cos(a) + s*S*sin(a) = W`` — what the reported normal MEANS.
 
-    Exact for both Janbu variants: the correction factor scales F, and the
-    forces are formed at whichever F is reported, so the identity closes
-    either way.
+    Exact for both Janbu variants. Since v0.1.220 (D211) Janbu Corrected
+    forms its state at F0, the factor its equilibrium is solved at, and S is
+    divided by that same F (see ``_mobilised``); until then both were at the
+    corrected factor, which closed this identity too but not the next one.
     """
 
     def _check(self, method_id):
@@ -382,17 +389,22 @@ class TestJanbusOwnEquation:
         r = self._residual(_run("bishop_simplified"), slices)
         assert r > 0.01, r
 
-    def test_janbu_corrected_does_not_either_which_is_the_correction(self):
+    def test_janbu_corrected_closes_it_too_because_its_state_is_the_solved_one(self):
         """f0 multiplies the factor of safety and comes from Janbu's (1973)
         comparison of the simplified and the rigorous solutions — it is not
-        obtained by re-solving equilibrium, so the corrected state does not
-        close the force balance. Reporting the forces at the CORRECTED F is
-        a deliberate choice: they go with the number that is displayed."""
+        obtained by re-solving equilibrium, so the only equilibrium state
+        there is is the one at F0, and that is the state reported.
+
+        v0.1.220 (D211), CHANGED ON PURPOSE. Until then the forces were
+        reported at the corrected F, "a deliberate choice: they go with the
+        number that is displayed", and this case asserted that the set then
+        MISSED this balance by more than 1 %. That choice was a state no
+        solution had; see ``methods.janbu.STATE_AT_EQUILIBRIUM_FOS``."""
         _p, _c, slices = _slope()
         simplified = _run("janbu_simplified")
         corrected = _run("janbu_corrected")
         assert corrected.fos > simplified.fos, (corrected.fos, simplified.fos)
-        assert self._residual(corrected, slices) > 0.01
+        assert self._residual(corrected, slices) < 1e-3
 
 
 # ======================================================================

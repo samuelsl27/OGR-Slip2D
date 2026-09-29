@@ -60,6 +60,7 @@ from .base import (
 from .bishop import (  # reuse the envelope linearisation and the X = 0 base forces
     BishopSimplified,
     base_forces_no_interslice_shear,
+    x0_resisting_pass,
 )
 
 
@@ -89,11 +90,7 @@ class JanbuSimplified(LEMMethod):
         kv = project.seismic.kv if project.seismic.enabled else 0.0
 
         # Sliding direction
-        driving_raw = sum(
-            slice_forces(s, kh, kv).w_total * math.tan(s.base_angle)
-            for s in slices
-        )
-        slide_sign = 1.0 if driving_raw >= 0 else -1.0
+        slide_sign = slide_sense(slices, kh, kv)
 
         # v0.1.113 — supports enter through T_S, the projection ON THE
         # BASE, exactly as in Bishop and Ordinary and exactly as the
@@ -118,60 +115,17 @@ class JanbuSimplified(LEMMethod):
         # — Sheahan's own — disagrees with the first by up to 4.7 %, which
         # is more than the gap being adjudicated. See below.
         from ..support_integration import (resolve_support_terms,
-                                          support_failure_details,
-                                          support_vertical_load)
+                                          support_failure_details)
         sup = resolve_support_terms(project, surface, slices, slide_sign)
         s_list = slices.slices if hasattr(slices, "slices") else slices
 
-        # v0.1.142 — and the projection is weighted by sec alpha, which is
-        # the half v0.1.113 did not settle. Janbu balances SHEAR along the
-        # base: Sum S*sec a = Sum W*tan a. Putting an external force
-        # P = (P_h, P_v) on a slice into that balance gives
-        #
-        #     Sum (W - P_v)*tan a  +  Sum P_h  =  Sum S*sec a
-        #
-        # and with T_S = slide_sign*(P_h*cos a + P_v*sin a) the whole of the
-        # support's contribution to the driving side is exactly -T_S*sec a,
-        # its normal part arriving through W_eff below. Substituted into the
-        # form of this method on a PLANE the result cancels down to the
-        # closed-form Coulomb wedge, for Active and for Passive alike:
-        #
-        #     Active   F = (c'L + (W cos a + T_N) tan phi') / (W sin a - T_S)
-        #     Passive  F = (c'L + (W cos a + T_N) tan phi' + T_S) / (W sin a)
-        #
-        # which is not a convention: on a plane the sliding mass is one free
-        # body and the interslice forces cancel in the sum, so every method
-        # that closes global force equilibrium owes that number. The two
-        # Corps of Engineers, Lowe-Karafiath and Ordinary reproduce it to the
-        # last digit; until this version Janbu missed it by +1.9 % at 35 deg
-        # and -20.0 % at 50 deg while being EXACT on the same planes with no
-        # support at all. See ``tests/test_janbu_wedge_v1142.py``.
-        def _sec_weighted(column):
-            """Sum of a per-slice support column, each term over cos alpha."""
-            if not sup.present:
-                return 0.0
-            return math.fsum(
-                t / max(math.cos(s.base_angle), 1e-9)
-                for t, s in zip(column, s_list) if t
-            )
-
-        t_active_sec = _sec_weighted(sup.t_active)
-        t_passive_sec = _sec_weighted(sup.t_passive)
-
-        # Driving force horizontal: Σ W·(1+kv)·tan α + Σ kh·W
-        denominator = 0.0
-        for s in slices:
-            f = slice_forces(s, kh, kv)
-            denominator += slide_sign * f.w_total * math.tan(s.base_angle)
-            denominator += f.h_seismic  # horizontal seismic adds directly
-            # v0.1.61 — external water thrust. The driving force is
-            # measured positive along the sliding direction, whose x
-            # component is −slide_sign (slide_sign = +1 means the mass
-            # moves towards −x); h_water is signed in +x.
-            denominator += -slide_sign * f.h_water
-
-        driving_no_support = denominator
-        denominator -= t_active_sec
+        # v0.1.220 (D210) -- the driving side, without and with the Active
+        # supports, and the Passive supports' term, from the one function
+        # the back analysis also calls; see :func:`horizontal_driving_sum`
+        # for the sec alpha weighting of the supports and why.
+        (driving_no_support, denominator,
+         t_active_sec, t_passive_sec) = horizontal_driving_sum(
+            s_list, kh, kv, slide_sign, sup)
         active_ratio = (
             t_active_sec / driving_no_support
             if sup.present and abs(driving_no_support) > 1e-9 else 0.0
@@ -217,95 +171,46 @@ class JanbuSimplified(LEMMethod):
         # strength because their estimate was clipped; see
         # ``BishopSimplified._zero_strength``.
         zero: list[int] = []
+        imposed = self._imposed_reader()
         for it in range(1, self.max_iterations + 1):
             iterations = it
-            numerator = 0.0
-            sigma_load = [0.0] * len(s_list) if sup.present else None
-            zero = []
-
-            for i_s, s in enumerate(s_list):
-                # v0.1.61 — the base normal carries the ponded-water
-                # weight; the horizontal thrust belongs on the driving side
-                W_eff = slice_forces(s, kh, kv).w_total
-                # v0.1.142 — the support is a LINE LOAD on this slice, so it
-                # joins the vertical equilibrium n_alpha comes from instead
-                # of being bolted on outside it. Bishop made the same move in
-                # v0.1.137; the two are the same statement, and the argument
-                # for it is written at ``support_vertical_load``.
-                if sup.present:
-                    load = support_vertical_load(
-                        sup, i_s, s.base_angle, slide_sign, fos)
-                    W_eff += load
-                    sigma_load[i_s] = load
-                b = s.width
-
-                # Estimate σ'ₙ
-                N_est = W_eff * math.cos(s.base_angle)
-                raw = N_est - s.pore_pressure * s.base_length
-                N_eff_est = max(0.0, raw)
-                sigma_n_eff = N_eff_est / max(s.base_length, 1e-9)
-                # v0.1.213 (D84) -- or where the method's own solution put
-                # this base; see ``base.self_consistent_envelope``.
-                imposed = self._imposed_stress(i_s)
-                if imposed is not None:
-                    raw, sigma_n_eff = imposed, max(0.0, imposed)
-
-                c, tan_phi = BishopSimplified._local_c_phi(
-                    s, s.material, sigma_n_eff
+            # v0.1.220 (D210) -- the resisting sum at this F, from the one
+            # function the back analysis also calls. The support is a LINE
+            # LOAD on each slice, in the vertical equilibrium n_alpha comes
+            # from (v0.1.142, as Bishop since v0.1.137). From v0.1.64 to
+            # v0.1.141 a term ``T_N*tan phi'`` was also added raw, outside
+            # the n_alpha normalisation; it is gone, because the friction a
+            # support's normal component mobilises is whatever the slice's
+            # own equilibrium yields, and adding it again outside would count
+            # it twice with the wrong weight. What decided it was the
+            # closed-form wedge, not the six published Clouterre planes: on
+            # them the two Corps methods, Lowe-Karafiath and Ordinary all
+            # reproduce the wedge to the last digit and leave a FLAT residual
+            # against Sheahan's own column (-7.1 % to -8.2 %), the signature
+            # of the nail geometry the manual does not publish, while the
+            # combination that fit had a 4.3-point TREND across the same six
+            # angles, the signature of a formulation error. See
+            # ``tests/test_janbu_wedge_v1142.py`` and the header of
+            # ``tests/test_support_projection_v1113.py``.
+            pas = x0_resisting_pass(s_list, kh, kv, slide_sign, sup, fos,
+                                    imposed, janbu=True)
+            sigma_load, zero = pas.sigma_load, pas.zero
+            if pas.collapsed is not None:
+                return LEMResult(
+                    fos=None,
+                    converged=False,
+                    iterations=iterations,
+                    method_id=self.METHOD_ID,
+                    surface=surface,
+                    slices=slices,
+                    reason=REASON_N_ALPHA_COLLAPSED,
+                    error_message=f"nα collapsed at slice {pas.collapsed[0]}",
                 )
-                if raw < 0.0 and BishopSimplified._zero_strength(
-                        s, raw, c, tan_phi):
-                    zero.append(i_s)
-
-                # n_α = cos²α · (1 + tan α · tan φ' / F)  (with sliding sign)
-                n_alpha = (math.cos(s.base_angle) ** 2) * (
-                    1.0 + slide_sign * math.tan(s.base_angle) * tan_phi / fos
-                )
-                if abs(n_alpha) < 1e-6:
-                    return LEMResult(
-                        fos=None,
-                        converged=False,
-                        iterations=iterations,
-                        method_id=self.METHOD_ID,
-                        surface=surface,
-                        slices=slices,
-                        reason=REASON_N_ALPHA_COLLAPSED,
-                        error_message=f"nα collapsed at slice {s.index}",
-                    )
-
-                # Numerator term: [c'·b + (W − u·b)·tan φ'] / n_α
-                numerator += (
-                    c * b + (W_eff - s.pore_pressure * b) * tan_phi
-                ) / n_alpha
-
-                # v0.1.64 to v0.1.141 a term ``T_N*tan phi'`` was added
-                # here, raw, outside the n_alpha normalisation. It is gone:
-                # the friction a support's normal component mobilises is
-                # whatever this slice's own equilibrium yields from W_eff
-                # above, and adding it again outside would be counting it
-                # twice with the wrong weight.
-                #
-                # v0.1.141 measured four combinations of that term and the
-                # driving projection and could not choose between them,
-                # because the only external evidence in hand was the six
-                # published Clouterre planes and the combination that fit
-                # them was the one that failed its own load-equals-support
-                # identity. The closed-form wedge is what decided it, and it
-                # decided against the fit: on those same six planes the two
-                # Corps methods, Lowe-Karafiath and Ordinary all reproduce
-                # the wedge to the last digit, and the residual they leave
-                # against Sheahan's own published column is FLAT (-7.1 % to
-                # -8.2 %), which is the signature of the nail geometry the
-                # manual does not publish. The combination that fit had a
-                # 4.3-point TREND across the same six angles, which is the
-                # signature of a formulation error. See
-                # ``tests/test_janbu_wedge_v1142.py`` and the header of
-                # ``tests/test_support_projection_v1113.py``.
 
             # v0.1.142 — sec alpha, for the reason given at the top:
             # a PASSIVE support mobilises at T_S/F alongside the base
             # shear, so it carries the same weighting the shear does.
-            numerator += t_passive_sec
+            numerator = pas.total + t_passive_sec
 
             # Same backstop as Bishop's, and for the same reason: the next
             # pass computes tan(phi)/F inside n_alpha, so a zero F raises
@@ -347,6 +252,10 @@ class JanbuSimplified(LEMMethod):
                     if accelerated is not None:
                         fos = accelerated
 
+        # v0.1.220 (D211) -- the factor of safety this equilibrium was solved
+        # at, kept before the correction multiplies it: the per-slice state
+        # below is formed at it. See ``STATE_AT_EQUILIBRIUM_FOS``.
+        f_eq = fos
         correction = None
         if self._CORRECTION:
             # v0.1.214 (D80) -- ``b1`` from the soil type of the bases; see
@@ -355,6 +264,7 @@ class JanbuSimplified(LEMMethod):
             f0, b1 = janbu_correction(slices)
             fos *= f0
             correction = {"janbu_b1": b1, "janbu_f0": f0}
+        state_fos = f_eq if STATE_AT_EQUILIBRIUM_FOS else fos
 
         # v0.1.107 - the per-slice columns, which this method left EMPTY
         # until now. Janbu neglects the inter-slice shear exactly as
@@ -369,16 +279,15 @@ class JanbuSimplified(LEMMethod):
         # slices: 1.7625 with nothing undrained against 1.2177 with all
         # fifty, where the accepted answer is 1.347.
         #
-        # AFTER the Janbu (1973) correction factor, deliberately: f0
-        # multiplies the factor of safety, and these forces are reported
-        # against the factor of safety that is reported. The price is that
-        # Janbu Corrected's set no longer satisfies the GLOBAL HORIZONTAL
-        # equilibrium that Janbu (1954) solves - f0 is empirical and does
-        # not come from re-solving anything - while Janbu Simplified's
-        # does, to 1e-5 of the forces involved. Each slice still satisfies
-        # its own vertical equilibrium in both.
+        # v0.1.220 (D211) -- at the factor the equilibrium was SOLVED at,
+        # F0, and not at the corrected f0*F0 as from v0.1.107 to v0.1.219.
+        # The reason that choice gave, "these forces are reported against
+        # the factor of safety that is reported", cost it Janbu's own
+        # GLOBAL HORIZONTAL equilibrium, which f0 does not come from; at F0
+        # Janbu Corrected's set is Janbu Simplified's and satisfies it. See
+        # the block above ``STATE_AT_EQUILIBRIUM_FOS``.
         normals, shears, strengths = base_forces_no_interslice_shear(
-            s_list, kh, kv, slide_sign, fos,
+            s_list, kh, kv, slide_sign, state_fos,
             envelope_stress=self._envelope_stress,
             support_load=sigma_load)
 
@@ -422,6 +331,8 @@ class JanbuSimplified(LEMMethod):
                 # ``analysis_runner.zero_strength_note``.
                 "zero_strength_slices": zero,
                 **(correction or {}),
+                # v0.1.220 (D211) -- read by ``checks.equilibrium_fos``.
+                **_equilibrium_keys(f_eq),
             }),
         )
 
@@ -431,6 +342,145 @@ class JanbuCorrected(JanbuSimplified):
     METHOD_ID = "janbu_corrected"
     DISPLAY_NAME = "Janbu Corrected"
     _CORRECTION = True
+
+
+# ----------------------------------------------------------------------
+# v0.1.220 (D210) -- the sums of this method, written once for the solver and
+# the back analysis; see the block above ``bishop.slide_sense``.
+
+
+def slide_sense(slices, kh: float, kv: float) -> float:
+    """Janbu's sense of sliding: the sign of ``sum W_total tan a``, ponded
+    water inside ``W_total`` and ``tan`` weighting a steep base far more than
+    Bishop's ``sin`` (the method D112 is about). Moved out of
+    ``compute_fos`` so the back analysis asks this method for its own sense
+    (v0.1.220, D210) instead of Bishop's."""
+    driving_raw = sum(
+        slice_forces(s, kh, kv).w_total * math.tan(s.base_angle)
+        for s in slices
+    )
+    return 1.0 if driving_raw >= 0 else -1.0
+
+
+def horizontal_driving_sum(slices, kh: float, kv: float, slide_sign: float,
+                           sup) -> tuple[float, float, float, float]:
+    """Janbu's driving side and its two support terms, as
+    ``(driving without the Active supports, driving with them,
+    Active term, Passive term)`` (v0.1.220, D210; moved out of
+    ``compute_fos`` unchanged, bit for bit).
+
+        driving = sum s*W_total*tan a + sum kh*W_soil - s*H_water
+                  [- sum T_active*sec a]
+
+    v0.1.142 — the support projection is weighted by sec alpha, which is
+    the half v0.1.113 did not settle. Janbu balances SHEAR along the base:
+    Sum S*sec a = Sum W*tan a. Putting an external force P = (P_h, P_v) on
+    a slice into that balance gives
+
+        Sum (W - P_v)*tan a  +  Sum P_h  =  Sum S*sec a
+
+    and with T_S = slide_sign*(P_h*cos a + P_v*sin a) the whole of the
+    support's contribution to the driving side is exactly -T_S*sec a, its
+    normal part arriving through the slice's load in
+    :func:`bishop.x0_resisting_pass`. Substituted into the form of this
+    method on a PLANE the result cancels down to the closed-form Coulomb
+    wedge, for Active and for Passive alike:
+
+        Active   F = (c'L + (W cos a + T_N) tan phi') / (W sin a - T_S)
+        Passive  F = (c'L + (W cos a + T_N) tan phi' + T_S) / (W sin a)
+
+    which is not a convention: on a plane the sliding mass is one free body
+    and the interslice forces cancel in the sum, so every method that closes
+    global force equilibrium owes that number. The two Corps of Engineers,
+    Lowe-Karafiath and Ordinary reproduce it to the last digit; until
+    v0.1.142 Janbu missed it by +1.9 % at 35 deg and -20.0 % at 50 deg while
+    being EXACT on the same planes with no support at all. See
+    ``tests/test_janbu_wedge_v1142.py``.
+    """
+    s_list = slices.slices if hasattr(slices, "slices") else slices
+
+    def _sec_weighted(column):
+        """Sum of a per-slice support column, each term over cos alpha."""
+        if not sup.present:
+            return 0.0
+        return math.fsum(
+            t / max(math.cos(s.base_angle), 1e-9)
+            for t, s in zip(column, s_list) if t
+        )
+
+    t_active_sec = _sec_weighted(sup.t_active)
+    t_passive_sec = _sec_weighted(sup.t_passive)
+
+    # Driving force horizontal: Σ W·(1+kv)·tan α + Σ kh·W
+    denominator = 0.0
+    for s in s_list:
+        f = slice_forces(s, kh, kv)
+        denominator += slide_sign * f.w_total * math.tan(s.base_angle)
+        denominator += f.h_seismic  # horizontal seismic adds directly
+        # v0.1.61 — external water thrust. The driving force is
+        # measured positive along the sliding direction, whose x
+        # component is −slide_sign (slide_sign = +1 means the mass
+        # moves towards −x); h_water is signed in +x.
+        denominator += -slide_sign * f.h_water
+
+    driving_no_support = denominator
+    denominator -= t_active_sec
+    return driving_no_support, denominator, t_active_sec, t_passive_sec
+
+
+# ----------------------------------------------------------------------
+# v0.1.220 (D211) -- Janbu Corrected forms its per-slice STATE at the factor
+# its equilibrium is solved at, F0, not at the corrected F = f0*F0.
+#
+# WHAT WAS WRONG. The solver iterates on the uncorrected factor and
+# multiplies by f0 at the end (Janbu 1973), and everything read afterwards --
+# the stress a curved envelope is linearised at (D84), the columns, the
+# m-alpha and tension checks, the interslice march, stage 1 of the multi-
+# stage drawdown -- was formed at the corrected F: a state no pass solved.
+# With a power curve the fixed point settled 2.4e-2 away from the stress the
+# solver's own equilibrium resolves.
+#
+# WHAT DECIDED IT (the owner, 2026-09-29, after measuring side B -- only the
+# envelope point and the back analysis at F0 -- and side C, all of it):
+#
+# * F0 is the factor OF THE SOLUTION: Duncan, Wright & Brandon (2014,
+#   Fig. 6.13) write F = f0*F0 with "F0 = factor of safety from force
+#   equilibrium solution with horizontal interslice forces", and the
+#   reference documentation obtains the corrected factor "by multiplying the
+#   Janbu Simplified safety factor for the surface" by f0. The correction is
+#   an empirical adjustment of the NUMBER (Janbu compared his simplified and
+#   generalized procedures on homogeneous slopes); it re-solves nothing.
+# * the reference's two worked reports print the SAME count of every error
+#   code for the two Janbu (Ej_1: 3264 valid, -112 91 in both; Ej_2: -112 146
+#   in both). Only a state formed at F0 gives that identity: at the corrected
+#   F this program counted 90 against 92 and 159 against 162.
+# * the mobilised shear is the EQUILIBRIUM shear stress, tau = s/F, "the
+#   shear stress required to maintain a just-stable slope" (Duncan, Wright &
+#   Brandon 2014, §6.1, Eqs. 6.1-6.2): the F is the one the equilibrium
+#   equations are solved with, and here that is F0. At F0 the published
+#   normal and tau_f/F0 close each slice's vertical equilibrium and Janbu's
+#   own horizontal balance; at f0*F0 they close neither, and s/(f0*F0) is the
+#   equilibrium stress of no solution anyone computed.
+#
+# Measured on the verification bank: the 34 Janbu Corrected rows keep every
+# factor and every critical surface; the -112 count moves in 14 of them and
+# the published sigma'n_max of the critical in 32 (up to -4.8 %; none has a
+# published value); problem 40, the one curved envelope, moves -0.0024 %.
+#
+# A module switch, like ``B1_BY_SOIL_TYPE``, so an A/B can rebuild the state
+# at the corrected F and a test can demand that it moves (rule 7). Side B was
+# measured and dropped: it read the envelope at F0 and checked it at F, which
+# is incoherent by construction.
+STATE_AT_EQUILIBRIUM_FOS = True
+
+
+def _equilibrium_keys(f_eq: float) -> dict:
+    """The ``details`` key that tells the readers of the state which F it was
+    formed at (v0.1.220, D211): ``checks.equilibrium_fos`` reads it. Absent
+    with the switch off, so every reader falls back to the reported F."""
+    if STATE_AT_EQUILIBRIUM_FOS:
+        return {"equilibrium_fos": f_eq}
+    return {}
 
 
 # ----------------------------------------------------------------------

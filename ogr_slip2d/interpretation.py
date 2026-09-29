@@ -309,9 +309,19 @@ def slice_rows(result) -> list:
     method's base normal force, ``sigma_n_eff = sigma_n - u``, ``tau_f``
     the shear strength per unit base length and ``tau_m = tau_f / F`` (the
     reference's "Shear Stress"; its Ej_2 table: 31.082 / 1.11442 =
-    27.8907)."""
+    27.8907).
+
+    v0.1.220 (D211) -- F is the factor the method's equilibrium was solved
+    at (``checks.equilibrium_fos``): the mobilised shear is the equilibrium
+    shear stress, tau = s/F (Duncan, Wright & Brandon 2014, Eqs. 6.1-6.2).
+    It is the reported factor for every method but Janbu Corrected, which
+    solves at F0 and reports f0*F0."""
+    from .checks import equilibrium_fos
+
     rows = []
     fos = getattr(result, "fos", None)
+    if fos:
+        fos = equilibrium_fos(result)
     for s in getattr(result, "slices", None) or []:
         i = getattr(s, "index", None)
         sn = slice_stress(result, "base_normal_force", s)
