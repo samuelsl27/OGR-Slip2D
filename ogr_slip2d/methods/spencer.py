@@ -92,6 +92,8 @@ class Spencer(LEMMethod):
         # v0.1.64 — supports, resolved once for every inner solve below.
         from ..support_integration import (resolve_support_terms,
                                            support_failure_details,
+                                           support_forces,
+                                           support_moments,
                                            support_normal_load)
         sup = resolve_support_terms(project, surface, slices, slide_sign)
 
@@ -344,6 +346,14 @@ class Spencer(LEMMethod):
                     # the solver linearised at) and the base normal of its OWN
                     # solution, which the Tensile Stress Check tests.
                     "sigma_support_load": support_normal_load(sup),
+                    # v0.1.221 (D212) -- the whole force of the support on each
+                    # slice, at the F of the force branch that solved the
+                    # per-slice equilibrium, and its moment about the base
+                    # midpoint: read by the interslice march.
+                    "support_force": support_forces(
+                        sup, slices, slide_sign,
+                        force.fos if force is not None else 0.5 * (ff + fm)),
+                    "support_moment": support_moments(sup, slices),
                     "solved_base_normal": list(normals),
                     # v0.1.213 (D84) -- see ``zero_strength_note``.
                     "zero_strength_slices": system.zero_strength_slices(),
@@ -592,6 +602,14 @@ class Spencer(LEMMethod):
                 # the solver linearised at) and the base normal of its OWN
                 # solution, which the Tensile Stress Check tests.
                 "sigma_support_load": support_normal_load(sup),
+                # v0.1.221 (D212) -- the whole force of the support on each
+                # slice, at the F of the force branch that solved the
+                # per-slice equilibrium, and its moment about the base
+                # midpoint: read by the interslice march.
+                "support_force": support_forces(
+                    sup, slices, slide_sign,
+                    force.fos if force is not None else 0.5 * (ff_final + fm_final)),
+                "support_moment": support_moments(sup, slices),
                 "solved_base_normal": list(normals),
                 # v0.1.213 (D84) -- see ``zero_strength_note``.
                 "zero_strength_slices": system.zero_strength_slices(),

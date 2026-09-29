@@ -3227,6 +3227,8 @@ class InterpretWindow(QMainWindow):
             U  — pore-water resultant on the base (u·l)
             E_L, X_L / E_R, X_R — interslice forces on each face, at the
                 line-of-thrust application heights
+            T  — the support force the method applied to the slice
+                (v0.1.221, D212), on its line of action
 
         v0.1.22 — vectors come from the interslice post-processor
         (``ogr_slip2d.postprocess``), not from single-slice statics, so
@@ -3297,11 +3299,19 @@ class InterpretWindow(QMainWindow):
         ax.fill(xs + [xs[0]], ys + [ys[0]], color="#d9d9d9",
                 edgecolor="black", lw=1.2, alpha=0.5, zorder=1)
 
+        # v0.1.221 (D212) -- the reinforcement the march applied to this
+        # slice, as the method published it; (0, 0) without one.
+        T_x = T_y = T_m = 0.0
+        if st.ok and st.support_force:
+            T_x, T_y = st.support_force[idx]
+            T_m = st.support_moment[idx] if st.support_moment else 0.0
+
         # Common force→length scale: largest arrow ≈ 60 % of slice height
         h_slice = max(0.5 * ((s.top_y_left - s.base_y_left)
                              + (s.top_y_right - s.base_y_right)), 1e-6)
         f_max = max(abs(W), abs(N), abs(S), abs(U),
-                    abs(E_L), abs(E_R), abs(X_L), abs(X_R), 1e-9)
+                    abs(E_L), abs(E_R), abs(X_L), abs(X_R),
+                    math.hypot(T_x, T_y), 1e-9)
         scale = 0.6 * max(h_slice, b) / f_max
 
         def arrow(x0, y0, fx, fy, color, label, lw=2.0, ls="-"):
@@ -3333,6 +3343,17 @@ class InterpretWindow(QMainWindow):
         # U (pore resultant, opposing N direction)
         if U > 0:
             arrow(x_cb - 0.15 * b, y_cb, -U * nx, -U * ny, "#2ca02c", "U")
+        # v0.1.221 (D212) -- the support, drawn on its line of action where
+        # it meets the base: the point of the chord whose moment about the
+        # base midpoint is the published one (the midpoint itself when the
+        # force runs along the chord and only a couple is left).
+        if T_x or T_y:
+            cross = tx * T_y - ty * T_x
+            d = (T_m / cross
+                 if abs(cross) > 1e-9 * max(1.0, math.hypot(T_x, T_y))
+                 else 0.0)
+            arrow(x_cb + d * tx, y_cb + d * ty, T_x, T_y, "#ff7f0e",
+                  tr("T (support)"))
         # Interslice: left face pushes right (+E_L,+X_L); right face
         # reaction (−E_R,−X_R). Drawn at the thrust heights.
         arrow(s.base_x_left, y_tL, E_L, X_L, "#9467bd", "Z_L")

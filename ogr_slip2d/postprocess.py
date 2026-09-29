@@ -80,6 +80,12 @@ class InterSliceState:
     closure: float = math.nan   # |E_n| (should be ~0 for force methods)
     e_max: float = 0.0          # max |E| (for normalising closure)
     ok: bool = False
+    # v0.1.221 (D212) -- per slice, the reinforcement the march applied:
+    # ``[f_x, f_y]`` and its moment about the base midpoint, as the method
+    # published them; empty without a support. The free-body diagram of the
+    # interpretation draws the force.
+    support_force: list = field(default_factory=list)
+    support_moment: list = field(default_factory=list)
 
     @property
     def relative_closure(self) -> float:
@@ -121,13 +127,53 @@ def _quad_centroid_y(s) -> float:
 
 
 # ----------------------------------------------------------------------
+# v0.1.221 (D212) -- whether the march carries the reinforcement the method
+# applied. Until this version it rebuilt each slice's equilibrium with the
+# method's loads (``slice_forces``, the water, the earthquake and its sense,
+# D173) and NO support force, so on a reinforced slope the interslice forces
+# and the line of thrust were those of a bare one, and since v0.1.216 (D196)
+# its N parted from the column the method publishes on every crossed slice:
+# on the -15 degree nail of ``test_support_normal_v1137`` the march gave
+# 6.686 kN/m where Bishop's own normal is 15.607 (6.565 against 15.381 with
+# Janbu). Each method now publishes the force it applied per slice
+# (``details["support_force"]``: the normal part whole and the tangential
+# part mobilised at ``t_active + t_passive/F``, the same vector for every
+# family; see ``support_integration.support_force_on_slice``) and its moment
+# about the base midpoint (``details["support_moment"]``), and the march adds
+# them: the force to the slice's two force balances, the moment to its line
+# of thrust. The strength is linearised where the method did, with the
+# support load its own estimate carried (``details["sigma_support_load"]``).
+# A module switch, like ``bishop.SUPPORT_IN_PUBLISHED_NORMAL``, so an A/B can
+# rebuild the bare march and a test can demand that it moves (rule 7).
+SUPPORT_IN_MARCH = True
+
+
+def _per_slice_list(details, key, n):
+    """``details[key]`` when it is a list of ``n`` entries, else None: the
+    march reads what the method published and nothing it did not."""
+    raw = details.get(key) if details else None
+    if raw is None or isinstance(raw, (str, bytes)):
+        return None
+    try:
+        vals = list(raw)
+    except TypeError:
+        return None
+    return vals if len(vals) == n else None
+
+
 def _march(slist, ratios, F, kh, kv,
-           envelope_stress=None, slide_sign=None) -> InterSliceState:
+           envelope_stress=None, slide_sign=None, support_force=None,
+           support_moment=None, support_load=None) -> InterSliceState:
     """Single left→right equilibrium march with the given boundary
     ratios. Returns the full state (E, X, N, S, thrust line).
 
     ``slide_sign`` is the sense of sliding the method solved with
-    (``details["slide_sign"]``); None falls back to the soil-weight sum."""
+    (``details["slide_sign"]``); None falls back to the soil-weight sum.
+
+    ``support_force``, ``support_moment`` and ``support_load`` (v0.1.221,
+    D212) are the reinforcement the method applied, per slice: the force
+    ``[f_x, f_y]`` (+x, +y), its moment about the base midpoint and the load
+    the method's stress estimate carried; None without a support."""
     n = len(slist)
     st = InterSliceState()
     st.E = [0.0] * (n + 1)
@@ -158,6 +204,12 @@ def _march(slist, ratios, F, kh, kv,
 
     # Thrust starts at the base end (E=0 there).
     st.y_thrust[0] = slist[0].base_y_left
+    if support_force is not None:
+        st.support_force = [list(f) if f is not None else [0.0, 0.0]
+                            for f in support_force]
+        st.support_moment = (list(support_moment)
+                             if support_moment is not None
+                             else [0.0] * n)
 
     for i, s in enumerate(slist):
         alpha = s.base_angle
@@ -168,8 +220,17 @@ def _march(slist, ratios, F, kh, kv,
         W_eff = fx.w_total
         H_seis = h_dir * fx.h_seismic
         H = H_seis + fx.h_water
+        # v0.1.221 (D212) -- and the reinforcement it applied.
+        sup_x = sup_y = sup_m = 0.0
+        if support_force is not None and support_force[i] is not None:
+            sup_x, sup_y = support_force[i]
+            if support_moment is not None:
+                sup_m = support_moment[i]
 
-        sigma_est = max(0.0, W_eff * math.cos(alpha) - u * l) / max(l, 1e-9)
+        W_est = W_eff
+        if support_load is not None and support_load[i]:
+            W_est = W_eff + support_load[i]
+        sigma_est = max(0.0, W_est * math.cos(alpha) - u * l) / max(l, 1e-9)
         # v0.1.213 (D84) -- the stress the method read a curved envelope at,
         # so the displayed state is built from the same straight line.
         if envelope_stress is not None and envelope_stress[i] is not None:
@@ -189,6 +250,9 @@ def _march(slist, ratios, F, kh, kv,
         A2 = ny + s_dir * a * ty
         C1 = st.E[i] + H + s_dir * k0 * tx
         C2 = st.X[i] - W_eff + s_dir * k0 * ty
+        if sup_x or sup_y:
+            C1 += sup_x
+            C2 += sup_y
         det = A2 - A1 * r_R
         if abs(det) < 1e-9:
             st.ok = False
@@ -224,6 +288,11 @@ def _march(slist, ratios, F, kh, kv,
         M_H = -(y_g - y_cb) * H_seis
         M_Hw = y_cb * fx.h_water - fx.m_water_ref0
         known = M_L + M_W + M_H + M_Hw
+        # v0.1.221 (D212) -- the reinforcement's moment about this same
+        # point, published by the method (its tangential part acts along the
+        # chord, so only the normal part and the couples have one).
+        if sup_m:
+            known += sup_m
         if abs(E_R) > 1e-9:
             y_tR = y_cb + ((x_R - x_cb) * st.X[i + 1] + known) / E_R
         else:
@@ -277,13 +346,22 @@ def compute_interslice_state(result: LEMResult,
     # v0.1.220 (D211) -- the F the method's state was solved at, which is
     # the reported one for every method but Janbu Corrected.
     F = equilibrium_fos(result)
+    # v0.1.221 (D212) -- the reinforcement the method applied, as it
+    # published it; the load its stress estimate carried only goes with the
+    # force, so a result with one and not the other marches as before.
+    sup_f = sup_m = sup_l = None
+    if SUPPORT_IN_MARCH:
+        sup_f = _per_slice_list(details, "support_force", n)
+        if sup_f is not None:
+            sup_m = _per_slice_list(details, "support_moment", n)
+            sup_l = _per_slice_list(details, "sigma_support_load", n)
+    kw = dict(envelope_stress=env, slide_sign=sense, support_force=sup_f,
+              support_moment=sup_m, support_load=sup_l)
 
-    st_pos = _march(slist, ratios, F, kh, kv,
-                    envelope_stress=env, slide_sign=sense)
+    st_pos = _march(slist, ratios, F, kh, kv, **kw)
     if all(abs(r) < 1e-12 for r in ratios):
         return st_pos
-    st_neg = _march(slist, [-r for r in ratios], F, kh, kv,
-                    envelope_stress=env, slide_sign=sense)
+    st_neg = _march(slist, [-r for r in ratios], F, kh, kv, **kw)
     if not st_pos.ok:
         best, sgn = st_neg, -1.0
     elif not st_neg.ok:
@@ -300,8 +378,7 @@ def compute_interslice_state(result: LEMResult,
     # so the displayed interslice state is self-equilibrated. This is a
     # display-consistency refinement; it never alters the FoS.
     def closure_signed(k: float) -> float:
-        stk = _march(slist, [sgn * k * r for r in ratios], F, kh,
-                     kv, envelope_stress=env, slide_sign=sense)
+        stk = _march(slist, [sgn * k * r for r in ratios], F, kh, kv, **kw)
         return stk.E[n] if stk.ok else math.nan
 
     k_lo, k_hi = 0.0, 2.0
@@ -324,8 +401,7 @@ def compute_interslice_state(result: LEMResult,
             else:
                 k_lo, f_lo = k_mid, f_mid
         st_ref = _march(slist, [sgn * k_lo * r for r in ratios],
-                        F, kh, kv, envelope_stress=env,
-                        slide_sign=sense)
+                        F, kh, kv, **kw)
         if st_ref.ok and st_ref.closure < best.closure:
             return st_ref
     return best

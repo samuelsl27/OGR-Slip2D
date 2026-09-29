@@ -289,6 +289,12 @@ class SupportTerms:
     #: (one support: ``P_j`` IS ``P_app`` and the list stays empty, bit for
     #: bit as before) and only while ``NORMAL_PART_PER_EFFECT`` is on.
     normal_couple: list = field(default_factory=list)
+    #: v0.1.221 (D212) -- ``couple`` split by the slice each support acts on:
+    #: a couple has the same value about every axis, but a SLICE's own moment
+    #: balance (the line of thrust of ``postprocess``) must receive only the
+    #: couples of the supports that act on it. Empty when every couple is
+    #: zero, which is every support that acts at its own crossing.
+    slice_couple: list = field(default_factory=list)
 
     def total_active_t(self) -> float:
         """The ACTIVE tangential force on the bases, for FORCE equilibrium.
@@ -508,6 +514,7 @@ def resolve_support_terms(
     w_app = [0.0] * n  # |F| weights for the application point
     crossings = [0] * n  # supports per slice, for ``normal_couple`` (D150)
     couple = 0.0
+    slice_couple = [0.0] * n   # the same, per slice (D212)
 
     for eff in effects:
         i = eff.slice_index
@@ -580,7 +587,9 @@ def resolve_support_terms(
         y_app[i] += w * eff.intersection_y
         w_app[i] += w
         crossings[i] += 1
-        couple += eff.couple()
+        c_eff = eff.couple()
+        couple += c_eff
+        slice_couple[i] += c_eff
 
     # The normal part alone, back in Cartesian components. Written from
     # ``n_press`` rather than accumulated per effect on purpose: every effect
@@ -627,7 +636,9 @@ def resolve_support_terms(
                         _failure_text(failures),
                         moment_active=moment_active,
                         moment_passive=moment_passive,
-                        normal_couple=normal_couple)
+                        normal_couple=normal_couple,
+                        slice_couple=(slice_couple if any(slice_couple)
+                                      else []))
 
 
 def support_failure_details(sup: "SupportTerms", details=None) -> dict:
@@ -712,6 +723,82 @@ def support_vertical_load(sup: "SupportTerms", i: int, base_angle: float,
     if t:
         down -= slide_sign * math.sin(base_angle) * t
     return down
+
+
+def support_force_on_slice(sup: "SupportTerms", i: int, base_angle: float,
+                           slide_sign: float, fos: float
+                           ) -> tuple[float, float]:
+    """The force the reinforcement puts on slice ``i``, as every method
+    applies it: ``(f_x, f_y)`` in kN/m, +x right and +y up (v0.1.221, D212).
+
+    Its NORMAL part whole, as the Cartesian load ``(nf_h, nf_v)``, and its
+    TANGENTIAL part mobilised at ``t_active + t_passive/F``, along the base in
+    the sense that resists sliding, ``slide_sign*(cos a, sin a)``. That is the
+    split of v0.1.115, and the same vector for every family: Bishop and Janbu
+    put its vertical component in the slice's vertical equilibrium
+    (``-f_y`` IS :func:`support_vertical_load`, bit for bit), Spencer, GLE and
+    the prescribed-inclination family take the normal part as a load and the
+    tangential part as a resistance mobilised the same way (``t_mob`` of
+    ``interslice.solve_branch``, the ``k0`` of ``modified_swedish``).
+
+    ``fos`` is the factor the method mobilised a PASSIVE support at: the one
+    its own iteration used, which each method passes. The interslice march of
+    the interpretation reads the published list (``details["support_force"]``)
+    so its slice equilibrium carries the force the solver's did.
+    """
+    if not sup.present:
+        return 0.0, 0.0
+    t = sup.t_active[i]
+    if sup.t_passive[i]:
+        t += sup.t_passive[i] / fos
+    f_x, f_y = sup.nf_h[i], sup.nf_v[i]
+    if t:
+        f_x += slide_sign * t * math.cos(base_angle)
+        f_y += slide_sign * t * math.sin(base_angle)
+    return f_x, f_y
+
+
+def support_forces(sup: "SupportTerms", slices, slide_sign: float,
+                   fos: float):
+    """:func:`support_force_on_slice` for every slice, as the list the
+    methods publish in ``details["support_force"]`` (v0.1.221, D212); None
+    without a support, so a surface without one publishes what it did."""
+    if sup is None or not getattr(sup, "present", False):
+        return None
+    s_list = slices.slices if hasattr(slices, "slices") else slices
+    return [list(support_force_on_slice(sup, i, s.base_angle, slide_sign,
+                                        fos))
+            for i, s in enumerate(s_list)]
+
+
+def support_moments(sup: "SupportTerms", slices):
+    """Per slice, the moment of that force about the MIDPOINT OF THE BASE,
+    anticlockwise, kN*m/m (v0.1.221, D212); None without a support.
+
+    The tangential part acts along the chord at the crossing, and the base
+    midpoint lies on that chord, so its moment is zero. What is left is the
+    normal part at its application point, ``(x_app - x_c)*nf_v -
+    (y_app - y_c)*nf_h``; the couple the normal parts leave about that mean
+    point when two or more supports cross the slice (``normal_couple``, D150);
+    and the couple of a support whose resultant acts away from its crossing
+    (``slice_couple``, v0.1.122). It is what the line of thrust of
+    ``postprocess._march`` adds to the slice's own moment balance.
+    """
+    if sup is None or not getattr(sup, "present", False):
+        return None
+    s_list = slices.slices if hasattr(slices, "slices") else slices
+    out = []
+    for i, s in enumerate(s_list):
+        x_c = 0.5 * (s.base_x_left + s.base_x_right)
+        y_c = 0.5 * (s.base_y_left + s.base_y_right)
+        m = ((sup.x_app[i] - x_c) * sup.nf_v[i]
+             - (sup.y_app[i] - y_c) * sup.nf_h[i])
+        if sup.normal_couple:
+            m += sup.normal_couple[i]
+        if sup.slice_couple:
+            m += sup.slice_couple[i]
+        out.append(m)
+    return out
 
 
 def support_normal_load(sup: "SupportTerms"):

@@ -169,6 +169,8 @@ class PrescribedInclinationMethod(LEMMethod):
         # v0.1.64 — supports, as an external force on each slice.
         from ..support_integration import (resolve_support_terms,
                                            support_failure_details,
+                                           support_forces,
+                                           support_moments,
                                            support_normal_load)
         sup = resolve_support_terms(project, surface, slices, slide_sign)
 
@@ -250,6 +252,13 @@ class PrescribedInclinationMethod(LEMMethod):
                 # the solver linearised at) and the base normal of its OWN
                 # solution, which the Tensile Stress Check tests.
                 "sigma_support_load": support_normal_load(sup),
+                # v0.1.221 (D212) -- the whole force of the support on each
+                # slice, at this method's F (its tangential part enters the
+                # recursion through ``k0`` mobilised the same way), and its
+                # moment about the base midpoint: read by the interslice
+                # march.
+                "support_force": support_forces(sup, slices, slide_sign, fos),
+                "support_moment": support_moments(sup, slices),
                 "solved_base_normal": list(normals),
                 # v0.1.213 (D84) -- see ``_zero_strength_slices``.
                 "zero_strength_slices": self._zero_strength_slices(

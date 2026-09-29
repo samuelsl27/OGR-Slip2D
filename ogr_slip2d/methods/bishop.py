@@ -310,6 +310,8 @@ class BishopSimplified(LEMMethod):
         """
         from ..moment_balance import axis_for, moment_terms
         from ..support_integration import (support_failure_details,
+                                           support_force_on_slice,
+                                           support_moments,
                                            support_vertical_load)
 
         axis = axis_for(project, surface)
@@ -321,6 +323,7 @@ class BishopSimplified(LEMMethod):
         # carried in the LAST pass, published so the checks linearise the
         # envelope where this solver did. See the circular path.
         sigma_load = None
+        support_force = None   # v0.1.221 (D212), as sigma_load
         # v0.1.213 (D84) -- the slices of the LAST pass that entered with no
         # strength because their estimate was clipped; see ``_zero_strength``.
         zero: list[int] = []
@@ -333,6 +336,7 @@ class BishopSimplified(LEMMethod):
             tangential = [0.0] * len(s_list) if sup.present else None
             tangential_passive = [0.0] * len(s_list) if sup.present else None
             sigma_load = [0.0] * len(s_list) if sup.present else None
+            support_force = [None] * len(s_list) if sup.present else None
             zero = []
             for i_s, s in enumerate(s_list):
                 f = slice_forces(s, kh, kv)
@@ -351,6 +355,9 @@ class BishopSimplified(LEMMethod):
                         sup, i_s, s.base_angle, slide_sign, fos)
                     w_n += load
                     sigma_load[i_s] = load
+                    # v0.1.221 (D212) -- the same force, whole, at the same F.
+                    support_force[i_s] = list(support_force_on_slice(
+                        sup, i_s, s.base_angle, slide_sign, fos))
                 n_est = w_n * math.cos(s.base_angle)
                 raw = n_est - s.pore_pressure * s.base_length
                 sigma = max(0.0, raw)
@@ -519,6 +526,12 @@ class BishopSimplified(LEMMethod):
                 # to each slice's stress estimate, read by
                 # ``checks._applied_support_load``; None without a support.
                 "sigma_support_load": sigma_load,
+                # v0.1.221 (D212) -- the whole force of the support on each
+                # slice, at the F of the last pass, and its moment about the
+                # base midpoint: read by the interslice march. None without
+                # a support.
+                "support_force": support_force,
+                "support_moment": support_moments(sup, s_list),
                 # v0.1.213 (D84) -- read by
                 # ``analysis_runner.zero_strength_note``.
                 "zero_strength_slices": zero,
@@ -551,7 +564,8 @@ class BishopSimplified(LEMMethod):
         # sense has to be known first, which is why this moved below the
         # detection above.
         from ..support_integration import (resolve_support_terms,
-                                           support_failure_details)
+                                           support_failure_details,
+                                           support_moments)
         sup = resolve_support_terms(project, surface, slices, slide_sign)
 
         s_list = slices.slices if hasattr(slices, "slices") else slices
@@ -658,6 +672,7 @@ class BishopSimplified(LEMMethod):
         # this solver did; it depends on F only through a PASSIVE support
         # (``t_passive / F``), so it is captured, not recomputed at the end.
         sigma_load = None
+        support_force = None   # v0.1.221 (D212), as sigma_load
         # v0.1.213 (D84) -- as in ``_general_moment_fos``.
         zero: list[int] = []
         imposed = self._imposed_reader()
@@ -669,6 +684,7 @@ class BishopSimplified(LEMMethod):
             pas = x0_resisting_pass(s_list, kh, kv, slide_sign, sup, fos,
                                     imposed)
             sigma_load, zero = pas.sigma_load, pas.zero
+            support_force = pas.support_force
             if pas.collapsed is not None:
                 index, m_alpha = pas.collapsed
                 return LEMResult(
@@ -767,6 +783,12 @@ class BishopSimplified(LEMMethod):
                 "kv": kv,
                 # v0.1.210 (D172) -- see above; None without a support.
                 "sigma_support_load": sigma_load,
+                # v0.1.221 (D212) -- the whole force of the support on each
+                # slice, at the F of the last pass, and its moment about the
+                # base midpoint: read by the interslice march. None without
+                # a support.
+                "support_force": support_force,
+                "support_moment": support_moments(sup, s_list),
                 # v0.1.213 (D84) -- see the non-circular exit.
                 "zero_strength_slices": zero,
             }),
@@ -892,6 +914,10 @@ class X0Pass:
     #: The support load each slice's stress estimate carried, published as
     #: ``details["sigma_support_load"]`` (D172); None without a support.
     sigma_load: Optional[list] = None
+    #: v0.1.221 (D212) -- the whole force the support put on each slice in
+    #: this pass, ``[f_x, f_y]``, published as ``details["support_force"]``
+    #: for the interslice march; None without a support.
+    support_force: Optional[list] = None
     #: The slices that entered with no strength because the stress their
     #: envelope was read at is negative (D84).
     zero: list = field(default_factory=list)
@@ -925,10 +951,12 @@ def x0_resisting_pass(slices, kh: float, kv: float, slide_sign: float, sup,
     that the back analysis evaluates the very sum the method solves.
     """
     s_list = slices.slices if hasattr(slices, "slices") else slices
-    out = X0Pass(sigma_load=[0.0] * len(s_list) if sup.present else None)
+    out = X0Pass(sigma_load=[0.0] * len(s_list) if sup.present else None,
+                 support_force=[None] * len(s_list) if sup.present else None)
     if sup.present:
         # Only a reinforced surface pays for the import (every pass).
-        from ..support_integration import support_vertical_load
+        from ..support_integration import (support_force_on_slice,
+                                           support_vertical_load)
     total = 0.0
     for i_s, s in enumerate(s_list):
         # v0.1.61 — the base normal follows from the VERTICAL
@@ -947,6 +975,9 @@ def x0_resisting_pass(slices, kh: float, kv: float, slide_sign: float, sup,
                 sup, i_s, s.base_angle, slide_sign, fos)
             W_eff += load
             out.sigma_load[i_s] = load
+            # v0.1.221 (D212) -- the same force, whole, at the same F.
+            out.support_force[i_s] = list(support_force_on_slice(
+                sup, i_s, s.base_angle, slide_sign, fos))
 
         N_est = W_eff * math.cos(s.base_angle)
         raw = N_est - s.pore_pressure * s.base_length

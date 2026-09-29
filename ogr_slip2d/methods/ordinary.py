@@ -125,7 +125,8 @@ class OrdinaryFellenius(LEMMethod):
         """
         from ..moment_balance import (axis_for, base_frame, moment_terms,
                                       rotation_sense)
-        from ..support_integration import support_failure_details
+        from ..support_integration import (support_failure_details,
+                                           support_forces, support_moments)
         from .bishop import BishopSimplified as _B
 
         axis = axis_for(project, surface)
@@ -273,6 +274,12 @@ class OrdinaryFellenius(LEMMethod):
                 "negative_effective_normal": n_negative_normal,
                 "zero_strength_slices": zero,
                 "num_slices": len(normals),
+                # v0.1.221 (D212) -- the whole force of the support on each
+                # slice, at this F, and its moment about the base midpoint,
+                # for the free body the interslice march draws.
+                "support_force": support_forces(sup, slices, slide_sign,
+                                                fos),
+                "support_moment": support_moments(sup, slices),
                 "moment_axis": terms.axis,
                 # v0.1.189 (D112) -- the sense of sliding, yes; but NOT the
                 # denominator-sign key that the screened methods publish.
@@ -343,7 +350,8 @@ class OrdinaryFellenius(LEMMethod):
         # tangential component is defined against it.
         from ..moment_balance import slice_cg_y
         from ..support_integration import (resolve_support_terms,
-                                           support_failure_details)
+                                           support_failure_details,
+                                           support_forces, support_moments)
         from .bishop import BishopSimplified as _B
         sup = resolve_support_terms(project, surface, slices, slide_sign)
         s_list = slices.slices if hasattr(slices, "slices") else slices
@@ -619,6 +627,12 @@ class OrdinaryFellenius(LEMMethod):
                 "negative_effective_normal": n_negative_normal,
                 "zero_strength_slices": zero,
                 "num_slices": len(normals),
+                # v0.1.221 (D212) -- the whole force of the support on each
+                # slice, at this F, and its moment about the base midpoint,
+                # for the free body the interslice march draws.
+                "support_force": support_forces(sup, slices, slide_sign,
+                                                fos),
+                "support_moment": support_moments(sup, slices),
                 "active_support_ratio": active_ratio,
                 # v0.1.189 (D112) -- sense of sliding only; no
                 # denominator-sign key, for the reason at the other exit.

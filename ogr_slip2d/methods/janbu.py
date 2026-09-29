@@ -115,7 +115,8 @@ class JanbuSimplified(LEMMethod):
         # — Sheahan's own — disagrees with the first by up to 4.7 %, which
         # is more than the gap being adjudicated. See below.
         from ..support_integration import (resolve_support_terms,
-                                          support_failure_details)
+                                          support_failure_details,
+                                          support_moments)
         sup = resolve_support_terms(project, surface, slices, slide_sign)
         s_list = slices.slices if hasattr(slices, "slices") else slices
 
@@ -167,6 +168,7 @@ class JanbuSimplified(LEMMethod):
         # by f0 only after the iteration, and a load taken at the corrected
         # F would be one no pass used (only a passive support depends on F).
         sigma_load = None
+        support_force = None   # v0.1.221 (D212), as sigma_load
         # v0.1.213 (D84) -- the slices of the LAST pass that entered with no
         # strength because their estimate was clipped; see
         # ``BishopSimplified._zero_strength``.
@@ -195,6 +197,7 @@ class JanbuSimplified(LEMMethod):
             pas = x0_resisting_pass(s_list, kh, kv, slide_sign, sup, fos,
                                     imposed, janbu=True)
             sigma_load, zero = pas.sigma_load, pas.zero
+            support_force = pas.support_force
             if pas.collapsed is not None:
                 return LEMResult(
                     fos=None,
@@ -327,6 +330,12 @@ class JanbuSimplified(LEMMethod):
                 # v0.1.210 (D172) -- read by ``checks._applied_support_load``;
                 # None without a support.
                 "sigma_support_load": sigma_load,
+                # v0.1.221 (D212) -- the whole force of the support on each
+                # slice, at the UNCORRECTED F of the last pass (the one its
+                # state is formed at, D211), and its moment about the base
+                # midpoint: read by the interslice march.
+                "support_force": support_force,
+                "support_moment": support_moments(sup, s_list),
                 # v0.1.213 (D84) -- read by
                 # ``analysis_runner.zero_strength_note``.
                 "zero_strength_slices": zero,

@@ -440,6 +440,8 @@ _DICTS: dict[str, dict[str, str]] = {
         # v0.1.220 (D211)
         'Equilibrium factor of safety F':
             'Factor de seguridad del equilibrio F',
+        # v0.1.221 (D212)
+        'T (support)': 'T (soporte)',
         'Material': 'Material',
         'Strength model': 'Modelo de resistencia',
         'Unit weight γ (kN/m³)': 'Peso específico γ (kN/m³)',
