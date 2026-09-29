@@ -78,6 +78,21 @@ from .bishop import BishopSimplified, driving_shear_forces
 EFFECTIVE_INTERSLICE = "effective"
 TOTAL_INTERSLICE = "total"
 
+# v0.1.222 (D220) -- the interslice ratios this family publishes are the
+# ones its recursion solved with. ``details["boundary_ratios"]`` gave every
+# interior boundary the tangent of the AVERAGE of the θ of its two slices,
+# while ``_march`` inclines the force on that boundary at the θ of the slice
+# on its left. With θ constant (Corps #1) the two are the same number bit
+# for bit; with θ varying (Corps #2, Lowe-Karafiath) the interslice march of
+# the interpretation (``postprocess.compute_interslice_state``) rebuilt a
+# state that is not the method's: on the slope of
+# ``test_support_normal_v1137`` its normals parted from the method's by 5.95
+# and 2.79 (in units of max(1, |N|)) and it closed only to 2e-2 and 2e-3;
+# with the solver's ratios it reproduces them to 1e-15. No factor reads the
+# ratios. A module switch, like ``postprocess.SUPPORT_IN_MARCH``, so an A/B
+# can rebuild the old ratios and a test can demand that they move (rule 7).
+BOUNDARY_RATIOS_AS_SOLVED = True
+
 
 # ======================================================================
 class PrescribedInclinationMethod(LEMMethod):
@@ -301,12 +316,19 @@ class PrescribedInclinationMethod(LEMMethod):
     def _boundary_ratios(self, slices: Slices) -> list[float]:
         """tan θ at each of the n+1 slice boundaries, in the raw frame.
 
-        θ is defined per slice; interior boundary values average the two
-        adjacent slices.
+        θ is defined per slice, and :meth:`_march` puts the resultant on
+        the right face of slice i at that slice's own θ_i; the left face of
+        slice i+1 receives the same vector (``theta_prev``), so boundary
+        i+1 carries tan θ_i. The mirror of the march (``orient``) negates α
+        and θ but keeps the order of the slices, so the rule is the same in
+        both senses. Boundary 0 carries no force (Z = 0 at the free end) and
+        takes tan θ_0. See ``BOUNDARY_RATIOS_AS_SOLVED``.
         """
         th = self._theta_angles(slices)
         if not th:
             return []
+        if BOUNDARY_RATIOS_AS_SOLVED:
+            return [math.tan(th[0])] + [math.tan(t) for t in th]
         out = [math.tan(th[0])]
         for i in range(len(th) - 1):
             out.append(math.tan(0.5 * (th[i] + th[i + 1])))

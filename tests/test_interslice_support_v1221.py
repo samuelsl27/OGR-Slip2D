@@ -28,12 +28,14 @@ What is asserted, none of it a snapshot:
   1e-9, on an active and on a passive nail;
 * Janbu's own balance, which is horizontal, closes again at the free end;
 * Corps of Engineers #1, whose inclination is one constant, reproduces its
-  own normals exactly -- the other two members of that family do not even
-  without a support, for a reason of their own (D220, reported apart);
+  own normals exactly -- the other two members of that family did not even
+  without a support, for a reason of their own (D220, closed in v0.1.222
+  and asserted in ``test_interslice_thrust_v1222``);
 * Spencer and GLE march as close to their own solution as they do on the
   bare slope, where without the support they miss it by an order more;
-* each slice satisfies both force balances with the support, and its moment
-  balance with the support's moment;
+* each slice satisfies both force balances with the support, and the line
+  of thrust takes the support's moment (the moment balance of every slice,
+  D221, is asserted in ``test_interslice_thrust_v1222``);
 * rule 7: with ``postprocess.SUPPORT_IN_MARCH`` off the march is the bare
   one (6.686 on slice 46), and on a bare slope nothing moves by a bit.
 
@@ -241,28 +243,33 @@ class TestEachSliceIsInEquilibriumWithItsSupport:
 
     def test_the_line_of_thrust_takes_it(self):
         """The march adds the published moment to the slice's own moment
-        balance, so the application height of the next thrust moves by
-        exactly that moment over it. Asserted in size, not in sign: the sign
-        with which that balance treats its known moments is wrong, reported
-        apart (D221) and not this version's to change."""
+        balance. Changed on purpose in v0.1.222 (D221): the line is traversed
+        from both free ends since, and slice 46 lies in the right half, so
+        its moment moves the height of its LEFT thrust -- by exactly that
+        moment over it and now with its sign, which this test could only ask
+        in size while D221 stood -- and the heights to its right do not move
+        by a bit. It asked for the right-hand thrust in v0.1.221."""
         from ogr_slip2d import postprocess as pp
         *_x, res = _solve("bishop_simplified", "active")
         st = _state(res)
         slist = list(res.slices)
         details = res.details
         n = len(slist)
-        zero_m = [0.0] * n
+        assert CROSSED > n // 2 + 1                 # guard: the right half
+        other_m = list(details["support_moment"])
+        other_m[CROSSED] = 0.0
         bare_m = pp._march(slist, [0.0] * (n + 1),
                            details.get("equilibrium_fos", res.fos), 0.0, 0.0,
                            slide_sign=details["slide_sign"],
                            support_force=details["support_force"],
-                           support_moment=zero_m,
+                           support_moment=other_m,
                            support_load=details["sigma_support_load"])
-        dy = st.y_thrust[CROSSED + 1] - bare_m.y_thrust[CROSSED + 1]
+        dy = st.y_thrust[CROSSED] - bare_m.y_thrust[CROSSED]
         m_sup = details["support_moment"][CROSSED]
-        e_r = st.E[CROSSED + 1]
-        assert abs(abs(dy * e_r) - abs(m_sup)) <= 1e-9 * max(1.0, abs(m_sup)), (
-            dy * e_r, m_sup)
+        e_l = st.E[CROSSED]
+        assert abs(dy * e_l - m_sup) <= 1e-9 * max(1.0, abs(m_sup)), (
+            dy * e_l, m_sup)
+        assert st.y_thrust[CROSSED + 1:] == bare_m.y_thrust[CROSSED + 1:]
 
 
 # ======================================================================

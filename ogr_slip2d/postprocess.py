@@ -39,7 +39,9 @@ interpretation window — no longer marches without it.
 Substituting S the system is linear in (N, E_R) and solved in closed
 form. The application height of E_R (line of thrust) then follows from
 the moment balance about the base midpoint, where N and S are assumed
-to act (standard assumption).
+to act (standard assumption). Since v0.1.222 (D221) the line is traversed
+from both free ends towards the centre slice, and the centre slice's faces
+take the average of the two traversals (see ``THRUST_LINE_BALANCED``).
 
 Boundary conditions: E = X = 0 at both free ends. For rigorous
 force-equilibrium methods (Spencer, GLE, Lowe-Karafiath) the closure
@@ -48,7 +50,9 @@ non-zero closure is expected and reported, not hidden.
 
 The interslice ratios r_i (X/E at each boundary) come from
 ``LEMResult.details["boundary_ratios"]`` when the method provides them
-(Spencer: λ; GLE: λ·f(x); Lowe-Karafiath: tanθ_i) and default to zeros
+(Spencer: λ; GLE: λ·f(x); Lowe-Karafiath and the Corps pair: tanθ of the
+slice left of each boundary, as their recursion solved it since v0.1.222,
+D220) and default to zeros
 (Bishop, Janbu, Ordinary). Because some methods compute λ in a
 slide-sign-flipped frame, both sign conventions are tried and the one
 with the smaller closure |E_n| is kept.
@@ -147,6 +151,42 @@ def _quad_centroid_y(s) -> float:
 # rebuild the bare march and a test can demand that it moves (rule 7).
 SUPPORT_IN_MARCH = True
 
+# v0.1.222 (D221) -- the line of thrust balances the moments of each slice.
+# The height of each interslice force follows from the moment balance of a
+# slice about its base midpoint, where N and S act: the anticlockwise
+# moments of its two interslice forces, its weight, the earthquake, the
+# water and the support sum to zero (the discrete form of Duncan, Wright &
+# Brandon 2014, Eq. 6.82). Until this version the known moments entered
+# with the wrong sign, so NO slice was in moment equilibrium: two equal
+# horizontal thrusts came out at opposite heights instead of collinear.
+#
+# With the sign right, a traversal from ONE end is not enough. The line is
+# an unknown of the complete-equilibrium procedures (Spencer, Morgenstern-
+# Price: DW&B 2014, Table 6.2) and nothing else satisfies the moment balance
+# of the whole mass: a force-equilibrium method leaves an imbalance, and so,
+# in a small way, does the march of Spencer and GLE, which is not their
+# solver. A traversal from the left end carries all of it to the right one,
+# where E -> 0 turns it into heights: 2968 slice heights on Corps 1 of
+# ``test_support_normal_v1137``, and the right free end of that 12 m slope
+# at y = -608 237 m with Spencer. Both free ends are known (E = 0 there),
+# so the line is traversed from both, and the two traversals meet at the
+# centre slice, whose two faces take their average: every slice is in
+# moment equilibrium but the two next to the centre one, which carry half
+# of the imbalance each, where the interslice forces are largest.
+#
+# A march that does not close (Bishop, the Ordinary method: moment-only
+# methods, which assume the interslice forces away and have no line of
+# thrust) leaves a force at its right end, and the traversal places it at
+# the base, as the left one; its imbalance goes to the centre with the rest
+# instead of throwing the right-hand heights off (Bishop on the same slope:
+# 5th to 95th percentile of the height -0.8 to 1.6 slice heights, against
+# -4.6 to 12 from the left end alone). The overlay of the interpretation
+# does not offer the line for these methods; their free-body diagram is in
+# moment equilibrium all the same. A module switch, like
+# ``SUPPORT_IN_MARCH``, so an A/B can rebuild the old line and a test can
+# demand that it moves.
+THRUST_LINE_BALANCED = True
+
 
 def _per_slice_list(details, key, n):
     """``details[key]`` when it is a list of ``n`` entries, else None: the
@@ -204,6 +244,10 @@ def _march(slist, ratios, F, kh, kv,
 
     # Thrust starts at the base end (E=0 there).
     st.y_thrust[0] = slist[0].base_y_left
+    # v0.1.222 (D221) -- per slice, the moment about its base midpoint of
+    # everything but its two interslice forces, for the traversal from the
+    # right end.
+    other = [0.0] * n
     if support_force is not None:
         st.support_force = [list(f) if f is not None else [0.0, 0.0]
                             for f in support_force]
@@ -288,13 +332,28 @@ def _march(slist, ratios, F, kh, kv,
         M_H = -(y_g - y_cb) * H_seis
         M_Hw = y_cb * fx.h_water - fx.m_water_ref0
         known = M_L + M_W + M_H + M_Hw
+        other[i] = M_W + M_H + M_Hw
         # v0.1.221 (D212) -- the reinforcement's moment about this same
         # point, published by the method (its tangential part acts along the
         # chord, so only the normal part and the couples have one).
         if sup_m:
             known += sup_m
+            other[i] += sup_m
         if abs(E_R) > 1e-9:
-            y_tR = y_cb + ((x_R - x_cb) * st.X[i + 1] + known) / E_R
+            # v0.1.222 (D221) -- ``known`` is the ANTICLOCKWISE moment of
+            # every other force on the slice, and the right face pushes the
+            # slice with (-E_R, -X_R), whose moment about this point is
+            # -(x_R - x_c)*X_R + (y_R - y_c)*E_R. The balance is their sum
+            # equal to zero, so the height takes ``-known``. It took
+            # ``+known`` from v0.1.22 to v0.1.221: two equal horizontal
+            # thrusts with nothing else on the slice came out at opposite
+            # heights instead of collinear, the line sat on the base (with
+            # Spencer on ``test_support_normal_v1137``, 5th to 95th
+            # percentile of its height 0 to 3 % of the slice, against 8 to
+            # 18 % balanced), and every slice missed its moment balance by
+            # ``2*known``. See ``THRUST_LINE_BALANCED``.
+            sign = -1.0 if THRUST_LINE_BALANCED else 1.0
+            y_tR = y_cb + ((x_R - x_cb) * st.X[i + 1] + sign * known) / E_R
         else:
             # Undefined application point when E≈0 → conventional h/3.
             y_tR = s.base_y_right + (s.top_y_right - s.base_y_right) / 3.0
@@ -302,8 +361,53 @@ def _march(slist, ratios, F, kh, kv,
 
     st.closure = abs(st.E[n])
     st.e_max = max((abs(e) for e in st.E), default=0.0)
+    if THRUST_LINE_BALANCED and n:
+        _thrust_from_both_ends(st, slist, other)
     st.ok = True
     return st
+
+
+def _thrust_from_both_ends(st: InterSliceState, slist, other) -> None:
+    """v0.1.222 (D221) -- meet the traversal from the left end, already in
+    ``st.y_thrust``, with one from the right end at the centre slice.
+
+    The right free end carries no force (only the closure residual of the
+    march, which a moment-only method leaves), so the traversal starts at
+    its base, as the left one does, and each slice gives the height of its
+    LEFT force from its moment balance about the base midpoint. Both
+    traversals run through the centre slice ``m = n // 2``, and each of its
+    two faces takes the average of the two: the balance of a slice is linear
+    in the heights of its two faces, so the centre slice stays in
+    equilibrium, and its two neighbours carry half of the imbalance of the
+    whole mass each. See ``THRUST_LINE_BALANCED``.
+    """
+    n = len(slist)
+    y_left = st.y_thrust
+    y_right = [0.0] * (n + 1)
+    y_right[n] = slist[-1].base_y_right
+    m = n // 2
+    for i in range(n - 1, m - 1, -1):
+        s = slist[i]
+        x_cb = 0.5 * (s.base_x_left + s.base_x_right)
+        y_cb = 0.5 * (s.base_y_left + s.base_y_right)
+        # The right face pushes the slice with (-E, -X).
+        M_R = (-(s.base_x_right - x_cb) * st.X[i + 1]
+               + (y_right[i + 1] - y_cb) * st.E[i + 1])
+        if abs(st.E[i]) > 1e-9:
+            y_right[i] = y_cb + ((s.base_x_left - x_cb) * st.X[i]
+                                 + M_R + other[i]) / st.E[i]
+        else:
+            # Undefined application point when E≈0 → conventional h/3.
+            y_right[i] = (s.base_y_left
+                          + (s.top_y_left - s.base_y_left) / 3.0)
+    y = list(y_left)
+    for j in range(m + 2, n):
+        y[j] = y_right[j]
+    for j in (m, m + 1):
+        if 0 < j < n:
+            y[j] = 0.5 * (y_left[j] + y_right[j])
+    y[n] = y_right[n]
+    st.y_thrust = y
 
 
 # ----------------------------------------------------------------------
