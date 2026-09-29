@@ -149,6 +149,26 @@ BOUNDARY_RATIOS_AS_SOLVED = True
 # an A/B can rebuild the old factors and a test can demand that they move.
 THETA_AT_BOUNDARY = True
 
+# v0.1.224 (D223) -- Corps of Engineers #1 draws its line to the TOP of a
+# tension crack. Its assumption is interpretation 1 of Duncan, Wright &
+# Brandon (2014, Fig. 6.14a): a line joining the points where the failure
+# surface meets the ground. A tension crack truncates the mass at its crest
+# end, and the failure surface -- the slip surface and the crack -- reaches
+# the ground at the top of the crack; the line was drawn to its BOTTOM, a
+# point of the slip surface below the ground. On the given circle of
+# verification problem 27 with its 11 ft crack, whose values the reference
+# program and XSTABL publish with the same differences between methods
+# (Corps #2 0.007 above Corps #1 dry and 0.006 wet, Lowe-Karafiath 0.010
+# below), OGR gave +0.026 and +0.010: Corps #1 fell 1.3 % against the
+# offset every other method of that model shares. To the top of the crack,
+# +0.0066 / -0.0101 dry and +0.0060 / -0.0098 wet. An end with no crack is
+# where the slip surface meets the ground -- which is not the end slice's
+# own top when the surface leaves through a vertical face, the reason the
+# crack is read from its wall -- and does not move by a bit. A module
+# switch, so an A/B can rebuild the old line and a test can demand that it
+# moves.
+CHORD_TO_CRACK_TOP = True
+
 
 def boundary_theta(theta):
     """The inclination of each of the n+1 slice boundaries, from the n
@@ -851,6 +871,11 @@ class CorpsOfEngineers1(PrescribedInclinationMethod):
     surface daylights at both. The angle is taken from the first and last
     slice rather than from the surface object so that a tension crack,
     which truncates the sliding mass, moves the end with it.
+
+    Since v0.1.224 (D223) a cracked end is the TOP of the crack, where the
+    failure surface -- the slip surface and the crack -- meets the ground;
+    it was the bottom, which is not on the ground at all. See
+    ``CHORD_TO_CRACK_TOP``.
     """
 
     METHOD_ID = "corps_engineers_1"
@@ -860,8 +885,23 @@ class CorpsOfEngineers1(PrescribedInclinationMethod):
         slist = list(slices)
         if not slist:
             return []
-        dx = slist[-1].base_x_right - slist[0].base_x_left
-        dy = slist[-1].base_y_right - slist[0].base_y_left
+        x0, y0 = slist[0].base_x_left, slist[0].base_y_left
+        x1, y1 = slist[-1].base_x_right, slist[-1].base_y_right
+        # v0.1.224 (D223) -- the end a tension crack closes is the top of
+        # the crack. The wall travels with the slices; it is taken only at
+        # the end it closes (a mass the crack did not truncate -- one of
+        # two disjoint ones -- does not end there).
+        wall = (getattr(slices, "tension_crack_wall", None)
+                if CHORD_TO_CRACK_TOP else None)
+        if wall is not None:
+            x_wall, _y_bottom, y_top = wall
+            tol = 1e-9 * max(abs(x1 - x0), 1.0)
+            if abs(x_wall - x1) <= tol:
+                y1 = y_top
+            elif abs(x_wall - x0) <= tol:
+                y0 = y_top
+        dx = x1 - x0
+        dy = y1 - y0
         # A vertical chord has no inclination to speak of; a slip surface
         # that degenerate is rejected upstream, and 0 keeps the recursion
         # finite instead of handing it a pole.

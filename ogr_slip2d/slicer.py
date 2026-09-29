@@ -235,6 +235,13 @@ class Slices:
     tension_crack_arm: float = 0.0     # vertical distance from the
                                         # crack base to the centroid of
                                         # the water column (for moment)
+    # v0.1.224 (D223) -- the wall a tension crack left at the crest end of
+    # this mass, ``(x, y_bottom, y_top)`` from the crack boundary up to the
+    # ground, wet or dry; None without one. The failure surface of a
+    # cracked mass reaches the ground at ``y_top``, which is where
+    # Corps of Engineers #1 draws its line from
+    # (``methods.modified_swedish.CHORD_TO_CRACK_TOP``).
+    tension_crack_wall: Optional[tuple] = None
 
     def __len__(self) -> int:
         return len(self.slices)
@@ -1925,6 +1932,10 @@ def slice_surface(
     # handed 73.5 kN — more than its own weight — and the search dutifully
     # found that as its minimum.
     wall = getattr(surface, "tension_crack_wall", None)
+    # v0.1.224 (D223) -- and the wall itself travels with the slices, dry
+    # or wet, so a method that needs where the mass meets the ground at
+    # its cracked end does not have to guess it from the end slice.
+    result.tension_crack_wall = wall
     if wall is not None and not project.tension_crack_properties.is_dry():
         result = _apply_tension_crack(project, result, wall)
 
