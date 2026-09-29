@@ -91,6 +91,17 @@ def _solve(method_id, case="bare"):
     return _CACHE[key]
 
 
+def _solve_fresh(method_id):
+    """The bare slope solved now, under whatever switches are set, and not
+    cached: the cache holds the default recursion."""
+    from ogr_slip2d.methods import method_registry
+    from ogr_slip2d.slicer import slice_surface
+    from test_support_normal_v1137 import NSLICES, _circle, _project
+    p, c = _project(None), _circle()
+    sl = slice_surface(p, c, num_slices=NSLICES)
+    return method_registry()[method_id]().compute_fos(p, c, sl)
+
+
 def _mirrored(p, c):
     """The same model reflected about x = 0, as
     ``test_failure_direction_v173._mirrored`` does: the two are provably
@@ -396,12 +407,33 @@ class TestTheFamilyMarchesWithItsOwnRatios:
         """Rule 7: with the averaged ratios the march is not the method's
         state for the two members whose inclination varies (5.95 and 2.79
         on this slope), and Corps #1, whose inclination is one constant,
-        publishes the same ratios bit for bit either way."""
+        publishes the same ratios bit for bit either way.
+
+        Changed on purpose in v0.1.223 (D222): the recursion now inclines
+        each boundary at the average of its two slices, which is what the
+        ratios published before this fix said. So the switch moves the
+        number against the recursion of v0.1.222 (``THETA_AT_BOUNDARY``
+        off), where it was measured, and with D222 on the two publications
+        are one and the same list."""
+        from ogr_slip2d.methods import modified_swedish as ms
         for mid in ("corps_engineers_2", "lowe_karafiath"):
-            res = _solve(mid)
+            ms.THETA_AT_BOUNDARY = False
+            try:
+                res = _solve_fresh(mid)
+            finally:
+                ms.THETA_AT_BOUNDARY = True
+            assert _gap(_state(res).N, _solved(res)) < 1e-6, mid
             st = _state(res, as_solved=False)
             assert _gap(st.N, _solved(res)) > 1.0, (
                 mid, _gap(st.N, _solved(res)))
+            res = _solve(mid)
+            new = _resolve(res).details["boundary_ratios"]
+            ms.BOUNDARY_RATIOS_AS_SOLVED = False
+            try:
+                old = _resolve(res).details["boundary_ratios"]
+            finally:
+                ms.BOUNDARY_RATIOS_AS_SOLVED = True
+            assert new == old, mid
         res = _solve("corps_engineers_1")
         new = _resolve(res).details["boundary_ratios"]
         from ogr_slip2d.methods import modified_swedish as ms

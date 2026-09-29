@@ -41,6 +41,11 @@ The θ assumptions, and where each one comes from:
     Corps of Engineers #1 θ   = chord of the slip surface   constant
     Corps of Engineers #2 θ_i = β_i                varies per slice
 
+Each method defines θ per SLICE; the force on a boundary is inclined at the
+average of its two slices since v0.1.223 (D222; see ``THETA_AT_BOUNDARY``),
+which is where the assumption places it ("at each vertical interslice
+boundary", EM 1110-2-1902 Sec. C-4a).
+
 References for the assumptions:
 
     Lowe, J. & Karafiath, L. (1960). "Stability of earth dams upon
@@ -92,6 +97,78 @@ TOTAL_INTERSLICE = "total"
 # ratios. A module switch, like ``postprocess.SUPPORT_IN_MARCH``, so an A/B
 # can rebuild the old ratios and a test can demand that they move (rule 7).
 BOUNDARY_RATIOS_AS_SOLVED = True
+
+# v0.1.223 (D222) -- the interslice force on a boundary is inclined at the
+# average of the inclinations of the two slices that share it. Each method of
+# the family defines theta per SLICE (``_theta_angles``), and until this
+# version the recursion gave each boundary the theta of the slice on its
+# LEFT in index order, which always runs left to right in x: the mirror of
+# the march (``orient``) negates alpha and theta but keeps the order. Three
+# things said that was wrong:
+#
+# * The definition. Lowe and Karafiath (1960) incline the interslice forces
+#   at "the average of the inclinations of the slope (ground surface) and
+#   shear surface at each vertical interslice boundary" (USACE 2003,
+#   EM 1110-2-1902, Sec. C-4a); Duncan, Wright & Brandon (2014, Table 6.1)
+#   say the inclination varies "depending on where the slice boundaries are
+#   located", and their Fig. 6.14c draws the ground-slope variant of the
+#   Corps assumption (Corps #2 here) the same way: "interslice force here is
+#   parallel to average slope here". The inclination belongs to the vertical
+#   section the force acts on. Taking the slice on one side evaluates it
+#   half a slice away.
+# * Symmetry. The same problem reflected about a vertical line gave another
+#   factor: the slope of ``test_support_normal_v1137`` and its mirror image,
+#   50 slices, Corps #2 1.923682 against 1.906777 (-0.88 %), Lowe-Karafiath
+#   1.861010 against 1.859092 (-0.10 %); halving with every doubling of the
+#   slices, as a one-sided evaluation does. The average is symmetric by
+#   construction; measured, the two factors agree to 1e-10, the tolerance
+#   of the root.
+# * Accuracy. On a ground and a slip surface whose inclinations vary
+#   smoothly the one-sided choice converges at first order in the slice
+#   width (observed order 0.97 to 1.03 up to 1 600 slices, with the left
+#   and the right one missing on opposite sides) and the average at second
+#   order (observed 2.00), to the same limit: the Richardson extrapolation
+#   of the old factors lands on the new ones.
+#
+# External check: the given circle of verification problem 27 (Malkawi,
+# Hassan & Sarma 2001, published by the reference program and by XSTABL),
+# where the two programs agree that Lowe-Karafiath equals Corps #1 and
+# Corps #2 is 0.003 above it. With the average at each boundary OGR gives
+# -0.0005 and +0.0023; with the left slice, -0.0020 and +0.0033 (see
+# ``test_prescribed_theta_boundary_v1223``).
+#
+# Why the average of the two slices and not the geometry at the boundary
+# (the tangent of a circle, the ground slope at that x): the slices are the
+# geometry the method solves -- their chords carry its base angles and their
+# tops its weights -- and on that polygon the inclination AT a boundary is
+# undefined where two chords meet, the symmetric choice being their
+# bisector, which is the average of the two angles. Both converge at second
+# order to the same limit (measured); with a ground drawn as a polyline the
+# exact one picks up the slope of whichever segment the boundary falls on.
+# With theta constant (Corps #1) nothing moves by a bit. A module switch, so
+# an A/B can rebuild the old factors and a test can demand that they move.
+THETA_AT_BOUNDARY = True
+
+
+def boundary_theta(theta):
+    """The inclination of each of the n+1 slice boundaries, from the n
+    per-slice values ``theta``: the average of the two slices of an
+    interior boundary, and the end slice's own at the two free ends, where
+    no force acts. With ``THETA_AT_BOUNDARY`` off, the slice on the LEFT of
+    each boundary, as the recursion had it until v0.1.222.
+
+    The one place the rule lives: the recursion (``_march``), the base
+    normals (``_base_forces``) and the published ratios
+    (``_boundary_ratios``) all read it, so what the interpretation shows is
+    what was solved (D220). A negated ``theta`` -- the mirrored march --
+    gives the negated inclinations exactly."""
+    if not theta:
+        return []
+    if not THETA_AT_BOUNDARY:
+        return [theta[0]] + list(theta)
+    return ([theta[0]]
+            + [0.5 * (a + b) for a, b in zip(theta, theta[1:])]
+            + [theta[-1]])
 
 
 # ======================================================================
@@ -316,19 +393,21 @@ class PrescribedInclinationMethod(LEMMethod):
     def _boundary_ratios(self, slices: Slices) -> list[float]:
         """tan θ at each of the n+1 slice boundaries, in the raw frame.
 
-        θ is defined per slice, and :meth:`_march` puts the resultant on
-        the right face of slice i at that slice's own θ_i; the left face of
-        slice i+1 receives the same vector (``theta_prev``), so boundary
-        i+1 carries tan θ_i. The mirror of the march (``orient``) negates α
-        and θ but keeps the order of the slices, so the rule is the same in
-        both senses. Boundary 0 carries no force (Z = 0 at the free end) and
-        takes tan θ_0. See ``BOUNDARY_RATIOS_AS_SOLVED``.
+        The inclination :meth:`_march` gave each boundary
+        (:func:`boundary_theta`): since v0.1.223 (D222) the average of its
+        two slices, which is also what this published until v0.1.221,
+        while the recursion took the slice on the left (D220 made the
+        publication follow the recursion; D222 moved the recursion). The
+        mirror of the march (``orient``) negates α and θ but keeps the
+        order of the slices, so the rule is the same in both senses. The
+        free ends carry no force and take their end slice's θ. See
+        ``BOUNDARY_RATIOS_AS_SOLVED``.
         """
         th = self._theta_angles(slices)
         if not th:
             return []
         if BOUNDARY_RATIOS_AS_SOLVED:
-            return [math.tan(th[0])] + [math.tan(t) for t in th]
+            return [math.tan(t) for t in boundary_theta(th)]
         out = [math.tan(th[0])]
         for i in range(len(th) - 1):
             out.append(math.tan(0.5 * (th[i] + th[i + 1])))
@@ -341,8 +420,11 @@ class PrescribedInclinationMethod(LEMMethod):
         """The inter-slice resultant ``Z`` on the right face of every slice.
 
         Each slice carries a resultant inter-slice force ``Z_i`` on its
-        right face, inclined at the prescribed angle ``θ_i`` to the
-        horizontal. Eliminating the base normal ``N`` and the mobilised
+        right face, inclined to the horizontal at the angle ``θ_{i+1}`` of
+        that boundary, and receives ``Z_{i-1}`` on its left face at the
+        angle ``θ_i`` of its left boundary (``boundary_theta``: the n
+        per-slice angles ``theta`` give the n+1 boundary ones, v0.1.223,
+        D222). Eliminating the base normal ``N`` and the mobilised
         shear ``S = [c·l + (N − u·l)·tanφ]/F`` from the two force
         equilibrium equations of the slice gives the linear recursion
 
@@ -350,8 +432,8 @@ class PrescribedInclinationMethod(LEMMethod):
 
         with
             a       = tanφ / F
-            D_i     = cos(α_i − θ_i)   − a·sin(α_i − θ_i)
-            D⁻      = cos(α_i − θ_{i-1}) − a·sin(α_i − θ_{i-1})
+            D_i     = cos(α_i − θ_{i+1}) − a·sin(α_i − θ_{i+1})
+            D⁻      = cos(α_i − θ_i)     − a·sin(α_i − θ_i)
             const_i = (kh·W − k0·cosα)(cosα − a·sinα)
                       − (W + k0·sinα)(sinα + a·cosα)
             k0      = (c·l − u·l·tanφ) / F
@@ -388,7 +470,10 @@ class PrescribedInclinationMethod(LEMMethod):
         """
         Z = 0.0
         out: list[float] = []
-        theta_prev = theta[0] if theta else 0.0
+        # v0.1.223 (D222) -- the inclination of each BOUNDARY: the force on
+        # the left face of slice i is the one boundary i carries, and the
+        # force on its right face the one boundary i+1 carries.
+        theta_b = boundary_theta(theta)
         if h_water is None:
             h_water = [0.0] * len(slices_list)
         if v_support is None:
@@ -396,8 +481,9 @@ class PrescribedInclinationMethod(LEMMethod):
         if t_support is None:
             t_support = [0.0] * len(slices_list)
 
-        for i, (s, alpha, th, hw, vs, ts) in enumerate(zip(
-                slices_list, alpha_n, theta, h_water, v_support, t_support)):
+        for i, (s, alpha, hw, vs, ts) in enumerate(zip(
+                slices_list, alpha_n, h_water, v_support, t_support)):
+            theta_prev, th = theta_b[i], theta_b[i + 1]
             # v0.1.61 — the ponded water rides in the vertical term (it is
             # a load the base has to carry) and its horizontal thrust joins
             # the seismic force in the horizontal slot. This is a
@@ -449,7 +535,6 @@ class PrescribedInclinationMethod(LEMMethod):
             )
             Z = (Z * D_prev + const_i) / D_i
             out.append(Z)
-            theta_prev = th
 
         return out
 
@@ -538,8 +623,9 @@ class PrescribedInclinationMethod(LEMMethod):
             N = [ W + P·cosβ − ΔZ_v − ((c'Δℓ − u·Δℓ·tanφ')/F)·sinα ]
                 / [ cosα + (tanφ'·sinα)/F ]
 
-        with ``ΔZ_v = Z_i·sinθ_i − Z_{i-1}·sinθ_{i-1}`` the net vertical
-        component of the two inter-slice forces. Horizontal loads —
+        with ``ΔZ_v = Z_i·sinθ_{i+1} − Z_{i-1}·sinθ_i`` the net vertical
+        component of the two inter-slice forces, each at the angle of its
+        boundary (``boundary_theta``, v0.1.223). Horizontal loads —
         seismic, water thrust, the horizontal part of a surface water
         load — do not appear, because they have no vertical component.
 
@@ -573,10 +659,11 @@ class PrescribedInclinationMethod(LEMMethod):
         shears: list[float] = []
         strengths: list[float] = []
         z_prev = 0.0
-        th_prev = theta[0] if theta else 0.0
+        # v0.1.223 (D222) -- the boundary inclinations ``_march`` used.
+        theta_b = boundary_theta(theta)
         for i, s in enumerate(slist):
             alpha = alpha_n[i]
-            th = theta[i]
+            th_prev, th = theta_b[i], theta_b[i + 1]
             W_eff = slice_forces(s, kh, kv).w_total - v_sup[i]
             l = max(s.base_length, 1e-9)
             u = s.pore_pressure
@@ -612,7 +699,6 @@ class PrescribedInclinationMethod(LEMMethod):
             shears.append((c_rep * l + (N - u * l) * tan_phi_rep) / F)
             strengths.append(tau * l)
             z_prev = zs[i]
-            th_prev = th
         return normals, shears, strengths
 
     # ==================================================================
@@ -800,6 +886,12 @@ class CorpsOfEngineers2(PrescribedInclinationMethod):
     (2003) §C-4a, which is a single constant for the whole surface and is
     what #1 implements: the two coincide only on a slope of uniform
     inclination.
+
+    The angle is the ground's over each slice; a boundary takes the average
+    of its two slices (v0.1.223, D222), which is Duncan, Wright & Brandon's
+    (2014) Fig. 6.14c -- "interslice force here is parallel to average
+    slope here" -- and, where the ground has a vertex on the boundary, the
+    bisector of its two sides.
     """
 
     METHOD_ID = "corps_engineers_2"

@@ -11,15 +11,19 @@ Stabilization Methods", 2nd ed., Wiley.
 
 The Lowe-Karafiath procedure is a **force-equilibrium** method (it does
 NOT satisfy moment equilibrium). Its single defining assumption is the
-inclination of the inter-slice resultant at every internal boundary:
+inclination of the inter-slice resultant at every internal boundary k:
 
-        θ_i = ½ · ( β_i + α_i )
+        θ_k = ½ · ( β_k + α_k )
 
-where β_i is the inclination of the *ground surface* over the slice and
-α_i is the inclination of the *slip surface* (base) of the slice. The
+where β_k is the inclination of the *ground surface* and α_k that of the
+*slip surface* at the boundary ("at each vertical interslice boundary",
+USACE 2003, EM 1110-2-1902 Sec. C-4a). Since v0.1.223 (D222) each is the
+average of the chords of the two slices that meet there -- the bisector
+where they form a vertex -- which is the average of the two slices'
+½·(β_i + α_i); until then the boundary took the slice on its left. The
 inter-slice force ratio is therefore prescribed directly,
 
-        X_i / E_i = tan θ_i
+        X_k / E_k = tan θ_k
 
 with no scalar λ to iterate on. Because only force equilibrium is
 enforced, the Factor of Safety follows from a single fixed-point
@@ -52,6 +56,9 @@ class LoweKarafiath(PrescribedInclinationMethod):
 
     # ------------------------------------------------------------------
     def _theta_angles(self, slices: Slices) -> list[float]:
+        # Per slice; the family averages two slices at each boundary
+        # (v0.1.223, D222), where Lowe and Karafiath place the assumption:
+        # "at each vertical interslice boundary" (EM 1110-2-1902, C-4a).
         return [self._interslice_tan_theta_angle(s, 1.0) for s in slices]
 
     # ------------------------------------------------------------------
