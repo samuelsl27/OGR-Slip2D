@@ -515,6 +515,22 @@ def _equilibrium_keys(f_eq: float) -> dict:
 # Off, every surface gets 0.50, as before v0.1.214.
 B1_BY_SOIL_TYPE = True
 
+# v0.1.230 (D219) -- a model whose strength depends on the slice (the
+# anisotropic ones) has a type per BASE, not per material: the type of an
+# Anisotropic Strength Function is the type of the range the base falls in.
+# ``base_soil_type`` reads such a model with the context of the base,
+# exactly as the solver reads it (``SliceContext.from_slice``). Until this
+# version it read the model without a slice, which for that function meant
+# the row of least cohesion, so a table with a "φ only" range and a "c
+# only" range took one row's ``b1`` where the rule of D80 gives 0.50.
+#
+# A module switch, read at call time, like ``B1_BY_SOIL_TYPE``. Off, a
+# material is read without a slice, as before; but that reading is not the
+# one of v0.1.229 for the anisotropic models, whose context-free strength
+# is the WEAKEST orientation since v0.1.230 (in ``ogr_core``, which no
+# switch here reaches).
+SOIL_TYPE_PER_BASE = True
+
 #: Janbu (1973): c only (φ = 0), φ only (c = 0), and c and φ.
 JANBU_B1 = {"c": 0.69, "phi": 0.31, "c-phi": 0.50}
 
@@ -526,7 +542,7 @@ JANBU_B1 = {"c": 0.69, "phi": 0.31, "c-phi": 0.50}
 _TYPE_PROBES = (0.0, 10.0, 200.0)
 
 
-def base_soil_type(material) -> Optional[str]:
+def base_soil_type(material, slice_=None) -> Optional[str]:
     """The soil type of Janbu's curves for one base material.
 
     ``"c"`` (strength independent of the normal stress: φ = 0),
@@ -547,6 +563,16 @@ def base_soil_type(material) -> Optional[str]:
     through the origin is a frictional soil and gets the φ-only curve, not
     the c-φ one, which is 0.50 against 0.31 and the unsafe side (a power
     curve with c = d = 0, Barton-Bandis, a hyperbolic envelope).
+
+    v0.1.230 (D219) -- with ``slice_`` (and ``SOIL_TYPE_PER_BASE`` on), a
+    model that reads the slice and is not one of the classes named above --
+    the four anisotropic models -- is read with the context of THAT base
+    (``SliceContext.from_slice``), so its type is the type of what that base
+    computes with: the range it falls in, the orientation it has. Two
+    consequences, on purpose: a Generalized Anisotropic range holding
+    SHANSEP or Vertical Stress Ratio reads the slice's vertical stress and is
+    "c" where it was "phi"; one holding an undrained model by depth can have
+    no type (a cu ≤ 0) on some base, which then takes no part.
     """
     from ogr_core.materials import (InfiniteStrength, MohrCoulomb,
                                     NoStrength, Undrained)
@@ -571,8 +597,16 @@ def base_soil_type(material) -> Optional[str]:
         if phi > 0.0:
             return "phi"
         return None
+    read = st.shear_strength
+    if slice_ is not None and SOIL_TYPE_PER_BASE and \
+            getattr(st, "needs_context", False):
+        from ogr_core.materials.strength_model import SliceContext
+
+        def read(p):
+            return st.shear_strength_ctx(p, SliceContext.from_slice(slice_,
+                                                                    p))
     try:
-        t0, t1, t2 = (float(st.shear_strength(p)) for p in _TYPE_PROBES)
+        t0, t1, t2 = (float(read(p)) for p in _TYPE_PROBES)
     except (ArithmeticError, ValueError):
         # An envelope that cannot be read at a probe keeps the c-φ curve,
         # which is what every surface got before v0.1.214.
@@ -607,6 +641,8 @@ def janbu_correction(slices) -> tuple[float, float]:
     slopes; a surface whose bases are of more than one type takes the c-φ
     value, the rule of the reference documentation (see the block above and
     :func:`base_soil_type`). With ``B1_BY_SOIL_TYPE`` off, 0.50 always.
+    Since v0.1.230 (D219) each base is read with its own slice, so an
+    anisotropic material has the type of what each base computes with.
 
     References:
         Janbu, N. (1973). "Slope stability computations." In Hirschfeld &
@@ -621,7 +657,7 @@ def janbu_correction(slices) -> tuple[float, float]:
     s_list = slices.slices if hasattr(slices, "slices") else list(slices)
     b1 = JANBU_B1["c-phi"]
     if B1_BY_SOIL_TYPE:
-        kinds = {base_soil_type(s.material) for s in s_list} - {None}
+        kinds = {base_soil_type(s.material, s) for s in s_list} - {None}
         if len(kinds) == 1:
             b1 = JANBU_B1[kinds.pop()]
     if not s_list:

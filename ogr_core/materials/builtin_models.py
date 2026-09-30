@@ -722,9 +722,17 @@ class AnisotropicLinear(StrengthModel):
         return c, math.degrees(math.atan(tan_phi))
 
     def shear_strength(self, sigma_n_eff: float) -> float:
-        # No context → assume worst case (bedding-aligned, minimum)
-        c, phi = self.params["c1"], self.params["phi1"]
-        return c + max(sigma_n_eff, 0.0) * math.tan(math.radians(phi))
+        """No slice, no orientation: the WEAKEST one (v0.1.230, D219, the
+        owner's decision). c and tan φ are linear in t and t is monotone in
+        the angle to the bedding, so the weakest is at 0 or at 90 degrees
+        from it -- whatever A and B are, valid or not. It used to be the
+        bedding strength (c1, φ1), which is the weakest only while the rock
+        mass is the stronger of the two."""
+        bed = float(self.params["bedding_angle"])
+        s = max(sigma_n_eff, 0.0)
+        return min(c + s * tan_phi
+                   for c, tan_phi in (self._c_tan_phi(bed, bed),
+                                      self._c_tan_phi(bed + 90.0, bed)))
 
     def shear_strength_ctx(self, sigma_n_eff, ctx: SliceContext | None = None):
         if ctx is None:
@@ -1232,15 +1240,19 @@ class AnisotropicStrengthFunction(StrengthModel):
         return rows[-1][1], rows[-1][2]
 
     def shear_strength(self, sigma_n_eff: float) -> float:
-        # No context → use the row with the least cohesion
+        """No slice, no orientation: the WEAKEST range at this stress
+        (v0.1.230, D219, the owner's decision). It used to be the range of
+        least COHESION, which is not the weakest one at any stress where a
+        range with more cohesion has less friction: Janbu's soil type read
+        this and classified the whole material by one row."""
         if self.legacy_points is not None:
             raise LegacyAnisotropicTable(
                 ANISOTROPIC_FUNCTION_LEGACY_NOTE.format(name="?"))
         if not self.rows:
             return 0.0
-        c_min = min(self.rows, key=lambda t: t[1])
-        return c_min[1] + max(sigma_n_eff, 0.0) * math.tan(
-            math.radians(c_min[2]))
+        s = max(sigma_n_eff, 0.0)
+        return min(c + s * math.tan(math.radians(phi))
+                   for _a, c, phi in self.rows)
 
     def shear_strength_ctx(self, sigma_n_eff, ctx: SliceContext | None = None):
         if ctx is None:
@@ -1468,8 +1480,15 @@ class GeneralizedAnisotropic(StrengthModel):
 
     # ------------------------------------------------------------------
     def shear_strength(self, sigma_n_eff: float) -> float:
-        # No context: the rule that holds a horizontal base.
-        return self._model_for_angle(0.0).shear_strength(sigma_n_eff)
+        """No slice, no orientation: the WEAKEST of its rules' models, each
+        read without a slice too (v0.1.230, D219, the owner's decision). It
+        used to be the rule that holds a horizontal base. Raises, as the
+        model does everywhere, when no rule can be built."""
+        children = self._children()
+        if not children:
+            raise IncompleteGeneralizedAnisotropic(
+                "no rule holds a model that can be built")
+        return min(m.shear_strength(sigma_n_eff) for m in children)
 
     def shear_strength_ctx(self, sigma_n_eff, ctx: SliceContext | None = None):
         angle = math.degrees(ctx.base_angle_rad) if ctx is not None else 0.0

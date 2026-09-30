@@ -131,63 +131,14 @@ class BishopSimplified(LEMMethod):
         # so every LEM method picks it up here, in one place.
         c_suction = getattr(slice_, "suction_cohesion", 0.0) or 0.0
 
-        # v0.1.15 — build a context for models that need it
+        # v0.1.15 — build a context for models that need it. v0.1.230
+        # (D219) — built by ``SliceContext.from_slice``, bit for bit what
+        # was written here, so that Janbu's soil type reads the context
+        # the solver reads.
         ctx = None
         if getattr(strength, "needs_context", False):
             from ogr_core.materials.strength_model import SliceContext
-            # vertical effective stress at the base ≈ (W + W_w)/b − u (per
-            # unit width). Use slice attributes when available.
-            #
-            # v0.1.214 (D166) -- ``+ water_weight``, the ponded water
-            # standing on the slice, which the slicer keeps out of
-            # ``weight`` so the seismic coefficients cannot reach it. The
-            # pore pressure at the base carries the head of that water, so
-            # without its weight the estimate fell by ``γ_w·d`` under a
-            # reservoir and was clipped to zero -- and SHANSEP, the model
-            # that reads it, then fell back to ``su(σ'_n)`` in silence. With
-            # it, a submerged column gives ``γ'·h`` whatever the depth of the
-            # water: Terzaghi's principle, and the sum the reference
-            # documentation writes for its own excess-pore-pressure example.
-            # NO seismic coefficient here: this is the consolidation stress
-            # a strength model reads, not a load the earthquake applies.
-            # By ``getattr`` because ``ogr_core.support.bond`` hands in a
-            # stand-in with no water field.
-            try:
-                b = max(slice_.width, 1e-9)
-                sigma_v_total = (slice_.weight
-                                 + getattr(slice_, "water_weight", 0.0)) / b
-                u = getattr(slice_, "pore_pressure", 0.0)
-                sigma_v_eff = max(sigma_v_total - u, 0.0)
-            except Exception:  # noqa: BLE001
-                sigma_v_eff = sn
-            if sigma_v_probe is not None:
-                sigma_v_eff = max(float(sigma_v_probe), 0.0)
-            depth = 0.0
-            try:
-                depth = 0.5 * (slice_.top_y_left + slice_.top_y_right) \
-                    - 0.5 * (slice_.base_y_left + slice_.base_y_right)
-            except Exception:  # noqa: BLE001
-                pass
-            ctx = SliceContext(
-                base_angle_rad=getattr(slice_, "base_angle", 0.0),
-                sigma_v_eff=sigma_v_eff,
-                depth=max(depth, 0.0),
-                pore_pressure=getattr(slice_, "pore_pressure", 0.0),
-                y_base=0.5 * (getattr(slice_, "base_y_left", 0.0)
-                              + getattr(slice_, "base_y_right", 0.0)),
-                # v0.1.120 — measured by the slicer, which is the only
-                # thing that knows the layer contacts and the ground
-                # profile. Passed through unchanged, None included: a
-                # model that needs one and is handed None must fall back,
-                # not read a depth off the other field.
-                layer_top_y=getattr(slice_, "layer_top_y", None),
-                slope_distance=getattr(slice_, "slope_distance", None),
-                # v0.1.126 — the local bedding orientation, for the three
-                # anisotropic models. None when the material names no
-                # anisotropic surface, and they then use the single global
-                # angle they carry, exactly as before this existed.
-                bedding_angle_deg=getattr(slice_, "bedding_angle_deg", None),
-            )
+            ctx = SliceContext.from_slice(slice_, sn, sigma_v_probe)
 
         def _tau(s: float) -> float:
             if ctx is not None:
