@@ -55,7 +55,20 @@ def _qt():
 
 def _drive(fn, timeout=120.0):
     """Run ``fn`` in a thread while this (the Qt) thread pumps events:
-    the bridge answers from the event loop, as it does in the window."""
+    the bridge answers from the event loop, as it does in the window.
+
+    v0.1.231 -- the cyclic garbage collector runs in whichever thread
+    happens to allocate when a threshold is crossed, and what it collects
+    is destroyed THERE. Qt objects left in a reference cycle by an earlier
+    test (a dialog whose ``accept`` was a lambda capturing it) would then
+    be destroyed in the client thread, which Qt does not support: the most
+    likely cause of the segmentation fault of the Python 3.12 job of
+    v0.1.230, twice at this point of the suite. So the garbage is
+    collected here, on the Qt thread, before the client starts, and the
+    automatic collector stays off while it runs.
+    """
+    import gc
+
     from PySide6.QtWidgets import QApplication
     box = {}
 
@@ -65,12 +78,19 @@ def _drive(fn, timeout=120.0):
         except BaseException as exc:  # noqa: BLE001 - re-raised below
             box["error"] = exc
 
-    t = threading.Thread(target=target, daemon=True)
-    t.start()
-    deadline = time.time() + timeout
-    while t.is_alive() and time.time() < deadline:
-        QApplication.processEvents()
-        time.sleep(0.005)
+    gc.collect()
+    was_enabled = gc.isenabled()
+    gc.disable()
+    try:
+        t = threading.Thread(target=target, daemon=True)
+        t.start()
+        deadline = time.time() + timeout
+        while t.is_alive() and time.time() < deadline:
+            QApplication.processEvents()
+            time.sleep(0.005)
+    finally:
+        if was_enabled:
+            gc.enable()
     assert not t.is_alive(), "the bridge did not answer"
     if "error" in box:
         raise box["error"]

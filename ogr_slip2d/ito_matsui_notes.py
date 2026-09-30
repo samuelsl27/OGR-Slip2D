@@ -93,7 +93,17 @@ def ito_matsui_notes(project, method_ids=()) -> list[str]:
                _TILT_TOLERANCE_DEG, max(leaning)))
 
     # --- water on the shaft ----------------------------------------------
-    if _has_pore_pressure(project, piles):
+    # v0.1.231 (D227) -- the two checks below answered an exception with
+    # False, so the note vanished and nothing said the check was never
+    # made. A note must not kill a run; it must not pretend either.
+    try:
+        wet = _has_pore_pressure(project, piles)
+    except Exception as exc:  # noqa: BLE001 - said, not swallowed
+        wet = False
+        notes.append(_UNCHECKED % ("whether there is pore pressure along "
+                                   "an Ito-Matsui pile", type(exc).__name__,
+                                   exc))
+    if wet:
         notes.append(
             "There is pore pressure along an Ito-Matsui pile. The published "
             "equation is written on the total overburden because there is "
@@ -103,7 +113,14 @@ def ito_matsui_notes(project, method_ids=()) -> list[str]:
             "conservative one. The theory itself is silent.")
 
     # --- the pressure goes negative near the surface ---------------------
-    if _has_negative_pressure(project, piles):
+    try:
+        negative = _has_negative_pressure(project, piles)
+    except Exception as exc:  # noqa: BLE001 - said, not swallowed
+        negative = False
+        notes.append(_UNCHECKED % ("whether the Ito-Matsui pressure goes "
+                                   "negative near the surface",
+                                   type(exc).__name__, exc))
+    if negative:
         notes.append(
             "The Ito-Matsui pressure comes out negative over part of the "
             "pile, near the surface, where the cohesion terms outweigh the "
@@ -114,6 +131,10 @@ def ito_matsui_notes(project, method_ids=()) -> list[str]:
     return notes
 
 
+#: v0.1.231 (D227) -- what a note says when its check could not be made.
+_UNCHECKED = "It could not be checked %s (%s: %s)."
+
+
 def _has_pore_pressure(project, piles) -> bool:
     """True if any sample along any of the piles sits below water."""
     from ogr_core.support.bond import sigma_v_effective_at
@@ -122,10 +143,7 @@ def _has_pore_pressure(project, piles) -> bool:
         for f in (0.25, 0.5, 0.75, 1.0):
             x = sup.head.x + f * (sup.tail.x - sup.head.x)
             y = sup.head.y + f * (sup.tail.y - sup.head.y)
-            try:
-                _sv, u, _depth = sigma_v_effective_at(project, x, y)
-            except Exception:  # noqa: BLE001 - a note must not kill a run
-                return False
+            _sv, u, _depth = sigma_v_effective_at(project, x, y)
             if u > 1e-9:
                 return True
     return False
@@ -140,10 +158,7 @@ def _has_negative_pressure(project, piles) -> bool:
     """
     from .support_integration import _bond_profiles
 
-    try:
-        profiles = _bond_profiles(project)
-    except Exception:  # noqa: BLE001 - a note must not kill a run
-        return False
+    profiles = _bond_profiles(project)
     for sup, _ in piles:
         bp = profiles.get(sup.id)
         if bp is not None and any(t < 0.0 for t in bp.tau):

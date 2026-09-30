@@ -286,6 +286,8 @@ class HelicalAnchor(SupportType):
     DEFAULT_APPLICATION = ForceApplication.ACTIVE
     SUPPORTS_SHEAR: ClassVar[bool] = True
     NEEDS_BOND_PROFILE: ClassVar[bool] = True
+    # v0.1.231 (D227) -- the shaft and the plates both read the soil.
+    READS_SOIL_STRENGTH: ClassVar[bool] = True
     PARAMETERS: ClassVar[dict] = {
         "tensile_capacity": (150.0, "kN",
             "Ultimate tensile capacity of the steel shaft, independent of "

@@ -60,8 +60,13 @@ jobs:
       - name: Run the test suite
         # QT_QPA_PLATFORM=offscreen is what lets the widget tests run on a
         # headless runner; the runner exits non-zero when anything fails.
+        # v0.1.231 -- PYTHONFAULTHANDLER prints the Python stack of every
+        # thread if the process dies on a signal: the 3.12 job of v0.1.230
+        # died with a bare "Segmentation fault" in the middle of a file, and
+        # nothing said which test or which Qt object it was.
         env:
           QT_QPA_PLATFORM: offscreen
+          PYTHONFAULTHANDLER: "1"
         run: python tests/_runner.py
 
   licence:

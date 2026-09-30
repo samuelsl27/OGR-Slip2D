@@ -376,6 +376,31 @@ def _layer_top_at(project: "Project", x: float, y: float):
     return _column_weight(project, x, y, ground_y, 1.0)[1]
 
 
+def _soil_unreadable(material, x: float, y: float, exc: BaseException):
+    """The support cannot be priced because the soil around it cannot be
+    read at ``(x, y)``.
+
+    v0.1.231 (D227) -- the two readers below answered ANY exception of the
+    material's strength model with a strength of zero ("a plugin must not
+    kill an analysis"): the support kept a bond of zero and a pull-out
+    capacity of zero, and nothing said why -- the class of D56 and D94.
+    Now it is DECLARED, through the channel D95 opened: the support is left
+    out as ``not_priceable`` with this reason, on every surface it crosses
+    (``support_integration._bond_profiles``), which is the owner's decision
+    of D184, "reject and declare". Any exception, not only a refusal of the
+    model: whatever the model raises, the soil could not be read there.
+    """
+    from .support import SupportEvaluationError
+
+    strength = getattr(material, "strength", None)
+    model = (getattr(strength, "DISPLAY_NAME", None)
+             or type(strength).__name__)
+    return SupportEvaluationError(
+        "", "the soil around it cannot be read at (%.4g, %.4g): material "
+            "%r (%s) raised %s: %s" % (x, y, getattr(material, "name", "?"),
+                                       model, type(exc).__name__, exc))
+
+
 def soil_shear_strength_at(
     project: "Project", x: float, y: float, sigma_v_eff: float,
     depth: float = 0.0, pore_pressure: float = 0.0,
@@ -400,12 +425,44 @@ def soil_shear_strength_at(
     let a sheet buried in a clay whose strength grows with depth take its
     fraction of the strength at the TOP of that clay, all along the sheet,
     without saying so.
+
+    v0.1.231 -- a model that raises is DECLARED (D227, see
+    :func:`_soil_unreadable`), and the local bedding of a linked
+    anisotropic surface reaches the model (D228): the slicer gives it to
+    every slice base, and the context built here left it out, so a support
+    read the material's global angle.
     """
+    _mat, tau = _soil_reading(project, x, y, sigma_v_eff, depth,
+                              pore_pressure, axis_angle_rad)
+    if tau is None:
+        return 0.0
+    # Infinite Strength is a modelling device for rigid bedrock, not a
+    # promise that a sheet buried in it can never be pulled out. Letting
+    # the infinity through would make the pullout mode vanish from the
+    # minimum without saying so. v0.1.231 (D227) -- and the analysis says
+    # where it applies: :func:`infinite_soil_at`.
+    if not math.isfinite(tau):
+        return 0.0
+    return max(0.0, tau)
+
+
+def _soil_reading(project: "Project", x: float, y: float,
+                  sigma_v_eff: float, depth: float = 0.0,
+                  pore_pressure: float = 0.0, axis_angle_rad: float = 0.0):
+    """``(material, tau)`` at ``(x, y)``: tau as the material's own model
+    gives it, infinity included, with the context
+    :func:`soil_shear_strength_at` documents; ``(material, None)`` where
+    there is no material or it has no model.
+
+    v0.1.231 -- split out of :func:`soil_shear_strength_at`, unchanged, so
+    that :func:`infinite_soil_at` reads exactly what the reader reads.
+    """
+    from ..geometry.anisotropic_surface import bedding_angle_at
     from ..materials.strength_model import SliceContext
 
     mat = project.material_at(x, y)
     if mat is None or getattr(mat, "strength", None) is None:
-        return 0.0
+        return mat, None
     strength = mat.strength
     layer_top_y = None
     if getattr(strength, "NEEDS_LAYER_TOP", False):
@@ -424,18 +481,39 @@ def soil_shear_strength_at(
         y_base=y,
         layer_top_y=layer_top_y,
         slope_distance=slope_distance,
+        bedding_angle_deg=bedding_angle_at(project, mat, x, y),
     )
     try:
         tau = strength.shear_strength_ctx(sigma_v_eff, ctx)
-    except Exception:  # noqa: BLE001 - a plugin must not kill an analysis
-        return 0.0
-    # Infinite Strength is a modelling device for rigid bedrock, not a
-    # promise that a sheet buried in it can never be pulled out. Letting
-    # the infinity through would make the pullout mode vanish from the
-    # minimum without saying so.
-    if not math.isfinite(tau):
-        return 0.0
-    return max(0.0, tau)
+    except Exception as exc:  # noqa: BLE001 - declared, not swallowed
+        raise _soil_unreadable(mat, x, y, exc) from exc
+    return mat, tau
+
+
+def infinite_soil_at(project: "Project", x: float, y: float,
+                     axis_angle_rad: float = 0.0):
+    """The material at ``(x, y)`` when the two readers take the soil there
+    as ZERO because its strength is not finite, or None.
+
+    v0.1.231 (D227, finding c). The zero is a decision written in
+    :func:`soil_shear_strength_at` and :func:`equivalent_c_phi_at`: Infinite
+    Strength is how a model draws rigid bedrock, and a support anchored in
+    it keeps a bond, a plate bearing or a pile pressure of zero there
+    rather than an infinite one. What was missing was saying where it
+    applied; this is the question the analysis asks to say it.
+
+    Read in the stress state and with the orientation the bond profile
+    uses (:func:`build_bond_profile`), so it answers for the point exactly
+    what the reader decides there -- which is also what makes an Infinite
+    Strength child of a Generalized Anisotropic material count only where
+    its angle range applies. Raises what the reader raises.
+    """
+    sigma_v_eff, u, depth = sigma_v_effective_at(project, x, y)
+    mat, tau = _soil_reading(project, x, y, sigma_v_eff, depth, u,
+                             axis_angle_rad)
+    if tau is not None and not math.isfinite(tau):
+        return mat
+    return None
 
 
 class _PointAsSlice:
@@ -458,10 +536,12 @@ class _PointAsSlice:
 
     __slots__ = ("width", "weight", "pore_pressure", "base_angle",
                  "base_y_left", "base_y_right", "top_y_left", "top_y_right",
-                 "layer_top_y", "slope_distance", "suction_cohesion")
+                 "layer_top_y", "slope_distance", "suction_cohesion",
+                 "bedding_angle_deg")
 
     def __init__(self, y, sigma_v_eff, pore_pressure, depth,
-                 axis_angle_rad, layer_top_y, slope_distance):
+                 axis_angle_rad, layer_top_y, slope_distance,
+                 bedding_angle_deg=None):
         self.width = 1.0
         self.weight = sigma_v_eff + pore_pressure
         self.pore_pressure = pore_pressure
@@ -470,6 +550,11 @@ class _PointAsSlice:
         self.top_y_left = self.top_y_right = y + max(0.0, depth)
         self.layer_top_y = layer_top_y
         self.slope_distance = slope_distance
+        # v0.1.231 (D228) -- the local bedding of a linked anisotropic
+        # surface, which ``SliceContext.from_slice`` reads as it reads a
+        # slice's. The LAST argument, with None by default: a test builds
+        # this with the seven above.
+        self.bedding_angle_deg = bedding_angle_deg
         # Not measured along a support: the slicer computes the matric
         # suction term at a slice BASE, from that slice's own state. Left
         # at zero rather than guessed, and said out loud because a soil
@@ -500,6 +585,8 @@ def equivalent_c_phi_at(
 
     from ogr_slip2d.methods.bishop import BishopSimplified
 
+    from ..geometry.anisotropic_surface import bedding_angle_at
+
     mat = project.material_at(x, y) if project is not None else None
     if mat is None or getattr(mat, "strength", None) is None:
         return 0.0, 0.0
@@ -514,12 +601,14 @@ def equivalent_c_phi_at(
             from ..geometry.ground import distance_to_profile, ground_surface
             slope_distance = distance_to_profile(ground_surface(ext), x, y)
     stand_in = _PointAsSlice(y, sigma_v_eff, pore_pressure, depth,
-                             axis_angle_rad, layer_top_y, slope_distance)
+                             axis_angle_rad, layer_top_y, slope_distance,
+                             bedding_angle_at(project, mat, x, y))
     try:
         c, tan_phi = BishopSimplified._local_c_phi(
             stand_in, mat, max(0.0, sigma_v_eff))
-    except Exception:  # noqa: BLE001 - a plugin must not kill an analysis
-        return 0.0, 0.0
+    except Exception as exc:  # noqa: BLE001 - declared, not swallowed
+        # v0.1.231 (D227) -- see :func:`_soil_unreadable`.
+        raise _soil_unreadable(mat, x, y, exc) from exc
     if not (_math.isfinite(c) and _math.isfinite(tan_phi)) or c >= 1e11:
         return 0.0, 0.0
     return max(0.0, c), max(0.0, tan_phi)

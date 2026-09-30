@@ -163,6 +163,23 @@ pay for 50 soil samples it never reads. The engine always asks the INSTANCE,
 so a property works; read off the CLASS a property object is truthy, so do
 not read them off the class.
 
+A type whose profile takes the strength of the SOIL around it — a fraction
+of it, or its equivalent `c` and `phi` — should read it through
+`bond.soil_shear_strength_at` and `bond.equivalent_c_phi_at`, and declare
+`READS_SOIL_STRENGTH = True` (a property, too, when it depends on the mode:
+`Geosynthetic` reads the soil only with the coefficient of interaction).
+Two things come with those readers since v0.1.231:
+
+- where the material's strength model raises, the reader raises
+  `SupportEvaluationError` naming the material, the model, the exception and
+  the point, so the support is left out as described in the next section
+  instead of keeping a bond of zero in silence (defect D227);
+- where the soil's strength is not finite — Infinite Strength, the rigid
+  bedrock of a model — the reader answers zero, a written decision, and the
+  analysis says where it applied for every type that declares
+  `READS_SOIL_STRENGTH`. A type whose law is its own (a bond strength, a
+  friction angle) never reads the soil and should not declare it.
+
 ### When a support cannot be priced at all
 
 `force_at` and `shear_at` answer with a number or raise

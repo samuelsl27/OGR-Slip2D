@@ -87,7 +87,11 @@ def support_bond(project, support, stype, failures: Optional[list] = None):
 
     v0.1.163, defect D95 - ``failures`` collects the exception CLASS NAME
     when the profile will not build, the way ``compute_support_effects``
-    collects its reasons. Until this version the diagram answered a failed
+    collects its reasons. v0.1.231 (D227) - each entry is ``(support id,
+    what, refused)``: for a ``SupportEvaluationError`` (the model DECLARED
+    the support unpriceable, and the analysis leaves it out) ``what`` is
+    its reason and ``refused`` is True; for anything else, the class name
+    and False. Until this version the diagram answered a failed
     profile with ``None`` and drew the curves the type produces without
     one, which for a geosynthetic in coefficient mode is a flat zero and
     for a helical anchor is seven flat zeros: a plot of nothing, with
@@ -102,7 +106,13 @@ def support_bond(project, support, stype, failures: Optional[list] = None):
         return build_bond_profile(project, support, stype)
     except Exception as exc:  # noqa: BLE001 - a diagram must not kill Interpret
         if failures is not None:
-            failures.append((getattr(support, "id", ""), type(exc).__name__))
+            # v0.1.231 (D227) -- a support DECLARED unpriceable carries its
+            # reason, and the third field says which of the two it was.
+            from ogr_core.support import SupportEvaluationError
+            refused = isinstance(exc, SupportEvaluationError)
+            failures.append((getattr(support, "id", ""),
+                             (exc.reason or type(exc).__name__) if refused
+                             else type(exc).__name__, refused))
         return None
 
 
@@ -216,7 +226,13 @@ class SupportForceDiagramWindow(QDialog):
             self.note.setText(tr("At the slip surface: %.4f kN/m") % applied)
         else:
             self.note.setText("")
-        if failures:
+        if failures and len(failures[0]) > 2 and failures[0][2]:
+            # v0.1.231 (D227) -- declared: the analysis leaves it out.
+            self.note.setText(
+                tr("This support cannot be priced (%s): the analysis leaves "
+                   "it out.") % failures[0][1]
+                + ("  " + self.note.text() if self.note.text() else ""))
+        elif failures:
             # v0.1.163, defect D95 -- FIRST, and it replaces nothing: the
             # line above is about a number that was computed, and this one
             # says the stress state behind it never was. A reader who takes

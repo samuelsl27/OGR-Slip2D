@@ -113,6 +113,79 @@ def support_identity_notes(project, method_ids=()) -> list[str]:
     return notes
 
 
+def infinite_strength_notes(project, method_ids=()) -> list[str]:
+    """The supports that read the soil and run through a material whose
+    strength is not finite, where that soil is read as ZERO.
+
+    v0.1.231 (D227, finding c) -- see
+    ``ogr_core.support.bond.infinite_soil_at`` for the decision and why it
+    stays. The note samples the axis where the bond profile samples it (the
+    mid-points of its segments) and, for a type with plates, each plate.
+    """
+    from ogr_core.support.bond import DEFAULT_SEGMENTS, infinite_soil_at
+
+    def _name(st):
+        return (getattr(st, "_display_name", "")
+                or getattr(st, "DISPLAY_NAME", "")
+                or getattr(st, "TYPE_ID", ""))
+
+    notes: list[str] = []
+    for stype, sups in supports_by_type(project):
+        if not getattr(stype, "READS_SOIL_STRENGTH", False):
+            continue
+        for sup in sups:
+            length = sup.length()
+            if length <= 0.0:
+                continue
+            hx, hy = sup.head.x, sup.head.y
+            ux = (sup.tail.x - hx) / length
+            uy = (sup.tail.y - hy) / length
+            axis = sup.axis_angle_rad()
+
+            def _in_it(s, names):
+                mat = infinite_soil_at(project, hx + ux * s, hy + uy * s,
+                                       axis)
+                if mat is not None:
+                    names.add(getattr(mat, "name", "") or "?")
+                return mat is not None
+
+            names: set = set()
+            plates = [min(max(0.0, float(d)), length)
+                      for d in stype.station_distances(length)]
+            try:
+                hits = sum(_in_it((i + 0.5) * length / DEFAULT_SEGMENTS,
+                                  names)
+                           for i in range(DEFAULT_SEGMENTS))
+                plate_hits = sum(_in_it(d, names) for d in plates)
+            except Exception:  # noqa: BLE001 - said by the profile channel
+                # The same reading fails when the bond profile is built,
+                # and the analysis says so for this support: "cannot be
+                # priced" with its reason (D227, D95), or the note on a
+                # profile that would not build. A note must not kill the
+                # run that would have said it.
+                continue
+            if not hits and not plate_hits:
+                continue
+            where = []
+            if hits:
+                where.append("about %.0f %% of its length"
+                             % (100.0 * hits / DEFAULT_SEGMENTS))
+            if plate_hits:
+                where.append("%d of its %d plates" % (plate_hits,
+                                                      len(plates)))
+            notes.append(
+                "Support '%s' (%s) has %s in %s, whose strength is not "
+                "finite (Infinite Strength): the soil around it is read as "
+                "zero there. Rigid bedrock is a modelling device, not a "
+                "promise that a support cannot be pulled out of it, and "
+                "letting the infinity through would drop its pull-out or "
+                "bearing from the minimum."
+                % (getattr(sup, "name", "") or sup.id, _name(stype),
+                   " and ".join(where),
+                   ", ".join("'%s'" % n for n in sorted(names))))
+    return notes
+
+
 def force_location_notes(project, method_ids=()) -> list[str]:
     """What the *location of force* setting cannot do, and in which methods.
 

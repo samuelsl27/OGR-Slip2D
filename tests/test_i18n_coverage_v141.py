@@ -41,6 +41,32 @@ from ogr_gui.i18n import (  # noqa: E402
 _ROOT = Path(__file__).resolve().parent.parent
 _GUI = _ROOT / "ogr_gui"
 
+
+class _Language:
+    """The language set for a block, and the one before it put back on the
+    way out, whatever happens inside.
+
+    v0.1.231 -- ``TestLanguageSwitching`` restored English in a
+    ``teardown_method``, which this project's runner does not call, and two
+    tests of ``TestTranslationCompleteness`` ended on Spanish on purpose or
+    by omission: every one of them left the language Spanish for whatever
+    ran next. In the full suite nothing after this file happened to read a
+    translated text; a filtered run with ``test_support_silence_v1155``
+    after it failed on "no notes" (rule 5 of AGENTS.md).
+    """
+
+    def __init__(self, lang):
+        self.lang = lang
+
+    def __enter__(self):
+        self.prev = current_language()
+        set_language(self.lang)
+        return self
+
+    def __exit__(self, *exc):
+        set_language(self.prev)
+        return False
+
 # Constructors and setters whose literal argument is shown to the user.
 _VISIBLE = [
     r'setWindowTitle\(\s*"([^"]+)"',
@@ -236,17 +262,14 @@ class TestTranslationCompleteness:
 
     def test_english_is_the_reference(self):
         """English keys pass through unchanged."""
-        set_language("en")
-        try:
+        with _Language("en"):
             assert tr("Materials") == "Materials"
             assert tr("Water Table") == "Water Table"
-        finally:
-            set_language("es")
 
     def test_unknown_key_returns_itself(self):
-        set_language("es")
-        assert tr("a key that does not exist") == \
-            "a key that does not exist"
+        with _Language("es"):
+            assert tr("a key that does not exist") == \
+                "a key that does not exist"
 
 
 class TestCoverageBudget:
@@ -313,35 +336,31 @@ class TestCoverageBudget:
 
 
 class TestLanguageSwitching:
-    """Every test here restores English on exit: leaving the language set
-    to Spanish leaked into other suites, where translated menu titles no
-    longer matched the names being looked up."""
-
-    def teardown_method(self, _m=None):
-        set_language("en")
+    """Every test here restores the language it found: leaving it Spanish
+    leaked into other suites, where translated menu titles no longer
+    matched the names being looked up. v0.1.231 -- with ``_Language``, and
+    not with the ``teardown_method`` this class had, which the runner never
+    calls."""
 
     def test_switching_changes_the_text(self):
-        set_language("es")
-        assert tr("Materials") == "Materiales"
-        set_language("en")
-        assert tr("Materials") == "Materials"
-        set_language("es")
+        with _Language("es"):
+            assert tr("Materials") == "Materiales"
+            set_language("en")
+            assert tr("Materials") == "Materials"
 
     def test_available_languages(self):
         langs = available_languages()
         assert "en" in langs and "es" in langs
 
     def test_current_language_reported(self):
-        set_language("es")
-        assert current_language() == "es"
-        set_language("en")
-        assert current_language() == "en"
-        set_language("es")
+        with _Language("es"):
+            assert current_language() == "es"
+            set_language("en")
+            assert current_language() == "en"
 
     def test_geotechnical_terms_are_correct(self):
         """Terminology matters more than literal translation: these are
         the standard Spanish geotechnical terms."""
-        set_language("es")
         expected = {
             "Water Table": "Nivel freático",
             "Tension Crack": "Grieta de tracción",
@@ -349,8 +368,9 @@ class TestLanguageSwitching:
             "Standard deviation:": "Desviación típica:",
             "Number of slices:": "Número de dovelas:",
         }
-        for k, v in expected.items():
-            assert tr(k) == v, (k, tr(k))
+        with _Language("es"):
+            for k, v in expected.items():
+                assert tr(k) == v, (k, tr(k))
 
     def test_dialog_shows_translated_title(self):
         try:
@@ -358,11 +378,11 @@ class TestLanguageSwitching:
         except ImportError:
             return
         QApplication.instance() or QApplication([])
-        set_language("es")
         from test_slide_validation_ej1 import _ej1_project
 
         from ogr_gui.dialogs.random_variables_dialog import (
             RandomVariablesDialog,
         )
-        d = RandomVariablesDialog(_ej1_project(), None)
-        assert "Estadística" in d.windowTitle()
+        with _Language("es"):
+            d = RandomVariablesDialog(_ej1_project(), None)
+            assert "Estadística" in d.windowTitle()

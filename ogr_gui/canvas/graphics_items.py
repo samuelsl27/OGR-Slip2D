@@ -407,12 +407,20 @@ class SupportItem(DomainItem):
             # one place the user looks first.
             bond = None
             bond_failed = None
+            # v0.1.231 (D227) -- a support the model DECLARES unpriceable
+            # (the soil around it cannot be read) is left out of the
+            # analysis: the tooltip says that, with the reason, instead of
+            # the zero-stress sentence meant for a type with a bug.
+            bond_refused = None
             if project is not None and getattr(
                     support_type_obj, "NEEDS_BOND_PROFILE", False):
-                from ogr_core.support import build_bond_profile
+                from ogr_core.support import (SupportEvaluationError,
+                                              build_bond_profile)
                 try:
                     bond = build_bond_profile(
                         project, support, support_type_obj)
+                except SupportEvaluationError as exc:
+                    bond_refused = exc.reason or type(exc).__name__
                 except Exception as exc:  # noqa: BLE001
                     bond_failed = type(exc).__name__
             try:
@@ -438,6 +446,12 @@ class SupportItem(DomainItem):
                     )
             except Exception:  # noqa: BLE001
                 pass
+            if bond_refused is not None:
+                import html as _html
+                tooltip += "<br><i>" + tr(
+                    "This support cannot be priced (%s): the analysis "
+                    "leaves it out.") % (_html.escape(bond_refused),) \
+                    + "</i>"
             if bond_failed is not None:
                 tooltip += "<br><i>" + tr(
                     "Bond profile could not be built (%s): the forces "

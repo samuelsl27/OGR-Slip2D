@@ -218,6 +218,14 @@ class SupportType(ABC):
     # bond strength given directly per metre; building a 50-sample profile
     # for those would cost a search real time for a number nobody reads.
     NEEDS_BOND_PROFILE: ClassVar[bool] = False
+    # v0.1.231 (D227) -- whether that profile reads the strength of the
+    # SOIL around the support (``bond.soil_shear_strength_at`` or
+    # ``bond.equivalent_c_phi_at``) rather than a bond of its own. Those
+    # readers take an Infinite Strength soil as zero, and the analysis says
+    # where (``ogr_slip2d.support_notes.infinite_strength_notes``) only for
+    # the types that declare this; a type whose law is its own never reads
+    # the soil, so a soil nail through bedrock is not that case.
+    READS_SOIL_STRENGTH: ClassVar[bool] = False
 
     @abstractmethod
     def force_at(
@@ -1128,6 +1136,12 @@ class PileMicropile(SupportType):
         return self._ito()
 
     @property
+    def READS_SOIL_STRENGTH(self) -> bool:  # noqa: N802 - see above
+        """Ito & Matsui reads the soil's c and phi along the shaft
+        (``bond.equivalent_c_phi_at``); Shear reads nothing."""
+        return self._ito()
+
+    @property
     def MEASURED_FROM_TOP(self) -> bool:  # noqa: N802 - see above
         """Ito & Matsui measures depth from the top of the pile.
 
@@ -1406,6 +1420,14 @@ class Geosynthetic(SupportType):
     # v0.1.149 — the identity an instance names through ``type_ref``;
     # see ``SupportType`` for why the class id was not enough.
     id: str = field(default_factory=lambda: str(uuid4()), compare=False)
+
+    @property
+    def READS_SOIL_STRENGTH(self) -> bool:  # noqa: N802 - shadows a ClassVar
+        """Only the coefficient of interaction takes a fraction of the
+        soil's own strength; the other two laws are the sheet's own. A
+        property, as ``PileMicropile.NEEDS_BOND_PROFILE`` is: ask the
+        instance, never the class."""
+        return self.pullout_mode == "coefficient"
 
     def _friction_factor_at(self, y: float, depth: float) -> float:
         """F* at one point, constant or varying linearly with depth.

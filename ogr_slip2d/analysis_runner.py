@@ -333,6 +333,10 @@ def settings_warnings(project, method_ids=()) -> list[str]:
     # one the project no longer holds (D66).
     from .support_notes import support_identity_notes
     notes.extend(support_identity_notes(project, method_ids))
+    # v0.1.231 (D227) -- where a support reads an Infinite Strength soil,
+    # which the bond readers take as zero.
+    from .support_notes import infinite_strength_notes
+    notes.extend(infinite_strength_notes(project, method_ids))
     # v0.1.127 — the seismic modes change WHICH surface is reported, so
     # anything downstream that consumes "the critical surface" is now
     # consuming a different one. The probabilistic and sensitivity runs

@@ -127,3 +127,54 @@ def anisotropy_angle_at(polyline: Polyline, x: float,
     if i is None:
         return None
     return segment_angle_deg(polyline, i)
+
+
+def material_surfaces(project) -> dict:
+    """``{material id: polyline}`` for the materials that name one.
+
+    v0.1.126. Empty when no material points at an anisotropic surface,
+    which is every project until somebody draws one — so the per-slice
+    cost of the feature is a dictionary lookup that finds nothing.
+
+    A material naming a surface that has been DELETED is left out rather
+    than made to fail: the strength model then falls back on its own
+    global bedding angle, which is what it did before the surface
+    existed. Silently ignoring a dangling id would be wrong if it changed
+    an answer, and it cannot: the fallback is the documented behaviour of
+    a material with no surface.
+
+    v0.1.231 (D228) -- moved here, bit for bit, from the slicer
+    (``ogr_slip2d.slicer._anisotropic_surfaces``), so that the supports,
+    which live in ``ogr_core``, read the same surfaces the slice bases do.
+    """
+    from .boundary_type import BoundaryType
+
+    wanted = {getattr(m, "anisotropic_surface_id", None): None
+              for m in project.materials}
+    wanted.pop(None, None)
+    if not wanted:
+        return {}
+    by_id = {b.id: b.polyline for b in project.boundaries
+             if b.btype == BoundaryType.ANISOTROPIC_SURFACE}
+    out = {}
+    for m in project.materials:
+        sid = getattr(m, "anisotropic_surface_id", None)
+        pl = by_id.get(sid) if sid else None
+        if pl is not None:
+            out[m.id] = pl
+    return out
+
+
+def bedding_angle_at(project, material, x: float,
+                     y: float) -> Optional[float]:
+    """The local bedding of ``material`` at ``(x, y)``: the angle of its
+    anisotropic surface at the closest point, or None when it names none
+    (or names one that no longer exists). v0.1.231 (D228): the supports
+    ask it, with the rule the slicer applies to a slice base."""
+    if material is None or not getattr(material, "anisotropic_surface_id",
+                                       None):
+        return None
+    pl = material_surfaces(project).get(getattr(material, "id", None))
+    if pl is None:
+        return None
+    return anisotropy_angle_at(pl, x, y)

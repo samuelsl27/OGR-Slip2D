@@ -1452,14 +1452,14 @@ def compute_support_effects(
     if not supports:
         return []
 
-    # Failure direction: from settings
-    is_l2r = False
-    try:
-        from ogr_core.project.units import FailureDirection
-        fd = project.settings.units.failure_direction
-        is_l2r = (fd == FailureDirection.LEFT_TO_RIGHT)
-    except Exception:  # noqa: BLE001
-        is_l2r = False
+    # Failure direction: from settings. v0.1.231 (D227) -- read as it is:
+    # an ``except`` here turned any setting it could not read into
+    # right-to-left without a word, which flips the sense of a tangent,
+    # horizontal or perpendicular support force. The enum has no third
+    # value, so a failure to read it is a broken project, and says so.
+    from ogr_core.project.units import FailureDirection
+    is_l2r = (project.settings.units.failure_direction
+              == FailureDirection.LEFT_TO_RIGHT)
 
     slip_xy = _slip_polyline(surface, slices)
     if len(slip_xy) < 2:

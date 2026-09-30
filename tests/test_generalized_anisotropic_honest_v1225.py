@@ -399,8 +399,12 @@ class TestTheDialog:
             mats[0].anisotropic_surface_id = "a-surface"
         dlg = MaterialPropertiesDialog(mats)
         dlg.list.setCurrentRow(0)
-        dlg.accepted_calls = []
-        dlg.accept = lambda: dlg.accepted_calls.append(True)
+        # v0.1.231 -- the lambda keeps the LIST, not the dialog: capturing
+        # the dialog made a cycle the garbage collector broke at any later
+        # moment, inside another test; a Qt object destroyed there is the
+        # likely cause of the segfault of the 3.12 job of v0.1.230.
+        calls = dlg.accepted_calls = []
+        dlg.accept = lambda: calls.append(True)
         return dlg
 
     def test_ok_keeps_the_rules_of_the_material_on_screen(self):

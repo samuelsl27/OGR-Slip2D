@@ -2042,6 +2042,10 @@ _DICTS: dict[str, dict[str, str]] = {
             "No se ha podido construir el perfil de adherencia de este "
             "soporte (%s): las capacidades de abajo son su envolvente a "
             "tensión efectiva nula, no las que daría el estado tensional.",
+        # v0.1.231 (D227): un soporte cuyo suelo no se puede leer se declara.
+        "This support cannot be priced (%s): the analysis leaves it out.":
+            "Este soporte no se puede calcular (%s): el análisis lo deja "
+            "fuera.",
         "Bond profile could not be built (%s): the forces above are the "
         "envelope at zero effective stress.":
             "No se ha podido construir el perfil de adherencia (%s): las "

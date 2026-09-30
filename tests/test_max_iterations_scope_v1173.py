@@ -745,9 +745,15 @@ class TestTheControlOnScreen:
                 if "Maximum iterations (scope differs" in k
                 or "bounds a different loop" in k]
         assert len(keys) == 2, keys
+        # v0.1.231 -- restored HERE: the ``teardown_method`` of this class
+        # is never called by ``tests/_runner.py``, so the language stayed
+        # Spanish for every file after this one (rule 5).
         set_language("es")
-        for key in keys:
-            assert tr(key) != key, key
+        try:
+            for key in keys:
+                assert tr(key) != key, key
+        finally:
+            set_language("en")
         assert page is not None
 
 
