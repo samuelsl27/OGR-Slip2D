@@ -112,7 +112,7 @@ stability analysis read the field.
   method's numbers.
 
 ## Materials
-catalog('strength_models') lists the 21 strength models with their
+catalog('strength_models') lists the 22 strength models with their
 parameters, units and defaults. The common ones:
 * mohr_coulomb: cohesion (kPa), friction_angle (deg)
 * undrained: cohesion (kPa) — phi = 0
@@ -123,6 +123,13 @@ parameters, units and defaults. The common ones:
   {"angle_min": -90, "angle_max": 0, "material": "Clay"}. The analysis uses
   that material's strength as it is when it runs; a material a range takes
   is deleted only with reassign_to or force.
+* c_phi_function: rows [[normal stress, c, phi], ...]; c and phi are
+  interpolated between rows.
+* snowden_anisotropic_linear: bedding_angle, A1, B1 (the clockwise side of
+  the bedding), A2, B2 (the counter-clockwise side), all in deg, and two
+  functions, bedding and rock_mass, each {"model_id":
+  "shear_normal_function", "points": [[s, tau], ...]} or {"model_id":
+  "c_phi_function", "rows": [...]}; linear transition between them.
 unit_weight is the bulk unit weight; sat_unit_weight is only used below the
 water surface when use_sat_unit_weight is true.
 

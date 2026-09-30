@@ -25,6 +25,14 @@ the verification bank, which has no Snowden material.
 
 DISCRIMINATION, measured on the v0.1.217 tree: the identity and rule-7 cases
 fail there by behaviour (the surface is ignored); the controls pass.
+
+v0.1.229 (D215) -- changed on purpose: the model is now the reference's
+(A1, B1, A2, B2 and two strength functions, a linear transition), and a
+material with the old c1, phi1, c2, phi2 and B is refused until reviewed.
+The material here is the old one's nearest form (A = 0, B = 25, one C/Phi
+row per function), and the one case that read the old ``_c_phi`` reads the
+new ``weight`` and ``_blend``. What the file pins is unchanged: the local
+bedding is read, and without a surface the global angle is.
 """
 from __future__ import annotations
 
@@ -39,9 +47,15 @@ from ogr_slip2d.methods import method_registry
 from ogr_slip2d.search import GridSearch
 from ogr_slip2d.surface import SlipCircle
 
+def _cphi(c: float, phi: float) -> dict:
+    return {"model_id": "c_phi_function", "params": {},
+            "rows": [[0.0, c, phi]]}
+
+
 #: A Snowden material whose transition is sharp enough (B = 25 deg) for a
 #: change of bedding to show on the factor of safety.
-SNOWDEN = dict(c1=5.0, phi1=12.0, c2=25.0, phi2=32.0, B=25.0)
+SNOWDEN = dict(A1=0.0, B1=25.0, A2=0.0, B2=25.0, bedding=_cphi(5.0, 12.0),
+               rock_mass=_cphi(25.0, 32.0))
 
 
 def _line(*pts) -> Polyline:
@@ -133,12 +147,14 @@ class TestWhatMustNotMove:
     def test_no_surface_is_the_global_angle_bit_for_bit(self):
         """With no surface the context carries None and the fallback is
         the global angle: exactly the call v0.1.217 made."""
+        from ogr_core.materials.builtin_models import fold_plane_angle_deg
         from ogr_core.materials.strength_model import SliceContext
         m = SnowdenModifiedAnisotropicLinear(bedding_angle=17.0, **SNOWDEN)
         for angle in (-40.0, 5.0, 17.0, 33.0, 71.0):
             ctx = SliceContext(base_angle_rad=math.radians(angle))
-            c, phi = m._c_phi(angle)
-            want = c + 80.0 * math.tan(math.radians(phi))
+            alpha = fold_plane_angle_deg(math.degrees(math.radians(angle))
+                                         - 17.0)
+            want = m._blend(80.0, m.weight(alpha))
             assert m.shear_strength_ctx(80.0, ctx) == want, angle
 
     def test_a_dangling_id_falls_back_to_the_global_angle(self):

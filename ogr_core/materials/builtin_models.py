@@ -878,6 +878,141 @@ class DiscreteFunction(StrengthModel):
 
 # ----------------------------------------------------------------------
 @register
+class CPhiFunction(StrengthModel):
+    """C/Phi Function — Mohr-Coulomb cohesion and friction angle as
+    functions of the effective normal stress (v0.1.229, D215).
+
+    A table of ``rows`` ``(σ'ₙ, c, φ)``. The reference documentation
+    defines the strength type by entering "Effective Normal stress, Cohesion
+    and Friction Angle" and says "the interpolation is done on the cohesion
+    and friction angle level, meaning for a given value of effective normal
+    stress the cohesion and friction angle are interpolated". So between two
+    rows c and φ (the angle, in degrees) are linear in σ'ₙ, and
+
+        τ = c(σ'ₙ) + max(σ'ₙ, 0)·tan φ(σ'ₙ).
+
+    Below the first row and above the last the end row holds: a decision,
+    since the documentation does not say, and the convention of the
+    shear-normal function. What a valid table is (at least one row, finite,
+    σ'ₙ strictly increasing, c ≥ 0 and 0 ≤ φ < 90) lives in
+    ``ogr_core.project.rules.c_phi_rows_refusal``; the model computes with
+    what it is given, in the order given.
+
+    Design factors (categories c′ and tan φ′, D224): the analysis copy
+    divides the INTERPOLATED c and tan φ, through two divisors it carries,
+    and not the rows: φ is interpolated as an angle, so factoring each
+    row's tan φ would divide tan φ exactly only at the rows. The divisors
+    are 1 -- this model bit for bit -- everywhere but in that copy.
+    """
+
+    MODEL_ID = "c_phi_function"
+    DISPLAY_NAME = "C/Phi Function"
+    PARAMETERS = {}
+
+    #: The table a new material starts with: a gently curved envelope, the
+    #: friction angle falling and the cohesion rising with the stress.
+    DEFAULT_ROWS = ((0.0, 5.0, 35.0), (100.0, 10.0, 30.0),
+                    (300.0, 20.0, 25.0))
+
+    design_c_divisor: float = 1.0
+    design_tan_divisor: float = 1.0
+
+    def __init__(self, **params):
+        rows = params.pop("rows", None)
+        super().__init__(**params)
+        if rows is None:
+            rows = self.DEFAULT_ROWS
+        # Not sorted: the order IS the table, and an unordered one is
+        # refused by the rule rather than silently rearranged.
+        self.rows = [(float(s), float(c), float(p)) for (s, c, p) in rows]
+
+    def _segment(self, sigma: float):
+        """``(s0, c0, φ0, s1, c1, φ1)`` of the segment holding ``sigma``, or
+        None outside the table. A stress on a row belongs to the segment
+        that starts there (the first one that holds it)."""
+        rows = self.rows
+        for (s0, c0, p0), (s1, c1, p1) in zip(rows, rows[1:]):
+            if s0 <= sigma < s1:
+                return s0, c0, p0, s1, c1, p1
+        return None
+
+    def c_phi_at(self, sigma: float):
+        """``(c, φ in degrees)`` at ``sigma``, as the class docstring says."""
+        rows = self.rows
+        if not rows:
+            return 0.0, 0.0
+        if sigma <= rows[0][0]:
+            return rows[0][1], rows[0][2]
+        if sigma >= rows[-1][0]:
+            return rows[-1][1], rows[-1][2]
+        seg = self._segment(sigma)
+        if seg is None:           # only an unordered table gets here
+            return rows[-1][1], rows[-1][2]
+        s0, c0, p0, s1, c1, p1 = seg
+        f = (sigma - s0) / (s1 - s0)
+        return c0 + f * (c1 - c0), p0 + f * (p1 - p0)
+
+    def shear_strength(self, sigma_n_eff: float) -> float:
+        c, phi = self.c_phi_at(sigma_n_eff)
+        return (c / self.design_c_divisor
+                + max(sigma_n_eff, 0.0) * math.tan(math.radians(phi))
+                / self.design_tan_divisor)
+
+    def tangent_slope(self, sigma_n_eff: float) -> float:
+        """dτ/dσ'ₙ of :meth:`shear_strength`, exactly: on a segment
+        ``c′ + tan φ + σ·(1 + tan²φ)·φ′`` (φ′ in radians per unit stress),
+        and ``tan φ`` of the end row outside the table. At a row, the
+        segment that starts there, as :meth:`_segment` picks it."""
+        s = sigma_n_eff
+        if not self.rows:
+            return 0.0
+        _c, phi = self.c_phi_at(s)
+        t = math.tan(math.radians(phi))
+        seg = self._segment(s)
+        dc = dphi = 0.0
+        if seg is not None:
+            s0, c0, p0, s1, c1, p1 = seg
+            dc = (c1 - c0) / (s1 - s0)
+            dphi = math.radians(p1 - p0) / (s1 - s0)
+        friction = (t + s * (1.0 + t * t) * dphi) if s >= 0.0 else 0.0
+        return dc / self.design_c_divisor + friction / self.design_tan_divisor
+
+    def design_factored(self, factors: MaterialFactors) -> FactoredStrength:
+        f_c, f_t = factors.cohesion, factors.tan_phi
+        if f_c == 1.0 and f_t == 1.0:
+            return FactoredStrength(self, {}, "c′, tan φ′")
+        import copy
+        out = copy.deepcopy(self)
+        changes = {}
+        if f_c != 1.0:
+            out.design_c_divisor = self.design_c_divisor * f_c
+            changes["cohesion divisor"] = (self.design_c_divisor,
+                                           out.design_c_divisor)
+        if f_t != 1.0:
+            out.design_tan_divisor = self.design_tan_divisor * f_t
+            changes["tan φ divisor"] = (self.design_tan_divisor,
+                                        out.design_tan_divisor)
+        return FactoredStrength(out, changes, "c′, tan φ′")
+
+    def to_dict(self) -> dict:
+        d = super().to_dict()
+        d["rows"] = [list(r) for r in self.rows]
+        if self.design_c_divisor != 1.0:
+            d["design_c_divisor"] = self.design_c_divisor
+        if self.design_tan_divisor != 1.0:
+            d["design_tan_divisor"] = self.design_tan_divisor
+        return d
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "CPhiFunction":
+        m = cls(rows=data.get("rows"), **data.get("params", {}))
+        m.design_c_divisor = float(data.get("design_c_divisor", 1.0))
+        m.design_tan_divisor = float(data.get("design_tan_divisor", 1.0))
+        return m
+
+
+# ----------------------------------------------------------------------
+@register
 class SHANSEP(StrengthModel):
     """SHANSEP undrained strength (Ladd & Foott 1974).
 
@@ -1389,20 +1524,94 @@ class GeneralizedAnisotropic(StrengthModel):
 
 
 # ----------------------------------------------------------------------
+#: v0.1.229 (D215) -- what the analysis says about a Snowden material saved
+#: with the parameters of the model OGR had before this version, and what
+#: the model raises if an analysis reaches one anyway. One text for both.
+SNOWDEN_LEGACY_NOTE = (
+    "The Snowden Modified Anisotropic Linear material {name!r} was saved by a "
+    "version before 0.1.229, with c1, phi1, c2, phi2 and a single B and a "
+    "cosine transition of the friction ANGLE. The model is now the one the "
+    "reference documents: a linear transition of the shear strength between "
+    "a bedding and a rock mass strength function, with A1, B1, A2 and B2. "
+    "The material shows the nearest such form (A1 = A2 = 0, B1 = B2 = B, one "
+    "C/Phi row per function), whose numbers are not the old ones: review it "
+    "and accept it.")
+
+#: The parameters of the model before v0.1.229; any of them marks a file
+#: written by it.
+_SNOWDEN_LEGACY_KEYS = ("c1", "phi1", "c2", "phi2", "B")
+
+
+class LegacySnowden(ValueError):
+    """A Snowden material still holding the c1, phi1, c2, phi2 and B of a
+    file saved before v0.1.229 (D215). Never computed with."""
+
+
+class IncompleteSnowden(ValueError):
+    """A Snowden material whose bedding or rock mass strength function is
+    not a shear-normal or a C/Phi function, or cannot be built (v0.1.229).
+    The analysis refuses such a model before it starts
+    (``ogr_core.project.rules.snowden_refusal``); this is what a caller that
+    gets past the refusal meets."""
+
+
 @register
 class SnowdenModifiedAnisotropicLinear(StrengthModel):
-    """Snowden Modified Anisotropic Linear (Snowden Associates).
+    """Snowden Modified Anisotropic Linear (Mercer 2012, 2013).
 
-    A refinement of Anisotropic Linear where, instead of a single
-    linear transition, the shear strength is computed from a
-    Mohr-Coulomb envelope whose parameters are modulated by an
-    anisotropy ratio that varies smoothly (cosine) with the angular
-    distance from the bedding orientation. This avoids the sharp
-    kinks of the basic linear model.
+    The Anisotropic Linear model with the two additions the reference
+    documentation describes (v0.1.229, D215):
 
-        ratio = 0.5·(1 − cos(π·min(|Δ|, B)/B))     ∈ [0, 1]
-        c   = c1   + ratio·(c2 − c1)
-        phi = phi1 + ratio·(phi2 − phi1)
+    * a NON-SYMMETRIC anisotropy function of four parameters. With α the
+      angle from the bedding (the 1-direction) to the slice base, measured
+      counter-clockwise and folded into (-90, 90] (the documentation's
+      figures: α from direction 1 to the plane; A1 and B1 on the negative
+      side, A2 and B2 on the positive one),
+
+          (A, B) = (A1, B1) if α < 0,   (A2, B2) if α ≥ 0
+          t = clip((|α| − A) / (B − A), 0, 1)
+
+      and A = B is a step at A;
+
+    * the bedding and rock mass strengths are FUNCTIONS of σ'ₙ, each a
+      shear-normal function or a C/Phi function ("Shear-Normal function" or
+      "Cohesion-Friction function"), and the strength of an intermediate
+      orientation is "a weighted average determined by the linear transition
+      of the anisotropy function":
+
+          τ = (1 − t)·τ_bedding(σ'ₙ) + t·τ_rock mass(σ'ₙ).
+
+    With one C/Phi row per function, (c1, φ1) and (c2, φ2), and A1 = A2,
+    B1 = B2, this is Anisotropic Linear exactly (D216 interpolates c and
+    tan φ, which is the same line in t). The base angle is the slicer's
+    ``atan2(dy, dx)`` with dx > 0, a geometric inclination whatever the
+    failure direction, so the sign of α is the figures' sign. The bedding
+    is the local one of a linked anisotropic surface when the slicer gives
+    it (D208), else ``bedding_angle``.
+
+    Without a slice there is no orientation, and the model answers the
+    WEAKEST one: the least of the strengths at α = 0, at α → −90 and at
+    α = +90 (the strength is linear in t and t is monotone in |α| on each
+    side, so no other α can be weaker).
+
+    Until v0.1.229 OGR had another model under this name: c1, φ1, c2, φ2 and
+    one B, with a symmetric cosine transition of c and of the ANGLE φ. A
+    file that still holds those parameters opens, keeps them
+    (``legacy_params``) and round-trips them untouched, and shows the
+    nearest form of this model for the user to review; it is never computed
+    with: the analysis refuses it (``SNOWDEN_LEGACY_NOTE``) and the model
+    raises :class:`LegacySnowden` if a caller gets past that.
+
+    What values A1..B2 and the two functions may take lives in
+    ``ogr_core.project.rules.snowden_refusal``. A function that cannot be
+    built does not stop the material from loading: the rule refuses it and
+    the model raises :class:`IncompleteSnowden` if it is computed with.
+
+    References:
+        Mercer, K. (2012). The history and development of the anisotropic
+            linear model: part 1. Australian Centre for Geomechanics, Perth.
+        Mercer, K. (2013). The history and development of the anisotropic
+            linear model: part 2. Australian Centre for Geomechanics, Perth.
 
     Needs the slice base angle → ``needs_context = True``.
     """
@@ -1410,60 +1619,183 @@ class SnowdenModifiedAnisotropicLinear(StrengthModel):
     MODEL_ID = "snowden_anisotropic_linear"
     DISPLAY_NAME = "Snowden Modified Anisotropic Linear"
     PARAMETERS = {
-        "c1": (5.0, "kPa", "Cohesion along bedding"),
-        "phi1": (15.0, "deg", "Friction angle along bedding"),
-        "c2": (20.0, "kPa", "Cohesion across bedding"),
-        "phi2": (30.0, "deg", "Friction angle across bedding"),
-        "bedding_angle": (0.0, "deg", "Bedding orientation from horizontal"),
-        "B": (30.0, "deg", "Angular distance for full transition"),
+        "bedding_angle": (0.0, "deg",
+            "Orientation of the bedding (the 1-direction), counter-clockwise "
+            "from horizontal"),
+        "A1": (10.0, "deg",
+            "Bedding strength only up to this angle, on the clockwise side "
+            "of the bedding (negative angles)"),
+        "B1": (30.0, "deg",
+            "Rock mass strength only beyond this angle, on the clockwise "
+            "side of the bedding"),
+        "A2": (10.0, "deg",
+            "Bedding strength only up to this angle, on the "
+            "counter-clockwise side of the bedding"),
+        "B2": (30.0, "deg",
+            "Rock mass strength only beyond this angle, on the "
+            "counter-clockwise side of the bedding"),
     }
+
+    #: The strength functions the bedding and the rock mass may be.
+    FUNCTION_IDS = ("shear_normal_function", "c_phi_function")
+    #: One C/Phi row each, the default Anisotropic Linear's (c1, φ1) and
+    #: (c2, φ2): with the default A and B the two defaults are one material.
+    DEFAULT_BEDDING = {"model_id": "c_phi_function", "params": {},
+                       "rows": [[0.0, 5.0, 15.0]]}
+    DEFAULT_ROCK_MASS = {"model_id": "c_phi_function", "params": {},
+                         "rows": [[0.0, 20.0, 30.0]]}
+
+    def __init__(self, **params):
+        import copy
+        bedding = params.pop("bedding", None)
+        rock_mass = params.pop("rock_mass", None)
+        self.legacy_params = None
+        if any(k in params for k in _SNOWDEN_LEGACY_KEYS):
+            # Kept exactly as written, for the round trip; the model shows
+            # the nearest form of the new one (see the class docstring).
+            self.legacy_params = {k: float(v) for k, v in params.items()}
+            old = dict(self.legacy_params)
+            b = old.get("B", 30.0)
+            bedding = {"model_id": "c_phi_function", "params": {},
+                       "rows": [[0.0, old.get("c1", 5.0),
+                                 old.get("phi1", 15.0)]]}
+            rock_mass = {"model_id": "c_phi_function", "params": {},
+                         "rows": [[0.0, old.get("c2", 20.0),
+                                   old.get("phi2", 30.0)]]}
+            params = {"bedding_angle": old.get("bedding_angle", 0.0),
+                      "A1": 0.0, "B1": b, "A2": 0.0, "B2": b}
+        super().__init__(**params)
+        self.bedding = copy.deepcopy(
+            self.DEFAULT_BEDDING if bedding is None else bedding)
+        self.rock_mass = copy.deepcopy(
+            self.DEFAULT_ROCK_MASS if rock_mass is None else rock_mass)
+        # function name -> (the dict it was built from, a copy of it, the
+        # model or the exception building it raised); as in Generalized.
+        self._built: dict = {}
 
     @property
     def needs_context(self) -> bool:
         return True
 
-    def _c_phi(self, base_angle_deg: float, bedding_deg=None):
-        bed = (self.params["bedding_angle"] if bedding_deg is None
-               else float(bedding_deg))
-        b = max(self.params["B"], 1e-6)
-        delta = abs(base_angle_deg - bed) % 180.0
-        if delta > 90.0:
-            delta = 180.0 - delta
-        x = min(delta, b)
-        ratio = 0.5 * (1.0 - math.cos(math.pi * x / b))
-        c1, phi1 = self.params["c1"], self.params["phi1"]
-        c2, phi2 = self.params["c2"], self.params["phi2"]
-        return c1 + ratio * (c2 - c1), phi1 + ratio * (phi2 - phi1)
+    # ------------------------------------------------------------------
+    def function(self, which: str) -> StrengthModel:
+        """The ``"bedding"`` or ``"rock_mass"`` strength function, built once
+        per content of its dict. Raises :class:`IncompleteSnowden` when it is
+        not a shear-normal or C/Phi function or cannot be built."""
+        import copy
+        data = getattr(self, which)
+        cached = self._built.get(which)
+        if cached is None or cached[0] is not data or cached[1] != data:
+            if not isinstance(data, dict) or \
+                    data.get("model_id") not in self.FUNCTION_IDS:
+                built = IncompleteSnowden(
+                    f"the {which.replace('_', ' ')} function must be a "
+                    f"Shear/Normal Function or a C/Phi Function, got "
+                    f"{data!r}")
+            else:
+                try:
+                    built = StrengthModel.from_dict(data)
+                except Exception as exc:  # noqa: BLE001 - reported below
+                    built = IncompleteSnowden(
+                        f"the {which.replace('_', ' ')} function cannot be "
+                        f"built: {type(exc).__name__}: {exc}")
+            cached = (data, copy.deepcopy(data), built)
+            self._built[which] = cached
+        if isinstance(cached[2], Exception):
+            raise cached[2]
+        return cached[2]
+
+    def weight(self, alpha_deg: float) -> float:
+        """t of the class docstring at ``alpha_deg``, already folded: 0 is
+        the bedding strength only, 1 the rock mass strength only."""
+        if alpha_deg < 0.0:
+            a, b = self.params["A1"], self.params["B1"]
+        else:
+            a, b = self.params["A2"], self.params["B2"]
+        d = abs(alpha_deg)
+        if d <= a:
+            return 0.0
+        if d >= b or b - a < 1e-9:
+            return 1.0
+        return (d - a) / (b - a)
+
+    def _blend(self, sigma_n_eff: float, t: float) -> float:
+        if t <= 0.0:
+            return self.function("bedding").shear_strength(sigma_n_eff)
+        if t >= 1.0:
+            return self.function("rock_mass").shear_strength(sigma_n_eff)
+        bed = self.function("bedding").shear_strength(sigma_n_eff)
+        rock = self.function("rock_mass").shear_strength(sigma_n_eff)
+        return (1.0 - t) * bed + t * rock
+
+    def _refuse_legacy(self) -> None:
+        if self.legacy_params is not None:
+            raise LegacySnowden(SNOWDEN_LEGACY_NOTE.format(name="?"))
 
     def shear_strength(self, sigma_n_eff: float) -> float:
-        c, phi = self.params["c1"], self.params["phi1"]
-        return c + max(sigma_n_eff, 0.0) * math.tan(math.radians(phi))
+        # No slice, no orientation: the weakest one (class docstring).
+        self._refuse_legacy()
+        return min(self._blend(sigma_n_eff, self.weight(a))
+                   for a in (0.0, -90.0, 90.0))
 
     def shear_strength_ctx(self, sigma_n_eff, ctx: SliceContext | None = None):
         if ctx is None:
             return self.shear_strength(sigma_n_eff)
-        # v0.1.218 (D208) -- the LOCAL bedding, as Anisotropic Linear reads
-        # it. v0.1.126 taught ``_c_phi`` to take it and put the argument in
-        # the Anisotropic Strength Function's call instead of this one, so
-        # an anisotropic surface linked to a Snowden material was offered by
-        # the dialog and read by nothing: the global ``bedding_angle`` won
-        # everywhere (rule 7). Without a surface the context carries None
-        # and ``_local_bedding_deg`` answers that same global angle, so a
-        # material with no surface is bit for bit what it was.
-        c, phi = self._c_phi(math.degrees(ctx.base_angle_rad),
-                             _local_bedding_deg(self, ctx))
-        return c + max(sigma_n_eff, 0.0) * math.tan(math.radians(phi))
+        self._refuse_legacy()
+        # v0.1.218 (D208) -- the LOCAL bedding when a surface gives one.
+        alpha = fold_plane_angle_deg(math.degrees(ctx.base_angle_rad)
+                                     - _local_bedding_deg(self, ctx))
+        return self._blend(sigma_n_eff, self.weight(alpha))
 
     def design_factored(self, factors: MaterialFactors) -> FactoredStrength:
-        f_c, f_t = factors.cohesion, factors.tan_phi
-        done = _factor_params(self, {"c1": f_c, "c2": f_c},
-                              {"phi1": f_t, "phi2": f_t}, "c′, tan φ′")
-        if f_t != 1.0:
-            # The cosine transition interpolates the ANGLE: the two ends
-            # are exactly factored, the transition only nearly (D215).
-            done.note = ("its transition interpolates φ, so between its two "
-                         "ends tan φ is divided only approximately")
-        return done
+        """Each function by its own model (D224): a shear-normal function as
+        τ, a C/Phi function as c′ and tan φ′. The transition is linear in the
+        two strengths, so dividing both divides the blend."""
+        if self.legacy_params is not None:
+            return FactoredStrength(
+                self, {}, "each function by its own model",
+                note=("a material saved before 0.1.229 is refused by the "
+                      "analysis, so it was not factored"))
+        import copy
+        changes, notes, new = {}, [], {}
+        for which in ("bedding", "rock_mass"):
+            try:
+                fn = self.function(which)
+            except IncompleteSnowden:
+                notes.append(f"its {which.replace('_', ' ')} function cannot "
+                             f"be built, so it was not factored")
+                continue
+            done = fn.design_factored(factors)
+            if done.changes:
+                new[which] = done.model.to_dict()
+                for k, v in done.changes.items():
+                    changes[f"{which.replace('_', ' ')} {k}"] = v
+            if done.note:
+                notes.append(f"{which.replace('_', ' ')}: {done.note}")
+        out = self
+        if new:
+            out = copy.deepcopy(self)
+            for which, data in new.items():
+                setattr(out, which, data)
+            out._built = {}
+        return FactoredStrength(out, changes, "each function by its own model",
+                                note="; ".join(notes) or None)
+
+    def to_dict(self) -> dict:
+        import copy
+        if self.legacy_params is not None:
+            return {"model_id": self.MODEL_ID,
+                    "params": dict(self.legacy_params)}
+        d = super().to_dict()
+        d["bedding"] = copy.deepcopy(self.bedding)
+        d["rock_mass"] = copy.deepcopy(self.rock_mass)
+        return d
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "SnowdenModifiedAnisotropicLinear":
+        return cls(bedding=data.get("bedding"),
+                   rock_mass=data.get("rock_mass"),
+                   **data.get("params", {}))
 
 
 # ======================================================================

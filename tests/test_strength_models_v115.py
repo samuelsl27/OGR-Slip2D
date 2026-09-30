@@ -150,16 +150,28 @@ class TestSHANSEP:
 
 # ======================================================================
 class TestSnowden:
-    def test_cosine_midpoint(self):
+    def test_linear_midpoint(self):
+        """v0.1.229 (D215) -- changed on purpose: this case checked the
+        cosine transition of c and φ the model had before 0.1.229. The model
+        is now the reference's, a LINEAR transition of the shear strength
+        between the bedding and rock mass functions: halfway between A = 0
+        and B = 30, τ is the mean of the two strengths."""
         from ogr_core.materials.builtin_models import (
             SnowdenModifiedAnisotropicLinear,
         )
+        from ogr_core.materials.strength_model import SliceContext
+
+        def cphi(c, phi):
+            return {"model_id": "c_phi_function", "params": {},
+                    "rows": [[0.0, c, phi]]}
         m = SnowdenModifiedAnisotropicLinear(
-            c1=5, phi1=15, c2=20, phi2=30, bedding_angle=0, B=30)
-        # At 15° (half of B=30): cosine ratio = 0.5
-        c, phi = m._c_phi(15)
-        assert abs(c - 12.5) < 1e-6
-        assert abs(phi - 22.5) < 1e-6
+            bedding_angle=0, A1=0, B1=30, A2=0, B2=30,
+            bedding=cphi(5, 15), rock_mass=cphi(20, 30))
+        tau = m.shear_strength_ctx(
+            100.0, SliceContext(base_angle_rad=math.radians(15)))
+        want = (0.5 * (5 + 100 * math.tan(math.radians(15)))
+                + 0.5 * (20 + 100 * math.tan(math.radians(30))))
+        assert math.isclose(tau, want, rel_tol=1e-12), (tau, want)
 
 
 # ======================================================================

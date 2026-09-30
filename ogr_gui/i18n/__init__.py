@@ -2276,6 +2276,56 @@ _DICTS: dict[str, dict[str, str]] = {
             "No se puede quitar %s: los tramos de %s toman su resistencia. "
             "Cámbielos antes.",
 
+        # --- v0.1.229 · D215: Snowden de la referencia y la función C/Phi
+        "Bedding Strength Function...":
+            "Función de resistencia de la estratificación...",
+        "Rock Mass Strength Function...":
+            "Función de resistencia del macizo rocoso...",
+        "Define Bedding Strength Function":
+            "Definir la función de resistencia de la estratificación",
+        "Define Rock Mass Strength Function":
+            "Definir la función de resistencia del macizo rocoso",
+        "Shear-Normal function": "Función corte-normal",
+        "Cohesion-Friction function": "Función cohesión-fricción",
+        "(not a valid function)": "(no es una función válida)",
+        "%s, %d row(s)": "%s, %d fila(s)",
+        "This function is not a shear-normal or a C/Phi function; a new "
+        "one is shown.":
+            "Esta función no es corte-normal ni C/Phi; se muestra una "
+            "nueva.",
+        "The table has no rows: at least one (normal stress, cohesion, "
+        "friction angle) row is needed.":
+            "La tabla no tiene filas: hace falta al menos una fila (tensión "
+            "normal, cohesión, ángulo de rozamiento).",
+        "Every row must be three numbers: normal stress, cohesion and "
+        "friction angle.":
+            "Cada fila tiene que ser tres números: tensión normal, cohesión "
+            "y ángulo de rozamiento.",
+        "A1, B1, A2 and B2 must satisfy 0° ≤ A ≤ B ≤ 90° on each side of "
+        "the bedding.":
+            "A1, B1, A2 y B2 tienen que cumplir 0° ≤ A ≤ B ≤ 90° a cada lado "
+            "de la estratificación.",
+        "The bedding strength function is not valid:":
+            "La función de resistencia de la estratificación no es válida:",
+        "The rock mass strength function is not valid:":
+            "La función de resistencia del macizo rocoso no es válida:",
+        "it must be a shear-normal or a C/Phi function that can be built.":
+            "tiene que ser una función corte-normal o C/Phi que se pueda "
+            "construir.",
+        "This material was saved by a version before 0.1.229, with c1, "
+        "φ1, c2, φ2 and a single B and a cosine transition. The model is "
+        "now the reference's: a linear transition between a bedding and a "
+        "rock mass strength function, with A1, B1, A2 and B2. What is "
+        "shown is the nearest such form, whose numbers are not the old "
+        "ones: review it before accepting.":
+            "Este material se guardó con una versión anterior a la 0.1.229, "
+            "con c1, φ1, c2, φ2, un solo B y una transición en coseno. El "
+            "modelo es ahora el de la referencia: una transición lineal entre "
+            "una función de resistencia de la estratificación y otra del "
+            "macizo rocoso, con A1, B1, A2 y B2. Lo que se enseña es la forma "
+            "de ese modelo más parecida, cuyos números no son los de antes: "
+            "revíselo antes de aceptar.",
+
         # --- v0.1.219 · D206: el sismo, sólo sobre el suelo -------------
         "<b>Pseudo-static seismic load.</b><br>"
         "Applied to every slice as a body force proportional to the "

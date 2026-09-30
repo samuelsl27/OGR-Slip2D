@@ -190,12 +190,26 @@ class _StrengthParamPanel(QWidget):
         # quantity (None).
         "rules": (("Angle to (°)", "angle"),
                   ("Material", None)),
+        # v0.1.229 (D215) — the C/Phi function: (σ'ₙ, c, φ) rows.
+        "cphi": (("Normal stress (%s)", "pressure"),
+                 ("Cohesion (%s)", "pressure"),
+                 ("Friction angle (°)", "angle")),
     }
 
     #: v0.1.228 (D218b) — the caption of each table.
     _TABLE_CAPTIONS = {"points": "Function points:",
                        "rows3": "Function points:",
-                       "rules": "Angle ranges:"}
+                       "rules": "Angle ranges:",
+                       "cphi": "Function points:"}
+
+    #: v0.1.229 (D215) — the two strength functions of a Snowden material:
+    #: the button that opens each one and the title of its dialog.
+    _FUNCTION_BUTTONS = (
+        ("bedding", "Bedding Strength Function...",
+         "Define Bedding Strength Function"),
+        ("rock_mass", "Rock Mass Strength Function...",
+         "Define Rock Mass Strength Function"),
+    )
 
     def __init__(self, parent=None, units_obj=None) -> None:
         super().__init__(parent)
@@ -215,6 +229,11 @@ class _StrengthParamPanel(QWidget):
         # v0.1.228 (D218b) — (id, name, strength dict) of the materials a
         # Generalized Anisotropic range can take; see ``set_rule_materials``.
         self._rule_choices: list = []
+        # v0.1.229 (D215) — a Snowden material's two strength functions, as
+        # given and as they stand, and the label that sums each one up.
+        self._functions = None
+        self._functions_given = None
+        self._function_labels: dict = {}
 
     def set_rule_materials(self, choices) -> None:
         """The materials a Generalized Anisotropic range can take, as (id,
@@ -353,6 +372,9 @@ class _StrengthParamPanel(QWidget):
         self._table_kind = None
         self._table_given = None
         self._table_shown = None
+        self._functions = None
+        self._functions_given = None
+        self._function_labels = {}
         mid = getattr(model_cls, "MODEL_ID", "")
         if mid in ("shear_normal_function", "discrete_function"):
             # v0.1.227 (D217) — each model's own default table: the discrete
@@ -365,6 +387,10 @@ class _StrengthParamPanel(QWidget):
             # the model's own, not a second copy of it.
             self._build_points_table(current_params, kind="rows3",
                                      default=list(model_cls.DEFAULT_ROWS))
+        elif mid == "c_phi_function":
+            # v0.1.229 (D215) — (σ'ₙ, c, φ) rows, in the project's units.
+            self._build_points_table(current_params, kind="cphi",
+                                     default=list(model_cls.DEFAULT_ROWS))
         elif mid == "generalized_anisotropic":
             # v0.1.228 (D218b) — the reference's "Angle Range" input: each
             # row is the angle a range ends at and the material it takes.
@@ -376,6 +402,9 @@ class _StrengthParamPanel(QWidget):
                        if self._rule_choices else [])
             self._build_points_table(current_params, kind="rules",
                                      default=default)
+
+        if mid == "snowden_anisotropic_linear":
+            self._build_function_buttons(current_params, model_cls)
 
         # v0.1.120 — the depth-dependent undrained models carry ONE piece
         # of state that is not a number: whether the cutoff applies at
@@ -419,7 +448,8 @@ class _StrengthParamPanel(QWidget):
         """The stored field a table kind edits: the anisotropic function's
         ranges live in ``rows`` since v0.1.218 (D209), the functions of
         σ'ₙ in ``points``."""
-        return {"rows3": "rows", "rules": "rules"}.get(kind, "points")
+        return {"rows3": "rows", "cphi": "rows",
+                "rules": "rules"}.get(kind, "points")
 
     def table_headers(self) -> list[str]:
         """The headers of the table on screen, as shown."""
@@ -600,6 +630,9 @@ class _StrengthParamPanel(QWidget):
         if self._chk_cutoff is not None and \
                 self._chk_cutoff.isChecked() != self._cutoff_given:
             return False
+        if self._functions is not None and \
+                self._functions != self._functions_given:
+            return False
         return self.table_unchanged()
 
     def get_params(self) -> dict:
@@ -642,6 +675,9 @@ class _StrengthParamPanel(QWidget):
         # v0.1.120 — the cutoff switch, for the models that have one.
         if self._chk_cutoff is not None:
             out["cutoff_enabled"] = self._chk_cutoff.isChecked()
+        # v0.1.229 (D215) — a Snowden material's two strength functions.
+        if self._functions is not None:
+            out.update(copy.deepcopy(self._functions))
         return out
 
     def _rules_from_table(self, sys_obj) -> list:
@@ -683,8 +719,159 @@ class _StrengthParamPanel(QWidget):
             lo = hi
         return rules
 
+    # ------------------------------------------------------------------
+    # v0.1.229 (D215) — Snowden's bedding and rock mass strength functions.
+    # Each is edited in a dialog of its own (the reference's "Bedding
+    # Strength Function" and "Rock Mass Strength Function" buttons); the
+    # panel keeps the two dicts and a label that sums each one up.
+    def _build_function_buttons(self, current_params, model_cls) -> None:
+        current_params = current_params or {}
+        given = {}
+        for which, text, _title in self._FUNCTION_BUTTONS:
+            default = (model_cls.DEFAULT_BEDDING if which == "bedding"
+                       else model_cls.DEFAULT_ROCK_MASS)
+            given[which] = copy.deepcopy(current_params.get(which, default))
+            btn = QPushButton(tr(text))
+            btn.clicked.connect(
+                lambda _checked=False, w=which: self._open_function(w))
+            label = QLabel("")
+            label.setStyleSheet("color: #555; font-style: italic;")
+            self._form.addRow(btn, label)
+            self._function_labels[which] = label
+        self._functions = given
+        self._functions_given = copy.deepcopy(given)
+        for which in given:
+            self._refresh_function_label(which)
+
+    @staticmethod
+    def function_summary(function) -> str:
+        """What a strength function is, in a few words: its kind and the
+        size of its table."""
+        try:
+            cls = REGISTRY.get(function["model_id"])
+        except Exception:  # noqa: BLE001 - a function a file broke
+            return tr("(not a valid function)")
+        table = function.get("rows", function.get("points")) or []
+        return tr("%s, %d row(s)") % (cls.DISPLAY_NAME, len(table))
+
+    def _refresh_function_label(self, which: str) -> None:
+        label = self._function_labels.get(which)
+        if label is not None and self._functions is not None:
+            label.setText(self.function_summary(self._functions[which]))
+
+    def function(self, which: str) -> dict:
+        """The ``"bedding"`` or ``"rock_mass"`` function as it stands."""
+        return copy.deepcopy(self._functions[which])
+
+    def set_function(self, which: str, function: dict) -> None:
+        """Replace one of the two functions (what the function dialog's OK
+        does; a test calls it without the dialog)."""
+        self._functions[which] = copy.deepcopy(function)
+        self._refresh_function_label(which)
+
+    def _open_function(self, which: str) -> None:
+        title = next(t for w, _b, t in self._FUNCTION_BUTTONS if w == which)
+        dlg = StrengthFunctionDialog(self._functions[which],
+                                     units_obj=self._units_obj,
+                                     title=tr(title), parent=self)
+        if dlg.exec():
+            self.set_function(which, dlg.result_function())
+
     def current_model(self) -> type[StrengthModel] | None:
         return self._model_cls
+
+
+# ----------------------------------------------------------------------
+class StrengthFunctionDialog(QDialog):
+    """The bedding or the rock mass strength function of a Snowden material
+    (v0.1.229, D215).
+
+    The reference documentation offers two kinds, a "Shear-Normal function"
+    (τ at each σ'ₙ) and a "Cohesion-Friction function" (c and φ at each
+    σ'ₙ), which are this program's shear-normal and C/Phi functions: the
+    dialog is a choice of kind and that model's table, in the project's
+    units, with the same checks as the material dialog. OK is
+    :meth:`_accept_if_valid`, so a test drives the dialog without
+    ``exec()``. A table left as it was comes back exactly as it came in.
+    """
+
+    KINDS = (("shear_normal_function", "Shear-Normal function"),
+             ("c_phi_function", "Cohesion-Friction function"))
+
+    def __init__(self, function, units_obj=None, title: str = "",
+                 parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self._given = copy.deepcopy(function)
+        self._result = None
+        lay = QVBoxLayout(self)
+        self.cbo_kind = QComboBox()
+        for mid, text in self.KINDS:
+            self.cbo_kind.addItem(tr(text), mid)
+        lay.addWidget(self.cbo_kind)
+        self.panel = _StrengthParamPanel(units_obj=units_obj)
+        lay.addWidget(self.panel)
+        self.lbl_problem = QLabel("")
+        self.lbl_problem.setWordWrap(True)
+        self.lbl_problem.setStyleSheet("color: #b00020;")
+        self.lbl_problem.setVisible(False)
+        lay.addWidget(self.lbl_problem)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok
+                                   | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self._accept_if_valid)
+        buttons.rejected.connect(self.reject)
+        lay.addWidget(buttons)
+
+        mid = function.get("model_id") if isinstance(function, dict) else None
+        known = mid in dict(self.KINDS)
+        self._given_kind = mid if known else None
+        self.cbo_kind.setCurrentIndex(
+            self.cbo_kind.findData(mid if known else "c_phi_function"))
+        table = {k: v for k, v in (function or {}).items()
+                 if k in ("points", "rows")} if known else {}
+        self.panel.set_model(REGISTRY.get(self.cbo_kind.currentData()), table)
+        if not known:
+            self._show(tr("This function is not a shear-normal or a C/Phi "
+                          "function; a new one is shown."))
+        self.cbo_kind.currentIndexChanged.connect(self._on_kind)
+
+    def _show(self, text: str) -> None:
+        self.lbl_problem.setText(text)
+        self.lbl_problem.setVisible(bool(text))
+
+    def _on_kind(self, _index) -> None:
+        self.panel.set_model(REGISTRY.get(self.cbo_kind.currentData()))
+        self._show("")
+
+    def _accept_if_valid(self) -> bool:
+        from ogr_core.materials.builtin_models import ShearNormalFunction
+        from ogr_core.project.rules import (c_phi_rows_refusal,
+                                            function_points_refusal)
+        bad = self.panel.unparsed_table_rows()
+        if bad:
+            self._show(tr("Row %d of the table is not %d numbers.")
+                       % (bad[0], self.panel.table_columns()))
+            return False
+        kind = self.cbo_kind.currentData()
+        if kind == self._given_kind and self.panel.is_unchanged():
+            self._result = copy.deepcopy(self._given)
+            self.accept()
+            return True
+        model = REGISTRY.get(kind)(**self.panel.get_params())
+        why = (function_points_refusal(model.points)
+               if isinstance(model, ShearNormalFunction)
+               else c_phi_rows_refusal(model.rows))
+        if why is not None:
+            self._show(tr(MaterialPropertiesDialog._TABLE_REFUSALS.get(
+                why.code, why.message)))
+            return False
+        self._result = model.to_dict()
+        self.accept()
+        return True
+
+    def result_function(self):
+        """The function the dialog was accepted with, or None."""
+        return copy.deepcopy(self._result)
 
 
 # ----------------------------------------------------------------------
@@ -1290,6 +1477,10 @@ class MaterialPropertiesDialog(QDialog):
         _params = dict(m.strength.params)
         if hasattr(m.strength, "cutoff_enabled"):
             _params["cutoff_enabled"] = m.strength.cutoff_enabled
+        # v0.1.229 (D215) — Snowden's bedding and rock mass functions.
+        for _which in ("bedding", "rock_mass"):
+            if isinstance(getattr(m.strength, _which, None), dict):
+                _params[_which] = copy.deepcopy(getattr(m.strength, _which))
         self.param_panel.set_model(type(m.strength), _params)
         # v0.1.15 — for function/table-based models, also pass the
         # ``points`` so the table editor pre-fills.
@@ -1320,6 +1511,15 @@ class MaterialPropertiesDialog(QDialog):
                 "before 0.1.218. Each row is now a range (angle to, c, φ), "
                 "as the reference documents this strength type: review it "
                 "before accepting.")
+        elif getattr(m.strength, "legacy_params", None) is not None:
+            # v0.1.229 (D215) — ``SNOWDEN_LEGACY_NOTE``.
+            problem = tr(
+                "This material was saved by a version before 0.1.229, with "
+                "c1, φ1, c2, φ2 and a single B and a cosine transition. The "
+                "model is now the reference's: a linear transition between "
+                "a bedding and a rock mass strength function, with A1, B1, "
+                "A2 and B2. What is shown is the nearest such form, whose "
+                "numbers are not the old ones: review it before accepting.")
         elif getattr(m.strength, "MODEL_ID", None) == \
                 "generalized_anisotropic" and m.anisotropic_surface_id:
             # v0.1.225 (D218) — ``rules.material_surface_refusal``: the
@@ -1341,8 +1541,7 @@ class MaterialPropertiesDialog(QDialog):
                    or generalized_links_refusal(m, self.materials))
             if why is not None:
                 problem = (tr("In material %s:") % m.name + " "
-                           + tr(self._TABLE_REFUSALS.get(why.code,
-                                                         why.message)))
+                           + self._refusal_text(why))
         self._show_strength_problem(problem)
 
         # v0.1.126 — the anisotropic surface, restored before the pore
@@ -1405,6 +1604,9 @@ class MaterialPropertiesDialog(QDialog):
         "anisotropic_linear":   "c and tan φ vary linearly with angle to "
                                 "bedding",
         "shear_normal_function":"τ = f(σ′ₙ)  (piecewise-linear table)",
+        # v0.1.229 (D215) — c and φ interpolated in σ′ₙ.
+        "c_phi_function":       "τ = c(σ′ₙ) + σ′ₙ · tan φ(σ′ₙ)  "
+                                "(c, φ interpolated)",
         "discrete_function":    "τ = f(σ′ₙ)  (step function table)",
         # v0.1.218 (D207) — A is added, as the published formula writes it;
         # su_min stays the floor it always was.
@@ -1417,8 +1619,10 @@ class MaterialPropertiesDialog(QDialog):
         "generalized_anisotropic":
                                 "material per range of base angle, "
                                 "−90° to +90°",
+        # v0.1.229 (D215) — the reference's model.
         "snowden_anisotropic_linear":
-                                "(c, φ) vary by cosine with angle to bedding",
+                                "τ = (1 − t)·τ_bedding + t·τ_rock mass, t "
+                                "linear in the angle to bedding",
         # v0.1.120 — undrained strength varying linearly with depth
         "undrained_depth_layer": "τ = c_top + Δc·(y_top − y)",
         "undrained_depth_datum": "τ = c_datum + Δc·(y_datum − y)",
@@ -1696,7 +1900,41 @@ class MaterialPropertiesDialog(QDialog):
             "The shear strength must be zero or more.",
         "function_points_order":
             "The normal stresses must increase from one row to the next.",
+        # v0.1.229 (D215) — ``rules.c_phi_rows_refusal``.
+        "c_phi_rows_empty":
+            "The table has no rows: at least one (normal stress, cohesion, "
+            "friction angle) row is needed.",
+        "c_phi_rows_not_rows":
+            "Every row must be three numbers: normal stress, cohesion and "
+            "friction angle.",
+        "c_phi_rows_strength":
+            "The cohesion must be zero or more and the friction angle "
+            "between 0° and 90°.",
+        "c_phi_rows_order":
+            "The normal stresses must increase from one row to the next.",
+        # v0.1.229 (D215) — ``rules.snowden_refusal``. The two function
+        # codes are followed by the text of their ``cause``.
+        "snowden_ab":
+            "A1, B1, A2 and B2 must satisfy 0° ≤ A ≤ B ≤ 90° on each side "
+            "of the bedding.",
+        "snowden_bedding":
+            "The bedding strength function is not valid:",
+        "snowden_rock_mass":
+            "The rock mass strength function is not valid:",
+        "snowden_function_type":
+            "it must be a shear-normal or a C/Phi function that can be "
+            "built.",
     }
+
+    def _refusal_text(self, why) -> str:
+        """A refusal in the user's language, by its code; with the text of
+        its ``cause`` after it when it has one (v0.1.229)."""
+        text = tr(self._TABLE_REFUSALS.get(why.code, why.message))
+        cause = getattr(why, "cause", None)
+        if cause is not None:
+            text += " " + tr(self._TABLE_REFUSALS.get(cause.code,
+                                                      cause.message))
+        return text
 
     def _show_strength_problem(self, text: str) -> None:
         self.lbl_strength_problem.setText(text)
@@ -1759,9 +1997,11 @@ class MaterialPropertiesDialog(QDialog):
             if m.id not in changed and not (links & changed):
                 continue
             why = strength_model_refusal(m.strength, m.name)
-            # A table still held as points was not shown or not touched:
-            # it stays as it was and the analysis says why it refuses it.
-            if why is not None and why.code == "anisotropic_table_legacy":
+            # A table still held as points (or a Snowden material saved
+            # before 0.1.229) was not shown or not touched: it stays as it
+            # was and the analysis says why it refuses it.
+            if why is not None and why.code in ("anisotropic_table_legacy",
+                                                "snowden_legacy"):
                 continue
             why = why or generalized_links_refusal(m, self.materials)
             if why is None:
@@ -1770,7 +2010,7 @@ class MaterialPropertiesDialog(QDialog):
                 self.list.setCurrentRow(row)
             self._show_strength_problem(
                 tr("In material %s:") % m.name + " "
-                + tr(self._TABLE_REFUSALS.get(why.code, why.message)))
+                + self._refusal_text(why))
             return
         self.accept()
 

@@ -145,8 +145,11 @@ class TestEveryModelSaysItsCategory:
         for mid, cls in REGISTRY.all().items():
             done = _instance(mid, cls).design_factored(_mf())
             assert done.category, mid
-            if mid != "snowden_anisotropic_linear":
-                assert done.note is None, (mid, done.note)
+            # v0.1.229 (D215) -- changed on purpose: Snowden is no longer
+            # the exception. Its transition now blends the two strengths
+            # linearly, so each function factored by its own model divides
+            # the whole; it needs no note.
+            assert done.note is None, (mid, done.note)
 
     def test_a_model_that_declares_nothing_is_left_alone_and_said(self):
         from ogr_core.materials.strength_model import StrengthModel
@@ -179,9 +182,9 @@ class TestTheStrengthIsDividedByGamma:
 
     def test_every_model(self):
         from ogr_core.materials import REGISTRY
-        skip = {"infinite_strength", "no_strength",
-                # Its transition interpolates the angle (D215, 0.1.229).
-                "snowden_anisotropic_linear"}
+        # v0.1.229 (D215) -- changed on purpose: Snowden joined; its
+        # transition interpolated the angle until then.
+        skip = {"infinite_strength", "no_strength"}
         for mid, cls in REGISTRY.all().items():
             if mid in skip:
                 continue

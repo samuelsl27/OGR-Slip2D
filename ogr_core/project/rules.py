@@ -34,11 +34,15 @@ class Refusal:
     """Why an edit or a run is not allowed.
 
     ``code`` is for a program to branch on and never changes wording;
-    ``message`` is for a person or a language model to read.
+    ``message`` is for a person or a language model to read. ``cause``
+    (v0.1.229) is the refusal of a part, when the whole is refused because
+    of it: an interface that translates by code can then say which part and
+    why.
     """
 
     code: str
     message: str
+    cause: Optional["Refusal"] = None
 
 
 #: Boundary types a model may hold at most one of. EXTERNAL is here
@@ -296,6 +300,101 @@ def function_points_refusal(points) -> Optional[Refusal]:
     return None
 
 
+def c_phi_rows_refusal(rows) -> Optional[Refusal]:
+    """Why ``rows`` cannot be the table of a C/Phi function, or None.
+
+    v0.1.229 (D215) — ``(σ'ₙ, c, φ)`` rows: at least one, every value a
+    finite number, σ'ₙ strictly increasing (a repeated σ'ₙ is two strengths
+    for one stress), c ≥ 0 and 0 ≤ φ < 90, as in every Mohr-Coulomb table of
+    the program.
+    """
+    import math
+
+    try:
+        rows = [tuple(r) for r in (rows or [])]
+    except TypeError:
+        return Refusal("c_phi_rows_not_rows",
+                       "The table must be a list of (normal stress, cohesion, "
+                       "friction angle) rows.")
+    if not rows:
+        return Refusal("c_phi_rows_empty",
+                       "The table has no rows: at least one (normal stress, "
+                       "cohesion, friction angle) row is needed.")
+    sigmas = []
+    for i, row in enumerate(rows, start=1):
+        try:
+            s, c, phi = (float(v) for v in row)
+        except (TypeError, ValueError):
+            return Refusal("c_phi_rows_not_rows",
+                           f"Row {i} is not three numbers (normal stress, "
+                           f"cohesion, friction angle): {row!r}.")
+        if not all(math.isfinite(v) for v in (s, c, phi)):
+            return Refusal("c_phi_rows_not_rows",
+                           f"Row {i} holds a value that is not finite.")
+        if c < 0.0 or not 0.0 <= phi < 90.0:
+            return Refusal("c_phi_rows_strength",
+                           f"Row {i}: the cohesion must be ≥ 0 and the "
+                           f"friction angle in [0, 90), got c = {c:g}, "
+                           f"phi = {phi:g}.")
+        sigmas.append(s)
+    for i in range(1, len(sigmas)):
+        if not sigmas[i] > sigmas[i - 1]:
+            return Refusal("c_phi_rows_order",
+                           f"The normal stresses must increase strictly: row "
+                           f"{i + 1} ({sigmas[i]:g}) does not exceed row {i} "
+                           f"({sigmas[i - 1]:g}).")
+    return None
+
+
+def snowden_refusal(strength) -> Optional[Refusal]:
+    """Why a Snowden Modified Anisotropic Linear model cannot be computed
+    with, or None.
+
+    v0.1.229 (D215) — its A1, B1, A2 and B2 are angles from the bedding on
+    each side of it, the band of bedding strength and the end of the
+    transition, within the (-90, 90] of the reference documentation's
+    anisotropy function: 0 ≤ A ≤ B ≤ 90 on each side (A = B is a step,
+    which the model computes). Its bedding and rock mass strengths are each
+    a shear-normal or a C/Phi function, with a valid table; a refusal of
+    one of them is the ``cause`` of the refusal returned.
+    """
+    import math
+
+    from ..materials.builtin_models import CPhiFunction, ShearNormalFunction
+
+    p = strength.params
+    for side in ("1", "2"):
+        a = float(p.get("A" + side, 0.0))
+        b = float(p.get("B" + side, 0.0))
+        if not (math.isfinite(a) and math.isfinite(b)) or \
+                not 0.0 <= a <= b <= 90.0:
+            return Refusal("snowden_ab",
+                           f"A{side} and B{side} must satisfy 0 <= A{side} "
+                           f"<= B{side} <= 90 degrees; got A{side} = {a:g}, "
+                           f"B{side} = {b:g}.")
+    for which in ("bedding", "rock_mass"):
+        label = which.replace("_", " ")
+        try:
+            fn = strength.function(which)
+        except ValueError as exc:
+            return Refusal("snowden_" + which,
+                           f"The {label} strength function: {exc}.",
+                           cause=Refusal("snowden_function_type", str(exc)))
+        if isinstance(fn, ShearNormalFunction):
+            why = function_points_refusal(fn.points)
+        elif isinstance(fn, CPhiFunction):
+            why = c_phi_rows_refusal(fn.rows)
+        else:                                  # guarded by ``function``
+            why = Refusal("snowden_function_type",
+                          f"{fn.DISPLAY_NAME} is not a shear-normal or a "
+                          f"C/Phi function.")
+        if why is not None:
+            return Refusal("snowden_" + which,
+                           f"The {label} strength function: {why.message}",
+                           cause=why)
+    return None
+
+
 def generalized_anisotropic_rules_refusal(rules) -> Optional[Refusal]:
     """Why ``rules`` cannot be the rules of a Generalized Anisotropic
     model, or None.
@@ -409,16 +508,21 @@ def strength_model_refusal(strength, name: Optional[str] = None
     Anisotropic rules that are not the reference's contiguous ranges or
     hold a model that cannot be built (D218), and the A and B of Anisotropic
     Linear (D216). v0.1.227 — the τ–σ'ₙ tables of the shear-normal and
-    discrete functions (D217). A Generalized Anisotropic model is then asked about the
-    models of its rules, since one of them can be such a table. ``name`` is
-    the material's, for the message.
+    discrete functions (D217). v0.1.229 — the C/Phi function's table, and
+    Snowden: a material saved before 0.1.229, its A and B, and its two
+    strength functions (D215). A Generalized Anisotropic model is then
+    asked about the models of its rules, since one of them can be such a
+    table. ``name`` is the material's, for the message.
     """
     from ..materials.builtin_models import (ANISOTROPIC_FUNCTION_LEGACY_NOTE,
+                                            SNOWDEN_LEGACY_NOTE,
                                             AnisotropicLinear,
                                             AnisotropicStrengthFunction,
+                                            CPhiFunction,
                                             DiscreteFunction,
                                             GeneralizedAnisotropic,
-                                            ShearNormalFunction)
+                                            ShearNormalFunction,
+                                            SnowdenModifiedAnisotropicLinear)
     from ..materials.strength_model import StrengthModel
 
     label = name if name is not None else "?"
@@ -429,6 +533,22 @@ def strength_model_refusal(strength, name: Optional[str] = None
             return None
         return Refusal(why.code, f"Material {label!r}, "
                                  f"{strength.DISPLAY_NAME}: {why.message}")
+    if isinstance(strength, CPhiFunction):
+        why = c_phi_rows_refusal(strength.rows)
+        if why is None:
+            return None
+        return Refusal(why.code, f"Material {label!r}, C/Phi Function: "
+                                 f"{why.message}")
+    if isinstance(strength, SnowdenModifiedAnisotropicLinear):
+        if strength.legacy_params is not None:
+            return Refusal("snowden_legacy",
+                           SNOWDEN_LEGACY_NOTE.format(name=label))
+        why = snowden_refusal(strength)
+        if why is None:
+            return None
+        return Refusal(why.code, f"Material {label!r}, Snowden Modified "
+                                 f"Anisotropic Linear: {why.message}",
+                       cause=why.cause)
     if isinstance(strength, AnisotropicStrengthFunction):
         if strength.legacy_points is not None:
             return Refusal("anisotropic_table_legacy",
