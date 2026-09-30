@@ -221,3 +221,97 @@ def apply_design_factors(project, settings=None):
             "changed.")
     rep.applied = True
     return factored, rep
+
+
+# ----------------------------------------------------------------------
+# v0.1.228 (D218b) -- Generalized Anisotropic rules that LINK a material.
+#
+# The reference's "Angle Range" input assigns a MATERIAL to each range. A
+# rule keeps the model it computes with (``model``, the format of every
+# earlier version) and may name the material it came from
+# (``material_id``). What the analysis computes with is that material's
+# strength AS IT IS WHEN THE ANALYSIS RUNS: the link is resolved on the
+# analysis copy, after the design factors, so the child is factored once,
+# through its own material (the reference documentation: design factors
+# apply to the child materials), and a statistical sample drawn on the
+# material reaches the ranges that link it. The copy in the project is a
+# snapshot the editor refreshes for display; it never decides a number.
+def resolve_generalized_links(materials) -> int:
+    """Copy, into every rule that links a material, that material's current
+    strength. Returns how many Generalized materials changed. A rule whose
+    link is dangling, points at its own material or at another Generalized
+    one is left as it is: the analysis refuses those
+    (``rules.generalized_links_refusal``)."""
+    from ogr_core.materials.builtin_models import GeneralizedAnisotropic
+
+    by_id = {m.id: m for m in materials}
+    n = 0
+    for m in materials:
+        st = getattr(m, "strength", None)
+        if not isinstance(st, GeneralizedAnisotropic):
+            continue
+        rules, changed = [], False
+        for rule in st.rules:
+            src = (by_id.get(rule.get("material_id"))
+                   if isinstance(rule, dict) else None)
+            if src is None or src is m or isinstance(
+                    getattr(src, "strength", None), GeneralizedAnisotropic):
+                rules.append(rule)
+                continue
+            new = dict(rule)
+            new["model"] = src.strength.to_dict()
+            changed = changed or new != rule
+            rules.append(new)
+        if changed:
+            m.strength = GeneralizedAnisotropic(rules=rules, **st.params)
+            n += 1
+    return n
+
+
+def has_generalized_links(project) -> bool:
+    from ogr_core.materials.builtin_models import GeneralizedAnisotropic
+    return any(
+        isinstance(getattr(m, "strength", None), GeneralizedAnisotropic)
+        and any(isinstance(r, dict) and r.get("material_id")
+                for r in m.strength.rules)
+        for m in getattr(project, "materials", []))
+
+
+def _with_own_materials(project):
+    """``project`` with a list of materials of its own, each a shallow copy
+    whose strength can be replaced, and everything else shared.
+
+    What the analysis computes on when there is a link and no standard: it
+    computed on the project itself before (and without a link still does),
+    so sharing the rest changes nothing it did; the materials are what the
+    resolution replaces, and the user's must not change. Not a round trip
+    through ``to_dict``/``from_dict``: the loader migrates (it reads a
+    ``max_lambda`` of 1.5 as a file from before v0.1.90, D182), so that is
+    not an identity -- the reason ``ogr_api.snapshot`` copies with
+    ``deepcopy``. The caches are dropped on the copy only, so none built
+    from the user's materials is served to it.
+    """
+    import copy
+
+    out = copy.copy(project)
+    out.materials = [copy.copy(m) for m in project.materials]
+    out._listeners = []
+    out.invalidate_regions_cache()
+    return out
+
+
+def prepare_analysis_project(project, settings=None):
+    """The project every analysis computes on, and the factor report.
+
+    v0.1.228 (D218b) — the design standard's factored copy
+    (:func:`apply_design_factors`), with the Generalized Anisotropic links
+    resolved on it. With a link and the standard off, the links are
+    resolved on :func:`_with_own_materials`: the user's project is never
+    modified by a calculation, and without a link nothing is copied.
+    """
+    out, rep = apply_design_factors(project, settings)
+    if has_generalized_links(out):
+        if out is project:
+            out = _with_own_materials(project)
+        resolve_generalized_links(out.materials)
+    return out, rep

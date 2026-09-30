@@ -560,6 +560,48 @@ def _apply_material_fields(project, m, fields: dict, *, creating: bool
     return notes
 
 
+def _link_rules_by_name(project, strength):
+    """A strength spec whose Generalized Anisotropic rules may name the
+    material they take by ``material`` (name or id), rewritten with the
+    ``material_id`` and a snapshot of that material's strength (v0.1.228,
+    D218b). Anything else is returned as it is."""
+    if not isinstance(strength, dict) or (
+            strength.get("model") or strength.get("model_id")
+    ) != "generalized_anisotropic" or not isinstance(
+            strength.get("rules"), list):
+        return strength
+    out = dict(strength)
+    rules = []
+    for i, rule in enumerate(strength["rules"], start=1):
+        if isinstance(rule, dict) and "material" in rule:
+            ref = rule["material"]
+            src = next((m for m in project.materials
+                        if m.id == ref or (isinstance(ref, str) and
+                                           m.name.strip().lower()
+                                           == ref.strip().lower())), None)
+            if src is None:
+                raise InvalidArgument(
+                    f"Rule {i} links {ref!r}, which is not a material of "
+                    f"this model.",
+                    hint="Create the linked material first (in "
+                         "model_define, earlier in the materials list).")
+            rule = {k: v for k, v in rule.items() if k != "material"}
+            rule["material_id"] = src.id
+            rule["model"] = src.strength.to_dict()
+        rules.append(rule)
+    out["rules"] = rules
+    return out
+
+
+def _check_links(project, m):
+    """v0.1.228 (D218b) — ``rules.generalized_links_refusal``."""
+    from ogr_core.project.rules import generalized_links_refusal
+    why = generalized_links_refusal(m, list(project.materials) + (
+        [] if m in project.materials else [m]))
+    if why is not None:
+        raise InvalidArgument(why.message)
+
+
 def _new_material(project, name, strength, fields):
     from ogr_core.materials import Material
 
@@ -580,7 +622,9 @@ def _new_material(project, name, strength, fields):
     if len(project.materials) >= project.settings.max_materials:
         raise Conflict(f"The model already has the maximum of "
                        f"{project.settings.max_materials} materials.")
-    m = Material(name=name.strip(), strength=strength_from_spec(strength))
+    m = Material(name=name.strip(), strength=strength_from_spec(
+        _link_rules_by_name(project, strength)))
+    _check_links(project, m)
     notes = _apply_material_fields(project, m, fields, creating=True)
     project.add_material(m)
     return m, notes
@@ -611,7 +655,9 @@ def material_set(ws, project_id: Optional[str] = None,
                 fields["name"] = name
             cleared = []
             if strength is not None:
-                m.strength = strength_from_spec(strength)
+                m.strength = strength_from_spec(
+                    _link_rules_by_name(project, strength))
+                _check_links(project, m)
                 # v0.1.225 (D218) — what the dialog does when a material
                 # leaves a model that reads a surface: the link goes, since
                 # nothing would read it.
@@ -627,6 +673,10 @@ def material_set(ws, project_id: Optional[str] = None,
             notes = _apply_material_fields(project, m, fields,
                                            creating=False) + cleared
             project._notify("material_modified")
+        # v0.1.228 (D218b) — the snapshots of the ranges that link a
+        # material follow it, for display; the analysis resolves them anyway.
+        from ogr_core.project import resolve_generalized_links
+        resolve_generalized_links(project.materials)
         return {"material": material_info(m), "created": created,
                 "notes": notes}
 
@@ -649,13 +699,41 @@ def material_delete(ws, material: str, project_id: Optional[str] = None,
                        if a.get("material_id") == m.id]
         refs_layers = [b for b in project.boundaries
                        if b.material_id == m.id]
+        # v0.1.228 (D218b) — a Generalized Anisotropic range that links it
+        # is a use too.
+        refs_links = [(g, r) for g in project.materials
+                      if g is not m and isinstance(
+                          getattr(g.strength, "rules", None), list)
+                      for r in g.strength.rules
+                      if isinstance(r, dict) and r.get("material_id") == m.id]
         is_default = project.materials and project.materials[0] is m
-        if (refs_assign or refs_layers) and target is None and not force:
+        if (refs_assign or refs_layers or refs_links) and target is None \
+                and not force:
             raise Conflict(
                 f"{m.name!r} is used by {len(refs_assign)} region "
-                f"assignment(s) and {len(refs_layers)} weak layer(s).",
+                f"assignment(s), {len(refs_layers)} weak layer(s) and "
+                f"{len(refs_links)} Generalized Anisotropic range(s).",
                 hint="Pass reassign_to='<material>' to move them, or "
-                     "force=true to drop them.")
+                     "force=true to drop them (a range keeps the strength "
+                     "it had, unlinked).")
+        if refs_links and target is not None and isinstance(
+                getattr(target.strength, "rules", None), list):
+            raise Conflict(
+                f"{target.name!r} is a Generalized Anisotropic material; a "
+                f"range cannot link it.")
+        # New rule dicts rather than edits in place: a copy made through
+        # ``to_dict`` (the analysis copy, an imported material) shares them.
+        for g in {id(g): g for g, _r in refs_links}.values():
+            rules = []
+            for rule in g.strength.rules:
+                if isinstance(rule, dict) and rule.get("material_id") == m.id:
+                    rule = dict(rule)
+                    if target is not None:
+                        rule["material_id"] = target.id
+                    else:
+                        rule.pop("material_id", None)
+                rules.append(rule)
+            g.strength = type(g.strength)(rules=rules, **g.strength.params)
         for a in refs_assign:
             if target is not None:
                 a["material_id"] = target.id
@@ -666,6 +744,9 @@ def material_delete(ws, material: str, project_id: Optional[str] = None,
         for b in refs_layers:
             b.material_id = target.id if target is not None else None
         project.materials = [x for x in project.materials if x is not m]
+        if refs_links:
+            from ogr_core.project import resolve_generalized_links
+            resolve_generalized_links(project.materials)
         project._notify("material_removed")
         notes = []
         if is_default and project.materials:

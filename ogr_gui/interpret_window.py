@@ -1591,8 +1591,8 @@ class InterpretWindow(QMainWindow):
         # method applied them, so the project goes too: the FACTORED copy,
         # which is the one the analysis ran on (the original when no design
         # standard is on).
-        from ogr_core.project import apply_design_factors
-        factored, _report = apply_design_factors(self.project)
+        from ogr_core.project import prepare_analysis_project
+        factored, _report = prepare_analysis_project(self.project)
         r = required_force(crit.slices, crit.surface, target, mid,
                            elevation, kh, kv, project=factored)
         if r is None:

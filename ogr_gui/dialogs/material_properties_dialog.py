@@ -185,7 +185,17 @@ class _StrengthParamPanel(QWidget):
         "rows3": (("Angle to (°)", "angle"),
                   ("Cohesion (%s)", "pressure"),
                   ("Friction angle (°)", "angle")),
+        # v0.1.228 (D218b) — the Generalized Anisotropic ranges: the angle
+        # each one ends at and the material it takes, a choice and not a
+        # quantity (None).
+        "rules": (("Angle to (°)", "angle"),
+                  ("Material", None)),
     }
+
+    #: v0.1.228 (D218b) — the caption of each table.
+    _TABLE_CAPTIONS = {"points": "Function points:",
+                       "rows3": "Function points:",
+                       "rules": "Angle ranges:"}
 
     def __init__(self, parent=None, units_obj=None) -> None:
         super().__init__(parent)
@@ -202,6 +212,17 @@ class _StrengthParamPanel(QWidget):
         self._table_shown = None     # the cell texts as first shown
         self._chk_cutoff = None
         self._cutoff_given = None
+        # v0.1.228 (D218b) — (id, name, strength dict) of the materials a
+        # Generalized Anisotropic range can take; see ``set_rule_materials``.
+        self._rule_choices: list = []
+
+    def set_rule_materials(self, choices) -> None:
+        """The materials a Generalized Anisotropic range can take, as (id,
+        name, strength dict): every material of the project but the one
+        being edited and the Generalized Anisotropic ones (v0.1.228, D218b).
+        The dialog passes them because this panel knows nothing of the
+        other materials."""
+        self._rule_choices = [(str(i), str(n), s) for i, n, s in choices]
 
     def set_units(self, units_obj) -> None:
         """Update the active unit system (e.g. project settings changed).
@@ -344,6 +365,17 @@ class _StrengthParamPanel(QWidget):
             # the model's own, not a second copy of it.
             self._build_points_table(current_params, kind="rows3",
                                      default=list(model_cls.DEFAULT_ROWS))
+        elif mid == "generalized_anisotropic":
+            # v0.1.228 (D218b) — the reference's "Angle Range" input: each
+            # row is the angle a range ends at and the material it takes.
+            # A new selection starts with one range, −90° to +90°, taking
+            # the first material it can.
+            default = ([{"angle_min": -90.0, "angle_max": 90.0,
+                         "material_id": self._rule_choices[0][0],
+                         "model": copy.deepcopy(self._rule_choices[0][2])}]
+                       if self._rule_choices else [])
+            self._build_points_table(current_params, kind="rules",
+                                     default=default)
 
         # v0.1.120 — the depth-dependent undrained models carry ONE piece
         # of state that is not a number: whether the cutoff applies at
@@ -387,7 +419,7 @@ class _StrengthParamPanel(QWidget):
         """The stored field a table kind edits: the anisotropic function's
         ranges live in ``rows`` since v0.1.218 (D209), the functions of
         σ'ₙ in ``points``."""
-        return "rows" if kind == "rows3" else "points"
+        return {"rows3": "rows", "rules": "rules"}.get(kind, "points")
 
     def table_headers(self) -> list[str]:
         """The headers of the table on screen, as shown."""
@@ -421,17 +453,29 @@ class _StrengthParamPanel(QWidget):
         tbl.horizontalHeader().setStretchLastSection(True)
         shown = []
         for r, row in enumerate(pts):
+            # A rule is shown as (angle to, the material it takes).
+            cells = ((row.get("angle_max") if isinstance(row, dict)
+                      else None, None) if kind == "rules" else row)
             texts = []
             for c in range(ncol):
+                if columns[c][1] is None:
+                    combo = self._choice_combo(r, row)
+                    tbl.setCellWidget(r, c, combo)
+                    texts.append(self._choice_text(combo))
+                    continue
                 # v0.1.192 (D181) — was f"{:.3f}", which rounded every
                 # point to three decimals on the next OK; the exact text
                 # of the displayed value round-trips through float().
-                user = self._si_to_user(float(row[c]), columns[c][1],
-                                        sys_obj)
-                texts.append(_exact_text(user))
-                tbl.setItem(r, c, QTableWidgetItem(texts[-1]))
+                try:
+                    user = self._si_to_user(float(cells[c]), columns[c][1],
+                                            sys_obj)
+                    text = _exact_text(user)
+                except (TypeError, ValueError):
+                    text = ""    # reported by ``unparsed_table_rows``
+                texts.append(text)
+                tbl.setItem(r, c, QTableWidgetItem(text))
             shown.append(texts)
-        self._form.addRow(QLabel(tr("Function points:")), tbl)
+        self._form.addRow(QLabel(tr(self._TABLE_CAPTIONS[kind])), tbl)
         # Add/remove buttons
         btns = QWidget()
         hl = QHBoxLayout(btns)
@@ -443,7 +487,10 @@ class _StrengthParamPanel(QWidget):
             r = tbl.rowCount()
             tbl.insertRow(r)
             for c in range(ncol):
-                tbl.setItem(r, c, QTableWidgetItem("0.0"))
+                if columns[c][1] is None:
+                    tbl.setCellWidget(r, c, self._choice_combo(None, None))
+                else:
+                    tbl.setItem(r, c, QTableWidgetItem("0.0"))
 
         def _del():
             cur = tbl.currentRow()
@@ -458,15 +505,54 @@ class _StrengthParamPanel(QWidget):
         self._table = tbl
         self._table_kind = kind
         self._table_ncol = ncol
-        self._table_given = [tuple(float(v) for v in row) for row in pts]
+        # The rules are kept as they came, dicts and all; the tables of
+        # numbers as numbers.
+        self._table_given = (copy.deepcopy(pts) if kind == "rules" else
+                             [tuple(float(v) for v in row) for row in pts])
         self._table_shown = shown
+
+    # ------------------------------------------------------------------
+    # v0.1.228 (D218b) — the material column of the Generalized Anisotropic
+    # ranges. Each row offers the materials the dialog passed; a rule that
+    # links none of them (its own model, from a file, the API or a script,
+    # or a link that no longer resolves) also offers to keep its own model,
+    # which is what it shows until another choice is made.
+    @staticmethod
+    def _model_name(rule) -> str:
+        try:
+            return REGISTRY.get(rule["model"]["model_id"]).DISPLAY_NAME
+        except Exception:  # noqa: BLE001 - any malformed rule: no name
+            return "?"
+
+    def _choice_combo(self, index, rule):
+        combo = QComboBox()
+        link = rule.get("material_id") if isinstance(rule, dict) else None
+        ids = [cid for cid, _n, _s in self._rule_choices]
+        if index is not None and link not in ids:
+            text = (tr("(own model: %s; its link is broken)") if link else
+                    tr("(own model: %s)")) % self._model_name(rule)
+            combo.addItem(text, f"own:{index}")
+        for cid, cname, _s in self._rule_choices:
+            combo.addItem(cname, f"material:{cid}")
+        if link in ids:
+            combo.setCurrentIndex(combo.findData(f"material:{link}"))
+        return combo
+
+    @staticmethod
+    def _choice_text(combo) -> str:
+        data = combo.currentData() if combo is not None else None
+        return "" if data is None else str(data)
 
     def _cell_texts(self) -> list[list[str]]:
         tbl = self._table
+        columns = self._TABLE_COLUMNS[self._table_kind]
         out = []
         for r in range(tbl.rowCount()):
             row = []
             for c in range(self._table_ncol):
+                if columns[c][1] is None:
+                    row.append(self._choice_text(tbl.cellWidget(r, c)))
+                    continue
                 item = tbl.item(r, c)
                 row.append(item.text() if item is not None else "")
             out.append(row)
@@ -490,10 +576,13 @@ class _StrengthParamPanel(QWidget):
         import math
         if self._table is None:
             return []
+        columns = self._TABLE_COLUMNS[self._table_kind]
         bad = []
         for r, row in enumerate(self._cell_texts(), start=1):
             try:
-                if not all(math.isfinite(float(t)) for t in row):
+                if not all(math.isfinite(float(t))
+                           for c, t in enumerate(row)
+                           if columns[c][1] is not None):
                     bad.append(r)
             except ValueError:
                 bad.append(r)
@@ -533,7 +622,9 @@ class _StrengthParamPanel(QWidget):
         if self._table is not None:
             key = self._table_key(self._table_kind)
             if self.table_unchanged():
-                out[key] = list(self._table_given)
+                out[key] = copy.deepcopy(self._table_given)
+            elif self._table_kind == "rules":
+                out[key] = self._rules_from_table(sys_obj)
             else:
                 columns = self._TABLE_COLUMNS[self._table_kind]
                 pts = []
@@ -552,6 +643,45 @@ class _StrengthParamPanel(QWidget):
         if self._chk_cutoff is not None:
             out["cutoff_enabled"] = self._chk_cutoff.isChecked()
         return out
+
+    def _rules_from_table(self, sys_obj) -> list:
+        """The ranges on screen as rules (v0.1.228, D218b).
+
+        Each range starts where the one before it ends and the first at
+        −90°, the structure of the reference's "Angle Range" input, so the
+        table holds only where each one ends. A range that takes a material
+        carries its id and a copy of its strength, which the analysis
+        replaces with the material's strength when it runs
+        (``prepare_analysis_project``); one that keeps its own model keeps
+        the rule it was given, without a link.
+        """
+        by_id = {cid: s for cid, _n, s in self._rule_choices}
+        rules, lo = [], -90.0
+        for row in self._cell_texts():
+            try:
+                hi = self._user_to_si(float(row[0]), "angle", sys_obj)
+            except ValueError:
+                continue    # reported by ``unparsed_table_rows``
+            choice = row[1]
+            given = None
+            if choice.startswith("own:"):
+                given = self._table_given[int(choice[len("own:"):])]
+            link = (choice[len("material:"):]
+                    if choice.startswith("material:") else None)
+            if link in by_id:
+                rule = {"material_id": link,
+                        "model": copy.deepcopy(by_id[link])}
+            elif isinstance(given, dict):
+                rule = copy.deepcopy(given)
+                rule.pop("material_id", None)
+            else:
+                # Nothing to take (no other material in the project): a
+                # range without a model, which OK refuses with its reason.
+                rule = {}
+            rule["angle_min"], rule["angle_max"] = lo, hi
+            rules.append(rule)
+            lo = hi
+        return rules
 
     def current_model(self) -> type[StrengthModel] | None:
         return self._model_cls
@@ -1129,9 +1259,20 @@ class MaterialPropertiesDialog(QDialog):
         self._set_editor_enabled(True)
         self._load(self._current_row)
 
+    def _rule_choices_for(self, parent) -> list:
+        """What a Generalized Anisotropic range of ``parent`` can take
+        (v0.1.228, D218b): every other material that is not Generalized
+        Anisotropic itself, with its strength as it stands in this session.
+        The same materials ``rules.generalized_links_refusal`` accepts."""
+        from ogr_core.materials.builtin_models import GeneralizedAnisotropic
+        return [(m.id, m.name, m.strength.to_dict()) for m in self.materials
+                if m is not parent and not isinstance(
+                    getattr(m, "strength", None), GeneralizedAnisotropic)]
+
     def _load(self, row: int) -> None:
         """Populate the editor widgets from ``self.materials[row]``."""
         m = self.materials[row]
+        self.param_panel.set_rule_materials(self._rule_choices_for(m))
         self.ed_name.setText(m.name)
         self._color_hex = m.color
         self._update_color_button()
@@ -1168,6 +1309,10 @@ class MaterialPropertiesDialog(QDialog):
             elif hasattr(m.strength, "points"):
                 params_with_pts["points"] = list(m.strength.points)
                 self.param_panel.set_model(type(m.strength), params_with_pts)
+            elif isinstance(getattr(m.strength, "rules", None), list):
+                # v0.1.228 (D218b) — the Generalized Anisotropic ranges.
+                params_with_pts["rules"] = copy.deepcopy(m.strength.rules)
+                self.param_panel.set_model(type(m.strength), params_with_pts)
         problem = ""
         if legacy is not None:
             problem = tr(
@@ -1190,8 +1335,10 @@ class MaterialPropertiesDialog(QDialog):
             # table, rules with a gap) says so as soon as it is shown. OK
             # judges only what the session changed, so this is where the user
             # sees why a run will be refused.
-            from ogr_core.project.rules import strength_model_refusal
-            why = strength_model_refusal(m.strength, m.name)
+            from ogr_core.project.rules import (
+                generalized_links_refusal, strength_model_refusal)
+            why = (strength_model_refusal(m.strength, m.name)
+                   or generalized_links_refusal(m, self.materials))
             if why is not None:
                 problem = (tr("In material %s:") % m.name + " "
                            + tr(self._TABLE_REFUSALS.get(why.code,
@@ -1265,9 +1412,10 @@ class MaterialPropertiesDialog(QDialog):
         # v0.1.218 (D209) — constant within each range of base angle.
         "anisotropic_strength_function":
                                 "(c, φ) per range of base angle, −90° to +90°",
-        # v0.1.225 (D218) — absolute ranges, −90° to +90°.
+        # v0.1.225 (D218) — absolute ranges, −90° to +90°; v0.1.228
+        # (D218b) — each takes a material, as the reference's input does.
         "generalized_anisotropic":
-                                "model assigned per range of base angle, "
+                                "material per range of base angle, "
                                 "−90° to +90°",
         "snowden_anisotropic_linear":
                                 "(c, φ) vary by cosine with angle to bedding",
@@ -1371,6 +1519,9 @@ class MaterialPropertiesDialog(QDialog):
         if not mid:
             return
         cls = REGISTRY.get(mid)
+        if 0 <= self._current_row < len(self.materials):
+            self.param_panel.set_rule_materials(self._rule_choices_for(
+                self.materials[self._current_row]))
         self.param_panel.set_model(cls)
         self._show_strength_problem("")
         # Update formula label
@@ -1443,17 +1594,11 @@ class MaterialPropertiesDialog(QDialog):
         unchanged = (getattr(m.strength, "MODEL_ID", None) == mid
                      and self.param_panel.is_unchanged())
         if not unchanged:
-            params = self.param_panel.get_params()
-            # v0.1.225 (D218) — the rules of a Generalized Anisotropic
-            # material have no editor here, so they are carried over rather
-            # than rebuilt: rebuilding them from the (empty) editors left
-            # ``rules = []``, and the model then answered a strength of zero
-            # at every base, just because the material had been shown and OK
-            # pressed.
-            if mid == "generalized_anisotropic" and \
-                    getattr(m.strength, "MODEL_ID", None) == mid:
-                params["rules"] = list(m.strength.rules)
-            m.strength = cls(**params)
+            # v0.1.225 (D218) carried the Generalized Anisotropic rules over
+            # here, because rebuilding them from editors that did not hold
+            # them left ``rules = []`` and a strength of zero at every base;
+            # since v0.1.228 (D218b) the panel edits and returns them.
+            m.strength = cls(**self.param_panel.get_params())
         # Only the models that read it keep it. Switching a material away
         # from an anisotropic model has to CLEAR the link, or a strength
         # nobody can see would still be pointing at a polyline.
@@ -1508,12 +1653,11 @@ class MaterialPropertiesDialog(QDialog):
         "anisotropic_table_end":
             "The last range must end at +90°.",
         # v0.1.225 (D218) — ``rules.generalized_anisotropic_rules_refusal``.
-        # This dialog has no editor for the rules yet; they come from the
-        # API, a script or a file, so the first message says where.
+        # v0.1.228 (D218b) — the ranges are edited here, each taking a
+        # material, so the messages say so.
         "generalized_rules_empty":
             "A Generalized Anisotropic material needs its ranges, from −90° "
-            "to +90°, each with a strength model; this version defines them "
-            "through the API or a script.",
+            "to +90°, each taking the strength of a material.",
         "generalized_rules_not_rules":
             "Every rule must be a range of angles with a strength model.",
         "generalized_rules_angles":
@@ -1527,7 +1671,17 @@ class MaterialPropertiesDialog(QDialog):
         "generalized_rules_end":
             "The last range must end at +90°.",
         "generalized_rules_model":
-            "Every range needs a strength model that can be built.",
+            "Every range needs a material, or a strength model that can be "
+            "built.",
+        # v0.1.228 (D218b) — ``rules.generalized_links_refusal``.
+        "generalized_link_missing":
+            "A range takes a material that is not in the project: choose "
+            "another one.",
+        "generalized_link_self":
+            "A range cannot take the strength of its own material.",
+        "generalized_link_generalized":
+            "A range cannot take the strength of another Generalized "
+            "Anisotropic material.",
         # v0.1.225 (D216) — ``rules.anisotropic_linear_refusal``.
         "anisotropic_linear_ab":
             "A and B must satisfy 0° ≤ A ≤ B.",
@@ -1555,6 +1709,12 @@ class MaterialPropertiesDialog(QDialog):
         bad = self.param_panel.unparsed_table_rows()
         if not bad:
             return False
+        if self.param_panel._table_kind == "rules":
+            # v0.1.228 (D218b) — its one number is where the range ends.
+            self._show_strength_problem(
+                tr("Row %d of the table: «angle to» is not a number.")
+                % bad[0])
+            return True
         self._show_strength_problem(
             tr("Row %d of the table is not %d numbers.")
             % (bad[0], self.param_panel.table_columns()))
@@ -1577,17 +1737,34 @@ class MaterialPropertiesDialog(QDialog):
         if self._refuse_unparsed_rows():
             return
         self._store(self._current_row)
-        from ogr_core.project.rules import strength_model_refusal
-        for row, m in enumerate(self.materials):
-            # v0.1.225 (D218) — only a strength this session changed (or a
-            # new material) is judged here; see ``_strength_on_entry``.
+        from ogr_core.project import resolve_generalized_links
+        from ogr_core.project.rules import (
+            generalized_links_refusal, strength_model_refusal)
+        # v0.1.225 (D218) — only a strength this session changed (or a new
+        # material) is judged here; see ``_strength_on_entry``.
+        changed = set()
+        for m in self.materials:
             entry = self._strength_on_entry.get(m.id)
-            if entry is not None and entry == self._strength_state(m):
+            if entry is None or entry != self._strength_state(m):
+                changed.add(m.id)
+        # v0.1.228 (D218b) — the copy of a linked material's strength that
+        # a Generalized Anisotropic range keeps follows the material, for
+        # what is shown and saved; the analysis takes the material's own
+        # strength anyway. A range whose material changed is judged too.
+        resolve_generalized_links(self.materials)
+        for row, m in enumerate(self.materials):
+            links = {r.get("material_id")
+                     for r in getattr(m.strength, "rules", None) or []
+                     if isinstance(r, dict)} - {None}
+            if m.id not in changed and not (links & changed):
                 continue
             why = strength_model_refusal(m.strength, m.name)
             # A table still held as points was not shown or not touched:
             # it stays as it was and the analysis says why it refuses it.
-            if why is None or why.code == "anisotropic_table_legacy":
+            if why is not None and why.code == "anisotropic_table_legacy":
+                continue
+            why = why or generalized_links_refusal(m, self.materials)
+            if why is None:
                 continue
             if row != self._current_row:
                 self.list.setCurrentRow(row)
@@ -1618,6 +1795,19 @@ class MaterialPropertiesDialog(QDialog):
     def _remove_material(self) -> None:
         row = self.list.currentRow()
         if 0 <= row < len(self.materials):
+            # v0.1.228 (D218b) — a material whose strength a Generalized
+            # Anisotropic range takes stays until that range takes another:
+            # removing it would leave the range pointing at nothing.
+            gone = self.materials[row]
+            users = [g.name for g in self.materials if g is not gone and any(
+                isinstance(r, dict) and r.get("material_id") == gone.id
+                for r in getattr(g.strength, "rules", None) or [])]
+            if users:
+                self._show_strength_problem(
+                    tr("%s cannot be removed: the ranges of %s take its "
+                       "strength. Change them first.")
+                    % (gone.name, ", ".join(users)))
+                return
             # The row about to disappear must not be committed afterwards.
             self._current_row = -1
             del self.materials[row]

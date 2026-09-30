@@ -458,6 +458,47 @@ def strength_model_refusal(strength, name: Optional[str] = None
     return None
 
 
+def generalized_links_refusal(material, materials) -> Optional[Refusal]:
+    """Why a Generalized Anisotropic material's LINKED rules cannot be
+    computed with, or None.
+
+    v0.1.228 (D218b) — a rule may name the material whose strength it takes
+    (``material_id``), as the reference's "Angle Range" input assigns a
+    material to each range. The link must name a material of the project,
+    not the Generalized material itself and not another Generalized one: a
+    range takes a plain strength, which also rules out cycles.
+    """
+    from ..materials.builtin_models import GeneralizedAnisotropic
+
+    strength = getattr(material, "strength", None)
+    if not isinstance(strength, GeneralizedAnisotropic):
+        return None
+    by_id = {m.id: m for m in materials}
+    label = getattr(material, "name", "?")
+    for i, rule in enumerate(strength.rules or [], start=1):
+        link = rule.get("material_id") if isinstance(rule, dict) else None
+        if not link:
+            continue
+        src = by_id.get(link)
+        if src is None:
+            return Refusal("generalized_link_missing",
+                           f"Material {label!r}, Generalized Anisotropic: "
+                           f"rule {i} links a material that is not in the "
+                           f"project.")
+        if src is material:
+            return Refusal("generalized_link_self",
+                           f"Material {label!r}, Generalized Anisotropic: "
+                           f"rule {i} links the material itself.")
+        if isinstance(getattr(src, "strength", None),
+                      GeneralizedAnisotropic):
+            return Refusal("generalized_link_generalized",
+                           f"Material {label!r}, Generalized Anisotropic: "
+                           f"rule {i} links {src.name!r}, another "
+                           f"Generalized Anisotropic material; a range takes "
+                           f"a plain strength model.")
+    return None
+
+
 #: v0.1.225 (D218) — the strength models that read an anisotropic surface,
 #: moved here from the material dialog so that the API asks the same
 #: question. The reference lists three (Anisotropic Linear, Snowden Modified

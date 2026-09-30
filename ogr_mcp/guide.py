@@ -117,6 +117,12 @@ parameters, units and defaults. The common ones:
 * mohr_coulomb: cohesion (kPa), friction_angle (deg)
 * undrained: cohesion (kPa) — phi = 0
 * hoek_brown: sigci (kPa), mb, s, a
+* generalized_anisotropic: rules, each a range of the slice base
+  inclination (absolute, degrees from the horizontal, contiguous from -90
+  to 90) that takes the strength of a MATERIAL of the model:
+  {"angle_min": -90, "angle_max": 0, "material": "Clay"}. The analysis uses
+  that material's strength as it is when it runs; a material a range takes
+  is deleted only with reassign_to or force.
 unit_weight is the bulk unit weight; sat_unit_weight is only used below the
 water surface when use_sat_unit_weight is true.
 

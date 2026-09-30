@@ -1207,7 +1207,11 @@ class GeneralizedAnisotropic(StrengthModel):
     ``model`` is another registered model in its dict form. The reference
     documents this input ("Angle Range") as angle ranges ordered counter-
     clockwise from -90 to +90, each range starting where the previous one
-    ends, "and assign a material to each range".
+    ends, "and assign a material to each range". Since v0.1.228 (D218b) a
+    rule may name that material (``material_id``): the analysis then
+    computes with the material's strength, resolved on its own copy of the
+    project (``ogr_core.project.prepare_analysis_project``), and ``model``
+    is the copy the editor shows.
 
     v0.1.225 (D218) -- five decisions, each with its reason:
 
@@ -1347,6 +1351,12 @@ class GeneralizedAnisotropic(StrengthModel):
         child materials."""
         rules, changes, notes = [], {}, []
         for i, rule in enumerate(self.rules):
+            if isinstance(rule, dict) and rule.get("material_id"):
+                # v0.1.228 (D218b) -- a rule that LINKS a material is given
+                # that material's strength on the analysis copy, after the
+                # factors: it is factored once, through the material.
+                rules.append(rule)
+                continue
             try:
                 child = self._rule_model(i, rule)
             except IncompleteGeneralizedAnisotropic:

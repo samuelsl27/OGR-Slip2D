@@ -54,4 +54,6 @@ from .design_factors import (  # noqa: E402,F401
     FactorReport,
     apply_design_factors,
     factor_friction_angle,
+    prepare_analysis_project,
+    resolve_generalized_links,
 )

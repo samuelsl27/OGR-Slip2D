@@ -28,8 +28,8 @@ publica el propio servidor (`tools/list`); aquí va para qué sirve cada una.
 | `model_define` | C | El modelo entero en una llamada: contornos, materiales, un punto dentro de la región de cada uno, nivel freático y ajustes. |
 | `boundary_add` | | Un contorno: exterior, de material, nivel freático, piezométrica, desembalse, grieta de tracción, objeto de Block Search, capa débil o superficie anisótropa. Un contorno de material **cerrado** (`closed=true`) es una lente: su propia región y un hueco en la de alrededor (desde v0.1.197). |
 | `boundary_edit` | | Editar o borrar un contorno: vértices, traslación, tipo, nombre. |
-| `material_set` | | Crear o modificar un material, también su envolvente de desembalse rápido (`drawdown_envelope`, desde v0.1.200). Las propiedades hidráulicas van por `hydraulic_set`. |
-| `material_delete` | | Borrar un material (se niega mientras lo usen regiones). |
+| `material_set` | | Crear o modificar un material, también su envolvente de desembalse rápido (`drawdown_envelope`, desde v0.1.200). Las propiedades hidráulicas van por `hydraulic_set`. Un tramo de Generalized Anisotropic toma un material del modelo por su nombre (`"material": "Arcilla"`, desde v0.1.228), y el análisis usa la resistencia de ese material tal como esté al calcular. |
+| `material_delete` | | Borrar un material (se niega mientras lo usen regiones, capas débiles o tramos de un Generalized Anisotropic, salvo con `reassign_to` o `force`). |
 | `material_assign` | | Asignar un material a la región que contiene un punto. |
 | `external_reshape` | | Expandir o encoger el contorno exterior: desplazamiento paralelo, o una polilínea de relleno o excavación con los dos extremos sobre él. |
 | `slope_angle_change` | | Cambiar el ángulo global de la cara del talud entre dos vértices del exterior (pie y coronación): solo se mueve la cara, proyectando en horizontal (por defecto), en vertical o girando; `keep_benches` conserva el ancho de las bermas. Los contornos que acaban en la cara la siguen; soportes y cargas no se mueven (se avisa). |
@@ -87,7 +87,7 @@ Una carga lineal «normal al contorno» o «con ángulo respecto al contorno» t
 | `dxf_import` | | Importar su geometría (un paso de deshacer). |
 | `dxf_export` | | Exportar el modelo y las superficies críticas de un resultado. |
 | `report_generate` | | Informe PDF de un análisis. |
-| `properties_import` | | Copiar materiales o tipos de soporte de otro `.ogr`. |
+| `properties_import` | | Copiar materiales o tipos de soporte de otro `.ogr`. Un tramo de Generalized Anisotropic que tomaba un material se enlaza con su copia importada o con el material del mismo nombre; si no hay ninguno, conserva su resistencia sin enlace y lo dice una nota. |
 
 ## Agua subterránea (`groundwater`, desde v0.1.200)
 

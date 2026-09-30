@@ -241,7 +241,8 @@ def check_analysis_settings(project) -> list[str]:
     # v0.1.225 (D218) — and a Generalized Anisotropic material that still
     # links an anisotropic surface, whose ranges would now be read in
     # another frame.
-    from ogr_core.project.rules import (material_surface_refusal,
+    from ogr_core.project.rules import (generalized_links_refusal,
+                                        material_surface_refusal,
                                         strength_model_refusal)
     for _mat in project.materials:
         _why = strength_model_refusal(getattr(_mat, "strength", None),
@@ -249,6 +250,11 @@ def check_analysis_settings(project) -> list[str]:
         if _why is not None:
             problems.append(_why.message)
         _why = material_surface_refusal(_mat)
+        if _why is not None:
+            problems.append(_why.message)
+        # v0.1.228 (D218b) — a rule that links a material the project no
+        # longer has, the material itself or another Generalized one.
+        _why = generalized_links_refusal(_mat, project.materials)
         if _why is not None:
             problems.append(_why.message)
 
@@ -2125,8 +2131,8 @@ def run_analysis(project, method_ids=None,
         if problems:
             raise AnalysisNotConfigured(problems)
 
-    from ogr_core.project import apply_design_factors
-    project, factor_report = apply_design_factors(project)
+    from ogr_core.project import prepare_analysis_project
+    project, factor_report = prepare_analysis_project(project)
 
     if method_ids is None:
         method_ids = list(project.settings.methods.enabled_methods)
@@ -2260,7 +2266,8 @@ def evaluate_surfaces(project, surface, method_ids=None, *,
     goes through, in the same order:
 
     - the same refusal (``check_analysis_settings``);
-    - the same factored copy (``apply_design_factors``);
+    - the same factored copy (``prepare_analysis_project``: the design
+      factors and, since v0.1.228, the Generalized Anisotropic links);
     - the same configured method and search (``build_search``), so the
       admissibility checks, the surface filters, the slope limits and the
       seismic objective are the project's own;
@@ -2281,8 +2288,8 @@ def evaluate_surfaces(project, surface, method_ids=None, *,
         if problems:
             raise AnalysisNotConfigured(problems)
 
-    from ogr_core.project import apply_design_factors
-    project, factor_report = apply_design_factors(project)
+    from ogr_core.project import prepare_analysis_project
+    project, factor_report = prepare_analysis_project(project)
 
     if method_ids is None:
         method_ids = list(project.settings.methods.enabled_methods)
@@ -2419,7 +2426,7 @@ def run_configured_drawdown_sweep(project, method_ids=None, *,
     warnings)``. With the standard off the copy IS the project, so nothing
     changes.
     """
-    from ogr_core.project import apply_design_factors
+    from ogr_core.project import prepare_analysis_project
     from ogr_core.statistics import run_drawdown_sweep
 
     problems = check_analysis_settings(project)
@@ -2435,7 +2442,7 @@ def run_configured_drawdown_sweep(project, method_ids=None, *,
     method_ids = (list(method_ids) if method_ids else
                   list(project.settings.methods.enabled_methods)
                   or ["bishop_simplified"])
-    factored, report = apply_design_factors(project)
+    factored, report = prepare_analysis_project(project)
     warnings = list(settings_warnings(factored, method_ids))
     searches = {mid: build_search(factored, mid) for mid in method_ids}
     missing = [mid for mid, s in searches.items() if s is None]
@@ -2485,7 +2492,7 @@ def run_configured_statistics(project, method_ids=None, *,
     AFTER its sample (``prepare``), so a sampled cohesion is factored like
     the deterministic one instead of replacing a factored value.
     """
-    from ogr_core.project import apply_design_factors
+    from ogr_core.project import prepare_analysis_project
     from ogr_core.statistics import (SamplingMethod, run_global_minimum,
                                      run_overall_slope, run_sensitivity)
 
@@ -2513,10 +2520,10 @@ def run_configured_statistics(project, method_ids=None, *,
                             "critical surface. Check the model and the "
                             "search settings.")
         return out
-    factored, _rep = apply_design_factors(project)
+    factored, _rep = prepare_analysis_project(project)
 
     def prepare(clone):
-        return apply_design_factors(clone)[0]
+        return prepare_analysis_project(clone)[0]
 
     try:
         sampling = SamplingMethod(st.sampling_method)
@@ -2559,7 +2566,7 @@ def run_configured_back_analysis(project, *, target_fos=None,
     to ``settings.back_analysis``. v0.1.201 — the interface searched the
     raw project with no design factors and no ``check_analysis_settings``.
     """
-    from ogr_core.project import apply_design_factors
+    from ogr_core.project import prepare_analysis_project
 
     from .back_analysis import SUPPORTED_METHODS, run_back_analysis
 
@@ -2575,7 +2582,7 @@ def run_configured_back_analysis(project, *, target_fos=None,
         problems.append("The target factor of safety must be positive.")
     if problems:
         raise AnalysisNotConfigured(problems)
-    factored, report = apply_design_factors(project)
+    factored, report = prepare_analysis_project(project)
     warnings = list(settings_warnings(factored, [mid]))
     search = build_search(factored, mid)
     if search is None:
@@ -2598,7 +2605,7 @@ def run_configured_optimization(project, method_id, surface, *,
     """
     from dataclasses import replace
 
-    from ogr_core.project import apply_design_factors
+    from ogr_core.project import prepare_analysis_project
 
     from .optimize import optimize_surface
 
@@ -2609,7 +2616,7 @@ def run_configured_optimization(project, method_id, surface, *,
                    seed=project.settings.analysis_seed())
     if max_iterations is not None:
         opts = replace(opts, max_iterations=int(max_iterations))
-    factored, report = apply_design_factors(project)
+    factored, report = prepare_analysis_project(project)
     warnings = list(settings_warnings(factored, [method_id]))
     search = build_search(factored, method_id)
     if search is None:

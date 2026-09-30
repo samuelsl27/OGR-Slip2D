@@ -373,4 +373,7 @@ class TestTheCallersPassTheModel:
         assert any(k.arg == "project" for k in calls[0].keywords)
         names = {getattr(n.func, "id", "") for n in ast.walk(fn)
                  if isinstance(n, ast.Call)}
-        assert "apply_design_factors" in names
+        # v0.1.228 (D218b) — changed on purpose: the analysis copy is made
+        # by ``prepare_analysis_project``, which applies the design factors
+        # and resolves the Generalized Anisotropic links on the same copy.
+        assert "prepare_analysis_project" in names

@@ -2189,12 +2189,6 @@ _DICTS: dict[str, dict[str, str]] = {
             "El último tramo tiene que terminar en +90°.",
 
         # --- v0.1.225 · D218 y D216: Generalized Anisotropic y A, B -----
-        "A Generalized Anisotropic material needs its ranges, from −90° "
-        "to +90°, each with a strength model; this version defines them "
-        "through the API or a script.":
-            "Un material Generalized Anisotropic necesita sus tramos, de "
-            "−90° a +90°, cada uno con su modelo de resistencia; en esta "
-            "versión se definen por la API o por un script.",
         "Every rule must be a range of angles with a strength model.":
             "Cada regla tiene que ser un tramo de ángulos con un modelo de "
             "resistencia.",
@@ -2208,9 +2202,6 @@ _DICTS: dict[str, dict[str, str]] = {
         "no overlaps.":
             "Cada tramo tiene que empezar donde acaba el anterior: sin "
             "huecos ni solapes.",
-        "Every range needs a strength model that can be built.":
-            "Cada tramo necesita un modelo de resistencia que se pueda "
-            "construir.",
         "A and B must satisfy 0° ≤ A ≤ B.":
             "A y B tienen que cumplir 0° ≤ A ≤ B.",
         "This material links an anisotropic surface. Since 0.1.225 "
@@ -2254,6 +2245,36 @@ _DICTS: dict[str, dict[str, str]] = {
             "Valor de entrada de aire: succión matricial por debajo de la "
             "cual sigue rigiendo el ángulo de rozamiento saturado "
             "(envolvente bilineal).",
+
+        # --- v0.1.228 · D218b: el editor de tramos de Generalized ------
+        "Angle ranges:": "Tramos de ángulo:",
+        "(own model: %s)": "(modelo propio: %s)",
+        "(own model: %s; its link is broken)":
+            "(modelo propio: %s; su enlace está roto)",
+        "A Generalized Anisotropic material needs its ranges, from −90° "
+        "to +90°, each taking the strength of a material.":
+            "Un material Generalized Anisotropic necesita sus tramos, de "
+            "−90° a +90°, cada uno con la resistencia de un material.",
+        "Every range needs a material, or a strength model that can be "
+        "built.":
+            "Cada tramo necesita un material, o un modelo de resistencia "
+            "que se pueda construir.",
+        "A range takes a material that is not in the project: choose "
+        "another one.":
+            "Un tramo toma un material que no está en el proyecto: elija "
+            "otro.",
+        "A range cannot take the strength of its own material.":
+            "Un tramo no puede tomar la resistencia de su propio material.",
+        "A range cannot take the strength of another Generalized "
+        "Anisotropic material.":
+            "Un tramo no puede tomar la resistencia de otro material "
+            "Generalized Anisotropic.",
+        "Row %d of the table: «angle to» is not a number.":
+            "Fila %d de la tabla: «ángulo hasta» no es un número.",
+        "%s cannot be removed: the ranges of %s take its strength. Change "
+        "them first.":
+            "No se puede quitar %s: los tramos de %s toman su resistencia. "
+            "Cámbielos antes.",
 
         # --- v0.1.219 · D206: el sismo, sólo sobre el suelo -------------
         "<b>Pseudo-static seismic load.</b><br>"
