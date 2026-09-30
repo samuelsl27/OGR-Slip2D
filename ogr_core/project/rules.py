@@ -249,18 +249,124 @@ def anisotropic_function_rows_refusal(rows) -> Optional[Refusal]:
     return None
 
 
+def generalized_anisotropic_rules_refusal(rules) -> Optional[Refusal]:
+    """Why ``rules`` cannot be the rules of a Generalized Anisotropic
+    model, or None.
+
+    v0.1.225 (D218) — the model used to answer a strength of ZERO, in
+    silence, for an angle no rule held and for a rule whose model could not
+    be built. The rules are the reference's "Angle Range" input: ranges of
+    slice base inclination "ordered counter-clockwise, from −90 to +90",
+    each "Angle From" being the previous "Angle To" and the last one
+    ending at +90. So the first rule starts at −90, each one starts where
+    the previous one ends, and the last one ends at +90: a gap is an angle
+    with no strength and an overlap a rule that can never be reached (the
+    first one that holds an angle wins). Every model must be present and
+    buildable. Its own refusals are asked by :func:`strength_model_refusal`
+    AFTER this one, so the structure is judged first.
+    """
+    import math
+
+    from ..materials.strength_model import StrengthModel
+
+    try:
+        rules = list(rules or [])
+    except TypeError:
+        return Refusal("generalized_rules_not_rules",
+                       "The rules must be a list of {angle_min, angle_max, "
+                       "model} objects.")
+    if not rules:
+        return Refusal("generalized_rules_empty",
+                       "There are no rules: at least one range, from -90 to "
+                       "+90 degrees, with its strength model, is needed.")
+    bounds = []
+    for i, rule in enumerate(rules, start=1):
+        if not isinstance(rule, dict):
+            return Refusal("generalized_rules_not_rules",
+                           f"Rule {i} is not an {{angle_min, angle_max, "
+                           f"model}} object: {rule!r}.")
+        try:
+            amin = float(rule.get("angle_min", -90.0))
+            amax = float(rule.get("angle_max", 90.0))
+        except (TypeError, ValueError):
+            return Refusal("generalized_rules_not_rules",
+                           f"The angles of rule {i} are not numbers.")
+        if not (math.isfinite(amin) and math.isfinite(amax)) or not (
+                -90.0 - 1e-9 <= amin < amax <= 90.0 + 1e-9):
+            return Refusal("generalized_rules_angles",
+                           f"Rule {i} must go from a lower to a higher angle "
+                           f"within [-90, 90] degrees; it goes from {amin:g} "
+                           f"to {amax:g}.")
+        bounds.append((amin, amax))
+    if abs(bounds[0][0] + 90.0) > 1e-9:
+        return Refusal("generalized_rules_start",
+                       f"The first range starts at -90 degrees; it starts at "
+                       f"{bounds[0][0]:g}.")
+    for i in range(1, len(bounds)):
+        if abs(bounds[i][0] - bounds[i - 1][1]) > 1e-9:
+            kind = ("leaves the angles between {a:g} and {b:g} degrees "
+                    "with no strength" if bounds[i][0] > bounds[i - 1][1]
+                    else "overlaps it, so part of a range can never be "
+                         "reached")
+            return Refusal("generalized_rules_order",
+                           f"Rule {i + 1} must start where rule {i} ends "
+                           f"({bounds[i - 1][1]:g} degrees); it starts at "
+                           f"{bounds[i][0]:g}, which "
+                           + kind.format(a=bounds[i - 1][1], b=bounds[i][0])
+                           + ".")
+    if abs(bounds[-1][1] - 90.0) > 1e-9:
+        return Refusal("generalized_rules_end",
+                       f"The last range must end at +90 degrees; it ends at "
+                       f"{bounds[-1][1]:g}.")
+    for i, rule in enumerate(rules, start=1):
+        data = rule.get("model")
+        if not data:
+            return Refusal("generalized_rules_model",
+                           f"Rule {i} has no strength model.")
+        try:
+            StrengthModel.from_dict(data)
+        except Exception as exc:  # noqa: BLE001 - the message says which
+            return Refusal("generalized_rules_model",
+                           f"The strength model of rule {i} cannot be built: "
+                           f"{type(exc).__name__}: {exc}")
+    return None
+
+
+def anisotropic_linear_refusal(strength) -> Optional[Refusal]:
+    """Why an Anisotropic Linear model's A and B cannot be used, or None.
+
+    v0.1.225 (D216) — A is "an angular range on either side of the bedding
+    plane orientation" and B − A "the angular range over which the increase
+    from bedding plane to rock mass shear strength takes place" (the
+    reference documentation), so 0 ≤ A ≤ B. A = B is a step, which the
+    model computes.
+    """
+    import math
+
+    a = float(strength.params.get("A", 0.0))
+    b = float(strength.params.get("B", 0.0))
+    if not (math.isfinite(a) and math.isfinite(b)) or not 0.0 <= a <= b:
+        return Refusal("anisotropic_linear_ab",
+                       f"A and B must satisfy 0 <= A <= B degrees; got "
+                       f"A = {a:g}, B = {b:g}.")
+    return None
+
+
 def strength_model_refusal(strength, name: Optional[str] = None
                            ) -> Optional[Refusal]:
     """Why a material's strength model cannot be computed with, or None.
 
-    v0.1.218 (D209) — only the Anisotropic Strength Function can say no
-    today: a table saved as interpolated points by a version before 0.1.218
-    (``legacy_points``), or rows that are not a valid set of ranges. A
-    Generalized Anisotropic model is asked about the models of its rules,
-    since one of them can be such a table. ``name`` is the material's, for
-    the message.
+    v0.1.218 (D209) — the Anisotropic Strength Function: a table saved as
+    interpolated points by a version before 0.1.218 (``legacy_points``), or
+    rows that are not a valid set of ranges. v0.1.225 — Generalized
+    Anisotropic rules that are not the reference's contiguous ranges or
+    hold a model that cannot be built (D218), and the A and B of Anisotropic
+    Linear (D216). A Generalized Anisotropic model is then asked about the
+    models of its rules, since one of them can be such a table. ``name`` is
+    the material's, for the message.
     """
     from ..materials.builtin_models import (ANISOTROPIC_FUNCTION_LEGACY_NOTE,
+                                            AnisotropicLinear,
                                             AnisotropicStrengthFunction,
                                             GeneralizedAnisotropic)
     from ..materials.strength_model import StrengthModel
@@ -276,18 +382,68 @@ def strength_model_refusal(strength, name: Optional[str] = None
             return None
         return Refusal(why.code, f"Material {label!r}, Anisotropic Strength "
                                  f"Function: {why.message}")
+    if isinstance(strength, AnisotropicLinear):
+        why = anisotropic_linear_refusal(strength)
+        if why is None:
+            return None
+        return Refusal(why.code, f"Material {label!r}, Anisotropic Linear: "
+                                 f"{why.message}")
     if isinstance(strength, GeneralizedAnisotropic):
-        for rule in strength.rules or []:
-            data = rule.get("model") if isinstance(rule, dict) else None
-            if not data:
-                continue
-            try:
-                sub = StrengthModel.from_dict(data)
-            except Exception:  # noqa: BLE001 - reported as its own defect
-                continue
-            why = strength_model_refusal(sub, name)
+        why = generalized_anisotropic_rules_refusal(strength.rules)
+        if why is not None:
+            return Refusal(why.code, f"Material {label!r}, Generalized "
+                                     f"Anisotropic: {why.message}")
+        for rule in strength.rules:
+            why = strength_model_refusal(
+                StrengthModel.from_dict(rule["model"]), name)
             if why is not None:
                 return why
+    return None
+
+
+#: v0.1.225 (D218) — the strength models that read an anisotropic surface,
+#: moved here from the material dialog so that the API asks the same
+#: question. The reference lists three (Anisotropic Linear, Snowden Modified
+#: Anisotropic Linear and Generalized Anisotropic), but in Generalized
+#: Anisotropic a surface belongs to the "Angle or Surface" input, one per
+#: joint, which OGR does not implement; its "Angle Range" input, the one
+#: OGR has, reads absolute slice base inclinations and no surface.
+SURFACE_READING_MODEL_IDS = frozenset({
+    "anisotropic_linear",
+    "snowden_anisotropic_linear",
+})
+
+
+def reads_anisotropic_surface(strength_or_id) -> bool:
+    """Whether a strength model (or model id) reads an anisotropic surface.
+
+    A link from a material whose model does not read one would be a
+    setting that decides nothing (rule 7)."""
+    mid = (strength_or_id if isinstance(strength_or_id, str)
+           else getattr(strength_or_id, "MODEL_ID", None))
+    return mid in SURFACE_READING_MODEL_IDS
+
+
+def material_surface_refusal(material) -> Optional[Refusal]:
+    """Why a material's anisotropic-surface link cannot be computed with,
+    or None.
+
+    v0.1.225 (D218) — a Generalized Anisotropic material that links one:
+    until this version the model subtracted the surface's bedding from the
+    base angle, so its ranges would now select other rules. It is refused
+    until reviewed, the treatment D209 gave a table whose meaning changed;
+    the material dialog removes the link when it stores the material. A
+    link from any other model that does not read it was inert before and
+    stays inert.
+    """
+    from ..materials.builtin_models import (GENERALIZED_SURFACE_NOTE,
+                                            GeneralizedAnisotropic)
+
+    if getattr(material, "anisotropic_surface_id", None) and isinstance(
+            getattr(material, "strength", None), GeneralizedAnisotropic):
+        return Refusal("generalized_surface_legacy",
+                       GENERALIZED_SURFACE_NOTE.format(
+                           name=getattr(material, "name", "?")))
     return None
 
 

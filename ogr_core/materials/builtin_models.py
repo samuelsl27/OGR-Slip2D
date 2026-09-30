@@ -529,19 +529,40 @@ def _local_bedding_deg(model, ctx, fallback_param: str = "bedding_angle"):
 
 @register
 class AnisotropicLinear(StrengthModel):
-    """Anisotropic Linear strength (Mercer 2012; Snowden Associates).
+    """Anisotropic Linear strength (Mercer 2012, 2013).
 
-    Mohr-Coulomb strength whose cohesion and friction angle vary with
-    the orientation β of the slip-surface base relative to the
-    anisotropy (bedding) direction. Between the bedding orientation
-    (angle ``A``, minimum strength) and ``B`` degrees away from it the
-    parameters interpolate linearly from (c1, φ1) to (c2, φ2);
-    beyond B they stay at (c2, φ2).
+    Mohr-Coulomb strength whose cohesion and friction angle depend on the
+    acute angle α between the slice base and the bedding (the
+    "1-direction"). With
 
-        |Δ| = angular distance between slice base and bedding (0–90°)
-        if |Δ| ≤ A:           use (c1, φ1)
-        elif A < |Δ| < B:     linear interp between the two
-        else (|Δ| ≥ B):       use (c2, φ2)
+        t = (|α| − A) / (B − A)
+
+    the model is
+
+        t ≤ 0:        c = c1,                 tan φ = tan φ1
+        0 < t < 1:    c = c1(1 − t) + c2·t,   tan φ = tan φ1(1 − t) + tan φ2·t
+        t ≥ 1:        c = c2,                 tan φ = tan φ2
+
+    (c1, φ1) is the bedding strength, the minimum; (c2, φ2) the rock mass
+    strength; A the half-width of the band where only the bedding strength
+    applies and B − A the width of the linear transition. A = B is a step at
+    A. What values A and B may take lives in
+    ``ogr_core.project.rules.anisotropic_linear_refusal`` (0 ≤ A ≤ B).
+
+    v0.1.225 (D216) -- the TANGENT of the friction angle is interpolated,
+    as the reference documentation's equations write it ("the cohesion and
+    the tangent of the friction angle can be computed for any plane
+    orientation"). Until this version OGR interpolated the angle itself:
+    with φ1 = 15° and φ2 = 30°, at t = 0.5 that gave 22.5° where the
+    equations give 22.91°. The two ends are unchanged bit for bit and the
+    parameters mean what they meant, so a saved project needs no migration:
+    what was wrong was the formula.
+
+    References:
+        Mercer, K. (2012). The history and development of the anisotropic
+            linear model: part 1. Australian Centre for Geomechanics, Perth.
+        Mercer, K. (2013). The history and development of the anisotropic
+            linear model: part 2. Australian Centre for Geomechanics, Perth.
 
     Needs the slice base angle → ``needs_context = True``.
     """
@@ -564,7 +585,9 @@ class AnisotropicLinear(StrengthModel):
     def needs_context(self) -> bool:
         return True
 
-    def _c_phi_for_angle(self, base_angle_deg: float, bedding_deg=None):
+    def _c_tan_phi(self, base_angle_deg: float, bedding_deg=None):
+        """``(c, tan φ)`` on a plane at ``base_angle_deg``; see the class
+        docstring for the equations."""
         a = self.params["A"]
         b = self.params["B"]
         bed = (self.params["bedding_angle"] if bedding_deg is None
@@ -573,16 +596,20 @@ class AnisotropicLinear(StrengthModel):
         delta = abs(base_angle_deg - bed) % 180.0
         if delta > 90.0:
             delta = 180.0 - delta
-        c1, phi1 = self.params["c1"], self.params["phi1"]
-        c2, phi2 = self.params["c2"], self.params["phi2"]
+        c1, c2 = self.params["c1"], self.params["c2"]
+        tan1 = math.tan(math.radians(self.params["phi1"]))
+        tan2 = math.tan(math.radians(self.params["phi2"]))
         if delta <= a:
-            return c1, phi1
-        if delta >= b:
-            return c2, phi2
-        if b - a < 1e-9:
-            return c2, phi2
+            return c1, tan1
+        if delta >= b or b - a < 1e-9:
+            return c2, tan2
         t = (delta - a) / (b - a)
-        return c1 + t * (c2 - c1), phi1 + t * (phi2 - phi1)
+        return c1 * (1.0 - t) + c2 * t, tan1 * (1.0 - t) + tan2 * t
+
+    def _c_phi_for_angle(self, base_angle_deg: float, bedding_deg=None):
+        """``(c, φ in degrees)``, for callers that want the angle."""
+        c, tan_phi = self._c_tan_phi(base_angle_deg, bedding_deg)
+        return c, math.degrees(math.atan(tan_phi))
 
     def shear_strength(self, sigma_n_eff: float) -> float:
         # No context → assume worst case (bedding-aligned, minimum)
@@ -593,9 +620,10 @@ class AnisotropicLinear(StrengthModel):
         if ctx is None:
             return self.shear_strength(sigma_n_eff)
         base_deg = math.degrees(ctx.base_angle_rad)
-        c, phi = self._c_phi_for_angle(base_deg,
-                                       _local_bedding_deg(self, ctx))
-        return c + max(sigma_n_eff, 0.0) * math.tan(math.radians(phi))
+        # v0.1.225 (D216) -- tan φ straight from the interpolation, never
+        # through the angle and back.
+        c, tan_phi = self._c_tan_phi(base_deg, _local_bedding_deg(self, ctx))
+        return c + max(sigma_n_eff, 0.0) * tan_phi
 
 
 # ----------------------------------------------------------------------
@@ -828,11 +856,12 @@ class AnisotropicStrengthFunction(StrengthModel):
     counter-clockwise from the horizontal, in (-90, 90] degrees: the
     slicer's ``alpha = atan2(dy, dx)`` with ``dx > 0``, in degrees. No
     bedding is involved. That is what separates this model from
-    ``anisotropic_linear``, Snowden's and the generalized one, which read
-    the angle BETWEEN the base and a bedding direction: here the table
-    itself is the anisotropy, written against the base inclination. Nor
-    does the material dialog offer to link an anisotropic surface to it
-    (``_ANISOTROPIC_MODEL_IDS`` in ``ogr_gui``).
+    ``anisotropic_linear`` and Snowden's, which read the angle BETWEEN the
+    base and a bedding direction: here the table itself is the anisotropy,
+    written against the base inclination. The generalized model reads its
+    ranges the same way since v0.1.225 (D218). Nor does the material dialog
+    offer to link an anisotropic surface to it
+    (``ogr_core.project.rules.reads_anisotropic_surface``).
 
     v0.1.218 (D209) — the table is a list of RANGES, ``rows`` of
     ``(angle_to, c, phi)``, as the reference documentation defines this
@@ -956,15 +985,97 @@ class AnisotropicStrengthFunction(StrengthModel):
 
 
 # ----------------------------------------------------------------------
+#: v0.1.225 (D218) -- what the analysis says about a Generalized Anisotropic
+#: material that links an anisotropic surface. One text for the rule and the
+#: dialog, like ``ANISOTROPIC_FUNCTION_LEGACY_NOTE``.
+GENERALIZED_SURFACE_NOTE = (
+    "The Generalized Anisotropic material {name!r} links an anisotropic "
+    "surface. Its angle ranges are ABSOLUTE slice base inclinations, measured "
+    "from the horizontal, as the reference defines this input; until 0.1.225 "
+    "OGR subtracted the surface's bedding from the base angle first, so the "
+    "same ranges would now select other rules. Open the material, review the "
+    "ranges as absolute inclinations and accept it: the link is removed.")
+
+
+class _AskedByChildren:
+    """A ``NEEDS_*`` flag a composite model answers for its children.
+
+    v0.1.225 (D218) -- on an INSTANCE it is true when any child that can be
+    built reads the field, so the slicer and the support code measure it
+    for a child that needs it. On the CLASS it is False, like any model
+    that does not read the field by itself: a plain property would hand the
+    class a property object, which is truthy, and the registry would then
+    count the composite among the models that switch the expensive field on
+    (``test_undrained_depth_v1120``).
+    """
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+    def __get__(self, obj, objtype=None) -> bool:
+        if obj is None:
+            return False
+        return any(getattr(m, self.name, False) for m in obj._children())
+
+
+class IncompleteGeneralizedAnisotropic(ValueError):
+    """A Generalized Anisotropic model asked for an angle that no rule
+    covers, or whose rule holds a model that cannot be built (v0.1.225,
+    D218). The analysis refuses such a model before it starts
+    (``ogr_core.project.rules.generalized_anisotropic_rules_refusal``);
+    this is what a caller that gets past the refusal meets, instead of the
+    strength of ZERO the model used to return in silence."""
+
+
 @register
 class GeneralizedAnisotropic(StrengthModel):
-    """Generalized Anisotropic strength — assign ANY base strength
-    model to ranges of slice base orientation. A composite of
-    (angle_min, angle_max, sub_model) rules; the first matching rule's
-    model is used.
+    """Generalized Anisotropic strength -- any registered strength model
+    assigned to a RANGE of slice base inclination.
 
-    Stored as a list of rules; each rule references another registered
-    model by its dict form. Needs context → ``needs_context = True``.
+    Stored as ``rules``, a list of ``{angle_min, angle_max, model}`` where
+    ``model`` is another registered model in its dict form. The reference
+    documents this input ("Angle Range") as angle ranges ordered counter-
+    clockwise from -90 to +90, each range starting where the previous one
+    ends, "and assign a material to each range".
+
+    v0.1.225 (D218) -- five decisions, each with its reason:
+
+    * The ranges are ABSOLUTE inclinations of the slice base, measured
+      counter-clockwise from the horizontal and folded into (-90, 90]
+      (:func:`fold_plane_angle_deg`): the reference's tutorial for this
+      model says it in so many words ("Angles in the dialog are measured
+      from horizontal, so 90 degrees represents vertical") and models a
+      sub-horizontal bedding by giving it the band -10 to 10. Until this
+      version OGR subtracted the local bedding of a linked anisotropic
+      surface first (v0.1.126), which no source supports and which put the
+      model in a different frame from the Anisotropic Strength Function
+      whose ranges the reference describes in the same words (D195). In
+      the reference an anisotropic surface belongs to the other input of
+      this model, "Angle or Surface", which OGR does not implement; a
+      material that still links one is refused
+      (``GENERALIZED_SURFACE_NOTE``).
+    * The angle is folded ALWAYS. It used to be folded only when a bedding
+      was subtracted, so a support, which reads the model at the angle of
+      its axis (``atan2``, in (-180, 180]), found no rule at 165 degrees and
+      got a strength of zero.
+    * The first rule that holds the angle wins, and a limit belongs to the
+      lower range, within 1e-9 degree as in
+      :class:`AnisotropicStrengthFunction` (the angle arrives in radians).
+      What a valid set of rules is -- contiguous from -90 to +90, every
+      model buildable -- lives in ``ogr_core.project.rules``; the model
+      computes with what it is given, and an angle no rule holds, or a
+      model that cannot be built, RAISES
+      :class:`IncompleteGeneralizedAnisotropic`. Returning zero was a
+      strength nobody entered, which looked like a result (D56, D94).
+    * Each rule's model is built once and kept while its dict is unchanged
+      (it used to be rebuilt from its dict on every call).
+    * The child receives the slice context unchanged, and the model asks
+      for the fields its children read (``NEEDS_LAYER_TOP``,
+      ``NEEDS_SLOPE_DISTANCE``): a child that measures cu from the slope
+      used to get no distance and fall back without a word. Water, weight
+      and every other property are the parent material's.
+
+    Needs the slice base angle → ``needs_context = True``.
     """
 
     MODEL_ID = "generalized_anisotropic"
@@ -976,52 +1087,85 @@ class GeneralizedAnisotropic(StrengthModel):
         super().__init__(**params)
         # rules: list of dicts {angle_min, angle_max, model: <dict>}
         self.rules = rules or []
+        # rule index -> (the dict the model was built from, a copy of it,
+        # the model or the exception building it raised).
+        self._built: dict = {}
 
     @property
     def needs_context(self) -> bool:
         return True
 
-    def _model_for_angle(self, angle_deg: float):
-        from .strength_model import StrengthModel as _SM
-        for rule in self.rules:
-            amin = rule.get("angle_min", -90.0)
-            amax = rule.get("angle_max", 90.0)
-            if amin <= angle_deg <= amax:
-                mdict = rule.get("model")
-                if mdict:
-                    try:
-                        return _SM.from_dict(mdict)
-                    except Exception:  # noqa: BLE001
-                        return None
-        return None
+    # ------------------------------------------------------------------
+    def _rule_model(self, i: int, rule):
+        """The model of rule ``i``, built once per content of its dict.
 
+        Kept against a COPY of the dict and compared by value, so a dict
+        edited in place is rebuilt rather than served stale. Raises
+        :class:`IncompleteGeneralizedAnisotropic` when it cannot be built.
+        """
+        import copy
+
+        from .strength_model import StrengthModel as _SM
+
+        mdict = rule.get("model") if isinstance(rule, dict) else None
+        cached = self._built.get(i)
+        if cached is None or cached[0] is not mdict or cached[1] != mdict:
+            if not mdict:
+                built = IncompleteGeneralizedAnisotropic(
+                    f"rule {i + 1} has no model")
+            else:
+                try:
+                    built = _SM.from_dict(mdict)
+                except Exception as exc:  # noqa: BLE001 - reported below
+                    built = IncompleteGeneralizedAnisotropic(
+                        f"the model of rule {i + 1} cannot be built: "
+                        f"{type(exc).__name__}: {exc}")
+            cached = (mdict, copy.deepcopy(mdict), built)
+            self._built[i] = cached
+        if isinstance(cached[2], Exception):
+            raise cached[2]
+        return cached[2]
+
+    def _model_for_angle(self, angle_deg: float):
+        a = fold_plane_angle_deg(angle_deg)
+        for i, rule in enumerate(self.rules):
+            if not isinstance(rule, dict):
+                raise IncompleteGeneralizedAnisotropic(
+                    f"rule {i + 1} is not a rule: {rule!r}")
+            try:
+                amin = float(rule.get("angle_min", -90.0))
+                amax = float(rule.get("angle_max", 90.0))
+            except (TypeError, ValueError):
+                raise IncompleteGeneralizedAnisotropic(
+                    f"the angles of rule {i + 1} are not numbers") from None
+            if amin <= a <= amax + 1e-9:
+                return self._rule_model(i, rule)
+        raise IncompleteGeneralizedAnisotropic(
+            f"no rule holds a slice base at {a:g} degrees")
+
+    def _children(self):
+        """The models of the rules that can be built."""
+        out = []
+        for i, rule in enumerate(self.rules):
+            try:
+                out.append(self._rule_model(i, rule))
+            except IncompleteGeneralizedAnisotropic:
+                continue
+        return out
+
+    NEEDS_LAYER_TOP = _AskedByChildren("NEEDS_LAYER_TOP")
+    NEEDS_SLOPE_DISTANCE = _AskedByChildren("NEEDS_SLOPE_DISTANCE")
+
+    # ------------------------------------------------------------------
     def shear_strength(self, sigma_n_eff: float) -> float:
-        # No context → use the first rule's model, or zero
-        if self.rules:
-            m = self._model_for_angle(0.0)
-            if m is not None:
-                return m.shear_strength(sigma_n_eff)
-        return 0.0
+        # No context: the rule that holds a horizontal base.
+        return self._model_for_angle(0.0).shear_strength(sigma_n_eff)
 
     def shear_strength_ctx(self, sigma_n_eff, ctx: SliceContext | None = None):
-        angle = math.degrees(ctx.base_angle_rad) if ctx else 0.0
-        # v0.1.126 — the rule bands are angles RELATIVE TO THE BEDDING.
-        # With no anisotropic surface the bedding is horizontal and the
-        # base angle already is that relative angle, which is why this
-        # model never carried a bedding parameter; with one, the local
-        # orientation has to be subtracted first. Folded back into
-        # (-90, 90] because a bedding direction has no sense, and the
-        # bands are written on that interval.
-        bed = _local_bedding_deg(self, ctx)
-        if bed:
-            angle -= bed
-            while angle > 90.0:
-                angle -= 180.0
-            while angle <= -90.0:
-                angle += 180.0
+        angle = math.degrees(ctx.base_angle_rad) if ctx is not None else 0.0
+        # v0.1.225 (D218) -- the ABSOLUTE base inclination; no bedding is
+        # subtracted. See the class docstring.
         m = self._model_for_angle(angle)
-        if m is None:
-            return 0.0
         if getattr(m, "needs_context", False):
             return m.shear_strength_ctx(sigma_n_eff, ctx)
         return m.shear_strength(sigma_n_eff)

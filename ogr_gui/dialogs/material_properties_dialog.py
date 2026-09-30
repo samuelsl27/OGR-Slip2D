@@ -47,15 +47,13 @@ from .drawdown_strength_dialog import DrawdownStrengthDialog, envelope_summary
 
 
 # ----------------------------------------------------------------------
-#: The strength models that can read an anisotropic surface. Named here
-#: rather than probed for a parameter, because Generalized Anisotropic has
-#: no ``bedding_angle`` of its own — its rule bands ARE the angles — and a
-#: probe would have left it out.
-_ANISOTROPIC_MODEL_IDS = frozenset({
-    "anisotropic_linear",
-    "snowden_anisotropic_linear",
-    "generalized_anisotropic",
-})
+#: The strength models that can read an anisotropic surface. v0.1.225
+#: (D218) — the rule lives in ``ogr_core.project.rules`` so the API asks the
+#: same one; Generalized Anisotropic left it that version, because its
+#: ranges are absolute slice base inclinations.
+from ogr_core.project.rules import (  # noqa: E402
+    SURFACE_READING_MODEL_IDS as _ANISOTROPIC_MODEL_IDS,
+)
 
 
 def _exact_text(value: float) -> str:
@@ -496,6 +494,13 @@ class MaterialPropertiesDialog(QDialog):
         # preserves each material's ``id`` (region assignments key off it)
         # and any attribute set outside the dataclass, such as ``b_bar``.
         self.materials = [copy.deepcopy(m) for m in materials]
+        # v0.1.225 (D218) — each material's strength as it came in, so OK
+        # judges only the strengths this session changed: a material whose
+        # model the dialog cannot edit (Generalized Anisotropic rules), and
+        # that was merely looked at, must not block accepting other edits.
+        # The analysis still refuses it.
+        self._strength_on_entry = {
+            m.id: self._strength_state(m) for m in self.materials}
         self._current_row = -1
         self._units_obj = units_obj  # ogr_core.project.units.Units
 
@@ -633,9 +638,10 @@ class MaterialPropertiesDialog(QDialog):
         str_layout.addWidget(self.param_panel)
 
         # v0.1.126 — which anisotropic surface orients this material's
-        # bedding. Shown ONLY for the three models that read it: offering
-        # it beside Mohr-Coulomb would be a control that decides nothing,
-        # which this project counts as worse than not having one.
+        # bedding. Shown ONLY for the models that read it (two since
+        # v0.1.225): offering it beside Mohr-Coulomb would be a control that
+        # decides nothing, which this project counts as worse than not
+        # having one.
         self._aniso_row = QWidget()
         _aniso_lay = QHBoxLayout(self._aniso_row)
         _aniso_lay.setContentsMargins(0, 0, 0, 0)
@@ -1024,11 +1030,24 @@ class MaterialPropertiesDialog(QDialog):
             elif hasattr(m.strength, "points"):
                 params_with_pts["points"] = list(m.strength.points)
                 self.param_panel.set_model(type(m.strength), params_with_pts)
-        self._show_strength_problem(
-            tr("This table was saved as interpolated points by a version "
-               "before 0.1.218. Each row is now a range (angle to, c, φ), "
-               "as the reference documents this strength type: review it "
-               "before accepting.") if legacy is not None else "")
+        problem = ""
+        if legacy is not None:
+            problem = tr(
+                "This table was saved as interpolated points by a version "
+                "before 0.1.218. Each row is now a range (angle to, c, φ), "
+                "as the reference documents this strength type: review it "
+                "before accepting.")
+        elif getattr(m.strength, "MODEL_ID", None) == \
+                "generalized_anisotropic" and m.anisotropic_surface_id:
+            # v0.1.225 (D218) — ``rules.material_surface_refusal``: the
+            # analysis refuses the link until the material is stored here.
+            problem = tr(
+                "This material links an anisotropic surface. Since 0.1.225 "
+                "its ranges are absolute slice base inclinations, measured "
+                "from the horizontal, as the reference defines them; before, "
+                "the surface's bedding was subtracted first. Accepting keeps "
+                "the ranges and removes the link.")
+        self._show_strength_problem(problem)
 
         # v0.1.126 — the anisotropic surface, restored before the pore
         # pressure so it sits with the strength it belongs to. An id that
@@ -1086,7 +1105,9 @@ class MaterialPropertiesDialog(QDialog):
         # v0.1.15 — strength models added to complete the catalogue
         "barton_bandis":        "τ = σ′ₙ · tan(φ_r + JRC·log₁₀(JCS/σ′ₙ))",
         "drained_undrained":    "τ = min(c′+σ′ₙ·tanφ′,  c′+σ_t·tanφ′)",
-        "anisotropic_linear":   "(c, φ) vary linearly with angle to bedding",
+        # v0.1.225 (D216) — the TANGENT of φ is interpolated.
+        "anisotropic_linear":   "c and tan φ vary linearly with angle to "
+                                "bedding",
         "shear_normal_function":"τ = f(σ′ₙ)  (piecewise-linear table)",
         "discrete_function":    "τ = f(σ′ₙ)  (step function table)",
         # v0.1.218 (D207) — A is added, as the published formula writes it;
@@ -1095,8 +1116,10 @@ class MaterialPropertiesDialog(QDialog):
         # v0.1.218 (D209) — constant within each range of base angle.
         "anisotropic_strength_function":
                                 "(c, φ) per range of base angle, −90° to +90°",
+        # v0.1.225 (D218) — absolute ranges, −90° to +90°.
         "generalized_anisotropic":
-                                "model assigned per base-angle range",
+                                "model assigned per range of base angle, "
+                                "−90° to +90°",
         "snowden_anisotropic_linear":
                                 "(c, φ) vary by cosine with angle to bedding",
         # v0.1.120 — undrained strength varying linearly with depth
@@ -1235,7 +1258,16 @@ class MaterialPropertiesDialog(QDialog):
 
         mid = self.cbo_strength.currentData()
         cls = REGISTRY.get(mid)
-        m.strength = cls(**self.param_panel.get_params())
+        params = self.param_panel.get_params()
+        # v0.1.225 (D218) — the rules of a Generalized Anisotropic material
+        # have no editor here, so they are carried over rather than rebuilt:
+        # rebuilding them from the (empty) editors left ``rules = []``, and
+        # the model then answered a strength of zero at every base, just
+        # because the material had been shown and OK pressed.
+        if mid == "generalized_anisotropic" and \
+                getattr(m.strength, "MODEL_ID", None) == mid:
+            params["rules"] = list(m.strength.rules)
+        m.strength = cls(**params)
         # Only the models that read it keep it. Switching a material away
         # from an anisotropic model has to CLEAR the link, or a strength
         # nobody can see would still be pointing at a polyline.
@@ -1289,11 +1321,44 @@ class MaterialPropertiesDialog(QDialog):
             "one before.",
         "anisotropic_table_end":
             "The last range must end at +90°.",
+        # v0.1.225 (D218) — ``rules.generalized_anisotropic_rules_refusal``.
+        # This dialog has no editor for the rules yet; they come from the
+        # API, a script or a file, so the first message says where.
+        "generalized_rules_empty":
+            "A Generalized Anisotropic material needs its ranges, from −90° "
+            "to +90°, each with a strength model; this version defines them "
+            "through the API or a script.",
+        "generalized_rules_not_rules":
+            "Every rule must be a range of angles with a strength model.",
+        "generalized_rules_angles":
+            "Each range must go from a lower to a higher angle, between "
+            "−90° and +90°.",
+        "generalized_rules_start":
+            "The first range must start at −90°.",
+        "generalized_rules_order":
+            "Each range must start where the previous one ends: no gaps and "
+            "no overlaps.",
+        "generalized_rules_end":
+            "The last range must end at +90°.",
+        "generalized_rules_model":
+            "Every range needs a strength model that can be built.",
+        # v0.1.225 (D216) — ``rules.anisotropic_linear_refusal``.
+        "anisotropic_linear_ab":
+            "A and B must satisfy 0° ≤ A ≤ B.",
     }
 
     def _show_strength_problem(self, text: str) -> None:
         self.lbl_strength_problem.setText(text)
         self.lbl_strength_problem.setVisible(bool(text))
+
+    @staticmethod
+    def _strength_state(m) -> object:
+        """What a material's strength holds, comparable by value."""
+        strength = getattr(m, "strength", None)
+        try:
+            return strength.to_dict()
+        except Exception:  # noqa: BLE001 - then it always counts as changed
+            return None
 
     def _ok(self) -> None:
         # v0.1.218 (D209) — a table of ranges that is not one is refused
@@ -1308,6 +1373,11 @@ class MaterialPropertiesDialog(QDialog):
         self._store(self._current_row)
         from ogr_core.project.rules import strength_model_refusal
         for row, m in enumerate(self.materials):
+            # v0.1.225 (D218) — only a strength this session changed (or a
+            # new material) is judged here; see ``_strength_on_entry``.
+            entry = self._strength_on_entry.get(m.id)
+            if entry is not None and entry == self._strength_state(m):
+                continue
             why = strength_model_refusal(m.strength, m.name)
             # A table still held as points was not shown or not touched:
             # it stays as it was and the analysis says why it refuses it.

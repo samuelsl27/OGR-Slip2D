@@ -238,10 +238,17 @@ def check_analysis_settings(project) -> list[str]:
     # Anisotropic Strength Function saved as interpolated points before
     # v0.1.218, whose rows would now be read as ranges, or a table of ranges
     # that is not one. The rule lives in ``ogr_core.project.rules``.
-    from ogr_core.project.rules import strength_model_refusal
+    # v0.1.225 (D218) — and a Generalized Anisotropic material that still
+    # links an anisotropic surface, whose ranges would now be read in
+    # another frame.
+    from ogr_core.project.rules import (material_surface_refusal,
+                                        strength_model_refusal)
     for _mat in project.materials:
         _why = strength_model_refusal(getattr(_mat, "strength", None),
                                       getattr(_mat, "name", None))
+        if _why is not None:
+            problems.append(_why.message)
+        _why = material_surface_refusal(_mat)
         if _why is not None:
             problems.append(_why.message)
 

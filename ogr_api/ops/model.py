@@ -545,6 +545,18 @@ def _apply_material_fields(project, m, fields: dict, *, creating: bool
             for b in project.boundaries):
         raise InvalidArgument("anisotropic_surface_id is not an "
                               "anisotropic surface of this model.")
+    # v0.1.225 (D218) — the dialog's rule, moved: only the models that read
+    # a surface may link one; anything else would be a setting that decides
+    # nothing (and Generalized Anisotropic reads absolute inclinations).
+    from ogr_core.project.rules import (SURFACE_READING_MODEL_IDS,
+                                        reads_anisotropic_surface)
+    if m.anisotropic_surface_id and "anisotropic_surface_id" in fields \
+            and not reads_anisotropic_surface(m.strength):
+        raise Conflict(
+            f"anisotropic_surface_id is read only by "
+            f"{sorted(SURFACE_READING_MODEL_IDS)}; this material uses "
+            f"{getattr(m.strength, 'MODEL_ID', '?')!r}.",
+            hint="Leave anisotropic_surface_id out (or null).")
     return notes
 
 
@@ -597,10 +609,23 @@ def material_set(ws, project_id: Optional[str] = None,
                        == name.strip().lower() for o in project.materials):
                     raise Conflict(f"Another material is named {name!r}.")
                 fields["name"] = name
+            cleared = []
             if strength is not None:
                 m.strength = strength_from_spec(strength)
+                # v0.1.225 (D218) — what the dialog does when a material
+                # leaves a model that reads a surface: the link goes, since
+                # nothing would read it.
+                from ogr_core.project.rules import reads_anisotropic_surface
+                if (m.anisotropic_surface_id
+                        and "anisotropic_surface_id" not in fields
+                        and not reads_anisotropic_surface(m.strength)):
+                    m.anisotropic_surface_id = None
+                    cleared.append(
+                        "anisotropic_surface_id was cleared: the new "
+                        "strength model does not read an anisotropic "
+                        "surface.")
             notes = _apply_material_fields(project, m, fields,
-                                           creating=False)
+                                           creating=False) + cleared
             project._notify("material_modified")
         return {"material": material_info(m), "created": created,
                 "notes": notes}

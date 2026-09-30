@@ -2184,6 +2184,43 @@ _DICTS: dict[str, dict[str, str]] = {
         "The last range must end at +90°.":
             "El último tramo tiene que terminar en +90°.",
 
+        # --- v0.1.225 · D218 y D216: Generalized Anisotropic y A, B -----
+        "A Generalized Anisotropic material needs its ranges, from −90° "
+        "to +90°, each with a strength model; this version defines them "
+        "through the API or a script.":
+            "Un material Generalized Anisotropic necesita sus tramos, de "
+            "−90° a +90°, cada uno con su modelo de resistencia; en esta "
+            "versión se definen por la API o por un script.",
+        "Every rule must be a range of angles with a strength model.":
+            "Cada regla tiene que ser un tramo de ángulos con un modelo de "
+            "resistencia.",
+        "Each range must go from a lower to a higher angle, between "
+        "−90° and +90°.":
+            "Cada tramo tiene que ir de un ángulo menor a otro mayor, entre "
+            "−90° y +90°.",
+        "The first range must start at −90°.":
+            "El primer tramo tiene que empezar en −90°.",
+        "Each range must start where the previous one ends: no gaps and "
+        "no overlaps.":
+            "Cada tramo tiene que empezar donde acaba el anterior: sin "
+            "huecos ni solapes.",
+        "Every range needs a strength model that can be built.":
+            "Cada tramo necesita un modelo de resistencia que se pueda "
+            "construir.",
+        "A and B must satisfy 0° ≤ A ≤ B.":
+            "A y B tienen que cumplir 0° ≤ A ≤ B.",
+        "This material links an anisotropic surface. Since 0.1.225 "
+        "its ranges are absolute slice base inclinations, measured "
+        "from the horizontal, as the reference defines them; before, "
+        "the surface's bedding was subtracted first. Accepting keeps "
+        "the ranges and removes the link.":
+            "Este material enlaza una superficie anisótropa. Desde la "
+            "0.1.225 sus tramos son inclinaciones absolutas de la base de "
+            "la dovela, medidas desde la horizontal, como los define la "
+            "referencia; antes se restaba primero el buzamiento de la "
+            "superficie. Al aceptar se conservan los tramos y se quita el "
+            "enlace.",
+
         # --- v0.1.219 · D206: el sismo, sólo sobre el suelo -------------
         "<b>Pseudo-static seismic load.</b><br>"
         "Applied to every slice as a body force proportional to the "

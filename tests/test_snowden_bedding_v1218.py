@@ -149,18 +149,39 @@ class TestWhatMustNotMove:
 
 class TestNestedInGeneralizedAnisotropic:
     """The Generalized Anisotropic model hands its context to a sub-model
-    that needs one, so a Snowden rule reads the local bedding as well: one
-    rule over every angle is the Snowden material itself, surface
-    included. A behaviour change of v0.1.218 for that combination."""
+    that needs one, so a Snowden rule reads the bedding the context
+    carries: one rule over every angle is the Snowden model itself.
+
+    v0.1.225 (D218) -- changed on purpose. These two cases linked an
+    anisotropic surface to the GENERALIZED material and compared factors of
+    safety. Since v0.1.225 its ranges are absolute slice base inclinations,
+    as the reference defines them, and a Generalized material that links a
+    surface is refused before any analysis
+    (``rules.material_surface_refusal``); so the pass-through is pinned
+    where it lives, on the model and the context it is handed."""
+
+    def _pair(self):
+        from ogr_core.materials.strength_model import SliceContext
+        snow = SnowdenModifiedAnisotropicLinear(bedding_angle=0.0, **SNOWDEN)
+        nested = GeneralizedAnisotropic(rules=[{
+            "angle_min": -90.0, "angle_max": 90.0,
+            "model": snow.to_dict()}])
+
+        def ctx(angle, bedding):
+            return SliceContext(base_angle_rad=math.radians(angle),
+                                bedding_angle_deg=bedding)
+        return snow, nested, ctx
 
     def test_one_rule_over_every_angle_is_the_model_itself(self):
-        surf = _straight(25.0)
-        a = _fos(_slope(bedding_angle=0.0, surface=surf, nested=True))
-        b = _fos(_slope(bedding_angle=0.0, surface=surf))
-        assert math.isclose(a, b, rel_tol=1e-12), (a, b)
+        snow, nested, ctx = self._pair()
+        for angle in (-60.0, -10.0, 0.0, 12.0, 40.0, 85.0):
+            for bedding in (None, 25.0):
+                c = ctx(angle, bedding)
+                assert nested.shear_strength_ctx(80.0, c) == \
+                    snow.shear_strength_ctx(80.0, c), (angle, bedding)
 
-    def test_and_the_surface_moves_it(self):
-        a = _fos(_slope(bedding_angle=0.0, surface=_straight(25.0),
-                        nested=True))
-        b = _fos(_slope(bedding_angle=0.0, nested=True))
+    def test_and_the_bedding_it_carries_moves_it(self):
+        snow, nested, ctx = self._pair()
+        a = nested.shear_strength_ctx(80.0, ctx(12.0, 25.0))
+        b = nested.shear_strength_ctx(80.0, ctx(12.0, None))
         assert abs(a - b) > 1e-3 * b, (a, b)

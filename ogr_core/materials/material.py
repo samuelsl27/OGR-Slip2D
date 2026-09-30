@@ -162,12 +162,14 @@ class Material:
     use_grid: bool = True
     # v0.1.126 — boundary id of the ANISOTROPIC SURFACE that orients this
     # material's bedding, or None for the single global angle its strength
-    # model already carries. Only the three anisotropic models read it
-    # (Anisotropic Linear, Snowden Modified, Generalized Anisotropic); for
-    # anything else it is inert, and that is deliberate rather than an
+    # model already carries. Only the models of
+    # ``ogr_core.project.rules.SURFACE_READING_MODEL_IDS`` read it
+    # (Anisotropic Linear and Snowden Modified; Generalized Anisotropic did
+    # until v0.1.225, when its ranges became absolute inclinations, D218);
+    # for anything else it is inert, and that is deliberate rather than an
     # oversight: assigning a fold direction to a Mohr-Coulomb material
-    # would be a setting that decides nothing, and the dialog does not
-    # offer it.
+    # would be a setting that decides nothing, and neither the dialog nor
+    # the API offers it.
     #
     # It lives on the MATERIAL and not on the boundary because the link
     # runs that way: several materials may read the same surface, and the
