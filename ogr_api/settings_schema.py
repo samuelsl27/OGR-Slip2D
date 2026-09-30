@@ -169,9 +169,11 @@ VIRTUAL = {
         "mutually exclusive; this key sets exactly one (or none)."),
 }
 
-_DESIGN_FACTORS = ("factor_permanent", "factor_variable", "factor_cohesion",
-                   "factor_friction", "factor_unit_weight",
-                   "factor_resistance")
+# v0.1.225 (D224) — the list the settings class keeps, so a factor added
+# there (cu and the other models' shear strength, that version) reaches the
+# API, its bounds and its preset handling without being typed again.
+from ogr_core.project.settings import DesignStandardSettings as _DSS  # noqa: E402
+_DESIGN_FACTORS = _DSS.FACTOR_FIELDS
 
 #: Numeric bounds that follow from what the quantity IS, not from taste.
 #: The design-factor range is the one the interface's spin boxes enforce.

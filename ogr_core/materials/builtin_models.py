@@ -28,7 +28,76 @@ import math
 from typing import ClassVar
 
 from .registry import register
-from .strength_model import SliceContext, StrengthModel
+from .strength_model import (FactoredStrength, MaterialFactors, SliceContext,
+                             StrengthModel, tan_factored_angle)
+
+
+# ----------------------------------------------------------------------
+# v0.1.225 (D224) -- design-standard partial factors, by category.
+#
+# Each model says in ``design_factored`` which category of partial factor
+# its parameters are (``MaterialFactors``): c′ and tan φ′ (Mohr-Coulomb and
+# the models written with them), cu (the undrained ones, whatever gives
+# them their cu), or the shear strength τ as a whole (every other envelope,
+# the reference documentation's "Shear strength (other models)"). With all
+# four factors equal to γ every model's strength is divided by γ exactly,
+# at every σ'ₙ, which is the strength reduction the limit-equilibrium
+# factor of safety is defined by (Frank et al. 2004, §11.5).
+def _factor_params(model, factors_by_param: dict, tangents: dict,
+                   category: str) -> FactoredStrength:
+    """Divide ``model.params[k]`` by ``factors_by_param[k]``, and the
+    TANGENT of each angle ``tangents[k]`` by its factor. A factor of 1
+    leaves the value untouched, bit for bit."""
+    new, changes = {}, {}
+    for k, f in factors_by_param.items():
+        if f != 1.0:
+            v = model.params[k]
+            new[k] = v / f
+            changes[k] = (v, new[k])
+    for k, f in tangents.items():
+        if f != 1.0:
+            v = model.params[k]
+            new[k] = tan_factored_angle(v, f)
+            changes[k] = (v, new[k])
+    out = model._with_params(**new) if new else model
+    return FactoredStrength(out, changes, category)
+
+
+class _DesignDivisor:
+    """Category "τ" for an envelope its own parameters cannot scale.
+
+    v0.1.225 (D224) -- τ/γ is not a Hoek-Brown or a Barton-Bandis envelope
+    of any other parameters (σci/γ, for one, changes the curvature), so
+    these models carry a divisor of their shear strength instead. Only the
+    analysis copy made by ``ogr_core.project.design_factors`` sets it; it
+    travels in ``to_dict`` so a copy of that copy keeps it, and it is 1 --
+    bit for bit the model as before -- everywhere else. The tangent is taken
+    from ``shear_strength``, so it follows.
+    """
+
+    design_divisor: float = 1.0
+
+    def design_factored(self, factors: MaterialFactors) -> FactoredStrength:
+        if factors.shear == 1.0:
+            return FactoredStrength(self, {}, "τ")
+        import copy
+        out = copy.deepcopy(self)
+        out.design_divisor = self.design_divisor * factors.shear
+        return FactoredStrength(
+            out, {"shear strength divisor": (self.design_divisor,
+                                             out.design_divisor)}, "τ")
+
+    def to_dict(self) -> dict:
+        d = super().to_dict()
+        if self.design_divisor != 1.0:
+            d["design_divisor"] = self.design_divisor
+        return d
+
+    @classmethod
+    def from_dict(cls, data: dict):
+        m = cls(**data.get("params", {}))
+        m.design_divisor = float(data.get("design_divisor", 1.0))
+        return m
 
 
 # ----------------------------------------------------------------------
@@ -51,6 +120,11 @@ class MohrCoulomb(StrengthModel):
         phi_rad = math.radians(self.params["friction_angle"])
         return c + max(0.0, sigma_n_eff) * math.tan(phi_rad)
 
+    def design_factored(self, factors: MaterialFactors) -> FactoredStrength:
+        return _factor_params(self, {"cohesion": factors.cohesion},
+                              {"friction_angle": factors.tan_phi},
+                              "c′, tan φ′")
+
 
 # ----------------------------------------------------------------------
 @register
@@ -66,6 +140,10 @@ class Undrained(StrengthModel):
     def shear_strength(self, sigma_n_eff: float) -> float:
         return self.params["cohesion"]
 
+    def design_factored(self, factors: MaterialFactors) -> FactoredStrength:
+        return _factor_params(self, {"cohesion": factors.undrained}, {},
+                              "cu")
+
 
 # ----------------------------------------------------------------------
 @register
@@ -78,6 +156,10 @@ class InfiniteStrength(StrengthModel):
 
     def shear_strength(self, sigma_n_eff: float) -> float:
         return float("inf")
+
+    def design_factored(self, factors: MaterialFactors) -> FactoredStrength:
+        # Nothing to factor: a modelling device, not a strength.
+        return FactoredStrength(self, {}, "—")
 
 
 # ----------------------------------------------------------------------
@@ -92,10 +174,13 @@ class NoStrength(StrengthModel):
     def shear_strength(self, sigma_n_eff: float) -> float:
         return 0.0
 
+    def design_factored(self, factors: MaterialFactors) -> FactoredStrength:
+        return FactoredStrength(self, {}, "—")
+
 
 # ----------------------------------------------------------------------
 @register
-class GeneralizedHoekBrown(StrengthModel):
+class GeneralizedHoekBrown(_DesignDivisor, StrengthModel):
     """Generalized Hoek-Brown rock-mass failure criterion.
 
     Strength at a given σ'ₙ is obtained by solving the local tangent of
@@ -126,7 +211,8 @@ class GeneralizedHoekBrown(StrengthModel):
         h = 1.0 + a * mb * (arg ** (a - 1.0))
         # Instantaneous shear strength:
         tau = (sigma_n * (h - 1.0) * math.sqrt(h)) / (h + 1.0)
-        return max(0.0, tau)
+        # v0.1.225 (D224) -- 1 except on a design-factored copy.
+        return max(0.0, tau) / self.design_divisor
 
     def tangent_slope(self, sigma_n_eff: float) -> float:
         """v0.1.14 — analytical-style tangent at σ'ₙ.
@@ -195,7 +281,7 @@ class GeneralizedHoekBrown(StrengthModel):
 
 # ----------------------------------------------------------------------
 @register
-class HoekBrown(StrengthModel):
+class HoekBrown(_DesignDivisor, StrengthModel):
     """Classic Hoek-Brown rock-mass failure criterion (Hoek 1980).
 
     Principal-stress form:
@@ -237,7 +323,8 @@ class HoekBrown(StrengthModel):
         if h <= 0:
             return 0.0
         tau = (sigma_n * (h - 1.0) * math.sqrt(h)) / (h + 1.0)
-        return max(0.0, tau)
+        # v0.1.225 (D224) -- 1 except on a design-factored copy.
+        return max(0.0, tau) / self.design_divisor
 
     def tangent_slope(self, sigma_n_eff: float) -> float:
         """v0.1.14 — high-precision finite-difference tangent."""
@@ -328,6 +415,12 @@ class PowerCurve(StrengthModel):
             power_term = a * b * (base ** (b - 1.0))
         return max(0.0, power_term + math.tan(math.radians(W)))
 
+    def design_factored(self, factors: MaterialFactors) -> FactoredStrength:
+        # τ/γ exactly: c/γ + (a/γ)(σ'ₙ + d)^b + σ'ₙ·tan W/γ. Until v0.1.225
+        # only ``c`` was divided, because its name matched a list.
+        f = factors.shear
+        return _factor_params(self, {"c": f, "a": f}, {"waviness": f}, "τ")
+
 
 # ----------------------------------------------------------------------
 @register
@@ -377,6 +470,11 @@ class Hyperbolic(StrengthModel):
             return 0.0
         return (c_inf * c_inf * tan_phi0) / (denom * denom)
 
+    def design_factored(self, factors: MaterialFactors) -> FactoredStrength:
+        # τ/γ exactly: (c∞/γ)·σ'ₙ·(tan φ0/γ) / (c∞/γ + σ'ₙ·tan φ0/γ).
+        f = factors.shear
+        return _factor_params(self, {"c_inf": f}, {"phi_0": f}, "τ")
+
 
 # ----------------------------------------------------------------------
 @register
@@ -422,6 +520,11 @@ class VerticalStressRatio(StrengthModel):
         return max(self.params["K"] * max(ctx.sigma_v_eff, 0.0),
                    self.params["min_strength"])
 
+    def design_factored(self, factors: MaterialFactors) -> FactoredStrength:
+        # K·σ'v is an undrained strength ratio (su/σ'v), so its cu factor.
+        f = factors.undrained
+        return _factor_params(self, {"K": f, "min_strength": f}, {}, "cu")
+
 
 # ======================================================================
 # v0.1.15 — Additional strength models matching the reference's catalogue
@@ -429,7 +532,7 @@ class VerticalStressRatio(StrengthModel):
 
 # ----------------------------------------------------------------------
 @register
-class BartonBandis(StrengthModel):
+class BartonBandis(_DesignDivisor, StrengthModel):
     """Barton-Bandis criterion for rock joints / discontinuities.
 
         τ = σ'ₙ · tan( φr + JRC · log₁₀(JCS / σ'ₙ) )
@@ -463,7 +566,9 @@ class BartonBandis(StrengthModel):
         ratio = max(jcs / sigma_n, 1.0)  # log10 ≥ 0
         total_angle = phi_r + jrc * math.log10(ratio)
         total_angle = min(total_angle, cap)
-        return sigma_n * math.tan(math.radians(total_angle))
+        # v0.1.225 (D224) -- the divisor is 1 except on a design copy.
+        return sigma_n * math.tan(math.radians(total_angle)) \
+            / self.design_divisor
 
     def tangent_slope(self, sigma_n_eff: float) -> float:
         # Centred finite difference (envelope is strongly non-linear)
@@ -510,6 +615,11 @@ class DrainedUndrained(StrengthModel):
         if sigma_n_eff <= st:
             return math.tan(math.radians(self.params["phi"]))
         return 0.0  # capped → horizontal
+
+    def design_factored(self, factors: MaterialFactors) -> FactoredStrength:
+        # c' and tan φ'; the threshold is a stress, not a strength.
+        return _factor_params(self, {"cohesion": factors.cohesion},
+                              {"phi": factors.tan_phi}, "c′, tan φ′")
 
 
 # ----------------------------------------------------------------------
@@ -625,6 +735,13 @@ class AnisotropicLinear(StrengthModel):
         c, tan_phi = self._c_tan_phi(base_deg, _local_bedding_deg(self, ctx))
         return c + max(sigma_n_eff, 0.0) * tan_phi
 
+    def design_factored(self, factors: MaterialFactors) -> FactoredStrength:
+        # c and tan φ are interpolated linearly (D216), so dividing both
+        # ends divides the whole transition.
+        f_c, f_t = factors.cohesion, factors.tan_phi
+        return _factor_params(self, {"c1": f_c, "c2": f_c},
+                              {"phi1": f_t, "phi2": f_t}, "c′, tan φ′")
+
 
 # ----------------------------------------------------------------------
 @register
@@ -677,6 +794,9 @@ class ShearNormalFunction(StrengthModel):
                 return (t1 - t0) / (s1 - s0)
         return 0.0
 
+    def design_factored(self, factors: MaterialFactors) -> FactoredStrength:
+        return _factor_points(self, factors.shear)
+
     def to_dict(self) -> dict:
         d = super().to_dict()
         d["points"] = list(self.points)
@@ -685,6 +805,18 @@ class ShearNormalFunction(StrengthModel):
     @classmethod
     def from_dict(cls, data: dict) -> "ShearNormalFunction":
         return cls(points=data.get("points"), **data.get("params", {}))
+
+
+def _factor_points(model, f: float) -> FactoredStrength:
+    """Divide the τ of every (σ'ₙ, τ) point by ``f``: the table's own
+    interpolation (linear, or by steps) then divides τ everywhere."""
+    if f == 1.0:
+        return FactoredStrength(model, {}, "τ")
+    pts = [(s, t / f) for s, t in model.points]
+    changes = {f"point {i} τ": (t, t / f)
+               for i, (_s, t) in enumerate(model.points, start=1)}
+    return FactoredStrength(type(model)(points=pts, **model.params),
+                            changes, "τ")
 
 
 # ----------------------------------------------------------------------
@@ -722,6 +854,9 @@ class DiscreteFunction(StrengthModel):
             else:
                 break
         return val
+
+    def design_factored(self, factors: MaterialFactors) -> FactoredStrength:
+        return _factor_points(self, factors.shear)
 
     def to_dict(self) -> dict:
         d = super().to_dict()
@@ -812,6 +947,12 @@ class SHANSEP(StrengthModel):
             return self._su(sigma_n_eff)
         # v0.1.218 (D207) -- at σ'v ≤ 0 the formula at zero, not su(σ'ₙ).
         return self._su(max(ctx.sigma_v_eff, 0.0))
+
+    def design_factored(self, factors: MaterialFactors) -> FactoredStrength:
+        # su is a cu, whatever gives it: dividing A, S and su_min divides
+        # max(A + σ'v·S·OCR^m, su_min) exactly.
+        f = factors.undrained
+        return _factor_params(self, {"A": f, "S": f, "su_min": f}, {}, "cu")
 
 
 # ----------------------------------------------------------------------
@@ -968,6 +1109,28 @@ class AnisotropicStrengthFunction(StrengthModel):
         # belonged to Snowden's call, which v0.1.218 (D208) gave it.
         c, phi = self._c_phi(math.degrees(ctx.base_angle_rad))
         return c + max(sigma_n_eff, 0.0) * math.tan(math.radians(phi))
+
+    def design_factored(self, factors: MaterialFactors) -> FactoredStrength:
+        if self.legacy_points is not None:
+            return FactoredStrength(
+                self, {}, "c′, tan φ′",
+                note=("a table saved as points before 0.1.218 is refused by "
+                      "the analysis, so it was not factored"))
+        f_c, f_t = factors.cohesion, factors.tan_phi
+        rows, changes = [], {}
+        for i, (a, c, phi) in enumerate(self.rows, start=1):
+            c2 = c / f_c if f_c != 1.0 else c
+            phi2 = tan_factored_angle(phi, f_t) if f_t != 1.0 else phi
+            if c2 != c:
+                changes[f"row {i} c"] = (c, c2)
+            if phi2 != phi:
+                changes[f"row {i} phi"] = (phi, phi2)
+            rows.append((a, c2, phi2))
+        if not changes:
+            return FactoredStrength(self, {}, "c′, tan φ′")
+        return FactoredStrength(
+            AnisotropicStrengthFunction(rows=rows, **self.params), changes,
+            "c′, tan φ′")
 
     def to_dict(self) -> dict:
         d = super().to_dict()
@@ -1170,6 +1333,33 @@ class GeneralizedAnisotropic(StrengthModel):
             return m.shear_strength_ctx(sigma_n_eff, ctx)
         return m.shear_strength(sigma_n_eff)
 
+    def design_factored(self, factors: MaterialFactors) -> FactoredStrength:
+        """Each rule's model by its own category (v0.1.225, D224); the
+        reference documentation says the design factors apply to the
+        child materials."""
+        rules, changes, notes = [], {}, []
+        for i, rule in enumerate(self.rules):
+            try:
+                child = self._rule_model(i, rule)
+            except IncompleteGeneralizedAnisotropic:
+                notes.append(f"rule {i + 1}: its model cannot be built, so "
+                             f"it was not factored")
+                rules.append(rule)
+                continue
+            done = child.design_factored(factors)
+            new_rule = dict(rule)
+            if done.changes:
+                new_rule["model"] = done.model.to_dict()
+                for k, v in done.changes.items():
+                    changes[f"rule {i + 1} {k}"] = v
+            if done.note:
+                notes.append(f"rule {i + 1}: {done.note}")
+            rules.append(new_rule)
+        out = (GeneralizedAnisotropic(rules=rules, **self.params)
+               if changes else self)
+        return FactoredStrength(out, changes, "each rule by its own model",
+                                note="; ".join(notes) or None)
+
     def to_dict(self) -> dict:
         d = super().to_dict()
         d["rules"] = list(self.rules)
@@ -1245,6 +1435,17 @@ class SnowdenModifiedAnisotropicLinear(StrengthModel):
         c, phi = self._c_phi(math.degrees(ctx.base_angle_rad),
                              _local_bedding_deg(self, ctx))
         return c + max(sigma_n_eff, 0.0) * math.tan(math.radians(phi))
+
+    def design_factored(self, factors: MaterialFactors) -> FactoredStrength:
+        f_c, f_t = factors.cohesion, factors.tan_phi
+        done = _factor_params(self, {"c1": f_c, "c2": f_c},
+                              {"phi1": f_t, "phi2": f_t}, "c′, tan φ′")
+        if f_t != 1.0:
+            # The cosine transition interpolates the ANGLE: the two ends
+            # are exactly factored, the transition only nearly (D215).
+            done.note = ("its transition interpolates φ, so between its two "
+                         "ends tan φ is divided only approximately")
+        return done
 
 
 # ======================================================================
@@ -1347,6 +1548,15 @@ class _UndrainedLinearBase(StrengthModel):
 
     def tangent_slope(self, sigma_n_eff: float) -> float:
         return 0.0  # φ = 0: the envelope is horizontal in σ'ₙ
+
+    def design_factored(self, factors: MaterialFactors) -> FactoredStrength:
+        # The whole profile is a cu: the value at the reference, the rate
+        # and the cutoff are divided alike, so cu(z)/γ exactly. Until
+        # v0.1.225 only a parameter NAMED cohesion_top was, which left
+        # cu(z) = c_top/γ + Δc·z in two models and the datum one untouched.
+        f = factors.undrained
+        return _factor_params(self, {self._C_REF: f, "cohesion_change": f,
+                                     "cutoff": f}, {}, "cu")
 
     # ------------------------------------------------------------------
     def to_dict(self) -> dict:

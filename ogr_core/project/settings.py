@@ -910,15 +910,39 @@ class DesignStandardSettings:
     factor_friction: float = 1.0
     factor_unit_weight: float = 1.0
     factor_resistance: float = 1.0
+    # v0.1.225 (D224) — the two material categories the reference's
+    # design-standard dialog has beside c' and tan φ': the undrained
+    # strength cu, which EN 1997-1 (Annex A) factors apart (γcu = 1.4 in
+    # set M2, where γc' = 1.25), and "Shear strength (other models)", the
+    # divisor of the whole τ of every envelope that is neither c' + σ'·tan φ'
+    # nor a cu. See ``ogr_core.project.design_factors``.
+    factor_undrained: float = 1.0
+    factor_shear_strength: float = 1.0
 
-    # Named presets. Values follow the Eurocode 7 design approaches; the
-    # user can still pick "custom" and enter their own.
+    #: The factors, in the order of the tuples of ``PRESETS``: one list for
+    #: the presets, the API and the catalogue, so they cannot disagree.
+    FACTOR_FIELDS = ("factor_permanent", "factor_variable",
+                     "factor_cohesion", "factor_friction",
+                     "factor_unit_weight", "factor_resistance",
+                     "factor_undrained", "factor_shear_strength")
+
+    # Named presets. Values follow the Eurocode 7 design approaches
+    # (EN 1997-1, Annex A: A1/A2, M1/M2, R1/R2/R3); the user can still pick
+    # "custom" and enter their own. The last two columns, v0.1.225: γcu is
+    # 1.4 in M2; the "other models" shear-strength factor is NOT an EN 1997-1
+    # factor and is set to γφ' of the same set -- the strength reduction the
+    # limit-equilibrium factor of safety is defined by, applied to an
+    # envelope that cannot be split into c' and tan φ' (Frank et al. 2004,
+    # §11.5, divide c' and tan φ' by one factor). A decision, written here.
+    # The ACTION factors of DA3 are those of A1 (1.35, 1.5) where a slope
+    # takes A2 (1.0, 1.3), and the permanent one is not applied: D226,
+    # reported and not corrected in v0.1.225.
     PRESETS = {
-        "none": (1.0, 1.0, 1.0, 1.0, 1.0, 1.0),
-        "eurocode7_da1c1": (1.35, 1.5, 1.0, 1.0, 1.0, 1.0),
-        "eurocode7_da1c2": (1.0, 1.3, 1.25, 1.25, 1.0, 1.0),
-        "eurocode7_da2": (1.35, 1.5, 1.0, 1.0, 1.0, 1.1),
-        "eurocode7_da3": (1.35, 1.5, 1.25, 1.25, 1.0, 1.0),
+        "none": (1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0),
+        "eurocode7_da1c1": (1.35, 1.5, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0),
+        "eurocode7_da1c2": (1.0, 1.3, 1.25, 1.25, 1.0, 1.0, 1.4, 1.25),
+        "eurocode7_da2": (1.35, 1.5, 1.0, 1.0, 1.0, 1.1, 1.0, 1.0),
+        "eurocode7_da3": (1.35, 1.5, 1.25, 1.25, 1.0, 1.0, 1.4, 1.25),
     }
 
     def apply_preset(self, name: str) -> bool:
@@ -928,10 +952,35 @@ class DesignStandardSettings:
         self.standard = name
         if vals is None:
             return False
-        (self.factor_permanent, self.factor_variable, self.factor_cohesion,
-         self.factor_friction, self.factor_unit_weight,
-         self.factor_resistance) = vals
+        for attr, value in zip(self.FACTOR_FIELDS, vals):
+            setattr(self, attr, value)
         return True
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "DesignStandardSettings":
+        """Read a saved design standard.
+
+        v0.1.225 (D224) — a file written before this version has no
+        ``factor_undrained`` or ``factor_shear_strength``. For a named
+        standard both come from its preset (a Eurocode 7 file then gets
+        γcu = 1.4, which is what the standard asks). For ``custom`` the cu
+        factor takes the cohesion factor, which is what that file's cu was
+        divided by until now, and the other models' factor stays 1: a user's
+        own numbers are not guessed.
+        """
+        data = {k: v for k, v in (data or {}).items() if k != "PRESETS"}
+        out = cls(**data)
+        if "factor_undrained" not in data:
+            vals = cls.PRESETS.get(out.standard)
+            if vals is not None:
+                preset = dict(zip(cls.FACTOR_FIELDS, vals))
+                out.factor_undrained = preset["factor_undrained"]
+                if "factor_shear_strength" not in data:
+                    out.factor_shear_strength = \
+                        preset["factor_shear_strength"]
+            else:
+                out.factor_undrained = out.factor_cohesion
+        return out
 
 
 @dataclass
@@ -1412,10 +1461,8 @@ class ProjectSettings:
                 **data.get("back_analysis", {})),
             random_numbers=RandomNumberSettings(
                 **data.get("random_numbers", {})),
-            design_standard=DesignStandardSettings(
-                **{k: v for k, v in
-                   (data.get("design_standard") or {}).items()
-                   if k != "PRESETS"}),
+            design_standard=DesignStandardSettings.from_dict(
+                data.get("design_standard") or {}),
             advanced=AdvancedSettings.from_dict(data.get("advanced", {})),
             seismic=SeismicAnalysisSettings(**data.get("seismic", {})),
             summary=ProjectSummary(**data.get("summary", {})),

@@ -262,9 +262,11 @@ class TestRulesBetweenTwoSettings:
                            "design_standard.standard": "eurocode7_da1c2"})
             ds = ws.get(pid).project.settings.design_standard
             want = DesignStandardSettings.PRESETS["eurocode7_da1c2"]
-            assert (ds.factor_permanent, ds.factor_variable,
-                    ds.factor_cohesion, ds.factor_friction,
-                    ds.factor_unit_weight, ds.factor_resistance) == want
+            # v0.1.225 (D224) — changed on purpose: the presets gained the
+            # cu and "other models" factors, and the order of their tuples is
+            # ``FACTOR_FIELDS``, the one list the API also reads.
+            assert tuple(getattr(ds, f) for f in
+                         DesignStandardSettings.FACTOR_FIELDS) == want
         finally:
             ws.shutdown()
 

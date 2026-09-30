@@ -159,8 +159,7 @@ def catalog(kind: str, project=None):
         return list(SYSTEMS)
     if kind == "design_standards":
         from ogr_core.project.settings import DesignStandardSettings
-        keys = ("factor_permanent", "factor_variable", "factor_cohesion",
-                "factor_friction", "factor_unit_weight", "factor_resistance")
+        keys = DesignStandardSettings.FACTOR_FIELDS
         return ([{"id": name, "factors": dict(zip(keys, vals))}
                  for name, vals in DesignStandardSettings.PRESETS.items()]
                 + [{"id": "custom", "factors": None}])

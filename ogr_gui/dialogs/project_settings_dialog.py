@@ -1206,11 +1206,16 @@ class _DesignStandardPage(QWidget):
         form.addRow(tr("Design standard:"), self.cbo_std)
 
         self.factors = {}
+        # v0.1.225 (D224) — the four material categories of the reference
+        # (c', tan φ', cu and the shear strength of the other models), and
+        # the resistance factor, which divides all four.
         for attr, label in (
             ("factor_permanent", tr("Permanent actions:")),
             ("factor_variable", tr("Variable actions:")),
             ("factor_cohesion", tr("Cohesion:")),
             ("factor_friction", tr("tan(friction angle):")),
+            ("factor_undrained", tr("Undrained strength cu:")),
+            ("factor_shear_strength", tr("Shear strength (other models):")),
             ("factor_unit_weight", tr("Unit weight:")),
             ("factor_resistance", tr("Resistance:")),
         ):

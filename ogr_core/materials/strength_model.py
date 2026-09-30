@@ -14,8 +14,57 @@ Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 
+import math
 from abc import ABC, abstractmethod
-from typing import ClassVar
+from dataclasses import dataclass, field
+from typing import ClassVar, Optional
+
+
+# ----------------------------------------------------------------------
+@dataclass(frozen=True)
+class MaterialFactors:
+    """The divisors a design standard applies to a strength, by category.
+
+    v0.1.225 (D224) — the four categories of material partial factor of
+    the reference documentation's design-standard dialog ("Effective
+    cohesion c'", "Effective friction tan(phi)", "Undrained strength cu"
+    and "Shear strength (other models)"), each already multiplied by the
+    resistance factor, which divides the whole resisting side (Frank et al.
+    2004, §11.5: the over-design factor is F/(γG·γR;e)). Every model says
+    which category its parameters belong to in
+    :meth:`StrengthModel.design_factored`; there is no list of names.
+    """
+
+    cohesion: float = 1.0     # c′            (γc′·γR;e)
+    tan_phi: float = 1.0      # tan φ′        (γφ′·γR;e)
+    undrained: float = 1.0    # cu            (γcu·γR;e)
+    shear: float = 1.0        # τ, other models (γτ·γR;e)
+
+
+@dataclass
+class FactoredStrength:
+    """What :meth:`StrengthModel.design_factored` returns: the factored
+    model (a NEW object; the original is never touched), what changed
+    (``{name: (before, after)}``), the category or categories applied, and
+    a note when something could not be factored."""
+
+    model: "StrengthModel"
+    changes: dict = field(default_factory=dict)
+    category: str = ""
+    note: Optional[str] = None
+
+
+def tan_factored_angle(phi_deg: float, factor: float) -> float:
+    """An angle whose TANGENT is divided by ``factor``, in degrees.
+
+    Eurocode 7 factors tan φ′, not φ′ (EN 1997-1, Annex A): dividing 30° by
+    1.25 gives 24.0°, dividing tan 30° by 1.25 gives 24.79°. Clamped to
+    ±89.9° so a vertical input stays finite.
+    """
+    if factor <= 0:
+        return phi_deg
+    phi = max(-89.9, min(89.9, float(phi_deg)))
+    return math.degrees(math.atan(math.tan(math.radians(phi)) / factor))
 
 
 class StrengthModel(ABC):
@@ -115,6 +164,30 @@ class StrengthModel(ABC):
     from the slice base to the nearest point of the ground profile. The
     more expensive of the two: a point-to-polyline distance per slice,
     paid on every trial surface of a search."""
+
+    # ------------------------------------------------------------------
+    def design_factored(self, factors: MaterialFactors) -> FactoredStrength:
+        """This strength with a design standard's partial factors applied.
+
+        v0.1.225 (D224) — every built-in model overrides it and says which
+        category of :class:`MaterialFactors` its parameters are. A model
+        that does not (a plugin written later) is returned UNCHANGED, with
+        a note that says so: until this version the factors were applied to
+        parameters picked by NAME, and every model whose names did not match
+        was left unfactored without a word.
+        """
+        return FactoredStrength(
+            self, {}, "",
+            note=(f"{self.DISPLAY_NAME or self.MODEL_ID}: this strength model "
+                  f"declares no partial factor, so it was NOT factored."))
+
+    def _with_params(self, **new) -> "StrengthModel":
+        """A copy of this model with some parameters replaced; any state it
+        carries beside ``params`` (tables, rules, switches) is copied too."""
+        import copy
+        out = copy.deepcopy(self)
+        out.params.update({k: float(v) for k, v in new.items()})
+        return out
 
     # ------------------------------------------------------------------
     def to_dict(self) -> dict:

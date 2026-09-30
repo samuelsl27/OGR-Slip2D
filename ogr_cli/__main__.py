@@ -245,6 +245,11 @@ def compute(
                       f"{outcome.factor_report.summary()} — the reported "
                       f"value is an over-design factor, not a factor of "
                       f"safety, and must exceed 1")
+        # v0.1.225 (D224) — the report's notes too: what the standard asks
+        # for and was not applied. The interface and the API showed them;
+        # this printed the summary alone.
+        for note in getattr(outcome.factor_report, "notes", None) or []:
+            console.print(f"[yellow]  {note}[/yellow]")
 
     tbl = Table(title=f"{banner} — {len(outcome.results)} method(s)")
     tbl.add_column("Method", style="cyan")

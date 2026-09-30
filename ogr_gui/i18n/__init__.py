@@ -586,6 +586,10 @@ _DICTS: dict[str, dict[str, str]] = {
         'Unit weight:': 'Peso específico:',
         'Variable actions:': 'Acciones variables:',
         'tan(friction angle):': 'tan(ángulo de rozamiento):',
+        # v0.1.225 (D224): las dos categorías nuevas de coeficiente de material
+        'Undrained strength cu:': 'Resistencia sin drenaje cu:',
+        'Shear strength (other models):':
+            'Resistencia al corte (otros modelos):',
 
         # --- v0.1.51: data tips y diálogo de forzado ----------------
         'Capture tolerances': 'Tolerancias de captura',
