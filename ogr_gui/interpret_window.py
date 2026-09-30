@@ -391,12 +391,18 @@ def _reported_value(result, item, project=None):
         if metres is None:
             return "", ""
         value, unit = metres * 100.0, "cm"
-        try:
-            system = project.settings.units.unit_system()
-            value = system.to_user(metres, Quantity.SMALL_LENGTH)
-            unit = system.label_for(Quantity.SMALL_LENGTH)
-        except Exception:
-            pass
+        # v0.1.227 (D225) — ``get_system()``: this called ``unit_system()``,
+        # which ``Units`` has never had, and a bare ``except`` swallowed the
+        # AttributeError, so an imperial project read centimetres too. Only
+        # a conversion error falls back now; a misspelt name raises.
+        units = getattr(getattr(project, "settings", None), "units", None)
+        if units is not None:
+            try:
+                system = units.get_system()
+                value = system.to_user(metres, Quantity.SMALL_LENGTH)
+                unit = system.label_for(Quantity.SMALL_LENGTH)
+            except (ValueError, KeyError):
+                value, unit = metres * 100.0, "cm"
         return ("%.3f %s" % (value, unit),
                 tr("Ky:") + " %.4f" % details.get("ky", float("nan")))
     if kind == "ky":

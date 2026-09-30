@@ -366,15 +366,38 @@ class TestTheDialog:
         assert not dlg.lbl_strength_problem.isHidden()
         assert "0.1.218" in dlg.lbl_strength_problem.text()
 
-    def test_ok_refuses_a_table_that_is_not_ranges(self):
+    def test_ok_refuses_an_edited_table_that_is_not_ranges(self):
         """The old default points start at -90: as ranges the first one
-        would be empty, and OK says so instead of accepting."""
+        would be empty, and OK says so instead of accepting.
+
+        v0.1.227 (D217) — changed on purpose: the table is judged as ranges
+        once it has been EDITED. Shown and left alone, it is kept as the
+        points it was saved as (next case), and the analysis refuses it."""
+        from PySide6.QtWidgets import QTableWidgetItem
         from ogr_core.materials.strength_model import StrengthModel
         legacy = StrengthModel.from_dict({
             "model_id": "anisotropic_strength_function", "params": {},
             "points": [list(p) for p in OLD_DEFAULT_POINTS]})
         dlg = self._dialog(legacy)
+        dlg.param_panel._table.setItem(1, 1, QTableWidgetItem("6"))
         dlg._ok()
         assert dlg.accepted_calls == []
         assert "-90" in dlg.lbl_strength_problem.text() \
             or "−90" in dlg.lbl_strength_problem.text()
+
+    def test_a_table_left_alone_is_not_converted(self):
+        """v0.1.227 (D217, finding L) — looking is not reviewing: OK keeps
+        the points as they were saved, and the analysis still refuses
+        them, as D209 decided."""
+        from ogr_core.materials.strength_model import StrengthModel
+        from ogr_slip2d.analysis_runner import check_analysis_settings
+        legacy = StrengthModel.from_dict({
+            "model_id": "anisotropic_strength_function", "params": {},
+            "points": [list(p) for p in OLD_DEFAULT_POINTS]})
+        dlg = self._dialog(legacy)
+        dlg._ok()
+        assert dlg.accepted_calls == [True]
+        kept = dlg.result_materials()[0].strength
+        assert kept.legacy_points == [tuple(p) for p in OLD_DEFAULT_POINTS]
+        assert any("0.1.218" in s for s in
+                   check_analysis_settings(_project(kept)))

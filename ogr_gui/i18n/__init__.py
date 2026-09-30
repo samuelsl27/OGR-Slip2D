@@ -2225,6 +2225,36 @@ _DICTS: dict[str, dict[str, str]] = {
             "superficie. Al aceptar se conservan los tramos y se quita el "
             "enlace.",
 
+        # --- v0.1.227 · D217: tablas con unidades y filas que no son números
+        "Normal stress (%s)": "Tensión normal (%s)",
+        "Shear strength (%s)": "Resistencia al corte (%s)",
+        "Cohesion (%s)": "Cohesión (%s)",
+        "Friction angle (°)": "Ángulo de rozamiento (°)",
+        "Row %d of the table is not %d numbers.":
+            "La fila %d de la tabla no son %d números.",
+        "The table has no points: at least one (normal stress, shear "
+        "strength) point is needed.":
+            "La tabla no tiene puntos: hace falta al menos un punto (tensión "
+            "normal, resistencia al corte).",
+        "Every point must be two numbers: normal stress and shear "
+        "strength.":
+            "Cada punto tiene que ser dos números: tensión normal y "
+            "resistencia al corte.",
+        "The shear strength must be zero or more.":
+            "La resistencia al corte tiene que ser cero o mayor.",
+        "The normal stresses must increase from one row to the next.":
+            "Las tensiones normales tienen que crecer de una fila a la "
+            "siguiente.",
+        "Unsaturated shear strength angle. 0 means matric suction "
+        "does not contribute to strength (conservative default).":
+            "Ángulo de resistencia no saturada. Con 0 la succión matricial "
+            "no aporta resistencia (valor por defecto, conservador).",
+        "Air entry value: matric suction below which the saturated "
+        "friction angle still governs (bilinear envelope).":
+            "Valor de entrada de aire: succión matricial por debajo de la "
+            "cual sigue rigiendo el ángulo de rozamiento saturado "
+            "(envolvente bilineal).",
+
         # --- v0.1.219 · D206: el sismo, sólo sobre el suelo -------------
         "<b>Pseudo-static seismic load.</b><br>"
         "Applied to every slice as a body force proportional to the "

@@ -757,13 +757,17 @@ class ShearNormalFunction(StrengthModel):
     DISPLAY_NAME = "Shear/Normal Function"
     PARAMETERS = {}  # table stored separately
 
+    #: The table a new material starts with; the dialog reads it from here
+    #: (v0.1.227, D217) instead of keeping a copy of its own.
+    DEFAULT_POINTS = ((0.0, 5.0), (100.0, 45.0), (300.0, 110.0))
+
     def __init__(self, **params):
         # Accept a 'points' kwarg (list of (sigma, tau)); not part of
         # the numeric PARAMETERS dict.
         pts = params.pop("points", None)
         super().__init__(**params)
         if pts is None:
-            pts = [(0.0, 5.0), (100.0, 45.0), (300.0, 110.0)]
+            pts = list(self.DEFAULT_POINTS)
         self.points = [(float(s), float(t)) for (s, t) in pts]
         self.points.sort()
 
@@ -832,11 +836,15 @@ class DiscreteFunction(StrengthModel):
     DISPLAY_NAME = "Discrete Function"
     PARAMETERS = {}
 
+    #: v0.1.227 (D217) -- its own; the dialog used to show the shear-normal
+    #: function's table for this model too.
+    DEFAULT_POINTS = ((0.0, 10.0), (100.0, 50.0), (200.0, 80.0))
+
     def __init__(self, **params):
         pts = params.pop("points", None)
         super().__init__(**params)
         if pts is None:
-            pts = [(0.0, 10.0), (100.0, 50.0), (200.0, 80.0)]
+            pts = list(self.DEFAULT_POINTS)
         self.points = [(float(s), float(t)) for (s, t) in pts]
         self.points.sort()
 

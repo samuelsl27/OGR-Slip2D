@@ -133,6 +133,25 @@ class _StrengthParamPanel(QWidget):
     ``PARAMETERS``) is mapped to a :class:`Quantity` and the editor shows
     the value in the active project unit system. Conversion happens in
     ``set_model`` (SI → user) and ``get_params`` (user → SI).
+
+    v0.1.227 (D217) — the tables too, and nothing moves that nobody
+    edited:
+
+    * a table's cells are in the quantity of their column (a stress in the
+      project's stress unit, an angle in degrees), converted with the same
+      function as the parameters, under a translated header that names the
+      unit (``_TABLE_COLUMNS``). They were kPa under a fixed "(kPa)" header
+      whatever the project's units;
+    * what the panel was given is kept beside what it shows: a value, or a
+      whole table, whose display was not changed goes back EXACTLY as it
+      came in. Converting to the user's unit and back loses up to an ulp
+      (x·f/f), so every OK in imperial units used to rewrite every value;
+      and ``is_unchanged`` lets the dialog keep a strength it did not edit
+      as it is -- a table saved before 0.1.218 is then not converted just
+      by being looked at (D209's warning asked for a review, not this);
+    * a row that is not numbers is reported for every table, not only the
+      anisotropic function's, and an empty stored table is shown empty
+      rather than replaced by the default.
     """
 
     # Map the literal SI unit string declared in builtin_models to the
@@ -156,6 +175,18 @@ class _StrengthParamPanel(QWidget):
         "":        "dimensionless",
     }
 
+    #: v0.1.227 (D217) — each table's columns: the ``tr()`` key of the
+    #: header (a ``%s`` takes the unit label of the column's quantity) and
+    #: the quantity of its cells. The keys are translated through a
+    #: variable, so a test guards that each has its Spanish entry.
+    _TABLE_COLUMNS = {
+        "points": (("Normal stress (%s)", "pressure"),
+                   ("Shear strength (%s)", "pressure")),
+        "rows3": (("Angle to (°)", "angle"),
+                  ("Cohesion (%s)", "pressure"),
+                  ("Friction angle (°)", "angle")),
+    }
+
     def __init__(self, parent=None, units_obj=None) -> None:
         super().__init__(parent)
         self._form = QFormLayout(self)
@@ -163,6 +194,14 @@ class _StrengthParamPanel(QWidget):
         self._param_quantity: dict[str, str] = {}  # name → quantity_id
         self._model_cls: type[StrengthModel] | None = None
         self._units_obj = units_obj  # ogr_core.project.units.Units or None
+        # v0.1.227 (D217) — what each editor was given (SI) and showed.
+        self._given: dict[str, tuple[float, float]] = {}
+        self._table = None
+        self._table_kind = None
+        self._table_given = None     # the rows as given (SI)
+        self._table_shown = None     # the cell texts as first shown
+        self._chk_cutoff = None
+        self._cutoff_given = None
 
     def set_units(self, units_obj) -> None:
         """Update the active unit system (e.g. project settings changed).
@@ -185,8 +224,8 @@ class _StrengthParamPanel(QWidget):
     @staticmethod
     def _si_to_user(si_value: float, quantity_id: str, sys_obj) -> float:
         """An SI value in the unit the editor shows. One function for
-        ``set_model`` and ``set_param_values``, so the two cannot convert
-        differently."""
+        ``set_model``, ``set_param_values`` and the tables, so they cannot
+        convert differently."""
         from ogr_core.units import Quantity
         if sys_obj is not None and quantity_id != "dimensionless":
             try:
@@ -194,6 +233,27 @@ class _StrengthParamPanel(QWidget):
             except (ValueError, KeyError):
                 pass
         return si_value
+
+    @staticmethod
+    def _user_to_si(user_value: float, quantity_id: str, sys_obj) -> float:
+        """The inverse of :meth:`_si_to_user`."""
+        from ogr_core.units import Quantity
+        if sys_obj is not None and quantity_id != "dimensionless":
+            try:
+                return sys_obj.from_user(user_value, Quantity(quantity_id))
+            except (ValueError, KeyError):
+                pass
+        return user_value
+
+    def _unit_label(self, quantity_id: str, fallback: str = "") -> str:
+        from ogr_core.units import Quantity
+        sys_obj = self._active_system()
+        if sys_obj is not None and quantity_id != "dimensionless":
+            try:
+                return sys_obj.label_for(Quantity(quantity_id))
+            except (ValueError, KeyError):
+                pass
+        return fallback
 
     def set_param_values(self, values: dict) -> None:
         """Write SI ``values`` into the editors of the current model.
@@ -224,7 +284,6 @@ class _StrengthParamPanel(QWidget):
     ) -> None:
         """Build editors. ``current_params`` are values in SI (canonical
         units stored on the material)."""
-        from ogr_core.units import Quantity
         self._model_cls = model_cls
         # Clear
         while self._form.count():
@@ -234,6 +293,7 @@ class _StrengthParamPanel(QWidget):
                 w.deleteLater()
         self._editors.clear()
         self._param_quantity.clear()
+        self._given.clear()
 
         current_params = current_params or {}
         sys_obj = self._active_system()
@@ -246,12 +306,8 @@ class _StrengthParamPanel(QWidget):
             si_value = float(current_params.get(name, default))
             # Convert to display
             user_value = self._si_to_user(si_value, quantity_id, sys_obj)
-            user_label = unit if unit != "-" else ""
-            if sys_obj is not None and quantity_id != "dimensionless":
-                try:
-                    user_label = sys_obj.label_for(Quantity(quantity_id))
-                except (ValueError, KeyError):
-                    pass
+            user_label = self._unit_label(quantity_id,
+                                          unit if unit != "-" else "")
 
             # v0.1.192 (D181) — was a QDoubleSpinBox with 4 decimals, which
             # rounded every value it was given; see ``_PreciseSpinBox``.
@@ -264,33 +320,30 @@ class _StrengthParamPanel(QWidget):
             label.setToolTip(description)
             self._form.addRow(label, ed)
             self._editors[name] = ed
+            self._given[name] = (si_value, ed.value())
 
         if not model_cls.PARAMETERS:
             self._form.addRow(QLabel(tr("(no parameters)")))
 
         # v0.1.15 — function/table-based models (Shear/Normal Function,
-        # Discrete Function, Anisotropic Strength Function) carry a
-        # ``points`` list instead of (or in addition to) numeric
-        # PARAMETERS. Build a small table editor for them.
+        # Discrete Function, Anisotropic Strength Function) carry a table
+        # instead of (or in addition to) numeric PARAMETERS.
         self._table = None
         self._table_kind = None
+        self._table_given = None
+        self._table_shown = None
         mid = getattr(model_cls, "MODEL_ID", "")
         if mid in ("shear_normal_function", "discrete_function"):
-            self._build_points_table(
-                current_params, columns=["σ'ₙ (kPa)", "τ (kPa)"],
-                kind="points",
-                default=[(0.0, 5.0), (100.0, 45.0), (300.0, 110.0)],
-            )
+            # v0.1.227 (D217) — each model's own default table: the discrete
+            # function used to show the shear-normal one.
+            self._build_points_table(current_params, kind="points",
+                                     default=list(model_cls.DEFAULT_POINTS))
         elif mid == "anisotropic_strength_function":
             # v0.1.218 (D209) — each row is a RANGE, (angle to, c, φ), as
             # the reference documents the strength type; the default is
             # the model's own, not a second copy of it.
-            self._build_points_table(
-                current_params,
-                columns=[tr("Angle to (°)"), tr("c (kPa)"), tr("φ (°)")],
-                kind="rows3",
-                default=list(model_cls.DEFAULT_ROWS),
-            )
+            self._build_points_table(current_params, kind="rows3",
+                                     default=list(model_cls.DEFAULT_ROWS))
 
         # v0.1.120 — the depth-dependent undrained models carry ONE piece
         # of state that is not a number: whether the cutoff applies at
@@ -298,10 +351,12 @@ class _StrengthParamPanel(QWidget):
         # checkbox, and the value alone cannot encode "off" — zero is a
         # legitimate minimum when the rate is negative.
         self._chk_cutoff = None
+        self._cutoff_given = None
         if getattr(model_cls, "_C_REF", None) is not None and \
                 "cutoff" in model_cls.PARAMETERS:
             self._build_cutoff_switch(
                 bool(current_params.get("cutoff_enabled", False)))
+            self._cutoff_given = self._chk_cutoff.isChecked()
 
     def _build_cutoff_switch(self, enabled: bool) -> None:
         """Checkbox governing the cutoff, and the spinbox it governs.
@@ -334,28 +389,48 @@ class _StrengthParamPanel(QWidget):
         σ'ₙ in ``points``."""
         return "rows" if kind == "rows3" else "points"
 
-    def _build_points_table(self, current_params, columns, kind, default):
+    def table_headers(self) -> list[str]:
+        """The headers of the table on screen, as shown."""
+        tbl = self._table
+        if tbl is None:
+            return []
+        return [tbl.horizontalHeaderItem(c).text()
+                for c in range(tbl.columnCount())]
+
+    def _build_points_table(self, current_params, kind, default):
         """Build an editable table for function-based models."""
         from PySide6.QtWidgets import (
             QPushButton, QTableWidget, QTableWidgetItem, QHBoxLayout, QWidget,
         )
         key = self._table_key(kind)
-        pts = None
-        if current_params and key in current_params:
-            pts = current_params[key]
-        if not pts:
-            pts = default
+        columns = self._TABLE_COLUMNS[kind]
+        # v0.1.227 (D217) — an empty table that was STORED is shown empty
+        # (and OK refuses it); the default is only for a new selection.
+        pts = (list(current_params[key])
+               if current_params and key in current_params else default)
         ncol = len(columns)
+        sys_obj = self._active_system()
+        headers = []
+        for text, quantity_id in columns:
+            header = tr(text)
+            if "%s" in header:
+                header = header % self._unit_label(quantity_id, "kPa")
+            headers.append(header)
         tbl = QTableWidget(len(pts), ncol)
-        tbl.setHorizontalHeaderLabels(columns)
+        tbl.setHorizontalHeaderLabels(headers)
         tbl.horizontalHeader().setStretchLastSection(True)
+        shown = []
         for r, row in enumerate(pts):
+            texts = []
             for c in range(ncol):
                 # v0.1.192 (D181) — was f"{:.3f}", which rounded every
-                # point to three decimals on the next OK, for the same
-                # reason the spin boxes rounded; ``get_params`` reads the
-                # cell back with float(), so the exact text round-trips.
-                tbl.setItem(r, c, QTableWidgetItem(_exact_text(row[c])))
+                # point to three decimals on the next OK; the exact text
+                # of the displayed value round-trips through float().
+                user = self._si_to_user(float(row[c]), columns[c][1],
+                                        sys_obj)
+                texts.append(_exact_text(user))
+                tbl.setItem(r, c, QTableWidgetItem(texts[-1]))
+            shown.append(texts)
         self._form.addRow(QLabel(tr("Function points:")), tbl)
         # Add/remove buttons
         btns = QWidget()
@@ -383,58 +458,99 @@ class _StrengthParamPanel(QWidget):
         self._table = tbl
         self._table_kind = kind
         self._table_ncol = ncol
+        self._table_given = [tuple(float(v) for v in row) for row in pts]
+        self._table_shown = shown
+
+    def _cell_texts(self) -> list[list[str]]:
+        tbl = self._table
+        out = []
+        for r in range(tbl.rowCount()):
+            row = []
+            for c in range(self._table_ncol):
+                item = tbl.item(r, c)
+                row.append(item.text() if item is not None else "")
+            out.append(row)
+        return out
+
+    def table_unchanged(self) -> bool:
+        """True when the table on screen is the one it was given."""
+        if self._table is None:
+            return True
+        return self._cell_texts() == self._table_shown
 
     def unparsed_table_rows(self) -> list[int]:
-        """The rows (1-based) of the anisotropic function's table that are
-        not three numbers. ``get_params`` skips them, which for a table of
-        RANGES would silently merge two ranges into one (v0.1.218, D209),
-        so the dialog asks before accepting."""
-        tbl = getattr(self, "_table", None)
-        if tbl is None or self._table_kind != "rows3":
+        """The rows (1-based) of the table on screen that are not numbers.
+
+        ``get_params`` cannot store them. For the anisotropic function a
+        dropped row would silently merge two ranges into one (v0.1.218,
+        D209); for the functions of σ'ₙ it would move the envelope (v0.1.227,
+        D217), so the dialog asks before accepting, and before leaving the
+        material for another one.
+        """
+        import math
+        if self._table is None:
             return []
         bad = []
-        for r in range(tbl.rowCount()):
+        for r, row in enumerate(self._cell_texts(), start=1):
             try:
-                for c in range(self._table_ncol):
-                    float(tbl.item(r, c).text())
-            except (ValueError, AttributeError):
-                bad.append(r + 1)
+                if not all(math.isfinite(float(t)) for t in row):
+                    bad.append(r)
+            except ValueError:
+                bad.append(r)
         return bad
 
+    def table_columns(self) -> int:
+        return self._table_ncol if self._table is not None else 0
+
+    def is_unchanged(self) -> bool:
+        """True when no editor, no cell and no switch was changed since the
+        panel was given its values (v0.1.227, D217)."""
+        for k, ed in self._editors.items():
+            if ed.value() != self._given[k][1]:
+                return False
+        if self._chk_cutoff is not None and \
+                self._chk_cutoff.isChecked() != self._cutoff_given:
+            return False
+        return self.table_unchanged()
+
     def get_params(self) -> dict:
-        """Return the editor values converted to SI (the storage unit)."""
-        from ogr_core.units import Quantity
+        """Return the editor values converted to SI (the storage unit).
+
+        v0.1.227 (D217) — a value whose display was not changed is returned
+        exactly as it was given, not converted there and back.
+        """
         sys_obj = self._active_system()
         out: dict = {}
         for k, ed in self._editors.items():
-            user_value = ed.value()
-            quantity_id = self._param_quantity.get(k, "dimensionless")
-            if sys_obj is not None and quantity_id != "dimensionless":
-                try:
-                    q = Quantity(quantity_id)
-                    out[k] = sys_obj.from_user(user_value, q)
-                    continue
-                except (ValueError, KeyError):
-                    pass
-            out[k] = user_value
+            si_given, shown = self._given.get(k, (None, None))
+            if si_given is not None and ed.value() == shown:
+                out[k] = si_given
+                continue
+            out[k] = self._user_to_si(ed.value(),
+                                      self._param_quantity.get(
+                                          k, "dimensionless"), sys_obj)
         # v0.1.15 — read the function table if present
-        tbl = getattr(self, "_table", None)
-        if tbl is not None:
-            ncol = self._table_ncol
-            pts = []
-            for r in range(tbl.rowCount()):
-                try:
-                    vals = tuple(
-                        float(tbl.item(r, c).text()) for c in range(ncol)
-                    )
-                    pts.append(vals)
-                except (ValueError, AttributeError):
-                    continue
-            out[self._table_key(self._table_kind)] = pts
+        if self._table is not None:
+            key = self._table_key(self._table_kind)
+            if self.table_unchanged():
+                out[key] = list(self._table_given)
+            else:
+                columns = self._TABLE_COLUMNS[self._table_kind]
+                pts = []
+                for row in self._cell_texts():
+                    try:
+                        pts.append(tuple(
+                            self._user_to_si(float(t), columns[c][1],
+                                             sys_obj)
+                            for c, t in enumerate(row)))
+                    except ValueError:
+                        # Reported by ``unparsed_table_rows``, which the
+                        # dialog asks before it stores anything.
+                        continue
+                out[key] = pts
         # v0.1.120 — the cutoff switch, for the models that have one.
-        chk = getattr(self, "_chk_cutoff", None)
-        if chk is not None:
-            out["cutoff_enabled"] = chk.isChecked()
+        if self._chk_cutoff is not None:
+            out["cutoff_enabled"] = self._chk_cutoff.isChecked()
         return out
 
     def current_model(self) -> type[StrengthModel] | None:
@@ -542,11 +658,19 @@ class MaterialPropertiesDialog(QDialog):
         gamma_label, gamma_factor = self._unit_weight_label_factor()
         self._gamma_label = gamma_label
         self._gamma_factor = gamma_factor
-        self.dsp_gamma = QDoubleSpinBox()
-        self.dsp_gamma.setRange(0.0, 1e6); self.dsp_gamma.setDecimals(4)
+        # v0.1.227 (D217) — every number of the material in a box that does
+        # not round (D181 fixed the strength parameters and left these at 2
+        # to 4 decimals), and what each box was given kept beside what it
+        # shows (``_put_si``/``_get_si``), so an OK in another unit system
+        # does not move a value nobody edited.
+        self._si_shown: dict = {}
+        self._pressure_label, self._pressure_factor = \
+            self._quantity_label_factor("pressure", "kPa")
+        self.dsp_gamma = _PreciseSpinBox()
+        self.dsp_gamma.setRange(0.0, 1e6)
         self.dsp_gamma.setSuffix(f" {gamma_label}")
-        self.dsp_gamma_sat = QDoubleSpinBox()
-        self.dsp_gamma_sat.setRange(0.0, 1e6); self.dsp_gamma_sat.setDecimals(4)
+        self.dsp_gamma_sat = _PreciseSpinBox()
+        self.dsp_gamma_sat.setRange(0.0, 1e6)
         self.dsp_gamma_sat.setSuffix(f" {gamma_label}")
         # v0.1.60 — the saturated unit weight is opt-in, and the option is
         # only offered when a water table exists: without one there is no
@@ -584,21 +708,21 @@ class MaterialPropertiesDialog(QDialog):
         # a finite-element analysis, because only then can the pore
         # pressures be negative. Both default to 0, so matric suction
         # contributes nothing unless the user opts in.
-        from PySide6.QtWidgets import QDoubleSpinBox as _DSB
-        self.dsp_phi_b = _DSB()
-        self.dsp_phi_b.setDecimals(2)
+        self.dsp_phi_b = _PreciseSpinBox()
         self.dsp_phi_b.setRange(0.0, 89.0)
         self.dsp_phi_b.setSingleStep(1.0)
-        self.dsp_phi_b.setToolTip(
+        self.dsp_phi_b.setSuffix(" °")
+        self.dsp_phi_b.setToolTip(tr(
             "Unsaturated shear strength angle. 0 means matric suction "
-            "does not contribute to strength (conservative default).")
-        self.dsp_aev = _DSB()
-        self.dsp_aev.setDecimals(3)
+            "does not contribute to strength (conservative default)."))
+        # v0.1.227 (D217) — a suction is a pressure, in the project's unit.
+        self.dsp_aev = _PreciseSpinBox()
         self.dsp_aev.setRange(0.0, 1e7)
         self.dsp_aev.setSingleStep(5.0)
-        self.dsp_aev.setToolTip(
+        self.dsp_aev.setSuffix(f" {self._pressure_label}")
+        self.dsp_aev.setToolTip(tr(
             "Air entry value: matric suction below which the saturated "
-            "friction angle still governs (bilinear envelope).")
+            "friction angle still governs (bilinear envelope)."))
         self._row_phi_b = gen_form.rowCount()
         gen_form.addRow(tr("Unsaturated Shear Strength Angle") + ":",
                         self.dsp_phi_b)
@@ -681,8 +805,11 @@ class MaterialPropertiesDialog(QDialog):
         self.cbo_pp = QComboBox()
         for t in PorePressureType:
             self.cbo_pp.addItem(t.value, t)
-        self.dsp_ru = QDoubleSpinBox(); self.dsp_ru.setRange(0.0, 1.0); self.dsp_ru.setDecimals(3)
-        self.dsp_u = QDoubleSpinBox(); self.dsp_u.setRange(0.0, 1e6); self.dsp_u.setDecimals(2); self.dsp_u.setSuffix(" kPa")
+        self.dsp_ru = _PreciseSpinBox(); self.dsp_ru.setRange(0.0, 1.0)
+        # v0.1.227 (D217) — a pressure, in the project's unit; it was kPa
+        # under a fixed " kPa" whatever the units.
+        self.dsp_u = _PreciseSpinBox(); self.dsp_u.setRange(0.0, 1e6)
+        self.dsp_u.setSuffix(f" {self._pressure_label}")
 
         # v0.1.62 — which water surface this material takes its pore
         # pressure from. The field existed and was honoured by the solver
@@ -701,8 +828,8 @@ class MaterialPropertiesDialog(QDialog):
         # is a checkbox and not a spinbox with a magic value — the same
         # pattern the saturated unit weight above already uses.
         self.chk_hu = QCheckBox(tr("Hu coefficient") + ":")
-        self.dsp_hu = QDoubleSpinBox()
-        self.dsp_hu.setRange(0.0, 1.0); self.dsp_hu.setDecimals(3)
+        self.dsp_hu = _PreciseSpinBox()
+        self.dsp_hu.setRange(0.0, 1.0)
         self.dsp_hu.setValue(1.0)
         self.chk_hu.setToolTip(tr(
             "u = γw · Hu · h, with h the vertical distance up to the "
@@ -744,8 +871,8 @@ class MaterialPropertiesDialog(QDialog):
         rd_form = QFormLayout(rd_grp)
         self._drawdown_form = rd_form
         self.chk_undrained = QCheckBox(tr("Undrained Behaviour"))
-        self.dsp_b_bar = QDoubleSpinBox()
-        self.dsp_b_bar.setRange(0.0, 5.0); self.dsp_b_bar.setDecimals(3)
+        self.dsp_b_bar = _PreciseSpinBox()
+        self.dsp_b_bar.setRange(0.0, 5.0)
         self.dsp_b_bar.setToolTip(tr(
             "Skempton's B̄: Δu = B̄ · Δσv. Only a material that behaves "
             "undrained retains excess pore pressure after drawdown."))
@@ -779,9 +906,8 @@ class MaterialPropertiesDialog(QDialog):
         ex_grp = QGroupBox(tr("Excess Pore Pressure"))
         self.grp_excess = ex_grp
         ex_form = QFormLayout(ex_grp)
-        self.dsp_b_bar_excess = QDoubleSpinBox()
+        self.dsp_b_bar_excess = _PreciseSpinBox()
         self.dsp_b_bar_excess.setRange(0.0, 5.0)
-        self.dsp_b_bar_excess.setDecimals(3)
         self.dsp_b_bar_excess.setToolTip(tr(
             "Skempton's B̄: Δu = B̄ · Δσv. Use 0 for a free-draining "
             "material, which then develops no excess however much load "
@@ -985,6 +1111,16 @@ class MaterialPropertiesDialog(QDialog):
         the selection.
         """
         if self._current_row >= 0 and self._current_row != row:
+            # v0.1.227 (D217) — a table row that is not numbers keeps the
+            # material on screen: storing it would drop the row (D209 asked
+            # this at OK only). ``currentRowChanged`` arrives AFTER the list
+            # moved, so it is put back with its signals blocked, and nothing
+            # is reloaded -- a reload would throw away the table being fixed.
+            if self._refuse_unparsed_rows():
+                self.list.blockSignals(True)
+                self.list.setCurrentRow(self._current_row)
+                self.list.blockSignals(False)
+                return
             self._store(self._current_row)
         self._current_row = row if 0 <= row < len(self.materials) else -1
         if self._current_row < 0:
@@ -1001,7 +1137,9 @@ class MaterialPropertiesDialog(QDialog):
         self._update_color_button()
         self._populate_gamma(m)
         self.dsp_phi_b.setValue(getattr(m, "phi_b", 0.0) or 0.0)
-        self.dsp_aev.setValue(getattr(m, "air_entry_value", 0.0) or 0.0)
+        self._put_si(self.dsp_aev,
+                     getattr(m, "air_entry_value", 0.0) or 0.0,
+                     self._pressure_factor)
 
         idx = self.cbo_strength.findData(m.strength.MODEL_ID)
         if idx >= 0:
@@ -1047,6 +1185,17 @@ class MaterialPropertiesDialog(QDialog):
                 "from the horizontal, as the reference defines them; before, "
                 "the surface's bedding was subtracted first. Accepting keeps "
                 "the ranges and removes the link.")
+        else:
+            # v0.1.227 (D217) — a strength the analysis will refuse (an empty
+            # table, rules with a gap) says so as soon as it is shown. OK
+            # judges only what the session changed, so this is where the user
+            # sees why a run will be refused.
+            from ogr_core.project.rules import strength_model_refusal
+            why = strength_model_refusal(m.strength, m.name)
+            if why is not None:
+                problem = (tr("In material %s:") % m.name + " "
+                           + tr(self._TABLE_REFUSALS.get(why.code,
+                                                         why.message)))
         self._show_strength_problem(problem)
 
         # v0.1.126 — the anisotropic surface, restored before the pore
@@ -1061,7 +1210,7 @@ class MaterialPropertiesDialog(QDialog):
         if idx >= 0:
             self.cbo_pp.setCurrentIndex(idx)
         self.dsp_ru.setValue(m.ru)
-        self.dsp_u.setValue(m.constant_u)
+        self._put_si(self.dsp_u, m.constant_u, self._pressure_factor)
 
         # v0.1.62 — water parameters. Signals are blocked while loading so
         # that populating the widgets cannot write back into the material
@@ -1144,6 +1293,37 @@ class MaterialPropertiesDialog(QDialog):
         except Exception:  # noqa: BLE001
             return "kN/m³", 1.0
 
+    def _quantity_label_factor(self, quantity_id: str,
+                               default_label: str) -> tuple[str, float]:
+        """(display label, SI → user factor) of a quantity in the active
+        unit system; ``(default_label, 1.0)`` without one (v0.1.227)."""
+        if self._units_obj is None:
+            return default_label, 1.0
+        try:
+            from ogr_core.units import Quantity
+            q = Quantity(quantity_id)
+            sys_obj = self._units_obj.get_system()
+            return sys_obj.label_for(q), sys_obj.factors[q.value]
+        except Exception:  # noqa: BLE001
+            return default_label, 1.0
+
+    def _put_si(self, widget, si_value: float, factor: float) -> None:
+        """Show an SI value in the user's unit, and remember both.
+
+        v0.1.227 (D217) — ``_get_si`` returns ``si_value`` EXACTLY while the
+        box still shows what this put in it: x·f/f is not x to the last bit,
+        so reading back through the factor moved every value of a material
+        on every OK in a unit system with a factor other than 1.
+        """
+        widget.setValue(float(si_value) * factor)
+        self._si_shown[widget] = (widget.value(), float(si_value))
+
+    def _get_si(self, widget, factor: float) -> float:
+        shown, si = self._si_shown.get(widget, (None, None))
+        if shown is not None and widget.value() == shown:
+            return si
+        return widget.value() / (factor or 1.0)
+
     def _populate_gamma(self, mat) -> None:
         """Set the γ / γ_sat controls from the material (stored in SI).
 
@@ -1151,13 +1331,10 @@ class MaterialPropertiesDialog(QDialog):
         γ_sat warning and the checkbox drives the spinbox's enabled state,
         and neither should fire for values that are merely being loaded.
         """
-        gamma_si = mat.unit_weight
-        gamma_sat_si = mat.sat_unit_weight
-        for wgt, value in ((self.dsp_gamma, gamma_si * self._gamma_factor),
-                           (self.dsp_gamma_sat,
-                            gamma_sat_si * self._gamma_factor)):
+        for wgt, si in ((self.dsp_gamma, mat.unit_weight),
+                        (self.dsp_gamma_sat, mat.sat_unit_weight)):
             wgt.blockSignals(True)
-            wgt.setValue(value)
+            self._put_si(wgt, si, self._gamma_factor)
             wgt.blockSignals(False)
         self.chk_gamma_sat.blockSignals(True)
         self.chk_gamma_sat.setChecked(bool(mat.use_sat_unit_weight))
@@ -1169,8 +1346,8 @@ class MaterialPropertiesDialog(QDialog):
     def _read_gamma(self) -> tuple[float, float, bool]:
         """Read γ, γ_sat (converted to SI) and the γ_sat opt-in flag."""
         f = self._gamma_factor or 1.0
-        gamma_si = self.dsp_gamma.value() / f
-        gamma_sat_si = self.dsp_gamma_sat.value() / f
+        gamma_si = self._get_si(self.dsp_gamma, f)
+        gamma_sat_si = self._get_si(self.dsp_gamma_sat, f)
         return gamma_si, gamma_sat_si, self.chk_gamma_sat.isChecked()
 
     def _on_gamma_sat_toggled(self, checked: bool) -> None:
@@ -1254,20 +1431,29 @@ class MaterialPropertiesDialog(QDialog):
         m.unit_weight, m.sat_unit_weight, m.use_sat_unit_weight = \
             self._read_gamma()
         m.phi_b = self.dsp_phi_b.value()
-        m.air_entry_value = self.dsp_aev.value()
+        m.air_entry_value = self._get_si(self.dsp_aev, self._pressure_factor)
 
         mid = self.cbo_strength.currentData()
         cls = REGISTRY.get(mid)
-        params = self.param_panel.get_params()
-        # v0.1.225 (D218) — the rules of a Generalized Anisotropic material
-        # have no editor here, so they are carried over rather than rebuilt:
-        # rebuilding them from the (empty) editors left ``rules = []``, and
-        # the model then answered a strength of zero at every base, just
-        # because the material had been shown and OK pressed.
-        if mid == "generalized_anisotropic" and \
-                getattr(m.strength, "MODEL_ID", None) == mid:
-            params["rules"] = list(m.strength.rules)
-        m.strength = cls(**params)
+        # v0.1.227 (D217) — a strength nobody edited is kept as it is, not
+        # rebuilt from its editors: rebuilding converts a table saved as
+        # points before 0.1.218 into ranges just because the material was
+        # shown (D209 wanted a review, not that), and any state the editors
+        # do not hold would be lost.
+        unchanged = (getattr(m.strength, "MODEL_ID", None) == mid
+                     and self.param_panel.is_unchanged())
+        if not unchanged:
+            params = self.param_panel.get_params()
+            # v0.1.225 (D218) — the rules of a Generalized Anisotropic
+            # material have no editor here, so they are carried over rather
+            # than rebuilt: rebuilding them from the (empty) editors left
+            # ``rules = []``, and the model then answered a strength of zero
+            # at every base, just because the material had been shown and OK
+            # pressed.
+            if mid == "generalized_anisotropic" and \
+                    getattr(m.strength, "MODEL_ID", None) == mid:
+                params["rules"] = list(m.strength.rules)
+            m.strength = cls(**params)
         # Only the models that read it keep it. Switching a material away
         # from an anisotropic model has to CLEAR the link, or a strength
         # nobody can see would still be pointing at a polyline.
@@ -1277,7 +1463,7 @@ class MaterialPropertiesDialog(QDialog):
 
         m.pore_pressure = self.cbo_pp.currentData()
         m.ru = self.dsp_ru.value()
-        m.constant_u = self.dsp_u.value()
+        m.constant_u = self._get_si(self.dsp_u, self._pressure_factor)
 
         # v0.1.62 — water parameters
         m.water_surface_id = self.cbo_water_surface.currentData()
@@ -1345,11 +1531,34 @@ class MaterialPropertiesDialog(QDialog):
         # v0.1.225 (D216) — ``rules.anisotropic_linear_refusal``.
         "anisotropic_linear_ab":
             "A and B must satisfy 0° ≤ A ≤ B.",
+        # v0.1.227 (D217) — ``rules.function_points_refusal``.
+        "function_points_empty":
+            "The table has no points: at least one (normal stress, shear "
+            "strength) point is needed.",
+        "function_points_not_points":
+            "Every point must be two numbers: normal stress and shear "
+            "strength.",
+        "function_points_strength":
+            "The shear strength must be zero or more.",
+        "function_points_order":
+            "The normal stresses must increase from one row to the next.",
     }
 
     def _show_strength_problem(self, text: str) -> None:
         self.lbl_strength_problem.setText(text)
         self.lbl_strength_problem.setVisible(bool(text))
+
+    def _refuse_unparsed_rows(self) -> bool:
+        """Say so, and answer True, when the table on screen has a row that
+        is not numbers (v0.1.227, D217: every table, and before switching
+        material as well as at OK)."""
+        bad = self.param_panel.unparsed_table_rows()
+        if not bad:
+            return False
+        self._show_strength_problem(
+            tr("Row %d of the table is not %d numbers.")
+            % (bad[0], self.param_panel.table_columns()))
+        return True
 
     @staticmethod
     def _strength_state(m) -> object:
@@ -1365,10 +1574,7 @@ class MaterialPropertiesDialog(QDialog):
         # here, with the reason on screen, instead of being accepted and
         # refused later by the analysis. A row that is not three numbers
         # first: storing would drop it, and two ranges would become one.
-        bad = self.param_panel.unparsed_table_rows()
-        if bad:
-            self._show_strength_problem(
-                tr("Row %d of the table is not three numbers.") % bad[0])
+        if self._refuse_unparsed_rows():
             return
         self._store(self._current_row)
         from ogr_core.project.rules import strength_model_refusal
@@ -1394,6 +1600,10 @@ class MaterialPropertiesDialog(QDialog):
     # ------------------------------------------------------------------
     def _add_material(self) -> None:
         from ogr_core.materials import MohrCoulomb  # lazy
+        # v0.1.227 (D217) — checked BEFORE anything is added: the new row
+        # would move the selection away from a table that cannot be stored.
+        if self._current_row >= 0 and self._refuse_unparsed_rows():
+            return
         # Commit whatever is on screen first: adding a material moves the
         # selection, which would otherwise drop the pending edits.
         self._store(self._current_row)

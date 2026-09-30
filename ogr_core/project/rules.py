@@ -249,6 +249,53 @@ def anisotropic_function_rows_refusal(rows) -> Optional[Refusal]:
     return None
 
 
+def function_points_refusal(points) -> Optional[Refusal]:
+    """Why ``points`` cannot be the table of a shear-normal or discrete
+    strength function, or None.
+
+    v0.1.227 (D217) — the table is τ as a function of σ'ₙ: at least one
+    point, every value a finite number, τ ≥ 0, and σ'ₙ strictly increasing
+    (a repeated σ'ₙ is two strengths for one stress). Until this version an
+    EMPTY table was accepted by the API and answered τ = 0 at every base,
+    and a row the dialog could not read was dropped without a word.
+    """
+    import math
+
+    try:
+        pts = [tuple(p) for p in (points or [])]
+    except TypeError:
+        return Refusal("function_points_not_points",
+                       "The table must be a list of (normal stress, shear "
+                       "strength) points.")
+    if not pts:
+        return Refusal("function_points_empty",
+                       "The table has no points: at least one (normal "
+                       "stress, shear strength) point is needed.")
+    sigmas = []
+    for i, p in enumerate(pts, start=1):
+        try:
+            s, tau = (float(v) for v in p)
+        except (TypeError, ValueError):
+            return Refusal("function_points_not_points",
+                           f"Point {i} is not two numbers (normal stress, "
+                           f"shear strength): {p!r}.")
+        if not (math.isfinite(s) and math.isfinite(tau)):
+            return Refusal("function_points_not_points",
+                           f"Point {i} holds a value that is not finite.")
+        if tau < 0.0:
+            return Refusal("function_points_strength",
+                           f"Point {i}: the shear strength must be zero or "
+                           f"more, got {tau:g}.")
+        sigmas.append(s)
+    for i in range(1, len(sigmas)):
+        if not sigmas[i] > sigmas[i - 1]:
+            return Refusal("function_points_order",
+                           f"The normal stresses must increase strictly: "
+                           f"point {i + 1} ({sigmas[i]:g}) does not exceed "
+                           f"point {i} ({sigmas[i - 1]:g}).")
+    return None
+
+
 def generalized_anisotropic_rules_refusal(rules) -> Optional[Refusal]:
     """Why ``rules`` cannot be the rules of a Generalized Anisotropic
     model, or None.
@@ -361,17 +408,27 @@ def strength_model_refusal(strength, name: Optional[str] = None
     rows that are not a valid set of ranges. v0.1.225 — Generalized
     Anisotropic rules that are not the reference's contiguous ranges or
     hold a model that cannot be built (D218), and the A and B of Anisotropic
-    Linear (D216). A Generalized Anisotropic model is then asked about the
+    Linear (D216). v0.1.227 — the τ–σ'ₙ tables of the shear-normal and
+    discrete functions (D217). A Generalized Anisotropic model is then asked about the
     models of its rules, since one of them can be such a table. ``name`` is
     the material's, for the message.
     """
     from ..materials.builtin_models import (ANISOTROPIC_FUNCTION_LEGACY_NOTE,
                                             AnisotropicLinear,
                                             AnisotropicStrengthFunction,
-                                            GeneralizedAnisotropic)
+                                            DiscreteFunction,
+                                            GeneralizedAnisotropic,
+                                            ShearNormalFunction)
     from ..materials.strength_model import StrengthModel
 
     label = name if name is not None else "?"
+    if isinstance(strength, (ShearNormalFunction, DiscreteFunction)):
+        # v0.1.227 (D217).
+        why = function_points_refusal(strength.points)
+        if why is None:
+            return None
+        return Refusal(why.code, f"Material {label!r}, "
+                                 f"{strength.DISPLAY_NAME}: {why.message}")
     if isinstance(strength, AnisotropicStrengthFunction):
         if strength.legacy_points is not None:
             return Refusal("anisotropic_table_legacy",
