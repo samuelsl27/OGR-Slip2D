@@ -145,7 +145,12 @@ class EditCoordinatesDialog(QDialog):
             except (ValueError, AttributeError):
                 continue
             verts.append(Vertex(x, y))
-        if len(verts) < 2:
+        # v0.1.232 (D109) — a Block Search Point is the one boundary made of
+        # a single vertex; editing its coordinates must not need a second.
+        src = self._source_boundary
+        need = (1 if src.btype == BoundaryType.BLOCK_SEARCH_OBJECT
+                and len(src.polyline.vertices) == 1 else 2)
+        if len(verts) < need:
             return
         new_b = deepcopy(self._source_boundary)
         new_b.polyline.vertices = verts
@@ -414,6 +419,100 @@ class ConvertBoundaryDialog(QDialog):
 
     def new_type(self) -> BoundaryType:
         return self.cbo.currentData()
+
+
+# ======================================================================
+class BlockObjectDialog(QDialog):
+    """What a Block Search object is (v0.1.232, D109).
+
+    Its kind — Window, Line, Point or Polyline — and, for a Polyline, how
+    each of its two points is generated, with the reference's three
+    choices per side: anywhere along the polyline, anywhere on its end
+    segment on that side, or at its end vertex on that side.
+
+    The kind is SHOWN, not edited: it is how the object was drawn, and a
+    two-vertex Line turned into a Polyline by a combo box would be exactly
+    the silent reinterpretation that storing the kind exists to prevent.
+    The side options are enabled only for a Polyline, and «Line Segment» is
+    disabled on a polyline of one segment, where the rule refuses it.
+
+    NOT modal, unlike the rest of this module: the main window opens it
+    with ``show()`` and reads :meth:`spec` when it is accepted, and a test
+    drives it the same way, without ``exec()``.
+    """
+
+    def __init__(self, boundary: Boundary, parent=None) -> None:
+        super().__init__(parent)
+        from ogr_core.geometry import (BlockObjectKind, PolylinePointMode,
+                                       block_spec_of)
+
+        self.setWindowTitle(tr("Block Search Object"))
+        self._boundary_id = boundary.id
+        spec = block_spec_of(boundary)
+        self._kind = spec.kind if spec is not None else None
+        names = {
+            BlockObjectKind.WINDOW: tr("Window"),
+            BlockObjectKind.LINE: tr("Line"),
+            BlockObjectKind.POINT: tr("Point"),
+            BlockObjectKind.POLYLINE: tr("Polyline"),
+        }
+        root = QVBoxLayout(self)
+        form = QFormLayout()
+        self.lbl_kind = QLabel(names.get(self._kind, "-"))
+        form.addRow(tr("Kind:"), self.lbl_kind)
+
+        is_polyline = self._kind is BlockObjectKind.POLYLINE
+        one_segment = len(boundary.polyline.vertices) < 3
+        self.cbo_left = QComboBox()
+        self.cbo_left.addItem(tr("Any Line Segment"), PolylinePointMode.ANY)
+        self.cbo_left.addItem(tr("Left Line Segment"),
+                              PolylinePointMode.SEGMENT)
+        self.cbo_left.addItem(tr("Left End Point"),
+                              PolylinePointMode.END_POINT)
+        self.cbo_right = QComboBox()
+        self.cbo_right.addItem(tr("Any Line Segment"), PolylinePointMode.ANY)
+        self.cbo_right.addItem(tr("Right Line Segment"),
+                               PolylinePointMode.SEGMENT)
+        self.cbo_right.addItem(tr("Right End Point"),
+                               PolylinePointMode.END_POINT)
+        for cbo, mode in ((self.cbo_left,
+                           spec.left_point if spec else None),
+                          (self.cbo_right,
+                           spec.right_point if spec else None)):
+            cbo.setCurrentIndex(max(0, cbo.findData(mode)))
+            cbo.setEnabled(is_polyline)
+            if one_segment:
+                cbo.model().item(1).setEnabled(False)
+        form.addRow(tr("Left point:"), self.cbo_left)
+        form.addRow(tr("Right point:"), self.cbo_right)
+        root.addLayout(form)
+
+        note = QLabel(
+            tr("A Block Search Polyline gives every trial surface two "
+               "points and the stretch of polyline between them; these "
+               "options say where each point is generated.")
+            if is_polyline else
+            tr("Only a Block Search Polyline has point options."))
+        note.setWordWrap(True)
+        root.addWidget(note)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        root.addWidget(buttons)
+
+    def boundary_id(self) -> str:
+        return self._boundary_id
+
+    def spec(self):
+        """The spec the dialog stands for, or None for an object without
+        vertices (which has no kind)."""
+        from ogr_core.geometry import BlockObjectSpec
+        if self._kind is None:
+            return None
+        return BlockObjectSpec(kind=self._kind,
+                               left_point=self.cbo_left.currentData(),
+                               right_point=self.cbo_right.currentData())
 
 
 # ======================================================================

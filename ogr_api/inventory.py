@@ -52,6 +52,11 @@ MAPPED: dict[str, str] = {
     "add_weak_layer": "boundary_add",
     "add_aniso_surface": "boundary_add",
     "block_object": "boundary_add",
+    # v0.1.232 (D109) — the other three Block Search objects; the kind goes
+    # in boundary_add's `block_object`.
+    "block_line": "boundary_add",
+    "block_point": "boundary_add",
+    "block_polyline": "boundary_add",
     "del_boundary": "boundary_edit",
     "move_boundary": "boundary_edit",
     "edit_coordinates": "boundary_edit",

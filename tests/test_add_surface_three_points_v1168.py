@@ -206,21 +206,38 @@ def _menu_texts(window, name: str) -> list:
 
 
 def _activated_modes() -> set:
-    """Modos que alguna llamada de `ogr_gui` llega a activar, por AST."""
+    """Modos que alguna llamada de `ogr_gui` llega a activar, por AST.
+
+    v0.1.232 (D109) — cambiado a propósito, y lo que protege no cambia. Las
+    cuatro acciones de Block Search comparten la guarda de
+    `act_add_block_search_object`, y entran en su modo a través de ella: le
+    pasan el ToolMode POR NOMBRE (`mode=ToolMode.DRAW_BLOCK_LINE`) y ella
+    llama a `_set_tool(mode or ToolMode.DRAW_BLOCK_SEARCH)`. Son dos formas
+    nuevas de nombrar un modo que entra, y el censo las lee las dos: los
+    ToolMode que aparezcan EN CUALQUIER PARTE del argumento de
+    `set_tool_mode`/`_set_tool` (la del `or`), y los que se pasen como
+    `mode=` a una llamada. Sin ellas este censo decía que nadie activa la
+    línea, el punto y la polilínea, y `trigger()` los activa.
+    """
+    def _modos(expr):
+        return {x.attr for x in ast.walk(expr)
+                if isinstance(x, ast.Attribute)
+                and isinstance(x.value, ast.Name)
+                and x.value.id == "ToolMode"}
+
     seen = set()
     for f in (_ROOT / "ogr_gui").rglob("*.py"):
         tree = ast.parse(f.read_text(encoding="utf-8"))
         for n in ast.walk(tree):
-            if not (isinstance(n, ast.Call)
-                    and getattr(n.func, "attr", None) in ("set_tool_mode",
-                                                          "_set_tool")
-                    and n.args):
+            if not isinstance(n, ast.Call):
                 continue
-            a = n.args[0]
-            if (isinstance(a, ast.Attribute)
-                    and isinstance(a.value, ast.Name)
-                    and a.value.id == "ToolMode"):
-                seen.add(a.attr)
+            for kw in n.keywords:
+                if kw.arg == "mode":
+                    seen |= _modos(kw.value)
+            if (getattr(n.func, "attr", None) in ("set_tool_mode",
+                                                  "_set_tool")
+                    and n.args):
+                seen |= _modos(n.args[0])
     return seen
 
 

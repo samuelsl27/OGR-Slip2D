@@ -194,19 +194,73 @@ _DICTS: dict[str, dict[str, str]] = {
         # Search. El término castellano es el que el propio diccionario
         # ya fijó para esta misma acción (771) y para «Block Search
         # Options» (790).
-        'Add Block Search Object': 'Añadir objeto de búsqueda por bloques',
+        # v0.1.232 (D109) — la referencia tiene CUATRO objetos de búsqueda
+        # por bloques; la acción de siempre dibuja la ventana y se llama
+        # así, y «Add Block Search Object» sale del diccionario.
+        'Add Block Search Window': 'Añadir ventana de búsqueda por bloques',
+        'Add Block Search Line': 'Añadir línea de búsqueda por bloques',
+        'Add Block Search Point': 'Añadir punto de búsqueda por bloques',
+        'Add Block Search Polyline':
+            'Añadir polilínea de búsqueda por bloques',
         # Los VALORES de los controles se quedan en inglés a propósito:
         # el botón de radio pone «Non-Circular» (grid_dialogs.py:282) y
         # el combo pone «Block Search» (:304), ninguno traducido, así
         # que un nombre castellano mandaría al usuario a buscar un
-        # control que no existe con ese nombre.
-        'Add Block Search Object is only available with the Block Search '
+        # control que no existe con ese nombre. v0.1.232 (D109): la
+        # precondición es de los cuatro objetos y ya no nombra una acción.
+        'Block Search objects are only available with the Block Search '
         'method. Set Surface Options -> Surface Type = Non-Circular, '
         'Search Method = Block Search.':
-            'Añadir objeto de búsqueda por bloques sólo está disponible '
+            'Los objetos de búsqueda por bloques sólo están disponibles '
             'con el método Block Search. Abre Opciones de superficie y pon '
             'Tipo de superficie = Non-Circular, Método de búsqueda = '
             'Block Search.',
+        'Draw a Block Search line: click its two end points.':
+            'Dibuja una línea de búsqueda por bloques: pulsa en sus dos '
+            'extremos.',
+        'Draw a Block Search point: click the point every trial surface '
+        'must pass through.':
+            'Dibuja un punto de búsqueda por bloques: pulsa en el punto por '
+            'el que tiene que pasar toda superficie de prueba.',
+        'Draw a Block Search polyline: click its vertices from one end to '
+        'the other, right-click or Enter to finish.':
+            'Dibuja una polilínea de búsqueda por bloques: pulsa sus '
+            'vértices de un extremo al otro y termina con el botón derecho '
+            'o Intro.',
+        'Add a Block Search line: every trial surface gets one vertex at '
+        'a random place along it':
+            'Añadir una línea de búsqueda por bloques: cada superficie de '
+            'prueba recibe un vértice en un punto al azar de ella',
+        'Add a Block Search point: every trial surface passes through it':
+            'Añadir un punto de búsqueda por bloques: toda superficie de '
+            'prueba pasa por él',
+        'Add a Block Search polyline: every trial surface follows it '
+        'between two points generated on it':
+            'Añadir una polilínea de búsqueda por bloques: cada superficie '
+            'de prueba la sigue entre dos puntos generados sobre ella',
+        'Block Search Object...': 'Objeto de búsqueda por bloques...',
+        'Block Search Object': 'Objeto de búsqueda por bloques',
+        'Point': 'Punto',
+        'Kind:': 'Tipo:',
+        'Left point:': 'Punto izquierdo:',
+        'Right point:': 'Punto derecho:',
+        # Los tres modos de cada punto de la polilínea, con los nombres
+        # de la referencia: «Any / Left / Right Line Segment» y «Left /
+        # Right End Point».
+        'Any Line Segment': 'Cualquier segmento',
+        'Left Line Segment': 'Segmento izquierdo',
+        'Right Line Segment': 'Segmento derecho',
+        'Left End Point': 'Extremo izquierdo',
+        'Right End Point': 'Extremo derecho',
+        'A Block Search Polyline gives every trial surface two points and '
+        'the stretch of polyline between them; these options say where '
+        'each point is generated.':
+            'Una polilínea de búsqueda por bloques da a cada superficie de '
+            'prueba dos puntos y el tramo de polilínea entre ellos; estas '
+            'opciones dicen dónde se genera cada punto.',
+        'Only a Block Search Polyline has point options.':
+            'Sólo una polilínea de búsqueda por bloques tiene opciones de '
+            'punto.',
         # v0.1.167 (D103) — el aviso de la rama deshabilitada REUTILIZA
         # la clave de arriba: misma precondición, mismas palabras. Lo
         # único nuevo es la indicación de dibujo de la rama habilitada,

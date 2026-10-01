@@ -3740,17 +3740,39 @@ class BlockSearch(BaseSearch):
     The sliding mass is treated as active / central / passive "blocks".
 
     Method (per the reference's documentation):
-      1. One random point is generated for each Block Search object. The
-         reference REQUIRES the user to draw them; in their absence OGR
-         tiles an implicit block region with ``num_groups`` vertical
-         windows and samples one point in each. That fallback is ours, not
-         the reference's, and it is worth saying so: an unguided random
-         search over N free vertices is not the same thing as N windows
-         placed by someone who knows where the weak layer runs.
+      1. Every Block Search object the user draws gives each trial surface
+         its vertices (v0.1.232, D109 — the kinds are defined in
+         ``ogr_core.geometry.block_object``):
+
+         * a **Window** gives one vertex, at random inside it;
+         * a **Line** gives one vertex, at random along it — the surface
+           does NOT follow the line;
+         * a **Point** gives itself, with no random number;
+         * a **Polyline** gives TWO points along it, each generated as its
+           side says (anywhere, on the end segment, or at the end vertex),
+           AND every vertex of the polyline between them: the surface is
+           constrained to follow the polyline between its two points.
+
+         Until v0.1.232 every kind gave one point, so the Polyline did not
+         exist and a surface could not run along a weak layer — the flat
+         that verification problem 75 publishes was unreachable by
+         construction.
+
+         The reference REQUIRES the user to draw at least one object; in
+         their absence OGR tiles an implicit block region with
+         ``num_groups`` vertical windows and samples one point in each.
+         That fallback is ours, not the reference's, and it is worth saying
+         so: an unguided random search over N free vertices is not the
+         same thing as N windows placed by someone who knows where the weak
+         layer runs.
       2. The points are sorted by X-coordinate so the surface is
          kinematically admissible (single-valued, does not reverse).
          That sort is the WHOLE of the admissibility condition; see
-         ``_run`` for the two extra filters that used to sit here.
+         ``_run`` for the two extra filters that used to sit here. It
+         keeps a Polyline's stretch whole because the analysis refuses a
+         polyline that does not advance in x and any other object inside
+         its lateral extent (``rules.block_objects_refusal``), as the
+         reference does.
       3. The Left and Right Projection Angles project the surface up to
          the ground surface from the leftmost and rightmost block points.
          Angles are measured CCW from the +x axis (the reference's convention):
@@ -3855,17 +3877,21 @@ class BlockSearch(BaseSearch):
         sl_sets = self.slope_limit_sets or ((top[0].x, top[-1].x),)
 
         # v0.1.17 — collect user-drawn Block Search objects. Each is a
-        # Boundary of type BLOCK_SEARCH_OBJECT. Their geometry kind is
-        # inferred from the vertex count:
-        #   - 1 vertex   → point   (use exactly)
-        #   - 2 vertices → line    (sample a random point along it)
-        #   - closed 4-vertex → window (sample inside the quad)
-        #   - open >2    → polyline (sample a point along it)
+        # Boundary of type BLOCK_SEARCH_OBJECT. v0.1.232 (D109) — its kind is
+        # stored on it (``Boundary.block_object``); one saved before stores
+        # none and is read with ``infer_block_kind``. What each kind gives a
+        # trial surface is ``_sample_block_object``.
         block_objects = [
             b for b in project.boundaries
             if b.btype == BoundaryType.BLOCK_SEARCH_OBJECT
         ]
         use_user_objects = len(block_objects) > 0
+        # The soil the sampled vertices must stay in. Built once: it used to
+        # be rebuilt for every vertex of every trial surface, which a
+        # Polyline — several vertices per object — would have multiplied.
+        # Same expression, same geometry, same answers.
+        soil = (ext_poly.buffer(1e-6 * max(dx, 1.0))
+                if ext_poly is not None else None)
 
         # Block windows: vertical bands over the slope region. Center
         # them on the slope face (the steepest ground segment) so the
@@ -3905,31 +3931,33 @@ class BlockSearch(BaseSearch):
             # the two semantics comparable instead of merely described.
             result.attempts += 1
 
-            # 1. one random point per block window (or per user-drawn
-            #    Block Search object). Each point must lie INSIDE the
-            #    soil mass.
+            # 1. one random point per block window, or the vertices each
+            #    user-drawn Block Search object gives (one for a Window, a
+            #    Line or a Point; two points and the stretch between them
+            #    for a Polyline). Each vertex must lie INSIDE the soil mass.
             block_pts = []
             ok = True
             if use_user_objects:
-                # Sample one point from each user-drawn search object.
                 for bobj in block_objects:
-                    pt = self._sample_block_object(bobj, rng)
-                    if pt is None:
+                    chain = self._sample_block_object(bobj, rng)
+                    if not chain:
                         ok = False
                         break
-                    px, py = pt
-                    # Clip to inside the soil; reject points above ground
-                    gy = PathSearch._interpolate_top_y(top, px)
-                    if gy is not None and py > gy + 1e-6:
-                        ok = False
-                        break
-                    if ext_poly is not None:
-                        from shapely.geometry import Point as _Pt0
-                        if not ext_poly.buffer(1e-6 * max(dx, 1.0)).contains(
-                                _Pt0(px, py)):
+                    for px, py in chain:
+                        # Clip to inside the soil; reject points above
+                        # ground
+                        gy = PathSearch._interpolate_top_y(top, px)
+                        if gy is not None and py > gy + 1e-6:
                             ok = False
                             break
-                    block_pts.append(Vertex(px, py))
+                        if soil is not None:
+                            from shapely.geometry import Point as _Pt0
+                            if not soil.contains(_Pt0(px, py)):
+                                ok = False
+                                break
+                        block_pts.append(Vertex(px, py))
+                    if not ok:
+                        break
             else:
                 # One band per group, and the band is the stand-in for a
                 # Block Search Window the user did not draw. Tiling the
@@ -4055,10 +4083,9 @@ class BlockSearch(BaseSearch):
                     continue
 
             # Inside-External validation
-            if ext_poly is not None:
+            if soil is not None:
                 from shapely.geometry import Point as _Pt
-                buf = ext_poly.buffer(1e-6 * max(dx, 1.0))
-                if any(not buf.contains(_Pt(v.x, v.y)) for v in deduped):
+                if any(not soil.contains(_Pt(v.x, v.y)) for v in deduped):
                     result.invalid_count += 1
                     continue
 
@@ -4092,22 +4119,37 @@ class BlockSearch(BaseSearch):
 
     @staticmethod
     def _sample_block_object(boundary, rng):
-        """Sample one point from a Block Search object, per the reference's rules.
+        """The vertices one Block Search object gives a trial surface.
 
-        point (1 vertex)   → the exact point
-        line (2 vertices)  → random point along the segment
-        polyline (>2 open) → random point along the polyline
-        window (closed quad)→ random point inside the quadrilateral
-        Returns (x, y) or None.
+        A list of (x, y), left to right, or None for an object without
+        vertices. By kind (``ogr_core.geometry.block_object``):
+
+        * Point → the point itself, no random number;
+        * Line → one point at random along its segment;
+        * Window → one point at random inside it: rejection sampling over
+          its bounding box, 50 tries, then the MEAN OF ITS VERTICES — which
+          for a non-convex polygon can fall outside it (the old comment
+          called it the centroid; it is not). Any closed polygon of three
+          or more vertices is sampled this way, not only a quadrilateral;
+        * Polyline → its two points and every vertex between them
+          (``_polyline_chain``).
+
+        v0.1.232 (D109) — the Point, Line and Window branches draw exactly
+        the random numbers they drew before, in the same order, so a model
+        that declares only those gets the same trial surfaces bit for bit.
+        Until this version every kind returned one point.
         """
+        from ogr_core.geometry.block_object import (BlockObjectKind,
+                                                    block_spec_of)
+
+        spec = block_spec_of(boundary)
         verts = boundary.polyline.vertices
-        closed = getattr(boundary.polyline, "closed", False)
         n = len(verts)
-        if n == 0:
+        if spec is None or n == 0:
             return None
-        if n == 1:
-            return (verts[0].x, verts[0].y)
-        if closed and n >= 3:
+        if spec.kind is BlockObjectKind.POINT:
+            return [(verts[0].x, verts[0].y)]
+        if spec.kind is BlockObjectKind.WINDOW:
             # Window: sample inside the polygon via bounding-box rejection
             xs = [v.x for v in verts]
             ys = [v.y for v in verts]
@@ -4118,10 +4160,14 @@ class BlockSearch(BaseSearch):
                 px = rng.uniform(x0, x1)
                 py = rng.uniform(y0, y1)
                 if BlockSearch._point_in_poly(px, py, poly):
-                    return (px, py)
-            # fallback: centroid
-            return (sum(xs) / n, sum(ys) / n)
-        # line or open polyline: sample by arc length
+                    return [(px, py)]
+            # fallback: the mean of the vertices (see the docstring)
+            return [(sum(xs) / n, sum(ys) / n)]
+        if spec.kind is BlockObjectKind.POLYLINE:
+            return BlockSearch._polyline_chain(verts, spec, rng)
+        # Line: one point by arc length. The walk is written for a path of
+        # several segments because until v0.1.232 an open object of more
+        # than two vertices was sampled this way too; it is now a Polyline.
         seglens = []
         total = 0.0
         for a, b in zip(verts[:-1], verts[1:]):
@@ -4129,16 +4175,78 @@ class BlockSearch(BaseSearch):
             seglens.append(d)
             total += d
         if total < 1e-12:
-            return (verts[0].x, verts[0].y)
+            return [(verts[0].x, verts[0].y)]
         t = rng.uniform(0.0, total)
         acc = 0.0
         for i, d in enumerate(seglens):
             if acc + d >= t:
                 f = (t - acc) / d if d > 1e-12 else 0.0
                 a, b = verts[i], verts[i + 1]
-                return (a.x + f * (b.x - a.x), a.y + f * (b.y - a.y))
+                return [(a.x + f * (b.x - a.x), a.y + f * (b.y - a.y))]
             acc += d
-        return (verts[-1].x, verts[-1].y)
+        return [(verts[-1].x, verts[-1].y)]
+
+    @staticmethod
+    def _polyline_chain(verts, spec, rng):
+        """The two points of a Block Search Polyline and the stretch between.
+
+        v0.1.232 (D109). The reference: a Block Search Polyline generates
+        TWO points along the polyline, and the slip surface is constrained
+        to follow the polyline BETWEEN them. How each point is generated is
+        chosen for the left and for the right one separately
+        (``PolylinePointMode``):
+
+        * ANY — uniform by arc length over the whole polyline;
+        * SEGMENT — uniform by arc length over the end segment of that side;
+        * END_POINT — the end vertex of that side, with no random number.
+
+        The left point is drawn first, then the right one. Nothing in the
+        reference says what happens when the right one lands to the left of
+        the left one (ANY on one side and SEGMENT on the other can do it):
+        OGR takes the two in order along the polyline, so the surface still
+        follows the stretch between them. That is our reading, and it is
+        written here so it is not mistaken for the reference's.
+
+        Returns the points left to right: the first point, every vertex of
+        the polyline strictly between the two, and the second point.
+        """
+        from ogr_core.geometry.block_object import (PolylinePointMode,
+                                                    left_to_right)
+
+        pts = left_to_right(verts)
+        cum = [0.0]
+        for a, b in zip(pts[:-1], pts[1:]):
+            cum.append(cum[-1] + math.hypot(b.x - a.x, b.y - a.y))
+        total = cum[-1]
+        if total < 1e-12:
+            return [(pts[0].x, pts[0].y)]
+
+        def draw(mode, left: bool) -> float:
+            if mode is PolylinePointMode.END_POINT:
+                return 0.0 if left else total
+            if mode is PolylinePointMode.SEGMENT:
+                lo, hi = (0.0, cum[1]) if left else (cum[-2], total)
+                return rng.uniform(lo, hi)
+            return rng.uniform(0.0, total)
+
+        t_left = draw(spec.left_point, True)
+        t_right = draw(spec.right_point, False)
+        t_a, t_b = min(t_left, t_right), max(t_left, t_right)
+
+        def at(t: float):
+            for i in range(1, len(cum)):
+                if t <= cum[i]:
+                    d = cum[i] - cum[i - 1]
+                    f = (t - cum[i - 1]) / d if d > 1e-12 else 0.0
+                    a, b = pts[i - 1], pts[i]
+                    return (a.x + f * (b.x - a.x), a.y + f * (b.y - a.y))
+            return (pts[-1].x, pts[-1].y)
+
+        chain = [at(t_a)]
+        chain.extend((pts[i].x, pts[i].y) for i in range(len(pts))
+                     if t_a < cum[i] < t_b)
+        chain.append(at(t_b))
+        return chain
 
     @staticmethod
     def _point_in_poly(x, y, poly) -> bool:

@@ -79,6 +79,10 @@ _CATALOG: dict[str, tuple[str, Optional[str]]] = {
     "surface_options":   ("fa6s.arrows-split-up-and-left", None),
     "auto_grid":         ("fa6s.border-all", None),
     "block_object":      ("fa6s.object-group", None),
+    # v0.1.232 (D109) — the other three Block Search objects
+    "block_line":        ("fa6s.slash", None),
+    "block_point":       ("fa6s.crosshairs", None),
+    "block_polyline":    ("fa6s.pen-nib", None),
     "slope_limits":      ("fa6s.left-right", None),
     # --- Properties ---------------------------------------------------
     "define_materials":  ("fa6s.layer-group", None),

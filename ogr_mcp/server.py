@@ -353,13 +353,23 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
             ] = None,
             replace: Annotated[bool, Field(
                 description="External only: replace the existing one.")
-            ] = False) -> dict[str, Any]:
+            ] = False,
+            block_object: Annotated[Any, Field(
+                description="Block search object only: {'kind': 'window' "
+                            "| 'line' | 'point' | 'polyline'} and, for a "
+                            "polyline, 'left_point' / 'right_point' "
+                            "('any', 'segment' or 'end_point'). A line "
+                            "gives each trial surface one vertex; a "
+                            "polyline two points and the stretch between "
+                            "them. Omitted: inferred from the points "
+                            "(2 open points = line).")] = None
+            ) -> dict[str, Any]:
         """Add one boundary. One external, one water table and one tension
         crack at most; a water surface does nothing until assigned."""
         return run("boundary_add", type=type, points=points,
                    project_id=project_id, name=name, closed=closed,
                    material=material, assign_to=assign_to,
-                   replace=replace)
+                   replace=replace, block_object=block_object)
 
     @tool("boundary_edit", _DESTRUCTIVE)
     def boundary_edit(boundary: Annotated[str, Field(
@@ -367,7 +377,8 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
             op: Annotated[Literal[
                 "set_vertices", "translate", "move_vertex",
                 "insert_vertex", "delete_vertex", "rename", "change_type",
-                "delete", "copy", "scale", "rotate", "simplify"], Field(
+                "delete", "copy", "scale", "rotate", "simplify",
+                "block_object"], Field(
                     description="What to do.")],
             project_id: ProjectId = None,
             points: Annotated[Optional[list[list[float]]], Field(
@@ -395,14 +406,19 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
                 description="scale/rotate: [x, y] or 'centroid' "
                             "(default).")] = None,
             tolerance: Annotated[Optional[float], Field(
-                description="simplify: max deviation (m).")] = None
+                description="simplify: max deviation (m).")] = None,
+            block_object: Annotated[Any, Field(
+                description="block_object: the kind of a block search "
+                            "object, as in boundary_add; null goes back to "
+                            "the kind its points imply.")] = None
             ) -> dict[str, Any]:
         """Edit, transform, copy or delete a boundary."""
         return run("boundary_edit", boundary=boundary, op=op,
                    project_id=project_id, points=points, dx=dx, dy=dy,
                    index=index, point_xy=point_xy, name=name,
                    new_type=new_type, sx=sx, sy=sy, angle=angle,
-                   pivot=pivot, tolerance=tolerance)
+                   pivot=pivot, tolerance=tolerance,
+                   block_object=block_object)
 
     @tool("material_set", _EDIT)
     def material_set(project_id: ProjectId = None,

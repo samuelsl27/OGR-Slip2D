@@ -468,7 +468,9 @@ class TestNothingIsPending:
     def test_every_action_is_mapped_or_ui_only(self):
         from ogr_api.inventory import PENDING, PENDING_CEILING, coverage
         assert PENDING == {} and PENDING_CEILING == 0
-        assert coverage()["mapped"] == 113
+        # v0.1.232 (D109): 113 -> 116, the Line, Point and Polyline of the
+        # Block Search, all three mapped to boundary_add (`block_object`).
+        assert coverage()["mapped"] == 116
 
 
 def _qt():

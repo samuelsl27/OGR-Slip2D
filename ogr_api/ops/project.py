@@ -37,6 +37,14 @@ def boundary_info(b, *, with_vertices: bool) -> dict:
            "n_vertices": len(b.polyline.vertices)}
     if b.material_id:
         out["material_id"] = b.material_id
+    if b.btype.name == "BLOCK_SEARCH_OBJECT":
+        # v0.1.232 (D109) — the kind the search reads, and whether it is
+        # stored or inferred from the vertices (an object saved before).
+        from ogr_core.geometry import block_spec_of
+        spec = block_spec_of(b)
+        if spec is not None:
+            out["block_object"] = {**spec.to_dict(),
+                                   "stored": b.block_object is not None}
     if with_vertices:
         out["vertices"] = [[_r(v.x), _r(v.y)] for v in b.polyline.vertices]
     return out

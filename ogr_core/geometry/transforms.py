@@ -193,6 +193,13 @@ def convert_boundary(boundary: Boundary, new_type: BoundaryType) -> Boundary:
         # open water table into a material boundary joined its two ends
         # with a chord across the model.
         pass
+    # v0.1.232 (D109) — the stored kind of a Block Search object belongs to
+    # that object: any other type drops it, and an object made by conversion
+    # is read with the inferred kind (``block_object.infer_block_kind``)
+    # until someone chooses one.
+    if (new_type != BoundaryType.BLOCK_SEARCH_OBJECT
+            or boundary.btype != BoundaryType.BLOCK_SEARCH_OBJECT):
+        new.block_object = None
     new.name = new_type.display_name
     return new
 

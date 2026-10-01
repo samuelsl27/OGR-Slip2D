@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 from uuid import uuid4
 
+from .block_object import BlockObjectSpec
 from .boundary_type import BoundaryType
 from .primitives import Polyline, Vertex
 
@@ -41,6 +42,15 @@ class Boundary:
     outside the external boundary can make discretisation fail, and deleting
     the layer to find out is not a workflow.
     """
+    block_object: Optional[BlockObjectSpec] = None
+    """What a BLOCK_SEARCH_OBJECT is (v0.1.232, D109): Window, Line, Point
+    or Polyline, and for a Polyline how its two points are generated.
+
+    Only that type reads it. None on an object saved before v0.1.232, which
+    the search reads with ``block_object.infer_block_kind`` — see that
+    module for why the kind had to be stored: a two-vertex Polyline and a
+    Line are different objects with the same vertices.
+    """
 
     def __post_init__(self) -> None:
         if self.color is None:
@@ -49,7 +59,7 @@ class Boundary:
             self.name = self.btype.display_name
 
     def to_dict(self) -> dict:
-        return {
+        out = {
             "id": self.id,
             "name": self.name,
             "type": self.btype.name,
@@ -60,18 +70,31 @@ class Boundary:
             "suppressed": self.suppressed,
             "polyline": self.polyline.to_dict(),
         }
+        # Only when stored, and only on the one type that reads it: a model
+        # without Block Search objects, or with objects saved before
+        # v0.1.232, writes exactly the file it wrote before.
+        if (self.block_object is not None
+                and self.btype == BoundaryType.BLOCK_SEARCH_OBJECT):
+            out["block_object"] = self.block_object.to_dict()
+        return out
 
     @classmethod
     def from_dict(cls, data: dict) -> "Boundary":
+        btype = BoundaryType[data["type"]]
+        raw = data.get("block_object")
         b = cls(
             polyline=Polyline.from_dict(data["polyline"]),
-            btype=BoundaryType[data["type"]],
+            btype=btype,
             name=data.get("name", ""),
             color=data.get("color"),
             line_width=data.get("line_width", 1.5),
             visible=data.get("visible", True),
             material_id=data.get("material_id"),
             suppressed=bool(data.get("suppressed", False)),
+            block_object=(BlockObjectSpec.from_dict(raw)
+                          if raw is not None
+                          and btype == BoundaryType.BLOCK_SEARCH_OBJECT
+                          else None),
         )
         if "id" in data:
             b.id = data["id"]

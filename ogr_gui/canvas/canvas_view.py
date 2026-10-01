@@ -1104,6 +1104,17 @@ class CanvasView(QGraphicsView):
                 )
             )
             menu.addAction(a)
+        elif b.btype == BoundaryType.BLOCK_SEARCH_OBJECT:
+            # v0.1.232 (D109) — its kind, and for a Polyline how its two
+            # points are generated.
+            menu.addSeparator()
+            a = QAction(tr("Block Search Object..."), self)
+            a.triggered.connect(
+                lambda _c=False: self.boundary_action_requested.emit(
+                    "block_object_props", bidx,
+                )
+            )
+            menu.addAction(a)
         elif b.btype == BoundaryType.EXTERNAL:
             menu.addSeparator()
             for label, aid in (
@@ -1337,7 +1348,19 @@ class CanvasView(QGraphicsView):
             return False
         self._draw_points.append((x, y))
         self._update_draw_preview()
+        self._finish_if_complete()
         return True
+
+    def _finish_if_complete(self) -> None:
+        """Finish a drawing that is complete by definition.
+
+        v0.1.232 (D109) — a Block Search Point after one click and a Block
+        Search Line after two: waiting for Enter would only let the user
+        draw an object that is not one.
+        """
+        need = self._tool_mode.points_to_finish
+        if need and len(self._draw_points) >= need:
+            self._finish_drawing()
 
     def is_drawing(self) -> bool:
         return bool(self._draw_points) and self._tool_mode.is_drawing_boundary
@@ -1402,10 +1425,12 @@ class CanvasView(QGraphicsView):
         polygon (External / Material), the first and last point are
         ensured to be distinct and the polyline is flagged closed.
         """
-        if len(self._draw_points) < 2:
+        mode = self._tool_mode
+        # v0.1.232 (D109) — a Block Search Point is the one boundary made of
+        # a single vertex; everything else needs two.
+        if len(self._draw_points) < (1 if mode.points_to_finish == 1 else 2):
             self._cancel_drawing()
             return
-        mode = self._tool_mode
         btype = mode.boundary_type_drawn
         if btype is None:
             self._cancel_drawing()
@@ -1439,6 +1464,12 @@ class CanvasView(QGraphicsView):
             except Exception:  # noqa: BLE001
                 pass
         boundary = Boundary(polyline=pline, btype=btype)
+        # v0.1.232 (D109) — the kind of a Block Search object is stored, not
+        # inferred: a two-click Line and a two-click Polyline have the same
+        # vertices and are different objects.
+        if mode.block_kind_drawn is not None:
+            from ogr_core.geometry import BlockObjectSpec
+            boundary.block_object = BlockObjectSpec(kind=mode.block_kind_drawn)
         self._clear_draw_preview()
         self._draw_points = []
         self._last_snap = None
@@ -1522,6 +1553,15 @@ class CanvasView(QGraphicsView):
         for i, b in enumerate(self.project.boundaries):
             verts = b.polyline.vertices
             n = len(verts)
+            if n == 1:
+                # v0.1.232 (D109) — a Block Search Point: without this it
+                # could be drawn but never picked, so never deleted nor
+                # edited from its context menu.
+                d = math.hypot(x - verts[0].x, y - verts[0].y)
+                if d < best_dist:
+                    best_dist = d
+                    best_idx = i
+                continue
             if n < 2:
                 continue
             segs = n if b.polyline.closed else n - 1
@@ -1893,6 +1933,7 @@ class CanvasView(QGraphicsView):
                         return
                 self._draw_points.append((snapped.x(), snapped.y()))
                 self._update_draw_preview()
+                self._finish_if_complete()
                 event.accept()
                 return
 

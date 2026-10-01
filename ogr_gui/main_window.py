@@ -202,7 +202,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.231"
+    VERSION = "0.1.232"
 
     def __init__(self) -> None:
         super().__init__()
@@ -526,8 +526,18 @@ class MainWindow(QMainWindow):
         # "surface": the action draws a Block Search object and adds no
         # surface at all. No ellipsis, because every draw-mode action in
         # this window goes without one; "..." is reserved for a dialog.
-        self._mk("block_object", "Add Block Search Object",
+        # v0.1.232 (D109) - it is the WINDOW now, by name: the reference
+        # has four Block Search objects, and a label saying "Object" for
+        # the one that draws a window would read as all of them. The key
+        # stays, so nothing that finds the action by key has to move.
+        self._mk("block_object", "Add Block Search Window",
                  self.act_add_block_search_object, "block_object")
+        self._mk("block_line", "Add Block Search Line",
+                 self.act_add_block_search_line, "block_line")
+        self._mk("block_point", "Add Block Search Point",
+                 self.act_add_block_search_point, "block_point")
+        self._mk("block_polyline", "Add Block Search Polyline",
+                 self.act_add_block_search_polyline, "block_polyline")
         # v0.1.55 (phase M4) — focus objects, optimisation and the
         # remaining surface entries.
         from ogr_slip2d.focus import FocusKind as _FK
@@ -791,6 +801,9 @@ class MainWindow(QMainWindow):
         m_surf.addAction(self._actions["auto_grid"])
         m_surf.addAction(self._actions["add_grid"])
         m_surf.addAction(self._actions["block_object"])
+        m_surf.addAction(self._actions["block_line"])
+        m_surf.addAction(self._actions["block_point"])
+        m_surf.addAction(self._actions["block_polyline"])
         m_surf.addAction(self._actions["surf_centre_radius"])
         m_surf.addAction(self._actions["surf_three_points"])
         m_surf.addAction(self._actions["surf_manage"])
@@ -1200,14 +1213,22 @@ class MainWindow(QMainWindow):
                 f"{self.project.settings.search.search_method}", 3000,
             )
 
-    def act_add_block_search_object(self) -> None:
-        """Add a Block Search object (a search window) on the canvas.
+    def act_add_block_search_object(self, *, mode=None, prompt=None) -> None:
+        """Add a Block Search object on the canvas; the Window by default.
 
         Block Search uses one or more user-drawn search objects to
         generate slip-surface vertices. This enters a draw mode where
         the user clicks the corners of a search window (a closed
-        quadrilateral); the resulting boundary is stored as a
-        BLOCK_SEARCH_OBJECT and used by the Block Search.
+        polygon); the resulting boundary is stored as a
+        BLOCK_SEARCH_OBJECT of kind Window and used by the Block Search.
+
+        v0.1.232 (D109) — the Line, Point and Polyline actions call this one
+        with their own draw mode and prompt, because the four objects share
+        its precondition and therefore its guard (and the closure of D103
+        reads that guard here, by name). ``mode`` and ``prompt`` are
+        keyword-only so that ``QAction.triggered``, which hands its
+        ``checked`` flag to a slot that takes a positional argument, has
+        nowhere to put it.
         """
         s = self.project.settings.search
         if s.search_method != "block":
@@ -1228,18 +1249,53 @@ class MainWindow(QMainWindow):
             #    tooltip ends up contradicting what it describes, which
             #    is the defect D102 repaired one step above. The key is
             #    shared on purpose, and a test fixes that it stays shared.
+            # v0.1.232 (D109) - and shared by the four objects now, which is
+            # why it no longer names one action: "Add Block Search Object"
+            # was the label of the window, and there are four labels.
             self.ogr_status.showMessage(
-                tr("Add Block Search Object is only available with the "
+                tr("Block Search objects are only available with the "
                    "Block Search method. Set Surface Options -> Surface "
                    "Type = Non-Circular, Search Method = Block Search."),
                 8000,
             )
             return
-        self._set_tool(ToolMode.DRAW_BLOCK_SEARCH)
+        self._set_tool(mode or ToolMode.DRAW_BLOCK_SEARCH)
         self.ogr_status.showMessage(
-            tr("Draw a Block Search window: click the corners, "
-               "right-click or Enter to close."), 5000,
+            prompt or tr("Draw a Block Search window: click the corners, "
+                         "right-click or Enter to close."), 5000,
         )
+
+    def act_add_block_search_line(self) -> None:
+        """Add a Block Search Line: two clicks (v0.1.232, D109).
+
+        Every trial surface gets ONE vertex at a random place along it and
+        does not follow it — which is what a Polyline is for.
+        """
+        self.act_add_block_search_object(
+            mode=ToolMode.DRAW_BLOCK_LINE,
+            prompt=tr("Draw a Block Search line: click its two end points."))
+
+    def act_add_block_search_point(self) -> None:
+        """Add a Block Search Point: one click (v0.1.232, D109).
+
+        Every trial surface passes through it; no random number is drawn.
+        """
+        self.act_add_block_search_object(
+            mode=ToolMode.DRAW_BLOCK_POINT,
+            prompt=tr("Draw a Block Search point: click the point every "
+                      "trial surface must pass through."))
+
+    def act_add_block_search_polyline(self) -> None:
+        """Add a Block Search Polyline (v0.1.232, D109).
+
+        Every trial surface gets two points on it and follows it between
+        them; the options for each point open once it is drawn.
+        """
+        self.act_add_block_search_object(
+            mode=ToolMode.DRAW_BLOCK_POLYLINE,
+            prompt=tr("Draw a Block Search polyline: click its vertices from "
+                      "one end to the other, right-click or Enter to "
+                      "finish."))
 
     def act_auto_grid(self) -> None:
         """Reset to Auto Grid (clear user-defined grid bounds)."""
@@ -3910,19 +3966,34 @@ class MainWindow(QMainWindow):
                     if is_circular else
                     tr("Only available with Surface Options -> Surface "
                        "Type = Circular."))
-        if "block_object" in actions:
-            actions["block_object"].setEnabled(
-                boundary_refusal(self.project,
-                                 BoundaryType.BLOCK_SEARCH_OBJECT) is None)
+        # v0.1.232 (D109) - the four Block Search objects, one precondition.
+        block_tips = {
+            "block_object": tr(
+                "Add a Block Search object (search window) on the model"),
+            "block_line": tr(
+                "Add a Block Search line: every trial surface gets one "
+                "vertex at a random place along it"),
+            "block_point": tr(
+                "Add a Block Search point: every trial surface passes "
+                "through it"),
+            "block_polyline": tr(
+                "Add a Block Search polyline: every trial surface follows "
+                "it between two points generated on it"),
+        }
+        block_allowed = boundary_refusal(
+            self.project, BoundaryType.BLOCK_SEARCH_OBJECT) is None
+        for key, tip in block_tips.items():
+            if key not in actions:
+                continue
+            actions[key].setEnabled(block_allowed)
             # v0.1.166 (D102) - the DISABLED branch is the one almost
             # every user sees, because Block Search is not the default
             # method, and it was the one still naming "Add Surface" and
             # still outside tr(). A tooltip contradicting the label it
             # describes is the same defect one step down.
-            actions["block_object"].setToolTip(
-                tr("Add a Block Search object (search window) on the model")
-                if is_block else
-                tr("Add Block Search Object is only available with the "
+            actions[key].setToolTip(
+                tip if is_block else
+                tr("Block Search objects are only available with the "
                    "Block Search method. Set Surface Options -> Surface "
                    "Type = Non-Circular, Search Method = Block Search."))
 
@@ -4453,6 +4524,70 @@ class MainWindow(QMainWindow):
         # v0.1.121 — and the same for a weak layer, whose strength is the
         # material it names.
         self._maybe_prompt_weak_layer_material(boundary)
+        # v0.1.232 (D109) — a Block Search Polyline has two options of its
+        # own, how each of its points is generated; they open as soon as it
+        # is drawn, NOT modal, with the reference's default (anywhere along
+        # the polyline) already chosen.
+        self._maybe_open_block_polyline_options(boundary)
+
+    def _maybe_open_block_polyline_options(self, boundary) -> None:
+        from ogr_core.geometry import BlockObjectKind
+        spec = getattr(boundary, "block_object", None)
+        if (boundary.btype != BoundaryType.BLOCK_SEARCH_OBJECT
+                or spec is None or spec.kind is not BlockObjectKind.POLYLINE):
+            return
+        idx = next((i for i, b in enumerate(self.project.boundaries)
+                    if b.id == boundary.id), None)
+        if idx is not None:
+            self._open_block_object_dialog(idx)
+
+    def _open_block_object_dialog(self, bidx: int) -> None:
+        """The Block Search Object dialog, NOT modal (v0.1.232, D109).
+
+        Accepting it goes through ``_apply_block_object_dialog``, a bound
+        method: a lambda here would capture the dialog, and a dialog held
+        in a reference cycle is what the garbage collector destroyed from
+        the wrong thread in the segfault of v0.1.230.
+        """
+        from .dialogs import BlockObjectDialog
+        if not (0 <= bidx < len(self.project.boundaries)):
+            return
+        previous = getattr(self, "_block_object_dialog", None)
+        if previous is not None:
+            previous.close()
+        dlg = BlockObjectDialog(self.project.boundaries[bidx], self)
+        dlg.accepted.connect(self._apply_block_object_dialog)
+        self._block_object_dialog = dlg
+        dlg.show()
+
+    def _apply_block_object_dialog(self) -> None:
+        dlg = getattr(self, "_block_object_dialog", None)
+        if dlg is not None:
+            self.apply_block_object_spec(dlg.boundary_id(), dlg.spec())
+
+    def apply_block_object_spec(self, boundary_id: str, spec) -> bool:
+        """Store ``spec`` on the Block Search object ``boundary_id``.
+
+        Undoable, and refused — with the rule's reason in the status bar —
+        if the object's geometry cannot be that kind or take those options
+        (``rules.block_object_refusal``). Returns whether it was stored.
+        """
+        from copy import deepcopy
+
+        from ogr_core.project.rules import block_object_refusal
+        idx = next((i for i, b in enumerate(self.project.boundaries)
+                    if b.id == boundary_id), None)
+        if idx is None:
+            return False
+        new_b = deepcopy(self.project.boundaries[idx])
+        new_b.block_object = spec
+        why = block_object_refusal(new_b)
+        if why is not None:
+            self.ogr_status.showMessage(why.message, 8000)
+            return False
+        self.command_stack.do(
+            self.project, ReplaceBoundaryCommand(index=idx, new_boundary=new_b))
+        return True
 
     def _on_boundary_clicked(self, index: int) -> None:
         """Canvas hit-tested a boundary while a pick-based tool is active."""
@@ -4630,12 +4765,19 @@ class MainWindow(QMainWindow):
                 new_b = deepcopy(b)
                 new_b.btype = dlg.new_type()
                 new_b.id = b.id
+                # v0.1.232 (D109) — the stored kind belongs to the Block
+                # Search object; the same rule as ``convert_boundary``.
+                if (new_b.btype != BoundaryType.BLOCK_SEARCH_OBJECT
+                        or b.btype != BoundaryType.BLOCK_SEARCH_OBJECT):
+                    new_b.block_object = None
                 self.command_stack.do(
                     self.project,
                     ReplaceBoundaryCommand(index=bidx, new_boundary=new_b),
                 )
         elif action == "define_tension_crack":
             self.act_define_tension_crack()
+        elif action == "block_object_props":
+            self._open_block_object_dialog(bidx)
         elif action == "expand_shrink":
             self.act_expand_shrink(preselected_idx=bidx)
         elif action == "change_slope":

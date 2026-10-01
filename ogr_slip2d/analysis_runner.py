@@ -221,6 +221,15 @@ def check_analysis_settings(project) -> list[str]:
             "analysis first — computing now would report u = 0 "
             "everywhere, which looks like a dry slope.")
 
+    # v0.1.232 (D109) — Block Search objects whose kind their geometry
+    # cannot be, or an object inside the lateral extent of a Polyline. Asked
+    # only for the Block Search, which is the only search that reads them.
+    if project.settings.search.search_method == "block":
+        from ogr_core.project.rules import block_objects_refusal
+        _why = block_objects_refusal(project)
+        if _why is not None:
+            problems.append(_why.message)
+
     # v0.1.219 (D206) — the seismic coefficients of a model that did not come
     # through the API or the dialog (a file, a script): the same rule those
     # two ask, so a negative kh, which the methods would apply as a force
@@ -602,10 +611,13 @@ def _block_group_notes(project) -> list[str]:
                 if b.btype == BoundaryType.BLOCK_SEARCH_OBJECT)
     if drawn == 0:
         return []
-    what = ("1 Block Search object, so every trial surface takes one vertex "
-            "from it" if drawn == 1 else
-            f"{drawn} Block Search objects, so every trial surface takes one "
-            f"vertex from each of them")
+    # v0.1.232 (D109) — this used to say that every trial surface takes ONE
+    # vertex from each object, which stopped being true when the Polyline
+    # started giving two points and the stretch between them.
+    what = ("1 Block Search object, so the trial surfaces are built from it"
+            if drawn == 1 else
+            f"{drawn} Block Search objects, so the trial surfaces are built "
+            f"from them")
     return [
         f"This model draws {what} and the Number of Groups setting — "
         f"{s_search.block_num_groups} here — configures nothing. That count "

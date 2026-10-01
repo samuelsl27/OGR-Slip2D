@@ -137,10 +137,20 @@ def catalog(kind: str, project=None):
         from ogr_core.project.settings import SurfaceType
         return [m.value for m in SurfaceType]
     if kind == "boundary_types":
-        from ogr_core.geometry import BoundaryType
-        return [{"id": b.name.lower(), "name": b.display_name,
-                 "closed": b == BoundaryType.EXTERNAL}
-                for b in BoundaryType]
+        from ogr_core.geometry import (BlockObjectKind, BoundaryType,
+                                       PolylinePointMode)
+        out = [{"id": b.name.lower(), "name": b.display_name,
+                "closed": b == BoundaryType.EXTERNAL}
+               for b in BoundaryType]
+        # v0.1.232 (D109) — what `block_object` takes on a Block Search
+        # object: its kind, and for a polyline how each point is generated.
+        for entry in out:
+            if entry["id"] == "block_search_object":
+                entry["block_object"] = {
+                    "kinds": [k.value for k in BlockObjectKind],
+                    "polyline_point_modes": [m.value
+                                             for m in PolylinePointMode]}
+        return out
     if kind == "pore_pressure_types":
         from ogr_core.materials import PorePressureType
         return [m.value for m in PorePressureType]

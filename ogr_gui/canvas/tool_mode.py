@@ -34,7 +34,11 @@ class ToolMode(Enum):
     DRAW_TENSION_CRACK = "draw_tension_crack"
     DRAW_WEAK_LAYER = "draw_weak_layer"       # v0.1.121
     DRAW_ANISOTROPIC_SURFACE = "draw_anisotropic_surface"   # v0.1.126
-    DRAW_BLOCK_SEARCH = "draw_block_search"
+    DRAW_BLOCK_SEARCH = "draw_block_search"       # the Window
+    # v0.1.232 (D109) — the other three Block Search objects
+    DRAW_BLOCK_LINE = "draw_block_line"
+    DRAW_BLOCK_POINT = "draw_block_point"
+    DRAW_BLOCK_POLYLINE = "draw_block_polyline"
 
     # ----- Boundary CRUD -----
     DELETE_BOUNDARY = "delete_boundary"
@@ -81,8 +85,37 @@ class ToolMode(Enum):
             ToolMode.DRAW_WEAK_LAYER,
             ToolMode.DRAW_ANISOTROPIC_SURFACE,
             ToolMode.DRAW_BLOCK_SEARCH,
+            ToolMode.DRAW_BLOCK_LINE,
+            ToolMode.DRAW_BLOCK_POINT,
+            ToolMode.DRAW_BLOCK_POLYLINE,
             ToolMode.DRAW_EXPAND_SHRINK,
         }
+
+    @property
+    def points_to_finish(self) -> int:
+        """Clicks after which the drawing finishes by itself, or 0.
+
+        v0.1.232 (D109) — a Block Search Point is one click and a Block
+        Search Line two, by definition; every other drawing finishes when
+        the user says so.
+        """
+        return {ToolMode.DRAW_BLOCK_POINT: 1,
+                ToolMode.DRAW_BLOCK_LINE: 2}.get(self, 0)
+
+    @property
+    def block_kind_drawn(self):
+        """The kind of Block Search object this mode draws, or None.
+
+        v0.1.232 (D109) — stored on the object, because a two-vertex Line
+        and a two-vertex Polyline cannot be told apart by their vertices.
+        """
+        from ogr_core.geometry import BlockObjectKind
+        return {
+            ToolMode.DRAW_BLOCK_SEARCH: BlockObjectKind.WINDOW,
+            ToolMode.DRAW_BLOCK_LINE: BlockObjectKind.LINE,
+            ToolMode.DRAW_BLOCK_POINT: BlockObjectKind.POINT,
+            ToolMode.DRAW_BLOCK_POLYLINE: BlockObjectKind.POLYLINE,
+        }.get(self)
 
     @property
     def draws_closed_polygon(self) -> bool:
@@ -111,6 +144,9 @@ class ToolMode(Enum):
             ToolMode.DRAW_ANISOTROPIC_SURFACE:
                 BoundaryType.ANISOTROPIC_SURFACE,
             ToolMode.DRAW_BLOCK_SEARCH: BoundaryType.BLOCK_SEARCH_OBJECT,
+            ToolMode.DRAW_BLOCK_LINE: BoundaryType.BLOCK_SEARCH_OBJECT,
+            ToolMode.DRAW_BLOCK_POINT: BoundaryType.BLOCK_SEARCH_OBJECT,
+            ToolMode.DRAW_BLOCK_POLYLINE: BoundaryType.BLOCK_SEARCH_OBJECT,
         }.get(self)
 
     # ------------------------------------------------------------------
@@ -130,6 +166,10 @@ class ToolMode(Enum):
             ToolMode.DRAW_TENSION_CRACK: "CrossCursor",
             ToolMode.DRAW_WEAK_LAYER: "CrossCursor",
             ToolMode.DRAW_ANISOTROPIC_SURFACE: "CrossCursor",
+            ToolMode.DRAW_BLOCK_SEARCH: "CrossCursor",
+            ToolMode.DRAW_BLOCK_LINE: "CrossCursor",
+            ToolMode.DRAW_BLOCK_POINT: "CrossCursor",
+            ToolMode.DRAW_BLOCK_POLYLINE: "CrossCursor",
             ToolMode.DELETE_BOUNDARY: "PointingHandCursor",
             ToolMode.MOVE_BOUNDARY: "SizeAllCursor",
             ToolMode.COPY_BOUNDARY: "PointingHandCursor",

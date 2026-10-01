@@ -81,7 +81,13 @@ _KEY = "block_object"
 # three fragments are copied verbatim from the tooltip in
 # ``main_window.refresh_action_availability``; Python joins them at parse
 # time, which is what makes this one dictionary key.
-_PRECONDITION = ("Add Block Search Object is only available with the "
+#
+# v0.1.232 (D109) — changed on purpose. The key began "Add Block Search
+# Object is only available...", naming this action's label; the action is
+# now "Add Block Search Window", one of FOUR that share the precondition
+# and the key, so the sentence names the objects instead of one label.
+# What this file protects — no modal, one text for two paths — is unchanged.
+_PRECONDITION = ("Block Search objects are only available with the "
                  "Block Search method. Set Surface Options -> Surface "
                  "Type = Non-Circular, Search Method = Block Search.")
 

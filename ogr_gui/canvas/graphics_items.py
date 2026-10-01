@@ -70,7 +70,21 @@ class BoundaryItem(DomainItem):
     def refresh(self) -> None:
         path = QPainterPath()
         verts = self.boundary.polyline.vertices
-        if verts:
+        if len(verts) == 1:
+            # v0.1.232 (D109) — a Block Search Point is one vertex, which as
+            # a path draws nothing at all. A ringed cross of fixed SCREEN
+            # size, so it reads the same at every zoom: the item ignores the
+            # view's transformation (scale and y flip) and sits at the point,
+            # and the marker is symmetric, so the flip it ignores is moot.
+            self.setFlag(QGraphicsItem.ItemIgnoresTransformations, True)
+            self.setPos(verts[0].x, verts[0].y)
+            r = 5.0
+            path.addEllipse(QPointF(0.0, 0.0), r, r)
+            path.moveTo(-2.0 * r, 0.0)
+            path.lineTo(2.0 * r, 0.0)
+            path.moveTo(0.0, -2.0 * r)
+            path.lineTo(0.0, 2.0 * r)
+        elif verts:
             path.moveTo(verts[0].x, verts[0].y)
             for v in verts[1:]:
                 path.lineTo(v.x, v.y)

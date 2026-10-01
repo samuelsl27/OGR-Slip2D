@@ -146,6 +146,60 @@ def _make_boundary(btype, pts, *, name=None, closed=None,
                     material_id=material_id)
 
 
+def _block_object_spec(raw, btype):
+    """A Block Search object's spec from its dict, or None (v0.1.232, D109).
+
+    ``{"kind": "window" | "line" | "point" | "polyline", "left_point": ...,
+    "right_point": ...}``, the two points only for a polyline and each one
+    of ``any``, ``segment`` or ``end_point``. A bare kind string is
+    accepted too. None leaves the kind to be inferred from the vertices,
+    which is what an object saved before v0.1.232 gets.
+    """
+    from ogr_core.geometry import (BlockObjectKind, BlockObjectSpec,
+                                   PolylinePointMode)
+
+    if raw is None:
+        return None
+    if btype.name != "BLOCK_SEARCH_OBJECT":
+        raise InvalidArgument(
+            f"block_object is only read for a Block Search object, not a "
+            f"{btype.display_name}.")
+    if isinstance(raw, str):
+        raw = {"kind": raw}
+    if not isinstance(raw, dict) or "kind" not in raw:
+        raise InvalidArgument(
+            "block_object is {'kind': 'window' | 'line' | 'point' | "
+            "'polyline'} and, for a polyline, 'left_point' and "
+            "'right_point' ('any', 'segment' or 'end_point').")
+    extra = sorted(set(raw) - {"kind", "left_point", "right_point"})
+    if extra:
+        raise InvalidArgument(f"block_object: unknown key(s) {extra}.")
+    kind = coerce_enum(raw["kind"], BlockObjectKind, "block_object.kind")
+    if kind is not BlockObjectKind.POLYLINE and (
+            "left_point" in raw or "right_point" in raw):
+        raise InvalidArgument(
+            "left_point and right_point are only read for a Block Search "
+            "Polyline: the other objects give one vertex each.")
+    return BlockObjectSpec(
+        kind=kind,
+        left_point=coerce_enum(raw.get("left_point", "any"),
+                               PolylinePointMode, "block_object.left_point"),
+        right_point=coerce_enum(raw.get("right_point", "any"),
+                                PolylinePointMode,
+                                "block_object.right_point"))
+
+
+def _check_block_object(b) -> None:
+    """Refuse a Block Search object its geometry cannot be (D109)."""
+    from ogr_core.project.rules import block_object_refusal
+
+    if b.btype.name != "BLOCK_SEARCH_OBJECT":
+        return
+    why = block_object_refusal(b)
+    if why is not None:
+        raise InvalidArgument(why.message)
+
+
 def _check_allowed(project, btype, *, replacing=None) -> None:
     from ogr_core.project.rules import boundary_refusal
 
@@ -187,10 +241,12 @@ def boundary_add(ws, type: str, points: list,
                  project_id: Optional[str] = None,
                  name: Optional[str] = None, closed: Optional[bool] = None,
                  material: Optional[str] = None,
-                 assign_to: Any = None, replace: bool = False) -> dict:
+                 assign_to: Any = None, replace: bool = False,
+                 block_object: Any = None) -> dict:
     """Add a boundary (external, material, water_table, piezometric, ...)."""
     btype = boundary_type(type)
     WATER = ("WATER_TABLE", "PIEZOMETRIC")
+    spec = _block_object_spec(block_object, btype)
 
     def edit(project):
         existing = None
@@ -216,6 +272,8 @@ def boundary_add(ws, type: str, points: list,
                 f"{btype.display_name}.")
         b = _make_boundary(btype, points, name=name, closed=closed,
                            material_id=mat_id)
+        b.block_object = spec
+        _check_block_object(b)
         if existing is not None:
             b.id = existing.id
             idx = project.boundaries.index(existing)
@@ -252,7 +310,7 @@ def boundary_add(ws, type: str, points: list,
 
 _EDIT_OPS = ("set_vertices", "translate", "move_vertex", "insert_vertex",
              "delete_vertex", "rename", "change_type", "delete", "copy",
-             "scale", "rotate", "simplify")
+             "scale", "rotate", "simplify", "block_object")
 
 
 @operation("boundary_edit", toolset="model", mutates=True)
@@ -266,10 +324,12 @@ def boundary_edit(ws, boundary: str, op: str,
                   sx: Optional[float] = None, sy: Optional[float] = None,
                   angle: Optional[float] = None,
                   pivot: Any = None,
-                  tolerance: Optional[float] = None) -> dict:
+                  tolerance: Optional[float] = None,
+                  block_object: Any = None) -> dict:
     """Edit or delete a boundary: set_vertices, translate, move/insert/
     delete_vertex, rename, change_type, delete, copy, scale, rotate,
-    simplify."""
+    simplify, block_object (the kind of a Block Search object; None goes
+    back to the kind its vertices imply)."""
     from ogr_core.geometry import Vertex
 
     if op not in _EDIT_OPS:
@@ -398,6 +458,17 @@ def boundary_edit(ws, boundary: str, op: str,
                 raise Conflict("Only a closed polyline can become the "
                                "External boundary.")
             new = convert_boundary(b, target)
+        elif op == "block_object":
+            new.block_object = (_block_object_spec(block_object, b.btype)
+                                if block_object is not None else None)
+            if b.btype.name != "BLOCK_SEARCH_OBJECT":
+                raise InvalidArgument(
+                    f"block_object is only read for a Block Search object, "
+                    f"not a {b.btype.display_name}.")
+        # v0.1.232 (D109) — whatever the edit, a Block Search object has to
+        # stay one its geometry can be: moving a vertex of a Polyline so it
+        # doubles back is refused here, with the reason, not at compute.
+        _check_block_object(new)
         from ogr_core.geometry.cleanup import has_self_intersections
         if len(new.polyline.vertices) >= 4 and has_self_intersections(
                 new.polyline):

@@ -104,6 +104,136 @@ def boundary_refusal(project, btype: BoundaryType) -> Optional[Refusal]:
 
 
 # ----------------------------------------------------------------------
+def block_object_refusal(boundary) -> Optional[Refusal]:
+    """Why this Block Search object cannot be searched as it is, or None.
+
+    v0.1.232 (D109). The kind stored on the object — or inferred, for one
+    saved before — has to be one its geometry can be:
+
+    * a Point is one vertex, a Line is one segment given by two points,
+      and a Window is a closed polygon (four-sided in the reference; OGR
+      takes any of three or more vertices, which contains it);
+    * a Polyline is open, has two or more vertices, and ADVANCES in x from
+      one end to the other. The trial surface follows it between its two
+      points and is assembled by sorting every vertex by x, so a polyline
+      that doubles back would give a surface that reverses direction —
+      not kinematically admissible, which is what the reference's own
+      sorting is there to prevent;
+    * the «Left / Right Line Segment» option draws its point on the end
+      segment of that side, which «assumes that the polyline consists of at
+      least two line segments». On a single segment it is refused instead
+      of quietly meaning «anywhere».
+    """
+    from ..geometry.block_object import (BlockObjectKind, PolylinePointMode,
+                                         block_spec_of, left_to_right)
+
+    poly = boundary.polyline
+    verts = poly.vertices
+    n = len(verts)
+    spec = block_spec_of(boundary)
+    if spec is None:
+        return Refusal("block_object_empty",
+                       "A Block Search object needs at least one vertex.")
+    kind = spec.kind
+    if kind is BlockObjectKind.POINT and n != 1:
+        return Refusal(
+            "block_object_geometry",
+            f"A Block Search Point is a single point; this one has {n} "
+            f"vertices.")
+    if kind is BlockObjectKind.LINE and n != 2:
+        return Refusal(
+            "block_object_geometry",
+            f"A Block Search Line is one segment given by two points; this "
+            f"one has {n} vertices. A path of several segments that the "
+            f"surface should follow is a Block Search Polyline.")
+    if kind is BlockObjectKind.WINDOW and not (poly.closed and n >= 3):
+        return Refusal(
+            "block_object_geometry",
+            "A Block Search Window is a closed polygon of at least three "
+            "vertices.")
+    if kind is BlockObjectKind.POLYLINE:
+        if poly.closed or n < 2:
+            return Refusal(
+                "block_object_geometry",
+                "A Block Search Polyline is an open line of at least two "
+                "vertices.")
+        pts = left_to_right(verts)
+        if any(b.x <= a.x for a, b in zip(pts, pts[1:])):
+            return Refusal(
+                "block_polyline_not_monotone",
+                "A Block Search Polyline has to advance in x from one end to "
+                "the other: the trial surface follows it between its two "
+                "points, and a polyline that doubles back (or has a vertical "
+                "segment) would give a surface that reverses direction.")
+        if n < 3 and PolylinePointMode.SEGMENT in (spec.left_point,
+                                                   spec.right_point):
+            return Refusal(
+                "block_polyline_segment_mode",
+                "The Left / Right Line Segment option places its point on "
+                "the end segment of that side, which needs a polyline of at "
+                "least two segments; this one has one. Use Any Line Segment "
+                "or End Point.")
+    return None
+
+
+def block_objects_refusal(project) -> Optional[Refusal]:
+    """Why the Block Search objects of ``project`` cannot be searched, or None.
+
+    v0.1.232 (D109). Each object on its own (:func:`block_object_refusal`),
+    then the one rule between them: no other object may overlap the lateral
+    extent of a Block Search Polyline. The reference does not allow it
+    «because this is likely to create kinematically inadmissible slip
+    surfaces»; in OGR it is also what keeps the polyline's stretch whole,
+    since a trial surface is assembled by sorting the vertices of all its
+    objects by x and a vertex from another object inside that range would
+    cut the stretch in two. Objects that merely touch at an end are allowed.
+
+    The tolerance of «merely touch» is relative to the size of the objects'
+    coordinates, not absolute: the same number would mean different things
+    in millimetres and in metres.
+    """
+    from ..geometry.block_object import BlockObjectKind, block_spec_of
+
+    objects = [b for b in project.boundaries
+               if b.btype == BoundaryType.BLOCK_SEARCH_OBJECT]
+    for i, b in enumerate(objects):
+        why = block_object_refusal(b)
+        if why is not None:
+            return Refusal(why.code, f"{_block_label(b, i)}: {why.message}",
+                           cause=why)
+    spans = []
+    for i, b in enumerate(objects):
+        xs = [v.x for v in b.polyline.vertices]
+        spans.append((i, b, min(xs), max(xs), block_spec_of(b).kind))
+    scale = max([1.0] + [abs(x) for _i, _b, lo, hi, _k in spans
+                         for x in (lo, hi)])
+    tol = 1e-9 * scale
+    for i, p, p_lo, p_hi, kind in spans:
+        if kind is not BlockObjectKind.POLYLINE:
+            continue
+        for j, q, q_lo, q_hi, _kind in spans:
+            if j == i:
+                continue
+            if q_hi > p_lo + tol and q_lo < p_hi - tol:
+                return Refusal(
+                    "block_polyline_overlap",
+                    f"{_block_label(q, j)} overlaps the lateral extent of "
+                    f"the Block Search Polyline {_block_label(p, i)} (x from "
+                    f"{p_lo:g} to {p_hi:g}). This is not allowed: the trial "
+                    f"surface follows the polyline between its two points, "
+                    f"and a vertex of another object inside that range "
+                    f"would cut the stretch.")
+    return None
+
+
+def _block_label(boundary, index: int) -> str:
+    """A Block Search object named in a refusal: its name and its position
+    among the model's Block Search objects, since every object drawn in
+    the interface is called the same."""
+    return f"{boundary.name or boundary.btype.display_name} #{index + 1}"
+
+
+# ----------------------------------------------------------------------
 def assign_water_surface(project, surface_id, picked: Iterable[str],
                          cleared: Iterable[str] = ()) -> None:
     """Point materials at a water surface, and set their pore-pressure model.

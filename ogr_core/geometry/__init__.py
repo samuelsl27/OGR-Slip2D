@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 Samuel Sáez López — Universidad Politécnica de Cartagena
 """Geometric primitives and operations for OGR Core."""
+from .block_object import (BlockObjectKind, BlockObjectSpec,
+                           PolylinePointMode, block_spec_of,
+                           infer_block_kind)
 from .boundary import Boundary
 from .boundary_type import BoundaryType
 from .cleanup import (
@@ -70,4 +73,10 @@ __all__ = [
     "lower_y_at",
     "upper_y_at",
     "zero_thickness_spans",
+    # v0.1.232 (D109) — the four Block Search objects, stored on the object
+    "BlockObjectKind",
+    "BlockObjectSpec",
+    "PolylinePointMode",
+    "block_spec_of",
+    "infer_block_kind",
 ]

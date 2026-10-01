@@ -3,6 +3,7 @@
 """Modal dialog boxes used by the GUI."""
 from .boundary_dialogs import (
     AssignMaterialDialog,
+    BlockObjectDialog,
     ChangeSlopeAngleDialog,
     ConvertBoundaryDialog,
     EditCoordinatesDialog,
@@ -28,6 +29,7 @@ from .optimize_settings_dialog import OptimizeSettingsDialog
 __all__ = [
     "AboutDialog",
     "AssignMaterialDialog",
+    "BlockObjectDialog",
     "ChangeSlopeAngleDialog",
     "ComputeProgressDialog",
     "ConvertBoundaryDialog",

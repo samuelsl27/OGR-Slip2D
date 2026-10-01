@@ -64,6 +64,12 @@ interface DISPLAYS; every value you send or receive here is SI.
 * At most one water table, one tension crack and one external boundary;
   a drawdown line only with the rapid drawdown option on; a Block Search
   object only with the Block Search.
+* A Block Search object has a KIND (boundary_add block_object): a window
+  or a line gives every trial surface one vertex, a point is a vertex
+  every surface passes through, and a polyline gives two points AND the
+  stretch of polyline between them — the one to put along a weak layer.
+  Two open points without a kind are a line, not a polyline. Nothing may
+  overlap the x-range of a polyline, and a polyline must advance in x.
 
 ## Water
 * A water table (phreatic surface) or a piezometric line produces pore
