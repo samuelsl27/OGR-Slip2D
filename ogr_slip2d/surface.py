@@ -494,6 +494,11 @@ class SlipSurface:
     # tension crack the same way a circular one does.
     tension_cracks: list = field(default_factory=list)
     tension_crack_wall: Optional[tuple] = None
+    # v0.1.233 (D99) — the Group ID of the Block Search group that generated
+    # this surface, when the search ran with Multiple Groups; None otherwise
+    # (every other search, and a Block Search without groups). It only says
+    # where the surface came from: no calculation reads it.
+    block_group: Optional[int] = None
 
     def __post_init__(self) -> None:
         # Enforce left-to-right ordering

@@ -362,7 +362,11 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
                             "gives each trial surface one vertex; a "
                             "polyline two points and the stretch between "
                             "them. Omitted: inferred from the points "
-                            "(2 open points = line).")] = None
+                            "(2 open points = line). 'group_id' (an "
+                            "integer, default 0) is its Group ID, read "
+                            "only with settings search."
+                            "block_multiple_groups on: then each id is "
+                            "searched on its own.")] = None
             ) -> dict[str, Any]:
         """Add one boundary. One external, one water table and one tension
         crack at most; a water surface does nothing until assigned."""

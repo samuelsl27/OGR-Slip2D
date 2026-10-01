@@ -78,17 +78,28 @@ class BlockObjectSpec:
 
     ``left_point`` and ``right_point`` are read only for a Polyline, and
     only a Polyline writes them.
+
+    ``group_id`` (v0.1.233, D99) is the reference's Group ID: with
+    *Multiple Groups* on, the search runs once per distinct id, each run
+    using only the objects that carry it. It is read ONLY when
+    ``SearchSettings.block_multiple_groups`` is on — with the box off every
+    object belongs to one search whatever its id says, which is the
+    reference's behaviour — and it is written only when it is not 0, so a
+    file that never used groups is byte-for-byte what it was.
     """
 
     kind: BlockObjectKind
     left_point: PolylinePointMode = PolylinePointMode.ANY
     right_point: PolylinePointMode = PolylinePointMode.ANY
+    group_id: int = 0
 
     def to_dict(self) -> dict:
         out = {"kind": self.kind.value}
         if self.kind is BlockObjectKind.POLYLINE:
             out["left_point"] = self.left_point.value
             out["right_point"] = self.right_point.value
+        if self.group_id:
+            out["group_id"] = int(self.group_id)
         return out
 
     @classmethod
@@ -97,6 +108,7 @@ class BlockObjectSpec:
             kind=BlockObjectKind(data["kind"]),
             left_point=PolylinePointMode(data.get("left_point", "any")),
             right_point=PolylinePointMode(data.get("right_point", "any")),
+            group_id=int(data.get("group_id", 0) or 0),
         )
 
 
@@ -134,6 +146,37 @@ def block_spec_of(boundary) -> Optional[BlockObjectSpec]:
         return spec
     kind = infer_block_kind(boundary.polyline)
     return None if kind is None else BlockObjectSpec(kind=kind)
+
+
+def block_group_of(boundary) -> int:
+    """The Group ID a Block Search object carries; 0 when it stores none.
+
+    An object saved before v0.1.233, or one whose spec is only inferred,
+    has no id of its own and is in group 0 — so a model with Multiple
+    Groups on and no ids assigned is ONE group, which is what the box off
+    gives too.
+    """
+    spec = getattr(boundary, "block_object", None)
+    return int(getattr(spec, "group_id", 0) or 0) if spec is not None else 0
+
+
+def block_groups(boundaries, multiple_groups: bool) -> list:
+    """The Block Search objects partitioned the way a search uses them.
+
+    A list of ``(group_id, [objects])`` in ascending id order. With
+    ``multiple_groups`` off there is exactly one group, holding every
+    object in model order (the id is not read). The order of the objects
+    inside a group is the model's: it is the order in which the search
+    draws their random numbers, so a one-group partition reproduces the
+    search without groups draw for draw.
+    """
+    objs = list(boundaries)
+    if not objs:
+        return []
+    if not multiple_groups:
+        return [(0, objs)]
+    ids = sorted({block_group_of(b) for b in objs})
+    return [(g, [b for b in objs if block_group_of(b) == g]) for g in ids]
 
 
 def left_to_right(vertices) -> list:

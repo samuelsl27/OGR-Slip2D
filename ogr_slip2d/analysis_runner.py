@@ -285,7 +285,9 @@ def _shadow_setting_problems(project) -> list[str]:
     sentences. They both said v0.1.103, which was already false for
     ``path_optimize`` (v0.1.104) and would have been false again for
     ``block_multiple_groups``. A refusal that misdates the removal sends
-    the reader to the wrong changelog.
+    the reader to the wrong changelog. (``block_multiple_groups`` left the
+    registry in v0.1.233, D99: it is a live field again, with the
+    reference's meaning.)
     """
     from ogr_core.project.settings import _SHADOW_FIELDS
 
@@ -583,34 +585,56 @@ def _steffensen_scope_notes(project, method_ids) -> list[str]:
 
 
 def _block_group_notes(project) -> list[str]:
-    """What the Number of Groups cannot do once objects are drawn.
+    """What the Block Search group settings do — and do not do — here.
 
     v0.1.156, defect D07c(b). ``block_num_groups`` is read in exactly one
     place — the branch of ``BlockSearch._run`` that tiles OGR's implicit
     region — and that branch runs only when the model carries no
     ``BLOCK_SEARCH_OBJECT`` at all. With one drawn, the vertices come from
-    the objects and the count configures nothing.
+    the objects and the count configures nothing. It fires whatever the
+    count says, including its default of three: a three is as much a claim
+    by the panel as a seven, and the control is equally inert under both.
 
-    Which is not a rare corner: it is the ONLY arrangement the reference
-    supports, since it requires at least one search object to be drawn, and
-    it is what all five block models of the reference bank do. So the panel
-    shows a live number that describes the run in the one case the
-    reference does not document, and describes nothing in the case it does.
-    Rule 7 asks for that to be said rather than implied.
+    v0.1.233, defect D100 — the other half, which 0.1.156 was not asked to
+    write. With NO object drawn the search does run, but over a region OGR
+    chose (a box over the slope face tiled into vertical bands, one random
+    vertex in each) and not over anything the model says: the reference
+    requires at least one object and offers no fallback, so nothing about
+    that region can be calibrated against it. That is said on every such
+    run. The count was relabelled «Implicit Region Bands» in the same
+    version, because «Number of Groups» was the name of the reference's
+    Multiple Groups, which it is not.
 
-    It fires whatever the count says, including its default of three: a
-    three is as much a claim by the panel as a seven, and the control is
-    equally inert under both.
+    v0.1.233, defect D99 — and two silences of Multiple Groups itself (rule
+    7): the box is on but every object carries the same Group ID, which is
+    one group and the same search as the box off; or the box is on with no
+    object drawn, where there are no ids to split by.
     """
-    from ogr_core.geometry import BoundaryType
+    from ogr_core.geometry import BoundaryType, block_groups
 
     s_search = project.settings.search
     if s_search.search_method != "block":
         return []
-    drawn = sum(1 for b in project.boundaries
-                if b.btype == BoundaryType.BLOCK_SEARCH_OBJECT)
+    objects = [b for b in project.boundaries
+               if b.btype == BoundaryType.BLOCK_SEARCH_OBJECT]
+    drawn = len(objects)
+    multiple = bool(getattr(s_search, "block_multiple_groups", False))
+    notes = []
     if drawn == 0:
-        return []
+        notes.append(
+            f"No Block Search object is drawn, so the sampling region is "
+            f"chosen by the program and not by the model: a box over the "
+            f"slope face tiled into {s_search.block_num_groups} vertical "
+            f"band(s) (Implicit Region Bands), one random vertex in each. "
+            f"The reference requires at least one Block Search object "
+            f"(window, line, point or polyline); draw one to search where "
+            f"the model says the slip surface can run.")
+        if multiple:
+            notes.append(
+                "Multiple Groups is on, but no Block Search object is drawn, "
+                "so there are no Group IDs to split the search by: the "
+                "setting does nothing here.")
+        return notes
     # v0.1.232 (D109) — this used to say that every trial surface takes ONE
     # vertex from each object, which stopped being true when the Polyline
     # started giving two points and the stretch between them.
@@ -618,12 +642,20 @@ def _block_group_notes(project) -> list[str]:
             if drawn == 1 else
             f"{drawn} Block Search objects, so the trial surfaces are built "
             f"from them")
-    return [
-        f"This model draws {what} and the Number of Groups setting — "
+    notes.append(
+        f"This model draws {what} and the Implicit Region Bands setting — "
         f"{s_search.block_num_groups} here — configures nothing. That count "
         f"only divides the region OGR falls back to when no Block Search "
-        f"object is drawn."
-    ]
+        f"object is drawn.")
+    if multiple:
+        parts = block_groups(objects, True)
+        if len(parts) == 1:
+            notes.append(
+                f"Multiple Groups is on, but every Block Search object has "
+                f"Group ID {parts[0][0]}: that is one group, and the search "
+                f"is the same as with the setting off. Give the objects "
+                f"different Group IDs to search them separately.")
+    return notes
 
 
 def _base_angle_ceiling_notes(project) -> list[str]:
@@ -1977,6 +2009,8 @@ def build_search(project, method_id: str, progress_cb: Optional[Callable] = None
         from .search import BlockSearch
         return BlockSearch(
             num_groups=s_search.block_num_groups,
+            # v0.1.233 (D99) — the reference's Multiple Groups.
+            multiple_groups=bool(s_search.block_multiple_groups),
             left_start_angle_deg=s_search.block_left_start_angle_deg,
             left_end_angle_deg=s_search.block_left_end_angle_deg,
             right_start_angle_deg=s_search.block_right_start_angle_deg,

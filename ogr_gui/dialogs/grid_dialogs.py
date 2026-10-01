@@ -643,6 +643,7 @@ class SurfaceOptionsDialog(QDialog):
                 self._sync_optimize_boxes(_optimize_default_for(m))
             elif m == SM.BLOCK_SEARCH:
                 self._b_num.setValue(int(defaults.block_num_surfaces))
+                self._b_multi.setChecked(bool(defaults.block_multiple_groups))
                 self._b_groups.setValue(max(1, int(defaults.block_num_groups)))
                 self._b_left_start.setValue(defaults.block_left_start_angle_deg)
                 self._b_left_end.setValue(defaults.block_left_end_angle_deg)
@@ -1040,7 +1041,8 @@ class SurfaceOptionsDialog(QDialog):
         w = QGroupBox(tr("Block Search Options"))
         outer = QVBoxLayout(w)
 
-        # Top row: Number of Surfaces + Multiple Groups
+        # Top row: Number of Surfaces, Multiple Groups and the implicit
+        # region's band count
         f1 = QFormLayout()
         self._b_num = QSpinBox()
         self._b_num.setRange(10, 1000000)
@@ -1058,15 +1060,34 @@ class SurfaceOptionsDialog(QDialog):
         # a Group ID to each search object the user draws. Here the count
         # divides an implicit region instead, so the box gated the wrong
         # quantity, and unticking it OVERWROTE the number the user had typed.
+        #
+        # v0.1.233 (D99) — Multiple Groups is BACK, and this time it is the
+        # reference's: the box that turns on the Group ID of every drawn
+        # object, one search per id with Number of Surfaces divided between
+        # them. And the count below it, which was labelled «Number of Groups»
+        # — the reference's name for something else — is now called what it
+        # is (D100): the bands of the region OGR falls back to when nothing is
+        # drawn. The two controls are independent and each says when it acts.
+        self._b_multi = QCheckBox(tr("Multiple Groups"))
+        self._b_multi.setChecked(bool(getattr(s, "block_multiple_groups",
+                                              False)))
+        self._b_multi.setToolTip(tr(
+            "Search each Group ID of the drawn Block Search objects on its "
+            "own, with Number of Surfaces divided equally between the "
+            "groups — for example one Block Search Polyline per weak layer, "
+            "each with its own Group ID. The Group ID is set in the Block "
+            "Search Object dialog of each object."))
+        f1.addRow("", self._b_multi)
         self._b_groups = QSpinBox()
         self._b_groups.setRange(1, 20)
         self._b_groups.setValue(max(1, int(s.block_num_groups)))
         self._b_groups.setToolTip(tr(
-            "How many vertical bands the sampling region is divided into "
-            "when no Block Search object is drawn — one surface vertex per "
-            "band. With objects drawn, the vertices come from them and this "
-            "number does nothing."))
-        f1.addRow(tr("Number of Groups:"), self._b_groups)
+            "Only used when no Block Search object is drawn: the program then "
+            "searches a box over the slope face, divided into this many "
+            "vertical bands with one surface vertex per band. The reference "
+            "requires at least one drawn object and has no such setting. "
+            "With objects drawn, this number does nothing."))
+        f1.addRow(tr("Implicit Region Bands:"), self._b_groups)
         outer.addLayout(f1)
 
         # Side-by-side projection angles
@@ -1183,6 +1204,7 @@ class SurfaceOptionsDialog(QDialog):
         # so unticking the box did not merely stop using the number, it
         # DESTROYED it: type 7, untick, tick again and the 7 was a 3.
         s.block_num_groups = max(1, int(self._b_groups.value()))
+        s.block_multiple_groups = self._b_multi.isChecked()
 
         # ----- Filters -----
         s.min_elevation = (

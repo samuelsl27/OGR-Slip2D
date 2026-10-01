@@ -2,8 +2,8 @@
 # Copyright (C) 2026 Samuel Sáez López — Universidad Politécnica de Cartagena
 """Geometric primitives and operations for OGR Core."""
 from .block_object import (BlockObjectKind, BlockObjectSpec,
-                           PolylinePointMode, block_spec_of,
-                           infer_block_kind)
+                           PolylinePointMode, block_group_of, block_groups,
+                           block_spec_of, infer_block_kind)
 from .boundary import Boundary
 from .boundary_type import BoundaryType
 from .cleanup import (
@@ -77,6 +77,8 @@ __all__ = [
     "BlockObjectKind",
     "BlockObjectSpec",
     "PolylinePointMode",
+    "block_group_of",
+    "block_groups",
     "block_spec_of",
     "infer_block_kind",
 ]

@@ -244,6 +244,20 @@ _DICTS: dict[str, dict[str, str]] = {
         'Kind:': 'Tipo:',
         'Left point:': 'Punto izquierdo:',
         'Right point:': 'Punto derecho:',
+        # v0.1.233 (D99, D100): los Multiple Groups de la referencia (un
+        # Group ID por objeto) y el contador de bandas de la región implícita,
+        # que hasta ahora se llamaba «Number of Groups» sin serlo.
+        'Multiple Groups': 'Grupos múltiples',
+        'Search each Group ID of the drawn Block Search objects on its own, with Number of Surfaces divided equally between the groups — for example one Block Search Polyline per weak layer, each with its own Group ID. The Group ID is set in the Block Search Object dialog of each object.':
+            'Busca por separado cada identificador de grupo de los objetos de búsqueda por bloques dibujados, repartiendo el número de superficies a partes iguales entre los grupos; por ejemplo, una polilínea de bloque por cada capa débil, cada una con su identificador. El identificador se asigna en el diálogo «Objeto de búsqueda por bloques» de cada objeto.',
+        'Only used when no Block Search object is drawn: the program then searches a box over the slope face, divided into this many vertical bands with one surface vertex per band. The reference requires at least one drawn object and has no such setting. With objects drawn, this number does nothing.':
+            'Solo se usa cuando no hay ningún objeto de búsqueda por bloques dibujado: el programa busca entonces en una caja sobre la cara del talud, dividida en este número de bandas verticales, con un vértice de superficie por banda. La referencia exige al menos un objeto dibujado y no tiene este ajuste. Con objetos dibujados, este número no hace nada.',
+        'Implicit Region Bands:': 'Bandas de la región implícita:',
+        'Objects with the same Group ID are searched together, and each Group ID on its own, with Number of Surfaces divided between them. Only used when Multiple Groups is on in Surface Options.':
+            'Los objetos con el mismo identificador de grupo se buscan juntos, y cada identificador por separado, con el número de superficies repartido entre ellos. Solo se usa con «Grupos múltiples» activado en las opciones de superficie.',
+        'Group ID:': 'Identificador de grupo:',
+        'Turn Multiple Groups on in Surface Options to search the Group IDs separately.':
+            'Activa «Grupos múltiples» en las opciones de superficie para buscar por separado cada identificador de grupo.',
         # Los tres modos de cada punto de la polilínea, con los nombres
         # de la referencia: «Any / Left / Right Line Segment» y «Left /
         # Right End Point».
@@ -1143,9 +1157,6 @@ _DICTS: dict[str, dict[str, str]] = {
         'Most influential first — ': 'Más influyente primero — ',
         'Move Down': 'Bajar',
         'Move Up': 'Subir',
-        'How many vertical bands the sampling region is divided into when no Block Search object is drawn — one surface vertex per band. With objects drawn, the vertices come from them and this number does nothing.':
-            'En cuántas bandas verticales se divide la región de muestreo cuando no hay ningún objeto de Block Search dibujado — un vértice de superficie por banda. Con objetos dibujados, los vértices salen de ellos y este número no hace nada.',
-        'Number of Groups:': 'Número de grupos:',
         'New type:': 'Nuevo tipo:',
         'No probabilistic result for this method.': 'Sin resultado probabilístico para este método.',
         'No results to display.': 'No hay resultados que mostrar.',

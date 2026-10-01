@@ -191,8 +191,16 @@ def block_objects_refusal(project) -> Optional[Refusal]:
     The tolerance of «merely touch» is relative to the size of the objects'
     coordinates, not absolute: the same number would mean different things
     in millimetres and in metres.
+
+    v0.1.233 (D99) — the rule holds WITHIN a group. With Multiple Groups on
+    (``SearchSettings.block_multiple_groups``) each Group ID is searched on
+    its own and its surfaces are assembled from its own objects only, so a
+    polyline in one group cannot be cut by an object of another. That is
+    exactly what the reference uses groups for: one polyline per weak layer,
+    overlapping in x, each with its id.
     """
-    from ..geometry.block_object import BlockObjectKind, block_spec_of
+    from ..geometry.block_object import (BlockObjectKind, block_group_of,
+                                         block_spec_of)
 
     objects = [b for b in project.boundaries
                if b.btype == BoundaryType.BLOCK_SEARCH_OBJECT]
@@ -201,28 +209,36 @@ def block_objects_refusal(project) -> Optional[Refusal]:
         if why is not None:
             return Refusal(why.code, f"{_block_label(b, i)}: {why.message}",
                            cause=why)
+    grouped = bool(getattr(project.settings.search, "block_multiple_groups",
+                           False))
     spans = []
     for i, b in enumerate(objects):
         xs = [v.x for v in b.polyline.vertices]
-        spans.append((i, b, min(xs), max(xs), block_spec_of(b).kind))
-    scale = max([1.0] + [abs(x) for _i, _b, lo, hi, _k in spans
+        spans.append((i, b, min(xs), max(xs), block_spec_of(b).kind,
+                      block_group_of(b) if grouped else 0))
+    scale = max([1.0] + [abs(x) for _i, _b, lo, hi, _k, _g in spans
                          for x in (lo, hi)])
     tol = 1e-9 * scale
-    for i, p, p_lo, p_hi, kind in spans:
+    for i, p, p_lo, p_hi, kind, g_p in spans:
         if kind is not BlockObjectKind.POLYLINE:
             continue
-        for j, q, q_lo, q_hi, _kind in spans:
-            if j == i:
+        for j, q, q_lo, q_hi, _kind, g_q in spans:
+            if j == i or g_q != g_p:
                 continue
             if q_hi > p_lo + tol and q_lo < p_hi - tol:
+                where = (f" (both in Group ID {g_p})" if grouped else "")
+                way_out = (" Give them different Group IDs to search them "
+                           "separately." if grouped else
+                           " To search them separately, turn Multiple Groups "
+                           "on and give them different Group IDs.")
                 return Refusal(
                     "block_polyline_overlap",
                     f"{_block_label(q, j)} overlaps the lateral extent of "
                     f"the Block Search Polyline {_block_label(p, i)} (x from "
-                    f"{p_lo:g} to {p_hi:g}). This is not allowed: the trial "
-                    f"surface follows the polyline between its two points, "
-                    f"and a vertex of another object inside that range "
-                    f"would cut the stretch.")
+                    f"{p_lo:g} to {p_hi:g}){where}. This is not allowed: the "
+                    f"trial surface follows the polyline between its two "
+                    f"points, and a vertex of another object inside that "
+                    f"range would cut the stretch.{way_out}")
     return None
 
 

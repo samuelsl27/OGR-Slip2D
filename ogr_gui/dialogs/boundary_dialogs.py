@@ -439,9 +439,16 @@ class BlockObjectDialog(QDialog):
     NOT modal, unlike the rest of this module: the main window opens it
     with ``show()`` and reads :meth:`spec` when it is accepted, and a test
     drives it the same way, without ``exec()``.
+
+    v0.1.233 (D99) — and the object's Group ID, which the reference assigns
+    here. It is enabled only when ``multiple_groups`` says the model has
+    Multiple Groups on, because it does nothing otherwise; disabled, it
+    still shows — and keeps — the id the object stores, so turning the box
+    off and on again does not lose anything.
     """
 
-    def __init__(self, boundary: Boundary, parent=None) -> None:
+    def __init__(self, boundary: Boundary, parent=None,
+                 multiple_groups: bool = False) -> None:
         super().__init__(parent)
         from ogr_core.geometry import (BlockObjectKind, PolylinePointMode,
                                        block_spec_of)
@@ -485,6 +492,16 @@ class BlockObjectDialog(QDialog):
                 cbo.model().item(1).setEnabled(False)
         form.addRow(tr("Left point:"), self.cbo_left)
         form.addRow(tr("Right point:"), self.cbo_right)
+        self.spn_group = QSpinBox()
+        self.spn_group.setRange(0, 999)
+        self.spn_group.setValue(int(getattr(spec, "group_id", 0) or 0)
+                                if spec is not None else 0)
+        self.spn_group.setEnabled(bool(multiple_groups))
+        self.spn_group.setToolTip(tr(
+            "Objects with the same Group ID are searched together, and each "
+            "Group ID on its own, with Number of Surfaces divided between "
+            "them. Only used when Multiple Groups is on in Surface Options."))
+        form.addRow(tr("Group ID:"), self.spn_group)
         root.addLayout(form)
 
         note = QLabel(
@@ -495,6 +512,12 @@ class BlockObjectDialog(QDialog):
             tr("Only a Block Search Polyline has point options."))
         note.setWordWrap(True)
         root.addWidget(note)
+        if not multiple_groups:
+            group_note = QLabel(tr(
+                "Turn Multiple Groups on in Surface Options to search the "
+                "Group IDs separately."))
+            group_note.setWordWrap(True)
+            root.addWidget(group_note)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
@@ -512,7 +535,8 @@ class BlockObjectDialog(QDialog):
             return None
         return BlockObjectSpec(kind=self._kind,
                                left_point=self.cbo_left.currentData(),
-                               right_point=self.cbo_right.currentData())
+                               right_point=self.cbo_right.currentData(),
+                               group_id=int(self.spn_group.value()))
 
 
 # ======================================================================

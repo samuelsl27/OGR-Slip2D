@@ -348,24 +348,12 @@ _SHADOW_FIELDS: dict = {
     "auto_refine_factor": (0.5, None, "v0.1.103"),
     "block_left_proj_angle_deg": (135.0, None, "v0.1.103"),
     "block_right_proj_angle_deg": (45.0, None, "v0.1.103"),
-    # v0.1.156, defect D07c(b) — the third block field to die this way, and
-    # the one that took longest because it looked like it did something: it
-    # gated the Number of Groups box in the dialog, so it was "UI only"
-    # rather than dead. But it was WRITTEN to the .ogr, and a model saying
-    # ``block_multiple_groups: false`` with ``block_num_groups: 7`` ran seven
-    # groups — the declaration and the run disagreeing, which is rule 7.
-    #
-    # It is retired rather than wired to the engine because the name is
-    # borrowed. What the reference calls Multiple Groups is a Group ID
-    # assigned to each search object the USER draws, with the search run once
-    # per group and Number of Surfaces split equally between them. OGR
-    # implements none of that — ``BLOCK_SEARCH_OBJECT`` carries no group id
-    # and every drawn object contributes one vertex to one surface, which is
-    # the reference's behaviour with no groups at all. Honouring the boolean
-    # would have bound that name to OGR's band count with an "off" value of
-    # three that appears nowhere in the reference, and would have made
-    # ``block_num_groups = 7`` from a script a silent no-op.
-    "block_multiple_groups": (False, None, "v0.1.156"),
+    # ``block_multiple_groups`` sat here from v0.1.156 (D07c(b)) to v0.1.232:
+    # retired because it was written to every .ogr, read by nothing outside
+    # the dialog, and bound to OGR's band count rather than to what the
+    # reference means by it. v0.1.233 (D99) gives it back that meaning — the
+    # box that turns the Group IDs of the drawn objects on — and the engine
+    # reads it, so it is a live field again. See ``SearchSettings``.
 }
 
 
@@ -510,10 +498,18 @@ class SearchSettings:
 
     # ---------- Block Search (non-circular) ----------
     block_num_surfaces: int = 5000
-    # ``block_multiple_groups`` used to sit here, written to every .ogr and
-    # read by nothing outside the dialog it drove. Retired in v0.1.156; the
-    # note on ``_SHADOW_FIELDS`` says why the name could not simply be wired
-    # to the count below.
+    # v0.1.233 (D99) — the reference's Multiple Groups. On, each drawn Block
+    # Search object is searched with the others that share its Group ID
+    # (``BlockObjectSpec.group_id``), one search per id, and Number of
+    # Surfaces is divided equally between the groups; off, every object
+    # belongs to one search whatever its id. Its documented use is several
+    # weak layers searched at once, one Polyline per layer. It has nothing
+    # to do with ``block_num_groups`` below, whatever the two names suggest:
+    # that one only tiles the region OGR falls back to when NO object is
+    # drawn. Retired in v0.1.156 when it meant the latter by accident, and
+    # back with the reference's meaning; an old file that stored it loads it
+    # unchanged, and with no ids assigned it runs one group, as it did.
+    block_multiple_groups: bool = False
     block_left_start_angle_deg: float = 135.0
     block_left_end_angle_deg: float = 135.0
     block_right_start_angle_deg: float = 45.0

@@ -70,6 +70,13 @@ interface DISPLAYS; every value you send or receive here is SI.
   stretch of polyline between them — the one to put along a weak layer.
   Two open points without a kind are a line, not a polyline. Nothing may
   overlap the x-range of a polyline, and a polyline must advance in x.
+* Several weak layers at once: one polyline per layer, each with its own
+  block_object group_id, and the setting search.block_multiple_groups on.
+  Then each Group ID is searched on its own, Number of Surfaces is split
+  between the groups, and polylines of different groups may overlap in x.
+* With NO Block Search object drawn the search samples a region the
+  program chooses (search.block_num_groups vertical bands): the reference
+  requires at least one object, so draw one.
 
 ## Water
 * A water table (phreatic surface) or a piezometric line produces pore

@@ -463,7 +463,10 @@ class TestTheNoteNoLongerSaysOneVertex:
         assert len(notes) == 1, notes
         assert "one vertex" not in notes[0], notes[0]
         assert "1 Block Search object" in notes[0], notes[0]
-        assert "Number of Groups" in notes[0], notes[0]
+        # v0.1.233 (D100) — the count is called «Implicit Region Bands» now:
+        # «Number of Groups» was the reference's name for Multiple Groups,
+        # which it is not. Changed on purpose; the note says the same.
+        assert "Implicit Region Bands" in notes[0], notes[0]
         assert not ("stable" in notes[0] and "head" in notes[0])
         assert "edge of the search grid" not in notes[0]
         assert "path_optimize" not in notes[0]

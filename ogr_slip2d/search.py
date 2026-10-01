@@ -306,6 +306,13 @@ class SearchResult:
     # reference's own definition: the global minimum is the lowest "of ALL
     # slip surfaces analyzed", and a surface the user defined is analysed.
     user_evaluations: list[LEMResult] = field(default_factory=list)
+    # v0.1.233 (D99) — a Block Search with Multiple Groups runs once per
+    # Group ID; this says how the budget went: one dict per group, in id
+    # order, with ``group_id``, ``objects``, ``budget`` (candidates drawn
+    # for it), ``valid`` and ``min_fos`` (None if no valid surface). Empty
+    # for every other search and for a Block Search without groups, so
+    # nothing that reads results had to learn it.
+    block_groups: list = field(default_factory=list)
 
     def score(self, result) -> float:
         """This run's objective, evaluated on one of its surfaces."""
@@ -3783,6 +3790,18 @@ class BlockSearch(BaseSearch):
          Limits, otherwise it is discarded.
       5. Repeated for ``num_surfaces`` candidates.
 
+    Multiple Groups (v0.1.233, D99): with ``multiple_groups`` on, the drawn
+    objects are partitioned by their Group ID
+    (``ogr_core.geometry.block_groups``) and the search above runs once per
+    group, each run using ONLY that group's objects, with Number of
+    Surfaces divided equally between the groups («approximately 2500 for
+    each» of two, in the reference's example) — in ascending id order, the
+    remainder of the division going to the first. One random stream for the
+    whole run, and the critical surface is the lowest of all the groups.
+    With the box off, or with every object in one group, the partition is
+    one group holding every object in model order, and the run is the same
+    draw for draw as before groups existed.
+
     Options: ``convex_only`` rejects surfaces with a reflex (non-convex)
     vertex, matching the documented "Convex Surfaces Only" checkbox. It is
     the user's option and it is OFF by default, which is why nothing else
@@ -3793,6 +3812,7 @@ class BlockSearch(BaseSearch):
         self,
         method,
         num_groups: int = 3,
+        multiple_groups: bool = False,
         left_proj_angle_deg: float = 135.0,
         right_proj_angle_deg: float = 45.0,
         left_start_angle_deg: Optional[float] = None,
@@ -3812,6 +3832,10 @@ class BlockSearch(BaseSearch):
             **_base_kwargs(legacy_kwargs),
         )
         self.num_groups = max(1, num_groups)
+        # v0.1.233 (D99) — the reference's Multiple Groups; see the class
+        # docstring. Not to be confused with ``num_groups`` above, which
+        # only tiles the implicit region when no object is drawn.
+        self.multiple_groups = bool(multiple_groups)
         # Single-angle defaults; ranges override if provided.
         self.left_start = (left_start_angle_deg
                            if left_start_angle_deg is not None
@@ -3920,6 +3944,23 @@ class BlockSearch(BaseSearch):
         y_lo = ymin + 0.05 * dy
         y_hi = ymin + 0.75 * dy
 
+        # v0.1.233 (D99) — Multiple Groups. ``groups`` is the partition the
+        # run uses and ``plan[ip]`` the group candidate ``ip`` belongs to:
+        # each group gets ``N // n`` candidates in ascending id order and the
+        # remainder goes to the first, so ``attempts == N`` still holds as an
+        # identity. With the box off — or every object in one group — the
+        # partition is ONE group holding every object in model order, and
+        # the loop draws exactly what it drew before groups existed.
+        from ogr_core.geometry import block_groups as _block_groups
+        groups = (_block_groups(block_objects, self.multiple_groups)
+                  if use_user_objects else [])
+        n_groups = max(1, len(groups))
+        base, rest = divmod(self.num_surfaces, n_groups)
+        budgets = [base + (rest if k == 0 else 0) for k in range(n_groups)]
+        plan = [k for k in range(n_groups) for _ in range(budgets[k])]
+        tagged = use_user_objects and self.multiple_groups
+        per_group = [{"valid": 0, "min_fos": None} for _ in range(n_groups)]
+
         for ip in range(self.num_surfaces):
             if self.progress_cb and ip % 25 == 0:
                 self.progress_cb(ip, self.num_surfaces)
@@ -3938,7 +3979,7 @@ class BlockSearch(BaseSearch):
             block_pts = []
             ok = True
             if use_user_objects:
-                for bobj in block_objects:
+                for bobj in groups[plan[ip]][1]:
                     chain = self._sample_block_object(bobj, rng)
                     if not chain:
                         ok = False
@@ -4091,6 +4132,8 @@ class BlockSearch(BaseSearch):
 
             poly = Polyline(vertices=deduped, closed=False)
             surface = SlipSurface(polyline=poly)
+            if tagged:
+                surface.block_group = groups[plan[ip]][0]
             if self._focus_rejects(surface):
                 # v0.1.129 — this search DECLARED ``focus_objects`` since
                 # v0.1.55 under a comment saying it applied them before
@@ -4110,9 +4153,20 @@ class BlockSearch(BaseSearch):
             result.evaluations.append(res)
             if res.is_valid:
                 result.valid_count += 1
+                if tagged:
+                    g = per_group[plan[ip]]
+                    g["valid"] += 1
+                    if g["min_fos"] is None or res.fos < g["min_fos"]:
+                        g["min_fos"] = res.fos
             else:
                 result.invalid_count += 1
 
+        if tagged:
+            result.block_groups = [
+                {"group_id": gid, "objects": len(objs), "budget": budgets[k],
+                 "valid": per_group[k]["valid"],
+                 "min_fos": per_group[k]["min_fos"]}
+                for k, (gid, objs) in enumerate(groups)]
         if self.progress_cb:
             self.progress_cb(self.num_surfaces, self.num_surfaces)
         return result

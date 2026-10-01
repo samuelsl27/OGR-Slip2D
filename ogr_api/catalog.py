@@ -144,12 +144,17 @@ def catalog(kind: str, project=None):
                for b in BoundaryType]
         # v0.1.232 (D109) — what `block_object` takes on a Block Search
         # object: its kind, and for a polyline how each point is generated.
+        # v0.1.233 (D99) — and its Group ID, read only with the setting
+        # `search.block_multiple_groups` on.
         for entry in out:
             if entry["id"] == "block_search_object":
                 entry["block_object"] = {
                     "kinds": [k.value for k in BlockObjectKind],
                     "polyline_point_modes": [m.value
-                                             for m in PolylinePointMode]}
+                                             for m in PolylinePointMode],
+                    "group_id": ("non-negative integer, default 0; read "
+                                 "only when search.block_multiple_groups "
+                                 "is true")}
         return out
     if kind == "pore_pressure_types":
         from ogr_core.materials import PorePressureType

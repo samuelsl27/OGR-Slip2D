@@ -202,7 +202,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.232"
+    VERSION = "0.1.233"
 
     def __init__(self) -> None:
         super().__init__()
@@ -4531,10 +4531,20 @@ class MainWindow(QMainWindow):
         self._maybe_open_block_polyline_options(boundary)
 
     def _maybe_open_block_polyline_options(self, boundary) -> None:
+        """Open the Block Search Object dialog for a just-drawn object.
+
+        For a Polyline always (its two point options, v0.1.232); and, since
+        v0.1.233 (D99), for ANY Block Search object while Multiple Groups is
+        on, because then every object needs its Group ID and this is where
+        the reference assigns it.
+        """
         from ogr_core.geometry import BlockObjectKind
         spec = getattr(boundary, "block_object", None)
-        if (boundary.btype != BoundaryType.BLOCK_SEARCH_OBJECT
-                or spec is None or spec.kind is not BlockObjectKind.POLYLINE):
+        if boundary.btype != BoundaryType.BLOCK_SEARCH_OBJECT or spec is None:
+            return
+        grouped = bool(getattr(self.project.settings.search,
+                               "block_multiple_groups", False))
+        if spec.kind is not BlockObjectKind.POLYLINE and not grouped:
             return
         idx = next((i for i, b in enumerate(self.project.boundaries)
                     if b.id == boundary.id), None)
@@ -4555,7 +4565,10 @@ class MainWindow(QMainWindow):
         previous = getattr(self, "_block_object_dialog", None)
         if previous is not None:
             previous.close()
-        dlg = BlockObjectDialog(self.project.boundaries[bidx], self)
+        dlg = BlockObjectDialog(
+            self.project.boundaries[bidx], self,
+            multiple_groups=bool(getattr(self.project.settings.search,
+                                         "block_multiple_groups", False)))
         dlg.accepted.connect(self._apply_block_object_dialog)
         self._block_object_dialog = dlg
         dlg.show()

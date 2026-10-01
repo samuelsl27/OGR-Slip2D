@@ -58,6 +58,20 @@ boundary, which is where the defect lived and where nothing looked.
 
 COST. Three Block Searches of 150 candidates on a small slope, plus a handful
 of note calls that run no search at all. Around four seconds.
+
+CHANGED ON PURPOSE IN v0.1.233 (D99, D100), and the reason is the one this
+file gave for retiring the boolean: the name was borrowed and the meaning was
+not. v0.1.233 implements the meaning — the Group ID of every drawn object, one
+search per id, Number of Surfaces divided between them — so the boolean comes
+back as the box that turns it on, read by the engine. What this file
+protected still holds and is still asserted here: the boolean never governs
+the band count (an old file keeps the count it declared), and the band count
+reaches the engine. Two things changed with it: the first class now asserts
+the field is LIVE and out of the registry instead of retired; and the band
+count is labelled «Implicit Region Bands» — «Number of Groups» was the
+reference's name for the feature it is not — so the note is found by that
+label. The behaviour of the groups themselves is
+``tests/test_block_groups_v1233.py``.
 """
 from __future__ import annotations
 import re
@@ -107,24 +121,25 @@ def _run(groups: int):
 
 
 # ======================================================================
-class TestTheFieldIsGoneAndTheRegistrySaysSo:
-    """Retiring a name in this project means three things at once: the
-    dataclass loses it, ``_SHADOW_FIELDS`` gains it, and an analysis that
-    is handed it anyway refuses instead of ignoring it."""
+class TestTheFieldIsBackWithTheReferencesMeaning:
+    """v0.1.233 — the boolean retired in v0.1.156 returns as the reference's
+    Multiple Groups. So it is a field again, it is out of the registry of
+    dead names, the analysis does not refuse it, and — what v0.1.156 cared
+    about — it still does not touch the band count."""
 
-    def test_it_is_no_longer_a_field(self):
+    def test_it_is_a_field_again(self):
         from ogr_core.project.settings import SearchSettings
-        assert _NAME not in {f.name for f in fields(SearchSettings)}
+        f = {x.name: x for x in fields(SearchSettings)}
+        assert _NAME in f
+        assert SearchSettings().block_multiple_groups is False
 
-    def test_a_saved_model_stops_carrying_it(self):
-        """``to_dict`` is a bare ``asdict``, so the file mirrors the
-        dataclass. This is what stops the lie being written again."""
+    def test_a_saved_model_carries_it(self):
         from ogr_core.project.settings import SearchSettings
-        assert _NAME not in asdict(SearchSettings())
+        assert asdict(SearchSettings())[_NAME] is False
 
-    def test_the_registry_holds_it_with_its_own_version(self):
+    def test_the_registry_no_longer_holds_it(self):
         from ogr_core.project.settings import _SHADOW_FIELDS
-        assert _SHADOW_FIELDS[_NAME] == (False, None, "v0.1.156")
+        assert _NAME not in _SHADOW_FIELDS
 
     def test_every_entry_carries_a_version(self):
         """The reason the tuple grew: the refusal used to date every
@@ -136,41 +151,29 @@ class TestTheFieldIsGoneAndTheRegistrySaysSo:
             assert re.fullmatch(r"v\d+\.\d+\.\d+", entry[2]), (name, entry)
         assert _SHADOW_FIELDS["path_optimize"][2] == "v0.1.104"
 
-    def test_an_old_file_loads_and_keeps_the_count_it_declared(self):
-        """The point of the whole defect, as a round trip: the boolean
-        never governed the number, so dropping it must not touch it."""
+    def test_an_old_file_loads_both_and_neither_moves_the_other(self):
+        """The point of D07c(b), as a round trip: the boolean never governed
+        the number, so reading it back must not touch it — in either
+        direction."""
         from ogr_core.project.settings import SearchSettings
 
-        s = SearchSettings.from_dict({
-            "search_method": "block",
-            _NAME: True,
-            "block_num_groups": 7,
-            "block_num_surfaces": 4321,
-        })
-        assert not hasattr(s, _NAME)
-        assert s.block_num_groups == 7
-        assert s.block_num_surfaces == 4321
+        for flag in (True, False):
+            s = SearchSettings.from_dict({
+                "search_method": "block",
+                _NAME: flag,
+                "block_num_groups": 7,
+                "block_num_surfaces": 4321,
+            })
+            assert s.block_multiple_groups is flag
+            assert s.block_num_groups == 7
+            assert s.block_num_surfaces == 4321
 
-    def test_the_false_and_seven_combination_is_not_reconciled_either(self):
-        """The file the defect described. It ran seven groups before and
-        it runs seven groups now — the change removes the contradiction by
-        removing the half of it that said nothing, not by moving a number.
-        """
-        from ogr_core.project.settings import SearchSettings
-
-        s = SearchSettings.from_dict({_NAME: False, "block_num_groups": 7})
-        assert s.block_num_groups == 7
-
-    def test_setting_it_from_a_script_refuses_the_analysis(self):
+    def test_setting_it_from_a_script_is_not_refused(self):
         from ogr_slip2d.analysis_runner import _shadow_setting_problems
 
         p = _block_project(3)
+        p.settings.search.block_multiple_groups = True
         assert _shadow_setting_problems(p) == []
-        setattr(p.settings.search, _NAME, True)
-        problems = _shadow_setting_problems(p)
-        assert len(problems) == 1, problems
-        assert _NAME in problems[0]
-        assert "v0.1.156" in problems[0], problems[0]
 
 
 # ======================================================================
@@ -218,7 +221,7 @@ class TestTheSilenceTheSurvivingControlStillHad:
     def _notes(self, project):
         from ogr_slip2d.analysis_runner import settings_warnings
         return [n for n in settings_warnings(project, ("bishop_simplified",))
-                if "Number of Groups" in n]
+                if "Implicit Region Bands" in n]
 
     def test_a_drawn_object_gets_the_note(self):
         notes = self._notes(_block_project(3, objects=[self._OBJ]))
@@ -243,8 +246,11 @@ class TestTheSilenceTheSurvivingControlStillHad:
 
     def test_no_object_means_no_note(self):
         """Then the count really does configure the run, and saying it
-        does nothing would be the opposite error."""
-        assert self._notes(_block_project(3)) == []
+        does nothing would be the opposite error. (Since v0.1.233 that run
+        gets ANOTHER note — the region is the program's choice, D100 — which
+        names the bands but does not say they do nothing.)"""
+        notes = self._notes(_block_project(3))
+        assert all("configures nothing" not in n for n in notes), notes
 
     def test_another_search_method_gets_no_note(self):
         p = _block_project(3, objects=[self._OBJ])

@@ -150,10 +150,15 @@ def _block_object_spec(raw, btype):
     """A Block Search object's spec from its dict, or None (v0.1.232, D109).
 
     ``{"kind": "window" | "line" | "point" | "polyline", "left_point": ...,
-    "right_point": ...}``, the two points only for a polyline and each one
-    of ``any``, ``segment`` or ``end_point``. A bare kind string is
-    accepted too. None leaves the kind to be inferred from the vertices,
-    which is what an object saved before v0.1.232 gets.
+    "right_point": ..., "group_id": n}``, the two points only for a
+    polyline and each one of ``any``, ``segment`` or ``end_point``. A bare
+    kind string is accepted too. None leaves the kind to be inferred from
+    the vertices, which is what an object saved before v0.1.232 gets.
+
+    v0.1.233 (D99) — ``group_id``, a non-negative integer, is the object's
+    Group ID for Multiple Groups (``search.block_multiple_groups``); 0 when
+    omitted. It is stored whether or not the box is on, and read only when
+    it is, as the reference does.
     """
     from ogr_core.geometry import (BlockObjectKind, BlockObjectSpec,
                                    PolylinePointMode)
@@ -171,7 +176,8 @@ def _block_object_spec(raw, btype):
             "block_object is {'kind': 'window' | 'line' | 'point' | "
             "'polyline'} and, for a polyline, 'left_point' and "
             "'right_point' ('any', 'segment' or 'end_point').")
-    extra = sorted(set(raw) - {"kind", "left_point", "right_point"})
+    extra = sorted(set(raw) - {"kind", "left_point", "right_point",
+                               "group_id"})
     if extra:
         raise InvalidArgument(f"block_object: unknown key(s) {extra}.")
     kind = coerce_enum(raw["kind"], BlockObjectKind, "block_object.kind")
@@ -180,13 +186,20 @@ def _block_object_spec(raw, btype):
         raise InvalidArgument(
             "left_point and right_point are only read for a Block Search "
             "Polyline: the other objects give one vertex each.")
+    group = raw.get("group_id", 0)
+    if (isinstance(group, bool) or not isinstance(group, int)
+            or group < 0):
+        raise InvalidArgument(
+            f"block_object.group_id must be a non-negative integer, not "
+            f"{group!r}.")
     return BlockObjectSpec(
         kind=kind,
         left_point=coerce_enum(raw.get("left_point", "any"),
                                PolylinePointMode, "block_object.left_point"),
         right_point=coerce_enum(raw.get("right_point", "any"),
                                 PolylinePointMode,
-                                "block_object.right_point"))
+                                "block_object.right_point"),
+        group_id=group)
 
 
 def _check_block_object(b) -> None:
