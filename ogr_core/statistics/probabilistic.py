@@ -411,16 +411,6 @@ def counts_as_sample(r) -> bool:
             and bool(getattr(r, "admissible", True)))
 
 
-def _admissibility_kwargs(project) -> dict:
-    """The project's own screens, for the search a sample is re-evaluated
-    with (v0.1.202: a bare ``GridSearch`` always screened m-alpha and
-    never the tensile check, whatever the project said)."""
-    settings = getattr(project, "settings", None)
-    if settings is None or not hasattr(settings, "admissibility_kwargs"):
-        return {}
-    return settings.admissibility_kwargs()
-
-
 _CODE_LABELS = {-120: "-120 tensile stress", -112: "-112 m-alpha",
                 -101: "inadmissible (-101)"}
 
@@ -668,8 +658,7 @@ def run_global_minimum(
     Returns:
         A :class:`ProbabilisticResult`, empty when no variable is random.
     """
-    from ogr_slip2d.analysis_runner import build_method
-    from ogr_slip2d.search import GridSearch
+    from ogr_slip2d.analysis_runner import build_evaluator, build_method
 
     result = ProbabilisticResult(
         num_samples=num_samples, sampling_method=sampling.value,
@@ -766,8 +755,17 @@ def run_global_minimum(
         surface = _rebuild_surface(sd)
         if surface is None:
             continue
-        search = GridSearch(method=method, num_slices=num_slices,
-                            min_area=0.0, **_admissibility_kwargs(project))
+        # v0.1.235 (D92) — the search the PROJECT configures, not one
+        # assembled here. Until this version this line was a bare
+        # ``GridSearch`` with the method and the admissibility screens and
+        # nothing else, so the Surface Filters, the Slope Limits, the focus
+        # objects, the seismic mode and the Minimum Area of the
+        # deterministic run never reached a sample: on a circle with two
+        # sliding masses every sample could answer for the mass the
+        # deterministic run had filtered out. ``build_evaluator`` is the one
+        # door, and it takes the method built above as it is.
+        search = build_evaluator(project, mid, method=method,
+                                 num_slices=num_slices)
 
         mres = MethodProbabilisticResult(
             method_id=mid,

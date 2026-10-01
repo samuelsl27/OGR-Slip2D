@@ -351,11 +351,19 @@ def settings_warnings(project, method_ids=()) -> list[str]:
     # v0.1.127 — the seismic modes change WHICH surface is reported, so
     # anything downstream that consumes "the critical surface" is now
     # consuming a different one. The probabilistic and sensitivity runs
-    # are the case that matters: they build the same search per sample and
-    # then take statistics of ``critical.fos``, which under the Ky
-    # objective is the factor of the LOWEST-Ky surface and not the lowest
-    # factor. That is a defensible thing to want and a terrible thing to
-    # get by accident.
+    # are the case that matters: they take statistics of the factor of
+    # safety of the surface the deterministic run chose, which under the
+    # Ky objective is the factor of the LOWEST-Ky surface and not the
+    # lowest factor. That is a defensible thing to want and a terrible
+    # thing to get by accident.
+    #
+    # v0.1.235 (D92) — and now also per sample. Until this version the
+    # Global Minimum and sensitivity samples were evaluated with a bare
+    # search whose objective was always the factor of safety, so on a
+    # circle with two sliding masses a sample chose its mass by factor of
+    # safety while the deterministic run had chosen by Ky. The samples go
+    # through ``build_evaluator`` now, which carries the seismic mode, and
+    # the sentence below holds for them too.
     seismic_cfg = getattr(project.settings, "seismic", None)
     if seismic_cfg is not None and seismic_cfg.needs_ky:
         stats = project.settings.statistics
@@ -1839,63 +1847,22 @@ def build_method(project, method_id: str, num_slices: Optional[int] = None):
     return wrap_for_drawdown(method, project, num_slices=int(num_slices))
 
 
-# ======================================================================
-def build_search(project, method_id: str, progress_cb: Optional[Callable] = None):
-    """The search object for ``method_id``, configured from the project.
+def _search_common(project, method, num_slices,
+                   progress_cb: Optional[Callable] = None) -> dict:
+    """The arguments every search takes from the project, whatever its kind.
 
-    Exposed so the Overall Slope probabilistic analysis and Optimize
-    Surfaces can rebuild EXACTLY the same search once per sample rather
-    than duplicating this dispatch. Returns None when ``method_id`` is
-    not registered.
+    v0.1.235 (D92) — lifted out of :func:`build_search` unchanged, argument
+    for argument and in the same order, so that :func:`build_evaluator`
+    takes them from the same place instead of assembling a search by hand.
+    The comments below travelled with the arguments they explain.
     """
-    from ogr_core.project.settings import is_auto_refine_non_circular
-
-    method = build_method(project, method_id)
-    if method is None:
-        return None
-
     s = project.settings
     s_search = s.search
-    num_slices = s.methods.num_slices
-    admissibility = s.admissibility_kwargs()
-    search_method = s_search.search_method
-
-    def _seed_kw() -> dict:
-        """The project's seed, for the searches that draw at random.
-
-        v0.1.74 — the Random Numbers page promised a pseudo-random run
-        "will give exactly the same results", and no search had ever been
-        told which seed to use.
-        """
-        if search_method in _DETERMINISTIC_SEARCHES:
-            return {}
-        return {"seed": s.analysis_seed()}
-
-    def _optimize_kw() -> dict:
-        """Optimize Surfaces, for the NON-CIRCULAR searches only.
-
-        v0.1.104 — the whole panel was editable, saved and read by nobody
-        (defect D08, anomaly A9-1): ticking the box on a Block Search
-        stored the tick and changed nothing. It is not in ``common``
-        because the reference offers the option for Surface Type =
-        Non-Circular alone; a circular search would only be able to ignore
-        it, which is the fault this closes, not one to repeat.
-
-        The optimisation gets the project's seed too. Without one the walk
-        would draw from ``random.Random(None)`` and the same model would
-        give a different answer on every run — which is exactly what the
-        Random Numbers page promises it will not do.
-        """
-        kw = dict(s.optimize_kwargs())
-        if kw.get("optimize") is not None:
-            kw["optimize_seed"] = s.analysis_seed()
-        return kw
-
-    common = dict(
+    return dict(
         method=method,
         num_slices=num_slices,
         progress_cb=progress_cb,
-        **admissibility,
+        **s.admissibility_kwargs(),
         # v0.1.102 — the Surface Filters, and they go in ``common`` rather
         # than into each branch on purpose: they apply to EVERY search, and
         # the six branches below are exactly the place where a filter gets
@@ -1940,9 +1907,116 @@ def build_search(project, method_id: str, progress_cb: Optional[Callable] = None
         # (-26.4 %) on a 2.41 ft2 skin, against 1.5841 (-0.62 %) on the
         # 201.95 ft2 mechanism the manual publishes. Defect D51.
         min_area=(s_search.min_area
-                  or _MIN_AREA_FALLBACK.get(search_method, 1.0)),
-        **_seed_kw(),
+                  or _MIN_AREA_FALLBACK.get(s_search.search_method, 1.0)),
     )
+
+
+def build_evaluator(project, method_id: str, *, method=None,
+                    num_slices: Optional[int] = None):
+    """The search a statistical run evaluates a KNOWN surface with.
+
+    A ``GridSearch`` that is never run, carrying every project setting
+    :func:`build_search` hands a search: the admissibility screens, the
+    Surface Filters, the Slope Limits, the seismic mode, the focus objects
+    and the Minimum Area. None when ``method_id`` is not registered and no
+    ``method`` is handed in.
+
+    v0.1.235 (D92) — ``run_global_minimum`` and ``run_sensitivity``
+    assembled a ``GridSearch`` by hand, with the method and the screens and
+    nothing else, and ``min_area=0``. A circle that defines two sliding
+    masses was then answered, sample by sample, for the mass the filters had
+    removed from the deterministic run: on the notched model of verification
+    problem 22 (Fredlund and Krahn 1977) with a Minimum Elevation of 30 ft,
+    the bare search answers the circle 1.38202 (the deep mass) where the
+    configured one answers 3.35931 (the mass the filter keeps). The
+    histogram belonged to another mechanism and nothing said so. It was
+    the third door of one fault: v0.1.74 closed it for the searches and
+    v0.1.108 for the methods.
+
+    Why a ``GridSearch`` whatever search the project declares: evaluating a
+    GIVEN surface (``evaluate_circle``, ``evaluate_surface``) is
+    ``BaseSearch``'s and the same for every kind; the kinds differ in how
+    they GENERATE surfaces, which a re-evaluation never does.
+
+    Declared: under a critical-seismic-coefficient mode the evaluator picks,
+    among the masses of a circle, the one with the lowest Ky, as the
+    deterministic run does, and pays for the Ky solves that takes.
+
+    Args:
+        method: the method to evaluate with, when the caller already built
+            it. The samplers pass the one built from the DESIGN-FACTORED
+            project (``method_factory``), which this function must not
+            replace with one of its own.
+        num_slices: the slicing of the re-evaluations; the project's when
+            None.
+    """
+    if num_slices is None:
+        num_slices = project.settings.methods.num_slices
+    if method is None:
+        method = build_method(project, method_id, num_slices)
+    if method is None:
+        return None
+    from .search import GridSearch
+    return GridSearch(**_search_common(project, method, int(num_slices)))
+
+
+# ======================================================================
+def build_search(project, method_id: str, progress_cb: Optional[Callable] = None):
+    """The search object for ``method_id``, configured from the project.
+
+    Exposed so the Overall Slope probabilistic analysis and Optimize
+    Surfaces can rebuild EXACTLY the same search once per sample rather
+    than duplicating this dispatch. Returns None when ``method_id`` is
+    not registered.
+    """
+    from ogr_core.project.settings import is_auto_refine_non_circular
+
+    method = build_method(project, method_id)
+    if method is None:
+        return None
+
+    s = project.settings
+    s_search = s.search
+    num_slices = s.methods.num_slices
+    search_method = s_search.search_method
+
+    def _seed_kw() -> dict:
+        """The project's seed, for the searches that draw at random.
+
+        v0.1.74 — the Random Numbers page promised a pseudo-random run
+        "will give exactly the same results", and no search had ever been
+        told which seed to use.
+        """
+        if search_method in _DETERMINISTIC_SEARCHES:
+            return {}
+        return {"seed": s.analysis_seed()}
+
+    def _optimize_kw() -> dict:
+        """Optimize Surfaces, for the NON-CIRCULAR searches only.
+
+        v0.1.104 — the whole panel was editable, saved and read by nobody
+        (defect D08, anomaly A9-1): ticking the box on a Block Search
+        stored the tick and changed nothing. It is not in ``common``
+        because the reference offers the option for Surface Type =
+        Non-Circular alone; a circular search would only be able to ignore
+        it, which is the fault this closes, not one to repeat.
+
+        The optimisation gets the project's seed too. Without one the walk
+        would draw from ``random.Random(None)`` and the same model would
+        give a different answer on every run — which is exactly what the
+        Random Numbers page promises it will not do.
+        """
+        kw = dict(s.optimize_kwargs())
+        if kw.get("optimize") is not None:
+            kw["optimize_seed"] = s.analysis_seed()
+        return kw
+
+    # v0.1.235 (D92) — what EVERY search takes is assembled in one place,
+    # ``_search_common``, which the statistical re-evaluation reads too
+    # (``build_evaluator``). The seed stays here: it belongs to the
+    # searches that draw, and a re-evaluation draws nothing.
+    common = dict(_search_common(project, method, num_slices, progress_cb),
+                  **_seed_kw())
 
     if search_method == "slope":
         from .search import SlopeSearch

@@ -93,12 +93,18 @@ _CIRCLE = SlipCircle(centre_x=88.0, centre_y=70.5, radius=47.212)
 
 
 def _search(project):
-    """The search the sampler itself builds.
+    """The search the sampler built until v0.1.235 (D92).
 
     Through ``build_method`` and not ``BishopSimplified()``: the engine
     takes the method as the PROJECT configures it, so a hand-built one
     would answer a different number and the identity below would be
     measuring method construction instead of ``apply_sample``.
+
+    Since D92 the sampler builds ``analysis_runner.build_evaluator``, which
+    adds the project's Surface Filters, Slope Limits, focus objects, seismic
+    mode and Minimum Area. This model sets none of the first four and its
+    mass is far above the Minimum Area, so the two are the same evaluation
+    and the identity below still measures ``apply_sample`` and nothing else.
     """
     return GridSearch(method=build_method(project, _MID, _SLICES),
                       num_slices=_SLICES, min_area=0.0)

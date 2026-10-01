@@ -203,13 +203,11 @@ def run_sensitivity(
     Promising a wider cover than the guard gives is what cost this project
     two versions over m-alpha (v0.1.82-84).
     """
-    from ogr_slip2d.analysis_runner import build_method
-    from ogr_slip2d.search import GridSearch
+    from ogr_slip2d.analysis_runner import build_evaluator, build_method
 
     from .probabilistic import (
         _NO_DETERMINISTIC,
         _NO_METHOD,
-        _admissibility_kwargs,
         _cannot_reevaluate,
         counts_as_sample,
         _evaluate_on,
@@ -291,10 +289,12 @@ def run_sensitivity(
         surface = _rebuild_surface(sd)
         if surface is None:
             continue
-        # v0.1.202 — the project's own screens, and only admissible
-        # points (``counts_as_sample``): see ``run_global_minimum``.
-        search = GridSearch(method=method, num_slices=num_slices,
-                            min_area=0.0, **_admissibility_kwargs(project))
+        # v0.1.202 — only admissible points (``counts_as_sample``).
+        # v0.1.235 (D92) — and the search the PROJECT configures, filters,
+        # limits, focus, seismic mode and Minimum Area included, from the
+        # same door as ``run_global_minimum``: see the note there.
+        search = build_evaluator(project, mid, method=method,
+                                 num_slices=num_slices)
         sweeps: dict = {}
 
         for rv in usable:

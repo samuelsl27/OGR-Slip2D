@@ -58,11 +58,15 @@ Fredlund and Krahn (1977) table 22.3 — 1.377 Bishop, 1.373 Spencer. No number
 this program printed is pinned anywhere.
 
 ONE HONEST LIMIT OF THE IDENTITY. The deterministic side below is computed with
-the same bare ``GridSearch(min_area=0.0)`` the sampler builds, and NOT with
+a bare ``GridSearch(min_area=0.0)``, and NOT with
 ``analysis_runner.build_search``, which the program uses and which also passes
-surface filters, slope limits and focus objects. So the identity isolates the
-round trip of the surface, not the configuration of the search. The anchor that
-bites is the published one.
+surface filters, slope limits and focus objects. Until v0.1.235 the sampler
+built that same bare search; since D92 it builds
+``analysis_runner.build_evaluator``, the configured one. These models set no
+filter, limit or focus, so the two are the same evaluation and the identity
+still isolates the round trip of the surface, not the configuration of the
+search — ``test_statistics_search_settings_v1235.py`` covers that, on a model
+where the two differ. The anchor that bites is the published one.
 
 Author: Samuel Sáez López (UPCT)
 """
@@ -171,7 +175,11 @@ def _without_the_option(project):
 
 
 def _search(method_id: str = "bishop_simplified"):
-    """The bare GridSearch the sampler itself builds (probabilistic.py)."""
+    """A bare GridSearch: the one the sampler built until v0.1.235 (D92).
+
+    On these models it is the same evaluation as the configured
+    ``build_evaluator`` the sampler builds now; see the module docstring.
+    """
     from ogr_slip2d.methods import method_registry
     from ogr_slip2d.search import GridSearch
 
