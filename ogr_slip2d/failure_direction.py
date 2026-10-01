@@ -163,3 +163,71 @@ def steepest_face_index(top, project) -> int:
 
     return (min(tied, key=_toe_x) if crest_is_on_the_right(project)
             else max(tied, key=_toe_x))
+
+
+#: v0.1.234 (D241) — whether the slope face is the run of segments
+#: COLLINEAR with the steepest one (True) or that one segment alone (False,
+#: every version up to 0.1.233). A module switch so the verification bank
+#: can rebuild the engine that wrote an older file and attribute a change to
+#: this version; the engine itself never turns it off.
+FACE_IS_THE_COLLINEAR_RUN = True
+
+#: Two consecutive profile segments are one straight face when the sine of
+#: the angle between them is below this. Relative, like the tie band of
+#: :func:`steepest_face_index` (1e-6 of the slope): a vertex placed ON the
+#: face by a contact that meets it, or one rounded a millimetre off it in a
+#: model drawn in metres, does not split the face, while a real change of
+#: inclination does.
+COLLINEAR_SINE = 1e-6
+
+
+def _same_line(p, q, r) -> bool:
+    """Whether segment p->q continues straight into q->r (same direction)."""
+    ux, uy = q.x - p.x, q.y - p.y
+    vx, vy = r.x - q.x, r.y - q.y
+    lu = (ux * ux + uy * uy) ** 0.5
+    lv = (vx * vx + vy * vy) ** 0.5
+    if lu <= 0.0 or lv <= 0.0:
+        return False
+    if ux * vx + uy * vy <= 0.0:
+        return False
+    return abs(ux * vy - uy * vx) <= COLLINEAR_SINE * lu * lv
+
+
+def slope_face(top, project) -> tuple:
+    """The slope face as a run of ``top``: ``(lo, hi)``, the indices of its
+    two ends, ``lo < hi``.
+
+    v0.1.234, defect D241. :func:`steepest_face_index` answers with ONE
+    segment, and a face is not always one segment. Where a material contact
+    or a water line meets the face, the ground profile carries a vertex
+    there, so a straight face arrives in collinear pieces: on verification
+    problem 52 the face (0, 0)-(30, 15) arrived as three, cut at (6, 3) and
+    (18, 9) by two contacts. The pieces tie in steepness, the tie-break keeps
+    the one whose toe lies on the declared side, and every search that reads
+    the face sized its windows on a fifth of the slope. In the Path Search,
+    whose turn-up schedule aims at a target set from the face's crest, that
+    bent every trial path upward 6 m from the toe: Spencer 2.2515 on a model
+    whose manual publishes 1.796, and 1.7901 with the same terrain once the
+    face was read whole.
+
+    The terrain is the same with and without such a vertex, so the search
+    has to be too. The face is therefore the steepest segment — chosen and
+    tie-broken exactly as before — extended over every neighbour that
+    continues it in a straight line (:func:`_same_line`). A face that turns,
+    however slightly beyond the tolerance, stays one segment; a vertical step
+    never joins an inclined face.
+
+    The five readers — Path Search, Block Search without objects, Simulated
+    Annealing, and through :func:`ogr_slip2d.search.slope_frame` the Slope
+    Search and the Particle Swarm — all take the face from here.
+    """
+    i = steepest_face_index(top, project)
+    lo, hi = i, i + 1
+    if not FACE_IS_THE_COLLINEAR_RUN or len(top) < 3:
+        return lo, hi
+    while lo > 0 and _same_line(top[lo - 1], top[lo], top[hi]):
+        lo -= 1
+    while hi < len(top) - 1 and _same_line(top[lo], top[hi], top[hi + 1]):
+        hi += 1
+    return lo, hi

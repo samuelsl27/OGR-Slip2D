@@ -26,7 +26,7 @@ from typing import Callable, Optional
 from ogr_core.project import Project
 from ogr_core.project.settings import SurfaceType, WeakLayerHandling
 
-from .failure_direction import steepest_face_index
+from .failure_direction import slope_face, steepest_face_index  # noqa: F401
 from .methods import LEMMethod, LEMResult
 from .rapid_drawdown import RapidDrawdownError, drawdown_gap
 from .slicer import REFUSED_OUTSIDE_MODEL, TOUCHED_MODEL_EDGE, slice_surface
@@ -2664,10 +2664,12 @@ def slope_frame(project: Project,
     y_min = min(v.y for v in ext_verts)
     H = y_max - y_min
 
-    # Locate slope face (steepest segment) → toe/crest + β
-    steepest_i = steepest_face_index(top, project)
-    face_a = top[steepest_i]
-    face_b = top[steepest_i + 1]
+    # Locate slope face (steepest segment) → toe/crest + β. v0.1.234 (D241)
+    # — the face is the run of segments collinear with the steepest one, so
+    # a contact that meets the face does not cut the frame to one piece.
+    face_lo, face_hi = slope_face(top, project)
+    face_a = top[face_lo]
+    face_b = top[face_hi]
     beta_deg = math.degrees(math.atan2(
         abs(face_b.y - face_a.y), abs(face_b.x - face_a.x)))
     toe_pt = face_a if face_a.y <= face_b.y else face_b
@@ -3921,9 +3923,11 @@ class BlockSearch(BaseSearch):
         # them on the slope face (the steepest ground segment) so the
         # sampled points fall inside the soil mass, not in the air in
         # front of the toe.
-        steepest_i = steepest_face_index(top, project)
-        face_lo_x = min(top[steepest_i].x, top[steepest_i + 1].x)
-        face_hi_x = max(top[steepest_i].x, top[steepest_i + 1].x)
+        # v0.1.234 (D241) — the whole face, not the piece of it a contact
+        # left between two vertices.
+        face_lo, face_hi = slope_face(top, project)
+        face_lo_x = min(top[face_lo].x, top[face_hi].x)
+        face_hi_x = max(top[face_lo].x, top[face_hi].x)
         face_w = max(face_hi_x - face_lo_x, 1e-6)
         # Windows span from a little before the toe to a little past the
         # crest, where realistic slip surfaces pass.
@@ -4649,9 +4653,17 @@ class PathSearch(BaseSearch):
         # v0.1.136, unchanged, so that the three other sites that locate
         # the face can share it instead of each deciding by iteration
         # order (defect D34).
-        steepest_i = steepest_face_index(top, project)
-        face_a = top[steepest_i]
-        face_b = top[steepest_i + 1]
+        #
+        # v0.1.234 (D241) — and the face is the run of segments collinear
+        # with that one (``slope_face``). This search is where reading one
+        # piece cost most: ``crest_target`` below is set from the face's
+        # crest, and on verification problem 52, whose straight face two
+        # material contacts cut into three, it aimed every trial path at a
+        # point 6 m from the toe — Spencer 2.2515 where the manual publishes
+        # 1.796, and 1.7901 with the face read whole.
+        face_lo, face_hi = slope_face(top, project)
+        face_a = top[face_lo]
+        face_b = top[face_hi]
         # Slope angle β (magnitude) of the face
         beta = math.atan2(abs(face_b.y - face_a.y),
                           abs(face_b.x - face_a.x))
@@ -5197,9 +5209,11 @@ class SimulatedAnnealingSearch(BaseSearch):
             self._ext_poly = None
 
         # Locate the slope face (steepest ground segment) → toe / crest.
-        steepest_i = steepest_face_index(top, project)
-        face_a = top[steepest_i]
-        face_b = top[steepest_i + 1]
+        # v0.1.234 (D241) — the whole collinear run, so the fixed endpoints
+        # below span the slope and not one piece of it.
+        face_lo, face_hi = slope_face(top, project)
+        face_a = top[face_lo]
+        face_b = top[face_hi]
         toe_pt = face_a if face_a.y <= face_b.y else face_b
         crest_pt = face_b if face_a.y <= face_b.y else face_a
 
