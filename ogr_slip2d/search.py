@@ -277,6 +277,18 @@ class SearchResult:
     # optimisation rather than from the search, which is the one thing the
     # factor of safety alone cannot tell you.
     optimized: Optional[LEMResult] = None
+    # v0.1.237 (D87) — the evaluations this run added by steering on the
+    # factors it had already computed, and not from the geometry and the
+    # seed: the refinement walk of the Slope Search and what Optimize
+    # Surfaces keeps (``optimized`` included). They are ALSO in
+    # ``evaluations``, so nothing that reads the population changes; this
+    # only says which of them another sample would not have produced.
+    # Overall Slope leaves them out of the critical probabilistic surface,
+    # as the reference does with the optimised surfaces. Filled by the
+    # searches that otherwise regenerate their surfaces
+    # (``BaseSearch.SAME_SURFACES_EVERY_SAMPLE``); the ones that steer
+    # throughout do not need it, since no such surface is named for them.
+    steered: list[LEMResult] = field(default_factory=list)
     # v0.1.126 — the DISTINCT local minima, best first. Empty for the six
     # searches that predate the multimodal one, so nothing that reads a
     # SearchResult today has to change: ``critical`` is still the answer,
@@ -422,6 +434,18 @@ class SearchResult:
 # ======================================================================
 class BaseSearch(ABC):
     """Base class for search strategies."""
+
+    #: v0.1.237 (D87) — whether this search analyses the SAME surfaces on
+    #: every run over one geometry, whatever the material values: its
+    #: population comes from the geometry, the settings and the seed alone,
+    #: never from the factors it computes. Overall Slope asks it before
+    #: naming a critical probabilistic surface, which needs a surface
+    #: analysed in every sample — a probability of failure is a property of
+    #: ONE surface over the samples. False here, so a search has to claim
+    #: it: Auto Refine, Simulated Annealing and Particle Swarm steer on their
+    #: own factors and analyse different surfaces in every sample, and the
+    #: reference does not offer the surface for those.
+    SAME_SURFACES_EVERY_SAMPLE = False
 
     def __init__(
         self,
@@ -1686,6 +1710,7 @@ class BaseSearch(ABC):
             return
         result.optimized = best
         result.evaluations.append(best)
+        result.steered.append(best)          # v0.1.237 (D87)
         result.valid_count += 1
 
     def _optimize_each_minimum(self, project: Project, result) -> None:
@@ -1737,6 +1762,7 @@ class BaseSearch(ABC):
                         and getattr(res, "admissible", True)
                         and self.score(res) < self.score(r)):
                     result.evaluations.append(res)
+                    result.steered.append(res)          # v0.1.237 (D87)
                     result.valid_count += 1
                     keep = res
                     if improved is None or self.score(res) < self.score(improved):
@@ -1979,6 +2005,10 @@ class GridSearch(BaseSearch):
     generating large numbers of useless circles and missing the
     per-centre radius bracketing. This version matches the reference.
     """
+
+    #: v0.1.237 (D87) — the circles come from the grid, the radii and the
+    #: geometry: the same, to the last digit, whatever the materials.
+    SAME_SURFACES_EVERY_SAMPLE = True
 
     def __init__(
         self,
@@ -2747,6 +2777,12 @@ class SlopeSearch(BaseSearch):
     whole bounding box (the old behaviour).
     """
 
+    #: v0.1.237 (D87) — the population is drawn from the seed and the
+    #: geometry, and every draw is made whatever the factors turn out to
+    #: be. The refinement walk after it steers on them, like an
+    #: optimisation, and goes to ``SearchResult.steered`` as well.
+    SAME_SURFACES_EVERY_SAMPLE = True
+
     def __init__(
         self,
         method: LEMMethod,
@@ -2896,6 +2932,9 @@ class SlopeSearch(BaseSearch):
                     if not (0.2 <= res.fos <= 100.0):
                         continue
                     result.evaluations.append(res)
+                    # v0.1.237 (D87) — where the walk goes depends on the
+                    # factors, so another sample walks elsewhere.
+                    result.steered.append(res)
                     result.valid_count += 1
                     if self.score(res) < cur_f:
                         cur_f = self.score(res)
@@ -3810,6 +3849,11 @@ class BlockSearch(BaseSearch):
     may quietly enforce the same thing.
     """
 
+    #: v0.1.237 (D87) — exactly Number of Surfaces candidates, drawn from the
+    #: seed and the objects whether they turn out valid or not: the same in
+    #: every run. Optimize Surfaces, when on, goes to ``steered``.
+    SAME_SURFACES_EVERY_SAMPLE = True
+
     def __init__(
         self,
         method,
@@ -4448,6 +4492,14 @@ class PathSearch(BaseSearch):
     All randomness is reproducible when ``seed`` is given (the
     reference's Pseudo-Random mode).
     """
+
+    #: v0.1.237 (D87) — the candidates come from the seed and the geometry,
+    #: in the same order in every run. The run stops once Number of Surfaces
+    #: of them are valid, so a sample with more invalid ones goes a little
+    #: further down the SAME sequence; the first Number of Surfaces are
+    #: drawn in every run. Overall Slope only names a surface with a factor
+    #: in every sample, so that tail decides nothing it should not.
+    SAME_SURFACES_EVERY_SAMPLE = True
 
     def __init__(
         self,

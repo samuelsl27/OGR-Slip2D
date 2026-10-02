@@ -1994,6 +1994,48 @@ _DICTS: dict[str, dict[str, str]] = {
         "Mean over-design factor": "Factor de sobredimensionamiento medio",
         "over-design factor = 1": "factor de sobredimensionamiento = 1",
         "Δ over-design factor": "Δ factor de sobredimensionamiento",
+        # v0.1.237 (D87) — una fila de «Pick GM Surfaces» dice qué
+        # superficie es, con sus extremos: las dos masas de un círculo, o
+        # una compuesta y su círculo, se leían igual.
+        "%d: circle centre (%.2f, %.2f) r = %.2f, x from %.2f to %.2f":
+            "%d: círculo centro (%.2f, %.2f) r = %.2f, x de %.2f a %.2f",
+        "%d: composite surface, circle centre (%.2f, %.2f) r = %.2f, "
+        "x from %.2f to %.2f":
+            "%d: superficie compuesta, círculo centro (%.2f, %.2f) "
+            "r = %.2f, x de %.2f a %.2f",
+        "%d: non-circular surface, x from %.2f to %.2f":
+            "%d: superficie no circular, x de %.2f a %.2f",
+        # Las cuatro frases son del MOTOR (``probabilistic.py``, constantes
+        # ``_CPS_*``) y Interpret las busca por su valor: si cambian allí,
+        # cambian aquí (lo comprueba test_surface_key_endpoints_v1237).
+        "No critical probabilistic surface: this search steers on the "
+        "factors of safety it computes, so it analyses different surfaces "
+        "in every sample and none of them has a probability of failure of "
+        "its own. It is computed for the Grid, Slope, Path and Block "
+        "searches.":
+            "Sin superficie probabilística crítica: esta búsqueda se guía "
+            "por los factores de seguridad que calcula, así que analiza "
+            "superficies distintas en cada muestra y ninguna tiene una "
+            "probabilidad de rotura propia. Solo se calcula con las "
+            "búsquedas Grid, Slope, Path y Block.",
+        "No critical probabilistic surface: the search minimised the "
+        "critical seismic coefficient Ky, and the critical probabilistic "
+        "surface is defined on the factor of safety.":
+            "Sin superficie probabilística crítica: la búsqueda minimizó el "
+            "coeficiente sísmico crítico Ky, y la superficie probabilística "
+            "crítica se define sobre el factor de seguridad.",
+        "No critical probabilistic surface: too few valid samples to "
+        "estimate one.":
+            "Sin superficie probabilística crítica: demasiado pocas muestras "
+            "válidas para estimarla.",
+        "No critical probabilistic surface: no surface of the search had a "
+        "factor of safety in every sample, and a probability of failure "
+        "counted over some of the samples only is not comparable with the "
+        "others.":
+            "Sin superficie probabilística crítica: ninguna superficie de la "
+            "búsqueda tuvo factor de seguridad en todas las muestras, y una "
+            "probabilidad de rotura contada solo sobre algunas de ellas no "
+            "es comparable con las demás.",
         "Language": "Idioma",
         "Theme": "Tema",
         "Light": "Claro",

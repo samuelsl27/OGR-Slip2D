@@ -429,6 +429,82 @@ _NO_DETERMINISTIC = ("the deterministic run left no critical surface for "
 _STEM_GM = "failed on the deterministic critical surface"
 _STEM_OS = "produced no valid surface"
 
+#: v0.1.237 (D87) — why an Overall Slope method names no critical
+#: probabilistic surface, in its ``notes["critical_probabilistic"]``. The
+#: reference does not offer the surface for a search that steers on its own
+#: factors nor with the Ky objective; the other two follow from what the
+#: surface is. Interpret shows them through ``tr()`` BY VALUE, so each has
+#: its Spanish entry in ``ogr_gui/i18n`` and a test keeps the two in step.
+_CPS_STEERED = (
+    "No critical probabilistic surface: this search steers on the "
+    "factors of safety it computes, so it analyses different surfaces "
+    "in every sample and none of them has a probability of failure of "
+    "its own. It is computed for the Grid, Slope, Path and Block "
+    "searches.")
+_CPS_KY = (
+    "No critical probabilistic surface: the search minimised the "
+    "critical seismic coefficient Ky, and the critical probabilistic "
+    "surface is defined on the factor of safety.")
+_CPS_TOO_FEW = (
+    "No critical probabilistic surface: too few valid samples to "
+    "estimate one.")
+_CPS_NOT_IN_EVERY_SAMPLE = (
+    "No critical probabilistic surface: no surface of the search had a "
+    "factor of safety in every sample, and a probability of failure "
+    "counted over some of the samples only is not comparable with the "
+    "others.")
+
+
+def _critical_probabilistic_excluded(search, run) -> Optional[str]:
+    """Why this run's search can name no critical probabilistic surface.
+
+    v0.1.237 (D87) — the two exclusions the reference makes for a search as
+    a whole, decided on the objects themselves. ``getattr`` with a default,
+    because ``search_factory`` is the caller's and may hand back any object
+    with a ``run``: one that does not claim to regenerate its surfaces is
+    not taken to.
+    """
+    from ogr_slip2d.search import OBJECTIVE_FOS
+
+    if not getattr(search, "SAME_SURFACES_EVERY_SAMPLE", False):
+        return _CPS_STEERED
+    if getattr(run, "objective", OBJECTIVE_FOS) != OBJECTIVE_FOS:
+        return _CPS_KY
+    return None
+
+
+def _accumulate_surfaces(run, per_surface: dict) -> None:
+    """One factor per surface of ``run``, under its key in ``per_surface``.
+
+    v0.1.237 (D87). ONE per surface and sample — a surface met twice in a
+    run is one surface met once — so that "a factor in every sample" can be
+    read off the count. What the search steered to (``SearchResult.
+    steered``: a walk, an optimisation; ``optimized`` too, for a result
+    that predates the list) is left out, as the reference leaves out the
+    optimised surfaces: another sample would not have produced it.
+
+    v0.1.202 — admissible ones only: an inadmissible surface has no factor
+    of safety to accumulate.
+    """
+    left_out = {id(r) for r in (getattr(run, "steered", None) or ())}
+    optimized = getattr(run, "optimized", None)
+    if optimized is not None:
+        left_out.add(id(optimized))
+    seen: set = set()
+    for ev in run.evaluations:
+        if id(ev) in left_out or not counts_as_sample(ev):
+            continue
+        sd = ev.surface.to_dict() if hasattr(ev.surface, "to_dict") else None
+        key = _surface_key(sd)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        sp = per_surface.get(key)
+        if sp is None:
+            sp = SurfaceProbability(surface=sd)
+            per_surface[key] = sp
+        sp.statistics.values.append(ev.fos)
+
 
 def counts_as_sample(r) -> bool:
     """Whether an evaluated sample HAS a factor of safety.
@@ -924,7 +1000,13 @@ def run_global_minimum(
 @dataclass
 class SurfaceProbability:
     """Probability statistics accumulated for ONE slip surface across the
-    samples of an Overall Slope run."""
+    samples of an Overall Slope run.
+
+    v0.1.237 (D87) — one factor per sample in which the search analysed it
+    with an admissible factor, under its exact identity (``_surface_key``).
+    Only one with a factor in every counted sample can be the critical
+    probabilistic surface.
+    """
 
     surface: Optional[dict] = None
     statistics: SampleStatistics = field(default_factory=SampleStatistics)
@@ -986,34 +1068,62 @@ class OverallSlopeResult:
                 cp.probability_of_failure if cp else None),
             "critical_probabilistic_beta": (
                 cp.reliability_index if cp else None),
+            # v0.1.237 (D87) — and why there is none, when there is none.
+            "critical_probabilistic_note":
+                self.notes.get("critical_probabilistic"),
             "failed_samples": self.failed_samples,
             "lost_by_cause": self.notes.get("lost_by_cause"),
         }
 
 
-def _surface_key(sd: dict, tol: float = 0.5) -> str:
+def _exact(value) -> str:
+    """A coordinate as the shortest text that reads back as the same float.
+
+    ``float`` first, so the integer 4 and the float 4.0 — one coordinate —
+    are one text; ``+ 0.0`` folds -0.0 onto 0.0, the one pair of equal
+    floats that print differently.
+    """
+    return repr(float(value) + 0.0)
+
+
+def _surface_key(sd: dict) -> str:
     """Identity of a surface for accumulating statistics across samples.
 
-    Geometry is quantised so that the same candidate generated in two
-    different iterations maps to the same key. A grid search regenerates
-    an identical set of circles every time, so this groups them exactly;
-    for random searches the tolerance merges near-coincident surfaces.
+    v0.1.237 (D87) — the TYPE and the GEOMETRY TO THE LAST DIGIT, extent
+    included, and nothing rounded. Until v0.1.236 a circle was its centre
+    and radius rounded to 0.5 model units, which merged three kinds of
+    surface that are not the same surface: the two disjoint sliding masses
+    of one circle, a composite and the uncut circle it was clipped from,
+    and two circles of a grid less than half a unit apart. Measured on
+    bank problem 36 (a 20 x 20 grid at 1.0 x 1.25 m, ten radius
+    increments): 746 of its 1570 keys gathered circles that differ, and two
+    of them hid the critical probabilistic surface — the circle with the
+    lowest reliability index shared its key with its neighbour of the next
+    radius, and the mixture lost.
 
-    WHAT THIS KEY DOES NOT SEPARATE, said here because the accumulated
-    statistics are only as honest as the identity they are accumulated
-    under: a circle is keyed by centre and radius alone, so the two
-    DISJOINT sliding masses of one circle share a key, and so do a
-    composite and the uncut circle it was clipped from. Reported as a
-    defect of its own rather than fixed here — putting the extent in the
-    key would regroup the samples of every circular model.
+    No tolerance, because where the key decides something none is needed:
+    the critical probabilistic surface is only named for a search that
+    regenerates the same surfaces in every sample
+    (``BaseSearch.SAME_SURFACES_EVERY_SAMPLE``), and such a search
+    regenerates them to the last digit — the same arithmetic on the same
+    geometry. A tolerance can only merge, and what it merges is a mixture
+    whose probability of failure belongs to no surface. (The old 0.5 was
+    also absolute, in the model's units.) For a search that steers on its
+    own factors the minima differ in some digit from sample to sample, so
+    ``distinct_minima`` counts each of them: that is what they are.
     """
     stype = _surface_type(sd)
     if stype is None:
         return ""
     if stype in _CIRCLE_SEEDED:
-        return "c:%d:%d:%d" % (round(sd["centre_x"] / tol),
-                               round(sd["centre_y"] / tol),
-                               round(sd["radius"] / tol))
+        key = "%s:%s:%s:%s" % (stype, _exact(sd["centre_x"]),
+                               _exact(sd["centre_y"]), _exact(sd["radius"]))
+        x_left, x_right = sd.get("x_left"), sd.get("x_right")
+        if x_left is None or x_right is None:
+            # A circle never resolved onto a mass, or a dictionary written
+            # without its extent: still a key, just not the key of a mass.
+            return key
+        return "%s:%s:%s" % (key, _exact(x_left), _exact(x_right))
     # Every serialised surface that is not keyed by its circle is keyed by
     # its vertices, and they are PAIRS: ``Polyline.to_dict`` writes
     # ``[x, y]`` and always has. Reading ``v["x"]`` off a list raised
@@ -1025,18 +1135,19 @@ def _surface_key(sd: dict, tol: float = 0.5) -> str:
     if stype in _POLYLINE_SEEDED:
         verts = (sd.get("polyline") or {}).get("vertices") or []
     else:
-        # ``composite`` and ``weak_layer`` publish their drawn vertices at
-        # the root. Until now they all collapsed onto the empty key "p:",
-        # which merged surfaces that are not the same surface.
+        # ``weak_layer`` publishes its drawn vertices at the root. Until
+        # v0.1.154 they all collapsed onto the empty key "p:", which merged
+        # surfaces that are not the same surface.
         verts = sd.get("vertices") or []
     if not verts:
         # No key rather than the bare "p:" every vertexless surface used
         # to share: the caller skips an empty key, and skipping one
         # surface is better than merging it with all the others.
         return ""
-    return "p:" + ":".join(
-        "%d,%d" % (round(v[0] / tol), round(v[1] / tol))
-        for v in verts)
+    # v0.1.237 (D87) — the type after the prefix: two types with the same
+    # vertices are still two surfaces.
+    return "p:%s:" % stype + ":".join(
+        "%s,%s" % (_exact(v[0]), _exact(v[1])) for v in verts)
 
 
 def run_overall_slope(
@@ -1070,12 +1181,29 @@ def run_overall_slope(
     samples.
 
     In addition, the **critical probabilistic surface** is determined:
-    the individual surface with the maximum probability of failure (and
-    therefore the minimum reliability index), which as the reference
-    stresses *need not be the deterministic critical surface*. Statistics
-    are accumulated per surface across the iterations, and only surfaces
-    evaluated at least ``min_evaluations`` times are eligible, so a
-    surface seen once cannot win on a single unlucky sample.
+    the individual surface with the maximum probability of failure (ties
+    broken by the lower reliability index), which as the reference
+    stresses *need not be the deterministic critical surface*.
+
+    v0.1.237 (D87) — what "individual surface" means. A probability of
+    failure is a property of ONE surface over the samples, PF(S) =
+    P[F(S, X) < 1], so:
+
+    * a surface is its type and its geometry to the last digit, extent
+      included (``_surface_key``): pooling two surfaces gives the PF of a
+      mixture, which belongs to neither;
+    * a candidate has a factor in EVERY counted sample. Counting a surface
+      only in the samples where the search happened to report it biases
+      its PF — which mass of a circle the engine reports depends on X —
+      and leaves it incomparable with the others. With every candidate
+      counted over the run's own samples, PF(critical probabilistic) <=
+      PF(run) holds by construction, as the reference documents it;
+    * what the search steered to (``SearchResult.steered``) never enters;
+    * there is none, with the reason in ``notes["critical_probabilistic"]``,
+      for a search that steers on its own factors
+      (``SAME_SURFACES_EVERY_SAMPLE`` false), with the Ky objective — the
+      reference's two exclusions —, with fewer than ``min_evaluations``
+      counted samples, or when no surface had a factor in every sample.
 
     ``search_factory`` is a callable ``method_id -> BaseSearch`` that
     builds a fully configured search, so the run honours exactly the same
@@ -1144,6 +1272,9 @@ def run_overall_slope(
         minima_keys: set = set()
         values: list[float] = []
         counts: dict = {}
+        # v0.1.237 (D87) — why this method names no critical probabilistic
+        # surface, once something says so; until then, there may be one.
+        why_not: Optional[str] = None
 
         for i in range(num_samples):
             clone = clone_project(project)
@@ -1171,23 +1302,13 @@ def run_overall_slope(
             values.append(run.critical.fos)
             ores.sample_index.append(i)
 
-            # Accumulate per-surface statistics for the critical
-            # probabilistic surface
-            for ev in run.evaluations:
-                # v0.1.202 — admissible ones only: an inadmissible surface
-                # has no factor of safety to accumulate.
-                if not counts_as_sample(ev):
-                    continue
-                sd = (ev.surface.to_dict()
-                      if hasattr(ev.surface, "to_dict") else None)
-                key = _surface_key(sd)
-                if not key:
-                    continue
-                sp = per_surface.get(key)
-                if sp is None:
-                    sp = SurfaceProbability(surface=sd)
-                    per_surface[key] = sp
-                sp.statistics.values.append(ev.fos)
+            # Per-surface statistics for the critical probabilistic
+            # surface; v0.1.237 (D87): not for a search that cannot have
+            # one, which spares a guided search the bookkeeping too.
+            if why_not is None:
+                why_not = _critical_probabilistic_excluded(search, run)
+            if why_not is None:
+                _accumulate_surfaces(run, per_surface)
 
             crit_sd = (run.critical.surface.to_dict()
                        if hasattr(run.critical.surface, "to_dict")
@@ -1203,14 +1324,27 @@ def run_overall_slope(
         ores.statistics = SampleStatistics(values=values)
 
         # Critical probabilistic surface: maximum probability of failure,
-        # ties broken by the lower reliability index.
-        eligible = [sp for sp in per_surface.values()
-                    if sp.statistics.n >= min_evaluations]
-        if eligible:
-            ores.critical_probabilistic = max(
-                eligible,
-                key=lambda sp: (sp.probability_of_failure,
-                                -sp.reliability_index))
+        # ties broken by the lower reliability index, among the surfaces
+        # with a factor in EVERY counted sample (v0.1.237, D87; see the
+        # docstring). ``_accumulate_surfaces`` adds at most one factor per
+        # sample, so a full count is exactly that.
+        if values and why_not is None:
+            if len(values) < min_evaluations:
+                why_not = _CPS_TOO_FEW
+            else:
+                eligible = [sp for sp in per_surface.values()
+                            if sp.statistics.n == len(values)]
+                if eligible:
+                    ores.critical_probabilistic = max(
+                        eligible,
+                        key=lambda sp: (sp.probability_of_failure,
+                                        -sp.reliability_index))
+                else:
+                    why_not = _CPS_NOT_IN_EVERY_SAMPLE
+        if values and why_not is not None:
+            # Only with samples: a method that has none is lost, and
+            # ``_publish_method_losses`` already says so.
+            ores.notes["critical_probabilistic"] = why_not
         ores.notes["surfaces_tracked"] = len(per_surface)
         if ores.failed_samples:
             ores.notes["lost_by_cause"] = _counted_reasons(counts)

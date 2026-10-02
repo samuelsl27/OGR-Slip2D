@@ -558,14 +558,18 @@ class TestOverallSlopeCanIndexASurfaceItAnalysed:
         assert one(80.0) not in ("", "p:")
         assert one(80.0) != one(85.0)
 
-    def test_a_circle_keeps_the_key_it_always_had(self):
-        """The one thing that must NOT move: every circular model in the
-        bank groups its samples by this string."""
+    def test_a_circle_is_keyed_by_its_type_and_its_exact_geometry(self):
+        """CHANGED ON PURPOSE in v0.1.237 (D87). This test was
+        ``test_a_circle_keeps_the_key_it_always_had`` and pinned the defect
+        itself: the key of a circle was its centre and radius rounded to
+        0.5, so a composite shared the key of its uncut circle (and the two
+        masses of one circle, and two grid circles less than half a unit
+        apart, shared one too). The identity is now the type and the
+        geometry to the last digit; ``test_surface_key_endpoints_v1237``
+        has the rest."""
         from ogr_core.statistics.probabilistic import _surface_key
 
         d = _the_four_dicts()
-        assert _surface_key(d["circle"]) == "c:%d:%d:%d" % (
-            round(_XC / 0.5), round(_YC / 0.5), round(_R / 0.5))
-        assert _surface_key(d["composite"]) == _surface_key(d["circle"]), (
-            "a composite has always been keyed by its circle, and this "
-            "version does not change that")
+        assert _surface_key(d["circle"]) == "circle:%r:%r:%r" % (
+            float(_XC), float(_YC), float(_R))
+        assert _surface_key(d["composite"]) != _surface_key(d["circle"])

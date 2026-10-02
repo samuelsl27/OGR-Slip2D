@@ -413,6 +413,38 @@ def _reported_value(result, item, project=None):
     return "%.3f" % item.fos, ""
 
 
+def minimum_row_text(i: int, sd: dict) -> str:
+    """One row of *Pick GM Surfaces*: what the surface is, extent included.
+
+    v0.1.237 (D87) — two rows read the same whenever they were the two
+    sliding masses of one circle, or a composite and its uncut circle: the
+    row named a circle by its centre and radius alone, which was also the
+    identity Overall Slope accumulated under. Dispatched on the serialised
+    ``type``, not on whether the dictionary has a ``radius`` (a composite
+    has one too, and that shape test is D59). A bare dictionary with a
+    radius and no type is still a circle, as in the statistical engine.
+    """
+    stype = sd.get("type") or ("circle" if "radius" in sd else None)
+    xl, xr = sd.get("x_left"), sd.get("x_right")
+    if stype in ("circle", "composite"):
+        head = (i, sd["centre_x"], sd["centre_y"], sd["radius"])
+        if xl is None or xr is None:
+            return tr("%d: circle centre (%.2f, %.2f) r = %.2f") % head
+        if stype == "composite":
+            return tr("%d: composite surface, circle centre (%.2f, %.2f) "
+                      "r = %.2f, x from %.2f to %.2f") % (head + (xl, xr))
+        return tr("%d: circle centre (%.2f, %.2f) r = %.2f, "
+                  "x from %.2f to %.2f") % (head + (xl, xr))
+    if xl is None or xr is None:
+        verts = (sd.get("polyline") or {}).get("vertices") or sd.get(
+            "vertices") or []
+        if verts:
+            xl, xr = min(v[0] for v in verts), max(v[0] for v in verts)
+    if xl is None or xr is None:
+        return tr("%d: non-circular surface") % i
+    return tr("%d: non-circular surface, x from %.2f to %.2f") % (i, xl, xr)
+
+
 # ======================================================================
 class _SummaryDock(QDockWidget):
     """Header summary: method, number of valid surfaces, critical FoS."""
@@ -2425,12 +2457,7 @@ class InterpretWindow(QMainWindow):
             fos = sd.get("_fos")
             tail = ("" if fos is None
                     else tr("   |   FS = %s") % ("%.3f" % fos))
-            if "radius" in sd:
-                lst.addItem(tr("%d: circle centre (%.2f, %.2f) r = %.2f")
-                            % (i, sd["centre_x"], sd["centre_y"],
-                               sd["radius"]) + tail)
-            else:
-                lst.addItem(tr("%d: non-circular surface") % i + tail)
+            lst.addItem(minimum_row_text(i, sd) + tail)
         lay.addWidget(lst)
 
         def _picked(row: int) -> None:
@@ -2453,13 +2480,22 @@ class InterpretWindow(QMainWindow):
             return
         # v0.1.169 (D127) — the method that has samples, not the first
         # one. ``cp`` itself needs no guard: entries of ``per_surface`` are
-        # born holding a value and only surfaces with at least
-        # ``min_evaluations`` of them are eligible, so its ``pf`` is always
-        # a float and a "--" branch here would be dead code.
+        # born holding a value and only surfaces with one in every counted
+        # sample (at least ``min_evaluations`` of them, v0.1.237) are
+        # eligible, so its ``pf`` is always a float and a "--" branch here
+        # would be dead code.
         cp = getattr(prob.reported, "critical_probabilistic", None)
         if cp is None:
             if on:
-                self._info(tr(
+                # v0.1.237 (D87) — an Overall Slope run can have none too,
+                # and then it says why (a search that steers on its own
+                # factors, the Ky objective, or no surface with a factor in
+                # every sample). That sentence is the engine's, so it is
+                # looked up by value: its Spanish entry is in the
+                # dictionary.
+                why = (getattr(prob.reported, "notes", None) or {}).get(
+                    "critical_probabilistic")
+                self._info(tr(why) if why else tr(
                     "No critical probabilistic surface: it comes from the "
                     "Overall Slope analysis type."))
             return

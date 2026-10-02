@@ -202,7 +202,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.236"
+    VERSION = "0.1.237"
 
     def __init__(self) -> None:
         super().__init__()
@@ -2307,6 +2307,8 @@ class MainWindow(QMainWindow):
         new = copy.copy(candidates[mid])
         new.evaluations = list(new.evaluations) + [res]
         new.optimized = res
+        # v0.1.237 (D87) — a NEW list too: ``copy.copy`` shares the old one.
+        new.steered = list(getattr(new, "steered", ()) or ()) + [res]
         new.valid_count = new.valid_count + 1
         self.last_search_results = dict(results)
         self.last_search_results[mid] = new
