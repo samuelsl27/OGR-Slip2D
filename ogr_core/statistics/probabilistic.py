@@ -60,6 +60,10 @@ class MethodProbabilisticResult:
     #: the first failure: the scatter data and the CSV export zipped them
     #: and paired every later factor with the NEXT sample's values.
     sample_index: list = field(default_factory=list)
+    #: v0.1.238 (D89) — counted samples that answered for another sliding
+    #: mass of the deterministic circle (``_MassSwitches``); the sentence,
+    #: when there are any, is ``notes["mass_switch"]``.
+    mass_switches: int = 0
 
     # ------------------------------------------------------------------
     # v0.1.169 (D127) — ``Optional`` because the statistic they delegate to
@@ -95,6 +99,7 @@ class MethodProbabilisticResult:
                 st.lognormal_reliability_index(),
             "failed_samples": self.failed_samples,
             "lost_by_cause": self.notes.get("lost_by_cause"),
+            "mass_switches": self.mass_switches,        # v0.1.238 (D89)
         }
 
 
@@ -473,6 +478,121 @@ def _critical_probabilistic_excluded(search, run) -> Optional[str]:
     return None
 
 
+def _extent(surface) -> Optional[tuple]:
+    """``(x_left, x_right)`` of a surface or of its dictionary, or None.
+
+    v0.1.238 (D89) — which sliding mass of a circle an evaluation answered
+    for. Within one run the geometry does not change, so the same mass
+    comes back with the same extent to the last digit (the same arithmetic
+    on the same ground: what ``_surface_key`` stands on, D87) and another
+    mass with another extent — two masses of one circle are disjoint
+    chords. So the extent alone tells them apart, and it is read off the
+    object without ``to_dict()``, which on a composite redraws it.
+    """
+    if isinstance(surface, dict):
+        x_left, x_right = surface.get("x_left"), surface.get("x_right")
+    else:
+        x_left = getattr(surface, "x_left", None)
+        x_right = getattr(surface, "x_right", None)
+    if x_left is None or x_right is None:
+        return None
+    return (float(x_left), float(x_right))
+
+
+def _circle_of(surface) -> Optional[tuple]:
+    """``(centre_x, centre_y, radius)`` of a circle-based surface, or None.
+
+    A composite is its circle clipped and a weak-layer surface carries its
+    base circle, so both answer; a polyline does not.
+    """
+    if isinstance(surface, dict):
+        stype = _surface_type(surface)
+        if stype == "weak_layer":
+            return _circle_of(surface.get("base") or {})
+        if stype not in _CIRCLE_SEEDED:
+            return None
+        values = (surface.get("centre_x"), surface.get("centre_y"),
+                  surface.get("radius"))
+    else:
+        if not hasattr(surface, "radius") and hasattr(surface, "base"):
+            return _circle_of(surface.base)
+        values = (getattr(surface, "centre_x", None),
+                  getattr(surface, "centre_y", None),
+                  getattr(surface, "radius", None))
+    if any(v is None for v in values):
+        return None
+    return tuple(float(v) for v in values)
+
+
+class _MassSwitches:
+    """Counted samples that answered for ANOTHER sliding mass of the
+    deterministic circle.
+
+    v0.1.238 (D89). D36 (v0.1.131) seeds every sample with the circle and
+    no endpoints on purpose, so that each sample resolves its own mass, and
+    ``_best_of_masses`` keeps the lower factor — which is right. What was
+    missing is saying so: on a circle with two masses, a sampled parameter
+    that crosses the point where the critical mass changes makes those
+    samples answer for the other one, and measured on the notched slope of
+    ``test_statistical_rebuild_v1154`` with the cohesion of its upper soil
+    between 50 and 450 psf, the ten samples below 1 of forty were all of
+    them from the notch — the probability of failure belonged entirely to
+    a mass the deterministic answer is not. Counting changes no number.
+
+    A deterministic surface without an extent (a dictionary written
+    without one) or without a circle (a polyline, which keeps its ends) is
+    not watched: there is nothing to compare, or no mass to change.
+    """
+
+    def __init__(self, deterministic_surface):
+        self.home = _extent(deterministic_surface)
+        self.circle = _circle_of(deterministic_surface)
+        self.count = 0
+        self.below_one = 0
+        self.at: dict = {}          # extent -> samples that answered for it
+
+    @property
+    def watching(self) -> bool:
+        return self.home is not None and self.circle is not None
+
+    def see(self, result) -> bool:
+        """Count ``result`` if it is the deterministic circle answering for
+        another mass; a different circle is not a change of mass."""
+        if not self.watching:
+            return False
+        surface = getattr(result, "surface", None)
+        extent = _extent(surface)
+        if (extent is None or extent == self.home
+                or _circle_of(surface) != self.circle):
+            return False
+        self.count += 1
+        self.at[extent] = self.at.get(extent, 0) + 1
+        if result.fos < 1.0:
+            self.below_one += 1
+        return True
+
+    def where(self) -> str:
+        """The masses it went to; how many went to each only when there is
+        more than one, since otherwise the head of the sentence says it."""
+        if len(self.at) == 1:
+            (xl, xr), = self.at
+            return "x from %.2f to %.2f" % (xl, xr)
+        return "; ".join("x from %.2f to %.2f in %d" % (xl, xr, n)
+                         for (xl, xr), n in sorted(self.at.items()))
+
+    def sentence(self, head: str, below_one: Optional[int] = None) -> str:
+        """``head`` says what changed mass, in the caller's words; with
+        ``below_one`` (the samples under 1 of the run), how much of the
+        probability of failure is theirs."""
+        text = "%s (%s), not for its own (x from %.2f to %.2f)" % (
+            head, self.where(), self.home[0], self.home[1])
+        if below_one:
+            text += ("; %d of the %d with a factor below 1 are among them, "
+                     "and the probability of failure counts them"
+                     % (self.below_one, below_one))
+        return text + "."
+
+
 def _accumulate_surfaces(run, per_surface: dict) -> None:
     """One factor per surface of ``run``, under its key in ``per_surface``.
 
@@ -721,13 +841,21 @@ def _publish_method_warnings(result) -> None:
 
     The sentence and the threshold are NOT touched: this version opens the
     channel, it does not rewrite the note.
+
+    v0.1.238 (D89) — and the ``mass_switch`` sentence, under a key of its
+    own so the 20 % one stays word for word. The count itself
+    (``mass_switches``) is a field, not a note, for the reason
+    ``surfaces_tracked`` is not published: a number on every sound run is
+    not a sentence.
     """
     for mid, mres in result.by_method.items():
         if getattr(mres.statistics, "n", 0) <= 0:
             continue
-        said = (getattr(mres, "notes", None) or {}).get("warning")
-        if said:
-            result.note_lines.append("%s: %s" % (mid, said))
+        notes = getattr(mres, "notes", None) or {}
+        for key in ("warning", "mass_switch"):
+            said = notes.get(key)
+            if said:
+                result.note_lines.append("%s: %s" % (mid, said))
 
 
 def run_global_minimum(
@@ -917,6 +1045,7 @@ def run_global_minimum(
         )
         values: list[float] = []
         counts: dict = {}
+        switches = _MassSwitches(sd)            # v0.1.238 (D89)
         for i in range(num_samples):
             clone = clone_project(project)
             one = {k: v[i] for k, v in samples.items()}
@@ -930,6 +1059,7 @@ def run_global_minimum(
             if counts_as_sample(r):
                 values.append(r.fos)
                 mres.sample_index.append(i)
+                switches.see(r)
             else:
                 # A sample can make the surface unsolvable (for instance a
                 # very low strength). It is counted separately rather than
@@ -964,6 +1094,13 @@ def run_global_minimum(
             continue
 
         mres.statistics = SampleStatistics(values=values)
+        # v0.1.238 (D89) — said, and only said: no number moves.
+        mres.mass_switches = switches.count
+        if switches.count:
+            mres.notes["mass_switch"] = switches.sentence(
+                "%d of %d samples answered for another sliding mass of the "
+                "deterministic circle" % (switches.count, len(values)),
+                sum(1 for v in values if v < 1.0))
         # The 20 % warning and its wording are untouched, and it is now
         # only reached when at least one sample DID survive -- which is
         # exactly where "check the variable ranges" still means something.
@@ -1034,6 +1171,11 @@ class OverallSlopeResult:
     notes: dict = field(default_factory=dict)
     #: v0.1.201 — see ``MethodProbabilisticResult.sample_index``.
     sample_index: list = field(default_factory=list)
+    #: v0.1.238 (D89) — counted samples whose critical surface was the
+    #: deterministic circle answering for another sliding mass. Another
+    #: circle is not a change of mass: that is the moving minimum this
+    #: analysis exists to find.
+    mass_switches: int = 0
 
     @property
     def probability_of_failure(self) -> Optional[float]:
@@ -1071,6 +1213,7 @@ class OverallSlopeResult:
             # v0.1.237 (D87) — and why there is none, when there is none.
             "critical_probabilistic_note":
                 self.notes.get("critical_probabilistic"),
+            "mass_switches": self.mass_switches,        # v0.1.238 (D89)
             "failed_samples": self.failed_samples,
             "lost_by_cause": self.notes.get("lost_by_cause"),
         }
@@ -1275,6 +1418,7 @@ def run_overall_slope(
         # v0.1.237 (D87) — why this method names no critical probabilistic
         # surface, once something says so; until then, there may be one.
         why_not: Optional[str] = None
+        switches = _MassSwitches(getattr(det, "surface", None))   # D89
 
         for i in range(num_samples):
             clone = clone_project(project)
@@ -1301,6 +1445,7 @@ def run_overall_slope(
 
             values.append(run.critical.fos)
             ores.sample_index.append(i)
+            switches.see(run.critical)
 
             # Per-surface statistics for the critical probabilistic
             # surface; v0.1.237 (D87): not for a search that cannot have
@@ -1345,6 +1490,13 @@ def run_overall_slope(
             # Only with samples: a method that has none is lost, and
             # ``_publish_method_losses`` already says so.
             ores.notes["critical_probabilistic"] = why_not
+        ores.mass_switches = switches.count
+        if switches.count:
+            ores.notes["mass_switch"] = switches.sentence(
+                "%d of %d samples had the deterministic circle as their "
+                "critical surface, answering for another sliding mass"
+                % (switches.count, len(values)),
+                sum(1 for v in values if v < 1.0))
         ores.notes["surfaces_tracked"] = len(per_surface)
         if ores.failed_samples:
             ores.notes["lost_by_cause"] = _counted_reasons(counts)

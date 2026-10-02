@@ -63,6 +63,12 @@ class VariableSensitivity:
     #: happened. A named variable with no points says the truth; dropping
     #: it silently would only move the lie.
     note: str = ""
+    #: v0.1.238 (D89) — the parameter values whose point answered for
+    #: another sliding mass of the deterministic circle. Not a ``note``:
+    #: that marks a variable that was not swept and takes it out of the
+    #: ranking, and this one was swept; the sentence goes to
+    #: ``SensitivityResult.note_lines``.
+    mass_switch_values: list = field(default_factory=list)
 
     # ------------------------------------------------------------------
     @property
@@ -213,6 +219,7 @@ def run_sensitivity(
         _FACTORED_COPY,
         _NO_DETERMINISTIC,
         _NO_METHOD,
+        _MassSwitches,
         _analysis_copy,
         _cannot_reevaluate,
         _is_factored_copy,
@@ -327,6 +334,7 @@ def run_sensitivity(
                 key=rv.key, label=rv.label or rv.key,
                 mean_value=rv.distribution.mean,
                 deterministic_fos=getattr(det, "fos", math.nan))
+            switches = _MassSwitches(sd)        # v0.1.238 (D89)
             for i in range(n_points):
                 x = lo + (hi - lo) * i / (n_points - 1)
                 # Every other variable stays at its mean: the clone is
@@ -354,11 +362,21 @@ def run_sensitivity(
                 if counts_as_sample(r):
                     vs.values.append(x)
                     vs.fos.append(r.fos)
+                    if switches.see(r):
+                        vs.mass_switch_values.append(x)
                 done += 1
                 if progress_cb and done % 20 == 0:
                     progress_cb(done, total)
             if vs.values or vs.note:
                 sweeps[rv.key] = vs
+            if vs.mass_switch_values:
+                # v0.1.238 (D89) — a curve that changes mechanism part way
+                # is two curves drawn as one; said, never redrawn.
+                at = vs.mass_switch_values
+                res.note_lines.append("%s: %s" % (mid, switches.sentence(
+                    "The sweep of %s answered for another sliding mass of "
+                    "the deterministic circle at %d of %d points, from %g to "
+                    "%g" % (vs.label, len(at), vs.n, min(at), max(at)))))
 
         # A method whose every variable was refused contributes nothing to
         # rank, so it does not enter ``by_method`` -- and with no method in
