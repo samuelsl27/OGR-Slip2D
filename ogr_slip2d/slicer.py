@@ -993,7 +993,13 @@ def _surface_pressure_at(project: Project, x: float) -> float:
     so it cannot be expressed here and is handled by
     :func:`distributed_loads_on` instead. Before v0.1.122 such a load
     contributed nothing anywhere, silently.
+
+    v0.1.241 (D232) — DOWNWARD positive and SIGNED, the convention of the
+    slice weight and of :func:`_line_load_components`: a load that points
+    up pulls the ground and takes weight off. See
+    :data:`SIGNED_SURFACE_PRESSURE`.
     """
+    signed = SIGNED_SURFACE_PRESSURE
     total = 0.0
     for load in project.distributed_loads:
         x1, x2 = load.start.x, load.end.x
@@ -1002,10 +1008,32 @@ def _surface_pressure_at(project: Project, x: float) -> float:
             t = 0.0 if abs(x2 - x1) < 1e-12 else (x - x1) / (x2 - x1)
             t = max(0.0, min(1.0, t))
             p = load.pressure_at(t)
-            # Vertical component of the pressure
+            # Vertical component of the pressure, downward positive
             _, dy = load.direction_vector()
-            total += abs(p * dy)  # kPa
+            total += -p * dy if signed else abs(p * dy)  # kPa
     return total
+
+
+#: v0.1.241 (D232) — the vertical component of a distributed load keeps its
+#: SIGN.
+#:
+#: Until v0.1.240 it was added as ``abs(p·dy)``: a load pointing UP was
+#: applied DOWN, while its horizontal component (:func:`distributed_loads_on`),
+#: the vertical-segment case and every line load (:func:`_line_load_components`)
+#: kept theirs — so the claim below that a line load of P kN/m and a
+#: distributed load whose integral is P give the same slice weight was false
+#: for any load pointing up, and the API's own note on such a load ("it
+#: pulls the ground") described something the engine did not do. Measured on
+#: the phi = 0 slope of ``test_tension_crack_truncation_v1109``, 20 kPa over
+#: 16 m of the crest pointing up: 1.0295, the same as pointing down, where
+#: the equivalent line load gives 1.2069. A net upward resultant on a slice
+#: is a net negative weight, which the methods already handle.
+#:
+#: Read at call time by :func:`_surface_pressure_at` and by
+#: ``ogr_core.hydraulic.excess_pore_pressure.load_delta_sigma_v``. Off, the
+#: v0.1.240 behaviour. No model of the verification bank has a distributed
+#: load pointing up (230 models, 11 such loads, all straight down).
+SIGNED_SURFACE_PRESSURE = True
 
 
 def distributed_loads_on(project: Project, x_left: float, x_right: float,

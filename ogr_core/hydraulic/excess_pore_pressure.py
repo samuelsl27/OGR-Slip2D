@@ -158,8 +158,13 @@ def load_delta_sigma_v(project: "Project", x: float,
     mesh-dependent and what to do about it. Without a width, line loads
     are skipped rather than guessed at.
     """
+    import ogr_slip2d.slicer as _slicer
     from ogr_slip2d.slicer import _line_load_components
 
+    # v0.1.241 (D232) — signed, downward positive, like the slice weight:
+    # a load pointing up unloads the ground below it. Read off the slicer's
+    # switch, so the two readers of the same pressure cannot disagree.
+    signed = _slicer.SIGNED_SURFACE_PRESSURE
     total = 0.0
     for load in getattr(project, "distributed_loads", None) or []:
         if not getattr(load, "creates_excess_pore_pressure", False):
@@ -171,7 +176,8 @@ def load_delta_sigma_v(project: "Project", x: float,
         t = 0.0 if abs(x2 - x1) < 1e-12 else (x - x1) / (x2 - x1)
         t = max(0.0, min(1.0, t))
         _dx, dy = load.direction_vector()
-        total += abs(load.pressure_at(t) * dy)
+        p = load.pressure_at(t)
+        total += -p * dy if signed else abs(p * dy)
 
     if slice_width and slice_width > 0.0:
         half = 0.5 * slice_width
