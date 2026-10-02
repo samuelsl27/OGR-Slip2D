@@ -593,6 +593,72 @@ class _MassSwitches:
         return text + "."
 
 
+#: v0.1.239 (D88) — the refusal of the probe below. No ": " inside: the
+#: panel groups a line by the first one, which ``_method_lines`` puts after
+#: the method id.
+_NOT_ITSELF = (
+    "The deterministic critical surface does not re-evaluate to itself on "
+    "the project the samples run on (it answers for x from %.2f to %.2f, "
+    "%s, instead of x from %.2f to %.2f, %s); a setting that decides the "
+    "sliding mass, such as Composite Surfaces or a surface filter, differs "
+    "between the two runs, so this method was skipped.")
+
+
+def _does_not_reevaluate_to_itself(project, prepare, search, surface,
+                                   surface_dict) -> Optional[str]:
+    """Why the deterministic surface is not itself on the samples' project.
+
+    v0.1.239 (D88). The guard of v0.1.154 (``_cannot_reevaluate``) refuses
+    a composite whose samples run with Composite Surfaces off, and nothing
+    else: the other direction passes it. A deterministic run with the
+    option OFF gives a circle that answers for one mass; samples with it ON
+    answer for another, and on the notched slope of
+    ``test_statistical_rebuild_v1154`` the result reported 3.3585 as the
+    deterministic factor over samples around 1.38 (−59 %), with no note. A
+    surface filter set only on the samples' project does the same (+141 %).
+    The guard cannot see either: it would have to know the settings the
+    deterministic surface came from, and they do not travel.
+
+    So the question is asked of the MECHANISM, which needs no such memory:
+    the seed of the deterministic surface, evaluated once on the project
+    the samples run on — prepared as they are, with no sample applied — by
+    the samples' own evaluator, has to come back as the same surface: the
+    same type and the same extent. Within one geometry the same mass comes
+    back to the last digit (D87, D89), so any difference is a different
+    mechanism. Symmetric by construction, and for any setting that decides
+    the mass, not only for the one the guard knows.
+
+    Direct dispatch on purpose, not through ``_evaluate_on``: tests patch
+    that global to count and to fail sample evaluations, and the probe is
+    not a sample. An exception, no result or a surface without an extent
+    refuses nothing: the samples will say what they find. A deterministic
+    surface without an extent (a dictionary written without one) or a
+    polyline (it keeps its ends) is not probed.
+    """
+    home = _extent(surface_dict)
+    if home is None:
+        return None
+    from ogr_slip2d.surface import SlipCircle
+
+    try:
+        unperturbed = prepare(clone_project(project))
+        if isinstance(surface, SlipCircle):
+            r = search.evaluate_circle(unperturbed, surface)
+        else:
+            r = search.evaluate_surface(unperturbed, surface)
+    except Exception:  # noqa: BLE001 - see the docstring
+        return None
+    there = _extent(getattr(r, "surface", None))
+    if there is None:
+        return None
+    home_type = _surface_type(surface_dict)
+    there_type = _surface_type(r.surface.to_dict())
+    if there == home and there_type == home_type:
+        return None
+    return _NOT_ITSELF % (there[0], there[1], there_type,
+                          home[0], home[1], home_type)
+
+
 def _accumulate_surfaces(run, per_surface: dict) -> None:
     """One factor per surface of ``run``, under its key in ``per_surface``.
 
@@ -1037,6 +1103,15 @@ def run_global_minimum(
         # door, and it takes the method built above as it is.
         search = build_evaluator(configured, mid, method=method,
                                  num_slices=num_slices)
+        # v0.1.239 (D88) — and the other direction of the guard above, asked
+        # of the mechanism: the surface has to come back as itself on the
+        # project the samples run on.
+        mismatch = _does_not_reevaluate_to_itself(project, prepare, search,
+                                                  surface, sd)
+        if mismatch is not None:
+            result.notes[mid] = mismatch
+            lost.append(mid)
+            continue
 
         mres = MethodProbabilisticResult(
             method_id=mid,

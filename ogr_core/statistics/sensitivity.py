@@ -222,6 +222,7 @@ def run_sensitivity(
         _MassSwitches,
         _analysis_copy,
         _cannot_reevaluate,
+        _does_not_reevaluate_to_itself,
         _is_factored_copy,
         counts_as_sample,
         _evaluate_on,
@@ -325,6 +326,13 @@ def run_sensitivity(
         # same door as ``run_global_minimum``: see the note there.
         search = build_evaluator(configured, mid, method=method,
                                  num_slices=num_slices)
+        # v0.1.239 (D88) — as in ``run_global_minimum``.
+        mismatch = _does_not_reevaluate_to_itself(project, prepare, search,
+                                                  surface, sd)
+        if mismatch is not None:
+            res.notes[mid] = mismatch
+            lost.append(mid)
+            continue
         sweeps: dict = {}
 
         for rv in usable:
