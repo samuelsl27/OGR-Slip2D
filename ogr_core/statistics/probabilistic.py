@@ -246,6 +246,40 @@ def _evaluate_on(project, search, surface):
     return search.evaluate_surface(project, surface)
 
 
+#: v0.1.236 (D93) — what a statistical run says when it is handed the
+#: design-factored copy an analysis computes on instead of the model. A
+#: constant because the three runs say the same thing.
+_FACTORED_COPY = (
+    "The project handed to this statistical run is the design-factored copy "
+    "an analysis computes on, not the model: its samples would overwrite "
+    "factored values with unfactored ones and be factored a second time. "
+    "Pass the model itself; every sample is prepared like the analysis.")
+
+
+def _analysis_copy(project):
+    """``project`` as an analysis computes on it.
+
+    v0.1.236 (D93) — ``prepare_analysis_project``: the design standard's
+    factored copy with the Generalized links resolved, or the project
+    itself when there is nothing to prepare, so a model without a standard
+    and without links is evaluated exactly as before. It is the default
+    ``prepare`` of the three statistical runs and the project their method
+    and evaluator are configured from, which is what the analysis door
+    (``analysis_runner.run_configured_statistics``) passes explicitly.
+    """
+    from ogr_core.project import prepare_analysis_project
+    return prepare_analysis_project(project)[0]
+
+
+def _is_factored_copy(project) -> bool:
+    """Whether ``project`` is the copy ``apply_design_factors`` returned.
+
+    ``getattr`` and not the attribute, because a project pickled before
+    v0.1.236 does not carry the flag and is a model, not a copy.
+    """
+    return bool(getattr(project, "design_factored_copy", False))
+
+
 def _composite_surfaces(project) -> bool:
     """Composite Surfaces, as the project the SAMPLES run on carries it.
 
@@ -635,25 +669,39 @@ def run_global_minimum(
     """Run a Global Minimum probabilistic analysis.
 
     Args:
-        project: the deterministic model (never modified).
+        project: the MODEL the user edits (never modified), not the
+            design-factored copy an analysis computes on: that copy is
+            refused with a note (v0.1.236, D93), because sampling it would
+            write unfactored values over factored ones and factor them again.
         critical_surfaces: ``method_id -> LEMResult`` from the
-            deterministic run. Each method keeps its OWN critical
-            surface, as the reference specifies.
+            deterministic run (``analysis_runner.run_analysis``, which
+            computes on the prepared copy). Each method keeps its OWN
+            critical surface, as the reference specifies. Said because the
+            default ``prepare`` turned the old mismatch round: a caller who
+            computes its deterministic surface on the RAW model while a
+            design standard is on gets factored samples next to an
+            unfactored ``deterministic_fos``. Nothing here can tell which
+            model a ``LEMResult`` came from.
         variables: the :class:`RandomVariable` list.
         num_samples: N.
         sampling: Monte Carlo or Latin Hypercube.
         seed: for reproducibility.
         num_slices: slicing used in the repeated evaluations.
         method_factory: ``method_id -> LEMMethod``; defaults to
-            ``analysis_runner.build_method``, which is the one place that
-            configures a method from the project (v0.1.108).
+            ``analysis_runner.build_method`` on the project as the analysis
+            prepares it, which is the one place that configures a method
+            from the project (v0.1.108).
         progress_cb: called as ``(done, total)``.
         prepare: ``project -> project`` applied to every sampled clone
-            after its sample, before it is evaluated (v0.1.201): the
-            analysis door passes the design factors here, so a sampled
-            value is factored like the deterministic one instead of
-            overwriting a factored parameter with an unfactored value.
-            None leaves the clone as sampled.
+            after its sample, before it is evaluated (v0.1.201), so a
+            sampled value is factored like the deterministic one instead of
+            overwriting a factored parameter with an unfactored value. None
+            means the analysis preparation (``prepare_analysis_project``:
+            the design standard's factors and the Generalized links), as
+            the analysis door passes it (v0.1.236, D93); until then None
+            left the clone as sampled, and a direct caller put unfactored
+            samples next to a factored deterministic surface. Pass
+            ``lambda clone: clone`` for the model exactly as sampled.
 
     Returns:
         A :class:`ProbabilisticResult`, empty when no variable is random.
@@ -663,6 +711,21 @@ def run_global_minimum(
     result = ProbabilisticResult(
         num_samples=num_samples, sampling_method=sampling.value,
         analysis_type=ProbabilisticType.GLOBAL_MINIMUM)
+
+    # v0.1.236 (D93) — refused before anything is drawn (``_FACTORED_COPY``).
+    if _is_factored_copy(project):
+        _publish_note(result, "error", _FACTORED_COPY)
+        return result
+    # v0.1.236 (D93) — the samples are prepared like the analysis unless the
+    # caller says how, and the method and the evaluator are configured from
+    # the same prepared, unsampled project, as the door configures them from
+    # its ``factored``. Measured before the change on the slope of
+    # ``test_cli_wiring_v177`` with EC7 DA1-C2: the door 0.9071 / PF 0.850,
+    # a direct call with the same deterministic surface and no ``prepare``
+    # 1.1333 / PF 0.120. Without a standard and without links the prepared
+    # project IS the project, so nothing else moves.
+    if prepare is None:
+        prepare = _analysis_copy
 
     active = [rv for rv in variables if rv.distribution.is_random]
     if not active:
@@ -677,6 +740,7 @@ def run_global_minimum(
             "No deterministic result: run the regular analysis first so "
             "the global minimum surface is known.")
         return result
+    configured = _analysis_copy(project)
 
     result.variables = [rv.key for rv in active]
     samples = sample_project_variables(
@@ -712,10 +776,13 @@ def run_global_minimum(
         (anomaly A98-1 by a third route), and it also dropped the
         convergence settings the user configured — the same fault v0.1.74
         closed for the searches, still open here.
+
+        v0.1.236 (D93) — from ``configured``, the project as the analysis
+        prepares it, which is what the door's own factory builds on.
         """
         if method_factory is not None:
             return method_factory(mid)
-        return build_method(project, mid, num_slices)
+        return build_method(configured, mid, num_slices)
 
     total = num_samples * max(1, len(critical_surfaces))
     done = 0
@@ -764,7 +831,7 @@ def run_global_minimum(
         # sliding masses every sample could answer for the mass the
         # deterministic run had filtered out. ``build_evaluator`` is the one
         # door, and it takes the method built above as it is.
-        search = build_evaluator(project, mid, method=method,
+        search = build_evaluator(configured, mid, method=method,
                                  num_slices=num_slices)
 
         mres = MethodProbabilisticResult(
@@ -780,8 +847,7 @@ def run_global_minimum(
             apply_sample(clone, active, one)
             exc = None
             try:
-                if prepare is not None:
-                    clone = prepare(clone)
+                clone = prepare(clone)
                 r = _evaluate_on(clone, search, surface)
             except Exception as e:  # noqa: BLE001
                 r, exc = None, e
@@ -988,7 +1054,11 @@ def run_overall_slope(
 ) -> ProbabilisticResult:
     """Run an **Overall Slope** probabilistic analysis.
 
-    ``prepare`` as in :func:`run_global_minimum` (v0.1.201).
+    ``project`` and ``prepare`` as in :func:`run_global_minimum`: the model,
+    never the design-factored copy (refused), and every sampled clone
+    prepared like the analysis when ``prepare`` is None (v0.1.236, D93).
+    The search is the caller's (``search_factory``), so nothing else here
+    is configured from the prepared project.
 
     The ENTIRE SEARCH is repeated ``num_samples`` times, loading a new
     set of random-variable samples each time, so the location of the
@@ -1017,6 +1087,16 @@ def run_overall_slope(
     result = ProbabilisticResult(
         num_samples=num_samples, sampling_method=sampling.value,
         analysis_type=ProbabilisticType.OVERALL_SLOPE)
+
+    # v0.1.236 (D93) — as in ``run_global_minimum``. Measured before the
+    # change on the slope of ``test_cli_wiring_v177`` with EC7 DA1-C2, 40
+    # searches: the door 0.9064 / PF 0.850, a direct call without
+    # ``prepare`` 1.1325 / PF 0.125.
+    if _is_factored_copy(project):
+        _publish_note(result, "error", _FACTORED_COPY)
+        return result
+    if prepare is None:
+        prepare = _analysis_copy
 
     active = [rv for rv in variables if rv.distribution.is_random]
     if not active:
@@ -1071,8 +1151,7 @@ def run_overall_slope(
                                          samples.items()})
             exc = None
             try:
-                if prepare is not None:
-                    clone = prepare(clone)
+                clone = prepare(clone)
                 search = search_factory(mid)
                 run = search.run(clone)
             except Exception as e:  # noqa: BLE001

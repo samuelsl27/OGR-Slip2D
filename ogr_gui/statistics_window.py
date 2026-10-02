@@ -38,11 +38,19 @@ class StatisticsWindow(QMainWindow):
     """Read-only viewer for probabilistic / sensitivity results."""
 
     def __init__(self, project, prob_result=None, sens_result=None,
-                 parent=None):
+                 parent=None, *, factor_report=None):
         super().__init__(parent)
         self.project = project
         self.prob = prob_result
         self.sens = sens_result
+        # v0.1.236 (D93) — the design-standard report of the run these
+        # results come from, and what it makes of every sample. Asked of the
+        # run, never of ``project.settings``: the settings may have changed
+        # since (``reported_quantity``, v0.1.165).
+        from .reported_quantity import sample_label, statistics_factor_lines
+        self.factor_report = factor_report
+        self.factored = bool(getattr(factor_report, "applied", False))
+        self.quantity = sample_label(factor_report)
         self.setWindowTitle(tr("Statistics — OGR Slip2D"))
         self.resize(980, 620)
 
@@ -61,14 +69,26 @@ class StatisticsWindow(QMainWindow):
         bar.addWidget(QLabel(tr("Plot:")))
         self.cbo_plot = QComboBox()
         if prob_result is not None and prob_result.ok:
-            self.cbo_plot.addItem("Histogram of FoS", "histogram")
-            self.cbo_plot.addItem("Convergence", "convergence")
+            self.cbo_plot.addItem(
+                tr("Histogram of the over-design factor") if self.factored
+                else tr("Histogram of FoS"), "histogram")
+            self.cbo_plot.addItem(tr("Convergence"), "convergence")
         if sens_result is not None and sens_result.ok:
-            self.cbo_plot.addItem("Sensitivity", "sensitivity")
+            self.cbo_plot.addItem(tr("Sensitivity"), "sensitivity")
         self.cbo_plot.currentIndexChanged.connect(self._redraw)
         bar.addWidget(self.cbo_plot)
         bar.addStretch(1)
         v.addLayout(bar)
+
+        # v0.1.236 (D93) — with a standard on, what every number below is.
+        # Its own label, apart from the run notes underneath: those say what
+        # the run could NOT do, this says what the values ARE. Hidden without
+        # a standard, so such a window is the one it has always been.
+        self.lbl_factor_report = QLabel(
+            "\n".join(statistics_factor_lines(factor_report)))
+        self.lbl_factor_report.setWordWrap(True)
+        self.lbl_factor_report.setVisible(self.factored)
+        v.addWidget(self.lbl_factor_report)
 
         # v0.1.170 (D129) — a label of its OWN, above the plot and outside
         # everything ``_redraw`` rewrites. It cannot share ``self.status``
@@ -204,11 +224,13 @@ class StatisticsWindow(QMainWindow):
         ax.bar([h[0] for h in hist], [h[1] for h in hist],
                width=widths * 0.9, color="#4c78a8", edgecolor="white")
         ax.axvline(1.0, color="crimson", lw=2.0,
-                   label="failure threshold (FS = 1)")
+                   label=(tr("failure threshold (over-design factor = 1)")
+                          if self.factored
+                          else tr("failure threshold (FS = 1)")))
         ax.axvline(st.mean, color="#333333", ls="--", lw=1.4,
                    label=f"mean = {st.mean:.4f}")
-        ax.set_xlabel("Factor of safety")
-        ax.set_ylabel("Number of samples")
+        ax.set_xlabel(self.quantity)
+        ax.set_ylabel(tr("Number of samples"))
         ax.legend(fontsize=8)
         ax.grid(True, alpha=0.3)
         self._show(fig)
@@ -221,7 +243,9 @@ class StatisticsWindow(QMainWindow):
             f"{st.probability_of_failure() * 100:.2f} %   |   "
             f"reliability index: {st.reliability_index():.3f} "
             f"(lognormal {st.lognormal_reliability_index():.3f})   |   "
-            f"deterministic FoS: {res.deterministic_fos:.4f}")
+            + (tr("deterministic over-design factor") if self.factored
+               else tr("deterministic FoS"))
+            + f": {res.deterministic_fos:.4f}")
 
     # ------------------------------------------------------------------
     def _plot_convergence(self, mid):
@@ -234,9 +258,12 @@ class StatisticsWindow(QMainWindow):
         fig = self._figure()
         ax = fig.add_subplot(111)
         ax.plot([c[0] for c in conv], [c[1] for c in conv],
-                color="#4c78a8", label="mean FoS")
-        ax.set_xlabel("Number of samples")
-        ax.set_ylabel("Mean factor of safety")
+                color="#4c78a8",
+                label=(tr("mean over-design factor") if self.factored
+                       else tr("mean FoS")))
+        ax.set_xlabel(tr("Number of samples"))
+        ax.set_ylabel(tr("Mean over-design factor") if self.factored
+                      else tr("Mean factor of safety"))
         ax.grid(True, alpha=0.3)
         ax2 = ax.twinx()
         ax2.plot([c[0] for c in conv], [100.0 * c[2] for c in conv],
@@ -273,14 +300,16 @@ class StatisticsWindow(QMainWindow):
             ax.plot(vs.percent_of_range(), vs.fos, marker="",
                     label=vs.label)
         ax.axhline(1.0, color="crimson", lw=1.6, ls="-",
-                   label="FS = 1")
-        ax.set_xlabel("Percent of variable range (%)")
-        ax.set_ylabel("Factor of safety")
+                   label=(tr("over-design factor = 1") if self.factored
+                          else "FS = 1"))
+        ax.set_xlabel(tr("Percent of variable range (%)"))
+        ax.set_ylabel(self.quantity)
         ax.grid(True, alpha=0.3)
         ax.legend(fontsize=8)
         self._show(fig)
         rows = self.sens.ranking(mid)
-        txt = "   |   ".join(f"{lab}: ΔFoS {span:.4f}"
+        delta = tr("Δ over-design factor") if self.factored else "ΔFoS"
+        txt = "   |   ".join(f"{lab}: {delta} {span:.4f}"
                              for _k, lab, span in rows[:5])
         if refused:
             txt += ("   |   " + tr("not swept, no longer in the model: ")

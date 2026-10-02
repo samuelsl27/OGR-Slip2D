@@ -16,14 +16,11 @@ Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 
-import copy
 import hashlib
 import json
 
-#: Private attributes a detached copy must not carry: the observers belong
-#: to whoever is watching the original (the canvas, the window) and do not
-#: pickle; the groundwater solver is a cache of the original's FE state.
-_NOT_COPIED = ("_listeners", "_gw_solver")
+from ogr_core.project.copies import NOT_COPIED as _NOT_COPIED  # noqa: F401
+from ogr_core.project.copies import detached_copy as _detached_copy
 
 
 def detached_copy(project):
@@ -32,17 +29,14 @@ def detached_copy(project):
     Safe to hand to another thread or pickle into a child process: nothing
     in it points back at the original, and an edit to either is invisible
     to the other.
+
+    v0.1.236 (D246) — the recipe lives in ``ogr_core.project.copies`` now,
+    where the statistical engine's ``clone_project`` can use it too: that
+    one was a bare ``deepcopy``, and on a project bound to the main window
+    it died on the window's own listener. This keeps the operations
+    layer's contract (cold caches) and its name.
     """
-    memo = {}
-    for name in _NOT_COPIED:
-        value = project.__dict__.get(name)
-        if value is not None:
-            memo[id(value)] = [] if name == "_listeners" else None
-    clone = copy.deepcopy(project, memo)
-    if "_listeners" in clone.__dict__:
-        clone._listeners = []
-    clone.invalidate_regions_cache()
-    return clone
+    return _detached_copy(project, cold_caches=True)
 
 
 def model_hash(project) -> str:

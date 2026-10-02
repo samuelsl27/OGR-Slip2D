@@ -1975,6 +1975,25 @@ _DICTS: dict[str, dict[str, str]] = {
         "Over-design factor": "Factor de sobredimensionamiento",
         "Design standard applied: %s — the reported value is an over-design factor, not a factor of safety, and must exceed 1":
             "Norma de diseño aplicada: %s — el valor indicado es un factor de sobredimensionamiento, no un factor de seguridad, y debe ser mayor que 1",
+        # v0.1.236 (D93) — la estadística dice lo mismo: con una norma
+        # activa cada muestra se factoriza, y lo que se cuenta es el factor
+        # de sobredimensionamiento.
+        "Design standard applied to every sample: %s — the statistics describe the over-design factor, not the factor of safety":
+            "Norma de diseño aplicada a cada muestra: %s — la estadística describe el factor de sobredimensionamiento, no el factor de seguridad",
+        "Histogram of FoS": "Histograma del FS",
+        "Histogram of the over-design factor":
+            "Histograma del factor de sobredimensionamiento",
+        "failure threshold (FS = 1)": "umbral de rotura (FS = 1)",
+        "failure threshold (over-design factor = 1)":
+            "umbral de rotura (factor de sobredimensionamiento = 1)",
+        "deterministic FoS": "FS determinista",
+        "deterministic over-design factor":
+            "factor de sobredimensionamiento determinista",
+        "mean over-design factor": "factor de sobredimensionamiento medio",
+        "Mean factor of safety": "Factor de seguridad medio",
+        "Mean over-design factor": "Factor de sobredimensionamiento medio",
+        "over-design factor = 1": "factor de sobredimensionamiento = 1",
+        "Δ over-design factor": "Δ factor de sobredimensionamiento",
         "Language": "Idioma",
         "Theme": "Tema",
         "Light": "Claro",

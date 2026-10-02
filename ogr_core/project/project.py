@@ -108,6 +108,15 @@ class Project:
         # save for it.
         self.user_surfaces = []
 
+        # v0.1.236 (D93) — True only on the copy ``apply_design_factors``
+        # returns, never on a model the user edits. Not saved (``to_dict``
+        # writes named fields, and a model read back is a model to factor),
+        # but kept by ``deepcopy`` and pickle, which is how a statistical run
+        # can tell the analysis copy from the model: sampling the copy writes
+        # unfactored values over factored ones and then factors the sample a
+        # second time. Declared here for the reason ``user_surfaces`` is.
+        self.design_factored_copy: bool = False
+
         # v0.1.11 — Regions cache (avoids recomputing planar
         # subdivision for every material_at() lookup during compute).
         self._regions_cache: Optional[list] = None

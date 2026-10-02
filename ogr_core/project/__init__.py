@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 Samuel Sáez López — Universidad Politécnica de Cartagena
 """Project-level data model, settings and serialization."""
+from .copies import detached_copy
 from .project import FILE_FORMAT_VERSION, Project
 from .results_io import RESULTS_FORMAT_VERSION, load_summary, save_results
 from .settings import (
@@ -27,6 +28,7 @@ from .units import (
 
 __all__ = [
     "Project",
+    "detached_copy",
     "FILE_FORMAT_VERSION",
     "RESULTS_FORMAT_VERSION",
     "save_results",

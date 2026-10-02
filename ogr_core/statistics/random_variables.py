@@ -31,7 +31,6 @@ Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 
-import copy
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
@@ -312,8 +311,16 @@ def clone_project(project):
     The probabilistic engine applies each sample to a clone so the user's
     model is never mutated — a hard requirement, since a run may involve
     thousands of samples.
+
+    v0.1.236 (D246) — without the project's listeners, which belong to
+    whoever is watching it. This was a bare ``copy.deepcopy``, and a
+    project bound to the main window carries the window's own method among
+    them: every statistical run started from the menu died here with
+    ``TypeError: cannot pickle 'MainWindow' object``. The copy keeps the
+    region caches, as the bare ``deepcopy`` did (see ``detached_copy``).
     """
-    return copy.deepcopy(project)
+    from ogr_core.project.copies import detached_copy
+    return detached_copy(project, cold_caches=False)
 
 
 def apply_sample(project, variables: list, sample: dict) -> int:

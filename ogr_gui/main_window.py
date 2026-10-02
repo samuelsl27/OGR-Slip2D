@@ -202,7 +202,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.235"
+    VERSION = "0.1.236"
 
     def __init__(self) -> None:
         super().__init__()
@@ -230,6 +230,11 @@ class MainWindow(QMainWindow):
         # would change the moment the user opened the settings dialog, while
         # the number on screen still came from the old run.
         self.last_factor_report = None
+        # v0.1.236 (D93) — and the report of the last STATISTICS run, kept
+        # apart for the reason the two note lists are: Compute Statistics
+        # runs its own deterministic analysis, and the two runs need not
+        # share a standard if the settings changed in between.
+        self.last_statistics_factor_report = None
         self.interpret_windows: list[InterpretWindow] = []
 
         # v0.1.2 — selection filter state
@@ -1731,10 +1736,23 @@ class MainWindow(QMainWindow):
 
         self._prob_result = None
         self._sens_result = None
+        # v0.1.236 (D93) — the report of THIS run, which factored every
+        # sample. Until this version ``out.factor_report`` was read by
+        # nobody: with a standard on, the window, the notes and the status
+        # bar called "FoS" what is an over-design factor.
+        from .reported_quantity import sample_label, statistics_factor_lines
+        report = out.factor_report
+        self.last_statistics_factor_report = report
         # The deterministic run's own warnings are Compute's to show; this
-        # channel carries what the statistics say (v0.1.170, D129).
+        # channel carries what the statistics say (v0.1.170, D129) -- and,
+        # first, what the standard made of every sample (v0.1.236).
         self.last_statistics_notes = []
+        self.last_statistics_notes += statistics_factor_lines(report)
         messages = []
+        # Nothing is prefixed without a standard: the status bar of such a
+        # run reads exactly as it did.
+        head = (sample_label(report) + ": "
+                if getattr(report, "applied", False) else "")
 
         res = out.probabilistic
         if res is not None:
@@ -1744,7 +1762,7 @@ class MainWindow(QMainWindow):
                 # sample, and ``ok`` is exactly the claim that it exists.
                 first = res.reported
                 messages.append(
-                    f"PF = {first.probability_of_failure * 100:.2f} %, "
+                    f"{head}PF = {first.probability_of_failure * 100:.2f} %, "
                     f"beta = {first.reliability_index:.3f}")
                 # v0.1.164 (D91) — a run that sampled only SOME of the
                 # declared variables still reports PF, but not as if
@@ -1797,7 +1815,9 @@ class MainWindow(QMainWindow):
         from .statistics_window import StatisticsWindow
         w = StatisticsWindow(self.project,
                              getattr(self, "_prob_result", None),
-                             getattr(self, "_sens_result", None), self)
+                             getattr(self, "_sens_result", None), self,
+                             factor_report=getattr(
+                                 self, "last_statistics_factor_report", None))
         w.show()
         self._stats_window = w
 
@@ -3793,6 +3813,7 @@ class MainWindow(QMainWindow):
         self.last_compute_warnings = []
         self.last_statistics_notes = []
         self.last_factor_report = None
+        self.last_statistics_factor_report = None
         self._prob_result = None
         self._sens_result = None
         self._back_analysis_result = None

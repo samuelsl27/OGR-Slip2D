@@ -1450,6 +1450,18 @@ class InterpretWindow(QMainWindow):
         return (getattr(parent, "_prob_result", None),
                 getattr(parent, "_sens_result", None))
 
+    def _stat_factored(self) -> bool:
+        """Whether the statistics shown were factored by a design standard.
+
+        v0.1.236 (D93) — asked of the report of the STATISTICS run, which
+        the main window keeps beside its results, and not of
+        ``self.factor_report``: that one belongs to the deterministic run
+        this window was opened on, and the two need not share a standard.
+        """
+        report = getattr(self.parent(), "last_statistics_factor_report",
+                         None)
+        return bool(getattr(report, "applied", False))
+
     def _plot_xy(self, title, series, xlabel, ylabel, marker="o"):
         """A one-off XY chart window.
 
@@ -2267,7 +2279,8 @@ class InterpretWindow(QMainWindow):
             return
         self._plot_xy(tr("Sensitivity"), series,
                       tr("Percent of variable range (%)"),
-                      tr("Factor of safety"), marker="")
+                      tr("Over-design factor") if self._stat_factored()
+                      else tr("Factor of safety"), marker="")
 
     def _convergence_plot(self) -> None:
         prob, _sens = self._stat_results()
@@ -2285,7 +2298,8 @@ class InterpretWindow(QMainWindow):
             return
         self._plot_xy(
             tr("Convergence"),
-            [(tr("mean FoS"), [c[0] for c in conv],
+            [(tr("mean over-design factor") if self._stat_factored()
+              else tr("mean FoS"), [c[0] for c in conv],
               [c[1] for c in conv]),
              (tr("probability of failure (%)"), [c[0] for c in conv],
               [100.0 * c[2] for c in conv])],

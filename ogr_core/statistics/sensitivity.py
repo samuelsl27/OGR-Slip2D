@@ -175,10 +175,14 @@ def run_sensitivity(
 
     ``prepare`` (v0.1.201): ``project -> project`` applied to each swept
     clone before it is evaluated; the analysis door passes the design
-    factors, as for the probabilistic runs.
+    factors, as for the probabilistic runs. None means the analysis
+    preparation since v0.1.236 (D93), and the method and the evaluator are
+    configured from the project as the analysis prepares it: see
+    ``run_global_minimum``.
 
     Args:
-        project: the deterministic model (never modified).
+        project: the MODEL (never modified), not the design-factored copy
+            an analysis computes on, which is refused with a note.
         critical_surfaces: ``method_id -> LEMResult`` from the
             deterministic run.
         variables: the :class:`RandomVariable` list; only the minimum and
@@ -206,9 +210,12 @@ def run_sensitivity(
     from ogr_slip2d.analysis_runner import build_evaluator, build_method
 
     from .probabilistic import (
+        _FACTORED_COPY,
         _NO_DETERMINISTIC,
         _NO_METHOD,
+        _analysis_copy,
         _cannot_reevaluate,
+        _is_factored_copy,
         counts_as_sample,
         _evaluate_on,
         _publish_method_losses,
@@ -217,6 +224,17 @@ def run_sensitivity(
     )
 
     res = SensitivityResult(intervals=intervals)
+
+    # v0.1.236 (D93) — as in ``run_global_minimum``. Measured before the
+    # change on the slope of ``test_cli_wiring_v177`` with EC7 DA1-C2, the
+    # cohesion swept from 4 to 16 kPa: the door 0.6365 / 0.9084 / 1.1779 at
+    # both ends and the middle, a direct call without ``prepare`` 0.7952 /
+    # 1.1334 / 1.4726.
+    if _is_factored_copy(project):
+        _publish_note(res, "error", _FACTORED_COPY)
+        return res
+    if prepare is None:
+        prepare = _analysis_copy
 
     usable = [rv for rv in variables
               if abs(rv.distribution.high - rv.distribution.low) > 1e-15]
@@ -232,6 +250,9 @@ def run_sensitivity(
             "No deterministic result: run the regular analysis first so "
             "the global minimum surface is known.")
         return res
+    # v0.1.236 (D93) — the method and the evaluator from the project as the
+    # analysis prepares it, as in ``run_global_minimum``.
+    configured = _analysis_copy(project)
 
     def _make_method(mid):
         """The method as the PROJECT configures it, not as the registry
@@ -245,10 +266,12 @@ def run_sensitivity(
         (anomaly A98-1 by a third route), and it also dropped the
         convergence settings the user configured — the same fault v0.1.74
         closed for the searches, still open here.
+
+        v0.1.236 (D93) — from ``configured``, as in ``run_global_minimum``.
         """
         if method_factory is not None:
             return method_factory(mid)
-        return build_method(project, mid, num_slices)
+        return build_method(configured, mid, num_slices)
 
     n_points = max(2, int(intervals) + 1)
     total = len(usable) * n_points * max(1, len(critical_surfaces))
@@ -293,7 +316,7 @@ def run_sensitivity(
         # v0.1.235 (D92) — and the search the PROJECT configures, filters,
         # limits, focus, seismic mode and Minimum Area included, from the
         # same door as ``run_global_minimum``: see the note there.
-        search = build_evaluator(project, mid, method=method,
+        search = build_evaluator(configured, mid, method=method,
                                  num_slices=num_slices)
         sweeps: dict = {}
 
@@ -324,8 +347,7 @@ def run_sensitivity(
                     done += n_points - i
                     break
                 try:
-                    if prepare is not None:
-                        clone = prepare(clone)
+                    clone = prepare(clone)
                     r = _evaluate_on(clone, search, surface)
                 except Exception:  # noqa: BLE001
                     r = None

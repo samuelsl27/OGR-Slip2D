@@ -153,6 +153,11 @@ def apply_design_factors(project, settings=None):
     rep.standard = getattr(ds, "standard", "custom")
     from ogr_core.project import Project
     factored = Project.from_dict(project.to_dict())
+    # v0.1.236 (D93) — the copy says what it is. A statistical run samples
+    # the MODEL and factors each sample; handed this copy instead, it would
+    # write unfactored sampled values over factored ones and factor them a
+    # second time, so ``ogr_core.statistics`` refuses it by this flag.
+    factored.design_factored_copy = True
 
     mf = material_factors(ds)
     f_gamma = float(getattr(ds, "factor_unit_weight", 1.0) or 1.0)

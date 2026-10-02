@@ -84,3 +84,41 @@ def fos_label(factor_report=None) -> str:
     if bool(getattr(factor_report, "applied", False)):
         return tr("Over-design factor")
     return tr("Critical FoS")
+
+
+def sample_label(factor_report=None) -> str:
+    """The caption of the values a STATISTICAL run collects.
+
+    v0.1.236 (D93) — every sample is a ``result.fos`` computed on the
+    prepared copy of the sampled model (under a critical-coefficient mode
+    the evaluator chooses the mass by Ky, but the value kept is still the
+    factor of safety, v0.1.235), so the only question is the one
+    :func:`fos_label` asks: whether a design standard factored the inputs.
+    "Factor of safety" otherwise, and not "Critical FoS": a histogram of the
+    samples is not one critical value. Asked of the statistics run's own
+    report, never of the settings, for the reason the module docstring
+    gives.
+    """
+    if bool(getattr(factor_report, "applied", False)):
+        return tr("Over-design factor")
+    return tr("Factor of safety")
+
+
+def statistics_factor_lines(factor_report=None) -> list:
+    """What a design standard did to a statistical run, as note lines.
+
+    v0.1.236 (D93) — the statistical counterpart of the line Compute puts
+    first since v0.1.165 (D96). Its own sentence, because what it qualifies
+    is not one reported value but every sample, and so the probability of
+    failure and the reliability index computed from them. The report's own
+    notes follow, untranslated, as the deterministic path carries them
+    (``ogr_core`` cannot import ``ogr_gui.i18n``). Empty without a standard,
+    so the notes of a run without one are exactly what they were.
+    """
+    if not bool(getattr(factor_report, "applied", False)):
+        return []
+    lines = [tr("Design standard applied to every sample: %s — the "
+                "statistics describe the over-design factor, not the factor "
+                "of safety") % factor_report.summary()]
+    lines += [str(n) for n in (getattr(factor_report, "notes", None) or [])]
+    return lines
