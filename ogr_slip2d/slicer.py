@@ -1223,6 +1223,36 @@ def tension_crack_boundary(project: Project):
 CRACK_WALL_ON_LINE = True
 
 
+def _wall_is_the_models(project: Project, tc, ground: Polyline,
+                        wall) -> bool:
+    """Whether ``wall`` is the wall the CURRENT model puts at its abscissa.
+
+    v0.1.240 (D90). A tension-crack wall is a derived quantity: it is the
+    vertical face of the mass at the crest, from the crack line up to the
+    ground, and the water in the crack pushes on it with Terzaghi's
+    ½·γw·h² (Duncan, Wright and Brandon 2014, *Soil Strength and Slope
+    Stability*, 2nd ed., §14.3.2). Both ends depend on the model as it is
+    NOW — the crack boundary and the ground — and not on the model the
+    surface was first sliced against. That is also why the wall is not
+    serialised with the surface: stored, it would be redundant while the
+    model is unchanged (the round trip already deduces it again, see
+    :data:`CRACK_WALL_ON_LINE`) and false once it changes.
+
+    Its base has to be on the crack line and its top on the ground at its
+    abscissa, both to the model's geometric tolerance
+    (:func:`_model_grid_tol`): on an unchanged model the same arithmetic
+    gives the same numbers, so a wall left by this very model always
+    passes.
+    """
+    x, y_bottom, y_top = wall
+    y_crack = _interp_y_on_polyline(tc.polyline, x)
+    y_ground = envelope_y_at(ground, x)
+    if y_crack is None or y_ground is None:
+        return False
+    eps = _model_grid_tol(project)
+    return abs(y_bottom - y_crack) <= eps and abs(y_top - y_ground) <= eps
+
+
 def apply_tension_crack_truncation(
     project: Project,
     surface: SurfaceProtocol,
@@ -1309,10 +1339,31 @@ def apply_tension_crack_truncation(
     # chords and cuts them before the slicer ever sees them, and a caller
     # may hand the same surface back for a second pass. Re-entering must
     # neither cut again nor forget the wall it cut last time.
+    #
+    # v0.1.240 (D90) — but only a wall that is still THIS model's. The wall
+    # is derived — the crack line and the ground at the crest of the mass —
+    # and until this version a wall the object carried was trusted on its
+    # abscissa alone, so a surface sliced against one model and handed back
+    # after the crack or the ground was edited kept the old wall and the
+    # old thrust. Measured on the phi = 0 slope of
+    # ``test_tension_crack_truncation_v1109`` with the crack filled: the
+    # crack lowered from 34 to 32, the dragged wall gave 0.975074 against
+    # 0.963586 for the same polyline evaluated anew (+1.19 %); the upper
+    # flat raised from 40 to 41, 0.903066 against 0.881964 (+2.39 %); both
+    # on the unsafe side, through the public ``slice_surface``. A wall that
+    # is no longer the model's is forgotten, also from the drawing, and the
+    # rule below decides as for any surface. On an unchanged model it is
+    # kept, as before, to the last bit.
     prev = getattr(surface, "tension_crack_wall", None)
     if prev is not None and abs(prev[0] - x_crest) <= 1e-9 * max(
             x_right - x_left, 1.0):
-        return (x_left, x_right)
+        if _wall_is_the_models(project, tc, ground, prev):
+            return (x_left, x_right)
+    if prev is not None:
+        try:
+            surface.tension_cracks.remove(tuple(prev))
+        except (AttributeError, ValueError):   # not drawn, or no channel
+            pass
     _remember(None)
 
     # Is the crest of the SURFACE inside the crack zone? The zone is the

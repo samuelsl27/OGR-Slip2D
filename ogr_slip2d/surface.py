@@ -571,6 +571,20 @@ class SlipSurface:
         return lo, hi
 
     def to_dict(self) -> dict:
+        """Serialised form, without ``tension_crack_wall`` on purpose.
+
+        v0.1.240 (D90). The wall is not data but a consequence: the face of
+        the mass at its crest, from the crack line up to the ground, where
+        the water in the crack pushes. Stored, it would be redundant while
+        the model is unchanged — a polyline rebuilt from this dictionary
+        ends on the crack line and the slicer gives it the same wall again
+        (``slicer.CRACK_WALL_ON_LINE``; measured on the phi = 0 slope of
+        ``test_tension_crack_truncation_v1109``, the same factor to the last
+        digit) — and false once the crack or the ground is edited, which
+        is the case the slicer now refuses to trust an old wall in
+        (``slicer._wall_is_the_models``). ``tension_cracks`` is only what
+        is drawn.
+        """
         return {
             "type": "polyline",
             "id": self.id,
@@ -895,6 +909,10 @@ class CompositeSurface:
         is what the probabilistic sampler relies on. The polyline, because
         a drawing of the arc alone would be a picture of a surface that was
         never analysed.
+
+        v0.1.240 (D90) — and no ``tension_crack_wall``, for the reason
+        :meth:`SlipSurface.to_dict` gives: a wall is derived from the
+        surface, the crack and the ground of the model it is sliced on.
         """
         return {
             "type": "composite",
