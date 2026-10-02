@@ -346,12 +346,20 @@ class TestThePresets:
             assert (s.factor_undrained, s.factor_shear_strength) == (cu, tau)
 
     def test_da2_applies_its_resistance_factor(self):
+        """γR;e = 1.1 divides the resistance. Since v0.1.242 (D226a) DA2
+        also multiplies the weight by γG = 1.35, which on this c-φ slope is
+        no plain division (``test_design_weight_factors_v1242`` holds the
+        whole DA2 identity, F/1.485, on an undrained slope): γG is set back
+        to 1 here, so that what is measured is the resistance factor."""
         from ogr_core.materials.builtin_models import MohrCoulomb
         mc = MohrCoulomb(cohesion=6.0, friction_angle=24.0)
         p = _project(mc)
         q = _project(mc)
-        q.settings.design_standard.enabled = True
-        q.settings.design_standard.apply_preset("eurocode7_da2")
+        ds = q.settings.design_standard
+        ds.enabled = True
+        ds.apply_preset("eurocode7_da2")
+        ds.standard = "custom"
+        ds.factor_permanent = 1.0
         out, _rep = _factored(q)
         a = _fos(p, "bishop_simplified")
         b = _fos(out, "bishop_simplified")
@@ -375,11 +383,13 @@ class TestThePresets:
 
 class TestTheReport:
 
-    def test_the_permanent_factor_is_said_not_applied(self):
+    def test_the_permanent_factor_is_said(self):
+        """Until v0.1.242 the note said the factor was NOT applied; since
+        D226a it says how it is (``test_design_weight_factors_v1242``)."""
         from ogr_core.materials.builtin_models import MohrCoulomb
         _out, rep = _factored(_custom(_project(MohrCoulomb()), perm=1.35))
-        assert any("permanent-action factor" in n for n in rep.notes), (
-            rep.notes)
+        assert any("permanent-action factor 1.35 multiplies the weight" in n
+                   for n in rep.notes), rep.notes
 
     def test_a_model_note_reaches_the_report(self):
         """What a model says it could not factor is in the report, with the

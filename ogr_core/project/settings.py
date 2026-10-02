@@ -914,13 +914,28 @@ class DesignStandardSettings:
     # nor a cu. See ``ogr_core.project.design_factors``.
     factor_undrained: float = 1.0
     factor_shear_strength: float = 1.0
+    # v0.1.242 (D226a) — the permanent action split as EN 1997-1 (Annex A,
+    # Table A.3) splits it: ``factor_permanent`` is γG for an UNFAVOURABLE
+    # permanent action and this is γG for a FAVOURABLE one, 1.0 in both
+    # sets A1 and A2. The weight of the soil is the permanent action of a
+    # slope, and the engine applies it slice by slice
+    # (``ogr_slip2d.design_actions``).
+    factor_permanent_favourable: float = 1.0
+    # The single source assumption, an option of the reference's design
+    # standard: on, every slice takes the unfavourable γG, since the weight
+    # of the soil is one action from one source (Bond et al. 2013; Frank et
+    # al. 2004, §11.5, write the over-design factor as F/(γG·γR;e) for the
+    # whole weight); off, each slice takes γG or γG,fav by the dip of its
+    # base. On by default, as the reference's dialog shows it.
+    single_source_weight: bool = True
 
     #: The factors, in the order of the tuples of ``PRESETS``: one list for
     #: the presets, the API and the catalogue, so they cannot disagree.
     FACTOR_FIELDS = ("factor_permanent", "factor_variable",
                      "factor_cohesion", "factor_friction",
                      "factor_unit_weight", "factor_resistance",
-                     "factor_undrained", "factor_shear_strength")
+                     "factor_undrained", "factor_shear_strength",
+                     "factor_permanent_favourable")
 
     # Named presets. Values follow the Eurocode 7 design approaches
     # (EN 1997-1, Annex A: A1/A2, M1/M2, R1/R2/R3); the user can still pick
@@ -930,16 +945,22 @@ class DesignStandardSettings:
     # limit-equilibrium factor of safety is defined by, applied to an
     # envelope that cannot be split into c' and tan φ' (Frank et al. 2004,
     # §11.5, divide c' and tan φ' by one factor). A decision, written here.
-    # The ACTION factors of DA3 are those of A1 (1.35, 1.5) where a slope
-    # takes A2 (1.0, 1.3), and the permanent one is not applied: D226,
-    # reported and not corrected in v0.1.225.
+    # v0.1.242 (D226a) — the ninth column is γG,fav (1.0 in A1 and A2), and
+    # DA3 takes the ACTIONS of A2 (1.0, 1.3): in a slope the actions on the
+    # soil are geotechnical actions, which DA3 factors with A2, so on a
+    # slope DA3 is DA1-C2 (Frank et al. 2004, §11.5: γG = 1.00 in DA-1C2
+    # and DA-3). Until v0.1.241 it carried those of A1 (1.35, 1.5).
     PRESETS = {
-        "none": (1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0),
-        "eurocode7_da1c1": (1.35, 1.5, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0),
-        "eurocode7_da1c2": (1.0, 1.3, 1.25, 1.25, 1.0, 1.0, 1.4, 1.25),
-        "eurocode7_da2": (1.35, 1.5, 1.0, 1.0, 1.0, 1.1, 1.0, 1.0),
-        "eurocode7_da3": (1.35, 1.5, 1.25, 1.25, 1.0, 1.0, 1.4, 1.25),
+        "none": (1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0),
+        "eurocode7_da1c1": (1.35, 1.5, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0),
+        "eurocode7_da1c2": (1.0, 1.3, 1.25, 1.25, 1.0, 1.0, 1.4, 1.25, 1.0),
+        "eurocode7_da2": (1.35, 1.5, 1.0, 1.0, 1.0, 1.1, 1.0, 1.0, 1.0),
+        "eurocode7_da3": (1.0, 1.3, 1.25, 1.25, 1.0, 1.0, 1.4, 1.25, 1.0),
     }
+    #: v0.1.242 (D226a) — the action factors a named preset carried before
+    #: this version, where they differ from the corrected one: a file that
+    #: still has them gets the corrected ones on loading.
+    OLD_PRESET_ACTIONS = {"eurocode7_da3": (1.35, 1.5)}
 
     def apply_preset(self, name: str) -> bool:
         """Load a named set of partial factors. Returns False if unknown
@@ -976,6 +997,20 @@ class DesignStandardSettings:
                         preset["factor_shear_strength"]
             else:
                 out.factor_undrained = out.factor_cohesion
+        # v0.1.242 (D226a) — no ``single_source_weight``: a file from before
+        # the permanent action was applied. A named standard that still
+        # carries the action factors of its old preset gets the corrected
+        # ones (DA3: A1 -> A2); a custom one keeps its numbers, and both
+        # take γG,fav = 1.0 and the single source assumption, the reference's
+        # defaults.
+        if "single_source_weight" not in data:
+            old = cls.OLD_PRESET_ACTIONS.get(out.standard)
+            if old is not None and (out.factor_permanent,
+                                    out.factor_variable) == old:
+                preset = dict(zip(cls.FACTOR_FIELDS,
+                                  cls.PRESETS[out.standard]))
+                out.factor_permanent = preset["factor_permanent"]
+                out.factor_variable = preset["factor_variable"]
         return out
 
 

@@ -860,6 +860,73 @@ def seismic_coefficient_refusal(name: str, value) -> Optional[Refusal]:
 
 
 # ----------------------------------------------------------------------
+#: The bound both permanent-action factors meet: the unfavourable one is at
+#: least 1 and the favourable one at most 1 (EN 1990:2002, Table A1.2 (A)
+#: to (C); EN 1997-1:2004, Tables A.1, A.3, A.15 and A.17: 1.1/0.9,
+#: 1.35/1.0, 1.0/1.0, 1.0/0.9 and 1.35/0.9, never the other way round).
+PERMANENT_ACTION_FACTOR_BOUND = 1.0
+
+
+def design_action_factors_refusal(design_standard) -> Optional[Refusal]:
+    """Why the permanent-action factors of a design standard cannot be
+    applied, or None.
+
+    v0.1.242 (D226a), when the slicer started applying them. The weight of a
+    slice whose base drives the sliding takes the unfavourable factor γG,
+    that of one whose base resists it the favourable γG,fav, and which is
+    which is decided on the UNFACTORED slices (``ogr_slip2d.design_actions``).
+    With γG ≥ 1 ≥ γG,fav the factored mass slides the same way: with s that
+    sense, s·Σ ξ·W·sin α = Σ_drive γG·W·|sin α| − Σ_resist γG,fav·W·|sin α|
+    is at least s·Σ W·sin α > 0, so no slice changes side by being factored.
+    The bound is also what the two words mean: a factor below 1 on an
+    unfavourable action, or above 1 on a favourable one, makes the design
+    less safe than the characteristic model. A factor of 0 or less would
+    remove the weight of the slices that resist, or turn it upward, and a
+    value that is not a finite number would reach every slice as one.
+
+    Checked whatever ``single_source_weight`` says: a value that is wrong is
+    wrong before the option that would use it is switched on.
+    """
+    import math
+
+    names = (("factor_permanent", "permanent actions, unfavourable"),
+             ("factor_permanent_favourable", "permanent actions, favourable"))
+    values = {}
+    for attr, label in names:
+        raw = getattr(design_standard, attr, 1.0)
+        try:
+            v = float(raw)
+        except (TypeError, ValueError):
+            v = math.nan
+        if not math.isfinite(v):
+            return Refusal("design_action_factor_not_a_number",
+                           f"The partial factor on {label} must be a finite "
+                           f"number, got {raw!r}.")
+        values[attr] = v
+    unfav = values["factor_permanent"]
+    fav = values["factor_permanent_favourable"]
+    if unfav < PERMANENT_ACTION_FACTOR_BOUND:
+        return Refusal(
+            "design_action_factor_unfavourable_below_one",
+            f"The partial factor on unfavourable permanent actions must be "
+            f"at least 1, got {unfav}: below 1 it would make the driving "
+            f"weight lighter than the characteristic one.")
+    if fav > PERMANENT_ACTION_FACTOR_BOUND:
+        return Refusal(
+            "design_action_factor_favourable_above_one",
+            f"The partial factor on favourable permanent actions must be at "
+            f"most 1, got {fav}: above 1 it would make the resisting weight "
+            f"heavier than the characteristic one.")
+    if not fav > 0.0:
+        return Refusal(
+            "design_action_factor_favourable_not_positive",
+            f"The partial factor on favourable permanent actions must be "
+            f"above 0, got {fav}: a permanent action keeps its sign, and "
+            f"at 0 the slices that resist would have no weight.")
+    return None
+
+
+# ----------------------------------------------------------------------
 def set_seismic_records(project, records) -> bool:
     """Replace the project's strong-motion records.
 

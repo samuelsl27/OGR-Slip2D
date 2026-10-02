@@ -202,7 +202,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.241"
+    VERSION = "0.1.242"
 
     def __init__(self) -> None:
         super().__init__()
@@ -1142,7 +1142,8 @@ class MainWindow(QMainWindow):
                 self.project, results, path,
                 author=summary.author or None,
                 company=summary.company or None,
-                title=summary.title or None)
+                title=summary.title or None,
+                factor_report=getattr(self, "last_factor_report", None))
         except ImportError:
             QMessageBox.critical(
                 self, tr("Generate Report"),

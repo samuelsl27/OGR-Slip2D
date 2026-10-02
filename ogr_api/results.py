@@ -150,7 +150,8 @@ def slice_table(res) -> list[dict]:
         row = {k: _r(d.get(k), 4) for k in (
             "x_centre", "width", "base_x_left", "base_y_left",
             "base_x_right", "base_y_right", "base_angle_deg", "base_length",
-            "height", "weight", "pore_pressure", "surface_pressure")}
+            "height", "weight", "weight_factor", "pore_pressure",
+            "surface_pressure")}
         row["index"] = d.get("index", i)
         row["material_id"] = d.get("material_id")
         if i < len(N):

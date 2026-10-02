@@ -496,6 +496,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Base y left (m)': 'y de base izquierda (m)',
         'Base y right (m)': 'y de base derecha (m)',
         'Weight W (kN)': 'Peso W (kN)',
+        'Weight factor': 'Factor de peso',
         'Pore pressure u (kPa)': 'Presión intersticial u (kPa)',
         'Surface load q (kPa)': 'Carga en superficie q (kPa)',
         'Base normal force N (kN)': 'Fuerza normal en la base N (kN)',
@@ -636,7 +637,19 @@ _DICTS: dict[str, dict[str, str]] = {
         'Number of samples:': 'Número de muestras:',
         'Off by default: applying partial factors silently would change every factor of safety previously compared against, so it has to be an explicit choice. Selecting a standard loads its factors; choose Custom to enter your own.': 'Desactivado por defecto: aplicar coeficientes parciales en silencio cambiaría todos los factores de seguridad con los que se haya comparado antes, así que debe ser una elección explícita. Elegir una norma carga sus coeficientes; escoja Personalizado para introducir los suyos.',
         'Overall Slope': 'Talud completo',
-        'Permanent actions:': 'Acciones permanentes:',
+        # v0.1.242 (D226a): el peso de la dovela, favorable o desfavorable
+        'Permanent actions, unfavourable:':
+            'Acciones permanentes, desfavorables:',
+        'Permanent actions, favourable:': 'Acciones permanentes, favorables:',
+        'Single source: the unfavourable factor on the weight of every slice':
+            'Fuente única: el coeficiente desfavorable en el peso de todas '
+            'las dovelas',
+        'The weight of the soil above the surface is one permanent action: with this on, every slice takes the unfavourable factor. Off, a slice whose base drives the sliding takes the unfavourable factor, and one whose base climbs against it the favourable one.':
+            'El peso del terreno sobre la superficie es una sola acción '
+            'permanente: con la casilla marcada, todas las dovelas toman el '
+            'coeficiente desfavorable. Desmarcada, la dovela cuya base '
+            'empuja el deslizamiento toma el coeficiente desfavorable, y la '
+            'que tiene la base remontando contra él, el favorable.',
         'Probabilistic analysis': 'Análisis probabilístico',
         'Pseudo-random': 'Pseudoaleatorio',
         'Random': 'Aleatorio',

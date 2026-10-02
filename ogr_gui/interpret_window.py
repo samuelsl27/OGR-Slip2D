@@ -97,6 +97,10 @@ class _SliceDataDock(QDockWidget):
         # --- Forces ----------------------------------------------------
         ("─ Forces ─", lambda s, r: ""),
         ("Weight W (kN)",    lambda s, r: round(s.weight, 2)),
+        # v0.1.242 (D226a) -- the permanent-action factor the weight above
+        # already carries: 1.0 without a design standard.
+        ("Weight factor",
+         lambda s, r: round(getattr(s, "weight_factor", 1.0), 3)),
         ("Pore pressure u (kPa)",   lambda s, r: round(s.pore_pressure, 2)),
         ("Surface load q (kPa)",    lambda s, r: round(s.surface_pressure, 2)),
         ("Base normal force N (kN)",

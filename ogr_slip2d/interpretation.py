@@ -335,6 +335,9 @@ def slice_rows(result) -> list:
             "base_angle_deg": math.degrees(s.base_angle),
             "height": s.height,
             "weight": s.weight,
+            # v0.1.242 (D226a) -- the permanent-action factor already in
+            # ``weight``: 1.0 without a design standard.
+            "weight_factor": getattr(s, "weight_factor", 1.0),
             "pore_pressure": u,
             "surface_pressure": getattr(s, "surface_pressure", 0.0),
             "base_normal_force": per_slice(result, "base_normal_force", i),

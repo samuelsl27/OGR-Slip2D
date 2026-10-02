@@ -135,6 +135,13 @@ class Slice:
     # ``methods.ordinary.POND_THRUST_OUT_OF_NORMAL``). Included in
     # ``water_force_h``, never added to it.
     pond_force_h: float = 0.0
+    # v0.1.242 (D226a) -- the permanent-action factor this slice's SOIL
+    # weight was multiplied by (``design_actions.apply_action_factors``):
+    # γG where its base drives the sliding, γG,fav where it resists, γG
+    # everywhere under the single source assumption; 1.0 without a design
+    # standard. Already in ``weight`` and ``soil_weight``, never applied
+    # again.
+    weight_factor: float = 1.0
     material: Optional[Material] = None
     # v0.1.120 — geometry that only the SLICER can measure, kept here so
     # that every LEM method reads it through the one place that builds a
@@ -209,6 +216,7 @@ class Slice:
             "top_y_mean": self.top_y_mean,
             "height": self.height,
             "weight": self.weight,
+            "weight_factor": self.weight_factor,
             "pore_pressure": self.pore_pressure,
             "suction_cohesion": self.suction_cohesion,
             "raw_pore_pressure": self.raw_pore_pressure,
@@ -242,6 +250,10 @@ class Slices:
     # Corps of Engineers #1 draws its line from
     # (``methods.modified_swedish.CHORD_TO_CRACK_TOP``).
     tension_crack_wall: Optional[tuple] = None
+    # v0.1.242 (D226a) -- the sense of sliding (+1 or -1) the slice weights
+    # were factored by, read off the unfactored slices; None when no
+    # permanent-action factor was applied.
+    design_sense: Optional[float] = None
 
     def __len__(self) -> int:
         return len(self.slices)
@@ -1034,6 +1046,19 @@ def _surface_pressure_at(project: Project, x: float) -> float:
 #: v0.1.240 behaviour. No model of the verification bank has a distributed
 #: load pointing up (230 models, 11 such loads, all straight down).
 SIGNED_SURFACE_PRESSURE = True
+
+
+#: v0.1.242 (D226a) — the design standard's permanent-action factor (γG,
+#: γG,fav) multiplies the soil weight of each slice.
+#:
+#: Until v0.1.241 ``factor_permanent`` was read and never applied: with the
+#: preset DA1-C1 the reference's Eurocode 7 tutorial gave its characteristic
+#: 1.36 where it publishes an over-design factor of 1.207. The factors travel
+#: on the analysis copy (``Project.action_factors``) and are applied by
+#: ``design_actions.apply_action_factors`` at the end of
+#: :func:`slice_surface`. Off, the v0.1.241 behaviour. No model of the
+#: verification bank has a design standard enabled.
+DESIGN_WEIGHT_FACTORS = True
 
 
 def distributed_loads_on(project: Project, x_left: float, x_right: float,
@@ -1974,6 +1999,15 @@ def slice_surface(
 
     if len(result) < 3:
         return None
+
+    # v0.1.242 (D226a) — the design standard's permanent-action factor on the
+    # soil weight of each slice, decided by the dip of its base. Here, once
+    # every slice exists (the sense of sliding is a property of the whole
+    # mass) and before the water in the crack, which is not factored. See
+    # :data:`DESIGN_WEIGHT_FACTORS`.
+    if DESIGN_WEIGHT_FACTORS:
+        from .design_actions import apply_action_factors
+        apply_action_factors(project, result)
 
     # v0.1.7 — Tension Crack hydrostatic force, on the wall the
     # truncation actually left.

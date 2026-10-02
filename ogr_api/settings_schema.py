@@ -418,6 +418,17 @@ def _check_cross_rules(s, changes: dict, project) -> None:
             f"{ds.standard!r}); a named standard loads its own factors.",
             hint="Set 'design_standard.standard': 'custom' in the same "
                  "batch, then the factors.")
+    # v0.1.242 (D226a) — the permanent-action factors the slicer applies to
+    # the slice weights, asked of the rule the analysis asks. Only when the
+    # batch touches the standard: a stored value is the analysis's to
+    # refuse, not a reason to refuse an unrelated edit.
+    if any(p.startswith("design_standard.") for p in changes):
+        from ogr_core.project.rules import design_action_factors_refusal
+        why = design_action_factors_refusal(ds)
+        if why is not None:
+            raise Conflict(why.message,
+                           hint="The unfavourable factor is at least 1 and "
+                                "the favourable one above 0 and at most 1.")
 
     if s.seismic.newmark and not s.seismic.record_id:
         raise Conflict("seismic.newmark needs seismic.record_id.",

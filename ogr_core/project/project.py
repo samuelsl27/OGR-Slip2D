@@ -116,6 +116,11 @@ class Project:
         # unfactored values over factored ones and then factors the sample a
         # second time. Declared here for the reason ``user_surfaces`` is.
         self.design_factored_copy: bool = False
+        # v0.1.242 (D226a) — the ACTION factors the slicer applies slice by
+        # slice (``ogr_core.loads.actions.ActionFactors``), set on the same
+        # copy and never on a model: None means none. Not saved, kept by
+        # ``deepcopy`` and pickle, like the flag above.
+        self.action_factors = None
 
         # v0.1.11 — Regions cache (avoids recomputing planar
         # subdivision for every material_at() lookup during compute).

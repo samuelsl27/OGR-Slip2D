@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (
 )
 
 from ogr_core.project import ProjectSettings
+from ogr_core.project.rules import PERMANENT_ACTION_FACTOR_BOUND
 from ogr_core.project.settings import (
     GroundwaterMethod,
     LEMMethod as LEM,
@@ -1209,23 +1210,54 @@ class _DesignStandardPage(QWidget):
         # v0.1.225 (D224) — the four material categories of the reference
         # (c', tan φ', cu and the shear strength of the other models), and
         # the resistance factor, which divides all four.
-        for attr, label in (
-            ("factor_permanent", tr("Permanent actions:")),
-            ("factor_variable", tr("Variable actions:")),
-            ("factor_cohesion", tr("Cohesion:")),
-            ("factor_friction", tr("tan(friction angle):")),
-            ("factor_undrained", tr("Undrained strength cu:")),
-            ("factor_shear_strength", tr("Shear strength (other models):")),
-            ("factor_unit_weight", tr("Unit weight:")),
-            ("factor_resistance", tr("Resistance:")),
+        # v0.1.242 (D226a) — the permanent action splits in two: the
+        # weight of a slice whose base drives the sliding takes the
+        # unfavourable factor, that of one whose base resists it the
+        # favourable one. Their ranges are the bound the analysis checks
+        # (``rules.design_action_factors_refusal``), so the page cannot
+        # hold a pair the run would refuse.
+        lo, hi = 0.1, 10.0
+        bound = PERMANENT_ACTION_FACTOR_BOUND
+        for attr, label, (a, b) in (
+            ("factor_permanent", tr("Permanent actions, unfavourable:"),
+             (bound, hi)),
+            ("factor_permanent_favourable",
+             tr("Permanent actions, favourable:"), (lo, bound)),
+            ("factor_variable", tr("Variable actions:"), (lo, hi)),
+            ("factor_cohesion", tr("Cohesion:"), (lo, hi)),
+            ("factor_friction", tr("tan(friction angle):"), (lo, hi)),
+            ("factor_undrained", tr("Undrained strength cu:"), (lo, hi)),
+            ("factor_shear_strength", tr("Shear strength (other models):"),
+             (lo, hi)),
+            ("factor_unit_weight", tr("Unit weight:"), (lo, hi)),
+            ("factor_resistance", tr("Resistance:"), (lo, hi)),
         ):
             sp = QDoubleSpinBox()
             sp.setDecimals(3)
-            sp.setRange(0.1, 10.0)
+            sp.setRange(a, b)
             sp.setSingleStep(0.05)
             sp.setValue(float(getattr(self.s, attr, 1.0)))
             self.factors[attr] = sp
             form.addRow(label, sp)
+
+        # v0.1.242 (D226a) — the soil above a surface is one action from
+        # one source (Bond et al. 2013), so by default every slice takes
+        # the unfavourable factor. Off, the dip of each slice's base
+        # decides, and the favourable factor starts to be read.
+        self.chk_single_source = QCheckBox(tr(
+            "Single source: the unfavourable factor on the weight of every "
+            "slice"))
+        self.chk_single_source.setChecked(
+            bool(getattr(self.s, "single_source_weight", True)))
+        self.chk_single_source.setToolTip(tr(
+            "The weight of the soil above the surface is one permanent "
+            "action: with this on, every slice takes the unfavourable "
+            "factor. Off, a slice whose base drives the sliding takes the "
+            "unfavourable factor, and one whose base climbs against it the "
+            "favourable one."))
+        self.chk_single_source.toggled.connect(
+            lambda _on: self._on_enabled(self.chk_enabled.isChecked()))
+        form.addRow("", self.chk_single_source)
 
         note = QLabel(tr(
             "Off by default: applying partial factors silently would "
@@ -1241,6 +1273,12 @@ class _DesignStandardPage(QWidget):
         custom = self.cbo_std.currentData() == "custom"
         for sp in self.factors.values():
             sp.setEnabled(bool(on) and custom)
+        # Not a factor of the standard but how the permanent ones are laid
+        # on the slices, so it is open for a named standard too; and with
+        # it on the favourable factor is read by nothing (rule 7).
+        self.chk_single_source.setEnabled(bool(on))
+        if self.chk_single_source.isChecked():
+            self.factors["factor_permanent_favourable"].setEnabled(False)
 
     def _on_standard(self, *_a) -> None:
         name = self.cbo_std.currentData()
@@ -1255,6 +1293,7 @@ class _DesignStandardPage(QWidget):
         self.s.standard = self.cbo_std.currentData()
         for attr, sp in self.factors.items():
             setattr(self.s, attr, sp.value())
+        self.s.single_source_weight = self.chk_single_source.isChecked()
 
 
 class _AdvancedPage(QWidget):

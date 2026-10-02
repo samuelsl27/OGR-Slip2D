@@ -158,10 +158,15 @@ def apply_design_factors(project, settings=None):
     # write unfactored sampled values over factored ones and factor them a
     # second time, so ``ogr_core.statistics`` refuses it by this flag.
     factored.design_factored_copy = True
+    # v0.1.242 (D226a) — and carries the action factors the slicer applies to
+    # the weight of each slice, since whether a slice's weight is favourable
+    # depends on its base and there is no slice yet.
+    from ogr_core.loads.actions import ActionFactors
+    actions = ActionFactors.from_settings(ds)
+    factored.action_factors = actions
 
     mf = material_factors(ds)
     f_gamma = float(getattr(ds, "factor_unit_weight", 1.0) or 1.0)
-    f_perm = float(getattr(ds, "factor_permanent", 1.0) or 1.0)
     f_var = float(getattr(ds, "factor_variable", 1.0) or 1.0)
 
     for mat in factored.materials:
@@ -197,7 +202,7 @@ def apply_design_factors(project, settings=None):
             rep.materials.append({"name": mat.name, "changes": changed,
                                   "category": category})
 
-    if f_perm != 1.0 or f_var != 1.0:
+    if f_var != 1.0:
         for group, factor in ((getattr(factored, "distributed_loads", []),
                                f_var),
                               (getattr(factored, "line_loads", []),
@@ -209,18 +214,29 @@ def apply_design_factors(project, settings=None):
                         setattr(load, attr, value * factor)
                         rep.loads += 1
 
-    # v0.1.225 — what the standard asks for and this version does not do
-    # yet is SAID, not left for the user to find (D226).
-    if f_perm != 1.0:
+    # v0.1.242 (D226a) — the permanent action is applied now, to the weight
+    # of each slice, and the note says how; what is still not done is said
+    # too (v0.1.225: never left for the user to find).
+    if not actions.is_identity():
+        if actions.single_source_weight:
+            rep.notes.append(
+                f"Soil weight: the permanent-action factor "
+                f"{actions.permanent_unfavourable:g} multiplies the weight of "
+                f"every slice (single source assumption).")
+        else:
+            rep.notes.append(
+                f"Soil weight: the permanent-action factor "
+                f"{actions.permanent_unfavourable:g} multiplies the weight of "
+                f"the slices whose base drives the sliding, and "
+                f"{actions.permanent_favourable:g} that of the others.")
+    if rep.loads:
         rep.notes.append(
-            f"The permanent-action factor ({f_perm:g}) is not applied: the "
-            f"weight of the soil and the permanent loads carry no action "
-            f"factor in this version, and every load takes the variable one "
-            f"({f_var:g}).")
+            f"Every load takes the variable-action factor ({f_var:g}): a "
+            f"load carries no action type in this version.")
 
     factors = (mf.cohesion, mf.tan_phi, mf.undrained, mf.shear, f_gamma,
-               f_perm, f_var)
-    if all(f == 1.0 for f in factors):
+               f_var)
+    if all(f == 1.0 for f in factors) and actions.is_identity():
         rep.notes.append(
             "The standard is enabled but every factor is 1.0, so nothing "
             "changed.")

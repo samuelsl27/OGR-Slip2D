@@ -184,13 +184,18 @@ def report_generate(ws, path: str, result_id: str,
     from ogr_core.report.report_generator import generate_report
 
     handle, results, stale = _search_results(ws, result_id, None)
+    # v0.1.242 (D226a) — the run's own factor report, stored with it: the
+    # report says what was factored and calls the number what it is.
+    factor_report = ws.find_result(result_id)[1].payload().get(
+        "factor_report")
     target = ws.resolve_path(path, for_write=True, overwrite=overwrite,
                              suffix=".pdf")
     with ws.reading(handle.id, "report_generate") as project:
         try:
             written = generate_report(project, results, str(target),
                                       author=author, company=company,
-                                      title=title)
+                                      title=title,
+                                      factor_report=factor_report)
         except RuntimeError as exc:  # reportlab missing
             raise Conflict(str(exc)) from None
     out = {"path": str(written)}

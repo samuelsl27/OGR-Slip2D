@@ -151,17 +151,31 @@ class TestFactorsReachTheAnalysis:
         factored = GridSearch(**_KW).run(out).critical.fos
         assert factored < base - 0.05, (base, factored)
 
-    def test_da1c1_leaves_an_unloaded_model_alone(self):
-        """DA1 Combination 1 factors ACTIONS only. With no external
-        loads there is nothing to factor, so the factor of safety must be
-        unchanged — a good check that material factors are not being
-        applied where the code does not ask for them."""
+    def test_da1c1_factors_the_weight_of_an_unloaded_model(self):
+        """DA1 Combination 1 factors ACTIONS only — and the weight of the
+        soil is one. Until v0.1.242 (D226a) this test said "with no
+        external loads there is nothing to factor" and pinned the
+        characteristic number, which was the defect: γG = 1.35 was read and
+        never applied. Its material factors are 1.0, so with the weight
+        factor switched off the number is still the characteristic one bit
+        for bit — the check this test was written for, that no material
+        factor is applied where the code does not ask for one — and on it
+        falls, because the cohesion of Ej_1 does not grow with the weight
+        (0.8960 → 0.8145, measured on v0.1.242)."""
+        import ogr_slip2d.slicer as S
         p = _ej1_project()
         base = GridSearch(**_KW).run(p).critical.fos
         p.settings.design_standard.enabled = True
         p.settings.design_standard.apply_preset("eurocode7_da1c1")
         out, _rep = apply_design_factors(p)
-        assert abs(GridSearch(**_KW).run(out).critical.fos - base) < 1e-9
+        saved = S.DESIGN_WEIGHT_FACTORS
+        try:
+            S.DESIGN_WEIGHT_FACTORS = False
+            off = GridSearch(**_KW).run(out).critical.fos
+        finally:
+            S.DESIGN_WEIGHT_FACTORS = saved
+        assert abs(off - base) < 1e-9
+        assert GridSearch(**_KW).run(out).critical.fos < base - 0.05
 
     def test_da1c2_and_da3_agree_on_an_unloaded_model(self):
         """Their material factors are identical; they differ only in the

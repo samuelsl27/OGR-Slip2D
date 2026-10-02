@@ -243,6 +243,17 @@ def check_analysis_settings(project) -> list[str]:
             if _why is not None:
                 problems.append(_why.message)
 
+    # v0.1.242 (D226a) — the permanent-action factors the slicer applies to
+    # the weight of each slice, from a file or a script that did not come
+    # through the dialog or the API. Only with the standard on: off, nothing
+    # reads them.
+    _ds = getattr(project.settings, "design_standard", None)
+    if _ds is not None and getattr(_ds, "enabled", False):
+        from ogr_core.project.rules import design_action_factors_refusal
+        _why = design_action_factors_refusal(_ds)
+        if _why is not None:
+            problems.append(_why.message)
+
     # v0.1.218 (D209) — a strength model that cannot be computed with: an
     # Anisotropic Strength Function saved as interpolated points before
     # v0.1.218, whose rows would now be read as ranges, or a table of ranges

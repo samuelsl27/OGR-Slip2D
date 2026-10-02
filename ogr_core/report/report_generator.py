@@ -80,6 +80,7 @@ def generate_report(
     author: Optional[str] = None,
     company: Optional[str] = None,
     title: Optional[str] = None,
+    factor_report=None,
 ) -> str:
     """Generate a PDF analysis report.
 
@@ -93,6 +94,11 @@ def generate_report(
         Destination .pdf path.
     author, company, title : str, optional
         Override the project-summary fields.
+    factor_report : FactorReport, optional
+        The run's design-factor report (v0.1.242, D226a). With partial
+        factors applied, the report says which, and the headline number is
+        an over-design factor rather than a factor of safety. Asked of the
+        run and not of ``project.settings``, which can change after it.
 
     Returns
     -------
@@ -234,6 +240,27 @@ def generate_report(
          else "Disabled"),
     ]))
 
+    # ---- 3b. Design Standard --------------------------------------
+    # v0.1.242 (D226a) — what the run factored, from its own factor report.
+    # Without one nothing is said here, as before; the slice table still
+    # carries each slice's weight factor, which comes from the result.
+    factored = bool(getattr(factor_report, "applied", False))
+    if factored:
+        from xml.sax.saxutils import escape
+        story.append(Spacer(1, 6))
+        story.append(Paragraph("<b>Design Standard</b>", body))
+        story.append(kv_table([
+            ("Standard", str(getattr(factor_report, "standard", "—"))),
+            ("Factored", factor_report.summary()),
+        ]))
+        for note in getattr(factor_report, "notes", None) or []:
+            story.append(Paragraph(
+                f"&nbsp;&nbsp;&nbsp;• {escape(str(note))}", body))
+    # The caption follows the value printed: with partial factors on the
+    # inputs the number is an over-design factor, which must exceed 1.
+    fs_label = "Over-design Factor" if factored else "Factor of Safety (FS)"
+    fs_short = "ODF" if factored else "FS"
+
     # ---- 4. Material Properties -----------------------------------
     section("Material Properties")
     story.append(_materials_table(project, body))
@@ -249,7 +276,7 @@ def generate_report(
             continue
         crit = res.critical
         surf = crit.surface
-        rows = [("Factor of Safety (FS)", _fmt(crit.fos, 4))]
+        rows = [(fs_label, _fmt(crit.fos, 4))]
         if hasattr(surf, "centre_x") and surf.centre_x is not None:
             rows += [
                 ("Centre", f"({_fmt(surf.centre_x)}, "
@@ -309,7 +336,7 @@ def generate_report(
         if res is None or res.critical is None:
             continue
         story.append(Paragraph(
-            f"Method: {_method_name(mid)} — FS = "
+            f"Method: {_method_name(mid)} — {fs_short} = "
             f"{_fmt(res.critical.fos, 4)}", h_method))
         story.append(_slice_table(res.critical, project))
         story.append(Spacer(1, 8))
@@ -432,8 +459,15 @@ def _slice_table(crit, project):
     header = ["#", "Width\n[m]", "Weight\n[kN]", "Base\nMat.",
               "c\n[kPa]", "φ\n[°]", "α\n[°]", "Base σ\n[kPa]",
               "Shear str.\n[kPa]", "u\n[kPa]"]
-    rows = [header]
     slices = crit.slices.slices
+    # v0.1.242 (D226a) — the permanent-action factor each weight carries,
+    # beside it, when the run applied one: the weight column is the
+    # FACTORED weight, and a reader checking it by hand needs the factor.
+    weighted = any(getattr(sl, "weight_factor", 1.0) != 1.0
+                   for sl in slices)
+    if weighted:
+        header.insert(3, "Weight\nfactor")
+    rows = [header]
     fos = crit.fos
     for i, sl in enumerate(slices):
         mat = sl.material
@@ -453,7 +487,7 @@ def _slice_table(crit, project):
         ss = (crit.base_shear_strength[i]
               if crit.base_shear_strength
               and i < len(crit.base_shear_strength) else None)
-        rows.append([
+        row = [
             str(i + 1),
             _fmt(sl.width, 3),
             _fmt(sl.weight, 1),
@@ -463,9 +497,14 @@ def _slice_table(crit, project):
             _fmt(bn, 2),
             _fmt(ss, 2),
             _fmt(sl.pore_pressure, 1),
-        ])
+        ]
+        if weighted:
+            row.insert(3, _fmt(getattr(sl, "weight_factor", 1.0), 3))
+        rows.append(row)
     w = project_width(project)
     cw = [8, 13, 15, 18, 11, 9, 11, 16, 17, 12]
+    if weighted:
+        cw.insert(3, 12)
     scale = w / sum(cw)
     t = Table(rows, colWidths=[c * scale for c in cw], repeatRows=1)
     st = _grid_style()
