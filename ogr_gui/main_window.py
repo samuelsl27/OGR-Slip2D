@@ -202,7 +202,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.248"
+    VERSION = "0.1.249"
 
     def __init__(self) -> None:
         super().__init__()
@@ -4677,9 +4677,25 @@ class MainWindow(QMainWindow):
             self._do_move_boundary(index, dx, dy)
 
     # --- primitive boundary ops --------------------------------------
+    def _surface_in_use(self, b) -> bool:
+        """Say so, and answer True, when ``b`` is an anisotropic surface a
+        joint of a Generalized Anisotropic material reads (v0.1.249, D231b:
+        ``rules.surface_in_use_refusal``); it is not deleted."""
+        from ogr_core.project.rules import surface_in_use_refusal
+        why = surface_in_use_refusal(self.project, b.id)
+        if why is None:
+            return False
+        self.ogr_status.showMessage(
+            tr("This anisotropic surface is read by the joints of a "
+               "Generalized Anisotropic material: change them first."),
+            6000)
+        return True
+
     def _do_delete_boundary(self, index: int) -> None:
         if 0 <= index < len(self.project.boundaries):
             b = self.project.boundaries[index]
+            if self._surface_in_use(b):
+                return
             # v0.1.7: RemoveBoundaryCommand takes the Boundary object
             # itself so undo can re-insert the exact same instance.
             self.command_stack.do(
@@ -4791,6 +4807,8 @@ class MainWindow(QMainWindow):
             return
         b = self.project.boundaries[bidx]
         if action == "delete":
+            if self._surface_in_use(b):
+                return
             self.command_stack.do(
                 self.project, RemoveBoundaryCommand(boundary=b),
             )

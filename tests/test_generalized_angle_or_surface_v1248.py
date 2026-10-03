@@ -331,7 +331,10 @@ class TestTheRule:
         from ogr_core.materials.builtin_models import GeneralizedAnisotropic
         from ogr_core.project.rules import strength_model_refusal
         assert self._code() is None
-        assert self._code(definition="surface") == "generalized_aos_surface"
+        # Changed on purpose in v0.1.249 (D231b): joints by surface are
+        # computed, and a joint by surface without its surface is refused.
+        assert self._code(definition="surface") == \
+            "generalized_aos_joint_surface"
         assert self._code(mapping="sigmoid") == "generalized_aos_mapping"
         assert self._code(joint_selection="best") == \
             "generalized_aos_selection"

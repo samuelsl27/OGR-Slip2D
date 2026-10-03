@@ -178,3 +178,62 @@ def bedding_angle_at(project, material, x: float,
     if pl is None:
         return None
     return anisotropy_angle_at(pl, x, y)
+
+
+# ----------------------------------------------------------------------
+# v0.1.249 (D231b) -- the joints of a Generalized Anisotropic "Angle or
+# Surface" function defined by a SURFACE: each joint takes the orientation
+# of its own anisotropic surface at the point closest to the slice base,
+# by the rule above (the reference: "The point on the anisotropic surface
+# that is closest to the given slice base is found, and the angle of the
+# anisotropic surface at that point is taken as the angle of anisotropy").
+def joint_surfaces(project) -> dict:
+    """``{material id: {surface id: polyline}}`` for the Generalized
+    Anisotropic materials whose "Angle or Surface" joints are defined by a
+    surface. Empty when there is none, so the per-slice cost is a
+    dictionary lookup that finds nothing. A joint naming a surface that is
+    not in the model is left out here; the analysis refuses it before it
+    starts (``rules.generalized_surfaces_refusal``)."""
+    from .boundary_type import BoundaryType
+
+    out = {}
+    by_id = None
+    for m in getattr(project, "materials", ()):
+        st = getattr(m, "strength", None)
+        if not (getattr(st, "angle_or_surface", False)
+                and getattr(st, "definition", None) == "surface"):
+            continue
+        if by_id is None:
+            by_id = {b.id: b.polyline for b in project.boundaries
+                     if b.btype == BoundaryType.ANISOTROPIC_SURFACE}
+        surfaces = {}
+        for joint in getattr(st, "joints", None) or []:
+            sid = joint.get("surface_id") if isinstance(joint, dict) else None
+            if sid and sid in by_id:
+                surfaces[sid] = by_id[sid]
+        out[m.id] = surfaces
+    return out
+
+
+def surface_angles_at(surfaces: dict, x: float, y: float) -> Optional[dict]:
+    """``{surface id: orientation at (x, y)}`` of ``surfaces`` (one entry
+    of :func:`joint_surfaces`), or None when there are none."""
+    if not surfaces:
+        return None
+    out = {}
+    for sid, pl in surfaces.items():
+        ang = anisotropy_angle_at(pl, x, y)
+        if ang is not None:
+            out[sid] = ang
+    return out
+
+
+def joint_surface_angles_at(project, material, x: float,
+                            y: float) -> Optional[dict]:
+    """The orientations the joints of ``material`` read at ``(x, y)``, or
+    None: the supports ask it with the rule the slicer applies to a slice
+    base (v0.1.249, D231b)."""
+    if material is None:
+        return None
+    return surface_angles_at(
+        joint_surfaces(project).get(getattr(material, "id", None), {}), x, y)

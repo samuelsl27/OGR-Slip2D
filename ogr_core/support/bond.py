@@ -475,7 +475,8 @@ def _soil_reading(project: "Project", x: float, y: float,
     v0.1.231 -- split out of :func:`soil_shear_strength_at`, unchanged, so
     that :func:`infinite_soil_at` reads exactly what the reader reads.
     """
-    from ..geometry.anisotropic_surface import bedding_angle_at
+    from ..geometry.anisotropic_surface import (bedding_angle_at,
+                                                joint_surface_angles_at)
     from ..materials.strength_model import SliceContext
 
     mat = project.material_at(x, y)
@@ -501,6 +502,9 @@ def _soil_reading(project: "Project", x: float, y: float,
         slope_distance=slope_distance,
         bedding_angle_deg=bedding_angle_at(project, mat, x, y),
         x_base=x,
+        # v0.1.249 (D231b) -- the joint surfaces of "Angle or Surface", at
+        # the point, by the rule the slicer applies to a base.
+        surface_angles=joint_surface_angles_at(project, mat, x, y),
     )
     try:
         tau = strength.shear_strength_ctx(sigma_v_eff, ctx)
@@ -556,11 +560,11 @@ class _PointAsSlice:
     __slots__ = ("width", "weight", "pore_pressure", "base_angle",
                  "base_y_left", "base_y_right", "top_y_left", "top_y_right",
                  "layer_top_y", "slope_distance", "suction_cohesion",
-                 "bedding_angle_deg", "x_centre")
+                 "bedding_angle_deg", "x_centre", "surface_angles")
 
     def __init__(self, y, sigma_v_eff, pore_pressure, depth,
                  axis_angle_rad, layer_top_y, slope_distance,
-                 bedding_angle_deg=None, x=None):
+                 bedding_angle_deg=None, x=None, surface_angles=None):
         self.width = 1.0
         self.weight = sigma_v_eff + pore_pressure
         self.pore_pressure = pore_pressure
@@ -577,6 +581,9 @@ class _PointAsSlice:
         # v0.1.246 (D229) -- where the point is across, for a strength that
         # is a field over the material; last again, None by default.
         self.x_centre = x
+        # v0.1.249 (D231b) -- the joint surfaces of "Angle or Surface" at
+        # the point; last again, None by default.
+        self.surface_angles = surface_angles
         # Not measured along a support: the slicer computes the matric
         # suction term at a slice BASE, from that slice's own state. Left
         # at zero rather than guessed, and said out loud because a soil
@@ -607,7 +614,8 @@ def equivalent_c_phi_at(
 
     from ogr_slip2d.methods.bishop import BishopSimplified
 
-    from ..geometry.anisotropic_surface import bedding_angle_at
+    from ..geometry.anisotropic_surface import (bedding_angle_at,
+                                                joint_surface_angles_at)
 
     mat = project.material_at(x, y) if project is not None else None
     if mat is None or getattr(mat, "strength", None) is None:
@@ -624,7 +632,9 @@ def equivalent_c_phi_at(
             slope_distance = distance_to_profile(ground_surface(ext), x, y)
     stand_in = _PointAsSlice(y, sigma_v_eff, pore_pressure, depth,
                              axis_angle_rad, layer_top_y, slope_distance,
-                             bedding_angle_at(project, mat, x, y), x=x)
+                             bedding_angle_at(project, mat, x, y), x=x,
+                             surface_angles=joint_surface_angles_at(
+                                 project, mat, x, y))
     try:
         c, tan_phi = BishopSimplified._local_c_phi(
             stand_in, mat, max(0.0, sigma_v_eff))

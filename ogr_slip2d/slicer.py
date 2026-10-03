@@ -181,6 +181,10 @@ class Slice:
     # (``water_material``). None means ``material``, as it was for every
     # slice before. Read through ``water_material_of``.
     water_material: Optional[Material] = None
+    # v0.1.249 (D231b) -- ``{surface id: orientation}`` of the anisotropic
+    # surfaces the joints of a Generalized Anisotropic "Angle or Surface"
+    # material read at this base, or None when the material has none.
+    surface_angles: Optional[dict] = None
 
     # ------------------------------------------------------------------
     @property
@@ -1851,6 +1855,11 @@ def slice_surface(
     # being sliced. Empty for every model that has none, which is all of
     # them until somebody draws one, so the cost is one ``any()``.
     aniso_by_material = _anisotropic_surfaces(project)
+    # v0.1.249 (D231b) -- and the surfaces of the joints of "Angle or
+    # Surface" materials, once per call; empty without any.
+    from ogr_core.geometry.anisotropic_surface import (joint_surfaces,
+                                                       surface_angles_at)
+    joints_by_material = joint_surfaces(project)
 
     # v0.1.121 — the stretches where a weak layer IS the surface, resolved to
     # materials once instead of once per slice. Empty for every surface that
@@ -2093,6 +2102,11 @@ def slice_surface(
             pl = aniso_by_material.get(getattr(mat, "id", None))
             if pl is not None:
                 bedding_angle_deg = anisotropy_angle_at(pl, xc, base_y_mid)
+        # v0.1.249 (D231b) -- the orientation of each joint surface at this
+        # base, by the same rule.
+        surface_angles = (surface_angles_at(
+            joints_by_material.get(getattr(mat, "id", None), {}), xc,
+            base_y_mid) if joints_by_material else None)
 
         # v0.1.96 — a water surface that does not reach this abscissa is
         # a REFUSAL, not zero pore pressure. ``pore_pressure_at`` cannot
@@ -2174,6 +2188,7 @@ def slice_surface(
             layer_top_y=layer_top_y,
             slope_distance=slope_distance,
             bedding_angle_deg=bedding_angle_deg,
+            surface_angles=surface_angles,
             weak_layer_id=weak_layer_id,
             load_parts=_load_parts,
             water_material=wmat if wmat is not mat else None,

@@ -278,6 +278,7 @@ def check_analysis_settings(project) -> list[str]:
     # links an anisotropic surface, whose ranges would now be read in
     # another frame.
     from ogr_core.project.rules import (generalized_links_refusal,
+                                        generalized_surfaces_refusal,
                                         material_surface_refusal,
                                         strength_model_refusal)
     for _mat in project.materials:
@@ -291,6 +292,10 @@ def check_analysis_settings(project) -> list[str]:
         # v0.1.228 (D218b) — a rule that links a material the project no
         # longer has, the material itself or another Generalized one.
         _why = generalized_links_refusal(_mat, project.materials)
+        if _why is not None:
+            problems.append(_why.message)
+        # v0.1.249 (D231b) — a joint by surface whose surface is gone.
+        _why = generalized_surfaces_refusal(_mat, project)
         if _why is not None:
             problems.append(_why.message)
 

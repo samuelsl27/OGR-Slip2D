@@ -197,6 +197,12 @@ class _StrengthParamPanel(QWidget):
                    ("Half-width A (°)", "angle"),
                    ("Transition end B (°)", "angle"),
                    ("Material", None)),
+        # v0.1.249 (D231b) — the same, each joint along an anisotropic
+        # surface of the model, a choice ("surface") and not a quantity.
+        "joints_surface": (("Anisotropic surface", "surface"),
+                           ("Half-width A (°)", "angle"),
+                           ("Transition end B (°)", "angle"),
+                           ("Material", None)),
         # v0.1.229 (D215) — the C/Phi function: (σ'ₙ, c, φ) rows.
         "cphi": (("Normal stress (%s)", "pressure"),
                  ("Cohesion (%s)", "pressure"),
@@ -215,6 +221,7 @@ class _StrengthParamPanel(QWidget):
                        "rows3": "Function points:",
                        "rules": "Angle ranges:",
                        "joints": "Joints:",
+                       "joints_surface": "Joints:",
                        "cphi": "Function points:",
                        "discrete_cu": "Data points:",
                        "discrete_cphi": "Data points:"}
@@ -283,6 +290,17 @@ class _StrengthParamPanel(QWidget):
         self._parent_water_given = None
         # v0.1.248 (D231a) — the Generalized Anisotropic editor's controls.
         self._ga = None
+        # v0.1.249 (D231b) — (id, label) of the model's anisotropic
+        # surfaces, and, per material combo of a joints table, the joint it
+        # was built from: what the table does not show (the angle of a joint
+        # by surface, the surface of a joint by angle) is carried from it.
+        self._surface_choices: list = []
+        self._joint_given: dict = {}
+
+    def set_anisotropic_surfaces(self, choices) -> None:
+        """The anisotropic surfaces a joint can follow, as (id, label)
+        (v0.1.249, D231b); the dialog passes them."""
+        self._surface_choices = [(str(i), str(n)) for i, n in choices]
 
     def set_rule_materials(self, choices) -> None:
         """The materials a Generalized Anisotropic range can take, as (id,
@@ -428,6 +446,7 @@ class _StrengthParamPanel(QWidget):
         self._chk_parent_water = None
         self._parent_water_given = None
         self._ga = None
+        self._joint_given = {}
         mid = getattr(model_cls, "MODEL_ID", "")
         if mid == "discrete_function":
             self._build_discrete(current_params, model_cls)
@@ -575,13 +594,14 @@ class _StrengthParamPanel(QWidget):
         cbo_def = combo(self._GA_DEFINITIONS,
                         current_params.get("definition", "angle"),
                         "Anisotropy definition:")
-        # Joints by surface are read from v0.1.249 (D231b); until then the
-        # choice is shown and cannot be taken.
+        # v0.1.249 (D231b) — by surface only when the model has one to
+        # follow (a choice that cannot be completed would do nothing).
         item = cbo_def.model().item(cbo_def.findData("surface"))
-        if item is not None and cbo_def.currentData() != "surface":
+        if item is not None and not self._surface_choices \
+                and cbo_def.currentData() != "surface":
             item.setEnabled(False)
-        cbo_def.setToolTip(tr("Joints defined by an anisotropic surface are "
-                              "not available yet: define them by angle."))
+            cbo_def.setToolTip(tr("Draw an anisotropic surface first to "
+                                  "define the joints by surface."))
         cbo_map = combo(self._GA_MAPPINGS,
                         current_params.get("mapping", "ab"),
                         "Mapping function:")
@@ -604,13 +624,22 @@ class _StrengthParamPanel(QWidget):
                      "material_id": self._rule_choices[0][0],
                      "model": copy.deepcopy(self._rule_choices[0][2])}]
                    if self._rule_choices else [])
-        self._build_points_table(current_params, kind="joints",
-                                 default=default)
+        if cbo_def.currentData() == "surface":
+            for joint in default:
+                joint.pop("angle", None)
+                if self._surface_choices:
+                    joint["surface_id"] = self._surface_choices[0][0]
+            kind = "joints_surface"
+        else:
+            kind = "joints"
+        self._build_points_table(current_params, kind=kind, default=default)
         self._ga.update({"base": cbo_base, "base_given": base,
                          "definition": cbo_def, "mapping": cbo_map,
                          "selection": cbo_sel, "weaker": chk})
         cbo_map.currentIndexChanged.connect(
             lambda _i: self._sync_ab_columns())
+        cbo_def.currentIndexChanged.connect(
+            lambda _i: self.set_model(self._model_cls, self.get_params()))
         self._sync_ab_columns()
 
     def _sync_ab_columns(self) -> None:
@@ -669,15 +698,21 @@ class _StrengthParamPanel(QWidget):
     def _joints_from_table(self, sys_obj) -> list:
         """The joints on screen (v0.1.248, D231a): angle, A and B, and the
         material each takes or the model it keeps, as the ranges are read
-        by :meth:`_rules_from_table`."""
+        by :meth:`_rules_from_table`. v0.1.249 (D231b): by surface, the
+        surface instead of the angle; what a row does not show is carried
+        from the joint it was built from."""
         by_id = {cid: st for cid, _n, st in self._rule_choices}
+        by_surface = self._table_kind == "joints_surface"
         joints = []
-        for row in self._cell_texts():
+        for r, row in enumerate(self._cell_texts()):
             try:
-                angle, a, b = (self._user_to_si(float(t), "angle", sys_obj)
-                               for t in row[:3])
+                a, b = (self._user_to_si(float(t), "angle", sys_obj)
+                        for t in row[1:3])
+                angle = (None if by_surface else
+                         self._user_to_si(float(row[0]), "angle", sys_obj))
             except ValueError:
                 continue    # reported by ``unparsed_table_rows``
+            hidden = self._joint_given.get(self._table.cellWidget(r, 3), {})
             choice = row[3]
             given = None
             if choice.startswith("own:"):
@@ -692,9 +727,32 @@ class _StrengthParamPanel(QWidget):
                 joint.pop("material_id", None)
             else:
                 joint = {}
-            joint["angle"], joint["A"], joint["B"] = angle, a, b
+            if by_surface:
+                joint["surface_id"] = row[0]
+                if "angle" in hidden:
+                    joint["angle"] = hidden["angle"]
+            else:
+                joint["angle"] = angle
+                if hidden.get("surface_id"):
+                    joint["surface_id"] = hidden["surface_id"]
+            joint["A"], joint["B"] = a, b
             joints.append(joint)
         return joints
+
+    def _surface_combo(self, joint):
+        """The anisotropic surface of a joint: the model's surfaces, and the
+        one the joint names when it is no longer in the model (OK then
+        refuses it with its reason)."""
+        combo = QComboBox()
+        sid = joint.get("surface_id") if isinstance(joint, dict) else None
+        ids = [i for i, _n in self._surface_choices]
+        for i, label in self._surface_choices:
+            combo.addItem(label, i)
+        if sid and sid not in ids:
+            combo.addItem(tr("(a surface no longer in the model)"), sid)
+        if sid:
+            combo.setCurrentIndex(max(0, combo.findData(sid)))
+        return combo
 
     def _build_parent_water(self, checked: bool) -> None:
         """The «water parameters of the parent material» switch of a
@@ -753,8 +811,9 @@ class _StrengthParamPanel(QWidget):
         """The stored field a table kind edits: the anisotropic function's
         ranges live in ``rows`` since v0.1.218 (D209), the functions of
         σ'ₙ in ``points``."""
-        return {"rows3": "rows", "cphi": "rows",
-                "rules": "rules", "joints": "joints"}.get(kind, "points")
+        return {"rows3": "rows", "cphi": "rows", "rules": "rules",
+                "joints": "joints",
+                "joints_surface": "joints"}.get(kind, "points")
 
     def table_headers(self) -> list[str]:
         """The headers of the table on screen, as shown."""
@@ -796,12 +855,22 @@ class _StrengthParamPanel(QWidget):
             elif kind == "joints":
                 cells = ((row.get("angle"), row.get("A"), row.get("B"), None)
                          if isinstance(row, dict) else (None,) * 4)
+            elif kind == "joints_surface":
+                cells = ((None, row.get("A"), row.get("B"), None)
+                         if isinstance(row, dict) else (None,) * 4)
             else:
                 cells = row
             texts = []
             for c in range(ncol):
                 if columns[c][1] is None:
                     combo = self._choice_combo(r, row)
+                    tbl.setCellWidget(r, c, combo)
+                    texts.append(self._choice_text(combo))
+                    if kind in ("joints", "joints_surface"):
+                        self._joint_given[combo] = copy.deepcopy(row)
+                    continue
+                if columns[c][1] == "surface":
+                    combo = self._surface_combo(row)
                     tbl.setCellWidget(r, c, combo)
                     texts.append(self._choice_text(combo))
                     continue
@@ -831,6 +900,10 @@ class _StrengthParamPanel(QWidget):
             for c in range(ncol):
                 if columns[c][1] is None:
                     tbl.setCellWidget(r, c, self._choice_combo(None, None))
+                elif columns[c][1] == "surface":
+                    tbl.setCellWidget(r, c, self._surface_combo(
+                        {"surface_id": self._surface_choices[0][0]}
+                        if self._surface_choices else None))
                 else:
                     tbl.setItem(r, c, QTableWidgetItem("0.0"))
             self._sync_parent_water()
@@ -853,7 +926,8 @@ class _StrengthParamPanel(QWidget):
         # The rules are kept as they came, dicts and all; the tables of
         # numbers as numbers.
         self._table_given = (copy.deepcopy(pts)
-                             if kind in ("rules", "joints") else
+                             if kind in ("rules", "joints", "joints_surface")
+                             else
                              [tuple(float(v) for v in row) for row in pts])
         self._table_shown = shown
 
@@ -903,7 +977,7 @@ class _StrengthParamPanel(QWidget):
         for r in range(tbl.rowCount()):
             row = []
             for c in range(self._table_ncol):
-                if columns[c][1] is None:
+                if columns[c][1] in (None, "surface"):
                     row.append(self._choice_text(tbl.cellWidget(r, c)))
                     continue
                 item = tbl.item(r, c)
@@ -935,7 +1009,7 @@ class _StrengthParamPanel(QWidget):
             try:
                 if not all(math.isfinite(float(t))
                            for c, t in enumerate(row)
-                           if columns[c][1] is not None):
+                           if columns[c][1] not in (None, "surface")):
                     bad.append(r)
             except ValueError:
                 bad.append(r)
@@ -992,7 +1066,7 @@ class _StrengthParamPanel(QWidget):
                 out[key] = copy.deepcopy(self._table_given)
             elif self._table_kind == "rules":
                 out[key] = self._rules_from_table(sys_obj)
-            elif self._table_kind == "joints":
+            elif self._table_kind in ("joints", "joints_surface"):
                 out[key] = self._joints_from_table(sys_obj)
             else:
                 columns = self._TABLE_COLUMNS[self._table_kind]
@@ -1816,6 +1890,8 @@ class MaterialPropertiesDialog(QDialog):
         """Populate the editor widgets from ``self.materials[row]``."""
         m = self.materials[row]
         self.param_panel.set_rule_materials(self._rule_choices_for(m))
+        # v0.1.249 (D231b) — the surfaces a joint can follow.
+        self.param_panel.set_anisotropic_surfaces(self._aniso_surfaces)
         self.ed_name.setText(m.name)
         self._color_hex = m.color
         self._update_color_button()
@@ -2263,6 +2339,23 @@ class MaterialPropertiesDialog(QDialog):
         "generalized_link_generalized":
             "A range cannot take the strength of another Generalized "
             "Anisotropic material.",
+        # v0.1.248–0.1.249 (D231) — ``rules.generalized_angle_or_surface_
+        # refusal`` and ``rules.generalized_surfaces_refusal``.
+        "generalized_aos_base":
+            "The base needs a material, or a strength model that can be "
+            "built.",
+        "generalized_aos_joints":
+            "At least one joint is needed.",
+        "generalized_aos_joint_model":
+            "Every joint needs a material, or a strength model that can be "
+            "built.",
+        "generalized_aos_ab":
+            "A and B of every joint must satisfy 0 <= A <= B <= 90 degrees.",
+        "generalized_aos_joint_surface":
+            "Every joint must follow an anisotropic surface.",
+        "generalized_surface_missing":
+            "A joint follows an anisotropic surface that is not in the "
+            "model: choose another one.",
         # v0.1.225 (D216) — ``rules.anisotropic_linear_refusal``.
         "anisotropic_linear_ab":
             "A and B must satisfy 0° ≤ A ≤ B.",
@@ -2336,10 +2429,28 @@ class MaterialPropertiesDialog(QDialog):
                 tr("Row %d of the table: the angle, A and B must be "
                    "numbers.") % bad[0])
             return True
+        if self.param_panel._table_kind == "joints_surface":
+            # v0.1.249 (D231b) — a surface, two numbers and a material.
+            self._show_strength_problem(
+                tr("Row %d of the table: A and B must be numbers.") % bad[0])
+            return True
         self._show_strength_problem(
             tr("Row %d of the table is not %d numbers.")
             % (bad[0], self.param_panel.table_columns()))
         return True
+
+    def _missing_joint_surface(self, m):
+        """``rules.generalized_surfaces_refusal`` with the surfaces this
+        dialog was given (it has no project): a joint by surface naming one
+        that is not among them (v0.1.249, D231b)."""
+        from types import SimpleNamespace
+
+        from ogr_core.geometry import BoundaryType
+        from ogr_core.project.rules import generalized_surfaces_refusal
+        fake = SimpleNamespace(boundaries=[
+            SimpleNamespace(id=sid, btype=BoundaryType.ANISOTROPIC_SURFACE)
+            for sid, _n in self._aniso_surfaces])
+        return generalized_surfaces_refusal(m, fake)
 
     @staticmethod
     def _strength_state(m) -> object:
@@ -2390,6 +2501,10 @@ class MaterialPropertiesDialog(QDialog):
                                                 "snowden_legacy"):
                 continue
             why = why or generalized_links_refusal(m, self.materials)
+            # v0.1.249 (D231b) — a joint following a surface the model no
+            # longer has.
+            if why is None:
+                why = self._missing_joint_surface(m)
             if why is None:
                 continue
             if row != self._current_row:

@@ -2432,10 +2432,39 @@ _DICTS: dict[str, dict[str, str]] = {
         "Joint angle (°)": "Ángulo de la junta (°)",
         "Half-width A (°)": "Semiancho A (°)",
         "Transition end B (°)": "Fin de la transición B (°)",
-        "Joints defined by an anisotropic surface are not available yet: "
-        "define them by angle.":
-            "Las juntas definidas por una superficie anisótropa todavía no "
-            "están disponibles: defínalas por ángulo.",
+        # --- v0.1.249 · D231b: juntas por superficie
+        "Anisotropic surface": "Superficie anisótropa",
+        "Draw an anisotropic surface first to define the joints by "
+        "surface.":
+            "Dibuje antes una superficie anisótropa para definir las juntas "
+            "por superficie.",
+        "(a surface no longer in the model)":
+            "(una superficie que ya no está en el modelo)",
+        "Row %d of the table: A and B must be numbers.":
+            "Fila %d de la tabla: A y B tienen que ser números.",
+        "This anisotropic surface is read by the joints of a Generalized "
+        "Anisotropic material: change them first.":
+            "Esta superficie anisótropa la leen las juntas de un material "
+            "Generalized Anisotropic: cámbielas primero.",
+        "The base needs a material, or a strength model that can be "
+        "built.":
+            "La base necesita un material, o un modelo de resistencia que "
+            "se pueda construir.",
+        "At least one joint is needed.":
+            "Hace falta al menos una junta.",
+        "Every joint needs a material, or a strength model that can be "
+        "built.":
+            "Cada junta necesita un material, o un modelo de resistencia "
+            "que se pueda construir.",
+        "A and B of every joint must satisfy 0 <= A <= B <= 90 degrees.":
+            "A y B de cada junta tienen que cumplir 0 <= A <= B <= 90 "
+            "grados.",
+        "Every joint must follow an anisotropic surface.":
+            "Cada junta tiene que seguir una superficie anisótropa.",
+        "A joint follows an anisotropic surface that is not in the model: "
+        "choose another one.":
+            "Una junta sigue una superficie anisótropa que no está en el "
+            "modelo: elija otra.",
         "How the strength goes from the joint's to the base's as the slice "
         "base turns away from the joint: A and B as in Anisotropic Linear, "
         "the S-shaped cosine curve (sin² of the offset) or a straight line "

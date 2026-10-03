@@ -1609,8 +1609,10 @@ class GeneralizedAnisotropic(StrengthModel):
     v0.1.248 (D231a) -- the reference's other input, "Angle or Surface"
     (``input_type``): a BASE strength "for failure planes which are not
     within the defined orientation range" of the joints, and JOINTS, each at
-    an angle (by a surface from v0.1.249) with its strength, a material or a
-    model of its own. ``mapping`` says how a joint's strength gives way to
+    an angle or, from v0.1.249 (D231b), along an anisotropic surface
+    (``definition``; the surface's orientation at the point closest to the
+    base, as for any anisotropic surface), with its strength, a material or
+    a model of its own. ``mapping`` says how a joint's strength gives way to
     the base's with the offset δ between the joint and the base (A and B,
     cosine or linear; :meth:`mapping_fraction`), ``joint_selection`` which
     joint answers when there are several, and ``use_base_if_weaker`` whether
@@ -1869,6 +1871,27 @@ class GeneralizedAnisotropic(StrengthModel):
             return 1.0
         return (delta_deg - a) / (b - a)
 
+    def _joint_angle(self, j: int, joint, ctx) -> float:
+        """The orientation of joint ``j`` at the base of ``ctx``: its angle,
+        or (v0.1.249, D231b) the orientation of its anisotropic surface at
+        the point closest to the base, which the slicer and the supports
+        measure (``SliceContext.surface_angles``). Raises where there is
+        none: a surface missing from the model is refused before the
+        analysis, and a caller without a base has no point to read it at."""
+        if self.definition == "surface":
+            sid = joint.get("surface_id") if isinstance(joint, dict) else None
+            angles = getattr(ctx, "surface_angles", None) or {}
+            if sid not in angles:
+                raise IncompleteGeneralizedAnisotropic(
+                    f"joint {j + 1}: no orientation of its anisotropic "
+                    f"surface at this base")
+            return float(angles[sid])
+        try:
+            return float(joint.get("angle"))
+        except (TypeError, ValueError, AttributeError):
+            raise IncompleteGeneralizedAnisotropic(
+                f"the angle of joint {j + 1} is not a number") from None
+
     @staticmethod
     def _read(model, sigma_n_eff, ctx):
         if ctx is not None and getattr(model, "needs_context", False):
@@ -1885,10 +1908,6 @@ class GeneralizedAnisotropic(StrengthModel):
         with the smallest offset, the first of the list on a tie
         ("Closest"). Then, with ``use_base_if_weaker``, min(τ, τ_base).
         """
-        if self.definition != "angle":
-            raise IncompleteGeneralizedAnisotropic(
-                "joints defined by a surface are not implemented in this "
-                "version")
         if not self.joints:
             raise IncompleteGeneralizedAnisotropic("there are no joints")
         tau_base = self._read(self._child_model(("base", None), self.base),
@@ -1896,11 +1915,7 @@ class GeneralizedAnisotropic(StrengthModel):
         chosen = None          # (τ_j, δ) of the joint that answers
         for j, joint in enumerate(self.joints):
             model = self._child_model(("joints", j), joint)
-            try:
-                joint_angle = float(joint.get("angle"))
-            except (TypeError, ValueError, AttributeError):
-                raise IncompleteGeneralizedAnisotropic(
-                    f"the angle of joint {j + 1} is not a number") from None
+            joint_angle = self._joint_angle(j, joint, ctx)
             delta = self.joint_offset_deg(angle_deg, joint_angle)
             t = self.mapping_fraction(delta, joint)
             # The ends without the other strength: 0·τ is not 0 when τ is

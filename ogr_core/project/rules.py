@@ -697,8 +697,10 @@ def generalized_angle_or_surface_refusal(strength) -> Optional[Refusal]:
     takes over. So: a base and at least one joint, each with a strength
     model that can be built; a joint angle that is a number; A and B with
     0 <= A <= B <= 90, as in Snowden, when the mapping reads them; the
-    three choices among their values. Joints by surface are refused until
-    the version that reads the surfaces (D231b).
+    three choices among their values. v0.1.249 (D231b): joints by
+    surface name their surface (``surface_id``) instead of an angle; that
+    the surface is in the model is asked of the project
+    (:func:`generalized_surfaces_refusal`).
     """
     import math
 
@@ -709,10 +711,6 @@ def generalized_angle_or_surface_refusal(strength) -> Optional[Refusal]:
         return Refusal("generalized_aos_definition",
                        f"The anisotropy is defined by 'angle' or 'surface', "
                        f"not {strength.definition!r}.")
-    if strength.definition == "surface":
-        return Refusal("generalized_aos_surface",
-                       "Joints defined by an anisotropic surface are not "
-                       "implemented in this version: define them by angle.")
     if strength.mapping not in _G.MAPPINGS:
         return Refusal("generalized_aos_mapping",
                        f"The mapping function is one of {list(_G.MAPPINGS)}, "
@@ -741,14 +739,21 @@ def generalized_angle_or_surface_refusal(strength) -> Optional[Refusal]:
             return Refusal("generalized_aos_joint_model",
                            f"Joint {j} needs a strength: a material or a "
                            f"model of its own.")
-        try:
-            angle = float(joint.get("angle"))
-        except (TypeError, ValueError):
-            angle = float("nan")
-        if not math.isfinite(angle):
-            return Refusal("generalized_aos_joint_angle",
-                           f"The angle of joint {j} must be a number of "
-                           f"degrees.")
+        if strength.definition == "surface":
+            sid = joint.get("surface_id")
+            if not isinstance(sid, str) or not sid:
+                return Refusal("generalized_aos_joint_surface",
+                               f"Joint {j} must name its anisotropic "
+                               f"surface.")
+        else:
+            try:
+                angle = float(joint.get("angle"))
+            except (TypeError, ValueError):
+                angle = float("nan")
+            if not math.isfinite(angle):
+                return Refusal("generalized_aos_joint_angle",
+                               f"The angle of joint {j} must be a number of "
+                               f"degrees.")
         if strength.mapping == "ab":
             try:
                 a = float(joint.get("A"))
@@ -973,6 +978,54 @@ def reads_anisotropic_surface(strength_or_id) -> bool:
     mid = (strength_or_id if isinstance(strength_or_id, str)
            else getattr(strength_or_id, "MODEL_ID", None))
     return mid in SURFACE_READING_MODEL_IDS
+
+
+def generalized_surfaces_refusal(material, project) -> Optional[Refusal]:
+    """Why the joints of a Generalized Anisotropic "Angle or Surface"
+    material defined by a surface cannot be computed with in ``project``,
+    or None (v0.1.249, D231b): each one must name an anisotropic surface of
+    the model. A joint whose surface is gone has no orientation to read, and
+    computing it with some other angle would be a number nobody entered."""
+    from ..geometry.boundary_type import BoundaryType
+    from ..materials.builtin_models import GeneralizedAnisotropic
+
+    st = getattr(material, "strength", None)
+    if not (isinstance(st, GeneralizedAnisotropic) and st.angle_or_surface
+            and st.definition == "surface"):
+        return None
+    ids = {b.id for b in getattr(project, "boundaries", ())
+           if b.btype == BoundaryType.ANISOTROPIC_SURFACE}
+    for j, joint in enumerate(st.joints or [], start=1):
+        sid = joint.get("surface_id") if isinstance(joint, dict) else None
+        if sid not in ids:
+            return Refusal("generalized_surface_missing",
+                           f"Material {getattr(material, 'name', '?')!r}, "
+                           f"Generalized Anisotropic: joint {j} names an "
+                           f"anisotropic surface that is not in the model.")
+    return None
+
+
+def surface_in_use_refusal(project, boundary_id) -> Optional[Refusal]:
+    """Why the boundary ``boundary_id`` cannot be deleted, or None
+    (v0.1.249, D231b): an anisotropic surface that a joint of a
+    Generalized Anisotropic material reads. Deleting it would leave the
+    joint with no orientation; the user changes the joint first. Asked by
+    the API and by the interface."""
+    from ..materials.builtin_models import GeneralizedAnisotropic
+
+    users = []
+    for m in getattr(project, "materials", ()):
+        st = getattr(m, "strength", None)
+        if not isinstance(st, GeneralizedAnisotropic):
+            continue
+        if any(isinstance(j, dict) and j.get("surface_id") == boundary_id
+               for j in st.joints or []):
+            users.append(repr(m.name))
+    if not users:
+        return None
+    return Refusal("surface_in_use",
+                   "The anisotropic surface is read by the joints of "
+                   + ", ".join(users) + "; change them first.")
 
 
 def material_surface_refusal(material) -> Optional[Refusal]:

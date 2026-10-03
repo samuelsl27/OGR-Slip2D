@@ -276,6 +276,10 @@ class SliceContext:
             on the single global angle they carry themselves. The
             distinction matters: 0.0 would be a horizontal bedding, which
             is a real answer and not the absence of one.
+        surface_angles: ``{surface id: orientation}`` of the anisotropic
+            surfaces the joints of a Generalized Anisotropic "Angle or
+            Surface" material read, at this base [deg from horizontal],
+            v0.1.249 (D231b). ``None`` when the material has none.
     """
     base_angle_rad: float = 0.0
     sigma_v_eff: float = 0.0
@@ -286,6 +290,7 @@ class SliceContext:
     slope_distance: "float | None" = None
     bedding_angle_deg: "float | None" = None
     x_base: "float | None" = None
+    surface_angles: "dict | None" = None
 
     @classmethod
     def from_slice(cls, slice_, sigma_n_eff: float,
@@ -359,4 +364,7 @@ class SliceContext:
             # v0.1.246 (D229) — where the base is, for the models whose
             # strength is a field over the material.
             x_base=getattr(slice_, "x_centre", None),
+            # v0.1.249 (D231b) — the orientation each joint surface has
+            # here, for "Angle or Surface" by surface.
+            surface_angles=getattr(slice_, "surface_angles", None),
         )

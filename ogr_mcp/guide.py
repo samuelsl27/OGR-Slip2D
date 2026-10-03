@@ -144,7 +144,10 @@ parameters, units and defaults. The common ones:
   "material": "Bedding"}]; mapping "ab" (A and B as Anisotropic Linear),
   "cosine" (sin² of the offset) or "linear"; joint_selection "worst_case"
   or "closest"; use_base_if_weaker (default true). Water and drawdown are
-  this material's. Joints by surface are refused in this version.
+  this material's. definition "surface": each joint names an anisotropic
+  surface ("surface_id", the boundary id) instead of an angle, and takes
+  its orientation at the point closest to the slice base; a surface a
+  joint reads cannot be deleted.
 * c_phi_function: rows [[normal stress, c, phi], ...]; c and phi are
   interpolated between rows.
 * snowden_anisotropic_linear: bedding_angle, A1, B1 (the clockwise side of

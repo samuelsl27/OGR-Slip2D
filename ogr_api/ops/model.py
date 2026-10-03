@@ -373,6 +373,13 @@ def boundary_edit(ws, boundary: str, op: str,
                     "regions": len(project.resolve_regions()),
                     "notes": notes}
         if op == "delete":
+            # v0.1.249 (D231b) — not a surface a joint reads.
+            from ogr_core.project.rules import surface_in_use_refusal
+            why = surface_in_use_refusal(project, b.id)
+            if why is not None:
+                raise Conflict(why.message,
+                               hint="Point those joints at another surface "
+                                    "or define them by angle first.")
             project.boundaries.pop(idx)
             cleared = [m for m in project.materials
                        if m.water_surface_id == b.id]
@@ -687,10 +694,14 @@ def _link_rules_by_name(project, strength):
 
 
 def _check_links(project, m):
-    """v0.1.228 (D218b) — ``rules.generalized_links_refusal``."""
-    from ogr_core.project.rules import generalized_links_refusal
+    """v0.1.228 (D218b) — ``rules.generalized_links_refusal``; v0.1.249
+    (D231b) — and ``rules.generalized_surfaces_refusal``."""
+    from ogr_core.project.rules import (generalized_links_refusal,
+                                        generalized_surfaces_refusal)
     why = generalized_links_refusal(m, list(project.materials) + (
         [] if m in project.materials else [m]))
+    if why is None:
+        why = generalized_surfaces_refusal(m, project)
     if why is not None:
         raise InvalidArgument(why.message)
 
