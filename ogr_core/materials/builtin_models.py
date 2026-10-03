@@ -1591,8 +1591,20 @@ class GeneralizedAnisotropic(StrengthModel):
     * The child receives the slice context unchanged, and the model asks
       for the fields its children read (``NEEDS_LAYER_TOP``,
       ``NEEDS_SLOPE_DISTANCE``): a child that measures cu from the slope
-      used to get no distance and fall back without a word. Water, weight
-      and every other property are the parent material's.
+      used to get no distance and fall back without a word.
+
+    v0.1.247 (D230) -- what each material gives a slice. The weight is
+    always the parent's (the reference: "The unit weight of the parent
+    material will be used to calculate the weight of a slice"). The water
+    is the parent's while ``use_parent_water`` is True, the default, which
+    is what every earlier version computed; with it False, a base whose
+    range LINKS a material takes that material's water parameters (water
+    surface, Hu, Ru, grid, B-bar of loading, unsaturated strength), as the
+    reference's option of the same name describes for the "Angle Range"
+    input. The rapid drawdown is always the linked material's: the
+    reference's option leaves it out. The slicer and the drawdown read
+    these through ``linked_material_id``; a range with no link has no
+    material, so the parent stands for it.
 
     Needs the slice base angle → ``needs_context = True``.
     """
@@ -1603,9 +1615,13 @@ class GeneralizedAnisotropic(StrengthModel):
 
     def __init__(self, **params):
         rules = params.pop("rules", None)
+        use_parent_water = params.pop("use_parent_water", True)
         super().__init__(**params)
         # rules: list of dicts {angle_min, angle_max, model: <dict>}
         self.rules = rules or []
+        # v0.1.247 (D230) -- see the class docstring. Stored as given: what
+        # a valid value is (a bool) lives in ``ogr_core.project.rules``.
+        self.use_parent_water = use_parent_water
         # rule index -> (the dict the model was built from, a copy of it,
         # the model or the exception building it raised).
         self._built: dict = {}
@@ -1645,7 +1661,10 @@ class GeneralizedAnisotropic(StrengthModel):
             raise cached[2]
         return cached[2]
 
-    def _model_for_angle(self, angle_deg: float):
+    def _rule_index(self, angle_deg: float) -> int:
+        """The index of the first rule that holds ``angle_deg``, folded.
+        Raises :class:`IncompleteGeneralizedAnisotropic` where the model
+        cannot answer (see the class docstring)."""
         a = fold_plane_angle_deg(angle_deg)
         for i, rule in enumerate(self.rules):
             if not isinstance(rule, dict):
@@ -1658,9 +1677,40 @@ class GeneralizedAnisotropic(StrengthModel):
                 raise IncompleteGeneralizedAnisotropic(
                     f"the angles of rule {i + 1} are not numbers") from None
             if amin <= a <= amax + 1e-9:
-                return self._rule_model(i, rule)
+                return i
         raise IncompleteGeneralizedAnisotropic(
             f"no rule holds a slice base at {a:g} degrees")
+
+    def _model_for_angle(self, angle_deg: float):
+        i = self._rule_index(angle_deg)
+        return self._rule_model(i, self.rules[i])
+
+    def rule_index_for_angle(self, angle_deg: float) -> int:
+        """The index of the rule that holds a base at ``angle_deg``
+        (absolute, folded as the strength folds it), v0.1.247 (D230).
+        Raises :class:`IncompleteGeneralizedAnisotropic` where the strength
+        does: the model never answers in place of a rule it lacks (D218)."""
+        return self._rule_index(angle_deg)
+
+    def linked_material_id(self, angle_deg: float):
+        """The id of the material the range holding ``angle_deg`` links, or
+        None when that range links none (v0.1.247, D230): whose water and
+        drawdown parameters a base at that angle can take. Raises as
+        :meth:`rule_index_for_angle` does."""
+        i = self.rule_index_for_angle(angle_deg)
+        return self.rules[i].get("material_id") or None
+
+    def replaced(self, **changes) -> "GeneralizedAnisotropic":
+        """A new model with ``changes`` (``rules``, ``use_parent_water`` or a
+        parameter) and everything else as here (v0.1.247, D230). The places
+        that rebuild the model -- the design factors, the link resolution,
+        the property import, the API -- go through here, so an attribute
+        added to the model is not dropped by one of them."""
+        kwargs = {"rules": self.rules,
+                  "use_parent_water": self.use_parent_water,
+                  **self.params}
+        kwargs.update(changes)
+        return GeneralizedAnisotropic(**kwargs)
 
     def _children(self):
         """The models of the rules that can be built."""
@@ -1724,19 +1774,23 @@ class GeneralizedAnisotropic(StrengthModel):
             if done.note:
                 notes.append(f"rule {i + 1}: {done.note}")
             rules.append(new_rule)
-        out = (GeneralizedAnisotropic(rules=rules, **self.params)
-               if changes else self)
+        out = self.replaced(rules=rules) if changes else self
         return FactoredStrength(out, changes, "each rule by its own model",
                                 note="; ".join(notes) or None)
 
     def to_dict(self) -> dict:
         d = super().to_dict()
         d["rules"] = list(self.rules)
+        d["use_parent_water"] = self.use_parent_water
         return d
 
     @classmethod
     def from_dict(cls, data: dict) -> "GeneralizedAnisotropic":
-        return cls(rules=data.get("rules"), **data.get("params", {}))
+        # v0.1.247 (D230) -- a file without the key is from before the
+        # option, and computed with the parent's water: True keeps it.
+        return cls(rules=data.get("rules"),
+                   use_parent_water=data.get("use_parent_water", True),
+                   **data.get("params", {}))
 
 
 # ----------------------------------------------------------------------

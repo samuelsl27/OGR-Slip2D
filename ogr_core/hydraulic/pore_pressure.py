@@ -88,6 +88,7 @@ def pore_pressure_at(
     material: Optional[Material],
     ground_surface_y: Optional[float] = None,
     weight_factor: float = 1.0,
+    weight_material: Optional[Material] = None,
 ) -> float:
     """Compute pore pressure u [kPa] at `point` for `material`.
 
@@ -102,6 +103,10 @@ def pore_pressure_at(
             analysis. Ru reads that weight (u = ru·σv), so its soil term is
             multiplied by it; the ponded water is not soil and is not.
             Nothing else here reads a weight. 1.0 changes nothing.
+        weight_material: v0.1.247 (D230) — the material whose unit weight
+            Ru's σv is computed with, when it is not ``material``: a
+            Generalized Anisotropic slice takes the water of a linked
+            material and keeps its own weight. None means ``material``.
 
     Returns:
         Pore pressure in kPa (always ≥ 0; suction is clamped to zero).
@@ -168,7 +173,7 @@ def pore_pressure_at(
         # than reading ``sat_unit_weight`` directly so that a material
         # which has NOT opted into a saturated unit weight cannot have
         # that unused number change its pore pressure through a back door.
-        sigma_v = material.gamma_at(True) * depth
+        sigma_v = (weight_material or material).gamma_at(True) * depth
         if weight_factor != 1.0:
             sigma_v *= weight_factor
         # v0.1.61 — the vertical earth pressure INCLUDES the weight of any

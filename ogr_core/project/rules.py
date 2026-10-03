@@ -787,6 +787,14 @@ def strength_model_refusal(strength, name: Optional[str] = None
         if why is not None:
             return Refusal(why.code, f"Material {label!r}, Generalized "
                                      f"Anisotropic: {why.message}")
+        # v0.1.247 (D230) -- a switch, so a bool: a 0, a "false" or a None
+        # would be read as true or false by whoever reads it next.
+        if not isinstance(getattr(strength, "use_parent_water", True), bool):
+            return Refusal(
+                "generalized_parent_water",
+                f"Material {label!r}, Generalized Anisotropic: "
+                f"use_parent_water must be true or false, not "
+                f"{strength.use_parent_water!r}.")
         for rule in strength.rules:
             why = strength_model_refusal(
                 StrengthModel.from_dict(rule["model"]), name)

@@ -88,8 +88,7 @@ def _relink_generalized(project, source, imported: dict, notes: list):
                     f"{clone.name!r}: range {i} now takes the strength of "
                     f"{here.name!r}, the material of that name in this "
                     f"model.")
-        clone.strength = GeneralizedAnisotropic(rules=rules,
-                                                **clone.strength.params)
+        clone.strength = clone.strength.replaced(rules=rules)
     resolve_generalized_links(project.materials)
 
 

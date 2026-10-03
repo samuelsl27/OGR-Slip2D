@@ -172,6 +172,57 @@ CAP_MAX_PASSES = 20
 PASS_INVARIANT_KEYS = ("slide_sign", "m_alpha_sign", "kh", "kv")
 
 
+#: v0.1.247 (D230) -- the rapid drawdown of a Generalized Anisotropic slice
+#: is the drawdown of the material its range links: the «Undrained
+#: Behaviour» switch, the R or Kc = 1 envelope, the c' and phi' they are
+#: read with, and the B-bar of the B-bar procedure (:func:`_drawdown_material`).
+#:
+#: Until v0.1.246 they were the parent's, the material of the region, so a
+#: Generalized parent marked undrained refused every surface ("needs a
+#: linear effective envelope") and an undrained child was drained. The
+#: reference's «use the parent parameters» option leaves out "rapid
+#: drawdown and multi-stage seismic settings", which are the child's
+#: whichever way it is set. A range with no link has no material, and the
+#: parent stands for it. Off, the v0.1.246 behaviour. No model of the
+#: verification bank has a Generalized Anisotropic material.
+GA_CHILD_DRAWDOWN = True
+
+
+def _drawdown_material(project, slice_):
+    """The material whose rapid-drawdown parameters ``slice_`` reads: the
+    material its Generalized Anisotropic range links, or its own (v0.1.247,
+    D230; see ``GA_CHILD_DRAWDOWN``)."""
+    mat = slice_.material
+    if not GA_CHILD_DRAWDOWN:
+        return mat
+    from .slicer import _linked_child
+    child = _linked_child(project, mat, slice_.base_angle)
+    return child if child is not None else mat
+
+
+#: v0.1.247 (D233) -- the stage-1 state of a base whose material has no
+#: linear effective envelope is the strength the stage-1 pass computed with
+#: there, tau_fc = s(sigma'_fc)/F1 (:func:`_stage1_own_tau`).
+#:
+#: Until v0.1.246 ``_stage1_state`` turned the refusal of ``_effective_c_phi``
+#: into c' = phi' = 0 without a word: tau_fc = 0, so K1 = 1 for whatever
+#: undrained base of stage 2 read it. A material boundary is a mandatory
+#: slice cut in both stages (v0.1.66), so an undrained base only ever read a
+#: stage-1 base of its own, linear, material, and the zero decided nothing:
+#: 0 of 27 configurations of the Appendix G slope with a Power Curve beside
+#: the undrained shell. The drawdown of a Generalized Anisotropic slice
+#: being its linked material's (``GA_CHILD_DRAWDOWN``) opened a way: the two
+#: slicings put the bases of one abscissa on the two sides of a range
+#: limit, and a range with no link stands for the parent, which has no
+#: linear envelope. Measured on the Appendix G slope with the limit swept
+#: by half degrees: 44 of 726 cases moved, up to +0.30 % (Lowe-Karafiath)
+#: and +0.25 % (Duncan-Wright-Wong), the unsafe side. Duncan, Wright &
+#: Brandon (2014), Eq. 9.3: tau_fc is the shear stress on the failure plane
+#: at consolidation, the strength mobilised by the stage-1 solution, which
+#: is what this reads for any model. Off, the v0.1.246 zero.
+STAGE1_OWN_STRENGTH = True
+
+
 class RapidDrawdownError(RuntimeError):
     """A modelling error the user has to resolve, not a numerical hiccup."""
 
@@ -414,6 +465,24 @@ def undrained_strength_dww(
 _level_project = level_project
 
 
+def _stage1_own_tau(slice_, sigma_fc: float) -> float:
+    """The shear strength the stage-1 pass computed with on ``slice_``'s
+    base, at ``sigma_fc`` (v0.1.247, D233; see ``STAGE1_OWN_STRENGTH``).
+
+    Read as the solvers read it: through the base's context when the model
+    needs one (a Generalized Anisotropic material reads the range of the
+    base's angle). A model that cannot answer raises: the pass that just
+    converged on the same base did not, and a strength nobody computed is
+    not put in its place.
+    """
+    from ogr_core.materials.strength_model import SliceContext
+    strength = slice_.material.strength
+    if getattr(strength, "needs_context", False):
+        return strength.shear_strength_ctx(
+            sigma_fc, SliceContext.from_slice(slice_, sigma_fc))
+    return strength.shear_strength(sigma_fc)
+
+
 def _stage1_state(project, surface, slices, result):
     """(σ'_fc, τ_fc) sampled along the surface, from the stage-1 solution.
 
@@ -473,10 +542,16 @@ def _stage1_state(project, surface, slices, result):
         l = max(s.base_length, 1e-9)
         n_eff = normals[i] - s.pore_pressure * l          # (2)
         sigma_fc = max(0.0, n_eff) / l
-        mat = s.material
+        mat = _drawdown_material(project, s)
         try:
             c_eff, phi_eff = _effective_c_phi(mat)
         except RapidDrawdownError:
+            if STAGE1_OWN_STRENGTH:
+                # v0.1.247 (D233) -- the strength this base was solved
+                # with, not a zero. See ``STAGE1_OWN_STRENGTH``.
+                out.append((s.base_x_left, s.base_x_right, sigma_fc,
+                            _stage1_own_tau(s, sigma_fc) / fs1))
+                continue
             c_eff, phi_eff = 0.0, 0.0
         tau_fc = (c_eff + sigma_fc * math.tan(math.radians(phi_eff))) / fs1
         out.append((s.base_x_left, s.base_x_right, sigma_fc, tau_fc))
@@ -650,7 +725,7 @@ def rapid_drawdown_fos(
 
     tau_by_index: dict = {}
     for i, s in enumerate(sl2.slices):
-        mat = s.material
+        mat = _drawdown_material(p2, s)
         if not getattr(mat, "undrained_behaviour", False):
             continue          # freely draining: keeps c', phi' and its u
         sampled = _sample_state(state, s.x_centre)
@@ -716,7 +791,8 @@ def rapid_drawdown_fos(
         for i, tau_ff in tau_by_index.items():
             l = max(sl2.slices[i].base_length, 1e-9)
             sigma_d = max(0.0, normals2[i]) / l               # (9)
-            c_eff, phi_eff = _effective_c_phi(sl2.slices[i].material)
+            c_eff, phi_eff = _effective_c_phi(
+                _drawdown_material(p2, sl2.slices[i]))
             # The cap is always taken against the ORIGINAL undrained
             # strength, never against the already-capped value: feeding
             # the capped one back would let it ratchet down without a
@@ -1055,15 +1131,19 @@ def b_bar_pore_pressures(project, slices) -> int:
     initial = level_project(project, use_drawdown=False)
     final = level_project(project, use_drawdown=True)
     n = 0
+    from .slicer import water_material_of
     for s in slices.slices:
-        mat = s.material
+        # v0.1.247 (D230) -- whether it drains, and its B-bar, are the
+        # drawdown's; the initial pore pressure is the water's.
+        mat = (_drawdown_material(project, s) if s.material is not None
+               else None)
         if mat is None or not getattr(mat, "undrained_behaviour", False):
             continue
         x = s.x_centre
         y_ground = s.top_y_mid
         u_ini = pore_pressure_at(
-            initial, Vertex(x, s.base_y_mid), mat,
-            ground_surface_y=y_ground)
+            initial, Vertex(x, s.base_y_mid), water_material_of(s),
+            ground_surface_y=y_ground, weight_material=s.material)
         delta_sigma_v = -gamma_w * (ponded_depth_at(initial, x, y_ground)
                                     - ponded_depth_at(final, x, y_ground))
         u = max(0.0, u_ini + float(getattr(mat, "b_bar", 0.0))

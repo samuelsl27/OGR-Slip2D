@@ -175,6 +175,12 @@ class Slice:
     # region its midpoint falls in, and without this the two are
     # indistinguishable in the output.
     weak_layer_id: Optional[str] = None
+    # v0.1.247 (D230) -- the material whose WATER parameters this base read,
+    # when it is not ``material``: the material a Generalized Anisotropic
+    # range links, with the parent's «water parameters» switch off
+    # (``water_material``). None means ``material``, as it was for every
+    # slice before. Read through ``water_material_of``.
+    water_material: Optional[Material] = None
 
     # ------------------------------------------------------------------
     @property
@@ -232,6 +238,8 @@ class Slice:
             "water_force_h": self.water_force_h,
             "material_id": self.material.id if self.material else None,
             "weak_layer_id": self.weak_layer_id,
+            "water_material_id": (self.water_material.id
+                                  if self.water_material else None),
         }
 
 
@@ -1119,6 +1127,83 @@ DESIGN_PORE_PRESSURE_FOLLOWS_WEIGHT = True
 DESIGN_WEIGHT_FACTORS = True
 
 
+#: v0.1.247 (D230) — a Generalized Anisotropic material whose «water
+#: parameters of the parent» switch is OFF gives each slice base the water of
+#: the material its range links (:func:`water_material`).
+#:
+#: Until v0.1.246 the water was always the parent's, the material of the
+#: region. The reference's option of that name ("use the parent
+#: parameters") covers the water surface, Hu, the pressure grid, B-bar and
+#: the unsaturated strength, and is on by default in its recent files; it
+#: stays on by default here (the owner's decision), so no file moves. Off,
+#: the v0.1.246 behaviour. No model of the verification bank has a
+#: Generalized Anisotropic material.
+GA_CHILD_WATER = True
+
+
+def _linked_child(project, material, alpha: float):
+    """The material the Generalized Anisotropic range holding a base at
+    ``alpha`` (radians) links, or None (v0.1.247, D230).
+
+    None also when the material is not Generalized Anisotropic, when the
+    range links nothing, or when the link does not resolve to a material of
+    ``project`` that can be one (itself, another Generalized Anisotropic one
+    or a dangling id): the analysis refuses those
+    (``rules.generalized_links_refusal``), and the parent stands for them
+    until it does.
+    """
+    from ogr_core.materials.builtin_models import (
+        GeneralizedAnisotropic, IncompleteGeneralizedAnisotropic)
+    strength = getattr(material, "strength", None)
+    if not isinstance(strength, GeneralizedAnisotropic):
+        return None
+    try:
+        link = strength.linked_material_id(math.degrees(alpha))
+    except IncompleteGeneralizedAnisotropic:
+        # No rule holds this base, or the rules are malformed. The STRENGTH
+        # raises at this same base (the model never answers in place of a
+        # rule it lacks, D218), so the surface is refused there and whose
+        # water is read here decides nothing: the parent stands for it.
+        return None
+    if not link:
+        return None
+    for m in getattr(project, "materials", ()):
+        if m.id == link:
+            if m is material or isinstance(
+                    getattr(m, "strength", None), GeneralizedAnisotropic):
+                return None
+            return m
+    return None
+
+
+def water_material(project, material, alpha: float):
+    """The material whose WATER parameters a base of ``material`` at
+    ``alpha`` (radians) reads: its own, or, for a Generalized Anisotropic
+    material with its «water parameters of the parent» switch off, the
+    material its range links (v0.1.247, D230; see ``GA_CHILD_WATER``).
+
+    The water surface, Hu, Ru, the grid, the B-bar of loading and the
+    unsaturated strength are all read from it; the weight, never: the
+    column is weighed region by region, and the reference weighs a
+    Generalized Anisotropic slice with the parent's unit weight. Ru
+    multiplies that column, so a child's Ru multiplies the parent's weight.
+    """
+    if not GA_CHILD_WATER:
+        return material
+    strength = getattr(material, "strength", None)
+    if getattr(strength, "use_parent_water", True):
+        return material
+    child = _linked_child(project, material, alpha)
+    return child if child is not None else material
+
+
+def water_material_of(slice_):
+    """The material whose water parameters ``slice_``'s base read when it
+    was cut (v0.1.247, D230): what anything that asks its pore pressure
+    again has to ask with."""
+    return getattr(slice_, "water_material", None) or slice_.material
+
+
 def distributed_loads_on(project: Project, x_left: float, x_right: float,
                          span: float):
     """Distributed-load forces on the slice ``[x_left, x_right)``.
@@ -1204,7 +1289,8 @@ def distributed_loads_on(project: Project, x_left: float, x_right: float,
 def _base_pore_pressure(project: Project, mat, xc: float, base_y_mid: float,
                         top_y_mid: float, dx: float, u_cutoff,
                         weight_factor: float = 1.0,
-                        load_factors: Optional[dict] = None):
+                        load_factors: Optional[dict] = None,
+                        weight_material=None):
     """``(u, u_raw, c_suction)`` at the midpoint of a slice base.
 
     The groundwater method's pore pressure, the unsaturated policy and the
@@ -1215,6 +1301,11 @@ def _base_pore_pressure(project: Project, mat, xc: float, base_y_mid: float,
     overburden, the B-bar bands that load) and ``load_factors``
     (``{load_id: factor}``) each load that creates excess. With the
     defaults it is the block it was, bit for bit.
+
+    v0.1.247 (D230) — ``mat`` is the material whose WATER the base reads
+    (:func:`water_material`), and ``weight_material`` the one whose unit
+    weight Ru's overburden is computed with when that is another (None:
+    ``mat``).
     """
     u = pore_pressure_at(
         project,
@@ -1222,6 +1313,7 @@ def _base_pore_pressure(project: Project, mat, xc: float, base_y_mid: float,
         mat,
         ground_surface_y=top_y_mid,
         weight_factor=weight_factor,
+        weight_material=weight_material,
     )
     # v0.1.28 — unsaturated policy (extended Mohr-Coulomb). Only a
     # seepage analysis can return u < 0; everything else already
@@ -2008,13 +2100,19 @@ def slice_surface(
         # is asked separately; the reference discards the whole slip
         # surface in this case and writes an error rather than reporting a
         # dry slope, which is the unsafe side to be wrong on.
-        if not water_surface_defined_at(project, mat, xc):
+        #
+        # v0.1.247 (D230) -- asked of the material whose water this base
+        # reads, which a Generalized Anisotropic material may hand to the
+        # material its range links (``water_material``).
+        wmat = water_material(project, mat, alpha)
+        if not water_surface_defined_at(project, wmat, xc):
             return None
 
         # Pore pressure at the midpoint of the base (v0.1.244, D226c: in a
         # function of its own, which a design standard asks again).
         u, u_raw, c_suction = _base_pore_pressure(
-            project, mat, xc, base_y_mid, top_y_mid, dx, _u_cutoff)
+            project, wmat, xc, base_y_mid, top_y_mid, dx, _u_cutoff,
+            weight_material=mat if wmat is not mat else None)
 
         # v0.1.219 (D206) -- the soil alone, before any load joins it: what
         # the seismic coefficients act on. Kept exactly, not rebuilt later as
@@ -2078,6 +2176,7 @@ def slice_surface(
             bedding_angle_deg=bedding_angle_deg,
             weak_layer_id=weak_layer_id,
             load_parts=_load_parts,
+            water_material=wmat if wmat is not mat else None,
         )
         # v0.1.61 — free-standing water resting on this slice. Applied
         # after the slice exists because it needs the finished top

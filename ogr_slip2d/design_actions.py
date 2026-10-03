@@ -123,7 +123,7 @@ def refresh_pore_pressures(project, slices) -> None:
     factors are all 1, keeps what it had to the last bit.
     """
     from .slicer import (_base_pore_pressure, negative_pore_pressure_cutoff,
-                         reads_the_weight)
+                         reads_the_weight, water_material_of)
     factors = getattr(slices, "load_factors", None) or {}
     by_load = {load_id: v[2] for load_id, v in factors.items()} or None
     loads_move = any(f != 1.0 for f in (by_load or {}).values())
@@ -131,14 +131,18 @@ def refresh_pore_pressures(project, slices) -> None:
     for s in slices.slices:
         if s.weight_factor == 1.0 and not loads_move:
             continue
-        if not reads_the_weight(project, s.material):
+        # v0.1.247 (D230) -- with the material whose water the base read,
+        # which a Generalized Anisotropic material may hand to a child.
+        wmat = water_material_of(s)
+        if not reads_the_weight(project, wmat):
             continue
         # The point the slicer used: the same doubles it stored.
         u, u_raw, c_suction = _base_pore_pressure(
-            project, s.material, s.x_centre,
+            project, wmat, s.x_centre,
             0.5 * (s.base_y_left + s.base_y_right),
             0.5 * (s.top_y_left + s.top_y_right), s.width, cutoff,
-            weight_factor=s.weight_factor, load_factors=by_load)
+            weight_factor=s.weight_factor, load_factors=by_load,
+            weight_material=s.material if wmat is not s.material else None)
         s.pore_pressure = u
         s.raw_pore_pressure = u_raw
         s.suction_cohesion = c_suction

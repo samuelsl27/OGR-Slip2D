@@ -255,6 +255,10 @@ class _StrengthParamPanel(QWidget):
         # v0.1.246 (D229) — the Discrete Function's type and method combos,
         # and what they were given.
         self._discrete = None
+        # v0.1.247 (D230) — a Generalized Anisotropic material's «water
+        # parameters of the parent» switch, and what it was given.
+        self._chk_parent_water = None
+        self._parent_water_given = None
 
     def set_rule_materials(self, choices) -> None:
         """The materials a Generalized Anisotropic range can take, as (id,
@@ -397,6 +401,8 @@ class _StrengthParamPanel(QWidget):
         self._functions_given = None
         self._function_labels = {}
         self._discrete = None
+        self._chk_parent_water = None
+        self._parent_water_given = None
         mid = getattr(model_cls, "MODEL_ID", "")
         if mid == "discrete_function":
             self._build_discrete(current_params, model_cls)
@@ -426,6 +432,8 @@ class _StrengthParamPanel(QWidget):
                        if self._rule_choices else [])
             self._build_points_table(current_params, kind="rules",
                                      default=default)
+            self._build_parent_water(
+                bool(current_params.get("use_parent_water", True)))
 
         if mid == "snowden_anisotropic_linear":
             self._build_function_buttons(current_params, model_cls)
@@ -490,6 +498,34 @@ class _StrengthParamPanel(QWidget):
         params["points"] = rows
         params["function_type"] = new
         self.set_model(model_cls, params)
+
+    def _build_parent_water(self, checked: bool) -> None:
+        """The «water parameters of the parent material» switch of a
+        Generalized Anisotropic material (v0.1.247, D230). Greyed out while
+        no range takes a material: a range with its own model has no water
+        of its own, so the switch would change nothing."""
+        from PySide6.QtWidgets import QCheckBox
+
+        chk = QCheckBox(tr("Use the water parameters of the parent material"))
+        chk.setChecked(checked)
+        chk.setToolTip(tr(
+            "Ticked, every slice base takes the water of this material. "
+            "Unticked, a base whose range takes a material takes that "
+            "material's water (water surface, Hu, Ru, grid, B-bar and "
+            "unsaturated strength). The weight is always this material's, "
+            "and the rapid drawdown always the range's material's."))
+        self._form.addRow("", chk)
+        self._chk_parent_water = chk
+        self._parent_water_given = checked
+        self._sync_parent_water()
+
+    def _sync_parent_water(self) -> None:
+        chk = self._chk_parent_water
+        if chk is None or self._table is None:
+            return
+        links = any(str(row[1]).startswith("material:")
+                    for row in self._cell_texts())
+        chk.setEnabled(links)
 
     def _build_cutoff_switch(self, enabled: bool) -> None:
         """Checkbox governing the cutoff, and the spinbox it governs.
@@ -593,11 +629,13 @@ class _StrengthParamPanel(QWidget):
                     tbl.setCellWidget(r, c, self._choice_combo(None, None))
                 else:
                     tbl.setItem(r, c, QTableWidgetItem("0.0"))
+            self._sync_parent_water()
 
         def _del():
             cur = tbl.currentRow()
             if cur >= 0:
                 tbl.removeRow(cur)
+            self._sync_parent_water()
         b_add.clicked.connect(_add)
         b_del.clicked.connect(_del)
         hl.addWidget(b_add)
@@ -638,6 +676,8 @@ class _StrengthParamPanel(QWidget):
             combo.addItem(cname, f"material:{cid}")
         if link in ids:
             combo.setCurrentIndex(combo.findData(f"material:{link}"))
+        combo.currentIndexChanged.connect(
+            lambda _i: self._sync_parent_water())
         return combo
 
     @staticmethod
@@ -710,6 +750,10 @@ class _StrengthParamPanel(QWidget):
                 self._discrete["method"].currentData()) != \
                 self._discrete["given"]:
             return False
+        if self._chk_parent_water is not None and (
+                self._chk_parent_water.isChecked()
+                != self._parent_water_given):
+            return False
         return self.table_unchanged()
 
     def get_params(self) -> dict:
@@ -759,6 +803,9 @@ class _StrengthParamPanel(QWidget):
         if self._discrete is not None:
             out["function_type"] = self._discrete["type"].currentData()
             out["method"] = self._discrete["method"].currentData()
+        # v0.1.247 (D230) — the Generalized Anisotropic water switch.
+        if self._chk_parent_water is not None:
+            out["use_parent_water"] = self._chk_parent_water.isChecked()
         return out
 
     def _rules_from_table(self, sys_obj) -> list:
@@ -1569,6 +1616,9 @@ class MaterialPropertiesDialog(QDialog):
             _discrete = {"function_type": m.strength.function_type,
                          "method": m.strength.method}
         _params.update(_discrete)
+        # v0.1.247 (D230) — the Generalized Anisotropic water switch.
+        if hasattr(m.strength, "use_parent_water"):
+            _params["use_parent_water"] = m.strength.use_parent_water
         self.param_panel.set_model(type(m.strength), _params)
         # v0.1.15 — for function/table-based models, also pass the
         # ``points`` so the table editor pre-fills.
@@ -1592,6 +1642,8 @@ class MaterialPropertiesDialog(QDialog):
             elif isinstance(getattr(m.strength, "rules", None), list):
                 # v0.1.228 (D218b) — the Generalized Anisotropic ranges.
                 params_with_pts["rules"] = copy.deepcopy(m.strength.rules)
+                params_with_pts["use_parent_water"] = (
+                    m.strength.use_parent_water)
                 self.param_panel.set_model(type(m.strength), params_with_pts)
         problem = ""
         if legacy is not None:

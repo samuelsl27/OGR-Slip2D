@@ -686,6 +686,23 @@ def _check_links(project, m):
         raise InvalidArgument(why.message)
 
 
+def _parent_water_notes(m) -> list:
+    """Rule 7 (v0.1.247, D230): ``use_parent_water`` false on a Generalized
+    Anisotropic material none of whose ranges links a material changes
+    nothing, since a range with its own model has no water of its own. Said
+    rather than refused: the dialog greys the switch out for the same
+    reason, and linking a range later makes it count."""
+    st = getattr(m, "strength", None)
+    if getattr(st, "use_parent_water", True) is not False:
+        return []
+    if any(isinstance(r, dict) and r.get("material_id")
+           for r in getattr(st, "rules", None) or []):
+        return []
+    return [f"{m.name!r}: use_parent_water=false changes nothing while no "
+            f"range links a material; every base keeps this material's "
+            f"water."]
+
+
 def _new_material(project, name, strength, fields):
     from ogr_core.materials import Material
 
@@ -710,6 +727,7 @@ def _new_material(project, name, strength, fields):
         _link_rules_by_name(project, strength)))
     _check_links(project, m)
     notes = _apply_material_fields(project, m, fields, creating=True)
+    notes += _parent_water_notes(m)
     project.add_material(m)
     return m, notes
 
@@ -756,6 +774,8 @@ def material_set(ws, project_id: Optional[str] = None,
                         "surface.")
             notes = _apply_material_fields(project, m, fields,
                                            creating=False) + cleared
+            if strength is not None:
+                notes += _parent_water_notes(m)
             project._notify("material_modified")
         # v0.1.228 (D218b) — the snapshots of the ranges that link a
         # material follow it, for display; the analysis resolves them anyway.
@@ -817,7 +837,7 @@ def material_delete(ws, material: str, project_id: Optional[str] = None,
                     else:
                         rule.pop("material_id", None)
                 rules.append(rule)
-            g.strength = type(g.strength)(rules=rules, **g.strength.params)
+            g.strength = g.strength.replaced(rules=rules)
         for a in refs_assign:
             if target is not None:
                 a["material_id"] = target.id

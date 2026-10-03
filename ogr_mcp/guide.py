@@ -125,7 +125,7 @@ stability analysis read the field.
   method's numbers.
 
 ## Materials
-catalog('strength_models') lists the 22 strength models with their
+catalog('strength_models') lists the 23 strength models with their
 parameters, units and defaults. The common ones:
 * mohr_coulomb: cohesion (kPa), friction_angle (deg)
 * undrained: cohesion (kPa) — phi = 0
@@ -135,7 +135,10 @@ parameters, units and defaults. The common ones:
   to 90) that takes the strength of a MATERIAL of the model:
   {"angle_min": -90, "angle_max": 0, "material": "Clay"}. The analysis uses
   that material's strength as it is when it runs; a material a range takes
-  is deleted only with reassign_to or force.
+  is deleted only with reassign_to or force. use_parent_water (default
+  true): the water of every base is this material's; false, a base whose
+  range takes a material takes that material's water. The weight is always
+  this material's, and the rapid drawdown always the range's material's.
 * c_phi_function: rows [[normal stress, c, phi], ...]; c and phi are
   interpolated between rows.
 * snowden_anisotropic_linear: bedding_angle, A1, B1 (the clockwise side of

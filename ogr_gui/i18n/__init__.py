@@ -2411,6 +2411,20 @@ _DICTS: dict[str, dict[str, str]] = {
             "de un TIN, un spline que no se puede resolver), responde un "
             "spline de placa delgada local con los diez puntos más "
             "próximos, y el inverso de la distancia si también falla.",
+        # --- v0.1.247 · D230: el agua de los hijos de Generalized
+        "Use the water parameters of the parent material":
+            "Usar los parámetros de agua del material padre",
+        "Ticked, every slice base takes the water of this material. "
+        "Unticked, a base whose range takes a material takes that "
+        "material's water (water surface, Hu, Ru, grid, B-bar and "
+        "unsaturated strength). The weight is always this material's, "
+        "and the rapid drawdown always the range's material's.":
+            "Marcada, la base de cada dovela toma el agua de este material. "
+            "Desmarcada, una base cuyo tramo toma un material toma el agua "
+            "de ese material (superficie de agua, Hu, Ru, rejilla, B̄ y "
+            "resistencia no saturada). El peso es siempre el de este "
+            "material, y el desembalse rápido siempre el del material del "
+            "tramo.",
         "Row %d of the table is not %d numbers.":
             "La fila %d de la tabla no son %d números.",
         "The table has no points: at least one (normal stress, shear "

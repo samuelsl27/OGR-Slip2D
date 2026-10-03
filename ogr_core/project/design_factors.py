@@ -346,7 +346,7 @@ def resolve_generalized_links(materials) -> int:
             changed = changed or new != rule
             rules.append(new)
         if changed:
-            m.strength = GeneralizedAnisotropic(rules=rules, **st.params)
+            m.strength = st.replaced(rules=rules)
             n += 1
     return n
 

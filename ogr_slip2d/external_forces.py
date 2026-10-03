@@ -248,11 +248,15 @@ def interslice_water_thrust(project, slices) -> list:
         if h <= 0.0:
             continue
         xi = getattr(s, "weight_factor", 1.0) if follows else 1.0
+        # v0.1.247 (D230) -- and the water of that slice's base, which a
+        # Generalized Anisotropic material may hand to a child.
+        wmat = _slicer.water_material_of(s)
         total = 0.0
         for k in range(samples):
             y = y_lo + h * k / (samples - 1)
-            u = pore_pressure_at(project, Vertex(x, y), s.material,
-                                 ground_surface_y=y_hi, weight_factor=xi)
+            u = pore_pressure_at(project, Vertex(x, y), wmat,
+                                 ground_surface_y=y_hi, weight_factor=xi,
+                                 weight_material=s.material)
             w = 0.5 if k in (0, samples - 1) else 1.0
             total += w * u
         thrust[i + 1] = total * h / (samples - 1)
