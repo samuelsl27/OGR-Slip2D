@@ -446,6 +446,68 @@ def function_points_refusal(points) -> Optional[Refusal]:
     return None
 
 
+def discrete_function_refusal(strength) -> Optional[Refusal]:
+    """Why a Discrete Function cannot be computed with, or None.
+
+    v0.1.246 (D229) — the reference's field of strength over the material:
+    a function type (``undrained``: rows (x, y, cu); ``drained``: rows
+    (x, y, c, φ)), an interpolation method the model knows, at least one
+    point, every value a finite number, cu and c zero or more, φ in [0, 90),
+    and no two points at the same place (two strengths for one point, which
+    no interpolation can honour). Asked by the dialog, the API and the
+    analysis, through :func:`strength_model_refusal`.
+    """
+    import math
+
+    ftype = getattr(strength, "function_type", None)
+    if ftype not in strength.FUNCTION_TYPES:
+        return Refusal("discrete_function_type",
+                       f"The function type must be one of "
+                       f"{list(strength.FUNCTION_TYPES)}, got {ftype!r}.")
+    method = getattr(strength, "method", None)
+    if method not in strength.METHODS:
+        return Refusal("discrete_function_method",
+                       f"The interpolation method must be one of "
+                       f"{list(strength.METHODS)}, got {method!r}.")
+    width = 3 if ftype == "undrained" else 4
+    what = ("(x, y, cu)" if ftype == "undrained" else "(x, y, c, phi)")
+    try:
+        rows = [tuple(r) for r in (strength.points or [])]
+    except TypeError:
+        return Refusal("discrete_function_not_points",
+                       f"The table must be a list of {what} points.")
+    if not rows:
+        return Refusal("discrete_function_empty",
+                       f"The table has no points: at least one {what} point "
+                       f"is needed.")
+    seen = set()
+    for i, r in enumerate(rows, start=1):
+        try:
+            vals = tuple(float(v) for v in r)
+        except (TypeError, ValueError):
+            vals = ()
+        if len(vals) != width:
+            return Refusal("discrete_function_not_points",
+                           f"Point {i} is not {what}: {r!r}.")
+        if not all(math.isfinite(v) for v in vals):
+            return Refusal("discrete_function_not_points",
+                           f"Point {i} holds a value that is not finite.")
+        if vals[2] < 0.0:
+            return Refusal("discrete_function_strength",
+                           f"Point {i}: the cohesion must be zero or more, "
+                           f"got {vals[2]:g}.")
+        if width == 4 and not 0.0 <= vals[3] < 90.0:
+            return Refusal("discrete_function_angle",
+                           f"Point {i}: the friction angle must be in "
+                           f"[0, 90), got {vals[3]:g}.")
+        if vals[:2] in seen:
+            return Refusal("discrete_function_repeated",
+                           f"Point {i} repeats the place ({vals[0]:g}, "
+                           f"{vals[1]:g}): two strengths for one point.")
+        seen.add(vals[:2])
+    return None
+
+
 def c_phi_rows_refusal(rows) -> Optional[Refusal]:
     """Why ``rows`` cannot be the table of a C/Phi function, or None.
 
@@ -668,17 +730,26 @@ def strength_model_refusal(strength, name: Optional[str] = None
                                             DiscreteFunction,
                                             GeneralizedAnisotropic,
                                             ShearNormalFunction,
-                                            SnowdenModifiedAnisotropicLinear)
+                                            SnowdenModifiedAnisotropicLinear,
+                                            StepFunction)
     from ..materials.strength_model import StrengthModel
 
     label = name if name is not None else "?"
-    if isinstance(strength, (ShearNormalFunction, DiscreteFunction)):
-        # v0.1.227 (D217).
+    if isinstance(strength, (ShearNormalFunction, StepFunction)):
+        # v0.1.227 (D217); the step function was called Discrete Function
+        # until v0.1.246 (D229).
         why = function_points_refusal(strength.points)
         if why is None:
             return None
         return Refusal(why.code, f"Material {label!r}, "
                                  f"{strength.DISPLAY_NAME}: {why.message}")
+    if isinstance(strength, DiscreteFunction):
+        # v0.1.246 (D229) — the reference's field over the material.
+        why = discrete_function_refusal(strength)
+        if why is None:
+            return None
+        return Refusal(why.code, f"Material {label!r}, Discrete Function: "
+                                 f"{why.message}")
     if isinstance(strength, CPhiFunction):
         why = c_phi_rows_refusal(strength.rows)
         if why is None:

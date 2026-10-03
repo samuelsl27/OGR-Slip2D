@@ -24,6 +24,7 @@ class TestRegistry:
         for mid in (
             "barton_bandis", "drained_undrained", "anisotropic_linear",
             "shear_normal_function", "discrete_function", "shansep",
+            "step_function",
             "anisotropic_strength_function", "generalized_anisotropic",
             "snowden_anisotropic_linear",
         ):
@@ -121,10 +122,14 @@ class TestShearNormalFunction:
 
 
 # ======================================================================
-class TestDiscreteFunction:
+class TestStepFunction:
+    """The step function of σ'ₙ, called Discrete Function until v0.1.246
+    (D229); the Discrete Function is now the reference's field over the
+    material (``test_discrete_function_v1246``)."""
+
     def test_step(self):
-        from ogr_core.materials.builtin_models import DiscreteFunction
-        f = DiscreteFunction(points=[(0, 10), (100, 50), (200, 80)])
+        from ogr_core.materials.builtin_models import StepFunction
+        f = StepFunction(points=[(0, 10), (100, 50), (200, 80)])
         assert f.shear_strength(150) == 50.0
         assert f.shear_strength(250) == 80.0
         assert f.shear_strength(50) == 10.0

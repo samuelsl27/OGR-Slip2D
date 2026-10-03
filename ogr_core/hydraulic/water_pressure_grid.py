@@ -177,63 +177,33 @@ class WaterPressureGrid:
     # ------------------------------------------------------------------
     def _ensure_tps(self) -> bool:
         """Fit the TPS once and cache the weights. Returns False if the
-        system is singular/ill-conditioned."""
+        system is singular/ill-conditioned.
+
+        v0.1.246 (D229) — the fit lives in ``ogr_core.interpolation``, moved
+        there unchanged so the Discrete Function strength model can use it;
+        the grid's values are the doubles they were."""
         if self._tps_weights is not None:
             return True
-        pts = _np.asarray(self.points, dtype=float)
-        xy = pts[:, :2]
-        v = pts[:, 2]
-        n = len(pts)
-
-        d = _np.linalg.norm(xy[:, None, :] - xy[None, :, :], axis=2)
-        with _np.errstate(divide="ignore", invalid="ignore"):
-            A = _np.where(d > 0, d * d * _np.log(d), 0.0)
-        P = _np.hstack([_np.ones((n, 1)), xy])           # [1, x, y]
-        M = _np.zeros((n + 3, n + 3))
-        M[:n, :n] = A
-        M[:n, n:] = P
-        M[n:, :n] = P.T
-        rhs = _np.concatenate([v, _np.zeros(3)])
-        try:
-            cond = _np.linalg.cond(M)
-            if not math.isfinite(cond) or cond > 1e12:
-                return False
-            w = _np.linalg.solve(M, rhs)
-        except _np.linalg.LinAlgError:
+        from ogr_core.interpolation import tps_fit
+        fit = tps_fit(self.points)
+        if fit is None:
             return False
-        self._tps_weights = w
-        self._tps_pts = xy
+        self._tps_weights, self._tps_pts = fit
         return True
 
     def _tps_value(self, x: float, y: float) -> Optional[float]:
         if not self._ensure_tps():
             return None
-        xy = self._tps_pts
-        w = self._tps_weights
-        n = len(xy)
-        d = _np.linalg.norm(xy - _np.array([x, y]), axis=1)
-        with _np.errstate(divide="ignore", invalid="ignore"):
-            phi = _np.where(d > 0, d * d * _np.log(d), 0.0)
-        return float(phi @ w[:n] + w[n] + w[n + 1] * x + w[n + 2] * y)
+        from ogr_core.interpolation import tps_value
+        return tps_value((self._tps_weights, self._tps_pts), x, y)
 
     # ------------------------------------------------------------------
     def _idw_value(self, x: float, y: float) -> float:
         """Shepard IDW (power 2) over the k nearest points; exact at
-        the data points."""
-        best: list[tuple[float, float]] = []  # (d2, value)
-        for px, py, pv in self.points:
-            d2 = (px - x) ** 2 + (py - y) ** 2
-            if d2 < 1e-18:
-                return pv
-            best.append((d2, pv))
-        best.sort(key=lambda t: t[0])
-        best = best[: max(1, self.idw_neighbours)]
-        wsum = vsum = 0.0
-        for d2, pv in best:
-            w = 1.0 / d2
-            wsum += w
-            vsum += w * pv
-        return vsum / wsum
+        the data points (``ogr_core.interpolation.idw_value``, v0.1.246)."""
+        from ogr_core.interpolation import idw_value
+        return idw_value(self.points, x, y,
+                         neighbours=self.idw_neighbours)
 
     # ==================================================================
     # Pore pressure at (x, y)

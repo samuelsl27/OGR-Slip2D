@@ -2393,6 +2393,24 @@ _DICTS: dict[str, dict[str, str]] = {
         "Shear strength (%s)": "Resistencia al corte (%s)",
         "Cohesion (%s)": "Cohesión (%s)",
         "Friction angle (°)": "Ángulo de rozamiento (°)",
+        # --- v0.1.246 · D229: la Discrete Function de la referencia
+        "X (%s)": "Coordenada x (%s)",
+        "Y (%s)": "Coordenada y (%s)",
+        "Cohesion cu (%s)": "Resistencia sin drenaje cu (%s)",
+        "Data points:": "Puntos de datos:",
+        "Function type:": "Tipo de función:",
+        "Interpolation method:": "Método de interpolación:",
+        "Undrained (phi = 0)": "Sin drenaje (φ = 0)",
+        "Drained (c, phi)": "Drenado (c, φ)",
+        "Inverse Distance": "Inverso de la distancia",
+        "TIN Triangulation": "Triangulación TIN",
+        "Thin Plate Spline": "Spline de placa delgada",
+        "Linear by Elevation": "Lineal por cota",
+        "Where the method cannot answer (outside the triangles of a TIN, a spline that cannot be solved), a local thin plate spline over the ten nearest points does, and inverse distance where that fails too.":
+            "Donde el método no puede responder (fuera de los triángulos "
+            "de un TIN, un spline que no se puede resolver), responde un "
+            "spline de placa delgada local con los diez puntos más "
+            "próximos, y el inverso de la distancia si también falla.",
         "Row %d of the table is not %d numbers.":
             "La fila %d de la tabla no son %d números.",
         "The table has no points: at least one (normal stress, shear "

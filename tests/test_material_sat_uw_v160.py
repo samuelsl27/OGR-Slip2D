@@ -385,11 +385,13 @@ class TestStrengthTableSurvivesSerialization:
         m2 = Material.from_dict(m.to_dict())
         assert m2.strength.points == pts
 
-    def test_discrete_function_keeps_its_points(self):
+    def test_step_function_keeps_its_points(self):
+        """The step function of σ'ₙ was called Discrete Function until
+        v0.1.246 (D229)."""
         from ogr_core.materials import Material
-        from ogr_core.materials.builtin_models import DiscreteFunction
+        from ogr_core.materials.builtin_models import StepFunction
         pts = [(0.0, 3.0), (50.0, 40.0), (150.0, 70.0)]
-        m = Material(name="d", strength=DiscreteFunction(points=pts))
+        m = Material(name="d", strength=StepFunction(points=pts))
         m2 = Material.from_dict(m.to_dict())
         assert m2.strength.points == pts
 

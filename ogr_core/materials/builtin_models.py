@@ -833,15 +833,23 @@ def _factor_points(model, f: float) -> FactoredStrength:
 
 # ----------------------------------------------------------------------
 @register
-class DiscreteFunction(StrengthModel):
-    """Discrete strength function: like Shear/Normal Function but the
-    strength is a *step* function (each σ'ₙ interval has a constant
-    τ), used when discrete test results are available. Uses the value
-    of the lower bracketing point (no interpolation).
+class StepFunction(StrengthModel):
+    """Step function of σ'ₙ: like Shear/Normal Function but the strength is
+    a *step* function (each σ'ₙ interval has a constant τ), used when
+    discrete test results are available. Uses the value of the lower
+    bracketing point (no interpolation).
+
+    v0.1.246 (D229) — this model was called "Discrete Function" until this
+    version, and the reference's Discrete Function is another thing: a
+    field of cu, or of c and φ, over the material (:class:`DiscreteFunction`
+    now). It keeps its behaviour and its table under its own name, an
+    extension of this program's: the reference has no step function of
+    σ'ₙ. A file that saved it as ``discrete_function`` with (σ'ₙ, τ) points
+    is read as this model, with the same τ to the last bit.
     """
 
-    MODEL_ID = "discrete_function"
-    DISPLAY_NAME = "Discrete Function"
+    MODEL_ID = "step_function"
+    DISPLAY_NAME = "Step Function (σ′ₙ)"
     PARAMETERS = {}
 
     #: v0.1.227 (D217) -- its own; the dialog used to show the shear-normal
@@ -880,8 +888,197 @@ class DiscreteFunction(StrengthModel):
         return d
 
     @classmethod
-    def from_dict(cls, data: dict) -> "DiscreteFunction":
+    def from_dict(cls, data: dict) -> "StepFunction":
         return cls(points=data.get("points"), **data.get("params", {}))
+
+
+# ----------------------------------------------------------------------
+@register
+class DiscreteFunction(StrengthModel):
+    """Discrete Function — the strength given at scattered (x, y) points of
+    the material and interpolated at the base of each slice (v0.1.246,
+    D229).
+
+    The reference's documentation: the shear strength is specified "at
+    discrete x,y locations throughout a material" and "can then be
+    interpolated", for the undrained case (cu, φ = 0) or the drained one (c
+    and φ), and for the drained one "the Interpolation is performed
+    independently for Cohesion and friction angle". So:
+
+        undrained   τ = cu(x, y)
+        drained     τ = c(x, y) + max(σ'ₙ, 0)·tan φ(x, y)
+
+    with (x, y) the middle of the slice base (``SliceContext.x_base`` and
+    ``y_base``). ``method`` is the interpolation (``ogr_core.interpolation``:
+    inverse distance, the default, being the one whose formula the
+    reference's documentation writes; TIN; thin plate spline; linear by
+    elevation), with the reference's secondary method where it cannot
+    answer. Chugh, modified Chugh, the local spline as a method of its own
+    and kriging are not implemented: declared, not approximated.
+
+    After interpolating, cu and c are clipped at 0 and φ to [0, 90): a
+    spline can overshoot between the data, and a negative strength is not
+    an interpolation of positive ones.
+
+    Without a point to read at — a caller with no slice, a plot of the
+    envelope — the field is read at the centroid of its points: there is no
+    right answer, and that one is at least inside the data.
+
+    Design factors (D224): undrained, the cu category; drained, c′ and
+    tan φ′. They divide what is INTERPOLATED, through divisors the analysis
+    copy carries (the mould of the C/Phi Function): φ is interpolated as an
+    angle, so factoring each point's tan φ would not divide tan φ between
+    them.
+    """
+
+    MODEL_ID = "discrete_function"
+    DISPLAY_NAME = "Discrete Function"
+    PARAMETERS = {}
+
+    FUNCTION_TYPES = ("undrained", "drained")
+    METHODS = ("inverse_distance", "tin", "thin_plate_spline",
+               "linear_by_elevation")
+    #: A new material's table: three points of a field that grows with
+    #: depth, so that every method has something to interpolate.
+    DEFAULT_POINTS = {
+        "undrained": ((0.0, 0.0, 30.0), (20.0, 0.0, 40.0),
+                      (10.0, -10.0, 60.0)),
+        "drained": ((0.0, 0.0, 5.0, 30.0), (20.0, 0.0, 8.0, 32.0),
+                    (10.0, -10.0, 10.0, 34.0)),
+    }
+
+    design_c_divisor: float = 1.0
+    design_tan_divisor: float = 1.0
+
+    def __init__(self, **params):
+        ftype = params.pop("function_type", "undrained")
+        method = params.pop("method", "inverse_distance")
+        pts = params.pop("points", None)
+        super().__init__(**params)
+        self.function_type = str(ftype)
+        self.method = str(method)
+        if pts is None:
+            pts = self.DEFAULT_POINTS.get(self.function_type,
+                                          self.DEFAULT_POINTS["undrained"])
+        # Not validated here: what a valid table is lives in
+        # ``ogr_core.project.rules.discrete_function_refusal``, which the
+        # dialog, the API and the analysis ask.
+        self.points = [tuple(float(v) for v in row) for row in pts]
+        self._fields = None
+
+    @property
+    def needs_context(self) -> bool:
+        return True
+
+    def _field(self):
+        """``(c or cu field, φ field or None)``, built once per table."""
+        key = (self.function_type, self.method, tuple(self.points))
+        if self._fields is None or self._fields[0] != key:
+            from ogr_core.interpolation import ScatteredField
+            method = (self.method if self.method in self.METHODS
+                      else "inverse_distance")
+            c = ScatteredField([(r[0], r[1], r[2]) for r in self.points
+                                if len(r) >= 3], method)
+            phi = (ScatteredField([(r[0], r[1], r[3]) for r in self.points
+                                   if len(r) >= 4], method)
+                   if self.function_type == "drained" else None)
+            self._fields = (key, c, phi)
+        return self._fields[1], self._fields[2]
+
+    def _where(self, ctx):
+        x = getattr(ctx, "x_base", None) if ctx is not None else None
+        if x is not None:
+            return float(x), float(ctx.y_base)
+        pts = self.points
+        if not pts:
+            return 0.0, 0.0
+        return (sum(r[0] for r in pts) / len(pts),
+                sum(r[1] for r in pts) / len(pts))
+
+    def c_phi_at(self, x: float, y: float) -> tuple:
+        """``(c, φ)`` interpolated at (x, y) and clipped, before any design
+        divisor; ``(cu, 0)`` for the undrained type."""
+        c_field, phi_field = self._field()
+        c = max(0.0, c_field.value_at(x, y))
+        if phi_field is None:
+            return c, 0.0
+        phi = min(max(phi_field.value_at(x, y), 0.0), 89.999)
+        return c, phi
+
+    def shear_strength_ctx(self, sigma_n_eff: float, ctx=None) -> float:
+        x, y = self._where(ctx)
+        c, phi = self.c_phi_at(x, y)
+        if self.function_type != "drained":
+            return c / self.design_c_divisor
+        return (c / self.design_c_divisor
+                + max(sigma_n_eff, 0.0) * math.tan(math.radians(phi))
+                / self.design_tan_divisor)
+
+    def shear_strength(self, sigma_n_eff: float) -> float:
+        return self.shear_strength_ctx(sigma_n_eff, None)
+
+    def design_factored(self, factors: MaterialFactors) -> FactoredStrength:
+        import copy
+        if self.function_type != "drained":
+            f = factors.undrained
+            if f == 1.0:
+                return FactoredStrength(self, {}, "cu")
+            out = copy.deepcopy(self)
+            out.design_c_divisor = self.design_c_divisor * f
+            return FactoredStrength(
+                out, {"cu divisor": (self.design_c_divisor,
+                                     out.design_c_divisor)}, "cu")
+        f_c, f_t = factors.cohesion, factors.tan_phi
+        if f_c == 1.0 and f_t == 1.0:
+            return FactoredStrength(self, {}, "c′, tan φ′")
+        out = copy.deepcopy(self)
+        changes = {}
+        if f_c != 1.0:
+            out.design_c_divisor = self.design_c_divisor * f_c
+            changes["cohesion divisor"] = (self.design_c_divisor,
+                                           out.design_c_divisor)
+        if f_t != 1.0:
+            out.design_tan_divisor = self.design_tan_divisor * f_t
+            changes["tan φ divisor"] = (self.design_tan_divisor,
+                                        out.design_tan_divisor)
+        return FactoredStrength(out, changes, "c′, tan φ′")
+
+    def to_dict(self) -> dict:
+        d = super().to_dict()
+        d["function_type"] = self.function_type
+        d["method"] = self.method
+        d["points"] = [list(r) for r in self.points]
+        if self.design_c_divisor != 1.0:
+            d["design_c_divisor"] = self.design_c_divisor
+        if self.design_tan_divisor != 1.0:
+            d["design_tan_divisor"] = self.design_tan_divisor
+        return d
+
+    @classmethod
+    def from_dict(cls, data: dict):
+        """A Discrete Function — or, for a file written before v0.1.246, the
+        model that file meant.
+
+        Without ``function_type`` the table says what it is by the length
+        of its rows: (σ'ₙ, τ) pairs are the step function this model was
+        until then, rebuilt as :class:`StepFunction` with the same points
+        (the same τ, bit for bit, so nothing is refused); rows of three or
+        four are the reference's field, undrained or drained.
+        """
+        pts = data.get("points")
+        ftype = data.get("function_type")
+        if ftype is None:
+            rows = list(pts or [])
+            if rows and all(len(r) == 2 for r in rows):
+                return StepFunction(points=pts, **data.get("params", {}))
+            ftype = ("drained" if rows and all(len(r) == 4 for r in rows)
+                     else "undrained")
+        m = cls(points=pts, function_type=ftype,
+                method=data.get("method", "inverse_distance"),
+                **data.get("params", {}))
+        m.design_c_divisor = float(data.get("design_c_divisor", 1.0))
+        m.design_tan_divisor = float(data.get("design_tan_divisor", 1.0))
+        return m
 
 
 # ----------------------------------------------------------------------

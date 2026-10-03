@@ -194,13 +194,31 @@ class _StrengthParamPanel(QWidget):
         "cphi": (("Normal stress (%s)", "pressure"),
                  ("Cohesion (%s)", "pressure"),
                  ("Friction angle (°)", "angle")),
+        # v0.1.246 (D229) — the Discrete Function: a field over (x, y), of
+        # cu (undrained) or of c and φ (drained), in the project's units.
+        "discrete_cu": (("X (%s)", "length"), ("Y (%s)", "length"),
+                        ("Cohesion cu (%s)", "pressure")),
+        "discrete_cphi": (("X (%s)", "length"), ("Y (%s)", "length"),
+                          ("Cohesion (%s)", "pressure"),
+                          ("Friction angle (°)", "angle")),
     }
 
     #: v0.1.228 (D218b) — the caption of each table.
     _TABLE_CAPTIONS = {"points": "Function points:",
                        "rows3": "Function points:",
                        "rules": "Angle ranges:",
-                       "cphi": "Function points:"}
+                       "cphi": "Function points:",
+                       "discrete_cu": "Data points:",
+                       "discrete_cphi": "Data points:"}
+
+    #: v0.1.246 (D229) — the Discrete Function's two choices, as the
+    #: reference's dialog offers them (the methods this program has).
+    _DISCRETE_TYPES = (("undrained", "Undrained (phi = 0)"),
+                       ("drained", "Drained (c, phi)"))
+    _DISCRETE_METHODS = (("inverse_distance", "Inverse Distance"),
+                         ("tin", "TIN Triangulation"),
+                         ("thin_plate_spline", "Thin Plate Spline"),
+                         ("linear_by_elevation", "Linear by Elevation"))
 
     #: v0.1.229 (D215) — the two strength functions of a Snowden material:
     #: the button that opens each one and the title of its dialog.
@@ -234,6 +252,9 @@ class _StrengthParamPanel(QWidget):
         self._functions = None
         self._functions_given = None
         self._function_labels: dict = {}
+        # v0.1.246 (D229) — the Discrete Function's type and method combos,
+        # and what they were given.
+        self._discrete = None
 
     def set_rule_materials(self, choices) -> None:
         """The materials a Generalized Anisotropic range can take, as (id,
@@ -375,8 +396,11 @@ class _StrengthParamPanel(QWidget):
         self._functions = None
         self._functions_given = None
         self._function_labels = {}
+        self._discrete = None
         mid = getattr(model_cls, "MODEL_ID", "")
-        if mid in ("shear_normal_function", "discrete_function"):
+        if mid == "discrete_function":
+            self._build_discrete(current_params, model_cls)
+        elif mid in ("shear_normal_function", "step_function"):
             # v0.1.227 (D217) — each model's own default table: the discrete
             # function used to show the shear-normal one.
             self._build_points_table(current_params, kind="points",
@@ -418,6 +442,54 @@ class _StrengthParamPanel(QWidget):
             self._build_cutoff_switch(
                 bool(current_params.get("cutoff_enabled", False)))
             self._cutoff_given = self._chk_cutoff.isChecked()
+
+    def _build_discrete(self, current_params, model_cls) -> None:
+        """The Discrete Function's editor (v0.1.246, D229): its function
+        type, its interpolation method and its table of points, whose
+        columns are those of the type. Changing the type keeps the points:
+        a cu becomes a c with φ = 0, and back the c is kept."""
+        ftype = current_params.get("function_type", "undrained")
+        if ftype not in dict(self._DISCRETE_TYPES):
+            ftype = "undrained"
+        method = current_params.get("method", "inverse_distance")
+        cbo_type = QComboBox()
+        for value, label in self._DISCRETE_TYPES:
+            cbo_type.addItem(tr(label), value)
+        cbo_type.setCurrentIndex(max(0, cbo_type.findData(ftype)))
+        cbo_method = QComboBox()
+        for value, label in self._DISCRETE_METHODS:
+            cbo_method.addItem(tr(label), value)
+        cbo_method.setCurrentIndex(max(0, cbo_method.findData(method)))
+        cbo_method.setToolTip(tr(
+            "Where the method cannot answer (outside the triangles of a "
+            "TIN, a spline that cannot be solved), a local thin plate "
+            "spline over the ten nearest points does, and inverse "
+            "distance where that fails too."))
+        self._form.addRow(tr("Function type:"), cbo_type)
+        self._form.addRow(tr("Interpolation method:"), cbo_method)
+        kind = "discrete_cu" if ftype == "undrained" else "discrete_cphi"
+        self._build_points_table(current_params, kind=kind,
+                                 default=list(model_cls.DEFAULT_POINTS[ftype]))
+        self._discrete = {"type": cbo_type, "method": cbo_method,
+                          "given": (ftype, method)}
+        cbo_type.currentIndexChanged.connect(
+            lambda _i: self._on_discrete_type(model_cls))
+
+    def _on_discrete_type(self, model_cls) -> None:
+        """Rebuild the editor with the other type's columns, the points
+        carried across."""
+        params = self.get_params()
+        new = self._discrete["type"].currentData()
+        rows = []
+        for r in params.get("points", []):
+            if new == "drained":
+                rows.append(tuple(r[:3]) + ((r[3],) if len(r) > 3
+                                            else (0.0,)))
+            else:
+                rows.append(tuple(r[:3]))
+        params["points"] = rows
+        params["function_type"] = new
+        self.set_model(model_cls, params)
 
     def _build_cutoff_switch(self, enabled: bool) -> None:
         """Checkbox governing the cutoff, and the spinbox it governs.
@@ -633,6 +705,11 @@ class _StrengthParamPanel(QWidget):
         if self._functions is not None and \
                 self._functions != self._functions_given:
             return False
+        if self._discrete is not None and (
+                self._discrete["type"].currentData(),
+                self._discrete["method"].currentData()) != \
+                self._discrete["given"]:
+            return False
         return self.table_unchanged()
 
     def get_params(self) -> dict:
@@ -678,6 +755,10 @@ class _StrengthParamPanel(QWidget):
         # v0.1.229 (D215) — a Snowden material's two strength functions.
         if self._functions is not None:
             out.update(copy.deepcopy(self._functions))
+        # v0.1.246 (D229) — the Discrete Function's type and method.
+        if self._discrete is not None:
+            out["function_type"] = self._discrete["type"].currentData()
+            out["method"] = self._discrete["method"].currentData()
         return out
 
     def _rules_from_table(self, sys_obj) -> list:
@@ -1481,6 +1562,13 @@ class MaterialPropertiesDialog(QDialog):
         for _which in ("bedding", "rock_mass"):
             if isinstance(getattr(m.strength, _which, None), dict):
                 _params[_which] = copy.deepcopy(getattr(m.strength, _which))
+        # v0.1.246 (D229) — the Discrete Function's type and method, which
+        # decide the columns of its table.
+        _discrete = {}
+        if m.strength.MODEL_ID == "discrete_function":
+            _discrete = {"function_type": m.strength.function_type,
+                         "method": m.strength.method}
+        _params.update(_discrete)
         self.param_panel.set_model(type(m.strength), _params)
         # v0.1.15 — for function/table-based models, also pass the
         # ``points`` so the table editor pre-fills.
@@ -1499,6 +1587,7 @@ class MaterialPropertiesDialog(QDialog):
                 self.param_panel.set_model(type(m.strength), params_with_pts)
             elif hasattr(m.strength, "points"):
                 params_with_pts["points"] = list(m.strength.points)
+                params_with_pts.update(_discrete)
                 self.param_panel.set_model(type(m.strength), params_with_pts)
             elif isinstance(getattr(m.strength, "rules", None), list):
                 # v0.1.228 (D218b) — the Generalized Anisotropic ranges.
@@ -1607,7 +1696,12 @@ class MaterialPropertiesDialog(QDialog):
         # v0.1.229 (D215) — c and φ interpolated in σ′ₙ.
         "c_phi_function":       "τ = c(σ′ₙ) + σ′ₙ · tan φ(σ′ₙ)  "
                                 "(c, φ interpolated)",
-        "discrete_function":    "τ = f(σ′ₙ)  (step function table)",
+        # v0.1.246 (D229) — the step function of σ′ₙ was called Discrete
+        # Function until this version; the Discrete Function is the
+        # reference's field over the material.
+        "step_function":        "τ = f(σ′ₙ)  (step function table)",
+        "discrete_function":    "cu(x, y), or c(x, y) + σ′ₙ · tan φ(x, y), "
+                                "interpolated",
         # v0.1.218 (D207) — A is added, as the published formula writes it;
         # su_min stays the floor it always was.
         "shansep":              "τ = A + σ′_v · S · OCR^m  (≥ su_min)",

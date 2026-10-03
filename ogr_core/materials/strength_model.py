@@ -265,6 +265,10 @@ class SliceContext:
             nearest point of the ground profile [m], v0.1.120. Differs
             from ``depth`` under a slope face, where the nearest point is
             not the one straight above. ``None`` as above.
+        x_base: abscissa of the middle of the slice base [m], v0.1.246
+            (D229), for the Discrete Function, whose strength is a field
+            over (x, y). ``None`` means nobody filled it in, and a model
+            that needs it must say what it does instead.
         bedding_angle_deg: LOCAL orientation of the bedding at this
             slice's base [deg from horizontal], v0.1.126. Filled in only
             when the material names an anisotropic surface; ``None``
@@ -281,6 +285,7 @@ class SliceContext:
     layer_top_y: "float | None" = None
     slope_distance: "float | None" = None
     bedding_angle_deg: "float | None" = None
+    x_base: "float | None" = None
 
     @classmethod
     def from_slice(cls, slice_, sigma_n_eff: float,
@@ -351,4 +356,7 @@ class SliceContext:
             # anisotropic surface, and they then use the single global
             # angle they carry, exactly as before this existed.
             bedding_angle_deg=getattr(slice_, "bedding_angle_deg", None),
+            # v0.1.246 (D229) — where the base is, for the models whose
+            # strength is a field over the material.
+            x_base=getattr(slice_, "x_centre", None),
         )

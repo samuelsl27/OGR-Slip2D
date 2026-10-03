@@ -138,13 +138,15 @@ class TestTablesSpeakTheProjectsUnits:
 
 class TestDefaultsAndEmptyTables:
 
-    def test_the_discrete_function_shows_its_own_default(self):
-        from ogr_core.materials.builtin_models import (DiscreteFunction,
-                                                       MohrCoulomb)
+    def test_the_step_function_shows_its_own_default(self):
+        """Called Discrete Function until v0.1.246 (D229); the reference's
+        Discrete Function has its own editor (test v1246)."""
+        from ogr_core.materials.builtin_models import (MohrCoulomb,
+                                                       StepFunction)
         dlg = _dialog(MohrCoulomb())
         dlg.cbo_strength.setCurrentIndex(
-            dlg.cbo_strength.findData("discrete_function"))
-        want = [list(map(float, p)) for p in DiscreteFunction.DEFAULT_POINTS]
+            dlg.cbo_strength.findData("step_function"))
+        want = [list(map(float, p)) for p in StepFunction.DEFAULT_POINTS]
         got = [[float(t) for t in row] for row in _cells(dlg)]
         assert got == want, got
 
@@ -276,7 +278,8 @@ class TestTheRuleAndTheAPI:
     def test_the_api_refuses_an_empty_table(self):
         from ogr_api.catalog import strength_from_spec
         from ogr_api.errors import InvalidArgument
-        for mid in ("shear_normal_function", "discrete_function"):
+        for mid in ("shear_normal_function", "step_function",
+                    "discrete_function"):
             try:
                 strength_from_spec({"model": mid, "points": []})
             except InvalidArgument as exc:
