@@ -234,6 +234,12 @@ def interslice_water_thrust(project, slices) -> list:
     if n == 0:
         return thrust
 
+    # v0.1.244 (D226c) — with a design standard, Ru reads the factored
+    # weight on the face too: the face takes the factor of the slice on its
+    # left, whose material it already takes.
+    from . import slicer as _slicer
+    follows = _slicer.DESIGN_PORE_PRESSURE_FOLLOWS_WEIGHT
+
     samples = 9  # trapezoidal points over the face; cheap and ample here
     for i, s in enumerate(s_list[:-1]):
         x = s.base_x_right
@@ -241,11 +247,12 @@ def interslice_water_thrust(project, slices) -> list:
         h = y_hi - y_lo
         if h <= 0.0:
             continue
+        xi = getattr(s, "weight_factor", 1.0) if follows else 1.0
         total = 0.0
         for k in range(samples):
             y = y_lo + h * k / (samples - 1)
             u = pore_pressure_at(project, Vertex(x, y), s.material,
-                                 ground_surface_y=y_hi)
+                                 ground_surface_y=y_hi, weight_factor=xi)
             w = 0.5 if k in (0, samples - 1) else 1.0
             total += w * u
         thrust[i + 1] = total * h / (samples - 1)

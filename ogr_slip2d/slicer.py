@@ -1086,6 +1086,26 @@ def _action_of(load) -> str:
 SIGNED_SURFACE_PRESSURE = True
 
 
+#: v0.1.244 (D226c) — the pore pressures that READ the weight follow the
+#: factored one: Ru (u = ru·σv) and the excess pore pressure of B-bar
+#: loading (Δσv from the bands that load and from the loads that create
+#: excess), at each slice base (``design_actions.apply_action_factors``
+#: asks :func:`_base_pore_pressure` again with the factors) and on the
+#: inter-slice faces where the prescribed-inclination methods integrate
+#: the water (``external_forces.interslice_water_thrust``).
+#:
+#: Until v0.1.243 both were computed from the UNFACTORED weight while the
+#: weight itself was factored, so a design standard made a slope look safer
+#: than its characteristic model: on the c′ = 0, φ′ = 40° slope of
+#: ``test_tension_crack_truncation_v1109`` with EN 1997-1 DA1-C1, where
+#: homogeneity asks Γ = F, Γ/F was 1.085–1.094 with Ru = 0.25 and
+#: 1.233–1.291 with a B-bar of 0.5, over the nine methods. The reference
+#: uses one weight per slice for every term, the pore pressure included.
+#: Off, the v0.1.243 behaviour. No model of the verification bank has a
+#: design standard enabled.
+DESIGN_PORE_PRESSURE_FOLLOWS_WEIGHT = True
+
+
 #: v0.1.242 (D226a) — the design standard's permanent-action factor (γG,
 #: γG,fav) multiplies the soil weight of each slice.
 #:
@@ -1181,6 +1201,64 @@ def distributed_loads_on(project: Project, x_left: float, x_right: float,
 
 
 # ----------------------------------------------------------------------
+def _base_pore_pressure(project: Project, mat, xc: float, base_y_mid: float,
+                        top_y_mid: float, dx: float, u_cutoff,
+                        weight_factor: float = 1.0,
+                        load_factors: Optional[dict] = None):
+    """``(u, u_raw, c_suction)`` at the midpoint of a slice base.
+
+    The groundwater method's pore pressure, the unsaturated policy and the
+    excess pore pressure of undrained loading, in that order. v0.1.244
+    (D226c) — out of :func:`slice_surface` unchanged, so a design standard
+    can ask it again once a slice's soil and its loads have their factors:
+    ``weight_factor`` reaches what reads the weight of the soil (Ru's
+    overburden, the B-bar bands that load) and ``load_factors``
+    (``{load_id: factor}``) each load that creates excess. With the
+    defaults it is the block it was, bit for bit.
+    """
+    u = pore_pressure_at(
+        project,
+        Vertex(xc, base_y_mid),
+        mat,
+        ground_surface_y=top_y_mid,
+        weight_factor=weight_factor,
+    )
+    # v0.1.28 — unsaturated policy (extended Mohr-Coulomb). Only a
+    # seepage analysis can return u < 0; everything else already
+    # clamps at zero, so this is a no-op for those methods.
+    u_raw = u
+    u, c_suction = apply_unsaturated_policy(u, mat, u_cutoff)
+
+    # v0.1.75 — excess pore pressure from undrained loading, added to
+    # the INITIAL pore pressure the groundwater method just produced,
+    # which is the order Skempton's formulation and the reference
+    # both state. After the unsaturated policy on purpose: the excess
+    # is a positive addition and cannot turn into suction cohesion,
+    # and running the policy on the sum would let a loaded slice
+    # silently lose the suction term it had earned.
+    if excess_is_enabled(project):
+        du = excess_at(project, mat, xc, base_y_mid, top_y_mid,
+                       slice_width=dx, weight_factor=weight_factor,
+                       load_factors=load_factors)
+        if du:
+            u += du
+    return u, u_raw, c_suction
+
+
+def reads_the_weight(project: Project, material) -> bool:
+    """Whether the pore pressure of ``material`` reads the weight of the
+    soil or the loads above it: Ru, or the excess of B-bar loading (v0.1.244,
+    D226c)."""
+    from ogr_core.materials import PorePressureType
+    if material is None:
+        return False
+    ppt = getattr(material, "pore_pressure", None)
+    if ppt == PorePressureType.RU_COEFFICIENT:
+        return True
+    return (excess_is_enabled(project)
+            and float(getattr(material, "b_bar", 0.0) or 0.0) > 0.0)
+
+
 def negative_pore_pressure_cutoff(project) -> Optional[float]:
     """The project's cap on matric suction, or None when there is none.
 
@@ -1933,31 +2011,10 @@ def slice_surface(
         if not water_surface_defined_at(project, mat, xc):
             return None
 
-        # Pore pressure at the midpoint of the base
-        u = pore_pressure_at(
-            project,
-            Vertex(xc, base_y_mid),
-            mat,
-            ground_surface_y=top_y_mid,
-        )
-        # v0.1.28 — unsaturated policy (extended Mohr-Coulomb). Only a
-        # seepage analysis can return u < 0; everything else already
-        # clamps at zero, so this is a no-op for those methods.
-        u_raw = u
-        u, c_suction = apply_unsaturated_policy(u, mat, _u_cutoff)
-
-        # v0.1.75 — excess pore pressure from undrained loading, added to
-        # the INITIAL pore pressure the groundwater method just produced,
-        # which is the order Skempton's formulation and the reference
-        # both state. After the unsaturated policy on purpose: the excess
-        # is a positive addition and cannot turn into suction cohesion,
-        # and running the policy on the sum would let a loaded slice
-        # silently lose the suction term it had earned.
-        if excess_is_enabled(project):
-            du = excess_at(project, mat, xc, base_y_mid, top_y_mid,
-                           slice_width=dx)
-            if du:
-                u += du
+        # Pore pressure at the midpoint of the base (v0.1.244, D226c: in a
+        # function of its own, which a design standard asks again).
+        u, u_raw, c_suction = _base_pore_pressure(
+            project, mat, xc, base_y_mid, top_y_mid, dx, _u_cutoff)
 
         # v0.1.219 (D206) -- the soil alone, before any load joins it: what
         # the seismic coefficients act on. Kept exactly, not rebuilt later as

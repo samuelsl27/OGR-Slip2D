@@ -149,7 +149,8 @@ def _loading_bands(project: "Project", x: float, y_bottom: float,
 
 # ----------------------------------------------------------------------
 def load_delta_sigma_v(project: "Project", x: float,
-                       slice_width: Optional[float] = None) -> float:
+                       slice_width: Optional[float] = None,
+                       load_factors: Optional[dict] = None) -> float:
     """Vertical stress at abscissa ``x`` from the external loads that load.
 
     Distributed loads contribute their vertical pressure component
@@ -157,6 +158,11 @@ def load_delta_sigma_v(project: "Project", x: float,
     ``slice_width`` — see the module docstring for why that is
     mesh-dependent and what to do about it. Without a width, line loads
     are skipped rather than guessed at.
+
+    v0.1.244 (D226c) — ``load_factors`` (``{load_id: factor}``) are the
+    factors a design standard gave each whole load on the surface being
+    analysed (``ogr_slip2d.design_actions.load_factors``): the stress a
+    load adds is the factored load's. None, the loads as drawn.
     """
     import ogr_slip2d.slicer as _slicer
     from ogr_slip2d.slicer import _line_load_components
@@ -177,7 +183,10 @@ def load_delta_sigma_v(project: "Project", x: float,
         t = max(0.0, min(1.0, t))
         _dx, dy = load.direction_vector()
         p = load.pressure_at(t)
-        total += -p * dy if signed else abs(p * dy)
+        q = -p * dy if signed else abs(p * dy)
+        if load_factors:
+            q *= load_factors.get(load.id, 1.0)
+        total += q
 
     if slice_width and slice_width > 0.0:
         half = 0.5 * slice_width
@@ -185,8 +194,10 @@ def load_delta_sigma_v(project: "Project", x: float,
             if not getattr(load, "creates_excess_pore_pressure", False):
                 continue
             if abs(load.point.x - x) <= half + 1e-12:
-                total += _line_load_components(load, project)[0] \
-                    / slice_width
+                q = _line_load_components(load, project)[0] / slice_width
+                if load_factors:
+                    q *= load_factors.get(load.id, 1.0)
+                total += q
     return total
 
 
@@ -215,16 +226,28 @@ def seismic_delta_sigma_v(project: "Project", soil_sigma_v: float) -> float:
 # ----------------------------------------------------------------------
 def delta_sigma_v_at(project: "Project", x: float, y: float,
                      ground_surface_y: float,
-                     slice_width: Optional[float] = None) -> float:
-    """Total change in vertical stress at (x, y), in kPa."""
+                     slice_width: Optional[float] = None,
+                     weight_factor: float = 1.0,
+                     load_factors: Optional[dict] = None) -> float:
+    """Total change in vertical stress at (x, y), in kPa.
+
+    v0.1.244 (D226c) — in a design-standard analysis the weight of the
+    bands above is the factored one (``weight_factor``, the factor the
+    slice's soil took) and so is each load (``load_factors``); the vertical
+    seismic term, a fraction of the soil's, follows the soil.
+    """
     soil = soil_delta_sigma_v(project, x, y, ground_surface_y)
-    loads = load_delta_sigma_v(project, x, slice_width)
+    if weight_factor != 1.0:
+        soil *= weight_factor
+    loads = load_delta_sigma_v(project, x, slice_width, load_factors)
     return soil + loads + seismic_delta_sigma_v(project, soil)
 
 
 def excess_at(project: "Project", material, x: float, y: float,
               ground_surface_y: float,
-              slice_width: Optional[float] = None) -> float:
+              slice_width: Optional[float] = None,
+              weight_factor: float = 1.0,
+              load_factors: Optional[dict] = None) -> float:
     """Δu = B̄ · Δσv for one point, in kPa. Zero when B̄ = 0.
 
     The gate is ``b_bar > 0`` alone, as the reference states: a material
@@ -239,4 +262,4 @@ def excess_at(project: "Project", material, x: float, y: float,
     if b_bar <= 0.0:
         return 0.0
     return b_bar * delta_sigma_v_at(project, x, y, ground_surface_y,
-                                    slice_width)
+                                    slice_width, weight_factor, load_factors)

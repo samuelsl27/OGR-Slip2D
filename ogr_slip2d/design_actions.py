@@ -103,7 +103,45 @@ def apply_action_factors(project, slices) -> None:
         slices.load_factors = {
             load_id: (action, drives, xi, names.get(load_id, load_id))
             for load_id, (action, drives, xi) in factors.items()} or None
+    from . import slicer as _slicer
+    if _slicer.DESIGN_PORE_PRESSURE_FOLLOWS_WEIGHT:
+        refresh_pore_pressures(project, slices)
     slices.design_sense = sense
+
+
+def refresh_pore_pressures(project, slices) -> None:
+    """Ask the pore pressure at each slice base again where it reads the
+    weight, now that the soil and the loads have their factors.
+
+    v0.1.244 (D226c). Ru (u = ru·σv) and the excess of B-bar loading read
+    the weight of the soil above the base and the loads on it. The slicer
+    computes them before any factor exists (the factors need every slice);
+    here they are asked again, through the same function
+    (``slicer._base_pore_pressure``), with the factor this slice's soil took
+    and the one each load took — one weight per slice for every term, as
+    the reference has it. A slice whose material reads no weight, or whose
+    factors are all 1, keeps what it had to the last bit.
+    """
+    from .slicer import (_base_pore_pressure, negative_pore_pressure_cutoff,
+                         reads_the_weight)
+    factors = getattr(slices, "load_factors", None) or {}
+    by_load = {load_id: v[2] for load_id, v in factors.items()} or None
+    loads_move = any(f != 1.0 for f in (by_load or {}).values())
+    cutoff = negative_pore_pressure_cutoff(project)
+    for s in slices.slices:
+        if s.weight_factor == 1.0 and not loads_move:
+            continue
+        if not reads_the_weight(project, s.material):
+            continue
+        # The point the slicer used: the same doubles it stored.
+        u, u_raw, c_suction = _base_pore_pressure(
+            project, s.material, s.x_centre,
+            0.5 * (s.base_y_left + s.base_y_right),
+            0.5 * (s.top_y_left + s.top_y_right), s.width, cutoff,
+            weight_factor=s.weight_factor, load_factors=by_load)
+        s.pore_pressure = u
+        s.raw_pore_pressure = u_raw
+        s.suction_cohesion = c_suction
 
 
 def load_factors(actions, slices, sense: float) -> dict:

@@ -87,6 +87,7 @@ def pore_pressure_at(
     point: Vertex,
     material: Optional[Material],
     ground_surface_y: Optional[float] = None,
+    weight_factor: float = 1.0,
 ) -> float:
     """Compute pore pressure u [kPa] at `point` for `material`.
 
@@ -96,6 +97,11 @@ def pore_pressure_at(
         material: the material containing that point (None → 0).
         ground_surface_y: y-coordinate of the ground above `point`;
             required only for the Ru model.
+        weight_factor: v0.1.244 (D226c) — the permanent-action factor the
+            weight of the soil above `point` took in a design-standard
+            analysis. Ru reads that weight (u = ru·σv), so its soil term is
+            multiplied by it; the ponded water is not soil and is not.
+            Nothing else here reads a weight. 1.0 changes nothing.
 
     Returns:
         Pore pressure in kPa (always ≥ 0; suction is clamped to zero).
@@ -163,6 +169,8 @@ def pore_pressure_at(
         # which has NOT opted into a saturated unit weight cannot have
         # that unused number change its pore pressure through a back door.
         sigma_v = material.gamma_at(True) * depth
+        if weight_factor != 1.0:
+            sigma_v *= weight_factor
         # v0.1.61 — the vertical earth pressure INCLUDES the weight of any
         # ponded water standing above the point, as the reference states
         # for this model. It does NOT include external loads (line,
