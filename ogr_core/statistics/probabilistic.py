@@ -64,6 +64,10 @@ class MethodProbabilisticResult:
     #: mass of the deterministic circle (``_MassSwitches``); the sentence,
     #: when there are any, is ``notes["mass_switch"]``.
     mass_switches: int = 0
+    #: v0.1.251 (D85) — counted samples that answered for another
+    #: weak-layer case of the deterministic surface's own mass
+    #: (``_CaseSwitches``); the sentence is ``notes["case_switch"]``.
+    case_switches: int = 0
 
     # ------------------------------------------------------------------
     # v0.1.169 (D127) — ``Optional`` because the statistic they delegate to
@@ -100,6 +104,7 @@ class MethodProbabilisticResult:
             "failed_samples": self.failed_samples,
             "lost_by_cause": self.notes.get("lost_by_cause"),
             "mass_switches": self.mass_switches,        # v0.1.238 (D89)
+            "case_switches": self.case_switches,        # v0.1.251 (D85)
         }
 
 
@@ -169,8 +174,12 @@ class ProbabilisticResult:
 #: ``polyline``, so it fell through to ``SlipSurface.from_dict`` and
 #: raised ``KeyError('polyline')`` from OUTSIDE the sample loop, taking
 #: every method and both analyses down with it.
+#:
+#: v0.1.251 (D85) — and a weak-layer surface is seeded FROM ITS BASE, one
+#: level deep (``_seed_source``): until this version it was refused by name.
 _CIRCLE_SEEDED = ("circle", "composite")
 _POLYLINE_SEEDED = ("polyline",)
+_WEAK_LAYER_SEEDED = ("weak_layer",)
 
 
 def _surface_type(surface_dict) -> Optional[str]:
@@ -190,6 +199,35 @@ def _surface_type(surface_dict) -> Optional[str]:
     if stype is None and "radius" in surface_dict:
         return "circle"
     return stype
+
+
+def _seed_source(surface_dict) -> Optional[tuple]:
+    """``(seed type, dictionary the seed is built from)``, or None.
+
+    v0.1.251 (D85) — the ONE place that decides what a statistical loop can
+    seed. ``_rebuild_surface`` builds from it and ``_cannot_reevaluate``
+    refuses by it, so the two cannot disagree: until this version each had
+    its own list, and a type one accepted and the other did not would have
+    reached the silent ``continue`` of both loops.
+
+    A circle, a composite and a polyline seed themselves. A weak-layer
+    surface seeds its BASE — the mass it was clipped from, whatever that is
+    — one level deep: its ``to_dict`` carries the base whole, and each
+    sample clips that base against the weak layers of its own project again
+    (``BaseSearch._best_of_masses`` → ``_weak_layer_cases``), exactly as a
+    composite is clipped against the floor again from its circle. A base
+    that is itself a weak-layer surface, or of a type that cannot be
+    seeded, gives None.
+    """
+    stype = _surface_type(surface_dict)
+    if stype in _CIRCLE_SEEDED + _POLYLINE_SEEDED:
+        return stype, surface_dict
+    if stype in _WEAK_LAYER_SEEDED:
+        base = surface_dict.get("base")
+        btype = _surface_type(base)
+        if btype in _CIRCLE_SEEDED + _POLYLINE_SEEDED:
+            return btype, base
+    return None
 
 
 def _rebuild_surface(surface_dict: dict):
@@ -225,21 +263,33 @@ def _rebuild_surface(surface_dict: dict):
     1.0535 against 0.9750). The circle seed stays for the reason above:
     each sample resolves its own mass.
 
+    v0.1.251 (D85) — a WEAK-LAYER surface is seeded from its base
+    (``_seed_source``), for the composite's reason: the sample's own
+    evaluator clips that base against the weak layers of the sample's own
+    project, so the surface each sample analyses is the one its project
+    forms. Measured on the planar joint of ``test_weak_layer_v1121``
+    (Ordinary, 40 slices, cohesion and friction of the joint sampled): every
+    sample comes back a weak-layer surface and matches the closed form
+    ``(cL + W cos a tan phi) / (W sin a)`` to 7.7e-16. Until this version
+    the type was refused by name, and a model whose critical surface runs
+    along a weak layer had no statistics at all.
+
     Returns ``None`` for a serialised surface this loop cannot seed, so
     the caller can say so and carry on with the other methods.
     """
     from ogr_slip2d.surface import SlipCircle, SlipSurface
 
-    stype = _surface_type(surface_dict)
+    source = _seed_source(surface_dict)
+    if source is None:
+        return None
+    stype, seed_dict = source
     if stype in _CIRCLE_SEEDED:
         return SlipCircle(
-            centre_x=float(surface_dict["centre_x"]),
-            centre_y=float(surface_dict["centre_y"]),
-            radius=float(surface_dict["radius"]),
+            centre_x=float(seed_dict["centre_x"]),
+            centre_y=float(seed_dict["centre_y"]),
+            radius=float(seed_dict["radius"]),
         )
-    if stype in _POLYLINE_SEEDED:
-        return SlipSurface.from_dict(surface_dict)
-    return None
+    return SlipSurface.from_dict(seed_dict)
 
 
 def _evaluate_on(project, search, surface):
@@ -314,11 +364,14 @@ def _cannot_reevaluate(project, surface_dict) -> Optional[str]:
     reason is wider than what it checks is exactly what cost this project
     two versions over m-alpha (v0.1.82-84).
 
-    THE TYPE, because ``_rebuild_surface`` seeds from a circle or from a
-    polyline and from nothing else. Until v0.1.154 a surface it could not
-    seed reached ``SlipSurface.from_dict`` and raised from outside the
-    sample loop: the user lost every method and both analyses at once, and
-    the interface printed nothing at all.
+    THE TYPE, because ``_rebuild_surface`` seeds what ``_seed_source``
+    accepts and nothing else. Until v0.1.154 a surface it could not seed
+    reached ``SlipSurface.from_dict`` and raised from outside the sample
+    loop: the user lost every method and both analyses at once, and the
+    interface printed nothing at all. v0.1.251 (D85) — a weak-layer surface
+    is judged by its BASE, since that is what it is seeded from: refused
+    only when the base is missing or cannot be seeded, and the sentence
+    names both types.
 
     COMPOSITE SURFACES, because a composite is seeded from its circle and
     that circle only becomes composite again while the project the samples
@@ -331,22 +384,51 @@ def _cannot_reevaluate(project, surface_dict) -> Optional[str]:
     any kind. Refusing is what v0.1.131 (D36) implies rather than a new
     rule: a surface answers for the project it is asked about, so a
     project that would not produce this surface cannot be handed its
-    number.
+    number. A weak-layer surface clipped from a composite needs the option
+    for the same reason, and says so in its own words.
+
+    What a weak-layer surface needs besides — the same layers, handled the
+    same way, in the project the samples run on — is not checked here: it
+    would need the settings the deterministic surface came from, which do
+    not travel. The probe of v0.1.239 asks the mechanism instead
+    (``_does_not_reevaluate_to_itself``).
     """
     if not isinstance(surface_dict, dict) or not surface_dict:
         return ("The deterministic result carries no serialised surface, "
                 "so there is nothing to re-evaluate.")
-    stype = _surface_type(surface_dict)
-    if stype not in _CIRCLE_SEEDED + _POLYLINE_SEEDED:
-        return (f"The deterministic critical surface is of type "
-                f"'{stype}', which a statistical run cannot re-evaluate; "
-                f"this method was skipped.")
-    if stype == "composite" and not _composite_surfaces(project):
+    source = _seed_source(surface_dict)
+    if source is None:
+        return _type_refusal(surface_dict)
+    if source[0] == "composite" and not _composite_surfaces(project):
+        if _surface_type(surface_dict) in _WEAK_LAYER_SEEDED:
+            return ("The deterministic critical surface runs along a weak "
+                    "layer from a composite one, and Composite Surfaces is "
+                    "off in the project the samples run on, so that surface "
+                    "cannot be formed again; this method was skipped.")
         return ("The deterministic critical surface is a composite one, "
                 "and Composite Surfaces is off in the project the samples "
                 "run on, so that surface cannot be formed again; this "
                 "method was skipped.")
     return None
+
+
+def _type_refusal(surface_dict) -> str:
+    """The sentence for a serialised surface ``_seed_source`` cannot seed.
+
+    A function of its own because two places say it: ``_cannot_reevaluate``
+    and the guard after ``_rebuild_surface`` in both loops, which says the
+    same thing instead of dropping the method (v0.1.251, D85). A weak-layer
+    surface names its base as well, since the base is what failed.
+    """
+    stype = _surface_type(surface_dict)
+    if stype in _WEAK_LAYER_SEEDED:
+        btype = _surface_type((surface_dict or {}).get("base"))
+        return (f"The deterministic critical surface is of type "
+                f"'{stype}' on a base of type '{btype}', which a statistical "
+                f"run cannot re-evaluate; this method was skipped.")
+    return (f"The deterministic critical surface is of type "
+            f"'{stype}', which a statistical run cannot re-evaluate; "
+            f"this method was skipped.")
 
 
 # ======================================================================
@@ -593,6 +675,128 @@ class _MassSwitches:
         return text + "."
 
 
+def _active_layers(surface) -> tuple:
+    """The weak layers a surface runs along: ``((boundary id, x0, x1), ...)``,
+    or ``()`` when it runs along none.
+
+    v0.1.251 (D85) — which weak-layer CASE of a mass an evaluation answered
+    for. A weak-layer surface takes the extent of the mass it was clipped
+    from, so two cases of one mass — two subsets of layers, or the mass
+    shearing through the blocks with none — share their ends to the last
+    digit, and the extent cannot tell them apart. The stretches each layer
+    wins can, and they come back to the last digit too: the same arithmetic
+    on the same geometry (D87). Read off a dictionary's ``weak_layers``, or
+    off the object's ``spans()`` without ``to_dict()``; anything else — a
+    circle, a polyline, the plain stand-ins of the tests — runs along none.
+    """
+    if isinstance(surface, dict):
+        return tuple((w.get("boundary_id"), float(w["x0"]), float(w["x1"]))
+                     for w in (surface.get("weak_layers") or ()))
+    spans = getattr(surface, "spans", None)
+    if not callable(spans):
+        return ()
+    return tuple((getattr(band, "boundary_id", None), float(a), float(b))
+                 for a, b, band in spans())
+
+
+def _case_text(stype, layers) -> str:
+    """A weak-layer case in words: the stretches of its layers, by x.
+
+    By x and not by boundary id, because the ids are uuids that mean
+    nothing on a screen; the stretches are what the user can find on the
+    drawing.
+    """
+    if not layers:
+        return "a %s on no weak layer" % stype
+    return "a %s along weak layers over %s" % (stype, ", ".join(
+        "x from %.2f to %.2f" % (x0, x1) for _bid, x0, x1 in layers))
+
+
+class _CaseSwitches:
+    """Counted samples that answered for ANOTHER WEAK-LAYER CASE of the
+    deterministic surface's own mass.
+
+    v0.1.251 (D85). With automatic case generation one mass becomes one
+    surface per subset of the layers it touches, the bare mass included,
+    and ``_best_of_masses`` keeps the lowest factor — which is right: a
+    sample whose joint is strong enough answers for the surface shearing
+    through the blocks, and that IS its critical mechanism. What was
+    missing is saying so, D89's argument word for word: measured on two
+    joints with the friction of the weak one sampled widely, 1 sample of
+    40 answered for the bare mass and nothing said it. Counting changes no
+    number.
+
+    A sibling of ``_MassSwitches`` and not a branch of it: a case of the
+    same mass has the SAME extent, so only a sample with the home extent
+    is looked at, and the two counts are disjoint by construction; the
+    mass count keeps meaning exactly what D89 says, and its ``see`` keeps
+    its answer. It watches any deterministic surface with an extent, a
+    polyline base included, where ``_MassSwitches`` has no mass to watch.
+    A model without weak layers never counts: every case there is the mass
+    itself, with no layer.
+    """
+
+    def __init__(self, deterministic_surface):
+        self.home = _extent(deterministic_surface)
+        self.layers = _active_layers(deterministic_surface)
+        self.count = 0
+        self.below_one = 0
+        self.at: dict = {}          # active layers -> samples that answered
+
+    @property
+    def watching(self) -> bool:
+        return self.home is not None
+
+    def see(self, result) -> bool:
+        """Count ``result`` if it is the home mass answering with other
+        layers; another mass is ``_MassSwitches``' to count."""
+        if not self.watching:
+            return False
+        surface = getattr(result, "surface", None)
+        if _extent(surface) != self.home:
+            return False
+        layers = _active_layers(surface)
+        if layers == self.layers:
+            return False
+        self.count += 1
+        self.at[layers] = self.at.get(layers, 0) + 1
+        if result.fos < 1.0:
+            self.below_one += 1
+        return True
+
+    def where(self) -> str:
+        """The cases it went to; how many went to each only when there is
+        more than one, since otherwise the head of the sentence says it."""
+        def case(layers):
+            if not layers:
+                return "on no weak layer"
+            return "along weak layers over " + ", ".join(
+                "x from %.2f to %.2f" % (x0, x1) for _b, x0, x1 in layers)
+        if len(self.at) == 1:
+            (layers,) = self.at
+            return case(layers)
+        # Sorted by their text: a boundary id may be None on a stand-in,
+        # and None does not compare with a string.
+        return "; ".join("%s in %d" % (case(layers), n)
+                         for layers, n in sorted(self.at.items(),
+                                                 key=lambda kv: repr(kv[0])))
+
+    def sentence(self, head: str, below_one: Optional[int] = None) -> str:
+        """``head`` says what changed case, in the caller's words; with
+        ``below_one`` (the samples under 1 of the run), how much of the
+        probability of failure is theirs."""
+        own = ("on no weak layer" if not self.layers
+               else "along weak layers over " + ", ".join(
+                   "x from %.2f to %.2f" % (x0, x1)
+                   for _b, x0, x1 in self.layers))
+        text = "%s (%s), not for its own (%s)" % (head, self.where(), own)
+        if below_one:
+            text += ("; %d of the %d with a factor below 1 are among them, "
+                     "and the probability of failure counts them"
+                     % (self.below_one, below_one))
+        return text + "."
+
+
 #: v0.1.239 (D88) — the refusal of the probe below. No ": " inside: the
 #: panel groups a line by the first one, which ``_method_lines`` puts after
 #: the method id.
@@ -602,6 +806,18 @@ _NOT_ITSELF = (
     "%s, instead of x from %.2f to %.2f, %s); a setting that decides the "
     "sliding mass, such as Composite Surfaces or a surface filter, differs "
     "between the two runs, so this method was skipped.")
+
+#: v0.1.251 (D85) — the same refusal when the MASS comes back and the
+#: weak-layer CASE does not: the same head, because the bank's closure of
+#: D88 and ``test_reevaluation_symmetry_v1239`` recognise the probe by it,
+#: and a tail that names the settings that decide a case instead of the
+#: ones that decide a mass. ``_NOT_ITSELF`` keeps its six fields.
+_NOT_ITSELF_CASE = (
+    "The deterministic critical surface does not re-evaluate to itself on "
+    "the project the samples run on (it answers for the same mass as %s, "
+    "instead of %s); a setting that decides the weak-layer case, such as "
+    "the weak-layer handling or a suppressed weak layer, differs between "
+    "the two runs, so this method was skipped.")
 
 
 def _does_not_reevaluate_to_itself(project, prepare, search, surface,
@@ -632,8 +848,19 @@ def _does_not_reevaluate_to_itself(project, prepare, search, surface,
     that global to count and to fail sample evaluations, and the probe is
     not a sample. An exception, no result or a surface without an extent
     refuses nothing: the samples will say what they find. A deterministic
-    surface without an extent (a dictionary written without one) or a
-    polyline (it keeps its ends) is not probed.
+    surface without an extent (a dictionary written without one, as a
+    polyline's is) is not probed; a weak-layer surface carries the extent
+    of its base, a polyline base included, so it is.
+
+    v0.1.251 (D85) — and the same weak-layer CASE: the layers the surface
+    runs along (``_active_layers``) have to come back too. A weak-layer
+    surface keeps the extent of the mass it was clipped from, so a run
+    whose weak-layer handling differs answers for the same ends with other
+    layers, and type and extent did not see it: measured on two joints of
+    ``test_weak_layer_v1121`` (the upper one strong), the deterministic
+    surface computed with "highest" (5.957) published samples computed
+    with automatic cases around 1.855, with no note. When the mass comes
+    back and the case does not, the sentence says so (``_NOT_ITSELF_CASE``).
     """
     home = _extent(surface_dict)
     if home is None:
@@ -653,8 +880,14 @@ def _does_not_reevaluate_to_itself(project, prepare, search, surface,
         return None
     home_type = _surface_type(surface_dict)
     there_type = _surface_type(r.surface.to_dict())
-    if there == home and there_type == home_type:
+    home_layers = _active_layers(surface_dict)
+    there_layers = _active_layers(r.surface)
+    if (there == home and there_type == home_type
+            and there_layers == home_layers):
         return None
+    if there == home and "weak_layer" in (home_type, there_type):
+        return _NOT_ITSELF_CASE % (_case_text(there_type, there_layers),
+                                   _case_text(home_type, home_layers))
     return _NOT_ITSELF % (there[0], there[1], there_type,
                           home[0], home[1], home_type)
 
@@ -913,12 +1146,14 @@ def _publish_method_warnings(result) -> None:
     (``mass_switches``) is a field, not a note, for the reason
     ``surfaces_tracked`` is not published: a number on every sound run is
     not a sentence.
+
+    v0.1.251 (D85) — and the ``case_switch`` one, for the same reason.
     """
     for mid, mres in result.by_method.items():
         if getattr(mres.statistics, "n", 0) <= 0:
             continue
         notes = getattr(mres, "notes", None) or {}
-        for key in ("warning", "mass_switch"):
+        for key in ("warning", "mass_switch", "case_switch"):
             said = notes.get(key)
             if said:
                 result.note_lines.append("%s: %s" % (mid, said))
@@ -1091,6 +1326,13 @@ def run_global_minimum(
             continue
         surface = _rebuild_surface(sd)
         if surface is None:
+            # v0.1.251 (D85) — a bare ``continue`` until this version: the
+            # method vanished without a word, the third route of D129.
+            # Unreachable while ``_cannot_reevaluate`` and ``_rebuild_surface``
+            # read the same ``_seed_source``; reached only when a caller
+            # replaces one of them, and then it says the type refusal.
+            result.notes[mid] = _type_refusal(sd)
+            lost.append(mid)
             continue
         # v0.1.235 (D92) — the search the PROJECT configures, not one
         # assembled here. Until this version this line was a bare
@@ -1121,6 +1363,7 @@ def run_global_minimum(
         values: list[float] = []
         counts: dict = {}
         switches = _MassSwitches(sd)            # v0.1.238 (D89)
+        cases = _CaseSwitches(sd)               # v0.1.251 (D85)
         for i in range(num_samples):
             clone = clone_project(project)
             one = {k: v[i] for k, v in samples.items()}
@@ -1135,6 +1378,7 @@ def run_global_minimum(
                 values.append(r.fos)
                 mres.sample_index.append(i)
                 switches.see(r)
+                cases.see(r)
             else:
                 # A sample can make the surface unsolvable (for instance a
                 # very low strength). It is counted separately rather than
@@ -1175,6 +1419,13 @@ def run_global_minimum(
             mres.notes["mass_switch"] = switches.sentence(
                 "%d of %d samples answered for another sliding mass of the "
                 "deterministic circle" % (switches.count, len(values)),
+                sum(1 for v in values if v < 1.0))
+        # v0.1.251 (D85) — and so is a change of weak-layer case.
+        mres.case_switches = cases.count
+        if cases.count:
+            mres.notes["case_switch"] = cases.sentence(
+                "%d of %d samples answered for another weak-layer case of "
+                "the deterministic surface" % (cases.count, len(values)),
                 sum(1 for v in values if v < 1.0))
         # The 20 % warning and its wording are untouched, and it is now
         # only reached when at least one sample DID survive -- which is
@@ -1494,6 +1745,12 @@ def run_overall_slope(
         # surface, once something says so; until then, there may be one.
         why_not: Optional[str] = None
         switches = _MassSwitches(getattr(det, "surface", None))   # D89
+        # v0.1.251 (D85) — and NO ``_CaseSwitches`` here, on purpose. This
+        # analysis never re-seeds the deterministic surface: every sample
+        # searches again, and in a fresh non-circular search two different
+        # polylines can share their ends to the digit, so "the home extent
+        # with other layers" would not name the home mass. A different case
+        # is a different surface here, and ``distinct_minima`` counts it.
 
         for i in range(num_samples):
             clone = clone_project(project)

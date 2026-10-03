@@ -7,4 +7,4 @@ Planned for v0.5.0. See docs/roadmap.md.
 
 Author: Samuel Sáez López — PhD Student, UPCT
 """
-__version__ = "0.1.250"
+__version__ = "0.1.251"

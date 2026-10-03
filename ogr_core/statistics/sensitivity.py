@@ -69,6 +69,10 @@ class VariableSensitivity:
     #: ranking, and this one was swept; the sentence goes to
     #: ``SensitivityResult.note_lines``.
     mass_switch_values: list = field(default_factory=list)
+    #: v0.1.251 (D85) — and the values whose point answered for another
+    #: weak-layer case of the deterministic surface's own mass, for the
+    #: same reason (``probabilistic._CaseSwitches``).
+    case_switch_values: list = field(default_factory=list)
 
     # ------------------------------------------------------------------
     @property
@@ -219,11 +223,13 @@ def run_sensitivity(
         _FACTORED_COPY,
         _NO_DETERMINISTIC,
         _NO_METHOD,
+        _CaseSwitches,
         _MassSwitches,
         _analysis_copy,
         _cannot_reevaluate,
         _does_not_reevaluate_to_itself,
         _is_factored_copy,
+        _type_refusal,
         counts_as_sample,
         _evaluate_on,
         _publish_method_losses,
@@ -319,6 +325,10 @@ def run_sensitivity(
             continue
         surface = _rebuild_surface(sd)
         if surface is None:
+            # v0.1.251 (D85) — as in ``run_global_minimum``: said with the
+            # type refusal instead of a bare ``continue``.
+            res.notes[mid] = _type_refusal(sd)
+            lost.append(mid)
             continue
         # v0.1.202 — only admissible points (``counts_as_sample``).
         # v0.1.235 (D92) — and the search the PROJECT configures, filters,
@@ -343,6 +353,7 @@ def run_sensitivity(
                 mean_value=rv.distribution.mean,
                 deterministic_fos=getattr(det, "fos", math.nan))
             switches = _MassSwitches(sd)        # v0.1.238 (D89)
+            cases = _CaseSwitches(sd)           # v0.1.251 (D85)
             for i in range(n_points):
                 x = lo + (hi - lo) * i / (n_points - 1)
                 # Every other variable stays at its mean: the clone is
@@ -372,6 +383,8 @@ def run_sensitivity(
                     vs.fos.append(r.fos)
                     if switches.see(r):
                         vs.mass_switch_values.append(x)
+                    if cases.see(r):
+                        vs.case_switch_values.append(x)
                 done += 1
                 if progress_cb and done % 20 == 0:
                     progress_cb(done, total)
@@ -384,6 +397,14 @@ def run_sensitivity(
                 res.note_lines.append("%s: %s" % (mid, switches.sentence(
                     "The sweep of %s answered for another sliding mass of "
                     "the deterministic circle at %d of %d points, from %g to "
+                    "%g" % (vs.label, len(at), vs.n, min(at), max(at)))))
+            if vs.case_switch_values:
+                # v0.1.251 (D85) — and a curve that changes weak-layer case
+                # part way, for the same reason.
+                at = vs.case_switch_values
+                res.note_lines.append("%s: %s" % (mid, cases.sentence(
+                    "The sweep of %s answered for another weak-layer case of "
+                    "the deterministic surface at %d of %d points, from %g to "
                     "%g" % (vs.label, len(at), vs.n, min(at), max(at)))))
 
         # A method whose every variable was refused contributes nothing to

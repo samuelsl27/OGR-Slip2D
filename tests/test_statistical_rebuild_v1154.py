@@ -312,6 +312,13 @@ class TestEveryTypeThisProgramSerialisesIsAccountedFor:
             assert key, name
 
     def test_each_one_either_seeds_or_is_refused_by_name(self):
+        """CHANGED ON PURPOSE in v0.1.251 (D85): ``weak_layer`` moved from
+        refused to SEEDED — from its base, here a circle, so the seed is a
+        circle without endpoints and every sample clips it against the
+        weak layers of its own project (``test_weak_layer_statistics_v1251``
+        holds the numbers). The refused branch stays alive with the one
+        weak-layer surface that still cannot be seeded: one without a base,
+        refused under its own name."""
         from ogr_core.statistics.probabilistic import (
             _cannot_reevaluate, _rebuild_surface,
         )
@@ -319,8 +326,11 @@ class TestEveryTypeThisProgramSerialisesIsAccountedFor:
 
         p = _project()
         seeds = {"circle": SlipCircle, "composite": SlipCircle,
-                 "polyline": SlipSurface}
-        for name, d in _the_four_dicts().items():
+                 "polyline": SlipSurface, "weak_layer": SlipCircle}
+        dicts = _the_four_dicts()
+        dicts["weak_layer without a base"] = {
+            k: v for k, v in dicts["weak_layer"].items() if k != "base"}
+        for name, d in dicts.items():
             seed = _rebuild_surface(d)
             refusal = _cannot_reevaluate(p, d)
             if name in seeds:
@@ -328,7 +338,9 @@ class TestEveryTypeThisProgramSerialisesIsAccountedFor:
                 assert refusal is None, (name, refusal)
             else:
                 assert seed is None, (name, seed)
-                assert refusal and name in refusal, (name, refusal)
+                assert refusal and d["type"] in refusal, (name, refusal)
+        weak_seed = _rebuild_surface(dicts["weak_layer"])
+        assert weak_seed.x_left is None and weak_seed.x_right is None
 
     def test_a_bare_dictionary_without_a_type_is_still_a_circle(self):
         """``run_global_minimum`` accepts a bare dict as ``det.surface``.
@@ -438,26 +450,41 @@ class TestWhenTheOptionIsGoneTheRunSaysSoInsteadOfAnswering:
 
     def test_a_weak_layer_critical_no_longer_takes_the_run_down(self):
         """D59's loudest half: this used to raise KeyError('polyline') from
-        outside the sample loop and lose every method and both analyses."""
+        outside the sample loop and lose every method and both analyses.
+
+        CHANGED ON PURPOSE in v0.1.251 (D85): the same assertion still
+        holds, for another reason. A weak-layer surface is now seeded from
+        its base, and this stand-in is one over a model with NO weak layer
+        — problem 22's weak layer is a band of material, not a Weak Layer
+        boundary — so its base circle comes back as the composite, with
+        other ends. The type passes ``_cannot_reevaluate`` and the probe of
+        v0.1.239 refuses the mechanism, naming ``weak_layer`` as the type
+        that did not come back."""
         from ogr_core.statistics import SamplingMethod as SM
         from ogr_core.statistics import run_global_minimum, run_sensitivity
+        from ogr_core.statistics.probabilistic import (_NOT_ITSELF,
+                                                       _cannot_reevaluate)
         from ogr_slip2d.surface import WeakLayerSurface
 
         p = _project()
         det = _deterministic(p)
         stand_in = copy.copy(det)
         stand_in.surface = WeakLayerSurface(base=_circle(), bands=())
+        assert _cannot_reevaluate(p, stand_in.surface.to_dict()) is None
+        head = _NOT_ITSELF.split(" (", 1)[0]
 
         res = run_global_minimum(
             p, {"bishop_simplified": stand_in}, [_cohesion_var(p)],
             num_samples=2, sampling=SM.MONTE_CARLO, seed=7,
             num_slices=_SLICES)
         assert "weak_layer" in " ".join(self._refused(res))
+        assert res.notes["bishop_simplified"].startswith(head)
 
         sen = run_sensitivity(p, {"bishop_simplified": stand_in},
                               [_cohesion_var(p)], intervals=2,
                               num_slices=_SLICES)
         assert "weak_layer" in " ".join(self._refused(sen))
+        assert sen.notes["bishop_simplified"].startswith(head)
 
     def test_the_reason_reaches_the_key_the_interface_prints(self):
         """``_compute_statistics`` looks at ``notes['error']`` and nowhere
