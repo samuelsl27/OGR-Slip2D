@@ -107,7 +107,7 @@ print(f"Radius: {result.critical.surface.radius:.1f} m")
 | F4 / F5   | Zoom out / in             |
 | F7        | Toggle grid               |
 | Ctrl+1…6  | Add boundary (each type)  |
-| F1        | Help                      |
+| F1        | Help: the online documentation, in the interface language |
 
 ## 6. Language
 

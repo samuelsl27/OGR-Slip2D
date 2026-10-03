@@ -1976,6 +1976,11 @@ _DICTS: dict[str, dict[str, str]] = {
         "Tile Vertically": "Mosaico vertical",
         # --- Help -----------------------------------------------------
         "Help Topics": "Temas de ayuda",
+        # v0.1.250 — Help Topics opens the online documentation.
+        "Opening the documentation in your browser: %s":
+            "Abriendo la documentación en el navegador: %s",
+        "No browser could be opened; the documentation is at %s":
+            "No se pudo abrir el navegador; la documentación está en %s",
         "About OGR Slip2D": "Acerca de OGR Slip2D",
         "Check for Updates": "Buscar actualizaciones",
         # --- Common UI ------------------------------------------------

@@ -202,7 +202,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.249"
+    VERSION = "0.1.250"
 
     def __init__(self) -> None:
         super().__init__()
@@ -4457,11 +4457,15 @@ class MainWindow(QMainWindow):
     # Help
     # ==================================================================
     def act_help(self) -> None:
-        QMessageBox.information(
-            self, tr("Help Topics"),
-            "Online docs: https://github.com/samuelsl27/OGR-Slip2D\n"
-            "Window → Terminal opens a Python REPL connected to the live project.",
-        )
+        """Help Topics (F1): the online documentation, in the language of
+        the interface.
+
+        v0.1.250 — it was a modal box with a repository address. See
+        :mod:`ogr_gui.documentation` for why opening the browser is not the
+        network call AGENTS.md forbids.
+        """
+        from .documentation import open_documentation
+        open_documentation(self)
 
     def act_about(self) -> None:
         AboutDialog(self).exec()

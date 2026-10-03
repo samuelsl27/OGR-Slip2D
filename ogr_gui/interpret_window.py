@@ -1120,12 +1120,17 @@ class InterpretWindow(QMainWindow):
         m_win.addAction(self.slice_dock.toggleViewAction())
 
         # -- Help -----------------------------------------------------
+        # v0.1.250 — the same door as F1 in the main window: the online
+        # documentation in the language of the interface, instead of a box
+        # of its own with one line of text (see ``ogr_gui.documentation``).
         m_help = mb.addMenu(tr("Help"))
-        m_help.addAction(QAction(tr("Help Topics"), self,
-                                  triggered=lambda: self._info(
-                                      "Interpret window: double-click a row in the Surfaces dock "
-                                      "to focus on a specific slip surface. Slices can be inspected "
-                                      "via Query → Query Slice Data.")))
+        self._act_help_topics = QAction(tr("Help Topics"), self)
+        self._act_help_topics.triggered.connect(self._open_documentation)
+        m_help.addAction(self._act_help_topics)
+
+    def _open_documentation(self) -> None:
+        from .documentation import open_documentation
+        open_documentation(self)
 
     # ==================================================================
     # v0.1.9 — Method selector toolbar (top of window)
