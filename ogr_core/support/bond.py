@@ -263,6 +263,14 @@ def sigma_v_effective_at(
     from ..hydraulic.ponded_water import ponded_depth_at
     from ..hydraulic.pore_pressure import pore_pressure_at
 
+    # v0.1.245 (D226d) — with a design standard and its anchors option on,
+    # γG multiplies what is permanent above the point: the soil column, the
+    # pore pressure that reads it (Ru) and the permanent loads. The ponded
+    # water is not soil and the variable loads never take a factor here.
+    # Off — the default, as in the reference — 1, and nothing is touched.
+    actions = getattr(project, "action_factors", None)
+    xi = actions.anchor_factor() if actions is not None else 1.0
+
     if ground_y is None:
         ext = project.external_boundary()
         if ext is not None:
@@ -279,6 +287,8 @@ def sigma_v_effective_at(
         # bottom of the column sits in as well; here only the weight is
         # wanted. See ``_layer_top_at`` below for the reader of the other.
         sigma_v = _column_weight(project, x, y, ground_y, 1.0)[0]
+        if xi != 1.0:
+            sigma_v *= xi
         # v0.1.214 (D166) -- and the water standing on the ground. The pore
         # pressure subtracted below carries the head of that water, so
         # without its weight a point under a reservoir came out ``γ_w·d``
@@ -291,10 +301,18 @@ def sigma_v_effective_at(
             sigma_v += (project.settings.groundwater.pore_fluid_unit_weight
                         * pond)
 
-    sigma_v += _surface_pressure_at(project, x)
+    if xi == 1.0:
+        sigma_v += _surface_pressure_at(project, x)
+    else:
+        from ogr_slip2d.slicer import _surface_pressures_at
+        for load, p in _surface_pressures_at(project, x):
+            permanent = getattr(getattr(load, "action", None), "value",
+                                "variable") == "permanent"
+            sigma_v += p * xi if permanent else p
 
     mat = project.material_at(x, y)
-    u = pore_pressure_at(project, Vertex(x, y), mat, ground_surface_y=ground_y)
+    u = pore_pressure_at(project, Vertex(x, y), mat, ground_surface_y=ground_y,
+                         weight_factor=xi)
     return max(0.0, sigma_v - u), u, depth
 
 

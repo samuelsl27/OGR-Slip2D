@@ -928,6 +928,19 @@ class DesignStandardSettings:
     # left out. Each load says which action it is (``LoadAction``), and the
     # engine decides, load by load, whether it drives the sliding.
     factor_variable_favourable: float = 1.0
+    # v0.1.245 (D226d) — the factor on the seismic coefficients kh and kv,
+    # 1.0 in every preset: Frank et al. (2004, §11.5) send the seismic
+    # design situation to EN 1998-5, whose partial factor on the seismic
+    # action is 1.0. Applied to the copy; with a critical-coefficient
+    # search (Ky, Newmark) the coefficient is what is sought, and the
+    # factor is said and not applied.
+    factor_seismic: float = 1.0
+    # v0.1.245 (D226d) — whether γG also multiplies the effective vertical
+    # stress a support's bond reads (the soil above it and the permanent
+    # loads; the variable loads never). Off by default, as the reference
+    # has it: a larger σ'v is a larger pullout capacity, so the factor that
+    # makes the driving side heavier would make the anchor stronger.
+    anchor_permanent_factor: bool = False
     # The single source assumption, an option of the reference's design
     # standard: on, every slice takes the unfavourable γG, since the weight
     # of the soil is one action from one source (Bond et al. 2013; Frank et
@@ -943,7 +956,7 @@ class DesignStandardSettings:
                      "factor_unit_weight", "factor_resistance",
                      "factor_undrained", "factor_shear_strength",
                      "factor_permanent_favourable",
-                     "factor_variable_favourable")
+                     "factor_variable_favourable", "factor_seismic")
 
     # Named presets. Values follow the Eurocode 7 design approaches
     # (EN 1997-1, Annex A: A1/A2, M1/M2, R1/R2/R3); the user can still pick
@@ -959,16 +972,17 @@ class DesignStandardSettings:
     # slope DA3 is DA1-C2 (Frank et al. 2004, §11.5: γG = 1.00 in DA-1C2
     # and DA-3). Until v0.1.241 it carried those of A1 (1.35, 1.5).
     # v0.1.243 (D226b) — the tenth is γQ,fav: 0 in A1 and A2.
+    # v0.1.245 (D226d) — the eleventh the seismic factor, 1.0 throughout.
     PRESETS = {
-        "none": (1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0),
+        "none": (1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0),
         "eurocode7_da1c1": (1.35, 1.5, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
-                            0.0),
+                            0.0, 1.0),
         "eurocode7_da1c2": (1.0, 1.3, 1.25, 1.25, 1.0, 1.0, 1.4, 1.25, 1.0,
-                            0.0),
+                            0.0, 1.0),
         "eurocode7_da2": (1.35, 1.5, 1.0, 1.0, 1.0, 1.1, 1.0, 1.0, 1.0,
-                          0.0),
+                          0.0, 1.0),
         "eurocode7_da3": (1.0, 1.3, 1.25, 1.25, 1.0, 1.0, 1.4, 1.25, 1.0,
-                          0.0),
+                          0.0, 1.0),
     }
     #: v0.1.242 (D226a) — the action factors a named preset carried before
     #: this version, where they differ from the corrected one: a file that
@@ -1037,6 +1051,14 @@ class DesignStandardSettings:
                     zip(cls.FACTOR_FIELDS, vals))["factor_variable_favourable"]
             else:
                 out.factor_variable_favourable = out.factor_variable
+        # v0.1.245 (D226d) — no ``factor_seismic``: a file from before γγ
+        # DIVIDED the unit weight. Every preset has γγ = 1, so only a custom
+        # one can carry another value, and it was multiplying: it is read as
+        # its inverse, which divides to the same number.
+        if "factor_seismic" not in data and out.standard not in cls.PRESETS:
+            f = float(out.factor_unit_weight)
+            if f and f != 1.0:
+                out.factor_unit_weight = 1.0 / f
         return out
 
 

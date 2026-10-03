@@ -86,6 +86,22 @@ from ogr_core.materials.strength_model import (MaterialFactors,
 #: the verification bank has a design standard enabled.
 LOADS_BY_ACTION = True
 
+#: v0.1.245 (D226d) — the unit-weight factor γγ DIVIDES the unit weights.
+#:
+#: It is a material factor (EN 1997-1, Annex A, Table A.4: "weight density
+#: γγ", 1.0 in M1 and M2), and a material property's design value is its
+#: characteristic value divided by its factor (EN 1997-1, 2.4.6.2, eq. 2.2:
+#: X_d = X_k/γ_M), which is also how the reference applies every material
+#: factor. Until v0.1.244 it multiplied, with a comment calling the heavier
+#: soil the unfavourable direction — the job of γG, the action factor, which
+#: since v0.1.242 multiplies the weight of each slice. On the φ = 0 slope of
+#: ``test_tension_crack_truncation_v1109`` a custom γγ = 1.25 gave 0.888742
+#: (γ × 1.25) where the characteristic weight divided gives 1.388659. Every
+#: preset has γγ = 1, and a custom file from before this version is read
+#: with its factor inverted (``DesignStandardSettings.from_dict``), so a
+#: saved model keeps its number. Off, the multiplication.
+UNIT_WEIGHT_DIVIDES = True
+
 
 @dataclass
 class FactorReport:
@@ -210,10 +226,13 @@ def apply_design_factors(project, settings=None):
             for attr in ("unit_weight", "sat_unit_weight"):
                 value = getattr(mat, attr, None)
                 if isinstance(value, (int, float)) and value:
-                    # Unit weight MULTIPLIES: a heavier soil is the
-                    # unfavourable direction for a driving weight.
-                    setattr(mat, attr, value * f_gamma)
-                    changed[attr] = (value, value * f_gamma)
+                    # v0.1.245 (D226d) — a material factor divides (see
+                    # :data:`UNIT_WEIGHT_DIVIDES`); making the soil heavier
+                    # is γG's job, slice by slice.
+                    new = (value / f_gamma if UNIT_WEIGHT_DIVIDES
+                           else value * f_gamma)
+                    setattr(mat, attr, new)
+                    changed[attr] = (value, new)
         if changed:
             rep.materials.append({"name": mat.name, "changes": changed,
                                   "category": category})
@@ -229,6 +248,25 @@ def apply_design_factors(project, settings=None):
                     rep.loads += 1
     elif by_action and loads and not actions.loads_are_identity():
         rep.loads = len(loads)
+
+    # v0.1.245 (D226d) — the seismic coefficients take the seismic factor,
+    # unless the run SEEKS the coefficient (Ky, Newmark): then there is no
+    # coefficient to factor, and the note says so.
+    f_seis = float(getattr(ds, "factor_seismic", 1.0))
+    seis = getattr(factored, "seismic", None)
+    if f_seis != 1.0 and seis is not None and getattr(seis, "enabled", False):
+        sa = getattr(getattr(factored, "settings", None), "seismic", None)
+        if sa is not None and (getattr(sa, "compute_ky", False)
+                               or getattr(sa, "newmark", False)):
+            rep.notes.append(
+                f"Seismic: the factor {f_seis:g} is not applied — the run "
+                f"seeks the critical seismic coefficient, so there is no "
+                f"coefficient to factor.")
+        else:
+            seis.kh = float(seis.kh) * f_seis
+            seis.kv = float(seis.kv) * f_seis
+            rep.notes.append(
+                f"Seismic: kh and kv multiplied by {f_seis:g}.")
 
     # v0.1.242 (D226a) — the permanent action is applied now, to the weight
     # of each slice, and the note says how; what is still not done is said
@@ -259,7 +297,7 @@ def apply_design_factors(project, settings=None):
             f"load carries no action type in this version.")
 
     factors = (mf.cohesion, mf.tan_phi, mf.undrained, mf.shear, f_gamma,
-               1.0 if by_action else f_var)
+               1.0 if by_action else f_var, f_seis)
     if all(f == 1.0 for f in factors) and actions.is_identity():
         rep.notes.append(
             "The standard is enabled but every factor is 1.0, so nothing "

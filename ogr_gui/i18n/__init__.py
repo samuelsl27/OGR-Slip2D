@@ -506,6 +506,20 @@ _DICTS: dict[str, dict[str, str]] = {
         'drives the sliding': 'empuja el deslizamiento',
         'resists the sliding': 'se opone al deslizamiento',
         'Loads on this surface:': 'Cargas en esta superficie:',
+        # v0.1.245 (D226d): sismo, anclajes y γγ
+        'Seismic coefficients:': 'Coeficientes sísmicos:',
+        'Divides the unit weights, as every material factor divides its property.':
+            'Divide los pesos específicos, como todo coeficiente de '
+            'material divide su propiedad.',
+        'Anchors: the permanent-action factor on the effective stress of the bond':
+            'Anclajes: el coeficiente de acciones permanentes en la '
+            'tensión efectiva de la adherencia',
+        'Off by default: a heavier column above a support makes a stronger anchor, so the factor that makes the driving side heavier would make the anchor stronger too. On, it multiplies the soil and the permanent loads above the bond; the variable loads never.':
+            'Desmarcada por defecto: una columna más pesada sobre un '
+            'soporte da un anclaje más resistente, así que el coeficiente '
+            'que hace más pesado el lado que empuja haría también más '
+            'fuerte el anclaje. Marcada, multiplica el terreno y las '
+            'cargas permanentes sobre la adherencia; las variables, nunca.',
         'With a design standard, a permanent load takes the factors of permanent actions and a variable one those of variable actions, each by whether the whole load drives the sliding of the surface or resists it.':
             'Con una norma de diseño, una carga permanente toma los '
             'coeficientes de las acciones permanentes y una variable los de '

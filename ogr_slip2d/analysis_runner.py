@@ -253,6 +253,22 @@ def check_analysis_settings(project) -> list[str]:
         _why = design_action_factors_refusal(_ds)
         if _why is not None:
             problems.append(_why.message)
+        # v0.1.245 (D226d) — and the seismic coefficients the factored copy
+        # will carry: kh and kv times the seismic factor must still be
+        # coefficients (a critical-coefficient search does not apply it).
+        _f = float(getattr(_ds, "factor_seismic", 1.0))
+        _sa = getattr(project.settings, "seismic", None)
+        _seeks = bool(_sa is not None and (getattr(_sa, "compute_ky", False)
+                                           or getattr(_sa, "newmark", False)))
+        if (_f != 1.0 and not _seeks and _seis is not None
+                and getattr(_seis, "enabled", False)):
+            for _name in ("kh", "kv"):
+                _why = seismic_coefficient_refusal(
+                    _name, _f * float(getattr(_seis, _name, 0.0)))
+                if _why is not None:
+                    problems.append(
+                        f"With the design standard's seismic factor {_f:g}: "
+                        f"{_why.message}")
 
     # v0.1.218 (D209) — a strength model that cannot be computed with: an
     # Anisotropic Strength Function saved as interpolated points before

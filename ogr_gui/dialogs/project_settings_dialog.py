@@ -1237,6 +1237,8 @@ class _DesignStandardPage(QWidget):
              (lo, hi)),
             ("factor_unit_weight", tr("Unit weight:"), (lo, hi)),
             ("factor_resistance", tr("Resistance:"), (lo, hi)),
+            # v0.1.245 (D226d) — on kh and kv, 1 in every preset.
+            ("factor_seismic", tr("Seismic coefficients:"), (lo, hi)),
         ):
             sp = QDoubleSpinBox()
             sp.setDecimals(3)
@@ -1265,6 +1267,25 @@ class _DesignStandardPage(QWidget):
             lambda _on: self._on_enabled(self.chk_enabled.isChecked()))
         form.addRow("", self.chk_single_source)
 
+        # v0.1.245 (D226d) — what the two remaining action-side choices of
+        # the reference say, here: γγ divides like every material factor,
+        # and γG reaches the stress a support's bond reads only on request.
+        self.factors["factor_unit_weight"].setToolTip(tr(
+            "Divides the unit weights, as every material factor divides its "
+            "property."))
+        self.chk_anchor = QCheckBox(tr(
+            "Anchors: the permanent-action factor on the effective stress of "
+            "the bond"))
+        self.chk_anchor.setChecked(
+            bool(getattr(self.s, "anchor_permanent_factor", False)))
+        self.chk_anchor.setToolTip(tr(
+            "Off by default: a heavier column above a support makes a "
+            "stronger anchor, so the factor that makes the driving side "
+            "heavier would make the anchor stronger too. On, it multiplies "
+            "the soil and the permanent loads above the bond; the variable "
+            "loads never."))
+        form.addRow("", self.chk_anchor)
+
         note = QLabel(tr(
             "Off by default: applying partial factors silently would "
             "change every factor of safety previously compared against, "
@@ -1283,6 +1304,7 @@ class _DesignStandardPage(QWidget):
         # on the slices, so it is open for a named standard too; and with
         # it on the favourable factor is read by nothing (rule 7).
         self.chk_single_source.setEnabled(bool(on))
+        self.chk_anchor.setEnabled(bool(on))
         if self.chk_single_source.isChecked():
             self.factors["factor_permanent_favourable"].setEnabled(False)
 
@@ -1300,6 +1322,7 @@ class _DesignStandardPage(QWidget):
         for attr, sp in self.factors.items():
             setattr(self.s, attr, sp.value())
         self.s.single_source_weight = self.chk_single_source.isChecked()
+        self.s.anchor_permanent_factor = self.chk_anchor.isChecked()
 
 
 class _AdvancedPage(QWidget):

@@ -44,6 +44,10 @@ class ActionFactors:
     drives the sliding as a whole. ``factors_loads`` False means the loads
     were already multiplied in the copy, the way v0.1.242 did it
     (``design_factors.LOADS_BY_ACTION`` off), and the engine leaves them be.
+
+    ``anchor_permanent`` (v0.1.245, D226d) says whether γG also reaches the
+    effective vertical stress a support's bond reads; see
+    :meth:`anchor_factor`.
     """
 
     permanent_unfavourable: float = 1.0
@@ -52,6 +56,7 @@ class ActionFactors:
     variable_unfavourable: float = 1.0
     variable_favourable: float = 1.0
     factors_loads: bool = True
+    anchor_permanent: bool = False
 
     def weight_is_identity(self) -> bool:
         """Whether applying these changes no slice weight."""
@@ -81,6 +86,13 @@ class ActionFactors:
             return self.permanent_unfavourable
         return self.permanent_favourable
 
+    def anchor_factor(self) -> float:
+        """The factor on the soil and the permanent loads above a support's
+        bond: γG with the option on, 1 without it (the reference's default,
+        since a heavier column makes a stronger anchor). The variable loads
+        never take one there."""
+        return self.permanent_unfavourable if self.anchor_permanent else 1.0
+
     def load_factor_for(self, action, drives: bool) -> float:
         """The factor on a whole load of ``action`` (a ``LoadAction`` or its
         value) that drives the sliding (``drives``) or resists it. The
@@ -109,4 +121,6 @@ class ActionFactors:
             variable_unfavourable=float(getattr(ds, "factor_variable", 1.0)),
             variable_favourable=float(
                 getattr(ds, "factor_variable_favourable", 1.0)),
-            factors_loads=bool(factors_loads))
+            factors_loads=bool(factors_loads),
+            anchor_permanent=bool(getattr(ds, "anchor_permanent_factor",
+                                          False)))
