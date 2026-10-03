@@ -190,6 +190,13 @@ class _StrengthParamPanel(QWidget):
         # quantity (None).
         "rules": (("Angle to (°)", "angle"),
                   ("Material", None)),
+        # v0.1.248 (D231a) — the joints of "Angle or Surface": the angle of
+        # each joint, its A and B (read by the A and B mapping only) and the
+        # material it takes.
+        "joints": (("Joint angle (°)", "angle"),
+                   ("Half-width A (°)", "angle"),
+                   ("Transition end B (°)", "angle"),
+                   ("Material", None)),
         # v0.1.229 (D215) — the C/Phi function: (σ'ₙ, c, φ) rows.
         "cphi": (("Normal stress (%s)", "pressure"),
                  ("Cohesion (%s)", "pressure"),
@@ -207,6 +214,7 @@ class _StrengthParamPanel(QWidget):
     _TABLE_CAPTIONS = {"points": "Function points:",
                        "rows3": "Function points:",
                        "rules": "Angle ranges:",
+                       "joints": "Joints:",
                        "cphi": "Function points:",
                        "discrete_cu": "Data points:",
                        "discrete_cphi": "Data points:"}
@@ -219,6 +227,20 @@ class _StrengthParamPanel(QWidget):
                          ("tin", "TIN Triangulation"),
                          ("thin_plate_spline", "Thin Plate Spline"),
                          ("linear_by_elevation", "Linear by Elevation"))
+
+    #: v0.1.248 (D231a) — the choices of a Generalized Anisotropic function,
+    #: as the reference's dialog offers them.
+    _GA_INPUTS = (("angle_range", "Angle Range"),
+                  ("angle_or_surface", "Angle or Surface"))
+    _GA_DEFINITIONS = (("angle", "Angle"), ("surface", "Surface"))
+    _GA_MAPPINGS = (("ab", "A and B"), ("cosine", "Cosine"),
+                    ("linear", "Linear"))
+    _GA_SELECTIONS = (("worst_case", "Worst case"), ("closest", "Closest"))
+    #: The fields of each input: what the other input holds is carried
+    #: through unchanged while one of them is on screen.
+    _GA_RANGE_KEYS = ("rules", "use_parent_water")
+    _GA_JOINT_KEYS = ("base", "joints", "definition", "mapping",
+                      "joint_selection", "use_base_if_weaker")
 
     #: v0.1.229 (D215) — the two strength functions of a Snowden material:
     #: the button that opens each one and the title of its dialog.
@@ -259,6 +281,8 @@ class _StrengthParamPanel(QWidget):
         # parameters of the parent» switch, and what it was given.
         self._chk_parent_water = None
         self._parent_water_given = None
+        # v0.1.248 (D231a) — the Generalized Anisotropic editor's controls.
+        self._ga = None
 
     def set_rule_materials(self, choices) -> None:
         """The materials a Generalized Anisotropic range can take, as (id,
@@ -403,6 +427,7 @@ class _StrengthParamPanel(QWidget):
         self._discrete = None
         self._chk_parent_water = None
         self._parent_water_given = None
+        self._ga = None
         mid = getattr(model_cls, "MODEL_ID", "")
         if mid == "discrete_function":
             self._build_discrete(current_params, model_cls)
@@ -422,18 +447,7 @@ class _StrengthParamPanel(QWidget):
             self._build_points_table(current_params, kind="cphi",
                                      default=list(model_cls.DEFAULT_ROWS))
         elif mid == "generalized_anisotropic":
-            # v0.1.228 (D218b) — the reference's "Angle Range" input: each
-            # row is the angle a range ends at and the material it takes.
-            # A new selection starts with one range, −90° to +90°, taking
-            # the first material it can.
-            default = ([{"angle_min": -90.0, "angle_max": 90.0,
-                         "material_id": self._rule_choices[0][0],
-                         "model": copy.deepcopy(self._rule_choices[0][2])}]
-                       if self._rule_choices else [])
-            self._build_points_table(current_params, kind="rules",
-                                     default=default)
-            self._build_parent_water(
-                bool(current_params.get("use_parent_water", True)))
+            self._build_generalized(current_params, model_cls)
 
         if mid == "snowden_anisotropic_linear":
             self._build_function_buttons(current_params, model_cls)
@@ -499,6 +513,189 @@ class _StrengthParamPanel(QWidget):
         params["function_type"] = new
         self.set_model(model_cls, params)
 
+    def _build_generalized(self, current_params, model_cls) -> None:
+        """The Generalized Anisotropic editor: its input type and, below it,
+        the editor of that input (v0.1.248, D231a). What the other input
+        holds is carried through unchanged."""
+        input_type = current_params.get("input_type", "angle_range")
+        if input_type not in dict(self._GA_INPUTS):
+            input_type = "angle_range"
+        cbo_input = QComboBox()
+        for value, label in self._GA_INPUTS:
+            cbo_input.addItem(tr(label), value)
+        cbo_input.setCurrentIndex(max(0, cbo_input.findData(input_type)))
+        self._form.addRow(tr("Input type:"), cbo_input)
+        joints = input_type == "angle_or_surface"
+        keep = {k: copy.deepcopy(current_params[k])
+                for k in (self._GA_RANGE_KEYS if joints
+                          else self._GA_JOINT_KEYS)
+                if k in current_params}
+        self._ga = {"input": cbo_input, "keep": keep}
+        if joints:
+            self._build_joints_editor(current_params)
+        else:
+            # v0.1.228 (D218b) — the reference's "Angle Range" input: each
+            # row is the angle a range ends at and the material it takes.
+            # A new selection starts with one range, −90° to +90°, taking
+            # the first material it can.
+            default = ([{"angle_min": -90.0, "angle_max": 90.0,
+                         "material_id": self._rule_choices[0][0],
+                         "model": copy.deepcopy(self._rule_choices[0][2])}]
+                       if self._rule_choices else [])
+            self._build_points_table(current_params, kind="rules",
+                                     default=default)
+            self._build_parent_water(
+                bool(current_params.get("use_parent_water", True)))
+        self._ga["given"] = self._ga_state()
+        cbo_input.currentIndexChanged.connect(
+            lambda _i: self._on_ga_input(model_cls))
+
+    def _build_joints_editor(self, current_params) -> None:
+        """"Angle or Surface": the base, the definition, the mapping, the
+        joint selection, the weaker base and the joints (v0.1.248, D231a).
+        A new selection starts with the first material as the base and one
+        joint at 0° that takes the first material too."""
+        from PySide6.QtWidgets import QCheckBox
+
+        base = current_params.get("base")
+        if not isinstance(base, dict):
+            base = ({"material_id": self._rule_choices[0][0],
+                     "model": copy.deepcopy(self._rule_choices[0][2])}
+                    if self._rule_choices else None)
+        cbo_base = self._choice_combo("base", base)
+        self._form.addRow(tr("Base material:"), cbo_base)
+
+        def combo(options, value, label):
+            c = QComboBox()
+            for v, text in options:
+                c.addItem(tr(text), v)
+            c.setCurrentIndex(max(0, c.findData(value)))
+            self._form.addRow(tr(label), c)
+            return c
+        cbo_def = combo(self._GA_DEFINITIONS,
+                        current_params.get("definition", "angle"),
+                        "Anisotropy definition:")
+        # Joints by surface are read from v0.1.249 (D231b); until then the
+        # choice is shown and cannot be taken.
+        item = cbo_def.model().item(cbo_def.findData("surface"))
+        if item is not None and cbo_def.currentData() != "surface":
+            item.setEnabled(False)
+        cbo_def.setToolTip(tr("Joints defined by an anisotropic surface are "
+                              "not available yet: define them by angle."))
+        cbo_map = combo(self._GA_MAPPINGS,
+                        current_params.get("mapping", "ab"),
+                        "Mapping function:")
+        cbo_map.setToolTip(tr(
+            "How the strength goes from the joint's to the base's as the "
+            "slice base turns away from the joint: A and B as in Anisotropic "
+            "Linear, the S-shaped cosine curve (sin² of the offset) or a "
+            "straight line from 0 to 90 degrees."))
+        cbo_sel = combo(self._GA_SELECTIONS,
+                        current_params.get("joint_selection", "worst_case"),
+                        "Several joints:")
+        cbo_sel.setToolTip(tr(
+            "Worst case: the joint that gives the lowest strength. Closest: "
+            "the joint most closely aligned with the slice base, the first "
+            "of the list on a tie."))
+        chk = QCheckBox(tr("Use the base material where it is weaker"))
+        chk.setChecked(bool(current_params.get("use_base_if_weaker", True)))
+        self._form.addRow("", chk)
+        default = ([{"angle": 0.0, "A": 10.0, "B": 20.0,
+                     "material_id": self._rule_choices[0][0],
+                     "model": copy.deepcopy(self._rule_choices[0][2])}]
+                   if self._rule_choices else [])
+        self._build_points_table(current_params, kind="joints",
+                                 default=default)
+        self._ga.update({"base": cbo_base, "base_given": base,
+                         "definition": cbo_def, "mapping": cbo_map,
+                         "selection": cbo_sel, "weaker": chk})
+        cbo_map.currentIndexChanged.connect(
+            lambda _i: self._sync_ab_columns())
+        self._sync_ab_columns()
+
+    def _sync_ab_columns(self) -> None:
+        """A and B are read by the A and B mapping only: with the other two
+        their cells cannot be edited (rule 7)."""
+        from PySide6.QtCore import Qt
+        ga, tbl = self._ga, self._table
+        if ga is None or "mapping" not in ga or tbl is None:
+            return
+        on = ga["mapping"].currentData() == "ab"
+        for r in range(tbl.rowCount()):
+            for c in (1, 2):
+                item = tbl.item(r, c)
+                if item is None:
+                    continue
+                flags = item.flags()
+                item.setFlags(flags | Qt.ItemIsEditable | Qt.ItemIsEnabled
+                              if on else
+                              flags & ~Qt.ItemIsEditable & ~Qt.ItemIsEnabled)
+
+    def _ga_state(self):
+        """What the Generalized editor's own controls hold, comparable."""
+        ga = self._ga
+        if ga is None:
+            return None
+        out = [ga["input"].currentData()]
+        for k in ("base", "definition", "mapping", "selection"):
+            if k in ga:
+                out.append(ga[k].currentData())
+        if "weaker" in ga:
+            out.append(ga["weaker"].isChecked())
+        return tuple(out)
+
+    def _on_ga_input(self, model_cls) -> None:
+        """Rebuild the editor for the other input; the fields of both are
+        kept."""
+        params = self.get_params()
+        params["input_type"] = self._ga["input"].currentData()
+        self.set_model(model_cls, params)
+
+    def _base_from_combo(self):
+        """The base on screen: the material chosen, or the base's own
+        model when it keeps it; None when there is nothing to take."""
+        by_id = {cid: st for cid, _n, st in self._rule_choices}
+        data = self._ga["base"].currentData() or ""
+        if data.startswith("material:") and data[9:] in by_id:
+            return {"material_id": data[9:],
+                    "model": copy.deepcopy(by_id[data[9:]])}
+        given = self._ga.get("base_given")
+        if data.startswith("own:") and isinstance(given, dict):
+            out = copy.deepcopy(given)
+            out.pop("material_id", None)
+            return out
+        return None
+
+    def _joints_from_table(self, sys_obj) -> list:
+        """The joints on screen (v0.1.248, D231a): angle, A and B, and the
+        material each takes or the model it keeps, as the ranges are read
+        by :meth:`_rules_from_table`."""
+        by_id = {cid: st for cid, _n, st in self._rule_choices}
+        joints = []
+        for row in self._cell_texts():
+            try:
+                angle, a, b = (self._user_to_si(float(t), "angle", sys_obj)
+                               for t in row[:3])
+            except ValueError:
+                continue    # reported by ``unparsed_table_rows``
+            choice = row[3]
+            given = None
+            if choice.startswith("own:"):
+                given = self._table_given[int(choice[len("own:"):])]
+            link = (choice[len("material:"):]
+                    if choice.startswith("material:") else None)
+            if link in by_id:
+                joint = {"material_id": link,
+                         "model": copy.deepcopy(by_id[link])}
+            elif isinstance(given, dict):
+                joint = copy.deepcopy(given)
+                joint.pop("material_id", None)
+            else:
+                joint = {}
+            joint["angle"], joint["A"], joint["B"] = angle, a, b
+            joints.append(joint)
+        return joints
+
     def _build_parent_water(self, checked: bool) -> None:
         """The «water parameters of the parent material» switch of a
         Generalized Anisotropic material (v0.1.247, D230). Greyed out while
@@ -557,7 +754,7 @@ class _StrengthParamPanel(QWidget):
         ranges live in ``rows`` since v0.1.218 (D209), the functions of
         σ'ₙ in ``points``."""
         return {"rows3": "rows", "cphi": "rows",
-                "rules": "rules"}.get(kind, "points")
+                "rules": "rules", "joints": "joints"}.get(kind, "points")
 
     def table_headers(self) -> list[str]:
         """The headers of the table on screen, as shown."""
@@ -591,9 +788,16 @@ class _StrengthParamPanel(QWidget):
         tbl.horizontalHeader().setStretchLastSection(True)
         shown = []
         for r, row in enumerate(pts):
-            # A rule is shown as (angle to, the material it takes).
-            cells = ((row.get("angle_max") if isinstance(row, dict)
-                      else None, None) if kind == "rules" else row)
+            # A rule is shown as (angle to, the material it takes), a joint
+            # as (angle, A, B, the material it takes).
+            if kind == "rules":
+                cells = (row.get("angle_max") if isinstance(row, dict)
+                         else None, None)
+            elif kind == "joints":
+                cells = ((row.get("angle"), row.get("A"), row.get("B"), None)
+                         if isinstance(row, dict) else (None,) * 4)
+            else:
+                cells = row
             texts = []
             for c in range(ncol):
                 if columns[c][1] is None:
@@ -630,6 +834,7 @@ class _StrengthParamPanel(QWidget):
                 else:
                     tbl.setItem(r, c, QTableWidgetItem("0.0"))
             self._sync_parent_water()
+            self._sync_ab_columns()
 
         def _del():
             cur = tbl.currentRow()
@@ -647,7 +852,8 @@ class _StrengthParamPanel(QWidget):
         self._table_ncol = ncol
         # The rules are kept as they came, dicts and all; the tables of
         # numbers as numbers.
-        self._table_given = (copy.deepcopy(pts) if kind == "rules" else
+        self._table_given = (copy.deepcopy(pts)
+                             if kind in ("rules", "joints") else
                              [tuple(float(v) for v in row) for row in pts])
         self._table_shown = shown
 
@@ -668,6 +874,11 @@ class _StrengthParamPanel(QWidget):
         combo = QComboBox()
         link = rule.get("material_id") if isinstance(rule, dict) else None
         ids = [cid for cid, _n, _s in self._rule_choices]
+        # v0.1.248 (D231a) — the base of "Angle or Surface" offers to keep
+        # its own model only when it has one.
+        if index == "base" and not (isinstance(rule, dict)
+                                    and rule.get("model")):
+            index = None
         if index is not None and link not in ids:
             text = (tr("(own model: %s; its link is broken)") if link else
                     tr("(own model: %s)")) % self._model_name(rule)
@@ -754,6 +965,8 @@ class _StrengthParamPanel(QWidget):
                 self._chk_parent_water.isChecked()
                 != self._parent_water_given):
             return False
+        if self._ga is not None and self._ga_state() != self._ga["given"]:
+            return False
         return self.table_unchanged()
 
     def get_params(self) -> dict:
@@ -779,6 +992,8 @@ class _StrengthParamPanel(QWidget):
                 out[key] = copy.deepcopy(self._table_given)
             elif self._table_kind == "rules":
                 out[key] = self._rules_from_table(sys_obj)
+            elif self._table_kind == "joints":
+                out[key] = self._joints_from_table(sys_obj)
             else:
                 columns = self._TABLE_COLUMNS[self._table_kind]
                 pts = []
@@ -806,6 +1021,19 @@ class _StrengthParamPanel(QWidget):
         # v0.1.247 (D230) — the Generalized Anisotropic water switch.
         if self._chk_parent_water is not None:
             out["use_parent_water"] = self._chk_parent_water.isChecked()
+        # v0.1.248 (D231a) — the input type, the other input's fields as
+        # they came, and the controls of "Angle or Surface".
+        ga = self._ga
+        if ga is not None:
+            for k, v in ga["keep"].items():
+                out.setdefault(k, copy.deepcopy(v))
+            out["input_type"] = ga["input"].currentData()
+            if "base" in ga:
+                out["base"] = self._base_from_combo()
+                out["definition"] = ga["definition"].currentData()
+                out["mapping"] = ga["mapping"].currentData()
+                out["joint_selection"] = ga["selection"].currentData()
+                out["use_base_if_weaker"] = ga["weaker"].isChecked()
         return out
 
     def _rules_from_table(self, sys_obj) -> list:
@@ -1616,9 +1844,13 @@ class MaterialPropertiesDialog(QDialog):
             _discrete = {"function_type": m.strength.function_type,
                          "method": m.strength.method}
         _params.update(_discrete)
-        # v0.1.247 (D230) — the Generalized Anisotropic water switch.
-        if hasattr(m.strength, "use_parent_water"):
-            _params["use_parent_water"] = m.strength.use_parent_water
+        # v0.1.247 (D230) — the Generalized Anisotropic water switch, and
+        # v0.1.248 (D231a) every field of both its inputs.
+        _ga = {}
+        if m.strength.MODEL_ID == "generalized_anisotropic":
+            _ga = {k: copy.deepcopy(v) for k, v in m.strength.to_dict().items()
+                   if k not in ("model_id", "params", "rules")}
+        _params.update(_ga)
         self.param_panel.set_model(type(m.strength), _params)
         # v0.1.15 — for function/table-based models, also pass the
         # ``points`` so the table editor pre-fills.
@@ -1642,8 +1874,7 @@ class MaterialPropertiesDialog(QDialog):
             elif isinstance(getattr(m.strength, "rules", None), list):
                 # v0.1.228 (D218b) — the Generalized Anisotropic ranges.
                 params_with_pts["rules"] = copy.deepcopy(m.strength.rules)
-                params_with_pts["use_parent_water"] = (
-                    m.strength.use_parent_water)
+                params_with_pts.update(_ga)
                 self.param_panel.set_model(type(m.strength), params_with_pts)
         problem = ""
         if legacy is not None:
@@ -2099,6 +2330,12 @@ class MaterialPropertiesDialog(QDialog):
                 tr("Row %d of the table: «angle to» is not a number.")
                 % bad[0])
             return True
+        if self.param_panel._table_kind == "joints":
+            # v0.1.248 (D231a) — three numbers and a material.
+            self._show_strength_problem(
+                tr("Row %d of the table: the angle, A and B must be "
+                   "numbers.") % bad[0])
+            return True
         self._show_strength_problem(
             tr("Row %d of the table is not %d numbers.")
             % (bad[0], self.param_panel.table_columns()))
@@ -2137,8 +2374,11 @@ class MaterialPropertiesDialog(QDialog):
         # strength anyway. A range whose material changed is judged too.
         resolve_generalized_links(self.materials)
         for row, m in enumerate(self.materials):
+            # v0.1.248 (D231a): the base and the joints link too.
             links = {r.get("material_id")
-                     for r in getattr(m.strength, "rules", None) or []
+                     for _k, r in (m.strength.children_items()
+                                   if hasattr(m.strength, "children_items")
+                                   else ())
                      if isinstance(r, dict)} - {None}
             if m.id not in changed and not (links & changed):
                 continue
@@ -2187,7 +2427,9 @@ class MaterialPropertiesDialog(QDialog):
             gone = self.materials[row]
             users = [g.name for g in self.materials if g is not gone and any(
                 isinstance(r, dict) and r.get("material_id") == gone.id
-                for r in getattr(g.strength, "rules", None) or [])]
+                for _k, r in (g.strength.children_items()
+                              if hasattr(g.strength, "children_items")
+                              else ()))]
             if users:
                 self._show_strength_problem(
                     tr("%s cannot be removed: the ranges of %s take its "

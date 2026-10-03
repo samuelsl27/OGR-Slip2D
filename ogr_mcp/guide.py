@@ -139,6 +139,12 @@ parameters, units and defaults. The common ones:
   true): the water of every base is this material's; false, a base whose
   range takes a material takes that material's water. The weight is always
   this material's, and the rapid drawdown always the range's material's.
+  input_type "angle_or_surface" (the reference's other input): a base
+  {"material": "Rock"} and joints [{"angle": 20, "A": 8, "B": 27,
+  "material": "Bedding"}]; mapping "ab" (A and B as Anisotropic Linear),
+  "cosine" (sin² of the offset) or "linear"; joint_selection "worst_case"
+  or "closest"; use_base_if_weaker (default true). Water and drawdown are
+  this material's. Joints by surface are refused in this version.
 * c_phi_function: rows [[normal stress, c, phi], ...]; c and phi are
   interpolated between rows.
 * snowden_anisotropic_linear: bedding_angle, A1, B1 (the clockwise side of

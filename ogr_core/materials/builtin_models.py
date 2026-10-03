@@ -1606,6 +1606,19 @@ class GeneralizedAnisotropic(StrengthModel):
     these through ``linked_material_id``; a range with no link has no
     material, so the parent stands for it.
 
+    v0.1.248 (D231a) -- the reference's other input, "Angle or Surface"
+    (``input_type``): a BASE strength "for failure planes which are not
+    within the defined orientation range" of the joints, and JOINTS, each at
+    an angle (by a surface from v0.1.249) with its strength, a material or a
+    model of its own. ``mapping`` says how a joint's strength gives way to
+    the base's with the offset δ between the joint and the base (A and B,
+    cosine or linear; :meth:`mapping_fraction`), ``joint_selection`` which
+    joint answers when there are several, and ``use_base_if_weaker`` whether
+    a base weaker than that joint takes over -- all three fixed once per
+    function, as its dialog fixes them. The water and the drawdown are the
+    parent's (its note: "Angle or Surface uses the water properties of the
+    parent material"); ``use_parent_water`` belongs to "Angle Range" only.
+
     Needs the slice base angle → ``needs_context = True``.
     """
 
@@ -1613,16 +1626,42 @@ class GeneralizedAnisotropic(StrengthModel):
     DISPLAY_NAME = "Generalized Anisotropic"
     PARAMETERS = {}
 
+    #: v0.1.248 (D231a) -- the reference's two inputs, and the choices its
+    #: "Angle or Surface" dialog fixes once per function.
+    INPUT_TYPES = ("angle_range", "angle_or_surface")
+    DEFINITIONS = ("angle", "surface")
+    MAPPINGS = ("ab", "cosine", "linear")
+    JOINT_SELECTIONS = ("worst_case", "closest")
+
     def __init__(self, **params):
         rules = params.pop("rules", None)
         use_parent_water = params.pop("use_parent_water", True)
+        input_type = params.pop("input_type", "angle_range")
+        base = params.pop("base", None)
+        joints = params.pop("joints", None)
+        definition = params.pop("definition", "angle")
+        mapping = params.pop("mapping", "ab")
+        joint_selection = params.pop("joint_selection", "worst_case")
+        use_base_if_weaker = params.pop("use_base_if_weaker", True)
         super().__init__(**params)
         # rules: list of dicts {angle_min, angle_max, model: <dict>}
         self.rules = rules or []
         # v0.1.247 (D230) -- see the class docstring. Stored as given: what
         # a valid value is (a bool) lives in ``ogr_core.project.rules``.
         self.use_parent_water = use_parent_water
-        # rule index -> (the dict the model was built from, a copy of it,
+        # v0.1.248 (D231a) -- the "Angle or Surface" input: a base
+        # {material_id?, model} and joints [{angle, A, B, material_id?,
+        # model}]. Kept beside the ranges, as the reference keeps the two
+        # lists apart; ``input_type`` says which one computes. Stored as
+        # given; what is valid lives in ``ogr_core.project.rules``.
+        self.input_type = input_type
+        self.base = base
+        self.joints = joints or []
+        self.definition = definition
+        self.mapping = mapping
+        self.joint_selection = joint_selection
+        self.use_base_if_weaker = use_base_if_weaker
+        # child key -> (the dict the model was built from, a copy of it,
         # the model or the exception building it raised).
         self._built: dict = {}
 
@@ -1630,9 +1669,52 @@ class GeneralizedAnisotropic(StrengthModel):
     def needs_context(self) -> bool:
         return True
 
+    @property
+    def angle_or_surface(self) -> bool:
+        """Whether the "Angle or Surface" input computes (v0.1.248)."""
+        return self.input_type == "angle_or_surface"
+
     # ------------------------------------------------------------------
-    def _rule_model(self, i: int, rule):
-        """The model of rule ``i``, built once per content of its dict.
+    # The children: the ranges of "Angle Range", the base and the joints of
+    # "Angle or Surface". v0.1.248 (D231a) -- one walk for every consumer
+    # of a link (the link resolution and its refusal, the property import,
+    # the API, the design factors, the NEEDS_* flags), so that a child
+    # added to the model cannot be missed by one of them.
+    @staticmethod
+    def child_label(key) -> str:
+        """``rule 2``, ``the base`` or ``joint 1``, for messages."""
+        kind, i = key
+        if kind == "rules":
+            return f"rule {i + 1}"
+        if kind == "base":
+            return "the base"
+        return f"joint {i + 1}"
+
+    def children_items(self, active_only: bool = False):
+        """``(key, entry)`` of every child, ``key`` being ``("rules", i)``,
+        ``("base", None)`` or ``("joints", j)`` and ``entry`` its dict
+        (``model`` and an optional ``material_id``). ``active_only``: only
+        the input that computes."""
+        if not active_only or not self.angle_or_surface:
+            for i, rule in enumerate(self.rules):
+                yield ("rules", i), rule
+        if not active_only or self.angle_or_surface:
+            if self.base is not None:
+                yield ("base", None), self.base
+            for j, joint in enumerate(self.joints):
+                yield ("joints", j), joint
+
+    def with_children(self, new: dict) -> "GeneralizedAnisotropic":
+        """A new model whose children under the keys of ``new`` are the
+        entries given, and everything else as here."""
+        return self.replaced(
+            rules=[new.get(("rules", i), r) for i, r in enumerate(self.rules)],
+            base=new.get(("base", None), self.base),
+            joints=[new.get(("joints", j), jt)
+                    for j, jt in enumerate(self.joints)])
+
+    def _child_model(self, key, entry):
+        """The model of a child, built once per content of its dict.
 
         Kept against a COPY of the dict and compared by value, so a dict
         edited in place is rebuilt rather than served stale. Raises
@@ -1642,24 +1724,29 @@ class GeneralizedAnisotropic(StrengthModel):
 
         from .strength_model import StrengthModel as _SM
 
-        mdict = rule.get("model") if isinstance(rule, dict) else None
-        cached = self._built.get(i)
+        label = self.child_label(key)
+        mdict = entry.get("model") if isinstance(entry, dict) else None
+        cached = self._built.get(key)
         if cached is None or cached[0] is not mdict or cached[1] != mdict:
             if not mdict:
                 built = IncompleteGeneralizedAnisotropic(
-                    f"rule {i + 1} has no model")
+                    f"{label} has no model")
             else:
                 try:
                     built = _SM.from_dict(mdict)
                 except Exception as exc:  # noqa: BLE001 - reported below
                     built = IncompleteGeneralizedAnisotropic(
-                        f"the model of rule {i + 1} cannot be built: "
+                        f"the model of {label} cannot be built: "
                         f"{type(exc).__name__}: {exc}")
             cached = (mdict, copy.deepcopy(mdict), built)
-            self._built[i] = cached
+            self._built[key] = cached
         if isinstance(cached[2], Exception):
             raise cached[2]
         return cached[2]
+
+    def _rule_model(self, i: int, rule):
+        """The model of rule ``i``; see :meth:`_child_model`."""
+        return self._child_model(("rules", i), rule)
 
     def _rule_index(self, angle_deg: float) -> int:
         """The index of the first rule that holds ``angle_deg``, folded.
@@ -1696,28 +1783,44 @@ class GeneralizedAnisotropic(StrengthModel):
         """The id of the material the range holding ``angle_deg`` links, or
         None when that range links none (v0.1.247, D230): whose water and
         drawdown parameters a base at that angle can take. Raises as
-        :meth:`rule_index_for_angle` does."""
+        :meth:`rule_index_for_angle` does.
+
+        v0.1.248 (D231a) -- None with the "Angle or Surface" input, which
+        blends a base and joints and so hands a base to no one material:
+        the reference documents that it "uses the water properties of the
+        parent material", and its drawdown is the parent's too."""
+        if self.angle_or_surface:
+            return None
         i = self.rule_index_for_angle(angle_deg)
         return self.rules[i].get("material_id") or None
 
     def replaced(self, **changes) -> "GeneralizedAnisotropic":
-        """A new model with ``changes`` (``rules``, ``use_parent_water`` or a
-        parameter) and everything else as here (v0.1.247, D230). The places
-        that rebuild the model -- the design factors, the link resolution,
-        the property import, the API -- go through here, so an attribute
-        added to the model is not dropped by one of them."""
+        """A new model with ``changes`` (``rules``, ``use_parent_water``, the
+        fields of "Angle or Surface" or a parameter) and everything else as
+        here (v0.1.247, D230). The places that rebuild the model -- the
+        design factors, the link resolution, the property import, the API --
+        go through here, so an attribute added to the model is not dropped
+        by one of them."""
         kwargs = {"rules": self.rules,
                   "use_parent_water": self.use_parent_water,
+                  "input_type": self.input_type,
+                  "base": self.base,
+                  "joints": self.joints,
+                  "definition": self.definition,
+                  "mapping": self.mapping,
+                  "joint_selection": self.joint_selection,
+                  "use_base_if_weaker": self.use_base_if_weaker,
                   **self.params}
         kwargs.update(changes)
         return GeneralizedAnisotropic(**kwargs)
 
     def _children(self):
-        """The models of the rules that can be built."""
+        """The models of the input that computes, those that can be
+        built."""
         out = []
-        for i, rule in enumerate(self.rules):
+        for key, entry in self.children_items(active_only=True):
             try:
-                out.append(self._rule_model(i, rule))
+                out.append(self._child_model(key, entry))
             except IncompleteGeneralizedAnisotropic:
                 continue
         return out
@@ -1726,70 +1829,196 @@ class GeneralizedAnisotropic(StrengthModel):
     NEEDS_SLOPE_DISTANCE = _AskedByChildren("NEEDS_SLOPE_DISTANCE")
 
     # ------------------------------------------------------------------
+    # v0.1.248 (D231a) -- "Angle or Surface", joints by angle.
+    @staticmethod
+    def joint_offset_deg(base_angle_deg: float, joint_angle_deg: float):
+        """δ, the ACUTE angle between a slice base and a joint, in [0, 90]
+        degrees: the reference's "angle offset", folded as Anisotropic
+        Linear folds its own (a plane has no sense)."""
+        d = abs(float(base_angle_deg) - float(joint_angle_deg)) % 180.0
+        return 180.0 - d if d > 90.0 else d
+
+    def mapping_fraction(self, delta_deg: float, joint) -> float:
+        """t, how far toward the BASE strength a joint at offset ``delta_deg``
+        stands: 0 on the joint, 1 on the base. The reference's three
+        mapping functions, from its figure of them (decisions written in
+        D231, where its text is silent or contradicts it):
+
+        * ``ab``: the joint up to A, the base from B, linear between --
+          the transition of Anisotropic Linear (Mercer 2012, 2013); A = B
+          is a step at A;
+        * ``linear``: δ/90;
+        * ``cosine``: sin²δ = (1 − cos 2δ)/2, the S-shaped curve of its
+          figure, flat at both ends and crossing the linear one at 45°. Its
+          text ("cosine 1 → base") says the opposite of the figure and of
+          its own text for the linear function.
+        """
+        if self.mapping == "linear":
+            return delta_deg / 90.0
+        if self.mapping == "cosine":
+            return math.sin(math.radians(delta_deg)) ** 2
+        try:
+            a = float(joint.get("A", 0.0))
+            b = float(joint.get("B", 0.0))
+        except (TypeError, ValueError, AttributeError):
+            raise IncompleteGeneralizedAnisotropic(
+                "the A and B of a joint are not numbers") from None
+        if delta_deg <= a:
+            return 0.0
+        if delta_deg >= b or b - a < 1e-9:
+            return 1.0
+        return (delta_deg - a) / (b - a)
+
+    @staticmethod
+    def _read(model, sigma_n_eff, ctx):
+        if ctx is not None and getattr(model, "needs_context", False):
+            return model.shear_strength_ctx(sigma_n_eff, ctx)
+        return model.shear_strength(sigma_n_eff)
+
+    def _angle_or_surface_strength(self, sigma_n_eff, ctx, angle_deg):
+        """τ on a base at ``angle_deg`` with the "Angle or Surface" input.
+
+        For each joint, τ_j = (1 − t)·τ_joint + t·τ_base at the base's σ'ₙ,
+        t from :meth:`mapping_fraction` (with Mohr-Coulomb children this is
+        the linear interpolation of c and tan φ that Anisotropic Linear
+        writes). Several joints: the lowest τ_j ("Worst Case") or the joint
+        with the smallest offset, the first of the list on a tie
+        ("Closest"). Then, with ``use_base_if_weaker``, min(τ, τ_base).
+        """
+        if self.definition != "angle":
+            raise IncompleteGeneralizedAnisotropic(
+                "joints defined by a surface are not implemented in this "
+                "version")
+        if not self.joints:
+            raise IncompleteGeneralizedAnisotropic("there are no joints")
+        tau_base = self._read(self._child_model(("base", None), self.base),
+                              sigma_n_eff, ctx)
+        chosen = None          # (τ_j, δ) of the joint that answers
+        for j, joint in enumerate(self.joints):
+            model = self._child_model(("joints", j), joint)
+            try:
+                joint_angle = float(joint.get("angle"))
+            except (TypeError, ValueError, AttributeError):
+                raise IncompleteGeneralizedAnisotropic(
+                    f"the angle of joint {j + 1} is not a number") from None
+            delta = self.joint_offset_deg(angle_deg, joint_angle)
+            t = self.mapping_fraction(delta, joint)
+            # The ends without the other strength: 0·τ is not 0 when τ is
+            # an infinite strength.
+            if t <= 0.0:
+                tau = self._read(model, sigma_n_eff, ctx)
+            elif t >= 1.0:
+                tau = tau_base
+            else:
+                tau = ((1.0 - t) * self._read(model, sigma_n_eff, ctx)
+                       + t * tau_base)
+            if chosen is None:
+                chosen = (tau, delta)
+            elif self.joint_selection == "worst_case":
+                if tau < chosen[0]:
+                    chosen = (tau, delta)
+            # "Closest": the smallest offset; offsets within 1e-9 degree are
+            # a tie, which the first of the list wins -- the angle reaches
+            # here through radians, and 30 degrees comes back as
+            # 29.999999999999996, so an exact comparison would let the
+            # rounding pick the joint.
+            elif delta < chosen[1] - 1e-9:
+                chosen = (tau, delta)
+        tau = chosen[0]
+        if self.use_base_if_weaker:
+            tau = min(tau, tau_base)
+        return tau
+
+    # ------------------------------------------------------------------
     def shear_strength(self, sigma_n_eff: float) -> float:
-        """No slice, no orientation: the WEAKEST of its rules' models, each
-        read without a slice too (v0.1.230, D219, the owner's decision). It
-        used to be the rule that holds a horizontal base. Raises, as the
-        model does everywhere, when no rule can be built."""
+        """No slice, no orientation: the WEAKEST of its children, each read
+        without a slice too (v0.1.230, D219, the owner's decision): the
+        ranges of "Angle Range", or the base and the joints of "Angle or
+        Surface" (v0.1.248). It used to be the rule that holds a horizontal
+        base. Raises, as the model does everywhere, when no child can be
+        built."""
         children = self._children()
         if not children:
             raise IncompleteGeneralizedAnisotropic(
-                "no rule holds a model that can be built")
+                "no rule holds a model that can be built"
+                if not self.angle_or_surface else
+                "neither the base nor any joint holds a model that can be "
+                "built")
         return min(m.shear_strength(sigma_n_eff) for m in children)
 
     def shear_strength_ctx(self, sigma_n_eff, ctx: SliceContext | None = None):
         angle = math.degrees(ctx.base_angle_rad) if ctx is not None else 0.0
         # v0.1.225 (D218) -- the ABSOLUTE base inclination; no bedding is
         # subtracted. See the class docstring.
+        if self.angle_or_surface:
+            return self._angle_or_surface_strength(sigma_n_eff, ctx, angle)
         m = self._model_for_angle(angle)
         if getattr(m, "needs_context", False):
             return m.shear_strength_ctx(sigma_n_eff, ctx)
         return m.shear_strength(sigma_n_eff)
 
     def design_factored(self, factors: MaterialFactors) -> FactoredStrength:
-        """Each rule's model by its own category (v0.1.225, D224); the
-        reference documentation says the design factors apply to the
-        child materials."""
-        rules, changes, notes = [], {}, []
-        for i, rule in enumerate(self.rules):
-            if isinstance(rule, dict) and rule.get("material_id"):
-                # v0.1.228 (D218b) -- a rule that LINKS a material is given
+        """Each child's model by its own category (v0.1.225, D224): the
+        ranges, or the base and the joints (v0.1.248); the reference
+        documentation says the design factors apply to the child
+        materials."""
+        new, changes, notes = {}, {}, []
+        for key, entry in self.children_items(active_only=True):
+            label = self.child_label(key)
+            if isinstance(entry, dict) and entry.get("material_id"):
+                # v0.1.228 (D218b) -- a child that LINKS a material is given
                 # that material's strength on the analysis copy, after the
                 # factors: it is factored once, through the material.
-                rules.append(rule)
                 continue
             try:
-                child = self._rule_model(i, rule)
+                child = self._child_model(key, entry)
             except IncompleteGeneralizedAnisotropic:
-                notes.append(f"rule {i + 1}: its model cannot be built, so "
-                             f"it was not factored")
-                rules.append(rule)
+                notes.append(f"{label}: its model cannot be built, so it "
+                             f"was not factored")
                 continue
             done = child.design_factored(factors)
-            new_rule = dict(rule)
             if done.changes:
-                new_rule["model"] = done.model.to_dict()
+                new_entry = dict(entry)
+                new_entry["model"] = done.model.to_dict()
+                new[key] = new_entry
                 for k, v in done.changes.items():
-                    changes[f"rule {i + 1} {k}"] = v
+                    changes[f"{label} {k}"] = v
             if done.note:
-                notes.append(f"rule {i + 1}: {done.note}")
-            rules.append(new_rule)
-        out = self.replaced(rules=rules) if changes else self
-        return FactoredStrength(out, changes, "each rule by its own model",
+                notes.append(f"{label}: {done.note}")
+        out = self.with_children(new) if changes else self
+        how = ("the base and each joint by its own model"
+               if self.angle_or_surface else "each rule by its own model")
+        return FactoredStrength(out, changes, how,
                                 note="; ".join(notes) or None)
 
     def to_dict(self) -> dict:
         d = super().to_dict()
         d["rules"] = list(self.rules)
         d["use_parent_water"] = self.use_parent_water
+        d["input_type"] = self.input_type
+        d["base"] = self.base
+        d["joints"] = list(self.joints)
+        d["definition"] = self.definition
+        d["mapping"] = self.mapping
+        d["joint_selection"] = self.joint_selection
+        d["use_base_if_weaker"] = self.use_base_if_weaker
         return d
 
     @classmethod
     def from_dict(cls, data: dict) -> "GeneralizedAnisotropic":
         # v0.1.247 (D230) -- a file without the key is from before the
         # option, and computed with the parent's water: True keeps it.
+        # v0.1.248 (D231a) -- one without the "Angle or Surface" keys is an
+        # "Angle Range" function, the only input before.
         return cls(rules=data.get("rules"),
                    use_parent_water=data.get("use_parent_water", True),
+                   input_type=data.get("input_type", "angle_range"),
+                   base=data.get("base"),
+                   joints=data.get("joints"),
+                   definition=data.get("definition", "angle"),
+                   mapping=data.get("mapping", "ab"),
+                   joint_selection=data.get("joint_selection", "worst_case"),
+                   use_base_if_weaker=data.get("use_base_if_weaker", True),
                    **data.get("params", {}))
 
 

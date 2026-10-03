@@ -2411,6 +2411,47 @@ _DICTS: dict[str, dict[str, str]] = {
             "de un TIN, un spline que no se puede resolver), responde un "
             "spline de placa delgada local con los diez puntos más "
             "próximos, y el inverso de la distancia si también falla.",
+        # --- v0.1.248 · D231a: «Angle or Surface» de Generalized
+        "Input type:": "Tipo de entrada:",
+        "Angle Range": "Rango de ángulos",
+        "Angle or Surface": "Ángulo o superficie",
+        "Base material:": "Material base:",
+        "Anisotropy definition:": "Definición de la anisotropía:",
+        "Angle": "Ángulo",
+        "Surface": "Superficie",
+        "Mapping function:": "Función de transición:",
+        "A and B": "A y B",
+        "Cosine": "Coseno",
+        "Linear": "Lineal",
+        "Several joints:": "Varias juntas:",
+        "Worst case": "Peor caso",
+        "Closest": "Más próxima",
+        "Use the base material where it is weaker":
+            "Usar el material base donde sea más débil",
+        "Joints:": "Juntas:",
+        "Joint angle (°)": "Ángulo de la junta (°)",
+        "Half-width A (°)": "Semiancho A (°)",
+        "Transition end B (°)": "Fin de la transición B (°)",
+        "Joints defined by an anisotropic surface are not available yet: "
+        "define them by angle.":
+            "Las juntas definidas por una superficie anisótropa todavía no "
+            "están disponibles: defínalas por ángulo.",
+        "How the strength goes from the joint's to the base's as the slice "
+        "base turns away from the joint: A and B as in Anisotropic Linear, "
+        "the S-shaped cosine curve (sin² of the offset) or a straight line "
+        "from 0 to 90 degrees.":
+            "Cómo pasa la resistencia de la de la junta a la de la base "
+            "según la base de la dovela se aparta de la junta: A y B como en "
+            "Anisotropic Linear, la curva en S del coseno (sen² del desfase) "
+            "o una recta de 0 a 90 grados.",
+        "Worst case: the joint that gives the lowest strength. Closest: the "
+        "joint most closely aligned with the slice base, the first of the "
+        "list on a tie.":
+            "Peor caso: la junta que da la menor resistencia. Más próxima: "
+            "la junta más alineada con la base de la dovela; en empate, la "
+            "primera de la lista.",
+        "Row %d of the table: the angle, A and B must be numbers.":
+            "Fila %d de la tabla: el ángulo, A y B tienen que ser números.",
         # --- v0.1.247 · D230: el agua de los hijos de Generalized
         "Use the water parameters of the parent material":
             "Usar los parámetros de agua del material padre",

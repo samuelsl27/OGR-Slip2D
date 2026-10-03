@@ -686,6 +686,99 @@ def generalized_anisotropic_rules_refusal(rules) -> Optional[Refusal]:
     return None
 
 
+def generalized_angle_or_surface_refusal(strength) -> Optional[Refusal]:
+    """Why the "Angle or Surface" input of a Generalized Anisotropic model
+    cannot be computed with, or None (v0.1.248, D231a).
+
+    The reference's dialog: a base material, joints each with its angle (or
+    its anisotropic surface) and its material, and, once per function, the
+    mapping function (A and B, cosine or linear), which joint answers when
+    there are several ("Worst Case" or "Closest") and whether a weaker base
+    takes over. So: a base and at least one joint, each with a strength
+    model that can be built; a joint angle that is a number; A and B with
+    0 <= A <= B <= 90, as in Snowden, when the mapping reads them; the
+    three choices among their values. Joints by surface are refused until
+    the version that reads the surfaces (D231b).
+    """
+    import math
+
+    from ..materials.builtin_models import GeneralizedAnisotropic as _G
+    from ..materials.strength_model import StrengthModel
+
+    if strength.definition not in _G.DEFINITIONS:
+        return Refusal("generalized_aos_definition",
+                       f"The anisotropy is defined by 'angle' or 'surface', "
+                       f"not {strength.definition!r}.")
+    if strength.definition == "surface":
+        return Refusal("generalized_aos_surface",
+                       "Joints defined by an anisotropic surface are not "
+                       "implemented in this version: define them by angle.")
+    if strength.mapping not in _G.MAPPINGS:
+        return Refusal("generalized_aos_mapping",
+                       f"The mapping function is one of {list(_G.MAPPINGS)}, "
+                       f"not {strength.mapping!r}.")
+    if strength.joint_selection not in _G.JOINT_SELECTIONS:
+        return Refusal("generalized_aos_selection",
+                       f"The joint selection is one of "
+                       f"{list(_G.JOINT_SELECTIONS)}, not "
+                       f"{strength.joint_selection!r}.")
+    if not isinstance(strength.use_base_if_weaker, bool):
+        return Refusal("generalized_aos_base_if_weaker",
+                       f"use_base_if_weaker must be true or false, not "
+                       f"{strength.use_base_if_weaker!r}.")
+    base = strength.base
+    if not isinstance(base, dict) or not base.get("model"):
+        return Refusal("generalized_aos_base",
+                       "The base needs a strength: a material or a model of "
+                       "its own.")
+    joints = strength.joints
+    if not isinstance(joints, list) or not joints:
+        return Refusal("generalized_aos_joints",
+                       "At least one joint is needed, with its angle and its "
+                       "strength.")
+    for j, joint in enumerate(joints, start=1):
+        if not isinstance(joint, dict) or not joint.get("model"):
+            return Refusal("generalized_aos_joint_model",
+                           f"Joint {j} needs a strength: a material or a "
+                           f"model of its own.")
+        try:
+            angle = float(joint.get("angle"))
+        except (TypeError, ValueError):
+            angle = float("nan")
+        if not math.isfinite(angle):
+            return Refusal("generalized_aos_joint_angle",
+                           f"The angle of joint {j} must be a number of "
+                           f"degrees.")
+        if strength.mapping == "ab":
+            try:
+                a = float(joint.get("A"))
+                b = float(joint.get("B"))
+            except (TypeError, ValueError):
+                a = b = float("nan")
+            # B <= 90 as in Snowden: the offset never passes 90 degrees, so
+            # a larger B would be a base that is never reached.
+            if not (math.isfinite(a) and math.isfinite(b)) or \
+                    not 0.0 <= a <= b <= 90.0:
+                return Refusal("generalized_aos_ab",
+                               f"Joint {j}: A and B must satisfy 0 <= A <= B "
+                               f"<= 90 degrees; got A = {joint.get('A')!r}, B = "
+                               f"{joint.get('B')!r}.")
+    for key, entry in strength.children_items(active_only=True):
+        try:
+            child = StrengthModel.from_dict(entry["model"])
+        except Exception as exc:  # noqa: BLE001 - the message says which
+            return Refusal("generalized_aos_model",
+                           f"The strength model of "
+                           f"{strength.child_label(key)} cannot be built: "
+                           f"{type(exc).__name__}: {exc}")
+        if isinstance(child, _G):
+            return Refusal("generalized_aos_nested",
+                           f"{strength.child_label(key).capitalize()} holds "
+                           f"a Generalized Anisotropic model; it takes a "
+                           f"plain strength.")
+    return None
+
+
 def anisotropic_linear_refusal(strength) -> Optional[Refusal]:
     """Why an Anisotropic Linear model's A and B cannot be used, or None.
 
@@ -783,7 +876,18 @@ def strength_model_refusal(strength, name: Optional[str] = None
         return Refusal(why.code, f"Material {label!r}, Anisotropic Linear: "
                                  f"{why.message}")
     if isinstance(strength, GeneralizedAnisotropic):
-        why = generalized_anisotropic_rules_refusal(strength.rules)
+        # v0.1.248 (D231a) -- the input that computes is judged: the ranges
+        # of "Angle Range" or the base and joints of "Angle or Surface".
+        if strength.input_type not in strength.INPUT_TYPES:
+            return Refusal("generalized_input_type",
+                           f"Material {label!r}, Generalized Anisotropic: "
+                           f"the input is one of "
+                           f"{list(strength.INPUT_TYPES)}, not "
+                           f"{strength.input_type!r}.")
+        if strength.angle_or_surface:
+            why = generalized_angle_or_surface_refusal(strength)
+        else:
+            why = generalized_anisotropic_rules_refusal(strength.rules)
         if why is not None:
             return Refusal(why.code, f"Material {label!r}, Generalized "
                                      f"Anisotropic: {why.message}")
@@ -795,9 +899,9 @@ def strength_model_refusal(strength, name: Optional[str] = None
                 f"Material {label!r}, Generalized Anisotropic: "
                 f"use_parent_water must be true or false, not "
                 f"{strength.use_parent_water!r}.")
-        for rule in strength.rules:
+        for _key, entry in strength.children_items(active_only=True):
             why = strength_model_refusal(
-                StrengthModel.from_dict(rule["model"]), name)
+                StrengthModel.from_dict(entry["model"]), name)
             if why is not None:
                 return why
     return None
@@ -812,6 +916,9 @@ def generalized_links_refusal(material, materials) -> Optional[Refusal]:
     material to each range. The link must name a material of the project,
     not the Generalized material itself and not another Generalized one: a
     range takes a plain strength, which also rules out cycles.
+
+    v0.1.248 (D231a) — the base and the joints of "Angle or Surface" too:
+    the children of the input that computes (``children_items``).
     """
     from ..materials.builtin_models import GeneralizedAnisotropic
 
@@ -820,25 +927,26 @@ def generalized_links_refusal(material, materials) -> Optional[Refusal]:
         return None
     by_id = {m.id: m for m in materials}
     label = getattr(material, "name", "?")
-    for i, rule in enumerate(strength.rules or [], start=1):
-        link = rule.get("material_id") if isinstance(rule, dict) else None
+    for key, entry in strength.children_items(active_only=True):
+        who = strength.child_label(key)
+        link = entry.get("material_id") if isinstance(entry, dict) else None
         if not link:
             continue
         src = by_id.get(link)
         if src is None:
             return Refusal("generalized_link_missing",
                            f"Material {label!r}, Generalized Anisotropic: "
-                           f"rule {i} links a material that is not in the "
+                           f"{who} links a material that is not in the "
                            f"project.")
         if src is material:
             return Refusal("generalized_link_self",
                            f"Material {label!r}, Generalized Anisotropic: "
-                           f"rule {i} links the material itself.")
+                           f"{who} links the material itself.")
         if isinstance(getattr(src, "strength", None),
                       GeneralizedAnisotropic):
             return Refusal("generalized_link_generalized",
                            f"Material {label!r}, Generalized Anisotropic: "
-                           f"rule {i} links {src.name!r}, another "
+                           f"{who} links {src.name!r}, another "
                            f"Generalized Anisotropic material; a range takes "
                            f"a plain strength model.")
     return None

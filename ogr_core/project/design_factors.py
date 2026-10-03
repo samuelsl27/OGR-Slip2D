@@ -333,20 +333,22 @@ def resolve_generalized_links(materials) -> int:
         st = getattr(m, "strength", None)
         if not isinstance(st, GeneralizedAnisotropic):
             continue
-        rules, changed = [], False
-        for rule in st.rules:
-            src = (by_id.get(rule.get("material_id"))
-                   if isinstance(rule, dict) else None)
+        # v0.1.248 (D231a) -- every child: the ranges, and the base and the
+        # joints of "Angle or Surface".
+        new_children, changed = {}, False
+        for key, entry in st.children_items():
+            src = (by_id.get(entry.get("material_id"))
+                   if isinstance(entry, dict) else None)
             if src is None or src is m or isinstance(
                     getattr(src, "strength", None), GeneralizedAnisotropic):
-                rules.append(rule)
                 continue
-            new = dict(rule)
+            new = dict(entry)
             new["model"] = src.strength.to_dict()
-            changed = changed or new != rule
-            rules.append(new)
+            if new != entry:
+                new_children[key] = new
+                changed = True
         if changed:
-            m.strength = st.replaced(rules=rules)
+            m.strength = st.with_children(new_children)
             n += 1
     return n
 
@@ -355,8 +357,8 @@ def has_generalized_links(project) -> bool:
     from ogr_core.materials.builtin_models import GeneralizedAnisotropic
     return any(
         isinstance(getattr(m, "strength", None), GeneralizedAnisotropic)
-        and any(isinstance(r, dict) and r.get("material_id")
-                for r in m.strength.rules)
+        and any(isinstance(e, dict) and e.get("material_id")
+                for _k, e in m.strength.children_items())
         for m in getattr(project, "materials", []))
 
 

@@ -62,14 +62,17 @@ def _relink_generalized(project, source, imported: dict, notes: list):
         # New rule dicts, never edited in place: the clone came through
         # ``to_dict``, which hands out the SOURCE's rule dicts, so an edit in
         # place would relink the other project's material as well.
-        rules = []
-        for i, rule in enumerate(clone.strength.rules, start=1):
+        # v0.1.248 (D231a) -- every child: the ranges, the base and the
+        # joints.
+        new_children = {}
+        for key, rule in clone.strength.children_items():
+            who = ("range %d" % (key[1] + 1) if key[0] == "rules"
+                   else clone.strength.child_label(key))
             link = rule.get("material_id") if isinstance(rule, dict) else None
             if not link:
-                rules.append(rule)
                 continue
             rule = copy.deepcopy(rule)
-            rules.append(rule)
+            new_children[key] = rule
             here = imported.get(link)
             src = by_src.get(link)
             by_name_here = here is None and src is not None
@@ -79,16 +82,16 @@ def _relink_generalized(project, source, imported: dict, notes: list):
                     here.strength, GeneralizedAnisotropic):
                 rule.pop("material_id", None)
                 notes.append(
-                    f"{clone.name!r}: range {i} linked a material this model "
+                    f"{clone.name!r}: {who} linked a material this model "
                     f"cannot link; it keeps the strength it had, unlinked.")
                 continue
             rule["material_id"] = here.id
             if by_name_here:
                 notes.append(
-                    f"{clone.name!r}: range {i} now takes the strength of "
+                    f"{clone.name!r}: {who} now takes the strength of "
                     f"{here.name!r}, the material of that name in this "
                     f"model.")
-        clone.strength = clone.strength.replaced(rules=rules)
+        clone.strength = clone.strength.with_children(new_children)
     resolve_generalized_links(project.materials)
 
 
