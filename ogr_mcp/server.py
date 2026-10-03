@@ -803,7 +803,15 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
                      description="Loads undrained layers (needs the "
                                  "excess pore pressure option).")] = None,
                  name: Annotated[Optional[str], Field(
-                     description="Label.")] = None) -> dict[str, Any]:
+                     description="Label.")] = None,
+                 action: Annotated[Optional[Literal[
+                     "permanent", "variable"]], Field(
+                     description="With a design standard: a permanent "
+                                 "load takes the permanent-action factors, "
+                                 "a variable one (the default) the "
+                                 "variable ones; each by whether the whole "
+                                 "load drives the sliding.")
+                 ] = None) -> dict[str, Any]:
         """Add a distributed or line load, or change one."""
         return run("load_set", project_id=project_id, load=load, kind=kind,
                    start=start, end=end, point_xy=point_xy,
@@ -811,7 +819,7 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
                    distribution=distribution, orientation=orientation,
                    angle_deg=angle_deg,
                    creates_excess_pore_pressure=creates_excess_pore_pressure,
-                   name=name)
+                   name=name, action=action)
 
     @tool("load_delete", _DESTRUCTIVE)
     def load_delete(loads: Annotated[Any, Field(

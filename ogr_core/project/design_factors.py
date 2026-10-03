@@ -72,6 +72,20 @@ from dataclasses import dataclass, field
 from ogr_core.materials.strength_model import (MaterialFactors,
                                                tan_factored_angle)
 
+#: v0.1.243 (D226b) — the loads are factored by the engine, each one as a
+#: whole, with the factors of its own action and by whether it drives the
+#: sliding of the surface (``ogr_slip2d.design_actions``).
+#:
+#: Until v0.1.242 every load of the copy was multiplied by γQ here, whatever
+#: it was and wherever it acted: with EN 1997-1 DA1-C1 a variable load on the
+#: part of a slope that resists the sliding took 1.5 where Table A.3 gives
+#: γQ,fav = 0 — on the φ = 0 slope of ``test_tension_crack_truncation_v1109``,
+#: 20 kPa on the face below the lowest point of the circle gave 0.847712
+#: where the load left out gives 0.822909 (+3.0 %, on the unsafe side) — and
+#: a permanent load could not be declared. Off, that behaviour. No model of
+#: the verification bank has a design standard enabled.
+LOADS_BY_ACTION = True
+
 
 @dataclass
 class FactorReport:
@@ -160,9 +174,11 @@ def apply_design_factors(project, settings=None):
     factored.design_factored_copy = True
     # v0.1.242 (D226a) — and carries the action factors the slicer applies to
     # the weight of each slice, since whether a slice's weight is favourable
-    # depends on its base and there is no slice yet.
+    # depends on its base and there is no slice yet; v0.1.243 (D226b), to
+    # each load as well, for the same reason.
     from ogr_core.loads.actions import ActionFactors
-    actions = ActionFactors.from_settings(ds)
+    by_action = LOADS_BY_ACTION
+    actions = ActionFactors.from_settings(ds, factors_loads=by_action)
     factored.action_factors = actions
 
     mf = material_factors(ds)
@@ -202,22 +218,22 @@ def apply_design_factors(project, settings=None):
             rep.materials.append({"name": mat.name, "changes": changed,
                                   "category": category})
 
-    if f_var != 1.0:
-        for group, factor in ((getattr(factored, "distributed_loads", []),
-                               f_var),
-                              (getattr(factored, "line_loads", []),
-                               f_var)):
-            for load in group:
-                for attr in ("magnitude", "magnitude_1", "magnitude_2"):
-                    value = getattr(load, attr, None)
-                    if isinstance(value, (int, float)) and value:
-                        setattr(load, attr, value * factor)
-                        rep.loads += 1
+    loads = (list(getattr(factored, "distributed_loads", None) or [])
+             + list(getattr(factored, "line_loads", None) or []))
+    if not by_action and f_var != 1.0:
+        for load in loads:
+            for attr in ("magnitude", "magnitude_1", "magnitude_2"):
+                value = getattr(load, attr, None)
+                if isinstance(value, (int, float)) and value:
+                    setattr(load, attr, value * f_var)
+                    rep.loads += 1
+    elif by_action and loads and not actions.loads_are_identity():
+        rep.loads = len(loads)
 
     # v0.1.242 (D226a) — the permanent action is applied now, to the weight
     # of each slice, and the note says how; what is still not done is said
     # too (v0.1.225: never left for the user to find).
-    if not actions.is_identity():
+    if not actions.weight_is_identity():
         if actions.single_source_weight:
             rep.notes.append(
                 f"Soil weight: the permanent-action factor "
@@ -229,13 +245,21 @@ def apply_design_factors(project, settings=None):
                 f"{actions.permanent_unfavourable:g} multiplies the weight of "
                 f"the slices whose base drives the sliding, and "
                 f"{actions.permanent_favourable:g} that of the others.")
-    if rep.loads:
+    if rep.loads and by_action:
+        rep.notes.append(
+            f"Loads: each one is factored as a whole, by its action and by "
+            f"whether it drives the sliding of the surface: a permanent load "
+            f"by {actions.permanent_unfavourable:g} or "
+            f"{actions.permanent_favourable:g}, a variable one by "
+            f"{actions.variable_unfavourable:g} or "
+            f"{actions.variable_favourable:g}.")
+    elif rep.loads:
         rep.notes.append(
             f"Every load takes the variable-action factor ({f_var:g}): a "
             f"load carries no action type in this version.")
 
     factors = (mf.cohesion, mf.tan_phi, mf.undrained, mf.shear, f_gamma,
-               f_var)
+               1.0 if by_action else f_var)
     if all(f == 1.0 for f in factors) and actions.is_identity():
         rep.notes.append(
             "The standard is enabled but every factor is 1.0, so nothing "

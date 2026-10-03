@@ -1223,7 +1223,13 @@ class _DesignStandardPage(QWidget):
              (bound, hi)),
             ("factor_permanent_favourable",
              tr("Permanent actions, favourable:"), (lo, bound)),
-            ("factor_variable", tr("Variable actions:"), (lo, hi)),
+            # v0.1.243 (D226b) — and the variable action, whose favourable
+            # factor is 0 in the Eurocode: a load that would help is left
+            # out.
+            ("factor_variable", tr("Variable actions, unfavourable:"),
+             (bound, hi)),
+            ("factor_variable_favourable",
+             tr("Variable actions, favourable:"), (0.0, bound)),
             ("factor_cohesion", tr("Cohesion:"), (lo, hi)),
             ("factor_friction", tr("tan(friction angle):"), (lo, hi)),
             ("factor_undrained", tr("Undrained strength cu:"), (lo, hi)),

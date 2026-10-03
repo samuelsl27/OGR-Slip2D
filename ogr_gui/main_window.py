@@ -202,7 +202,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.242"
+    VERSION = "0.1.243"
 
     def __init__(self) -> None:
         super().__init__()
@@ -4034,7 +4034,9 @@ class MainWindow(QMainWindow):
         """
         from .dialogs.load_dialogs import DistributedLoadDialog
 
-        dlg = DistributedLoadDialog(parent=self)
+        dlg = DistributedLoadDialog(
+            parent=self,
+            design_standard=self.project.settings.design_standard.enabled)
         if not dlg.exec():
             return
 
@@ -4050,6 +4052,8 @@ class MainWindow(QMainWindow):
             # never called by anyone: the model field did not exist,
             # so the tick went nowhere.
             "creates_excess_pore_pressure": dlg.excess_pp(),
+            # v0.1.243 (D226b) — what a design standard factors it by.
+            "action": dlg.action(),
         }
         # Disconnect anything previously connected, then connect once
         try:
@@ -4075,7 +4079,7 @@ class MainWindow(QMainWindow):
         params = self._pending_dist_load
         self._pending_dist_load = None
         from ogr_core.geometry import Vertex as _V
-        from ogr_core.loads import DistributedLoad
+        from ogr_core.loads import DistributedLoad, LoadAction
         load = DistributedLoad(
             start=_V(sx, sy),
             end=_V(ex, ey),
@@ -4090,6 +4094,7 @@ class MainWindow(QMainWindow):
             creates_excess_pore_pressure=bool(
                 params.get("creates_excess_pore_pressure", False)),
             name=f"Dist {params['magnitude_1']:.1f} kN/m²",
+            action=params.get("action", LoadAction.VARIABLE),
         )
         self.project.distributed_loads.append(load)
         self.project.is_dirty = True
@@ -4108,7 +4113,9 @@ class MainWindow(QMainWindow):
         """
         from .dialogs.load_dialogs import LineLoadDialog
 
-        dlg = LineLoadDialog(parent=self)
+        dlg = LineLoadDialog(
+            parent=self,
+            design_standard=self.project.settings.design_standard.enabled)
         if not dlg.exec():
             return
 
@@ -4117,6 +4124,7 @@ class MainWindow(QMainWindow):
             "orientation": dlg.orientation(),
             "angle_deg": dlg.angle_deg(),
             "creates_excess_pore_pressure": dlg.excess_pp(),
+            "action": dlg.action(),
         }
         try:
             self.canvas.point_picked.disconnect(self._on_line_load_point_picked)
@@ -4259,7 +4267,10 @@ class MainWindow(QMainWindow):
             if kind == "distributed" and 0 <= idx < len(self.project.distributed_loads):
                 from .dialogs.load_dialogs import DistributedLoadDialog
                 load = self.project.distributed_loads[idx]
-                dlg = DistributedLoadDialog(existing=load, parent=self)
+                dlg = DistributedLoadDialog(
+                    existing=load, parent=self,
+                    design_standard=(
+                        self.project.settings.design_standard.enabled))
                 if dlg.exec():
                     load.magnitude_1 = dlg.magnitude_1()
                     load.magnitude_2 = dlg.magnitude_2()
@@ -4267,18 +4278,23 @@ class MainWindow(QMainWindow):
                     load.angle_deg = dlg.angle_deg()
                     load.distribution = dlg.distribution()
                     load.creates_excess_pore_pressure = dlg.excess_pp()
+                    load.action = dlg.action()
                     self.project.is_dirty = True
                     self.project._notify("loads_changed")
                     self.canvas.refresh()
             elif kind == "line" and 0 <= idx < len(self.project.line_loads):
                 from .dialogs.load_dialogs import LineLoadDialog
                 load = self.project.line_loads[idx]
-                dlg = LineLoadDialog(existing=load, parent=self)
+                dlg = LineLoadDialog(
+                    existing=load, parent=self,
+                    design_standard=(
+                        self.project.settings.design_standard.enabled))
                 if dlg.exec():
                     load.magnitude = dlg.magnitude_1()
                     load.orientation = dlg.orientation()
                     load.angle_deg = dlg.angle_deg()
                     load.creates_excess_pore_pressure = dlg.excess_pp()
+                    load.action = dlg.action()
                     self.project.is_dirty = True
                     self.project._notify("loads_changed")
                     self.canvas.refresh()
@@ -4293,7 +4309,7 @@ class MainWindow(QMainWindow):
         params = self._pending_line_load
         self._pending_line_load = None
         from ogr_core.geometry import Vertex as _V
-        from ogr_core.loads import LineLoad
+        from ogr_core.loads import LineLoad, LoadAction
         load = LineLoad(
             point=_V(x, y),
             magnitude=params["magnitude"],
@@ -4303,6 +4319,7 @@ class MainWindow(QMainWindow):
             creates_excess_pore_pressure=bool(
                 params.get("creates_excess_pore_pressure", False)),
             name=f"Line {params['magnitude']:.1f} kN/m",
+            action=params.get("action", LoadAction.VARIABLE),
         )
         # v0.1.199 — normal (or at an angle) to the boundary means to the
         # GROUND SURFACE at the point; off it there is no such direction,

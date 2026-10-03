@@ -4,6 +4,7 @@
 from .loads import (
     DistributedLoad,
     LineLoad,
+    LoadAction,
     LoadDistribution,
     LoadOrientation,
     SeismicLoad,
@@ -20,6 +21,7 @@ __all__ = [
     "SeismicLoad",
     "LoadOrientation",
     "LoadDistribution",
+    "LoadAction",
     "SeismicRecord",
     "AccelerationUnit",
     "parse_record_text",

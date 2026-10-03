@@ -921,6 +921,13 @@ class DesignStandardSettings:
     # slope, and the engine applies it slice by slice
     # (``ogr_slip2d.design_actions``).
     factor_permanent_favourable: float = 1.0
+    # v0.1.243 (D226b) — and the variable action split the same way:
+    # ``factor_variable`` is γQ for an UNFAVOURABLE variable load and this is
+    # γQ for a FAVOURABLE one, 0 in both sets A1 and A2 (EN 1997-1, Annex A,
+    # Table A.3): a variable load that would help may not be there, so it is
+    # left out. Each load says which action it is (``LoadAction``), and the
+    # engine decides, load by load, whether it drives the sliding.
+    factor_variable_favourable: float = 1.0
     # The single source assumption, an option of the reference's design
     # standard: on, every slice takes the unfavourable γG, since the weight
     # of the soil is one action from one source (Bond et al. 2013; Frank et
@@ -935,7 +942,8 @@ class DesignStandardSettings:
                      "factor_cohesion", "factor_friction",
                      "factor_unit_weight", "factor_resistance",
                      "factor_undrained", "factor_shear_strength",
-                     "factor_permanent_favourable")
+                     "factor_permanent_favourable",
+                     "factor_variable_favourable")
 
     # Named presets. Values follow the Eurocode 7 design approaches
     # (EN 1997-1, Annex A: A1/A2, M1/M2, R1/R2/R3); the user can still pick
@@ -950,12 +958,17 @@ class DesignStandardSettings:
     # soil are geotechnical actions, which DA3 factors with A2, so on a
     # slope DA3 is DA1-C2 (Frank et al. 2004, §11.5: γG = 1.00 in DA-1C2
     # and DA-3). Until v0.1.241 it carried those of A1 (1.35, 1.5).
+    # v0.1.243 (D226b) — the tenth is γQ,fav: 0 in A1 and A2.
     PRESETS = {
-        "none": (1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0),
-        "eurocode7_da1c1": (1.35, 1.5, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0),
-        "eurocode7_da1c2": (1.0, 1.3, 1.25, 1.25, 1.0, 1.0, 1.4, 1.25, 1.0),
-        "eurocode7_da2": (1.35, 1.5, 1.0, 1.0, 1.0, 1.1, 1.0, 1.0, 1.0),
-        "eurocode7_da3": (1.0, 1.3, 1.25, 1.25, 1.0, 1.0, 1.4, 1.25, 1.0),
+        "none": (1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0),
+        "eurocode7_da1c1": (1.35, 1.5, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+                            0.0),
+        "eurocode7_da1c2": (1.0, 1.3, 1.25, 1.25, 1.0, 1.0, 1.4, 1.25, 1.0,
+                            0.0),
+        "eurocode7_da2": (1.35, 1.5, 1.0, 1.0, 1.0, 1.1, 1.0, 1.0, 1.0,
+                          0.0),
+        "eurocode7_da3": (1.0, 1.3, 1.25, 1.25, 1.0, 1.0, 1.4, 1.25, 1.0,
+                          0.0),
     }
     #: v0.1.242 (D226a) — the action factors a named preset carried before
     #: this version, where they differ from the corrected one: a file that
@@ -1011,6 +1024,19 @@ class DesignStandardSettings:
                                   cls.PRESETS[out.standard]))
                 out.factor_permanent = preset["factor_permanent"]
                 out.factor_variable = preset["factor_variable"]
+        # v0.1.243 (D226b) — no ``factor_variable_favourable``: a file from
+        # before a load had an action. A named standard takes it from its
+        # preset (0 in the Eurocode 7 sets: a favourable variable load now
+        # leaves the analysis, as EN 1997-1 asks); a custom one takes its
+        # own ``factor_variable``, which is what every load of that file was
+        # multiplied by until now, so its numbers do not move.
+        if "factor_variable_favourable" not in data:
+            vals = cls.PRESETS.get(out.standard)
+            if vals is not None:
+                out.factor_variable_favourable = dict(
+                    zip(cls.FACTOR_FIELDS, vals))["factor_variable_favourable"]
+            else:
+                out.factor_variable_favourable = out.factor_variable
         return out
 
 

@@ -142,6 +142,13 @@ class Slice:
     # standard. Already in ``weight`` and ``soil_weight``, never applied
     # again.
     weight_factor: float = 1.0
+    # v0.1.243 (D226b) -- what each load put on this slice, as
+    # ``(load_id, action, f_v, f_h, y)``: the downward force it added to
+    # ``weight`` and the horizontal force (+x) it added to the external
+    # channel at elevation ``y``. Kept so the design standard can factor a
+    # load as a whole (``design_actions``); every force is already in
+    # ``weight`` or ``water_force_h``, never applied again from here.
+    load_parts: list = field(default_factory=list)
     material: Optional[Material] = None
     # v0.1.120 — geometry that only the SLICER can measure, kept here so
     # that every LEM method reads it through the one place that builds a
@@ -254,6 +261,10 @@ class Slices:
     # were factored by, read off the unfactored slices; None when no
     # permanent-action factor was applied.
     design_sense: Optional[float] = None
+    # v0.1.243 (D226b) -- ``{load_id: (action, drives, factor, name)}``: how
+    # each load on this surface was classed and factored by the design
+    # standard; None when no load was.
+    load_factors: Optional[dict] = None
 
     def __len__(self) -> int:
         return len(self.slices)
@@ -1011,8 +1022,21 @@ def _surface_pressure_at(project: Project, x: float) -> float:
     up pulls the ground and takes weight off. See
     :data:`SIGNED_SURFACE_PRESSURE`.
     """
+    return _summed(_surface_pressures_at(project, x))
+
+
+def _surface_pressures_at(project: Project, x: float) -> list:
+    """``(load, p)`` for each distributed load acting at x: the vertical
+    component of its pressure, in kPa, downward positive and signed (see
+    :func:`_surface_pressure_at`, which is their sum).
+
+    v0.1.243 (D226b) — split out so that a design standard can factor each
+    load by itself; the order is the order of ``project.distributed_loads``,
+    and :func:`_summed` adds them in it, so the total is the one this
+    function's caller always had, bit for bit.
+    """
     signed = SIGNED_SURFACE_PRESSURE
-    total = 0.0
+    out = []
     for load in project.distributed_loads:
         x1, x2 = load.start.x, load.end.x
         lo, hi = min(x1, x2), max(x1, x2)
@@ -1022,8 +1046,22 @@ def _surface_pressure_at(project: Project, x: float) -> float:
             p = load.pressure_at(t)
             # Vertical component of the pressure, downward positive
             _, dy = load.direction_vector()
-            total += -p * dy if signed else abs(p * dy)  # kPa
+            out.append((load, -p * dy if signed else abs(p * dy)))  # kPa
+    return out
+
+
+def _summed(parts) -> float:
+    """The total of ``(load, p)`` pairs, added in their order from 0.0."""
+    total = 0.0
+    for _load, p in parts:
+        total += p
     return total
+
+
+def _action_of(load) -> str:
+    """The value of a load's ``LoadAction``; variable when it has none (a
+    load built before v0.1.243, or by hand)."""
+    return getattr(getattr(load, "action", None), "value", "variable")
 
 
 #: v0.1.241 (D232) — the vertical component of a distributed load keeps its
@@ -1065,9 +1103,10 @@ def distributed_loads_on(project: Project, x_left: float, x_right: float,
                          span: float):
     """Distributed-load forces on the slice ``[x_left, x_right)``.
 
-    Yields ``(f_h, f_v_extra, y)``: the HORIZONTAL force in kN/m signed in
-    +x, an EXTRA downward force for the vertical-segment case only, and the
-    elevation the horizontal force acts at.
+    Yields ``(f_h, f_v_extra, y, load)``: the HORIZONTAL force in kN/m signed
+    in +x, an EXTRA downward force for the vertical-segment case only, the
+    elevation the horizontal force acts at, and (v0.1.243, D226b) the load
+    it comes from.
 
     v0.1.122 — until this version the horizontal component of a distributed
     load was **discarded entirely**. :func:`_surface_pressure_at` kept
@@ -1122,7 +1161,7 @@ def distributed_loads_on(project: Project, x_left: float, x_right: float,
             denom = p1 + p2
             t_c = ((p1 + 2.0 * p2) / (3.0 * denom)) if denom else 0.5
             y_c = y1 + (y2 - y1) * t_c
-            out.append((total * dxu, -total * dyu, y_c))
+            out.append((total * dxu, -total * dyu, y_c, load))
             continue
 
         lo, hi = min(x1, x2), max(x1, x2)
@@ -1137,7 +1176,7 @@ def distributed_loads_on(project: Project, x_left: float, x_right: float,
         if not p:
             continue
         y = load.start.y + (load.end.y - load.start.y) * t
-        out.append((p * dxu * (b - a), 0.0, y))
+        out.append((p * dxu * (b - a), 0.0, y, load))
     return out
 
 
@@ -1925,8 +1964,12 @@ def slice_surface(
         # ``weight - loads``, which is not bit for bit the soil weight.
         soil_weight = weight
 
-        q = _surface_pressure_at(project, xc)
+        _q_parts = _surface_pressures_at(project, xc)
+        q = _summed(_q_parts)
         weight += q * dx  # add the distributed-load surcharge
+        # v0.1.243 (D226b) -- and what each load put there, by itself.
+        _load_parts = [(_load.id, _action_of(_load), _p * dx, 0.0, 0.0)
+                       for _load, _p in _q_parts if _p]
 
         # v0.1.75 — line loads. The vertical component joins ``weight``,
         # which is exactly how the distributed surcharge above is
@@ -1936,16 +1979,21 @@ def slice_surface(
         # component needs a moment arm and goes through the external
         # force channel below, once the slice exists.
         _lines = line_loads_on(project, xl, xr)
-        for _load in _lines:
-            weight += _line_load_components(_load, project)[0]
+        _line_forces = [_line_load_components(_load, project)
+                        for _load in _lines]
+        for _load, (_fv, _fh) in zip(_lines, _line_forces):
+            weight += _fv
+            _load_parts.append((_load.id, _action_of(_load), _fv, _fh,
+                                _load.point.y))
 
         # v0.1.122 — the horizontal half of the distributed loads, which
         # until this version was thrown away. Only the VERTICAL-segment case
         # brings a vertical part back with it: for every other segment the
         # weight above already carries it, through ``_surface_pressure_at``.
         _dist = distributed_loads_on(project, xl, xr, x_r - x_l)
-        for _fh, _fv, _y in _dist:
+        for _fh, _fv, _y, _load in _dist:
             weight += _fv
+            _load_parts.append((_load.id, _action_of(_load), _fv, _fh, _y))
 
         sl = Slice(
             index=i,
@@ -1972,6 +2020,7 @@ def slice_surface(
             slope_distance=slope_distance,
             bedding_angle_deg=bedding_angle_deg,
             weak_layer_id=weak_layer_id,
+            load_parts=_load_parts,
         )
         # v0.1.61 — free-standing water resting on this slice. Applied
         # after the slice exists because it needs the finished top
@@ -1985,14 +2034,13 @@ def slice_surface(
         # is precisely what this is; the accumulator stores the moment
         # about a fixed reference, so forces of opposite sign on the same
         # slice add up correctly.
-        for _load in _lines:
-            _fh = _line_load_components(_load, project)[1]
+        for _load, (_fv, _fh) in zip(_lines, _line_forces):
             if _fh:
                 sl.add_water_force(f_h=_fh, y=_load.point.y)
         # v0.1.122 — and the same for the distributed loads, through the
         # same accumulator and for the same reason: what it models is a
         # horizontal force at a height.
-        for _fh, _fv, _y in _dist:
+        for _fh, _fv, _y, _load in _dist:
             if _fh:
                 sl.add_water_force(f_h=_fh, y=_y)
         result.slices.append(sl)

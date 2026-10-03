@@ -860,10 +860,12 @@ def seismic_coefficient_refusal(name: str, value) -> Optional[Refusal]:
 
 
 # ----------------------------------------------------------------------
-#: The bound both permanent-action factors meet: the unfavourable one is at
-#: least 1 and the favourable one at most 1 (EN 1990:2002, Table A1.2 (A)
-#: to (C); EN 1997-1:2004, Tables A.1, A.3, A.15 and A.17: 1.1/0.9,
-#: 1.35/1.0, 1.0/1.0, 1.0/0.9 and 1.35/0.9, never the other way round).
+#: The bound every action factor meets: an unfavourable one is at least 1
+#: and a favourable one at most 1 (EN 1990:2002, Table A1.2 (A) to (C);
+#: EN 1997-1:2004, Tables A.1, A.3, A.15 and A.17: permanent 1.1/0.9,
+#: 1.35/1.0, 1.0/1.0, 1.0/0.9 and 1.35/0.9, variable 1.5/0 and 1.3/0, never
+#: the other way round). Since v0.1.243 (D226b) the variable pair meets it
+#: too; the name stayed.
 PERMANENT_ACTION_FACTOR_BOUND = 1.0
 
 
@@ -886,11 +888,19 @@ def design_action_factors_refusal(design_standard) -> Optional[Refusal]:
 
     Checked whatever ``single_source_weight`` says: a value that is wrong is
     wrong before the option that would use it is switched on.
+
+    v0.1.243 (D226b) — the variable pair, now that each load is classed and
+    factored whole: γQ ≥ 1 ≥ γQ,fav ≥ 0, by the same argument (a load that
+    drives grows, one that resists shrinks, so the balance that decided the
+    sense of sliding can only grow). Here 0 is allowed and is EN 1997-1's own
+    value: a variable load that would help may not be there.
     """
     import math
 
     names = (("factor_permanent", "permanent actions, unfavourable"),
-             ("factor_permanent_favourable", "permanent actions, favourable"))
+             ("factor_permanent_favourable", "permanent actions, favourable"),
+             ("factor_variable", "variable actions, unfavourable"),
+             ("factor_variable_favourable", "variable actions, favourable"))
     values = {}
     for attr, label in names:
         raw = getattr(design_standard, attr, 1.0)
@@ -923,6 +933,26 @@ def design_action_factors_refusal(design_standard) -> Optional[Refusal]:
             f"The partial factor on favourable permanent actions must be "
             f"above 0, got {fav}: a permanent action keeps its sign, and "
             f"at 0 the slices that resist would have no weight.")
+    q_unfav = values["factor_variable"]
+    q_fav = values["factor_variable_favourable"]
+    if q_unfav < PERMANENT_ACTION_FACTOR_BOUND:
+        return Refusal(
+            "design_action_factor_variable_unfavourable_below_one",
+            f"The partial factor on unfavourable variable actions must be at "
+            f"least 1, got {q_unfav}: below 1 it would make a load that "
+            f"drives the sliding lighter than its characteristic value.")
+    if q_fav > PERMANENT_ACTION_FACTOR_BOUND:
+        return Refusal(
+            "design_action_factor_variable_favourable_above_one",
+            f"The partial factor on favourable variable actions must be at "
+            f"most 1, got {q_fav}: above 1 it would make a load that resists "
+            f"the sliding heavier than its characteristic value.")
+    if q_fav < 0.0:
+        return Refusal(
+            "design_action_factor_variable_favourable_negative",
+            f"The partial factor on favourable variable actions must not be "
+            f"negative, got {q_fav}: at 0 the load is left out, which is "
+            f"the most a favourable variable action can be discounted.")
     return None
 
 

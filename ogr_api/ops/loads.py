@@ -107,11 +107,18 @@ def load_set(ws, project_id: Optional[str] = None,
              orientation: Optional[str] = None,
              angle_deg: Optional[float] = None,
              creates_excess_pore_pressure: Optional[bool] = None,
-             name: Optional[str] = None) -> dict:
-    """Add a distributed or line load, or change one (load=...)."""
+             name: Optional[str] = None,
+             action: Optional[str] = None) -> dict:
+    """Add a distributed or line load, or change one (load=...).
+
+    ``action`` is 'permanent' or 'variable' (the default for a new load):
+    with a design standard, a permanent load takes the permanent-action
+    factors and a variable one the variable ones, each by whether the load
+    drives the sliding of the surface (v0.1.243, D226b).
+    """
     from ogr_core.geometry import Vertex
-    from ogr_core.loads import (DistributedLoad, LineLoad, LoadDistribution,
-                                LoadOrientation)
+    from ogr_core.loads import (DistributedLoad, LineLoad, LoadAction,
+                                LoadDistribution, LoadOrientation)
 
     def num(v, where, lo=0.0):
         v = coerce_value(v, float, where)
@@ -142,6 +149,8 @@ def load_set(ws, project_id: Optional[str] = None,
         distr = coerce_enum(distribution, LoadDistribution,
                             "distribution") if distribution is not None \
             else None
+        act = coerce_enum(action, LoadAction, "action") \
+            if action is not None else None
         if k == "line" and (distribution is not None
                             or magnitude_end is not None or start
                             or end):
@@ -174,7 +183,8 @@ def load_set(ws, project_id: Optional[str] = None,
                     distribution=distr,
                     creates_excess_pore_pressure=bool(
                         creates_excess_pore_pressure),
-                    name=name or f"Dist {m1:.1f} kN/m²")
+                    name=name or f"Dist {m1:.1f} kN/m²",
+                    action=act or LoadAction.VARIABLE)
                 project.add_distributed_load(obj)
                 notes += _ground_note(project, [(sx, sy), (ex, ey)])
             else:
@@ -190,7 +200,8 @@ def load_set(ws, project_id: Optional[str] = None,
                                if angle_deg is not None else 0.0),
                     creates_excess_pore_pressure=bool(
                         creates_excess_pore_pressure),
-                    name=name or f"Line {m:.1f} kN/m")
+                    name=name or f"Line {m:.1f} kN/m",
+                    action=act or LoadAction.VARIABLE)
                 project.add_line_load(obj)
                 notes += _ground_note(project, [(px, py)])
         else:
@@ -224,6 +235,8 @@ def load_set(ws, project_id: Optional[str] = None,
                     creates_excess_pore_pressure)
             if name is not None:
                 obj.name = str(name)
+            if act is not None:
+                obj.action = act
             _check_fields(k, obj.orientation,
                           getattr(obj, "distribution", None),
                           getattr(obj, "magnitude_2", None),
@@ -247,6 +260,11 @@ def load_set(ws, project_id: Optional[str] = None,
                              "UPWARD (it pulls the ground). Give the points "
                              "left to right along the surface for a load "
                              "that presses into it.")
+        if action is not None and not \
+                project.settings.design_standard.enabled:
+            notes.append("action is only read with a design standard "
+                         "enabled (settings_set "
+                         "'design_standard.enabled').")
         if obj.creates_excess_pore_pressure and \
                 project.settings.groundwater.advanced_option() != \
                 "excess_pore_pressure":

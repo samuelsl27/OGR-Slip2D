@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from ogr_core.loads import LoadDistribution, LoadOrientation
+from ogr_core.loads import LoadAction, LoadDistribution, LoadOrientation
 from ogr_gui.i18n import tr  # noqa: E402
 
 
@@ -38,6 +38,7 @@ class _BaseLoadDialog(QDialog):
         show_distribution: bool,
         existing=None,
         parent=None,
+        design_standard: bool = False,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(title)
@@ -109,6 +110,24 @@ class _BaseLoadDialog(QDialog):
         )
         form.addRow("", self.cb_excess)
 
+        # v0.1.243 (D226b) — the action a design standard factors the load
+        # by. Shown only with a standard on, as the reference shows it: off,
+        # nothing reads it (rule 7), and the load keeps the action it had.
+        self.cb_action = QComboBox()
+        self.cb_action.addItem(tr("Variable (live load)"),
+                               LoadAction.VARIABLE)
+        self.cb_action.addItem(tr("Permanent (dead load)"),
+                               LoadAction.PERMANENT)
+        self.cb_action.setToolTip(tr(
+            "With a design standard, a permanent load takes the factors of "
+            "permanent actions and a variable one those of variable "
+            "actions, each by whether the whole load drives the sliding of "
+            "the surface or resists it."))
+        self.lbl_action = QLabel(tr("Load action:"))
+        form.addRow(self.lbl_action, self.cb_action)
+        self.lbl_action.setVisible(bool(design_standard))
+        self.cb_action.setVisible(bool(design_standard))
+
         root.addLayout(form)
 
         # Pre-fill with existing values
@@ -140,6 +159,9 @@ class _BaseLoadDialog(QDialog):
             # never stored in the first place.
             self.cb_excess.setChecked(
                 getattr(existing, "creates_excess_pore_pressure", False))
+            idx = self.cb_action.findData(
+                getattr(existing, "action", LoadAction.VARIABLE))
+            self.cb_action.setCurrentIndex(max(0, idx))
 
         # Reactive visibility
         self.cb_orientation.currentIndexChanged.connect(self._refresh)
@@ -185,26 +207,34 @@ class _BaseLoadDialog(QDialog):
     def excess_pp(self) -> bool:
         return self.cb_excess.isChecked()
 
+    def action(self) -> LoadAction:
+        """The load's action; the one it had when the combo is hidden."""
+        return self.cb_action.currentData()
+
 
 # ======================================================================
 class DistributedLoadDialog(_BaseLoadDialog):
-    def __init__(self, existing=None, parent=None) -> None:
+    def __init__(self, existing=None, parent=None,
+                 design_standard: bool = False) -> None:
         super().__init__(
             title="Add Distributed Load",
             magnitude_unit="kN/m²",
             show_distribution=True,
             existing=existing,
             parent=parent,
+            design_standard=design_standard,
         )
 
 
 # ======================================================================
 class LineLoadDialog(_BaseLoadDialog):
-    def __init__(self, existing=None, parent=None) -> None:
+    def __init__(self, existing=None, parent=None,
+                 design_standard: bool = False) -> None:
         super().__init__(
             title="Add Line Load",
             magnitude_unit="kN/m",
             show_distribution=False,
             existing=existing,
             parent=parent,
+            design_standard=design_standard,
         )

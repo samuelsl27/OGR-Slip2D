@@ -25,6 +25,26 @@ from ogr_gui.i18n import tr  # noqa: E402
 from ogr_gui.reported_quantity import fos_label  # noqa: E402
 
 
+def load_factor_lines(result) -> str:
+    """How a design standard classed each load on ``result``'s surface, as
+    lines to append to the header; empty without one (v0.1.243, D226b).
+
+    Whether a load drives the sliding depends on the surface, so it is said
+    for the critical one that is shown, not for the run."""
+    factors = getattr(getattr(result, "slices", None), "load_factors", None)
+    if not factors:
+        return ""
+    from html import escape
+    lines = []
+    for _load_id, (action, drives, factor, name) in factors.items():
+        role = (tr("drives the sliding") if drives
+                else tr("resists the sliding"))
+        kind = (tr("permanent load") if action == "permanent"
+                else tr("variable load"))
+        lines.append(f"{escape(str(name))}: {kind}, {role}: × {factor:g}")
+    return "<br>" + tr("Loads on this surface:") + "<br>" + "<br>".join(lines)
+
+
 class ResultsDock(QDockWidget):
     """Dock widget that presents the Top-N critical surfaces of a search."""
 
@@ -80,6 +100,7 @@ class ResultsDock(QDockWidget):
                 f"Method: <b>{search_result.method_id}</b>   "
                 f"Valid: {n_ok}   "
                 f"{label}: <b>{crit.fos:.3f}</b>"
+                + load_factor_lines(crit)
             )
         else:
             self.header_label.setText(

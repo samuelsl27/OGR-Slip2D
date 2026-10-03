@@ -303,6 +303,11 @@ def generate_report(
             rows.append(("Total Slice Area", f"{_fmt(area)} m²"))
         except Exception:  # noqa: BLE001
             pass
+        # v0.1.243 (D226b) — how the design standard classed each load on
+        # this surface: whether a load drives depends on the surface, so it
+        # is said here and not in the run's section.
+        for name, text in _load_factor_rows(crit):
+            rows.append((f"Load '{name}'", text))
         story.append(kv_table(rows))
         story.append(Spacer(1, 4))
 
@@ -452,6 +457,18 @@ def project_width(project):
 
 def mm_name(mat):
     return getattr(mat, "name", "Material")
+
+
+def _load_factor_rows(crit) -> list:
+    """``[(load name, "variable, drives the sliding: × 1.5")]`` for the loads
+    a design standard factored on ``crit``'s surface; empty without one."""
+    factors = getattr(getattr(crit, "slices", None), "load_factors", None)
+    if not factors:
+        return []
+    return [(name,
+             f"{action}, {'drives' if drives else 'resists'} the sliding: "
+             f"× {factor:g}")
+            for _load_id, (action, drives, factor, name) in factors.items()]
 
 
 def _slice_table(crit, project):

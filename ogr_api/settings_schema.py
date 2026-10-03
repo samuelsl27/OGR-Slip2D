@@ -185,6 +185,11 @@ _BOUNDS: dict[str, tuple[Optional[float], Optional[float], str]] = {
     "search.grid_ny": (1, None, "at least 1"),
     **{f"design_standard.{f}": (0.1, 10.0, "between 0.1 and 10")
        for f in _DESIGN_FACTORS},
+    # v0.1.243 (D226b) — γQ,fav is 0 in the Eurocode 7 sets: a favourable
+    # variable load is left out. The pair rule (``rules.design_action_
+    # factors_refusal``) then holds it at most 1.
+    "design_standard.factor_variable_favourable": (0.0, 10.0,
+                                                   "between 0 and 10"),
 }
 _STRICT_LOWER = {"methods.tolerance"}
 
@@ -427,8 +432,10 @@ def _check_cross_rules(s, changes: dict, project) -> None:
         why = design_action_factors_refusal(ds)
         if why is not None:
             raise Conflict(why.message,
-                           hint="The unfavourable factor is at least 1 and "
-                                "the favourable one above 0 and at most 1.")
+                           hint="An unfavourable factor is at least 1; a "
+                                "favourable one at most 1, and above 0 for "
+                                "a permanent action, 0 or more for a "
+                                "variable one.")
 
     if s.seismic.newmark and not s.seismic.record_id:
         raise Conflict("seismic.newmark needs seismic.record_id.",

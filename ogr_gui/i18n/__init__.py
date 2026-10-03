@@ -497,6 +497,20 @@ _DICTS: dict[str, dict[str, str]] = {
         'Base y right (m)': 'y de base derecha (m)',
         'Weight W (kN)': 'Peso W (kN)',
         'Weight factor': 'Factor de peso',
+        # v0.1.243 (D226b): la acción de una carga
+        'Load action:': 'Acción de la carga:',
+        'Variable (live load)': 'Variable (sobrecarga de uso)',
+        'Permanent (dead load)': 'Permanente (carga muerta)',
+        'permanent load': 'carga permanente',
+        'variable load': 'carga variable',
+        'drives the sliding': 'empuja el deslizamiento',
+        'resists the sliding': 'se opone al deslizamiento',
+        'Loads on this surface:': 'Cargas en esta superficie:',
+        'With a design standard, a permanent load takes the factors of permanent actions and a variable one those of variable actions, each by whether the whole load drives the sliding of the surface or resists it.':
+            'Con una norma de diseño, una carga permanente toma los '
+            'coeficientes de las acciones permanentes y una variable los de '
+            'las variables, cada una según si la carga entera empuja el '
+            'deslizamiento de la superficie o se opone a él.',
         'Pore pressure u (kPa)': 'Presión intersticial u (kPa)',
         'Surface load q (kPa)': 'Carga en superficie q (kPa)',
         'Base normal force N (kN)': 'Fuerza normal en la base N (kN)',
@@ -665,7 +679,8 @@ _DICTS: dict[str, dict[str, str]] = {
         'Tensile stress check': 'Comprobación de tracción',
         'Transient': 'Transitorio',
         'Unit weight:': 'Peso específico:',
-        'Variable actions:': 'Acciones variables:',
+        'Variable actions, unfavourable:': 'Acciones variables, desfavorables:',
+        'Variable actions, favourable:': 'Acciones variables, favorables:',
         'tan(friction angle):': 'tan(ángulo de rozamiento):',
         # v0.1.225 (D224): las dos categorías nuevas de coeficiente de material
         'Undrained strength cu:': 'Resistencia sin drenaje cu:',

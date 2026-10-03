@@ -35,6 +35,23 @@ class LoadDistribution(Enum):
     TRAPEZOIDAL = "trapezoidal"
 
 
+class LoadAction(Enum):
+    """What kind of action a load is, for a design standard (v0.1.243,
+    D226b).
+
+    A PERMANENT load (a dead load: a structure, a fill) takes the
+    permanent-action factors, γG where it drives the sliding and γG,fav
+    where it resists it; a VARIABLE one (a live load: traffic, storage)
+    takes γQ and γQ,fav (EN 1990:2002, 4.1.1; EN 1997-1:2004, Annex A,
+    Table A.3, where γQ,fav = 0: a variable load that helps may not be
+    there). Variable by default, as the reference's load dialogs offer it.
+    Nothing reads it without a design standard.
+    """
+
+    PERMANENT = "permanent"
+    VARIABLE = "variable"
+
+
 # ----------------------------------------------------------------------
 @dataclass
 class DistributedLoad:
@@ -58,6 +75,9 @@ class DistributedLoad:
     creates_excess_pore_pressure: bool = False
     id: str = field(default_factory=lambda: str(uuid4()))
     name: str = ""
+    # v0.1.243 (D226b) — see :class:`LoadAction`. Last, so a load built by
+    # position keeps meaning what it meant.
+    action: LoadAction = LoadAction.VARIABLE
 
     def pressure_at(self, t: float) -> float:
         """Linear interpolation between m1 and m2. 0 ≤ t ≤ 1."""
@@ -109,6 +129,7 @@ class DistributedLoad:
             "distribution": self.distribution.value,
             "creates_excess_pore_pressure":
                 self.creates_excess_pore_pressure,
+            "action": self.action.value,
         }
 
     @classmethod
@@ -125,6 +146,9 @@ class DistributedLoad:
             name=data.get("name", ""),
             creates_excess_pore_pressure=bool(
                 data.get("creates_excess_pore_pressure", False)),
+            # A file from before v0.1.243 has no action: every load was
+            # factored as a variable one, and still is.
+            action=LoadAction(data.get("action", "variable")),
         )
 
     def tooltip_html(self) -> str:
@@ -155,6 +179,8 @@ class LineLoad:
     creates_excess_pore_pressure: bool = False
     id: str = field(default_factory=lambda: str(uuid4()))
     name: str = ""
+    # v0.1.243 (D226b) — see :class:`LoadAction`.
+    action: LoadAction = LoadAction.VARIABLE
 
     def direction_vector(self, ground=None) -> tuple[float, float]:
         """Unit vector the load pushes along (-y is down).
@@ -221,6 +247,7 @@ class LineLoad:
             "angle_deg": self.angle_deg,
             "creates_excess_pore_pressure":
                 self.creates_excess_pore_pressure,
+            "action": self.action.value,
         }
 
     @classmethod
@@ -234,6 +261,7 @@ class LineLoad:
             name=data.get("name", ""),
             creates_excess_pore_pressure=bool(
                 data.get("creates_excess_pore_pressure", False)),
+            action=LoadAction(data.get("action", "variable")),
         )
 
     def tooltip_html(self) -> str:

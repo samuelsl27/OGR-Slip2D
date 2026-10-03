@@ -127,9 +127,26 @@ def lem_summary(res, *, with_slices: bool = False) -> Optional[dict]:
         extras["zero_strength_slices"] = [int(i) for i in zero]
     if extras:
         out["details"] = extras
+    # v0.1.243 (D226b) -- how a design standard classed and factored each
+    # load on THIS surface: a load that drives one surface can resist
+    # another, so this belongs to the result and not to the run.
+    loads = load_factor_rows(res)
+    if loads:
+        out["load_factors"] = loads
     if with_slices:
         out["slices"] = slice_table(res)
     return out
+
+
+def load_factor_rows(res) -> list[dict]:
+    """``[{load, name, action, drives, factor}]`` for the loads a design
+    standard factored on the surface of ``res``; empty without one."""
+    factors = getattr(getattr(res, "slices", None), "load_factors", None)
+    if not factors:
+        return []
+    return [{"load": load_id, "name": name, "action": action,
+             "drives": bool(drives), "factor": _r(factor)}
+            for load_id, (action, drives, factor, name) in factors.items()]
 
 
 def slice_table(res) -> list[dict]:
