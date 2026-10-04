@@ -1047,7 +1047,10 @@ def reversed_support_notes(project, result) -> list[str]:
         # metres. It only has to separate "on the surface" from "on a
         # side": the measured margins on problem 59 are +15.8 and -58.2 on
         # a 37.6-long bolt, so the value is nowhere near deciding anything.
-        tol = 1e-6 * length
+        # v0.1.254 (D97) -- the constant is shared with ``is_level``; the
+        # question is not (a side of the slip surface, not an elevation).
+        from ogr_core.support import LEVEL_TOL
+        tol = LEVEL_TOL * length
         head_side = _side_of_slip(support.head.x, support.head.y,
                                   ix, iy, slope)
         tail_side = _side_of_slip(support.tail.x, support.tail.y,
@@ -1446,7 +1449,7 @@ def compute_support_effects(
     with fewer than two points. Both return before the loop, and both are
     conditions the caller can test for itself.
     """
-    from ogr_core.support import support_type_pairs
+    from ogr_core.support import crest_reading, support_type_pairs
 
     supports = getattr(project, "supports", []) or []
     if not supports:
@@ -1548,25 +1551,30 @@ def compute_support_effects(
             # would silently invert its pressure diagram and return a
             # plausible, wrong number. Deciding it here, by geometry, is
             # the only place the question can be answered at all.
-            d_along = d_from_head
-            crest, other = support.head, support.tail
-            if getattr(stype, "MEASURED_FROM_TOP", False):
-                if support.tail.y > support.head.y:
-                    d_along = L_total - d_from_head
-                    crest, other = support.tail, support.head
-                elif support.tail.y == support.head.y:
-                    # No crest to measure from. Refusing beats guessing: the
-                    # analysis reports it instead of publishing a number that
-                    # depends on the drawing order.
-                    # v0.1.155 - and since D62 it really is reported. This
-                    # comment promised it for two versions while the guard
-                    # returned in silence.
-                    if reasons is not None:
-                        reasons.append((support.id, SUPPORT_NO_CREST))
-                    continue
+            #
+            # v0.1.254 (D97) -- asked of ``crest_reading``, the one rule the
+            # interface asks too. Level is decided to a tolerance relative to
+            # the support's length, not by ``tail.y == head.y``, which a
+            # support 1e-15 off level skipped; and when the tail is the
+            # crest the profile is read from the tail as well
+            # (``BondProfile.flipped``), not only the distance -- a pile
+            # drawn bottom to top integrated from its tip.
+            reading = crest_reading(support, stype,
+                                    bond_profiles.get(support.id))
+            if reading is None:
+                # No crest to measure from. Refusing beats guessing: the
+                # analysis reports it instead of publishing a number that
+                # depends on the drawing order.
+                # v0.1.155 - and since D62 it really is reported. This
+                # comment promised it for two versions while the guard
+                # returned in silence.
+                if reasons is not None:
+                    reasons.append((support.id, SUPPORT_NO_CREST))
+                continue
+            d_along = reading.along(d_from_head, L_total)
+            crest, other = reading.crest, reading.other
 
-            F = stype.force_at(d_along, L_total,
-                               bond_profiles.get(support.id))
+            F = stype.force_at(d_along, L_total, reading.bond)
 
             # v0.1.124 -- the SHEAR capacity, at last connected to something.
             # Until this version ``shear_at`` and ``SUPPORTS_SHEAR`` were
@@ -1676,8 +1684,7 @@ def compute_support_effects(
                 # diagram in closed form, but an Ito-Matsui pile does not: its
                 # diagram IS the sampled profile, so the centroid cannot be
                 # computed without it.
-                arm = stype.resultant_arm(d_along, L_total,
-                                          bond_profiles.get(support.id))
+                arm = stype.resultant_arm(d_along, L_total, reading.bond)
                 ux = (other.x - crest.x) / L_total
                 uy = (other.y - crest.y) / L_total
                 ax, ay = crest.x + arm * ux, crest.y + arm * uy

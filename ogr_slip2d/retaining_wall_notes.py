@@ -51,15 +51,19 @@ def retaining_wall_notes(project, method_ids=()) -> list[str]:
 
     notes: list[str] = []
 
-    flat = [s for s, _ in walls if s.head.y == s.tail.y]
+    # v0.1.254 (D97) -- the engine's own predicate (``crest_reading`` refuses
+    # exactly these), to the same tolerance. Until this version the note
+    # asked ``head.y == tail.y``, so a wall the engine refused could go
+    # unmentioned; and its singular sentence had no verb.
+    flat = [s for s, _ in walls if s.is_level()]
     if flat:
         notes.append(
-            "%d retaining wall%s drawn horizontally. Its pressure profile "
-            "is defined from the crest downwards and a horizontal wall has "
-            "no crest, so it is excluded from the analysis rather than "
-            "analysed with a profile that would depend on which end was "
-            "drawn first."
-            % (len(flat), "" if len(flat) == 1 else "s are"))
+            "%d retaining wall%s drawn horizontally. A wall's pressure "
+            "profile is defined from the crest downwards and a horizontal "
+            "wall has no crest, so it is excluded from the analysis rather "
+            "than analysed with a profile that would depend on which end "
+            "was drawn first."
+            % (len(flat), " is" if len(flat) == 1 else "s are"))
 
     # There is deliberately NO note about support patterns here. A wall
     # carries a pressure per metre of slope already, so a row of them would

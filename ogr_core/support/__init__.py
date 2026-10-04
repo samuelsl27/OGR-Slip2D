@@ -41,6 +41,7 @@ from .ito_matsui import (
     n_phi,
 )
 from .support import (
+    LEVEL_TOL,
     EndAnchored,
     ForceApplication,
     ForceOrientation,
@@ -67,6 +68,8 @@ from .support import (
 # ``__init__`` is what guarantees it has run before anything can ask
 # the registry for the type.
 from .retaining_wall import RetainingWallEFP
+# v0.1.254 (D97) — the one rule for which end a support is read from.
+from .crest import CrestReading, crest_reading
 from .helical_anchor import (
     NC_AT_ZERO_FRICTION,
     HelicalAnchor,
@@ -83,6 +86,9 @@ __all__ = [
     "SupportType",
     "SupportEvaluationError",
     "SupportInstance",
+    "LEVEL_TOL",
+    "CrestReading",
+    "crest_reading",
     "SupportPattern",
     "ForceApplication",
     "ForceOrientation",

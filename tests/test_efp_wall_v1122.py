@@ -368,12 +368,21 @@ class TestTheCrestIsGeometry:
 
     def test_a_horizontal_wall_is_refused_rather_than_guessed(self):
         """It has no crest, so a profile measured from the crest has no
-        meaning; answering would mean answering from the drawing order."""
+        meaning; answering would mean answering from the drawing order.
+
+        v0.1.254 (D97) — placed where the circle CUTS it. Until this version
+        the wall ran from 41.5 to 45.5 at y = 8.1, and the circle meets
+        y = 8.1 at x = 46.92: the wall was never crossed, the refusal was
+        never asked, and the test passed for a reason that had nothing to
+        do with it. The premise is asserted now: the same wall 1e-3 of its
+        length off level IS priced."""
         from ogr_core.geometry import Vertex
         p = _wall_project()
-        p.supports[0].head = Vertex(XW - 2.0, YW_TOP)
-        p.supports[0].tail = Vertex(XW + 2.0, YW_TOP)
+        p.supports[0].head = Vertex(45.5, 9.0)
+        p.supports[0].tail = Vertex(55.0, 9.0)
         assert _effect(p) is None
+        p.supports[0].tail = Vertex(55.0, 9.0 + 1e-3 * 9.5)
+        assert _effect(p) is not None, "the circle must cross this wall"
 
     def test_the_model_says_so_instead_of_staying_quiet(self):
         from ogr_core.geometry import Vertex

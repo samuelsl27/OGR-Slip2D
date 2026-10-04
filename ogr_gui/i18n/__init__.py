@@ -2196,6 +2196,13 @@ _DICTS: dict[str, dict[str, str]] = {
             "Requiere al menos un soporte en el modelo.",
         "Support:": "Soporte:",
         "Distance from head (m)": "Distancia desde la cabeza (m)",
+        # v0.1.254 (D97): un tipo medido desde la coronación se dibuja desde
+        # ella, y uno a nivel no tiene coronación y el análisis lo deja fuera.
+        "Distance from crest (m)": "Distancia desde la coronación (m)",
+        "This support is level and its type is measured from the crest: it "
+        "has no crest, and the analysis leaves it out.":
+            "Este soporte está a nivel y su tipo se mide desde la "
+            "coronación: no tiene coronación, y el análisis lo deja fuera.",
         "Force per metre of slope (kN/m)":
             "Fuerza por metro de talud (kN/m)",
         "Applied": "Aplicada",

@@ -438,22 +438,36 @@ class SupportItem(DomainItem):
                 except Exception as exc:  # noqa: BLE001
                     bond_failed = type(exc).__name__
             try:
-                F0 = support_type_obj.force_at(0, support.length(), bond)
-                Fmid = support_type_obj.force_at(
-                    0.5 * support.length(), support.length(), bond
-                )
+                # v0.1.254 (D97) — read from the end the analysis reads it
+                # from (``crest_reading``): a pile drawn bottom to top
+                # integrated the LOWER half for its midpoint, and a level
+                # support the analysis leaves out was given numbers.
+                from ogr_core.support import crest_reading
+                length = support.length()
+                reading = crest_reading(support, support_type_obj, bond)
+                if reading is None:
+                    tooltip += "<br><i>" + tr(
+                        "This support is level and its type is measured "
+                        "from the crest: it has no crest, and the analysis "
+                        "leaves it out.") + "</i>"
                 # v0.1.122 — "force at head" is a lie for a type whose
                 # profile is INTEGRATED from the crest: there the integral
                 # is zero by definition, and reporting it as a capacity
                 # reads as "this support does nothing".
-                if getattr(support_type_obj, "MEASURED_FROM_TOP", False):
+                elif getattr(support_type_obj, "MEASURED_FROM_TOP", False):
+                    Fmid = support_type_obj.force_at(
+                        0.5 * length, length, reading.bond)
                     Fend = support_type_obj.force_at(
-                        support.length(), support.length(), bond)
+                        length, length, reading.bond)
                     tooltip += (
                         f"<br><i>Force at midpoint:</i> {Fmid:.1f} kN/m"
                         f"<br><i>Force at the foot:</i> {Fend:.1f} kN/m"
                     )
                 else:
+                    F0 = support_type_obj.force_at(0, length, bond)
+                    Fmid = support_type_obj.force_at(
+                        0.5 * length, length, bond
+                    )
                     tooltip += (
                         f"<br><i>Force at head:</i> {F0:.1f} kN/m"
                         f"<br><i>Force at midpoint:</i> {Fmid:.1f} kN/m"

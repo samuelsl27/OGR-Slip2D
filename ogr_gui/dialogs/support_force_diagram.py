@@ -131,13 +131,22 @@ def support_series(project, support, samples: int = SAMPLES,
         return []
 
     bond = support_bond(project, support, stype, failures)
+    # v0.1.254 (D97) -- from the end the analysis reads it from, with the
+    # profile oriented the same way: for a type measured from its crest the
+    # abscissa is the distance from the crest. A level one has no crest and
+    # nothing to plot: the analysis leaves it out.
+    from ogr_core.support import crest_reading
+    reading = crest_reading(support, stype, bond)
+    if reading is None:
+        return []
     n = max(2, int(samples))
     xs = [length * i / (n - 1) for i in range(n)]
     modes: dict[str, list] = {}
     applied_ys = []
     for x in xs:
-        applied_ys.append(stype.force_at(x, length, bond))
-        for key, value in (stype.capacity_modes(x, length, bond) or {}).items():
+        applied_ys.append(stype.force_at(x, length, reading.bond))
+        for key, value in (stype.capacity_modes(x, length, reading.bond)
+                           or {}).items():
             modes.setdefault(key, []).append(value)
 
     series = [(tr(MODE_LABELS.get(k, k)), xs, ys) for k, ys in modes.items()]
@@ -146,7 +155,8 @@ def support_series(project, support, samples: int = SAMPLES,
 
 
 class SupportForceDiagramWindow(QDialog):
-    """Capacity against distance from the head, for one support at a time."""
+    """Capacity against distance along one support at a time: from the
+    head, or from the crest for a type measured from it (v0.1.254, D97)."""
 
     def __init__(self, project, critical=None, parent=None) -> None:
         super().__init__(parent)
@@ -210,15 +220,45 @@ class SupportForceDiagramWindow(QDialog):
         cut = _cut_distance(self.project, sup, self.critical)
         applied = None
         if cut is not None:
+            # v0.1.254 (D97) -- the cut and the force as the analysis reads
+            # them: from the crest for a type measured from it, with the
+            # profile flipped when the crest is the tail. Read from the
+            # head, the "at the slip surface" of a support drawn bottom to
+            # top was not the engine's number, even for a wall.
+            from ogr_core.support import crest_reading
             stype = _resolve_type(self.project, sup)
             bond = support_bond(self.project, sup, stype)
-            applied = stype.force_at(cut, sup.length(), bond)
+            reading = crest_reading(sup, stype, bond)
+            if reading is None:
+                return series, None, None
+            cut = reading.along(cut, sup.length())
+            applied = stype.force_at(cut, sup.length(), reading.bond)
         return series, applied, cut
+
+    def _no_crest(self) -> bool:
+        """True when the support on show is one the analysis leaves out
+        because its type is measured from a crest it does not have."""
+        sup = self.current_support()
+        if sup is None:
+            return False
+        from ogr_core.support import crest_reading
+        stype = _resolve_type(self.project, sup)
+        return stype is not None and crest_reading(sup, stype) is None
+
+    def _from_crest(self) -> bool:
+        sup = self.current_support()
+        stype = _resolve_type(self.project, sup) if sup is not None else None
+        return bool(getattr(stype, "MEASURED_FROM_TOP", False))
 
     def refresh(self) -> None:
         failures: list = []
         series, applied, cut = self.series(failures)
-        if len(series) <= 1:
+        if self._no_crest():
+            # v0.1.254 (D97) -- the same sentence as the canvas tooltip.
+            self.note.setText(tr(
+                "This support is level and its type is measured from the "
+                "crest: it has no crest, and the analysis leaves it out."))
+        elif len(series) <= 1:
             self.note.setText(tr(
                 "This support type publishes no failure modes; only the "
                 "applied force is shown."))
@@ -258,7 +298,8 @@ class SupportForceDiagramWindow(QDialog):
             if applied is not None:
                 ax.plot([cut], [applied], marker="o", color="black",
                         zorder=4)
-        ax.set_xlabel(tr("Distance from head (m)"))
+        ax.set_xlabel(tr("Distance from crest (m)") if self._from_crest()
+                      else tr("Distance from head (m)"))
         ax.set_ylabel(tr("Force per metre of slope (kN/m)"))
         ax.grid(True, alpha=0.3)
         ax.legend(fontsize=8)

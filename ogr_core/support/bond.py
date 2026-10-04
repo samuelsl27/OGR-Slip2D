@@ -214,6 +214,31 @@ class BondProfile:
         lo_i = i * step
         return run + self.tau[i] * 0.5 * (x * x - lo_i * lo_i)
 
+    def flipped(self) -> "BondProfile":
+        """The same profile measured from the TAIL.
+
+        v0.1.254 (D97). A type measured from its crest reads the profile from
+        whichever end is higher (:func:`ogr_core.support.crest.crest_reading`);
+        when that end is the tail, every distance it asks about runs from the
+        tail. The profile itself stays sampled head to tail —
+        :func:`build_bond_profile` and its cache do not change — and this is
+        its mirror image: segment ``i`` here is segment ``n - 1 - i`` there,
+        and a station at ``d`` moves to ``L - d``. The segments are equal and
+        each sample is at a midpoint, so ``flipped().integral(0, d)`` is
+        ``integral(L - d, L)`` up to the order of a sum.
+
+        Built once and kept: a search asks for it on every surface.
+        """
+        cached = self.__dict__.get("_flipped")
+        if cached is not None:
+            return cached
+        st = sorted((self.total_length - d, v) for d, v in self.stations)
+        out = BondProfile.from_samples(self.tau[::-1], self.total_length, st)
+        # A frozen dataclass: the memo goes in past ``__setattr__``. It is
+        # not a field, so equality, ``replace`` and ``repr`` never see it.
+        object.__setattr__(self, "_flipped", out)
+        return out
+
     @property
     def total(self) -> float:
         """Integral over the whole length."""

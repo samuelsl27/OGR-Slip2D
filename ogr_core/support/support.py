@@ -1615,6 +1615,15 @@ class UserDefined(SupportType):
 # ======================================================================
 # Instance — placement of a support in the model
 # ======================================================================
+#: v0.1.254 (D97) — "at the same elevation", as a fraction of the support's
+#: own length: :meth:`SupportInstance.is_level`, and the side test of
+#: ``ogr_slip2d.support_integration.reversed_support_notes``. 1e-6 of the
+#: length is far below anything a drawing means — the margins measured on
+#: problem 59 are +15.8 and -58.2 on a 37.6-long bolt — and far above
+#: rounding.
+LEVEL_TOL = 1e-6
+
+
 @dataclass
 class SupportInstance:
     """A concrete placement of a support in the model.
@@ -1682,6 +1691,21 @@ class SupportInstance:
     def length(self) -> float:
         from ..geometry.primitives import Vertex  # noqa
         return self.head.distance_to(self.tail)
+
+    def is_level(self) -> bool:
+        """True when the two ends are at the same elevation, to
+        :data:`LEVEL_TOL` of the support's own length.
+
+        v0.1.254 (D97). What a type measured from its crest asks before it
+        can be read at all: a level support has no crest. Until this version
+        the engine asked ``tail.y == head.y``, exactly, so a wall drawn
+        1e-15 off level skipped the refusal and was measured from whichever
+        end rounding made higher — the plausible, wrong number the refusal
+        exists to prevent, one epsilon further on. Relative to the length by
+        the project's rule for geometric tolerances; the same constant as
+        ``reversed_support_notes``, which asks a different question.
+        """
+        return abs(self.tail.y - self.head.y) <= LEVEL_TOL * self.length()
 
     def axis_angle_rad(self) -> float:
         """Angle of the support axis (head → tail) from positive x."""

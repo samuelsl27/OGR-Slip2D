@@ -136,14 +136,17 @@ class TestTheNoteFiresWhenItShould:
     def test_a_pile_measured_from_the_top_is_reported_too(self):
         """Even where the numbers provably do not move.
 
-        A ``PileMicropile`` is ``MEASURED_FROM_TOP``, so
-        ``compute_support_effects`` re-derives its crest from the two y
-        values and the capacity comes out the same either way; with
-        ``tangent_to_slip`` the force direction ignores the axis as well.
-        The model is still drawn wrong, the convention is documented for
-        every type, and the orientation is a setting the user can change
-        afterwards — so the check does not carve out an exception it
-        would then have to keep in step with the types.
+        This pile is in Shear mode, whose force is a constant along the
+        pile, and with ``tangent_to_slip`` the force direction ignores the
+        axis as well. (In Ito & Matsui mode a pile is ``MEASURED_FROM_TOP``
+        and is read from its higher end; until v0.1.254 the distance was,
+        but the profile was integrated from the head, so that mode DID move
+        — D97, ``test_support_level_tolerance_v1254``. This docstring said
+        "the capacity comes out the same either way" for every pile.) The
+        model is still drawn wrong, the convention is documented for every
+        type, and the orientation is a setting the user can change
+        afterwards — so the check does not carve out an exception it would
+        then have to keep in step with the types.
         """
         from ogr_core.geometry import Vertex
         from ogr_core.support import (ForceApplication, ForceOrientation,
