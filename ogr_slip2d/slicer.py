@@ -395,6 +395,94 @@ REFUSED_OUTSIDE_MODEL = "outside_model"
 #: in v0.1.143, one level up.
 TOUCHED_MODEL_EDGE = "base_on_model_edge"
 
+#: v0.1.258 (D244) — why a POLYLINE was refused at one of its two ends: its
+#: first or last vertex is BELOW the ground at its own x, by more than the
+#: slicer's tolerance. The end slice would then have a vertical outer face,
+#: from that vertex up to the ground, that carries neither strength nor
+#: thrust — a tension crack nobody drew — and the factor came out lower
+#: with no word (the critical of verification problem 15 sunk 5 m and 1 m:
+#: Janbu 0.4294 to 0.3929). The reference calls such a surface −101,
+#: «Only one (or none) slip surface / slope intersections»: an end inside
+#: the soil leaves the surface one crossing with the slope.
+REFUSED_END_BELOW_GROUND = "end_below_ground"
+
+#: v0.1.258 (D244) — and the end ABOVE the ground, which was already
+#: refused (v0.1.100) but with no reason, so the search counted it among
+#: the surfaces "that could not be sliced" and told the user to use more
+#: slices: the wrong remedy.
+REFUSED_END_ABOVE_GROUND = "end_above_ground"
+
+#: v0.1.258 (D244) — a polyline's two ends must be ON the ground. Off, a
+#: buried end is sliced as before (and the Auto Refine non-circular keeps
+#: the arc's height at its ends, below). A module switch so the bank can
+#: attribute what the rule moves.
+END_ON_GROUND = True
+
+#: v0.1.258 (D244) — how far below the ground an end may sit before the
+#: polyline is refused, as a fraction of the surface's horizontal extent.
+#: Looser than the 1e-6 that judges a base ABOVE the ground, and the census
+#: of the verification bank is why (owner's decision of 2026-10-04): the
+#: archived polylines carry four decimals, which leaves their ends up to
+#: 2e-6 of the width under a sloping ground (verification problem 15:
+#: 6.7e-5 m on 41 m), while the real burials it found go from 3.3e-3 of the
+#: width (0.05 m, a derived surface of problem 25) to 0.13 (0.99 m, the
+#: Block Search of problem 109 before v0.1.257). An end buried by 1e-4 of
+#: the width leaves an unresisted face of that height, a ten-thousandth of
+#: the mass it bounds.
+END_BELOW_GROUND_REL = 1e-4
+
+
+def _end_is_a_crack(surface, x: float, tol: float) -> bool:
+    """True if a tension crack of ``surface`` stands at its end ``x``.
+
+    Such an end is below the ground ON PURPOSE: the modelled crack and the
+    reverse-curvature crack both end the surface at the crack line, and
+    both are recorded in ``tension_cracks`` (the Auto Refine non-circular
+    copies the circle's onto its polyline).
+    """
+    for crack in getattr(surface, "tension_cracks", None) or ():
+        try:
+            if abs(float(crack[0]) - x) <= tol:
+                return True
+        except (TypeError, ValueError, IndexError):
+            continue
+    wall = getattr(surface, "tension_crack_wall", None)
+    if wall:
+        try:
+            return abs(float(wall[0]) - x) <= tol
+        except (TypeError, ValueError, IndexError):
+            return False
+    return False
+
+
+def _end_on_crack_line(project, x: float, y: float, tol: float) -> bool:
+    """True if ``(x, y)`` lies on the model's Tension Crack line.
+
+    v0.1.258 (D244). The crack is deduced from the MODEL (the rule of D90),
+    not only from what the surface carries: a polyline rebuilt from an
+    archive has no ``tension_cracks``, and one archived with four decimals
+    arrives a rounding width off the line, outside the fine tolerance with
+    which D189 gives back its wall (that loss of the thrust is D192). Its
+    end is still the crack's, below the ground on purpose. Measured on the
+    archived critical of verification problem 39 (clay): its crest end is
+    4.4e-5 under the crack line and 2.06 m under the ground.
+    """
+    tc = tension_crack_boundary(project)
+    if tc is None or len(tc.polyline.vertices) < 2:
+        return False
+    yc = envelope_y_at(tc.polyline, x)
+    return yc is not None and abs(y - yc) <= tol
+
+
+def _ground_low_at(ground, x: float) -> Optional[float]:
+    """The LOWER of the ground's heights at ``x``: at a vertical step the
+    profile has two, and a point anywhere on the face is on the ground."""
+    heights = [h for h in (envelope_y_at(ground, x),
+                           envelope_y_at(ground, x, side=-1),
+                           envelope_y_at(ground, x, side=1))
+               if h is not None]
+    return min(heights) if heights else None
+
 
 def _base_material(project: Project, xc: float, base_y_mid: float,
                    grid_tol: float,
@@ -1913,6 +2001,16 @@ def slice_surface(
     # vertices and carry no such guarantee, so they stay judged.
     ends_are_ground_crossings = isinstance(
         surface, (SlipCircle, CompositeSurface))
+    # v0.1.258 (D244) — whose ends the below-ground rule may not judge: a
+    # circle's and a composite's, and those of a weak-layer surface on a
+    # circular or composite base, which keeps the ends of the mass it
+    # clipped. They are ground crossings, and the root-finder's error at a
+    # steep end is no burial. Kept apart from the flag above on purpose:
+    # that one also decides the clamp of an end ABOVE the ground, which this
+    # version does not change.
+    _base = getattr(surface, "base", None)
+    ends_on_crossings = ends_are_ground_crossings or isinstance(
+        _base, (SlipCircle, CompositeSurface))
 
     for i, (xl, xr) in enumerate(zip(bounds[:-1], bounds[1:])):
         dx = xr - xl
@@ -1958,13 +2056,40 @@ def slice_surface(
                     or y_base_l - y_top_l <= tol):
                 y_base_l = y_top_l
             else:
+                if (END_ON_GROUND and i == 0 and reasons is not None):
+                    reasons.append(REFUSED_END_ABOVE_GROUND)
                 return None
         if y_base_r > y_top_r:
             if ((i == last_i and ends_are_ground_crossings)
                     or y_base_r - y_top_r <= tol):
                 y_base_r = y_top_r
             else:
+                if (END_ON_GROUND and i == last_i and reasons is not None):
+                    reasons.append(REFUSED_END_ABOVE_GROUND)
                 return None
+        # v0.1.258 (D244) — and BELOW it. Only at the two ends of a
+        # polyline, which nothing else places on the ground (a circle's are
+        # crossings by construction), and never at an end a tension crack
+        # truncated, which is below the ground on purpose. Within its
+        # tolerance (``END_BELOW_GROUND_REL``) nothing is touched, so a
+        # polyline whose ends are on the ground is sliced bit for bit as
+        # before.
+        if END_ON_GROUND and not ends_on_crossings:
+            ends = []
+            if i == 0:
+                ends.append((xl, y_base_l))
+            if i == last_i:
+                ends.append((xr, y_base_r))
+            for x_end, y_end in ends:
+                low = _ground_low_at(ground, x_end)
+                below_tol = END_BELOW_GROUND_REL * (x_r - x_l)
+                if (low is not None and low - y_end > below_tol
+                        and not _end_is_a_crack(surface, x_end, tol)
+                        and not _end_on_crack_line(project, x_end, y_end,
+                                                   below_tol)):
+                    if reasons is not None:
+                        reasons.append(REFUSED_END_BELOW_GROUND)
+                    return None
 
         # v0.1.100 — THE BASE OF A SLICE IS THE CHORD between its two
         # endpoints, not the tangent at its midpoint.

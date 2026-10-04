@@ -290,6 +290,7 @@ def surface_evaluate(ws, surface: dict, project_id: Optional[str] = None,
         method_ids = _check_runnable(project, methods)
         copy = detached_copy(project)
         fingerprint = model_hash(project)
+    snapped = _snap_polyline_ends(copy, surf)
     try:
         outcome = evaluate_surfaces(copy, surf, method_ids)
     except AnalysisNotConfigured as exc:  # pragma: no cover - checked above
@@ -303,8 +304,74 @@ def surface_evaluate(ws, surface: dict, project_id: Optional[str] = None,
                           model_hash=fingerprint,
                           payload={"results": outcome.results,
                                    "factor_report": outcome.factor_report})
+    notes = list(snapped)
     none = [mid for mid, r in outcome.results.items() if r is None]
     if none:
-        summary["notes"] = [f"{', '.join(none)}: the surface does not cut "
-                            f"the model, so there is nothing to price."]
+        # v0.1.258 (D244) — the reason of each refusal, which the analysis
+        # now gives per method, instead of one sentence for all of them.
+        why = [w for w in outcome.warnings
+               if any(w.startswith(f"{mid}: ") for mid in none)]
+        notes.extend(why or [f"{', '.join(none)}: the surface does not cut "
+                             f"the model, so there is nothing to price."])
+    if notes:
+        summary["notes"] = notes
     return {"result_id": res.id, **summary}
+
+
+def _snap_polyline_ends(project, surf) -> list:
+    """Put a polyline's two ends on the External Boundary, and say so.
+
+    v0.1.258 (D244). The reference moves the start and end of a slip
+    surface entered by hand that are "not entered exactly on the External
+    Boundary" to "the nearest point on the External Boundary"; this is the
+    API's door for such a surface. An end within the model's tolerance
+    (1e-6 of the bounding-box diagonal) is left exactly as given, so a
+    surface already on the ground is evaluated bit for bit as before. A
+    snap that would make x stop increasing is refused rather than
+    performed: it would be another surface. Returns the notes.
+    """
+    import math as _m
+
+    from ogr_core.geometry import Vertex
+
+    pl = getattr(surf, "polyline", None)
+    ext = project.external_boundary()
+    if pl is None or ext is None or len(pl.vertices) < 2:
+        return []
+    ring = list(ext.polyline.vertices)
+    ring = ring + ring[:1]
+    xmin, ymin, xmax, ymax = project.bounding_box()
+    tol = 1e-6 * _m.hypot(xmax - xmin, ymax - ymin)
+
+    def nearest(x, y):
+        best = None
+        for a, b in zip(ring[:-1], ring[1:]):
+            dx, dy = b.x - a.x, b.y - a.y
+            span = dx * dx + dy * dy
+            t = 0.0 if span <= 0.0 else max(0.0, min(1.0, (
+                (x - a.x) * dx + (y - a.y) * dy) / span))
+            px, py = a.x + t * dx, a.y + t * dy
+            d = _m.hypot(x - px, y - py)
+            if best is None or d < best[0]:
+                best = (d, px, py)
+        return best
+
+    notes = []
+    verts = pl.vertices
+    for k, name in ((0, "first"), (len(verts) - 1, "last")):
+        v = verts[k]
+        d, px, py = nearest(v.x, v.y)
+        if d <= tol:
+            continue
+        verts[k] = Vertex(px, py)
+        notes.append(
+            f"The {name} vertex ({v.x:g}, {v.y:g}) is not on the External "
+            f"Boundary; it was moved to the nearest point of it, "
+            f"({px:g}, {py:g}), {d:g} away, as the reference does with a "
+            f"slip surface entered by hand.")
+    xs = [v.x for v in verts]
+    if any(b <= a for a, b in zip(xs, xs[1:])):
+        raise InvalidArgument(
+            "Moving the ends of the polyline onto the External Boundary "
+            "would make x stop increasing; give ends on the ground surface.")
+    return notes

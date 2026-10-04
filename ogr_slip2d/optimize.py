@@ -572,6 +572,34 @@ def optimize_surface(project, search, surface, settings=None):
     first = 0 if opts.move_endpoints else 1
     last = len(pts) if opts.move_endpoints else len(pts) - 1
 
+    # v0.1.258 (D244) — a free end moves ALONG the ground. Until now it
+    # moved in the plane like any vertex, and the slicer accepted an end
+    # inside the soil: on verification problem 15 the walk buried both ends
+    # in six runs out of six and reached 0.29-0.35 where the published
+    # values for this slope lie between 0.39 and 0.44. Greco (1996) checks
+    # the moved surface "with respect to the boundaries" and re-updates
+    # it, and the ends of a slip surface are points of the slope; the
+    # Simulated Annealing of this engine already slides its ends along the
+    # profile (``search._moved``). The same two random numbers are drawn
+    # as before: only what is done with them at an end changes.
+    _ground_line = None
+    if opts.move_endpoints:
+        from ogr_slip2d import slicer as _slicer
+        ext = project.external_boundary()
+        if _slicer.END_ON_GROUND and ext is not None:
+            from ogr_core.geometry import ground_surface
+            _ground_line = ground_surface(ext)
+
+    def _moved(i, base, angle, mag):
+        x = base[i][0] + mag * math.cos(angle)
+        if _ground_line is not None and i in (0, len(base) - 1):
+            from ogr_core.geometry import envelope_y_at
+            y = envelope_y_at(_ground_line, x, side=1 if i == 0 else -1)
+            if y is None:
+                y = envelope_y_at(_ground_line, x)
+            return None if y is None else (x, y)
+        return (x, base[i][1] + mag * math.sin(angle))
+
     def _admissible(trial, i) -> bool:
         """Cheap rejections, before an evaluation is spent on them."""
         # x must stay strictly increasing: a surface that doubles back is
@@ -622,8 +650,10 @@ def optimize_surface(project, search, surface, settings=None):
                     angle = rng.uniform(0.0, 2.0 * math.pi)
                     mag = rng.uniform(0.2, 1.0) * step
                     trial = list(best_pts)
-                    trial[i] = (best_pts[i][0] + mag * math.cos(angle),
-                                best_pts[i][1] + mag * math.sin(angle))
+                    moved = _moved(i, best_pts, angle, mag)
+                    if moved is None:
+                        continue
+                    trial[i] = moved
                     if not _admissible(trial, i):
                         continue
                     res = _score(trial)
@@ -660,8 +690,10 @@ def optimize_surface(project, search, surface, settings=None):
                 angle = rng.uniform(0.0, 2.0 * math.pi)
                 mag = rng.uniform(0.2, 1.0) * step
                 trial = list(best_pts)
-                trial[i] = (best_pts[i][0] + mag * math.cos(angle),
-                            best_pts[i][1] + mag * math.sin(angle))
+                moved = _moved(i, best_pts, angle, mag)
+                if moved is None:
+                    continue
+                trial[i] = moved
                 if not _admissible(trial, i):
                     continue
                 res = _score(trial)

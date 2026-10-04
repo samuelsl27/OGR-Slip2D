@@ -29,7 +29,8 @@ from ogr_core.project.settings import SurfaceType, WeakLayerHandling
 from .failure_direction import slope_face, steepest_face_index  # noqa: F401
 from .methods import LEMMethod, LEMResult
 from .rapid_drawdown import RapidDrawdownError, drawdown_gap
-from .slicer import REFUSED_OUTSIDE_MODEL, TOUCHED_MODEL_EDGE, slice_surface
+from .slicer import (REFUSED_END_ABOVE_GROUND, REFUSED_END_BELOW_GROUND,
+                     REFUSED_OUTSIDE_MODEL, TOUCHED_MODEL_EDGE, slice_surface)
 from .surface import SlipCircle, WeakLayerSurface, lowest_elevation
 
 
@@ -325,6 +326,13 @@ class SearchResult:
     # for every other search and for a Block Search without groups, so
     # nothing that reads results had to learn it.
     block_groups: list = field(default_factory=list)
+    # v0.1.258 (D244) — polylines the slicer refused because an END was not
+    # on the ground: below it (an end inside the soil, which leaves the
+    # surface one crossing with the slope) or above it. A refused surface
+    # leaves no evaluation, so the counts travel here, for the census of
+    # rejected surfaces (``interpretation.invalid_summary``).
+    ends_below_ground: int = 0
+    ends_above_ground: int = 0
 
     def score(self, result) -> float:
         """This run's objective, evaluated on one of its surfaces."""
@@ -849,6 +857,31 @@ class BaseSearch(ABC):
             "the search area." % (n, "" if n == 1 else "s")
         )
 
+    def _end_off_ground_note(self) -> str:
+        """What to say when polylines were refused at an end.
+
+        v0.1.258 (D244). A polyline's first and last vertices must be ON
+        the ground. One below it used to be sliced with a vertical outer
+        face that carried nothing, and came out valid and lower; one above
+        it was refused and blamed on the slice count.
+        """
+        below = getattr(self, "_end_below_ground", 0)
+        above = getattr(self, "_end_above_ground", 0)
+        parts = []
+        if below:
+            parts.append("%d with an end below the ground, which would have "
+                         "given its end slice a vertical face with no "
+                         "strength (the reference calls such a surface "
+                         "-101: one intersection with the slope)" % below)
+        if above:
+            parts.append("%d with an end above it" % above)
+        n = below + above
+        return ("%d polyline surface%s were discarded because an end was not "
+                "on the ground surface: %s. This is not a slice-count "
+                "problem: the first and last vertices of a polyline have to "
+                "lie on the ground." % (n, "" if n == 1 else "s",
+                                        "; ".join(parts)))
+
     def _on_model_edge_note(self) -> str:
         """What to say when a tolerance decided a base was inside.
 
@@ -1042,6 +1075,22 @@ class BaseSearch(ABC):
                     # note names the right culprit.
                     self._outside_model = getattr(
                         self, "_outside_model", 0) + 1
+                    self._last_refusal = REFUSED_OUTSIDE_MODEL
+                    continue
+                if slices is None and REFUSED_END_BELOW_GROUND in _why:
+                    # v0.1.258 (D244) — an end of a polyline inside the
+                    # soil. Counted apart for the same reason as the one
+                    # above: more slices cannot put an end on the ground.
+                    self._end_below_ground = getattr(
+                        self, "_end_below_ground", 0) + 1
+                    self._last_refusal = REFUSED_END_BELOW_GROUND
+                    continue
+                if slices is None and REFUSED_END_ABOVE_GROUND in _why:
+                    # v0.1.258 (D244) — and one in the air, refused since
+                    # v0.1.100 and counted until now as unsliceable.
+                    self._end_above_ground = getattr(
+                        self, "_end_above_ground", 0) + 1
+                    self._last_refusal = REFUSED_END_ABOVE_GROUND
                     continue
                 if slices is None:
                     # v0.1.135 — the slicer refused this surface WHOLE, and
@@ -1055,6 +1104,7 @@ class BaseSearch(ABC):
                     # carry a vertex per generated point plus every layer
                     # crossing, while a circle has no kinks at all.
                     self._unsliceable = getattr(self, "_unsliceable", 0) + 1
+                    self._last_refusal = "unsliceable"
                     continue
                 if len(slices) < 3:
                     continue
@@ -1373,6 +1423,10 @@ class BaseSearch(ABC):
         returned belongs to that surface. It is a different mechanism from
         the circle, not a wrong answer about it.
         """
+        # v0.1.258 (D244) — why the last surface handed to this door came
+        # back with nothing, for a caller that evaluates ONE surface and
+        # has to say why (``analysis_runner.evaluate_surfaces``).
+        self._last_refusal = None
         if isinstance(surface, SlipCircle):
             return self.evaluate_circle(project, surface)
         # v0.1.126 — and a polyline gets the containment rule a circle has
@@ -1384,8 +1438,39 @@ class BaseSearch(ABC):
         # on the FIRST material, which on that model is the weakest of the
         # two, so leaving the model was rewarded. Anomaly D48.
         if self._leaves_soil(project, surface):
+            self._last_refusal = "leaves_soil"
             return None
         return self._best_of_masses(project, (surface,))
+
+    #: v0.1.258 (D244) — what to tell a caller about ``_last_refusal``.
+    _REFUSAL_TEXT = {
+        REFUSED_END_BELOW_GROUND: (
+            "the surface was not analysed: its first or last vertex is "
+            "below the ground, so it meets the slope only once (the "
+            "reference's error -101) and its end slice would have a "
+            "vertical face with no strength. Put both ends on the ground "
+            "surface."),
+        REFUSED_END_ABOVE_GROUND: (
+            "the surface was not analysed: its first or last vertex is "
+            "above the ground. Put both ends on the ground surface."),
+        REFUSED_OUTSIDE_MODEL: (
+            "the surface was not analysed: a slice base fell outside the "
+            "External Boundary, where there is no soil."),
+        "leaves_soil": (
+            "the surface was not analysed: it dips below the External "
+            "Boundary."),
+        "unsliceable": (
+            "the surface was not analysed: the slicer refused it (more "
+            "mandatory cuts than slices, a degenerate width or a tension "
+            "crack it could not place)."),
+    }
+
+    def refusal_text(self) -> str:
+        """Why the last :meth:`evaluate_surface` gave nothing, in words."""
+        return self._REFUSAL_TEXT.get(
+            getattr(self, "_last_refusal", None),
+            "the surface does not cut the model, so there is nothing to "
+            "price.")
 
     def _leaves_soil(self, project: Project, surface) -> bool:
         """Whether a non-circular surface dips below the External."""
@@ -1430,6 +1515,8 @@ class BaseSearch(ABC):
         self._unsliceable = 0
         self._outside_model = 0
         self._on_model_edge = 0
+        self._end_below_ground = 0
+        self._end_above_ground = 0
         with project.regions_frozen():
             result = self._run(project)
             if self.optimize is not None and self.optimize.enabled:
@@ -1451,6 +1538,12 @@ class BaseSearch(ABC):
             # noise.
             if getattr(self, "_on_model_edge", 0):
                 self._note(self._on_model_edge_note())
+            # v0.1.258 (D244) — and the polylines refused at an end. Same
+            # rule: only if it happened.
+            result.ends_below_ground = getattr(self, "_end_below_ground", 0)
+            result.ends_above_ground = getattr(self, "_end_above_ground", 0)
+            if result.ends_below_ground or result.ends_above_ground:
+                self._note(self._end_off_ground_note())
             # v0.1.157 (D58) — the surfaces the user defined by hand,
             # analysed here and not in ``analysis_runner`` for the reason
             # this template method exists at all: tests, scripts and
@@ -3689,6 +3782,7 @@ class AutoRefineNonCircularSearch(AutoRefineSearch):
             poly = self._arc_polyline(mass, self.num_vertices)
             if poly is None:
                 continue
+            self._pin_ends_to_ground(project, poly)
             # The chords sit above the arc, so a mass whose ARC stayed
             # inside the soil can still have a chord break the surface
             # near an endpoint where the ground curves away. That is the
@@ -3705,6 +3799,42 @@ class AutoRefineNonCircularSearch(AutoRefineSearch):
         # coarser than the slicer refusal it claimed to measure, and
         # ``_best_of_masses`` now counts the refusal itself.
         return best
+
+    @staticmethod
+    def _pin_ends_to_ground(project, poly):
+        """Both ends of the converted polyline ON the ground, x and y.
+
+        v0.1.258 (D244). ``_arc_polyline`` pins the ends' x to the resolved
+        chord and keeps the ARC's height there, and a root-finder's error
+        near a vertical tangent can leave that height a little below the
+        ground: the slicer, which now refuses a polyline with an end inside
+        the soil, would throw the trial away. The ground's own height at the
+        same x is what the end is. An end at a tension crack is below the
+        ground on purpose and is left alone. Only with
+        ``slicer.END_ON_GROUND`` on, so the switch gives back the old
+        engine whole.
+        """
+        from ogr_core.geometry import Vertex, envelope_y_at, ground_surface
+        from . import slicer as _slicer
+
+        if not _slicer.END_ON_GROUND:
+            return poly
+        ext = project.external_boundary()
+        verts = poly.polyline.vertices
+        if ext is None or len(verts) < 2:
+            return poly
+        ground = ground_surface(ext)
+        tol = 1e-6 * (verts[-1].x - verts[0].x)
+        for k, side in ((0, 1), (len(verts) - 1, -1)):
+            v = verts[k]
+            if _slicer._end_is_a_crack(poly, v.x, tol):
+                continue
+            y = envelope_y_at(ground, v.x, side=side)
+            if y is None:
+                y = envelope_y_at(ground, v.x)
+            if y is not None:
+                verts[k] = Vertex(v.x, y)
+        return poly
 
     # ------------------------------------------------------------------
     @staticmethod

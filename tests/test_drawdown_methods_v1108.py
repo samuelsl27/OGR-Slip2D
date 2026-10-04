@@ -475,8 +475,13 @@ class TestNoDoorReturnsADrainedNumberInSilence:
         from ogr_slip2d.surface import SlipSurface
 
         p = _appendix_g("corps_2")
+        # v0.1.258 (D244): the right end was (300, 96), 9.5 below the ground
+        # (105.5 there, on the segment (296, 104)-(312, 110)). Since D244 the
+        # slicer refuses a polyline with an end inside the soil before the
+        # method is reached, so the error this test asks for would never be
+        # raised. The end is put ON the ground; what is tested is unchanged.
         poly = SlipSurface(polyline=Polyline(
-            vertices=[Vertex(72, 24), Vertex(170, 5), Vertex(300, 96)],
+            vertices=[Vertex(72, 24), Vertex(170, 5), Vertex(300, 105.5)],
             closed=False))
         with pytest.raises(RapidDrawdownError):
             self._search(self._raw()).evaluate_surface(p, poly)

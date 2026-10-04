@@ -124,6 +124,19 @@ def invalid_summary(search_result) -> dict:
         by_code[code] = by_code.get(code, 0) + 1
         why = invalid_reason(ev)
         by_reason[why] = by_reason.get(why, 0) + 1
+    # v0.1.258 (D244) — polylines refused at an end leave no evaluation,
+    # so they arrive as a count on the result. A surface with an end off
+    # the ground meets the slope once or not at all, which is the
+    # reference's −101 («Only one (or none) slip surface / slope
+    # intersections»). OGR also uses −101 for "any other rejection"
+    # (``ERROR_OTHER``): the two meanings share the code, and the reason
+    # below tells them apart.
+    off = (int(getattr(search_result, "ends_below_ground", 0) or 0)
+           + int(getattr(search_result, "ends_above_ground", 0) or 0))
+    if off:
+        by_code[ERROR_OTHER] = by_code.get(ERROR_OTHER, 0) + off
+        why = "an end of the polyline is not on the ground surface"
+        by_reason[why] = by_reason.get(why, 0) + off
     generated = getattr(search_result, "total_count",
                         len(getattr(search_result, "evaluations", [])))
     analysed = getattr(search_result, "analysed_count",

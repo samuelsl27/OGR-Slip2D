@@ -376,12 +376,14 @@ class TestBothDoorsIntoTheEngineFilter:
         from ogr_slip2d.surface import SlipSurface
         p = _slope()
         # Toe to slope face, dipping to y = -5 through the foundation.
-        # The upper end is 8.39 and not 8.40: the ground there is at
-        # 8.396, and a surface poking 4 mm above its own ground is one the
-        # slicer refuses whole since v0.1.100 — which would have made this
-        # test pass for entirely the wrong reason.
+        # The upper end is ON the face, computed: a surface poking 4 mm
+        # above its own ground is one the slicer refuses whole since
+        # v0.1.100, and since v0.1.258 (D244) so is one 6 mm below it — the
+        # 8.39 this test carried until then, chosen to dodge the first
+        # refusal. Either would make it pass for entirely the wrong reason.
         surf = SlipSurface(polyline=Polyline(vertices=[
-            Vertex(30.0, 0.0), Vertex(35.0, -5.0), Vertex(44.0, 8.39)],
+            Vertex(30.0, 0.0), Vertex(35.0, -5.0),
+            Vertex(44.0, (44.0 - 30.0) * math.tan(math.radians(30.96)))],
             closed=False))
         loose = GridSearch(method=BishopSimplified(), num_slices=_NUM_SLICES)
         assert loose.evaluate_surface(p, surf) is not None

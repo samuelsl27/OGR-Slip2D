@@ -131,11 +131,17 @@ def _circle():
 
 
 def _polyline():
-    """A non-circular surface through the same slope."""
+    """A non-circular surface through the same slope.
+
+    v0.1.258 (D244): the left end was (8, 26), 4 m under the crest (y = 30
+    for x < 15). Since D244 the slicer refuses a polyline with an end inside
+    the soil, and both tests below would have measured nothing. The end is
+    put ON the crest; what they test is unchanged.
+    """
     from ogr_core.geometry import Polyline, Vertex
     from ogr_slip2d import SlipSurface
     return SlipSurface(polyline=Polyline(vertices=[
-        Vertex(8.0, 26.0), Vertex(18.0, 7.5),
+        Vertex(8.0, 30.0), Vertex(18.0, 7.5),
         Vertex(34.0, 5.0), Vertex(47.0, 10.0)]))
 
 

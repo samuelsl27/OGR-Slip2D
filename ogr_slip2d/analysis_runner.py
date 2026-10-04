@@ -2489,6 +2489,12 @@ def evaluate_surfaces(project, surface, method_ids=None, *,
         with project.regions_frozen():
             results[mid] = search.evaluate_surface(project,
                                                    copy.deepcopy(surface))
+        if results[mid] is None:
+            # v0.1.258 (D244) — WHY there is no result, from the search
+            # itself. Every refusal used to come out as "the surface does
+            # not cut the model", which is the wrong thing to tell someone
+            # whose polyline ends a metre under the ground.
+            warnings.append(f"{mid}: {search.refusal_text()}")
     return AnalysisOutcome(results, factor_report, warnings, project)
 
 

@@ -475,9 +475,13 @@ class TestANonCircularSurfaceTruncatesToo:
 
     def _polyline_surface(self):
         # A shallow wedge under the slope face, daylighting on the upper
-        # flat at x = 75 where the ground is y = 40.
+        # flat at x = 75 where the ground is y = 40. v0.1.258 (D244): the
+        # toe end was (35, 23.33), the face's 23.333... rounded to two
+        # decimals and so 3.3 mm under the ground, which the slicer now
+        # refuses; it is put ON the face.
         return SlipSurface(polyline=Polyline(vertices=[
-            Vertex(35.0, 23.33), Vertex(45.0, 22.0), Vertex(60.0, 26.0),
+            Vertex(35.0, 20.0 + 5.0 * 2.0 / 3.0), Vertex(45.0, 22.0),
+            Vertex(60.0, 26.0),
             Vertex(70.0, 34.0), Vertex(75.0, 40.0)], closed=False))
 
     def test_the_polyline_is_cut_at_the_crack(self):

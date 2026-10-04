@@ -138,7 +138,7 @@ Los tres cálculos pasan por la misma puerta que `analysis_run`: sin norma de di
 | `job_list` | | Los trabajos de la sesión. |
 | `results_get` | C | Leer un resultado: resumen, superficie crítica con dovelas, mejores superficies, mínimos, avisos. |
 | `results_query` | | Lo que pregunta la ventana de interpretación (desde v0.1.201): códigos de error (−120 tracción, −112 m-alfa, −111 sin convergencia, −101 otros) y censo de superficies rechazadas, datos brutos, superficies que pasan por un punto (medido sobre la superficie que se calculó, no sobre el círculo entero), mínimo por centro, factor a lo largo del talud, dovelas con los números del método, filtros; y de un resultado de estadística, histograma, convergencia, muestras con su índice y sensibilidad. |
-| `surface_evaluate` | | El factor de seguridad de UNA superficie dada (círculo, tres puntos o polilínea), sin búsqueda. |
+| `surface_evaluate` | | El factor de seguridad de UNA superficie dada (círculo, tres puntos o polilínea), sin búsqueda. Desde v0.1.258, el primer y el último vértice de una polilínea que no estén sobre el contorno exterior se llevan al punto más próximo de él, como hace la referencia con una superficie introducida a mano, y `notes` lo dice (punto pedido, punto usado y distancia). Un método sin resultado dice en `notes` por qué: por ejemplo, un extremo bajo el terreno (el −101 de la referencia) o un extremo en el aire, en vez de «does not cut the model». |
 
 ## Vista, historia y Python
 

@@ -43,19 +43,24 @@ _MID = "bishop_simplified"
 _SLICES = 60
 
 
-def _slope(crack_y=34.0, flat=40.0, extra_material=False):
+def _slope(crack_y=34.0, flat=40.0, extra_material=False, face_top=None):
     """The phi = 0 slope of v1109 (0..100 x 0..40), the crack FILLED, with
     the upper flat at ``flat``; optionally a second material that no region
-    uses, to give a statistical run a variable that moves nothing."""
+    uses, to give a statistical run a variable that moves nothing.
+
+    ``face_top`` (v0.1.258, D244): the face ends at (60, face_top) and the
+    ground steps up there to ``flat``, so the flat can be raised BEHIND the
+    face without tilting the face itself."""
     import test_tension_crack_truncation_v1109 as U
     from ogr_core.geometry import Boundary, BoundaryType, Polyline, Vertex
     from ogr_core.geometry.tension_crack import (TensionCrackProperties,
                                                  WaterLevelMode)
     from ogr_core.materials import Material, MohrCoulomb
     from ogr_core.project import Project
-    ext = Polyline(vertices=[Vertex(0, 0), Vertex(100, 0), Vertex(100, flat),
-                             Vertex(60, flat), Vertex(30, 20), Vertex(0, 20)],
-                   closed=True)
+    top = [Vertex(60, flat)] if face_top is None else [Vertex(60, flat),
+                                                       Vertex(60, face_top)]
+    ext = Polyline(vertices=[Vertex(0, 0), Vertex(100, 0), Vertex(100, flat)]
+                   + top + [Vertex(30, 20), Vertex(0, 20)], closed=True)
     ext.ensure_ccw()
     p = Project("phi0 crack")
     p.add_boundary(Boundary(polyline=ext, btype=BoundaryType.EXTERNAL))
@@ -203,7 +208,12 @@ class TestADraggedWallDoesNotDecide:
         assert _same_wall(w, wf) and _close(t, tf) and _close(f, ff), (f, ff)
 
     def test_the_ground_raised(self):
-        s, old_wall, (f, w, t), (ff, wf, tf) = self._dragged(_slope(flat=41.0))
+        # v0.1.258 (D244): raised BEHIND the face. Raising the flat to 41
+        # with the face vertex moved to (60, 41) tilted the face, and the
+        # toe of the arc built on the old face ended 0.36 m under the new
+        # one: a surface the slicer now refuses, dragged wall or not.
+        s, old_wall, (f, w, t), (ff, wf, tf) = self._dragged(
+            _slope(flat=41.0, face_top=40.0))
         assert w[2] == 41.0 and not _same_wall(w, old_wall)
         assert _same_wall(w, wf) and _close(t, tf) and _close(f, ff), (f, ff)
 
