@@ -3781,6 +3781,23 @@ class AutoRefineNonCircularSearch(AutoRefineSearch):
         return surface
 
 
+#: v0.1.257 (D238) — the Block Search projection leaves the soil at the
+#: exact crossing of its ray with the ground (``ogr_core.geometry.
+#: ray_ground_exit``) instead of marching along the ray in absolute steps of
+#: 0.5. Off, the old march comes back whole: the step, its absolute margins
+#: of ±1.0, the point of the STEP instead of the crossing, the first-step
+#: return that took the start's x with the ground under the step, and the
+#: x-sort plus 1e-3 de-duplication of the two ends with the chain points.
+#: A module switch so the verification bank can attribute what it moves.
+BLOCK_EXACT_EXIT = True
+
+#: The distance within which a block point counts as ON the ground, as a
+#: fraction of the model's bounding-box diagonal (AGENTS.md: geometric
+#: tolerances are relative to the model). It is the same fraction the slicer
+#: grid uses (``slicer._model_grid_tol``).
+BLOCK_ON_GROUND_REL = 1e-6
+
+
 class BlockSearch(BaseSearch):
     """Block Search (non-circular) — the reference's method.
 
@@ -3973,6 +3990,9 @@ class BlockSearch(BaseSearch):
         # Same expression, same geometry, same answers.
         soil = (ext_poly.buffer(1e-6 * max(dx, 1.0))
                 if ext_poly is not None else None)
+        # v0.1.257 (D238) — "on the ground" for the projection's start.
+        ground_tol = BLOCK_ON_GROUND_REL * math.hypot(xmax - xmin,
+                                                      ymax - ymin)
 
         # Block windows: vertical bands over the slope region. Center
         # them on the slope face (the steepest ground segment) so the
@@ -4123,21 +4143,28 @@ class BlockSearch(BaseSearch):
             a_left = math.radians(rng.uniform(*left_range))
             a_right = math.radians(rng.uniform(*right_range))
 
-            left_pt = self._project_to_top(
-                block_pts[0], a_left, top, xmin, ymax)
-            right_pt = self._project_to_top(
-                block_pts[-1], a_right, top, xmax, ymax)
-            if left_pt is None or right_pt is None:
-                result.invalid_count += 1
-                continue
+            if BLOCK_EXACT_EXIT:
+                deduped = self._exact_ends(block_pts, a_left, a_right, top,
+                                           ground_tol)
+                if deduped is None:
+                    result.invalid_count += 1
+                    continue
+            else:
+                left_pt = self._project_to_top(
+                    block_pts[0], a_left, top, xmin, ymax)
+                right_pt = self._project_to_top(
+                    block_pts[-1], a_right, top, xmax, ymax)
+                if left_pt is None or right_pt is None:
+                    result.invalid_count += 1
+                    continue
 
-            verts = sorted([left_pt] + block_pts + [right_pt],
-                           key=lambda v: v.x)
-            # dedup near-coincident x
-            deduped = [verts[0]]
-            for v in verts[1:]:
-                if abs(v.x - deduped[-1].x) > 1e-3:
-                    deduped.append(v)
+                verts = sorted([left_pt] + block_pts + [right_pt],
+                               key=lambda v: v.x)
+                # dedup near-coincident x
+                deduped = [verts[0]]
+                for v in verts[1:]:
+                    if abs(v.x - deduped[-1].x) > 1e-3:
+                        deduped.append(v)
             if len(deduped) < 3:
                 result.invalid_count += 1
                 continue
@@ -4397,6 +4424,54 @@ class BlockSearch(BaseSearch):
             elif s != sign:
                 return False
         return True
+
+    @staticmethod
+    def _exact_ends(block_pts, a_left, a_right, top, tol):
+        """The trial surface: the two projections and the chain between.
+
+        v0.1.257 (D238). Each end is where the ray from the outermost
+        chain point leaves the soil (:func:`ray_ground_exit`), at the
+        exact crossing. Three outcomes per end:
+
+        * the exit IS the chain point (it starts on the ground and the ray
+          points into the air) — the surface ends there, as the polyline
+          of verification problem 109 does on the outer corner of each
+          gabion tread;
+        * the exit lies beyond the chain point on its own side — it is the
+          new end vertex;
+        * anything else rejects the candidate: an exit at the same x as
+          the chain point and another height is a vertical segment, which
+          the reference forbids, and an exit on the wrong side is a ray
+          pointing back over the surface. Until v0.1.256 the x-sort put
+          such an exit in the middle and built another surface without a
+          word, and the 1e-3 de-duplication could drop an exit in favour of
+          a buried chain point.
+
+        The chain points keep their own de-duplication, unchanged.
+        Returns the vertices, or None for an invalid candidate.
+        """
+        from ogr_core.geometry import Vertex, ray_ground_exit
+
+        first, last = block_pts[0], block_pts[-1]
+        exit_l = ray_ground_exit(top, first.x, first.y, a_left, tol)
+        exit_r = ray_ground_exit(top, last.x, last.y, a_right, tol)
+        if exit_l is None or exit_r is None:
+            return None
+        inner = [first]
+        for v in block_pts[1:]:
+            if abs(v.x - inner[-1].x) > 1e-3:
+                inner.append(v)
+        out = []
+        if math.hypot(exit_l[0] - first.x, exit_l[1] - first.y) > tol:
+            if not exit_l[0] < first.x - tol:
+                return None
+            out.append(Vertex(*exit_l))
+        out.extend(inner)
+        if math.hypot(exit_r[0] - last.x, exit_r[1] - last.y) > tol:
+            if not exit_r[0] > last.x + tol:
+                return None
+            out.append(Vertex(*exit_r))
+        return out
 
     @staticmethod
     def _project_to_top(

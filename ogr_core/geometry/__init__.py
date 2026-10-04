@@ -19,6 +19,7 @@ from .expand_shrink import (
     expand_shrink_external,
 )
 from .ground import (bedrock_surface, distance_to_profile, envelope_y_at,
+                     ray_ground_exit,
                      ground_surface, lower_y_at, upper_y_at,
                      zero_thickness_spans)
 from .primitives import Polyline, Vertex, segments_of
@@ -70,6 +71,8 @@ __all__ = [
     # v0.1.120 — true distance to the ground profile, for the
     # undrained strength measured from the slope face.
     "distance_to_profile",
+    # v0.1.257 — where a Block Search projection leaves the soil (D238).
+    "ray_ground_exit",
     "lower_y_at",
     "upper_y_at",
     "zero_thickness_spans",

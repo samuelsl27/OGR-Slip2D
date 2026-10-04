@@ -526,6 +526,106 @@ def distance_to_profile(profile: Polyline, x: float, y: float) -> float:
     return best
 
 
+def ray_ground_exit(profile, x0: float, y0: float, angle_rad: float,
+                    tol: float) -> Optional[tuple[float, float]]:
+    """Where the ray from ``(x0, y0)`` at ``angle_rad`` LEAVES the soil.
+
+    v0.1.257, defect D238. ``profile`` is a ground surface as
+    :func:`ground_surface` returns it (left to right, a vertical face as
+    two vertices sharing an abscissa); the soil is what lies below it. The
+    answer is the first point along the ray, at a parameter t ≥ 0, where
+    the ray passes from inside the soil to outside it — the point OF THE
+    RAY, which lies on the profile: on a face, on a flat, or part-way up a
+    vertical step. None when the ray never leaves through the ground
+    (it points into the soil, or leaves the profile's span first, through
+    a side of the model) or when the start is above the ground.
+
+    Two cases at t = 0, and the reason the trivial crossing is not simply
+    skipped:
+
+    * a start **on the ground** — within ``tol`` of the profile, measured
+      perpendicular to it: on a steep face the vertical gap is many times
+      the true distance — whose ray points straight out into the air
+      leaves at once, so the exit IS the start. Skipping t = 0 there would
+      let a ray that runs through the air re-enter the soil further on
+      and report that entry as its "exit": from the corner of a step,
+      a ray down and out lands on the toe through the air;
+    * a start on the ground whose ray points into the soil is followed
+      until it comes out again.
+
+    A stretch of the ray that runs along the ground counts as not inside,
+    so it ends the soil there. ``tol`` is a length in model units; the
+    caller makes it relative to the model.
+
+    Built for the Block Search projection, which until v0.1.256 marched
+    along the ray in absolute steps of 0.5 and returned the ground under
+    the step instead of the crossing.
+    """
+    pts = list(profile.vertices if hasattr(profile, "vertices") else profile)
+    if len(pts) < 2:
+        return None
+    cx, sy = math.cos(angle_rad), math.sin(angle_rad)
+    xs = [p.x for p in pts]
+    ys = [p.y for p in pts]
+    reach = (max(xs) - min(xs)) + (max(ys) - min(ys)) + abs(tol) + 1.0
+
+    def inside(t: float) -> Optional[bool]:
+        x, y = x0 + t * cx, y0 + t * sy
+        g = envelope_y_at(pts, x)
+        if g is None:
+            return None
+        return y < g - tol
+
+    on_ground = distance_to_profile(Polyline(vertices=pts), x0, y0) <= tol
+    if not on_ground:
+        g0 = envelope_y_at(pts, x0)
+        if g0 is None or y0 > g0:
+            return None
+
+    hits = []
+    for a, b in zip(pts[:-1], pts[1:]):
+        sx, sy_ = b.x - a.x, b.y - a.y
+        span = math.hypot(sx, sy_)
+        if span <= 0.0:
+            continue
+        wx, wy = a.x - x0, a.y - y0
+        den = cx * sy_ - sy * sx
+        if abs(den) <= 1e-12 * span:
+            # Parallel. Collinear with the ray: both ends of the segment are
+            # where the ray starts and stops running along the ground.
+            if abs(wx * sy - wy * cx) <= tol:
+                hits.append(wx * cx + wy * sy)
+                hits.append((b.x - x0) * cx + (b.y - y0) * sy)
+            continue
+        t = (wx * sy_ - wy * sx) / den
+        u = (wx * sy - wy * cx) / den
+        if -1e-12 <= u <= 1.0 + 1e-12 and t > 0.0:
+            hits.append(t)
+    # Where the ray leaves the profile's span is a boundary too: past it
+    # there is no ground to come out through, and an interval straddling it
+    # would be judged by a point the profile says nothing about.
+    if cx > 0.0:
+        hits.append((max(xs) - x0) / cx)
+    elif cx < 0.0:
+        hits.append((min(xs) - x0) / cx)
+    # Crossings closer together than ``tol`` are one crossing: a vertex is
+    # met by both of its segments, and the sliver between the two copies
+    # would otherwise be classified on its own.
+    bounds = [0.0]
+    for t in sorted(hits):
+        if t > bounds[-1] + tol:
+            bounds.append(t)
+    for i, a in enumerate(bounds):
+        b = bounds[i + 1] if i + 1 < len(bounds) else a + reach
+        state = inside(0.5 * (a + b))
+        if state is True:
+            continue
+        if state is None and not (i == 0 and on_ground):
+            return None
+        return (x0 + a * cx, y0 + a * sy)
+    return None
+
+
 def _as_vertices(external) -> list[Vertex]:
     """Accept a Boundary, a Polyline or a raw vertex sequence."""
     polyline = getattr(external, "polyline", None)
