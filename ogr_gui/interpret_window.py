@@ -49,8 +49,11 @@ from .resources import icon
 from ogr_slip2d.checks import equilibrium_fos as _equilibrium_fos  # noqa: E402
 from ogr_slip2d.interpretation import (  # noqa: E402
     base_parameter as _mc_param,
+    distance_to_path as _distance_to_path,
     per_slice as _per_slice,
     slice_stress as _slice_stress,
+    slip_centre as _slip_centre,
+    surface_path as _surface_path,
 )
 
 
@@ -439,6 +442,12 @@ def minimum_row_text(i: int, sd: dict) -> str:
                       "r = %.2f, x from %.2f to %.2f") % (head + (xl, xr))
         return tr("%d: circle centre (%.2f, %.2f) r = %.2f, "
                   "x from %.2f to %.2f") % (head + (xl, xr))
+    # v0.1.252 (D251) — a weak-layer surface said "non-circular surface",
+    # which is true and names nothing; it is the surface clipped onto a
+    # weak layer, and its ends are its mass's.
+    if stype == "weak_layer" and xl is not None and xr is not None:
+        return tr("%d: weak-layer surface, x from %.2f to %.2f") % (
+            i, xl, xr)
     if xl is None or xr is None:
         verts = (sd.get("polyline") or {}).get("vertices") or sd.get(
             "vertices") or []
@@ -1725,9 +1734,18 @@ class InterpretWindow(QMainWindow):
         best = self._best_at_grid_centre(x, y)
         if best is not None:
             return best
+        # v0.1.252 (D252) — measured to the surface the engine PRICED (the
+        # base of its slices), with the helpers v0.1.201 moved to
+        # ``ogr_slip2d.interpretation``. That move took
+        # ``_distance_point_to_surface`` away and left this call behind:
+        # every pick away from a grid centre raised AttributeError, so a
+        # polyline or a weak-layer surface could not be queried at all.
         nearest, nearest_d = None, float("inf")
         for ev in res.valid():
-            d = self._distance_point_to_surface(x, y, ev.surface)
+            path = _surface_path(ev)
+            if len(path) < 2:
+                continue
+            d = _distance_to_path(x, y, path)
             if d < nearest_d:
                 nearest, nearest_d = ev, d
         # A pick has to land somewhere near a surface to mean anything.
@@ -1755,12 +1773,13 @@ class InterpretWindow(QMainWindow):
             return cached[1]
         xs, ys = set(), set()
         for r in res.evaluations:
-            sd = r.surface.to_dict()
-            cx, cy = sd.get("centre_x"), sd.get("centre_y")
-            if cx is None or cy is None:
+            # v0.1.252 (D251) — the centre a weak-layer surface's base was
+            # drawn about counts too (``slip_centre``).
+            centre = _slip_centre(r.surface.to_dict())
+            if centre is None:
                 continue
-            xs.add(round(cx, 6))
-            ys.add(round(cy, 6))
+            xs.add(round(centre[0], 6))
+            ys.add(round(centre[1], 6))
 
         def _spacing(vals):
             vals = sorted(vals)
@@ -1779,15 +1798,15 @@ class InterpretWindow(QMainWindow):
             return []
         hits = []
         for r in res.evaluations:
-            sd = r.surface.to_dict()
             # A composite belongs to the grid centre its circle was drawn
             # about; excluding it would make the surfaces the option exists
             # to produce unclickable on the very grid that generated them.
-            if sd.get("type") not in ("circle", "composite"):
+            # v0.1.252 (D251) — and a weak-layer surface to the centre of
+            # its base, for the same reason (``slip_centre``).
+            centre = _slip_centre(r.surface.to_dict())
+            if centre is None:
                 continue
-            cx, cy = sd.get("centre_x"), sd.get("centre_y")
-            if cx is None or cy is None:
-                continue
+            cx, cy = centre
             if abs(cx - x) <= tol and abs(cy - y) <= tol:
                 hits.append(r)
         return hits

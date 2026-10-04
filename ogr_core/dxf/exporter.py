@@ -294,14 +294,15 @@ def export_dxf(project, path, options: Optional[ExportOptions] = None,
 
     # ---- critical slip surface --------------------------------------
     if opts.slip_surface and results:
-        from ogr_slip2d.surface import CompositeSurface, SlipCircle
+        from ogr_slip2d.surface import (CompositeSurface, SlipCircle,
+                                        WeakLayerSurface)
         for mid, sr in results.items():
             crit = getattr(sr, "critical", None)
             if crit is None:
                 continue
             surf = crit.surface
             layer = _layer(LAYER_SURFACE)
-            if isinstance(surf, CompositeSurface):
+            if isinstance(surf, (CompositeSurface, WeakLayerSurface)):
                 # v0.1.111 — asked BEFORE the circle branch, and asked of
                 # the surface rather than reconstructed here: a composite
                 # has a centre and a radius, so ``_surface_arc`` would
@@ -309,16 +310,25 @@ def export_dxf(project, path, options: Optional[ExportOptions] = None,
                 # dives below the floor of the model and was never
                 # analysed. Exporting that into a drawing someone builds
                 # from is worse than exporting nothing.
+                # v0.1.252 (D251) — a weak-layer surface likewise: it has
+                # no ``polyline``, so until this version the export raised
+                # AttributeError here, before ``saveas``, and wrote no file.
                 pts = surf.drawing_vertices()
             elif isinstance(surf, SlipCircle):
                 pts = _surface_arc(surf, crit)
-            else:
+            elif hasattr(surf, "polyline"):
                 pts = [(v.x, v.y) for v in surf.polyline.vertices]
+            else:
+                # A surface class this exporter does not know: left out and
+                # said, never a crash that loses the whole drawing.
+                rep.skipped.append("%s critical surface (%s)"
+                                   % (mid, type(surf).__name__))
+                continue
             if len(pts) >= 2:
                 msp.add_lwpolyline(_scaled(pts, factor),
                                    dxfattribs={"layer": layer})
                 rep.count(LAYER_SURFACE)
-            if opts.annotations:
+            if opts.annotations and pts:
                 mid_pt = pts[len(pts) // 2]
                 txt = msp.add_text(
                     f"{mid}  FS = {crit.fos:.4f}",

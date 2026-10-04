@@ -202,7 +202,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.251"
+    VERSION = "0.1.252"
 
     def __init__(self) -> None:
         super().__init__()
@@ -2255,7 +2255,19 @@ class MainWindow(QMainWindow):
             mid = choice
         crit = candidates[mid].critical
         surface = crit.surface
-        if not hasattr(surface, "polyline"):
+        # v0.1.252 (D251) — the engine's one question (``optimisation_
+        # refusal``), which tells a weak-layer surface from a circle.
+        from ogr_slip2d.optimize import (OPTIMISE_A_WEAK_LAYER,
+                                         optimisation_refusal)
+        refusal = optimisation_refusal(surface)
+        if refusal == OPTIMISE_A_WEAK_LAYER:
+            self._info(tr(
+                "Optimisation moves the vertices of a plain NON-CIRCULAR "
+                "surface. The critical surface of this method runs along a "
+                "weak layer, clipped from its base on every evaluation, so "
+                "it has no vertices of its own to move."))
+            return
+        if refusal is not None:
             self._info(tr(
                 "Optimisation applies to NON-CIRCULAR surfaces. The "
                 "critical surface of this method is a circle; use a "

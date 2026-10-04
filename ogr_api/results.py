@@ -74,22 +74,52 @@ def surface_summary(surface) -> Optional[dict]:
     if surface is None:
         return None
     d = surface.to_dict() if hasattr(surface, "to_dict") else {}
+    if not d.get("type"):
+        return {"type": type(surface).__name__}
+    return _summary_of(d)
+
+
+def _pairs(verts) -> list:
+    return [[_r(v.get("x") if isinstance(v, dict) else v[0]),
+             _r(v.get("y") if isinstance(v, dict) else v[1])]
+            for v in verts]
+
+
+def _summary_of(d: dict) -> dict:
+    """``surface_summary`` of a serialised surface, by its ``type``.
+
+    v0.1.252 (D251) — a composite and a weak-layer surface came back as
+    ``{"type": ...}`` and nothing else, so an agent asking for a critical
+    surface clipped to the floor or to a joint got no geometry at all. A
+    composite now carries its circle and the vertices it was analysed on;
+    a weak-layer surface carries its base (summarised the same way), the
+    stretches each active layer wins, and its vertices.
+    """
     kind = d.get("type")
-    if kind == "circle":
-        out = {"type": "circle",
+    if kind in ("circle", "composite"):
+        out = {"type": kind,
                "centre_x": _r(d.get("centre_x")),
                "centre_y": _r(d.get("centre_y")),
                "radius": _r(d.get("radius")),
                "x_left": _r(d.get("x_left")),
                "x_right": _r(d.get("x_right"))}
+        if kind == "composite":
+            out["vertices"] = _pairs(d.get("vertices") or [])
     elif kind == "polyline":
-        verts = d.get("polyline", {}).get("vertices", [])
         out = {"type": "polyline",
-               "vertices": [[_r(v.get("x") if isinstance(v, dict) else v[0]),
-                             _r(v.get("y") if isinstance(v, dict) else v[1])]
-                            for v in verts]}
+               "vertices": _pairs(d.get("polyline", {}).get("vertices", []))}
+    elif kind == "weak_layer":
+        out = {"type": "weak_layer",
+               "x_left": _r(d.get("x_left")),
+               "x_right": _r(d.get("x_right")),
+               "base": _summary_of(d.get("base") or {}),
+               "weak_layers": [{"x0": _r(w.get("x0")), "x1": _r(w.get("x1")),
+                                "material_id": w.get("material_id"),
+                                "boundary_id": w.get("boundary_id")}
+                               for w in (d.get("weak_layers") or [])],
+               "vertices": _pairs(d.get("vertices") or [])}
     else:
-        out = {"type": kind or type(surface).__name__}
+        out = {"type": kind or "unknown"}
     if d.get("tension_cracks"):
         out["tension_cracks"] = json_safe(d["tension_cracks"])
     return out

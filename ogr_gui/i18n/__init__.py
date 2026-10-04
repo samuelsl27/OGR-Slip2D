@@ -2052,6 +2052,17 @@ _DICTS: dict[str, dict[str, str]] = {
             "r = %.2f, x de %.2f a %.2f",
         "%d: non-circular surface, x from %.2f to %.2f":
             "%d: superficie no circular, x de %.2f a %.2f",
+        # v0.1.252 (D251)
+        "%d: weak-layer surface, x from %.2f to %.2f":
+            "%d: superficie de capa débil, x de %.2f a %.2f",
+        "Optimisation moves the vertices of a plain NON-CIRCULAR "
+        "surface. The critical surface of this method runs along a "
+        "weak layer, clipped from its base on every evaluation, so "
+        "it has no vertices of its own to move.":
+            "La optimización mueve los vértices de una superficie NO "
+            "CIRCULAR simple. La superficie crítica de este método va "
+            "por una capa débil y se recorta desde su base en cada "
+            "evaluación, así que no tiene vértices propios que mover.",
         # Las cuatro frases son del MOTOR (``probabilistic.py``, constantes
         # ``_CPS_*``) y Interpret las busca por su valor: si cambian allí,
         # cambian aquí (lo comprueba test_surface_key_endpoints_v1237).

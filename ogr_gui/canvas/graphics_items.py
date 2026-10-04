@@ -649,7 +649,7 @@ class SlipSurfaceItem(QGraphicsPathItem):
                 right_crack = cracks.get(round(float(xr), 9))
                 if right_crack is not None:
                     path.lineTo(xr, right_crack[1])
-        elif stype in ("polyline", "composite"):
+        elif stype in ("polyline", "composite", "weak_layer"):
             # v0.1.12 — non-circular surface (SlipSurface).
             # to_dict() returns {"type": "polyline", "polyline": {...}}
             # where polyline is itself a Polyline.to_dict() with "vertices".
@@ -662,6 +662,13 @@ class SlipSurfaceItem(QGraphicsPathItem):
             # surface runs along the boundary. Its ``vertices`` are that
             # analysed surface, and this is the one place where the picture
             # and the number are made to agree.
+            #
+            # v0.1.252 (D251) — and a WEAK-LAYER surface, for the
+            # composite's reason: its ``vertices`` are the surface as
+            # analysed, base and joint stretches with every break. It fell
+            # through every branch since v0.1.121 and was drawn as an empty
+            # path, so the critical surface of a model with a weak layer
+            # was not on the screen at all.
             verts = surface_dict.get("vertices")
             if not verts:
                 pl = surface_dict.get("polyline", {})
@@ -771,10 +778,20 @@ class SlipRadiiItem(QGraphicsPathItem):
         # its endpoints are drawn from the same arc. Its moment axis IS
         # this point, so leaving it undrawn would hide exactly what the
         # reader needs to judge the mechanism.
-        if surface_dict.get("type", "circle") in ("circle", "composite"):
-            xc = surface_dict["centre_x"]
-            yc = surface_dict["centre_y"]
-            r = surface_dict["radius"]
+        #
+        # v0.1.252 (D251) — and a weak-layer surface clipped from a circle
+        # or a composite, for the same reason: its moment axis is its
+        # base's (``WeakLayerSurface.moment_axis`` delegates), and its ends
+        # are its base's ends. The circle is read from the base.
+        circle = surface_dict
+        if surface_dict.get("type") == "weak_layer":
+            circle = surface_dict.get("base") or {}
+        if circle.get("type", "circle") in ("circle", "composite") and all(
+                circle.get(k) is not None
+                for k in ("centre_x", "centre_y", "radius")):
+            xc = circle["centre_x"]
+            yc = circle["centre_y"]
+            r = circle["radius"]
             for key in ("x_left", "x_right"):
                 x = surface_dict.get(key)
                 if x is None:

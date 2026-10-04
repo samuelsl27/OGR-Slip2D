@@ -395,6 +395,32 @@ def _snap_shallow(project, points, distance: Optional[float]):
 
 
 # ======================================================================
+#: v0.1.252 (D251) — why a critical surface cannot be optimised, as a key:
+#: the interface translates it, the API words it.
+OPTIMISE_A_CIRCLE = "circle"
+OPTIMISE_A_WEAK_LAYER = "weak_layer"
+
+
+def optimisation_refusal(surface) -> Optional[str]:
+    """Why ``surface`` cannot be optimised, as a key, or None when it can.
+
+    ``optimize_surface`` moves the vertices of a plain polyline: it reads
+    ``surface.polyline``. v0.1.252 (D251) — the interface and the API each
+    asked ``hasattr(surface, "polyline")`` on their own and each answered
+    "the critical surface of this method is a circle", which is wrong for a
+    weak-layer surface: it has no polyline because it is clipped from its
+    base again on every evaluation, not because it is a circle. ONE
+    question, asked by both, with an answer that names what the surface is.
+    """
+    if hasattr(surface, "polyline"):
+        return None
+    from ogr_slip2d.surface import WeakLayerSurface
+
+    if isinstance(surface, WeakLayerSurface):
+        return OPTIMISE_A_WEAK_LAYER
+    return OPTIMISE_A_CIRCLE
+
+
 def optimize_surface(project, search, surface, settings=None):
     """Random-walk a non-circular surface towards a lower factor.
 

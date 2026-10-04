@@ -249,7 +249,20 @@ def optimize_run(ws, result_id: str, method_id: Optional[str] = None,
     crit = getattr(payload[mid], "critical", None)
     if crit is None:
         raise Conflict(f"{mid} found no critical surface to optimise.")
-    if not hasattr(crit.surface, "polyline"):
+    # v0.1.252 (D251) — the engine's one question; it used to be asked here
+    # as ``hasattr(..., "polyline")`` and answered "a circle" for a surface
+    # clipped onto a weak layer too.
+    from ogr_slip2d.optimize import OPTIMISE_A_WEAK_LAYER, optimisation_refusal
+    refusal = optimisation_refusal(crit.surface)
+    if refusal == OPTIMISE_A_WEAK_LAYER:
+        raise Conflict("Optimisation moves the vertices of a plain "
+                       "NON-CIRCULAR surface; the critical surface of this "
+                       "method runs along a weak layer, clipped from its "
+                       "base on every evaluation, so it has no vertices of "
+                       "its own to move.",
+                       hint="The search already chose the worst weak-layer "
+                            "case of each trial surface.")
+    if refusal is not None:
         raise Conflict("Optimisation refines a NON-CIRCULAR surface; the "
                        "critical surface of this method is a circle.",
                        hint="Run a non-circular search (block, path, "

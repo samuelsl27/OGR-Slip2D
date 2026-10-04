@@ -199,6 +199,29 @@ def surface_area(res) -> float:
                                             or []))
 
 
+def slip_centre(surface_dict) -> Optional[tuple]:
+    """``(x, y)`` of the slip centre a serialised surface was drawn about,
+    or None for a surface that has none.
+
+    A circle and a composite carry their centre. v0.1.252 (D251) — and a
+    weak-layer surface clipped from either belongs to the centre of its
+    BASE, for the reason a composite belongs to its circle's: the grid
+    generated it there. Until this version it had no centre for the
+    interpretation window and for ``minimum_per_centre``, so a clipped
+    surface could not be picked on the grid that produced it. ONE answer,
+    read by both, instead of a type test in each.
+    """
+    sd = surface_dict or {}
+    if sd.get("type") == "weak_layer":
+        sd = sd.get("base") or {}
+    if sd.get("type", "circle") not in ("circle", "composite"):
+        return None
+    cx, cy = sd.get("centre_x"), sd.get("centre_y")
+    if cx is None or cy is None:
+        return None
+    return cx, cy
+
+
 def minimum_per_centre(search_result) -> list:
     """The lowest-factor surface at each slip-centre grid point, plus every
     surface that has no centre (a non-circular search has no grid of
@@ -207,11 +230,11 @@ def minimum_per_centre(search_result) -> list:
     best: dict = {}
     loose: list = []
     for r in search_result.valid():
-        sd = r.surface.to_dict()
-        cx, cy = sd.get("centre_x"), sd.get("centre_y")
-        if cx is None or cy is None:
+        centre = slip_centre(r.surface.to_dict())
+        if centre is None:
             loose.append(r)
             continue
+        cx, cy = centre
         key = (round(cx, 6), round(cy, 6))
         if key not in best or r.fos < best[key].fos:
             best[key] = r
