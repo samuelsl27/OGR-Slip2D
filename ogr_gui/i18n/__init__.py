@@ -2055,6 +2055,23 @@ _DICTS: dict[str, dict[str, str]] = {
         # v0.1.252 (D251)
         "%d: weak-layer surface, x from %.2f to %.2f":
             "%d: superficie de capa débil, x de %.2f a %.2f",
+        # v0.1.255 (D128) — la ventana de estadísticas dice sobre qué
+        # superficie se muestreó Global Minimum, y aparta los avisos de
+        # cambio de masa o de caso de «lo que no pudo hacer».
+        "Sampled surface: %s": "Superficie muestreada: %s",
+        "circle of centre (%.2f, %.2f) and radius %.2f":
+            "círculo de centro (%.2f, %.2f) y radio %.2f",
+        "composite surface clipped from the circle of centre "
+        "(%.2f, %.2f) and radius %.2f":
+            "superficie compuesta recortada del círculo de centro "
+            "(%.2f, %.2f) y radio %.2f",
+        "polyline of %d vertices": "poligonal de %d vértices",
+        "along the weak layer %s": "por la capa débil %s",
+        "its base: %s": "su base: %s",
+        ", from x = %.2f to %.2f": ", de x = %.2f a %.2f",
+        "a layer with no material": "una capa sin material",
+        "Samples that answered for another mechanism:":
+            "Muestras que contestaron por otro mecanismo:",
         "Optimisation moves the vertices of a plain NON-CIRCULAR "
         "surface. The critical surface of this method runs along a "
         "weak layer, clipped from its base on every evaluation, so "

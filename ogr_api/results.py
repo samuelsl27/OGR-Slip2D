@@ -400,12 +400,16 @@ def statistics_summary(outcome) -> dict:
             "sampling": prob.sampling_method,
             "num_samples": prob.num_samples, "variables": prob.variables,
             "methods": prob.summary(), "notes": prob.notes,
-            "note_lines": list(getattr(prob, "note_lines", []) or [])})
+            "note_lines": list(getattr(prob, "note_lines", []) or []),
+            # v0.1.255 (D128) — which of those lines say samples answered
+            # for another mass or weak-layer case; each is also above.
+            "switch_lines": list(getattr(prob, "switch_lines", []) or [])})
     if sens is not None:
         out["sensitivity"] = json_safe({
             "ok": sens.ok, "ranking": sens.ranking() if sens.ok else [],
             "notes": sens.notes,
-            "note_lines": list(getattr(sens, "note_lines", []) or [])})
+            "note_lines": list(getattr(sens, "note_lines", []) or []),
+            "switch_lines": list(getattr(sens, "switch_lines", []) or [])})
     return out
 
 

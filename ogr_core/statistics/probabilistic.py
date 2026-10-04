@@ -105,6 +105,13 @@ class MethodProbabilisticResult:
             "lost_by_cause": self.notes.get("lost_by_cause"),
             "mass_switches": self.mass_switches,        # v0.1.238 (D89)
             "case_switches": self.case_switches,        # v0.1.251 (D85)
+            # v0.1.255 (D128) — the identity of the surface this method was
+            # sampled on (``_surface_key``: type and geometry to the last
+            # digit, extent included), so a caller can tell the two
+            # methods' surfaces apart without the dictionary. None when the
+            # run samples no single surface (Overall Slope searches anew).
+            "surface_key": (_surface_key(self.surface)
+                            if isinstance(self.surface, dict) else None),
         }
 
 
@@ -134,6 +141,14 @@ class ProbabilisticResult:
     #: the same method -- D88 is going to add one -- is one more element,
     #: not a ``notes[mid]`` overwritten.
     note_lines: list = field(default_factory=list)
+    #: v0.1.255 (D128) — the lines of ``note_lines`` that say samples
+    #: answered for another sliding mass (D89) or another weak-layer case
+    #: (D85). They are something the run DID, not something it could not
+    #: do, and the statistics window gives them a title of their own. Every
+    #: one of them is ALSO in ``note_lines``, where every existing reader —
+    #: the notes panel, the API, the verification bank — keeps finding it;
+    #: the window asks for the split instead of parsing the sentences.
+    switch_lines: list = field(default_factory=list)
 
     @property
     def reported(self):
@@ -1148,6 +1163,10 @@ def _publish_method_warnings(result) -> None:
     not a sentence.
 
     v0.1.251 (D85) — and the ``case_switch`` one, for the same reason.
+
+    v0.1.255 (D128) — the two switch sentences go to ``switch_lines`` as
+    well: what the samples answered for is not something the run failed to
+    do, and the window says it under its own title.
     """
     for mid, mres in result.by_method.items():
         if getattr(mres.statistics, "n", 0) <= 0:
@@ -1156,7 +1175,10 @@ def _publish_method_warnings(result) -> None:
         for key in ("warning", "mass_switch", "case_switch"):
             said = notes.get(key)
             if said:
-                result.note_lines.append("%s: %s" % (mid, said))
+                line = "%s: %s" % (mid, said)
+                result.note_lines.append(line)
+                if key != "warning":
+                    result.switch_lines.append(line)
 
 
 def run_global_minimum(

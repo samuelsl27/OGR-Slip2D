@@ -147,6 +147,10 @@ class SensitivityResult:
     #: the same method -- D88 is going to add one -- is one more element,
     #: not a ``notes[mid]`` overwritten.
     note_lines: list = field(default_factory=list)
+    #: v0.1.255 (D128) — the sweeps that answered for another sliding mass or
+    #: another weak-layer case, said apart by the statistics window. Each
+    #: line is ALSO in ``note_lines`` (see ``ProbabilisticResult``).
+    switch_lines: list = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -394,18 +398,22 @@ def run_sensitivity(
                 # v0.1.238 (D89) — a curve that changes mechanism part way
                 # is two curves drawn as one; said, never redrawn.
                 at = vs.mass_switch_values
-                res.note_lines.append("%s: %s" % (mid, switches.sentence(
+                line = "%s: %s" % (mid, switches.sentence(
                     "The sweep of %s answered for another sliding mass of "
                     "the deterministic circle at %d of %d points, from %g to "
-                    "%g" % (vs.label, len(at), vs.n, min(at), max(at)))))
+                    "%g" % (vs.label, len(at), vs.n, min(at), max(at))))
+                res.note_lines.append(line)
+                res.switch_lines.append(line)       # v0.1.255 (D128)
             if vs.case_switch_values:
                 # v0.1.251 (D85) — and a curve that changes weak-layer case
                 # part way, for the same reason.
                 at = vs.case_switch_values
-                res.note_lines.append("%s: %s" % (mid, cases.sentence(
+                line = "%s: %s" % (mid, cases.sentence(
                     "The sweep of %s answered for another weak-layer case of "
                     "the deterministic surface at %d of %d points, from %g to "
-                    "%g" % (vs.label, len(at), vs.n, min(at), max(at)))))
+                    "%g" % (vs.label, len(at), vs.n, min(at), max(at))))
+                res.note_lines.append(line)
+                res.switch_lines.append(line)       # v0.1.255 (D128)
 
         # A method whose every variable was refused contributes nothing to
         # rank, so it does not enter ``by_method`` -- and with no method in

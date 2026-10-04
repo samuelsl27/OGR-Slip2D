@@ -41,7 +41,7 @@ from ogr_slip2d.analysis_runner import build_method  # noqa: E402
 from ogr_slip2d.search import GridSearch  # noqa: E402
 
 
-def _deterministic(project, methods=("bishop_simplified",)):
+def _deterministic(project, methods=("bishop_simplified",), grid=(4, 4, 6)):
     """Small deterministic search giving each method its own critical.
 
     v0.1.108 — through ``build_method``, and not ``BishopSimplified()``.
@@ -50,16 +50,74 @@ def _deterministic(project, methods=("bishop_simplified",)):
     defaults is a different calculation: the project tolerance is 0.005
     against the class's 0.001, which is worth about 3e-4 in the factor of
     safety — enough to break the 1e-6 identities below, and rightly so.
+
+    v0.1.255 (D128) — ``grid`` is ``(nx, ny, radius increments)``. Seven
+    tests share the 4 x 4 x 6 default, on which Bishop and Spencer pick the
+    SAME circle; a test about two methods' surfaces needs a grid where they
+    part, and asks for it instead of changing everyone's.
     """
+    nx, ny, ri = grid
     out = {}
     for mid in methods:
         r = GridSearch(method=build_method(project, mid, 18),
                        grid_x=(70, 100),
-                       grid_y=(60, 85), grid_nx=4, grid_ny=4,
-                       radius_increment=6, min_radius=15, num_slices=18,
+                       grid_y=(60, 85), grid_nx=nx, grid_ny=ny,
+                       radius_increment=ri, min_radius=15, num_slices=18,
                        min_area=0.5).run(project)
         out[mid] = r.critical
     return out
+
+
+def _sampled_on(run):
+    """``run()``, and the surface of every evaluation it made, by method.
+
+    v0.1.255 (D128). Recorded at ``_evaluate_on``, the one call through
+    which the engine evaluates a sample (and the probe of D88), keyed by
+    ``_surface_key`` — type and geometry to the last digit, extent
+    included — and tagged by the ``method_id`` of the result. Restored in
+    ``finally``: a module function left patched would leak into every test
+    that runs after this one (rule 5).
+    """
+    import ogr_core.statistics.probabilistic as P
+    seen: dict = {}
+    original = P._evaluate_on
+
+    def spy(project, search, surface):
+        r = original(project, search, surface)
+        if r is not None and getattr(r, "surface", None) is not None:
+            seen.setdefault(r.method_id, []).append(
+                P._surface_key(r.surface.to_dict()))
+        return r
+
+    P._evaluate_on = spy
+    try:
+        res = run()
+    finally:
+        P._evaluate_on = original
+    return res, seen
+
+
+def _not_on_their_own_surfaces(res, det, seen) -> list:
+    """What breaks "each method is sampled on its own deterministic
+    surface", one line per problem; empty when nothing does."""
+    from ogr_core.statistics.probabilistic import _surface_key
+    problems = []
+    for mid, crit in det.items():
+        key = _surface_key(crit.surface.to_dict())
+        mres = res.by_method.get(mid)
+        if mres is None:
+            problems.append("%s: not sampled (%s)" % (mid, res.notes.get(mid)))
+            continue
+        if mres.summary()["surface_key"] != key:
+            problems.append("%s: the summary names another surface" % mid)
+        keys = seen.get(mid) or []
+        if not keys:
+            problems.append("%s: no evaluation recorded" % mid)
+        wrong = [k for k in keys if k != key]
+        if wrong:
+            problems.append("%s: %d of %d evaluations on another surface"
+                            % (mid, len(wrong), len(keys)))
+    return problems
 
 
 def _cohesion_var(project, std_dev=3.0, span=9.0):
@@ -167,19 +225,77 @@ class TestGlobalMinimumEngine:
         mres = res.by_method["bishop_simplified"]
         assert abs(mres.mean_fos - mres.deterministic_fos) < 0.05
 
-    def test_each_method_keeps_its_own_surface(self):
-        """The reference stresses that every analysis method can have a
-        different global minimum."""
+    def _two_methods(self):
+        """Ej_1 on the 6 x 6 x 8 grid, where Bishop and Spencer part:
+        (90; 76.67; R 53.44) against (80; 60; R 35.12)."""
         p = _ej1_project()
-        det = _deterministic(p, ("bishop_simplified", "spencer"))
-        res = run_global_minimum(p, det, [_cohesion_var(p)],
-                                 num_samples=30,
-                                 sampling=SM.LATIN_HYPERCUBE, seed=2,
-                                 num_slices=18)
+        det = _deterministic(p, ("bishop_simplified", "spencer"),
+                             grid=(6, 6, 8))
+        return p, det
+
+    def _run(self, p, det):
+        return run_global_minimum(p, det, [_cohesion_var(p)],
+                                  num_samples=30,
+                                  sampling=SM.LATIN_HYPERCUBE, seed=2,
+                                  num_slices=18)
+
+    def test_each_method_keeps_its_own_surface(self):
+        """Every method is sampled on ITS OWN deterministic surface.
+
+        WHAT INVARIANT THIS PROTECTS (D59, D128). The reference stresses
+        that every analysis method can have a different global minimum, so
+        a Global Minimum run samples each method on the surface ITS search
+        found. Until v0.1.255 this test asserted ``surface is not None`` and
+        a copied deterministic factor: it passed with a composite degraded
+        to a circle (D59), would have passed with both methods sampled on
+        one circle, and ran on a 4 x 4 grid where Bishop and Spencer pick
+        the same circle anyway — a green test watching nothing. Now: the
+        two deterministic surfaces differ (premise), every evaluation of
+        each method is on its own surface to the last digit
+        (``_surface_key``, D87), the summary names it, and no sample changed
+        mass (D89). ``test_a_shared_seed_is_denounced`` proves the check
+        can fail.
+        """
+        from ogr_core.statistics.probabilistic import _surface_key
+        p, det = self._two_methods()
+        keys = {mid: _surface_key(c.surface.to_dict())
+                for mid, c in det.items()}
+        assert keys["bishop_simplified"] != keys["spencer"], keys
+        res, seen = _sampled_on(lambda: self._run(p, det))
         assert set(res.by_method) == {"bishop_simplified", "spencer"}
         for mid, mres in res.by_method.items():
-            assert mres.surface is not None
+            assert mres.mass_switches == 0, (mid, mres.mass_switches)
             assert abs(mres.deterministic_fos - det[mid].fos) < 1e-12
+        assert _not_on_their_own_surfaces(res, det, seen) == []
+
+    def test_a_shared_seed_is_denounced(self):
+        """The check above fails when both methods get Bishop's seed.
+
+        Twice. With only ``_rebuild_surface`` sabotaged, the probe of D88
+        refuses Spencer — its seed comes back as Bishop's circle — and the
+        check says Spencer was not sampled. With the probe sabotaged too,
+        Spencer IS sampled, on Bishop's circle, and the check says every
+        one of its evaluations was on another surface. Both patches undone
+        in ``finally`` (rule 5).
+        """
+        import ogr_core.statistics.probabilistic as P
+        p, det = self._two_methods()
+        bishop = det["bishop_simplified"].surface.to_dict()
+        rebuild, probe = P._rebuild_surface, P._does_not_reevaluate_to_itself
+        try:
+            P._rebuild_surface = lambda sd: rebuild(bishop)
+            res, seen = _sampled_on(lambda: self._run(p, det))
+            said = _not_on_their_own_surfaces(res, det, seen)
+            assert any(s.startswith("spencer: not sampled") for s in said), (
+                said)
+            P._does_not_reevaluate_to_itself = lambda *a, **k: None
+            res, seen = _sampled_on(lambda: self._run(p, det))
+            said = _not_on_their_own_surfaces(res, det, seen)
+            assert any(s.startswith("spencer:") and "another surface" in s
+                       for s in said), said
+        finally:
+            P._rebuild_surface, P._does_not_reevaluate_to_itself = (
+                rebuild, probe)
 
     def test_project_is_not_modified(self):
         p = _ej1_project()

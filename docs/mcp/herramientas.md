@@ -114,7 +114,7 @@ Unidades: cargas hidráulicas en m y presión intersticial en kPa; permeabilidad
 | `random_variable_list` | | Las entradas del modelo que pueden ser variables aleatorias, con su clave y su valor, y las ya definidas. |
 | `random_variable_set` | | Hacer aleatoria una entrada o cambiarla: distribución, desviación, rango, correlación. La media es siempre el valor del modelo. |
 | `random_variable_delete` | | Quitar una variable; las correlaciones que apuntaban a ella se limpian. |
-| `statistics_run` | | *Compute Statistics* en segundo plano: el determinista y luego el probabilístico (PF, índice de fiabilidad) o el de sensibilidad, con los coeficientes de diseño y la semilla del modelo. |
+| `statistics_run` | | *Compute Statistics* en segundo plano: el determinista y luego el probabilístico (PF, índice de fiabilidad) o el de sensibilidad, con los coeficientes de diseño y la semilla del modelo. Cada método trae `surface_key`, la identidad de la superficie sobre la que se muestreó (tipo y geometría al último dígito; `null` en Overall Slope, donde cada muestra busca de nuevo). `switch_lines` dice cuáles de `note_lines` cuentan muestras que contestaron por otra masa o por otro caso de capa débil. |
 | `back_analysis_run` | | La fuerza horizontal de sostenimiento necesaria para un factor objetivo, sobre la búsqueda configurada. |
 | `optimize_run` | | Optimizar la superficie crítica no circular de un resultado con los ajustes y la semilla del modelo; el resultado es uno NUEVO. |
 

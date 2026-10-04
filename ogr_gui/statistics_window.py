@@ -34,6 +34,69 @@ from PySide6.QtWidgets import (
 from ogr_gui.i18n import tr  # noqa: E402
 
 
+def _layer_name(project, layer: dict) -> str:
+    """A weak layer named the way the user knows it: by its material."""
+    mid = layer.get("material_id")
+    mat = None
+    if project is not None and mid:
+        try:
+            mat = project.material_by_id(mid)
+        except Exception:  # noqa: BLE001 - a name must not kill the window
+            mat = None
+    if mat is not None and getattr(mat, "name", ""):
+        return "«%s»" % mat.name
+    return tr("a layer with no material")
+
+
+def _surface_body(sd: dict, project) -> str:
+    """The description :func:`surface_text` puts after its label."""
+    stype = sd.get("type", "circle")
+    x0, x1 = sd.get("x_left"), sd.get("x_right")
+    if (x0 is None or x1 is None) and stype == "polyline":
+        vs = (sd.get("polyline") or {}).get("vertices") or []
+        if vs:
+            x0, x1 = vs[0][0], vs[-1][0]
+    span = (tr(", from x = %.2f to %.2f") % (x0, x1)
+            if x0 is not None and x1 is not None else "")
+    if stype == "circle":
+        return tr("circle of centre (%.2f, %.2f) and radius %.2f") % (
+            sd["centre_x"], sd["centre_y"], sd["radius"]) + span
+    if stype == "composite":
+        return tr("composite surface clipped from the circle of centre "
+                  "(%.2f, %.2f) and radius %.2f") % (
+            sd["centre_x"], sd["centre_y"], sd["radius"]) + span
+    if stype == "polyline":
+        vs = (sd.get("polyline") or {}).get("vertices") or []
+        return tr("polyline of %d vertices") % len(vs) + span
+    if stype == "weak_layer":
+        names = list(dict.fromkeys(
+            _layer_name(project, wl) for wl in sd.get("weak_layers") or ()))
+        base = _surface_body(sd.get("base") or {}, project)
+        return (tr("along the weak layer %s") % ", ".join(names)
+                + span + "; " + tr("its base: %s") % base)
+    return ""
+
+
+def surface_text(sd, project=None) -> str:
+    """One line naming the surface a Global Minimum run sampled.
+
+    v0.1.255 (D128). ``MethodProbabilisticResult.surface`` has been written
+    since v0.1.35 and read by nobody but the tests: the window said what the
+    samples gave and never what they were sampled on, and Bishop and Spencer
+    can be sampled on different circles of the same model. A circle by its
+    centre and radius, a composite by the circle it was clipped from, a
+    polyline by its vertices, a weak-layer surface by the layers it runs
+    along — named by their material, the name the user gave — and by the
+    base it was clipped from; all with the extent of the mass. Not
+    ``minimum_row_text``: that one numbers a row of a table. Empty when
+    there is no surface to name.
+    """
+    if not isinstance(sd, dict):
+        return ""
+    body = _surface_body(sd, project)
+    return tr("Sampled surface: %s") % body if body else ""
+
+
 class StatisticsWindow(QMainWindow):
     """Read-only viewer for probabilistic / sensitivity results."""
 
@@ -109,6 +172,22 @@ class StatisticsWindow(QMainWindow):
         self.lbl_run_notes.setVisible(bool(_lines))
         v.addWidget(self.lbl_run_notes)
 
+        # v0.1.255 (D128) — what the samples answered for: another sliding
+        # mass of the deterministic circle (D89), another weak-layer case of
+        # its mass (D85). Something the run DID, said apart from what it
+        # could not do, under a title of its own and not in red. The engine
+        # gives the split (``switch_lines``); nothing is parsed here.
+        self.lbl_switch_notes = QLabel("")
+        self.lbl_switch_notes.setWordWrap(True)
+        self.lbl_switch_notes.setStyleSheet("color: #8a5a00;")
+        _switches = self._switch_notes()
+        if _switches:
+            self.lbl_switch_notes.setText(
+                tr("Samples that answered for another mechanism:") + "\n"
+                + "\n".join(_switches))
+        self.lbl_switch_notes.setVisible(bool(_switches))
+        v.addWidget(self.lbl_switch_notes)
+
         self.canvas = None
         self._holder = QVBoxLayout()
         v.addLayout(self._holder, 1)
@@ -134,7 +213,20 @@ class StatisticsWindow(QMainWindow):
         """
         lines = []
         for res in (self.prob, self.sens):
-            lines += list(getattr(res, "note_lines", None) or [])
+            switches = set(getattr(res, "switch_lines", None) or ())
+            lines += [ln for ln in getattr(res, "note_lines", None) or ()
+                      if ln not in switches]
+        return list(dict.fromkeys(lines))
+
+    def _switch_notes(self) -> list:
+        """The lines that say samples answered for another mechanism.
+
+        v0.1.255 (D128). Asked of the engine (``switch_lines``), which knows
+        which of its own sentences these are; the window never reads them.
+        """
+        lines = []
+        for res in (self.prob, self.sens):
+            lines += list(getattr(res, "switch_lines", None) or [])
         return list(dict.fromkeys(lines))
 
     def _method_note(self, mid) -> str:
@@ -245,7 +337,21 @@ class StatisticsWindow(QMainWindow):
             f"(lognormal {st.lognormal_reliability_index():.3f})   |   "
             + (tr("deterministic over-design factor") if self.factored
                else tr("deterministic FoS"))
-            + f": {res.deterministic_fos:.4f}")
+            + f": {res.deterministic_fos:.4f}"
+            + self._surface_line(res))
+
+    def _surface_line(self, res) -> str:
+        """The sampled surface, on a line of its own, in Global Minimum.
+
+        v0.1.255 (D128). Only there: in Overall Slope every sample searches
+        anew and no single surface was sampled. No surface, no line.
+        """
+        from ogr_core.statistics import ProbabilisticType
+        if (getattr(self.prob, "analysis_type", None)
+                != ProbabilisticType.GLOBAL_MINIMUM):
+            return ""
+        text = surface_text(getattr(res, "surface", None), self.project)
+        return "\n" + text if text else ""
 
     # ------------------------------------------------------------------
     def _plot_convergence(self, mid):
