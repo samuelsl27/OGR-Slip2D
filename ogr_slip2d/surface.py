@@ -1127,9 +1127,31 @@ class WeakLayerSurface:
     x_left: Optional[float] = None
     x_right: Optional[float] = None
     id: str = field(default_factory=lambda: str(uuid4()))
-    # Inherited from the surface this was clipped from: reverse curvature
-    # and the user's tension crack are decided BEFORE any weak layer is
-    # considered, and clipping does not revisit them.
+    # Inherited from the surface this was clipped from: REVERSE CURVATURE is
+    # decided BEFORE any weak layer is considered — it belongs to the circle
+    # that generated the mass, where its arc turns back towards the centre
+    # — and clipping does not revisit it.
+    #
+    # v0.1.253 (D253) — the USER'S TENSION CRACK is not inherited: it is
+    # decided on THIS surface, where it meets the crack boundary. Until this
+    # version the base's wall was inherited too and the slicer accepted it as
+    # already decided, so a surface running along a joint ABOVE the crack
+    # line kept the wall of the bare mass: shear strength counted inside a
+    # zone the crack says has none ("once the soil is cracked, all strength
+    # on the plane of the crack is lost", Duncan, Wright and Brandon 2014,
+    # p. 15; "shear resistance along tension cracks should be ignored",
+    # USACE EM 1110-2-1902, p. 1-4), and a wall standing below the surface's
+    # own end. A circle is truncated by the search before any joint is
+    # considered, so every surface clipped from it carried the circle's wall:
+    # on the planar joint of ``test_weak_layer_v1121`` with a dry crack,
+    # 1.5861 against the 1.5570 of the block on the joint (Hoek and Bray
+    # 1981), +1.87 % on the unsafe side. The reference's own definitions read
+    # the same way: its crack forms where the failure surface meets the crack
+    # boundary, and its weak layer clips the failure surface. A surface
+    # clipped onto a joint never runs below its base, so its own crossing
+    # lies inside the extent it inherits, and the slicer finds it there. (The
+    # order of evaluation was a second defect: see
+    # ``weak_layers._own_copy``.)
     tension_cracks: list = field(default_factory=list)
     tension_crack_wall: Optional[tuple] = None
 
@@ -1144,11 +1166,15 @@ class WeakLayerSurface:
             if self.x_right is None:
                 self.x_right = br
         if not self.tension_cracks:
-            self.tension_cracks = list(
-                getattr(self.base, "tension_cracks", ()) or ())
-        if self.tension_crack_wall is None:
-            self.tension_crack_wall = getattr(
-                self.base, "tension_crack_wall", None)
+            inherited = list(getattr(self.base, "tension_cracks", ()) or ())
+            # The base's tension-crack wall is drawn in ``tension_cracks``
+            # as well (``slicer.apply_tension_crack_truncation``); it is the
+            # one entry that is not inherited (D253, above).
+            wall = getattr(self.base, "tension_crack_wall", None)
+            if wall is not None:
+                inherited = [c for c in inherited
+                             if tuple(c) != tuple(wall)]
+            self.tension_cracks = inherited
 
     # ------------------------------------------------------------------
     @property

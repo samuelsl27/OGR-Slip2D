@@ -122,6 +122,41 @@ def touching_bands(surface, bands) -> tuple:
     return tuple(out)
 
 
+def _own_copy(surface):
+    """``surface`` with mutable parts of its own: the bare case of automatic
+    case generation is analysed on this, never on the shared object.
+
+    v0.1.253 (D253). The slicer truncates a polyline IN PLACE at the tension
+    crack and writes the wall on it. Slicing the bare case (mask 0) on the
+    object every clipped case is then built from changed that base before
+    the clipped cases saw it: its extent, its wall and, through
+    ``WeakLayerSurface.moment_axis``, which delegates to the base, the axis
+    the crack's water thrust is taken about. The same weak-layer case
+    answered one way after the bare case and another way without it
+    ("highest"). A circle comes out of ``BaseSearch._candidate_surfaces``
+    already resolved and its slicing changes nothing; it is copied all the
+    same, since a caller may hand any surface in.
+
+    What the slicer changes is what gets its own: the polyline OBJECT, whose
+    vertex list it reassigns (the vertices themselves are never mutated),
+    and the ``tension_cracks`` list, which it appends to. The extent and the
+    wall are attributes it assigns, so they land on the copy anyway. Copied
+    with ``dataclasses.replace``, which keeps every identifier: the copy is
+    the same surface, analysed apart.
+    """
+    from dataclasses import is_dataclass, replace
+
+    if not is_dataclass(surface):
+        return surface
+    changes = {}
+    if hasattr(surface, "tension_cracks"):
+        changes["tension_cracks"] = list(surface.tension_cracks or [])
+    pl = getattr(surface, "polyline", None)
+    if pl is not None and is_dataclass(pl):
+        changes["polyline"] = replace(pl, vertices=list(pl.vertices))
+    return replace(surface, **changes)
+
+
 def weak_layer_variants(
     surface,
     bands,
@@ -167,7 +202,9 @@ def weak_layer_variants(
         # THROUGH the blocks rather than along a joint.
         for mask in range(1 << n):
             if mask == 0:
-                yield surface
+                # v0.1.253 (D253) — on a copy, so slicing it leaves the base
+                # of the clipped cases as it was (``_own_copy``).
+                yield _own_copy(surface)
                 continue
             subset = tuple(b for i, b in enumerate(touching) if mask >> i & 1)
             yield WeakLayerSurface(base=surface, bands=subset)
