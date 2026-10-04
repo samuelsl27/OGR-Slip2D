@@ -253,6 +253,14 @@ _DICTS: dict[str, dict[str, str]] = {
         'Only used when no Block Search object is drawn: the program then searches a box over the slope face, divided into this many vertical bands with one surface vertex per band. The reference requires at least one drawn object and has no such setting. With objects drawn, this number does nothing.':
             'Solo se usa cuando no hay ningún objeto de búsqueda por bloques dibujado: el programa busca entonces en una caja sobre la cara del talud, dividida en este número de bandas verticales, con un vértice de superficie por banda. La referencia exige al menos un objeto dibujado y no tiene este ajuste. Con objetos dibujados, este número no hace nada.',
         'Implicit Region Bands:': 'Bandas de la región implícita:',
+        # v0.1.256 (D237): lo que la búsqueda por bloques hace con los
+        # ángulos de proyección, dicho bajo las casillas.
+        'Left projection': 'Proyección izquierda',
+        'Right projection': 'Proyección derecha',
+        '%s: written from %s° to %s° and read as %s° to %s°, the arc between the two that avoids %s°. The reference measures the angles counter-clockwise from the positive x axis, with the Start Angle less than the End Angle.':
+            '%s: escrita de %s° a %s° y leída como %s° a %s°, el arco entre los dos que evita los %s°. La referencia mide los ángulos en sentido antihorario desde el semieje x positivo, con el ángulo inicial menor que el final.',
+        '%s: %s° to %s° goes outside %s° to %s°, the range the reference gives for kinematically valid surfaces on this slope. The search will use it as given.':
+            '%s: de %s° a %s° se sale de %s° a %s°, el rango que da la referencia para superficies cinemáticamente admisibles en este talud. La búsqueda lo usará tal cual.',
         'Objects with the same Group ID are searched together, and each Group ID on its own, with Number of Surfaces divided between them. Only used when Multiple Groups is on in Surface Options.':
             'Los objetos con el mismo identificador de grupo se buscan juntos, y cada identificador por separado, con el número de superficies repartido entre ellos. Solo se usa con «Grupos múltiples» activado en las opciones de superficie.',
         'Group ID:': 'Identificador de grupo:',

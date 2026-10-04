@@ -3826,7 +3826,12 @@ class BlockSearch(BaseSearch):
          Angles are measured CCW from the +x axis (the reference's convention):
          the default Left = 135°, Right = 45°. A *range* (start..end)
          may be given, in which case a random angle in the range is
-         drawn per surface.
+         drawn per surface. v0.1.256 (D237): the pair is read as the arc
+         of directions it denotes on its own side
+         (``ogr_core.project.rules.block_projection_range``), so a pair
+         written backwards or with 315° for −45° draws what it means; the
+         analysis says so, and says when the angles leave the reference's
+         limits, through ``settings_warnings``.
       4. The surface must intersect the slope surface within the Slope
          Limits, otherwise it is discarded.
       5. Repeated for ``num_surfaces`` candidates.
@@ -3905,6 +3910,12 @@ class BlockSearch(BaseSearch):
         import random
         from ogr_core.geometry import Polyline, Vertex, BoundaryType
         from .surface import SlipSurface
+
+        from ogr_core.project.rules import block_projection_range
+        left_range = block_projection_range(
+            self.left_start, self.left_end, "left")
+        right_range = block_projection_range(
+            self.right_start, self.right_end, "right")
 
         rng = random.Random(self.seed)
         result = SearchResult(method_id=self.method.METHOD_ID,
@@ -4103,13 +4114,14 @@ class BlockSearch(BaseSearch):
             # 2. sort by x (kinematic admissibility)
             block_pts.sort(key=lambda v: v.x)
 
-            # 3. projection angles (range → random per surface)
-            a_left = math.radians(rng.uniform(
-                min(self.left_start, self.left_end),
-                max(self.left_start, self.left_end)))
-            a_right = math.radians(rng.uniform(
-                min(self.right_start, self.right_end),
-                max(self.right_start, self.right_end)))
+            # 3. projection angles (range → random per surface). v0.1.256
+            # (D237) — each pair is read as the arc of directions it
+            # denotes on its own side (``rules.block_projection_range``):
+            # for every pair already inside its side's window that is
+            # exactly the ``(min, max)`` drawn here before, and the draw
+            # is still one number per side and surface, start = end too.
+            a_left = math.radians(rng.uniform(*left_range))
+            a_right = math.radians(rng.uniform(*right_range))
 
             left_pt = self._project_to_top(
                 block_pts[0], a_left, top, xmin, ymax)

@@ -101,6 +101,30 @@ def crest_end_is_on_the_right(project, ground, x_left: float,
     return y_r > y_l
 
 
+def model_crest_is_on_the_right(project) -> bool:
+    """Which end of the MODEL's ground is the crest: the higher one.
+
+    v0.1.256 (D237) — the side a Block Search projection may dip on
+    depends on it (``ogr_core.project.rules.block_angle_limits``). It is
+    :func:`crest_end_is_on_the_right` across the whole ground profile, so
+    geometry decides and the declaration only breaks a tie. Not the
+    steepest face of :func:`slope_face`: that rule skips vertical segments,
+    and on a vertical face — the very case the reference draws for the
+    265° limit — it would fall back to a flat one.
+    """
+    from ogr_core.geometry import ground_surface
+
+    external = project.external_boundary()
+    if external is None:
+        return crest_is_on_the_right(project)
+    ground = ground_surface(external)
+    verts = list(ground.vertices)
+    if len(verts) < 2:
+        return crest_is_on_the_right(project)
+    return crest_end_is_on_the_right(project, ground, verts[0].x,
+                                     verts[-1].x)
+
+
 def steepest_face_index(top, project) -> int:
     """Index of the segment of ``top`` that is the slope face.
 

@@ -649,6 +649,8 @@ class SurfaceOptionsDialog(QDialog):
                 self._b_left_end.setValue(defaults.block_left_end_angle_deg)
                 self._b_right_start.setValue(defaults.block_right_start_angle_deg)
                 self._b_right_end.setValue(defaults.block_right_end_angle_deg)
+                self._b_angle_touched.update(self._b_angle_stored)
+                self._refresh_block_angle_note()
                 self._b_convex.setChecked(defaults.block_convex_only)
                 self._sync_optimize_boxes(_optimize_default_for(m))
         except (AttributeError, RuntimeError):
@@ -1094,31 +1096,57 @@ class SurfaceOptionsDialog(QDialog):
         proj_w = QWidget()
         proj_h = QHBoxLayout(proj_w)
         proj_h.setContentsMargins(0, 0, 0, 0)
+        # v0.1.256 (D237) — the four angle boxes no longer rewrite the model
+        # they show. They used to clip to 0..360, so opening this dialog on
+        # verification problem 109 and pressing OK saved its −45 as 0, and
+        # their single decimal rounded any angle set through the API. Each
+        # box now reaches past ±360 to its stored value and ``apply`` writes
+        # an angle only when the user touched it. What the search will do
+        # with the angles is said live under them, by the same rule the
+        # analysis asks (``rules.block_angle_notes``).
+        self._b_angle_stored = {}
+        self._b_angle_touched = set()
+
+        def _angle_box(field):
+            value = float(getattr(s, field))
+            box = QDoubleSpinBox()
+            box.setRange(min(-360.0, value), max(360.0, value))
+            box.setDecimals(1)
+            box.setSuffix(" °")
+            box.setValue(value)
+            self._b_angle_stored[field] = value
+            box.valueChanged.connect(
+                lambda _v, f=field: self._block_angle_touched(f))
+            return box
+
         # Left projection
         gleft = QGroupBox(tr("Left Projection Angle"))
         fl = QFormLayout(gleft)
-        self._b_left_start = QDoubleSpinBox()
-        self._b_left_start.setRange(0.0, 360.0); self._b_left_start.setDecimals(1)
-        self._b_left_start.setSuffix(" °"); self._b_left_start.setValue(s.block_left_start_angle_deg)
+        self._b_left_start = _angle_box("block_left_start_angle_deg")
         fl.addRow(tr("Start Angle:"), self._b_left_start)
-        self._b_left_end = QDoubleSpinBox()
-        self._b_left_end.setRange(0.0, 360.0); self._b_left_end.setDecimals(1)
-        self._b_left_end.setSuffix(" °"); self._b_left_end.setValue(s.block_left_end_angle_deg)
+        self._b_left_end = _angle_box("block_left_end_angle_deg")
         fl.addRow(tr("End Angle:"), self._b_left_end)
         proj_h.addWidget(gleft)
         # Right projection
         gright = QGroupBox(tr("Right Projection Angle"))
         fr = QFormLayout(gright)
-        self._b_right_start = QDoubleSpinBox()
-        self._b_right_start.setRange(0.0, 360.0); self._b_right_start.setDecimals(1)
-        self._b_right_start.setSuffix(" °"); self._b_right_start.setValue(s.block_right_start_angle_deg)
+        self._b_right_start = _angle_box("block_right_start_angle_deg")
         fr.addRow(tr("Start Angle:"), self._b_right_start)
-        self._b_right_end = QDoubleSpinBox()
-        self._b_right_end.setRange(0.0, 360.0); self._b_right_end.setDecimals(1)
-        self._b_right_end.setSuffix(" °"); self._b_right_end.setValue(s.block_right_end_angle_deg)
+        self._b_right_end = _angle_box("block_right_end_angle_deg")
         fr.addRow(tr("End Angle:"), self._b_right_end)
         proj_h.addWidget(gright)
         outer.addWidget(proj_w)
+        self._b_angle_note = QLabel()
+        self._b_angle_note.setWordWrap(True)
+        self._b_angle_note.setStyleSheet("color: #a05a00;")
+        outer.addWidget(self._b_angle_note)
+        try:
+            from ogr_slip2d.failure_direction import (
+                model_crest_is_on_the_right)
+            self._b_crest_on_right = model_crest_is_on_the_right(project)
+        except Exception:  # noqa: BLE001 - a dialog must open on any model
+            self._b_crest_on_right = True
+        self._refresh_block_angle_note()
 
         # Convex / Optimize
         self._b_convex = QCheckBox(tr("Convex Surfaces Only"))
@@ -1127,6 +1155,65 @@ class SurfaceOptionsDialog(QDialog):
         self._b_optimize, b_row = self._optimize_row(s)
         outer.addWidget(b_row)
         return w
+
+    # ================================================================
+    _BLOCK_ANGLE_BOXES = {
+        "block_left_start_angle_deg": "_b_left_start",
+        "block_left_end_angle_deg": "_b_left_end",
+        "block_right_start_angle_deg": "_b_right_start",
+        "block_right_end_angle_deg": "_b_right_end",
+    }
+
+    def _block_angle_touched(self, field) -> None:
+        self._b_angle_touched.add(field)
+        self._refresh_block_angle_note()
+
+    def _block_angles(self) -> dict:
+        """The angles OK will write: the touched boxes, by field name."""
+        return {f: getattr(self, box).value()
+                for f, box in self._BLOCK_ANGLE_BOXES.items()
+                if f in self._b_angle_touched}
+
+    def _refresh_block_angle_note(self) -> None:
+        """Say under the boxes what the search will do with these angles.
+
+        v0.1.256 (D237). Asks ``rules.block_angle_notes`` with the values
+        OK would leave in the model (the stored one for a box nobody
+        touched) and words each note from its code, so the text follows the
+        interface's language. Not modal and not a refusal: the owner
+        decided that the angles are reported, not rejected.
+        """
+        from types import SimpleNamespace
+
+        from ogr_core.project.rules import block_angle_notes
+
+        label = getattr(self, "_b_angle_note", None)
+        if label is None:
+            return
+        values = dict(self._b_angle_stored)
+        values.update(self._block_angles())
+        lines = []
+        for n in block_angle_notes(SimpleNamespace(**values),
+                                   self._b_crest_on_right):
+            side = tr("Left projection" if n.side == "left"
+                      else "Right projection")
+            if n.code == "block_angle_reread":
+                lines.append(tr(
+                    "%s: written from %s° to %s° and read as %s° to %s°, the "
+                    "arc between the two that avoids %s°. The reference "
+                    "measures the angles counter-clockwise from the positive "
+                    "x axis, with the Start Angle less than the End Angle.")
+                    % (side, f"{n.start:g}", f"{n.end:g}", f"{n.lo:g}",
+                       f"{n.hi:g}", "0" if n.side == "left" else "180"))
+            else:
+                lines.append(tr(
+                    "%s: %s° to %s° goes outside %s° to %s°, the range the "
+                    "reference gives for kinematically valid surfaces on "
+                    "this slope. The search will use it as given.")
+                    % (side, f"{n.lo:g}", f"{n.hi:g}", f"{n.limit_lo:g}",
+                       f"{n.limit_hi:g}"))
+        label.setText("\n".join(lines))
+        label.setVisible(bool(lines))
 
     # ================================================================
     def apply(self) -> None:
@@ -1190,10 +1277,11 @@ class SurfaceOptionsDialog(QDialog):
 
         # ----- Block Search -----
         s.block_num_surfaces = int(self._b_num.value())
-        s.block_left_start_angle_deg = self._b_left_start.value()
-        s.block_left_end_angle_deg = self._b_left_end.value()
-        s.block_right_start_angle_deg = self._b_right_start.value()
-        s.block_right_end_angle_deg = self._b_right_end.value()
+        # v0.1.256 (D237) — only the angles the user touched: an untouched
+        # box shows its stored value rounded to one decimal, and writing
+        # that back would edit the model by opening the dialog.
+        for field, value in self._block_angles().items():
+            setattr(s, field, value)
         s.block_convex_only = self._b_convex.isChecked()
         # v0.1.104 — ONE write for the three synchronised boxes.
         # It used to be three, folded with an OR, which is why the

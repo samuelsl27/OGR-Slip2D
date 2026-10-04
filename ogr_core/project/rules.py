@@ -1100,6 +1100,157 @@ def seismic_coefficient_refusal(name: str, value) -> Optional[Refusal]:
 
 
 # ----------------------------------------------------------------------
+#: v0.1.256 (D237) — the angular limits the reference gives for the Block
+#: Search projection angles, in degrees counter-clockwise from the positive
+#: x axis. A typical search keeps the left angle in 95..175 and the right
+#: one in 5..85, "in order to generate kinematically valid slip surfaces";
+#: a surface that daylights into the face with a downward dip may take the
+#: left angle down to 265 on a left-facing slope, or the right one down to
+#: −85 on a right-facing slope, and only on that side. The reasons are
+#: kinematic: 5° off the vertical keeps every ray on its own side and the
+#: surface single-valued in x, which vertical slicing needs; and the crest
+#: side cannot dip, because the head scarp leaves the ground upwards and a
+#: descending ray never reaches a level crest.
+BLOCK_LEFT_MIN = 95.0
+BLOCK_LEFT_MAX = 175.0
+BLOCK_LEFT_MAX_FACE = 265.0
+BLOCK_RIGHT_MIN = 5.0
+BLOCK_RIGHT_MIN_FACE = -85.0
+BLOCK_RIGHT_MAX = 85.0
+
+#: The window each side's angles are read in, closed at both ends. A left
+#: ray must point to the left, so its forbidden direction is 0° and its
+#: window is centred on 180°; a right ray's forbidden direction is 180°.
+_BLOCK_WINDOWS = {"left": (0.0, 360.0), "right": (-180.0, 180.0)}
+
+
+def _into_window(angle: float, side: str) -> float:
+    """``angle`` as the same direction inside ``side``'s window.
+
+    Only a value strictly outside the window is shifted, by whole turns,
+    so every value inside it is returned untouched — bit for bit.
+    """
+    lo, hi = _BLOCK_WINDOWS[side]
+    a = float(angle)
+    while a < lo:
+        a += 360.0
+    while a > hi:
+        a -= 360.0
+    return a
+
+
+def block_projection_range(start, end, side: str) -> tuple[float, float]:
+    """The arc of directions a projection-angle pair denotes, as (lo, hi).
+
+    v0.1.256 (D237). A projection angle is a direction, so 315° and −45°
+    are one ray, and two directions bound two arcs. On each side exactly
+    one of them avoids the direction that ray can never take (0° for the
+    left ray, which would point right; 180° for the right ray); that arc
+    is the set the user wrote, whatever the order of the two angles, and a
+    uniform draw over it has the same distribution in both orders. The
+    other arc between 45° and −45° on the right, for instance, holds every
+    ray from 90° to 270°: rays that point back across the surface they are
+    meant to close. So the only reading of «45 to −45» on the right is
+    [−45, 45]. The reference writes the convention as "the Start Angle
+    must always be LESS than the End Angle"; a pair written the other way
+    is read here and reported by :func:`block_angle_notes`, not refused.
+
+    Each angle is first brought into its side's closed window, [0, 360]
+    on the left and [−180, 180] on the right; an angle already inside is
+    untouched and the pair comes back as ``(min, max)``, which is what the
+    search drew before this function existed. ``side`` is ``"left"`` or
+    ``"right"``.
+    """
+    a = _into_window(start, side)
+    b = _into_window(end, side)
+    return (min(a, b), max(a, b))
+
+
+@dataclass(frozen=True)
+class BlockAngleNote:
+    """Something to say about one side's Block Search projection angles.
+
+    ``code`` is ``"block_angle_reread"`` (the pair was written backwards,
+    or with an angle outside its side's window, and is read as ``lo..hi``)
+    or ``"block_angle_out_of_limits"`` (``lo..hi`` leaves the reference's
+    range ``limit_lo..limit_hi`` for this slope). The numbers are there so
+    the interface can say it in its own language; ``message`` is the
+    engine's English.
+    """
+
+    code: str
+    side: str
+    start: float
+    end: float
+    lo: float
+    hi: float
+    limit_lo: float
+    limit_hi: float
+    message: str
+
+
+def block_angle_limits(side: str, crest_on_right: bool) -> tuple[float, float]:
+    """The reference's admissible range for ``side`` on this slope.
+
+    The downward extension belongs to the side where the face is: the left
+    end of a slope whose crest is on the right (a left-facing slope), the
+    right end of one whose crest is on the left.
+    """
+    if side == "left":
+        return (BLOCK_LEFT_MIN,
+                BLOCK_LEFT_MAX_FACE if crest_on_right else BLOCK_LEFT_MAX)
+    return (BLOCK_RIGHT_MIN if crest_on_right else BLOCK_RIGHT_MIN_FACE,
+            BLOCK_RIGHT_MAX)
+
+
+def block_angle_notes(angles, crest_on_right: bool) -> list[BlockAngleNote]:
+    """What the Block Search will do with these projection angles, said.
+
+    v0.1.256 (D237). ``angles`` is anything with the four
+    ``block_*_angle_deg`` attributes of the search settings;
+    ``crest_on_right`` says which side the face is on, and is asked by the
+    caller from ``ogr_slip2d.failure_direction`` because this package
+    cannot import it.
+
+    Not refusals, by the owner's decision of 2026-10-04: a pair written
+    backwards is read as the arc of :func:`block_projection_range` and an
+    angle outside the reference's limits is used as given, but both are
+    said. Before this version neither was: the search straightened a
+    reversed pair with ``min``/``max`` and calculated with any angle at all.
+    """
+    notes: list[BlockAngleNote] = []
+    for side, label in (("left", "left"), ("right", "right")):
+        start = float(getattr(angles, f"block_{side}_start_angle_deg"))
+        end = float(getattr(angles, f"block_{side}_end_angle_deg"))
+        lo, hi = block_projection_range(start, end, side)
+        limit_lo, limit_hi = block_angle_limits(side, crest_on_right)
+        if (start, end) != (lo, hi):
+            forbidden = 0 if side == "left" else 180
+            notes.append(BlockAngleNote(
+                "block_angle_reread", side, start, end, lo, hi,
+                limit_lo, limit_hi,
+                f"The {label} projection angles are written from {start:g}° "
+                f"to {end:g}°, and the reference measures them "
+                f"counter-clockwise from the positive x axis with the Start "
+                f"Angle less than the End Angle. They were read as {lo:g}° "
+                f"to {hi:g}°: the arc between the two that avoids "
+                f"{forbidden}°, a direction no {label} projection can "
+                f"take."))
+        if lo < limit_lo or hi > limit_hi:
+            facing = "left" if crest_on_right else "right"
+            notes.append(BlockAngleNote(
+                "block_angle_out_of_limits", side, start, end, lo, hi,
+                limit_lo, limit_hi,
+                f"The {label} projection angles, {lo:g}° to {hi:g}°, go "
+                f"outside {limit_lo:g}° to {limit_hi:g}°, the range the "
+                f"reference gives for kinematically valid surfaces on a "
+                f"{facing}-facing slope. The search uses them as given; a "
+                f"projection that cannot reach the ground leaves its "
+                f"surface invalid."))
+    return notes
+
+
+# ----------------------------------------------------------------------
 #: The bound every action factor meets: an unfavourable one is at least 1
 #: and a favourable one at most 1 (EN 1990:2002, Table A1.2 (A) to (C);
 #: EN 1997-1:2004, Tables A.1, A.3, A.15 and A.17: permanent 1.1/0.9,

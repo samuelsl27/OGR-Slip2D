@@ -447,6 +447,7 @@ def settings_warnings(project, method_ids=()) -> list[str]:
     notes.extend(_surface_type_notes(s_search))
     notes.extend(_auto_refine_vertex_notes(project))
     notes.extend(_block_group_notes(project))
+    notes.extend(_block_angle_notes(project))
     notes.extend(_base_angle_ceiling_notes(project))
     notes.extend(_base_angle_scope_notes(project, method_ids))
     notes.extend(_optimize_notes(s_search))
@@ -696,6 +697,30 @@ def _block_group_notes(project) -> list[str]:
                 f"is the same as with the setting off. Give the objects "
                 f"different Group IDs to search them separately.")
     return notes
+
+
+def _block_angle_notes(project) -> list[str]:
+    """What the Block Search does with the projection angles, said.
+
+    v0.1.256, defect D237. Until this version the search straightened a
+    pair written backwards with ``min``/``max`` and calculated with any
+    angle at all, and nothing said either. The rule and its wording live
+    in ``ogr_core.project.rules.block_angle_notes``; this asks it with the
+    side the face is on, which only the geometry can answer
+    (``failure_direction.model_crest_is_on_the_right``). Notes, not
+    refusals: the owner decided on 2026-10-04 that angles outside the
+    reference's limits are reported and used. Scoped like
+    :func:`_block_group_notes`: only a Block Search reads the angles.
+    """
+    from ogr_core.project.rules import block_angle_notes
+
+    from .failure_direction import model_crest_is_on_the_right
+
+    s_search = project.settings.search
+    if s_search.search_method != "block":
+        return []
+    return [n.message for n in block_angle_notes(
+        s_search, model_crest_is_on_the_right(project))]
 
 
 def _base_angle_ceiling_notes(project) -> list[str]:

@@ -125,7 +125,7 @@ Los tres cálculos pasan por la misma puerta que `analysis_run`: sin norma de di
 | Herramienta | C | Para qué |
 |---|---|---|
 | `settings_get` | | Todos los ajustes con su valor, tipo y opciones. |
-| `settings_set` | | Cualquier ajuste por ruta (`search.search_method`); todo o nada. |
+| `settings_set` | | Cualquier ajuste por ruta (`search.search_method`); todo o nada. Devuelve en `warnings` lo que el análisis no puede honrar tal como está escrito. Desde v0.1.256 eso incluye los ángulos de proyección de la Block Search (`search.block_*_angle_deg`): un par escrito al revés se lee como el arco entre los dos que apunta a su lado (45 → −45 a la derecha es −45..45; 315 es −45), y un ángulo fuera de los límites de la referencia (izquierda 95–175, hasta 265 si el talud mira a la izquierda; derecha 5–85, desde −85 si mira a la derecha) se usa tal cual. Los dos se avisan; ninguno se rechaza. |
 | `analysis_configure` | C | Los ajustes de análisis más comunes en una llamada: métodos, tipo de superficie, búsqueda, dovelas, grid, dirección de rotura, norma. |
 
 ## Análisis (`analysis`)
