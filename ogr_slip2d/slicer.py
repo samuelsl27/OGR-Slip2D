@@ -412,6 +412,28 @@ REFUSED_END_BELOW_GROUND = "end_below_ground"
 #: slices: the wrong remedy.
 REFUSED_END_ABOVE_GROUND = "end_above_ground"
 
+#: v0.1.259 (D256) — and a base that rises above the ground BETWEEN the
+#: two ends: a slice corner inside the surface, not one of its ends, above
+#: the ground by more than ``ABOVE_GROUND_REL``. Part of the mass would be
+#: in the air there, so the surface is refused, as it always was; what was
+#: missing is the reason. Without it the search counted the surface among
+#: those "that could not be sliced" and its note asked for more slices,
+#: which cannot put a base back under the ground. Measured on verification
+#: problem 109 before its joints were corrected (D243): 4000 of the 5088
+#: surfaces its Block Search formed were refused here, every one on the
+#: exposed bench of a joint that the model's rounding left 3.5e-5 to
+#: 1.07e-3 m above the ground, and none of 40 of them could be sliced with
+#: 500 slices.
+REFUSED_BASE_ABOVE_GROUND = "base_above_ground"
+
+#: v0.1.259 (D256) — how far above the ground a slice-base corner may sit
+#: before the surface is refused, as a fraction of the surface's horizontal
+#: extent. Named, unchanged: it was the inline ``1e-6 * (x_r - x_l)`` of
+#: v0.1.100 (root-finding round-off, "a few 1e-6" by the v0.1.18 note), and
+#: the API puts a polyline's ends on the ground with the same figure, so
+#: that the two doors cannot disagree about what "on the ground" means.
+ABOVE_GROUND_REL = 1e-6
+
 #: v0.1.258 (D244) — a polyline's two ends must be ON the ground. Off, a
 #: buried end is sliced as before (and the Auto Refine non-circular keeps
 #: the arc's height at its ends, below). A module switch so the bank can
@@ -1990,7 +2012,7 @@ def slice_surface(
     # metres. Sized to the same order that absolute value had on the models
     # it was chosen for, because what it forgives is unchanged: root-finding
     # round-off, "a few 1e-6" by the v0.1.18 note.
-    tol = 1e-6 * (x_r - x_l)
+    tol = ABOVE_GROUND_REL * (x_r - x_l)
 
     # Whether the two extreme boundaries can be clamped without asking. On a
     # CIRCLE they can: ``candidate_chords`` returns crossings of the arc with
@@ -2056,16 +2078,26 @@ def slice_surface(
                     or y_base_l - y_top_l <= tol):
                 y_base_l = y_top_l
             else:
-                if (END_ON_GROUND and i == 0 and reasons is not None):
-                    reasons.append(REFUSED_END_ABOVE_GROUND)
+                if reasons is not None:
+                    if i == 0:
+                        if END_ON_GROUND:
+                            reasons.append(REFUSED_END_ABOVE_GROUND)
+                    else:
+                        # v0.1.259 (D256) — an interior corner.
+                        reasons.append(REFUSED_BASE_ABOVE_GROUND)
                 return None
         if y_base_r > y_top_r:
             if ((i == last_i and ends_are_ground_crossings)
                     or y_base_r - y_top_r <= tol):
                 y_base_r = y_top_r
             else:
-                if (END_ON_GROUND and i == last_i and reasons is not None):
-                    reasons.append(REFUSED_END_ABOVE_GROUND)
+                if reasons is not None:
+                    if i == last_i:
+                        if END_ON_GROUND:
+                            reasons.append(REFUSED_END_ABOVE_GROUND)
+                    else:
+                        # v0.1.259 (D256) — an interior corner.
+                        reasons.append(REFUSED_BASE_ABOVE_GROUND)
                 return None
         # v0.1.258 (D244) — and BELOW it. Only at the two ends of a
         # polyline, which nothing else places on the ground (a circle's are

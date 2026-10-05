@@ -318,17 +318,35 @@ def surface_evaluate(ws, surface: dict, project_id: Optional[str] = None,
     return {"result_id": res.id, **summary}
 
 
+#: v0.1.259 — an end this close to the External Boundary, as a fraction of
+#: the surface's width, is ON it: what is left is the round-off of whoever
+#: computed it.
+_ON_RING_REL = 1e-9
+
+
 def _snap_polyline_ends(project, surf) -> list:
     """Put a polyline's two ends on the External Boundary, and say so.
 
     v0.1.258 (D244). The reference moves the start and end of a slip
     surface entered by hand that are "not entered exactly on the External
     Boundary" to "the nearest point on the External Boundary"; this is the
-    API's door for such a surface. An end within the model's tolerance
-    (1e-6 of the bounding-box diagonal) is left exactly as given, so a
-    surface already on the ground is evaluated bit for bit as before. A
+    API's door for such a surface. An end already on it, to round-off
+    (``_ON_RING_REL`` of the surface's width), is left exactly as given, so
+    a surface already on the ground is evaluated bit for bit as before. A
     snap that would make x stop increasing is refused rather than
-    performed: it would be another surface. Returns the notes.
+    performed: it would be another surface. Returns the notes, one per end
+    moved farther than the slicer's own tolerance.
+
+    v0.1.259 — until then an end within 1e-6 of the model's DIAGONAL was
+    left alone, measured perpendicular to the boundary. The slicer judges
+    the VERTICAL offset against 1e-6 of the surface's width, and on a
+    steep face the vertical is many times the perpendicular (about 7 on
+    the 82 degree gabion face of verification problem 109). So an end
+    could pass here and be refused there: the optimised Bishop polyline of
+    the 109, archived to four decimals, came back "not analysed: its first
+    or last vertex is above the ground". Now every end that is not on the
+    boundary is put on it, where the slicer cannot refuse it, and the note
+    is kept for the moves that are not round-off.
     """
     import math as _m
 
@@ -340,8 +358,10 @@ def _snap_polyline_ends(project, surf) -> list:
         return []
     ring = list(ext.polyline.vertices)
     ring = ring + ring[:1]
-    xmin, ymin, xmax, ymax = project.bounding_box()
-    tol = 1e-6 * _m.hypot(xmax - xmin, ymax - ymin)
+    from ogr_slip2d.slicer import ABOVE_GROUND_REL
+    width = abs(pl.vertices[-1].x - pl.vertices[0].x)
+    on_ring = _ON_RING_REL * width
+    worth_saying = ABOVE_GROUND_REL * width
 
     def nearest(x, y):
         best = None
@@ -361,9 +381,11 @@ def _snap_polyline_ends(project, surf) -> list:
     for k, name in ((0, "first"), (len(verts) - 1, "last")):
         v = verts[k]
         d, px, py = nearest(v.x, v.y)
-        if d <= tol:
+        if d <= on_ring:
             continue
         verts[k] = Vertex(px, py)
+        if d <= worth_saying:
+            continue
         notes.append(
             f"The {name} vertex ({v.x:g}, {v.y:g}) is not on the External "
             f"Boundary; it was moved to the nearest point of it, "

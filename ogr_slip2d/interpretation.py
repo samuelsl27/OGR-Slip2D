@@ -137,6 +137,14 @@ def invalid_summary(search_result) -> dict:
         by_code[ERROR_OTHER] = by_code.get(ERROR_OTHER, 0) + off
         why = "an end of the polyline is not on the ground surface"
         by_reason[why] = by_reason.get(why, 0) + off
+    # v0.1.259 (D256) — and the surfaces whose base rose above the ground
+    # between the ends. Under OGR's "any other rejection" −101, with a
+    # reason of their own.
+    air = int(getattr(search_result, "bases_above_ground", 0) or 0)
+    if air:
+        by_code[ERROR_OTHER] = by_code.get(ERROR_OTHER, 0) + air
+        why = "the base rises above the ground surface between the ends"
+        by_reason[why] = by_reason.get(why, 0) + air
     generated = getattr(search_result, "total_count",
                         len(getattr(search_result, "evaluations", [])))
     analysed = getattr(search_result, "analysed_count",

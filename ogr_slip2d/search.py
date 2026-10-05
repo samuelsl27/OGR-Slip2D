@@ -29,8 +29,9 @@ from ogr_core.project.settings import SurfaceType, WeakLayerHandling
 from .failure_direction import slope_face, steepest_face_index  # noqa: F401
 from .methods import LEMMethod, LEMResult
 from .rapid_drawdown import RapidDrawdownError, drawdown_gap
-from .slicer import (REFUSED_END_ABOVE_GROUND, REFUSED_END_BELOW_GROUND,
-                     REFUSED_OUTSIDE_MODEL, TOUCHED_MODEL_EDGE, slice_surface)
+from .slicer import (REFUSED_BASE_ABOVE_GROUND, REFUSED_END_ABOVE_GROUND,
+                     REFUSED_END_BELOW_GROUND, REFUSED_OUTSIDE_MODEL,
+                     TOUCHED_MODEL_EDGE, slice_surface)
 from .surface import SlipCircle, WeakLayerSurface, lowest_elevation
 
 
@@ -333,6 +334,10 @@ class SearchResult:
     # rejected surfaces (``interpretation.invalid_summary``).
     ends_below_ground: int = 0
     ends_above_ground: int = 0
+    # v0.1.259 (D256) — and the surfaces refused because their base rose
+    # above the ground BETWEEN the two ends. Same reason for travelling
+    # here: a refused surface leaves no evaluation.
+    bases_above_ground: int = 0
 
     def score(self, result) -> float:
         """This run's objective, evaluated on one of its surfaces."""
@@ -882,6 +887,25 @@ class BaseSearch(ABC):
                 "lie on the ground." % (n, "" if n == 1 else "s",
                                         "; ".join(parts)))
 
+    def _base_above_ground_note(self) -> str:
+        """What to say when surfaces were refused for a base in the air.
+
+        v0.1.259 (D256). Between its two ends a slip surface has to stay
+        under the ground; where its base rises above it, part of the mass
+        would be in the air. Said apart from :meth:`_unsliceable_note`
+        because the remedy is the opposite one: no number of slices puts
+        the base back under the ground.
+        """
+        n = getattr(self, "_base_above_ground", 0)
+        return ("%d surface%s were discarded because the base rose above "
+                "the ground surface between the two ends, so part of the "
+                "sliding mass would be in the air. This is not a slice-count "
+                "problem: more slices cannot put the base back under the "
+                "ground. It happens where a surface follows a line that lies "
+                "on the ground, such as a weak layer or a Block Search "
+                "polyline along an exposed bench, and the line sits a "
+                "little above the ground there." % (n, "" if n == 1 else "s"))
+
     def _on_model_edge_note(self) -> str:
         """What to say when a tolerance decided a base was inside.
 
@@ -1091,6 +1115,15 @@ class BaseSearch(ABC):
                     self._end_above_ground = getattr(
                         self, "_end_above_ground", 0) + 1
                     self._last_refusal = REFUSED_END_ABOVE_GROUND
+                    continue
+                if slices is None and REFUSED_BASE_ABOVE_GROUND in _why:
+                    # v0.1.259 (D256) — a base above the ground between
+                    # the ends. Counted apart: until now it fell into the
+                    # unsliceable count below, whose note asks for more
+                    # slices, and no slice count cures it.
+                    self._base_above_ground = getattr(
+                        self, "_base_above_ground", 0) + 1
+                    self._last_refusal = REFUSED_BASE_ABOVE_GROUND
                     continue
                 if slices is None:
                     # v0.1.135 — the slicer refused this surface WHOLE, and
@@ -1456,6 +1489,10 @@ class BaseSearch(ABC):
         REFUSED_OUTSIDE_MODEL: (
             "the surface was not analysed: a slice base fell outside the "
             "External Boundary, where there is no soil."),
+        REFUSED_BASE_ABOVE_GROUND: (
+            "the surface was not analysed: between its two ends its base "
+            "rises above the ground surface, so part of the mass would be "
+            "in the air."),
         "leaves_soil": (
             "the surface was not analysed: it dips below the External "
             "Boundary."),
@@ -1517,6 +1554,7 @@ class BaseSearch(ABC):
         self._on_model_edge = 0
         self._end_below_ground = 0
         self._end_above_ground = 0
+        self._base_above_ground = 0
         with project.regions_frozen():
             result = self._run(project)
             if self.optimize is not None and self.optimize.enabled:
@@ -1544,6 +1582,11 @@ class BaseSearch(ABC):
             result.ends_above_ground = getattr(self, "_end_above_ground", 0)
             if result.ends_below_ground or result.ends_above_ground:
                 self._note(self._end_off_ground_note())
+            # v0.1.259 (D256) — and the ones whose base rose above the
+            # ground between the ends. Same rule: only if it happened.
+            result.bases_above_ground = getattr(self, "_base_above_ground", 0)
+            if result.bases_above_ground:
+                self._note(self._base_above_ground_note())
             # v0.1.157 (D58) — the surfaces the user defined by hand,
             # analysed here and not in ``analysis_runner`` for the reason
             # this template method exists at all: tests, scripts and
@@ -3927,6 +3970,17 @@ BLOCK_EXACT_EXIT = True
 #: grid uses (``slicer._model_grid_tol``).
 BLOCK_ON_GROUND_REL = 1e-6
 
+#: v0.1.259 (D257) — the point a Block Search object gives a trial surface
+#: is thrown away when it lies above the ground, and "above" used to mean
+#: by more than 1e-6 in the model's own units: a millimetre model and the
+#: same model in metres did not throw the same candidates (AGENTS.md:
+#: geometric tolerances relative to the model). It now means by more than
+#: ``BLOCK_ON_GROUND_REL`` of the model's diagonal, the tolerance D238 set
+#: for the same question at the start of a projection. Off, the old
+#: absolute 1e-6 comes back. A module switch so the verification bank can
+#: attribute what it moves.
+BLOCK_CHAIN_GUARD_RELATIVE = True
+
 
 class BlockSearch(BaseSearch):
     """Block Search (non-circular) — the reference's method.
@@ -4123,6 +4177,8 @@ class BlockSearch(BaseSearch):
         # v0.1.257 (D238) — "on the ground" for the projection's start.
         ground_tol = BLOCK_ON_GROUND_REL * math.hypot(xmax - xmin,
                                                       ymax - ymin)
+        # v0.1.259 (D257) — and for the points the objects give.
+        chain_tol = ground_tol if BLOCK_CHAIN_GUARD_RELATIVE else 1e-6
 
         # Block windows: vertical bands over the slope region. Center
         # them on the slope face (the steepest ground segment) so the
@@ -4197,7 +4253,7 @@ class BlockSearch(BaseSearch):
                         # Clip to inside the soil; reject points above
                         # ground
                         gy = PathSearch._interpolate_top_y(top, px)
-                        if gy is not None and py > gy + 1e-6:
+                        if gy is not None and py > gy + chain_tol:
                             ok = False
                             break
                         if soil is not None:
