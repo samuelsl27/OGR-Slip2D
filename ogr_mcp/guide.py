@@ -118,7 +118,10 @@ stability analysis read the field.
   histogram, the convergence and the samples.
 * back_analysis_run: the horizontal support force for a target factor of
   safety; optimize_run refines a NON-CIRCULAR critical surface into a new
-  result. All three use the design factors and the seed of the model.
+  result, with the model's technique (search.optimize_technique:
+  monte_carlo, the default random walk, or surface_altering, which moves
+  the ends along the ground and keeps the surface convex). All three use
+  the design factors and the seed of the model.
 * results_query also asks an analysis result what the Interpret window
   asks: error codes (-120 tensile, -112 m-alpha, -111 not converged, -101
   other), rejected surfaces, surfaces through a point, slices with the

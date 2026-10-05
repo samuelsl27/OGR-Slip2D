@@ -136,6 +136,9 @@ class TestOptimizeSurfaces:
         # value, it is per method, and the field is a tri-state whose
         # ``None`` means exactly that.
         assert s.optimize_enabled is None      # automatic
+        # v0.1.260 (D259) — Monte Carlo by the owner's decision; the help
+        # recommends Surface Altering but does not say which is the default.
+        assert s.optimize_technique == "monte_carlo"
         for m in (SearchMethod.BLOCK_SEARCH, SearchMethod.PATH_SEARCH):
             s.search_method = m.value
             assert optimize_enabled_for(s) is False, m
@@ -173,6 +176,7 @@ class TestRoundtripV112:
         s.block_right_end_angle_deg = 30.0
         s.optimize_enabled = True
         s.optimize_max_iterations = 2000
+        s.optimize_technique = "surface_altering"   # v0.1.260 (D259)
 
         d = asdict(s)
         s2 = SearchSettings(**d)
@@ -185,6 +189,7 @@ class TestRoundtripV112:
         assert s2.block_right_end_angle_deg == 30.0
         assert s2.optimize_enabled is True
         assert s2.optimize_max_iterations == 2000
+        assert s2.optimize_technique == "surface_altering"
 
 
 # ======================================================================

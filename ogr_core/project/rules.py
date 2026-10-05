@@ -1166,6 +1166,23 @@ def block_projection_range(start, end, side: str) -> tuple[float, float]:
     return (min(a, b), max(a, b))
 
 
+def optimize_technique_refusal(search_settings) -> Optional[Refusal]:
+    """v0.1.260 (D259) — an optimisation technique this program does not
+    have. One rule, asked by the analysis (``check_analysis_settings``) and
+    by every door that writes the setting, so that a misspelt value is
+    refused rather than quietly run as the default."""
+    from ogr_core.project.settings import OptimizeTechnique
+    allowed = [t.value for t in OptimizeTechnique]
+    value = getattr(search_settings, "optimize_technique",
+                    OptimizeTechnique.MONTE_CARLO.value)
+    if value in allowed:
+        return None
+    return Refusal(
+        "optimize_technique_unknown",
+        "Unknown optimisation technique %r: it has to be one of %s."
+        % (value, ", ".join(allowed)))
+
+
 @dataclass(frozen=True)
 class BlockAngleNote:
     """Something to say about one side's Block Search projection angles.

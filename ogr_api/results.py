@@ -431,6 +431,8 @@ def optimize_summary(result, report, factor_report=None, warnings=()
         "improved": report.improved, "initial_fos": report.initial_fos,
         "final_fos": report.final_fos, "iterations": report.iterations,
         "accepted": report.accepted, "rejected": report.rejected,
+        # v0.1.260 (D259) — which technique ran.
+        "technique": getattr(report, "technique", "monte_carlo"),
         "report": report.summary(), "notes": report.notes,
         "result": lem_summary(result),
         "admissible": bool(getattr(result, "admissible", True)),

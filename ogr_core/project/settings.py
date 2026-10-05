@@ -66,6 +66,21 @@ class WeakLayerHandling(Enum):
     AUTO_CASES = "auto_cases"
 
 
+class OptimizeTechnique(Enum):
+    """How *Optimize Surfaces* moves a non-circular surface.
+
+    v0.1.260 (D259). ``MONTE_CARLO`` is the random walk of Greco (1996),
+    the only technique until now. ``SURFACE_ALTERING`` reshapes the whole
+    surface in a sequence of bounded derivative-free sub-problems (ends
+    along the ground, interior pairs, curvature under convexity bounds,
+    weak-layer snapping), each solved with COBYQA, the successor of
+    Powell's BOBYQA (2009); see ``ogr_slip2d.surface_altering``.
+    """
+
+    MONTE_CARLO = "monte_carlo"
+    SURFACE_ALTERING = "surface_altering"
+
+
 class SearchMethod(Enum):
     # Circular-only
     GRID_SEARCH = "grid"
@@ -557,6 +572,13 @@ class SearchSettings:
     optimize_snap_specify_distance: bool = False
     optimize_snap_distance: float = 0.01
     optimize_use_depth_elevation_concave_checks: bool = True
+    # v0.1.260 (D259) — the optimisation technique. Monte Carlo stays the
+    # default by the owner's decision of 2026-10-05, so that no model,
+    # saved or new, moves unless Surface Altering is chosen; the reference
+    # recommends Surface Altering but its help does not say which one is
+    # the default. A file saved before this version has no key and loads as
+    # Monte Carlo, which is what it was computed with.
+    optimize_technique: str = OptimizeTechnique.MONTE_CARLO.value
 
     # ---------- User-defined Grid (Grid Search) ----------
     grid_x_min: Optional[float] = None
@@ -1506,6 +1528,7 @@ class ProjectSettings:
                            else None),
             use_surface_checks=bool(
                 s.optimize_use_depth_elevation_concave_checks),
+            technique=str(s.optimize_technique),
         )
 
     # ------------------------------------------------------------------

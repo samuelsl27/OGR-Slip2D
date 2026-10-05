@@ -79,6 +79,15 @@ _SNAP_AUTO_REL_DEPTH = 1e-3
 #: comparable at the same iteration budget.
 _EXPLORE_PROBES = 3
 
+#: v0.1.260 (D259) — the two techniques, by the values the project
+#: settings store (``ogr_core.project.settings.OptimizeTechnique``). Monte
+#: Carlo is this module's random walk; Surface Altering lives in
+#: ``ogr_slip2d.surface_altering`` and is reached from
+#: :func:`optimize_surface`, so no caller has to know which one ran.
+TECHNIQUE_MONTE_CARLO = "monte_carlo"
+TECHNIQUE_SURFACE_ALTERING = "surface_altering"
+TECHNIQUES = (TECHNIQUE_MONTE_CARLO, TECHNIQUE_SURFACE_ALTERING)
+
 
 @dataclass
 class OptimizeSettings:
@@ -146,6 +155,14 @@ class OptimizeSettings:
     # surface migrate, which is occasionally what is wanted.
     move_endpoints: bool = False
 
+    #: v0.1.260 (D259) — which technique moves the surface. Surface
+    #: Altering does NOT read ``step_reduction_factor``,
+    #: ``explore_all_vertices``, ``step_fraction``, ``min_step_fraction``,
+    #: ``seed`` or ``move_endpoints``: they configure the random walk, and
+    #: moving the two ends along the ground is the first step of Surface
+    #: Altering itself, not an option of it.
+    technique: str = TECHNIQUE_MONTE_CARLO
+
     def to_dict(self) -> dict:
         return {"enabled": self.enabled,
                 "target": self.target,
@@ -161,7 +178,8 @@ class OptimizeSettings:
                 "step_fraction": self.step_fraction,
                 "min_step_fraction": self.min_step_fraction,
                 "seed": self.seed, "densify_to": self.densify_to,
-                "move_endpoints": self.move_endpoints}
+                "move_endpoints": self.move_endpoints,
+                "technique": self.technique}
 
     @classmethod
     def from_dict(cls, d: dict) -> "OptimizeSettings":
@@ -192,7 +210,8 @@ class OptimizeSettings:
                    seed=d.get("seed"),
                    densify_to=int(d.get("densify_to", base.densify_to)),
                    move_endpoints=bool(
-                       d.get("move_endpoints", base.move_endpoints)))
+                       d.get("move_endpoints", base.move_endpoints)),
+                   technique=str(d.get("technique", base.technique)))
 
 
 @dataclass
@@ -206,6 +225,8 @@ class OptimizeReport:
     rejected: int = 0
     passes: int = 0
     notes: dict = field(default_factory=dict)
+    #: v0.1.260 (D259) — the technique that produced this report.
+    technique: str = TECHNIQUE_MONTE_CARLO
 
     @property
     def improvement(self) -> float:
@@ -444,7 +465,16 @@ def optimize_surface(project, search, surface, settings=None):
     from ogr_slip2d.surface import SlipSurface
 
     opts = settings or OptimizeSettings()
-    rep = OptimizeReport()
+    rep = OptimizeReport(technique=str(opts.technique))
+    if opts.technique not in TECHNIQUES:
+        # v0.1.260 (D259) — refused here as well as in
+        # ``check_analysis_settings``, because scripts reach this function
+        # without going through an analysis. ``error`` is the key the menu
+        # action stops on.
+        rep.notes["error"] = (
+            "Unknown optimisation technique %r: it has to be one of %s."
+            % (opts.technique, ", ".join(TECHNIQUES)))
+        return surface, None, rep
     rng = random.Random(opts.seed)
 
     pts = [(v.x, v.y) for v in surface.polyline.vertices]
@@ -561,6 +591,43 @@ def optimize_surface(project, search, surface, settings=None):
     if opts.use_surface_checks:
         concave_ceiling = max(float(opts.max_concave_angle_deg),
                               max_concave_angle_deg(pts))
+
+    def _finish(best_pts, best_fos, best_res, best_score):
+        """The epilogue both techniques share: Snap Shallow Surfaces to
+        Slope, then the report. v0.1.260 (D259) — a function so that
+        Surface Altering ends exactly as the random walk does and the walk's
+        own code above it did not have to move."""
+        # Snap Shallow Surfaces to Slope — after the walk, on its answer,
+        # and then re-evaluated, because the factor of safety belongs to the
+        # surface as finally shaped. It may come out HIGHER: that is the
+        # whole point of the option, and the reference's own example shows
+        # it (1.644 to 1.658).
+        if opts.snap_shallow_to_slope:
+            snapped, moved, used = _snap_shallow(
+                project, best_pts, opts.snap_distance)
+            if moved:
+                res = _evaluate(snapped)
+                rep.notes["snap_distance"] = used
+                rep.notes["snapped_vertices"] = moved
+                if res is not None and res.is_valid:
+                    rep.notes["fos_before_snap"] = best_fos
+                    best_pts, best_fos, best_res = snapped, res.fos, res
+                    best_score = _objective(res)
+                else:
+                    rep.notes["snap"] = (
+                        "The snapped surface could not be evaluated; the "
+                        "unsnapped one is reported.")
+        rep.final_fos = best_fos
+        return _make(best_pts), best_res, rep
+
+    if opts.technique == TECHNIQUE_SURFACE_ALTERING:
+        from .surface_altering import SaoContext, alter
+        best_pts, best_res, best_fos, best_score = alter(SaoContext(
+            project=project, opts=opts, rep=rep, evaluate=_evaluate,
+            objective=_objective, start_pts=list(pts), start_res=best_res,
+            start_score=best_score, concave_ceiling=concave_ceiling,
+            windows=getattr(search, "slope_limit_sets", None)))
+        return _finish(best_pts, best_fos, best_res, best_score)
 
     length = sum(math.dist(a, b) for a, b in zip(pts, pts[1:])) or 1.0
     step = length * opts.step_fraction
@@ -744,25 +811,4 @@ def optimize_surface(project, search, surface, settings=None):
             step = max(step * reduction, min_step)
             history.clear()
 
-    # Snap Shallow Surfaces to Slope — after the walk, on its answer, and
-    # then re-evaluated, because the factor of safety belongs to the surface
-    # as finally shaped. It may come out HIGHER: that is the whole point of
-    # the option, and the reference's own example shows it (1.644 to 1.658).
-    if opts.snap_shallow_to_slope:
-        snapped, moved, used = _snap_shallow(
-            project, best_pts, opts.snap_distance)
-        if moved:
-            res = _evaluate(snapped)
-            rep.notes["snap_distance"] = used
-            rep.notes["snapped_vertices"] = moved
-            if res is not None and res.is_valid:
-                rep.notes["fos_before_snap"] = best_fos
-                best_pts, best_fos, best_res = snapped, res.fos, res
-                best_score = _objective(res)
-            else:
-                rep.notes["snap"] = (
-                    "The snapped surface could not be evaluated; the "
-                    "unsnapped one is reported.")
-
-    rep.final_fos = best_fos
-    return _make(best_pts), best_res, rep
+    return _finish(best_pts, best_fos, best_res, best_score)

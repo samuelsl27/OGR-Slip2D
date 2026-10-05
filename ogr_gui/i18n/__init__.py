@@ -1257,6 +1257,11 @@ _DICTS: dict[str, dict[str, str]] = {
         'Maximum Iterations:': 'Iteraciones máximas:',
         'Optimises every surface the search generated. The answer is the same kind of answer; the run takes far longer.': 'Optimiza todas las superficies que generó la búsqueda. La respuesta es de la misma clase; el cálculo tarda mucho más.',
         'Optimization Options': 'Opciones de optimización',
+        # v0.1.260 (D259) — the technique selector.
+        'Optimization Technique:': 'Técnica de optimización:',
+        'Surface Altering': 'Alteración de superficie',
+        'Monte Carlo moves one vertex at a time at random. Surface Altering moves the ends along the ground and reshapes the whole surface, keeping it convex.': 'Monte Carlo mueve un vértice cada vez, al azar. La alteración de superficie mueve los extremos por el terreno y rehace la superficie entera, manteniéndola convexa.',
+        'Surface Altering does not use this: it configures the Monte Carlo technique.': 'La alteración de superficie no lo usa: configura la técnica de Monte Carlo.',
         'Optimize Surfaces Settings': 'Ajustes de optimización de superficies',
         'Settings...': 'Ajustes...',
         'Snap Shallow Surfaces to Slope': 'Ajustar al terreno las superficies someras',

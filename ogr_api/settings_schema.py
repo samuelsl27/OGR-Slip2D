@@ -100,6 +100,11 @@ def _standards() -> list[str]:
     return list(DesignStandardSettings.PRESETS) + ["custom"]
 
 
+def _optimize_techniques() -> list[str]:
+    from ogr_core.project.settings import OptimizeTechnique
+    return _enum_values(OptimizeTechnique)
+
+
 def _polarities() -> list[str]:
     from ogr_slip2d.newmark import Polarity
     return _enum_values(Polarity)
@@ -121,6 +126,8 @@ CHOICES: dict[str, Callable[[], list[str]]] = {
     # ``"fos_less_than"``, else the global minimum).
     "search.optimize_target": lambda: ["global_minimum", "all",
                                        "fos_less_than"],
+    # v0.1.260 (D259) — the random walk or Surface Altering.
+    "search.optimize_technique": _optimize_techniques,
     "search.weak_layer_handling": _weak_layer,
     "statistics.sampling_method": _sampling,
     "statistics.analysis_type": _prob_types,

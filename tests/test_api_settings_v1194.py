@@ -130,6 +130,23 @@ class TestNothingIsAcceptedInSilence:
         finally:
             ws.shutdown()
 
+    def test_the_optimisation_technique_takes_its_two_values(self):
+        """v0.1.260 (D259) — the random walk or Surface Altering, and a
+        technique this program does not have is refused with the choices,
+        not run as the default."""
+        from ogr_api import InvalidArgument
+        ws, pid = _ws_with_acads()
+        try:
+            for value in ("surface_altering", "monte_carlo"):
+                _set(ws, pid, {"search.optimize_technique": value})
+                assert (ws.get(pid).project.settings.search
+                        .optimize_technique == value)
+            exc = _raised(InvalidArgument, lambda: _set(
+                ws, pid, {"search.optimize_technique": "bobyqa"}))
+            assert "surface_altering" in str(exc)
+        finally:
+            ws.shutdown()
+
     def test_types_are_not_guessed(self):
         from ogr_api import InvalidArgument
         ws, pid = _ws_with_acads()

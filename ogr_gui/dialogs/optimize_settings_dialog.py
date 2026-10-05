@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
@@ -87,6 +88,22 @@ class OptimizeSettingsDialog(QDialog):
         # ---- Optimization Options -----------------------------------
         g_opt = QGroupBox(tr("Optimization Options"))
         f = QFormLayout(g_opt)
+        # v0.1.260 (D259) — the technique. Monte Carlo is the random walk
+        # of Greco (1996) and stays the default; Surface Altering reshapes
+        # the whole surface in bounded sub-problems, and does not read the
+        # two controls it greys out below.
+        self.cb_technique = QComboBox()
+        self.cb_technique.addItem(tr("Monte Carlo"), "monte_carlo")
+        self.cb_technique.addItem(tr("Surface Altering"), "surface_altering")
+        self.cb_technique.setToolTip(tr(
+            "Monte Carlo moves one vertex at a time at random. Surface "
+            "Altering moves the ends along the ground and reshapes the whole "
+            "surface, keeping it convex."))
+        i = self.cb_technique.findData(
+            getattr(s, "optimize_technique", "monte_carlo"))
+        self.cb_technique.setCurrentIndex(max(i, 0))
+        f.addRow(tr("Optimization Technique:"), self.cb_technique)
+
         self.sb_tolerance = QDoubleSpinBox()
         self.sb_tolerance.setDecimals(9)
         self.sb_tolerance.setRange(1e-9, 1.0)
@@ -141,6 +158,8 @@ class OptimizeSettingsDialog(QDialog):
         self.cb_explore.setChecked(bool(s.optimize_explore_all_vertices))
         f.addRow("", self.cb_explore)
         root.addWidget(g_opt)
+        self.cb_technique.currentIndexChanged.connect(self._sync_technique)
+        self._sync_technique()
 
         # ---- Snap Shallow Surfaces to Slope --------------------------
         self.g_snap = QGroupBox(tr("Snap Shallow Surfaces to Slope"))
@@ -187,11 +206,26 @@ class OptimizeSettingsDialog(QDialog):
         root.addWidget(buttons)
 
     # ------------------------------------------------------------------
+    def _sync_technique(self, *_args) -> None:
+        """Grey out what the chosen technique does not read (rule 7: a
+        control that cannot be honoured may not look as if it were)."""
+        walk = self.cb_technique.currentData() != "surface_altering"
+        if not hasattr(self, "_walk_tips"):
+            self._walk_tips = {w: w.toolTip()
+                               for w in (self.sb_step, self.cb_explore)}
+        for w, tip in self._walk_tips.items():
+            w.setEnabled(walk)
+            w.setToolTip(tip if walk else tr(
+                "Surface Altering does not use this: it configures the "
+                "Monte Carlo technique."))
+
     def _on_defaults(self) -> None:
         """Reset every field to the engineering defaults."""
         from ogr_core.project.settings import SearchSettings
         d = SearchSettings()
         self.rb_global.setChecked(True)
+        self.cb_technique.setCurrentIndex(
+            max(self.cb_technique.findData(d.optimize_technique), 0))
         self.sb_threshold.setValue(d.optimize_fos_threshold)
         self.sb_tolerance.setValue(d.optimize_tolerance)
         self.sb_iterations.setValue(int(d.optimize_max_iterations))
@@ -226,3 +260,4 @@ class OptimizeSettingsDialog(QDialog):
         s.optimize_snap_distance = float(self.sb_distance.value())
         s.optimize_use_depth_elevation_concave_checks = (
             self.cb_checks.isChecked())
+        s.optimize_technique = str(self.cb_technique.currentData())

@@ -116,7 +116,7 @@ Unidades: cargas hidráulicas en m y presión intersticial en kPa; permeabilidad
 | `random_variable_delete` | | Quitar una variable; las correlaciones que apuntaban a ella se limpian. |
 | `statistics_run` | | *Compute Statistics* en segundo plano: el determinista y luego el probabilístico (PF, índice de fiabilidad) o el de sensibilidad, con los coeficientes de diseño y la semilla del modelo. Cada método trae `surface_key`, la identidad de la superficie sobre la que se muestreó (tipo y geometría al último dígito; `null` en Overall Slope, donde cada muestra busca de nuevo). `switch_lines` dice cuáles de `note_lines` cuentan muestras que contestaron por otra masa o por otro caso de capa débil. |
 | `back_analysis_run` | | La fuerza horizontal de sostenimiento necesaria para un factor objetivo, sobre la búsqueda configurada. |
-| `optimize_run` | | Optimizar la superficie crítica no circular de un resultado con los ajustes y la semilla del modelo; el resultado es uno NUEVO. |
+| `optimize_run` | | Optimizar la superficie crítica no circular de un resultado con los ajustes y la semilla del modelo; el resultado es uno NUEVO. La técnica es la del modelo (`search.optimize_technique`): `monte_carlo`, el paseo aleatorio, por defecto, o `surface_altering` (desde v0.1.260), que mueve los extremos por el terreno y rehace la superficie entera manteniéndola convexa, y no usa la semilla. El resumen dice cuál corrió (`technique`). |
 
 Los tres cálculos pasan por la misma puerta que `analysis_run`: sin norma de diseño dan exactamente lo mismo que antes, y con norma, el modelo factorizado.
 

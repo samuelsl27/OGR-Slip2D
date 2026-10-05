@@ -619,6 +619,7 @@ class TestTheSettingsReachTheOptimiserUnchanged:
         s.optimize_snap_specify_distance = True
         s.optimize_snap_distance = 0.4
         s.optimize_use_depth_elevation_concave_checks = False
+        s.optimize_technique = "surface_altering"   # v0.1.260 (D259)
         o = p.settings.optimize_kwargs()["optimize"]
         assert o.enabled is True
         assert o.target == "fos_less_than"
@@ -631,6 +632,7 @@ class TestTheSettingsReachTheOptimiserUnchanged:
         assert o.snap_shallow_to_slope is True
         assert o.snap_distance == 0.4
         assert o.use_surface_checks is False
+        assert o.technique == "surface_altering"
 
     def test_an_unticked_concave_box_means_zero_not_infinity(self):
         p = _slope()
@@ -672,6 +674,7 @@ class TestTheSettingsReachTheOptimiserUnchanged:
         assert not d.optimize_snap_specify_distance and o.snap_distance is None
         assert (o.use_surface_checks
                 == d.optimize_use_depth_elevation_concave_checks)
+        assert o.technique == d.optimize_technique == "monte_carlo"
 
 
 # ======================================================================
@@ -741,6 +744,25 @@ class TestTheDialogCanClearTheBox:
         assert s.optimize_explore_all_vertices is True
         assert s.optimize_snap_shallow_to_slope is False
         assert s.optimize_use_depth_elevation_concave_checks is False
+
+    def test_the_technique_greys_what_it_does_not_read(self):
+        """v0.1.260 (D259) — Surface Altering does not read the Step
+        Reduction Factor or Explore All Vertices; the dialog greys them,
+        writes the technique, and Restore Defaults puts Monte Carlo back."""
+        from ogr_gui.dialogs import OptimizeSettingsDialog
+        p = _slope()
+        self._app()
+        d = OptimizeSettingsDialog(p)
+        assert d.cb_technique.currentData() == "monte_carlo"
+        assert d.sb_step.isEnabled() and d.cb_explore.isEnabled()
+        d.cb_technique.setCurrentIndex(
+            d.cb_technique.findData("surface_altering"))
+        assert not d.sb_step.isEnabled() and not d.cb_explore.isEnabled()
+        d.apply()
+        assert p.settings.search.optimize_technique == "surface_altering"
+        d._on_defaults()
+        assert d.cb_technique.currentData() == "monte_carlo"
+        assert d.sb_step.isEnabled() and d.cb_explore.isEnabled()
 
     def test_the_settings_dialog_round_trips_what_it_was_given(self):
         from ogr_gui.dialogs import OptimizeSettingsDialog

@@ -196,6 +196,12 @@ def check_analysis_settings(project) -> list[str]:
     # file format, which is no longer true.
     problems.extend(_shadow_setting_problems(project))
 
+    # v0.1.260 (D259) — a technique the optimiser does not have.
+    from ogr_core.project.rules import optimize_technique_refusal
+    _technique = optimize_technique_refusal(project.settings.search)
+    if _technique is not None:
+        problems.append(_technique.message)
+
     # v0.1.199 — a line load normal (or at an angle) to the boundary takes
     # its direction from the ground surface at its point; off the ground it
     # has none. It used to be applied vertically in silence.
@@ -1211,6 +1217,8 @@ def _optimize_notes(s_search) -> list[str]:
                     "global minimum of the slope."]
         return []
     out = []
+    sao = (getattr(s_search, "optimize_technique", "monte_carlo")
+           == "surface_altering")
     # v0.1.128 — the membership test alone would fire on the non-circular
     # Auto Refine, which does take the option: the method id is shared
     # with the circular one, so the pair has to be asked.
@@ -1221,11 +1229,21 @@ def _optimize_notes(s_search) -> list[str]:
             "the ones with vertices to move; this project searches with "
             "'%s'. The setting was ignored." % s_search.search_method)
     elif getattr(s_search, "optimize_target", "") == "all":
+        walk = "the alteration" if sao else "the random walk"
         out.append(
-            "Optimize Surfaces is set to optimise ALL surfaces, so the "
-            "random walk runs once per surface the search generates rather "
-            "than once on the critical one. The answer is the same kind of "
-            "answer; the run takes far longer.")
+            "Optimize Surfaces is set to optimise ALL surfaces, so %s "
+            "runs once per surface the search generates rather than once on "
+            "the critical one. The answer is the same kind of answer; the "
+            "run takes far longer." % walk)
+    # v0.1.260 (D259) — two settings Surface Altering cannot honour, said
+    # only when one of them was changed: they configure the random walk.
+    if sao and (bool(getattr(s_search, "optimize_explore_all_vertices", False))
+                or abs(float(getattr(s_search, "optimize_step_reduction_factor",
+                                     0.5)) - 0.5) > 1e-12):
+        out.append(
+            "Surface Altering does not read Step Reduction Factor or Explore "
+            "All Vertices: they configure the Monte Carlo technique, and "
+            "were ignored.")
     return out
 
 
