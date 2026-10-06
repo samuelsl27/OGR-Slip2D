@@ -10,7 +10,7 @@ ordinary analysis door, when Optimize Surfaces uses Surface Altering.
 bases within 10 degrees of horizontal, gamma = 20, no water) run with its
 own search panel — non-circular Auto Refine, 10 divisions, 10 circles,
 10 iterations, 50 %, 12 vertices, Optimize Surfaces on — and Bishop with 25
-slices gives the factor the tutorial publishes, 1.268, to within 1 %, and
+slices gives the factor the tutorial publishes, 1.268, to within 2 %, and
 the critical surface has the shape the tutorial describes: "a section of
 sub-horizontal slip connected to the surface by a steep incline", the
 sub-horizontal section on the bedding.
@@ -41,10 +41,21 @@ The default technique stays Monte Carlo by the owner's decision of
 2026-10-05 (no model moves unless Surface Altering is chosen), so this file
 chooses it explicitly, as a user of the panel would.
 
-**Why 1 % and why one run.** Surface Altering does not read the seed and
-the Auto Refine is deterministic, so there is no seed scatter to sample;
-the scatter that exists is the START's, -0.56 % to +0.82 % over five starts,
-and 1 % covers it. The run gives 1.26915 (+0.09 %) on v0.1.264.
+**Why 2 % and why one run.** Surface Altering does not read the seed and
+the Auto Refine is deterministic, so there is no seed scatter to sample.
+Two scatters do exist, and the second was learnt the hard way:
+
+* the START's: -0.56 % to +0.82 % over five starts on one machine;
+* the PLATFORM's. Surface Altering minimises with SciPy's COBYQA, which is
+  deterministic on one machine and not across library versions. v0.1.264
+  shipped this test at 1 % with 1.26915 (+0.09 %) measured on Windows,
+  Python 3.14, SciPy 1.18.0, and the CI on Linux (SciPy 1.17.1, NumPy
+  2.4.6) found 1.28572 on Python 3.11 and 3.13 and 1.28658 on 3.12, +1.40 %
+  and +1.47 %: the same family, another local minimum. Main went red on all
+  three Pythons.
+
+2 % covers both, measured, and still leaves the Monte Carlo answer (+4.9 %)
+outside: the factor test keeps failing where Surface Altering is missing.
 
 DISCRIMINATION, measured against a ``git archive`` of v0.1.255, which has no
 Surface Altering, so the same model runs the Monte Carlo walk: the factor
@@ -66,7 +77,9 @@ import math
 #: Tutorial 20, page 20-11: the non-circular Auto Refine with Optimize
 #: Surfaces, Bishop.
 _PUBLISHED = 1.268
-_REL_TOL = 0.01
+#: The measured scatter over starts and over platforms (see the header):
+#: -0.56 % to +1.47 %. NOT the 1 % of v0.1.264, which held on one machine.
+_REL_TOL = 0.02
 #: The Bedding band of the tutorial's "Angle Range" input, in degrees.
 _BEDDING = 10.0
 
