@@ -517,14 +517,20 @@ def required_force(slices, surface, target_fos, method_id="bishop_simplified",
 
 # ======================================================================
 def run_back_analysis(project, search, target_fos=1.3, elevation=0.0,
-                      method_id="bishop_simplified", num_slices=25,
+                      method_id="bishop_simplified",
                       progress_cb=None) -> BackAnalysisResult:
     """Back-analyse every surface of a search and report the one needing
     the largest support force.
 
     ``search`` is a configured search object; its surfaces are
     regenerated and each is back-analysed. The main stability results are
-    neither used nor modified.
+    neither used nor modified. The slicing is the search's own.
+
+    v0.1.263 (with D248) — the ``num_slices=25`` parameter is gone. It was
+    never read: the slices come from ``search``, and a setting that does not
+    reach the number is worse than none (rule 7). A caller that still
+    passes it gets a TypeError that says so, instead of a result that
+    ignores it.
     """
     out = BackAnalysisResult(method_id=method_id, target_fos=target_fos,
                              elevation=elevation)

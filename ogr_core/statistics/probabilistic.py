@@ -1188,7 +1188,7 @@ def run_global_minimum(
     num_samples: int = 1000,
     sampling: SamplingMethod = SamplingMethod.LATIN_HYPERCUBE,
     seed: Optional[int] = None,
-    num_slices: int = 25,
+    num_slices: Optional[int] = None,
     method_factory: Optional[Callable] = None,
     progress_cb: Optional[Callable[[int, int], None]] = None,
     prepare: Optional[Callable] = None,
@@ -1213,7 +1213,13 @@ def run_global_minimum(
         num_samples: N.
         sampling: Monte Carlo or Latin Hypercube.
         seed: for reproducibility.
-        num_slices: slicing used in the repeated evaluations.
+        num_slices: slicing used in the repeated evaluations. None (the
+            default since v0.1.263, D248) means the project's own, read
+            off the project as the analysis prepares it — what the analysis
+            door passes. Until then the default was a bare 25, so a direct
+            call (a script, a test, ``python_exec``) evaluated every sample
+            with 25 slices beside a deterministic run that had used the
+            project's.
         method_factory: ``method_id -> LEMMethod``; defaults to
             ``analysis_runner.build_method`` on the project as the analysis
             prepares it, which is the one place that configures a method

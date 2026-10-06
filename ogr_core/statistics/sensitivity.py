@@ -180,7 +180,7 @@ def run_sensitivity(
     critical_surfaces: dict,
     variables: list,
     intervals: int = DEFAULT_INTERVALS,
-    num_slices: int = 25,
+    num_slices: Optional[int] = None,
     method_factory: Optional[Callable] = None,
     progress_cb: Optional[Callable[[int, int], None]] = None,
     prepare: Optional[Callable] = None,
@@ -203,7 +203,9 @@ def run_sensitivity(
             maximum of each are used.
         intervals: number of equal intervals (50 in the reference), so
             ``intervals + 1`` values are evaluated.
-        num_slices: slicing for the repeated evaluations.
+        num_slices: slicing for the repeated evaluations; None (the
+            default since v0.1.263, D248) means the project's own, as in
+            ``run_global_minimum``.
         method_factory: ``method_id -> LEMMethod``; defaults to
             ``analysis_runner.build_method``, which is the one place that
             configures a method from the project (v0.1.108).
