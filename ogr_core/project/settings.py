@@ -565,6 +565,13 @@ class SearchSettings:
     optimize_tolerance: float = 1e-9
     optimize_max_iterations: int = 4000
     optimize_step_reduction_factor: float = 0.5
+    # v0.1.264 (D250) — ticked at 5 degrees WITHOUT a documented source: the
+    # reference describes the checkbox and gives no value. It is not inert.
+    # Steepening a straight ramp one vertex at a time passes through a
+    # concave kink, and on the reference's Generalized Anisotropic tutorial
+    # this ceiling is part of what holds the Monte Carlo walk at 1.31-1.35
+    # against a published 1.268 (1.27-1.31 at 45 degrees). Left as it is,
+    # pending the bank-wide measurement of defect D264.
     optimize_max_concave_angle_enabled: bool = True
     optimize_max_concave_angle_deg: float = 5.0
     optimize_explore_all_vertices: bool = False

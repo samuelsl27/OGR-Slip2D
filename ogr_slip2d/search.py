@@ -3933,6 +3933,34 @@ class AutoRefineNonCircularSearch(AutoRefineSearch):
     coarser one costs is model-dependent in size and in direction, and
     only a complete-equilibrium method can be asked how much of the
     difference is the surface.
+
+    **What the optimisation has to do here, measured (v0.1.264, D250).**
+    Every surface this search analyses is a polygon inscribed in a circle,
+    so none of them can have a kink. That is the documented method, not a
+    shortfall of this one, and it matters wherever the critical mechanism
+    IS a kink: on the reference's Generalized Anisotropic tutorial
+    (Bishop, 25 slices, a bedding direction within 10 degrees of
+    horizontal) the published surface is "a section of sub-horizontal slip
+    connected to the surface by a steep incline", 1.268. The search alone
+    reaches 1.4379, and not one of its 2875 polygons comes below 1.40: the
+    whole way down belongs to Optimize Surfaces.
+
+    The Monte Carlo walk does not make it: 1.3069 to 1.3524 over six
+    seeds. It lengthens the run along the bedding but leaves the ramp at
+    about 36 degrees, spread over six or seven nearly collinear segments.
+    Steepening a straight ramp one vertex at a time passes through a
+    concave kink, and the default ceiling of 5 degrees forbids it: with
+    45 the same walk gives 1.2687 to 1.3059. Freeing the ends (1.3104 to
+    1.3385), exploring all vertices (1.3265) and doubling the vertices
+    (1.3258) do not change the basin. Surface Altering, which moves the
+    whole surface at once, reaches 1.2691 from the same start (+0.09 %),
+    and 1.2609 to 1.2784 from four others.
+
+    The default technique stays Monte Carlo all the same: by the owner's
+    decision of 2026-10-05 no model moves unless Surface Altering is
+    chosen, and the tutorial's own figure predates Surface Altering, so
+    its 1.268 came from a random walk whose rules the reference does not
+    publish. See ``tests/test_auto_refine_noncircular_family_v1264.py``.
     """
 
     def __init__(self, method, num_vertices: int = 12, **kwargs) -> None:
