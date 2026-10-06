@@ -1183,6 +1183,87 @@ def optimize_technique_refusal(search_settings) -> Optional[Refusal]:
         % (value, ", ".join(allowed)))
 
 
+def slope_limit_windows(search_settings) -> Optional[tuple]:
+    """The two Slope Limit windows as ``((lo, hi), (lo, hi))``, first set
+    first, or None unless both sets are complete. Each pair is sorted; the
+    sets keep the order they were typed in, which is the order a message
+    should quote them in (the engine sorts them by their left limit,
+    ``search._normalise_slope_limits``)."""
+    keys = ("slope_limit_left", "slope_limit_right",
+            "slope_limit_left_2", "slope_limit_right_2")
+    vals = [getattr(search_settings, k, None) for k in keys]
+    if any(v is None for v in vals):
+        return None
+    first = tuple(sorted((float(vals[0]), float(vals[1]))))
+    second = tuple(sorted((float(vals[2]), float(vals[3]))))
+    return first, second
+
+
+def slope_limit_windows_overlap(search_settings) -> Optional[str]:
+    """How the two Slope Limit windows share ground: ``"nested"`` (one
+    lies inside the other), ``"partial"`` (they overlap and neither holds
+    the other) or None (separate, touching at a single point, or fewer
+    than two sets).
+
+    v0.1.261 (D262). Overlap means a common stretch of POSITIVE length,
+    judged against 1e-9 of the span of the two windows, so that two
+    windows that only touch at a limit point stay separate whatever the
+    units of the model.
+    """
+    w = slope_limit_windows(search_settings)
+    if w is None:
+        return None
+    (a0, a1), (b0, b1) = w
+    span = max(a1, b1) - min(a0, b0)
+    tol = 1e-9 * span
+    if min(a1, b1) - max(a0, b0) <= tol:
+        return None
+    if (a0 <= b0 + tol and b1 <= a1 + tol) or (b0 <= a0 + tol
+                                               and a1 <= b1 + tol):
+        return "nested"
+    return "partial"
+
+
+def slope_limit_windows_refusal(search_settings) -> Optional[Refusal]:
+    """v0.1.261 (D262) — a Grid Search with two overlapping Slope Limit
+    windows.
+
+    With two sets, the grid generates at each centre the radii of the
+    circles that run from one window to the other (``GridSearch.
+    _radius_bracket_two_windows``, read off the reference in D77). That
+    rule was measured on SEPARATE windows only. Each crossing of the
+    ground is given the first window that contains it, the windows being
+    sorted by their left limit, so on a stretch two windows share every
+    crossing goes to the one that starts further left — a choice nothing
+    measured supports — and with a window inside another that starts
+    further left no crossing ever belongs to the inner one and not one
+    circle is generated: the 109 of the verification bank, 0..30 +
+    14.473..18, gave none at any of 121 centres, in silence. The
+    reference's behaviour with overlapping windows is not measured
+    anywhere, so it is refused here instead of being invented.
+
+    Only the grid: every other search reads the two sets as ranges an end
+    may daylight in, which is well defined however they overlap
+    (``search._within_slope_limits``).
+    """
+    if getattr(search_settings, "search_method", None) != "grid":
+        return None
+    how = slope_limit_windows_overlap(search_settings)
+    if how is None:
+        return None
+    (a0, a1), (b0, b1) = slope_limit_windows(search_settings)
+    return Refusal(
+        "slope_limit_windows_overlap",
+        "The two sets of Slope Limits overlap ([%g, %g] and [%g, %g]). "
+        "With two sets, a Grid Search generates the circles that run from "
+        "one window to the other, a rule measured on separate windows "
+        "only: on the stretch two windows share it gives every crossing "
+        "to the window that starts further left, which nothing measured "
+        "supports, and with a window inside one that starts further left "
+        "it generates no circle at all. Make the two windows separate, or "
+        "use a single set." % (a0, a1, b0, b1))
+
+
 @dataclass(frozen=True)
 class BlockAngleNote:
     """Something to say about one side's Block Search projection angles.

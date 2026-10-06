@@ -145,6 +145,20 @@ def invalid_summary(search_result) -> dict:
         by_code[ERROR_OTHER] = by_code.get(ERROR_OTHER, 0) + air
         why = "the base rises above the ground surface between the ends"
         by_reason[why] = by_reason.get(why, 0) + air
+    # v0.1.261 (D263) — the surfaces refused because an end daylights
+    # outside the Slope Limits, which the reference does not code, and the
+    # circles that do not cut the ground twice, which ARE its −101 in its
+    # own words. Both under −101 with a reason of their own, like the two
+    # above; until now both were counted as "not sliced" with no reason.
+    for attr, why in (
+            ("outside_slope_limits",
+             "an end daylights outside the Slope Limits"),
+            ("misses_ground",
+             "the circle does not cut the ground surface twice")):
+        n = int(getattr(search_result, attr, 0) or 0)
+        if n:
+            by_code[ERROR_OTHER] = by_code.get(ERROR_OTHER, 0) + n
+            by_reason[why] = by_reason.get(why, 0) + n
     generated = getattr(search_result, "total_count",
                         len(getattr(search_result, "evaluations", [])))
     analysed = getattr(search_result, "analysed_count",

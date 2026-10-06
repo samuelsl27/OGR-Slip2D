@@ -35,6 +35,27 @@ from .slicer import (REFUSED_BASE_ABOVE_GROUND, REFUSED_END_ABOVE_GROUND,
 from .surface import SlipCircle, WeakLayerSurface, lowest_elevation
 
 
+#: v0.1.261 (D263) — a surface refused because an end daylights outside
+#: the Slope Limits, and a circle refused because it does not cut the
+#: ground twice. The second is the reference's −101 in its own words
+#: («Only one (or none) slip surface / slope intersections»); the first
+#: has no code of its own there. Neither is a slicer reason, so they live
+#: here and not in ``slicer``.
+REFUSED_OUTSIDE_SLOPE_LIMITS = "outside_slope_limits"
+REFUSED_MISSES_GROUND = "misses_ground"
+
+#: v0.1.261 (D255) — every counter a run keeps ON THE SEARCH rather than
+#: on its result. One list, read by ``BaseSearch.run`` to reset them and
+#: by ``_parallel_grid_run`` to bring them back from the workers: a
+#: counter added to one place and not the other is exactly how the
+#: parallel grid lost all of them (99 notes in series, 0 in parallel, on
+#: the 109 of the verification bank).
+_RUN_COUNTERS = ("_unsliceable", "_outside_model", "_on_model_edge",
+                 "_end_below_ground", "_end_above_ground",
+                 "_base_above_ground", "_outside_slope_limits",
+                 "_misses_ground")
+
+
 # ----------------------------------------------------------------------
 def _normalise_slope_limits(value) -> Optional[tuple]:
     """The Slope Limits as a tuple of ``(lo, hi)`` windows, left to right.
@@ -338,6 +359,13 @@ class SearchResult:
     # above the ground BETWEEN the two ends. Same reason for travelling
     # here: a refused surface leaves no evaluation.
     bases_above_ground: int = 0
+    # v0.1.261 (D263) — surfaces refused because an end daylights outside
+    # the Slope Limits, and circles refused because they do not cut the
+    # ground twice. Both counted for the SEARCH's population only, before
+    # any optimisation or user surface, so the census adds up to what the
+    # search generated.
+    outside_slope_limits: int = 0
+    misses_ground: int = 0
 
     def score(self, result) -> float:
         """This run's objective, evaluated on one of its surfaces."""
@@ -820,6 +848,11 @@ class BaseSearch(ABC):
         if line not in notes:
             notes.append(line)
 
+    def _count_misses_ground(self) -> None:
+        """One circle that does not cut the ground twice (v0.1.261, D263)."""
+        self._misses_ground = getattr(self, "_misses_ground", 0) + 1
+        self._last_refusal = REFUSED_MISSES_GROUND
+
     def _unsliceable_note(self, result) -> list[str]:
         """What to say when the slicer refused surfaces whole.
 
@@ -905,6 +938,64 @@ class BaseSearch(ABC):
                 "on the ground, such as a weak layer or a Block Search "
                 "polyline along an exposed bench, and the line sits a "
                 "little above the ground there." % (n, "" if n == 1 else "s"))
+
+    def _no_valid_surface_note(self, result) -> str:
+        """What to say when the run ends with no valid surface at all.
+
+        v0.1.261 (D263). Until now a search that found nothing said
+        nothing: on the 109 of the verification bank, with its Slope
+        Limits read as the starting and ending ranges, a Block Search
+        refused all 5000 of its surfaces and left neither a note nor an
+        evaluation. Raised only in that case, because refusals are routine
+        in any search with filters and a note on every run is noise.
+
+        It names what the run counted, and says plainly that the rest has
+        no recorded reason: several of the earlier refusals in a Block or
+        Path Search are still anonymous, and a note that implied it had
+        accounted for everything would be the silence again in other
+        words. The counts are of surfaces for the Slope Limits and for the
+        circles that miss the ground, and of pieces (masses, weak-layer
+        cases) for the slicer's reasons.
+        """
+        parts = []
+        n = int(getattr(result, "outside_slope_limits", 0) or 0)
+        if n:
+            windows = " and ".join(
+                "[%g, %g]" % (lo, hi)
+                for lo, hi in (self.slope_limit_sets or ()))
+            parts.append("%d with an end outside the Slope Limits%s"
+                         % (n, (" " + windows) if windows else ""))
+        n = int(getattr(result, "misses_ground", 0) or 0)
+        if n:
+            parts.append("%d circle%s that do not cut the ground twice"
+                         % (n, "" if n == 1 else "s"))
+        for attr, what in (("_outside_model", "that left the model"),
+                           ("_unsliceable", "that the slicer refused")):
+            n = getattr(self, attr, 0)
+            if n:
+                parts.append("%d %s" % (n, what))
+        n = (int(getattr(result, "ends_below_ground", 0) or 0)
+             + int(getattr(result, "ends_above_ground", 0) or 0))
+        if n:
+            parts.append("%d with an end off the ground" % n)
+        n = int(getattr(result, "bases_above_ground", 0) or 0)
+        if n:
+            parts.append("%d with the base above the ground" % n)
+        n = int(getattr(result, "focus_rejected", 0) or 0)
+        if n:
+            parts.append("%d removed by the focus objects" % n)
+        priced = sum(1 for r in result.evaluations if not r.is_valid)
+        line = ("No trial surface gave a valid factor of safety (%d "
+                "generated)." % result.total_count)
+        if priced:
+            line += (" %d %s priced and gave none; the census of invalid "
+                     "surfaces has their codes."
+                     % (priced, "was" if priced == 1 else "were"))
+        if parts:
+            line += " Refused before pricing: " + "; ".join(parts) + "."
+        line += (" Anything else was refused before it could be priced, "
+                 "for reasons this search does not record.")
+        return line
 
     def _on_model_edge_note(self) -> str:
         """What to say when a tolerance decided a base was inside.
@@ -1062,6 +1153,9 @@ class BaseSearch(ABC):
         definition, so it is asked after them and before the solve.
         """
         best: Optional[LEMResult] = None
+        # v0.1.261 (D263) — whether a piece of this surface fell to the
+        # Slope Limits, for the count below.
+        limits_refused = False
         for mass in candidates:
             # v0.1.121 — one mass becomes one surface per weak-layer case, and
             # the worst of them is the answer. It goes HERE, wrapped around the
@@ -1160,6 +1254,7 @@ class BaseSearch(ABC):
                                 slices[0].base_x_left, sets, tol)
                             and _within_slope_limits(
                                 slices[-1].base_x_right, sets, tol)):
+                        limits_refused = True
                         continue
                 # Filter by minimum "area" (here approximated as Σ w_i · h_i)
                 area = sum(s.width * max(s.height, 0.0) for s in slices)
@@ -1188,6 +1283,14 @@ class BaseSearch(ABC):
                 elif res.is_valid and (not best.is_valid
                                        or self.score(res) < self.score(best)):
                     best = res
+        if best is None and limits_refused:
+            # v0.1.261 (D263) — once per SURFACE, not per mass or weak-layer
+            # case: the census counts surfaces. Until now this rejection
+            # left no trace at all, and the single-surface door blamed a
+            # surface that "does not cut the model".
+            self._outside_slope_limits = getattr(
+                self, "_outside_slope_limits", 0) + 1
+            self._last_refusal = REFUSED_OUTSIDE_SLOPE_LIMITS
         return best
 
     # ------------------------------------------------------------------
@@ -1232,18 +1335,24 @@ class BaseSearch(ABC):
             xmin = ymin = xmax = ymax = None
         if xmin is not None:
             cx, cy, R = circle.centre_x, circle.centre_y, circle.radius
+            # v0.1.261 (D263) — the three skips below are circles that
+            # cannot cut the ground at all: counted as such, like the
+            # circle with no chord in ``_candidate_surfaces``.
             # Skip 1: circle bbox does not overlap model bbox at all
             if (cx + R < xmin or cx - R > xmax
                     or cy + R < ymin or cy - R > ymax):
+                self._count_misses_ground()
                 return None
             # Skip 2: circle is so high above the model that it
             # cannot intersect the ground (centre well above bbox top
             # AND lower edge above bbox top → no possible intersection)
             if cy - R > ymax:
+                self._count_misses_ground()
                 return None
             # Skip 3: circle so deep below the bottom that lower edge
             # is more than radius below the model bottom (non-physical)
             if cy + R < ymin:
+                self._count_misses_ground()
                 return None
 
         # v0.1.84 — a circle that crosses the ground more than twice
@@ -1379,6 +1488,11 @@ class BaseSearch(ABC):
         ground = ground_surface(external)
         chords = circle.candidate_chords(ground)
         if not chords:
+            # v0.1.261 (D263) — no pair of crossings with the ground, which
+            # is the reference's −101. The degenerate tangent radius the
+            # two-window grid emits at a centre with no valid radius ends
+            # here, and until now it ended here unseen.
+            self._count_misses_ground()
             return
         mode = _reverse_curvature_mode(project)
 
@@ -1500,6 +1614,13 @@ class BaseSearch(ABC):
             "the surface was not analysed: the slicer refused it (more "
             "mandatory cuts than slices, a degenerate width or a tension "
             "crack it could not place)."),
+        # v0.1.261 (D263).
+        REFUSED_OUTSIDE_SLOPE_LIMITS: (
+            "the surface was not analysed: an end daylights outside the "
+            "Slope Limits."),
+        REFUSED_MISSES_GROUND: (
+            "the surface was not analysed: the circle does not cut the "
+            "ground surface twice (the reference's error -101)."),
     }
 
     def refusal_text(self) -> str:
@@ -1549,14 +1670,17 @@ class BaseSearch(ABC):
         """
         self._weak_bands_cache = None
         self._pending_notes = []
-        self._unsliceable = 0
-        self._outside_model = 0
-        self._on_model_edge = 0
-        self._end_below_ground = 0
-        self._end_above_ground = 0
-        self._base_above_ground = 0
+        # v0.1.261 (D255) — from the one list the parallel grid also reads.
+        for name in _RUN_COUNTERS:
+            setattr(self, name, 0)
         with project.regions_frozen():
             result = self._run(project)
+            # v0.1.261 (D263) — taken HERE, before the optimisation and the
+            # user's surfaces, which go through the same doors and would
+            # otherwise add surfaces the search never generated to its
+            # census.
+            result.outside_slope_limits = self._outside_slope_limits
+            result.misses_ground = self._misses_ground
             if self.optimize is not None and self.optimize.enabled:
                 self._optimize_result(project, result)
             # v0.1.135 — surfaces the slicer refused whole. Raised after the
@@ -1595,6 +1719,11 @@ class BaseSearch(ABC):
             # differently at. AFTER the optimisation on purpose — see the
             # method's docstring.
             self._evaluate_user_surfaces(project, result)
+            # v0.1.261 (D263) — and a run that ends with nothing says why.
+            # After the user's surfaces, because a valid one of those is a
+            # valid surface of the run.
+            if not any(r.is_valid for r in result.all_evaluations()):
+                self._note(self._no_valid_surface_note(result))
             # v0.1.121 — anything the run decided it had to say. Attached
             # after the optimisation so a note raised while optimising is
             # carried too.
@@ -2043,8 +2172,21 @@ def _grid_batch(payload):
     grid centres.
     """
     search, project, centres, done_before, total = payload
+    # v0.1.261 (D255) — what the batch learns that lives on the SEARCH and
+    # not on its result: the refusal counters and the pending notes. Sent
+    # back as the DIFFERENCE over the batch, so a search that arrived with
+    # counts from an earlier run cannot have them added twice.
+    before = {name: getattr(search, name, 0) for name in _RUN_COUNTERS}
+    notes_before = list(getattr(search, "_pending_notes", None) or ())
     with project.regions_frozen():
-        return search._run_centres(project, centres, done_before, total)
+        part = search._run_centres(project, centres, done_before, total)
+    part._worker_counters = {
+        name: getattr(search, name, 0) - before[name]
+        for name in _RUN_COUNTERS}
+    part._worker_notes = [
+        line for line in (getattr(search, "_pending_notes", None) or ())
+        if line not in notes_before]
+    return part
 
 
 def _parallel_grid_run(search, project, centres, workers):
@@ -2072,11 +2214,13 @@ def _parallel_grid_run(search, project, centres, workers):
     # gave x1.85 on 7 workers, which is most of the gain thrown away
     # waiting for the slowest batch.
     #
-    # Splitting finer lets the pool schedule dynamically. ``map`` still
-    # returns results in the order the batches were submitted, so the
-    # merged ``evaluations`` list stays byte-identical to the sequential
-    # one — the ordering guarantee does not depend on which worker got
-    # what, only on the batches being contiguous and reassembled in order.
+    # Splitting finer lets the pool schedule dynamically. The results are
+    # put back in the order the batches were submitted (by ``map`` until
+    # v0.1.261, by index since, so that progress can be reported as each
+    # one finishes), so the merged ``evaluations`` list stays
+    # byte-identical to the sequential one — the ordering guarantee does
+    # not depend on which worker got what, only on the batches being
+    # contiguous and reassembled in order.
     n_batches = min(n, workers * 8)
     size, extra = divmod(n, n_batches)
     batches, start = [], 0
@@ -2090,18 +2234,40 @@ def _parallel_grid_run(search, project, centres, workers):
     # anyway, so it is stripped for the trip and restored afterwards.
     cb = search.progress_cb
     search.progress_cb = None
+    # v0.1.261 (D255) — the bar moves as batches finish, in centres like
+    # the sequential run, instead of jumping from nothing to the end. An
+    # error raised by the CALLER's callback is kept apart from a failure of
+    # the pool: the latter falls back to the sequential run, the former is
+    # the caller's and goes back to it, as it would in series.
+    from concurrent.futures import as_completed
+    cb_error = None
     try:
         payloads = [(search, project, centres[a:b], a, n)
                     for a, b in batches if b > a]
         with ProcessPoolExecutor(max_workers=workers) as pool:
-            parts = list(pool.map(_grid_batch, payloads))
+            futures = [pool.submit(_grid_batch, p) for p in payloads]
+            where = {f: k for k, f in enumerate(futures)}
+            # Reassembled by SUBMISSION order, whatever order they finish
+            # in: that is what keeps ``evaluations`` byte-identical to the
+            # sequential list.
+            parts = [None] * len(futures)
+            done = 0
+            for fut in as_completed(futures):
+                k = where[fut]
+                parts[k] = fut.result()
+                done += len(payloads[k][2])
+                if cb is not None and cb_error is None:
+                    try:
+                        cb(done, n)
+                    except Exception as exc:  # noqa: BLE001 - re-raised below
+                        cb_error = exc
     except Exception:  # noqa: BLE001 - see the docstring
-        return None
+        if cb_error is None:
+            return None
     finally:
         search.progress_cb = cb
-
-    if cb is not None:
-        cb(n, n)
+    if cb_error is not None:
+        raise cb_error
 
     merged = SearchResult(method_id=search.method.METHOD_ID,
                           objective=search.objective)
@@ -2115,6 +2281,18 @@ def _parallel_grid_run(search, project, centres, workers):
         # shape of the 1697 circles that went missing in v0.1.83, and the
         # parallel path is the DEFAULT for a grid big enough to care.
         merged.focus_rejected += part.focus_rejected
+        # v0.1.261 (D255) — and the counters and notes that live on the
+        # search. Until now they stayed in the workers' copies, and
+        # ``BaseSearch.run`` read them on the parent, which had evaluated
+        # nothing: on the 109 of the verification bank a 10 x 10 grid gave
+        # 99 notes in series and 0 in parallel. Notes are joined in batch
+        # order keeping the first appearance, which is the order of the
+        # sequential run.
+        for name, v in (getattr(part, "_worker_counters", None)
+                        or {}).items():
+            setattr(search, name, getattr(search, name, 0) + v)
+        for line in getattr(part, "_worker_notes", None) or ():
+            search._note(line)
     return merged
 
 
@@ -4356,11 +4534,15 @@ class BlockSearch(BaseSearch):
                 continue
 
             # 4. endpoints must daylight within the Slope Limits
-            if not _within_slope_limits(deduped[0].x, sl_sets, 1e-6):
+            # v0.1.261 (D263) — and the refusal is counted by name: on the
+            # 109 of the verification bank, with the limits read as the
+            # starting and ending ranges, all 5000 surfaces ended here and
+            # the run said nothing.
+            if (not _within_slope_limits(deduped[0].x, sl_sets, 1e-6)
+                    or not _within_slope_limits(deduped[-1].x, sl_sets,
+                                                1e-6)):
                 result.invalid_count += 1
-                continue
-            if not _within_slope_limits(deduped[-1].x, sl_sets, 1e-6):
-                result.invalid_count += 1
+                self._outside_slope_limits += 1
                 continue
 
             # v0.1.118 — sorting by x IS the kinematic admissibility this
@@ -5254,6 +5436,11 @@ class PathSearch(BaseSearch):
         #    v0.1.146 — one of the windows, not the span between them (D50).
         ex = pts[-1][0]
         if not _within_slope_limits(ex, sl_sets, 1e-6):
+            # v0.1.261 (D263) — the one reason this generator returns None
+            # that it can name; the others (floor, not emerged, budget)
+            # stay anonymous for now.
+            self._outside_slope_limits = getattr(
+                self, "_outside_slope_limits", 0) + 1
             return None
 
         # Order left→right

@@ -202,6 +202,13 @@ def check_analysis_settings(project) -> list[str]:
     if _technique is not None:
         problems.append(_technique.message)
 
+    # v0.1.261 (D262) — a grid with two overlapping Slope Limit windows,
+    # whose radius rule is measured on separate windows only.
+    from ogr_core.project.rules import slope_limit_windows_refusal
+    _windows = slope_limit_windows_refusal(project.settings.search)
+    if _windows is not None:
+        problems.append(_windows.message)
+
     # v0.1.199 — a line load normal (or at an angle) to the boundary takes
     # its direction from the ground surface at its point; off the ground it
     # has none. It used to be applied vertically in silence.
@@ -441,6 +448,32 @@ def settings_warnings(project, method_ids=()) -> list[str]:
             "automatic, and the second set is meant to be added to the "
             "first, not to replace it. It was ignored; set the first set "
             "as well.")
+    # v0.1.261 (D262) — and a set that lies inside the other. The two sets
+    # are ranges an end may daylight in (D50), so the inner one admits no
+    # end the outer one does not: as a filter it does nothing, which is
+    # rule 7. Not for the grid, which refuses any overlap outright
+    # (``check_analysis_settings``); and partial overlap gets no note,
+    # because there the union is wider than either set and it does act.
+    from ogr_core.project.rules import (slope_limit_windows,
+                                        slope_limit_windows_overlap)
+    if (s_search.search_method != "grid"
+            and slope_limit_windows_overlap(s_search) == "nested"):
+        (_a0, _a1), (_b0, _b1) = slope_limit_windows(s_search)
+        _inner, _outer = (((_b0, _b1), (_a0, _a1))
+                          if _b1 - _b0 <= _a1 - _a0
+                          else ((_a0, _a1), (_b0, _b1)))
+        _line = ("One set of Slope Limits, [%g, %g], lies inside the other, "
+                 "[%g, %g]. The two sets are the ranges where the ends of a "
+                 "surface may daylight, so the inner one admits no end the "
+                 "outer one does not: as a filter it does nothing."
+                 % (_inner + _outer))
+        if s_search.search_method == "path":
+            # The one place the second window acts on its own: Path Search
+            # starts in the window nearest the toe (``PathSearch._run``).
+            _line += (" A Path Search still starts its surfaces in the set "
+                      "nearer the toe, so there it can change where they "
+                      "begin.")
+        notes.append(_line)
     # Anything the stored model carried that could not be migrated. It is
     # a note and not a refusal: the analysis is valid, it simply did not
     # honour a value the file still mentions.
