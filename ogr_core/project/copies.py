@@ -61,3 +61,29 @@ def detached_copy(project, *, cold_caches: bool = True):
     if cold_caches:
         clone.invalidate_regions_cache()
     return clone
+
+
+def shippable_copy(project):
+    """A SHALLOW copy without the attributes of ``NOT_COPIED``, made to be
+    pickled at once into a child process.
+
+    v0.1.262 (D247). The window's project carries two listeners that do not
+    pickle — the canvas's lambda and the window's own bound method — and
+    they were the only part of it that did not: so a Grid Search started
+    from *Compute* could never be split across processes, and fell back to
+    one in silence (6.4 s against 3.5 s on the demo, measured in 0.1.235).
+
+    Shallow on purpose, and that is the whole contract: the copy SHARES the
+    boundaries, materials and caches of the original. Its warm region cache
+    travels with it, so every batch starts from regions already resolved
+    instead of rebuilding them; and pickling copies everything anyway, so
+    the child gets a project of its own. The copy itself must not be edited
+    or kept — anything that will be, takes :func:`detached_copy`.
+
+    The original is untouched: its listeners stay where they were.
+    """
+    clone = copy.copy(project)
+    for name in NOT_COPIED:
+        if name in clone.__dict__:
+            setattr(clone, name, [] if name == "_listeners" else None)
+    return clone

@@ -21,18 +21,21 @@ from __future__ import annotations
 
 import sys
 
-from PySide6.QtWidgets import QApplication
+# v0.1.262 (D247) — nothing from Qt or the window at import time. A Grid
+# Search started from *Compute* now splits across processes, and on Windows
+# every child starts by re-importing the parent's main module: run as
+# ``python -m ogr_gui``, that is this file, and its PySide6 and window
+# imports cost each child 1.4 s before it did any work. They are imported
+# where they are used.
 
-from .main_window import MainWindow
-from .themes import apply_theme
 
-
-def start_window(agent_bridge: bool = True) -> MainWindow:
+def start_window(agent_bridge: bool = True):
     """The main window, shown, with its agent bridge on unless asked not
     to. Separate from :func:`main` so that it can be tested without
     entering the event loop; the tests that build a ``MainWindow`` directly
     get no bridge, which is what keeps them off the user's discovery
     folder."""
+    from .main_window import MainWindow
     win = MainWindow()
     win.show()
     if agent_bridge:
@@ -43,6 +46,15 @@ def start_window(agent_bridge: bool = True) -> MainWindow:
 
 def main(argv=None) -> int:
     import argparse
+    import multiprocessing
+
+    # v0.1.262 (D247) — a no-op unless this runs as a frozen executable,
+    # where it is what keeps the grid's worker processes from starting a
+    # second copy of the program instead of doing their work.
+    multiprocessing.freeze_support()
+    from PySide6.QtWidgets import QApplication
+
+    from .themes import apply_theme
 
     argv = list(sys.argv if argv is None else argv)
     parser = argparse.ArgumentParser(prog="ogr-slip2d", add_help=False)

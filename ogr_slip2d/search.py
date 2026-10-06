@@ -2196,6 +2196,10 @@ def _parallel_grid_run(search, project, centres, workers):
     cannot start a process pool — a frozen build, a sandbox, a platform
     without fork or spawn — must still compute the right answer, just
     slower. A failure to parallelise is not a failure to analyse.
+
+    v0.1.262 (D247) — but it is said: the search records a note with the
+    reason. Too few centres for the workers is not a failure and says
+    nothing.
     """
     from concurrent.futures import ProcessPoolExecutor
 
@@ -2241,8 +2245,15 @@ def _parallel_grid_run(search, project, centres, workers):
     # the caller's and goes back to it, as it would in series.
     from concurrent.futures import as_completed
     cb_error = None
+    # v0.1.262 (D247) — the project travels as a shippable copy: the
+    # window's carries listeners that do not pickle (the canvas's lambda,
+    # the window's own method), so *Compute* could never split a grid and
+    # ran it in one process, in silence. Made once, not per batch; its warm
+    # region cache goes with it.
+    from ogr_core.project.copies import shippable_copy
+    shipped = shippable_copy(project)
     try:
-        payloads = [(search, project, centres[a:b], a, n)
+        payloads = [(search, shipped, centres[a:b], a, n)
                     for a, b in batches if b > a]
         with ProcessPoolExecutor(max_workers=workers) as pool:
             futures = [pool.submit(_grid_batch, p) for p in payloads]
@@ -2261,8 +2272,16 @@ def _parallel_grid_run(search, project, centres, workers):
                         cb(done, n)
                     except Exception as exc:  # noqa: BLE001 - re-raised below
                         cb_error = exc
-    except Exception:  # noqa: BLE001 - see the docstring
+    except Exception as exc:  # noqa: BLE001 - see the docstring
         if cb_error is None:
+            # v0.1.262 (D247) — falling back is right; doing it in silence
+            # was not: the window ran every grid in one process for as long
+            # as it existed and nothing said so.
+            search._note(
+                "The Grid Search was to be split across %d processes and ran "
+                "in one, because the process pool failed (%s: %s). The result "
+                "is the same; only the time is not."
+                % (workers, type(exc).__name__, str(exc)[:200]))
             return None
     finally:
         search.progress_cb = cb
