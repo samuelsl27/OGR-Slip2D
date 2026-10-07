@@ -440,9 +440,12 @@ class SeepageSolver:
         # or not, so this is the one place that needs to remember.
         res.gamma_w = self.gamma_w
         res.kr = list(kr) if kr is not None else None
-        # Nodal reactions at Dirichlet nodes: Q = K.H - q_applied.
-        # A negative reaction means water is being forced INTO the
-        # domain at that node, which a seepage face cannot do.
+        # Nodal reactions at Dirichlet nodes: Q = K.H - q_applied, the
+        # flow the prescribed head has to SUPPLY there. Positive is water
+        # entering the domain at that node, which a seepage face cannot
+        # do; negative is water leaving. v0.1.266 — this said the
+        # opposite, and the switching below always read it this way: a
+        # column draining through a head-fixed base gives -I x width.
         KH = [0.0] * n
         for r, c, v in zip(rows0, cols0, vals0):
             KH[r] += v * H[c]
@@ -689,6 +692,154 @@ def hydraulic_props_of(project) -> dict:
     return props
 
 
+#: v0.1.266 (D124) -- when the Picard loop of ``solve_unsaturated`` ends
+#: without converging, two other roads to the SAME fixed point are tried
+#: before the run is reported unconverged (``_rescue``): Anderson
+#: acceleration of the very Picard map, then continuation in the steepness
+#: of the permeability functions solved by Newton's method.
+#:
+#: Why: a permeability function that drops many decades over a fraction of
+#: a metre makes the Picard map of a fine mesh cycle for ever. Measured on
+#: dam 2 of the groundwater verification problem 9 (Bowles 1984), whose
+#: toe-drain curve falls six decades between 8 and 12 kPa: the 946-element
+#: mesh converges in 68 passes, the 3883-element one runs into a period-4
+#: cycle of five to seven drain elements (successive increments at cosine
+#: -1.000, unrelaxed change 2.6-3.0 m) and no relaxation breaks it; a 1-D
+#: column under the same kind of curve fails for every relaxation from 0.2
+#: to 0.6. Anderson converges on the dam and not on the column; Newton with
+#: continuation converges on both; all of them land on one fixed point
+#: (3.76148e-6 m3/(min m) through the dam, 1.0 % from Bowles' flow net).
+#:
+#: The rescue runs ONLY after the loop has failed, so every model that
+#: converges today goes through exactly the arithmetic it went through
+#: before. Off, the v0.1.265 behaviour.
+PICARD_RESCUE = True
+
+#: Anderson depths tried in turn, and the map evaluations allowed to each.
+#: Neither depth wins everywhere: on that dam, started after 200 Picard
+#: passes, depth 20 needs 36 evaluations and depth 5 166; started after
+#: 30, depth 5 needs 52 and depth 20 does not converge in 150.
+RESCUE_ANDERSON_DEPTHS = (5, 20)
+RESCUE_ANDERSON_EVALUATIONS = 150
+#: Newton iterations allowed to the whole continuation (the dam above
+#: needs 436 over 22 steps of t) and to one step of it.
+RESCUE_NEWTON_BUDGET = 1000
+RESCUE_NEWTON_PER_STEP = 30
+#: Smallest continuation step before the continuation gives up.
+RESCUE_MIN_STEP = 1e-3
+
+
+class _NewtonSystem:
+    """The steady unsaturated equations as a residual for Newton's method
+    (v0.1.266, D124).
+
+        R(H) = sum_e kr_e(H)^t K0_e H_e - q
+
+    with K0_e the element conductivity matrix at kr = 1 (the assembly of
+    ``SeepageSolver.assemble``), q the applied fluxes and kr_e taken, as in
+    ``_element_kr``, at the element's mean pressure head. Its Jacobian,
+
+        J = sum_e [ kr_e^t K0_e + (K0_e H_e) d(kr_e^t)/dp (1/3) 1^T ],
+
+    is not symmetric; d(kr^t)/dp is a central difference of the material's
+    own function, so every permeability model is differentiated the same
+    way, kinks included. Elements the assembly skips (degenerate) are
+    skipped here too.
+    """
+
+    def __init__(self, solver, bcs) -> None:
+        mesh = solver.mesh
+        nodes, k0, ys, props = [], [], [], []
+        for e in mesh.elements:
+            g = e.shape_gradients(mesh)
+            if g is None:
+                continue
+            dNdx, dNdy, area = g
+            kxx, kyy, kxy = solver.props_for(e).conductivity_tensor()
+            ke = [[area * (dNdx[i] * (kxx * dNdx[j] + kxy * dNdy[j])
+                           + dNdy[i] * (kxy * dNdx[j] + kyy * dNdy[j]))
+                   for j in range(3)] for i in range(3)]
+            nodes.append(e.nodes)
+            k0.append(ke)
+            ys.append([mesh.nodes[i].y for i in e.nodes])
+            props.append(solver.props_for(e))
+        self.n = mesh.node_count
+        self.gamma_w = solver.gamma_w
+        self.EN = _np.asarray(nodes, dtype=int).reshape(-1, 3)
+        self.K0 = _np.asarray(k0, dtype=float).reshape(-1, 3, 3)
+        self.Y = _np.asarray(ys, dtype=float).reshape(-1, 3)
+        self.props = props
+        self.rows = _np.repeat(self.EN, 3, axis=1).ravel()
+        self.cols = _np.tile(self.EN, (1, 3)).ravel()
+        self.q = _np.asarray(solver.assemble(bcs)[3], dtype=float)
+        self.fixed = solver._dirichlet_values(bcs)
+        self.node_y = [nd.y for nd in mesh.nodes]
+
+    def _kr(self, p, t):
+        k = _np.array([pr.kr_at_pressure_head(float(pp), self.gamma_w)
+                       for pr, pp in zip(self.props, p)])
+        return k if t == 1.0 else k ** t
+
+    def residual(self, H, t, jacobian: bool = False):
+        He = H[self.EN]
+        p = _np.mean(He - self.Y, axis=1)
+        kr = self._kr(p, t)
+        KH = _np.einsum("eij,ej->ei", self.K0, He)
+        R = -self.q.copy()
+        _np.add.at(R, self.EN.ravel(), (kr[:, None] * KH).ravel())
+        if not jacobian:
+            return R
+        h = 1e-7 * _np.maximum(1.0, _np.abs(p))
+        dk = (self._kr(p + h, t) - self._kr(p - h, t)) / (2.0 * h)
+        Je = (kr[:, None, None] * self.K0
+              + KH[:, :, None] * (dk / 3.0)[:, None, None])
+        J = _csr((Je.ravel(), (self.rows, self.cols)),
+                 shape=(self.n, self.n))
+        return R, J
+
+    def newton(self, H0, active, t, tol, max_iterations):
+        """Newton's method with the seepage-face set ``active`` held at
+        P = 0 and a backtracking (Armijo) line search on |R| over the free
+        nodes. Converged when the full Newton correction is below ``tol``
+        (m); a line search that cannot reduce |R| is a failure, never a
+        convergence. Returns (H, converged, iterations)."""
+        fixed = dict(self.fixed)
+        fixed.update({nid: self.node_y[nid] for nid in active})
+        H = _np.array(H0, dtype=float)
+        for nid, v in fixed.items():
+            H[nid] = v
+        free = _np.array([i for i in range(self.n) if i not in fixed],
+                         dtype=int)
+        if free.size == 0:
+            return H, True, 0
+        for k in range(1, max_iterations + 1):
+            R, J = self.residual(H, t, jacobian=True)
+            Rf = R[free]
+            norm = float(_np.linalg.norm(Rf))
+            try:
+                d = _spsolve(J[free][:, free].tocsc(), -Rf)
+            except Exception:  # noqa: BLE001 — a singular step ends Newton
+                return H, False, k
+            d = _np.atleast_1d(_np.asarray(d, dtype=float))
+            if not _np.all(_np.isfinite(d)):
+                return H, False, k
+            if float(_np.max(_np.abs(d))) < tol:
+                H[free] += d
+                return H, True, k
+            lam = 1.0
+            while True:
+                Hn = H.copy()
+                Hn[free] += lam * d
+                trial = float(_np.linalg.norm(self.residual(Hn, t)[free]))
+                if trial <= (1.0 - 1e-4 * lam) * norm:
+                    break
+                lam *= 0.5
+                if lam < 1e-4:
+                    return H, False, k
+            H = Hn
+        return H, False, max_iterations
+
+
 # ======================================================================
 class UnsaturatedSeepageSolver(SeepageSolver):
     """Steady-state **saturated/unsaturated** seepage with a free surface
@@ -707,7 +858,10 @@ class UnsaturatedSeepageSolver(SeepageSolver):
 
        with ``w = relaxation``. Under-relaxation is what makes the scheme
        robust when the permeability function is steep (sands), where a
-       plain fixed-point iteration oscillates.
+       plain fixed-point iteration oscillates — up to a point: when the
+       function is steep enough for the mesh, no relaxation stops the
+       oscillation, and ``_rescue`` takes over (v0.1.266, see
+       ``PICARD_RESCUE``).
 
     2. **Seepage face** — ``UNKNOWN`` boundary nodes obey the unilateral
        (Signorini) condition "P = 0 **or** Q = 0": water may leave the
@@ -820,6 +974,7 @@ class UnsaturatedSeepageSolver(SeepageSolver):
         history: list[float] = []
         converged = False
         it = 0
+        H_prev = H
 
         for it in range(1, self.max_iterations + 1):
             kr = self._element_kr(H)
@@ -836,44 +991,31 @@ class UnsaturatedSeepageSolver(SeepageSolver):
             w = self.relaxation
             H_relaxed = [(1.0 - w) * H[i] + w * H_new[i] for i in range(n)]
             delta = max(abs(H_relaxed[i] - H[i]) for i in range(n))
+            H_prev = H
             H = H_relaxed
             history.append(delta)
 
-            # ---- seepage-face switching -----------------------------
-            # Reaction sign convention (verified empirically against a
-            # 1D case): POSITIVE reaction = water entering the domain at
-            # that node. A seepage face cannot admit water, so a node
-            # held at P = 0 whose reaction turns positive must be
-            # released back to Q = 0.
-            #
-            # Plain switching chatters (the active set flips 2->1->0->2
-            # indefinitely and the heads never settle), which is the
-            # classical difficulty of the nodal-switching algorithm. Two
-            # standard cures are applied: a hysteresis band on both
-            # decisions, and a per-node switch budget after which the
-            # node is frozen in its current state so the active set is
-            # guaranteed to settle.
-            new_active = set(active)
-            for nid in unknown:
-                if switches.get(nid, 0) >= self.max_node_switches:
-                    continue                      # frozen
-                y = self.mesh.nodes[nid].y
-                if nid in active:
-                    q_node = (step.reactions[nid]
-                              if step.reactions else 0.0)
-                    if q_node > q_tol:            # inflow → release
-                        new_active.discard(nid)
-                        switches[nid] = switches.get(nid, 0) + 1
-                else:
-                    if H[nid] - y > p_tol:        # positive P → hold at 0
-                        new_active.add(nid)
-                        switches[nid] = switches.get(nid, 0) + 1
+            new_active = self._switch_seepage_face(
+                active, switches, unknown, H, step.reactions, p_tol, q_tol)
             set_changed = (new_active != active)
             active = new_active
 
             if delta < self.tolerance and not set_changed:
                 converged = True
                 break
+
+        # ---- the rescue (v0.1.266, D124) ----------------------------
+        # Only after the loop has failed: whatever converged above went
+        # through exactly the arithmetic it went through before.
+        rescue = None
+        if not converged and PICARD_RESCUE:
+            rescue = self._rescue(bcs, H, H_prev, active, unknown, p_tol,
+                                  q_tol, first.total_head)
+            if rescue["converged"]:
+                H = rescue["head"]
+                active = rescue["active"]
+                switches = rescue["switches"]
+                converged = True
 
         # ---- final consistent state ---------------------------------
         kr = self._element_kr(H)
@@ -883,12 +1025,16 @@ class UnsaturatedSeepageSolver(SeepageSolver):
             final.notes["error"] = "final solve failed"
             return final
         final.converged = converged
-        final.iterations = it
+        final.iterations = it + (rescue["iterations"] if rescue else 0)
         final.seepage_nodes = sorted(active)
         final.notes["picard_delta"] = history[-1] if history else float("nan")
         final.notes["relaxation"] = self.relaxation
         final.notes["kr_min"] = min(kr) if kr else 1.0
         final.notes["kr_max"] = max(kr) if kr else 1.0
+        if rescue is not None:
+            final.notes["rescue"] = rescue["method"]
+            final.notes["rescue_iterations"] = rescue["iterations"]
+            final.notes["rescue_residual"] = rescue["residual"]
         # v0.1.125 — a frozen node is an unresolved boundary condition,
         # and until this version nothing said so: freezing made the
         # active set stop changing, which was read as convergence. The
@@ -910,13 +1056,254 @@ class UnsaturatedSeepageSolver(SeepageSolver):
                 f"({len(frozen)} were frozen by the switch budget of "
                 f"{self.max_node_switches}). The free surface this "
                 f"reports is not the converged one.")
-        elif not converged:
+        elif not converged and rescue is None:
             final.notes["warning"] = (
                 f"Picard iteration did not converge in "
                 f"{self.max_iterations} steps (last change "
                 f"{history[-1]:.3e} m). Try a smaller relaxation factor "
                 f"or a finer mesh.")
+        elif not converged:
+            # v0.1.266 — the old advice is wrong on both counts when the
+            # rescue has run: no relaxation breaks the cycle it exists
+            # for, and a finer mesh is what brings the cycle on (D124).
+            final.notes["warning"] = (
+                f"Picard iteration did not converge in "
+                f"{self.max_iterations} steps (last change "
+                f"{history[-1]:.3e} m), and neither did the rescue "
+                f"(Anderson acceleration, then continuation with Newton's "
+                f"method; last change {rescue['residual']:.3e} m). A "
+                f"permeability function that drops many decades over a "
+                f"short suction range is the usual cause: check the "
+                f"curves of the materials near the water table.")
         return final
+
+    # ------------------------------------------------------------------
+    def _switch_seepage_face(self, active, switches, unknown, H,
+                             reactions, p_tol, q_tol) -> set:
+        """The active set after one seepage-face switching decision.
+
+        Reaction sign convention (verified empirically against a 1D case):
+        POSITIVE reaction = water entering the domain at that node. A
+        seepage face cannot admit water, so a node held at P = 0 whose
+        reaction turns positive must be released back to Q = 0.
+
+        Plain switching chatters (the active set flips 2->1->0->2
+        indefinitely and the heads never settle), which is the classical
+        difficulty of the nodal-switching algorithm. Two standard cures
+        are applied: a hysteresis band on both decisions, and a per-node
+        switch budget after which the node is frozen in its current state
+        so the active set is guaranteed to settle. ``switches`` is updated
+        in place.
+
+        v0.1.266 — moved out of the Picard loop, unchanged, so that the
+        rescue applies the very same rule.
+        """
+        new_active = set(active)
+        for nid in unknown:
+            if switches.get(nid, 0) >= self.max_node_switches:
+                continue                      # frozen
+            y = self.mesh.nodes[nid].y
+            if nid in active:
+                q_node = (reactions[nid]
+                          if reactions else 0.0)
+                if q_node > q_tol:            # inflow → release
+                    new_active.discard(nid)
+                    switches[nid] = switches.get(nid, 0) + 1
+            else:
+                if H[nid] - y > p_tol:        # positive P → hold at 0
+                    new_active.add(nid)
+                    switches[nid] = switches.get(nid, 0) + 1
+        return new_active
+
+    # ------------------------------------------------------------------
+    def _picard_map(self, bcs, H, active, power: float = 1.0):
+        """One unrelaxed Picard step, G(H): the linear solve with the
+        conductivities of ``H`` and the seepage-face nodes of ``active``
+        held at P = 0. ``power`` raises every relative permeability to
+        that power, the continuation parameter of ``_continuation_newton``
+        (1 is the problem itself)."""
+        kr = self._element_kr(list(H))
+        if power != 1.0:
+            kr = [k ** power for k in kr]
+        extra = {nid: self.mesh.nodes[nid].y for nid in active}
+        return SeepageSolver.solve(self, bcs, kr=kr, extra_dirichlet=extra)
+
+    # ------------------------------------------------------------------
+    def _rescue(self, bcs, H, H_prev, active, unknown, p_tol, q_tol,
+                H_saturated) -> dict:
+        """Look for the fixed point the Picard loop failed to reach
+        (v0.1.266, D124; see ``PICARD_RESCUE``).
+
+        The fixed point is the loop's own: heads H such that the linear
+        solve with the conductivities k(H) returns H, with the seepage-face
+        nodes obeying the loop's switching rule. Two roads, in order:
+
+        1. **Anderson acceleration** of the unrelaxed Picard map
+           G(H) (Anderson 1965; the "type II" form of Walker & Ni 2011,
+           which Lott, Walker, Woodward & Yang 2012 apply to the Picard
+           iteration of variably saturated flow), started from the centre
+           of the loop's last step — the centre of the cycle it was in.
+           Each depth of ``RESCUE_ANDERSON_DEPTHS`` in turn.
+        2. **Continuation with Newton's method** (``_continuation_newton``):
+           the steepness of every permeability function is brought from
+           zero to its own, each step solved by Newton from the previous
+           one.
+
+        Convergence is judged on the UNRELAXED change, max|G(H) - H| below
+        the tolerance, which is stricter than the loop's relaxed test.
+        Each road starts a switch budget of its own: it is a new attempt,
+        and the loop may have spent its budget on the cycle.
+
+        Returns a dict: ``converged``, ``method``, ``iterations`` (map
+        evaluations plus Newton iterations), ``residual`` (the last
+        max|G(H) - H|, m), ``head``, ``active`` and ``switches``.
+        """
+        out = {"converged": False, "method": "failed", "iterations": 0,
+               "residual": float("nan"), "head": H, "active": set(active),
+               "switches": {}}
+        if _np is None:
+            out["method"] = "not available (needs NumPy)"
+            return out
+        start = 0.5 * (_np.asarray(H, dtype=float)
+                       + _np.asarray(H_prev, dtype=float))
+        for depth in RESCUE_ANDERSON_DEPTHS:
+            r = self._anderson(bcs, start, set(active), unknown, p_tol,
+                               q_tol, depth)
+            out["iterations"] += r["iterations"]
+            out["residual"] = r["residual"]
+            if r["converged"]:
+                r["method"] = f"anderson (depth {depth})"
+                r["iterations"] = out["iterations"]
+                return r
+        if _csr is None or _spsolve is None:
+            return out
+        r = self._continuation_newton(bcs, H_saturated, unknown, p_tol,
+                                      q_tol)
+        out["iterations"] += r["iterations"]
+        out["residual"] = r["residual"]
+        if r["converged"]:
+            r["method"] = "continuation-newton"
+            r["iterations"] = out["iterations"]
+            return r
+        return out
+
+    # ------------------------------------------------------------------
+    def _anderson(self, bcs, x0, active, unknown, p_tol, q_tol,
+                  depth: int) -> dict:
+        """Anderson acceleration of G (Walker & Ni 2011, Alg. AA with
+        mixing parameter 1): x_{k+1} = G(x_k) - dG gamma, where gamma
+        minimises |F(x_k) - dF gamma| over the last ``depth`` differences
+        of the residual F = G(x) - x and of G. The history is emptied
+        whenever the seepage-face set changes, since G changes with it."""
+        x = _np.asarray(x0, dtype=float)
+        switches: dict[int, int] = {}
+        dF: list = []
+        dG: list = []
+        F_prev = G_prev = None
+        residual = float("nan")
+        k = 0
+        for k in range(1, RESCUE_ANDERSON_EVALUATIONS + 1):
+            step = self._picard_map(bcs, x, active)
+            if not step.converged:
+                break
+            g = _np.asarray(step.total_head, dtype=float)
+            f = g - x
+            residual = float(_np.max(_np.abs(f)))
+            new_active = self._switch_seepage_face(
+                active, switches, unknown, g, step.reactions, p_tol, q_tol)
+            if new_active != active:
+                active = new_active
+                dF, dG = [], []
+                F_prev = G_prev = None
+                x = g
+                continue
+            if residual < self.tolerance:
+                return {"converged": True, "iterations": k,
+                        "residual": residual, "head": x.tolist(),
+                        "active": active, "switches": switches}
+            if F_prev is not None:
+                dF.append(f - F_prev)
+                dG.append(g - G_prev)
+                if len(dF) > depth:
+                    dF.pop(0)
+                    dG.pop(0)
+            F_prev, G_prev = f, g
+            if dF:
+                gamma = _np.linalg.lstsq(_np.array(dF).T, f, rcond=None)[0]
+                x = g - _np.array(dG).T @ gamma
+            else:
+                x = g
+        return {"converged": False, "iterations": k, "residual": residual,
+                "head": x.tolist(), "active": active, "switches": switches}
+
+    # ------------------------------------------------------------------
+    def _continuation_newton(self, bcs, H0, unknown, p_tol, q_tol) -> dict:
+        """Continuation in the steepness of the permeability functions,
+        each step solved by Newton's method.
+
+        Every relative permeability is raised to a power t, from 0 (kr = 1
+        everywhere: the linear problem, whose solution ``H0`` is) to 1 (the
+        problem itself). Raising kr to t scales log kr, and so the slope of
+        every curve, by t, so a short step in t is a small change of the
+        problem and each Newton solve starts close to its solution (the
+        embedding is the classical natural-parameter continuation of
+        Allgower & Georg 1990). A step that fails is halved; one that
+        converges doubles the next. Within a step the seepage-face set is
+        held fixed for Newton and switched with the loop's rule afterwards,
+        repeating the step until the set stops changing. Newton's method
+        on this equation is compared with Picard's by Paniconi & Putti
+        (1994).
+        """
+        system = _NewtonSystem(self, bcs)
+        H = _np.asarray(H0, dtype=float)
+        active: set = set()
+        switches: dict[int, int] = {}
+        t, dt = 0.0, 0.25
+        newton = 0
+        fail = {"converged": False, "iterations": 0,
+                "residual": float("nan"), "head": list(H0),
+                "active": set(), "switches": {}}
+        while True:
+            tn = min(1.0, t + dt)
+            Hn, act_n, sw_n = H, set(active), dict(switches)
+            ok_step = False
+            for _ in range(len(unknown) + 2):
+                Hn, ok, k = system.newton(Hn, act_n, tn, self.tolerance,
+                                          RESCUE_NEWTON_PER_STEP)
+                newton += k
+                if not ok:
+                    break
+                step = self._picard_map(bcs, Hn, act_n, power=tn)
+                if not step.converged:
+                    break
+                new_active = self._switch_seepage_face(
+                    act_n, sw_n, unknown, step.total_head, step.reactions,
+                    p_tol, q_tol)
+                if new_active == act_n:
+                    ok_step = True
+                    break
+                act_n = new_active
+            if newton > RESCUE_NEWTON_BUDGET:
+                fail["iterations"] = newton
+                return fail
+            if ok_step:
+                H, active, switches, t = Hn, act_n, sw_n, tn
+                if t >= 1.0:
+                    break
+                dt = min(2.0 * dt, 1.0)
+            else:
+                dt *= 0.5
+                if dt < RESCUE_MIN_STEP:
+                    fail["iterations"] = newton
+                    return fail
+        # The answer must be a fixed point of the Picard map itself.
+        step = self._picard_map(bcs, H, active)
+        residual = (float(_np.max(_np.abs(
+            _np.asarray(step.total_head, dtype=float) - H)))
+            if step.converged else float("inf"))
+        return {"converged": residual < self.tolerance, "iterations": newton,
+                "residual": residual, "head": H.tolist(), "active": active,
+                "switches": switches}
 
     # ------------------------------------------------------------------
     def _unsettled_nodes(self, result, unknown, active, p_tol, q_tol

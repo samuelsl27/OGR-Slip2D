@@ -402,13 +402,23 @@ class TestUnsaturatedDam:
             assert abs(a - c) < 1e-6
 
     def test_non_convergence_is_reported(self):
+        # v0.1.266 — with the rescue on, two passes no longer make a run
+        # unconverged (the rescue finishes it), and this test would pass
+        # on its conditional without checking anything. It is the
+        # loop's report that is under test, so the loop runs alone.
+        from ogr_fem2d.solvers import seepage
         props = HydraulicProperties(ks=K_DAM,
                                     model=PermeabilityModel.VAN_GENUCHTEN,
                                     vg_alpha=5.0, vg_n=3.0, kr_min=1e-12)
-        _s, r = self._solve(props, h=1.2, relaxation=1.0,
-                            max_iterations=2)
-        if not r.converged:
-            assert "warning" in r.notes or "error" in r.notes
+        old = seepage.PICARD_RESCUE
+        try:
+            seepage.PICARD_RESCUE = False
+            _s, r = self._solve(props, h=1.2, relaxation=1.0,
+                                max_iterations=2)
+        finally:
+            seepage.PICARD_RESCUE = old
+        assert not r.converged
+        assert "warning" in r.notes or "error" in r.notes
 
     def test_kr_range_reported(self):
         props = HydraulicProperties(ks=K_DAM,

@@ -109,7 +109,11 @@ bajo presa, dupuit en acuífero libre rectangular) con error < 1 %.
 ### ✅ Fase 3 — No saturado + seepage face  *(COMPLETADA en v0.1.27)*
 Funciones k(ψ): Simple, van Genuchten, Fredlund-Xing (registro
 extensible como el de modelos de resistencia). Iteración de Picard con
-subrelajación adaptativa; condición Unknown/seepage face por conmutación
+subrelajación **constante**. Este plan decía «adaptativa» y nunca lo fue:
+lo destapó D124 en v0.1.266. Desde esa versión, cuando el bucle no
+converge, un rescate busca el mismo punto fijo: primero aceleración de
+Anderson y, si no basta, continuación en la pendiente de las curvas
+resuelta con Newton. Condición Unknown/seepage face por conmutación
 nodal. Este es el corazón del módulo y el bloque de mayor riesgo
 numérico.
 *Entregable:* casos del PDF de verificación de flujo (presa homogénea
