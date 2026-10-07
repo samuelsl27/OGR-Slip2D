@@ -1021,8 +1021,33 @@ class UnsaturatedSeepageSolver(SeepageSolver):
         ``tolerance``
             The tolerance the run was judged against.
         ``picard_delta``
-            Unchanged: the last RELAXED change of the loop (while D267 is
-            open, the quantity the stop test reads).
+            The last RELAXED change of the loop, the quantity the stop test
+            reads (see below).
+
+        What the tolerance measures (v0.1.272, D267)
+        --------------------------------------------
+        The loop stops when the RELAXED change w·max|H_new - H| falls below
+        ``tolerance`` and the seepage-face set has stopped changing. The
+        unrelaxed change at that point is below tolerance / w, so a small w
+        loosens the test by 1/w. Measured on the rectangular Gardner dam of
+        ``test_unsaturated_v127`` against the fixed point solved to 1e-12,
+        the converged result lies within 0.06 tolerance (w = 0.8), 0.25
+        (0.4, the groundwater door's), 0.56 (0.3), 0.76 (0.2) and 1.3 (0.1)
+        of it; and that fixed point is unique: w = 0.4 and 0.5 and three
+        different starting fields agree to 3e-13. Judging the unrelaxed
+        change instead would tighten the test by 1/w and move the digits of
+        every model that converges today, for nothing measurable, so it was
+        not done.
+
+        What a very small w does instead: with w = 0.1 the relaxation is so
+        slow that the face set changes at every pass for the first thirty,
+        and a node at the foot of the face spends its switch budget
+        (``DEFAULT_MAX_NODE_SWITCHES``) and freezes held at P = 0 with water
+        going in. The run is then NOT reported converged — ``converged`` is
+        False, ``unsettled_nodes`` 1 and the warning says the face never
+        settled — and its heads are 0.13 m off; with a budget of 50 or more
+        it converges within 1.3 tolerance. That budget against slow
+        relaxation is D279; the groundwater door uses w = 0.4.
         """
         n = self.mesh.node_count
         if n == 0 or not self.mesh.elements:
