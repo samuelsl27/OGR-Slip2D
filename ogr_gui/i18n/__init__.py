@@ -1359,6 +1359,34 @@ _DICTS: dict[str, dict[str, str]] = {
         'Show Grid': 'Mostrar malla',
         'Show Ruler': 'Mostrar regla',
         'Show support face plates and anchorage': 'Mostrar placas y anclajes de los soportes',
+        # v0.1.268 (D191) — the hydraulic-properties dialog: model and soil
+        # labels (translated through a variable, so tr() needs them here),
+        # the water content group and the problems it can show.
+        'Constant': 'Constante',
+        'User Defined': 'Definida por el usuario',
+        'Simple': 'Simple',
+        'Brooks-Corey': 'Brooks-Corey',
+        'Fredlund-Xing': 'Fredlund-Xing',
+        'Gardner': 'Gardner',
+        'van Genuchten': 'van Genuchten',
+        'Sand': 'Arena',
+        'Silt': 'Limo',
+        'Clay': 'Arcilla',
+        'Loam': 'Franco',
+        'k = Ks everywhere (fully saturated).': 'k = Ks en todo el dominio (totalmente saturado).',
+        'Ks is taken from the first point of the user curve.': 'Ks se toma del primer punto de la curva del usuario.',
+        'The van Genuchten permeability uses the alpha, n and m of the water content function below.':
+            'La permeabilidad de van Genuchten usa la alfa, la n y la m de la función de contenido de agua de abajo.',
+        'Water content function (transient analysis)': 'Función de contenido de agua (análisis transitorio)',
+        'The transient analysis reads this van Genuchten curve with every permeability model (an OGR convention); below the water table it reads the specific storage.':
+            'El análisis transitorio lee esta curva de van Genuchten con cualquier modelo de permeabilidad (un convenio de OGR); bajo el nivel freático lee el almacenamiento específico.',
+        'Saturated water content (θs):': 'Contenido de agua saturado (θs):',
+        'Residual water content (θr):': 'Contenido de agua residual (θr):',
+        'Specific storage Ss (1/m):': 'Almacenamiento específico Ss (1/m):',
+        'Read only by a transient groundwater analysis.': 'Solo lo lee un análisis transitorio de agua subterránea.',
+        'The water contents need 0 <= wc_res < wc_sat <= 1.': 'Los contenidos de agua deben cumplir 0 <= θr < θs <= 1.',
+        'A user-defined curve needs at least two (suction, permeability) points.':
+            'Una curva definida por el usuario necesita al menos dos puntos (succión, permeabilidad).',
         'Simple is an OGR convention: the reference does not publish its function. General: kr drops one decade over the first 100 kPa of suction, then stays constant. Ks does not change the shape of the curve.':
             'Simple es un convenio de OGR: la referencia no publica su función. General: kr baja una década en los primeros 100 kPa de succión y después se mantiene constante. Ks no cambia la forma de la curva.',
         'Simplify Boundary': 'Simplificar contorno',

@@ -111,7 +111,8 @@ SUCTION_UNIT = {
 #: The parameters each permeability function READS (v0.1.200). What every
 #: model reads besides these — Ks, anisotropy, the kr floor and the
 #: water-retention curve of the transient analysis (van Genuchten's alpha,
-#: n and m for EVERY model, with theta_s, theta_r and Ss) — is in
+#: n and m for EVERY model, with theta_s, theta_r and Ss: an OGR
+#: convention, see ``HydraulicProperties.water_content``, D191) — is in
 #: :data:`COMMON_FIELDS`. A parameter of another model is kept, as the
 #: interface keeps each model's page, but it moves nothing.
 MODEL_FIELDS = {

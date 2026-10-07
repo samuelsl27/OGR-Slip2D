@@ -18,6 +18,18 @@ Follows the reference layout reverse-engineered in
   only for the models that have a library (Brooks-Corey, Fredlund-Xing,
   Gardner, van Genuchten).
 
+v0.1.268 (D191) — the **water content function** of the transient
+analysis is a group of its own, visible with every model: theta_s,
+theta_r, the van Genuchten alpha, n and m, and the specific storage Ss.
+Until this version alpha and n sat on the van Genuchten page only, and
+theta_s, theta_r and Ss on none, although the transient reads all of them
+with ANY permeability model: a material with a user curve had five
+parameters moving its transient that the user could neither see nor
+change. alpha, n and m are the same widgets as before (one set: they are
+both the van Genuchten permeability and the retention curve of every
+model, an OGR convention); theta_s, theta_r and Ss are greyed out when no
+transient analysis reads them (``rules.transient_storage_is_read``).
+
 Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
@@ -46,6 +58,7 @@ from ogr_core.hydraulic import (
     SimpleSoilType,
     library_for,
 )
+from ogr_core.project.rules import transient_storage_is_read
 from ogr_gui.i18n import tr  # noqa: E402
 
 _MODEL_LABELS = [
@@ -126,7 +139,7 @@ class HydraulicPropertiesDialog(QDialog):
         row.addWidget(QLabel(tr("Model:")))
         self.cbo_model = QComboBox()
         for mdl, label in _MODEL_LABELS:
-            self.cbo_model.addItem(label, mdl)
+            self.cbo_model.addItem(tr(label), mdl)
         self.cbo_model.currentIndexChanged.connect(self._on_model_changed)
         row.addWidget(self.cbo_model, 1)
         self.btn_pick = QPushButton(tr("Pick…"))
@@ -139,9 +152,19 @@ class HydraulicPropertiesDialog(QDialog):
 
         self.stack = QStackedWidget()
         self._pages: dict[PermeabilityModel, QWidget] = {}
+        self._build_water_content_group()
         self._build_pages()
         fm.addWidget(self.stack)
         right.addWidget(gb_m, 1)
+        right.addWidget(self.gb_wc)
+
+        # v0.1.268 (D191) — what makes the current material unusable, in
+        # words, inside the dialog (a message box would block a test). It
+        # is where a User Defined material without a curve says so.
+        self.lbl_problems = QLabel("")
+        self.lbl_problems.setWordWrap(True)
+        self.lbl_problems.setStyleSheet("color: #b00020;")
+        right.addWidget(self.lbl_problems)
 
         bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         bb.accepted.connect(self._accept)
@@ -163,7 +186,7 @@ class HydraulicPropertiesDialog(QDialog):
         ):
             w = QWidget()
             v = QVBoxLayout(w)
-            v.addWidget(QLabel(text))
+            v.addWidget(QLabel(tr(text)))
             v.addStretch(1)
             self._pages[mdl] = w
             self.stack.addWidget(w)
@@ -173,7 +196,7 @@ class HydraulicPropertiesDialog(QDialog):
         f = QFormLayout(w)
         self.cbo_soil = QComboBox()
         for st, label in _SOIL_LABELS:
-            self.cbo_soil.addItem(label, st)
+            self.cbo_soil.addItem(tr(label), st)
         f.addRow(tr("Soil type:"), self.cbo_soil)
         # v0.1.267 (D190): the curve behind Simple is OGR's own convention
         # (see permeability_models.kr_simple). The user is told so where
@@ -220,9 +243,33 @@ class HydraulicPropertiesDialog(QDialog):
         self._pages[PermeabilityModel.GARDNER] = w
         self.stack.addWidget(w)
 
-        # van Genuchten
+        # van Genuchten — its alpha, n and m are those of the water content
+        # function below (one set of widgets; v0.1.268, D191)
         w = QWidget()
-        f = QFormLayout(w)
+        v = QVBoxLayout(w)
+        note = QLabel(tr(
+            "The van Genuchten permeability uses the alpha, n and m of the "
+            "water content function below."))
+        note.setWordWrap(True)
+        v.addWidget(note)
+        v.addStretch(1)
+        self._pages[PermeabilityModel.VAN_GENUCHTEN] = w
+        self.stack.addWidget(w)
+
+    def _build_water_content_group(self) -> None:
+        """theta_s, theta_r, alpha, n, m and Ss, for every model."""
+        self.gb_wc = QGroupBox(tr("Water content function (transient analysis)"))
+        f = QFormLayout(self.gb_wc)
+        note = QLabel(tr(
+            "The transient analysis reads this van Genuchten curve with "
+            "every permeability model (an OGR convention); below the water "
+            "table it reads the specific storage."))
+        note.setWordWrap(True)
+        f.addRow(note)
+        self.sp_wc_sat = _spin(0.0, 1.0, 0.4, 4, 0.01)
+        self.sp_wc_res = _spin(0.0, 1.0, 0.05, 4, 0.01)
+        f.addRow(tr("Saturated water content (θs):"), self.sp_wc_sat)
+        f.addRow(tr("Residual water content (θr):"), self.sp_wc_res)
         self.sp_vg_alpha = _spin(1e-9, 1e4, 3.6, 6, 0.1)
         self.sp_vg_n = _spin(1.0001, 20.0, 1.56, 4, 0.05)
         self.chk_custom_m = QCheckBox(tr("Custom m"))
@@ -232,8 +279,19 @@ class HydraulicPropertiesDialog(QDialog):
         f.addRow(tr("alpha (1/m):"), self.sp_vg_alpha)
         f.addRow(tr("n:"), self.sp_vg_n)
         f.addRow(self.chk_custom_m, self.sp_vg_m)
-        self._pages[PermeabilityModel.VAN_GENUCHTEN] = w
-        self.stack.addWidget(w)
+        # Ten decimals: with six, opening the dialog and pressing OK set an
+        # Ss of 1e-7 1/m to zero, because QDoubleSpinBox rounds on setValue.
+        self.sp_ss = _spin(0.0, 1.0, 1e-5, 10, 1e-5)
+        f.addRow(tr("Specific storage Ss (1/m):"), self.sp_ss)
+        # Read only by a transient analysis (rule 7): greyed out otherwise.
+        read = transient_storage_is_read(self.project)
+        for wdg in (self.sp_wc_sat, self.sp_wc_res, self.sp_ss):
+            wdg.setEnabled(read)
+            if not read:
+                wdg.setToolTip(tr(
+                    "Read only by a transient groundwater analysis."))
+        for wdg in (self.sp_wc_sat, self.sp_wc_res, self.sp_ss):
+            wdg.valueChanged.connect(self._refresh_problems)
 
     # ==================================================================
     def _on_model_changed(self, _idx: int) -> None:
@@ -245,6 +303,20 @@ class HydraulicPropertiesDialog(QDialog):
         self.sp_ks.setEnabled(mdl != PermeabilityModel.USER_DEFINED)
         # Pick is only offered for models with a parameter library
         self.btn_pick.setEnabled(bool(library_for(mdl)))
+        self._refresh_problems()
+
+    def _refresh_problems(self, *_args) -> None:
+        """Show what makes the material being edited unusable (v0.1.268,
+        D191): the widgets' values applied to a copy, asked to
+        ``HydraulicProperties.problems``. Nothing is blocked; it is said."""
+        if not (0 <= self._current < len(self._props)) or \
+                not hasattr(self, "lbl_problems"):
+            return
+        probe = HydraulicProperties.from_dict(
+            self._props[self._current].to_dict())
+        self._write(probe)
+        self.lbl_problems.setText(
+            "\n".join(tr(text) for text in probe.problems()))
 
     def _on_material_changed(self, row: int) -> None:
         if self._current >= 0:
@@ -273,12 +345,18 @@ class HydraulicPropertiesDialog(QDialog):
         self.sp_vg_n.setValue(p.vg_n)
         self.chk_custom_m.setChecked(p.vg_custom_m)
         self.sp_vg_m.setValue(p.vg_m)
+        self.sp_wc_sat.setValue(p.wc_sat)
+        self.sp_wc_res.setValue(p.wc_res)
+        self.sp_ss.setValue(p.specific_storage)
         self._on_model_changed(0)
 
     def _store(self, row: int) -> None:
         if not (0 <= row < len(self._props)):
             return
-        p = self._props[row]
+        self._write(self._props[row])
+
+    def _write(self, p: HydraulicProperties) -> None:
+        """The widgets' values into ``p``."""
         p.ks = self.sp_ks.value()
         p.k2_k1 = self.sp_k2k1.value()
         p.k1_angle_deg = self.sp_angle.value()
@@ -295,6 +373,9 @@ class HydraulicPropertiesDialog(QDialog):
         p.vg_n = self.sp_vg_n.value()
         p.vg_custom_m = self.chk_custom_m.isChecked()
         p.vg_m = self.sp_vg_m.value()
+        p.wc_sat = self.sp_wc_sat.value()
+        p.wc_res = self.sp_wc_res.value()
+        p.specific_storage = self.sp_ss.value()
 
     # ==================================================================
     def _pick(self) -> None:

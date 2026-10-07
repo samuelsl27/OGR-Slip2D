@@ -163,9 +163,12 @@ def hydraulic_set(ws, material: str, project_id: Optional[str] = None,
         project._notify("material_modified")
         if hp.model != PermeabilityModel.VAN_GENUCHTEN and any(
                 k.startswith("vg_") for k in props):
+            # v0.1.268 (D191): one van Genuchten curve as the retention of
+            # every model is OGR's convention (see water_content).
             notes.append("vg_alpha, vg_n and vg_m also define this "
                          "material's water-retention curve, which only the "
-                         "transient analysis reads.")
+                         "transient analysis reads (an OGR convention: the "
+                         "van Genuchten curve serves every model).")
         if not any(mm.pore_pressure == PorePressureType.FEM_SEEPAGE
                    for mm in project.materials):
             notes.append("No material takes its pore pressure from the "

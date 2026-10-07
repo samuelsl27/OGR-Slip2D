@@ -1530,3 +1530,20 @@ def reset_fem_mesh(project) -> list[str]:
     """Remove the mesh and everything computed on it (see
     :func:`set_fem_mesh`); returns what was dropped."""
     return set_fem_mesh(project, None)
+
+
+def transient_storage_is_read(project) -> bool:
+    """True when the water contents and the specific storage of the
+    materials move a number: only a transient groundwater analysis reads
+    them (``TransientSeepageSolver``: the stored water and the moisture
+    capacity of every step). A steady analysis, the slope stability and
+    the coupling never do.
+
+    v0.1.268 (D191) — the hydraulic-properties dialog shows theta_s,
+    theta_r and Ss for every model and greys them out when this is False,
+    so a field that changes nothing says so (rule 7). Alpha, n and m are
+    NOT governed by this rule: they are also the permeability of the van
+    Genuchten model, which a steady analysis reads.
+    """
+    gw = getattr(getattr(project, "settings", None), "groundwater", None)
+    return bool(getattr(gw, "transient", False))

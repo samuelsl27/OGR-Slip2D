@@ -240,6 +240,17 @@ class TestTranslationCompleteness:
                    # "Cortante"), which is what says this one is a name and
                    # not a forgotten entry.
                    "Ito & Matsui",
+                   # v0.1.268 (D191) - the permeability models are named
+                   # after their authors (Brooks & Corey 1964, Fredlund &
+                   # Xing 1994, Gardner 1958, van Genuchten 1980), proper
+                   # nouns like "Ito & Matsui" above, and "Simple" is the
+                   # same word in Spanish. The OTHER entries of the same
+                   # combos ARE translated ("Constant" -> "Constante",
+                   # "User Defined" -> "Definida por el usuario", "Loam" ->
+                   # "Franco"), which says these are names, not forgotten
+                   # entries.
+                   "Simple", "Brooks-Corey", "Fredlund-Xing", "Gardner",
+                   "van Genuchten",
                    # v0.1.127 - the symbol for the critical seismic
                    # coefficient, in the same class as "Cr:", "d:" and
                    # "mi:" above: notation, not prose. The words around

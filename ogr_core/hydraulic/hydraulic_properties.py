@@ -235,11 +235,25 @@ class HydraulicProperties:
 
         Uses the van Genuchten (1980) retention curve for every model,
         parameterised by ``vg_alpha``/``vg_n`` and the saturated and
-        residual water contents. The reference likewise keeps the
-        retention curve separate from the permeability function: the
-        latter governs how fast water MOVES, the former how much water is
-        STORED, and only the second matters for the transient storage
-        term.
+        residual water contents: the permeability function governs how
+        fast water MOVES, this curve how much is STORED, and only the
+        second enters the transient storage term.
+
+        That one curve serves every permeability model is an OGR
+        CONVENTION (v0.1.268, D191). This said that the reference "likewise
+        keeps the retention curve separate", and its help does not say so:
+        there theta_s, theta_r and mv are common to every model, the van
+        Genuchten alpha, n and m belong to the van Genuchten model only,
+        and mv is described as the slope of the water content curve the
+        transient needs, without the formula. Measured against the
+        published transients of the groundwater verification problems 17
+        and 18 (v0.1.268): a STORAGE CONSTANT AT gamma_w mv above the water
+        table, the literal reading of that description, is the worst of the
+        three readings tried (5.1 m off on problem 18's toe slope at 19 656
+        h), and this curve with alpha = 0.036 1/m the best (0.6 m; its
+        water table at 16 383 h in problem 17 within 0.05 m of the
+        figure). So the convention stays, and is now visible: the
+        hydraulic-properties dialog shows it with every model.
         """
         if suction <= 0.0:
             return self.wc_sat
