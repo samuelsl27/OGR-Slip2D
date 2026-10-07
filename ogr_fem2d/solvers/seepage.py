@@ -1048,6 +1048,20 @@ class UnsaturatedSeepageSolver(SeepageSolver):
         settled — and its heads are 0.13 m off; with a budget of 50 or more
         it converges within 1.3 tolerance. That budget against slow
         relaxation is D279; the groundwater door uses w = 0.4.
+
+        How precisely the seepage face is resolved (v0.1.273, D266)
+        -----------------------------------------------------------
+        On that dam the converged state is unique. Not everywhere: the
+        switching accepts a released node whose pressure is up to ``p_tol``
+        (0.02 times the element size) and a held node whose inflow is up
+        to ``q_tol``, and more than one face set can satisfy both. Over the
+        53 unsaturated steady rows of the verification bank, run with w
+        from 0.2 to 0.8, 4 rows land on another face set at another w (or
+        after the rescue instead of the loop): one to five face nodes, 0.2
+        to 2.4 cm of head, always below ``p_tol`` (1.4 and 4.2 cm in those
+        meshes). The exit point is resolved to a node and the face
+        pressures to ``p_tol``; that is the precision of this algorithm,
+        not a convergence error (D280).
         """
         n = self.mesh.node_count
         if n == 0 or not self.mesh.elements:
@@ -1173,15 +1187,20 @@ class UnsaturatedSeepageSolver(SeepageSolver):
                 f"{self.max_node_switches}). The free surface this "
                 f"reports is not the converged one.")
         elif not converged and rescue is None:
+            # v0.1.273 (D266) — this told the user to try "a smaller
+            # relaxation factor or a finer mesh". Neither is advice: the
+            # relaxation is not a setting anywhere a user can reach (see
+            # ``solve_project_groundwater``), and a finer mesh is what brings
+            # on the cycle the rescue exists for (D124). This branch is only
+            # reached with the rescue switched off.
             final.notes["warning"] = (
                 f"Picard iteration did not converge in "
                 f"{self.max_iterations} steps (last change "
-                f"{history[-1]:.3e} m). Try a smaller relaxation factor "
-                f"or a finer mesh.")
+                f"{history[-1]:.3e} m), and the rescue is switched off.")
         elif not converged:
             # v0.1.266 — the old advice is wrong on both counts when the
             # rescue has run: no relaxation breaks the cycle it exists
-            # for, and a finer mesh is what brings the cycle on (D124).
+            # for, and refining is what brings the cycle on (D124).
             final.notes["warning"] = (
                 f"Picard iteration did not converge in "
                 f"{self.max_iterations} steps (last change "
@@ -1899,9 +1918,12 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
             })
             last.notes.update(initial_notes)
             if not all_ok:
+                # v0.1.273 (D266) — both are settings of the project (the
+                # transient's time steps and Picard iterations per step); the
+                # relaxation factor this used to suggest is not
                 last.notes["warning"] = (
                     f"stage {k}: some time steps did not converge; try "
-                    f"more time steps or a smaller relaxation factor")
+                    f"more time steps or more Picard iterations per step")
             results.append(last)
             t_prev = stage.time
         return results

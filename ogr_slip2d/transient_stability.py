@@ -169,6 +169,30 @@ def solve_project_groundwater(project, *, progress_cb: Optional[Callable]
     with its free surface and its seepage faces. That other function is
     the saturated linear door and stays as it is; confined cases are
     validated against it.
+
+    Why the relaxation is not a project setting (v0.1.273, D266)
+    ------------------------------------------------------------
+    The steady solve uses w = 0.4, 200 Picard passes and tolerance 1e-5,
+    and the transient w = 0.5, fixed here. They were measured before being
+    left that way, on the 53 unsaturated steady rows of the verification
+    bank (every row of groundwater manual 05 that has one, both meshes, and
+    02-010 and 02-038), with w = 0.2, 0.3, 0.4, 0.6 and 0.8:
+
+    * convergence never depends on w: all 53 rows converge with all five,
+      the rescue (D124) catching the ones the loop alone does not, so a
+      smaller w never turns a failure into a result — the advice the old
+      warning gave was never true on the bank;
+    * in 49 rows the converged heads agree with those of w = 0.4 within
+      about two tolerances (median 0.55);
+    * in 4 rows a different w lands on another seepage-face set — one to
+      five nodes, 0.2 to 2.4 cm — always inside the pressure band p_tol
+      within which the face switching accepts a state
+      (``UnsaturatedSeepageSolver.solve_unsaturated``; D280).
+
+    A setting whose only measured effect is to pick another admissible
+    state of the face inside its band is not one a user could act on
+    (rule 7), so there is none. The transient's own settings — time steps,
+    Picard iterations per step, tolerance — are in the project settings.
     """
     from ogr_fem2d.solvers import UnsaturatedSeepageSolver
 
