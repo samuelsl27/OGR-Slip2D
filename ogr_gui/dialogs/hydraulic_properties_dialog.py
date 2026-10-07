@@ -175,6 +175,16 @@ class HydraulicPropertiesDialog(QDialog):
         for st, label in _SOIL_LABELS:
             self.cbo_soil.addItem(label, st)
         f.addRow(tr("Soil type:"), self.cbo_soil)
+        # v0.1.267 (D190): the curve behind Simple is OGR's own convention
+        # (see permeability_models.kr_simple). The user is told so where
+        # the model is chosen, not only in a docstring.
+        self.lbl_simple_note = QLabel(tr(
+            "Simple is an OGR convention: the reference does not publish "
+            "its function. General: kr drops one decade over the first "
+            "100 kPa of suction, then stays constant. Ks does not change "
+            "the shape of the curve."))
+        self.lbl_simple_note.setWordWrap(True)
+        f.addRow(self.lbl_simple_note)
         self._pages[PermeabilityModel.SIMPLE] = w
         self.stack.addWidget(w)
 

@@ -1359,6 +1359,8 @@ _DICTS: dict[str, dict[str, str]] = {
         'Show Grid': 'Mostrar malla',
         'Show Ruler': 'Mostrar regla',
         'Show support face plates and anchorage': 'Mostrar placas y anclajes de los soportes',
+        'Simple is an OGR convention: the reference does not publish its function. General: kr drops one decade over the first 100 kPa of suction, then stays constant. Ks does not change the shape of the curve.':
+            'Simple es un convenio de OGR: la referencia no publica su función. General: kr baja una década en los primeros 100 kPa de succión y después se mantiene constante. Ks no cambia la forma de la curva.',
         'Simplify Boundary': 'Simplificar contorno',
         'Simulated Annealing Search Options': 'Opciones de búsqueda por recocido simulado',
         'Slip surfaces': 'Superficies de rotura',

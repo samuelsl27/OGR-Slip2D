@@ -49,13 +49,16 @@ Mualem restriction; ``custom_m`` releases it):
     Se = [ 1 + (alpha*h)^n ]^(-m)
     kr = Se^(1/2) * [ 1 - (1 - Se^(1/m))^m ]^2
 
-**Simple** reproduces the documented behaviour: for the *General* soil
-type the permeability drops by one order of magnitude over the initial
-range of suction and then stays constant. The soil-type variants (sand,
-silt, clay, loam) use the same shape with a characteristic suction scale
-and drop magnitude per texture — sands lose permeability abruptly at low
-suction, clays gradually over a much wider range — which is the
-qualitative behaviour the literature curves show.
+**Simple** is a CONVENTION OF OGR, not a published function (v0.1.267,
+D190). The reference describes its own Simple model only in words: built
+from the magnitude of Ks and a soil type; for *General* the permeability
+drops one order of magnitude over "the initial range" of suction and then
+stays constant; the textures follow "average curves" of typical literature
+values. It publishes neither the range, nor how Ks enters, nor the
+curves, and no verification case pins them down (measured: on the bank's
+problems the mesh moves the answers as much as any reading of the range).
+OGR keeps that shape with numbers of its own, ``_SIMPLE_PARAMS``, which
+do NOT depend on Ks. See ``kr_simple`` for what each pair means.
 
 All functions are clamped to a floor ``kr_min`` so the conductivity
 matrix never becomes singular in very dry regions: this is standard
@@ -125,11 +128,9 @@ COMMON_FIELDS = ("ks", "k2_k1", "k1_angle_deg", "model", "kr_min",
                  "wc_res", "specific_storage")
 
 
-# Characteristic suction scale [kPa] and decades of permeability drop for
-# the Simple model. GENERAL matches the documented behaviour (one order
-# of magnitude over the initial suction range, then constant); the
-# textures follow the qualitative trend of published curves: coarse soils
-# desaturate abruptly at low suction, fine soils gradually.
+# Suction range psi_ref [kPa] and decades of permeability drop of the Simple
+# model: an OGR CONVENTION, without a source (v0.1.267, D190; the reasons
+# are in ``kr_simple``). Changing a pair moves every project that uses it.
 _SIMPLE_PARAMS = {
     SimpleSoilType.GENERAL: (100.0, 1.0),
     SimpleSoilType.SAND: (10.0, 4.0),
@@ -146,7 +147,37 @@ def kr_constant(psi: float, p) -> float:
 
 def kr_simple(psi: float, p) -> float:
     """Log-linear drop of ``decades`` orders of magnitude over the
-    initial suction range ``psi_ref``, constant afterwards."""
+    initial suction range ``psi_ref``, constant afterwards:
+
+        kr = 10^(-decades * min(1, psi / psi_ref)),   psi in kPa.
+
+    An OGR convention (see the module docstring), with these reasons:
+
+    * **General (100 kPa, 1 decade).** The one decade is the reference's
+      own description. The range is not published; 100 kPa (about 10 m of
+      suction) covers the suctions of the unsaturated zone of most slope
+      and embankment problems, so the drop happens where the model is used
+      and the plateau beyond it is a floor, not a regime.
+    * **Textures** keep the ordering every published average curve shows
+      (coarse soils lose permeability at low suction and steeply, fine
+      soils at high suction and gradually): Sand (10 kPa, 4 decades), Silt
+      (50, 3), Loam (100, 3), Clay (1500, 2). They are milder than the
+      Mualem-van Genuchten curves of the textural means of Carsel & Parrish
+      (1988) at the same suctions (Sand about 8 decades at 10 kPa, Loam 6 at
+      100 kPa, Clay 7 at 1500 kPa; Silt about 4 at 50 kPa), which is
+      deliberate: Simple is a coarse model for locating a phreatic surface,
+      and a user who wants a texture's real curve has the van Genuchten
+      library.
+    * **Ks does not enter.** The reference says its curve depends on the
+      magnitude of Ks, without saying how. Capillary scaling (Young-Laplace
+      with Kozeny-Carman; e.g. Guarracino 2007, Ks = 4.65e4 phi alpha^2
+      with Ks in cm/day and alpha in 1/cm)
+      would make the suction range shrink as Ks^(-1/2), but that law is
+      written for van Genuchten's alpha, not for this range, and it would
+      tie the result to the unit K is entered in. Measured on the bank's
+      problems 1, 4 and 5 (v0.1.267): no reading of the range is told
+      apart by them from the others.
+    """
     if psi <= 0.0:
         return 1.0
     psi_ref, decades = _SIMPLE_PARAMS.get(
