@@ -1512,12 +1512,15 @@ class InterpretWindow(QMainWindow):
                          None)
         return bool(getattr(report, "applied", False))
 
-    def _plot_xy(self, title, series, xlabel, ylabel, marker="o"):
+    def _plot_xy(self, title, series, xlabel, ylabel, marker="o",
+                 yscale="linear"):
         """A one-off XY chart window.
 
         Centralised because eight of the new entries are 'plot these
         numbers': repeating the matplotlib boilerplate eight times is how
-        eight subtly different charts appear.
+        eight subtly different charts appear. ``yscale`` is matplotlib's
+        (v0.1.269: the convergence chart spans ten decades, and plotting
+        log10 of the values instead would turn a zero change into -inf).
         """
         try:
             import matplotlib
@@ -1536,6 +1539,8 @@ class InterpretWindow(QMainWindow):
         ax = fig.add_subplot(111)
         for label, xs, ys in series:
             ax.plot(xs, ys, marker=marker, label=label)
+        if yscale != "linear":
+            ax.set_yscale(yscale)
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
         ax.grid(True, alpha=0.3)
@@ -2266,8 +2271,38 @@ class InterpretWindow(QMainWindow):
                                 "for this run."))
             return
         self._plot_xy(tr("Iteration history"),
-                      [("", list(range(1, len(hist) + 1)), list(hist))],
-                      tr("Iteration"), tr("Maximum change"))
+                      [p[:3] for p in self._gw_history_parts(seepage)],
+                      tr("Iteration"),
+                      tr("Maximum head change, unrelaxed (m)"))
+
+    @staticmethod
+    def _gw_history_parts(seepage) -> list:
+        """The published history (``solve_unsaturated``, v0.1.269) as one
+        chart series per part — the Picard loop and each road of the
+        rescue — as ``(label, xs, ys, name)``; xs count passes from 1
+        across the whole run. A single part gets no label."""
+        notes = seepage.notes or {}
+        hist = [float("nan") if v is None else float(v)
+                for v in notes.get("history") or []]
+        segments = notes.get("history_segments") or [["picard", 0]]
+        out = []
+        for k, (name, start) in enumerate(segments):
+            end = (segments[k + 1][1] if k + 1 < len(segments)
+                   else len(hist))
+            if end <= start:
+                continue
+            if name == "picard":
+                label = tr("Picard loop")
+            elif name.startswith("anderson"):
+                label = (tr("Rescue: Anderson acceleration (depth %s)")
+                         % name.split()[-1])
+            else:
+                label = tr("Rescue: continuation with Newton's method")
+            out.append((label, list(range(start + 1, end + 1)),
+                        hist[start:end], name))
+        if len(out) == 1:
+            out[0] = ("",) + out[0][1:]
+        return out
 
     def _gw_convergence(self) -> None:
         seepage = self._seepage()
@@ -2282,9 +2317,27 @@ class InterpretWindow(QMainWindow):
                 % (getattr(seepage, "iterations", 0),
                    tr("yes") if seepage.converged else tr("no")))
             return
-        self._plot_xy(tr("Convergence"),
-                      [("", list(range(1, len(hist) + 1)), list(hist))],
-                      tr("Iteration"), tr("Residual"))
+        notes = seepage.notes or {}
+        parts = self._gw_history_parts(seepage)
+        series = [p[:3] for p in parts]
+        # The thresholds each part actually stopped on: the loop judges
+        # the RELAXED change, so its line is tolerance / relaxation in the
+        # unrelaxed units of the series (D267); the rescue judges the
+        # unrelaxed change against the tolerance itself.
+        tol = notes.get("tolerance")
+        w = notes.get("relaxation")
+        loop = [p[1] for p in parts if p[3] == "picard"]
+        rescue = [x for p in parts if p[3] != "picard" for x in p[1]]
+        if tol and w and loop:
+            series.append((tr("Stop threshold of the loop "
+                              "(tolerance / relaxation)"),
+                           [loop[0][0], loop[0][-1]], [tol / w, tol / w]))
+        if tol and rescue:
+            series.append((tr("Stop threshold of the rescue (tolerance)"),
+                           [rescue[0], rescue[-1]], [tol, tol]))
+        self._plot_xy(tr("Convergence"), series, tr("Iteration"),
+                      tr("Maximum head change, unrelaxed (m)"),
+                      yscale="log")
 
     def _export_nodal_values(self) -> None:
         """Every nodal field to CSV."""

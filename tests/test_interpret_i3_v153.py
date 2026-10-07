@@ -301,13 +301,22 @@ class TestGroundwaterEntries:
         assert w._act_gw_iter.isEnabled() is True
         assert w._act_gw_conv.isEnabled() is True
 
-    def test_iteration_history_has_no_recorded_series(self):
-        """The solver reports an iteration count but no per-iteration
-        series, so these entries fall back to a summary."""
+    def test_iteration_history_is_recorded_and_drawn(self):
+        """v0.1.269 (D265) — this test pinned the gap: it demanded that
+        ``history`` be None, and the two entries could only ever show a
+        summary. The solver now publishes one entry per pass, and both
+        entries draw it (through the non-modal chart, never ``_info``)."""
         p = self._with_seepage()
         _p, _r, w = _interpret(p)
-        assert (p.seepage_result.notes or {}).get("history") is None
-        assert getattr(p.seepage_result, "iterations", 0) >= 1
+        hist = (p.seepage_result.notes or {}).get("history")
+        assert isinstance(hist, list)
+        assert len(hist) == p.seepage_result.iterations >= 1
+        plotted, shown = [], []
+        w._plot_xy = lambda *a, **k: plotted.append(a)
+        w._info = lambda *a, **k: shown.append(a)
+        w._gw_iteration_history()
+        w._gw_convergence()
+        assert len(plotted) == 2 and not shown, (plotted, shown)
 
     def test_user_data_expression_is_sandboxed(self):
         """No builtins: a project file must not be able to run arbitrary

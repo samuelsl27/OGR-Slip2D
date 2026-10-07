@@ -149,6 +149,27 @@ class SeepageBoundaryConditions:
 
 
 # ======================================================================
+def _finite_or_none(v):
+    """``v`` with every non-finite float, at any depth of lists and
+    dicts, replaced by None (see ``SeepageResult._json_safe``)."""
+    if isinstance(v, float):
+        return v if math.isfinite(v) else None
+    if isinstance(v, (list, tuple)):
+        return [_finite_or_none(x) for x in v]
+    if isinstance(v, dict):
+        return {k: _finite_or_none(x) for k, x in v.items()}
+    return v
+
+
+def _change_series(values) -> list:
+    """A convergence series as it is published in ``notes["history"]``:
+    four significant figures, which is all a chart of it can show, and
+    None where there is no number (v0.1.269, D265)."""
+    return [float("%.4g" % v) if math.isfinite(v) else None
+            for v in values]
+
+
+# ======================================================================
 @dataclass
 class SeepageResult:
     """Nodal heads plus the derived fields the Interpret view needs.
@@ -234,11 +255,18 @@ class SeepageResult:
         Notes are diagnostics, not results — a key that cannot be written
         is worth losing, but it must never make ``save()`` raise on a
         project the user just spent minutes computing.
+
+        v0.1.269 — a non-finite number is written as null. ``json.dumps``
+        accepts NaN and inf by default and writes ``NaN``, which is not
+        JSON: the .ogr is declared pure JSON, and a ``picard_delta`` of a
+        loop that never ran, or the residual of a rescue whose last solve
+        failed (inf), put one in it.
         """
         out = {}
         for k, v in (notes or {}).items():
+            v = _finite_or_none(v)
             try:
-                json.dumps(v)
+                json.dumps(v, allow_nan=False)
             except (TypeError, ValueError):
                 continue
             out[str(k)] = v
@@ -944,7 +972,33 @@ class UnsaturatedSeepageSolver(SeepageSolver):
     # ------------------------------------------------------------------
     def solve_unsaturated(self, bcs: SeepageBoundaryConditions
                           ) -> SeepageResult:
-        """Picard iteration with seepage-face nodal switching."""
+        """Picard iteration with seepage-face nodal switching.
+
+        The convergence history (v0.1.269, D265) is published in the
+        notes, for the Interpret charts and for anyone asking how a run
+        got where it did:
+
+        ``history``
+            One entry per Picard pass: the UNRELAXED change of the heads,
+            max|H_new - H| in metres, where H_new is the linear solve with
+            the conductivities of H. It is the change the map itself asks
+            for, independent of the relaxation factor w; the loop stops on
+            the RELAXED one, w times it (see ``picard_delta``), so a run
+            that converged ends with an entry below ``tolerance / w``.
+            When the rescue ran, its entries follow, with the same
+            measure max|G(H) - H|: one per Anderson evaluation of the map,
+            and the final one of the continuation (its intermediate steps
+            solve other problems, with kr raised to t < 1, and are left
+            out). Four significant figures; None where there is no number.
+        ``history_segments``
+            ``[name, first index]`` of each part of the series:
+            ``"picard"``, ``"anderson <depth>"``, ``"continuation"``.
+        ``tolerance``
+            The tolerance the run was judged against.
+        ``picard_delta``
+            Unchanged: the last RELAXED change of the loop (while D267 is
+            open, the quantity the stop test reads).
+        """
         n = self.mesh.node_count
         if n == 0 or not self.mesh.elements:
             res = SeepageResult()
@@ -972,6 +1026,9 @@ class UnsaturatedSeepageSolver(SeepageSolver):
         q_scale = max((abs(r) for r in first.reactions), default=0.0)
         q_tol = 1e-3 * q_scale if q_scale > 0 else 1e-14
         history: list[float] = []
+        # v0.1.269 (D265): the unrelaxed change of every pass, published
+        # (``history`` above stays the relaxed one the stop test reads)
+        changes: list[float] = []
         converged = False
         it = 0
         H_prev = H
@@ -991,6 +1048,7 @@ class UnsaturatedSeepageSolver(SeepageSolver):
             w = self.relaxation
             H_relaxed = [(1.0 - w) * H[i] + w * H_new[i] for i in range(n)]
             delta = max(abs(H_relaxed[i] - H[i]) for i in range(n))
+            changes.append(max(abs(H_new[i] - H[i]) for i in range(n)))
             H_prev = H
             H = H_relaxed
             history.append(delta)
@@ -1035,6 +1093,14 @@ class UnsaturatedSeepageSolver(SeepageSolver):
             final.notes["rescue"] = rescue["method"]
             final.notes["rescue_iterations"] = rescue["iterations"]
             final.notes["rescue_residual"] = rescue["residual"]
+        segments = [["picard", 0]]
+        if rescue is not None:
+            segments += [[name, len(changes) + i]
+                         for name, i in rescue["segments"]]
+            changes += rescue["history"]
+        final.notes["history"] = _change_series(changes)
+        final.notes["history_segments"] = segments
+        final.notes["tolerance"] = self.tolerance
         # v0.1.125 — a frozen node is an unresolved boundary condition,
         # and until this version nothing said so: freezing made the
         # active set stop changing, which was read as convergence. The
@@ -1156,14 +1222,23 @@ class UnsaturatedSeepageSolver(SeepageSolver):
 
         Returns a dict: ``converged``, ``method``, ``iterations`` (map
         evaluations plus Newton iterations), ``residual`` (the last
-        max|G(H) - H|, m), ``head``, ``active`` and ``switches``.
+        max|G(H) - H|, m), ``head``, ``active`` and ``switches``; and
+        ``history`` and ``segments``, its part of the published series
+        (see ``solve_unsaturated``), indexed from the rescue's start.
         """
         out = {"converged": False, "method": "failed", "iterations": 0,
                "residual": float("nan"), "head": H, "active": set(active),
-               "switches": {}}
+               "switches": {}, "history": [], "segments": []}
         if _np is None:
             out["method"] = "not available (needs NumPy)"
             return out
+
+        def _done(r, method):
+            r["method"] = method
+            r["iterations"] = out["iterations"]
+            r["history"], r["segments"] = out["history"], out["segments"]
+            return r
+
         start = 0.5 * (_np.asarray(H, dtype=float)
                        + _np.asarray(H_prev, dtype=float))
         for depth in RESCUE_ANDERSON_DEPTHS:
@@ -1171,20 +1246,23 @@ class UnsaturatedSeepageSolver(SeepageSolver):
                                q_tol, depth)
             out["iterations"] += r["iterations"]
             out["residual"] = r["residual"]
+            if r["history"]:
+                out["segments"].append([f"anderson {depth}",
+                                        len(out["history"])])
+                out["history"] += r["history"]
             if r["converged"]:
-                r["method"] = f"anderson (depth {depth})"
-                r["iterations"] = out["iterations"]
-                return r
+                return _done(r, f"anderson (depth {depth})")
         if _csr is None or _spsolve is None:
             return out
         r = self._continuation_newton(bcs, H_saturated, unknown, p_tol,
                                       q_tol)
         out["iterations"] += r["iterations"]
         out["residual"] = r["residual"]
+        if math.isfinite(r["residual"]):
+            out["segments"].append(["continuation", len(out["history"])])
+            out["history"].append(r["residual"])
         if r["converged"]:
-            r["method"] = "continuation-newton"
-            r["iterations"] = out["iterations"]
-            return r
+            return _done(r, "continuation-newton")
         return out
 
     # ------------------------------------------------------------------
@@ -1201,6 +1279,7 @@ class UnsaturatedSeepageSolver(SeepageSolver):
         dG: list = []
         F_prev = G_prev = None
         residual = float("nan")
+        residuals: list[float] = []          # v0.1.269 (D265)
         k = 0
         for k in range(1, RESCUE_ANDERSON_EVALUATIONS + 1):
             step = self._picard_map(bcs, x, active)
@@ -1209,6 +1288,7 @@ class UnsaturatedSeepageSolver(SeepageSolver):
             g = _np.asarray(step.total_head, dtype=float)
             f = g - x
             residual = float(_np.max(_np.abs(f)))
+            residuals.append(residual)
             new_active = self._switch_seepage_face(
                 active, switches, unknown, g, step.reactions, p_tol, q_tol)
             if new_active != active:
@@ -1220,7 +1300,8 @@ class UnsaturatedSeepageSolver(SeepageSolver):
             if residual < self.tolerance:
                 return {"converged": True, "iterations": k,
                         "residual": residual, "head": x.tolist(),
-                        "active": active, "switches": switches}
+                        "active": active, "switches": switches,
+                        "history": residuals}
             if F_prev is not None:
                 dF.append(f - F_prev)
                 dG.append(g - G_prev)
@@ -1234,7 +1315,8 @@ class UnsaturatedSeepageSolver(SeepageSolver):
             else:
                 x = g
         return {"converged": False, "iterations": k, "residual": residual,
-                "head": x.tolist(), "active": active, "switches": switches}
+                "head": x.tolist(), "active": active, "switches": switches,
+                "history": residuals}
 
     # ------------------------------------------------------------------
     def _continuation_newton(self, bcs, H0, unknown, p_tol, q_tol) -> dict:
@@ -1468,6 +1550,12 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
         """Advance one time step of size ``dt`` from ``H_old``.
 
         Returns ``(H_new, active_set, converged, iterations, result)``.
+
+        v0.1.269 (D265) — ``result.notes`` carries this step's convergence
+        history, ``history`` / ``history_segments`` / ``tolerance`` /
+        ``relaxation`` as ``solve_unsaturated`` defines them, so a stage
+        (the result of its last step) shows how its last step converged.
+        The tuple is unchanged: tests and scripts unpack it.
         """
         n = self.mesh.node_count
         mass = self._lumped_mass()
@@ -1496,6 +1584,7 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
         converged = False
         it = 0
         step_result = None
+        changes: list[float] = []
 
         for it in range(1, self.max_picard + 1):
             kr = self._element_kr(H)
@@ -1524,6 +1613,7 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
             w = self.relaxation
             H_rel = [(1.0 - w) * H[i] + w * H_new[i] for i in range(n)]
             delta = max(abs(H_rel[i] - H[i]) for i in range(n))
+            changes.append(max(abs(H_new[i] - H[i]) for i in range(n)))
             H = H_rel
 
             # Seepage-face switching (same convention as Phase 3:
@@ -1548,6 +1638,10 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
                 converged = True
                 break
 
+        step_result.notes.update({
+            "history": _change_series(changes),
+            "history_segments": [["picard", 0]],
+            "tolerance": self.tolerance, "relaxation": self.relaxation})
         return H, active, converged, it, step_result
 
     # ------------------------------------------------------------------
