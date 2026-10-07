@@ -187,8 +187,12 @@ class InterpretGroundwaterWindow(QMainWindow):
         if not r.converged:
             bits.append("NOT CONVERGED")
         warn = r.notes.get("warning")
+        # v0.1.270 (D268): a stage that evolved from an unconverged steady
+        # field says so, under its own warning
+        init = r.notes.get("initial_state_warning")
         self.status.setText("   |   ".join(bits)
-                            + (f"\n{warn}" if warn else ""))
+                            + (f"\n{warn}" if warn else "")
+                            + (f"\n{init}" if init and init != warn else ""))
 
     # ------------------------------------------------------------------
     def _redraw(self) -> None:

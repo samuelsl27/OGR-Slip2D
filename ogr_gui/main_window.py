@@ -202,7 +202,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.269"
+    VERSION = "0.1.270"
 
     def __init__(self) -> None:
         super().__init__()
@@ -3069,6 +3069,13 @@ class MainWindow(QMainWindow):
                    f"{max(result.pore_pressure):.1f}")
             if bad:
                 msg += f"  (stages not converged: {bad})"
+            # v0.1.270 (D268) — here and not only in the driver's warnings,
+            # which this message replaces on the status bar
+            if any(r.notes.get("initial_state_converged") is False
+                   for r in results):
+                from ogr_slip2d.transient_stability import (
+                    INITIAL_STATE_NOT_CONVERGED)
+                msg += "  " + tr(INITIAL_STATE_NOT_CONVERGED)
             self.statusBar().showMessage(msg, 9000)
             return
 

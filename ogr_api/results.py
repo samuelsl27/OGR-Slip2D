@@ -313,7 +313,8 @@ def seepage_field_summary(r) -> Optional[dict]:
                                          for vx, vy in r.velocity), 9)
     notes = {k: v for k, v in (r.notes or {}).items()
              if k in ("error", "warning", "time", "label", "calculate_sf",
-                      "fos", "fos_min", "fos_warning")}
+                      "fos", "fos_min", "fos_warning",
+                      "initial_state_converged", "initial_state_warning")}
     if notes:
         out["notes"] = json_safe(notes)
     return out
@@ -330,7 +331,12 @@ def stage_rows(results) -> list:
             "converged": bool(r.converged), "iterations": r.iterations,
             "fos": n.get("fos"), "fos_min": n.get("fos_min"),
             "fos_warning": n.get("fos_warning"),
-            "error": n.get("error")}))
+            "error": n.get("error"),
+            # v0.1.270 (D268): a stage's own warning (its time steps) and
+            # whether the steady field it started from converged
+            "warning": n.get("warning"),
+            "initial_state_converged": n.get("initial_state_converged"),
+            "initial_state_warning": n.get("initial_state_warning")}))
     return rows
 
 

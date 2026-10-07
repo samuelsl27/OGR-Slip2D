@@ -49,7 +49,16 @@ __all__ = [
     "stage_boundary_conditions",
     "with_stage_water",
     "groundwater_query_solver",
+    "INITIAL_STATE_NOT_CONVERGED",
 ]
+
+#: v0.1.270 (D268). A fixed sentence, because the interface translates the
+#: driver's warnings by using them as keys; the reason itself travels on
+#: every stage as ``notes["initial_state_warning"]``.
+INITIAL_STATE_NOT_CONVERGED = (
+    "The initial steady state of the transient analysis did not converge, "
+    "so every stage starts from an unconverged field (see each stage's "
+    "initial-state warning).")
 
 
 # ======================================================================
@@ -313,6 +322,12 @@ def run_transient_stability(project, method_ids=None, *,
             out.warnings.append(
                 f"The groundwater analysis produced no field: {why}")
             break
+
+    # v0.1.270 (D268) — a transient that starts from a steady field which
+    # did not converge evolves from an unconverged state, and its stages
+    # said nothing. They carry the note; the caller hears it here.
+    if any(r.notes.get("initial_state_converged") is False for r in results):
+        out.warnings.append(INITIAL_STATE_NOT_CONVERGED)
 
     # The stage pressures only reach the limit-equilibrium engine through
     # materials set to FEM_SEEPAGE. Saying so beats reporting a dry slope.

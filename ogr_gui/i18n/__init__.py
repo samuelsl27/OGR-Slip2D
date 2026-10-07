@@ -2373,6 +2373,13 @@ _DICTS: dict[str, dict[str, str]] = {
             "Ningún material toma su presión intersticial del campo de "
             "filtración por elementos finitos, así que los factores por "
             "etapa ignorarían por completo las presiones calculadas.",
+        # v0.1.270 (D268)
+        "The initial steady state of the transient analysis did not "
+        "converge, so every stage starts from an unconverged field (see "
+        "each stage's initial-state warning).":
+            "El permanente inicial del análisis transitorio no convergió, "
+            "así que todas las etapas parten de un campo no convergido "
+            "(véase el aviso del estado inicial de cada etapa).",
 
         # --- v0.1.155 · notas del análisis -------------------------
         "Analysis Notes": "Notas del análisis",

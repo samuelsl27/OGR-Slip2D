@@ -1730,12 +1730,28 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
         Returns one :class:`SeepageResult` per stage, each annotated with
         the stage time, the number of time steps used and the mass
         balance error.
+
+        v0.1.270 (D268) — when the initial field comes from the steady
+        run, every stage says whether that run converged:
+        ``notes["initial_state_converged"]``, and, when it did not,
+        ``notes["initial_state_warning"]`` with the steady run's own
+        reason. A separate key: ``warning`` is the stage's own, and a stage
+        whose time steps fail writes it. The stages' ``converged`` is NOT
+        lowered (the owner's decision): they converged from where they
+        started, and lowering it would also take away their free surface
+        and flux (``ok``). The one exception is a zero-span stage before
+        the first time step: it IS the steady field, unevolved, so it gets
+        that field's ``converged`` and its notes — reporting True there
+        was simply false. A given ``initial_head`` is the user's, and is
+        not judged.
         """
         if not stages:
             return []
         base_bcs = initial_bcs or (stages[0].bcs
                                    or SeepageBoundaryConditions())
 
+        steady = None
+        initial_notes: dict = {}
         if initial_head is not None:
             H = list(initial_head)
         else:
@@ -1755,10 +1771,18 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
                     else "initial steady state failed")
                 return [out]
             H = list(steady.total_head)
+            initial_notes["initial_state_converged"] = bool(steady.converged)
+            if not steady.converged:
+                why = (steady.notes.get("warning")
+                       or steady.notes.get("error") or "")
+                initial_notes["initial_state_warning"] = (
+                    "the initial steady state did not converge"
+                    + (f": {why}" if why else ""))
 
         results: list = []
         active: set = set()
         t_prev = 0.0
+        advanced = False
         for k, stage in enumerate(stages):
             bcs = stage.bcs or base_bcs
             span = max(stage.time - t_prev, 0.0)
@@ -1771,6 +1795,10 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
                                      for p in res.pressure_head]
                 res.gamma_w = self.gamma_w   # a zero-span stage still has
                 res.converged = True         # to survive a save
+                if steady is not None and not advanced:
+                    # v0.1.270 (D268): this stage is the steady field
+                    res.converged = bool(steady.converged)
+                    res.notes.update(steady.notes)
                 # v0.1.125 — ``calculate_sf`` travels with a zero-span
                 # stage too. Without it the INITIAL instant of a
                 # transient — the one stage that always has zero span —
@@ -1781,6 +1809,7 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
                                   "time_steps": 0,
                                   "calculate_sf": stage.calculate_sf,
                                   "label": stage.label})
+                res.notes.update(initial_notes)
                 results.append(res)
                 continue
 
@@ -1794,9 +1823,11 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
                 H, active, ok, it, last = self.step(bcs, H, dt, active)
                 iters += it
                 all_ok = all_ok and ok
+                advanced = True
             if last is None:
                 last = SeepageResult()
                 last.notes["error"] = "no time step computed"
+                last.notes.update(initial_notes)
                 results.append(last)
                 t_prev = stage.time
                 continue
@@ -1815,6 +1846,7 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
                 # stage's name reached nobody.
                 "label": stage.label,
             })
+            last.notes.update(initial_notes)
             if not all_ok:
                 last.notes["warning"] = (
                     f"stage {k}: some time steps did not converge; try "

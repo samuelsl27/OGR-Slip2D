@@ -16,7 +16,7 @@ Public API:
 
 Author: Samuel Sáez López — PhD Student, UPCT
 """
-__version__ = "0.1.269"
+__version__ = "0.1.270"
 
 from .methods import (
     BishopSimplified,
