@@ -29,6 +29,25 @@ from dataclasses import dataclass, field
 from typing import Iterator, Optional
 
 
+#: v0.1.271 (D270) — below this ``shape_ratio`` a triangle is degenerate
+#: (flat). The generator repairs such triangles and the solvers report them;
+#: the bank's healthy meshes have none below 0.1, the flat ones are at 1e-15.
+DEGENERATE_SHAPE_RATIO = 1e-10
+
+
+def triangle_shape_ratio(p1, p2, p3) -> float:
+    """2A / L^2max: 0 for collinear vertices, ~0.87 for an equilateral
+    triangle, and independent of the triangle's size — a RELATIVE measure,
+    unlike the absolute 1e-15 on the determinant that ``shape_gradients``
+    still uses (and that a flat triangle metres across passes)."""
+    (x1, y1), (x2, y2), (x3, y3) = p1, p2, p3
+    det = (x2 - x1) * (y3 - y1) - (x3 - x1) * (y2 - y1)
+    l2 = max((x2 - x1) ** 2 + (y2 - y1) ** 2,
+             (x3 - x2) ** 2 + (y3 - y2) ** 2,
+             (x1 - x3) ** 2 + (y1 - y3) ** 2)
+    return abs(det) / l2 if l2 > 0.0 else 0.0
+
+
 @dataclass(frozen=True)
 class Node:
     """A mesh vertex."""
@@ -83,6 +102,10 @@ class Element:
 
     def min_angle_deg(self, mesh: "Mesh") -> float:
         return min(self.angles_deg(mesh))
+
+    def shape_ratio(self, mesh: "Mesh") -> float:
+        """See :func:`triangle_shape_ratio`."""
+        return triangle_shape_ratio(*self.coords(mesh))
 
     def shape_gradients(self, mesh: "Mesh"):
         """(dN/dx, dN/dy, area) for the three linear shape functions.
@@ -196,6 +219,15 @@ class Mesh:
             ids.add(u)
             ids.add(v)
         return ids
+
+    def degenerate_elements(self) -> list[int]:
+        """Ids of the flat elements (``shape_ratio`` below
+        ``DEGENERATE_SHAPE_RATIO``). v0.1.271 (D270): the generator no
+        longer makes them, but a mesh saved before it did travels in the
+        .ogr; the solvers report these instead of skipping them, because
+        removing one can leave a node with no element in its region."""
+        return [e.id for e in self.elements
+                if e.shape_ratio(self) < DEGENERATE_SHAPE_RATIO]
 
     def is_conforming(self) -> bool:
         """True when no edge is shared by more than two elements (a

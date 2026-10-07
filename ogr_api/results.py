@@ -314,7 +314,8 @@ def seepage_field_summary(r) -> Optional[dict]:
     notes = {k: v for k, v in (r.notes or {}).items()
              if k in ("error", "warning", "time", "label", "calculate_sf",
                       "fos", "fos_min", "fos_warning",
-                      "initial_state_converged", "initial_state_warning")}
+                      "initial_state_converged", "initial_state_warning",
+                      "degenerate_elements", "mesh_warning")}
     if notes:
         out["notes"] = json_safe(notes)
     return out

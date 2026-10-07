@@ -190,9 +190,12 @@ class InterpretGroundwaterWindow(QMainWindow):
         # v0.1.270 (D268): a stage that evolved from an unconverged steady
         # field says so, under its own warning
         init = r.notes.get("initial_state_warning")
+        # v0.1.271 (D270): a mesh saved with flat elements says so
+        mesh_warn = r.notes.get("mesh_warning")
         self.status.setText("   |   ".join(bits)
                             + (f"\n{warn}" if warn else "")
-                            + (f"\n{init}" if init and init != warn else ""))
+                            + (f"\n{init}" if init and init != warn else "")
+                            + (f"\n{mesh_warn}" if mesh_warn else ""))
 
     # ------------------------------------------------------------------
     def _redraw(self) -> None:

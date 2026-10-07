@@ -328,6 +328,28 @@ class SeepageSolver:
         self.materials = materials or {}
         self.gamma_w = gamma_w
         self.default_props = default_props or HydraulicProperties()
+        self._degenerate: Optional[int] = None
+
+    # ------------------------------------------------------------------
+    def _note_degenerate(self, res: SeepageResult) -> None:
+        """v0.1.271 (D270) — say so when the mesh has flat elements.
+
+        The generator repairs them since this version, but a mesh saved by
+        an earlier one travels in the .ogr. They are reported and NOT
+        skipped: removing one can leave a node with no element in its
+        region, and the fix is to regenerate the mesh, which is what the
+        warning says. A mesh without them gets no note at all."""
+        if self._degenerate is None:
+            self._degenerate = (len(self.mesh.degenerate_elements())
+                                if hasattr(self.mesh, "degenerate_elements")
+                                else 0)
+        if self._degenerate:
+            res.notes["degenerate_elements"] = self._degenerate
+            res.notes["mesh_warning"] = (
+                f"the mesh has {self._degenerate} flat element(s) (three "
+                f"collinear nodes): nodes under them do not count as "
+                f"boundary and the conductivity matrix is badly "
+                f"conditioned. Regenerate the mesh.")
 
     # ------------------------------------------------------------------
     def props_for(self, element) -> HydraulicProperties:
@@ -414,6 +436,9 @@ class SeepageSolver:
         if n == 0 or not self.mesh.elements:
             res.notes["error"] = "empty mesh"
             return res
+        # before any early return: a node that only flat elements touch
+        # makes the system singular, and that failure needs this reason
+        self._note_degenerate(res)
 
         fixed = self._dirichlet_values(bcs)
         if extra_dirichlet:
@@ -1698,6 +1723,7 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
             KH[r] += v * H[c]
         res.reactions = [KH[i] - q0[i] for i in range(n)]
         res.converged = True
+        self._note_degenerate(res)
         return res
 
     # ------------------------------------------------------------------

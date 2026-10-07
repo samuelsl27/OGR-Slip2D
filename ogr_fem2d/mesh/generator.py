@@ -47,12 +47,39 @@ from __future__ import annotations
 import math
 from typing import Optional, Sequence
 
-from .mesh import Element, Mesh, Node
+from .mesh import (DEGENERATE_SHAPE_RATIO, Element, Mesh, Node,
+                   triangle_shape_ratio)
 
 try:
     from scipy.spatial import Delaunay as _SciDelaunay
 except ImportError:  # pragma: no cover
     _SciDelaunay = None
+
+#: v0.1.271 (D270) — repair the FLAT triangles a region's Delaunay leaves
+#: on its outline (see ``_repair_flat_triangles``).
+#:
+#: The triangulation of a region is unconstrained: its boundary nodes are
+#: points like any other, and where several of them are collinear on an
+#: edge of the region's outline that is also an edge of their convex hull,
+#: Qhull closes the hull with triangles of zero area (forms 2A/L^2max of
+#: 1e-16). Their centroid lies ON the outline, so the ray-casting filter
+#: keeps them or not by rounding. Measured on the verification bank: 7 on
+#: the slope face of problem 05-007 / 05-020, 16 on the slope face of
+#: 02-038 (every one of its three heights), 7 on the drain contact and the
+#: downstream face of dam 2 of 05-009 at 1500 elements; none anywhere else
+#: (59 meshes). They are not an accuracy
+#: problem but a TOPOLOGICAL one: the long edge of a fan of flat triangles
+#: is the one the mesh counts as boundary, so the nodes under it stop being
+#: boundary nodes (V - E + F came out 0, -3 and -4 instead of 1) and never
+#: receive the seepage-face condition a model puts on its boundary; and
+#: where the domain is metres across rather than centimetres the flat
+#: element is above the absolute 1e-15 of ``shape_gradients`` and enters
+#: the conductivity matrix ~1e15 times stiffer than its neighbours. The
+#: seepage of 02-038 never converged because of it; with them repaired it
+#: converges in all twelve combinations of its heights and curves. A mesh
+#: with no flat triangle is not touched. Switch off to rebuild the meshes
+#: of 0.1.270.
+FLAT_TRIANGLE_REPAIR = True
 
 
 # ======================================================================
@@ -416,11 +443,94 @@ def generate_mesh(
             # Otherwise seed the new points and try again
             interior = interior + bad_cc
 
+    repaired = 0
+    if FLAT_TRIANGLE_REPAIR:
+        elements, repaired = _repair_flat_triangles(registry.nodes,
+                                                    elements)
     mesh = Mesh(nodes=list(registry.nodes), elements=elements,
                 target_size=h)
     mesh.notes["regions"] = len(polys)
     mesh.notes["region_area"] = total_area
+    if repaired:
+        mesh.notes["flat_triangles_repaired"] = repaired
     return mesh
+
+
+# ----------------------------------------------------------------------
+def _shape_ratio(nodes, tri) -> float:
+    return triangle_shape_ratio(*((nodes[i].x, nodes[i].y) for i in tri))
+
+
+def _inside_edge(nodes, m, u, v) -> Optional[float]:
+    """Where node ``m`` lies along the OPEN segment (u, v), as a parameter
+    in (0, 1), or None if it is not on it. Collinearity is judged relative
+    to |uv|^2, so the test does not depend on the size of the model."""
+    x1, y1 = nodes[u].x, nodes[u].y
+    x2, y2 = nodes[v].x, nodes[v].y
+    x, y = nodes[m].x, nodes[m].y
+    L2 = (x2 - x1) ** 2 + (y2 - y1) ** 2
+    if L2 <= 0.0 or abs((x2 - x1) * (y - y1) - (x - x1) * (y2 - y1)) \
+            > 1e-9 * L2:
+        return None
+    t = ((x - x1) * (x2 - x1) + (y - y1) * (y2 - y1)) / L2
+    return t if 1e-9 < t < 1.0 - 1e-9 else None
+
+
+def _repair_flat_triangles(nodes, elements):
+    """Remove the flat triangles (see ``FLAT_TRIANGLE_REPAIR``) and mend
+    what they leave. Returns ``(elements, number removed)``; with none, the
+    very same list.
+
+    All the flat ones go at once. They come as fans over a run of collinear
+    nodes and fill the gaps between one another, so removing them one at a
+    time and splitting the neighbour across the long edge does not
+    terminate: the neighbour is often flat too, and splitting it makes new
+    flat ones (measured: the first prototype never finished on 02-038).
+    What remains may have an edge (u, v) with nodes of that run strictly
+    inside it; its triangle (u, v, D) is split as a fan from D, (u, m1, D),
+    (m1, m2, D), ..., (mk, v, D), in order along the edge. Each split takes
+    nodes off an edge and makes no edge with nodes inside (D is not
+    collinear with them), so it terminates. On the bank no split was
+    needed: removing the flat triangles leaves every edge clean.
+    """
+    flat = [e for e in elements
+            if _shape_ratio(nodes, e.nodes) < DEGENERATE_SHAPE_RATIO]
+    if not flat:
+        return elements, 0
+    run = {i for e in flat for i in e.nodes}
+    gone = {id(e) for e in flat}
+    kept = [e for e in elements if id(e) not in gone]
+    for _ in range(10 * len(run) + 10):
+        split = False
+        for e in kept:
+            for k in range(3):
+                u, v, D = e.nodes[k], e.nodes[(k + 1) % 3], \
+                    e.nodes[(k + 2) % 3]
+                inner = sorted((t, m) for m in run if m not in (u, v, D)
+                               for t in (_inside_edge(nodes, m, u, v),)
+                               if t is not None)
+                if not inner:
+                    continue
+                chain = [u] + [m for _t, m in inner] + [v]
+                kept.remove(e)
+                for a, b in zip(chain, chain[1:]):
+                    x1, y1 = nodes[a].x, nodes[a].y
+                    x2, y2 = nodes[b].x, nodes[b].y
+                    x3, y3 = nodes[D].x, nodes[D].y
+                    tri = ((a, b, D) if (x2 - x1) * (y3 - y1)
+                           - (x3 - x1) * (y2 - y1) > 0 else (a, D, b))
+                    kept.append(Element(id=0, nodes=tri,
+                                        material_id=e.material_id,
+                                        region_index=e.region_index))
+                split = True
+                break
+            if split:
+                break
+        if not split:
+            break
+    for k, e in enumerate(kept):
+        e.id = k
+    return kept, len(flat)
 
 
 # ----------------------------------------------------------------------
