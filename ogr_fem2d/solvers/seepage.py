@@ -1624,11 +1624,46 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
     """
 
     def __init__(self, *args, time_steps: int = 0,
-                 max_picard: int = 30, **kwargs) -> None:
+                 max_picard: int = 30,
+                 steady_relaxation: Optional[float] = None,
+                 steady_tolerance: Optional[float] = None,
+                 steady_max_iterations: Optional[int] = None,
+                 **kwargs) -> None:
         super().__init__(*args, **kwargs)
         # 0 → automatic number of time steps per stage
         self.time_steps = max(0, int(time_steps))
         self.max_picard = max(1, int(max_picard))
+        # v0.1.281 (D277): the settings of the initial steady state, when
+        # it is computed here (no ``initial_head``); None → this solver's
+        # own, as before. See ``_initial_steady``.
+        self.steady_relaxation = steady_relaxation
+        self.steady_tolerance = steady_tolerance
+        self.steady_max_iterations = steady_max_iterations
+
+    def _initial_steady(self, bcs) -> SeepageResult:
+        """The steady state a transient starts from, solved with the
+        ``steady_*`` settings where they were given (v0.1.281, D277).
+
+        The project's door solves its steady analysis with w = 0.4, 200
+        passes and tolerance 1e-5 (``solve_project_groundwater``); the
+        transient solver it builds runs with w = 0.5 and the transient
+        tolerance, and its initial steady state used to inherit them. The
+        field at t = 0 then differed from the steady analysis of the same
+        model and conditions at the level of the tolerance (where the loop
+        stops depends on w, D267), and a user comparing the two saw two
+        "equal" fields that were not. The door now passes its own settings
+        here; a script that passes none gets what it always got."""
+        saved = (self.relaxation, self.tolerance, self.max_iterations)
+        try:
+            if self.steady_relaxation is not None:
+                self.relaxation = min(max(self.steady_relaxation, 0.05), 1.0)
+            if self.steady_tolerance is not None:
+                self.tolerance = self.steady_tolerance
+            if self.steady_max_iterations is not None:
+                self.max_iterations = max(1, int(self.steady_max_iterations))
+            return super().solve_unsaturated(bcs)
+        finally:
+            self.relaxation, self.tolerance, self.max_iterations = saved
 
     # ------------------------------------------------------------------
     def _lumped_mass(self) -> list:
@@ -1887,7 +1922,7 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
         if initial_head is not None:
             H = list(initial_head)
         else:
-            steady = super().solve_unsaturated(base_bcs)
+            steady = self._initial_steady(base_bcs)
             if not steady.total_head:
                 out = SeepageResult()
                 # v0.1.125 — carry the reason through. It used to be

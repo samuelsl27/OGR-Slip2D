@@ -60,6 +60,23 @@ INITIAL_STATE_NOT_CONVERGED = (
     "so every stage starts from an unconverged field (see each stage's "
     "initial-state warning).")
 
+#: The steady solve of the door: relaxation, Picard passes and tolerance
+#: (why w is fixed: ``solve_project_groundwater``). One place, because the
+#: transient's initial steady state uses them too (v0.1.281, D277).
+STEADY_RELAXATION = 0.4
+STEADY_MAX_ITERATIONS = 200
+STEADY_TOLERANCE = 1e-5
+
+#: v0.1.281 (D277) — the initial steady state of a transient solved through
+#: this door uses the door's steady settings above, so that the field at
+#: t = 0 IS the steady analysis of the same model and conditions. It used
+#: to inherit the transient solver's (w = 0.5 and the transient tolerance)
+#: and differ from it at the level of the tolerance. The verification
+#: bank's transients (groundwater manual 05) build their solver directly
+#: and are not affected; the transient of problem 102 of manual 02 goes
+#: through here. Switch off to rebuild 0.1.280.
+INITIAL_STEADY_FROM_DOOR = True
+
 
 # ======================================================================
 @dataclass
@@ -173,7 +190,10 @@ def solve_project_groundwater(project, *, progress_cb: Optional[Callable]
     Why the relaxation is not a project setting (v0.1.273, D266)
     ------------------------------------------------------------
     The steady solve uses w = 0.4, 200 Picard passes and tolerance 1e-5,
-    and the transient w = 0.5, fixed here. They were measured before being
+    and the transient w = 0.5, fixed here; the transient's initial steady
+    state uses the steady settings (v0.1.281, D277: ``STEADY_*`` and
+    ``INITIAL_STEADY_FROM_DOOR``), so the field at t = 0 is this door's
+    steady analysis. They were measured before being
     left that way, on the 53 unsaturated steady rows of the verification
     bank (every row of groundwater manual 05 that has one, both meshes, and
     02-010 and 02-038), with w = 0.2, 0.3, 0.4, 0.6 and 0.8:
@@ -214,8 +234,9 @@ def solve_project_groundwater(project, *, progress_cb: Optional[Callable]
                                 progress_cb=progress_cb)
 
     solver = UnsaturatedSeepageSolver(mesh, props, gamma_w=gamma_w,
-                                      relaxation=0.4, max_iterations=200,
-                                      tolerance=1e-5)
+                                      relaxation=STEADY_RELAXATION,
+                                      max_iterations=STEADY_MAX_ITERATIONS,
+                                      tolerance=STEADY_TOLERANCE)
     result = solver.solve_unsaturated(_current_bcs(project, mesh))
     project.seepage_result = result
     project.transient_results = []
@@ -231,11 +252,16 @@ def _solve_transient(project, mesh, props, gamma_w, *, progress_cb=None):
     from ogr_fem2d.solvers import TransientSeepageSolver, TransientStage
 
     gw = project.settings.groundwater
+    steady = (dict(steady_relaxation=STEADY_RELAXATION,
+                   steady_tolerance=STEADY_TOLERANCE,
+                   steady_max_iterations=STEADY_MAX_ITERATIONS)
+              if INITIAL_STEADY_FROM_DOOR else {})
     solver = TransientSeepageSolver(
         mesh, props, gamma_w=gamma_w, relaxation=0.5,
         tolerance=gw.transient_tolerance,
         max_picard=gw.transient_max_iterations,
         time_steps=gw.transient_time_steps,
+        **steady,
     )
     current = _current_bcs(project, mesh)
     initial = current
