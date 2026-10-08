@@ -22,8 +22,9 @@ The invariants
 * converged runs with w = 0.2 and w = 0.4 (the groundwater door's) lie
   within the tolerance of the fixed point;
 * the fixed point does not depend on w (0.4 and 0.5 solved to 1e-12 agree);
-* w = 0.1 with the default switch budget is REPORTED as not converged, with
-  the face named as the reason, never passed off as a converged result;
+* w = 0.1 with a switch budget of 25 (the default until v0.1.283, D279) is
+  REPORTED as not converged, with the face named as the reason, never
+  passed off as a converged result;
 * with a budget that slow relaxation does not exhaust, w = 0.1 converges
   within twice the tolerance (the relaxed test's 1/w loosening, measured).
 
@@ -95,7 +96,10 @@ class TestTheToleranceOfAConvergedRun:
 
 class TestAVerySlowRelaxation:
     def test_is_reported_and_not_passed_off_as_converged(self):
-        r = _solve(0.1, TOL)
+        # v0.1.283 (D279): the DEFAULT budget now scales with 1/w (100 at
+        # w = 0.1) and this run converges (test_switch_budget_v1283); the
+        # exhausted budget is still reported, so it is asked for explicitly
+        r = _solve(0.1, TOL, max_node_switches=25)
         assert _off(r) > 0.05                      # 0.129 m, as reported
         assert r.converged is False
         assert r.notes["unsettled_nodes"] >= 1

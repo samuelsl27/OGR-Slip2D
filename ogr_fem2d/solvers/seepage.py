@@ -785,6 +785,13 @@ def hydraulic_props_of(project) -> dict:
 #: before. Off, the v0.1.265 behaviour.
 PICARD_RESCUE = True
 
+#: v0.1.283 (D279) — the seepage face's switch budget, when not given,
+#: scales with the relaxation: max(25, ceil(10/w))
+#: (``UnsaturatedSeepageSolver.max_node_switches``). With w >= 0.4 it is the
+#: 25 it always was; a slower relaxation no longer freezes a node of the
+#: face before the iterate has settled. Switch off to rebuild 0.1.282.
+SWITCH_BUDGET_SCALES_WITH_OMEGA = True
+
 #: Anderson depths tried in turn, and the map evaluations allowed to each.
 #: Neither depth wins everywhere: on that dam, started after 200 Picard
 #: passes, depth 20 needs 36 evaluations and depth 5 166; started after
@@ -1011,13 +1018,43 @@ class UnsaturatedSeepageSolver(SeepageSolver):
         self.relaxation = min(max(relaxation, 0.05), 1.0)
         self.max_iterations = max(1, max_iterations)
         self.tolerance = tolerance
-        # Anti-chatter budget for the seepage-face switching
-        if max_node_switches is None:
-            max_node_switches = self.DEFAULT_MAX_NODE_SWITCHES
-        self.max_node_switches = max(1, max_node_switches)
+        # Anti-chatter budget for the seepage-face switching; None → the
+        # default, scaled with the relaxation (see ``max_node_switches``)
+        self.max_node_switches = max_node_switches
         # Hysteresis band on the pressure-head decision; 0 → derived
         # from the mesh size in solve_unsaturated()
         self.switch_pressure_tol = switch_pressure_tol
+
+    @property
+    def max_node_switches(self) -> int:
+        """How many times a node of the seepage face may switch before it
+        freezes: the one given to the constructor, or else
+        ``DEFAULT_MAX_NODE_SWITCHES`` scaled with the relaxation,
+        max(25, ceil(10/w)) (v0.1.283, D279;
+        ``SWITCH_BUDGET_SCALES_WITH_OMEGA``).
+
+        With a slow relaxation the face set changes at almost every pass
+        while the relaxed iterate creeps towards the fixed point, so a node
+        spends switches in proportion to 1/w. Measured on the rectangular
+        Gardner dam of ``test_unsaturated_v127`` with w = 0.1: a node at
+        the foot of the face spent the 25 and froze held at P = 0 with
+        water going in, the run came out unconverged 0.129 m from the fixed
+        point, and the rescue could not step in (the frozen set no longer
+        changes, so the loop "ends"); with 50 or more it converges within
+        1.3 tolerance. 10/w is 25 at w = 0.4, the groundwater door's, so
+        the door and every w >= 0.4 keep exactly the budget they had. It is
+        read when used, so the initial steady state of a transient, solved
+        with the door's w (D277), gets the budget of that w."""
+        if self._max_node_switches is not None:
+            return self._max_node_switches
+        if SWITCH_BUDGET_SCALES_WITH_OMEGA:
+            return max(self.DEFAULT_MAX_NODE_SWITCHES,
+                       math.ceil(10.0 / self.relaxation - 1e-9))
+        return self.DEFAULT_MAX_NODE_SWITCHES
+
+    @max_node_switches.setter
+    def max_node_switches(self, value) -> None:
+        self._max_node_switches = None if value is None else max(1, int(value))
 
     # ------------------------------------------------------------------
     def _element_kr(self, H: list) -> list:
