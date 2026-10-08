@@ -781,6 +781,26 @@ RESCUE_NEWTON_PER_STEP = 30
 #: Smallest continuation step before the continuation gives up.
 RESCUE_MIN_STEP = 1e-3
 
+#: v0.1.274 (D269) — the seepage face of a transient time step follows the
+#: steady solver's rule (``_switch_seepage_face``) instead of its own copy.
+#:
+#: ``TransientSeepageSolver.step`` carried an inline copy of the switching
+#: loop that released a node held at P = 0 when its reaction exceeded an
+#: ABSOLUTE 1e-12, while the steady solver uses q_tol = 1e-3 times the
+#: largest nodal flux. Permeabilities on the verification bank run from
+#: 1e-13 to 1e-4: an absolute flux threshold is inside the round-off of one
+#: model and of the order of the whole flow of another. Switched on, each
+#: step takes q_tol from the reactions of its FIRST linear solve (which
+#: carry the storage flux and scale with the time step; a saturated solve
+#: of the stage's conditions does not — its flux is zero in a drawdown to a
+#: uniform level, exactly when the transient flow is largest) and checks the
+#: face of its final state (``_unsettled_nodes``): a step that leaves nodes
+#: violating the face condition is not converged, and the stage says how
+#: many (``notes["unsettled_nodes"]``). Without a seepage face nothing is
+#: computed, so saturated transients do the same arithmetic as before.
+#: Switch off to rebuild the transient of 0.1.273.
+TRANSIENT_FACE_RULE = True
+
 
 class _NewtonSystem:
     """The steady unsaturated equations as a residual for Newton's method
@@ -1083,8 +1103,10 @@ class UnsaturatedSeepageSolver(SeepageSolver):
         switches: dict[int, int] = {}
         # Hysteresis bands. The pressure band scales with the element
         # size (a sub-element pressure change is not a real switch); the
-        # flux band scales with the total Dirichlet throughput so it is
-        # dimensionally consistent across permeabilities.
+        # flux band scales with the largest nodal flux of the saturated
+        # solve (v0.1.274: this said "the total Dirichlet throughput",
+        # which is not what is computed), so it is dimensionally
+        # consistent across permeabilities.
         p_tol = (self.switch_pressure_tol
                  or 0.02 * max(self.mesh.target_size, 1e-9))
         q_scale = max((abs(r) for r in first.reactions), default=0.0)
@@ -1654,6 +1676,7 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
         it = 0
         step_result = None
         changes: list[float] = []
+        q_tol: Optional[float] = None
 
         for it in range(1, self.max_picard + 1):
             kr = self._element_kr(H)
@@ -1687,25 +1710,46 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
 
             # Seepage-face switching (same convention as Phase 3:
             # POSITIVE reaction = water entering the domain)
-            new_active = set(active)
-            for nid in unknown:
-                if switches.get(nid, 0) >= self.max_node_switches:
-                    continue
-                if nid in active:
-                    q_node = (step_result.reactions[nid]
-                              if step_result.reactions else 0.0)
-                    if q_node > 1e-12:
-                        new_active.discard(nid)
+            if TRANSIENT_FACE_RULE:
+                # v0.1.274 (D269): the steady solver's rule, with q_tol
+                # from this step's first linear solve (see the switch)
+                if unknown and q_tol is None:
+                    q_scale = max((abs(r) for r in step_result.reactions),
+                                  default=0.0)
+                    q_tol = 1e-3 * q_scale if q_scale > 0 else 1e-14
+                new_active = (self._switch_seepage_face(
+                    active, switches, unknown, H, step_result.reactions,
+                    p_tol, q_tol) if unknown else set(active))
+            else:
+                new_active = set(active)
+                for nid in unknown:
+                    if switches.get(nid, 0) >= self.max_node_switches:
+                        continue
+                    if nid in active:
+                        q_node = (step_result.reactions[nid]
+                                  if step_result.reactions else 0.0)
+                        if q_node > 1e-12:
+                            new_active.discard(nid)
+                            switches[nid] = switches.get(nid, 0) + 1
+                    elif H[nid] - ys[nid] > p_tol:
+                        new_active.add(nid)
                         switches[nid] = switches.get(nid, 0) + 1
-                elif H[nid] - ys[nid] > p_tol:
-                    new_active.add(nid)
-                    switches[nid] = switches.get(nid, 0) + 1
             changed = new_active != active
             active = new_active
 
             if delta < self.tolerance and not changed:
                 converged = True
                 break
+
+        if TRANSIENT_FACE_RULE and unknown and q_tol is not None:
+            # v0.1.274 (D269): ask the final state, as the steady solver
+            # does, instead of trusting that the loop ended for the right
+            # reason (a frozen node stops the set changing too)
+            unsettled = self._unsettled_nodes(step_result, unknown, active,
+                                              p_tol, q_tol)
+            step_result.notes["unsettled_nodes"] = len(unsettled)
+            if unsettled:
+                converged = False
 
         step_result.notes.update({
             "history": _change_series(changes),
