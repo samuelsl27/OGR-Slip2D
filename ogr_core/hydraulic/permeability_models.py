@@ -254,6 +254,33 @@ def kr_user_defined(psi: float, p) -> float:
     return 1.0
 
 
+def parse_user_curve_text(text: str) -> list:
+    """(suction [kPa], permeability) pairs from CSV-like text: comma,
+    semicolon, tab or whitespace separators; header, blank, comment (#) and
+    non-numeric lines skipped, extra columns ignored. In the order given:
+    the caller sorts.
+
+    v0.1.275 (D271) — the two-column sibling of
+    ``water_pressure_grid.parse_grid_csv_text``, so the interface reads a
+    user curve from a file the same way for everyone who calls it.
+    """
+    out = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        for sep in (",", ";", "\t"):
+            line = line.replace(sep, " ")
+        parts = [q for q in line.split() if q]
+        if len(parts) < 2:
+            continue
+        try:
+            out.append((float(parts[0]), float(parts[1])))
+        except ValueError:
+            continue  # header or non-numeric line
+    return out
+
+
 _MODEL_FUNCS = {
     PermeabilityModel.CONSTANT: kr_constant,
     PermeabilityModel.SIMPLE: kr_simple,

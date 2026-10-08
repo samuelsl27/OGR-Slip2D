@@ -154,6 +154,20 @@ def hydraulic_set(ws, material: str, project_id: Optional[str] = None,
         if "vg_m" in props and not hp.vg_custom_m:
             raise Conflict("vg_m is only read with vg_custom_m=true; "
                            "otherwise m = 1 - 1/n.")
+        # v0.1.275 (D271): with a user curve, Ks is its first point
+        # (HydraulicProperties.saturated_k). A ks that contradicts it would
+        # move nothing; one that agrees, or none, is kept in step with it.
+        k_sat = hp.saturated_k()
+        if k_sat != hp.ks:
+            if "ks" in props:
+                raise Conflict(
+                    f"With the user_defined model, Ks is the first point of "
+                    f"user_curve ({k_sat:g}); ks={hp.ks:g} would move "
+                    f"nothing.",
+                    hint="Leave ks out, or change the first point of "
+                         "user_curve.")
+            hp.ks = k_sat
+        notes.extend(hp.notices())
         bad = hp.problems()
         if bad:
             raise InvalidArgument("These hydraulic properties are not "

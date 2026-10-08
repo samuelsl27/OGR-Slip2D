@@ -181,7 +181,8 @@ class PropertiesTableDialog(QDialog):
         rows = []
         for m in mats:
             h = m.hydraulic
-            rows.append([m.name, h.ks, h.k2_k1, h.k1_angle_deg,
+            # v0.1.275 (D271): with a user curve, Ks is its first point
+            rows.append([m.name, h.saturated_k(), h.k2_k1, h.k1_angle_deg,
                          getattr(h.model, "value", h.model),
                          h.wc_sat, h.specific_storage])
         return headers, rows

@@ -49,6 +49,19 @@ from .permeability_models import (  # noqa: E402
     library_for,
 )
 
+#: v0.1.275 (D271) — with the User Defined model, the saturated permeability
+#: IS the first point of the user curve (``HydraulicProperties.saturated_k``).
+#:
+#: The dialog said so ("Ks is taken from the first point of the user
+#: curve") and disabled the Ks box, but the conductivity was built from the
+#: ``ks`` field and the curve only normalised kr by its first point, so
+#: k = ks * k(psi) / k_first: a curve whose first point differed from ``ks``
+#: was not the curve the user had typed, and the Plot drew it scaled by a
+#: box the user could not edit. Every User Defined material of the
+#: verification bank (20) already had ``ks`` equal to the first point, so
+#: none of them moves. Switch off to rebuild 0.1.274.
+USER_KS_FROM_CURVE = True
+
 
 class UnsaturatedModel(Enum):
     """Backwards-compatible alias kept for models written by v0.1.26.
@@ -106,9 +119,25 @@ class HydraulicProperties:
     specific_storage: float = 1.0e-5
 
     # ------------------------------------------------------------------
+    def saturated_k(self) -> float:
+        """The saturated permeability Ks this material is computed with.
+
+        ``ks``, except with the User Defined model and a curve whose first
+        point is positive: then the first point of the curve, in suction
+        order (v0.1.275, D271; ``USER_KS_FROM_CURVE``). The one door every
+        reader of Ks goes through — the conductivity, ``k_at_suction``,
+        the automatic time steps of the transient, the interface."""
+        if (USER_KS_FROM_CURVE
+                and self.model == PermeabilityModel.USER_DEFINED
+                and self.user_curve):
+            k_first = sorted(self.user_curve, key=lambda t: t[0])[0][1]
+            if k_first > 0:
+                return float(k_first)
+        return float(self.ks)
+
     def principal(self) -> tuple[float, float]:
         """(K1, K2) principal permeabilities."""
-        k1 = max(float(self.ks), 0.0)
+        k1 = max(self.saturated_k(), 0.0)
         k2 = k1 * max(float(self.k2_k1), 0.0)
         return k1, k2
 
@@ -194,6 +223,30 @@ class HydraulicProperties:
                      "divided by).")
         return out
 
+    def notices(self) -> list[str]:
+        """What these properties contain that changes nothing, in words;
+        empty if none. Not a problem — the material is usable — so it never
+        blocks a call; the interface and the API say it.
+
+        v0.1.275 (D271): kr is never taken below ``kr_min``, so the points
+        of a user curve below kr_min times its first permeability are drawn
+        but not used (the toe drain of groundwater problem 9 drops seven
+        decades against the default floor of six)."""
+        from .permeability_models import PermeabilityModel
+
+        out = []
+        if self.model == PermeabilityModel.USER_DEFINED and self.user_curve \
+                and 0 < self.kr_min <= 1:
+            pts = sorted(self.user_curve, key=lambda t: t[0])
+            k_first = pts[0][1]
+            if k_first > 0 and any(k < self.kr_min * k_first
+                                   for _s, k in pts):
+                out.append("Some points of user_curve are below kr_min "
+                           "times the first permeability: kr is never "
+                           "taken below kr_min, so they change nothing. "
+                           "Lower kr_min to use them.")
+        return out
+
     def suction_unit(self) -> str:
         """'m' or 'kPa': the unit this model's suction is written in."""
         from .permeability_models import SUCTION_UNIT
@@ -215,7 +268,7 @@ class HydraulicProperties:
 
     def k_at_suction(self, suction: float) -> float:
         """Absolute permeability at a given suction."""
-        return self.ks * self.relative_permeability(suction)
+        return self.saturated_k() * self.relative_permeability(suction)
 
     def conductivity_tensor_at(self, suction: float
                                ) -> tuple[float, float, float]:

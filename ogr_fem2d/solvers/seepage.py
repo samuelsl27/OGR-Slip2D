@@ -1986,7 +1986,8 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
         c_min = 1.0
         for e in self.mesh.elements:
             p = self.props_for(e)
-            k_max = max(k_max, p.ks)
+            # v0.1.275 (D271): the Ks the material is computed with
+            k_max = max(k_max, p.saturated_k())
             c_min = min(c_min, max(p.storage_at(-1.0), 1e-9))
         # characteristic diffusion time over one element
         t_elem = c_min * h * h / max(k_max, 1e-30)

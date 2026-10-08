@@ -1391,6 +1391,38 @@ _DICTS: dict[str, dict[str, str]] = {
         'The water contents need 0 <= wc_res < wc_sat <= 1.': 'Los contenidos de agua deben cumplir 0 <= θr < θs <= 1.',
         'A user-defined curve needs at least two (suction, permeability) points.':
             'Una curva definida por el usuario necesita al menos dos puntos (succión, permeabilidad).',
+        # v0.1.275 (D271): la curva de usuario y kr_min en el diálogo, y el
+        # resto de los mensajes de HydraulicProperties.problems()/notices()
+        'Minimum relative permeability kr_min:': 'Permeabilidad relativa mínima kr_min:',
+        'kr is never taken below this floor, so the dry zone keeps some conductivity; points of a user curve below it change nothing.':
+            'kr nunca baja de este suelo, así que la zona seca conserva algo de conductividad; los puntos de una curva de usuario por debajo de él no cambian nada.',
+        'Permeability (m/s)': 'Permeabilidad (m/s)',
+        'Rows of the user curve that are not two numbers: %s': 'Filas de la curva de usuario que no son dos números: %s',
+        'Text files (*.csv *.txt);;All files (*)': 'Archivos de texto (*.csv *.txt);;Todos los archivos (*)',
+        'No (suction, permeability) pairs were found in the file.': 'El archivo no contiene ningún par (succión, permeabilidad).',
+        'Pick representative parameters': 'Elegir parámetros representativos',
+        'Soil (literature values):': 'Suelo (valores de la bibliografía):',
+        'Plot': 'Gráfica',
+        'Points of the user curve': 'Puntos de la curva de usuario',
+        'Permeability k': 'Permeabilidad k',
+        'ks must be positive.': 'Ks tiene que ser positiva.',
+        'k2_k1 cannot be negative.': 'K2/K1 no puede ser negativo.',
+        'kr_min must be in (0, 1].': 'kr_min tiene que estar en (0, 1].',
+        'bc_lambda must be positive.': 'El índice de poros λ de Brooks-Corey tiene que ser positivo.',
+        'bc_psi_b cannot be negative.': 'La presión de burbujeo de Brooks-Corey no puede ser negativa.',
+        'fx_a, fx_b and fx_c must be positive.': 'A, B y C de Fredlund-Xing tienen que ser positivos.',
+        'gardner_a cannot be negative.': 'La a de Gardner no puede ser negativa.',
+        'gardner_n must be positive.': 'La n de Gardner tiene que ser positiva.',
+        'vg_alpha must be positive.': 'La α de van Genuchten tiene que ser positiva.',
+        'vg_n must be greater than 1.': 'La n de van Genuchten tiene que ser mayor que 1.',
+        'vg_m must be between 0 and 1.': 'La m de van Genuchten tiene que estar entre 0 y 1.',
+        'specific_storage cannot be negative.': 'El almacenamiento específico no puede ser negativo.',
+        'Suctions in user_curve cannot be negative.': 'Las succiones de la curva de usuario no pueden ser negativas.',
+        'Two points of user_curve have the same suction.': 'Dos puntos de la curva de usuario tienen la misma succión.',
+        'Permeabilities in user_curve must be positive (the first one is the saturated value every other is divided by).':
+            'Las permeabilidades de la curva de usuario tienen que ser positivas (la primera es el valor saturado entre el que se dividen todas las demás).',
+        'Some points of user_curve are below kr_min times the first permeability: kr is never taken below kr_min, so they change nothing. Lower kr_min to use them.':
+            'Algunos puntos de la curva de usuario están por debajo de kr_min por la primera permeabilidad: kr nunca baja de kr_min, así que no cambian nada. Baja kr_min para usarlos.',
         'Simple is an OGR convention: the reference does not publish its function. General: kr drops one decade over the first 100 kPa of suction, then stays constant. Ks does not change the shape of the curve.':
             'Simple es un convenio de OGR: la referencia no publica su función. General: kr baja una década en los primeros 100 kPa de succión y después se mantiene constante. Ks no cambia la forma de la curva.',
         'Simplify Boundary': 'Simplificar contorno',

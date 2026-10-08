@@ -113,7 +113,9 @@ _VISIBLE_MESSAGES = [
 # v0.1.200 — 67 -> 64: the transient stages dialog's three literal
 # warnings went to ``GroundwaterSettings.set_transient``, and the dialog
 # shows the core's message through tr().
-_UNWRAPPED_BUDGET_MESSAGES = 64
+# v0.1.275 — 64 -> 63: the hydraulic properties dialog's "Plot" message box
+# (matplotlib missing) now goes through tr() (D271).
+_UNWRAPPED_BUDGET_MESSAGES = 63
 
 
 def _gui_sources():

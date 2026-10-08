@@ -40,6 +40,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
+    QFileDialog,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -48,6 +49,8 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QStackedWidget,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -58,7 +61,12 @@ from ogr_core.hydraulic import (
     SimpleSoilType,
     library_for,
 )
+from ogr_core.hydraulic.permeability_models import parse_user_curve_text
 from ogr_core.project.rules import transient_storage_is_read
+from ogr_gui.dialogs.material_properties_dialog import (
+    _exact_text,
+    _PreciseSpinBox,
+)
 from ogr_gui.i18n import tr  # noqa: E402
 
 _MODEL_LABELS = [
@@ -83,6 +91,17 @@ _SOIL_LABELS = [
 def _spin(minimum, maximum, value, decimals=4, step=0.1):
     s = QDoubleSpinBox()
     s.setDecimals(decimals)
+    s.setRange(minimum, maximum)
+    s.setSingleStep(step)
+    s.setValue(value)
+    return s
+
+
+def _precise(minimum, maximum, value, step):
+    """A spin box that keeps every double it is given (v0.1.275, D271): a
+    permeability or a kr floor of 1e-13 survives opening the dialog and
+    pressing OK, which a fixed-decimal box does not."""
+    s = _PreciseSpinBox()
     s.setRange(minimum, maximum)
     s.setSingleStep(step)
     s.setValue(value)
@@ -125,12 +144,27 @@ class HydraulicPropertiesDialog(QDialog):
 
         gb_k = QGroupBox(tr("Permeability"))
         fk = QFormLayout(gb_k)
-        self.sp_ks = _spin(1e-14, 1.0, 1e-6, decimals=12, step=1e-7)
+        # v0.1.275 (D271): it had twelve decimals, so opening the dialog and
+        # pressing OK rounded a Ks below 1e-10 and turned 1e-13 into the
+        # box's minimum, 1e-14; the verification bank has Ks of 1e-13.
+        self.sp_ks = _precise(1e-300, 1.0, 1e-6, 1e-7)
         fk.addRow(tr("Saturated permeability Ks:"), self.sp_ks)
         self.sp_k2k1 = _spin(0.0, 100.0, 1.0, decimals=4, step=0.05)
         fk.addRow(tr("K2 / K1:"), self.sp_k2k1)
         self.sp_angle = _spin(-90.0, 90.0, 0.0, decimals=2, step=5.0)
         fk.addRow(tr("K1 angle (deg from +X):"), self.sp_angle)
+        # v0.1.275 (D271): the floor of the relative permeability, which
+        # moves the flow of every model with a dry zone, could be set by a
+        # script or the API and not seen or changed here
+        self.sp_kr_min = _precise(1e-300, 1.0, 1e-6, 1e-6)
+        fk.addRow(tr("Minimum relative permeability kr_min:"),
+                  self.sp_kr_min)
+        kr_note = QLabel(tr(
+            "kr is never taken below this floor, so the dry zone keeps some "
+            "conductivity; points of a user curve below it change nothing."))
+        kr_note.setWordWrap(True)
+        fk.addRow(kr_note)
+        self.sp_kr_min.valueChanged.connect(self._refresh_problems)
         right.addWidget(gb_k)
 
         gb_m = QGroupBox(tr("Unsaturated permeability model"))
@@ -177,19 +211,45 @@ class HydraulicPropertiesDialog(QDialog):
 
     # ==================================================================
     def _build_pages(self) -> None:
-        # Constant / User Defined — no parameters here
-        for mdl, text in (
-            (PermeabilityModel.CONSTANT,
-             "k = Ks everywhere (fully saturated)."),
-            (PermeabilityModel.USER_DEFINED,
-             "Ks is taken from the first point of the user curve."),
-        ):
-            w = QWidget()
-            v = QVBoxLayout(w)
-            v.addWidget(QLabel(tr(text)))
-            v.addStretch(1)
-            self._pages[mdl] = w
-            self.stack.addWidget(w)
+        # Constant — no parameters
+        w = QWidget()
+        v = QVBoxLayout(w)
+        v.addWidget(QLabel(tr("k = Ks everywhere (fully saturated).")))
+        v.addStretch(1)
+        self._pages[PermeabilityModel.CONSTANT] = w
+        self.stack.addWidget(w)
+
+        # User Defined — v0.1.275 (D271): the curve itself. Until this
+        # version the page was this one sentence, and the curve could only
+        # be set by a script or the API: choosing User Defined here gave a
+        # material with no curve, which is kr = 1 everywhere.
+        w = QWidget()
+        v = QVBoxLayout(w)
+        note = QLabel(tr("Ks is taken from the first point of the user "
+                         "curve."))
+        note.setWordWrap(True)
+        v.addWidget(note)
+        self.tbl_curve = QTableWidget(0, 2)
+        # D217: a table without units misleads; the suction of a user curve
+        # is in kPa since v0.1.200 (D121)
+        self.tbl_curve.setHorizontalHeaderLabels(
+            [tr("Matric suction (kPa)"), tr("Permeability (m/s)")])
+        self.tbl_curve.horizontalHeader().setStretchLastSection(True)
+        self.tbl_curve.itemChanged.connect(self._on_curve_edited)
+        v.addWidget(self.tbl_curve, 1)
+        row = QHBoxLayout()
+        self.btn_curve_add = QPushButton(tr("+ Row"))
+        self.btn_curve_add.clicked.connect(self._add_curve_row)
+        self.btn_curve_del = QPushButton(tr("− Row"))
+        self.btn_curve_del.clicked.connect(self._delete_curve_rows)
+        self.btn_curve_csv = QPushButton(tr("Import CSV…"))
+        self.btn_curve_csv.clicked.connect(self._import_curve)
+        for b in (self.btn_curve_add, self.btn_curve_del, self.btn_curve_csv):
+            row.addWidget(b)
+        row.addStretch(1)
+        v.addLayout(row)
+        self._pages[PermeabilityModel.USER_DEFINED] = w
+        self.stack.addWidget(w)
 
         # Simple
         w = QWidget()
@@ -299,8 +359,10 @@ class HydraulicPropertiesDialog(QDialog):
         page = self._pages.get(mdl)
         if page is not None:
             self.stack.setCurrentWidget(page)
-        # Ks is disabled for User Defined (it is the curve's first point)
+        # Ks is disabled for User Defined (it is the curve's first point,
+        # which the box shows: v0.1.275, D271)
         self.sp_ks.setEnabled(mdl != PermeabilityModel.USER_DEFINED)
+        self._sync_ks()
         # Pick is only offered for models with a parameter library
         self.btn_pick.setEnabled(bool(library_for(mdl)))
         self._refresh_problems()
@@ -308,15 +370,102 @@ class HydraulicPropertiesDialog(QDialog):
     def _refresh_problems(self, *_args) -> None:
         """Show what makes the material being edited unusable (v0.1.268,
         D191): the widgets' values applied to a copy, asked to
-        ``HydraulicProperties.problems``. Nothing is blocked; it is said."""
+        ``HydraulicProperties.problems``. Nothing is blocked; it is said.
+        v0.1.275 (D271): also what it contains that changes nothing
+        (``notices``) and the rows of the user curve that are not two
+        numbers."""
         if not (0 <= self._current < len(self._props)) or \
                 not hasattr(self, "lbl_problems"):
             return
         probe = HydraulicProperties.from_dict(
             self._props[self._current].to_dict())
         self._write(probe)
-        self.lbl_problems.setText(
-            "\n".join(tr(text) for text in probe.problems()))
+        lines = [tr(text) for text in probe.problems() + probe.notices()]
+        _pts, bad = self._curve_points()
+        if bad:
+            lines.append(tr("Rows of the user curve that are not two "
+                            "numbers: %s") % ", ".join(str(r) for r in bad))
+        self.lbl_problems.setText("\n".join(lines))
+
+    # ---- the user curve (v0.1.275, D271) ------------------------------
+    def _curve_points(self):
+        """(points, bad rows): the table's (suction, k) pairs in its order,
+        and the 1-based rows that are not two numbers; blank rows skipped.
+        A decimal comma is read as a point."""
+        pts, bad = [], []
+        for r in range(self.tbl_curve.rowCount()):
+            texts = []
+            for c in (0, 1):
+                item = self.tbl_curve.item(r, c)
+                texts.append(item.text().strip() if item is not None else "")
+            if not any(texts):
+                continue
+            try:
+                pts.append(tuple(float(t.replace(",", ".")) for t in texts))
+            except ValueError:
+                bad.append(r + 1)
+        return pts, bad
+
+    def _set_curve_rows(self, pts) -> None:
+        """Fill the table with ``pts``, each value written so that it reads
+        back exactly (``_exact_text``)."""
+        self.tbl_curve.blockSignals(True)
+        try:
+            self.tbl_curve.setRowCount(0)
+            for s, k in pts:
+                r = self.tbl_curve.rowCount()
+                self.tbl_curve.insertRow(r)
+                self.tbl_curve.setItem(r, 0, QTableWidgetItem(_exact_text(s)))
+                self.tbl_curve.setItem(r, 1, QTableWidgetItem(_exact_text(k)))
+        finally:
+            self.tbl_curve.blockSignals(False)
+        self._on_curve_edited()
+
+    def _add_curve_row(self) -> None:
+        self.tbl_curve.insertRow(self.tbl_curve.rowCount())
+
+    def _delete_curve_rows(self) -> None:
+        rows = sorted({i.row() for i in self.tbl_curve.selectedIndexes()},
+                      reverse=True)
+        if not rows and self.tbl_curve.rowCount():
+            rows = [self.tbl_curve.rowCount() - 1]
+        for r in rows:
+            self.tbl_curve.removeRow(r)
+        self._on_curve_edited()
+
+    def _import_curve(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, tr("Import CSV…"), "",
+            tr("Text files (*.csv *.txt);;All files (*)"))
+        if path:
+            with open(path, encoding="utf-8", errors="replace") as fh:
+                self.import_curve_text(fh.read())
+
+    def import_curve_text(self, text: str) -> int:
+        """Load the curve from CSV-like text (``parse_user_curve_text``);
+        returns how many points were read. Nothing read leaves the table as
+        it was and says so where the problems are shown."""
+        pts = parse_user_curve_text(text)
+        if pts:
+            self._set_curve_rows(pts)
+        else:
+            self.lbl_problems.setText(tr(
+                "No (suction, permeability) pairs were found in the file."))
+        return len(pts)
+
+    def _on_curve_edited(self, *_args) -> None:
+        self._sync_ks()
+        self._refresh_problems()
+
+    def _sync_ks(self) -> None:
+        """With User Defined, the Ks box shows the curve's first point."""
+        if self.cbo_model.currentData() != PermeabilityModel.USER_DEFINED:
+            return
+        pts, _bad = self._curve_points()
+        if pts:
+            k_first = sorted(pts, key=lambda t: t[0])[0][1]
+            if k_first > 0:
+                self.sp_ks.setValue(k_first)
 
     def _on_material_changed(self, row: int) -> None:
         if self._current >= 0:
@@ -327,7 +476,12 @@ class HydraulicPropertiesDialog(QDialog):
 
     # ------------------------------------------------------------------
     def _load(self, p: HydraulicProperties) -> None:
+        # The curve before Ks: filling the table re-syncs the Ks box while
+        # the model combo still shows the previous material's model, and
+        # Ks has to win (the model is set below and syncs it again).
+        self._set_curve_rows(p.user_curve)
         self.sp_ks.setValue(p.ks)
+        self.sp_kr_min.setValue(p.kr_min)
         self.sp_k2k1.setValue(p.k2_k1)
         self.sp_angle.setValue(p.k1_angle_deg)
         i = self.cbo_model.findData(p.model)
@@ -358,6 +512,13 @@ class HydraulicPropertiesDialog(QDialog):
     def _write(self, p: HydraulicProperties) -> None:
         """The widgets' values into ``p``."""
         p.ks = self.sp_ks.value()
+        p.kr_min = self.sp_kr_min.value()
+        # v0.1.275 (D271): the curve, sorted by suction. A table that holds
+        # the same points as the curve it was loaded with keeps that list
+        # as it was, so opening and pressing OK changes nothing.
+        pts, _bad = self._curve_points()
+        if sorted(pts) != sorted(tuple(q) for q in p.user_curve):
+            p.user_curve = sorted(pts, key=lambda t: t[0])
         p.k2_k1 = self.sp_k2k1.value()
         p.k1_angle_deg = self.sp_angle.value()
         p.model = self.cbo_model.currentData()
@@ -387,8 +548,8 @@ class HydraulicPropertiesDialog(QDialog):
             return
         names = sorted(lib)
         name, ok = QInputDialog.getItem(
-            self, "Pick representative parameters",
-            "Soil (literature values):", names, 0, False)
+            self, tr("Pick representative parameters"),
+            tr("Soil (literature values):"), names, 0, False)
         if not ok:
             return
         for key, value in lib[name].items():
@@ -403,11 +564,18 @@ class HydraulicPropertiesDialog(QDialog):
             if widget is not None:
                 widget.setValue(float(value))
 
-    def _plot(self) -> None:
-        """Graph the permeability function currently defined."""
+    def _plot(self):
+        """Graph the permeability function currently defined.
+
+        v0.1.275 (D271): NOT modal (it was ``exec()``: an informative chart
+        that blocks the dialog cannot be compared with the table beside it,
+        and blocks a run without a screen for ever); the points of a user
+        curve are drawn over its interpolation; the scale is the Ks the
+        material is computed with (``saturated_k``), which for a user curve
+        is its first point — it was the ``ks`` box, disabled there."""
         self._store(self._current)
         if not (0 <= self._current < len(self._props)):
-            return
+            return None
         p = self._props[self._current]
         try:
             import matplotlib
@@ -415,9 +583,9 @@ class HydraulicPropertiesDialog(QDialog):
             from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
             from matplotlib.figure import Figure
         except ImportError:
-            QMessageBox.information(self, "Plot",
-                                    "matplotlib is not installed.")
-            return
+            QMessageBox.information(self, tr("Plot"),
+                                    tr("matplotlib is not installed."))
+            return None
         curve = p.curve(psi_max=1e4, n=90)
         dlg = QDialog(self)
         dlg.setWindowTitle(tr("Permeability function"))
@@ -425,17 +593,28 @@ class HydraulicPropertiesDialog(QDialog):
         v = QVBoxLayout(dlg)
         fig = Figure(figsize=(5.4, 3.8), tight_layout=True)
         ax = fig.add_subplot(111)
+        k_sat = p.saturated_k()
         xs = [max(c[0], 1e-2) for c in curve[1:]]
-        ys = [p.ks * c[1] for c in curve[1:]]
+        ys = [k_sat * c[1] for c in curve[1:]]
         ax.loglog(xs, ys, lw=1.8)
+        if p.model == PermeabilityModel.USER_DEFINED and p.user_curve:
+            pts = sorted(p.user_curve, key=lambda t: t[0])
+            ax.loglog([max(s, 1e-2) for s, _k in pts], [k for _s, k in pts],
+                      "o", label=tr("Points of the user curve"))
+            ax.legend(fontsize=8)
         # v0.1.200 — in the unit the model is written in.
         ax.set_xlabel(tr("Suction head (m)") if p.suction_unit() == "m"
                       else tr("Matric suction (kPa)"))
-        ax.set_ylabel("Permeability k")
+        ax.set_ylabel(tr("Permeability k"))
         ax.grid(True, which="both", alpha=0.3)
         ax.set_title(self.cbo_model.currentText())
         v.addWidget(FigureCanvasQTAgg(fig))
-        dlg.exec()
+        dlg.show()
+        # kept so Qt does not collect the window as soon as this returns
+        if not hasattr(self, "_plot_windows"):
+            self._plot_windows = []
+        self._plot_windows.append(dlg)
+        return dlg
 
     # ==================================================================
     def _accept(self) -> None:
