@@ -1327,7 +1327,10 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
                             "bc_lambda, bc_psi_b, fx_a, fx_b, fx_c, "
                             "gardner_a, gardner_n, vg_alpha, vg_n, vg_m, "
                             "vg_custom_m, user_curve [[suction_kPa, k], "
-                            "...], wc_sat, wc_res, specific_storage. A "
+                            "...], wc_sat, wc_res, wc_alpha (1/m: the "
+                            "alpha of the transient's water-retention "
+                            "curve for every model but van_genuchten, "
+                            "which uses vg_alpha), specific_storage. A "
                             "parameter of another model is refused.")
             ] = None,
             reset: Annotated[bool, Field(

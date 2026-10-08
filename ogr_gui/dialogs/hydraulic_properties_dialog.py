@@ -30,6 +30,14 @@ both the van Genuchten permeability and the retention curve of every
 model, an OGR convention); theta_s, theta_r and Ss are greyed out when no
 transient analysis reads them (``rules.transient_storage_is_read``).
 
+v0.1.278 (D275) — the alpha of that curve is per model. The group's alpha
+is ``wc_alpha``, read by every model except van Genuchten; the van
+Genuchten page has its own alpha again, ``vg_alpha``, which with that model
+is both the permeability and the curve (one alpha, as van Genuchten 1980
+derives one from the other). Each of alpha, n and m is greyed out when it
+moves nothing for the model shown and the analysis
+(``rules.retention_field_is_read``).
+
 Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
@@ -64,7 +72,8 @@ from ogr_core.hydraulic import (
     library_for,
 )
 from ogr_core.hydraulic.permeability_models import parse_user_curve_text
-from ogr_core.project.rules import transient_storage_is_read
+from ogr_core.project.rules import (retention_field_is_read,
+                                    transient_storage_is_read)
 from ogr_gui.dialogs.material_properties_dialog import (
     _exact_text,
     _PreciseSpinBox,
@@ -320,16 +329,18 @@ class HydraulicPropertiesDialog(QDialog):
         self._pages[PermeabilityModel.GARDNER] = w
         self.stack.addWidget(w)
 
-        # van Genuchten — its alpha, n and m are those of the water content
-        # function below (one set of widgets; v0.1.268, D191)
+        # van Genuchten — its own alpha (v0.1.278, D275), and the n and m of
+        # the water content function below
         w = QWidget()
-        v = QVBoxLayout(w)
+        f = QFormLayout(w)
+        self.sp_vg_alpha = _spin(1e-9, 1e4, 3.6, 6, 0.1)
+        f.addRow(tr("alpha (1/m):"), self.sp_vg_alpha)
         note = QLabel(tr(
-            "The van Genuchten permeability uses the alpha, n and m of the "
-            "water content function below."))
+            "The van Genuchten permeability uses this alpha and the n and m "
+            "of the water content function below; with this model the water "
+            "content function uses this alpha too."))
         note.setWordWrap(True)
-        v.addWidget(note)
-        v.addStretch(1)
+        f.addRow(note)
         self._pages[PermeabilityModel.VAN_GENUCHTEN] = w
         self.stack.addWidget(w)
 
@@ -347,13 +358,15 @@ class HydraulicPropertiesDialog(QDialog):
         self.sp_wc_res = _spin(0.0, 1.0, 0.05, 4, 0.01)
         f.addRow(tr("Saturated water content (θs):"), self.sp_wc_sat)
         f.addRow(tr("Residual water content (θr):"), self.sp_wc_res)
-        self.sp_vg_alpha = _spin(1e-9, 1e4, 3.6, 6, 0.1)
+        # v0.1.278 (D275): the curve's own alpha; van Genuchten uses its
+        # page's (greyed out here then, see _refresh_retention)
+        self.sp_wc_alpha = _spin(1e-9, 1e4, 0.036, 6, 0.01)
         self.sp_vg_n = _spin(1.0001, 20.0, 1.56, 4, 0.05)
         self.chk_custom_m = QCheckBox(tr("Custom m"))
         self.sp_vg_m = _spin(1e-4, 0.9999, 0.359, 4, 0.02)
-        self.chk_custom_m.toggled.connect(self.sp_vg_m.setEnabled)
+        self.chk_custom_m.toggled.connect(self._refresh_retention)
         self.sp_vg_m.setEnabled(False)
-        f.addRow(tr("alpha (1/m):"), self.sp_vg_alpha)
+        f.addRow(tr("alpha (1/m):"), self.sp_wc_alpha)
         f.addRow(tr("n:"), self.sp_vg_n)
         f.addRow(self.chk_custom_m, self.sp_vg_m)
         # Ten decimals: with six, opening the dialog and pressing OK set an
@@ -367,8 +380,32 @@ class HydraulicPropertiesDialog(QDialog):
             if not read:
                 wdg.setToolTip(tr(
                     "Read only by a transient groundwater analysis."))
-        for wdg in (self.sp_wc_sat, self.sp_wc_res, self.sp_ss):
+        for wdg in (self.sp_wc_sat, self.sp_wc_res, self.sp_ss,
+                    self.sp_wc_alpha):
             wdg.valueChanged.connect(self._refresh_problems)
+
+    def _refresh_retention(self, *_args) -> None:
+        """Grey out the alpha, n and m of the water content function that
+        move nothing for the model shown and this project's analysis
+        (rule 7; v0.1.278, D275, ``rules.retention_field_is_read``)."""
+        if not hasattr(self, "cbo_model"):
+            return
+        mdl = self.cbo_model.currentData()
+        tips = {
+            "wc_alpha": tr("With van Genuchten the water content function "
+                           "uses the alpha of its page; with the other "
+                           "models it is read only by a transient "
+                           "groundwater analysis."),
+            "vg_n": tr("Read only by a transient groundwater analysis."),
+        }
+        for field, wdg in (("wc_alpha", self.sp_wc_alpha),
+                           ("vg_n", self.sp_vg_n),
+                           ("vg_custom_m", self.chk_custom_m)):
+            read = retention_field_is_read(self.project, mdl, field)
+            wdg.setEnabled(read)
+            wdg.setToolTip("" if read else tips.get(field, tips["vg_n"]))
+        self.sp_vg_m.setEnabled(self.chk_custom_m.isEnabled()
+                                and self.chk_custom_m.isChecked())
 
     # ==================================================================
     def _on_model_changed(self, _idx: int) -> None:
@@ -382,6 +419,7 @@ class HydraulicPropertiesDialog(QDialog):
         self._sync_ks()
         # Pick is only offered for models with a parameter library
         self.btn_pick.setEnabled(bool(library_for(mdl)))
+        self._refresh_retention()
         self._refresh_problems()
 
     def _refresh_problems(self, *_args) -> None:
@@ -518,6 +556,7 @@ class HydraulicPropertiesDialog(QDialog):
         self.sp_vg_m.setValue(p.vg_m)
         self.sp_wc_sat.setValue(p.wc_sat)
         self.sp_wc_res.setValue(p.wc_res)
+        self.sp_wc_alpha.setValue(p.wc_alpha)
         self.sp_ss.setValue(p.specific_storage)
         self._on_model_changed(0)
 
@@ -553,6 +592,7 @@ class HydraulicPropertiesDialog(QDialog):
         p.vg_m = self.sp_vg_m.value()
         p.wc_sat = self.sp_wc_sat.value()
         p.wc_res = self.sp_wc_res.value()
+        p.wc_alpha = self.sp_wc_alpha.value()
         p.specific_storage = self.sp_ss.value()
 
     # ==================================================================

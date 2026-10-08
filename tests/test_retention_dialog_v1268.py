@@ -21,6 +21,10 @@ What these tests protect:
 * theta_s, theta_r and Ss are greyed out when no transient analysis reads
   them (``rules.transient_storage_is_read``) and alpha/n/m are not (they are
   also the van Genuchten permeability, which a steady analysis reads);
+  since v0.1.278 (D275) the group's alpha is ``wc_alpha``, and alpha, n and
+  m are greyed out where they move nothing for the model shown
+  (``rules.retention_field_is_read``, its own test in
+  ``test_retention_alpha_v1278.py``);
 * Ss keeps ten decimals: 1e-7 survives opening the dialog and pressing OK;
 * a User Defined material without a curve says so inside the dialog.
 
@@ -62,7 +66,7 @@ def _project(transient=True):
     for m in p.materials:
         m.hydraulic = HydraulicProperties(
             ks=1e-5, model=PermeabilityModel.USER_DEFINED,
-            user_curve=list(CURVE_KPA), vg_alpha=1.0, vg_n=1.5,
+            user_curve=list(CURVE_KPA), wc_alpha=1.0, vg_n=1.5,
             wc_sat=0.4, wc_res=0.05, specific_storage=1e-3)
     return p
 
@@ -139,7 +143,9 @@ class TestEveryFieldMovesTheTransient:
         self._check(lambda d: d.sp_wc_res.setValue(0.10), "wc_res")
 
     def test_alpha(self):
-        self._check(lambda d: d.sp_vg_alpha.setValue(2.0), "vg_alpha")
+        # v0.1.278 (D275): the group's alpha is wc_alpha; the material is a
+        # user curve, whose retention does not read vg_alpha
+        self._check(lambda d: d.sp_wc_alpha.setValue(2.0), "wc_alpha")
 
     def test_n(self):
         self._check(lambda d: d.sp_vg_n.setValue(2.0), "vg_n")
@@ -160,7 +166,14 @@ class TestTheGroupFollowsTheRule:
         d = _dialog(_project(transient=False))
         for w in (d.sp_wc_sat, d.sp_wc_res, d.sp_ss):
             assert w.isEnabled() is False
-        # alpha and n are also the van Genuchten permeability
+        # v0.1.278 (D275): with this user curve and no transient, the
+        # curve's alpha and n move nothing either; with van Genuchten its
+        # page's alpha and the n are its permeability
+        assert d.sp_wc_alpha.isEnabled() is False
+        assert d.sp_vg_n.isEnabled() is False
+        from ogr_core.hydraulic import PermeabilityModel
+        d.cbo_model.setCurrentIndex(
+            d.cbo_model.findData(PermeabilityModel.VAN_GENUCHTEN))
         assert d.sp_vg_alpha.isEnabled() is True
         assert d.sp_vg_n.isEnabled() is True
 

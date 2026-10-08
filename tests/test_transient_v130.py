@@ -58,13 +58,13 @@ def _rect_mesh(w, h, size):
 class TestRetentionCurve:
     def test_saturated_and_dry_limits(self):
         p = HydraulicProperties(wc_sat=0.45, wc_res=0.08,
-                                vg_alpha=0.05, vg_n=2.0)
+                                wc_alpha=0.05, vg_n=2.0)
         assert abs(p.water_content(0.0) - 0.45) < 1e-12
         assert abs(p.water_content(-5.0) - 0.45) < 1e-12
         assert p.water_content(1e6) < 0.09
 
     def test_monotone_decreasing(self):
-        p = HydraulicProperties(vg_alpha=0.05, vg_n=2.0)
+        p = HydraulicProperties(wc_alpha=0.05, vg_n=2.0)
         prev = p.water_content(0.0)
         for psi in (1, 5, 10, 50, 200, 1000):
             th = p.water_content(psi)
@@ -75,7 +75,7 @@ class TestRetentionCurve:
         """C = d(theta)/d(pressure head) must match a numerical
         derivative of the retention curve."""
         p = HydraulicProperties(wc_sat=0.45, wc_res=0.08,
-                                vg_alpha=0.05, vg_n=2.0)
+                                wc_alpha=0.05, vg_n=2.0)
         for psi in (2.0, 10.0, 40.0, 150.0):
             d = 1e-4 * psi
             num = (p.water_content(psi - d)
@@ -92,8 +92,9 @@ class TestRetentionCurve:
         assert abs(p.storage_at(5.0) - 3e-4) < 1e-15
         # Capillary storage is substantially larger than elastic storage.
         # The exact ratio depends on the retention parameters (with the
-        # default loam-like curve it is about 10x, with a sand it is far
-        # more), so the assertion stays deliberately modest.
+        # default curve it is about 10x — alpha 0.036 1/m since v0.1.278,
+        # D275; the loam's 3.6 before —, with a sand it is far more), so
+        # the assertion stays deliberately modest.
         assert p.storage_at(-10.0) > 5 * 3e-4
 
     def test_storage_content_is_the_integral_of_storage(self):
@@ -101,7 +102,7 @@ class TestRetentionCurve:
         this consistency is what keeps the modified Picard scheme valid
         across the water table."""
         p = HydraulicProperties(wc_sat=0.45, wc_res=0.08,
-                                vg_alpha=0.05, vg_n=2.0,
+                                wc_alpha=0.05, vg_n=2.0,
                                 specific_storage=1e-3)
         for ph in (-40.0, -10.0, -2.0, 3.0, 20.0):
             d = 1e-4
@@ -237,7 +238,7 @@ class TestAsymptoticConsistency:
     def _props(self):
         return {"m": HydraulicProperties(
             ks=1e-5, model=PermeabilityModel.GARDNER,
-            gardner_a=1.0, gardner_n=3.0, vg_alpha=0.1, vg_n=2.0,
+            gardner_a=1.0, gardner_n=3.0, wc_alpha=0.1, vg_n=2.0,
             wc_sat=0.4, wc_res=0.05, specific_storage=1e-4)}
 
     def test_long_time_matches_steady_state(self):

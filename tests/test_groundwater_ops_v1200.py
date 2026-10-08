@@ -206,11 +206,12 @@ class TestTheLibraryIsInItsUnit:
     def test_the_retention_curve_is_in_metres(self):
         """theta(h) = theta_r + (theta_s - theta_r)[1 + (alpha h)^n]^-m,
         h in metres (van Genuchten 1980), what the transient storage
-        reads for every model."""
+        reads for every model. Its alpha is ``wc_alpha`` for every model but
+        van Genuchten since v0.1.278 (D275); this material is Constant."""
         from ogr_core.hydraulic import HydraulicProperties
         p = HydraulicProperties()
         m = 1.0 - 1.0 / p.vg_n
-        se = (1.0 + (p.vg_alpha * 1.5) ** p.vg_n) ** (-m)
+        se = (1.0 + (p.wc_alpha * 1.5) ** p.vg_n) ** (-m)
         exact = p.wc_res + (p.wc_sat - p.wc_res) * se
         assert abs(p.storage_content(-1.5) - exact) < 1e-15
 

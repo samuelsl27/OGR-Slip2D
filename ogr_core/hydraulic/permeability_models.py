@@ -108,24 +108,27 @@ SUCTION_UNIT = {
 }
 
 
-#: The parameters each permeability function READS (v0.1.200). What every
-#: model reads besides these — Ks, anisotropy, the kr floor and the
-#: water-retention curve of the transient analysis (van Genuchten's alpha,
-#: n and m for EVERY model, with theta_s, theta_r and Ss: an OGR
+#: The parameters each model READS beyond :data:`COMMON_FIELDS` (v0.1.200).
+#: What every model reads — Ks, anisotropy, the kr floor and the
+#: water-retention curve of the transient analysis (a van Genuchten curve
+#: with n and m, theta_s, theta_r and Ss for EVERY model: an OGR
 #: convention, see ``HydraulicProperties.water_content``, D191) — is in
-#: :data:`COMMON_FIELDS`. A parameter of another model is kept, as the
-#: interface keeps each model's page, but it moves nothing.
+#: :data:`COMMON_FIELDS`. The alpha of that curve is per model (v0.1.278,
+#: D275): van Genuchten reads its own ``vg_alpha`` in both, every other
+#: model reads ``wc_alpha`` (``HydraulicProperties.retention_alpha``). A
+#: parameter of another model is kept, as the interface keeps each model's
+#: page, but it moves nothing.
 MODEL_FIELDS = {
-    PermeabilityModel.CONSTANT: (),
-    PermeabilityModel.SIMPLE: ("simple_soil_type",),
-    PermeabilityModel.BROOKS_COREY: ("bc_lambda", "bc_psi_b"),
-    PermeabilityModel.FREDLUND_XING: ("fx_a", "fx_b", "fx_c"),
-    PermeabilityModel.GARDNER: ("gardner_a", "gardner_n"),
-    PermeabilityModel.VAN_GENUCHTEN: (),
-    PermeabilityModel.USER_DEFINED: ("user_curve",),
+    PermeabilityModel.CONSTANT: ("wc_alpha",),
+    PermeabilityModel.SIMPLE: ("simple_soil_type", "wc_alpha"),
+    PermeabilityModel.BROOKS_COREY: ("bc_lambda", "bc_psi_b", "wc_alpha"),
+    PermeabilityModel.FREDLUND_XING: ("fx_a", "fx_b", "fx_c", "wc_alpha"),
+    PermeabilityModel.GARDNER: ("gardner_a", "gardner_n", "wc_alpha"),
+    PermeabilityModel.VAN_GENUCHTEN: ("vg_alpha",),
+    PermeabilityModel.USER_DEFINED: ("user_curve", "wc_alpha"),
 }
 COMMON_FIELDS = ("ks", "k2_k1", "k1_angle_deg", "model", "kr_min",
-                 "vg_alpha", "vg_n", "vg_m", "vg_custom_m", "wc_sat",
+                 "vg_n", "vg_m", "vg_custom_m", "wc_sat",
                  "wc_res", "specific_storage")
 
 

@@ -89,7 +89,10 @@ def _drawdown(scale, rule, face=True):
     t, mesh = _t127()
     props = {"m": HydraulicProperties(
         ks=t.K_DAM * scale, model=PermeabilityModel.GARDNER, gardner_a=1.0,
-        gardner_n=3.0)}
+        gardner_n=3.0,
+        # the retention these numbers were measured with (the
+        # default alpha up to 0.1.277; v0.1.278, D275)
+        wc_alpha=3.6)}
     old = seepage.TRANSIENT_FACE_RULE
     try:
         seepage.TRANSIENT_FACE_RULE = rule

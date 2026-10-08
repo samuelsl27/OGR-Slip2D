@@ -139,12 +139,22 @@ def hydraulic_set(ws, material: str, project_id: Optional[str] = None,
             if key not in read:
                 owners = [mm.value for mm, fs in MODEL_FIELDS.items()
                           if key in fs]
+                hint = (f"Pass model='{owners[0]}' in the same call to "
+                        f"switch.")
+                # v0.1.278 (D275): the two alphas of the retention curve
+                if key == "vg_alpha":
+                    hint = ("The water-retention curve of this model reads "
+                            "wc_alpha; vg_alpha is the van Genuchten "
+                            "permeability's. " + hint)
+                elif key == "wc_alpha":
+                    hint = ("With van_genuchten the water-retention curve "
+                            "reads vg_alpha: one alpha in the water content "
+                            "and in the permeability (van Genuchten 1980).")
                 raise Conflict(
                     f"{key} is only read by the {' / '.join(owners)} model, "
                     f"and this material's is {hp.model.value}: it would "
                     f"move nothing.",
-                    hint=f"Pass model='{owners[0]}' in the same call to "
-                         f"switch.")
+                    hint=hint)
             if key == "user_curve":
                 value = [tuple(p) for p in points(raw, "user_curve",
                                                   minimum=2)]
@@ -176,13 +186,14 @@ def hydraulic_set(ws, material: str, project_id: Optional[str] = None,
         m.hydraulic = hp
         project._notify("material_modified")
         if hp.model != PermeabilityModel.VAN_GENUCHTEN and any(
-                k.startswith("vg_") for k in props):
+                k.startswith("vg_") or k == "wc_alpha" for k in props):
             # v0.1.268 (D191): one van Genuchten curve as the retention of
-            # every model is OGR's convention (see water_content).
-            notes.append("vg_alpha, vg_n and vg_m also define this "
-                         "material's water-retention curve, which only the "
-                         "transient analysis reads (an OGR convention: the "
-                         "van Genuchten curve serves every model).")
+            # every model is OGR's convention (see water_content); its alpha
+            # is wc_alpha since v0.1.278 (D275).
+            notes.append("wc_alpha, vg_n and vg_m define this material's "
+                         "water-retention curve, which only the transient "
+                         "analysis reads (an OGR convention: a van Genuchten "
+                         "curve serves every model).")
         if not any(mm.pore_pressure == PorePressureType.FEM_SEEPAGE
                    for mm in project.materials):
             notes.append("No material takes its pore pressure from the "

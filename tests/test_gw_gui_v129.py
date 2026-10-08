@@ -186,7 +186,13 @@ class TestHydraulicPropertiesDialog:
             assert d.btn_pick.isEnabled() is expected, mdl
 
     def test_custom_m_gates_the_m_field(self):
+        from ogr_core.hydraulic import PermeabilityModel
         _p, d = self._dlg()
+        # v0.1.278 (D275): m is read by the van Genuchten permeability and,
+        # with another model, only by a transient; this project is steady,
+        # so the gate is checked where m moves a number.
+        d.cbo_model.setCurrentIndex(
+            d.cbo_model.findData(PermeabilityModel.VAN_GENUCHTEN))
         assert d.sp_vg_m.isEnabled() is False
         d.chk_custom_m.setChecked(True)
         assert d.sp_vg_m.isEnabled() is True

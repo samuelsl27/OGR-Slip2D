@@ -62,6 +62,20 @@ from .permeability_models import (  # noqa: E402
 #: none of them moves. Switch off to rebuild 0.1.274.
 USER_KS_FROM_CURVE = True
 
+#: v0.1.278 (D275) — the water-retention curve of the transient analysis
+#: reads an alpha of its own, ``wc_alpha``, with every permeability model
+#: except van Genuchten (``HydraulicProperties.retention_alpha``).
+#:
+#: ``vg_alpha`` was both the van Genuchten PERMEABILITY parameter and the
+#: retention of every model, and its default (3.6 1/m since v0.1.200, the
+#: loam of Carsel & Parrish 1988) gave a new material a retention far from
+#: the published transients: problem 18 of the groundwater verification
+#: manual off by 2.77 m at 19 656 h, against 0.61 m with 0.036. Every
+#: transient of the verification bank fixes its retention alpha in its
+#: script, and a file without ``wc_alpha`` keeps reading the alpha it read,
+#: so none of them moves. Switch off to rebuild 0.1.277.
+RETENTION_OWN_ALPHA = True
+
 
 class UnsaturatedModel(Enum):
     """Backwards-compatible alias kept for models written by v0.1.26.
@@ -112,6 +126,9 @@ class HydraulicProperties:
     # Water content / storage (Phase 6 — transient analysis)
     wc_sat: float = 0.4                # saturated water content theta_s
     wc_res: float = 0.05               # residual water content theta_r
+    # v0.1.278 (D275): the alpha of that curve for every model except van
+    # Genuchten (see ``retention_alpha``) [1/m]
+    wc_alpha: float = 0.036
     # Specific storage [1/length]: elastic storage of the SATURATED zone
     # (compressibility of water plus the soil skeleton). Small compared
     # with the unsaturated storage, but it is what keeps the transient
@@ -200,6 +217,7 @@ class HydraulicProperties:
         need(self.gardner_a >= 0, "gardner_a cannot be negative.")
         need(self.gardner_n > 0, "gardner_n must be positive.")
         need(self.vg_alpha > 0, "vg_alpha must be positive.")
+        need(self.wc_alpha > 0, "wc_alpha must be positive.")
         need(self.vg_n > 1, "vg_n must be greater than 1.")
         need(0 < self.vg_m < 1, "vg_m must be between 0 and 1.")
         need(0 <= self.wc_res < self.wc_sat <= 1,
@@ -281,16 +299,39 @@ class HydraulicProperties:
         return kxx * kr, kyy * kr, kxy * kr
 
     # ------------------------------------------------------------------
+    def retention_alpha(self) -> float:
+        """The alpha of the water-retention curve [1/m] (v0.1.278, D275).
+
+        With the van Genuchten permeability model, ``vg_alpha``: van
+        Genuchten (1980) derives the permeability from that same curve
+        (with Mualem's model), so one alpha serves both and splitting them
+        would break the pair. With every other model, ``wc_alpha``, a
+        retention parameter of its own; the permeability function does not
+        read it.
+
+        Its default, 0.036 1/m, is an OGR convention, like the curve
+        itself (see ``water_content``): it is the alpha that reproduces the
+        published transients of the groundwater verification problems 17
+        and 18 best among the readings measured in v0.1.268 (problem 18,
+        head on the toe slope at 19 656 h against the figure: 0.61 m off,
+        and 2.77 m with the loam's 3.6). It is not a soil texture. Until
+        v0.1.277 the retention of every model read ``vg_alpha``, whose
+        default of 3.6 is the van Genuchten permeability of a loam.
+        """
+        if RETENTION_OWN_ALPHA and self.model != PermeabilityModel.VAN_GENUCHTEN:
+            return self.wc_alpha
+        return self.vg_alpha
+
     def water_content(self, suction: float) -> float:
         """Volumetric water content theta at suction HEAD ``suction`` [m]
         (``storage_content`` passes -P; v0.1.200 — this said "matric
         suction", the kPa word, and van Genuchten's alpha is in 1/m).
 
         Uses the van Genuchten (1980) retention curve for every model,
-        parameterised by ``vg_alpha``/``vg_n`` and the saturated and
-        residual water contents: the permeability function governs how
-        fast water MOVES, this curve how much is STORED, and only the
-        second enters the transient storage term.
+        parameterised by :meth:`retention_alpha`, ``vg_n``/``vg_m`` and the
+        saturated and residual water contents: the permeability function
+        governs how fast water MOVES, this curve how much is STORED, and
+        only the second enters the transient storage term.
 
         That one curve serves every permeability model is an OGR
         CONVENTION (v0.1.268, D191). This said that the reference "likewise
@@ -306,14 +347,16 @@ class HydraulicProperties:
         h), and this curve with alpha = 0.036 1/m the best (0.6 m; its
         water table at 16 383 h in problem 17 within 0.05 m of the
         figure). So the convention stays, and is now visible: the
-        hydraulic-properties dialog shows it with every model.
+        hydraulic-properties dialog shows it with every model. The alpha of
+        a new material that is not van Genuchten is that 0.036 since
+        v0.1.278 (``retention_alpha``, D275).
         """
         if suction <= 0.0:
             return self.wc_sat
         n = max(self.vg_n, 1.0 + 1e-9)
         m = self.vg_m if self.vg_custom_m else (1.0 - 1.0 / n)
         m = min(max(m, 1e-6), 1.0 - 1e-9)
-        a = max(self.vg_alpha, 1e-12)
+        a = max(self.retention_alpha(), 1e-12)
         se = (1.0 + (a * suction) ** n) ** (-m)
         se = min(max(se, 0.0), 1.0)
         return self.wc_res + (self.wc_sat - self.wc_res) * se
@@ -336,7 +379,7 @@ class HydraulicProperties:
         n = max(self.vg_n, 1.0 + 1e-9)
         m = self.vg_m if self.vg_custom_m else (1.0 - 1.0 / n)
         m = min(max(m, 1e-6), 1.0 - 1e-9)
-        a = max(self.vg_alpha, 1e-12)
+        a = max(self.retention_alpha(), 1e-12)
         ap = a * suction
         try:
             dse_dpsi = (-m * n * a * ap ** (n - 1.0)
@@ -416,11 +459,16 @@ class HydraulicProperties:
             "vg_m": self.vg_m, "vg_custom_m": self.vg_custom_m,
             "user_curve": [list(p) for p in self.user_curve],
             "wc_sat": self.wc_sat, "wc_res": self.wc_res,
+            "wc_alpha": self.wc_alpha,
             "specific_storage": self.specific_storage,
         }
 
     @classmethod
     def from_dict(cls, d: dict) -> "HydraulicProperties":
+        # NOT the dataclass default (3.6 since v0.1.200): a file without
+        # vg_alpha was written when the default was 0.036, evaluated as 1/m,
+        # and loading must keep what it meant.
+        vg_alpha = float(d.get("vg_alpha", 0.036))
         return cls(
             ks=float(d.get("ks", 1.0e-6)),
             k2_k1=float(d.get("k2_k1", 1.0)),
@@ -436,16 +484,16 @@ class HydraulicProperties:
             fx_c=float(d.get("fx_c", 1.0)),
             gardner_a=float(d.get("gardner_a", 0.01)),
             gardner_n=float(d.get("gardner_n", 2.0)),
-            # NOT the dataclass default (3.6 since v0.1.200): a file
-            # without this key was written when the default was 0.036,
-            # evaluated as 1/m, and loading must keep what it meant.
-            vg_alpha=float(d.get("vg_alpha", 0.036)),
+            vg_alpha=vg_alpha,
             vg_n=float(d.get("vg_n", 1.56)),
             vg_m=float(d.get("vg_m", 0.359)),
             vg_custom_m=bool(d.get("vg_custom_m", False)),
             user_curve=[tuple(p) for p in d.get("user_curve", [])],
             wc_sat=float(d.get("wc_sat", 0.4)),
             wc_res=float(d.get("wc_res", 0.05)),
+            # v0.1.278 (D275): a file without wc_alpha was written when the
+            # retention of every model read vg_alpha, so it keeps reading it
+            wc_alpha=float(d.get("wc_alpha", vg_alpha)),
             specific_storage=float(d.get("specific_storage", 1.0e-5)),
         )
 

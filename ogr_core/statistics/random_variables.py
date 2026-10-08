@@ -55,6 +55,7 @@ _MATERIAL_PARAMS = ("unit_weight", "sat_unit_weight", "ru", "constant_u",
 _HYDRAULIC_PARAMS = ("ks", "k2_k1", "k1_angle_deg", "bc_lambda",
                      "bc_psi_b", "fx_a", "fx_b", "fx_c", "gardner_a",
                      "gardner_n", "vg_alpha", "vg_n", "wc_sat", "wc_res",
+                     "wc_alpha",
                      "specific_storage")
 _SEISMIC_PARAMS = ("kh", "kv")
 _DIST_LOAD_PARAMS = ("magnitude_1", "magnitude_2")

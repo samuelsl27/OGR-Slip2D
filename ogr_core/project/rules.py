@@ -1541,9 +1541,37 @@ def transient_storage_is_read(project) -> bool:
 
     v0.1.268 (D191) — the hydraulic-properties dialog shows theta_s,
     theta_r and Ss for every model and greys them out when this is False,
-    so a field that changes nothing says so (rule 7). Alpha, n and m are
-    NOT governed by this rule: they are also the permeability of the van
-    Genuchten model, which a steady analysis reads.
+    so a field that changes nothing says so (rule 7). The alpha, n and m of
+    the curve depend on the permeability model too: see
+    :func:`retention_field_is_read`.
     """
     gw = getattr(getattr(project, "settings", None), "groundwater", None)
     return bool(getattr(gw, "transient", False))
+
+
+def retention_field_is_read(project, model, field: str) -> bool:
+    """True when ``field`` of the water-retention curve of a material with
+    permeability ``model`` moves a number in ``project`` (rule 7).
+
+    v0.1.278 (D275):
+
+    * ``wc_alpha`` — only a transient analysis, and never with van
+      Genuchten, whose curve reads ``vg_alpha``
+      (``HydraulicProperties.retention_alpha``);
+    * ``vg_alpha`` — always with van Genuchten (its permeability); never
+      with another model;
+    * ``vg_n``, ``vg_m`` and ``vg_custom_m`` — always with van Genuchten
+      (its permeability); with another model, only a transient;
+    * ``wc_sat``, ``wc_res`` and ``specific_storage`` — only a transient
+      (:func:`transient_storage_is_read`).
+    """
+    from ogr_core.hydraulic.permeability_models import PermeabilityModel
+    vg = model == PermeabilityModel.VAN_GENUCHTEN
+    transient = transient_storage_is_read(project)
+    if field == "wc_alpha":
+        return transient and not vg
+    if field == "vg_alpha":
+        return vg
+    if field in ("vg_n", "vg_m", "vg_custom_m"):
+        return vg or transient
+    return transient

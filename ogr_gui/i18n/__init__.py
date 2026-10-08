@@ -1379,8 +1379,10 @@ _DICTS: dict[str, dict[str, str]] = {
         'Loam': 'Franco',
         'k = Ks everywhere (fully saturated).': 'k = Ks en todo el dominio (totalmente saturado).',
         'Ks is taken from the first point of the user curve.': 'Ks se toma del primer punto de la curva del usuario.',
-        'The van Genuchten permeability uses the alpha, n and m of the water content function below.':
-            'La permeabilidad de van Genuchten usa la alfa, la n y la m de la función de contenido de agua de abajo.',
+        'The van Genuchten permeability uses this alpha and the n and m of the water content function below; with this model the water content function uses this alpha too.':
+            'La permeabilidad de van Genuchten usa esta alfa y la n y la m de la función de contenido de agua de abajo; con este modelo, la función de contenido de agua usa también esta alfa.',
+        'With van Genuchten the water content function uses the alpha of its page; with the other models it is read only by a transient groundwater analysis.':
+            'Con van Genuchten, la función de contenido de agua usa la alfa de su página; con los demás modelos solo la lee un análisis transitorio de agua subterránea.',
         'Water content function (transient analysis)': 'Función de contenido de agua (análisis transitorio)',
         'The transient analysis reads this van Genuchten curve with every permeability model (an OGR convention); below the water table it reads the specific storage.':
             'El análisis transitorio lee esta curva de van Genuchten con cualquier modelo de permeabilidad (un convenio de OGR); bajo el nivel freático lee el almacenamiento específico.',
@@ -1414,6 +1416,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'gardner_a cannot be negative.': 'La a de Gardner no puede ser negativa.',
         'gardner_n must be positive.': 'La n de Gardner tiene que ser positiva.',
         'vg_alpha must be positive.': 'La α de van Genuchten tiene que ser positiva.',
+        'wc_alpha must be positive.': 'La α de la función de contenido de agua tiene que ser positiva.',
         'vg_n must be greater than 1.': 'La n de van Genuchten tiene que ser mayor que 1.',
         'vg_m must be between 0 and 1.': 'La m de van Genuchten tiene que estar entre 0 y 1.',
         'specific_storage cannot be negative.': 'El almacenamiento específico no puede ser negativo.',
