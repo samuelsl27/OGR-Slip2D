@@ -202,7 +202,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.275"
+    VERSION = "0.1.276"
 
     def __init__(self) -> None:
         super().__init__()
@@ -2952,9 +2952,16 @@ class MainWindow(QMainWindow):
         from .dialogs.hydraulic_properties_dialog import (
             HydraulicPropertiesDialog,
         )
-        if HydraulicPropertiesDialog(self.project, self).exec():
-            self.statusBar().showMessage("Hydraulic properties updated",
-                                          4000)
+        dlg = HydraulicPropertiesDialog(self.project, self)
+        try:
+            if dlg.exec():
+                self.statusBar().showMessage("Hydraulic properties updated",
+                                              4000)
+        finally:
+            # v0.1.276 — freed with its Plot windows: it is a child of this
+            # window, and every opening left one more alive (manual test of
+            # D191/D271 found two at once)
+            dlg.deleteLater()
 
     def _seepage_bcs(self):
         """A COPY of the project's boundary conditions, or the documented
@@ -3859,6 +3866,16 @@ class MainWindow(QMainWindow):
         actions = getattr(self, "_actions", None)
         if not actions:
             return
+        # v0.1.276 (D281) — the groundwater actions too. They were refreshed
+        # only by the groundwater commands themselves and by Project
+        # Settings, not here, and this is what Open, New and the demo
+        # (``_attach_project``) and every project event call: opening a
+        # .ogr with an FEA method and a mesh left Define Hydraulic
+        # Properties, Boundary Conditions, Transient, Compute and Interpret
+        # Groundwater disabled, as they were for the empty project the
+        # window started with (found by the manual test of D191/D271).
+        if getattr(self, "project", None) is not None:
+            self._update_groundwater_actions()
         # v0.1.194 (spec 008) — WHETHER each drawing action is allowed is
         # asked of ``ogr_core.project.rules``, the same place a script or an
         # agent asks it; only the tooltips stay here, because they are

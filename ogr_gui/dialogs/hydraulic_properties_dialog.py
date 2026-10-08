@@ -44,10 +44,12 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QListWidget,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
@@ -140,7 +142,13 @@ class HydraulicPropertiesDialog(QDialog):
         root.addLayout(left, 1)
 
         # ---- parameters ---------------------------------------------
-        right = QVBoxLayout()
+        # v0.1.276 (D282) — in a scroll area. With the water content group
+        # of D191 and the curve table of D271 the column grew to 842 and 974
+        # px, taller than a 1536 x 816 screen: the title bar went off the
+        # top and the dialog could not be moved. The problems and OK /
+        # Cancel stay outside it, always in view.
+        panel = QWidget()
+        right = QVBoxLayout(panel)
 
         gb_k = QGroupBox(tr("Permeability"))
         fk = QFormLayout(gb_k)
@@ -191,6 +199,11 @@ class HydraulicPropertiesDialog(QDialog):
         fm.addWidget(self.stack)
         right.addWidget(gb_m, 1)
         right.addWidget(self.gb_wc)
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setWidget(panel)
+        column = QVBoxLayout()
+        column.addWidget(self.scroll, 1)
 
         # v0.1.268 (D191) — what makes the current material unusable, in
         # words, inside the dialog (a message box would block a test). It
@@ -198,13 +211,13 @@ class HydraulicPropertiesDialog(QDialog):
         self.lbl_problems = QLabel("")
         self.lbl_problems.setWordWrap(True)
         self.lbl_problems.setStyleSheet("color: #b00020;")
-        right.addWidget(self.lbl_problems)
+        column.addWidget(self.lbl_problems)
 
         bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         bb.accepted.connect(self._accept)
         bb.rejected.connect(self.reject)
-        right.addWidget(bb)
-        root.addLayout(right, 2)
+        column.addWidget(bb)
+        root.addLayout(column, 2)
 
         if project.materials:
             self.list.setCurrentRow(0)
@@ -234,6 +247,10 @@ class HydraulicPropertiesDialog(QDialog):
         # is in kPa since v0.1.200 (D121)
         self.tbl_curve.setHorizontalHeaderLabels(
             [tr("Matric suction (kPa)"), tr("Permeability (m/s)")])
+        # v0.1.276 — the first column as wide as its header (it showed
+        # "latric suction (kP"), the second takes the rest
+        self.tbl_curve.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.ResizeToContents)
         self.tbl_curve.horizontalHeader().setStretchLastSection(True)
         self.tbl_curve.itemChanged.connect(self._on_curve_edited)
         v.addWidget(self.tbl_curve, 1)
@@ -594,8 +611,11 @@ class HydraulicPropertiesDialog(QDialog):
         fig = Figure(figsize=(5.4, 3.8), tight_layout=True)
         ax = fig.add_subplot(111)
         k_sat = p.saturated_k()
-        xs = [max(c[0], 1e-2) for c in curve[1:]]
-        ys = [k_sat * c[1] for c in curve[1:]]
+        # v0.1.276 — from the first sample (suction 0, drawn at 1e-2 like
+        # the first point of a user curve): the line started at 0.1 and
+        # left the first point alone
+        xs = [max(c[0], 1e-2) for c in curve]
+        ys = [k_sat * c[1] for c in curve]
         ax.loglog(xs, ys, lw=1.8)
         if p.model == PermeabilityModel.USER_DEFINED and p.user_curve:
             pts = sorted(p.user_curve, key=lambda t: t[0])
