@@ -818,6 +818,15 @@ RESCUE_MIN_STEP = 1e-3
 #: Switch off to rebuild the transient of 0.1.273.
 TRANSIENT_FACE_RULE = True
 
+#: v0.1.282 (D276) — a converged transient step carries, to the next step
+#: and to the stored water, the last linear solve it publishes, and not the
+#: relaxed iterate (``TransientSeepageSolver.step``, "What is carried and
+#: what is published"). With w = 1 the two are the same to the bit (the
+#: erfc, Terzaghi, Ferris and Celia runs do not move); with w < 1 the
+#: carried state moves by about tolerance·(1 - w)/w. Switch off to rebuild
+#: 0.1.281.
+TRANSIENT_CARRY_LAST_SOLVE = True
+
 
 class _NewtonSystem:
     """The steady unsaturated equations as a residual for Newton's method
@@ -1699,6 +1708,38 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
         ``relaxation`` as ``solve_unsaturated`` defines them, so a stage
         (the result of its last step) shows how its last step converged.
         The tuple is unchanged: tests and scripts unpack it.
+
+        What is carried and what is published (v0.1.282, D276)
+        ------------------------------------------------------
+        A step that converges returns, as the state the next step and the
+        stored water start from, the last linear solve — the one ``result``
+        publishes (``TRANSIENT_CARRY_LAST_SOLVE``). Until v0.1.281 it carried
+        the RELAXED iterate and published the unrelaxed solve, which differ
+        by about tolerance·(1 - w)/w: measured on the transients of the
+        groundwater verification bank (w = 0.3), 1.6-2.2e-4 m at tolerance
+        1e-4 (05-017 to 019) and 1.7-2.1e-6 m at 1e-6 (05-020), exactly that
+        bound. The relaxation is a device of the iterations, not of the
+        state: carrying the solve keeps the published heads, their
+        reactions and the stored water those of one solved system. A step
+        that does not converge still carries the relaxed iterate (its
+        unrelaxed solve can be far off) and says so. Over a stage the
+        change is larger than that per-step bound: carrying another state
+        changes the Picard trajectory, and each step stops elsewhere within
+        the precision of the relaxed test (next section). Measured: the
+        published heads of 05-017 to 019 moved by 4 to 8 mm, 05-020 by
+        3e-5 m and the drawdown of problem 102 by 2e-7 m (none of them a
+        published figure).
+
+        What the tolerance measures (v0.1.282, D276)
+        --------------------------------------------
+        The loop stops when the RELAXED change w·max|H_new - H| falls below
+        ``tolerance`` and the face has settled, as in the steady solver
+        (D267). Judging the unrelaxed change instead (the same as running
+        with tolerance·w) was measured and not adopted: on 05-017 to 019 it
+        moves the heads by 2 to 10 mm (20 to 100 tolerances: that is how far
+        from the stricter answer the relaxed test stops) for 20 % more
+        passes, and on 05-020 by 1-4e-5 m; nothing in the bank's published
+        figures is that precise, and the steady solver keeps the same test.
         """
         n = self.mesh.node_count
         mass = self._lumped_mass()
@@ -1807,6 +1848,9 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
             "history": _change_series(changes),
             "history_segments": [["picard", 0]],
             "tolerance": self.tolerance, "relaxation": self.relaxation})
+        if converged and TRANSIENT_CARRY_LAST_SOLVE:
+            # v0.1.282 (D276): carry what is published (see the docstring)
+            H = list(step_result.total_head)
         return H, active, converged, it, step_result
 
     # ------------------------------------------------------------------
