@@ -89,7 +89,8 @@ def hydraulic_set(ws, material: str, project_id: Optional[str] = None,
                                                         MODEL_FIELDS,
                                                         SUCTION_UNIT,
                                                         PermeabilityModel,
-                                                        library_for)
+                                                        library_for,
+                                                        library_source)
     from ogr_core.materials import PorePressureType
 
     props = {} if properties is None else coerce_value(properties, dict,
@@ -127,7 +128,12 @@ def hydraulic_set(ws, material: str, project_id: Optional[str] = None,
                               list(lib))
             for key, value in lib[name].items():
                 setattr(hp, key, value)
-            notes.append(f"{name} from the library: {lib[name]}.")
+            # v0.1.279 (D273): where the numbers come from
+            source = library_source(hp.model)
+            origin = (f"from {source}" if source
+                      else "illustrative values, no published source")
+            notes.append(f"{name} from the library ({origin}): "
+                         f"{lib[name]}.")
         read = set(COMMON_FIELDS) | set(MODEL_FIELDS.get(hp.model, ()))
         for key, raw in props.items():
             if key not in known:

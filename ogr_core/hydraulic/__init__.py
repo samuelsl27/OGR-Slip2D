@@ -35,10 +35,12 @@ from .hydraulic_properties import (  # noqa: F401
     UnsaturatedModel,
 )
 from .permeability_models import (  # noqa: F401
+    LIBRARY_SOURCES,
     MATERIAL_LIBRARY,
     PermeabilityModel,
     SimpleSoilType,
     available_models,
     library_for,
+    library_source,
     register_model,
 )

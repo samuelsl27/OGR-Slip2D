@@ -309,9 +309,51 @@ def available_models() -> list[PermeabilityModel]:
 # Representative parameter library (the reference's "Pick" button)
 # ======================================================================
 #   model -> soil name -> parameter dict
-# Values are representative literature figures (van Genuchten 1980;
-# Carsel & Parrish 1988 for the VG textures; Brooks & Corey 1964).
 #
+# v0.1.279 (D273) — each library says where its numbers come from in
+# :data:`LIBRARY_SOURCES`, which the dialog, the API and the verification
+# bank read. Until this version a single comment cited "representative
+# literature figures (van Genuchten 1980; Carsel & Parrish 1988; Brooks &
+# Corey 1964)" for all four, and only the van Genuchten one had a table
+# behind it: Brooks & Corey (1964) publish no means by texture, and no
+# table by texture exists for the rational Gardner form or for
+# Fredlund-Xing, whose parameters are fitted to each soil's own data.
+
+#: Rawls, Brakensiek & Saxton (1982), table "Hydrologic soil properties
+#: classified by soil texture": the GEOMETRIC means ("antilog of the log
+#: mean") of the bubbling pressure, in cm of water, and of the pore-size
+#: distribution index lambda, for the eleven USDA textures. The geometric
+#: means because both are roughly lognormal across the samples (decision of
+#: the owner, 2026-10-08); the arithmetic means of psi_b are about twice
+#: these.
+_RAWLS_1982_BC = {
+    "Sand": (7.26, 0.592),
+    "Loamy sand": (8.69, 0.474),
+    "Sandy loam": (14.66, 0.322),
+    "Loam": (11.15, 0.220),
+    "Silt loam": (20.76, 0.211),
+    "Sandy clay loam": (28.08, 0.250),
+    "Clay loam": (25.89, 0.194),
+    "Silty clay loam": (32.56, 0.151),
+    "Sandy clay": (29.17, 0.168),
+    "Silty clay": (34.19, 0.127),
+    "Clay": (37.30, 0.131),
+}
+#: kPa per cm of water with gamma_w = 9.81 kN/m3, the project's default:
+#: the Brooks-Corey function reads psi_b in kPa and the solver converts the
+#: pressure head with the project's gamma_w (``kr_at_pressure_head``), so
+#: with the default unit weight the bubbling HEAD is exactly the table's.
+_KPA_PER_CM_OF_WATER = 9.81 / 100.0
+
+#: Where each library's numbers come from: a table by texture, cited, or
+#: None for values with no published source (shown as illustrative).
+LIBRARY_SOURCES = {
+    PermeabilityModel.VAN_GENUCHTEN.value: "Carsel & Parrish (1988)",
+    PermeabilityModel.BROOKS_COREY.value: "Rawls, Brakensiek & Saxton (1982)",
+    PermeabilityModel.GARDNER.value: None,
+    PermeabilityModel.FREDLUND_XING.value: None,
+}
+
 # v0.1.200 — the van Genuchten alphas are Carsel & Parrish's (1988) table
 # values, which that paper gives in 1/cm (sand 0.145 1/cm). They were
 # stored here as they are printed, labelled 1/kPa, and read by the solver
@@ -328,18 +370,26 @@ MATERIAL_LIBRARY: dict[str, dict[str, dict]] = {
         "Clay": {"vg_alpha": 0.8, "vg_n": 1.09},
         "Silty clay": {"vg_alpha": 0.5, "vg_n": 1.09},
     },
+    # Rawls, Brakensiek & Saxton (1982), psi_b in kPa (see _RAWLS_1982_BC).
+    # Until v0.1.278 five textures with lambda 2.0-0.3 and psi_b 5-100 kPa
+    # of no known source: the sand's psi_b was seven times the table's.
     PermeabilityModel.BROOKS_COREY.value: {
-        "Sand": {"bc_lambda": 2.0, "bc_psi_b": 5.0},
-        "Sandy loam": {"bc_lambda": 1.0, "bc_psi_b": 15.0},
-        "Loam": {"bc_lambda": 0.6, "bc_psi_b": 30.0},
-        "Silt loam": {"bc_lambda": 0.5, "bc_psi_b": 50.0},
-        "Clay": {"bc_lambda": 0.3, "bc_psi_b": 100.0},
+        soil: {"bc_lambda": lam, "bc_psi_b": hb_cm * _KPA_PER_CM_OF_WATER}
+        for soil, (hb_cm, lam) in _RAWLS_1982_BC.items()
     },
+    # ILLUSTRATIVE, no published table by texture: the rational form
+    # kr = 1/(1 + a h^n) is fitted to each soil's data, and no table of
+    # means by texture was found (2026-10-08). Kept to show the order of
+    # magnitude; the dialog and the API say so (LIBRARY_SOURCES).
     PermeabilityModel.GARDNER.value: {
         "Sand": {"gardner_a": 0.1, "gardner_n": 3.0},
         "Loam": {"gardner_a": 0.01, "gardner_n": 2.0},
         "Clay": {"gardner_a": 0.001, "gardner_n": 1.5},
     },
+    # ILLUSTRATIVE, no published table by texture: Fredlund & Xing (1994)
+    # propose the equation, whose parameters are fitted to each soil's data,
+    # and no table of means by texture was found (2026-10-08). The dialog
+    # and the API say so.
     PermeabilityModel.FREDLUND_XING.value: {
         "Sand": {"fx_a": 10.0, "fx_b": 3.0, "fx_c": 1.0},
         "Loam": {"fx_a": 50.0, "fx_b": 2.0, "fx_c": 1.0},
@@ -352,3 +402,10 @@ def library_for(model: PermeabilityModel) -> dict[str, dict]:
     """Representative parameter sets for ``model`` (empty when the model
     has no library, e.g. Simple / Constant / User Defined)."""
     return MATERIAL_LIBRARY.get(model.value, {})
+
+
+def library_source(model: PermeabilityModel):
+    """The published table ``model``'s library comes from, «Author (year)»,
+    or None when its values are illustrative, with no published source
+    (v0.1.279, D273). None too for a model without a library."""
+    return LIBRARY_SOURCES.get(model.value)

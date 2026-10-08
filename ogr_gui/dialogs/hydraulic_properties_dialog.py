@@ -14,9 +14,11 @@ Follows the reference layout reverse-engineered in
   first point of the curve);
 * the parameter widgets shown depend on the selected model;
 * **Plot** graphs the resulting k(psi) function;
-* **Pick** loads representative literature parameters, and is offered
-  only for the models that have a library (Brooks-Corey, Fredlund-Xing,
-  Gardner, van Genuchten).
+* **Pick** loads representative parameters, and is offered only for the
+  models that have a library (Brooks-Corey, Fredlund-Xing, Gardner, van
+  Genuchten). Its list says where they come from (v0.1.279, D273): the
+  published table for van Genuchten and Brooks-Corey, "illustrative, no
+  published source" for Gardner and Fredlund-Xing.
 
 v0.1.268 (D191) — the **water content function** of the transient
 analysis is a group of its own, visible with every model: theta_s,
@@ -71,7 +73,8 @@ from ogr_core.hydraulic import (
     SimpleSoilType,
     library_for,
 )
-from ogr_core.hydraulic.permeability_models import parse_user_curve_text
+from ogr_core.hydraulic.permeability_models import (library_source,
+                                                     parse_user_curve_text)
 from ogr_core.project.rules import (retention_field_is_read,
                                     transient_storage_is_read)
 from ogr_gui.dialogs.material_properties_dialog import (
@@ -301,7 +304,10 @@ class HydraulicPropertiesDialog(QDialog):
         w = QWidget()
         f = QFormLayout(w)
         self.sp_bc_lambda = _spin(0.01, 20.0, 0.6, 4, 0.05)
-        self.sp_bc_psib = _spin(0.0, 1e6, 30.0, 3, 5.0)
+        # Six decimals (v0.1.279, D273): the library's psi_b is the table's
+        # cm times 0.0981 (sand 0.712206 kPa), which three decimals rounded
+        # on Pick and again on OK.
+        self.sp_bc_psib = _spin(0.0, 1e6, 30.0, 6, 5.0)
         f.addRow(tr("Pore size index (lambda):"), self.sp_bc_lambda)
         f.addRow(tr("Bubbling pressure (kPa):"), self.sp_bc_psib)
         self._pages[PermeabilityModel.BROOKS_COREY] = w
@@ -596,8 +602,18 @@ class HydraulicPropertiesDialog(QDialog):
         p.specific_storage = self.sp_ss.value()
 
     # ==================================================================
+    def _pick_label(self, mdl) -> str:
+        """What the Pick list says its values are (v0.1.279, D273): the
+        published table they come from, or that they have none. It said
+        "literature values" for the four libraries, and two of them have no
+        source."""
+        source = library_source(mdl)
+        if source:
+            return tr("Soil (values from {0}):").format(source)
+        return tr("Soil (illustrative values, no published source):")
+
     def _pick(self) -> None:
-        """Load representative literature parameters for the model."""
+        """Load representative parameters for the model."""
         from PySide6.QtWidgets import QInputDialog
         mdl = self.cbo_model.currentData()
         lib = library_for(mdl)
@@ -606,7 +622,7 @@ class HydraulicPropertiesDialog(QDialog):
         names = sorted(lib)
         name, ok = QInputDialog.getItem(
             self, tr("Pick representative parameters"),
-            tr("Soil (literature values):"), names, 0, False)
+            self._pick_label(mdl), names, 0, False)
         if not ok:
             return
         for key, value in lib[name].items():

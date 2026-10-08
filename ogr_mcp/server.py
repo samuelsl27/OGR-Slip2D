@@ -1320,7 +1320,11 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
                             "user_curve suctions.")] = None,
             library: Annotated[Optional[str], Field(
                 description="Typical soil of the model's library, e.g. "
-                            "'Sand', 'Loam', 'Clay'.")] = None,
+                            "'Sand', 'Loam', 'Clay'. van_genuchten: Carsel "
+                            "& Parrish (1988); brooks_corey: Rawls, "
+                            "Brakensiek & Saxton (1982), 11 USDA textures; "
+                            "gardner and fredlund_xing: illustrative "
+                            "values, no published source.")] = None,
             properties: Annotated[Optional[dict[str, Any]], Field(
                 description="Fields: ks (saturated permeability), k2_k1, "
                             "k1_angle_deg, kr_min, simple_soil_type, "
