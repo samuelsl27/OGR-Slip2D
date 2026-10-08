@@ -202,7 +202,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.279"
+    VERSION = "0.1.280"
 
     def __init__(self) -> None:
         super().__init__()
@@ -3061,6 +3061,15 @@ class MainWindow(QMainWindow):
         mesh = getattr(self.project, "fem_mesh", None)
         if mesh is None or mesh.element_count == 0:
             self._info("Generate the FE mesh first.")
+            return
+        # v0.1.280 (D284): a mesh of another model (an edited geometry, a
+        # deleted material) is not computed. NOT modal, like the other
+        # refusals of this slot: a test or a script reaches it.
+        from ogr_core.project.rules import mesh_mismatch_reason
+        why = mesh_mismatch_reason(self.project)
+        if why:
+            self.statusBar().showMessage(
+                tr("Cannot compute: %s") % tr(why[0]).format(*why[1]), 15000)
             return
         from ogr_slip2d.transient_stability import solve_project_groundwater
 

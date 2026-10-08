@@ -329,6 +329,7 @@ class SeepageSolver:
         self.gamma_w = gamma_w
         self.default_props = default_props or HydraulicProperties()
         self._degenerate: Optional[int] = None
+        self._unmapped: Optional[int] = None
 
     # ------------------------------------------------------------------
     def _note_degenerate(self, res: SeepageResult) -> None:
@@ -350,6 +351,21 @@ class SeepageSolver:
                 f"collinear nodes): nodes under them do not count as "
                 f"boundary and the conductivity matrix is badly "
                 f"conditioned. Regenerate the mesh.")
+
+    def _note_default_props(self, res: SeepageResult) -> None:
+        """v0.1.280 (D284) — say how many elements are solved with
+        ``default_props`` because their material is not in the mapping the
+        solver was given. The project's doors refuse a mesh whose materials
+        no longer exist (``rules.mesh_mismatch``); this is for whoever builds
+        the solver directly — a script, a measurement — where a mesh of one
+        project with the properties of another was computed in silence (a
+        D274 measurement came out all saturated that way). A mesh whose
+        elements are all mapped gets no note."""
+        if self._unmapped is None:
+            self._unmapped = sum(1 for e in self.mesh.elements
+                                 if e.material_id not in self.materials)
+        if self._unmapped:
+            res.notes["default_props_elements"] = self._unmapped
 
     # ------------------------------------------------------------------
     def props_for(self, element) -> HydraulicProperties:
@@ -439,6 +455,7 @@ class SeepageSolver:
         # before any early return: a node that only flat elements touch
         # makes the system singular, and that failure needs this reason
         self._note_degenerate(res)
+        self._note_default_props(res)
 
         fixed = self._dirichlet_values(bcs)
         if extra_dirichlet:
@@ -1812,6 +1829,7 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
         res.reactions = [KH[i] - q0[i] for i in range(n)]
         res.converged = True
         self._note_degenerate(res)
+        self._note_default_props(res)
         return res
 
     # ------------------------------------------------------------------

@@ -1483,6 +1483,78 @@ def grid_refusal(project) -> Optional[str]:
     return None
 
 
+def fe_model_signature(project, regions=None) -> str:
+    """The fingerprint of what a finite-element mesh is built from: the
+    resolved regions, each with its outline, its holes and the material it
+    takes (v0.1.280, D284).
+
+    It is what ``generate_mesh_for_project`` meshes and nothing else: the
+    hydraulic properties are read from the materials at solve time, so
+    changing a permeability does not change it, while moving a vertex,
+    deleting or reassigning a material, or redefining the model does. The
+    canvas edits boundaries in place without notifying (see
+    ``Project.regions_frozen``), which is why this is a fingerprint of the
+    content and not a revision counter. ``regions`` may be passed when the
+    caller has just resolved them."""
+    import hashlib
+    if regions is None:
+        regions = project.resolve_regions()
+    items = []
+    for r in regions:
+        outline = tuple((v.x, v.y) for v in r.polygon.vertices)
+        holes = tuple(tuple((v.x, v.y) for v in h.vertices)
+                      for h in (getattr(r, "holes", None) or ()))
+        items.append(repr((getattr(r, "material_id", None), outline, holes)))
+    items.sort()
+    return hashlib.sha256("\n".join(items).encode("utf-8")).hexdigest()[:20]
+
+
+#: The two reasons of :func:`mesh_mismatch_reason`, English keys that the
+#: interface translates at the point of use.
+MESH_ORPHAN_ELEMENTS = ("{0} element(s) of the mesh belong to a material "
+                        "that no longer exists. Regenerate the mesh.")
+MESH_OF_ANOTHER_MODEL = ("The mesh was generated for another geometry or "
+                         "material assignment. Regenerate the mesh.")
+
+
+def mesh_mismatch(project) -> Optional[str]:
+    """:func:`mesh_mismatch_reason` in words (English); None when the
+    stored mesh is a mesh of this model or there is none."""
+    why = mesh_mismatch_reason(project)
+    return why[0].format(*why[1]) if why else None
+
+
+def mesh_mismatch_reason(project):
+    """Why the stored finite-element mesh is not a mesh of this model, as
+    ``(template, args)``; None when it is, or when there is no mesh
+    (v0.1.280, D284).
+
+    A mesh survives every edit but *Generate* and *Reset*
+    (:func:`set_fem_mesh`): deleting or replacing a material left its
+    elements pointing to an id the solver does not know, and it computed
+    them with the default properties (Constant, Ks 1e-6) without a word;
+    an edited geometry left a mesh of the old one. Measured: a material
+    deleted with ``reassign_to`` left 190 of 190 elements orphaned and the
+    discharge ten times off. Every door that solves asks this first and
+    refuses (decision of the owner, 2026-10-08).
+
+    Two checks: elements whose material no longer exists (any mesh, also
+    one saved before this version), and the fingerprint stored at meshing
+    against the model's (meshes generated since this version)."""
+    mesh = getattr(project, "fem_mesh", None)
+    if mesh is None or not getattr(mesh, "elements", None):
+        return None
+    live = {m.id for m in getattr(project, "materials", [])}
+    orphans = sum(1 for e in mesh.elements
+                  if e.material_id is not None and e.material_id not in live)
+    if orphans:
+        return MESH_ORPHAN_ELEMENTS, (orphans,)
+    stored = (getattr(mesh, "notes", None) or {}).get("model_signature")
+    if stored and stored != fe_model_signature(project):
+        return MESH_OF_ANOTHER_MODEL, ()
+    return None
+
+
 def set_fem_mesh(project, mesh) -> list[str]:
     """Install ``mesh`` and drop what belonged to the previous one; returns
     what was dropped, in words.

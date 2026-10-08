@@ -743,6 +743,13 @@ def groundwater_run(ws, project_id: Optional[str] = None,
     handle = ws.get(project_id)
     with ws.reading(handle.id, "groundwater_run") as project:
         mesh = _need_mesh(project)
+        # v0.1.280 (D284): a mesh of another model is refused before its
+        # conditions are even looked at
+        from ogr_core.project.rules import mesh_mismatch
+        why = mesh_mismatch(project)
+        if why:
+            raise Conflict(why, hint="Regenerate it with mesh_generate; the "
+                                     "boundary conditions go with it.")
         if project.seepage_bcs is None:
             raise NotConfigured(
                 "No boundary conditions have been set.",

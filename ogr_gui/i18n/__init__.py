@@ -2380,6 +2380,11 @@ _DICTS: dict[str, dict[str, str]] = {
 
         "Groundwater analysis: %s": "Análisis de filtración: %s",
         "Cannot compute: %s": "No se puede calcular: %s",
+        # v0.1.280 (D284): rules.MESH_ORPHAN_ELEMENTS / MESH_OF_ANOTHER_MODEL
+        "{0} element(s) of the mesh belong to a material that no longer exists. Regenerate the mesh.":
+            "{0} elemento(s) de la malla pertenecen a un material que ya no existe. Regenera la malla.",
+        "The mesh was generated for another geometry or material assignment. Regenerate the mesh.":
+            "La malla se generó para otra geometría u otra asignación de materiales. Regenera la malla.",
         "Negative pore pressure cutoff":
             "Tope de presión intersticial negativa",
         "Cutoff value:": "Valor del tope:",

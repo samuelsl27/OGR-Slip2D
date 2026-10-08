@@ -552,4 +552,12 @@ def generate_mesh_for_project(project, **kwargs) -> Mesh:
     # and ask ``material_at`` at each region's CENTROID, which is not
     # always in the region: a lens's surrounding region has its centroid in
     # the lens, and a non-convex region can have it outside.
-    return generate_mesh(project.resolve_regions(), **kwargs)
+    from ogr_core.project.rules import fe_model_signature
+
+    regions = project.resolve_regions()
+    mesh = generate_mesh(regions, **kwargs)
+    # v0.1.280 (D284): what it was built from, so that a solve can tell a
+    # mesh of another model (``rules.mesh_mismatch``); it travels in the
+    # .ogr with the other notes
+    mesh.notes["model_signature"] = fe_model_signature(project, regions)
+    return mesh

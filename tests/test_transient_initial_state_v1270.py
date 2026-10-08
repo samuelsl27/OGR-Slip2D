@@ -190,6 +190,15 @@ class TestTheWarningReachesTheCaller:
         _starved()
         mesh, _props, bcs = _CACHE["dam"]
         p = Project()
+        # v0.1.280 (D284): the mesh's elements are of material "m", and a
+        # project without that material is now refused by the doors as a
+        # mesh of another model; the project has to own it
+        from ogr_core.materials import Material
+        from ogr_core.materials.builtin_models import MohrCoulomb
+        mat = Material(name="m", strength=MohrCoulomb(cohesion=10.0,
+                                                      friction_angle=30.0))
+        mat.id = "m"
+        p.materials = [mat]
         p.fem_mesh = mesh
         p.seepage_bcs = bcs
         gw = p.settings.groundwater

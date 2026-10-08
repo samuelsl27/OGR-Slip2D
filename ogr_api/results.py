@@ -315,7 +315,8 @@ def seepage_field_summary(r) -> Optional[dict]:
              if k in ("error", "warning", "time", "label", "calculate_sf",
                       "fos", "fos_min", "fos_warning",
                       "initial_state_converged", "initial_state_warning",
-                      "degenerate_elements", "mesh_warning")}
+                      "degenerate_elements", "mesh_warning",
+                      "default_props_elements")}
     if notes:
         out["notes"] = json_safe(notes)
     return out

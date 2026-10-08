@@ -194,10 +194,18 @@ def solve_project_groundwater(project, *, progress_cb: Optional[Callable]
     (rule 7), so there is none. The transient's own settings — time steps,
     Picard iterations per step, tolerance — are in the project settings.
     """
+    from ogr_core.project.rules import mesh_mismatch
     from ogr_fem2d.solvers import UnsaturatedSeepageSolver
 
     gw = project.settings.groundwater
     mesh = _mesh_of(project, **mesh_kwargs)
+    # v0.1.280 (D284): a stored mesh of another model (an edited geometry,
+    # a deleted or replaced material) is refused, not solved with the
+    # default properties
+    why = mesh_mismatch(project)
+    if why:
+        from ogr_slip2d.analysis_runner import AnalysisNotConfigured
+        raise AnalysisNotConfigured([why])
     props = _hydraulic_props(project)
     gamma_w = getattr(gw, "pore_fluid_unit_weight", 9.81)
 
