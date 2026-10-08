@@ -202,7 +202,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.276"
+    VERSION = "0.1.277"
 
     def __init__(self) -> None:
         super().__init__()
@@ -2960,8 +2960,13 @@ class MainWindow(QMainWindow):
         finally:
             # v0.1.276 — freed with its Plot windows: it is a child of this
             # window, and every opening left one more alive (manual test of
-            # D191/D271 found two at once)
-            dlg.deleteLater()
+            # D191/D271 found two at once). v0.1.277 — by handing it back to
+            # Python, which frees it when this returns, and not with
+            # deleteLater(): the Linux CI of 0.1.276 passed every test and
+            # then crashed at interpreter exit ("shared QObject was deleted
+            # directly", segmentation fault), and deferred deletes were the
+            # one thing that version added; no event loop is needed now.
+            dlg.setParent(None)
 
     def _seepage_bcs(self):
         """A COPY of the project's boundary conditions, or the documented

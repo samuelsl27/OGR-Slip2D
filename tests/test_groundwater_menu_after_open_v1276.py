@@ -159,7 +159,10 @@ class TestTheHydraulicDialogOnAScreen:
         dlg.close()
 
     def test_the_window_frees_it(self):
-        from PySide6.QtCore import QCoreApplication, QEvent
+        """No child dialog is left behind. v0.1.277: checked without
+        processing deferred deletes — this test used to call
+        sendPostedEvents(DeferredDelete), which deletes whatever ANY earlier
+        test had scheduled, and the Linux CI of 0.1.276 crashed at exit."""
         from ogr_gui.dialogs.hydraulic_properties_dialog import (
             HydraulicPropertiesDialog)
         w = _window()
@@ -171,5 +174,4 @@ class TestTheHydraulicDialogOnAScreen:
             w._define_hydraulic_properties()
         finally:
             HydraulicPropertiesDialog.exec = real
-        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         assert w.findChildren(HydraulicPropertiesDialog) == []
