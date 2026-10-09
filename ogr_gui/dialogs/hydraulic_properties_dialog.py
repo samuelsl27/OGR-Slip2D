@@ -612,6 +612,16 @@ class HydraulicPropertiesDialog(QDialog):
             return tr("Soil (values from {0}):").format(source)
         return tr("Soil (illustrative values, no published source):")
 
+    def _pick_prompt(self, mdl) -> str:
+        """The label of the Pick list as handed to Qt.
+
+        v0.1.287 (D288) — the label of a ``QInputDialog`` has a buddy, so Qt
+        reads «&» as the mark of a keyboard shortcut and does not draw it:
+        «Rawls, Brakensiek & Saxton (1982)» came out «Rawls, Brakensiek
+        Saxton (1982)». Doubled, it is drawn. ``_pick_label`` keeps the
+        source as written, for whoever reads it."""
+        return self._pick_label(mdl).replace("&", "&&")
+
     def _pick(self) -> None:
         """Load representative parameters for the model."""
         from PySide6.QtWidgets import QInputDialog
@@ -622,7 +632,7 @@ class HydraulicPropertiesDialog(QDialog):
         names = sorted(lib)
         name, ok = QInputDialog.getItem(
             self, tr("Pick representative parameters"),
-            self._pick_label(mdl), names, 0, False)
+            self._pick_prompt(mdl), names, 0, False)
         if not ok:
             return
         for key, value in lib[name].items():

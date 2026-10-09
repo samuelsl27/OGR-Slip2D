@@ -273,7 +273,9 @@ class SurfaceOptionsDialog(QDialog):
         ))
 
         # ============ HEADER ============
-        header = QGroupBox(tr("Surface Type & Algorithm"))
+        # v0.1.287 (D288) — a group box title reads «&» as a shortcut
+        # mark and does not draw it: doubled, it is drawn.
+        header = QGroupBox(tr("Surface Type & Algorithm").replace("&", "&&"))
         hf = QFormLayout(header)
 
         # Surface Type radio buttons

@@ -159,7 +159,10 @@ class TestThePickList:
                 del QInputDialog.getItem
             else:
                 QInputDialog.getItem = raw
-        return seen[0]
+        # v0.1.287 (D288) — what Qt DRAWS: the label has a buddy, so «&&»
+        # is drawn «&» and a lone «&» is not drawn at all.
+        import re
+        return re.sub(r"&(.)", r"\1", seen[0])
 
     def test_the_label_names_the_table_or_says_illustrative(self):
         from ogr_gui.i18n import tr
