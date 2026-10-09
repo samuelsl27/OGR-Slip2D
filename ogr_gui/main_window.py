@@ -202,10 +202,14 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.284"
+    VERSION = "0.1.285"
 
     def __init__(self) -> None:
         super().__init__()
+        # v0.1.285 (D286) — before any widget is polished: the wheel steps
+        # a number box or a drop-down only when it has the focus.
+        from .wheel_guard import install as _install_wheel_guard
+        _install_wheel_guard()
         self.setWindowTitle(f"OGR Slip2D v{self.VERSION} — OpenGeoRock Suite")
         self.register_session()
         self.resize(1400, 900)
