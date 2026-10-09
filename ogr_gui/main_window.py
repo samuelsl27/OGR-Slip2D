@@ -225,7 +225,7 @@ class DisabledReasonFilter(QObject):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.289"
+    VERSION = "0.1.290"
 
     def __init__(self) -> None:
         super().__init__()
@@ -1002,14 +1002,15 @@ class MainWindow(QMainWindow):
     # ==================================================================
     def _tool_msg(self, name: str) -> None:
         self.ogr_status.showMessage(
-            f"Tool: {name} — interactive placement scheduled for next release", 4000
+            tr('Tool: {0} — interactive placement scheduled for next '
+               'release').format(name), 4000
         )
 
     def act_new(self) -> None:
         if self.project.is_dirty:
             r = QMessageBox.question(
                 self, tr("New Project"),
-                "Current project has unsaved changes. Save first?",
+                tr("Current project has unsaved changes. Save first?"),
                 QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel,
             )
             if r == QMessageBox.Save:
@@ -1033,9 +1034,9 @@ class MainWindow(QMainWindow):
             self.terminal_dock.attach_context(self.project, self.canvas, self)
             self.command_stack.clear()
             self.setWindowTitle(f"OGR Slip2D v{self.VERSION} — {Path(path).name}")
-            self.ogr_status.showMessage(f"Loaded {path}", 3000)
+            self.ogr_status.showMessage(tr('Loaded {0}').format(path), 3000)
         except Exception as e:  # noqa: BLE001
-            QMessageBox.critical(self, "Error", f"Could not open project:\n{e}")
+            QMessageBox.critical(self, tr("Error"), tr('Could not open project:\n{0}').format(e))
 
     def act_save(self) -> None:
         if self.project.file_path is None:
@@ -1043,9 +1044,9 @@ class MainWindow(QMainWindow):
             return
         try:
             self.project.save()
-            self.ogr_status.showMessage(f"Saved {self.project.file_path.name}", 2000)
+            self.ogr_status.showMessage(tr('Saved {0}').format(self.project.file_path.name), 2000)
         except Exception as e:  # noqa: BLE001
-            QMessageBox.critical(self, "Error", str(e))
+            QMessageBox.critical(self, tr("Error"), str(e))
 
     def act_save_as(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
@@ -1058,9 +1059,9 @@ class MainWindow(QMainWindow):
         try:
             self.project.save(Path(path))
             self.setWindowTitle(f"OGR Slip2D v{self.VERSION} — {Path(path).name}")
-            self.ogr_status.showMessage(f"Saved {path}", 2000)
+            self.ogr_status.showMessage(tr('Saved {0}').format(path), 2000)
         except Exception as e:  # noqa: BLE001
-            QMessageBox.critical(self, "Error", str(e))
+            QMessageBox.critical(self, tr("Error"), str(e))
 
     def act_import_dxf(self) -> None:
         """v0.1.46 — import geometry from a DXF drawing (Phase D2)."""
@@ -1161,7 +1162,7 @@ class MainWindow(QMainWindow):
         if not results:
             QMessageBox.warning(
                 self, tr("Generate Report"),
-                "No analysis results available. Run Compute first.")
+                tr("No analysis results available. Run Compute first."))
             return
         path, _ = QFileDialog.getSaveFileName(
             self, tr("Generate Report"),
@@ -1183,21 +1184,21 @@ class MainWindow(QMainWindow):
         except ImportError:
             QMessageBox.critical(
                 self, tr("Generate Report"),
-                "The 'reportlab' package is required for PDF reports.\n"
-                "Install it with:  pip install reportlab")
+                tr("The 'reportlab' package is required for PDF reports.\n"
+                   "Install it with:  pip install reportlab"))
             return
         except Exception as exc:  # noqa: BLE001
             QMessageBox.critical(
                 self, tr("Generate Report"),
-                f"Failed to generate report:\n{exc}")
+                tr('Failed to generate report:\n{0}').format(exc))
             return
-        self.ogr_status.showMessage(f"Report saved to {path}", 6000)
+        self.ogr_status.showMessage(tr('Report saved to {0}').format(path), 6000)
         QMessageBox.information(
             self, tr("Generate Report"),
-            f"Report generated successfully:\n{path}")
+            tr('Report generated successfully:\n{0}').format(path))
 
     def act_print(self) -> None:
-        QMessageBox.information(self, tr("Print..."), "Print planned for v0.2.0.")
+        QMessageBox.information(self, tr("Print..."), tr("Print planned for v0.2.0."))
 
     def act_preferences(self) -> None:
         dlg = PreferencesDialog(self, active_theme=self.active_theme)
@@ -1217,7 +1218,7 @@ class MainWindow(QMainWindow):
     def act_copy_image(self) -> None:
         pix = self.canvas.grab()
         QApplication.clipboard().setPixmap(pix)
-        self.ogr_status.showMessage("Canvas image copied to clipboard.", 2000)
+        self.ogr_status.showMessage(tr("Canvas image copied to clipboard."), 2000)
 
     # ==================================================================
     # View
@@ -1251,8 +1252,8 @@ class MainWindow(QMainWindow):
             self.project.is_dirty = True
             self.project._notify("settings_changed")
             self.ogr_status.showMessage(
-                f"Surface search configured: "
-                f"{self.project.settings.search.search_method}", 3000,
+                tr('Surface search configured: {0}').format(
+                    self.project.settings.search.search_method), 3000,
             )
 
     def act_add_block_search_object(self, *, mode=None, prompt=None) -> None:
@@ -1350,7 +1351,7 @@ class MainWindow(QMainWindow):
         self.project._notify("settings_changed")
         self.canvas.refresh()
         self.ogr_status.showMessage(
-            "Grid set to Auto (computed from model bounding box)", 3000,
+            tr("Grid set to Auto (computed from model bounding box)"), 3000,
         )
 
     def act_add_grid(self) -> None:
@@ -1396,10 +1397,10 @@ class MainWindow(QMainWindow):
         self.canvas.refresh()
         s = self.project.settings.search
         self.ogr_status.showMessage(
-            f"Grid: {s.grid_nx}×{s.grid_ny} intervals "
-            f"({s.grid_nx + 1}×{s.grid_ny + 1} centres) in "
-            f"x∈[{s.grid_x_min:.1f}, {s.grid_x_max:.1f}], "
-            f"y∈[{s.grid_y_min:.1f}, {s.grid_y_max:.1f}]",
+            tr('Grid: {0}×{1} intervals ({2}×{3} centres) in x∈[{4:.1f}, '
+               '{5:.1f}], y∈[{6:.1f}, {7:.1f}]').format(
+                s.grid_nx, s.grid_ny, s.grid_nx + 1, s.grid_ny + 1,
+                s.grid_x_min, s.grid_x_max, s.grid_y_min, s.grid_y_max),
             4000,
         )
         self._active_grid_dialog = None
@@ -1416,8 +1417,8 @@ class MainWindow(QMainWindow):
         self.canvas.segment_picked.connect(self._on_grid_picked)
         self.canvas.set_tool_mode(ToolMode.PICK_GRID_RECT)
         self.ogr_status.showMessage(
-            "Click two opposite corners on the canvas. The dialog will "
-            "update with the picked bounds; press OK to apply.",
+            tr("Click two opposite corners on the canvas. The dialog will "
+               "update with the picked bounds; press OK to apply."),
             12000,
         )
 
@@ -1471,11 +1472,11 @@ class MainWindow(QMainWindow):
             mesh = generate_mesh_for_project(self.project,
                                              target_elements=n)
         except Exception as exc:  # noqa: BLE001
-            self._info(f"Mesh generation failed: {exc}")
+            self._info(tr('Mesh generation failed: {0}').format(exc))
             return
         if mesh.element_count == 0:
-            self._info("No mesh generated. An External boundary with a "
-                       "valid closed polygon is required.")
+            self._info(tr("No mesh generated. An External boundary with a "
+                          "valid closed polygon is required."))
             return
         # v0.1.200 — the rule "a new mesh drops the conditions and the
         # fields of the old one" (v0.1.78 added the transient results to
@@ -1499,7 +1500,7 @@ class MainWindow(QMainWindow):
     def _reset_fem_mesh(self) -> None:
         """v0.1.25 — discard the FE mesh."""
         if getattr(self.project, "fem_mesh", None) is None:
-            self.statusBar().showMessage("No FE mesh to reset", 3000)
+            self.statusBar().showMessage(tr("No FE mesh to reset"), 3000)
             return
         from ogr_core.project.rules import reset_fem_mesh
         reset_fem_mesh(self.project)
@@ -1507,7 +1508,7 @@ class MainWindow(QMainWindow):
         self.project.is_dirty = True
         self.canvas.refresh_scene()
         self._update_groundwater_actions()
-        self.statusBar().showMessage("FE mesh cleared", 3000)
+        self.statusBar().showMessage(tr("FE mesh cleared"), 3000)
 
     # ==================================================================
     # Groundwater mode (Phase 5)
@@ -1584,11 +1585,12 @@ class MainWindow(QMainWindow):
             return
         c = res.critical
         self.statusBar().showMessage(
-            f"Back analysis ({cfg.method_id}): required force "
-            f"{res.required_force:.1f} for FS = {cfg.target_fos:g}  "
-            f"(active {c.active_force:.1f}, passive "
-            f"{c.passive_force:.1f}; surface FoS without support "
-            f"{c.unsupported_fos:.4f}, {res.surfaces_analysed} surfaces)",
+            tr('Back analysis ({0}): required force {1:.1f} for FS = '
+               '{2:g}  (active {3:.1f}, passive {4:.1f}; surface FoS '
+               'without support {5:.4f}, {6} surfaces)').format(
+                cfg.method_id, res.required_force, cfg.target_fos,
+                c.active_force, c.passive_force, c.unsupported_fos,
+                res.surfaces_analysed),
             15000)
 
     # ==================================================================
@@ -1656,7 +1658,7 @@ class MainWindow(QMainWindow):
         self.sweep_worker.progress.connect(self.prog.update_progress)
         self.sweep_worker.finished_result.connect(self._on_drawdown_sweep_done)
         self.sweep_worker.failed.connect(
-            lambda msg: QMessageBox.critical(self, "Error", msg))
+            lambda msg: QMessageBox.critical(self, tr("Error"), msg))
         self.sweep_worker.finished.connect(self.prog.accept)
         self.sweep_worker.start()
         self.prog.exec()
@@ -1748,7 +1750,7 @@ class MainWindow(QMainWindow):
             n = len(self.project.random_variables)
             self._update_statistics_actions()
             self.statusBar().showMessage(
-                f"{n} random variable(s) defined", 5000)
+                tr('{0} random variable(s) defined').format(n), 5000)
 
     def _compute_statistics(self) -> None:
         """Run the probabilistic and/or sensitivity analysis.
@@ -1837,8 +1839,8 @@ class MainWindow(QMainWindow):
 
         self._update_statistics_actions()
         if not messages:
-            self._info("Enable a probabilistic or sensitivity analysis "
-                       "in Project Settings first.")
+            self._info(tr("Enable a probabilistic or sensitivity analysis "
+                          "in Project Settings first."))
             return
         self.statusBar().showMessage("   |   ".join(messages), 12000)
         if self._prob_result is not None or self._sens_result is not None:
@@ -1847,7 +1849,7 @@ class MainWindow(QMainWindow):
     def _show_statistics(self) -> None:
         if (getattr(self, "_prob_result", None) is None
                 and getattr(self, "_sens_result", None) is None):
-            self._info("Run Compute Statistics first.")
+            self._info(tr("Run Compute Statistics first."))
             return
         from .statistics_window import StatisticsWindow
         w = StatisticsWindow(self.project,
@@ -2991,7 +2993,7 @@ class MainWindow(QMainWindow):
 
     def _define_hydraulic_properties(self) -> None:
         if not self.project.materials:
-            self._info("Define some materials first.")
+            self._info(tr("Define some materials first."))
             return
         from .dialogs.hydraulic_properties_dialog import (
             HydraulicPropertiesDialog,
@@ -2999,7 +3001,7 @@ class MainWindow(QMainWindow):
         dlg = HydraulicPropertiesDialog(self.project, self)
         try:
             if dlg.exec():
-                self.statusBar().showMessage("Hydraulic properties updated",
+                self.statusBar().showMessage(tr("Hydraulic properties updated"),
                                               4000)
         finally:
             # v0.1.276 — freed with its Plot windows: it is a child of this
@@ -3036,7 +3038,7 @@ class MainWindow(QMainWindow):
     def _set_boundary_conditions(self) -> None:
         mesh = getattr(self.project, "fem_mesh", None)
         if mesh is None or mesh.element_count == 0:
-            self._info("Generate the FE mesh first.")
+            self._info(tr("Generate the FE mesh first."))
             return
         from .dialogs.boundary_conditions_dialog import (
             BoundaryConditionsDialog,
@@ -3046,8 +3048,8 @@ class MainWindow(QMainWindow):
             self.project.seepage_bcs = bcs
             self.project.is_dirty = True
             self.statusBar().showMessage(
-                f"Boundary conditions: {len(bcs.nodes)} nodes, "
-                f"{len(bcs.segments)} segments", 5000)
+                tr('Boundary conditions: {0} nodes, {1} segments').format(
+                    len(bcs.nodes), len(bcs.segments)), 5000)
 
     def _edit_transient_stages(self) -> None:
         """v0.1.30 — edit the transient stages (Phase 6)."""
@@ -3062,8 +3064,8 @@ class MainWindow(QMainWindow):
             self._update_groundwater_actions()
             n = len(gw.transient_stages)
             self.statusBar().showMessage(
-                f"Transient: {'on' if gw.transient else 'off'}, "
-                f"{n} stage(s)", 5000)
+                tr('Transient: {0}, {1} stage(s)').format(
+                    tr("on") if gw.transient else tr("off"), n), 5000)
 
     def _compute_transient(self):
         """Run the staged transient analysis and the per-stage factors.
@@ -3104,7 +3106,7 @@ class MainWindow(QMainWindow):
     def _compute_groundwater(self) -> None:
         mesh = getattr(self.project, "fem_mesh", None)
         if mesh is None or mesh.element_count == 0:
-            self._info("Generate the FE mesh first.")
+            self._info(tr("Generate the FE mesh first."))
             return
         # v0.1.280 (D284): a mesh of another model (an edited geometry, a
         # deleted material) is not computed. NOT modal, like the other
@@ -3124,7 +3126,7 @@ class MainWindow(QMainWindow):
         if transient:
             results = self._compute_transient()
             if not results:
-                self._info("Transient analysis produced no results.")
+                self._info(tr("Transient analysis produced no results."))
                 return
             result = results[-1]
             self._update_groundwater_actions()
@@ -3168,14 +3170,15 @@ class MainWindow(QMainWindow):
             note = (f"  (default properties used for: "
                     f"{', '.join(missing[:3])})")
         self.statusBar().showMessage(
-            f"Groundwater solved in {result.iterations} iterations; "
-            f"u from {min(result.pore_pressure):.1f} to "
-            f"{max(result.pore_pressure):.1f}{note}", 9000)
+            tr('Groundwater solved in {0} iterations; u from {1:.1f} to '
+               '{2:.1f}{3}').format(
+                result.iterations, min(result.pore_pressure),
+                max(result.pore_pressure), note), 9000)
 
     def _interpret_groundwater(self) -> None:
         result = getattr(self.project, "seepage_result", None)
         if result is None:
-            self._info("Compute the groundwater analysis first.")
+            self._info(tr("Compute the groundwater analysis first."))
             return
         from .interpret_groundwater_window import (
             InterpretGroundwaterWindow,
@@ -3201,7 +3204,7 @@ class MainWindow(QMainWindow):
             n = (len(self.project.water_pressure_grid.points)
                  if self.project.water_pressure_grid else 0)
             self.statusBar().showMessage(
-                f"Water pressure grid: {n} points", 4000)
+                tr('Water pressure grid: {0} points').format(n), 4000)
 
     def act_info_viewer(self) -> None:
         p = self.project
@@ -3256,7 +3259,7 @@ class MainWindow(QMainWindow):
         self.worker = _ComputeWorker(self.project, method_ids)
         self.worker.progress.connect(self.prog.update_progress)
         self.worker.finished_result.connect(self._on_compute_done)
-        self.worker.failed.connect(lambda msg: QMessageBox.critical(self, "Error", msg))
+        self.worker.failed.connect(lambda msg: QMessageBox.critical(self, tr("Error"), msg))
         self.worker.finished.connect(self.prog.accept)
         self.worker.start()
         self.prog.exec()
@@ -3303,7 +3306,7 @@ class MainWindow(QMainWindow):
             panel.populate(self._analysis_notes())
         if not results:
             self.last_search_result = None
-            self.ogr_status.showMessage("No methods produced results.", 6000)
+            self.ogr_status.showMessage(tr("No methods produced results."), 6000)
             return
         # Pick the first enabled method's result for the main canvas
         first_id = next(iter(results))
@@ -3335,7 +3338,7 @@ class MainWindow(QMainWindow):
                 except Exception:  # noqa: BLE001
                     pass
         else:
-            self.ogr_status.showMessage("No valid failure surface found.", 6000)
+            self.ogr_status.showMessage(tr("No valid failure surface found."), 6000)
 
     @staticmethod
     def _ordinary_pore_pressure_warning(results) -> str:
@@ -3429,7 +3432,7 @@ class MainWindow(QMainWindow):
         results = getattr(self, "last_search_results", None)
         if not results:
             QMessageBox.information(self, tr("Interpret"),
-                                    "Run Compute first (Ctrl+T).")
+                                    tr("Run Compute first (Ctrl+T)."))
             return
         # v0.1.9: pass the full dict so the InterpretWindow can offer
         # a method selector
@@ -3653,7 +3656,7 @@ class MainWindow(QMainWindow):
         if dlg.exec():
             self.canvas.refresh()
             self.ogr_status.showMessage(
-                f"{len(self.project.support_types)} support types defined",
+                tr('{0} support types defined').format(len(self.project.support_types)),
                 3000,
             )
 
@@ -3662,10 +3665,10 @@ class MainWindow(QMainWindow):
         if not self.project.support_types:
             from PySide6.QtWidgets import QMessageBox
             QMessageBox.information(
-                self, "No support types",
-                "No support types are defined yet.\n\n"
-                "Open Properties → Define Support... first to create at "
-                "least one support type.",
+                self, tr("No support types"),
+                tr("No support types are defined yet.\n\n"
+                   "Open Properties → Define Support... first to create at "
+                   "least one support type."),
             )
             return
         try:
@@ -3711,8 +3714,9 @@ class MainWindow(QMainWindow):
         self.canvas.segment_picked.connect(self._on_add_support_picked)
         self.canvas.refresh()
         self.ogr_status.showMessage(
-            f"Support added ({len(self.project.supports)} total). "
-            "Click again to add another, or Esc to finish.", 3000,
+            tr('Support added ({0} total). Click again to add another, or '
+               'Esc to finish.').format(
+                len(self.project.supports)), 3000,
         )
 
     def act_add_support_pattern(self) -> None:
@@ -3720,9 +3724,9 @@ class MainWindow(QMainWindow):
         if not self.project.support_types:
             from PySide6.QtWidgets import QMessageBox
             QMessageBox.information(
-                self, "No support types",
-                "No support types are defined yet.\n\n"
-                "Open Properties → Define Support... first.",
+                self, tr("No support types"),
+                tr("No support types are defined yet.\n\n"
+                   "Open Properties → Define Support... first."),
             )
             return
         from .dialogs.support_pattern_dialog import AddSupportPatternDialog
@@ -3737,8 +3741,8 @@ class MainWindow(QMainWindow):
         self.canvas.segment_picked.connect(self._on_pattern_picked)
         self.canvas.set_tool_mode(ToolMode.ADD_SUPPORT_PATTERN)
         self.ogr_status.showMessage(
-            "Click two points along the slope boundary; pattern will "
-            "be generated automatically.", 8000,
+            tr("Click two points along the slope boundary; pattern will "
+               "be generated automatically."), 8000,
         )
 
     def _on_pattern_picked(
@@ -3768,8 +3772,8 @@ class MainWindow(QMainWindow):
         self.canvas.set_tool_mode(ToolMode.SELECT)
         self.canvas.refresh()
         self.ogr_status.showMessage(
-            f"Pattern generated: {len(new_supports)} supports added "
-            f"({len(self.project.supports)} total).", 4000,
+            tr('Pattern generated: {0} supports added ({1} total).').format(
+                len(new_supports), len(self.project.supports)), 4000,
         )
 
     def act_delete_support_mode(self) -> None:
@@ -3788,8 +3792,9 @@ class MainWindow(QMainWindow):
             self.project._notify("supports_changed")
             self.canvas.refresh()
             self.ogr_status.showMessage(
-                f"Support deleted ({len(self.project.supports)} remain). "
-                "Click another or Esc to finish.", 3000,
+                tr('Support deleted ({0} remain). Click another or Esc to '
+                   'finish.').format(
+                    len(self.project.supports)), 3000,
             )
 
     def act_stretch_support_mode(self) -> None:
@@ -3833,7 +3838,7 @@ class MainWindow(QMainWindow):
         self.canvas.set_tool_mode(ToolMode.SELECT)
         self.canvas.refresh()
         self.ogr_status.showMessage(
-            f"Support {idx + 1} {end_name} stretched.", 3000,
+            tr('Support {0} {1} stretched.').format(idx + 1, end_name), 3000,
         )
 
     # v0.1.15 — support right-click context menu actions
@@ -3845,7 +3850,7 @@ class MainWindow(QMainWindow):
             self.project.is_dirty = True
             self.project._notify("supports_changed")
             self.canvas.refresh()
-            self.ogr_status.showMessage("Support deleted.", 3000)
+            self.ogr_status.showMessage(tr("Support deleted."), 3000)
         elif action == "support_stretch":
             # Auto-pick the clicked support as the target and switch to stretch mode
             self._selected_support_idx = sidx
@@ -4167,8 +4172,8 @@ class MainWindow(QMainWindow):
         self.canvas.segment_picked.connect(self._on_dist_load_segment_picked)
         self.canvas.set_tool_mode(ToolMode.ADD_DISTRIBUTED_LOAD)
         self.ogr_status.showMessage(
-            "Click the start point of the load on a boundary, "
-            "then the end point. Esc to cancel.", 8000,
+            tr("Click the start point of the load on a boundary, "
+               "then the end point. Esc to cancel."), 8000,
         )
 
     def _on_dist_load_segment_picked(
@@ -4206,8 +4211,9 @@ class MainWindow(QMainWindow):
         self.canvas.set_tool_mode(ToolMode.SELECT)
         self.canvas.refresh()
         self.ogr_status.showMessage(
-            f"Distributed Load added: {params['magnitude_1']:.1f} kN/m² "
-            f"between ({sx:.2f},{sy:.2f}) and ({ex:.2f},{ey:.2f})", 4000,
+            tr('Distributed Load added: {0:.1f} kN/m² between '
+               '({1:.2f},{2:.2f}) and ({3:.2f},{4:.2f})').format(
+                params['magnitude_1'], sx, sy, ex, ey), 4000,
         )
 
     def act_add_line_load(self) -> None:
@@ -4237,7 +4243,7 @@ class MainWindow(QMainWindow):
         self.canvas.point_picked.connect(self._on_line_load_point_picked)
         self.canvas.set_tool_mode(ToolMode.ADD_LINE_LOAD)
         self.ogr_status.showMessage(
-            "Click on a boundary to place the line load. Esc to cancel.", 6000,
+            tr("Click on a boundary to place the line load. Esc to cancel."), 6000,
         )
 
     def act_seismic_load(self) -> None:
@@ -4251,10 +4257,10 @@ class MainWindow(QMainWindow):
             s = self.project.seismic
             if s.enabled:
                 self.ogr_status.showMessage(
-                    f"Seismic load: k_h = {s.kh:+.3f}, k_v = {s.kv:+.3f}", 4000,
+                    tr('Seismic load: k_h = {0:+.3f}, k_v = {1:+.3f}').format(s.kh, s.kv), 4000,
                 )
             else:
-                self.ogr_status.showMessage("Seismic load disabled", 3000)
+                self.ogr_status.showMessage(tr("Seismic load disabled"), 3000)
 
     def act_seismic_records(self) -> None:
         """Open the Seismic Records dialog (v0.1.127).
@@ -4270,7 +4276,7 @@ class MainWindow(QMainWindow):
             self.project._notify("seismic_changed")
             n = len(self.project.seismic_records)
             self.ogr_status.showMessage(
-                f"Seismic records: {n}", 4000)
+                tr('Seismic records: {0}').format(n), 4000)
 
     def act_delete_load(self) -> None:
         """Delete a load via a list dialog (also available via right-click).
@@ -4296,7 +4302,7 @@ class MainWindow(QMainWindow):
             ))
         if not loads_listing:
             QMessageBox.information(
-                self, "Delete Load", "No loads in the project.",
+                self, tr("Delete Load"), tr("No loads in the project."),
             )
             return
 
@@ -4345,7 +4351,7 @@ class MainWindow(QMainWindow):
         self.project._notify("loads_changed")
         self.canvas.refresh()
         self.ogr_status.showMessage(
-            f"Deleted {n_dist} distributed + {n_line} line loads.", 4000,
+            tr('Deleted {0} distributed + {1} line loads.').format(n_dist, n_line), 4000,
         )
 
     def _on_load_action(self, action: str, kind: str, idx: int) -> None:
@@ -4357,7 +4363,7 @@ class MainWindow(QMainWindow):
                 self.project._notify("loads_changed")
                 self.canvas.refresh()
                 self.ogr_status.showMessage(
-                    f"Deleted Distributed Load: {load.magnitude_1:.1f} kN/m²", 3000,
+                    tr('Deleted Distributed Load: {0:.1f} kN/m²').format(load.magnitude_1), 3000,
                 )
             elif kind == "line" and 0 <= idx < len(self.project.line_loads):
                 load = self.project.line_loads.pop(idx)
@@ -4365,7 +4371,7 @@ class MainWindow(QMainWindow):
                 self.project._notify("loads_changed")
                 self.canvas.refresh()
                 self.ogr_status.showMessage(
-                    f"Deleted Line Load: {load.magnitude:.1f} kN/m", 3000,
+                    tr('Deleted Line Load: {0:.1f} kN/m').format(load.magnitude), 3000,
                 )
         elif action == "modify":
             if kind == "distributed" and 0 <= idx < len(self.project.distributed_loads):
@@ -4446,8 +4452,8 @@ class MainWindow(QMainWindow):
         self.canvas.set_tool_mode(ToolMode.SELECT)
         self.canvas.refresh()
         self.ogr_status.showMessage(
-            f"Line Load added at ({x:.2f}, {y:.2f}): "
-            f"{params['magnitude']:.1f} kN/m", 4000,
+            tr('Line Load added at ({0:.2f}, {1:.2f}): {2:.1f} kN/m').format(
+                x, y, params['magnitude']), 4000,
         )
 
     def act_define_tension_crack(self) -> None:
@@ -4463,9 +4469,9 @@ class MainWindow(QMainWindow):
         )
         if not has_tc:
             QMessageBox.information(
-                self, "Define Tension Crack",
-                "No Tension Crack boundary in the project.\n\n"
-                "Add one first via Boundaries → Add Tension Crack."
+                self, tr("Define Tension Crack"),
+                tr("No Tension Crack boundary in the project.\n\n"
+                   "Add one first via Boundaries → Add Tension Crack.")
             )
             return
         from .dialogs.tension_crack_dialog import DefineTensionCrackDialog
@@ -4475,8 +4481,8 @@ class MainWindow(QMainWindow):
             self.project.is_dirty = True
             self.project._notify("tension_crack_changed")
             self.ogr_status.showMessage(
-                f"Tension Crack: "
-                f"{self.project.tension_crack_properties.mode.value}",
+                tr('Tension Crack: {0}').format(
+                    self.project.tension_crack_properties.mode.value),
                 3000,
             )
 
@@ -4488,9 +4494,9 @@ class MainWindow(QMainWindow):
         """
         if not self.project.materials:
             QMessageBox.information(
-                self, "Assign Materials",
-                "No materials defined yet.\n"
-                "Use Properties → Define Materials… first."
+                self, tr("Assign Materials"),
+                tr("No materials defined yet.\n"
+                   "Use Properties → Define Materials… first.")
             )
             return
         if self.assign_panel is not None and self.assign_panel.isVisible():
@@ -4507,7 +4513,7 @@ class MainWindow(QMainWindow):
         self.assign_panel.show()
         self.canvas.set_tool_mode(ToolMode.ASSIGN_MATERIAL)
         self.ogr_status.showMessage(
-            "Pick a material, then click a region on the canvas to paint it.",
+            tr("Pick a material, then click a region on the canvas to paint it."),
             5000,
         )
 
@@ -4531,12 +4537,12 @@ class MainWindow(QMainWindow):
         """
         if self._assign_active_material_id is None:
             self.ogr_status.showMessage(
-                "Pick a material in the Assign panel first.", 3000
+                tr("Pick a material in the Assign panel first."), 3000
             )
             return
         if self.project.external_boundary() is None:
             self.ogr_status.showMessage(
-                "Draw the External Boundary first.", 3000
+                tr("Draw the External Boundary first."), 3000
             )
             return
         mid = self._assign_active_material_id
@@ -4546,7 +4552,7 @@ class MainWindow(QMainWindow):
         )
         mat = self.project.material_by_id(mid)
         name = mat.name if mat else "(none)"
-        self.ogr_status.showMessage(f"Painted region with '{name}'.", 2000)
+        self.ogr_status.showMessage(tr("Painted region with '{0}'.").format(name), 2000)
 
     # ==================================================================
     # Window
@@ -4596,11 +4602,11 @@ class MainWindow(QMainWindow):
         added = self.canvas.add_manual_point(x, y)
         if added:
             self.ogr_status.showMessage(
-                f"Added vertex ({x:+.3f}, {y:+.3f})", 2000
+                tr('Added vertex ({0:+.3f}, {1:+.3f})').format(x, y), 2000
             )
         else:
             self.ogr_status.showMessage(
-                "Activate a boundary drawing tool first (Ctrl+1 … Ctrl+6).",
+                tr("Activate a boundary drawing tool first (Ctrl+1 … Ctrl+6)."),
                 3000,
             )
 
@@ -4648,16 +4654,16 @@ class MainWindow(QMainWindow):
             )
             if existing_ext_idx is not None:
                 reply = QMessageBox.question(
-                    self, "Replace External Boundary",
-                    "An External Boundary already exists. Replace it with "
-                    "the new one?\n\n"
-                    "(The old external will be removed; material boundaries "
-                    "remain untouched.)",
+                    self, tr("Replace External Boundary"),
+                    tr("An External Boundary already exists. Replace it with "
+                       "the new one?\n\n"
+                       "(The old external will be removed; material boundaries "
+                       "remain untouched.)"),
                     QMessageBox.Yes | QMessageBox.No,
                 )
                 if reply != QMessageBox.Yes:
                     self.ogr_status.showMessage(
-                        "Drawing discarded (External already exists).", 3000
+                        tr("Drawing discarded (External already exists)."), 3000
                     )
                     return
                 # Atomic replace via ReplaceBoundaryCommand
@@ -4665,7 +4671,8 @@ class MainWindow(QMainWindow):
                         index=existing_ext_idx, new_boundary=boundary
                     ))
                 self.ogr_status.showMessage(
-                    f"External Boundary replaced with {len(boundary.vertices)} vertices",
+                    tr('External Boundary replaced with {0} vertices').format(
+                        len(boundary.vertices)),
                     3000,
                 )
                 return
@@ -4673,7 +4680,8 @@ class MainWindow(QMainWindow):
         # Default: just add
         self.command_stack.do(self.project, AddBoundaryCommand(boundary=boundary))
         self.ogr_status.showMessage(
-            f"Added {boundary.btype.display_name} with {len(boundary.vertices)} vertices",
+            tr('Added {0} with {1} vertices').format(
+                boundary.btype.display_name, len(boundary.vertices)),
             3000,
         )
         # v0.1.97 — a water surface that is not assigned to any material
@@ -4819,7 +4827,7 @@ class MainWindow(QMainWindow):
             self.command_stack.do(
                 self.project, RemoveBoundaryCommand(boundary=b)
             )
-            self.ogr_status.showMessage(f"Deleted {b.name}", 2000)
+            self.ogr_status.showMessage(tr('Deleted {0}').format(b.name), 2000)
 
     def _do_copy_boundary(self, index: int) -> None:
         if 0 <= index < len(self.project.boundaries):
@@ -4833,7 +4841,7 @@ class MainWindow(QMainWindow):
                 Vertex(v.x + 2.0, v.y + 2.0) for v in orig.polyline.vertices
             ]
             self.command_stack.do(self.project, AddBoundaryCommand(boundary=new_b))
-            self.ogr_status.showMessage(f"Copied {orig.name}", 2000)
+            self.ogr_status.showMessage(tr('Copied {0}').format(orig.name), 2000)
 
     def _do_move_boundary(self, index: int, dx: float, dy: float) -> None:
         if 0 <= index < len(self.project.boundaries):
@@ -4843,7 +4851,7 @@ class MainWindow(QMainWindow):
             new_b.id = orig.id
             self.command_stack.do(self.project, ReplaceBoundaryCommand(index=index, new_boundary=new_b))
             self.ogr_status.showMessage(
-                f"Moved {orig.name} by ({dx:.2f}, {dy:.2f})", 2000
+                tr('Moved {0} by ({1:.2f}, {2:.2f})').format(orig.name, dx, dy), 2000
             )
 
     def _do_convert_boundary(self, index: int) -> None:
@@ -4857,7 +4865,7 @@ class MainWindow(QMainWindow):
             new_b.id = orig.id
             self.command_stack.do(self.project, ReplaceBoundaryCommand(index=index, new_boundary=new_b))
             self.ogr_status.showMessage(
-                f"Converted to {new_type.display_name}", 2000
+                tr('Converted to {0}').format(new_type.display_name), 2000
             )
 
     def _do_assign_material(self, index: int) -> None:
@@ -4873,16 +4881,16 @@ class MainWindow(QMainWindow):
         # its strength after it has been drawn.
         if b.btype not in (BoundaryType.MATERIAL, BoundaryType.WEAK_LAYER):
             self.ogr_status.showMessage(
-                "Assign Material applies to Material and Weak Layer "
-                "boundaries only. Use Properties → Assign Materials to "
-                "paint regions.",
+                tr("Assign Material applies to Material and Weak Layer "
+                   "boundaries only. Use Properties → Assign Materials to "
+                   "paint regions."),
                 3000,
             )
             return
         dlg = AssignMaterialDialog(self.project.materials, b.material_id, self)
         if dlg.exec():
             self.command_stack.do(self.project, AssignMaterialCommand(index=index, material_id=dlg.material_id()))
-            self.ogr_status.showMessage("Material assigned.", 2000)
+            self.ogr_status.showMessage(tr("Material assigned."), 2000)
 
     # --- vertex-level ops --------------------------------------------
     def _on_vertex_moved(self, bi: int, vi: int, x: float, y: float) -> None:
@@ -4911,7 +4919,7 @@ class MainWindow(QMainWindow):
         new_b.polyline.vertices.insert(vi + 1, Vertex(x, y))
         new_b.id = orig.id
         self.command_stack.do(self.project, ReplaceBoundaryCommand(index=bi, new_boundary=new_b))
-        self.ogr_status.showMessage("Vertex inserted", 1500)
+        self.ogr_status.showMessage(tr("Vertex inserted"), 1500)
 
 
 
@@ -4930,11 +4938,11 @@ class MainWindow(QMainWindow):
             self.command_stack.do(
                 self.project, RemoveBoundaryCommand(boundary=b),
             )
-            self.ogr_status.showMessage(f"Deleted {b.name}", 3000)
+            self.ogr_status.showMessage(tr('Deleted {0}').format(b.name), 3000)
         elif action == "move_boundary":
             self._set_tool(ToolMode.MOVE_BOUNDARY)
             self.ogr_status.showMessage(
-                "Click and drag the boundary to move it.", 4000,
+                tr("Click and drag the boundary to move it."), 4000,
             )
         elif action == "edit_coords":
             from .dialogs import EditCoordinatesDialog
@@ -4985,7 +4993,7 @@ class MainWindow(QMainWindow):
         if action == "move":
             self._set_tool(ToolMode.MOVE_VERTEX)
             self.ogr_status.showMessage(
-                "Click and drag a vertex to move it.", 3000,
+                tr("Click and drag a vertex to move it."), 3000,
             )
         elif action == "insert":
             self._set_tool(ToolMode.INSERT_VERTEX)
@@ -5059,11 +5067,11 @@ class MainWindow(QMainWindow):
             )
             mat_name = mat.name if mat else "?"
             self.ogr_status.showMessage(
-                f"Region at ({x:.2f}, {y:.2f}) → {mat_name}", 3000,
+                tr('Region at ({0:.2f}, {1:.2f}) → {2}').format(x, y, mat_name), 3000,
             )
         else:
             self.ogr_status.showMessage(
-                f"No region under ({x:.2f}, {y:.2f}).", 3000,
+                tr('No region under ({0:.2f}, {1:.2f}).').format(x, y), 3000,
             )
 
     def _on_boundary_dragged(self, bi: int, dx: float, dy: float) -> None:
@@ -5080,7 +5088,7 @@ class MainWindow(QMainWindow):
             ReplaceBoundaryCommand(index=bi, new_boundary=new_b),
         )
         self.ogr_status.showMessage(
-            f"Moved {orig.name} by ({dx:+.2f}, {dy:+.2f})", 3000,
+            tr('Moved {0} by ({1:+.2f}, {2:+.2f})').format(orig.name, dx, dy), 3000,
         )
 
     def _on_vertex_deleted(self, bi: int, vi: int) -> None:
@@ -5090,15 +5098,15 @@ class MainWindow(QMainWindow):
         orig = self.project.boundaries[bi]
         if len(orig.polyline.vertices) <= 2:
             QMessageBox.information(
-                self, "Delete Vertex",
-                "Cannot delete — boundary must keep at least 2 vertices.",
+                self, tr("Delete Vertex"),
+                tr("Cannot delete — boundary must keep at least 2 vertices."),
             )
             return
         new_b = deepcopy(orig)
         del new_b.polyline.vertices[vi]
         new_b.id = orig.id
         self.command_stack.do(self.project, ReplaceBoundaryCommand(index=bi, new_boundary=new_b))
-        self.ogr_status.showMessage("Vertex deleted", 1500)
+        self.ogr_status.showMessage(tr("Vertex deleted"), 1500)
 
     def _on_vertex_drag_finished(self, bi: int, snapshot_before) -> None:
         """Called when user releases the mouse after dragging a vertex.
@@ -5114,7 +5122,7 @@ class MainWindow(QMainWindow):
         # Restore pre-drag state silently, then push one command
         self.project.boundaries[bi] = snapshot_before
         self.command_stack.do(self.project, ReplaceBoundaryCommand(index=bi, new_boundary=final_boundary))
-        self.ogr_status.showMessage("Vertex moved", 1500)
+        self.ogr_status.showMessage(tr("Vertex moved"), 1500)
 
     # --- dialog-launched transformations ------------------------------
     def act_scale_boundary(self, preselected_idx: Optional[int] = None) -> None:
@@ -5129,7 +5137,7 @@ class MainWindow(QMainWindow):
             new_b.id = orig.id
             self.command_stack.do(self.project, ReplaceBoundaryCommand(index=idx, new_boundary=new_b))
             self.ogr_status.showMessage(
-                f"Scaled {orig.name} by ({sx:.3f}, {sy:.3f})", 2000
+                tr('Scaled {0} by ({1:.3f}, {2:.3f})').format(orig.name, sx, sy), 2000
             )
 
     def act_rotate_boundary(self, preselected_idx: Optional[int] = None) -> None:
@@ -5144,7 +5152,7 @@ class MainWindow(QMainWindow):
             new_b.id = orig.id
             self.command_stack.do(self.project, ReplaceBoundaryCommand(index=idx, new_boundary=new_b))
             self.ogr_status.showMessage(
-                f"Rotated {orig.name} by {angle:.2f}°", 2000
+                tr('Rotated {0} by {1:.2f}°').format(orig.name, angle), 2000
             )
 
     def act_expand_shrink(self, preselected_idx: Optional[int] = None) -> None:
@@ -5169,8 +5177,8 @@ class MainWindow(QMainWindow):
                     break
         if preselected_idx is None:
             QMessageBox.information(
-                self, "Expand / Shrink",
-                "No External Boundary in the project."
+                self, tr("Expand / Shrink"),
+                tr("No External Boundary in the project.")
             )
             return
 
@@ -5208,9 +5216,9 @@ class MainWindow(QMainWindow):
                 lambda project, _d=d: apply_external_offset(project, _d),
                 attrs=("boundaries",)))
         except Exception as e:  # noqa: BLE001
-            QMessageBox.critical(self, "Expand / Shrink", f"Failed: {e}")
+            QMessageBox.critical(self, tr("Expand / Shrink"), tr('Failed: {0}').format(e))
             return
-        self.ogr_status.showMessage(f"External offset by {d:+.2f} m", 2000)
+        self.ogr_status.showMessage(tr('External offset by {0:+.2f} m').format(d), 2000)
 
     # ------------------------------------------------------------------
     def _expand_shrink_draw_mode(self, idx: int) -> None:
@@ -5223,10 +5231,10 @@ class MainWindow(QMainWindow):
         self.canvas.boundary_drawn.connect(self._on_expand_shrink_polyline_drawn)
         self.canvas.set_tool_mode(ToolMode.DRAW_EXPAND_SHRINK)
         self.ogr_status.showMessage(
-            "Expand/Shrink: FIRST click must be ON the External (snap — "
-            "green cross). Intermediate points go OUTSIDE (expand) or "
-            "INSIDE (shrink). LAST click must also be ON the External. "
-            "Right-click → Done when finished.",
+            tr("Expand/Shrink: FIRST click must be ON the External (snap — "
+               "green cross). Intermediate points go OUTSIDE (expand) or "
+               "INSIDE (shrink). LAST click must also be ON the External. "
+               "Right-click → Done when finished."),
             10000,
         )
 
@@ -5257,12 +5265,12 @@ class MainWindow(QMainWindow):
                 old_ext.polyline, polyline_boundary.polyline,
             )
         except ExpandShrinkError as e:
-            QMessageBox.warning(self, "Expand / Shrink", str(e))
+            QMessageBox.warning(self, tr("Expand / Shrink"), str(e))
             return
         except Exception as e:  # noqa: BLE001
             QMessageBox.critical(
-                self, "Expand / Shrink",
-                f"Unexpected failure: {e}",
+                self, tr("Expand / Shrink"),
+                tr('Unexpected failure: {0}').format(e),
             )
             return
 
@@ -5270,13 +5278,17 @@ class MainWindow(QMainWindow):
         convert_arc = False
         if result.removed_arc is not None and len(result.removed_arc.vertices) >= 2:
             reply = QMessageBox.question(
-                self, "Expand / Shrink External",
-                f"External Boundary successfully <b>{result.mode}ed</b>."
-                "<br><br>Do you want to convert the deleted segments of the "
-                "original External Boundary into a Material Boundary?"
-                "<br><br>(This is useful if you want to keep the original "
-                "ground surface as a geological reference — e.g. for a fill "
-                "or an excavation.)",
+                self, tr("Expand / Shrink External"),
+                tr('External Boundary successfully <b>{0}</b>.<br><br>Do '
+                   'you want to convert the deleted segments of the original '
+                   'External Boundary into a Material Boundary?<br><br>(This '
+                   'is useful if you want to keep the original ground surface '
+                   'as a geological reference — e.g. for a fill or an '
+                   'excavation.)').format(
+                    # v0.1.290 (D291): a participle per language; it was
+                    # "{mode}ed", which also made "shrinked"
+                    {"expand": tr("expanded"), "shrink": tr("shrunk")}.get(
+                        result.mode, result.mode)),
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No,
             )
@@ -5382,8 +5394,8 @@ class MainWindow(QMainWindow):
             self.command_stack.do(self.project, ReplaceBoundaryCommand(
                 index=idx, new_boundary=new_b))
             self.ogr_status.showMessage(
-                f"Simplified from {len(orig.polyline.vertices)} to "
-                f"{len(new_b.polyline.vertices)} vertices", 3000
+                tr('Simplified from {0} to {1} vertices').format(
+                    len(orig.polyline.vertices), len(new_b.polyline.vertices)), 3000
             )
 
     def act_geometry_cleanup(self) -> None:
@@ -5459,7 +5471,7 @@ class MainWindow(QMainWindow):
                 return
             new_b.id = orig.id
             self.command_stack.do(self.project, ReplaceBoundaryCommand(index=idx, new_boundary=new_b))
-            self.ogr_status.showMessage("Coordinates updated", 2000)
+            self.ogr_status.showMessage(tr("Coordinates updated"), 2000)
 
     def act_selection_filter(self) -> None:
         dlg = SelectionFilterDialog(self.selection_filter, self)
@@ -5471,14 +5483,15 @@ class MainWindow(QMainWindow):
                                    "supports", "loads", "surfaces")
                        if getattr(self.selection_filter, n)]
             self.ogr_status.showMessage(
-                f"Selection filter: {', '.join(active) or 'nothing selectable'}",
+                tr('Selection filter: {0}').format(
+                    ', '.join(active) or 'nothing selectable'),
                 3000,
             )
 
     # --- helper: pick boundary from a list ---------------------------
     def _ask_boundary_index(self) -> Optional[int]:
         if not self.project.boundaries:
-            QMessageBox.information(self, "Select Boundary", "No boundaries defined.")
+            QMessageBox.information(self, tr("Select Boundary"), tr("No boundaries defined."))
             return None
         from PySide6.QtWidgets import QInputDialog
         labels = [
@@ -5499,7 +5512,7 @@ class MainWindow(QMainWindow):
         if self.project.is_dirty:
             r = QMessageBox.question(
                 self, tr("Load Demo Slope"),
-                "Current project has unsaved changes. Load demo anyway?",
+                tr("Current project has unsaved changes. Load demo anyway?"),
                 QMessageBox.Yes | QMessageBox.No,
             )
             if r != QMessageBox.Yes:
@@ -5513,7 +5526,7 @@ class MainWindow(QMainWindow):
         self.command_stack.clear()
         self._install_demo_project()
         self.setWindowTitle(f"OGR Slip2D v{self.VERSION} — Demo slope")
-        self.ogr_status.showMessage("Demo slope loaded.", 3000)
+        self.ogr_status.showMessage(tr("Demo slope loaded."), 3000)
 
     # ==================================================================
     def _install_demo_project(self) -> None:

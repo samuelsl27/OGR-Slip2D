@@ -2380,6 +2380,268 @@ _DICTS: dict[str, dict[str, str]] = {
 
         "Groundwater analysis: %s": "Análisis de filtración: %s",
         "Cannot compute: %s": "No se puede calcular: %s",
+        # v0.1.290 (D291) — the 26 menu actions of MainWindow._mk and the messages
+        # of the main window, now tr() templates
+        "Generate Report...":
+            "Generar informe...",
+        "Zoom Mouse":
+            "Zoom con el ratón",
+        "Select":
+            "Seleccionar",
+        "Water Pressure Grid...":
+            "Malla de presiones de agua...",
+        "Back Analysis of Support Force...":
+            "Retroanálisis de la fuerza de soporte...",
+        "Random Variables...":
+            "Variables aleatorias...",
+        "Compute Statistics":
+            "Calcular estadística",
+        "Show Statistics":
+            "Mostrar estadística",
+        "Define Hydraulic Properties...":
+            "Definir propiedades hidráulicas...",
+        "Generate FE Mesh...":
+            "Generar malla de elementos finitos...",
+        "Reset FE Mesh":
+            "Borrar la malla de elementos finitos",
+        "Set Boundary Conditions...":
+            "Definir condiciones de contorno...",
+        "Transient Groundwater...":
+            "Agua subterránea transitoria...",
+        "Compute Groundwater":
+            "Calcular agua subterránea",
+        "Interpret Groundwater":
+            "Interpretar agua subterránea",
+        "Move Boundary":
+            "Mover contorno",
+        "Copy Boundary":
+            "Copiar contorno",
+        "Scale Boundary...":
+            "Escalar contorno...",
+        "Rotate Boundary...":
+            "Rotar contorno...",
+        "Expand / Shrink External...":
+            "Expandir / contraer el contorno exterior...",
+        "Convert Boundary...":
+            "Convertir contorno...",
+        "Edit Coordinates...":
+            "Editar coordenadas...",
+        "Selection Filter...":
+            "Filtro de selección...",
+        "Stretch Support":
+            "Estirar soporte",
+        "Define Tension Crack...":
+            "Definir grieta de tracción...",
+        "Terminal":
+            "Terminal de Python",
+        "Tool: {0} — interactive placement scheduled for next release":
+            "Herramienta: {0} — la colocación interactiva llegará en una versión próxima",
+        "Report saved to {0}":
+            "Informe guardado en {0}",
+        "Report generated successfully:\n{0}":
+            "Informe generado:\n{0}",
+        "Print planned for v0.2.0.":
+            "La impresión está prevista para la v0.2.0.",
+        "Canvas image copied to clipboard.":
+            "Imagen del lienzo copiada al portapapeles.",
+        "Grid set to Auto (computed from model bounding box)":
+            "Rejilla en automático (calculada del rectángulo que envuelve el modelo)",
+        "Grid: {0}×{1} intervals ({2}×{3} centres) in x∈[{4:.1f}, {5:.1f}], y∈[{6:.1f}, {7:.1f}]":
+            "Rejilla: {0}×{1} intervalos ({2}×{3} centros) en x∈[{4:.1f}, {5:.1f}], y∈[{6:.1f}, {7:.1f}]",
+        "Click two opposite corners on the canvas. The dialog will update with the picked bounds; press OK to apply.":
+            "Pulsa dos esquinas opuestas en el lienzo. El diálogo se actualizará con los límites elegidos; pulsa Aceptar para aplicarlos.",
+        "FE mesh cleared":
+            "Malla de elementos finitos borrada",
+        "Back analysis ({0}): required force {1:.1f} for FS = {2:g}  (active {3:.1f}, passive {4:.1f}; surface FoS without support {5:.4f}, {6} surfaces)":
+            "Retroanálisis ({0}): fuerza necesaria {1:.1f} para FS = {2:g}  (activa {3:.1f}, pasiva {4:.1f}; FS de la superficie sin soporte {5:.4f}, {6} superficies)",
+        "Groundwater solved in {0} iterations; u from {1:.1f} to {2:.1f}{3}":
+            "Agua subterránea resuelta en {0} iteraciones; u de {1:.1f} a {2:.1f}{3}",
+        "Support added ({0} total). Click again to add another, or Esc to finish.":
+            "Soporte añadido ({0} en total). Pulsa otra vez para añadir otro, o Esc para terminar.",
+        "Click two points along the slope boundary; pattern will be generated automatically.":
+            "Pulsa dos puntos sobre el contorno del talud; el patrón se generará solo.",
+        "Pattern generated: {0} supports added ({1} total).":
+            "Patrón generado: {0} soportes añadidos ({1} en total).",
+        "Support {0} {1} stretched.":
+            "Soporte {0} {1} estirado.",
+        "Click the start point of the load on a boundary, then the end point. Esc to cancel.":
+            "Pulsa el punto inicial de la carga sobre un contorno y después el final. Esc para cancelar.",
+        "Distributed Load added: {0:.1f} kN/m² between ({1:.2f},{2:.2f}) and ({3:.2f},{4:.2f})":
+            "Carga repartida añadida: {0:.1f} kN/m² entre ({1:.2f},{2:.2f}) y ({3:.2f},{4:.2f})",
+        "Click on a boundary to place the line load. Esc to cancel.":
+            "Pulsa sobre un contorno para colocar la carga lineal. Esc para cancelar.",
+        "Deleted {0} distributed + {1} line loads.":
+            "Eliminadas {0} cargas repartidas y {1} lineales.",
+        "Line Load added at ({0:.2f}, {1:.2f}): {2:.1f} kN/m":
+            "Carga lineal añadida en ({0:.2f}, {1:.2f}): {2:.1f} kN/m",
+        "Pick a material, then click a region on the canvas to paint it.":
+            "Elige un material y pulsa una región del lienzo para pintarla.",
+        "Painted region with '{0}'.":
+            "Región pintada con «{0}».",
+        "Added {0} with {1} vertices":
+            "Añadido {0} con {1} vértices",
+        "Vertex inserted":
+            "Vértice insertado",
+        "Moved {0} by ({1:+.2f}, {2:+.2f})":
+            "{0} movido ({1:+.2f}, {2:+.2f})",
+        "Vertex deleted":
+            "Vértice eliminado",
+        "Vertex moved":
+            "Vértice movido",
+        "External offset by {0:+.2f} m":
+            "Contorno exterior desplazado {0:+.2f} m",
+        "Demo slope loaded.":
+            "Talud de ejemplo cargado.",
+        "Current project has unsaved changes. Save first?":
+            "El proyecto tiene cambios sin guardar. ¿Guardar primero?",
+        "Loaded {0}":
+            "Cargado {0}",
+        "Saved {0}":
+            "Guardado {0}",
+        "No analysis results available. Run Compute first.":
+            "No hay resultados de análisis. Calcula primero.",
+        "Surface search configured: {0}":
+            "Búsqueda de superficies configurada: {0}",
+        "No mesh generated. An External boundary with a valid closed polygon is required.":
+            "No se generó la malla. Hace falta un contorno exterior que sea un polígono cerrado válido.",
+        "No FE mesh to reset":
+            "No hay malla de elementos finitos que borrar",
+        "{0} random variable(s) defined":
+            "{0} variable(s) aleatoria(s) definida(s)",
+        "Run Compute Statistics first.":
+            "Calcula primero la estadística.",
+        "Define some materials first.":
+            "Define primero algún material.",
+        "Generate the FE mesh first.":
+            "Genera primero la malla de elementos finitos.",
+        "Boundary conditions: {0} nodes, {1} segments":
+            "Condiciones de contorno: {0} nodos, {1} segmentos",
+        "Transient: {0}, {1} stage(s)":
+            "Transitorio: {0}, {1} etapa(s)",
+        "Compute the groundwater analysis first.":
+            "Calcula primero el agua subterránea.",
+        "Water pressure grid: {0} points":
+            "Malla de presiones de agua: {0} puntos",
+        "No methods produced results.":
+            "Ningún método dio resultados.",
+        "No valid failure surface found.":
+            "No se encontró ninguna superficie de rotura válida.",
+        "Run Compute first (Ctrl+T).":
+            "Calcula primero (Ctrl+T).",
+        "{0} support types defined":
+            "{0} tipos de soporte definidos",
+        "No support types":
+            "No hay tipos de soporte",
+        "No support types are defined yet.\n\nOpen Properties → Define Support... first to create at least one support type.":
+            "Aún no hay tipos de soporte.\n\nAbre primero Propiedades → Definir soporte... y crea al menos uno.",
+        "No support types are defined yet.\n\nOpen Properties → Define Support... first.":
+            "Aún no hay tipos de soporte.\n\nAbre primero Propiedades → Definir soporte....",
+        "Support deleted ({0} remain). Click another or Esc to finish.":
+            "Soporte eliminado (quedan {0}). Pulsa otro o Esc para terminar.",
+        "Support deleted.":
+            "Soporte eliminado.",
+        "Seismic records: {0}":
+            "Registros sísmicos: {0}",
+        "No loads in the project.":
+            "El proyecto no tiene cargas.",
+        "No Tension Crack boundary in the project.\n\nAdd one first via Boundaries → Add Tension Crack.":
+            "El proyecto no tiene grieta de tracción.\n\nAñade una primero en Contornos → Añadir grieta de tracción.",
+        "Tension Crack: {0}":
+            "Grieta de tracción: {0}",
+        "No materials defined yet.\nUse Properties → Define Materials… first.":
+            "Aún no hay materiales.\nUsa primero Propiedades → Definir materiales….",
+        "Pick a material in the Assign panel first.":
+            "Elige primero un material en el panel de asignación.",
+        "Draw the External Boundary first.":
+            "Dibuja primero el contorno exterior.",
+        "Added vertex ({0:+.3f}, {1:+.3f})":
+            "Vértice añadido ({0:+.3f}, {1:+.3f})",
+        "Activate a boundary drawing tool first (Ctrl+1 … Ctrl+6).":
+            "Activa primero una herramienta de dibujo de contornos (Ctrl+1 … Ctrl+6).",
+        "Deleted {0}":
+            "Eliminado {0}",
+        "Copied {0}":
+            "Copiado {0}",
+        "Moved {0} by ({1:.2f}, {2:.2f})":
+            "{0} movido ({1:.2f}, {2:.2f})",
+        "Converted to {0}":
+            "Convertido en {0}",
+        "Assign Material applies to Material and Weak Layer boundaries only. Use Properties → Assign Materials to paint regions.":
+            "Asignar material solo se aplica a contornos de material y a capas débiles. Para pintar regiones, usa Propiedades → Asignar materiales.",
+        "Material assigned.":
+            "Material asignado.",
+        "Click and drag a vertex to move it.":
+            "Pulsa y arrastra un vértice para moverlo.",
+        "Region at ({0:.2f}, {1:.2f}) → {2}":
+            "Región en ({0:.2f}, {1:.2f}) → {2}",
+        "No region under ({0:.2f}, {1:.2f}).":
+            "No hay ninguna región en ({0:.2f}, {1:.2f}).",
+        "Cannot delete — boundary must keep at least 2 vertices.":
+            "No se puede eliminar: el contorno debe conservar al menos 2 vértices.",
+        "Scaled {0} by ({1:.3f}, {2:.3f})":
+            "{0} escalado ({1:.3f}, {2:.3f})",
+        "Rotated {0} by {1:.2f}°":
+            "{0} rotado {1:.2f}°",
+        "Expand / Shrink":
+            "Expandir / contraer",
+        "No External Boundary in the project.":
+            "El proyecto no tiene contorno exterior.",
+        "Expand / Shrink External":
+            "Expandir / contraer el contorno exterior",
+        "Simplified from {0} to {1} vertices":
+            "Simplificado de {0} a {1} vértices",
+        "Coordinates updated":
+            "Coordenadas actualizadas",
+        "Selection filter: {0}":
+            "Filtro de selección: {0}",
+        "Select Boundary":
+            "Elegir contorno",
+        "No boundaries defined.":
+            "No hay contornos definidos.",
+        "Current project has unsaved changes. Load demo anyway?":
+            "El proyecto tiene cambios sin guardar. ¿Cargar el ejemplo de todos modos?",
+        "Could not open project:\n{0}":
+            "No se pudo abrir el proyecto:\n{0}",
+        "The 'reportlab' package is required for PDF reports.\nInstall it with:  pip install reportlab":
+            "Para los informes PDF hace falta el paquete «reportlab».\nInstálalo con:  pip install reportlab",
+        "Failed to generate report:\n{0}":
+            "No se pudo generar el informe:\n{0}",
+        "Mesh generation failed: {0}":
+            "Falló la generación de la malla: {0}",
+        "Hydraulic properties updated":
+            "Propiedades hidráulicas actualizadas",
+        "Transient analysis produced no results.":
+            "El análisis transitorio no dio resultados.",
+        "Seismic load: k_h = {0:+.3f}, k_v = {1:+.3f}":
+            "Carga sísmica: k_h = {0:+.3f}, k_v = {1:+.3f}",
+        "Seismic load disabled":
+            "Carga sísmica desactivada",
+        "Deleted Distributed Load: {0:.1f} kN/m²":
+            "Carga repartida eliminada: {0:.1f} kN/m²",
+        "Replace External Boundary":
+            "Sustituir el contorno exterior",
+        "An External Boundary already exists. Replace it with the new one?\n\n(The old external will be removed; material boundaries remain untouched.)":
+            "Ya hay un contorno exterior. ¿Sustituirlo por el nuevo?\n\n(Se quitará el exterior anterior; los contornos de material no cambian.)",
+        "External Boundary replaced with {0} vertices":
+            "Contorno exterior sustituido por uno de {0} vértices",
+        "Click and drag the boundary to move it.":
+            "Pulsa y arrastra el contorno para moverlo.",
+        "Failed: {0}":
+            "Falló: {0}",
+        "Unexpected failure: {0}":
+            "Fallo inesperado: {0}",
+        "Deleted Line Load: {0:.1f} kN/m":
+            "Carga lineal eliminada: {0:.1f} kN/m",
+        "Drawing discarded (External already exists).":
+            "Dibujo descartado (ya hay un contorno exterior).",
+        "expanded":
+            "expandido",
+        "shrunk":
+            "contraído",
+        "External Boundary successfully <b>{0}</b>.<br><br>Do you want to convert the deleted segments of the original External Boundary into a Material Boundary?<br><br>(This is useful if you want to keep the original ground surface as a geological reference — e.g. for a fill or an excavation.)":
+            "Contorno exterior <b>{0}</b> correctamente.<br><br>¿Quieres convertir los tramos eliminados del contorno exterior original en un contorno de material?<br><br>(Sirve para conservar la superficie original del terreno como referencia geológica, p. ej. en un relleno o una excavación.)",
+        "Expand/Shrink: FIRST click must be ON the External (snap — green cross). Intermediate points go OUTSIDE (expand) or INSIDE (shrink). LAST click must also be ON the External. Right-click → Done when finished.":
+            "Expandir/contraer: el PRIMER clic debe caer SOBRE el contorno exterior (forzado — cruz verde). Los puntos intermedios van FUERA (expandir) o DENTRO (contraer). El ÚLTIMO clic también debe caer SOBRE el contorno exterior. Clic derecho → Hecho al terminar.",
         # v0.1.289 (D290) — the language notice, now true: the choice is saved
         "Language changed. Restart OGR Slip2D to see the menus and toolbars in it.":
             "Idioma cambiado. Reinicia OGR Slip2D para ver en él los menús y las barras de herramientas.",

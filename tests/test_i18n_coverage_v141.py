@@ -117,7 +117,10 @@ _VISIBLE_MESSAGES = [
 # (matplotlib missing) now goes through tr() (D271).
 # v0.1.289 — 63 -> 62: the language notice of the window («Restart the
 # application…», which was also false) goes through tr() (D290).
-_UNWRAPPED_BUDGET_MESSAGES = 62
+# v0.1.290 — 62 -> 16: every message of the main window goes through tr()
+# (D291: 119 status-bar, _info and message-box arguments, f-strings
+# included, which these patterns never saw). The 16 left are in dialogs.
+_UNWRAPPED_BUDGET_MESSAGES = 16
 
 
 def _gui_sources():
