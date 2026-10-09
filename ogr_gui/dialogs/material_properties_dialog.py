@@ -1320,8 +1320,13 @@ class MaterialPropertiesDialog(QDialog):
         rapid_drawdown: bool = False,
         drawdown_method: str = "b_bar",
         excess_pore_pressure: bool = False,
+        material_uses: dict | None = None,
     ) -> None:
         super().__init__(parent)
+        # v0.1.286 (D287) — {material id: (region assignments, weak
+        # layers)}, from rules.material_region_uses, handed in like the
+        # water surfaces: this dialog knows nothing of a Project.
+        self._material_uses = dict(material_uses or {})
         # v0.1.62 — (boundary id, translated label) for every water table
         # and piezometric line in the project. Passed in rather than read
         # from a Project so this dialog keeps knowing nothing about one,
@@ -2550,6 +2555,15 @@ class MaterialPropertiesDialog(QDialog):
                     tr("%s cannot be removed: the ranges of %s take its "
                        "strength. Change them first.")
                     % (gone.name, ", ".join(users)))
+                return
+            # v0.1.286 (D287) — and one that regions or weak layers use
+            # stays too, as the API's material_delete refuses it
+            # (rules.material_users): removed, they pointed at nothing.
+            n_regions, n_layers = self._material_uses.get(gone.id, (0, 0))
+            if n_regions or n_layers:
+                from ogr_core.project.rules import MATERIAL_IN_USE
+                self._show_strength_problem(tr(MATERIAL_IN_USE).format(
+                    gone.name, n_regions, n_layers))
                 return
             # The row about to disappear must not be committed afterwards.
             self._current_row = -1

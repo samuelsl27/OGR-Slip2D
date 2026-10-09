@@ -2380,6 +2380,8 @@ _DICTS: dict[str, dict[str, str]] = {
 
         "Groundwater analysis: %s": "Análisis de filtración: %s",
         "Cannot compute: %s": "No se puede calcular: %s",
+        # v0.1.286 (D287) — rules.MATERIAL_IN_USE
+        "{0} cannot be removed: {1} region(s) and {2} weak layer(s) use it. Assign them another material first.": "{0} no se puede quitar: lo usan {1} región(es) y {2} capa(s) débil(es). Asígnales otro material primero.",
         # v0.1.280 (D284): rules.MESH_ORPHAN_ELEMENTS / MESH_OF_ANOTHER_MODEL
         "{0} element(s) of the mesh belong to a material that no longer exists. Regenerate the mesh.":
             "{0} elemento(s) de la malla pertenecen a un material que ya no existe. Regenera la malla.",

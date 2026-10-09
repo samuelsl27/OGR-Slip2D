@@ -202,7 +202,7 @@ class _DrawdownSweepWorker(QThread):
 
 # ======================================================================
 class MainWindow(QMainWindow):
-    VERSION = "0.1.285"
+    VERSION = "0.1.286"
 
     def __init__(self) -> None:
         super().__init__()
@@ -3407,7 +3407,16 @@ class MainWindow(QMainWindow):
     # Properties
     # ==================================================================
     def act_define_materials(self) -> None:
-        dlg = MaterialPropertiesDialog(
+        dlg = self._materials_dialog()
+        if dlg.exec():
+            self.project.materials = dlg.result_materials()
+            self.project._notify("materials_changed")
+
+    def _materials_dialog(self) -> "MaterialPropertiesDialog":
+        """*Define Materials* as the menu opens it, not yet shown (v0.1.286,
+        D287: a test reaches the real dialog without ``exec``)."""
+        from ogr_core.project.rules import material_region_uses
+        return MaterialPropertiesDialog(
             self.project.materials, self, units_obj=self.project.settings.units,
             gw_method=str(self.project.settings.groundwater.method),
             # v0.1.60 — the saturated unit weight is only offered when a
@@ -3432,10 +3441,10 @@ class MainWindow(QMainWindow):
             # fields waited for their engine.
             excess_pore_pressure=bool(
                 self.project.settings.groundwater.excess_pore_pressure),
+            # v0.1.286 (D287) — who uses each material, so the dialog
+            # refuses to remove one in use, as the API does.
+            material_uses=material_region_uses(self.project),
         )
-        if dlg.exec():
-            self.project.materials = dlg.result_materials()
-            self.project._notify("materials_changed")
 
     # ------------------------------------------------------------------
     def _anisotropic_surface_choices(self) -> list[tuple[str, str]]:

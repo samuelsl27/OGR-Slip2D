@@ -1647,3 +1647,56 @@ def retention_field_is_read(project, model, field: str) -> bool:
     if field in ("vg_n", "vg_m", "vg_custom_m"):
         return vg or transient
     return transient
+
+
+# ----------------------------------------------------------------------
+# v0.1.286 (D287) — who uses a material
+# ----------------------------------------------------------------------
+#: The window's refusal to remove a material in use. A template: the
+#: dialog fills in the name and the counts, and translates the key.
+MATERIAL_IN_USE = ("{0} cannot be removed: {1} region(s) and {2} weak "
+                   "layer(s) use it. Assign them another material first.")
+
+
+def material_link_users(materials, material_id) -> list:
+    """``(material, rule)`` for every Generalized Anisotropic range (and,
+    since D231a, base or joint of "Angle or Surface") in ``materials`` that
+    takes its strength from ``material_id`` (D218b)."""
+    return [(g, r) for g in materials
+            if getattr(g, "id", None) != material_id
+            and hasattr(getattr(g, "strength", None), "children_items")
+            for _k, r in g.strength.children_items()
+            if isinstance(r, dict) and r.get("material_id") == material_id]
+
+
+def material_users(project, material_id, materials=None):
+    """Who uses a material: ``(region assignments, weak layers, linked
+    ranges)``.
+
+    v0.1.286 (D287) — moved from the API's ``material_delete``, which was
+    the only door that asked: the window's *Define Materials* removed a
+    material that regions used without a word, and left them pointing at
+    an id that no longer exists (the limit equilibrium then found no
+    factor and blamed surfaces leaving the model). ``materials`` is the
+    list searched for linked ranges — the dialog's pending one — and
+    defaults to the project's.
+    """
+    regions = [a for a in project.region_assignments
+               if a.get("material_id") == material_id]
+    layers = [b for b in project.boundaries
+              if getattr(b, "material_id", None) == material_id]
+    links = material_link_users(
+        project.materials if materials is None else materials, material_id)
+    return regions, layers, links
+
+
+def material_region_uses(project) -> dict:
+    """``{material id: (region assignments, weak layers)}`` for every
+    material of ``project``: what the materials dialog — which knows
+    nothing of a Project — is handed to refuse a removal (v0.1.286,
+    D287). The linked ranges it checks itself, on its pending list."""
+    out = {}
+    for m in project.materials:
+        regions, layers, _links = material_users(project, m.id)
+        out[m.id] = (len(regions), len(layers))
+    return out

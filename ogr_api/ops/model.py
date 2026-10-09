@@ -824,18 +824,12 @@ def material_delete(ws, material: str, project_id: Optional[str] = None,
         if target is m:
             raise InvalidArgument("reassign_to is the material being "
                                   "deleted.")
-        refs_assign = [a for a in project.region_assignments
-                       if a.get("material_id") == m.id]
-        refs_layers = [b for b in project.boundaries
-                       if b.material_id == m.id]
-        # v0.1.228 (D218b) — a Generalized Anisotropic range that links it
-        # is a use too.
-        # v0.1.248 (D231a): the base and the joints of "Angle or Surface"
-        # too.
-        refs_links = [(g, r) for g in project.materials
-                      if g is not m and hasattr(g.strength, "children_items")
-                      for _k, r in g.strength.children_items()
-                      if isinstance(r, dict) and r.get("material_id") == m.id]
+        # v0.1.286 (D287) — the uses are the rule's, so that the window's
+        # materials dialog refuses what this refuses. A Generalized
+        # Anisotropic range that links it is a use too (D218b), and the
+        # base and the joints of "Angle or Surface" (D231a).
+        from ogr_core.project.rules import material_users
+        refs_assign, refs_layers, refs_links = material_users(project, m.id)
         is_default = project.materials and project.materials[0] is m
         if (refs_assign or refs_layers or refs_links) and target is None \
                 and not force:
