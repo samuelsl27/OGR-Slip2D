@@ -2380,6 +2380,13 @@ _DICTS: dict[str, dict[str, str]] = {
 
         "Groundwater analysis: %s": "Análisis de filtración: %s",
         "Cannot compute: %s": "No se puede calcular: %s",
+        # v0.1.288 (D289) — why a groundwater entry is disabled
+        "Needs a finite-element groundwater method: choose one in Project Settings > Groundwater.":
+            "Necesita un método de agua subterránea por elementos finitos: elígelo en Ajustes de proyecto > Agua subterránea.",
+        "Needs the finite-element mesh: Groundwater > Mesh.":
+            "Necesita la malla de elementos finitos: Agua subterránea > Malla.",
+        "Needs a groundwater result: compute the groundwater first.":
+            "Necesita un resultado de agua subterránea: calcula primero el agua.",
         # v0.1.286 (D287) — rules.MATERIAL_IN_USE
         "{0} cannot be removed: {1} region(s) and {2} weak layer(s) use it. Assign them another material first.": "{0} no se puede quitar: lo usan {1} región(es) y {2} capa(s) débil(es). Asígnales otro material primero.",
         # v0.1.280 (D284): rules.MESH_ORPHAN_ELEMENTS / MESH_OF_ANOTHER_MODEL

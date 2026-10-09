@@ -46,6 +46,11 @@ QMenu::item {
 QMenu::item:selected {
     background-color: #d7e8ff;
 }
+/* v0.1.288 (D289): with a stylesheet, Qt draws a disabled item in the
+   colour given to QMenu unless a :disabled rule says otherwise. */
+QMenu::item:disabled {
+    color: #a0a0a0;
+}
 QMenu::separator {
     height: 1px;
     background: #d0d0d0;
@@ -135,6 +140,9 @@ QGroupBox::title {
     padding: 0 6px;
     color: #40607a;
 }
+QGroupBox::title:disabled {
+    color: #a0a0a0;
+}
 QTabWidget::pane {
     border: 1px solid #c0c0c0;
     background: #ffffff;
@@ -194,6 +202,8 @@ QMenu {
 }
 QMenu::item { padding: 5px 22px; border-radius: 3px; }
 QMenu::item:selected { background-color: #4a5a75; }
+/* v0.1.288 (D289): every text colour set here needs its :disabled one. */
+QMenu::item:disabled { color: #7a7a7a; }
 QMenu::separator { height: 1px; background: #4a4a4a; margin: 4px 6px; }
 
 QToolBar {
@@ -252,6 +262,7 @@ QPushButton {
 QPushButton:hover { background-color: #4a5a75; }
 QPushButton:pressed { background-color: #5b7398; }
 QPushButton:default { border: 2px solid #6a85b0; }
+QPushButton:disabled, QToolButton:disabled { color: #7a7a7a; }
 QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QPlainTextEdit, QTextEdit {
     background-color: #1e1e1e;
     color: #e0e0e0;
@@ -284,6 +295,12 @@ QTabBar::tab {
     border-top-right-radius: 3px;
 }
 QTabBar::tab:selected { background: #2b2b2b; font-weight: 500; }
+QTabBar::tab:disabled { color: #7a7a7a; }
+QLineEdit:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled,
+QComboBox:disabled, QPlainTextEdit:disabled, QTextEdit:disabled,
+QTreeView:disabled, QListView:disabled, QTableView:disabled,
+QHeaderView::section:disabled, QGroupBox:disabled,
+QGroupBox::title:disabled { color: #7a7a7a; }
 QScrollBar:vertical { background: #2b2b2b; width: 12px; }
 QScrollBar::handle:vertical { background: #555; border-radius: 6px; }
 QScrollBar::handle:vertical:hover { background: #6a85b0; }

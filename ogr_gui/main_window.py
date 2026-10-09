@@ -22,12 +22,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtCore import QEvent, QObject, Qt, QThread, Signal
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QToolBar,
 )
@@ -201,8 +202,30 @@ class _DrawdownSweepWorker(QThread):
 
 
 # ======================================================================
+class DisabledReasonFilter(QObject):
+    """v0.1.288 (D289) — puts on the status bar the status tip of the
+    DISABLED menu entry under the pointer.
+
+    Qt shows an action's status tip only when the menu makes it the current
+    action, and with the Fusion and windows11 styles it never does that for
+    a disabled one (``SH_Menu_AllowActiveAndDisabled`` is 0): the reason a
+    groundwater entry is disabled would never be seen. Enabled entries are
+    left to Qt."""
+
+    def __init__(self, window) -> None:
+        super().__init__(window)
+        self._window = window
+
+    def eventFilter(self, obj, event) -> bool:  # noqa: N802 (Qt API)
+        if event.type() == QEvent.Type.MouseMove and isinstance(obj, QMenu):
+            act = obj.actionAt(event.position().toPoint())
+            if act is not None and not act.isEnabled() and act.statusTip():
+                self._window.statusBar().showMessage(act.statusTip(), 5000)
+        return False
+
+
 class MainWindow(QMainWindow):
-    VERSION = "0.1.287"
+    VERSION = "0.1.288"
 
     def __init__(self) -> None:
         super().__init__()
@@ -916,6 +939,11 @@ class MainWindow(QMainWindow):
         m_help.addAction(self._actions["check_updates"])
         m_help.addSeparator()
         m_help.addAction(self._actions["about"])
+
+        # v0.1.288 (D289) — a disabled entry says why on the status bar.
+        self._disabled_reason = DisabledReasonFilter(self)
+        for menu in mb.findChildren(QMenu):
+            menu.installEventFilter(self._disabled_reason)
 
     # ==================================================================
     def _build_toolbar(self) -> None:
@@ -2937,17 +2965,25 @@ class MainWindow(QMainWindow):
         has_mesh = (getattr(self.project, "fem_mesh", None) is not None
                     and self.project.fem_mesh.element_count > 0)
         has_result = getattr(self.project, "seepage_result", None) is not None
-        for key, enabled in (
-            ("gw_hydraulic", fea),
-            ("gw_transient", fea),
-            ("gw_bcs", has_mesh),
-            ("gw_compute", has_mesh),
-            ("gw_interpret", has_result),
-            ("reset_mesh", has_mesh),
+        # v0.1.288 (D289) — and why, while disabled: the status bar says it
+        # when the pointer is on the entry (DisabledReasonFilter).
+        need_fea = tr("Needs a finite-element groundwater method: choose "
+                      "one in Project Settings > Groundwater.")
+        need_mesh = tr("Needs the finite-element mesh: Groundwater > Mesh.")
+        need_result = tr("Needs a groundwater result: compute the "
+                         "groundwater first.")
+        for key, enabled, reason in (
+            ("gw_hydraulic", fea, need_fea),
+            ("gw_transient", fea, need_fea),
+            ("gw_bcs", has_mesh, need_mesh),
+            ("gw_compute", has_mesh, need_mesh),
+            ("gw_interpret", has_result, need_result),
+            ("reset_mesh", has_mesh, need_mesh),
         ):
             act = self._actions.get(key)
             if act is not None:
                 act.setEnabled(bool(enabled))
+                act.setStatusTip("" if enabled else reason)
 
     def _define_hydraulic_properties(self) -> None:
         if not self.project.materials:
@@ -3917,6 +3953,7 @@ class MainWindow(QMainWindow):
             why = grid_refusal(self.project)
             actions["wp_grid"].setEnabled(why is None)
             actions["wp_grid"].setToolTip(tr(why) if why else "")
+            actions["wp_grid"].setStatusTip(tr(why) if why else "")
 
         def has_btype(bt) -> bool:
             return any(b.btype == bt for b in boundaries)
