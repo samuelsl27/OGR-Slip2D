@@ -2380,6 +2380,9 @@ _DICTS: dict[str, dict[str, str]] = {
 
         "Groundwater analysis: %s": "Análisis de filtración: %s",
         "Cannot compute: %s": "No se puede calcular: %s",
+        # v0.1.289 (D290) — the language notice, now true: the choice is saved
+        "Language changed. Restart OGR Slip2D to see the menus and toolbars in it.":
+            "Idioma cambiado. Reinicia OGR Slip2D para ver en él los menús y las barras de herramientas.",
         # v0.1.288 (D289) — why a groundwater entry is disabled
         "Needs a finite-element groundwater method: choose one in Project Settings > Groundwater.":
             "Necesita un método de agua subterránea por elementos finitos: elígelo en Ajustes de proyecto > Agua subterránea.",

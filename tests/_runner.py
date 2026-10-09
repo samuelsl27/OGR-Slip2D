@@ -434,6 +434,9 @@ def main(tests_dir: Path, patterns=(), k: str | None = None,
     # included, gets an empty folder of its own. A test that wants a window
     # makes one and points this variable at it, as before.
     os.environ["OGR_BRIDGE_DIR"] = tempfile.mkdtemp(prefix="ogr_test_bridges_")
+    # v0.1.289 (D290) — and the saved preferences (language, theme) live in
+    # a folder of the run's own, never in the user's registry.
+    os.environ["OGR_SETTINGS_DIR"] = tempfile.mkdtemp(prefix="ogr_test_settings_")
 
     # Before anything else: which tree is this about to measure? See
     # foreign_packages() for why a run that answers this wrongly is worse

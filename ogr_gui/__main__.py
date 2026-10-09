@@ -44,6 +44,22 @@ def start_window(agent_bridge: bool = True):
     return win
 
 
+def apply_saved_preferences(app) -> None:
+    """The language and the theme of the last session (v0.1.289, D290).
+
+    BEFORE the window is built: its menus, toolbar and status bar take
+    their texts from ``tr()`` once, so a language set afterwards would not
+    reach them. With nothing saved, English and the light theme, as
+    always. Tests that build a ``MainWindow`` directly never come here."""
+    from .i18n import set_language
+    from .themes import apply_theme
+    from .user_prefs import saved_language, saved_theme
+    lang = saved_language()
+    if lang:
+        set_language(lang)
+    apply_theme(app, saved_theme() or "light")
+
+
 def main(argv=None) -> int:
     import argparse
     import multiprocessing
@@ -54,8 +70,6 @@ def main(argv=None) -> int:
     multiprocessing.freeze_support()
     from PySide6.QtWidgets import QApplication
 
-    from .themes import apply_theme
-
     argv = list(sys.argv if argv is None else argv)
     parser = argparse.ArgumentParser(prog="ogr-slip2d", add_help=False)
     parser.add_argument("--no-agent-bridge", action="store_true")
@@ -64,7 +78,7 @@ def main(argv=None) -> int:
     app.setApplicationName("OGR Slip2D")
     app.setOrganizationName("OpenGeoRock Suite")
     app.setApplicationDisplayName("OGR Slip2D")
-    apply_theme(app, "light")
+    apply_saved_preferences(app)
 
     win = start_window(agent_bridge=not opts.no_agent_bridge)  # noqa: F841
     return app.exec()

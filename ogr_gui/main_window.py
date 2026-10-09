@@ -225,7 +225,7 @@ class DisabledReasonFilter(QObject):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.288"
+    VERSION = "0.1.289"
 
     def __init__(self) -> None:
         super().__init__()
@@ -239,7 +239,11 @@ class MainWindow(QMainWindow):
 
         self.project: Project = Project("Untitled")
         self.command_stack = CommandStack()
-        self.active_theme = "light"
+        # v0.1.289 (D290) — the theme the program started with
+        # (``apply_saved_preferences``); "light" when none was saved, and in
+        # the tests, which build the window directly.
+        from .user_prefs import saved_theme
+        self.active_theme = saved_theme() or "light"
         self.last_search_result = None
         self.last_search_results: dict = {}
         # v0.1.155 — the notes of the last run, kept beside its results
@@ -4604,16 +4608,26 @@ class MainWindow(QMainWindow):
     # Language & theme
     # ==================================================================
     def _apply_language(self, code: str) -> None:
+        """v0.1.289 (D290) — the choice is SAVED and applied at the next
+        start (``ogr_gui.__main__.apply_saved_preferences``), by the owner's
+        decision: the menus, toolbar and status bar take their texts once.
+        It used to say «Restart the application to fully apply
+        translations» and store nothing, so the restart came back in
+        English. The notice is in the language just chosen."""
+        from .user_prefs import save_language
         set_language(code)
+        save_language(code)
         QMessageBox.information(
-            self, "Language",
-            f"Language changed to {code.upper()}.\n"
-            "Restart the application to fully apply translations."
-        )
+            self, tr("Language"),
+            tr("Language changed. Restart OGR Slip2D to see the menus and "
+               "toolbars in it."))
 
     def _apply_theme(self, name: str) -> None:
+        from .user_prefs import save_theme
         self.active_theme = name
         apply_theme(QApplication.instance(), name)
+        # v0.1.289 (D290) — kept for the next start, like the language
+        save_theme(name)
 
     # ==================================================================
     # v0.1.2 — Boundary editing handlers

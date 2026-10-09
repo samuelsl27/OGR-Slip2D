@@ -115,7 +115,9 @@ _VISIBLE_MESSAGES = [
 # shows the core's message through tr().
 # v0.1.275 — 64 -> 63: the hydraulic properties dialog's "Plot" message box
 # (matplotlib missing) now goes through tr() (D271).
-_UNWRAPPED_BUDGET_MESSAGES = 63
+# v0.1.289 — 63 -> 62: the language notice of the window («Restart the
+# application…», which was also false) goes through tr() (D290).
+_UNWRAPPED_BUDGET_MESSAGES = 62
 
 
 def _gui_sources():
