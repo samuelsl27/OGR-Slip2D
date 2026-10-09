@@ -792,6 +792,23 @@ PICARD_RESCUE = True
 #: face before the iterate has settled. Switch off to rebuild 0.1.282.
 SWITCH_BUDGET_SCALES_WITH_OMEGA = True
 
+#: v0.1.284 (D280) — the hysteresis bands of the seepage-face switching are
+#: ten times narrower: a free node is held at P = 0 when its pressure exceeds
+#: 0.002 h (was 0.02 h) and a held node is released when its inflow exceeds
+#: 1e-4 of the largest nodal flux of the first solve (was 1e-3), in the steady
+#: solver and in every transient step (one rule since D269). With the old
+#: bands more than one face set was admissible, and w or the path (loop or
+#: rescue) picked a different one: 4 of the 53 steady rows of the bank landed
+#: 1 to 24 mm apart. Measured with the narrow bands (_auditoria/P6_0284 of the
+#: bank): three of those rows give one face for w from 0.2 to 0.8 (heads
+#: within 4e-5 m), the fourth two sets 2 mm apart; Charnyi's discharge is
+#: unchanged (1.772 %); the 58 rows of the bank converge as before, with the
+#: same rescues and passes within four, and the door's answer moves within
+#: its old band (05-001 1 cm, 02-038 up to 2 mm, the transient 05-018 1.9 cm). The bands exist
+#: against chatter (v0.1.125); the rescue stays behind them. Switch off to
+#: rebuild 0.1.283.
+FACE_BANDS_TIGHT = True
+
 #: Anderson depths tried in turn, and the map evaluations allowed to each.
 #: Neither depth wins everywhere: on that dam, started after 200 Picard
 #: passes, depth 20 needs 36 evaluations and depth 5 166; started after
@@ -1056,6 +1073,24 @@ class UnsaturatedSeepageSolver(SeepageSolver):
     def max_node_switches(self, value) -> None:
         self._max_node_switches = None if value is None else max(1, int(value))
 
+    def _face_p_tol(self) -> float:
+        """The pressure band of the seepage-face switching: a free node is
+        held at P = 0 only when its pressure exceeds it. ``switch_pressure_tol``
+        when given; otherwise a fraction of the element size, 0.002 h
+        (``FACE_BANDS_TIGHT``; 0.02 h until v0.1.283, D280)."""
+        if self.switch_pressure_tol:
+            return self.switch_pressure_tol
+        f = 0.002 if FACE_BANDS_TIGHT else 0.02
+        return f * max(self.mesh.target_size, 1e-9)
+
+    @staticmethod
+    def _face_q_tol(q_scale: float) -> float:
+        """The flux band: a held node is released only when its inflow
+        exceeds this fraction of the largest nodal flux of the first solve,
+        1e-4 (``FACE_BANDS_TIGHT``; 1e-3 until v0.1.283, D280)."""
+        f = 1e-4 if FACE_BANDS_TIGHT else 1e-3
+        return f * q_scale if q_scale > 0 else 1e-14
+
     # ------------------------------------------------------------------
     def _element_kr(self, H: list) -> list:
         """Relative permeability per element from the current heads.
@@ -1136,15 +1171,19 @@ class UnsaturatedSeepageSolver(SeepageSolver):
         -----------------------------------------------------------
         On that dam the converged state is unique. Not everywhere: the
         switching accepts a released node whose pressure is up to ``p_tol``
-        (0.02 times the element size) and a held node whose inflow is up
-        to ``q_tol``, and more than one face set can satisfy both. Over the
-        53 unsaturated steady rows of the verification bank, run with w
-        from 0.2 to 0.8, 4 rows land on another face set at another w (or
+        and a held node whose inflow is up to ``q_tol``, and more than one
+        face set can satisfy both. With the bands of 0.1.283 (0.02 times
+        the element size and 1e-3 of the largest nodal flux), over the 53
+        unsaturated steady rows of the verification bank run with w from
+        0.2 to 0.8, 4 rows landed on another face set at another w (or
         after the rescue instead of the loop): one to five face nodes, 0.2
         to 2.4 cm of head, always below ``p_tol`` (1.4 and 4.2 cm in those
-        meshes). The exit point is resolved to a node and the face
-        pressures to ``p_tol``; that is the precision of this algorithm,
-        not a convergence error (D280).
+        meshes). With the bands ten times narrower (v0.1.284, D280,
+        ``FACE_BANDS_TIGHT``) three of those rows give one face for every
+        w (heads within 4e-5 m) and the fourth (02-038 h = 61 with a dry
+        Gardner curve) two sets 2.1 mm apart. The exit point is resolved
+        to a node and the face pressures to ``p_tol``; that is the
+        precision of this algorithm, not a convergence error.
         """
         n = self.mesh.node_count
         if n == 0 or not self.mesh.elements:
@@ -1170,10 +1209,9 @@ class UnsaturatedSeepageSolver(SeepageSolver):
         # solve (v0.1.274: this said "the total Dirichlet throughput",
         # which is not what is computed), so it is dimensionally
         # consistent across permeabilities.
-        p_tol = (self.switch_pressure_tol
-                 or 0.02 * max(self.mesh.target_size, 1e-9))
+        p_tol = self._face_p_tol()
         q_scale = max((abs(r) for r in first.reactions), default=0.0)
-        q_tol = 1e-3 * q_scale if q_scale > 0 else 1e-14
+        q_tol = self._face_q_tol(q_scale)
         history: list[float] = []
         # v0.1.269 (D265): the unrelaxed change of every pass, published
         # (``history`` above stays the relaxed one the stop test reads)
@@ -1800,8 +1838,7 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
                          | {b.node_id for b in bcs.nodes if b.seepage_face})
         H = list(H_old)
         switches: dict[int, int] = {}
-        p_tol = (self.switch_pressure_tol
-                 or 0.02 * max(self.mesh.target_size, 1e-9))
+        p_tol = self._face_p_tol()
         converged = False
         it = 0
         step_result = None
@@ -1846,7 +1883,7 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
                 if unknown and q_tol is None:
                     q_scale = max((abs(r) for r in step_result.reactions),
                                   default=0.0)
-                    q_tol = 1e-3 * q_scale if q_scale > 0 else 1e-14
+                    q_tol = self._face_q_tol(q_scale)
                 new_active = (self._switch_seepage_face(
                     active, switches, unknown, H, step_result.reactions,
                     p_tol, q_tol) if unknown else set(active))

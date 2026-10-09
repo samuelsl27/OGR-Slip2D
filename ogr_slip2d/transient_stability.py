@@ -207,7 +207,9 @@ def solve_project_groundwater(project, *, progress_cb: Optional[Callable]
     * in 4 rows a different w lands on another seepage-face set — one to
       five nodes, 0.2 to 2.4 cm — always inside the pressure band p_tol
       within which the face switching accepts a state
-      (``UnsaturatedSeepageSolver.solve_unsaturated``; D280).
+      (``UnsaturatedSeepageSolver.solve_unsaturated``). Since v0.1.284
+      (D280) the bands are ten times narrower and three of those rows give
+      one face for every w; the fourth, two sets 2.1 mm apart.
 
     A setting whose only measured effect is to pick another admissible
     state of the face inside its band is not one a user could act on
