@@ -55,9 +55,15 @@ class _Fresh:
         self.sheet = _app().styleSheet()
         self.dir = tempfile.mkdtemp(prefix="ogr_test_prefs_")
         os.environ["OGR_SETTINGS_DIR"] = self.dir
+        # v0.1.292 (D302) — apply_saved_preferences installs Qt's own
+        # catalogue for Spanish; whatever it installs is removed here
+        self.translators = []
         return self
 
     def __exit__(self, *exc):
+        for t in self.translators:
+            if t is not None:
+                _app().removeTranslator(t)
         set_language(self.lang)
         _app().setStyleSheet(self.sheet)
         if self.env is None:
@@ -95,19 +101,19 @@ class TestTheStore:
 class TestTheStart:
     def test_the_saved_language_and_theme_are_applied(self):
         from ogr_gui.__main__ import apply_saved_preferences
-        with _Fresh():
+        with _Fresh() as f:
             user_prefs.save_language("es")
             user_prefs.save_theme("dark")
-            apply_saved_preferences(_app())
+            f.translators.append(apply_saved_preferences(_app()))
             assert current_language() == "es"
             assert _app().styleSheet() == THEMES["dark"]
 
     def test_a_window_built_after_it_has_spanish_menus(self):
         from ogr_gui.__main__ import apply_saved_preferences
         from ogr_gui.main_window import MainWindow
-        with _Fresh():
+        with _Fresh() as f:
             user_prefs.save_language("es")
-            apply_saved_preferences(_app())
+            f.translators.append(apply_saved_preferences(_app()))
             w = MainWindow()
             try:
                 assert w._actions["project_settings"].text() == \
