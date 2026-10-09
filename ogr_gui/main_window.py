@@ -225,7 +225,7 @@ class DisabledReasonFilter(QObject):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.290"
+    VERSION = "0.1.291"
 
     def __init__(self) -> None:
         super().__init__()

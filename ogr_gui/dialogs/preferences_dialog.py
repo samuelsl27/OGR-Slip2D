@@ -83,6 +83,10 @@ class PreferencesDialog(QDialog):
     def _accept(self) -> None:
         lang = self.cbo_language.currentData()
         theme = self.cbo_theme.currentData()
-        self.language_changed.emit(lang)
+        # v0.1.291 (D290b) — only a CHANGE of language is announced: every
+        # Save emitted it, and since D290 the window answers with «Language
+        # changed. Restart…», which a theme change made false.
+        if lang != current_language():
+            self.language_changed.emit(lang)
         self.theme_changed.emit(theme)
         self.accept()
