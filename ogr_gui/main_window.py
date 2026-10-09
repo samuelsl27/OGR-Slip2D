@@ -225,7 +225,7 @@ class DisabledReasonFilter(QObject):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.292"
+    VERSION = "0.1.293"
 
     def __init__(self) -> None:
         super().__init__()
@@ -1463,8 +1463,8 @@ class MainWindow(QMainWindow):
         """v0.1.25 — generate the FE mesh for the seepage analysis."""
         from PySide6.QtWidgets import QInputDialog
         n, ok = QInputDialog.getInt(
-            self, "Generate FE Mesh",
-            "Approximate number of elements:", 1000, 20, 200000, 100)
+            self, tr("Generate FE Mesh"),
+            tr("Approximate number of elements:"), 1000, 20, 200000, 100)
         if not ok:
             return
         from ogr_fem2d.mesh import generate_mesh_for_project
@@ -1489,12 +1489,15 @@ class MainWindow(QMainWindow):
         self.canvas.refresh_scene()
         self._update_groundwater_actions()
         q = mesh.quality_stats()
-        msg = (f"FE mesh: {q['elements']} elements, {q['nodes']} nodes, "
-               f"min angle {q['min_angle']:.1f} deg")
+        # v0.1.293 (D291b) — a template, and the names of what was
+        # dropped (English keys from rules.set_fem_mesh) translated here
+        msg = tr("FE mesh: {0} elements, {1} nodes, min angle {2:.1f} "
+                 "deg").format(q['elements'], q['nodes'], q['min_angle'])
         if dropped:
             # v0.1.200 — say what a new mesh took away: the stage
             # conditions, now among them, are not visible from here.
-            msg += "  (" + tr("dropped:") + " " + ", ".join(dropped) + ")"
+            msg += "  (" + tr("dropped:") + " " + ", ".join(
+                tr(d) for d in dropped) + ")"
         self.statusBar().showMessage(msg, 12000)
 
     def _reset_fem_mesh(self) -> None:
@@ -1680,9 +1683,10 @@ class MainWindow(QMainWindow):
         sweep = result.by_method[mid]
         margin = sweep.unsafe_margin()
         where = (tr("total drawdown") if level is None
-                 else f"y = {level:.2f}")
-        msg = (f"{tr('Critical drawdown level')} ({mid}): {where}, "
-               f"FS = {fos:.4f}")
+                 else "y = {0:.2f}".format(level))
+        # v0.1.293 (D291b) — a template
+        msg = tr("Critical drawdown level ({0}): {1}, FS = {2:.4f}").format(
+            mid, where, fos)
         if margin is not None and margin > 0.005:
             # v0.1.76 — the lookup stays OUTSIDE the f-string. Splitting an
             # implicitly concatenated literal across lines inside a
@@ -1719,7 +1723,7 @@ class MainWindow(QMainWindow):
             for m_id, sw in result.by_method.items():
                 html += f"<br>{m_id}<br>"
                 for lv, f, _s in sw.valid:
-                    lab = "total" if lv is None else f"{lv:8.2f}"
+                    lab = tr("total drawdown") if lv is None else f"{lv:8.2f}"
                     html += f"  {lab}   {f:.4f}<br>"
             html += "</pre>"
             self._info(html)
@@ -1800,9 +1804,10 @@ class MainWindow(QMainWindow):
                 # v0.1.169 (D127) — ``reported`` is the method that has a
                 # sample, and ``ok`` is exactly the claim that it exists.
                 first = res.reported
-                messages.append(
-                    f"{head}PF = {first.probability_of_failure * 100:.2f} %, "
-                    f"beta = {first.reliability_index:.3f}")
+                # v0.1.293 (D291b) — a template
+                messages.append(head + tr("PF = {0:.2f} %, beta = {1:.3f}").format(
+                    first.probability_of_failure * 100,
+                    first.reliability_index))
                 # v0.1.164 (D91) — a run that sampled only SOME of the
                 # declared variables still reports PF, but not as if
                 # nothing were missing.
@@ -1811,7 +1816,7 @@ class MainWindow(QMainWindow):
                     messages.append(warning)
             else:
                 messages.append(
-                    res.notes.get("error", "probabilistic run failed"))
+                    res.notes.get("error") or tr("probabilistic run failed"))
             # v0.1.170 (D129) — the panel is fed from ``note_lines`` alone;
             # ``notes`` goes only to the status bar.
             self.last_statistics_notes.extend(
@@ -1823,7 +1828,8 @@ class MainWindow(QMainWindow):
                 self._sens_result = res
                 rows = res.ranking()
                 if rows:
-                    messages.append(f"most sensitive: {rows[0][1]}")
+                    messages.append(
+                        tr("most sensitive: {0}").format(rows[0][1]))
                 warning = res.notes.get("warning")
                 if warning:
                     messages.append(warning)
@@ -2063,7 +2069,8 @@ class MainWindow(QMainWindow):
                 "axes annotate the model rather than define it; draw a "
                 "line, polyline, polygon, rectangle or circle first."))
             return
-        labels = [f"{i + 1}. {a.kind.value} ({len(a.outline())} pts)"
+        labels = [tr("{0}. {1} ({2} pts)").format(
+                      i + 1, a.kind.value, len(a.outline()))
                   for i, a in enumerate(candidates)]
         choice, ok = QInputDialog.getItem(
             self, tr("Convert Tool to Boundary"), tr("Annotation:"),
@@ -2109,7 +2116,7 @@ class MainWindow(QMainWindow):
         from ogr_core.annotations import Annotation, AnnotationKind
         path, _f = QFileDialog.getOpenFileName(
             self, tr("Add Image..."), "",
-            "Images (*.png *.jpg *.jpeg *.bmp);;All files (*)")
+            tr("Images (*.png *.jpg *.jpeg *.bmp);;All files (*)"))
         if not path:
             return
         try:
@@ -3131,11 +3138,13 @@ class MainWindow(QMainWindow):
             result = results[-1]
             self._update_groundwater_actions()
             bad = [i for i, r in enumerate(results) if not r.converged]
-            msg = (f"Transient: {len(results)} stage(s) solved; final "
-                   f"u from {min(result.pore_pressure):.1f} to "
-                   f"{max(result.pore_pressure):.1f}")
+            # v0.1.293 (D291b) — templates
+            msg = tr("Transient: {0} stage(s) solved; final u from {1:.1f} "
+                     "to {2:.1f}").format(len(results),
+                                          min(result.pore_pressure),
+                                          max(result.pore_pressure))
             if bad:
-                msg += f"  (stages not converged: {bad})"
+                msg += tr("  (stages not converged: {0})").format(bad)
             # v0.1.270 (D268) — here and not only in the driver's warnings,
             # which this message replaces on the status bar
             if any(r.notes.get("initial_state_converged") is False
@@ -3167,8 +3176,9 @@ class MainWindow(QMainWindow):
             return
         note = ""
         if missing:
-            note = (f"  (default properties used for: "
-                    f"{', '.join(missing[:3])})")
+            # v0.1.293 (D291b) — a template
+            note = tr("  (default properties used for: {0})").format(
+                ", ".join(missing[:3]))
         self.statusBar().showMessage(
             tr('Groundwater solved in {0} iterations; u from {1:.1f} to '
                '{2:.1f}{3}').format(
@@ -3208,17 +3218,21 @@ class MainWindow(QMainWindow):
 
     def act_info_viewer(self) -> None:
         p = self.project
-        info = (
-            f"<b>Project:</b> {p.name}<br>"
-            f"<b>Boundaries:</b> {len(p.boundaries)}<br>"
-            f"<b>Materials:</b> {len(p.materials)}<br>"
-            f"<b>Supports:</b> {len(p.supports)}<br>"
-            f"<b>Distributed loads:</b> {len(p.distributed_loads)}<br>"
-            f"<b>Line loads:</b> {len(p.line_loads)}<br>"
-            f"<b>Bounding box:</b> {p.bounding_box()}<br>"
-            f"<b>Search:</b> {p.settings.search.search_method}<br>"
-            f"<b>Author:</b> {p.settings.summary.author}"
-        )
+        # v0.1.293 (D291b) — a template
+        info = tr(
+            "<b>Project:</b> {0}<br>"
+            "<b>Boundaries:</b> {1}<br>"
+            "<b>Materials:</b> {2}<br>"
+            "<b>Supports:</b> {3}<br>"
+            "<b>Distributed loads:</b> {4}<br>"
+            "<b>Line loads:</b> {5}<br>"
+            "<b>Bounding box:</b> {6}<br>"
+            "<b>Search:</b> {7}<br>"
+            "<b>Author:</b> {8}"
+        ).format(p.name, len(p.boundaries), len(p.materials), len(p.supports),
+                 len(p.distributed_loads), len(p.line_loads),
+                 p.bounding_box(), p.settings.search.search_method,
+                 p.settings.summary.author)
         QMessageBox.information(self, tr("Info Viewer"), info)
 
     def act_compute(self) -> None:
@@ -3317,9 +3331,10 @@ class MainWindow(QMainWindow):
         critical = first_result.critical
         if critical:
             n_methods = len(results)
+            # v0.1.293 (D291b) — a template
             extra = (
-                f"  ({n_methods} methods computed — "
-                f"open Interpret for full results)"
+                tr("  ({0} methods computed — open Interpret for full "
+                   "results)").format(n_methods)
                 if n_methods > 1 else ""
             )
             warn = self._ordinary_pore_pressure_warning(results)
@@ -4288,17 +4303,17 @@ class MainWindow(QMainWindow):
         for i, ld in enumerate(self.project.distributed_loads):
             loads_listing.append((
                 "distributed", i,
-                f"Distributed: {ld.magnitude_1:.1f} kN/m² "
-                f"({ld.start.x:.1f}, {ld.start.y:.1f}) → "
-                f"({ld.end.x:.1f}, {ld.end.y:.1f})  "
-                f"[{ld.orientation.value}]",
+                tr("Distributed: {0:.1f} kN/m² ({1:.1f}, {2:.1f}) → "
+                   "({3:.1f}, {4:.1f})  [{5}]").format(
+                    ld.magnitude_1, ld.start.x, ld.start.y, ld.end.x,
+                    ld.end.y, ld.orientation.value),
             ))
         for i, ld in enumerate(self.project.line_loads):
             loads_listing.append((
                 "line", i,
-                f"Line: {ld.magnitude:.1f} kN/m at "
-                f"({ld.point.x:.1f}, {ld.point.y:.1f})  "
-                f"[{ld.orientation.value}]",
+                tr("Line: {0:.1f} kN/m at ({1:.1f}, {2:.1f})  [{3}]").format(
+                    ld.magnitude, ld.point.x, ld.point.y,
+                    ld.orientation.value),
             ))
         if not loads_listing:
             QMessageBox.information(
@@ -4791,12 +4806,12 @@ class MainWindow(QMainWindow):
             # Move by dx/dy input (simple for now)
             from PySide6.QtWidgets import QInputDialog
             dx, ok = QInputDialog.getDouble(
-                self, "Move Boundary", "ΔX (m):", 0.0, -1e6, 1e6, 3
+                self, tr("Move Boundary"), "ΔX (m):", 0.0, -1e6, 1e6, 3
             )
             if not ok:
                 return
             dy, ok = QInputDialog.getDouble(
-                self, "Move Boundary", "ΔY (m):", 0.0, -1e6, 1e6, 3
+                self, tr("Move Boundary"), "ΔY (m):", 0.0, -1e6, 1e6, 3
             )
             if not ok:
                 return
@@ -5022,12 +5037,13 @@ class MainWindow(QMainWindow):
 
         if material_at is None:
             info = QAction(
-                f"Region at ({x:.2f}, {y:.2f}) — no material assigned",
+                tr("Region at ({0:.2f}, {1:.2f}) — no material "
+                   "assigned").format(x, y),
                 self,
             )
         else:
             info = QAction(
-                f"Region — current: {material_at.name}", self,
+                tr("Region — current: {0}").format(material_at.name), self,
             )
         info.setEnabled(False)
         menu.addAction(info)
@@ -5188,8 +5204,8 @@ class MainWindow(QMainWindow):
             tr("Numeric offset (all edges by a fixed distance)"),
         ]
         choice, ok = QInputDialog.getItem(
-            self, "Expand / Shrink External",
-            "Choose the method to modify the External Boundary:",
+            self, tr("Expand / Shrink External"),
+            tr("Choose the method to modify the External Boundary:"),
             options, 0, False,
         )
         if not ok:
@@ -5311,9 +5327,13 @@ class MainWindow(QMainWindow):
         self.command_stack.do(self.project, SnapshotCommand(
             f"Expand/Shrink ({result.mode})", _apply,
             attrs=("boundaries",)))
-        msg = f"External {result.mode}ed."
+        # v0.1.293 (D291b) — the participle per language, as in the
+        # question above (D291): "{mode}ed" also made "shrinked"
+        msg = tr("External {0}.").format(
+            {"expand": tr("expanded"), "shrink": tr("shrunk")}.get(
+                result.mode, result.mode))
         if convert_arc:
-            msg += " Old segment preserved as Material Boundary."
+            msg += tr(" Old segment preserved as Material Boundary.")
         self.ogr_status.showMessage(msg, 5000)
 
     def act_change_slope_angle(self, preselected_idx: Optional[int] = None) -> None:
@@ -5420,27 +5440,29 @@ class MainWindow(QMainWindow):
         from ogr_core.project.commands import SnapshotCommand
 
         rep = inspect_boundaries(self.project.boundaries)
-        report_lines = ["Geometry Cleanup Report", "=" * 40, ""]
-        report_lines.append(
-            f"Total boundaries: {len(self.project.boundaries)}")
+        # v0.1.293 (D291b) — the report through tr(), line by line
+        report_lines = [tr("Geometry Cleanup Report"), "=" * 40, ""]
+        report_lines.append(tr("Total boundaries: {0}").format(
+            len(self.project.boundaries)))
         for i, row in enumerate(rep["boundaries"]):
             flags = []
             if row["self_intersects"]:
-                flags.append("SELF-INTERSECTS")
+                flags.append(tr("SELF-INTERSECTS"))
             if row["open_external"]:
-                flags.append("NOT CLOSED (external)")
+                flags.append(tr("NOT CLOSED (external)"))
             if row["duplicate_vertices"]:
-                flags.append(f"{row['duplicate_vertices']} duplicate "
-                             f"vertices")
+                flags.append(tr("{0} duplicate vertices").format(
+                    row['duplicate_vertices']))
             status = ", ".join(flags) if flags else "OK"
             report_lines.append(
-                f"  [{i}] {row['type'].upper()} '{row['name']}': "
-                f"{row['n_vertices']} vertices — {status}")
+                tr("  [{0}] {1} '{2}': {3} vertices — {4}").format(
+                    i, row['type'].upper(), row['name'],
+                    row['n_vertices'], status))
         if rep["cross_intersections"]:
             report_lines.append("")
             report_lines.append(
-                "Inter-boundary intersections: "
-                + ", ".join(f"{c['count']}" for c in
+                tr("Inter-boundary intersections: ")
+                + ", ".join(str(c['count']) for c in
                             rep["cross_intersections"]))
 
         dups = sum(r["duplicate_vertices"] for r in rep["boundaries"])
@@ -5453,8 +5475,9 @@ class MainWindow(QMainWindow):
                 "Geometry cleanup", _clean, attrs=("boundaries",)))
             self.canvas.refresh()
         report_lines.append("")
-        report_lines.append(f"Duplicate vertices removed: {dups} "
-                            f"(tolerance {rep['tolerance']:.3g} m)")
+        report_lines.append(tr("Duplicate vertices removed: {0} "
+                               "(tolerance {1:.3g} m)").format(
+            dups, rep['tolerance']))
 
         dlg = GeometryCleanupDialog("\n".join(report_lines), self)
         dlg.exec()
@@ -5495,11 +5518,12 @@ class MainWindow(QMainWindow):
             return None
         from PySide6.QtWidgets import QInputDialog
         labels = [
-            f"[{i}] {b.btype.display_name} '{b.name}' ({len(b.vertices)} verts)"
+            tr("[{0}] {1} '{2}' ({3} verts)").format(
+                i, tr(b.btype.display_name), b.name, len(b.vertices))
             for i, b in enumerate(self.project.boundaries)
         ]
         choice, ok = QInputDialog.getItem(
-            self, "Select Boundary", "Boundary:", labels, 0, False
+            self, tr("Select Boundary"), tr("Boundary:"), labels, 0, False
         )
         if not ok:
             return None

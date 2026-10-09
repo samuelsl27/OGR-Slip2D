@@ -2380,6 +2380,81 @@ _DICTS: dict[str, dict[str, str]] = {
 
         "Groundwater analysis: %s": "Análisis de filtración: %s",
         "Cannot compute: %s": "No se puede calcular: %s",
+        # v0.1.293 (D291b) — what D291 left in English in the main window
+        "FE mesh: {0} elements, {1} nodes, min angle {2:.1f} deg":
+            "Malla de elementos finitos: {0} elementos, {1} nodos, ángulo mínimo {2:.1f}°",
+        "boundary conditions":
+            "condiciones de contorno",
+        "seepage field":
+            "campo de filtración",
+        "transient results":
+            "resultados transitorios",
+        "initial conditions of the transient":
+            "condiciones iniciales del transitorio",
+        "conditions of the transient stages":
+            "condiciones de las etapas del transitorio",
+        "Transient: {0} stage(s) solved; final u from {1:.1f} to {2:.1f}":
+            "Transitorio: {0} etapa(s) resuelta(s); u final de {1:.1f} a {2:.1f}",
+        "  (stages not converged: {0})":
+            "  (etapas sin converger: {0})",
+        "  (default properties used for: {0})":
+            "  (propiedades por defecto en: {0})",
+        "  ({0} methods computed — open Interpret for full results)":
+            "  ({0} métodos calculados — abre Interpretar para verlos todos)",
+        "External {0}.":
+            "Contorno exterior {0}.",
+        " Old segment preserved as Material Boundary.":
+            " El tramo anterior se conserva como contorno de material.",
+        "Region at ({0:.2f}, {1:.2f}) — no material assigned":
+            "Región en ({0:.2f}, {1:.2f}) — sin material asignado",
+        "Region — current: {0}":
+            "Región — material actual: {0}",
+        "Geometry Cleanup Report":
+            "Informe de limpieza de la geometría",
+        "Total boundaries: {0}":
+            "Contornos en total: {0}",
+        "SELF-INTERSECTS":
+            "SE CORTA A SÍ MISMO",
+        "NOT CLOSED (external)":
+            "SIN CERRAR (exterior)",
+        "{0} duplicate vertices":
+            "{0} vértices duplicados",
+        "  [{0}] {1} '{2}': {3} vertices — {4}":
+            "  [{0}] {1} «{2}»: {3} vértices — {4}",
+        "Inter-boundary intersections: ":
+            "Cortes entre contornos: ",
+        "Duplicate vertices removed: {0} (tolerance {1:.3g} m)":
+            "Vértices duplicados eliminados: {0} (tolerancia {1:.3g} m)",
+        "Critical drawdown level ({0}): {1}, FS = {2:.4f}":
+            "Nivel de desembalse crítico ({0}): {1}, FS = {2:.4f}",
+        "PF = {0:.2f} %, beta = {1:.3f}":
+            "PF = {0:.2f} %, β = {1:.3f}",
+        "probabilistic run failed":
+            "el análisis probabilista falló",
+        "most sensitive: {0}":
+            "la más influyente: {0}",
+        "{0}. {1} ({2} pts)":
+            "{0}. {1} ({2} puntos)",
+        "<b>Project:</b> {0}<br><b>Boundaries:</b> {1}<br><b>Materials:</b> {2}<br><b>Supports:</b> {3}<br><b>Distributed loads:</b> {4}<br><b>Line loads:</b> {5}<br><b>Bounding box:</b> {6}<br><b>Search:</b> {7}<br><b>Author:</b> {8}":
+            "<b>Proyecto:</b> {0}<br><b>Contornos:</b> {1}<br><b>Materiales:</b> {2}<br><b>Soportes:</b> {3}<br><b>Cargas repartidas:</b> {4}<br><b>Cargas lineales:</b> {5}<br><b>Rectángulo envolvente:</b> {6}<br><b>Búsqueda:</b> {7}<br><b>Autor:</b> {8}",
+        "Distributed: {0:.1f} kN/m² ({1:.1f}, {2:.1f}) → ({3:.1f}, {4:.1f})  [{5}]":
+            "Repartida: {0:.1f} kN/m² ({1:.1f}, {2:.1f}) → ({3:.1f}, {4:.1f})  [{5}]",
+        "Line: {0:.1f} kN/m at ({1:.1f}, {2:.1f})  [{3}]":
+            "Lineal: {0:.1f} kN/m en ({1:.1f}, {2:.1f})  [{3}]",
+        "Generate FE Mesh":
+            "Generar malla de elementos finitos",
+        "Approximate number of elements:":
+            "Número aproximado de elementos:",
+        "Images (*.png *.jpg *.jpeg *.bmp);;All files (*)":
+            "Imágenes (*.png *.jpg *.jpeg *.bmp);;Todos los archivos (*)",
+        "Choose the method to modify the External Boundary:":
+            "Elige cómo modificar el contorno exterior:",
+        "[{0}] {1} '{2}' ({3} verts)":
+            "[{0}] {1} «{2}» ({3} vértices)",
+        "Boundary:":
+            "Contorno:",
+        "The Water Pressure Grid is read only with a grid groundwater method (Project Settings > Groundwater > Method), which also says what its values are.":
+            "La malla de presiones de agua solo se lee con un método de agua por malla (Ajustes de proyecto > Agua subterránea > Método), que además dice qué son sus valores.",
         # v0.1.290 (D291) — the 26 menu actions of MainWindow._mk and the messages
         # of the main window, now tr() templates
         "Generate Report...":
