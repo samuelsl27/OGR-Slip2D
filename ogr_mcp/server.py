@@ -91,6 +91,53 @@ def _strip(kwargs: dict) -> dict:
     return {k: v for k, v in kwargs.items() if v is not None}
 
 
+def _version_tuple(text) -> Optional[tuple]:
+    try:
+        return tuple(int(p) for p in str(text).split("."))
+    except ValueError:
+        return None
+
+
+def version_warnings(window: Optional[dict]) -> list:
+    """What ``server_info`` warns about the window it forwards to.
+
+    v0.1.300 (D296) -- an MCP client starts this server once and keeps it:
+    after an update, the server can be of one version and the window of
+    another (seen in a GUI test: server 0.1.271, window 0.1.284, and
+    nothing said). The agent then reads this server's tools, schemas and
+    guide while every call runs in the window. The window says its version
+    in the bridge's greeting since 0.1.300, so a window that does not say
+    it is older than that.
+    """
+    if not window or not window.get("window_open", window.get("pid")
+                                    is not None):
+        return []
+    theirs = window.get("version")
+    if theirs == __version__:
+        return []
+    common = ("This server's tools, their schemas and the guide are of its "
+              "own version, while the calls run in the window.")
+    restart_client = ("Restart the MCP client (it starts this server) so "
+                      "that both run the same version.")
+    reopen_program = ("Save the work, then close and reopen OGR Slip2D so "
+                      "that both run the same version.")
+    if not theirs:
+        return [f"The OGR Slip2D window does not say its version: it is "
+                f"older than 0.1.300, and this MCP server is {__version__}. "
+                f"{common} {reopen_program}"]
+    mine, other = _version_tuple(__version__), _version_tuple(theirs)
+    if mine is not None and other is not None and mine < other:
+        return [f"This MCP server is OGR Slip2D {__version__} but the "
+                f"window is {theirs}: the server was started before the "
+                f"program was updated. {common} {restart_client}"]
+    if mine is not None and other is not None:
+        return [f"The OGR Slip2D window is {theirs}, older than this MCP "
+                f"server ({__version__}): it was opened before the program "
+                f"was updated. {common} {reopen_program}"]
+    return [f"This MCP server is OGR Slip2D {__version__} and the window "
+            f"is {theirs}. {common} {restart_client} Or: {reopen_program}"]
+
+
 def build_server(ws, *, profile: str = "full", toolsets=None,
                  max_wait: float = DEFAULT_MAX_WAIT_S,
                  backend=None, oauth=None,
@@ -204,12 +251,15 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
         if hasattr(backend, "status"):
             window = backend.status()
         elif backend is not None:
-            window = {"pid": backend.pid, "window": backend.window}
+            window = {"pid": backend.pid, "window": backend.window,
+                      "version": getattr(backend, "version", None)}
         else:
             window = None
         return {
             "server": "ogr-slip2d", "version": __version__,
             "ogr_api": api_version,
+            # v0.1.300 (D296): empty unless something needs saying
+            "warnings": version_warnings(window),
             "units": "SI: m, kN, kPa, kN/m3, degrees",
             "profile": profile, "tools": list(registered),
             "workdir": (str(ws.workdir) if ws is not None and ws.workdir

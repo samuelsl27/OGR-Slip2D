@@ -164,7 +164,8 @@ class AgentBridge(QObject):
                                                 .LocalHost), 0):
             raise RuntimeError(self._server.errorString())
         self.discovery = write_discovery(self.port, self.token,
-                                         self.window.windowTitle())
+                                         self.window.windowTitle(),
+                                         version=self.window.VERSION)
         return self.port
 
     def stop(self) -> None:
@@ -230,9 +231,13 @@ class AgentBridge(QObject):
             wd = message.get("workdir")
             if wd and Path(wd).is_dir():
                 self.ws.workdir = Path(wd).resolve()
+            # v0.1.300 (D296) -- the version, so that an MCP server
+            # started before an update can tell the agent it is out of
+            # date (its tools and guide are its own, the calls run here)
             return {"hello": PROTOCOL, "ok": True,
                     "window": self.window.windowTitle(),
-                    "pid": os.getpid()}
+                    "pid": os.getpid(),
+                    "version": self.window.VERSION}
         mid = message.get("id")
         try:
             op = message.get("op")

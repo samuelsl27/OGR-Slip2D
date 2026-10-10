@@ -200,7 +200,9 @@ water surface when use_sat_unit_weight is true.
 By default, if the program is open (its agent bridge starts with it), a
 call goes to the WINDOW; if it is not, to models of this server's own.
 server_info says which in 'attached_to_window' ('next_call_goes_to'), and
-each model in 'open_models' says 'in_window'. A project_id, job_id or
+each model in 'open_models' says 'in_window'. If the window runs another
+version than this server, server_info says so in 'warnings', and what to
+restart. A project_id, job_id or
 result_id of the server's own keeps going to it. On the window:
 * The model IS the user's: they see every edit, and each edit is one step
   of the window's Edit > Undo (the user's steps are yours to undo too).

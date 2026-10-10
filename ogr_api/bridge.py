@@ -21,7 +21,9 @@ Wire format: one JSON object per line, UTF-8. Bytes (a PNG) travel as
 * client → server, first line: ``{"hello": PROTOCOL, "token": ...}``,
   optionally with ``"workdir"`` (v0.1.207: the folder the MCP server was
   given, so a relative path means the same in the window); answer
-  ``{"hello": PROTOCOL, "ok": true, "window": title, "pid": n}``.
+  ``{"hello": PROTOCOL, "ok": true, "window": title, "pid": n,
+  "version": v}`` (``version`` since v0.1.300: a window that does not send
+  it is older).
 * then ``{"id": n, "op": name, "kwargs": {...}}``; answer
   ``{"id": n, "ok": true, "result": ...}`` or
   ``{"id": n, "ok": false, "error": {"code", "message", "hint",
@@ -119,13 +121,16 @@ def bridge_dir() -> Path:
         Path.home() / ".ogr-slip2d" / "bridges"
 
 
-def write_discovery(port: int, token: str, title: str) -> Path:
+def write_discovery(port: int, token: str, title: str,
+                    version: Optional[str] = None) -> Path:
     """Announce this process's bridge; the file is the user's alone."""
     folder = bridge_dir()
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / f"{os.getpid()}.json"
     data = {"protocol": PROTOCOL, "port": int(port), "token": token,
             "pid": os.getpid(), "title": title, "started": time.time()}
+    if version:
+        data["version"] = str(version)
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(data), encoding="utf-8")
     try:
@@ -226,6 +231,8 @@ class BridgeClient:
                 "code": "E_INTERNAL", "message": "handshake refused"})
         self.window = hello.get("window", "")
         self.pid = hello.get("pid")
+        # v0.1.300 (D296) -- None from a window older than 0.1.300
+        self.version = hello.get("version")
 
     @classmethod
     def attach(cls, pid: Optional[int] = None) -> "BridgeClient":
@@ -411,6 +418,9 @@ class WindowRouter:
                 "window_open": client is not None,
                 "pid": client.pid if client is not None else None,
                 "window": client.window if client is not None else None,
+                # v0.1.300 (D296): server_info compares it with its own
+                "version": (getattr(client, "version", None)
+                            if client is not None else None),
                 "next_call_goes_to": ("the open window" if client is not None
                                       else "nowhere: no window is open"
                                       if self.only_window
