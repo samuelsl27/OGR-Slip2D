@@ -2380,6 +2380,17 @@ _DICTS: dict[str, dict[str, str]] = {
 
         "Groundwater analysis: %s": "Análisis de filtración: %s",
         "Cannot compute: %s": "No se puede calcular: %s",
+        # v0.1.294 (D289b) — the reasons of the disabled menu actions
+        "Needs a probabilistic or sensitivity analysis: enable one in Project Settings > Statistics.":
+            "Necesita un análisis probabilista o de sensibilidad: actívalo en Ajustes de proyecto > Estadística.",
+        "Needs random variables: Statistics > Random Variables.":
+            "Necesita variables aleatorias: Estadística > Variables aleatorias.",
+        "Needs a statistics result: compute the statistics first.":
+            "Necesita un resultado estadístico: calcula primero la estadística.",
+        "Drawdown Line is only available when Project Settings > Groundwater > Advanced > Rapid Drawdown is enabled.":
+            "La línea de desembalse solo está disponible con el desembalse rápido activado en Ajustes de proyecto > Agua subterránea > Avanzado.",
+        "Drawdown Level Sweep is only available when Project Settings > Groundwater > Advanced > Rapid Drawdown is enabled.":
+            "El barrido de niveles de desembalse solo está disponible con el desembalse rápido activado en Ajustes de proyecto > Agua subterránea > Avanzado.",
         # v0.1.293 (D291b) — what D291 left in English in the main window
         "FE mesh: {0} elements, {1} nodes, min angle {2:.1f} deg":
             "Malla de elementos finitos: {0} elementos, {1} nodos, ángulo mínimo {2:.1f}°",

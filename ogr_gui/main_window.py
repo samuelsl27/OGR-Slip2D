@@ -225,7 +225,7 @@ class DisabledReasonFilter(QObject):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.293"
+    VERSION = "0.1.294"
 
     def __init__(self) -> None:
         super().__init__()
@@ -1741,12 +1741,23 @@ class MainWindow(QMainWindow):
         has_vars = bool(getattr(self.project, "random_variables", []))
         has_res = (getattr(self, "_prob_result", None) is not None
                    or getattr(self, "_sens_result", None) is not None)
-        for key, enabled in (("stat_vars", on),
-                             ("stat_compute", on and has_vars),
-                             ("stat_show", has_res)):
+        # v0.1.294 (D289b) — and why, while disabled (DisabledReasonFilter
+        # puts it on the status bar; these three had no reason at all)
+        need_on = tr("Needs a probabilistic or sensitivity analysis: "
+                     "enable one in Project Settings > Statistics.")
+        need_vars = tr("Needs random variables: Statistics > Random "
+                       "Variables.")
+        need_res = tr("Needs a statistics result: compute the statistics "
+                      "first.")
+        for key, enabled, reason in (
+                ("stat_vars", on, need_on),
+                ("stat_compute", on and has_vars,
+                 need_on if not on else need_vars),
+                ("stat_show", has_res, need_res)):
             act = self._actions.get(key)
             if act is not None:
                 act.setEnabled(bool(enabled))
+                act.setStatusTip("" if enabled else reason)
 
     def _edit_random_variables(self) -> None:
         from .dialogs.random_variables_dialog import RandomVariablesDialog
@@ -4026,18 +4037,21 @@ class MainWindow(QMainWindow):
             dd_refusal = boundary_refusal(self.project, BoundaryType.DRAWDOWN)
             has_dd = has_btype(BoundaryType.DRAWDOWN)
             actions["add_drawdown"].setEnabled(dd_refusal is None)
+            # v0.1.294 (D289b) — the reason through tr(), and as status
+            # tip too, which the menus show (DisabledReasonFilter)
+            reason = ""
             if not rapid_drawdown:
-                actions["add_drawdown"].setToolTip(
-                    "Drawdown Line is only available when\n"
-                    "Project Settings → Groundwater → Advanced →\n"
-                    "Rapid Drawdown is enabled."
-                )
+                reason = tr("Drawdown Line is only available when Project "
+                            "Settings > Groundwater > Advanced > Rapid "
+                            "Drawdown is enabled.")
+                actions["add_drawdown"].setToolTip(reason)
             elif has_dd:
-                actions["add_drawdown"].setToolTip(
-                    tr("Only one Drawdown Line is allowed.")
-                )
+                reason = tr("Only one Drawdown Line is allowed.")
+                actions["add_drawdown"].setToolTip(reason)
             else:
                 actions["add_drawdown"].setToolTip(tr("Add Drawdown Line"))
+            actions["add_drawdown"].setStatusTip(
+                "" if dd_refusal is None else reason)
 
         # v0.1.70 — the sweep needs the same analysis enabled, but NOT a
         # drawn line: it supplies its own levels, and a project without a
@@ -4045,14 +4059,17 @@ class MainWindow(QMainWindow):
         # the total-drawdown answer.
         if "drawdown_sweep" in actions:
             actions["drawdown_sweep"].setEnabled(rapid_drawdown)
+            # v0.1.294 (D289b) — the reason through tr(), and as status tip
+            sweep_reason = tr("Drawdown Level Sweep is only available when "
+                              "Project Settings > Groundwater > Advanced > "
+                              "Rapid Drawdown is enabled.")
             actions["drawdown_sweep"].setToolTip(
                 tr("Search at a range of reservoir levels. The total "
                    "drawdown is not always the critical one.")
-                if rapid_drawdown else
-                "Drawdown Level Sweep is only available when\n"
-                "Project Settings → Groundwater → Advanced →\n"
-                "Rapid Drawdown is enabled."
+                if rapid_drawdown else sweep_reason
             )
+            actions["drawdown_sweep"].setStatusTip(
+                "" if rapid_drawdown else sweep_reason)
 
         # v0.1.12 — Greying-out grid actions when the current search
         # method does NOT use a centre grid (Slope/Auto Refine/Block/
@@ -4139,11 +4156,13 @@ class MainWindow(QMainWindow):
             # method, and it was the one still naming "Add Surface" and
             # still outside tr(). A tooltip contradicting the label it
             # describes is the same defect one step down.
-            actions[key].setToolTip(
-                tip if is_block else
-                tr("Block Search objects are only available with the "
-                   "Block Search method. Set Surface Options -> Surface "
-                   "Type = Non-Circular, Search Method = Block Search."))
+            block_reason = tr(
+                "Block Search objects are only available with the "
+                "Block Search method. Set Surface Options -> Surface "
+                "Type = Non-Circular, Search Method = Block Search.")
+            actions[key].setToolTip(tip if is_block else block_reason)
+            # v0.1.294 (D289b) — as status tip too, while disabled
+            actions[key].setStatusTip("" if block_allowed else block_reason)
 
     # ----- v0.1.7: Loadings (interactive in v0.1.8) ------------------
     def act_add_distributed_load(self) -> None:
