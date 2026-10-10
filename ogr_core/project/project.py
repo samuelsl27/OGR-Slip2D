@@ -591,6 +591,19 @@ class Project:
         regions = self.resolve_regions()
         return [self._material_in(regions, x, y) for x, y in points]
 
+    def region_material_id_at(self, x: float, y: float):
+        """The material id the region at (x, y) resolves to — even an id no
+        material of the project has — or None outside every region (or in a
+        region that takes the default, first, material).
+
+        v0.1.298 (D298) — what tells a point in a region whose material was
+        deleted from a point outside the model: ``material_at`` answers None
+        for both."""
+        for r in self.resolve_regions():
+            if _in_region(r, x, y):
+                return getattr(r, "material_id", None)
+        return None
+
     def _material_in(self, regions, x: float, y: float):
         for r in regions:
             if _in_region(r, x, y):

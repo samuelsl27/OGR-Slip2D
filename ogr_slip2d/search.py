@@ -30,8 +30,9 @@ from .failure_direction import slope_face, steepest_face_index  # noqa: F401
 from .methods import LEMMethod, LEMResult
 from .rapid_drawdown import RapidDrawdownError, drawdown_gap
 from .slicer import (REFUSED_BASE_ABOVE_GROUND, REFUSED_END_ABOVE_GROUND,
-                     REFUSED_END_BELOW_GROUND, REFUSED_OUTSIDE_MODEL,
-                     TOUCHED_MODEL_EDGE, slice_surface)
+                     REFUSED_END_BELOW_GROUND, REFUSED_ORPHAN_MATERIAL,
+                     REFUSED_OUTSIDE_MODEL, TOUCHED_MODEL_EDGE,
+                     slice_surface)
 from .surface import SlipCircle, WeakLayerSurface, lowest_elevation
 
 
@@ -50,7 +51,8 @@ REFUSED_MISSES_GROUND = "misses_ground"
 #: counter added to one place and not the other is exactly how the
 #: parallel grid lost all of them (99 notes in series, 0 in parallel, on
 #: the 109 of the verification bank).
-_RUN_COUNTERS = ("_unsliceable", "_outside_model", "_on_model_edge",
+_RUN_COUNTERS = ("_unsliceable", "_outside_model", "_orphan_material",
+                 "_on_model_edge",
                  "_end_below_ground", "_end_above_ground",
                  "_base_above_ground", "_outside_slope_limits",
                  "_misses_ground")
@@ -895,6 +897,17 @@ class BaseSearch(ABC):
             "the search area." % (n, "" if n == 1 else "s")
         )
 
+    def _orphan_material_note(self) -> str:
+        """What to say when surfaces were refused for crossing a region
+        whose material no longer exists (v0.1.298, D298)."""
+        n = getattr(self, "_orphan_material", 0)
+        return (
+            "%d surface%s were discarded because a slice base fell in a "
+            "region whose material no longer exists. Assign that region "
+            "another material (Properties > Assign Materials)."
+            % (n, "" if n == 1 else "s")
+        )
+
     def _end_off_ground_note(self) -> str:
         """What to say when polylines were refused at an end.
 
@@ -970,6 +983,8 @@ class BaseSearch(ABC):
             parts.append("%d circle%s that do not cut the ground twice"
                          % (n, "" if n == 1 else "s"))
         for attr, what in (("_outside_model", "that left the model"),
+                           ("_orphan_material", "that crossed a region "
+                                                "with no material"),
                            ("_unsliceable", "that the slicer refused")):
             n = getattr(self, attr, 0)
             if n:
@@ -1185,6 +1200,15 @@ class BaseSearch(ABC):
                     self._on_model_edge = getattr(
                         self, "_on_model_edge", 0) + _why.count(
                             TOUCHED_MODEL_EDGE)
+                if slices is None and REFUSED_ORPHAN_MATERIAL in _why:
+                    # v0.1.298 (D298) — refused because a slice base fell in
+                    # a region whose material no longer exists. Counted
+                    # apart: it used to be "outside the External Boundary",
+                    # which sent the user to the wrong place.
+                    self._orphan_material = getattr(
+                        self, "_orphan_material", 0) + 1
+                    self._last_refusal = REFUSED_ORPHAN_MATERIAL
+                    continue
                 if slices is None and REFUSED_OUTSIDE_MODEL in _why:
                     # v0.1.143 — refused because a slice base left the soil,
                     # which is a different fault from the one below and asks
@@ -1603,6 +1627,10 @@ class BaseSearch(ABC):
         REFUSED_OUTSIDE_MODEL: (
             "the surface was not analysed: a slice base fell outside the "
             "External Boundary, where there is no soil."),
+        # v0.1.298 (D298).
+        REFUSED_ORPHAN_MATERIAL: (
+            "the surface was not analysed: a slice base fell in a region "
+            "whose material no longer exists."),
         REFUSED_BASE_ABOVE_GROUND: (
             "the surface was not analysed: between its two ends its base "
             "rises above the ground surface, so part of the mass would be "
@@ -1695,6 +1723,10 @@ class BaseSearch(ABC):
             # every analysis is noise and rule 7 asks for the opposite.
             if getattr(self, "_outside_model", 0):
                 self._note(self._outside_model_note())
+            # v0.1.298 (D298) — and those that crossed a region whose
+            # material was deleted, with the remedy that applies to them
+            if getattr(self, "_orphan_material", 0):
+                self._note(self._orphan_material_note())
             # v0.1.151 — and the bases a tolerance ruled inside. Same rule:
             # only if it happened, because a note on every analysis is
             # noise.

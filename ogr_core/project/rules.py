@@ -1700,3 +1700,50 @@ def material_region_uses(project) -> dict:
         regions, layers, _links = material_users(project, m.id)
         out[m.id] = (len(regions), len(layers))
     return out
+
+
+# ----------------------------------------------------------------------
+# v0.1.298 (D298) — a region assigned to a material that no longer exists
+# ----------------------------------------------------------------------
+#: The warning, a template with the click point of the assignment. Every
+#: door says it: the validation, the analysis's notes, the window before
+#: computing (the owner's decision: warn, say what to change, and let the
+#: user compute anyway) and on opening a file.
+ORPHAN_ASSIGNMENT = (
+    "The region at ({0:.2f}, {1:.2f}) is assigned a material that no "
+    "longer exists. Assign it another material (Properties > Assign "
+    "Materials); a surface through it cannot be analysed.")
+
+
+def orphan_assignments(project) -> list:
+    """The region assignments whose material is not in the project.
+
+    Up to 0.1.285 the window's *Define Materials* removed a material in use
+    and left its regions pointing at it (D287), and a file saved then keeps
+    them. ``resolve_regions`` copies the id unchecked, ``material_at`` gives
+    None there, and the slicer used to refuse every surface through such a
+    region as "outside the External Boundary" while the validation said the
+    model could run (D298)."""
+    ids = {m.id for m in project.materials}
+    return [a for a in project.region_assignments
+            if a.get("material_id") not in ids]
+
+
+def orphan_assignment_reasons(project) -> list:
+    """``(template, args)`` per orphan assignment, for an interface that
+    translates the template (``ORPHAN_ASSIGNMENT``)."""
+    return [(ORPHAN_ASSIGNMENT,
+             (float(a.get("x", 0.0)), float(a.get("y", 0.0))))
+            for a in orphan_assignments(project)]
+
+
+def orphan_assignment_messages(project) -> list:
+    """The same, in English, for the API and the analysis notes."""
+    return [t.format(*args) for t, args in orphan_assignment_reasons(project)]
+
+
+def in_orphan_region(project, x: float, y: float) -> bool:
+    """Whether (x, y) lies in a region whose material does not exist — what
+    the slicer asks to name the cause of a base with no material (D298)."""
+    mid = project.region_material_id_at(x, y)
+    return mid is not None and project.material_by_id(mid) is None

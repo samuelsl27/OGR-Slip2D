@@ -388,6 +388,13 @@ def _anisotropic_surfaces(project: Project) -> dict:
 #: an aviso pointing at the wrong culprit, which is worse than none.
 REFUSED_OUTSIDE_MODEL = "outside_model"
 
+#: v0.1.298 (D298) — refused because a slice base fell in a region whose
+#: material no longer exists (a file saved before D287 can carry one). The
+#: soil is there, but nobody knows what it is; it used to be counted as
+#: ``REFUSED_OUTSIDE_MODEL`` and the note sent the user to check the
+#: External Boundary.
+REFUSED_ORPHAN_MATERIAL = "orphan_material"
+
 #: Not a refusal: a slice whose base sat ON the edge of the model and was
 #: resolved as being inside it. It travels in the same ``reasons`` list
 #: because the caller has to be able to say so — a tolerance that decides
@@ -2202,7 +2209,14 @@ def slice_surface(
         # with no soil at its base must never get as far as being weighed.
         if mat is None:
             if reasons is not None:
-                reasons.append(REFUSED_OUTSIDE_MODEL)
+                # v0.1.298 (D298) — a region whose material was deleted is
+                # not "outside the model": say which it is. Asked only on
+                # a refusal, so it costs nothing on a sound model.
+                from ogr_core.project.rules import in_orphan_region
+                reasons.append(
+                    REFUSED_ORPHAN_MATERIAL
+                    if in_orphan_region(project, xc, base_y_mid)
+                    else REFUSED_OUTSIDE_MODEL)
             return None
 
         # v0.1.121 — where the base runs ALONG a weak layer, the strength is

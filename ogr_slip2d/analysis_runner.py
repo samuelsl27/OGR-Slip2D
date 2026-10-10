@@ -2372,6 +2372,11 @@ def run_analysis(project, method_ids=None,
 
     known = method_registry()
     warnings: list[str] = settings_warnings(project, method_ids)
+    # v0.1.298 (D298) - a region whose material no longer exists is said
+    # first, with its remedy: the run goes on (the owner's decision), and
+    # every surface through it is refused under its own name.
+    from ogr_core.project.rules import orphan_assignment_messages
+    warnings = orphan_assignment_messages(project) + warnings
     results: dict = {}
     n_methods = len(method_ids)
 
@@ -2529,6 +2534,11 @@ def evaluate_surfaces(project, surface, method_ids=None, *,
 
     known = method_registry()
     warnings: list[str] = settings_warnings(project, method_ids)
+    # v0.1.298 (D298) - a region whose material no longer exists is said
+    # first, with its remedy: the run goes on (the owner's decision), and
+    # every surface through it is refused under its own name.
+    from ogr_core.project.rules import orphan_assignment_messages
+    warnings = orphan_assignment_messages(project) + warnings
     results: dict = {}
     for mid in method_ids:
         if mid not in known:

@@ -2380,6 +2380,11 @@ _DICTS: dict[str, dict[str, str]] = {
 
         "Groundwater analysis: %s": "Análisis de filtración: %s",
         "Cannot compute: %s": "No se puede calcular: %s",
+        # v0.1.298 (D298) — rules.ORPHAN_ASSIGNMENT and the question
+        "The region at ({0:.2f}, {1:.2f}) is assigned a material that no longer exists. Assign it another material (Properties > Assign Materials); a surface through it cannot be analysed.":
+            "La región en ({0:.2f}, {1:.2f}) tiene asignado un material que ya no existe. Asígnale otro material (Propiedades > Asignar materiales); una superficie que la cruce no se puede analizar.",
+        "Compute anyway? Every surface through that region will be discarded.":
+            "¿Calcular de todos modos? Se descartará toda superficie que cruce esa región.",
         # v0.1.297 (D304) — the results panel of an earlier model
         "Results of an earlier model: compute again.":
             "Resultados de un modelo anterior: vuelve a calcular.",

@@ -167,9 +167,14 @@ def status_of(project) -> dict:
         if m.id not in used and not any(
                 b.material_id == m.id for b in project.boundaries):
             notes.append(f"Material {m.name!r} is used by no region.")
+    # v0.1.298 (D298) — a region whose material no longer exists: a
+    # warning, not a blocker (the owner's decision: say what is wrong and
+    # what to change, and let the user compute anyway).
+    from ogr_core.project.rules import orphan_assignment_messages
     return {"can_run": not blockers and not diag["problems"],
             "blockers": blockers + diag["problems"],
-            "warnings": diag["warnings"], "model_notes": notes}
+            "warnings": orphan_assignment_messages(project) + diag["warnings"],
+            "model_notes": notes}
 
 
 def summary_of(handle, detail: str = "normal") -> dict:

@@ -225,7 +225,7 @@ class DisabledReasonFilter(QObject):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.297"
+    VERSION = "0.1.298"
 
     def __init__(self) -> None:
         super().__init__()
@@ -1063,6 +1063,12 @@ class MainWindow(QMainWindow):
             self.command_stack.clear()
             self.setWindowTitle(f"OGR Slip2D v{self.VERSION} — {Path(path).name}")
             self.ogr_status.showMessage(tr('Loaded {0}').format(path), 3000)
+            # v0.1.298 (D298) — a file saved before D287 can carry a region
+            # whose material was deleted: said on opening, not modal
+            orphan = self._orphan_region_text()
+            if orphan:
+                self.statusBar().showMessage(orphan.replace("\n", "  "),
+                                             20000)
         except Exception as e:  # noqa: BLE001
             QMessageBox.critical(self, tr("Error"), tr('Could not open project:\n{0}').format(e))
 
@@ -3298,6 +3304,30 @@ class MainWindow(QMainWindow):
                  p.settings.summary.author)
         QMessageBox.information(self, tr("Info Viewer"), info)
 
+    def _orphan_region_text(self) -> str:
+        """The warning of every region whose material no longer exists,
+        translated, one per line; empty when there is none (D298)."""
+        from ogr_core.project.rules import orphan_assignment_reasons
+        return "\n".join(tr(t).format(*args)
+                         for t, args in orphan_assignment_reasons(self.project))
+
+    def _confirm_orphan_regions(self) -> bool:
+        """True to compute. With a region whose material no longer exists,
+        the question «compute anyway?» (v0.1.298, D298). Without a screen
+        — the offscreen platform of the tests — nobody can answer: it
+        computes, as before this version."""
+        text = self._orphan_region_text()
+        if not text:
+            return True
+        if QApplication.platformName() == "offscreen":
+            return True
+        r = QMessageBox.question(
+            self, tr("Compute"),
+            text + "\n\n" + tr("Compute anyway? Every surface through that "
+                                "region will be discarded."),
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        return r == QMessageBox.Yes
+
     def act_compute(self) -> None:
         # v0.1.194 (spec 008) — the two empty-model checks are asked of
         # ``ogr_core.project.rules.compute_blockers``, which every other
@@ -3326,6 +3356,12 @@ class MainWindow(QMainWindow):
         if "no_materials" in _blockers:
             QMessageBox.warning(self, tr("Compute"),
                                 _blockers["no_materials"].message)
+            return
+        # v0.1.298 (D298) — a region whose material no longer exists: say
+        # what is wrong and what to change, and let the user compute anyway
+        # (the owner's decision). Computed, every surface through it is
+        # refused, and the notes now say why.
+        if not self._confirm_orphan_regions():
             return
 
         # v0.1.9 — pass ALL enabled methods, not just the first.
