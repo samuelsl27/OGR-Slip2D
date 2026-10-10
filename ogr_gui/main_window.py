@@ -225,7 +225,7 @@ class DisabledReasonFilter(QObject):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.294"
+    VERSION = "0.1.295"
 
     def __init__(self) -> None:
         super().__init__()
@@ -3137,8 +3137,13 @@ class MainWindow(QMainWindow):
             return
         from ogr_slip2d.transient_stability import solve_project_groundwater
 
+        # v0.1.295 (D303) — only the materials that elements of the mesh
+        # use: every material without hydraulic properties was named,
+        # used or not, and a spare one was reported as computed with the
+        # default properties when nothing was.
+        used = {e.material_id for e in mesh.elements}
         missing = [m.name for m in self.project.materials
-                   if m.hydraulic is None]
+                   if m.hydraulic is None and m.id in used]
         transient = bool(self.project.settings.groundwater.transient
                          and self.project.settings.groundwater.transient_stages)
         if transient:
