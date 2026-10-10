@@ -2534,6 +2534,10 @@ class MaterialPropertiesDialog(QDialog):
             name=f"Material {len(self.materials) + 1}",
             strength=MohrCoulomb(cohesion=10.0, friction_angle=25.0),
         )
+        # v0.1.299 (D297) — a colour no material of the list uses yet: every
+        # new one was #d4a373, and two of them could not be told apart
+        from ogr_core.materials.palette import next_material_color
+        m.color = next_material_color(x.color for x in self.materials)
         self.materials.append(m)
         self._append_item(m)
         self.list.setCurrentRow(len(self.materials) - 1)

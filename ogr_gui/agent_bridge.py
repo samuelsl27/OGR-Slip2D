@@ -73,6 +73,10 @@ class WindowHost:
         w = self.window
         w.canvas.refresh_scene()
         w.refresh_action_availability()
+        # v0.1.299 (D297) — an edit can rename the project (model_define's
+        # "name", by the owner's decision the project's name): the title
+        # says it, as after project_new
+        self.after_save()
 
     def after_save(self) -> None:
         w = self.window

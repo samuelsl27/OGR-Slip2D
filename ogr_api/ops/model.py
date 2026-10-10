@@ -750,6 +750,10 @@ def _new_material(project, name, strength, fields):
                        f"{project.settings.max_materials} materials.")
     m = Material(name=name.strip(), strength=strength_from_spec(
         _link_rules_by_name(project, strength)))
+    # v0.1.299 (D297) — a colour no material of the model uses yet; a
+    # ``color`` in ``fields`` still wins below
+    from ogr_core.materials.palette import next_material_color
+    m.color = next_material_color(x.color for x in project.materials)
     _check_links(project, m)
     notes = _apply_material_fields(project, m, fields, creating=True)
     notes += _parent_water_notes(m)
