@@ -55,9 +55,11 @@ def model_hash(project) -> str:
 def document_hash(project) -> str:
     """SHA-256 of the WHOLE serialised model, annotations included.
 
-    What "unsaved changes" means. ``is_dirty`` cannot answer it:
-    ``Project.save`` clears it and then notifies, and the notification sets
-    it again (reported in v0.1.194).
+    What "unsaved changes" means. ``is_dirty`` could not answer it until
+    v0.1.203: ``Project.save`` cleared it and then notified, and the
+    notification set it again (reported in v0.1.194). ``Project._notify``
+    leaves it alone for "saved" since then, and the window asks it before
+    closing (v0.1.296, D283).
     """
     return _sha(project.to_dict())
 

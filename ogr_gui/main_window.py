@@ -225,7 +225,7 @@ class DisabledReasonFilter(QObject):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.295"
+    VERSION = "0.1.296"
 
     def __init__(self) -> None:
         super().__init__()
@@ -1006,16 +1006,33 @@ class MainWindow(QMainWindow):
                'release').format(name), 4000
         )
 
+    def _ask_unsaved(self, title: str, text: str) -> str:
+        """Save / Discard / Cancel about the unsaved changes of the project:
+        ``"save"``, ``"discard"`` or ``"cancel"`` (v0.1.296, D283 — one
+        question for New and for closing the window).
+
+        Without a screen — the ``offscreen`` platform the tests run on —
+        nobody can answer, and a modal box would block for ever (AGENTS.md):
+        ``"discard"``, without opening anything."""
+        if QApplication.platformName() == "offscreen":
+            return "discard"
+        r = QMessageBox.question(
+            self, title, text,
+            QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel)
+        if r == QMessageBox.Save:
+            return "save"
+        if r == QMessageBox.Discard:
+            return "discard"
+        return "cancel"
+
     def act_new(self) -> None:
         if self.project.is_dirty:
-            r = QMessageBox.question(
-                self, tr("New Project"),
-                tr("Current project has unsaved changes. Save first?"),
-                QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel,
-            )
-            if r == QMessageBox.Save:
+            answer = self._ask_unsaved(
+                tr("New Project"),
+                tr("Current project has unsaved changes. Save first?"))
+            if answer == "save":
                 self.act_save()
-            elif r == QMessageBox.Cancel:
+            elif answer == "cancel":
                 return
         self._attach_project(Project("Untitled"))
         self.terminal_dock.attach_context(self.project, self.canvas, self)
@@ -2606,7 +2623,25 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:  # noqa: N802
         """Deregister on close, or the Window menu would list windows
-        that no longer exist."""
+        that no longer exist.
+
+        v0.1.296 (D283) — and FIRST, with unsaved changes, the question New
+        asks (the owner's decision): the window closed without a word — by
+        its X, by File → Exit and by Ctrl+Q — and the work was lost. Cancel
+        keeps it open; Save that does not save (Save As cancelled, an error)
+        keeps it open too."""
+        if self.project.is_dirty:
+            answer = self._ask_unsaved(
+                tr("Exit"),
+                tr("Current project has unsaved changes. Save first?"))
+            if answer == "save":
+                self.act_save()
+                if self.project.is_dirty:
+                    event.ignore()
+                    return
+            elif answer == "cancel":
+                event.ignore()
+                return
         self.unregister_session()
         self._stop_agent_bridge()
         super().closeEvent(event)
