@@ -2380,6 +2380,9 @@ _DICTS: dict[str, dict[str, str]] = {
 
         "Groundwater analysis: %s": "Análisis de filtración: %s",
         "Cannot compute: %s": "No se puede calcular: %s",
+        # v0.1.297 (D304) — the results panel of an earlier model
+        "Results of an earlier model: compute again.":
+            "Resultados de un modelo anterior: vuelve a calcular.",
         # v0.1.294 (D289b) — the reasons of the disabled menu actions
         "Needs a probabilistic or sensitivity analysis: enable one in Project Settings > Statistics.":
             "Necesita un análisis probabilista o de sensibilidad: actívalo en Ajustes de proyecto > Estadística.",

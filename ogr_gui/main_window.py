@@ -22,7 +22,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import QEvent, QObject, Qt, QThread, Signal
+from PySide6.QtCore import QEvent, QObject, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
@@ -225,7 +225,7 @@ class DisabledReasonFilter(QObject):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.296"
+    VERSION = "0.1.297"
 
     def __init__(self) -> None:
         super().__init__()
@@ -267,6 +267,17 @@ class MainWindow(QMainWindow):
         # share a standard if the settings changed in between.
         self.last_statistics_factor_report = None
         self.interpret_windows: list[InterpretWindow] = []
+        # v0.1.297 (D304) — the fingerprint of the model the results panel's
+        # result was computed on (ogr_api.snapshot.model_hash, the one the
+        # API marks a stale result with), and a deferred check of it: the
+        # hash is 0.3 ms without a mesh and 23 ms with 8000 elements, too
+        # much for every event of a vertex drag, so it runs once the edits
+        # pause.
+        self._results_model_hash = None
+        self._stale_timer = QTimer(self)
+        self._stale_timer.setSingleShot(True)
+        self._stale_timer.setInterval(300)
+        self._stale_timer.timeout.connect(self._check_results_stale)
 
         # v0.1.2 — selection filter state
         self.selection_filter = SelectionFilterState()
@@ -2401,6 +2412,7 @@ class MainWindow(QMainWindow):
         if self.last_search_result is candidates[mid]:
             self.last_search_result = new
         self.results_dock.show_result(new, self.last_factor_report)
+        self._remember_results_model()
         self.canvas.display_search_result(new)
         self.statusBar().showMessage(
             tr("Optimised: %s") % rep.summary(), 15000)
@@ -3378,6 +3390,7 @@ class MainWindow(QMainWindow):
         first_result = results[first_id]
         self.last_search_result = first_result  # back-compat
         self.results_dock.show_result(first_result, self.last_factor_report)
+        self._remember_results_model()
         self.canvas.display_search_result(first_result)
         critical = first_result.critical
         if critical:
@@ -3945,6 +3958,29 @@ class MainWindow(QMainWindow):
     def _on_project_event(self, event: str) -> None:
         """Project notified a state change — refresh conditional UI."""
         self.refresh_action_availability()
+        # v0.1.297 (D304) — and, once the edits pause, whether the result
+        # in the results panel is still of this model
+        if getattr(self, "_results_model_hash", None) is not None:
+            timer = getattr(self, "_stale_timer", None)
+            if timer is not None:
+                timer.start()
+
+    def _remember_results_model(self) -> None:
+        """The results panel was just filled: remember the model it is of
+        (v0.1.297, D304)."""
+        from ogr_api.snapshot import model_hash
+        self._results_model_hash = model_hash(self.project)
+
+    def _check_results_stale(self) -> None:
+        """Mark the results panel stale when the model is no longer the one
+        its result was computed on (v0.1.297, D304). The same fingerprint
+        as the API's: undoing the edit gives it back, and the mark goes;
+        an annotation is left out of it, and marks nothing."""
+        if self._results_model_hash is None:
+            return
+        from ogr_api.snapshot import model_hash
+        self.results_dock.set_stale(
+            model_hash(self.project) != self._results_model_hash)
 
     def _attach_project(self, project: "Project") -> None:
         """Bind a (new or loaded) project to all UI that depends on it.
@@ -3975,6 +4011,7 @@ class MainWindow(QMainWindow):
         # notes are cleared together, which is what
         # test_design_factor_report_gui_v1165 checks.)
         self.results_dock.show_result(None)
+        self._results_model_hash = None
         self.last_search_result = None
         self.last_search_results = {}
         self.last_compute_warnings = []

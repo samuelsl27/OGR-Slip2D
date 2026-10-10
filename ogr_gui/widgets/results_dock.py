@@ -62,6 +62,20 @@ class ResultsDock(QDockWidget):
         self.header_label.setStyleSheet("font-weight: 500; padding: 2px;")
         layout.addWidget(self.header_label)
 
+        # v0.1.297 (D304) — said when the model has changed since this
+        # result was computed (the window compares the same fingerprint
+        # the API marks a stale result with); hidden otherwise. Its own
+        # colours, so it reads with either theme.
+        self.stale_label = QLabel(tr(
+            "Results of an earlier model: compute again."))
+        self.stale_label.setWordWrap(True)
+        self.stale_label.setStyleSheet(
+            "color: #5a3b00; background: #fff1c2; padding: 3px; "
+            "border-radius: 2px;")
+        self.stale_label.setVisible(False)
+        layout.addWidget(self.stale_label)
+        self._stale = False
+
         self.table = QTableWidget(0, 6)
         self.table.setHorizontalHeaderLabels(
             ["#", "FoS", "Method", "Centre X", "Centre Y", "Radius"]
@@ -77,7 +91,19 @@ class ResultsDock(QDockWidget):
         self.setWidget(container)
 
     # ------------------------------------------------------------------
+    def set_stale(self, stale: bool) -> None:
+        """Mark the result shown as computed on an earlier model, or not
+        (v0.1.297, D304): the notice shows and the table greys out."""
+        self._stale = bool(stale)
+        self.stale_label.setVisible(self._stale)
+        self.table.setEnabled(not self._stale)
+
+    def is_stale(self) -> bool:
+        return self._stale
+
     def show_result(self, search_result, factor_report=None) -> None:
+        # a result just shown is of the model it was computed on
+        self.set_stale(False)
         self.table.setRowCount(0)
         if search_result is None or not search_result.evaluations:
             self.header_label.setText(tr("No results yet."))
