@@ -255,14 +255,25 @@ lista funciones añadidas ha desperdiciado la mitad de su valor.
 
 ## Coste de los tests
 
-La suite entera tarda **unos 25 minutos**: 24,9 min con 3782 casos
-(v0.1.175), 24 min 13 s con 3863 (v0.1.179), y 26 min 10 s y 25 min 29 s
-con 4175 (v0.1.191), en la misma máquina. Este párrafo decía «entre 5 y
-7½ minutos», que era cierto cuando la suite era mucho más pequeña, y siguió
-diciéndolo al menos dieciséis versiones después de dejar de serlo: en
-v0.1.191 se leyó como anomalía un tiempo normal. **El reloj total no es una
-medida**, es una comprobación de que la suite termina. Con este tiempo,
-lánzala en segundo plano y no toques el motor mientras corre.
+La suite entera tarda **entre 50 y 72 minutos** desde v0.1.278: así
+salieron todas las corridas de v0.1.278 a v0.1.300, con 5830–5955 casos,
+en la misma máquina. Antes tardaba unos 25 minutos (24,9 min con 3782
+casos en v0.1.175; 26 min 10 s y 25 min 29 s con 4175 en v0.1.191), y
+antes aún «entre 5 y 7½». Las dos cifras siguieron escritas aquí muchas
+versiones después de dejar de ser ciertas, y en v0.1.191 se leyó como
+anomalía un tiempo normal. No se ha medido por qué se duplicó. **El reloj
+total no es una medida**, es una comprobación de que la suite termina. Con
+este tiempo, lánzala en segundo plano, guarda el código de salida del
+proceso (`echo EXIT=$?`) y no toques el programa mientras corre.
+
+**Un corte sin totales con código 127** no es un test fallado: en Git Bash,
+127 es un proceso que terminó con 0xC0000409, lo que hace `abort()`. Desde
+v0.1.300 aborta a veces en el mismo test,
+`test_a_shared_seed_is_denounced`, al abrir el pool de procesos de una
+rejilla de 441 círculos, y deja cuatro procesos `spawn_main` huérfanos. Se
+repite con `QT_FORCE_STDERR_LOGGING=1 PYTHONFAULTHANDLER=1` delante de la
+orden, para que quede la traza. La causa está en estudio: el proceso de la
+suite acaba ocupando 7,7 GB (`docs/changelog/CHANGELOG_v0.1.301.md`, §3).
 
 Que el tiempo suba no es un problema por sí solo. Lo que sí importa es no
 meter un test caro sin darse cuenta: los caros son los que mallan y

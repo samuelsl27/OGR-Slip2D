@@ -55,6 +55,14 @@ class WindowHost:
     # -- state ----------------------------------------------------------
     def busy(self) -> Optional[str]:
         w = self.window
+        # v0.1.301 (D292) — an undo step of the window is open, usually a
+        # dialog in its exec(). This server delivers through the event loop,
+        # which a modal dialog keeps running: an edit now would be recorded
+        # inside the window's step, and the dialog's OK would overwrite it.
+        step = getattr(w, "_open_step", None)
+        if step:
+            return (f"The window is in the middle of an edit ({step}); an "
+                    f"edit now would land inside it.")
         for name in ("worker", "sweep_worker"):
             t = getattr(w, name, None)
             try:

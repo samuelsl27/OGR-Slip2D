@@ -369,6 +369,23 @@ class SnapshotCommand(Command):
         restore_state(project, restore)
         return kept
 
+    def rollback(self, project: Project) -> None:
+        """Put back what the edit changed, and only that, for an edit that
+        is NOT going to be a step: a dialog that wrote into the model while
+        open and was then cancelled (v0.1.301, D306).
+
+        Unlike :meth:`undo`, the attributes the edit left alone keep their
+        objects: a cancelled dialog that wrote nothing must not swap
+        ``project.settings`` for a copy under whoever holds it.
+        """
+        if self._before is None or self._after is None:
+            return
+        changed = {a: self._before[a] for a in self.attrs
+                   if _state_key({a: self._before[a]})
+                   != _state_key({a: self._after[a]})}
+        if changed:
+            restore_state(project, changed)
+
     @property
     def changed(self) -> bool:
         """Whether the edit changed anything it captured.

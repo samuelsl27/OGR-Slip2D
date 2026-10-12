@@ -14,7 +14,7 @@ from __future__ import annotations
 from typing import Optional
 
 from ..coerce import coerce_value
-from ..errors import InvalidArgument, unknown
+from ..errors import Busy, InvalidArgument, unknown
 from . import operation
 
 
@@ -28,6 +28,12 @@ def project_history(ws, project_id: Optional[str] = None,
     if not 1 <= steps <= 200:
         raise InvalidArgument("steps must be between 1 and 200.")
     handle = ws.get(project_id)
+    # v0.1.301 (D292) — undoing is an edit: the same refusal as
+    # ``Workspace.mutate`` while the window computes or has a step open.
+    if action != "list" and ws.host is not None:
+        why = ws.host.busy()
+        if why:
+            raise Busy(why, hint="Retry when the window has finished.")
     done = []
     with ws.reading(handle.id, f"history {action}") as project:
         for _ in range(steps if action != "list" else 0):

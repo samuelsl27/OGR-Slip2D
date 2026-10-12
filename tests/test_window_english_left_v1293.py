@@ -136,7 +136,11 @@ class TestNoEnglishLeft:
             fn = node.func
             name = getattr(fn, "id", None) or getattr(fn, "attr", None)
             # undo steps: the agent reads their names in project_history
-            if name and name.endswith("Command") and node.args:
+            # (v0.1.301, D292: and the window's own steps, _model_step and
+            # the undo_step decorator; the Edit menu translates them)
+            if name and (name.endswith("Command")
+                         or name in ("_model_step", "undo_step")) \
+                    and node.args:
                 allowed.add(id(node.args[0]))
             # the default name of a load is data the .ogr keeps
             for kw in node.keywords:

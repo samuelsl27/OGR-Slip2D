@@ -19,6 +19,8 @@ Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 
+import functools
+import inspect
 from pathlib import Path
 from typing import Optional
 
@@ -224,8 +226,43 @@ class DisabledReasonFilter(QObject):
         return False
 
 
+# ======================================================================
+#: v0.1.301 (D292, D306) — what the function of a step returns when its
+#: dialog was cancelled: whatever the dialog wrote while it was open is put
+#: back, and no step is left (``MainWindow._model_step``).
+STEP_CANCELLED = object()
+
+
+def undo_step(description: str, attrs=None):
+    """Make a whole ``MainWindow`` method ONE undo step named
+    ``description`` (v0.1.301, D292): the method runs inside
+    ``_model_step``, its dialog's ``exec()`` included.
+
+    Qt passes a slot every argument of the signal it can take, and
+    ``triggered`` carries ``checked``: a wrapper taking ``*args`` would hand
+    it to a method that has no parameter for it. The method's own
+    positional parameters decide how many arrive.
+    """
+    def wrap(method):
+        params = list(inspect.signature(method).parameters.values())[1:]
+        if any(p.kind is p.VAR_POSITIONAL for p in params):
+            n_pos = None
+        else:
+            n_pos = sum(p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+                        for p in params)
+
+        @functools.wraps(method)
+        def run(self, *args, **kwargs):
+            if n_pos is not None:
+                args = args[:n_pos]
+            return self._model_step(
+                description, lambda: method(self, *args, **kwargs), attrs)
+        return run
+    return wrap
+
+
 class MainWindow(QMainWindow):
-    VERSION = "0.1.300"
+    VERSION = "0.1.301"
 
     def __init__(self) -> None:
         super().__init__()
@@ -239,6 +276,9 @@ class MainWindow(QMainWindow):
 
         self.project: Project = Project("Untitled")
         self.command_stack = CommandStack()
+        # v0.1.301 (D292) — the description of the undo step being run, while
+        # one is (``_model_step``); an agent's edit answers Busy meanwhile.
+        self._open_step: Optional[str] = None
         # v0.1.289 (D290) — the theme the program started with
         # (``apply_saved_preferences``); "light" when none was saved, and in
         # the tests, which build the window directly.
@@ -360,6 +400,10 @@ class MainWindow(QMainWindow):
         self._build_actions()
         self._build_menus()
         self._build_toolbar()
+        # v0.1.301 (D292) — Undo and Redo say what they would undo. The
+        # stack is never replaced (New and Open clear it), so once is enough.
+        self.command_stack.on_changed(self._refresh_undo_actions)
+        self._refresh_undo_actions()
         # v0.1.29 — apply the Groundwater dependency rules from the start
         self._update_groundwater_actions()
         self._update_statistics_actions()
@@ -1244,10 +1288,124 @@ class MainWindow(QMainWindow):
     # Edit
     # ==================================================================
     def act_undo(self) -> None:
-        self.command_stack.undo(self.project)
+        """Undo the last step, the window's or an agent's: they share the
+        stack (``handle.stack = window.command_stack``).
+
+        v0.1.301 (D292) — Ctrl+Z undid an agent's boundary condition after
+        the user had deleted a material in a dialog, because no dialog left
+        a step. Every edit of the model made by this window goes through
+        ``_model_step`` (or a typed command); ``tests/test_window_undo_v1301.py``
+        walks the methods and fails on one that does not, and its
+        ``EXCEPTIONS`` give the reason for each that stays out.
+        """
+        if self._open_step is not None:
+            self.ogr_status.showMessage(
+                tr("Finish the edit in progress first."), 4000)
+            return
+        self._report_history_step(self.command_stack.undo(self.project),
+                                  tr("Undone: {0}"))
 
     def act_redo(self) -> None:
-        self.command_stack.redo(self.project)
+        if self._open_step is not None:
+            self.ogr_status.showMessage(
+                tr("Finish the edit in progress first."), 4000)
+            return
+        self._report_history_step(self.command_stack.redo(self.project),
+                                  tr("Redone: {0}"))
+
+    @staticmethod
+    def _step_name(cmd) -> str:
+        """The name of a step as the agent reads it in project_history
+        (``PaintRegionCommand.description`` is a method)."""
+        d = cmd.description
+        return d() if callable(d) else str(d)
+
+    def _report_history_step(self, cmd, template: str) -> None:
+        if cmd is None:
+            return
+        msg = template.format(tr(self._step_name(cmd)))
+        # SnapshotCommand._restore_where: what another hand changed after
+        # this step is left as it is, and said
+        kept = getattr(cmd, "kept", None)
+        if kept:
+            msg += "  " + tr("(kept, changed since: {0})").format(
+                ", ".join(kept))
+        self.ogr_status.showMessage(msg, 5000)
+
+    def _refresh_undo_actions(self) -> None:
+        """v0.1.301 (D292) — Undo and Redo name the step they would undo or
+        redo, and are disabled, saying why, when there is none."""
+        acts = getattr(self, "_actions", None)
+        if not acts or "undo" not in acts:
+            return
+        undo, redo = self.command_stack.history()
+        for act, names, empty in (
+                (acts["undo"], undo, tr("Nothing to undo.")),
+                (acts["redo"], redo, tr("Nothing to redo."))):
+            if names:
+                # D288 — a "&" in a name would become a mnemonic
+                name = tr(names[-1]).replace("&", "&&")
+                act.setText(tr("Undo {0}").format(name) if act is acts["undo"]
+                            else tr("Redo {0}").format(name))
+                act.setEnabled(True)
+                act.setStatusTip("")
+            else:
+                act.setText(tr("Undo") if act is acts["undo"] else tr("Redo"))
+                act.setEnabled(False)
+                act.setStatusTip(empty)
+
+    def _model_step(self, description: str, fn, attrs=None):
+        """Run ``fn()`` as ONE undo step named ``description``.
+
+        v0.1.301 (D292) — the pattern of ``Workspace.mutate``: the edit runs
+        inside a ``SnapshotCommand`` and is recorded only if it changed the
+        model, so a dialog accepted without changes, or cancelled, leaves no
+        empty step. ``fn`` includes the dialog's ``exec()``: the step starts
+        BEFORE the dialog opens, which is what lets Cancel put back what a
+        dialog wrote while open (D306) — ``fn`` returns ``STEP_CANCELLED``
+        for that.
+
+        * ``attrs`` defaults to ``LIGHT_ATTRS``; the finite-element mesh and
+          fields (``HEAVY_ATTRS``) only when the edit says it touches them.
+        * Re-entrant, like ``mutate``: a step run inside another one (the
+          terminal calling a method of the window) is part of the outer
+          step; a cancelled inner one still puts back what it wrote.
+        * If ``fn`` raises, ``SnapshotCommand`` restores and re-raises.
+        * While a step is open an agent's edit answers Busy
+          (``WindowHost.busy``): the bridge serves on this thread, inside a
+          dialog's ``exec()`` too, and its edit would land in this step.
+        """
+        from ogr_core.project.commands import LIGHT_ATTRS, SnapshotCommand
+
+        outer = self._open_step is None
+        was_dirty = self.project.is_dirty
+        cmd = SnapshotCommand(description, lambda _project: fn(),
+                              attrs=attrs or LIGHT_ATTRS)
+        if outer:
+            self._open_step = description
+        try:
+            cmd.execute(self.project)
+        finally:
+            if outer:
+                self._open_step = None
+        if cmd.result is STEP_CANCELLED:
+            cmd.rollback(self.project)
+            # the model is as it was, so is whether it needs saving
+            self.project.is_dirty = was_dirty
+            return None
+        if outer and cmd.changed:
+            self.command_stack.record(cmd)
+            self._after_model_step()
+        return cmd.result
+
+    def _after_model_step(self) -> None:
+        """What a recorded step leaves behind, as ``WindowHost.after_edit``
+        does for an agent's: the model needs saving (an edit of the heavy
+        attributes notifies nothing), and the canvas, the menus and the
+        stale-result check catch up."""
+        self.project.is_dirty = True
+        self.canvas.refresh_scene()
+        self._on_project_event("model_step")
 
     def act_copy_image(self) -> None:
         pix = self.canvas.grab()
@@ -5269,6 +5427,10 @@ class MainWindow(QMainWindow):
         final_boundary = self.project.boundaries[bi]
         # Restore pre-drag state silently, then push one command
         self.project.boundaries[bi] = snapshot_before
+        # v0.1.301 (D292) — a click on a vertex without moving it left an
+        # undo step that changed nothing
+        if final_boundary.to_dict() == snapshot_before.to_dict():
+            return
         self.command_stack.do(self.project, ReplaceBoundaryCommand(index=bi, new_boundary=final_boundary))
         self.ogr_status.showMessage(tr("Vertex moved"), 1500)
 
@@ -5512,7 +5674,9 @@ class MainWindow(QMainWindow):
         def _apply(project, _t=toe, _c=crest, _p=params):
             return change_slope_angle(project, _t, _c, **_p)
         try:
-            cmd = SnapshotCommand(tr("Change Slope Angle"), _apply,
+            # v0.1.301 — the API's name: the agent reads it in
+            # project_history, and the Undo entry translates it
+            cmd = SnapshotCommand("Change slope angle", _apply,
                                   attrs=("boundaries",))
             self.command_stack.do(self.project, cmd)
         except ValueError as exc:
