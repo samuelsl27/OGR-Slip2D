@@ -270,7 +270,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.303"
+    VERSION = "0.1.304"
 
     def __init__(self) -> None:
         super().__init__()
@@ -3028,6 +3028,7 @@ class MainWindow(QMainWindow):
         scene.render(painter, target, rect)
         painter.end()
 
+    @undo_step("Set load")
     def _modify_load(self) -> None:
         """Edit an existing load."""
         from PySide6.QtWidgets import QInputDialog
@@ -3064,12 +3065,16 @@ class MainWindow(QMainWindow):
             second, ok = QInputDialog.getDouble(
                 self, tr("Modify Load"), tr("Magnitude at the far end:"),
                 float(load.magnitude_2), -1e9, 1e9, 4)
-            if ok:
-                load.magnitude_2 = second
+            # v0.1.304 (D292) — Cancel cancels the edit: the magnitude
+            # written above stayed when the far end was cancelled
+            if not ok:
+                return STEP_CANCELLED
+            load.magnitude_2 = second
         self.project.is_dirty = True
         self.canvas.refresh_scene()
         self.statusBar().showMessage(tr("Load modified."), 5000)
 
+    @undo_step("Set support")
     def _modify_support(self) -> None:
         from PySide6.QtWidgets import QInputDialog
 
@@ -3127,6 +3132,7 @@ class MainWindow(QMainWindow):
             return str(name or "support")
         return str(name or self._type_label(stype))
 
+    @undo_step("Move support")
     def _move_support(self) -> None:
         """Translate a support without changing its length or angle."""
         from PySide6.QtWidgets import QInputDialog
@@ -3167,6 +3173,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(
             tr("Support moved by (%.3f, %.3f)") % (dx, dy), 5000)
 
+    @undo_step("Ungroup support pattern")
     def _ungroup_pattern(self) -> None:
         """Break a pattern into independent supports.
 
@@ -3950,6 +3957,7 @@ class MainWindow(QMainWindow):
     # ==================================================================
     # Support menu (v0.1.14)
     # ==================================================================
+    @undo_step("Define support types")
     def act_define_support(self) -> None:
         """Open the Define Support Properties dialog.
 
@@ -3984,6 +3992,7 @@ class MainWindow(QMainWindow):
         self.canvas.segment_picked.connect(self._on_add_support_picked)
         self.canvas.set_tool_mode(ToolMode.ADD_SUPPORT)
 
+    @undo_step("Set support")
     def _on_add_support_picked(
         self, x0: float, y0: float, x1: float, y1: float,
     ) -> None:
@@ -4051,6 +4060,7 @@ class MainWindow(QMainWindow):
                "be generated automatically."), 8000,
         )
 
+    @undo_step("Add support pattern")
     def _on_pattern_picked(
         self, x0: float, y0: float, x1: float, y1: float,
     ) -> None:
@@ -4091,6 +4101,7 @@ class MainWindow(QMainWindow):
         self.canvas.support_clicked.connect(self._on_delete_support_clicked)
         self.canvas.set_tool_mode(ToolMode.DELETE_SUPPORT)
 
+    @undo_step("Delete supports")
     def _on_delete_support_clicked(self, idx: int) -> None:
         if 0 <= idx < len(self.project.supports):
             removed = self.project.supports.pop(idx)
@@ -4112,6 +4123,7 @@ class MainWindow(QMainWindow):
         self.canvas.segment_picked.connect(self._on_stretch_support_picked)
         self.canvas.set_tool_mode(ToolMode.STRETCH_SUPPORT)
 
+    @undo_step("Stretch support")
     def _on_stretch_support_picked(
         self, x0: float, y0: float, x1: float, y1: float,
     ) -> None:
@@ -4151,16 +4163,28 @@ class MainWindow(QMainWindow):
     def _on_support_action_requested(self, action: str, sidx: int) -> None:
         if sidx < 0 or sidx >= len(self.project.supports):
             return
+        if action == "support_stretch":
+            # Auto-pick the clicked support as the target and switch to stretch mode
+            self._selected_support_idx = sidx
+            self.act_stretch_support_mode()
+            return
+        # v0.1.304 (D292) — the other three edit the model: one undo step
+        name = {"support_delete": "Delete supports",
+                "support_properties": "Set support",
+                "support_modify_pattern": "Modify support pattern",
+                }.get(action)
+        if name:
+            self._model_step(
+                name, lambda: self._apply_support_action(action, sidx))
+
+    def _apply_support_action(self, action: str, sidx: int) -> None:
+        """The edit of ``_on_support_action_requested``."""
         if action == "support_delete":
             self.project.supports.pop(sidx)
             self.project.is_dirty = True
             self.project._notify("supports_changed")
             self.canvas.refresh()
             self.ogr_status.showMessage(tr("Support deleted."), 3000)
-        elif action == "support_stretch":
-            # Auto-pick the clicked support as the target and switch to stretch mode
-            self._selected_support_idx = sidx
-            self.act_stretch_support_mode()
         elif action == "support_properties":
             from .dialogs.support_properties_dialog import SupportInstancePropertiesDialog
             dlg = SupportInstancePropertiesDialog(
@@ -4514,6 +4538,7 @@ class MainWindow(QMainWindow):
                "then the end point. Esc to cancel."), 8000,
         )
 
+    @undo_step("Set load")
     def _on_dist_load_segment_picked(
         self, sx: float, sy: float, ex: float, ey: float,
     ) -> None:
@@ -4584,6 +4609,7 @@ class MainWindow(QMainWindow):
             tr("Click on a boundary to place the line load. Esc to cancel."), 6000,
         )
 
+    @undo_step("Set seismic load")
     def act_seismic_load(self) -> None:
         """Open the Seismic Load dialog (pseudo-static k_h / k_v)."""
         from .dialogs.seismic_dialog import SeismicLoadDialog
@@ -4600,6 +4626,7 @@ class MainWindow(QMainWindow):
             else:
                 self.ogr_status.showMessage(tr("Seismic load disabled"), 3000)
 
+    @undo_step("Seismic records")
     def act_seismic_records(self) -> None:
         """Open the Seismic Records dialog (v0.1.127).
 
@@ -4616,6 +4643,7 @@ class MainWindow(QMainWindow):
             self.ogr_status.showMessage(
                 tr('Seismic records: {0}').format(n), 4000)
 
+    @undo_step("Delete loads")
     def act_delete_load(self) -> None:
         """Delete a load via a list dialog (also available via right-click).
 
@@ -4693,7 +4721,14 @@ class MainWindow(QMainWindow):
         )
 
     def _on_load_action(self, action: str, kind: str, idx: int) -> None:
-        """Handle right-click context menu on loads (Modify / Delete)."""
+        """Handle right-click context menu on loads (Modify / Delete), as
+        one undo step (v0.1.304, D292)."""
+        self._model_step(
+            "Delete loads" if action == "delete" else "Set load",
+            lambda: self._apply_load_action(action, kind, idx))
+
+    def _apply_load_action(self, action: str, kind: str, idx: int) -> None:
+        """The edit of ``_on_load_action``."""
         if action == "delete":
             if kind == "distributed" and 0 <= idx < len(self.project.distributed_loads):
                 load = self.project.distributed_loads.pop(idx)
@@ -4747,6 +4782,7 @@ class MainWindow(QMainWindow):
                     self.project._notify("loads_changed")
                     self.canvas.refresh()
 
+    @undo_step("Set load")
     def _on_line_load_point_picked(self, x: float, y: float) -> None:
         try:
             self.canvas.point_picked.disconnect(self._on_line_load_point_picked)

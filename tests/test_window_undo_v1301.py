@@ -85,7 +85,6 @@ WRITER_DIALOGS = {"AddGridDialog", "AnnotationsDialog", "DefineSupportDialog",
                   "TransientStagesDialog", "WaterPressureGridDialog"}
 _COPIES = {"list", "sorted", "reversed", "tuple", "set", "dict"}
 
-_P304 = "pending: loads and supports (0.1.304)"
 _P305 = ("pending: settings and search, statistics, surfaces and focus, "
          "annotations, DXF (0.1.305)")
 
@@ -97,23 +96,6 @@ EXCEPTIONS = {
                         "drag as one ReplaceBoundaryCommand",
     "_on_vertex_drag_finished": "rewinds the draft of _on_vertex_moved and "
                                 "records it with command_stack.do",
-    # -- 0.1.304 --------------------------------------------------------
-    "_on_dist_load_segment_picked": _P304,
-    "_on_line_load_point_picked": _P304,
-    "act_seismic_load": _P304,
-    "act_seismic_records": _P304,
-    "act_delete_load": _P304,
-    "_on_load_action": _P304,
-    "_modify_load": _P304,
-    "act_define_support": _P304,
-    "_on_add_support_picked": _P304,
-    "_on_pattern_picked": _P304,
-    "_on_delete_support_clicked": _P304,
-    "_on_stretch_support_picked": _P304,
-    "_on_support_action_requested": _P304,
-    "_modify_support": _P304,
-    "_move_support": _P304,
-    "_ungroup_pattern": _P304,
     # -- 0.1.305 --------------------------------------------------------
     "act_surface_options": _P305,
     "act_auto_grid": _P305,
@@ -142,8 +124,9 @@ EXCEPTIONS = {
 
 #: How many there may be. Lowering it is the point; raising it needs a
 #: reason in a changelog.
-#: 54 in 0.1.301; 41 in 0.1.303 (materials, properties and water).
-BUDGET = 41
+#: 54 in 0.1.301; 41 in 0.1.303 (materials, properties and water);
+#: 25 in 0.1.304 (loads and supports).
+BUDGET = 25
 
 
 def _is_project(e):
@@ -385,7 +368,7 @@ class TestTheInventory:
         assert all(r.strip() for r in EXCEPTIONS.values())
         assert len(EXCEPTIONS) <= BUDGET, (len(EXCEPTIONS), BUDGET)
         # frozen: a version that takes a family out lowers it
-        assert BUDGET == 41
+        assert BUDGET == 25
 
     def test_the_writer_lists_are_not_ghosts(self):
         import ogr_gui.dialogs as dialogs
