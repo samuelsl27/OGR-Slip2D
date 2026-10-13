@@ -71,13 +71,16 @@ NOT_MUTATORS = {"add_listener"}
 CONTAINER_MUTATORS = {"add", "remove", "insert", "append", "extend", "pop",
                       "clear", "sort", "reverse", "update", "setdefault",
                       "discard"}
+#: Methods that write the model whatever they are called on (v0.1.305:
+#: the Add Grid dialog writes its bounds only when the window asks).
+WRITER_METHODS = {"apply_to_settings"}
 #: Functions of other modules that write the project they are given.
 WRITER_FUNCS = {"apply_to_project", "assign_water_surface",
                 "import_properties", "set_fem_mesh", "reset_fem_mesh",
                 "solve_project_groundwater", "run_transient_stability"}
 #: Dialogs that write the model on their own (in their accept, apply or
 #: live), from the inventory of D292. A new dialog that does goes here.
-WRITER_DIALOGS = {"AddGridDialog", "AnnotationsDialog", "DefineSupportDialog",
+WRITER_DIALOGS = {"AnnotationsDialog", "DefineSupportDialog",
                   "HydraulicPropertiesDialog", "ModifySupportPatternDialog",
                   "ProjectSettingsDialog", "RandomVariablesDialog",
                   "SeismicLoadDialog", "SeismicRecordsDialog",
@@ -85,8 +88,6 @@ WRITER_DIALOGS = {"AddGridDialog", "AnnotationsDialog", "DefineSupportDialog",
                   "TransientStagesDialog", "WaterPressureGridDialog"}
 _COPIES = {"list", "sorted", "reversed", "tuple", "set", "dict"}
 
-_P305 = ("pending: settings and search, statistics, surfaces and focus, "
-         "annotations, DXF (0.1.305)")
 
 #: Methods that write the model outside an undo step, each with its reason.
 EXCEPTIONS = {
@@ -96,37 +97,14 @@ EXCEPTIONS = {
                         "drag as one ReplaceBoundaryCommand",
     "_on_vertex_drag_finished": "rewinds the draft of _on_vertex_moved and "
                                 "records it with command_stack.do",
-    # -- 0.1.305 --------------------------------------------------------
-    "act_surface_options": _P305,
-    "act_auto_grid": _P305,
-    "act_add_grid": _P305,
-    "_on_grid_picked": _P305,
-    "act_project_settings": _P305,
-    "_back_analysis": _P305,
-    "_move_slope_limits": _P305,
-    "_define_moment_axis": _P305,
-    "_reset_moment_axis": _P305,
-    "_reset_slope_limits": _P305,
-    "_edit_random_variables": _P305,
-    "_add_focus": _P305,
-    "_manage_focus": _P305,
-    "_add_surface_centre_radius": _P305,
-    "_on_surface_3pt_picked": _P305,
-    "_manage_user_surfaces": _P305,
-    "_set_annotations_visible": _P305,
-    "_delete_all_annotations": _P305,
-    "_manage_annotations": _P305,
-    "_start_annotation": _P305,
-    "_add_image": _P305,
-    "_convert_tool_to_boundary": _P305,
-    "act_import_dxf": _P305,
 }
 
 #: How many there may be. Lowering it is the point; raising it needs a
 #: reason in a changelog.
 #: 54 in 0.1.301; 41 in 0.1.303 (materials, properties and water);
-#: 25 in 0.1.304 (loads and supports).
-BUDGET = 25
+#: 25 in 0.1.304 (loads and supports); 2 in 0.1.305, the two halves
+#: of a vertex drag.
+BUDGET = 2
 
 
 def _is_project(e):
@@ -244,7 +222,9 @@ def writes_of(fn):
                     continue
             name = f.id if isinstance(f, ast.Name) else getattr(f, "attr",
                                                                  None)
-            if name == "setattr" and n.args:
+            if name in WRITER_METHODS:
+                out.append((n.lineno, "calls " + name, n))
+            elif name == "setattr" and n.args:
                 r, _ = _root(n.args[0], aliases)
                 if r and r != "*":
                     out.append((n.lineno, "setattr on " + r, n))
@@ -368,7 +348,7 @@ class TestTheInventory:
         assert all(r.strip() for r in EXCEPTIONS.values())
         assert len(EXCEPTIONS) <= BUDGET, (len(EXCEPTIONS), BUDGET)
         # frozen: a version that takes a family out lowers it
-        assert BUDGET == 25
+        assert BUDGET == 2
 
     def test_the_writer_lists_are_not_ghosts(self):
         import ogr_gui.dialogs as dialogs

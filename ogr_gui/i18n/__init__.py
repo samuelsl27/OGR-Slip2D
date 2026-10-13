@@ -2445,6 +2445,8 @@ _DICTS: dict[str, dict[str, str]] = {
         "Stretch support": "Estirar soporte",
         "Modify support pattern": "Modificar patrón de soportes",
         "Move support": "Mover soporte",
+        # v0.1.305 (D292)
+        "Edit annotations": "Editar anotaciones",
         # v0.1.298 (D298) — rules.ORPHAN_ASSIGNMENT and the question
         "The region at ({0:.2f}, {1:.2f}) is assigned a material that no longer exists. Assign it another material (Properties > Assign Materials); a surface through it cannot be analysed.":
             "La región en ({0:.2f}, {1:.2f}) tiene asignado un material que ya no existe. Asígnale otro material (Propiedades > Asignar materiales); una superficie que la cruce no se puede analizar.",

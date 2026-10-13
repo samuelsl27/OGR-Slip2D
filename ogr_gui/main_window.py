@@ -270,7 +270,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.304"
+    VERSION = "0.1.305"
 
     def __init__(self) -> None:
         super().__init__()
@@ -394,6 +394,10 @@ class MainWindow(QMainWindow):
         self.terminal_dock = TerminalDock(self)
         self.addDockWidget(Qt.BottomDockWidgetArea, self.terminal_dock)
         self.terminal_dock.attach_context(self.project, self.canvas, self)
+        # v0.1.305 (D292) — every command that changes the model is one undo
+        # step, as python_exec is for an agent (the owner's decision)
+        self.terminal_dock.terminal.step_runner = (
+            lambda run: self._model_step("Python script", run))
         self.terminal_dock.hide()
 
         # v0.1.7 — listen to project changes to update conditional UI
@@ -1159,6 +1163,7 @@ class MainWindow(QMainWindow):
         except Exception as e:  # noqa: BLE001
             QMessageBox.critical(self, tr("Error"), str(e))
 
+    @undo_step("Import DXF")
     def act_import_dxf(self) -> None:
         """v0.1.46 — import geometry from a DXF drawing (Phase D2)."""
         from PySide6.QtWidgets import QFileDialog
@@ -1314,7 +1319,12 @@ class MainWindow(QMainWindow):
         a step. Every edit of the model made by this window goes through
         ``_model_step`` (or a typed command); ``tests/test_window_undo_v1301.py``
         walks the methods and fails on one that does not, and its
-        ``EXCEPTIONS`` give the reason for each that stays out.
+        ``EXCEPTIONS`` give the reason for each that stays out. Since
+        v0.1.305 they are the two halves of a vertex drag:
+        ``_on_vertex_moved`` writes a draft on every mouse move, and
+        ``_on_vertex_drag_finished`` rewinds it and records the whole drag
+        as one ``ReplaceBoundaryCommand``. Back Analysis writes nothing (the
+        owner's decision, as ``back_analysis_run``).
         """
         if self._open_step is not None:
             self.ogr_status.showMessage(
@@ -1454,17 +1464,22 @@ class MainWindow(QMainWindow):
     # ==================================================================
     # Surfaces
     # ==================================================================
-    def act_surface_options(self) -> None:
+    @undo_step("Change settings")
+    def act_surface_options(self):
         # v0.1.9: Surface Options dialog (lives in grid_dialogs)
         dlg = SurfaceOptionsDialog(self.project, self)
-        if dlg.exec():
-            dlg.apply()
-            self.project.is_dirty = True
-            self.project._notify("settings_changed")
-            self.ogr_status.showMessage(
-                tr('Surface search configured: {0}').format(
-                    self.project.settings.search.search_method), 3000,
-            )
+        if not dlg.exec():
+            # v0.1.305 (D306) — its Optimize Settings wrote when accepted,
+            # and Cancel here left that written: it goes too
+            return STEP_CANCELLED
+        dlg.apply()
+        self.project.is_dirty = True
+        self.project._notify("settings_changed")
+        self.ogr_status.showMessage(
+            tr('Surface search configured: {0}').format(
+                self.project.settings.search.search_method), 3000,
+        )
+        return None
 
     def act_add_block_search_object(self, *, mode=None, prompt=None) -> None:
         """Add a Block Search object on the canvas; the Window by default.
@@ -1550,6 +1565,7 @@ class MainWindow(QMainWindow):
                       "one end to the other, right-click or Enter to "
                       "finish."))
 
+    @undo_step("Change settings")
     def act_auto_grid(self) -> None:
         """Reset to Auto Grid (clear user-defined grid bounds)."""
         s = self.project.settings.search
@@ -1597,13 +1613,16 @@ class MainWindow(QMainWindow):
         dlg.activateWindow()
 
     def _on_grid_dialog_accepted(self, dlg) -> None:
-        """User pressed OK on the Add Grid dialog."""
-        try:
-            dlg.apply_to_settings()
-        except Exception:  # noqa: BLE001
-            pass
-        self.project.is_dirty = True
-        self.project._notify("settings_changed")
+        """User pressed OK on the Add Grid dialog: ONE undo step with the
+        bounds and the intervals (v0.1.305, D306 — the picked rectangle is
+        written here, no longer when picked)."""
+        def apply():
+            try:
+                dlg.apply_to_settings()
+            except Exception:  # noqa: BLE001
+                pass
+            self.project._notify("settings_changed")
+        self._model_step("Change settings", apply)
         self.canvas.refresh()
         s = self.project.settings.search
         self.ogr_status.showMessage(
@@ -1617,6 +1636,14 @@ class MainWindow(QMainWindow):
 
     def _on_grid_dialog_rejected(self, dlg) -> None:
         self._active_grid_dialog = None
+        # v0.1.305 (D306) — a pick still armed would have written the
+        # bounds of a dialog already cancelled
+        try:
+            self.canvas.segment_picked.disconnect(self._on_grid_picked)
+        except (TypeError, RuntimeError):
+            pass
+        if self.canvas._tool_mode == ToolMode.PICK_GRID_RECT:
+            self.canvas.set_tool_mode(ToolMode.SELECT)
 
     def _begin_grid_pick(self) -> None:
         """Activate canvas pick mode while the dialog stays visible."""
@@ -1642,13 +1669,10 @@ class MainWindow(QMainWindow):
             pass
         self.canvas.set_tool_mode(ToolMode.SELECT)
 
-        s = self.project.settings.search
-        s.grid_x_min = min(x1, x2)
-        s.grid_x_max = max(x1, x2)
-        s.grid_y_min = min(y1, y2)
-        s.grid_y_max = max(y1, y2)
-        self.canvas.refresh()
-
+        # v0.1.305 (D306) — into the dialog only: it was written into the
+        # settings here, before OK, and its Cancel did not put it back. OK
+        # writes it (``_on_grid_dialog_accepted``); with no dialog open the
+        # pick has nowhere to go.
         dlg = getattr(self, "_active_grid_dialog", None)
         if dlg is not None:
             # Use the new update_bounds method which also brings the
@@ -1661,13 +1685,26 @@ class MainWindow(QMainWindow):
     # ==================================================================
     # Analysis
     # ==================================================================
-    def act_project_settings(self) -> None:
+    @undo_step("Change settings")
+    def act_project_settings(self):
+        """v0.1.305 (D306) — one undo step from opening to closing.
+
+        Apply and Restore Defaults write the settings at once, and Cancel
+        afterwards left them written. Cancel now puts back the settings the
+        dialog opened with (the owner's decision: Apply included), and
+        Apply tells the window, which refreshes what depends on them.
+        """
         dlg = ProjectSettingsDialog(self.project.settings, self,
                                     project=self.project)
-        if dlg.exec():
-            self.project._notify("settings_changed")
-            self._update_groundwater_actions()
-            self._update_statistics_actions()
+        dlg.settings_applied.connect(self._on_settings_applied)
+        if not dlg.exec():
+            return STEP_CANCELLED
+        self._on_settings_applied()
+
+    def _on_settings_applied(self) -> None:
+        self.project._notify("settings_changed")
+        self._update_groundwater_actions()
+        self._update_statistics_actions()
 
     @undo_step("Generate FE mesh", attrs=_WITH_FIELDS)
     def _generate_fem_mesh(self) -> None:
@@ -1747,6 +1784,13 @@ class MainWindow(QMainWindow):
         )
         from ogr_slip2d.back_analysis import SUPPORTED_METHODS
         cfg = self.project.settings.back_analysis
+        # v0.1.305 (D292) — the settings are not written, as
+        # back_analysis_run (the owner's decision): the values go to the run
+        # as arguments, and the last ones typed come back next time, for
+        # this project, without marking it modified.
+        last = getattr(self, "_back_analysis_last", None) or {
+            "target_fos": cfg.target_fos, "elevation": cfg.elevation,
+            "method_id": cfg.method_id}
 
         dlg = QDialog(self)
         dlg.setWindowTitle(tr("Back Analysis of Support Force"))
@@ -1755,12 +1799,12 @@ class MainWindow(QMainWindow):
         sp_fos = QDoubleSpinBox()
         sp_fos.setDecimals(3)
         sp_fos.setRange(0.001, 100.0)
-        sp_fos.setValue(cfg.target_fos)
+        sp_fos.setValue(last["target_fos"])
         form.addRow(tr("Target factor of safety:"), sp_fos)
         sp_el = QDoubleSpinBox()
         sp_el.setDecimals(3)
         sp_el.setRange(-1e6, 1e6)
-        sp_el.setValue(cfg.elevation)
+        sp_el.setValue(last["elevation"])
         sp_el.setToolTip(
             "Elevation of the horizontal force. Only affects Bishop: "
             "Janbu uses force equilibrium, where the position of a "
@@ -1769,7 +1813,7 @@ class MainWindow(QMainWindow):
         cbo = QComboBox()
         for mid in SUPPORTED_METHODS:
             cbo.addItem(mid, mid)
-        i = cbo.findData(cfg.method_id)
+        i = cbo.findData(last["method_id"])
         cbo.setCurrentIndex(max(0, i))
         form.addRow(tr("Analysis method:"), cbo)
         v.addLayout(form)
@@ -1780,17 +1824,15 @@ class MainWindow(QMainWindow):
         if not dlg.exec():
             return
 
-        cfg.enabled = True
-        cfg.target_fos = sp_fos.value()
-        cfg.elevation = sp_el.value()
-        cfg.method_id = cbo.currentData()
-        self.project.is_dirty = True
+        values = {"target_fos": sp_fos.value(), "elevation": sp_el.value(),
+                  "method_id": cbo.currentData()}
+        self._back_analysis_last = values
 
         # v0.1.201 — the analysis door: design factors, the settings
         # checks, the configured search. This searched the raw project.
         try:
             res, _report, _warnings = run_configured_back_analysis(
-                self.project)
+                self.project, **values)
         except AnalysisNotConfigured as exc:
             self._info("\n".join(tr(p) for p in exc.problems))
             return
@@ -1803,7 +1845,8 @@ class MainWindow(QMainWindow):
             tr('Back analysis ({0}): required force {1:.1f} for FS = '
                '{2:g}  (active {3:.1f}, passive {4:.1f}; surface FoS '
                'without support {5:.4f}, {6} surfaces)').format(
-                cfg.method_id, res.required_force, cfg.target_fos,
+                values["method_id"], res.required_force,
+                values["target_fos"],
                 c.active_force, c.passive_force, c.unsupported_fos,
                 res.surfaces_analysed),
             15000)
@@ -1971,6 +2014,7 @@ class MainWindow(QMainWindow):
                 act.setEnabled(bool(enabled))
                 act.setStatusTip("" if enabled else reason)
 
+    @undo_step("Random variables")
     def _edit_random_variables(self) -> None:
         from .dialogs.random_variables_dialog import RandomVariablesDialog
         if RandomVariablesDialog(self.project, self).exec():
@@ -2185,6 +2229,7 @@ class MainWindow(QMainWindow):
     # ==================================================================
     # Annotation layer and property tables (phase M3)
     # ==================================================================
+    @undo_step("Set annotation")
     def _start_annotation(self, kind) -> None:
         """Begin drawing an annotation.
 
@@ -2231,6 +2276,7 @@ class MainWindow(QMainWindow):
             msg += tr("   |   measured: %.4f") % value
         self.statusBar().showMessage(msg, 6000)
 
+    @undo_step("Set annotation")
     def _set_annotations_visible(self, visible: bool) -> None:
         self.project.annotations.set_all_visible(visible)
         self.project.is_dirty = True
@@ -2240,14 +2286,15 @@ class MainWindow(QMainWindow):
             % (len(self.project.annotations),
                tr("shown") if visible else tr("hidden")), 4000)
 
+    @undo_step("Delete annotations")
     def _delete_all_annotations(self) -> None:
         n = len(self.project.annotations)
         if not n:
             self._info(tr("There are no annotations."))
             return
         from PySide6.QtWidgets import QMessageBox
-        # Destructive and not undoable through the annotation layer, so
-        # it asks first.
+        # Destructive, so it asks first (and, since v0.1.305, it is an
+        # undo step too).
         if QMessageBox.question(
                 self, tr("Delete All Annotations"),
                 tr("Delete all %d annotation(s)? The physical model is "
@@ -2259,15 +2306,21 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(
             tr("%d annotation(s) deleted") % n, 4000)
 
-    def _manage_annotations(self) -> None:
+    @undo_step("Edit annotations")
+    def _manage_annotations(self):
+        """v0.1.305 (D306) — the dialog edits the layer as the user clicks;
+        it had only OK, and Esc kept every change. Now it has Cancel, and
+        Cancel or Esc put the layer back."""
         from .dialogs.annotations_dialog import AnnotationsDialog
 
         if not len(self.project.annotations):
             self._info(tr("There are no annotations."))
-            return
-        if AnnotationsDialog(self.project.annotations, self).exec():
-            self.project.is_dirty = True
-            self.canvas.refresh_scene()
+            return None
+        if not AnnotationsDialog(self.project.annotations, self).exec():
+            return STEP_CANCELLED
+        self.project.is_dirty = True
+        self.canvas.refresh_scene()
+        return None
 
     def _convert_tool_to_boundary(self) -> None:
         """The single, explicit bridge from the annotation layer to the
@@ -2319,11 +2372,13 @@ class MainWindow(QMainWindow):
         if not pts:
             self._info(tr("This annotation has no usable geometry."))
             return
-        self.project.add_boundary(Boundary(
-            btype=btype,
-            polyline=Polyline(vertices=[Vertex(x, y) for x, y in pts],
-                              closed=ann.closed)))
-        self.project.is_dirty = True
+        # v0.1.305 (D292) — one undo step, named as boundary_add names it
+        self._model_step(
+            f"Add {btype.display_name}",
+            lambda: self.project.add_boundary(Boundary(
+                btype=btype,
+                polyline=Polyline(vertices=[Vertex(x, y) for x, y in pts],
+                                  closed=ann.closed))))
         self.canvas.set_project(self.project)
         self.canvas.refresh_scene()
         # The annotation stays: converting copies the shape into the
@@ -2333,6 +2388,7 @@ class MainWindow(QMainWindow):
             tr("Converted to %s (%d vertices). The annotation was kept.")
             % (tchoice, len(pts)), 8000)
 
+    @undo_step("Set annotation")
     def _add_image(self) -> None:
         from PySide6.QtWidgets import QFileDialog
 
@@ -2399,6 +2455,7 @@ class MainWindow(QMainWindow):
             return None
         return pts
 
+    @undo_step("Set focus object")
     def _add_focus(self, kind) -> None:
         from PySide6.QtWidgets import QInputDialog
 
@@ -2444,8 +2501,12 @@ class MainWindow(QMainWindow):
             tr("Toggle or delete:"), items, 0, False)
         if not ok:
             return
+        # v0.1.305 (D292) — one undo step, named by what it does
         if choice == tr("(delete all)"):
-            objs.clear()
+            name = "Delete focus objects"
+
+            def edit():
+                objs.clear()
         else:
             idx = items.index(choice)
             action, ok = QInputDialog.getItem(
@@ -2454,14 +2515,22 @@ class MainWindow(QMainWindow):
             if not ok:
                 return
             if action == tr("Delete"):
-                objs.pop(idx)
+                name = "Delete focus objects"
+
+                def edit():
+                    objs.pop(idx)
             else:
-                objs[idx].enabled = not objs[idx].enabled
+                name = "Set focus object"
+
+                def edit():
+                    objs[idx].enabled = not objs[idx].enabled
+        self._model_step(name, edit)
         self.project.is_dirty = True
         self.canvas.refresh_scene()
         self.statusBar().showMessage(
             tr("%d focus object(s) defined.") % len(objs), 5000)
 
+    @undo_step("Delete user surfaces")
     def _manage_user_surfaces(self) -> None:
         """List and delete the slip surfaces the user defined by hand.
 
@@ -2601,6 +2670,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(
             tr("Optimised: %s") % rep.summary(), 15000)
 
+    @undo_step("Add user surface")
     def _add_surface_centre_radius(self) -> None:
         from PySide6.QtWidgets import QInputDialog
 
@@ -2638,6 +2708,7 @@ class MainWindow(QMainWindow):
         # again here would give the user the same instruction twice.
         self._set_tool(ToolMode.ADD_SURFACE_3PT)
 
+    @undo_step("Add user surface")
     def _on_surface_3pt_picked(self, ax: float, ay: float,
                                bx: float, by: float,
                                cx: float, cy: float) -> None:
@@ -2671,6 +2742,7 @@ class MainWindow(QMainWindow):
             tr("Circle added: centre (%.3f, %.3f), radius %.3f")
             % (circle.centre_x, circle.centre_y, circle.radius), 8000)
 
+    @undo_step("Change settings")
     def _move_slope_limits(self) -> None:
         """Edit the Slope Limits — one window, or two.
 
@@ -2683,7 +2755,10 @@ class MainWindow(QMainWindow):
         """
         from ogr_gui.dialogs.slope_limits_dialog import SlopeLimitsDialog
         dlg = SlopeLimitsDialog(self.project, self)
-        if dlg.exec() != dlg.Accepted:
+        # v0.1.305 — ``dlg.Accepted`` raised AttributeError with PySide6 6.11
+        # (the enum shortcut is on the class, not on an instance): Define
+        # Limits failed every time it was accepted, and no test reached it
+        if not dlg.exec():
             return
         problem = dlg.validate()
         if problem:
@@ -2708,6 +2783,7 @@ class MainWindow(QMainWindow):
                 tr("Slope limits: %.3f to %.3f and %.3f to %.3f")
                 % (left, right, left_2, right_2), 6000)
 
+    @undo_step("Change settings")
     def _define_moment_axis(self) -> None:
         """The point non-circular surfaces take moments about.
 
@@ -2734,6 +2810,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(
             tr("Moment axis: (%.3f, %.3f)") % (x, y), 6000)
 
+    @undo_step("Change settings")
     def _reset_moment_axis(self) -> None:
         """Back to automatic: one axis per surface, from its own chord."""
         s = self.project.settings.search
@@ -2744,6 +2821,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(
             tr("Moment axis: automatic (one per surface)."), 6000)
 
+    @undo_step("Change settings")
     def _reset_slope_limits(self) -> None:
         """Back to automatic, derived from the ground surface.
 
@@ -4272,6 +4350,7 @@ class MainWindow(QMainWindow):
         self._prob_result = None
         self._sens_result = None
         self._back_analysis_result = None
+        self._back_analysis_last = None
         self._gw_solver = None
         self.last_drawdown_sweep = None
         # Refresh the menu/toolbar enabled-state for the new project.
@@ -4302,6 +4381,10 @@ class MainWindow(QMainWindow):
         # window started with (found by the manual test of D191/D271).
         if getattr(self, "project", None) is not None:
             self._update_groundwater_actions()
+            # v0.1.305 (D292) — and the statistics ones: undoing a change of
+            # Project Settings > Statistics left them as they were
+            if "stat_show" in actions:
+                self._update_statistics_actions()
         # v0.1.194 (spec 008) — WHETHER each drawing action is allowed is
         # asked of ``ogr_core.project.rules``, the same place a script or an
         # agent asks it; only the tooltips stay here, because they are

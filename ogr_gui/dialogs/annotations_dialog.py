@@ -65,8 +65,12 @@ class AnnotationsDialog(QDialog):
             row.addWidget(b)
         v.addLayout(row)
 
-        bb = QDialogButtonBox(QDialogButtonBox.Ok)
+        # v0.1.305 (D306) — the buttons above edit the layer at once;
+        # Cancel (and Esc) put it back: the window runs this dialog inside
+        # one undo step and undoes what it wrote when it is rejected.
+        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         bb.accepted.connect(self.accept)
+        bb.rejected.connect(self.reject)
         v.addWidget(bb)
         self.refresh()
 

@@ -727,10 +727,11 @@ class SurfaceOptionsDialog(QDialog):
     def _on_optimize_settings(self) -> None:
         """Open the Optimize Surfaces Settings panel.
 
-        Applied straight onto the project rather than held: this dialog's
-        own OK writes the rest of the page the same way, and holding a
+        Applied straight onto the project rather than held: holding a
         second layer of pending values would be a second place for them to
-        get out of step.
+        get out of step. v0.1.305 (D306) — the window runs Surface Options
+        inside one undo step, so cancelling Surface Options puts these back
+        too; before, they stayed written.
         """
         from .optimize_settings_dialog import OptimizeSettingsDialog
 

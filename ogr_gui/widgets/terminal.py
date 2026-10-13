@@ -64,6 +64,9 @@ class TerminalWidget(QPlainTextEdit):
 
     PROMPT = ">>> "
     CONTINUATION = "... "
+    #: v0.1.305 (D292) — ``step_runner(run)`` runs a command inside an undo
+    #: step (the main window gives ``_model_step``); None runs it bare.
+    step_runner = None
 
     def __init__(self, namespace: Optional[dict] = None, parent=None) -> None:
         super().__init__(parent)
@@ -146,7 +149,14 @@ class TerminalWidget(QPlainTextEdit):
         old_stdout, old_stderr = sys.stdout, sys.stderr
         sys.stdout, sys.stderr = out, err
         try:
-            self._compiler.runsource(source, symbol="exec")
+            # v0.1.305 (D292) — through the window's undo step when it gives
+            # one (``step_runner``): a command that changes the model is
+            # one step, named "Python script" as python_exec's
+            if self.step_runner is not None:
+                self.step_runner(
+                    lambda: self._compiler.runsource(source, symbol="exec"))
+            else:
+                self._compiler.runsource(source, symbol="exec")
         except SystemExit:
             pass
         except Exception:  # noqa: BLE001

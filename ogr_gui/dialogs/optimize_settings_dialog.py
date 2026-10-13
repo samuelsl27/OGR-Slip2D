@@ -40,9 +40,9 @@ from ogr_gui.i18n import tr
 class OptimizeSettingsDialog(QDialog):
     """Edit the ``optimize_*`` block of ``SearchSettings``.
 
-    Writes nothing until :meth:`apply` is called, so the caller can hold
-    the values and commit them with the rest of Surface Options — the
-    behaviour the enclosing dialog's own OK / Cancel already promises.
+    Writes nothing until :meth:`apply` is called. Surface Options calls it
+    as soon as this dialog is accepted; v0.1.305 (D306) — the window's undo
+    step around Surface Options is what makes its Cancel cancel them too.
     """
 
     def __init__(self, project, parent=None) -> None:

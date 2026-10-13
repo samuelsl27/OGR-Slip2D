@@ -14,7 +14,7 @@ Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -697,7 +697,15 @@ class _SummaryPage(QWidget):
 
 # ----------------------------------------------------------------------
 class ProjectSettingsDialog(QDialog):
-    """Tree-navigated project settings editor."""
+    """Tree-navigated project settings editor.
+
+    Apply and Restore Defaults write into the settings it was given at
+    once. v0.1.305 (D306) — and say so (``settings_applied``); the window
+    runs the dialog inside one undo step, so its Cancel puts back what they
+    wrote.
+    """
+
+    settings_applied = Signal()
 
     def __init__(self, settings: ProjectSettings, parent=None,
                  project=None) -> None:
@@ -811,6 +819,7 @@ class ProjectSettingsDialog(QDialog):
             if hasattr(p, "apply"):
                 p.apply()
         self._refresh_page_gates()
+        self.settings_applied.emit()
 
     def _ok(self) -> None:
         self._apply()
@@ -830,6 +839,7 @@ class ProjectSettingsDialog(QDialog):
         self.pages.clear()
         self._build_pages()
         self.nav.setCurrentRow(0)
+        self.settings_applied.emit()
 
 
 # ======================================================================
