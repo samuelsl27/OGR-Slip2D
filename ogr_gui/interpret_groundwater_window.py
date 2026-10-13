@@ -148,51 +148,35 @@ class InterpretGroundwaterWindow(QMainWindow):
         self._summary()
         self._redraw()
 
-    def _plot_fos_history(self) -> None:
+    def _plot_fos_history(self):
         """Plot the factor of safety against time for the stages flagged
-        *Calculate SF* — the point of a transient stability analysis."""
-        pts = []
-        for r in self.stages:
-            fos = r.notes.get("fos") or {}
-            if fos:
-                pts.append((r.notes.get("time", 0.0), fos))
-        if not pts:
+        *Calculate SF* — the point of a transient stability analysis.
+
+        v0.1.308 (D311) — NON-modal, and the same series and chart as
+        *Interpret > Graph SF with Time* (``fos_history``,
+        ``ogr_gui.xy_chart``). It opened its own dialog with ``exec()``,
+        which blocked the application, and said "no factor" with a modal
+        box; that goes to the status bar now. Returns the chart window, or
+        None."""
+        from ogr_slip2d.transient_stability import fos_history
+
+        from .xy_chart import show_xy_chart
+        series = fos_history(self.stages, self.initial)
+        if not series:
             warn = next((r.notes.get("fos_warning") for r in self.stages
                          if r.notes.get("fos_warning")), None)
-            QMessageBox.information(
-                self, "FoS vs time",
-                warn or "No stage has a computed factor of safety. Tick "
-                        "'Calculate SF' on the stages you need and "
-                        "recompute.")
-            return
-        try:
-            import matplotlib
-            matplotlib.use("QtAgg", force=False)
-            from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
-            from matplotlib.figure import Figure
-            from PySide6.QtWidgets import QDialog
-        except ImportError:
-            QMessageBox.information(self, "FoS vs time",
-                                    "matplotlib is not installed.")
-            return
-        methods = sorted({m for _t, f in pts for m in f})
-        dlg = QDialog(self)
-        dlg.setWindowTitle(tr("Factor of safety vs time"))
-        dlg.resize(620, 420)
-        lay = QVBoxLayout(dlg)
-        fig = Figure(figsize=(5.8, 3.9), tight_layout=True)
-        ax = fig.add_subplot(111)
-        for mid in methods:
-            xs = [t for t, f in pts if mid in f]
-            ys = [f[mid] for _t, f in pts if mid in f]
-            ax.plot(xs, ys, marker="o", label=mid)
-        ax.set_xlabel("Time")
-        ax.set_ylabel("Critical factor of safety")
-        ax.grid(True, alpha=0.3)
-        if len(methods) > 1:
-            ax.legend(fontsize=8)
-        lay.addWidget(FigureCanvasQTAgg(fig))
-        dlg.exec()
+            self.statusBar().showMessage(
+                tr(warn) if warn else tr(
+                    "No stage has a computed factor of safety. Tick "
+                    "'Calculate SF' on the stages you need and recompute."),
+                15000)
+            return None
+        dlg = show_xy_chart(self, tr("Factor of safety vs time"), series,
+                            tr("Time"), tr("Factor of safety"))
+        if dlg is None:
+            self.statusBar().showMessage(tr("matplotlib is not installed."),
+                                         15000)
+        return dlg
 
     def _summary(self) -> None:
         r = self.result

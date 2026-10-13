@@ -1521,57 +1521,30 @@ class InterpretWindow(QMainWindow):
         eight subtly different charts appear. ``yscale`` is matplotlib's
         (v0.1.269: the convergence chart spans ten decades, and plotting
         log10 of the values instead would turn a zero change into -inf).
+        v0.1.308 (D311): the chart itself is ``ogr_gui.xy_chart``, which
+        *Interpret Groundwater* uses too.
         """
-        try:
-            import matplotlib
-            matplotlib.use("QtAgg", force=False)
-            from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
-            from matplotlib.figure import Figure
-        except ImportError:
+        from .xy_chart import show_xy_chart
+        dlg = show_xy_chart(self, title, series, xlabel, ylabel,
+                            marker=marker, yscale=yscale)
+        if dlg is None:
             self._info(tr("matplotlib is not installed."))
-            return None
-        from PySide6.QtWidgets import QDialog, QVBoxLayout
-        dlg = QDialog(self)
-        dlg.setWindowTitle(title)
-        dlg.resize(680, 460)
-        lay = QVBoxLayout(dlg)
-        fig = Figure(figsize=(6.4, 4.2), tight_layout=True)
-        ax = fig.add_subplot(111)
-        for label, xs, ys in series:
-            ax.plot(xs, ys, marker=marker, label=label)
-        if yscale != "linear":
-            ax.set_yscale(yscale)
-        ax.set_xlabel(xlabel)
-        ax.set_ylabel(ylabel)
-        ax.grid(True, alpha=0.3)
-        if len(series) > 1 or series and series[0][0]:
-            ax.legend(fontsize=8)
-        lay.addWidget(FigureCanvasQTAgg(fig))
-        # NON-modal on purpose: a chart that blocks the application cannot
-        # be compared against the model beside it, and two charts cannot
-        # be held open at once. The reference is kept so Qt does not
-        # collect the window as soon as this returns.
-        dlg.show()
-        if not hasattr(self, "_chart_windows"):
-            self._chart_windows = []
-        self._chart_windows.append(dlg)
         return dlg
 
     # ---- Data --------------------------------------------------------
     def _graph_sf_with_time(self) -> None:
-        """Factor of safety against time, from the transient stages."""
-        results = getattr(self.project, "transient_results", None) or []
-        pts = [(r.notes.get("time", 0.0), r.notes.get("fos") or {})
-               for r in results if r.notes.get("fos")]
-        if not pts:
+        """Factor of safety against time, from the transient stages.
+        v0.1.308 (D311): the series is ``fos_history``, the same one
+        *Interpret Groundwater* plots."""
+        from ogr_slip2d.transient_stability import fos_history
+        series = fos_history(
+            getattr(self.project, "transient_results", None) or [],
+            getattr(self.project, "transient_initial_result", None))
+        if not series:
             self._info(tr(
                 "No stage has a computed factor of safety. Tick "
                 "'Calculate SF' on the stages you need and recompute."))
             return
-        methods = sorted({m for _t, f in pts for m in f})
-        series = [(mid, [t for t, f in pts if mid in f],
-                   [f[mid] for _t, f in pts if mid in f])
-                  for mid in methods]
         self._plot_xy(tr("Factor of safety vs time"), series,
                       tr("Time"), tr("Factor of safety"))
 

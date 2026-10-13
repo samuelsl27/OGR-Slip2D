@@ -49,6 +49,7 @@ __all__ = [
     "stage_boundary_conditions",
     "with_stage_water",
     "groundwater_query_solver",
+    "fos_history",
     "INITIAL_STATE_NOT_CONVERGED",
 ]
 
@@ -464,6 +465,27 @@ def run_transient_stability(project, method_ids=None, *,
         if stage.factors:
             r.notes["fos_min"] = min(stage.factors.values())
     return out
+
+
+# ======================================================================
+def fos_history(results, initial=None) -> list:
+    """The factor of safety against time, one series per method:
+    ``[(method_id, times, factors)]``, from the ``notes["fos"]`` that
+    :func:`run_transient_stability` leaves on each stage — and on the
+    initial state, at t = 0, when it has one.
+
+    v0.1.308 (D311) — the one series of both Interpret windows, which used
+    to build it each their own way from the same notes. Stages without a
+    factor (not flagged *Calculate SF*) are left out of every series."""
+    points = []
+    for r in ([initial] if initial is not None else []) + list(results or []):
+        notes = getattr(r, "notes", None) or {}
+        fos = notes.get("fos") or {}
+        if fos:
+            points.append((float(notes.get("time", 0.0)), fos))
+    methods = sorted({m for _t, f in points for m in f})
+    return [(mid, [t for t, f in points if mid in f],
+             [f[mid] for _t, f in points if mid in f]) for mid in methods]
 
 
 # ======================================================================

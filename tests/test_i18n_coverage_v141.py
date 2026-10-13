@@ -125,7 +125,10 @@ _VISIBLE_MESSAGES = [
 # their buttons (disabled without a mesh), the capture of the initial state
 # writes to the dialog's own line, and "Select a stage first." goes
 # through tr().
-_UNWRAPPED_BUDGET_MESSAGES = 12
+# v0.1.308 — 12 -> 10: the two literal message boxes of Interpret
+# Groundwater's "FoS vs time…" (D311): its chart is non-modal and shared with
+# Interpret, and "no factor" goes to the status bar through tr().
+_UNWRAPPED_BUDGET_MESSAGES = 10
 
 
 def _gui_sources():
