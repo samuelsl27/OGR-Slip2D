@@ -270,7 +270,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.305"
+    VERSION = "0.1.306"
 
     def __init__(self) -> None:
         super().__init__()
@@ -3453,11 +3453,19 @@ class MainWindow(QMainWindow):
         # v0.1.280 (D284): a mesh of another model (an edited geometry, a
         # deleted material) is not computed. NOT modal, like the other
         # refusals of this slot: a test or a script reaches it.
-        from ogr_core.project.rules import mesh_mismatch_reason
+        from ogr_core.project.rules import (mesh_mismatch_reason,
+                                            transient_without_stages)
         why = mesh_mismatch_reason(self.project)
         if why:
             self.statusBar().showMessage(
                 tr("Cannot compute: %s") % tr(why[0]).format(*why[1]), 15000)
+            return
+        # v0.1.306 (D294): a transient with no stages is saved as work in
+        # progress, and computing it used to solve a steady state in silence
+        why = transient_without_stages(self.project)
+        if why:
+            self.statusBar().showMessage(tr("Cannot compute: %s") % tr(why),
+                                         15000)
             return
         from ogr_slip2d.transient_stability import solve_project_groundwater
 

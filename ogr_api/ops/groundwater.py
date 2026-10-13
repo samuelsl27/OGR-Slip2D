@@ -586,6 +586,11 @@ def transient_set(ws, project_id: Optional[str] = None,
         if enabled and others:
             notes.append("Switched off (one advanced groundwater option at "
                          "a time): " + ", ".join(others) + ".")
+        # v0.1.306 (D294): accepted, as work in progress, and said
+        from ogr_core.project.rules import transient_without_stages
+        why = transient_without_stages(project)
+        if why:
+            notes.append(why)
         if enabled and any(st.get("calculate_sf")
                            for st in gw.transient_stages) and not any(
                 m.pore_pressure == PorePressureType.FEM_SEEPAGE
@@ -745,11 +750,18 @@ def groundwater_run(ws, project_id: Optional[str] = None,
         mesh = _need_mesh(project)
         # v0.1.280 (D284): a mesh of another model is refused before its
         # conditions are even looked at
-        from ogr_core.project.rules import mesh_mismatch
+        from ogr_core.project.rules import (mesh_mismatch,
+                                            transient_without_stages)
         why = mesh_mismatch(project)
         if why:
             raise Conflict(why, hint="Regenerate it with mesh_generate; the "
                                      "boundary conditions go with it.")
+        # v0.1.306 (D294): it used to run a steady job in silence
+        why = transient_without_stages(project)
+        if why:
+            raise NotConfigured(why, hint="transient_set with stages, or "
+                                          "transient_set(enabled=false) for "
+                                          "a steady analysis.")
         if project.seepage_bcs is None:
             raise NotConfigured(
                 "No boundary conditions have been set.",

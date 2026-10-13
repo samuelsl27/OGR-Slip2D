@@ -12,9 +12,18 @@ The page is only reachable when the *Transient Groundwater* advanced
 option is enabled, which is itself exclusive with Excess Pore Pressure
 and Rapid Drawdown — the main window enforces that.
 
+v0.1.306 (D294) — the analysis can be accepted with NO stages, so the
+initial state can be captured first, the boundary conditions changed in
+their own dialog (which cannot open while this one is), and the stage
+added afterwards. The dialog says which initial state the transient starts
+from and lets it be cleared; computing a transient with no stages is
+refused, and the dialog says that too.
+
 Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
+
+import copy
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -44,10 +53,24 @@ class TransientStagesDialog(QDialog):
         self.settings = settings          # GroundwaterSettings
         self._current_bcs = current_bcs   # SeepageBoundaryConditions
         self._stage_bcs: dict = {}
+        # v0.1.306 (D294) — what OK writes as the initial state. It starts
+        # as the stored one, so that clearing it is a change OK can write.
+        self._initial_bcs = copy.deepcopy(settings.transient_initial_bcs)
         self.setWindowTitle(tr("Transient Groundwater"))
         self.resize(520, 480)
 
         v = QVBoxLayout(self)
+        # Built first: adding the stored rows below already refreshes them.
+        self.lbl_initial = QLabel("")
+        self.lbl_initial.setWordWrap(True)
+        self.lbl_no_stages = QLabel("")
+        self.lbl_no_stages.setWordWrap(True)
+        self.b_clear_initial = QPushButton(tr("Clear initial state"))
+        self.b_clear_initial.setToolTip(tr(
+            "Start the transient from the current boundary conditions "
+            "again, which means the model starts in equilibrium with "
+            "them."))
+        self.b_clear_initial.clicked.connect(self._clear_initial)
 
         self.chk_enabled = QCheckBox(
             tr("Transient groundwater analysis"))
@@ -78,19 +101,26 @@ class TransientStagesDialog(QDialog):
 
         row = QHBoxLayout()
         b_cap = QPushButton(tr("Capture current BCs"))
-        b_cap.setToolTip(
+        b_cap.setToolTip(tr(
             "Store the boundary conditions currently defined in Set "
             "Boundary Conditions into the selected stage. A transient "
             "run only evolves if the stage conditions differ from the "
-            "initial ones.")
+            "initial ones."))
         b_cap.clicked.connect(self._capture)
         row.addWidget(b_cap)
         b_init = QPushButton(tr("Capture as initial state"))
-        b_init.setToolTip(
+        b_init.setToolTip(tr(
             "Store the current boundary conditions as the INITIAL state "
-            "(the steady field the transient run starts from).")
+            "(the steady field the transient run starts from)."))
         b_init.clicked.connect(self._capture_initial)
         row.addWidget(b_init)
+        if current_bcs is None:
+            # Conditions are keyed by mesh node: without a mesh there are
+            # none to capture (they used to answer with a modal box).
+            for b in (b_cap, b_init):
+                b.setEnabled(False)
+                b.setToolTip(tr(
+                    "Needs the finite-element mesh: Groundwater > Mesh."))
         b_add = QPushButton(tr("Add stage"))
         b_add.clicked.connect(lambda: self._add_row(self._next_time(),
                                                     False, ""))
@@ -100,6 +130,13 @@ class TransientStagesDialog(QDialog):
             row.addWidget(b)
         row.addStretch(1)
         v.addLayout(row)
+        # Next to what it clears, and not a fifth button on a row that is
+        # already too narrow in Spanish (D293).
+        init_row = QHBoxLayout()
+        init_row.addWidget(self.lbl_initial, 1)
+        init_row.addWidget(self.b_clear_initial)
+        v.addLayout(init_row)
+        v.addWidget(self.lbl_no_stages)
 
         gb = QGroupBox(tr("Transient FEA options"))
         f = QFormLayout(gb)
@@ -131,11 +168,31 @@ class TransientStagesDialog(QDialog):
         self.table.setEnabled(on)
         if on and (self.settings.excess_pore_pressure
                    or self.settings.rapid_drawdown):
-            self.lbl_excl.setText(
+            self.lbl_excl.setText(tr(
                 "<i>Enabling transient analysis will switch off the other "
-                "advanced groundwater option.</i>")
+                "advanced groundwater option.</i>"))
         else:
             self.lbl_excl.setText("")
+        self._refresh_notes()
+
+    def _refresh_notes(self) -> None:
+        """The two lines that say what OK would store: which initial state
+        the transient starts from, and that it has no stage yet."""
+        if self._initial_bcs is None:
+            self.lbl_initial.setText(tr(
+                "Initial state: the current boundary conditions (none "
+                "captured)."))
+        else:
+            self.lbl_initial.setText(tr(
+                "Initial state: captured boundary conditions ({0} nodes, "
+                "{1} segments).").format(
+                    len(self._initial_bcs.get("nodes", [])),
+                    len(self._initial_bcs.get("segments", []))))
+        self.b_clear_initial.setEnabled(self._initial_bcs is not None)
+        empty = self.chk_enabled.isChecked() and self.table.rowCount() == 0
+        self.lbl_no_stages.setText(tr(
+            "No stages yet: Compute Groundwater will refuse until you add "
+            "one.") if empty else "")
 
     def _next_time(self) -> float:
         times = []
@@ -156,19 +213,17 @@ class TransientStagesDialog(QDialog):
         chk.setCheckState(Qt.Checked if calc_sf else Qt.Unchecked)
         self.table.setItem(r, 1, chk)
         self.table.setItem(r, 2, QTableWidgetItem(label))
+        self._refresh_notes()
 
     def _capture(self) -> None:
         """Snapshot the current boundary conditions into the selected
         stage."""
+        if self._current_bcs is None:     # the button is disabled then
+            return
         r = self.table.currentRow()
         if r < 0:
-            QMessageBox.information(self, "Transient Groundwater",
-                                    "Select a stage first.")
-            return
-        if self._current_bcs is None:
-            QMessageBox.information(
-                self, "Transient Groundwater",
-                "No boundary conditions defined yet.")
+            QMessageBox.information(self, tr("Transient Groundwater"),
+                                    tr("Select a stage first."))
             return
         self._stage_bcs[r] = self._current_bcs.to_dict()
         item = self.table.item(r, 2)
@@ -178,17 +233,20 @@ class TransientStagesDialog(QDialog):
                                QTableWidgetItem((label + " [BC]").strip()))
 
     def _capture_initial(self) -> None:
-        if self._current_bcs is None:
-            QMessageBox.information(
-                self, "Transient Groundwater",
-                "No boundary conditions defined yet.")
+        """Keep the current boundary conditions as the initial state."""
+        if self._current_bcs is None:     # the button is disabled then
             return
         # v0.1.200 — kept until OK: this wrote the settings at once, so
-        # the capture survived Cancel.
+        # the capture survived Cancel. v0.1.306 (D294) — said on the
+        # dialog's own line instead of a modal box (in English, and it
+        # said "stored" of something stored only on OK).
         self._initial_bcs = self._current_bcs.to_dict()
-        QMessageBox.information(
-            self, "Transient Groundwater",
-            "Current boundary conditions stored as the initial state.")
+        self._refresh_notes()
+
+    def _clear_initial(self) -> None:
+        """Start from the current conditions again (written on OK)."""
+        self._initial_bcs = None
+        self._refresh_notes()
 
     def _delete(self) -> None:
         rows = sorted({i.row() for i in self.table.selectedIndexes()},
@@ -201,6 +259,7 @@ class TransientStagesDialog(QDialog):
             self._stage_bcs.pop(r, None)
             self._stage_bcs = {(k - 1 if k > r else k): v
                                for k, v in self._stage_bcs.items()}
+        self._refresh_notes()
 
     # ------------------------------------------------------------------
     def stages(self) -> list:
@@ -227,7 +286,8 @@ class TransientStagesDialog(QDialog):
     def _accept(self) -> None:
         # v0.1.200 — the checks moved to
         # ``GroundwaterSettings.set_transient``, which an agent's stages go
-        # through too; it changes nothing when one fails.
+        # through too; it changes nothing when one fails. v0.1.306 (D294):
+        # no stages is no longer one of them.
         try:
             self.settings.set_transient(
                 self.chk_enabled.isChecked(), self.stages(),
@@ -238,6 +298,6 @@ class TransientStagesDialog(QDialog):
             QMessageBox.warning(self, tr("Transient Groundwater"),
                                 tr(str(exc)))
             return
-        if getattr(self, "_initial_bcs", None) is not None:
-            self.settings.transient_initial_bcs = self._initial_bcs
+        # Always written: clearing the initial state is a change too.
+        self.settings.transient_initial_bcs = self._initial_bcs
         self.accept()

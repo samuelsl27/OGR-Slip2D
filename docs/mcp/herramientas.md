@@ -98,7 +98,7 @@ Una carga lineal «normal al contorno» o «con ángulo respecto al contorno» t
 | `mesh_reset` | | Quitar la malla y todo lo calculado sobre ella. |
 | `seepage_bc_set` | | Una condición de contorno en un lado (`left`, `right`, `bottom`, `ground`), en nodos, a lo largo de una polilínea del contorno, o un embalse a una cota. |
 | `seepage_bc_clear` | | Volver a las condiciones por defecto (desconocida en la superficie, sin flujo en el resto), que no prescriben ninguna carga. |
-| `transient_set` | | El transitorio por etapas: tiempos, condiciones de cada etapa, *Calculate SF* y estado inicial. |
+| `transient_set` | | El transitorio por etapas: tiempos, condiciones de cada etapa, *Calculate SF* y estado inicial. Se puede guardar sin etapas mientras se prepara, pero `groundwater_run` no lo calcula hasta que tenga una. |
 | `water_grid_set` | | Rejilla de presiones de agua (puntos o un CSV) y sus opciones de interpolación. |
 | `water_grid_delete` | | Quitarla. |
 | `groundwater_run` | | Resolver el agua (permanente, o las etapas del transitorio con su factor de seguridad) en segundo plano. El campo se escribe de vuelta en el modelo en un paso de deshacer, salvo que el modelo haya cambiado mientras tanto. |

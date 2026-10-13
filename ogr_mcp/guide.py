@@ -103,7 +103,8 @@ stability analysis read the field.
   user curve take matric suction in kPa.
 * Transient: transient_set with stages (time, calculate_sf, their own
   conditions); groundwater_run then gives a factor of safety per flagged
-  stage.
+  stage. A transient may be saved with no stages while it is prepared (the
+  initial state first), but groundwater_run refuses it until it has one.
 * Rapid drawdown: turn it on in settings (groundwater.rapid_drawdown) with
   a drawdown line; drawdown_sweep_run searches at several reservoir levels,
   because the total drawdown is not always the worst.

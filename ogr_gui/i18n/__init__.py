@@ -1034,9 +1034,46 @@ _DICTS: dict[str, dict[str, str]] = {
         # message through tr(), so each one is a key.
         "Each stage is an object with a 'time'.":
             "Cada etapa es un objeto con un 'time'.",
-        'Define at least one stage, or switch the transient analysis off.':
-            'Defina al menos una etapa o desactive el análisis '
-            'transitorio.',
+        # v0.1.306 (D294) — the transient may be accepted with no stages
+        # (the check "Define at least one stage…" is gone); computing it is
+        # refused instead, with rules.TRANSIENT_WITHOUT_STAGES.
+        "The transient analysis is on and has no stages: there is nothing "
+        "to compute. Add a stage in Groundwater > Transient Groundwater, or "
+        "switch the transient analysis off.":
+            "El análisis transitorio está activado y no tiene etapas: no hay "
+            "nada que calcular. Añade una etapa en Agua subterránea > Agua "
+            "subterránea transitoria, o desactiva el análisis transitorio.",
+        "Store the boundary conditions currently defined in Set Boundary "
+        "Conditions into the selected stage. A transient run only evolves "
+        "if the stage conditions differ from the initial ones.":
+            "Guarda en la etapa seleccionada las condiciones de contorno "
+            "definidas ahora en Definir condiciones de contorno. Un "
+            "transitorio solo evoluciona si las condiciones de la etapa "
+            "difieren de las iniciales.",
+        "Store the current boundary conditions as the INITIAL state (the "
+        "steady field the transient run starts from).":
+            "Guarda las condiciones de contorno actuales como estado INICIAL "
+            "(el campo permanente del que parte el transitorio).",
+        "Clear initial state": "Borrar estado inicial",
+        "Start the transient from the current boundary conditions again, "
+        "which means the model starts in equilibrium with them.":
+            "El transitorio vuelve a partir de las condiciones de contorno "
+            "actuales, es decir, el modelo empieza en equilibrio con ellas.",
+        "<i>Enabling transient analysis will switch off the other advanced "
+        "groundwater option.</i>":
+            "<i>Activar el análisis transitorio desactivará la otra opción "
+            "avanzada de agua subterránea.</i>",
+        "Initial state: the current boundary conditions (none captured).":
+            "Estado inicial: las condiciones de contorno actuales (no se ha "
+            "capturado ninguno).",
+        "Initial state: captured boundary conditions ({0} nodes, {1} "
+        "segments).":
+            "Estado inicial: condiciones de contorno capturadas ({0} nodos, "
+            "{1} segmentos).",
+        "No stages yet: Compute Groundwater will refuse until you add one.":
+            "Aún no hay etapas: Calcular agua subterránea se negará hasta que "
+            "añadas una.",
+        "Select a stage first.": "Selecciona antes una etapa.",
         'Stage times must be positive.':
             'Los tiempos de las etapas deben ser positivos.',
         'Stage times must be distinct.':

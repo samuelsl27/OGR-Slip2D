@@ -816,11 +816,16 @@ class TestRefusalsChangeNothing:
         ws = _ws()
         pid = _box(ws, 20, 10)
         before = _state(ws, pid)
-        for stages in ([{"time": 5.0}, {"time": 5.0}], [{"time": -1.0}],
-                       []):
+        for stages in ([{"time": 5.0}, {"time": 5.0}], [{"time": -1.0}]):
             with pytest.raises(InvalidArgument):
                 call(ws, "transient_set", project_id=pid, stages=stages)
             assert _state(ws, pid) == before
+        # v0.1.306 (D294): no stages used to be refused here too; it is
+        # accepted as work in progress, says so, and groundwater_run is
+        # what refuses it (tests/test_transient_no_stages_v1306.py)
+        out = call(ws, "transient_set", project_id=pid, stages=[])
+        assert out["transient"] is True and out["stages"] == []
+        assert any("has no stages" in n for n in out["notes"]), out["notes"]
 
     def test_reading_needs_a_field_and_the_right_view(self):
         from ogr_api import Conflict, NotFound, call

@@ -215,10 +215,19 @@ class GroundwaterSettings:
         """Configure the staged transient analysis, all or nothing.
 
         v0.1.200 (spec 008, F3a) — the checks of the interface's transient
-        dialog, moved here so an agent's stages pass the same ones: with
-        the analysis on, at least one stage, every time positive and no
-        two equal. Stages are stored sorted by time. Raises ``ValueError``
-        and changes nothing when a check fails.
+        dialog, moved here so an agent's stages pass the same ones: every
+        time positive and no two equal. Stages are stored sorted by time.
+        Raises ``ValueError`` and changes nothing when a check fails.
+
+        v0.1.306 (D294) — the analysis may be on with NO stages. It used to
+        be refused, and that broke the natural order of work: capture the
+        initial state, close, change the boundary conditions in their own
+        dialog and come back to add the stage — the capture was lost
+        unless a placeholder stage was invented. A transient without
+        stages is a configuration in progress, not an analysis: every door
+        that computes refuses it and says why
+        (``rules.transient_without_stages``), instead of solving a steady
+        state in silence as they did.
         """
         clean = []
         for st in stages or []:
@@ -232,9 +241,6 @@ class GroundwaterSettings:
             clean.append(entry)
         clean.sort(key=lambda s: s["time"])
         if enabled:
-            if not clean:
-                raise ValueError("Define at least one stage, or switch the "
-                                 "transient analysis off.")
             times = [s["time"] for s in clean]
             if any(t <= 0 for t in times):
                 raise ValueError("Stage times must be positive.")

@@ -167,6 +167,13 @@ def status_of(project) -> dict:
         if m.id not in used and not any(
                 b.material_id == m.id for b in project.boundaries):
             notes.append(f"Material {m.name!r} is used by no region.")
+    # v0.1.306 (D294) — the groundwater refuses a transient with no stages;
+    # a note and not a blocker, because the stability analysis is not
+    # affected: this is where an agent looks before groundwater_run
+    from ogr_core.project.rules import transient_without_stages
+    why = transient_without_stages(project)
+    if why:
+        notes.append(why)
     # v0.1.298 (D298) — a region whose material no longer exists: a
     # warning, not a blocker (the owner's decision: say what is wrong and
     # what to change, and let the user compute anyway).

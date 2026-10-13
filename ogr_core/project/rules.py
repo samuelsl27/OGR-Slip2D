@@ -1555,6 +1555,38 @@ def mesh_mismatch_reason(project):
     return None
 
 
+#: The reason of :func:`transient_without_stages`, an English key that the
+#: interface translates at the point of use.
+TRANSIENT_WITHOUT_STAGES = (
+    "The transient analysis is on and has no stages: there is nothing to "
+    "compute. Add a stage in Groundwater > Transient Groundwater, or switch "
+    "the transient analysis off.")
+
+
+def transient_without_stages(project) -> Optional[str]:
+    """Why the groundwater cannot be computed as configured, when the
+    transient analysis is on with no stages; None otherwise (v0.1.306,
+    D294).
+
+    A transient analysis is an initial state and the instants at which the
+    field is observed (Celia, Bouloutas & Zarba 1990 pose it as an initial
+    condition and boundary conditions over a time interval). With no stages
+    there is no interval, and ``TransientSeepageSolver.solve_transient``
+    returns nothing. Every door used to fall back to a STEADY analysis
+    with the current conditions instead — ignoring the initial state the
+    user had captured — and said nothing. Computing the initial state
+    alone was considered and rejected: it would become the field the
+    stability analysis reads, weighted with the water of the CURRENT
+    conditions, which is exactly the situation of a user who captured the
+    initial state and then changed the conditions. Every door asks this
+    and refuses (decision of the owner, 2026-10-13); the configuration
+    itself can be saved like that, as work in progress."""
+    gw = project.settings.groundwater
+    if gw.transient and not gw.transient_stages:
+        return TRANSIENT_WITHOUT_STAGES
+    return None
+
+
 def set_fem_mesh(project, mesh) -> list[str]:
     """Install ``mesh`` and drop what belonged to the previous one; returns
     what was dropped, in words.

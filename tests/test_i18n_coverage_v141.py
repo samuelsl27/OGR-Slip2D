@@ -120,7 +120,12 @@ _VISIBLE_MESSAGES = [
 # v0.1.290 — 62 -> 16: every message of the main window goes through tr()
 # (D291: 119 status-bar, _info and message-box arguments, f-strings
 # included, which these patterns never saw). The 16 left are in dialogs.
-_UNWRAPPED_BUDGET_MESSAGES = 16
+# v0.1.306 — 16 -> 12: the transient stages dialog's four literal message
+# boxes (D294): the two "No boundary conditions defined yet." went with
+# their buttons (disabled without a mesh), the capture of the initial state
+# writes to the dialog's own line, and "Select a stage first." goes
+# through tr().
+_UNWRAPPED_BUDGET_MESSAGES = 12
 
 
 def _gui_sources():

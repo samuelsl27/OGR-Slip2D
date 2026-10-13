@@ -1489,7 +1489,9 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
                           description="Steps per stage; 0 = automatic.")
                       ] = None) -> dict[str, Any]:
         """Configure the staged transient groundwater analysis (times,
-        per-stage conditions, Calculate SF, initial state)."""
+        per-stage conditions, Calculate SF, initial state). It may be on
+        with no stages while you prepare it, but groundwater_run refuses it
+        until it has one."""
         return run("transient_set", project_id=project_id, enabled=enabled,
                    stages=stages, initial=initial, tolerance=tolerance,
                    max_iterations=max_iterations, time_steps=time_steps)
