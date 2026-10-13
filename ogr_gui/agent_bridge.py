@@ -79,6 +79,11 @@ class WindowHost:
     # -- after the operations -------------------------------------------
     def after_edit(self) -> None:
         w = self.window
+        # v0.1.303 (D292) — only a step that changed the model gets here
+        # (``Workspace.mutate``), and it needs saving: the field written
+        # back by groundwater_run notifies nothing, so a window that had
+        # been saved closed without asking and lost it.
+        w.project.is_dirty = True
         w.canvas.refresh_scene()
         w.refresh_action_availability()
         # v0.1.299 (D297) — an edit can rename the project (model_define's

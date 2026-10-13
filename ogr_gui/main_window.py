@@ -55,12 +55,20 @@ from ogr_core.project import Project, save_results
 from ogr_core.project.commands import (
     AddBoundaryCommand,
     AssignMaterialCommand,
+    HEAVY_ATTRS,
+    LIGHT_ATTRS,
     PaintRegionCommand,
     CommandStack,
     MacroCommand,
     RemoveBoundaryCommand,
     ReplaceBoundaryCommand,
 )
+
+#: v0.1.303 (D292) — what a step of the finite-element mesh or of the
+#: computed field captures: the model and the mesh and fields, as the API's
+#: ``mesh_generate`` and ``groundwater_run`` do (the owner's decision: they
+#: are undo steps, 2026-10-12).
+_WITH_FIELDS = LIGHT_ATTRS + HEAVY_ATTRS
 # v0.1.77 — the method classes and the search classes are no longer
 # imported here. The window does not build an analysis any more; it asks
 # ``ogr_slip2d.analysis_runner`` for one, which is what lets the CLI ask
@@ -262,7 +270,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.302"
+    VERSION = "0.1.303"
 
     def __init__(self) -> None:
         super().__init__()
@@ -1661,6 +1669,7 @@ class MainWindow(QMainWindow):
             self._update_groundwater_actions()
             self._update_statistics_actions()
 
+    @undo_step("Generate FE mesh", attrs=_WITH_FIELDS)
     def _generate_fem_mesh(self) -> None:
         """v0.1.25 — generate the FE mesh for the seepage analysis."""
         from PySide6.QtWidgets import QInputDialog
@@ -1702,6 +1711,7 @@ class MainWindow(QMainWindow):
                 tr(d) for d in dropped) + ")"
         self.statusBar().showMessage(msg, 12000)
 
+    @undo_step("Reset FE mesh", attrs=_WITH_FIELDS)
     def _reset_fem_mesh(self) -> None:
         """v0.1.25 — discard the FE mesh."""
         if getattr(self.project, "fem_mesh", None) is None:
@@ -2908,6 +2918,7 @@ class MainWindow(QMainWindow):
             tr("Copy Image will use vector data, which stays sharp when "
                "the figure is enlarged."), 6000)
 
+    @undo_step("Import properties")
     def _import_properties(self) -> None:
         """Bring materials and supports across from another project.
 
@@ -3230,6 +3241,7 @@ class MainWindow(QMainWindow):
                 act.setEnabled(bool(enabled))
                 act.setStatusTip("" if enabled else reason)
 
+    @undo_step("Hydraulic properties")
     def _define_hydraulic_properties(self) -> None:
         if not self.project.materials:
             self._info(tr("Define some materials first."))
@@ -3274,6 +3286,7 @@ class MainWindow(QMainWindow):
             return default_boundary_conditions(mesh)
         return copy.deepcopy(bcs)
 
+    @undo_step("Set boundary conditions")
     def _set_boundary_conditions(self) -> None:
         mesh = getattr(self.project, "fem_mesh", None)
         if mesh is None or mesh.element_count == 0:
@@ -3290,6 +3303,7 @@ class MainWindow(QMainWindow):
                 tr('Boundary conditions: {0} nodes, {1} segments').format(
                     len(bcs.nodes), len(bcs.segments)), 5000)
 
+    @undo_step("Transient groundwater")
     def _edit_transient_stages(self) -> None:
         """v0.1.30 — edit the transient stages (Phase 6)."""
         from .dialogs.transient_stages_dialog import TransientStagesDialog
@@ -3342,6 +3356,10 @@ class MainWindow(QMainWindow):
         self._gw_solver = getattr(self.project, "_gw_solver", None)
         return list(self.project.transient_results or [])
 
+    # v0.1.303 (D292) — a step with the field, as the API's; and a
+    # recorded step marks the project modified, which computing the
+    # groundwater never did although the field is saved in the .ogr
+    @undo_step("Compute groundwater", attrs=_WITH_FIELDS)
     def _compute_groundwater(self) -> None:
         mesh = getattr(self.project, "fem_mesh", None)
         if mesh is None or mesh.element_count == 0:
@@ -3440,6 +3458,7 @@ class MainWindow(QMainWindow):
         w.show()
         self._gw_interpret_window = w
 
+    @undo_step("Water pressure grid")
     def _edit_water_pressure_grid(self) -> None:
         """v0.1.23 — edit / import the Water Pressure Grid."""
         from .dialogs.water_pressure_grid_dialog import (
@@ -3732,6 +3751,9 @@ class MainWindow(QMainWindow):
     # ==================================================================
     # Properties
     # ==================================================================
+    # v0.1.303 (D292) — the edit H8 of the first GUI test lost: a
+    # material removed here was not an undo step
+    @undo_step("Define materials")
     def act_define_materials(self) -> None:
         dlg = self._materials_dialog()
         if dlg.exec():
@@ -3844,6 +3866,7 @@ class MainWindow(QMainWindow):
             dlg.cleared_material_ids(),
         )
 
+    @undo_step("Assign water surface")
     def apply_water_surface_assignment(self, wid, picked, cleared) -> None:
         """Write one Assign Water Surface decision onto the materials.
 
@@ -4771,6 +4794,7 @@ class MainWindow(QMainWindow):
                 x, y, params['magnitude']), 4000,
         )
 
+    @undo_step("Set tension crack")
     def act_define_tension_crack(self) -> None:
         """Open the Define Tension Crack dialog.
 
@@ -5368,6 +5392,7 @@ class MainWindow(QMainWindow):
         menu.addAction(a_def)
         menu.exec(global_pos)
 
+    @undo_step("Assign material")
     def _do_assign_material_at(
         self, x: float, y: float, material_id: str,
     ) -> None:

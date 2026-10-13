@@ -2435,6 +2435,10 @@ _DICTS: dict[str, dict[str, str]] = {
         "Water pressure grid": "Malla de presiones de agua",
         "Delete water pressure grid": "Eliminar malla de presiones de agua",
         "Compute groundwater": "Calcular agua subterránea",
+        # v0.1.303 (D292) — the window's own steps of this family
+        "Define materials": "Definir materiales",
+        "Assign water surface": "Asignar superficie de agua",
+        "Hydraulic properties": "Propiedades hidráulicas",
         # v0.1.298 (D298) — rules.ORPHAN_ASSIGNMENT and the question
         "The region at ({0:.2f}, {1:.2f}) is assigned a material that no longer exists. Assign it another material (Properties > Assign Materials); a surface through it cannot be analysed.":
             "La región en ({0:.2f}, {1:.2f}) tiene asignado un material que ya no existe. Asígnale otro material (Propiedades > Asignar materiales); una superficie que la cruce no se puede analizar.",

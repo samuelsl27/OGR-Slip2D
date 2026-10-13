@@ -85,7 +85,6 @@ WRITER_DIALOGS = {"AddGridDialog", "AnnotationsDialog", "DefineSupportDialog",
                   "TransientStagesDialog", "WaterPressureGridDialog"}
 _COPIES = {"list", "sorted", "reversed", "tuple", "set", "dict"}
 
-_P303 = "pending: materials, properties and water (0.1.303)"
 _P304 = "pending: loads and supports (0.1.304)"
 _P305 = ("pending: settings and search, statistics, surfaces and focus, "
          "annotations, DXF (0.1.305)")
@@ -98,20 +97,6 @@ EXCEPTIONS = {
                         "drag as one ReplaceBoundaryCommand",
     "_on_vertex_drag_finished": "rewinds the draft of _on_vertex_moved and "
                                 "records it with command_stack.do",
-    # -- 0.1.303 --------------------------------------------------------
-    "act_define_materials": _P303,
-    "_import_properties": _P303,
-    "apply_water_surface_assignment": _P303,
-    "_do_assign_material_at": _P303,
-    "act_define_tension_crack": _P303,
-    "_define_hydraulic_properties": _P303,
-    "_edit_water_pressure_grid": _P303,
-    "_set_boundary_conditions": _P303,
-    "_edit_transient_stages": _P303,
-    "_generate_fem_mesh": _P303,
-    "_reset_fem_mesh": _P303,
-    "_compute_groundwater": _P303,
-    "_compute_transient": _P303,
     # -- 0.1.304 --------------------------------------------------------
     "_on_dist_load_segment_picked": _P304,
     "_on_line_load_point_picked": _P304,
@@ -157,7 +142,8 @@ EXCEPTIONS = {
 
 #: How many there may be. Lowering it is the point; raising it needs a
 #: reason in a changelog.
-BUDGET = 54
+#: 54 in 0.1.301; 41 in 0.1.303 (materials, properties and water).
+BUDGET = 41
 
 
 def _is_project(e):
@@ -399,7 +385,7 @@ class TestTheInventory:
         assert all(r.strip() for r in EXCEPTIONS.values())
         assert len(EXCEPTIONS) <= BUDGET, (len(EXCEPTIONS), BUDGET)
         # frozen: a version that takes a family out lowers it
-        assert BUDGET == 54
+        assert BUDGET == 41
 
     def test_the_writer_lists_are_not_ghosts(self):
         import ogr_gui.dialogs as dialogs

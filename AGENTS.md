@@ -267,13 +267,15 @@ este tiempo, lánzala en segundo plano, guarda el código de salida del
 proceso (`echo EXIT=$?`) y no toques el programa mientras corre.
 
 **Un corte sin totales con código 127** no es un test fallado: en Git Bash,
-127 es un proceso que terminó con 0xC0000409, lo que hace `abort()`. Desde
-v0.1.300 aborta a veces en el mismo test,
-`test_a_shared_seed_is_denounced`, al abrir el pool de procesos de una
-rejilla de 441 círculos, y deja cuatro procesos `spawn_main` huérfanos. Se
-repite con `QT_FORCE_STDERR_LOGGING=1 PYTHONFAULTHANDLER=1` delante de la
-orden, para que quede la traza. La causa está en estudio: el proceso de la
-suite acaba ocupando 7,7 GB (`docs/changelog/CHANGELOG_v0.1.301.md`, §3).
+127 es un proceso que terminó con 0xC0000409, lo que hace `abort()`. En
+v0.1.300 y v0.1.301 la suite abortaba así una vez de cada dos, al abrir un
+pool de procesos: el recolector de basura de un hilo del pool destruía
+objetos de Qt que los tests dejaban en ciclos. Lo resolvió v0.1.302 con
+`ogr_gui/gc_guard.py`, que instalan la ventana y el runner. Si vuelve a
+pasar, es otra causa. Para ver la pila nativa hace falta un manejador de
+SIGABRT del CRT, y `faulthandler` no basta en Windows
+(`docs/changelog/CHANGELOG_v0.1.302.md`). Al abortar quedan trabajadores
+`spawn_main` huérfanos que hay que cerrar.
 
 Que el tiempo suba no es un problema por sí solo. Lo que sí importa es no
 meter un test caro sin darse cuenta: los caros son los que mallan y

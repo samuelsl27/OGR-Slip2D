@@ -9,6 +9,6 @@ without pulling in Qt.
 
 Author: Samuel Sáez López — PhD Student, UPCT
 """
-__version__ = "0.1.302"
+__version__ = "0.1.303"
 __author__ = "Samuel Sáez López"
 __institution__ = "Universidad Politécnica de Cartagena (UPCT)"
