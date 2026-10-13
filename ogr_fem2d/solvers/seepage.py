@@ -1723,6 +1723,10 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
         self.steady_relaxation = steady_relaxation
         self.steady_tolerance = steady_tolerance
         self.steady_max_iterations = steady_max_iterations
+        #: v0.1.307 (D295) — the steady field the last ``solve_transient``
+        #: started from, or None (an ``initial_head`` was given, or the
+        #: steady run produced no field). It was a local and was lost.
+        self.initial_result = None
 
     def _initial_steady(self, bcs) -> SeepageResult:
         """The steady state a transient starts from, solved with the
@@ -2029,7 +2033,12 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
         that field's ``converged`` and its notes — reporting True there
         was simply false. A given ``initial_head`` is the user's, and is
         not judged.
+
+        v0.1.307 (D295) — the steady field itself is kept on
+        ``self.initial_result`` (the return value is unchanged), so the
+        project can keep the state at t = 0 that every stage started from.
         """
+        self.initial_result = None
         if not stages:
             return []
         base_bcs = initial_bcs or (stages[0].bcs
@@ -2056,6 +2065,7 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
                     else "initial steady state failed")
                 return [out]
             H = list(steady.total_head)
+            self.initial_result = steady
             initial_notes["initial_state_converged"] = bool(steady.converged)
             if not steady.converged:
                 why = (steady.notes.get("warning")

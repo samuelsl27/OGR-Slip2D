@@ -56,7 +56,7 @@ MODEL_ATTRS = {
     "seismic_records", "region_assignments", "tension_crack_properties",
     "water_pressure_grid", "seepage_bcs", "random_variables", "annotations",
     "focus_objects", "user_surfaces", "fem_mesh", "seepage_result",
-    "transient_results",
+    "transient_results", "transient_initial_result",
 }
 #: Methods that change what they are called on (lists, the annotation
 #: layer, the settings' setters, the project's own add_/remove_...).

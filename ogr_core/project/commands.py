@@ -266,9 +266,12 @@ LIGHT_ATTRS: tuple[str, ...] = (
 )
 
 #: Computed or generated state that can weigh megabytes. A snapshot only
-#: carries them when the operation says it touches them.
+#: carries them when the operation says it touches them. v0.1.307 (D295):
+#: and the transient's initial state, so undoing a computation or a new mesh
+#: gives it back with the stages.
 HEAVY_ATTRS: tuple[str, ...] = ("fem_mesh", "seepage_result",
-                                "transient_results")
+                                "transient_results",
+                                "transient_initial_result")
 
 
 def capture_state(project: Project, attrs=LIGHT_ATTRS) -> dict:

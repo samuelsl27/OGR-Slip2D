@@ -2514,6 +2514,11 @@ _DICTS: dict[str, dict[str, str]] = {
             "resultados transitorios",
         "initial conditions of the transient":
             "condiciones iniciales del transitorio",
+        # v0.1.307 (D295) — the state at t = 0, kept apart from the stages
+        "initial state of the transient":
+            "estado inicial del transitorio",
+        "0: t = 0 (initial state)": "0: t = 0 (estado inicial)",
+        "initial state": "estado inicial",
         "conditions of the transient stages":
             "condiciones de las etapas del transitorio",
         "Transient: {0} stage(s) solved; final u from {1:.1f} to {2:.1f}":

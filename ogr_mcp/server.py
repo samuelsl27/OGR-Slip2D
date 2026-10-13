@@ -696,8 +696,11 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
                          Field(description="Contour the groundwater field "
                                            "(and its free surface).")
                      ] = None,
-                     stage: Annotated[Optional[int], Field(
-                         description="With field: a transient stage.")
+                     stage: Annotated[Optional[int | Literal["initial"]],
+                                      Field(
+                         description="With field: a transient stage "
+                                     "(0-based), or 'initial' for the state "
+                                     "the transient started from.")
                      ] = None,
                      source: Annotated[Literal["model", "window"], Field(
                          description="'window': the real canvas (only "
@@ -1558,9 +1561,13 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
                                 "summary", "point", "section",
                                 "free_surface", "stages", "nodes"], Field(
                                 description="What to read.")] = "summary",
-                            stage: Annotated[Optional[int], Field(
-                                description="Transient stage (0-based); "
-                                            "default the last.")] = None,
+                            stage: Annotated[
+                                Optional[int | Literal["initial"]], Field(
+                                    description="Transient stage (0-based), "
+                                                "or 'initial' for the state "
+                                                "the transient started from "
+                                                "(t = 0); default the "
+                                                "last.")] = None,
                             point_xy: Annotated[Optional[list[float]], Field(
                                 description="view 'point': [x, y].")] = None,
                             section: Annotated[Optional[list[list[float]]],

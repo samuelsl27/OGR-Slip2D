@@ -12,7 +12,7 @@ Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Union
 
 from ..coerce import coerce_value
 from ..errors import Conflict, InvalidArgument, unknown
@@ -28,7 +28,7 @@ def model_render(ws, project_id: Optional[str] = None,
                  save_path: Optional[str] = None,
                  overwrite: bool = False,
                  field: Optional[str] = None,
-                 stage: Optional[int] = None,
+                 stage: Union[int, str, None] = None,
                  source: str = "model") -> dict:
     """A PNG of the model, optionally with a result's critical surface
     or the groundwater field (contours and free surface); or, attached to

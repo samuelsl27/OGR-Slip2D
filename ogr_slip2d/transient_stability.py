@@ -180,7 +180,11 @@ def solve_project_groundwater(project, *, progress_cb: Optional[Callable]
     also stored on ``project.transient_results`` and the governing field
     on ``project.seepage_result``, which is where every consumer looks
     for them — the pore-pressure coupling, the Interpret windows and the
-    saved file.
+    saved file. v0.1.307 (D295): the steady field a transient starts from
+    is kept on ``project.transient_initial_result``, apart from the stages
+    so that no stage index moves (the API, the agent and the pairing of
+    ``run_transient_stability`` read them by number); a steady analysis
+    clears it.
 
     Unlike ``solve_project_seepage`` this uses the **unsaturated** solver,
     with its free surface and its seepage faces. That other function is
@@ -244,6 +248,7 @@ def solve_project_groundwater(project, *, progress_cb: Optional[Callable]
     result = solver.solve_unsaturated(_current_bcs(project, mesh))
     project.seepage_result = result
     project.transient_results = []
+    project.transient_initial_result = None
     project._fea_ponding_cache = None
     # Kept so the Interpret groundwater view can trace the free surface
     # without rebuilding a solver that might differ from the one that
@@ -284,6 +289,17 @@ def _solve_transient(project, mesh, props, gamma_w, *, progress_cb=None):
         ))
     results = solver.solve_transient(stages, initial_bcs=initial)
     project.transient_results = results
+    # v0.1.307 (D295) — the state at t = 0, which the reference shows first
+    # in Interpret and which every stage evolved from: the steady analysis
+    # of the initial conditions (to the bit, D277). Kept apart from the
+    # stages, so that no stage index moves.
+    start = solver.initial_result
+    if start is not None and start.total_head:
+        start.notes["time"] = 0.0
+        start.notes["initial_state"] = True
+        project.transient_initial_result = start
+    else:
+        project.transient_initial_result = None
     if results:
         project.seepage_result = results[-1]
     project._fea_ponding_cache = None

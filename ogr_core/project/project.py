@@ -81,6 +81,9 @@ class Project:
         # v0.1.30 — per-stage transient results, saved like the field
         # since v0.1.78 (the comment said "not saved" until v0.1.200).
         self.transient_results = []
+        # v0.1.307 (D295) — the steady field the transient started from
+        # (t = 0), apart from the stages so that no stage index moves.
+        self.transient_initial_result = None
         # v0.1.34 — random variables for the probabilistic / sensitivity
         # analysis (Phase P1). Serialised with the model.
         self.random_variables = []
@@ -689,7 +692,7 @@ class Project:
             self._notify("assignments_changed")
         return pruned
     def to_dict(self) -> dict:
-        return {
+        out = {
             "format_version": FILE_FORMAT_VERSION,
             "id": self.id,
             "name": self.name,
@@ -738,6 +741,15 @@ class Project:
             # analysis and not something the user typed.
             "user_surfaces": [s.to_dict() for s in self.user_surfaces],
         }
+        # v0.1.307 (D295) — written ONLY when there is one, unlike every key
+        # above: a key always present ("…": null) would change the file, the
+        # model fingerprint (``ogr_api.snapshot.model_hash``) and the
+        # verification bank's fingerprint of every model without a transient,
+        # with nothing in it having changed.
+        if self.transient_initial_result is not None:
+            out["transient_initial_result"] = (
+                self.transient_initial_result.to_dict())
+        return out
 
     def save(self, path: Optional[Path] = None) -> Path:
         path = Path(path) if path else self.file_path
@@ -934,7 +946,10 @@ class Project:
         # (u = gamma_w * (H - y)) and the materials for the conductivity.
         sr = data.get("seepage_result")
         trs = data.get("transient_results") or []
-        if sr or trs:
+        # v0.1.307 (D295) — absent from every file before this version and
+        # from every file without a transient
+        tir = data.get("transient_initial_result")
+        if sr or trs or tir:
             from ogr_fem2d.solvers import (SeepageResult as _SR,
                                            hydraulic_props_of, restore_derived)
             props = hydraulic_props_of(proj)
@@ -945,6 +960,8 @@ class Project:
             if sr:
                 proj.seepage_result = _restore(sr)
             proj.transient_results = [_restore(d) for d in trs]
+            if tir:
+                proj.transient_initial_result = _restore(tir)
 
         if path:
             proj.file_path = path

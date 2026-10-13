@@ -39,6 +39,10 @@ _FIELDS = [
     ("pore_pressure", "Pore Pressure u"),
 ]
 
+#: v0.1.307 (D295) — the data of the selector's entry for the initial state
+#: (the stages carry their own index, from 0).
+_INITIAL = -1
+
 
 class InterpretGroundwaterWindow(QMainWindow):
     """Read-only viewer for a seepage result."""
@@ -58,17 +62,27 @@ class InterpretGroundwaterWindow(QMainWindow):
         bar = QHBoxLayout()
         # v0.1.31 — stage navigation for transient runs
         self.stages = list(getattr(project, "transient_results", []) or [])
+        # v0.1.307 (D295) — and the state they started from, first, as the
+        # reference shows it. None for a steady field, and for a transient
+        # computed before this version, which never stored it.
+        self.initial = (getattr(project, "transient_initial_result", None)
+                        if self.stages else None)
         if self.stages:
             bar.addWidget(QLabel(tr("Stage:")))
             self.cbo_stage = QComboBox()
+            if self.initial is not None:
+                self.cbo_stage.addItem(tr("0: t = 0 (initial state)"),
+                                       _INITIAL)
             for i, r in enumerate(self.stages):
                 t = r.notes.get("time", 0.0)
                 lbl = r.notes.get("label") or ""
                 sf = "  [SF]" if r.notes.get("calculate_sf") else ""
                 self.cbo_stage.addItem(
                     f"{i + 1}: t = {t:g}{(' ' + lbl) if lbl else ''}{sf}", i)
-            self.cbo_stage.setCurrentIndex(len(self.stages) - 1)
-            self.cbo_stage.currentIndexChanged.connect(self._on_stage)
+            self.cbo_stage.setCurrentIndex(self.cbo_stage.count() - 1)
+            # Each entry carries what it shows: with the initial state in
+            # front, entry k is no longer stage k.
+            self.cbo_stage.currentIndexChanged.connect(self._on_choice)
             bar.addWidget(self.cbo_stage)
             self.btn_fos = QPushButton(tr("FoS vs time…"))
             self.btn_fos.clicked.connect(self._plot_fos_history)
@@ -113,10 +127,24 @@ class InterpretGroundwaterWindow(QMainWindow):
 
     # ------------------------------------------------------------------
     def _on_stage(self, index: int) -> None:
-        """Switch the displayed stage of a transient run."""
+        """Switch the displayed stage of a transient run (``index`` is the
+        stage's, 0-based)."""
         if not self.stages or not (0 <= index < len(self.stages)):
             return
-        self.result = self.stages[index]
+        self._show(self.stages[index])
+
+    def _on_choice(self, entry: int) -> None:
+        """An entry of the stage selector: a stage, or the initial state
+        (v0.1.307, D295)."""
+        data = self.cbo_stage.itemData(entry) if self.cbo_stage else None
+        if data == _INITIAL:
+            if self.initial is not None:
+                self._show(self.initial)
+        elif data is not None:
+            self._on_stage(int(data))
+
+    def _show(self, result) -> None:
+        self.result = result
         self._summary()
         self._redraw()
 
@@ -180,6 +208,8 @@ class InterpretGroundwaterWindow(QMainWindow):
             bits.append(f"seepage-face nodes: {len(r.seepage_nodes)}")
         if r.notes.get("time") is not None:
             bits.insert(0, f"t = {r.notes['time']:g}")
+        if r.notes.get("initial_state"):
+            bits.insert(1, tr("initial state"))
         fos = r.notes.get("fos") or {}
         if fos:
             bits.append("FoS " + ", ".join(

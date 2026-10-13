@@ -355,6 +355,11 @@ def groundwater_summary(project, warnings=()) -> dict:
     if stages:
         out["stages"] = stage_rows(stages)
         out["field_is"] = "the last stage"
+        # v0.1.307 (D295) — the state at t = 0, beside the stages and not
+        # in their list (row i is stage i); read it with stage="initial"
+        initial = getattr(project, "transient_initial_result", None)
+        if initial is not None:
+            out["initial_state"] = seepage_field_summary(initial)
     if missing:
         out["default_hydraulic_properties"] = missing
     return out

@@ -572,7 +572,9 @@ class TestInterpretStageNavigation:
     def test_stage_selector_lists_every_stage(self):
         p, iw = self._window()
         assert iw.cbo_stage is not None
-        assert iw.cbo_stage.count() == len(p.transient_results)
+        # v0.1.307 (D295): and the initial state, first
+        assert p.transient_initial_result is not None
+        assert iw.cbo_stage.count() == len(p.transient_results) + 1
 
     def test_switching_stage_changes_the_field(self):
         p, iw = self._window()

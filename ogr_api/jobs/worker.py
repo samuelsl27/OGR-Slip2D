@@ -114,6 +114,9 @@ def _groundwater(project, params, progress):
         solve_project_groundwater(project, progress_cb=progress)
     payload = {"seepage_result": project.seepage_result,
                "transient_results": list(project.transient_results or []),
+               # v0.1.307 (D295)
+               "transient_initial_result": getattr(
+                   project, "transient_initial_result", None),
                "mesh": project.fem_mesh, "warnings": warnings}
     return payload, groundwater_summary(project, warnings)
 

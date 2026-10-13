@@ -1611,6 +1611,9 @@ def set_fem_mesh(project, mesh) -> list[str]:
             ("boundary conditions", project.seepage_bcs is not None),
             ("seepage field", project.seepage_result is not None),
             ("transient results", bool(project.transient_results)),
+            # v0.1.307 (D295)
+            ("initial state of the transient",
+             getattr(project, "transient_initial_result", None) is not None),
             ("initial conditions of the transient",
              gw.transient_initial_bcs is not None),
             ("conditions of the transient stages",
@@ -1621,6 +1624,7 @@ def set_fem_mesh(project, mesh) -> list[str]:
     project.seepage_bcs = None
     project.seepage_result = None
     project.transient_results = []
+    project.transient_initial_result = None
     gw.transient_initial_bcs = None
     for st in gw.transient_stages:
         st.pop("bcs", None)

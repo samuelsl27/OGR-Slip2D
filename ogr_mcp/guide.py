@@ -105,6 +105,8 @@ stability analysis read the field.
   conditions); groundwater_run then gives a factor of safety per flagged
   stage. A transient may be saved with no stages while it is prepared (the
   initial state first), but groundwater_run refuses it until it has one.
+  Stages are read by number (0-based); stage="initial" reads the state the
+  transient started from (t = 0) in groundwater_results and model_render.
 * Rapid drawdown: turn it on in settings (groundwater.rapid_drawdown) with
   a drawdown line; drawdown_sweep_run searches at several reservoir levels,
   because the total drawdown is not always the worst.

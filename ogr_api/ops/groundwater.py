@@ -38,7 +38,7 @@ from __future__ import annotations
 
 import copy
 import math
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 from ..coerce import coerce_enum, coerce_value, points, type_hints
 from ..errors import (Conflict, InvalidArgument, NotConfigured, NotFound,
@@ -815,6 +815,9 @@ def _finish_groundwater(ws, job, handle, summary) -> dict:
         project.seepage_result = copy.deepcopy(data["seepage_result"])
         project.transient_results = copy.deepcopy(
             list(data.get("transient_results") or []))
+        # v0.1.307 (D295) — a job stored before this version has no key
+        project.transient_initial_result = copy.deepcopy(
+            data.get("transient_initial_result"))
         project._fea_ponding_cache = None
         project._gw_solver = None
         return model_hash(project)
@@ -879,22 +882,43 @@ JOB_FINISHERS["drawdown_sweep"] = _finish_sweep
 # ----------------------------------------------------------------------
 # Reading the field
 # ----------------------------------------------------------------------
+#: v0.1.307 (D295) — the ``stage`` that reads the state the transient
+#: started from (t = 0). A word and not a number, so that stage 0 stays the
+#: first stage for every caller that already reads them by number.
+INITIAL_STAGE = "initial"
+
+
 def field_of(project, stage=None):
     """``(SeepageResult, mesh, label)`` of the model's field: the governing
-    one, or transient stage ``stage``."""
+    one, transient stage ``stage``, or with ``stage="initial"`` the initial
+    state of the transient."""
     result = getattr(project, "seepage_result", None)
     mesh = getattr(project, "fem_mesh", None)
     if result is None or mesh is None:
         raise NotFound("This model has no groundwater field.",
                        hint="Run groundwater_run.")
     return _pick_stage(result, list(project.transient_results or []), mesh,
-                       stage)
+                       stage, getattr(project, "transient_initial_result",
+                                      None))
 
 
-def _pick_stage(result, stages, mesh, stage):
+def _pick_stage(result, stages, mesh, stage, initial=None):
     if stage is None:
         return result, mesh, ""
-    i = coerce_value(stage, int, "stage")
+    if isinstance(stage, str) and stage.strip().lower() == INITIAL_STAGE:
+        if not stages:
+            raise Conflict("stage is only read with a transient field; this "
+                           "one is steady.")
+        if initial is None:
+            raise NotFound("This transient field has no initial state "
+                           "stored: it was computed before version 0.1.307.",
+                           hint="Run groundwater_run again.")
+        return initial, mesh, ", initial state (t = 0)"
+    try:
+        i = coerce_value(stage, int, "stage")
+    except InvalidArgument:
+        raise InvalidArgument(f"stage is a stage number (0-based) or "
+                              f"{INITIAL_STAGE!r}.") from None
     if not stages:
         raise Conflict("stage is only read with a transient field; this "
                        "one is steady.")
@@ -909,13 +933,15 @@ def _pick_stage(result, stages, mesh, stage):
 def groundwater_results(ws, project_id: Optional[str] = None,
                         result_id: Optional[str] = None,
                         view: str = "summary",
-                        stage: Optional[int] = None,
+                        stage: Union[int, str, None] = None,
                         point_xy: Optional[list] = None,
                         section: Optional[list] = None,
                         save_path: Optional[str] = None,
                         overwrite: bool = False) -> dict:
     """Read the groundwater field: summary, the values at a point, the
-    flow through a section, the free surface, the stages, or every node."""
+    flow through a section, the free surface, the stages, or every node.
+    ``stage`` is a transient stage (0-based) or ``"initial"``, the state
+    the transient started from (v0.1.307, D295)."""
     from ogr_fem2d.solvers import UnsaturatedSeepageSolver
     from ogr_slip2d.transient_stability import groundwater_query_solver
 
@@ -938,15 +964,16 @@ def groundwater_results(ws, project_id: Optional[str] = None,
                            f"groundwater field.")
         data = res.payload()
         stages = list(data.get("transient_results") or [])
+        initial = data.get("transient_initial_result")
         field, mesh, label = _pick_stage(data.get("seepage_result"), stages,
-                                         data.get("mesh"), stage)
+                                         data.get("mesh"), stage, initial)
         if field is None or mesh is None:
             raise NotFound(f"{result_id} holds no field.")
         solver = UnsaturatedSeepageSolver(mesh, {})
         source = {"result_id": res.id,
                   "stale": model_hash(handle.project) != res.model_hash}
         out = _read_field(ws, view, field, stages, mesh, solver, label,
-                          point_xy, section, save_path, overwrite)
+                          point_xy, section, save_path, overwrite, initial)
         return {**source, **out}
     handle = ws.get(project_id)
     with ws.reading(handle.id, "groundwater_results") as project:
@@ -954,12 +981,13 @@ def groundwater_results(ws, project_id: Optional[str] = None,
         stages = list(project.transient_results or [])
         solver = groundwater_query_solver(project)
         out = _read_field(ws, view, field, stages, mesh, solver, label,
-                          point_xy, section, save_path, overwrite)
+                          point_xy, section, save_path, overwrite,
+                          getattr(project, "transient_initial_result", None))
     return {"project_id": handle.id, **out}
 
 
 def _read_field(ws, view, field, stages, mesh, solver, label, point_xy,
-                section, save_path, overwrite) -> dict:
+                section, save_path, overwrite, initial=None) -> dict:
     from ..coerce import point
 
     out: dict = {"view": view, "field": ("governing" if not label
@@ -974,6 +1002,10 @@ def _read_field(ws, view, field, stages, mesh, solver, label, point_xy,
         if not stages:
             raise Conflict("This field is steady; it has no stages.")
         out["stages"] = stage_rows(stages)
+        # v0.1.307 (D295) — beside the stages and not in their list, so
+        # that row i is still stage i
+        if initial is not None:
+            out["initial_state"] = seepage_field_summary(initial)
         return out
     if not field.ok:
         raise Conflict("This field did not converge or is empty: there is "

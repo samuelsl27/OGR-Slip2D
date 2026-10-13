@@ -102,7 +102,7 @@ Una carga lineal «normal al contorno» o «con ángulo respecto al contorno» t
 | `water_grid_set` | | Rejilla de presiones de agua (puntos o un CSV) y sus opciones de interpolación. |
 | `water_grid_delete` | | Quitarla. |
 | `groundwater_run` | | Resolver el agua (permanente, o las etapas del transitorio con su factor de seguridad) en segundo plano. El campo se escribe de vuelta en el modelo en un paso de deshacer, salvo que el modelo haya cambiado mientras tanto. |
-| `groundwater_results` | | Leer el campo: resumen, valores en un punto, caudal por una sección, superficie libre, etapas con sus factores, o todos los nodos en CSV. Funciona también tras reabrir el proyecto. |
+| `groundwater_results` | | Leer el campo: resumen, valores en un punto, caudal por una sección, superficie libre, etapas con sus factores, o todos los nodos en CSV. `stage` es el número de etapa (desde 0) o `"initial"`, el estado del que partió el transitorio (t = 0). Funciona también tras reabrir el proyecto. |
 | `drawdown_sweep_run` | | Desembalse rápido a varias cotas del embalse, porque el desembalse total no siempre es el peor; por la misma puerta que un análisis (coeficientes de diseño y comprobaciones). |
 
 Unidades: cargas hidráulicas en m y presión intersticial en kPa; permeabilidad, infiltración y caudal nodal en una misma unidad coherente (m/s). Desde v0.1.200 cada modelo de permeabilidad toma su succión en la unidad de su propia definición: van Genuchten y Gardner en altura (α en 1/m), Brooks-Corey, Fredlund-Xing, Simple y la curva de usuario en succión matricial (kPa).
@@ -144,7 +144,7 @@ Los tres cálculos pasan por la misma puerta que `analysis_run`: sin norma de di
 
 | Herramienta | C | Para qué |
 |---|---|---|
-| `model_render` | C | Imagen PNG del modelo, con las superficies críticas de un resultado o con los contornos del campo de agua (`field`) y su superficie libre; con el programa abierto, `source="window"` captura el lienzo real de la ventana. |
+| `model_render` | C | Imagen PNG del modelo, con las superficies críticas de un resultado o con los contornos del campo de agua (`field`, de una etapa o del estado inicial con `stage`) y su superficie libre; con el programa abierto, `source="window"` captura el lienzo real de la ventana. |
 | `project_history` | | Deshacer, rehacer o listar las ediciones. |
 | `python_exec` | C | Python contra el modelo, para lo que aún no tiene herramienta. Ver [seguridad.md](seguridad.md). |
 
