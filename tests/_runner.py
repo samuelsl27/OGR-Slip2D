@@ -56,6 +56,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import gc
 import importlib.util
 import inspect
 import math
@@ -457,6 +458,13 @@ def main(tests_dir: Path, patterns=(), k: str | None = None,
               "then run again.")
         return 2
     print(provenance(repo_root, origins))
+    # v0.1.302 (D310) — cyclic garbage found on a worker thread (a process
+    # pool's, a compute thread's) is held for the main thread instead of
+    # handed to shiboken's deferred deletion, which aborted the suite about
+    # one run in two (see ogr_gui/gc_guard.py). After the provenance check:
+    # it imports from the tree just checked.
+    from ogr_gui import gc_guard
+    gc_guard.install()
 
     patterns = list(patterns)
     every = sorted(tests_dir.glob("test_*.py"))
@@ -524,6 +532,11 @@ def main(tests_dir: Path, patterns=(), k: str | None = None,
         print(_banner())
 
     for i_file, f in enumerate(test_files, 1):
+        # v0.1.302 (D310) — what the previous file left as cyclic garbage is
+        # freed here, on the main thread, and not later by whichever thread
+        # trips the collector (where Qt objects go to a deferred deletion).
+        gc_guard.release()
+        gc.collect()
         print(f"\n=== {f.name} ===  ({i_file}/{n_files})")
         try:
             mod = _load_module(f)

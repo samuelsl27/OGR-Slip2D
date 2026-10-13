@@ -27,8 +27,8 @@ The infrastructure this version adds, and what these tests protect:
   back to the model it found, compared as JSON;
 * the INVENTORY: an AST walk of ``MainWindow`` finds every method that
   writes the model and fails on one that is neither a step nor in
-  ``EXCEPTIONS`` with its reason. ``BUDGET`` only goes down: 0.1.302,
-  0.1.303 and 0.1.304 take the families out;
+  ``EXCEPTIONS`` with its reason. ``BUDGET`` only goes down: 0.1.303,
+  0.1.304 and 0.1.305 take the families out (0.1.302 was D310);
 * every step name the stack can hold has its Spanish.
 """
 from __future__ import annotations
@@ -85,10 +85,10 @@ WRITER_DIALOGS = {"AddGridDialog", "AnnotationsDialog", "DefineSupportDialog",
                   "TransientStagesDialog", "WaterPressureGridDialog"}
 _COPIES = {"list", "sorted", "reversed", "tuple", "set", "dict"}
 
-_P302 = "pending: materials, properties and water (0.1.302)"
-_P303 = "pending: loads and supports (0.1.303)"
-_P304 = ("pending: settings and search, statistics, surfaces and focus, "
-         "annotations, DXF (0.1.304)")
+_P303 = "pending: materials, properties and water (0.1.303)"
+_P304 = "pending: loads and supports (0.1.304)"
+_P305 = ("pending: settings and search, statistics, surfaces and focus, "
+         "annotations, DXF (0.1.305)")
 
 #: Methods that write the model outside an undo step, each with its reason.
 EXCEPTIONS = {
@@ -98,61 +98,61 @@ EXCEPTIONS = {
                         "drag as one ReplaceBoundaryCommand",
     "_on_vertex_drag_finished": "rewinds the draft of _on_vertex_moved and "
                                 "records it with command_stack.do",
-    # -- 0.1.302 --------------------------------------------------------
-    "act_define_materials": _P302,
-    "_import_properties": _P302,
-    "apply_water_surface_assignment": _P302,
-    "_do_assign_material_at": _P302,
-    "act_define_tension_crack": _P302,
-    "_define_hydraulic_properties": _P302,
-    "_edit_water_pressure_grid": _P302,
-    "_set_boundary_conditions": _P302,
-    "_edit_transient_stages": _P302,
-    "_generate_fem_mesh": _P302,
-    "_reset_fem_mesh": _P302,
-    "_compute_groundwater": _P302,
-    "_compute_transient": _P302,
     # -- 0.1.303 --------------------------------------------------------
-    "_on_dist_load_segment_picked": _P303,
-    "_on_line_load_point_picked": _P303,
-    "act_seismic_load": _P303,
-    "act_seismic_records": _P303,
-    "act_delete_load": _P303,
-    "_on_load_action": _P303,
-    "_modify_load": _P303,
-    "act_define_support": _P303,
-    "_on_add_support_picked": _P303,
-    "_on_pattern_picked": _P303,
-    "_on_delete_support_clicked": _P303,
-    "_on_stretch_support_picked": _P303,
-    "_on_support_action_requested": _P303,
-    "_modify_support": _P303,
-    "_move_support": _P303,
-    "_ungroup_pattern": _P303,
+    "act_define_materials": _P303,
+    "_import_properties": _P303,
+    "apply_water_surface_assignment": _P303,
+    "_do_assign_material_at": _P303,
+    "act_define_tension_crack": _P303,
+    "_define_hydraulic_properties": _P303,
+    "_edit_water_pressure_grid": _P303,
+    "_set_boundary_conditions": _P303,
+    "_edit_transient_stages": _P303,
+    "_generate_fem_mesh": _P303,
+    "_reset_fem_mesh": _P303,
+    "_compute_groundwater": _P303,
+    "_compute_transient": _P303,
     # -- 0.1.304 --------------------------------------------------------
-    "act_surface_options": _P304,
-    "act_auto_grid": _P304,
-    "act_add_grid": _P304,
-    "_on_grid_picked": _P304,
-    "act_project_settings": _P304,
-    "_back_analysis": _P304,
-    "_move_slope_limits": _P304,
-    "_define_moment_axis": _P304,
-    "_reset_moment_axis": _P304,
-    "_reset_slope_limits": _P304,
-    "_edit_random_variables": _P304,
-    "_add_focus": _P304,
-    "_manage_focus": _P304,
-    "_add_surface_centre_radius": _P304,
-    "_on_surface_3pt_picked": _P304,
-    "_manage_user_surfaces": _P304,
-    "_set_annotations_visible": _P304,
-    "_delete_all_annotations": _P304,
-    "_manage_annotations": _P304,
-    "_start_annotation": _P304,
-    "_add_image": _P304,
-    "_convert_tool_to_boundary": _P304,
-    "act_import_dxf": _P304,
+    "_on_dist_load_segment_picked": _P304,
+    "_on_line_load_point_picked": _P304,
+    "act_seismic_load": _P304,
+    "act_seismic_records": _P304,
+    "act_delete_load": _P304,
+    "_on_load_action": _P304,
+    "_modify_load": _P304,
+    "act_define_support": _P304,
+    "_on_add_support_picked": _P304,
+    "_on_pattern_picked": _P304,
+    "_on_delete_support_clicked": _P304,
+    "_on_stretch_support_picked": _P304,
+    "_on_support_action_requested": _P304,
+    "_modify_support": _P304,
+    "_move_support": _P304,
+    "_ungroup_pattern": _P304,
+    # -- 0.1.305 --------------------------------------------------------
+    "act_surface_options": _P305,
+    "act_auto_grid": _P305,
+    "act_add_grid": _P305,
+    "_on_grid_picked": _P305,
+    "act_project_settings": _P305,
+    "_back_analysis": _P305,
+    "_move_slope_limits": _P305,
+    "_define_moment_axis": _P305,
+    "_reset_moment_axis": _P305,
+    "_reset_slope_limits": _P305,
+    "_edit_random_variables": _P305,
+    "_add_focus": _P305,
+    "_manage_focus": _P305,
+    "_add_surface_centre_radius": _P305,
+    "_on_surface_3pt_picked": _P305,
+    "_manage_user_surfaces": _P305,
+    "_set_annotations_visible": _P305,
+    "_delete_all_annotations": _P305,
+    "_manage_annotations": _P305,
+    "_start_annotation": _P305,
+    "_add_image": _P305,
+    "_convert_tool_to_boundary": _P305,
+    "act_import_dxf": _P305,
 }
 
 #: How many there may be. Lowering it is the point; raising it needs a

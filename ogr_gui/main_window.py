@@ -262,7 +262,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.301"
+    VERSION = "0.1.302"
 
     def __init__(self) -> None:
         super().__init__()
@@ -318,6 +318,16 @@ class MainWindow(QMainWindow):
         self._stale_timer.setSingleShot(True)
         self._stale_timer.setInterval(300)
         self._stale_timer.timeout.connect(self._check_results_stale)
+        # v0.1.302 (D310) — garbage the cyclic collector finds on the compute
+        # thread or a process pool's threads is held, not freed there (where
+        # shiboken would queue its Qt objects for a deferred deletion that
+        # aborted the test suite), and freed here, on this thread.
+        from . import gc_guard
+        gc_guard.install()
+        self._gc_release_timer = QTimer(self)
+        self._gc_release_timer.setInterval(2000)
+        self._gc_release_timer.timeout.connect(gc_guard.release)
+        self._gc_release_timer.start()
 
         # v0.1.2 — selection filter state
         self.selection_filter = SelectionFilterState()
