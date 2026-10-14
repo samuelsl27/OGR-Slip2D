@@ -2514,6 +2514,16 @@ _DICTS: dict[str, dict[str, str]] = {
             "resultados transitorios",
         "initial conditions of the transient":
             "condiciones iniciales del transitorio",
+        # v0.1.310 (D309) — Restore Defaults restores what the pages show
+        "Puts the values shown on these pages back to their defaults. "
+        "Nothing is written until Apply or OK; settings edited elsewhere "
+        "(the search grid, the slope limits, back analysis, the transient "
+        "stages) are kept.":
+            "Devuelve a su valor por defecto lo que muestran estas páginas. "
+            "No se escribe nada hasta Aplicar o Aceptar; los ajustes que se "
+            "editan en otros sitios (la rejilla de búsqueda, los límites del "
+            "talud, el retroanálisis, las etapas del transitorio) se "
+            "conservan.",
         # v0.1.307 (D295) — the state at t = 0, kept apart from the stages
         "initial state of the transient":
             "estado inicial del transitorio",

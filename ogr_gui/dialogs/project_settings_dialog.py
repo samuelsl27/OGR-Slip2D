@@ -14,6 +14,9 @@ Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 
+import copy
+import dataclasses
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -40,8 +43,6 @@ from ogr_core.project.rules import PERMANENT_ACTION_FACTOR_BOUND
 from ogr_core.project.settings import (
     GroundwaterMethod,
     LEMMethod as LEM,
-    SearchMethod,
-    SurfaceType,
 )
 from ogr_core.project.units import (
     FailureDirection,
@@ -54,6 +55,37 @@ from ogr_gui.i18n import tr
 # v0.1.127 — the separator the Seismic page prints between a
 # record's name and its peak acceleration.
 DASH = "—"
+
+
+def _part_of(target, source, part):
+    """The part of ``target`` that ``part`` is of ``source``.
+
+    v0.1.310 (D309) — every page keeps in ``self.s`` what it edits: the
+    settings themselves or one of their sections. Found by identity, so no
+    page has to declare it; a page that kept anything else makes this
+    raise instead of writing somewhere it should not.
+    """
+    if part is source:
+        return target
+    for name in vars(source):
+        if getattr(source, name) is part:
+            return getattr(target, name)
+    raise LookupError(
+        f"{type(part).__name__} is not a section of the settings")
+
+
+def _copy_fields(src, dst) -> None:
+    """Write into ``dst`` every field of ``src`` that differs from it.
+
+    v0.1.310 (D309) — section by section, so the sections keep their
+    identity: ``settings.search`` stays the object everything else holds.
+    """
+    for f in dataclasses.fields(src):
+        a, b = getattr(src, f.name), getattr(dst, f.name)
+        if dataclasses.is_dataclass(a) and type(a) is type(b):
+            _copy_fields(a, b)
+        elif a != b:
+            setattr(dst, f.name, copy.deepcopy(a))
 
 
 # ----------------------------------------------------------------------
@@ -633,43 +665,6 @@ class _GroundwaterPage(QWidget):
 
 
 # ----------------------------------------------------------------------
-class _SearchPage(QWidget):
-    def __init__(self, s: ProjectSettings) -> None:
-        super().__init__()
-        self.s = s
-        form = QFormLayout(self)
-
-        self.cbo_type = QComboBox()
-        for t in SurfaceType:
-            self.cbo_type.addItem(t.value, t.value)
-        self.cbo_type.setCurrentIndex(
-            max(0, self.cbo_type.findData(s.search.surface_type))
-        )
-        self.cbo_method = QComboBox()
-        for m in SearchMethod:
-            self.cbo_method.addItem(m.value, m.value)
-        self.cbo_method.setCurrentIndex(
-            max(0, self.cbo_method.findData(s.search.search_method))
-        )
-        self.dsp_r = QDoubleSpinBox(); self.dsp_r.setRange(0.01, 100.0); self.dsp_r.setValue(s.search.radius_increment); self.dsp_r.setSuffix(" m")
-        self.spn_n = QSpinBox(); self.spn_n.setRange(10, 1_000_000); self.spn_n.setValue(s.search.num_surfaces)
-        self.chk_composite = QCheckBox(tr("Composite Surfaces")); self.chk_composite.setChecked(s.search.composite_surfaces)
-
-        form.addRow(tr("Surface Type:"), self.cbo_type)
-        form.addRow(tr("Search Method:"), self.cbo_method)
-        form.addRow(tr("Radius Increment:"), self.dsp_r)
-        form.addRow(tr("Number of Surfaces:"), self.spn_n)
-        form.addRow(self.chk_composite)
-
-    def apply(self) -> None:
-        self.s.search.surface_type = self.cbo_type.currentData()
-        self.s.search.search_method = self.cbo_method.currentData()
-        self.s.search.radius_increment = self.dsp_r.value()
-        self.s.search.num_surfaces = self.spn_n.value()
-        self.s.search.composite_surfaces = self.chk_composite.isChecked()
-
-
-# ----------------------------------------------------------------------
 class _SummaryPage(QWidget):
     def __init__(self, s: ProjectSettings) -> None:
         super().__init__()
@@ -699,10 +694,12 @@ class _SummaryPage(QWidget):
 class ProjectSettingsDialog(QDialog):
     """Tree-navigated project settings editor.
 
-    Apply and Restore Defaults write into the settings it was given at
-    once. v0.1.305 (D306) — and say so (``settings_applied``); the window
-    runs the dialog inside one undo step, so its Cancel puts back what they
-    wrote.
+    Apply writes into the settings it was given at once. v0.1.305 (D306)
+    — and says so (``settings_applied``); the window runs the dialog inside
+    one undo step, so its Cancel puts back what Apply wrote.
+
+    v0.1.310 (D309) — Restore Defaults writes nothing: it puts the values
+    the pages show back to their defaults, and Apply or OK writes them.
     """
 
     settings_applied = Signal()
@@ -719,6 +716,10 @@ class ProjectSettingsDialog(QDialog):
         # callers construct this dialog with settings alone, and none of
         # them should have to change to go on working.
         self.project = project
+        # v0.1.310 (D309) — what the pages edit: the settings themselves,
+        # until Restore Defaults; from then on a copy of them, which Apply
+        # writes into the settings field by field.
+        self._edited = settings
 
         layout = QHBoxLayout(self)
 
@@ -746,7 +747,13 @@ class ProjectSettingsDialog(QDialog):
         buttons.accepted.connect(self._ok)
         buttons.rejected.connect(self.reject)
         buttons.button(QDialogButtonBox.Apply).clicked.connect(self._apply)
-        buttons.button(QDialogButtonBox.RestoreDefaults).clicked.connect(self._defaults)
+        restore = buttons.button(QDialogButtonBox.RestoreDefaults)
+        restore.clicked.connect(self._defaults)
+        restore.setToolTip(tr(
+            "Puts the values shown on these pages back to their defaults. "
+            "Nothing is written until Apply or OK; settings edited "
+            "elsewhere (the search grid, the slope limits, back analysis, "
+            "the transient stages) are kept."))
         main = QVBoxLayout()
         layout.takeAt(1)
         layout.takeAt(1)
@@ -765,7 +772,9 @@ class ProjectSettingsDialog(QDialog):
     # too many.
     _PAGES = (
         # v0.1.9 — Surface Search is NOT here: it lives in
-        # Surfaces → Surface Options, following the reference.
+        # Surfaces → Surface Options, following the reference. v0.1.310
+        # (D309) — and the _SearchPage class this module kept unused since
+        # then is gone: it read as if this dialog showed five search fields.
         ("General", "_GeneralPage"),
         ("Methods", "_MethodsPage"),
         ("Groundwater", "_GroundwaterPage"),
@@ -778,12 +787,14 @@ class ProjectSettingsDialog(QDialog):
         ("Project Summary", "_SummaryPage"),
     )
 
+    def _make_page(self, cls_name: str, settings: ProjectSettings) -> QWidget:
+        cls = globals()[cls_name]
+        return (cls(settings, self.project) if cls_name == "_SeismicPage"
+                else cls(settings))
+
     def _build_pages(self) -> None:
         for label, cls_name in self._PAGES:
-            cls = globals()[cls_name]
-            widget = (cls(self.settings, self.project)
-                      if cls_name == "_SeismicPage" else cls(self.settings))
-            self._add_page(label, widget)
+            self._add_page(label, self._make_page(cls_name, self._edited))
         self._refresh_page_gates()
 
     def _add_page(self, label: str, widget: QWidget) -> None:
@@ -799,7 +810,7 @@ class ProjectSettingsDialog(QDialog):
         offered a solver tolerance for an analysis that was not going to
         run.
         """
-        on = bool(self.settings.groundwater.transient)
+        on = bool(self._edited.groundwater.transient)
         for row, (label, _) in enumerate(self._PAGES):
             if label == "Transient":
                 item = self.nav.item(row)
@@ -818,6 +829,8 @@ class ProjectSettingsDialog(QDialog):
         for p in self.pages:
             if hasattr(p, "apply"):
                 p.apply()
+        if self._edited is not self.settings:
+            _copy_fields(self._edited, self.settings)
         self._refresh_page_gates()
         self.settings_applied.emit()
 
@@ -826,11 +839,29 @@ class ProjectSettingsDialog(QDialog):
         self.accept()
 
     def _defaults(self) -> None:
-        # Replace self.settings with a fresh ProjectSettings in place
+        """Put the values the pages show back to their defaults.
+
+        v0.1.310 (D309) — it replaced the whole settings with a fresh
+        ``ProjectSettings``, at once, and the 80 of 152 fields that no page
+        shows went with them: every search option (the grid, the slope
+        limits, the axis), the back analysis, the stages and the initial
+        state of a transient, the seed, the date the project was created.
+        Now each page is built on a fresh ``ProjectSettings``, so it shows
+        the defaults, and applies itself to a COPY of the settings: what
+        goes back is what its own ``apply`` writes, with no second list of
+        fields to drift from the pages (the fault v0.1.74 took out of this
+        method). Nothing reaches the settings until Apply or OK, as in
+        Surface Options.
+        """
         fresh = ProjectSettings()
-        for attr in vars(fresh):
-            setattr(self.settings, attr, getattr(fresh, attr))
-        # Rebuild pages (cheap) — all nine of them, from the one list.
+        edited = copy.deepcopy(self.settings)
+        for _label, cls_name in self._PAGES:
+            page = self._make_page(cls_name, fresh)
+            page.s = _part_of(edited, fresh, page.s)
+            page.apply()
+            page.deleteLater()
+        self._edited = edited
+        # Rebuild pages (cheap) — all of them, from the one list.
         self.nav.clear()
         while self.stack.count():
             w = self.stack.widget(0)
@@ -839,7 +870,6 @@ class ProjectSettingsDialog(QDialog):
         self.pages.clear()
         self._build_pages()
         self.nav.setCurrentRow(0)
-        self.settings_applied.emit()
 
 
 # ======================================================================
