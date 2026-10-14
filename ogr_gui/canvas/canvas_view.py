@@ -34,6 +34,7 @@ from PySide6.QtGui import (
     QWheelEvent,
 )
 from PySide6.QtWidgets import (
+    QGraphicsItem,
     QGraphicsRectItem,
     QGraphicsScene,
     QGraphicsView,
@@ -295,7 +296,11 @@ class CanvasView(QGraphicsView):
         # v0.1.9 — interactive boundary drag (click + hold + release)
         self._dragging_boundary: Optional[int] = None  # boundary index
         self._drag_boundary_origin: Optional[tuple[float, float]] = None
-        self._drag_boundary_orig_verts: Optional[list[tuple[float, float]]] = None
+        # v0.1.312 (D307) — the preview of a boundary drag: a dashed copy
+        # of the boundary that follows the mouse. The model is written
+        # once, on release.
+        self._drag_ghost = None
+        self._drag_ghost_base = QPointF()
         self._vertex_drag_start_boundary = None  # pre-drag snapshot for undo
 
         # v0.1.3 — snap state for visual overlay
@@ -437,6 +442,10 @@ class CanvasView(QGraphicsView):
             self._zw_rubber = None
             self._zw_start_scene = None
 
+        # v0.1.312 (D307) — a boundary drag does not survive a change of
+        # tool: it wrote nothing, so there is nothing to put back.
+        self._cancel_boundary_drag()
+
         previous = self._tool_mode
         self._tool_mode = mode
 
@@ -475,6 +484,9 @@ class CanvasView(QGraphicsView):
         scene = self.scene()
         scene.clear()
         self._result_items.clear()
+        # v0.1.312 (D307) — cleared with the scene; a drag in progress
+        # draws it again on its next move
+        self._drag_ghost = None
         if self.project is None:
             return
 
@@ -1477,6 +1489,35 @@ class CanvasView(QGraphicsView):
         self.set_tool_mode(ToolMode.SELECT)
         self.viewport().update()
 
+    def _make_drag_ghost(self, boundary):
+        """The dashed copy of ``boundary`` a drag moves (v0.1.312, D307).
+
+        Drawn from the boundary as it is and never written back. Its base
+        position is kept because a one-vertex Block Search Point already
+        sits at its vertex.
+        """
+        ghost = BoundaryItem(boundary)
+        pen = QPen(ghost.pen())
+        pen.setStyle(Qt.DashLine)
+        ghost.setPen(pen)
+        ghost.setToolTip("")
+        ghost.setAcceptHoverEvents(False)
+        ghost.setFlag(QGraphicsItem.ItemIsSelectable, False)
+        ghost.setZValue(50)
+        self.scene().addItem(ghost)
+        self._drag_ghost_base = QPointF(ghost.pos())
+        return ghost
+
+    def _cancel_boundary_drag(self) -> None:
+        """Drop a boundary drag in progress (v0.1.312, D307): the ghost
+        goes, and the model was never touched."""
+        ghost = self._drag_ghost
+        self._drag_ghost = None
+        self._dragging_boundary = None
+        self._drag_boundary_origin = None
+        if ghost is not None and ghost.scene() is self.scene():
+            self.scene().removeItem(ghost)
+
     def _cancel_drawing(self) -> None:
         self._draw_points = []
         self._clear_draw_preview()
@@ -1998,12 +2039,8 @@ class CanvasView(QGraphicsView):
                 scene_pt = self.mapToScene(event.position().toPoint())
                 idx = self._pick_boundary(scene_pt.x(), scene_pt.y())
                 if idx >= 0:
-                    b = self.project.boundaries[idx]
                     self._dragging_boundary = idx
                     self._drag_boundary_origin = (scene_pt.x(), scene_pt.y())
-                    self._drag_boundary_orig_verts = [
-                        (v.x, v.y) for v in b.polyline.vertices
-                    ]
                 event.accept()
                 return
 
@@ -2227,23 +2264,23 @@ class CanvasView(QGraphicsView):
             event.accept()
             return
 
-        # v0.1.9 — Drag entire boundary live
+        # v0.1.9 — Drag entire boundary live. v0.1.312 (D307) — as a
+        # ghost. This branch assigned ``v.x`` on the project's own vertices,
+        # which are frozen, so the first move raised, the boundary never
+        # moved and no undo step was left; and it rebuilt the whole scene,
+        # regions included, on every move. The ghost moves alone, and the
+        # model is written once, on release.
         if (self._dragging_boundary is not None
-                and self._drag_boundary_origin is not None
-                and self._drag_boundary_orig_verts is not None):
+                and self._drag_boundary_origin is not None):
             ox, oy = self._drag_boundary_origin
-            dx = pt.x() - ox
-            dy = pt.y() - oy
             bi = self._dragging_boundary
-            if 0 <= bi < len(self.project.boundaries):
-                b = self.project.boundaries[bi]
-                # Apply translation to the in-memory polyline (preview).
-                # Final commit happens on mouse release.
-                for vi, v in enumerate(b.polyline.vertices):
-                    ox0, oy0 = self._drag_boundary_orig_verts[vi]
-                    v.x = ox0 + dx
-                    v.y = oy0 + dy
-                self.refresh()
+            if (self._drag_ghost is None
+                    and 0 <= bi < len(self.project.boundaries)):
+                self._drag_ghost = self._make_drag_ghost(
+                    self.project.boundaries[bi])
+            if self._drag_ghost is not None:
+                self._drag_ghost.setPos(
+                    self._drag_ghost_base + QPointF(pt.x() - ox, pt.y() - oy))
             event.accept()
             return
 
@@ -2289,27 +2326,19 @@ class CanvasView(QGraphicsView):
             event.accept()
             return
 
-        # v0.1.9 — finish boundary drag
+        # v0.1.9 — finish boundary drag. v0.1.312 (D307) — the drag moved
+        # only the ghost, so there is nothing to restore: MainWindow turns
+        # the displacement into one undo step.
         if (self._dragging_boundary is not None
                 and event.button() == Qt.LeftButton):
             bi = self._dragging_boundary
             origin = self._drag_boundary_origin
-            orig_verts = self._drag_boundary_orig_verts
-            self._dragging_boundary = None
-            self._drag_boundary_origin = None
-            self._drag_boundary_orig_verts = None
-            if (origin is not None and orig_verts is not None
+            self._cancel_boundary_drag()
+            if (origin is not None
                     and 0 <= bi < len(self.project.boundaries)):
                 pt = self.mapToScene(event.position().toPoint())
                 dx = pt.x() - origin[0]
                 dy = pt.y() - origin[1]
-                # Restore original positions and emit a clean drag-finished
-                # event so MainWindow can wrap it in a CommandStack op.
-                b = self.project.boundaries[bi]
-                for vi, v in enumerate(b.polyline.vertices):
-                    ox0, oy0 = orig_verts[vi]
-                    v.x = ox0
-                    v.y = oy0
                 if abs(dx) > 1e-9 or abs(dy) > 1e-9:
                     self.boundary_dragged.emit(bi, dx, dy)
             event.accept()
@@ -2361,6 +2390,12 @@ class CanvasView(QGraphicsView):
             event.accept()
             return
         if event.key() == Qt.Key_Escape:
+            # v0.1.312 (D307) — a boundary drag in progress first, as a
+            # drawing: the tool stays, and a second Esc leaves it
+            if self._dragging_boundary is not None:
+                self._cancel_boundary_drag()
+                event.accept()
+                return
             # Cancel any drawing in progress first
             if self._draw_points:
                 self._cancel_drawing()
