@@ -270,7 +270,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.310"
+    VERSION = "0.1.311"
 
     def __init__(self) -> None:
         super().__init__()
@@ -349,18 +349,27 @@ class MainWindow(QMainWindow):
         self.canvas.selection_filter = self.selection_filter
         self.setCentralWidget(self.canvas)
         self.canvas.tool_mode_changed.connect(self._sync_tool_actions)
+        # v0.1.311 (D308) — what an action armed for its next pick goes
+        # when its mode does
+        self.canvas.tool_mode_changed.connect(self._forget_pending_picks)
         # v0.1.2 — interactive editing signals
         self.canvas.boundary_drawn.connect(self._on_boundary_drawn)
         self.canvas.boundary_clicked.connect(self._on_boundary_clicked)
         self.canvas.vertex_moved.connect(self._on_vertex_moved)
         self.canvas.vertex_inserted.connect(self._on_vertex_inserted)
         self.canvas.vertex_deleted.connect(self._on_vertex_deleted)
-        # v0.1.168 (D101) — connected once here and not armed/disarmed at
-        # each use like ``segment_picked``: that signal is shared by five
-        # modes, which is why they connect and disconnect around every
-        # pick. This one belongs to a single mode and has nothing to
-        # collide with.
+        # v0.1.168 (D101) — connected once here: it belongs to a single
+        # mode and has nothing to collide with.
         self.canvas.three_points_picked.connect(self._on_surface_3pt_picked)
+        # v0.1.311 (D308) — ``segment_picked`` is shared by five two-click
+        # modes, and each used to connect its own handler around a pick and
+        # disconnect only its own: Add Support reconnected itself after
+        # every support, nothing disconnected on Esc, and two clicks of a
+        # distributed load placed a support as well. Now it has one owner,
+        # connected once, which hands the pick to the mode both clicks
+        # were made in (a pending click does not survive a change of mode,
+        # D101).
+        self.canvas.segment_picked.connect(self._on_segment_picked)
         # v0.1.198 — Change Slope Angle's toe and crest, once, like the
         # three-point surface: a single mode, nothing to collide with.
         self.canvas.slope_vertices_picked.connect(
@@ -1061,6 +1070,35 @@ class MainWindow(QMainWindow):
     def _set_tool(self, mode: ToolMode) -> None:
         self.canvas.set_tool_mode(mode)
 
+    def _on_segment_picked(self, x0: float, y0: float,
+                           x1: float, y1: float) -> None:
+        """The one owner of ``canvas.segment_picked`` (v0.1.311, D308).
+
+        Hands the two clicks to the mode they were made in; any other mode
+        is not waiting for a segment, and the pick goes nowhere.
+        """
+        handler = {
+            ToolMode.ADD_DISTRIBUTED_LOAD: self._on_dist_load_segment_picked,
+            ToolMode.PICK_GRID_RECT: self._on_grid_picked,
+            ToolMode.ADD_SUPPORT: self._on_add_support_picked,
+            ToolMode.ADD_SUPPORT_PATTERN: self._on_pattern_picked,
+            ToolMode.STRETCH_SUPPORT: self._on_stretch_support_picked,
+        }.get(self.canvas.tool_mode)
+        if handler is not None:
+            handler(x0, y0, x1, y1)
+
+    def _forget_pending_picks(self, mode) -> None:
+        """Drop what an action armed for a mode that is no longer active.
+
+        v0.1.311 (D308) — the load of Add Distributed Load and the pattern
+        of Add Support Pattern outlived Esc and a change of tool. A grid
+        pick needs nothing here: it is armed by its mode alone.
+        """
+        if mode is not ToolMode.ADD_DISTRIBUTED_LOAD:
+            self._pending_dist_load = None
+        if mode is not ToolMode.ADD_SUPPORT_PATTERN:
+            self._active_pattern = None
+
     def _sync_tool_actions(self, mode) -> None:
         """Keep the toggled state of Pan / Zoom Window / Zoom Mouse /
         Select in sync with the canvas' current mode."""
@@ -1637,21 +1675,13 @@ class MainWindow(QMainWindow):
     def _on_grid_dialog_rejected(self, dlg) -> None:
         self._active_grid_dialog = None
         # v0.1.305 (D306) — a pick still armed would have written the
-        # bounds of a dialog already cancelled
-        try:
-            self.canvas.segment_picked.disconnect(self._on_grid_picked)
-        except (TypeError, RuntimeError):
-            pass
+        # bounds of a dialog already cancelled. v0.1.311 (D308) — leaving
+        # the mode disarms it.
         if self.canvas._tool_mode == ToolMode.PICK_GRID_RECT:
             self.canvas.set_tool_mode(ToolMode.SELECT)
 
     def _begin_grid_pick(self) -> None:
         """Activate canvas pick mode while the dialog stays visible."""
-        try:
-            self.canvas.segment_picked.disconnect(self._on_grid_picked)
-        except (TypeError, RuntimeError):
-            pass
-        self.canvas.segment_picked.connect(self._on_grid_picked)
         self.canvas.set_tool_mode(ToolMode.PICK_GRID_RECT)
         self.ogr_status.showMessage(
             tr("Click two opposite corners on the canvas. The dialog will "
@@ -1663,10 +1693,6 @@ class MainWindow(QMainWindow):
         self, x1: float, y1: float, x2: float, y2: float,
     ) -> None:
         """User clicked two corners — push values to the live dialog."""
-        try:
-            self.canvas.segment_picked.disconnect(self._on_grid_picked)
-        except (TypeError, RuntimeError):
-            pass
         self.canvas.set_tool_mode(ToolMode.SELECT)
 
         # v0.1.305 (D306) — into the dialog only: it was written into the
@@ -4071,11 +4097,6 @@ class MainWindow(QMainWindow):
                    "least one support type."),
             )
             return
-        try:
-            self.canvas.segment_picked.disconnect(self._on_add_support_picked)
-        except (TypeError, RuntimeError):
-            pass
-        self.canvas.segment_picked.connect(self._on_add_support_picked)
         self.canvas.set_tool_mode(ToolMode.ADD_SUPPORT)
 
     @undo_step("Set support")
@@ -4106,13 +4127,8 @@ class MainWindow(QMainWindow):
         self.project.supports.append(s)
         self.project.is_dirty = True
         self.project._notify("supports_changed")
-        try:
-            self.canvas.segment_picked.disconnect(self._on_add_support_picked)
-        except (TypeError, RuntimeError):
-            pass
         # Stay in ADD_SUPPORT mode so the user can place several in a
-        # row, as the reference does. Reconnect.
-        self.canvas.segment_picked.connect(self._on_add_support_picked)
+        # row, as the reference does.
         self.canvas.refresh()
         self.ogr_status.showMessage(
             tr('Support added ({0} total). Click again to add another, or '
@@ -4135,11 +4151,6 @@ class MainWindow(QMainWindow):
         if not dlg.exec() or dlg.pattern is None:
             return
         self._active_pattern = dlg.pattern
-        try:
-            self.canvas.segment_picked.disconnect(self._on_pattern_picked)
-        except (TypeError, RuntimeError):
-            pass
-        self.canvas.segment_picked.connect(self._on_pattern_picked)
         self.canvas.set_tool_mode(ToolMode.ADD_SUPPORT_PATTERN)
         self.ogr_status.showMessage(
             tr("Click two points along the slope boundary; pattern will "
@@ -4167,10 +4178,6 @@ class MainWindow(QMainWindow):
         self.project.supports.extend(new_supports)
         self.project.is_dirty = True
         self.project._notify("supports_changed")
-        try:
-            self.canvas.segment_picked.disconnect(self._on_pattern_picked)
-        except (TypeError, RuntimeError):
-            pass
         self.canvas.set_tool_mode(ToolMode.SELECT)
         self.canvas.refresh()
         self.ogr_status.showMessage(
@@ -4202,11 +4209,6 @@ class MainWindow(QMainWindow):
 
     def act_stretch_support_mode(self) -> None:
         """Enter Stretch Support mode: 2 clicks (endpoint, new position)."""
-        try:
-            self.canvas.segment_picked.disconnect(self._on_stretch_support_picked)
-        except (TypeError, RuntimeError):
-            pass
-        self.canvas.segment_picked.connect(self._on_stretch_support_picked)
         self.canvas.set_tool_mode(ToolMode.STRETCH_SUPPORT)
 
     @undo_step("Stretch support")
@@ -4235,10 +4237,6 @@ class MainWindow(QMainWindow):
             s.tail = Vertex(x1, y1)
         self.project.is_dirty = True
         self.project._notify("supports_changed")
-        try:
-            self.canvas.segment_picked.disconnect(self._on_stretch_support_picked)
-        except (TypeError, RuntimeError):
-            pass
         self.canvas.set_tool_mode(ToolMode.SELECT)
         self.canvas.refresh()
         self.ogr_status.showMessage(
@@ -4617,12 +4615,6 @@ class MainWindow(QMainWindow):
             # v0.1.243 (D226b) — what a design standard factors it by.
             "action": dlg.action(),
         }
-        # Disconnect anything previously connected, then connect once
-        try:
-            self.canvas.segment_picked.disconnect(self._on_dist_load_segment_picked)
-        except (TypeError, RuntimeError):
-            pass
-        self.canvas.segment_picked.connect(self._on_dist_load_segment_picked)
         self.canvas.set_tool_mode(ToolMode.ADD_DISTRIBUTED_LOAD)
         self.ogr_status.showMessage(
             tr("Click the start point of the load on a boundary, "
@@ -4633,10 +4625,6 @@ class MainWindow(QMainWindow):
     def _on_dist_load_segment_picked(
         self, sx: float, sy: float, ex: float, ey: float,
     ) -> None:
-        try:
-            self.canvas.segment_picked.disconnect(self._on_dist_load_segment_picked)
-        except (TypeError, RuntimeError):
-            pass
         if not getattr(self, "_pending_dist_load", None):
             return
         params = self._pending_dist_load
