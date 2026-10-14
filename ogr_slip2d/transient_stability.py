@@ -103,6 +103,10 @@ class StageStability:
 class TransientStabilityOutcome:
     stages: list = field(default_factory=list)
     warnings: list = field(default_factory=list)
+    #: v0.1.309 (D312) — the initial state (t = 0) with its factors, when
+    #: any stage asks for factors; apart from ``stages``, whose index is
+    #: the stage's.
+    initial: Optional[StageStability] = None
 
     @property
     def results(self) -> list:
@@ -357,6 +361,14 @@ def run_transient_stability(project, method_ids=None, *,
     rainfall. Every flagged stage runs the project's own configured
     search, through the same ``run_analysis`` a plain Compute uses, so
     the stage factors honour exactly the settings the project declares.
+
+    v0.1.309 (D312) — and, when any stage asks for factors, the factor of
+    the INITIAL state (t = 0), with the water of the initial conditions:
+    the value a drawdown history starts from, which the reference shows
+    first and the verification bank publishes (02-102: 1.745 and 1.815 for
+    the initial steady state). It is not a stage — no stage index moves —
+    so it lives on ``outcome.initial`` and on the notes of
+    ``project.transient_initial_result``; it costs one more search.
     """
     from ogr_core.materials import PorePressureType
     from .analysis_runner import run_analysis
@@ -385,6 +397,7 @@ def run_transient_stability(project, method_ids=None, *,
         from ogr_fem2d.solvers import SeepageBoundaryConditions
         in_force = SeepageBoundaryConditions.from_dict(
             gw.transient_initial_bcs)
+    initial_water = in_force          # v0.1.309 (D312): for the state at t = 0
     results = solve_project_groundwater(project, progress_cb=progress_cb,
                                         **mesh_kwargs)
     if not isinstance(results, list):
@@ -423,6 +436,23 @@ def run_transient_stability(project, method_ids=None, *,
                   else list(project.settings.methods.enabled_methods)
                   or ["bishop_simplified"])
 
+    def factors_of(r, water, stage):
+        """The configured search on field ``r`` with the weight of the
+        standing water of ``water``; the factors go on ``stage`` and on the
+        result's notes."""
+        with with_stage_water(project, r, water):
+            outcome = run_analysis(project, method_ids)
+        for mid, sr in (outcome.results or {}).items():
+            crit = sr.critical if sr else None
+            if crit is not None:
+                stage.factors[mid] = crit.fos
+        stage.warnings = list(outcome.warnings)
+        # Kept on the result too: that is where the Interpret chart and
+        # the saved project have read them since v0.1.31.
+        r.notes["fos"] = dict(stage.factors)
+        if stage.factors:
+            r.notes["fos_min"] = min(stage.factors.values())
+
     for i, r in enumerate(results):
         st = (gw.transient_stages[i]
               if i < len(gw.transient_stages) else {})
@@ -452,18 +482,18 @@ def run_transient_stability(project, method_ids=None, *,
             # It advanced under the currently defined conditions, which
             # is the fallback v0.1.31 established.
             in_force = current
-        with with_stage_water(project, r, in_force):
-            outcome = run_analysis(project, method_ids)
-        for mid, sr in (outcome.results or {}).items():
-            crit = sr.critical if sr else None
-            if crit is not None:
-                stage.factors[mid] = crit.fos
-        stage.warnings = list(outcome.warnings)
-        # Kept on the result too: that is where the Interpret chart and
-        # the saved project have read them since v0.1.31.
-        r.notes["fos"] = dict(stage.factors)
-        if stage.factors:
-            r.notes["fos_min"] = min(stage.factors.values())
+        factors_of(r, in_force, stage)
+
+    # v0.1.309 (D312) — the initial state, with its own water. Asked only
+    # when a stage asks for factors (a history needs its starting point,
+    # and a transient without factors needs none), and never when nothing
+    # couples: the stages already carry that warning.
+    start = getattr(project, "transient_initial_result", None)
+    if (couples and start is not None and start.total_head
+            and any(st.get("calculate_sf") for st in gw.transient_stages)):
+        out.initial = StageStability(index=-1, time=0.0,
+                                     label="initial state", result=start)
+        factors_of(start, initial_water, out.initial)
     return out
 
 

@@ -173,7 +173,8 @@ class TestBothWindowsPlotOneSeries:
         try:
             expected = fos_history(p.transient_results,
                                    p.transient_initial_result)
-            assert expected and len(expected[0][1]) == 2
+            # v0.1.309 (D312): the initial state's factor first, at t = 0
+            assert expected and expected[0][1] == [0.0, 1e4, 1e6]
             with _swap(xy, "show_xy_chart", record), _no_modals():
                 iw = _interpret(p, w)
                 iw._plot_fos_history()
