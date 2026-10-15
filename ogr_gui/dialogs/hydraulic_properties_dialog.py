@@ -44,6 +44,7 @@ Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 
+from PySide6.QtCore import QSize
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -81,6 +82,7 @@ from ogr_gui.dialogs.material_properties_dialog import (
     _exact_text,
     _PreciseSpinBox,
 )
+from ogr_gui.dialog_size import VerticalScrollArea, open_at_content_size
 from ogr_gui.i18n import tr  # noqa: E402
 
 _MODEL_LABELS = [
@@ -129,7 +131,9 @@ class HydraulicPropertiesDialog(QDialog):
         super().__init__(parent)
         self.project = project
         self.setWindowTitle(tr("Define Hydraulic Properties"))
-        self.resize(720, 520)
+        # v0.1.315 (D293) — grows from a corner, and opens at its content
+        # size at the end of the constructor
+        self.setSizeGripEnabled(True)
         self._current = -1
         # Working copies so Cancel really cancels
         self._props: list[HydraulicProperties] = []
@@ -148,9 +152,13 @@ class HydraulicPropertiesDialog(QDialog):
             self.list.addItem(m.name)
         self.list.currentRowChanged.connect(self._on_material_changed)
         left.addWidget(self.list, 1)
-        left.addWidget(QLabel(
-            "<i>Names and colours are defined in\nDefine Material "
-            "Properties</i>"))
+        # v0.1.315 (D293) — wrapped, translated and naming the real menu.
+        # As one rich-text line (a line break is just a space there) it was
+        # 486 px wide and set the minimum width of the whole dialog.
+        note = QLabel(tr("<i>Names and colours are defined in Properties > "
+                         "Define Materials.</i>"))
+        note.setWordWrap(True)
+        left.addWidget(note)
         root.addLayout(left, 1)
 
         # ---- parameters ---------------------------------------------
@@ -211,7 +219,10 @@ class HydraulicPropertiesDialog(QDialog):
         fm.addWidget(self.stack)
         right.addWidget(gb_m, 1)
         right.addWidget(self.gb_wc)
-        self.scroll = QScrollArea()
+        # v0.1.315 (D293) — as wide as what it holds: a plain scroll area
+        # got some 190 px of a 720 px dialog for 530 px of content, and
+        # scrolled sideways over cut notes and buttons
+        self.scroll = VerticalScrollArea()
         self.scroll.setWidgetResizable(True)
         self.scroll.setWidget(panel)
         column = QVBoxLayout()
@@ -233,6 +244,7 @@ class HydraulicPropertiesDialog(QDialog):
 
         if project.materials:
             self.list.setCurrentRow(0)
+        open_at_content_size(self, QSize(720, 520))
 
     # ==================================================================
     def _build_pages(self) -> None:

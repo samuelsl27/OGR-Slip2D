@@ -473,7 +473,11 @@ class DefineSupportDialog(QDialog):
         b_del.clicked.connect(self._delete_row)
         btn_row.addWidget(b_add); btn_row.addWidget(b_dup); btn_row.addWidget(b_del)
         left.addLayout(btn_row)
-        left_w = QWidget(); left_w.setLayout(left); left_w.setMaximumWidth(220)
+        left_w = QWidget(); left_w.setLayout(left)
+        # v0.1.315 (D293) — kept narrow, but never narrower than its row of
+        # buttons: at a flat 220 px "+ Añadir", "Duplicar" and "− Quitar"
+        # were cut
+        left_w.setMaximumWidth(max(220, left_w.minimumSizeHint().width()))
 
         # RIGHT — editor for the selected row
         right = QVBoxLayout()

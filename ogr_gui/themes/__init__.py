@@ -112,7 +112,6 @@ QPushButton {
     border: 1px solid #b0b0b0;
     padding: 5px 14px;
     border-radius: 3px;
-    min-width: 70px;
 }
 QPushButton:hover { background-color: #e8f1fb; }
 QPushButton:pressed { background-color: #c9dff7; }
@@ -257,7 +256,6 @@ QPushButton {
     padding: 5px 14px;
     border-radius: 3px;
     color: #e0e0e0;
-    min-width: 70px;
 }
 QPushButton:hover { background-color: #4a5a75; }
 QPushButton:pressed { background-color: #5b7398; }
@@ -320,5 +318,13 @@ THEMES: dict[str, str] = {
 
 
 def apply_theme(app, name: str = "light") -> None:
-    """Apply a named stylesheet to the running QApplication."""
+    """Apply a named stylesheet to the running QApplication.
+
+    v0.1.315 (D293) — and the floor of the buttons of a button box
+    (``ogr_gui.button_floor``), which replaces the ``min-width: 70px`` these
+    sheets used to give every button: in a style sheet that minimum
+    replaced the one the text asks for, and cut Spanish buttons.
+    """
+    from ogr_gui import button_floor
+    button_floor.install(app)
     app.setStyleSheet(THEMES.get(name, _LIGHT))

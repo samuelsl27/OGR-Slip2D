@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import copy
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -42,6 +42,7 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
     QVBoxLayout,
 )
+from ogr_gui.dialog_size import open_at_content_size
 from ogr_gui.i18n import tr  # noqa: E402
 
 
@@ -57,7 +58,6 @@ class TransientStagesDialog(QDialog):
         # as the stored one, so that clearing it is a change OK can write.
         self._initial_bcs = copy.deepcopy(settings.transient_initial_bcs)
         self.setWindowTitle(tr("Transient Groundwater"))
-        self.resize(520, 480)
 
         v = QVBoxLayout(self)
         # Built first: adding the stored rows below already refreshes them.
@@ -99,6 +99,9 @@ class TransientStagesDialog(QDialog):
                 self._stage_bcs[i] = st["bcs"]
         v.addWidget(self.table, 1)
 
+        # v0.1.315 (D293) — two rows: in Spanish the four buttons of one
+        # row asked for 1156 px, and the 520 px the dialog opened at cut all
+        # four once the theme let them shrink under their text.
         row = QHBoxLayout()
         b_cap = QPushButton(tr("Capture current BCs"))
         b_cap.setToolTip(tr(
@@ -126,9 +129,12 @@ class TransientStagesDialog(QDialog):
                                                     False, ""))
         b_del = QPushButton(tr("Delete stage"))
         b_del.clicked.connect(self._delete)
-        for b in (b_add, b_del):
-            row.addWidget(b)
         row.addStretch(1)
+        stage_row = QHBoxLayout()
+        for b in (b_add, b_del):
+            stage_row.addWidget(b)
+        stage_row.addStretch(1)
+        v.addLayout(stage_row)
         v.addLayout(row)
         # Next to what it clears, and not a fifth button on a row that is
         # already too narrow in Spanish (D293).
@@ -162,6 +168,9 @@ class TransientStagesDialog(QDialog):
         v.addWidget(bb)
 
         self._on_enabled(self.chk_enabled.isChecked())
+        # v0.1.315 (D293) — at the size its content asks for, not a fixed
+        # English one
+        open_at_content_size(self, QSize(520, 480))
 
     # ------------------------------------------------------------------
     def _on_enabled(self, on: bool) -> None:

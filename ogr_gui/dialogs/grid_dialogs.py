@@ -62,13 +62,17 @@ class AddGridDialog(QDialog):
         s = project.settings.search
 
         root = QVBoxLayout(self)
-        root.addWidget(QLabel(
+        intro = QLabel(
             "<b>Define the slip-circle centre grid.</b><br>"
             "Each cell of the grid is a candidate circle centre. "
             "For each centre, the radius is swept from a minimum to "
             "the maximum geometric extent in steps defined by the "
             "Radius Increment (Surface Options)."
-        ))
+        )
+        # v0.1.315 (D293) — unwrapped it was one 1616 px line, and the
+        # minimum width of the dialog: wider than a 1366 px screen
+        intro.setWordWrap(True)
+        root.addWidget(intro)
 
         # X range
         gx = QGroupBox(tr("X range"))

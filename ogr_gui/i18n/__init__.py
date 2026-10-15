@@ -2514,6 +2514,11 @@ _DICTS: dict[str, dict[str, str]] = {
             "resultados transitorios",
         "initial conditions of the transient":
             "condiciones iniciales del transitorio",
+        # v0.1.315 (D293) — the note of the hydraulic dialog, wrapped
+        "<i>Names and colours are defined in Properties > Define "
+        "Materials.</i>":
+            "<i>Los nombres y los colores se definen en Propiedades > "
+            "Definir materiales.</i>",
         # v0.1.313 (D313) — a support whose ends coincide
         "A support needs two different points: its head and tail coincide.":
             "Un soporte necesita dos puntos distintos: su cabeza y su cola "
