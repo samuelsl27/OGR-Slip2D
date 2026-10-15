@@ -1143,12 +1143,15 @@ class SurfaceOptionsDialog(QDialog):
         self._b_angle_note.setWordWrap(True)
         self._b_angle_note.setStyleSheet("color: #a05a00;")
         outer.addWidget(self._b_angle_note)
-        try:
-            from ogr_slip2d.failure_direction import (
-                model_crest_is_on_the_right)
-            self._b_crest_on_right = model_crest_is_on_the_right(project)
-        except Exception:  # noqa: BLE001 - a dialog must open on any model
-            self._b_crest_on_right = True
+        # v0.1.314 (D305) — ``project`` was a name this method never had:
+        # every call raised NameError, and an ``except Exception`` turned it
+        # into "crest on the right" whatever the slope, so a slope facing the
+        # other way was told the limits of the wrong side. No guard now:
+        # with no External boundary the function itself falls back to the
+        # declared failure direction, so a dialog opens on any model and
+        # there is nothing left to cover.
+        from ogr_slip2d.failure_direction import model_crest_is_on_the_right
+        self._b_crest_on_right = model_crest_is_on_the_right(self.project)
         self._refresh_block_angle_note()
 
         # Convex / Optimize
