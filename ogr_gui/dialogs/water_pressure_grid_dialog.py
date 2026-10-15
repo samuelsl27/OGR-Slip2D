@@ -87,7 +87,7 @@ class WaterPressureGridDialog(QDialog):
 
         # --- points table ---------------------------------------------
         self.table = QTableWidget(0, 3)
-        self.table.setHorizontalHeaderLabels(["x", "y", "value"])
+        self.table.setHorizontalHeaderLabels(["x", "y", tr("value")])
         self.table.horizontalHeader().setStretchLastSection(True)
         for (x, y, val) in grid.points:
             self._append_row(x, y, val)
@@ -134,7 +134,7 @@ class WaterPressureGridDialog(QDialog):
 
     def _update_count(self) -> None:
         if hasattr(self, "lbl_count"):
-            self.lbl_count.setText(f"{self.table.rowCount()} points")
+            self.lbl_count.setText(tr('{0} points').format(self.table.rowCount()))
 
     # ------------------------------------------------------------------
     def _import_csv(self) -> None:
@@ -147,8 +147,8 @@ class WaterPressureGridDialog(QDialog):
                                        errors="ignore").read())
         if not pts:
             QMessageBox.warning(
-                self, "Import",
-                "No (x, y, value) rows could be parsed from the file.")
+                self, tr("Import"),
+                tr("No (x, y, value) rows could be parsed from the file."))
             return
         for x, y, val in pts:
             self._append_row(x, y, val)
@@ -163,8 +163,8 @@ class WaterPressureGridDialog(QDialog):
                 val = float(self.table.item(r, 2).text().replace(",", "."))
             except (TypeError, ValueError, AttributeError):
                 QMessageBox.warning(
-                    self, "Water Pressure Grid",
-                    f"Row {r + 1} is not numeric.")
+                    self, tr("Water Pressure Grid"),
+                    tr('Row {0} is not numeric.').format(r + 1))
                 return
             pts.append((x, y, val))
         self.project.water_pressure_grid = WaterPressureGrid(

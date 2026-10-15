@@ -2514,6 +2514,142 @@ _DICTS: dict[str, dict[str, str]] = {
             "resultados transitorios",
         "initial conditions of the transient":
             "condiciones iniciales del transitorio",
+        # v0.1.318 (D300, family a) — the interpretation windows, the
+        # statistics window, the charts and the two dialogs whose messages
+        # were the last ones outside tr()
+        "   (closure |E_n|/max|E| = {0:.1f} % — expected for moment-only "
+        "methods)":
+            "   (cierre |E_n|/max|E| = {0:.1f} % — esperable en los métodos "
+            "que solo equilibran momentos)",
+        " (x {0:.2f} to {1:.2f})": " (x de {0:.2f} a {1:.2f})",
+        "<b>Cumulative distribution (text fallback)</b><br>Surfaces with FoS "
+        "&lt; 1.0 : {0} / {1}<br>P(FoS &lt; 1) ≈ {2:.3%}<br><i>Install "
+        "matplotlib for an interactive CDF plot.</i>":
+            "<b>Distribución acumulada (en texto)</b><br>Superficies con FS "
+            "&lt; 1,0: {0} / {1}<br>P(FS &lt; 1) ≈ {2:.3%}<br><i>Instala "
+            "matplotlib para un gráfico interactivo de la distribución.</i>",
+        "<b>matplotlib is required for interactive charts.</b><br>Install it "
+        "with:<br><code>pip install matplotlib</code>":
+            "<b>Los gráficos interactivos necesitan matplotlib.</b><br>"
+            "Instálalo con:<br><code>pip install matplotlib</code>",
+        "<b>{0}</b> surfaces pass within {1} m of ({2:.2f}, {3:.2f}).<br>":
+            "<b>{0}</b> superficies pasan a menos de {1} m de ({2:.2f}, "
+            "{3:.2f}).<br>",
+        "A flat tail means the sample count is sufficient; a curve still "
+        "drifting means more samples are needed.":
+            "Una cola plana indica que el número de muestras basta; una curva "
+            "que aún se mueve indica que hacen falta más.",
+        "Area (m²)": "Área (m²)",
+        "CDF over {0} surfaces": "Distribución acumulada de {0} superficies",
+        "Centre ({0:.2f}, {1:.2f}) — best FoS at this centre = {2:.3f}":
+            "Centro ({0:.2f}, {1:.2f}) — FS mínimo en este centro = {2:.3f}",
+        "Centre X": "Centro X",
+        "Centre Y": "Centro Y",
+        "Convergence Plot...": "Gráfico de convergencia...",
+        "Correlation coefficient. A negative value is the usual case for "
+        "cohesion and friction angle.":
+            "Coeficiente de correlación. Lo habitual entre la cohesión y el "
+            "ángulo de rozamiento es un valor negativo.",
+        "Critical Probabilistic Surface": "Superficie probabilística crítica",
+        "Critical surface — {0} slices — global FoS = {1:.3f}":
+            "Superficie crítica — {0} dovelas — FS global = {1:.3f}",
+        "Cumulative Plot...": "Gráfico acumulado...",
+        "Define User Data...": "Definir datos de usuario...",
+        "Discharge section": "Sección de descarga",
+        "Distribution over {0} valid surfaces":
+            "Distribución de {0} superficies válidas",
+        "Enter a relative minimum and maximum first.":
+            "Introduce antes un mínimo y un máximo relativos.",
+        "Enter four numbers: x0,y0,x1,y1":
+            "Introduce cuatro números: x0,y0,x1,y1",
+        "Flow Vectors": "Vectores de flujo",
+        "FoS": "FS",
+        "FoS = {0:.4f}{1}": "FS = {0:.4f}{1}",
+        "FoS vs Radius — {0} surfaces": "FS frente al radio — {0} superficies",
+        "Free Body Diagram — slice {0} ({1})":
+            "Diagrama de sólido libre — dovela {0} ({1})",
+        "Histogram Plot...": "Histograma...",
+        "Iteration History...": "Historial de iteraciones...",
+        "Line of thrust unavailable for this result":
+            "La línea de empuje no está disponible para este resultado",
+        "Method": "Método",
+        "Method: <b>{0}</b><br><i>No valid surfaces ({1} invalid)</i>":
+            "Método: <b>{0}</b><br><i>Ninguna superficie válida ({1} no "
+            "válidas)</i>",
+        "Method: <b>{0}</b><br><i>{1} valid surfaces, none with a critical "
+        "seismic coefficient: no coefficient within the search range brings "
+        "them to the target factor of safety.</i>":
+            "Método: <b>{0}</b><br><i>{1} superficies válidas, ninguna con "
+            "coeficiente sísmico crítico: ningún coeficiente del intervalo de "
+            "búsqueda las lleva al factor de seguridad objetivo.</i>",
+        "Method: <b>{0}</b><br>Valid surfaces: <b>{1}</b> / {2}<br>{3}<br>"
+        "<b>{4}</b><br>{5} = <span style='color:{6}; font-size:14pt;'><b>{7}"
+        "</b></span>{8}<br>Iterations: {9}<br>Centre: ({10:.2f}, {11:.2f})"
+        "<br>Radius: {12:.2f} m":
+            "Método: <b>{0}</b><br>Superficies válidas: <b>{1}</b> / {2}<br>"
+            "{3}<br><b>{4}</b><br>{5} = <span style='color:{6}; "
+            "font-size:14pt;'><b>{7}</b></span>{8}<br>Iteraciones: {9}<br>"
+            "Centro: ({10:.2f}, {11:.2f})<br>Radio: {12:.2f} m",
+        "No (x, y, value) rows could be parsed from the file.":
+            "No se pudo leer ninguna fila (x, y, valor) del archivo.",
+        "No results.": "Sin resultados.",
+        "No slices available.": "No hay dovelas.",
+        "No valid surfaces to scatter.":
+            "No hay superficies válidas para el gráfico de dispersión.",
+        "Normal flux through the section:\n\nQ = {0:.6e}  (per unit width)\n\n"
+        "Sign convention: positive when the flow crosses towards the section "
+        "normal, i.e. the tangent rotated +90 deg. Reversing the section "
+        "reverses the sign.":
+            "Caudal normal a través de la sección:\n\nQ = {0:.6e}  (por "
+            "unidad de anchura)\n\nConvenio de signos: positivo cuando el "
+            "flujo cruza hacia la normal de la sección, es decir, la "
+            "tangente girada +90°. Invertir la sección invierte el signo.",
+        "OGR Slip2D — Interpret — {0}": "OGR Slip2D — Interpretar — {0}",
+        "P(FoS<1) = {0:.2%}": "P(FS<1) = {0:.2%}",
+        "Phreatic Surface": "Superficie freática",
+        "Piezometric Lines": "Líneas piezométricas",
+        "Post-processing — read-only view. Close this window to return to "
+        "the model.":
+            "Posproceso — vista de solo lectura. Cierra esta ventana para "
+            "volver al modelo.",
+        "Query...": "Consulta...",
+        "Radius": "Radio",
+        "Result Table — {0} surfaces":
+            "Tabla de resultados — {0} superficies",
+        "Row {0} is not numeric.": "La fila {0} no es numérica.",
+        "Scatter Plot...": "Gráfico de dispersión...",
+        "Selected surface at ({0:.2f}, {1:.2f}) — FoS = {2:.3f}":
+            "Superficie elegida en ({0:.2f}, {1:.2f}) — FS = {2:.3f}",
+        "Sensitivity Plot...": "Gráfico de sensibilidad...",
+        "Slice {0}: α={1:.1f}°, b={2:.2f} m, FoS={3:.4f}{4}":
+            "Dovela {0}: α={1:.1f}°, b={2:.2f} m, FS={3:.4f}{4}",
+        "Slices": "Dovelas",
+        "Streamlines": "Líneas de corriente",
+        "Values along surface (FoS={0:.3f})":
+            "Valores a lo largo de la superficie (FS={0:.3f})",
+        "iterations: {0}": "iteraciones: {0}",
+        "matplotlib not installed.": "matplotlib no está instalado.",
+        "matplotlib not installed. Run <code>pip install matplotlib</code> "
+        "to enable interactive charts.":
+            "matplotlib no está instalado. Ejecuta <code>pip install "
+            "matplotlib</code> para tener gráficos interactivos.",
+        "mean = {0:.4f}": "media = {0:.4f}",
+        "nodes: {0}": "nodos: {0}",
+        "samples: {0}   |   mean: {1:.4f}   |   std dev: {2:.4f}   |   min: "
+        "{3:.4f}   |   max: {4:.4f}\nprobability of failure: {5:.2f} %   |   "
+        "reliability index: {6:.3f} (lognormal {7:.3f})   |   ":
+            "muestras: {0}   |   media: {1:.4f}   |   desv. típica: {2:.4f}"
+            "   |   mín: {3:.4f}   |   máx: {4:.4f}\nprobabilidad de rotura: "
+            "{5:.2f} %   |   índice de fiabilidad: {6:.3f} (lognormal "
+            "{7:.3f})   |   ",
+        "seepage-face nodes: {0}": "nodos de la cara de rezume: {0}",
+        "support {0}": "soporte {0}",
+        "value": "valor",
+        "{0}  —  no valid surface": "{0}  —  ninguna superficie válida",
+        "{0} points": "{0} puntos",
+        "Free Body Diagram": "Diagrama de sólido libre",
+        "Section as x0,y0,x1,y1:": "Sección como x0,y0,x1,y1:",
+        "Slice index:": "Índice de la dovela:",
         # v0.1.315 (D293) — the note of the hydraulic dialog, wrapped
         "<i>Names and colours are defined in Properties > Define "
         "Materials.</i>":

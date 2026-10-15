@@ -56,8 +56,8 @@ class _ChartDialogBase(QDialog):
         self._root = QVBoxLayout(self)
         if not MPL_AVAILABLE:
             self._root.addWidget(QLabel(
-                "<b>matplotlib is required for interactive charts.</b><br>"
-                "Install it with:<br><code>pip install matplotlib</code>"
+                tr("<b>matplotlib is required for interactive charts.</b><br>"
+                "Install it with:<br><code>pip install matplotlib</code>")
             ))
             btns = QDialogButtonBox(QDialogButtonBox.Close)
             btns.rejected.connect(self.reject)
@@ -129,7 +129,7 @@ class HistogramDialog(_ChartDialogBase):
             ax.legend(loc="upper right")
         ax.set_xlabel("Factor of Safety")
         ax.set_ylabel("Number of surfaces")
-        ax.set_title(f"Distribution over {len(self._values)} valid surfaces")
+        ax.set_title(tr('Distribution over {0} valid surfaces').format(len(self._values)))
         ax.grid(True, alpha=0.3)
         self.canvas.draw_idle()
 
@@ -160,13 +160,13 @@ class CumulativeDialog(_ChartDialogBase):
         pf = (values < 1.0).sum() / len(values) if len(values) else 0.0
         ax.text(
             1.02, 0.05,
-            f"P(FoS<1) = {pf:.2%}",
+            tr('P(FoS<1) = {0:.2%}').format(pf),
             color="#c0392b", fontsize=11, fontweight="bold",
             transform=ax.transData,
         )
         ax.set_xlabel("Factor of Safety")
         ax.set_ylabel("Cumulative probability")
-        ax.set_title(f"CDF over {len(values)} surfaces")
+        ax.set_title(tr('CDF over {0} surfaces').format(len(values)))
         ax.set_ylim(0, 1.02)
         ax.grid(True, alpha=0.3)
         self.canvas.draw_idle()
@@ -244,8 +244,7 @@ class SFAlongSlopeDialog(_ChartDialogBase):
         ax.axhline(1.0, color="#c0392b", linestyle="--", linewidth=1.0)
         ax.set_xlabel("Normalised distance along slope (toe → crest)")
         ax.set_ylabel("Factor of Safety")
-        ax.set_title(f"Critical surface — {len(slices)} slices — "
-                     f"global FoS = {fos_global:.3f}")
+        ax.set_title(tr('Critical surface — {0} slices — global FoS = {1:.3f}').format(len(slices), fos_global))
         ax.grid(True, alpha=0.3)
         self.canvas.draw_idle()
 

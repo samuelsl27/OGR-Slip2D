@@ -321,7 +321,7 @@ class StatisticsWindow(QMainWindow):
                           if self.factored
                           else tr("failure threshold (FS = 1)")))
         ax.axvline(st.mean, color="#333333", ls="--", lw=1.4,
-                   label=f"mean = {st.mean:.4f}")
+                   label=tr('mean = {0:.4f}').format(st.mean))
         ax.set_xlabel(self.quantity)
         ax.set_ylabel(tr("Number of samples"))
         ax.legend(fontsize=8)
@@ -329,13 +329,7 @@ class StatisticsWindow(QMainWindow):
         self._show(fig)
         res = self.prob.by_method[mid]
         self.status.setText(
-            f"samples: {st.n}   |   mean: {st.mean:.4f}   |   "
-            f"std dev: {st.std_dev:.4f}   |   min: {st.minimum:.4f}   |   "
-            f"max: {st.maximum:.4f}\n"
-            f"probability of failure: "
-            f"{st.probability_of_failure() * 100:.2f} %   |   "
-            f"reliability index: {st.reliability_index():.3f} "
-            f"(lognormal {st.lognormal_reliability_index():.3f})   |   "
+            tr('samples: {0}   |   mean: {1:.4f}   |   std dev: {2:.4f}   |   min: {3:.4f}   |   max: {4:.4f}\nprobability of failure: {5:.2f} %   |   reliability index: {6:.3f} (lognormal {7:.3f})   |   ').format(st.n, st.mean, st.std_dev, st.minimum, st.maximum, st.probability_of_failure() * 100, st.reliability_index(), st.lognormal_reliability_index())
             + (tr("deterministic over-design factor") if self.factored
                else tr("deterministic FoS"))
             + f": {res.deterministic_fos:.4f}"
@@ -380,8 +374,8 @@ class StatisticsWindow(QMainWindow):
         ax.legend(lines, [ln.get_label() for ln in lines], fontsize=8)
         self._show(fig)
         self.status.setText(
-            "A flat tail means the sample count is sufficient; a curve "
-            "still drifting means more samples are needed.")
+            tr("A flat tail means the sample count is sufficient; a curve "
+            "still drifting means more samples are needed."))
 
     # ------------------------------------------------------------------
     def _plot_sensitivity(self, mid):

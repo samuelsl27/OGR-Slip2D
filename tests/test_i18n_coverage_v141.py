@@ -128,7 +128,11 @@ _VISIBLE_MESSAGES = [
 # v0.1.308 — 12 -> 10: the two literal message boxes of Interpret
 # Groundwater's "FoS vs time…" (D311): its chart is non-modal and shared with
 # Interpret, and "no factor" goes to the status bar through tr().
-_UNWRAPPED_BUDGET_MESSAGES = 10
+# v0.1.318 — 10 -> 0: the last ten, in Interpret (4), Interpret Groundwater
+# (2), the random variables dialog (2) and the water pressure grid dialog
+# (2), go through tr() (D300). test_gui_spanish_v1318 now watches every
+# visible text of ogr_gui, messages included.
+_UNWRAPPED_BUDGET_MESSAGES = 0
 
 
 def _gui_sources():

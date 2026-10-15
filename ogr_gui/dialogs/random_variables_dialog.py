@@ -156,8 +156,8 @@ class RandomVariablesDialog(QDialog):
         self.sp_corr.setRange(-1.0, 1.0)
         self.sp_corr.setSingleStep(0.05)
         self.sp_corr.setToolTip(
-            "Correlation coefficient. A negative value is the usual case "
-            "for cohesion and friction angle.")
+            tr("Correlation coefficient. A negative value is the usual case "
+            "for cohesion and friction angle."))
         f.addRow(tr("Correlation coefficient:"), self.sp_corr)
 
         for w in (self.sp_std, self.sp_rmin, self.sp_rmax, self.sp_corr):
@@ -298,8 +298,8 @@ class RandomVariablesDialog(QDialog):
         rv = self.defined[key]
         if not rv.distribution.is_random:
             QMessageBox.information(
-                self, "Plot",
-                "Enter a relative minimum and maximum first.")
+                self, tr("Plot"),
+                tr("Enter a relative minimum and maximum first."))
             return
         try:
             import matplotlib
@@ -307,8 +307,8 @@ class RandomVariablesDialog(QDialog):
             from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
             from matplotlib.figure import Figure
         except ImportError:
-            QMessageBox.information(self, "Plot",
-                                    "matplotlib is not installed.")
+            QMessageBox.information(self, tr("Plot"),
+                                    tr("matplotlib is not installed."))
             return
         curve = rv.distribution.curve(120)
         dlg = QDialog(self)

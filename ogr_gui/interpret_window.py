@@ -488,8 +488,7 @@ class _SummaryDock(QDockWidget):
         c = result.critical
         if c is None:
             self.label.setText(
-                f"Method: <b>{result.method_id}</b><br>"
-                f"<i>No valid surfaces ({result.invalid_count} invalid)</i>"
+                tr('Method: <b>{0}</b><br><i>No valid surfaces ({1} invalid)</i>').format(result.method_id, result.invalid_count)
             )
             # v0.1.127 - and under a seismic objective "no critical
             # surface" is not the same statement as "no valid surfaces".
@@ -501,11 +500,7 @@ class _SummaryDock(QDockWidget):
             if (getattr(result, "objective", "fos") != "fos"
                     and result.valid_count):
                 self.label.setText(
-                    f"Method: <b>{result.method_id}</b><br>"
-                    f"<i>{result.valid_count} valid surfaces, none with a "
-                    f"critical seismic coefficient: no coefficient within "
-                    f"the search range brings them to the target factor "
-                    f"of safety.</i>")
+                    tr('Method: <b>{0}</b><br><i>{1} valid surfaces, none with a critical seismic coefficient: no coefficient within the search range brings them to the target factor of safety.</i>').format(result.method_id, result.valid_count))
             return
         sd = c.surface.to_dict()
         # v0.1.82 — the hard-coded colour table that used to live here is
@@ -541,17 +536,7 @@ class _SummaryDock(QDockWidget):
         else:
             esfuerzo = (tr("Generation attempts: %d") % intentos) + "<br>"
         self.label.setText(
-            f"Method: <b>{result.method_id}</b><br>"
-            f"Valid surfaces: <b>{n_ok}</b> / "
-            f"{getattr(result, 'total_count', len(result.evaluations))}<br>"
-            f"{esfuerzo}"
-            f"<br>"
-            f"<b>{tr('Critical surface')}</b><br>"
-            f"{label} = <span style='color:{theme_color('accent')}; font-size:14pt;'>"
-            f"<b>{value}</b></span>{extra}<br>"
-            f"Iterations: {c.iterations}<br>"
-            f"Centre: ({sd.get('centre_x', 0):.2f}, {sd.get('centre_y', 0):.2f})<br>"
-            f"Radius: {sd.get('radius', 0):.2f} m"
+            tr("Method: <b>{0}</b><br>Valid surfaces: <b>{1}</b> / {2}<br>{3}<br><b>{4}</b><br>{5} = <span style='color:{6}; font-size:14pt;'><b>{7}</b></span>{8}<br>Iterations: {9}<br>Centre: ({10:.2f}, {11:.2f})<br>Radius: {12:.2f} m").format(result.method_id, n_ok, getattr(result, 'total_count', len(result.evaluations)), esfuerzo, tr('Critical surface'), label, theme_color('accent'), value, extra, c.iterations, sd.get('centre_x', 0), sd.get('centre_y', 0), sd.get('radius', 0))
         )
 
 
@@ -568,7 +553,7 @@ class _ResultsTableDock(QDockWidget):
         vbox = QVBoxLayout(container)
         self.table = QTableWidget(0, 6)
         self.table.setHorizontalHeaderLabels(
-            ["#", "FoS", "Method", "Centre X", "Centre Y", "Radius"]
+            ["#", tr("FoS"), tr("Method"), tr("Centre X"), tr("Centre Y"), tr("Radius")]
         )
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
@@ -612,7 +597,7 @@ class InterpretWindow(QMainWindow):
         # to say here.
         super().__init__(parent)
         self.factor_report = factor_report
-        self.setWindowTitle(f"OGR Slip2D — Interpret — {project.name}")
+        self.setWindowTitle(tr('OGR Slip2D — Interpret — {0}').format(project.name))
         self.resize(1200, 800)
         self.project = project
 
@@ -689,8 +674,8 @@ class InterpretWindow(QMainWindow):
         except AttributeError:
             pass
 
-        self.statusBar().showMessage("Post-processing — read-only view. "
-                                     "Close this window to return to the model.", 5000)
+        self.statusBar().showMessage(tr("Post-processing — read-only view. "
+                                     "Close this window to return to the model."), 5000)
 
         # v0.1.49 (phase I1) — the pieces the post-processor
         # specification calls for and this window lacked: a graphical
@@ -1034,31 +1019,31 @@ class InterpretWindow(QMainWindow):
         m_query.addAction(self._act_query_text)
 
         # -- Groundwater ----------------------------------------------
-        m_gw = mb.addMenu("Groundwater")
-        m_gw.addAction(QAction("Phreatic Surface", self, checkable=True, checked=True))
-        m_gw.addAction(QAction("Piezometric Lines", self, checkable=True))
-        m_gw.addAction(QAction("Flow Vectors", self, checkable=True))
-        m_gw.addAction(QAction("Streamlines", self, checkable=True))
+        m_gw = mb.addMenu(tr("Groundwater"))
+        m_gw.addAction(QAction(tr("Phreatic Surface"), self, checkable=True, checked=True))
+        m_gw.addAction(QAction(tr("Piezometric Lines"), self, checkable=True))
+        m_gw.addAction(QAction(tr("Flow Vectors"), self, checkable=True))
+        m_gw.addAction(QAction(tr("Streamlines"), self, checkable=True))
         m_gw.addSeparator()
-        m_gw.addAction(QAction("Export All Nodal Values...", self,
+        m_gw.addAction(QAction(tr("Export All Nodal Values..."), self,
                                 triggered=self._export_nodal_values))
         # v0.1.53 — the groundwater field has its own contour and legend
         # options, separate from the stability ones: it is a different
         # scalar with a different range.
         m_gw.addSeparator()
-        m_gw.addAction(QAction("Contour Options...", self,
+        m_gw.addAction(QAction(tr("Contour Options..."), self,
                                 triggered=self._gw_contour_options))
-        m_gw.addAction(QAction("Legend Options...", self,
+        m_gw.addAction(QAction(tr("Legend Options..."), self,
                                 triggered=self._legend_options))
         m_gw.addSeparator()
-        m_gw.addAction(QAction("Query...", self,
+        m_gw.addAction(QAction(tr("Query..."), self,
                                 triggered=self._gw_query))
-        m_gw.addAction(QAction("Define User Data...", self,
+        m_gw.addAction(QAction(tr("Define User Data..."), self,
                                 triggered=self._gw_user_data))
         m_gw.addSeparator()
-        self._act_gw_iter = QAction("Iteration History...", self,
+        self._act_gw_iter = QAction(tr("Iteration History..."), self,
                                     triggered=self._gw_iteration_history)
-        self._act_gw_conv = QAction("Convergence Plot...", self,
+        self._act_gw_conv = QAction(tr("Convergence Plot..."), self,
                                     triggered=self._gw_convergence)
         for act in (self._act_gw_iter, self._act_gw_conv):
             act.setEnabled(
@@ -1067,23 +1052,23 @@ class InterpretWindow(QMainWindow):
             m_gw.addAction(act)
 
         # -- Statistics -----------------------------------------------
-        m_stat = mb.addMenu("Statistics")
-        m_stat.addAction(QAction("Histogram Plot...", self,
+        m_stat = mb.addMenu(tr("Statistics"))
+        m_stat.addAction(QAction(tr("Histogram Plot..."), self,
                                   triggered=self._histogram))
-        m_stat.addAction(QAction("Cumulative Plot...", self,
+        m_stat.addAction(QAction(tr("Cumulative Plot..."), self,
                                   triggered=self._cumulative))
-        m_stat.addAction(QAction("Scatter Plot...", self,
+        m_stat.addAction(QAction(tr("Scatter Plot..."), self,
                                   triggered=self._scatter))
         # v0.1.53 — the rest of the statistics module. Every one of these
         # needs a probabilistic or sensitivity result, so they are
         # disabled with a tooltip saying what to run first.
         m_stat.addSeparator()
-        self._act_sens_plot = QAction("Sensitivity Plot...", self,
+        self._act_sens_plot = QAction(tr("Sensitivity Plot..."), self,
                                       triggered=self._sensitivity_plot)
-        self._act_conv_plot = QAction("Convergence Plot...", self,
+        self._act_conv_plot = QAction(tr("Convergence Plot..."), self,
                                       triggered=self._convergence_plot)
         self._act_export_stats = QAction(
-            "Export Statistics Data...", self,
+            tr("Export Statistics Data..."), self,
             triggered=self._export_statistics)
         self._act_show_gm = QAction(tr("Show GM Surfaces"), self,
                                     checkable=True)
@@ -1091,7 +1076,7 @@ class InterpretWindow(QMainWindow):
         self._act_pick_gm = QAction(tr("Pick GM Surfaces"), self,
                                     triggered=self._pick_gm_surfaces)
         self._act_crit_prob = QAction(
-            "Critical Probabilistic Surface", self, checkable=True)
+            tr("Critical Probabilistic Surface"), self, checkable=True)
         self._act_crit_prob.toggled.connect(self._toggle_critical_prob)
         stats_acts = [self._act_sens_plot, self._act_conv_plot,
                       self._act_export_stats, self._act_crit_prob]
@@ -1158,7 +1143,7 @@ class InterpretWindow(QMainWindow):
             # produced the numbers on screen is the first thing a reader
             # of a report needs, single method or not. So the toolbar is
             # still created, just without the combo box.
-            tb = QToolBar("Method", self)
+            tb = QToolBar(tr("Method"), self)
             tb.setMovable(False)
             tb.setObjectName("MethodSelectorToolbar")
             self.lbl_algorithm = QLabel("")
@@ -1168,7 +1153,7 @@ class InterpretWindow(QMainWindow):
             self.addToolBar(Qt.TopToolBarArea, tb)
             return
 
-        tb = QToolBar("Method", self)
+        tb = QToolBar(tr("Method"), self)
         tb.setMovable(False)
         tb.setObjectName("MethodSelectorToolbar")
 
@@ -1202,7 +1187,7 @@ class InterpretWindow(QMainWindow):
                 )
             else:
                 self.cb_method.addItem(
-                    f"{label}  —  no valid surface", mid,
+                    tr('{0}  —  no valid surface').format(label), mid,
                 )
         self.cb_method.setMinimumWidth(340)
         self.cb_method.currentIndexChanged.connect(self._on_method_changed)
@@ -1282,7 +1267,7 @@ class InterpretWindow(QMainWindow):
     # Toolbar
     # ==================================================================
     def _build_toolbar(self) -> None:
-        tb = QToolBar("Interpret", self)
+        tb = QToolBar(tr("Interpret"), self)
         tb.setMovable(False)
         self.addToolBar(Qt.TopToolBarArea, tb)
         tb.addAction(icon("zoom_all"), tr("Zoom All"), self.canvas.zoom_all)
@@ -1341,8 +1326,7 @@ class InterpretWindow(QMainWindow):
         self._refresh_canvas_with_highlights(hover_id=sd.get("id"),
                                              hover_surface_dict=sd)
         self.statusBar().showMessage(
-            f"Centre ({cell[0]:.2f}, {cell[1]:.2f}) — best FoS at this "
-            f"centre = {best.fos:.3f}",
+            tr('Centre ({0:.2f}, {1:.2f}) — best FoS at this centre = {2:.3f}').format(cell[0], cell[1], best.fos),
             2000,
         )
         self._refresh_legend()
@@ -1447,7 +1431,7 @@ class InterpretWindow(QMainWindow):
         if self._slices_visible:
             self._redraw_slices_for_selected()
         self.statusBar().showMessage(
-            f"Selected surface at ({cx:.2f}, {cy:.2f}) — FoS = {best.fos:.3f}",
+            tr('Selected surface at ({0:.2f}, {1:.2f}) — FoS = {2:.3f}').format(cx, cy, best.fos),
             3000,
         )
 
@@ -1485,7 +1469,7 @@ class InterpretWindow(QMainWindow):
         from PySide6.QtWidgets import QApplication
         pix = self.canvas.grab()
         QApplication.clipboard().setPixmap(pix)
-        self.statusBar().showMessage("Canvas image copied to clipboard.", 2000)
+        self.statusBar().showMessage(tr("Canvas image copied to clipboard."), 2000)
 
 
     # ==================================================================
@@ -1566,7 +1550,7 @@ class InterpretWindow(QMainWindow):
             label = (getattr(sup, "name", "")
                      or getattr(stype, "_display_name", None)
                      or getattr(stype, "DISPLAY_NAME", None)
-                     or f"support {i}")
+                     or tr('support {0}').format(i))
             cap = None
             for attr in ("anchor_capacity", "tensile_capacity",
                          "plate_capacity"):
@@ -2603,7 +2587,7 @@ class InterpretWindow(QMainWindow):
             return
         pix = self.canvas.grab()
         pix.save(path)
-        self.statusBar().showMessage(f"Saved {path}", 3000)
+        self.statusBar().showMessage(tr('Saved {0}').format(path), 3000)
 
     def _export_slice_data_csv(self) -> None:
         """The slices of the selected surface, or of the critical one, with
@@ -2635,7 +2619,7 @@ class InterpretWindow(QMainWindow):
 
     def _export_data_csv(self) -> None:
         if self.search_result is None:
-            self._info("No results to export.")
+            self._info(tr("No results to export."))
             return
         path, _ = QFileDialog.getSaveFileName(
             self, "Export Raw Data", "", "CSV (*.csv)"
@@ -2657,9 +2641,9 @@ class InterpretWindow(QMainWindow):
                         f"{sd.get('radius', '')},{sd.get('x_left', '')},"
                         f"{sd.get('x_right', '')},{r.iterations},{r.converged}\n"
                     )
-            self.statusBar().showMessage(f"Saved {path}", 3000)
+            self.statusBar().showMessage(tr('Saved {0}').format(path), 3000)
         except Exception as e:  # noqa: BLE001
-            QMessageBox.critical(self, "Error", str(e))
+            QMessageBox.critical(self, tr("Error"), str(e))
 
     # ------------------------------------------------------------------
     def _raw_data_rows(self) -> list:
@@ -2721,9 +2705,9 @@ class InterpretWindow(QMainWindow):
                 with open(path, "w", encoding="utf-8") as f:
                     f.write(body + "\n")
             except OSError as e:
-                QMessageBox.critical(dlg, "Error", str(e))
+                QMessageBox.critical(dlg, tr("Error"), str(e))
                 return
-            self.statusBar().showMessage(f"Saved {path}", 3000)
+            self.statusBar().showMessage(tr('Saved {0}').format(path), 3000)
             dlg.accept()
 
         b_copy.clicked.connect(do_copy)
@@ -2766,7 +2750,7 @@ class InterpretWindow(QMainWindow):
         st = compute_interslice_state(target)
         if not st.ok:
             self.statusBar().showMessage(
-                "Line of thrust unavailable for this result", 3000)
+                tr("Line of thrust unavailable for this result"), 3000)
             return
 
         slist = list(target.slices)
@@ -3091,7 +3075,7 @@ class InterpretWindow(QMainWindow):
         self._ensure_a_query()
         target = self._query_target()
         if target is None or not target.slices:
-            self._info("No slices available — run a compute first.")
+            self._info(tr("No slices available — run a compute first."))
             return
 
         # Make sure slices are visible so the user has something to click
@@ -3164,7 +3148,7 @@ class InterpretWindow(QMainWindow):
         if target is None and self.search_result and self.search_result.critical:
             target = self.search_result.critical
         if target is None or not target.slices:
-            self._info("No slices available — run a compute first.")
+            self._info(tr("No slices available — run a compute first."))
             return
         # v0.1.201 — the METHOD's numbers (``interpretation.slice_rows``):
         # N / l from its base normal force and its shear strength. This
@@ -3192,7 +3176,7 @@ class InterpretWindow(QMainWindow):
                     ("α (°)", alpha),
                 ],
                 xlabel="x along surface (m)",
-                title=f"Values along surface (FoS={target.fos:.3f})",
+                title=tr('Values along surface (FoS={0:.3f})').format(target.fos),
                 parent=self,
             ).exec()
         except Exception:  # noqa: BLE001
@@ -3349,12 +3333,12 @@ class InterpretWindow(QMainWindow):
         if target is None and self.search_result and self.search_result.critical:
             target = self.search_result.critical
         if target is None or not target.slices:
-            self._info("No slices available.")
+            self._info(tr("No slices available."))
             return
         idx = len(target.slices) // 2
         from PySide6.QtWidgets import QInputDialog
         idx, ok = QInputDialog.getInt(
-            self, "Free Body Diagram", "Slice index:",
+            self, tr("Free Body Diagram"), tr("Slice index:"),
             idx, 0, len(target.slices) - 1,
         )
         if not ok:
@@ -3366,7 +3350,7 @@ class InterpretWindow(QMainWindow):
             from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
             from PySide6.QtWidgets import QDialog, QVBoxLayout
         except ImportError:
-            self._info("matplotlib not installed.")
+            self._info(tr("matplotlib not installed."))
             return
 
         from ogr_slip2d.postprocess import compute_interslice_state
@@ -3398,7 +3382,7 @@ class InterpretWindow(QMainWindow):
 
         dlg = QDialog(self)
         dlg.setWindowTitle(
-            f"Free Body Diagram — slice {idx} ({target.method_id})")
+            tr('Free Body Diagram — slice {0} ({1})').format(idx, target.method_id))
         dlg.resize(640, 560)
         v = QVBoxLayout(dlg)
         fig = Figure(figsize=(6.6, 5.4), tight_layout=True)
@@ -3474,14 +3458,11 @@ class InterpretWindow(QMainWindow):
 
         note = ""
         if st.ok and st.e_max > 0 and st.relative_closure > 0.02:
-            note = (f"   (closure |E_n|/max|E| = "
-                    f"{st.relative_closure * 100:.1f} % — expected for "
-                    f"moment-only methods)")
+            note = (tr('   (closure |E_n|/max|E| = {0:.1f} % — expected for moment-only methods)').format(st.relative_closure * 100))
         ax.set_aspect("equal", adjustable="box")
         ax.grid(True, alpha=0.3)
         ax.set_title(
-            f"Slice {idx}: α={math.degrees(s.base_angle):.1f}°, "
-            f"b={b:.2f} m, FoS={target.fos:.4f}{note}", fontsize=9)
+            tr('Slice {0}: α={1:.1f}°, b={2:.2f} m, FoS={3:.4f}{4}').format(idx, math.degrees(s.base_angle), b, target.fos, note), fontsize=9)
         ax.set_xlabel("x (m)")
         ax.set_ylabel("y (m)")
         canvas = FigureCanvasQTAgg(fig)
@@ -3535,13 +3516,12 @@ class InterpretWindow(QMainWindow):
             r = hits[0][1]
             try:
                 xl, xr = slope_intercepts(r)
-                where = f" (x {xl:.2f} to {xr:.2f})"
+                where = tr(' (x {0:.2f} to {1:.2f})').format(xl, xr)
             except Exception:  # noqa: BLE001
                 where = ""
-            best = f"FoS = {r.fos:.4f}{where}"
+            best = tr('FoS = {0:.4f}{1}').format(r.fos, where)
         self._info(
-            f"<b>{len(hits)}</b> surfaces pass within {tol} m of "
-            f"({px:.2f}, {py:.2f}).<br>"
+            tr('<b>{0}</b> surfaces pass within {1} m of ({2:.2f}, {3:.2f}).<br>').format(len(hits), tol, px, py)
             + tr("Lowest factor of safety among them: ")
             + (best or tr("(none)")))
 
@@ -3552,18 +3532,18 @@ class InterpretWindow(QMainWindow):
             return
         valid = [r for r in self.search_result.evaluations if r.is_valid]
         if not valid:
-            self._info("No valid surfaces.")
+            self._info(tr("No valid surfaces."))
             return
         from PySide6.QtWidgets import (
             QDialog, QVBoxLayout, QTableWidget, QTableWidgetItem,
         )
         dlg = QDialog(self)
-        dlg.setWindowTitle(f"Result Table — {len(valid)} surfaces")
+        dlg.setWindowTitle(tr('Result Table — {0} surfaces').format(len(valid)))
         dlg.resize(640, 480)
         v = QVBoxLayout(dlg)
         tbl = QTableWidget(len(valid), 5)
         tbl.setHorizontalHeaderLabels(
-            ["#", "FoS", "Type", "Area (m²)", "Slices"])
+            ["#", tr("FoS"), tr("Type"), tr("Area (m²)"), tr("Slices")])
         # v0.1.201 — sorting switched on AFTER the rows are in: with it on,
         # each inserted row re-sorts and the next ``setItem`` lands in a
         # row that has moved.
@@ -3677,7 +3657,7 @@ class InterpretWindow(QMainWindow):
             return
         valid = [r for r in self.search_result.evaluations if r.is_valid]
         if not valid:
-            self._info("No valid surfaces to scatter.")
+            self._info(tr("No valid surfaces to scatter."))
             return
         xs = [r.surface.to_dict().get("radius", 0.0) for r in valid]
         ys = [r.fos for r in valid]
@@ -3687,27 +3667,27 @@ class InterpretWindow(QMainWindow):
                 xs, ys,
                 xlabel="Radius (m)",
                 ylabel="Factor of Safety",
-                title=f"FoS vs Radius — {len(valid)} surfaces",
+                title=tr('FoS vs Radius — {0} surfaces').format(len(valid)),
                 parent=self,
             ).exec()
         except ImportError:
-            self._info("matplotlib not installed.")
+            self._info(tr("matplotlib not installed."))
 
     def _histogram(self) -> None:
         if not self.search_result:
-            self._info("No results.")
+            self._info(tr("No results."))
             return
         valid = [r.fos for r in self.search_result.evaluations if r.is_valid]
         if not valid:
-            self._info("No valid surfaces.")
+            self._info(tr("No valid surfaces."))
             return
         try:
             from .dialogs.chart_dialogs import HistogramDialog
             HistogramDialog(valid, self).exec()
         except ImportError:
             self._info(
-                "matplotlib not installed. Run <code>pip install matplotlib</code> "
-                "to enable interactive charts."
+                tr("matplotlib not installed. Run <code>pip install matplotlib</code> "
+                "to enable interactive charts.")
             )
 
     def _cumulative(self) -> None:
@@ -3723,10 +3703,7 @@ class InterpretWindow(QMainWindow):
             n_fail = sum(1 for f in valid if f < 1.0)
             pf = n_fail / len(valid) if valid else 0.0
             self._info(
-                f"<b>Cumulative distribution (text fallback)</b><br>"
-                f"Surfaces with FoS &lt; 1.0 : {n_fail} / {len(valid)}<br>"
-                f"P(FoS &lt; 1) ≈ {pf:.3%}<br>"
-                f"<i>Install matplotlib for an interactive CDF plot.</i>"
+                tr('<b>Cumulative distribution (text fallback)</b><br>Surfaces with FoS &lt; 1.0 : {0} / {1}<br>P(FoS &lt; 1) ≈ {2:.3%}<br><i>Install matplotlib for an interactive CDF plot.</i>').format(n_fail, len(valid), pf)
             )
 
     # ------------------------------------------------------------------

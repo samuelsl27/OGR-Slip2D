@@ -183,13 +183,13 @@ class InterpretGroundwaterWindow(QMainWindow):
         if r is None or not r.total_head:
             self.status.setText(tr("No seepage result."))
             return
-        bits = [f"nodes: {len(r.total_head)}",
+        bits = [tr('nodes: {0}').format(len(r.total_head)),
                 f"H: {min(r.total_head):.2f} … {max(r.total_head):.2f}",
                 f"u: {min(r.pore_pressure):.1f} … "
                 f"{max(r.pore_pressure):.1f}",
-                f"iterations: {r.iterations}"]
+                tr('iterations: {0}').format(r.iterations)]
         if r.seepage_nodes:
-            bits.append(f"seepage-face nodes: {len(r.seepage_nodes)}")
+            bits.append(tr('seepage-face nodes: {0}').format(len(r.seepage_nodes)))
         if r.notes.get("time") is not None:
             bits.insert(0, f"t = {r.notes['time']:g}")
         if r.notes.get("initial_state"):
@@ -287,23 +287,19 @@ class InterpretGroundwaterWindow(QMainWindow):
             return
         from PySide6.QtWidgets import QInputDialog
         text, ok = QInputDialog.getText(
-            self, "Discharge section",
-            "Section as x0,y0,x1,y1:")
+            self, tr("Discharge section"),
+            tr("Section as x0,y0,x1,y1:"))
         if not ok or not text:
             return
         try:
             x0, y0, x1, y1 = (float(v) for v in text.replace(";", ",")
                               .split(","))
         except ValueError:
-            QMessageBox.warning(self, "Discharge section",
-                                "Enter four numbers: x0,y0,x1,y1")
+            QMessageBox.warning(self, tr("Discharge section"),
+                                tr("Enter four numbers: x0,y0,x1,y1"))
             return
         q = self.solver.flux_through_segment(self.result, x0, y0, x1, y1,
                                              samples=500)
         QMessageBox.information(
-            self, "Discharge section",
-            f"Normal flux through the section:\n\n"
-            f"Q = {q:.6e}  (per unit width)\n\n"
-            f"Sign convention: positive when the flow crosses towards "
-            f"the section normal, i.e. the tangent rotated +90 deg. "
-            f"Reversing the section reverses the sign.")
+            self, tr("Discharge section"),
+            tr('Normal flux through the section:\n\nQ = {0:.6e}  (per unit width)\n\nSign convention: positive when the flow crosses towards the section normal, i.e. the tangent rotated +90 deg. Reversing the section reverses the sign.').format(q))
