@@ -59,8 +59,11 @@ def _contrast(img, rect, bg) -> int:
 
 class TestTheThemes:
     def _rendered(self, theme):
+        from PySide6.QtGui import QPalette
         app = _app()
         old = app.styleSheet()
+        # v0.1.316 (D301) — apply_theme sets the palette too
+        palette = QPalette(app.palette())
         try:
             apply_theme(app, theme)
             menu = QMenu()
@@ -79,6 +82,7 @@ class TestTheThemes:
             return result
         finally:
             app.setStyleSheet(old)
+            app.setPalette(palette)
 
     def test_light_draws_a_disabled_item_paler(self):
         on, off = self._rendered("light")

@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from ogr_gui.i18n import tr  # noqa: E402
+from ogr_gui.themes import theme_color
 
 
 def _layer_name(project, layer: dict) -> str:
@@ -161,7 +162,7 @@ class StatisticsWindow(QMainWindow):
         # any line, which is the only guarantee that does not erode.
         self.lbl_run_notes = QLabel("")
         self.lbl_run_notes.setWordWrap(True)
-        self.lbl_run_notes.setStyleSheet("color: #b00020;")
+        self.lbl_run_notes.setStyleSheet(f"color: {theme_color('error')};")
         _lines = self._run_notes()
         if _lines:
             self.lbl_run_notes.setText(
@@ -179,7 +180,7 @@ class StatisticsWindow(QMainWindow):
         # gives the split (``switch_lines``); nothing is parsed here.
         self.lbl_switch_notes = QLabel("")
         self.lbl_switch_notes.setWordWrap(True)
-        self.lbl_switch_notes.setStyleSheet("color: #8a5a00;")
+        self.lbl_switch_notes.setStyleSheet(f"color: {theme_color('caution')};")
         _switches = self._switch_notes()
         if _switches:
             self.lbl_switch_notes.setText(

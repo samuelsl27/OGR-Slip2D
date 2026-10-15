@@ -84,6 +84,7 @@ from ogr_gui.dialogs.material_properties_dialog import (
 )
 from ogr_gui.dialog_size import VerticalScrollArea, open_at_content_size
 from ogr_gui.i18n import tr  # noqa: E402
+from ogr_gui.themes import theme_color
 
 _MODEL_LABELS = [
     (PermeabilityModel.CONSTANT, "Constant"),
@@ -233,7 +234,7 @@ class HydraulicPropertiesDialog(QDialog):
         # is where a User Defined material without a curve says so.
         self.lbl_problems = QLabel("")
         self.lbl_problems.setWordWrap(True)
-        self.lbl_problems.setStyleSheet("color: #b00020;")
+        self.lbl_problems.setStyleSheet(f"color: {theme_color('error')};")
         column.addWidget(self.lbl_problems)
 
         bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)

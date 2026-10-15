@@ -51,6 +51,7 @@ from ogr_core.project.units import (
     UnitSystem,
 )
 from ogr_gui.i18n import tr
+from ogr_gui.themes import theme_color
 
 # v0.1.127 — the separator the Seismic page prints between a
 # record's name and its peak acceleration.
@@ -240,7 +241,7 @@ class _GeneralPage(QWidget):
         # Summary label (auto-updates)
         self._unit_summary = QLabel()
         self._unit_summary.setStyleSheet(
-            "color: #555; font-style: italic; padding-left: 6px;"
+            f"color: {theme_color('muted')}; font-style: italic; padding-left: 6px;"
         )
         self._refresh_unit_summary()
         self.cbo_unit_system.currentIndexChanged.connect(

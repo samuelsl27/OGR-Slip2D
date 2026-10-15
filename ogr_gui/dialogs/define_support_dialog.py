@@ -64,6 +64,7 @@ from ogr_core.support import (
     support_registry,
 )
 from ogr_gui.i18n import tr  # noqa: E402
+from ogr_gui.themes import theme_color
 
 
 # ----------------------------------------------------------------------
@@ -516,8 +517,8 @@ class DefineSupportDialog(QDialog):
         self.lbl_desc = QLabel()
         self.lbl_desc.setWordWrap(True)
         self.lbl_desc.setStyleSheet(
-            "color: #555; font-style: italic; padding: 8px;"
-            "background: #f4f4f8; border-radius: 4px;"
+            f"color: {theme_color('muted')}; font-style: italic; padding: 8px;"
+            f"background: {theme_color('note_bg')}; border-radius: 4px;"
         )
         right.addWidget(self.lbl_desc)
 

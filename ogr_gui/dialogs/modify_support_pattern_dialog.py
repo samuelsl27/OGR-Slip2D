@@ -40,6 +40,7 @@ from PySide6.QtWidgets import (
 
 from ogr_core.support import ForceApplication, ForceOrientation
 from ogr_gui.i18n import tr  # noqa: E402
+from ogr_gui.themes import theme_color
 
 
 def _detect_pattern_members(project, anchor_idx: int) -> list[int]:
@@ -103,7 +104,7 @@ class ModifySupportPatternDialog(QDialog):
             f"Pattern detected: <b>{len(members)} supports</b> of type "
             f"<b>{current_name}</b>"
         )
-        info.setStyleSheet("padding: 6px; background: #eef; border-radius: 4px;")
+        info.setStyleSheet(f"padding: 6px; background: {theme_color('info_bg')}; border-radius: 4px;")
         root.addWidget(info)
 
         # ---- Type

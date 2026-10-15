@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from ogr_gui.i18n import tr  # noqa: E402
+from ogr_gui.themes import theme_color
 
 
 # ======================================================================
@@ -63,7 +64,7 @@ class AssignMaterialsPanel(QDockWidget):
             "Pick a material below, then click on a region of the canvas\n"
             "to paint it.  Close this panel to exit.")
         hint.setWordWrap(True)
-        hint.setStyleSheet("color: #555; font-size: 9pt; padding: 2px;")
+        hint.setStyleSheet(f"color: {theme_color('muted')}; font-size: 9pt; padding: 2px;")
         vbox.addWidget(hint)
 
         self.list = QListWidget()
@@ -87,7 +88,7 @@ class AssignMaterialsPanel(QDockWidget):
 
         btn_row = QHBoxLayout()
         self.status = QLabel(tr("<i>No material selected</i>"))
-        self.status.setStyleSheet("color: #555; font-size: 9pt;")
+        self.status.setStyleSheet(f"color: {theme_color('muted')}; font-size: 9pt;")
         btn_row.addWidget(self.status, 1)
         btn_close = QPushButton(tr("Close"))
         btn_close.clicked.connect(lambda: (self.closed_by_user.emit(),

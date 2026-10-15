@@ -27,6 +27,7 @@ from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPen
 from PySide6.QtWidgets import QLabel, QSizePolicy, QWidget
 
 from ogr_gui.i18n import tr
+from ogr_gui.themes import theme_color
 
 
 class ColourScaleLegend(QWidget):
@@ -209,7 +210,7 @@ class ToggleLabel(QLabel):
         # legible at a glance without reading the word twice.
         self.setStyleSheet(
             "QLabel { padding: 0 6px; font-weight: %s; color: %s; }"
-            % ("bold" if on else "normal", "#202020" if on else "#909090"))
+            % ("bold" if on else "normal", theme_color("ink") if on else theme_color("disabled")))
 
     def state(self) -> bool:
         return self._state

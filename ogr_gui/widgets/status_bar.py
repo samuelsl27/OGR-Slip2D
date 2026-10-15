@@ -49,10 +49,14 @@ class _ToggleLabel(QLabel):
         self.setChecked(not self._active)
 
     def _refresh(self) -> None:
+        # v0.1.316 (D301) — "on" paints its own background, so it reads on
+        # either theme; "off" is text on the bar's, and asks the theme
+        from ogr_gui.themes import theme_color
         self.setStyleSheet(
             "padding: 2px 8px; border-radius: 3px; "
             + ("background: #b9d7f7; color: #10305a; font-weight: 500;"
-               if self._active else "background: transparent; color: #707070;")
+               if self._active else "background: transparent; color: %s;"
+               % theme_color("toggle_off"))
         )
 
 
@@ -112,7 +116,6 @@ class OgrStatusBar(QStatusBar):
         # Coord readout
         self.coord_label = QLabel(tr("X: 0.000   Y: 0.000"))
         self.coord_label.setMinimumWidth(170)
-        self.coord_label.setStyleSheet("color: #4a4a4a; font-family: monospace;")
 
         # Manual coord input
         self.coord_input = _CoordInput(self)
@@ -133,15 +136,27 @@ class OgrStatusBar(QStatusBar):
         for w in (self.snap, self.grid, self.ortho, self.osnap):
             self.addPermanentWidget(w)
         self._extra_toggles: dict = {}
-        sep = QLabel(" │ ")
-        sep.setStyleSheet("color: #c0c0c0;")
-        self.addPermanentWidget(sep)
+        self._sep = QLabel(" │ ")
+        self.addPermanentWidget(self._sep)
         self.addPermanentWidget(self.coord_label)
         self.addPermanentWidget(QLabel("  "))  # spacer
         self.addPermanentWidget(QLabel(tr("Enter X,Y:")))
         self.addPermanentWidget(self.coord_input)
+        self.retheme()
 
     # ------------------------------------------------------------------
+    def retheme(self) -> None:
+        """Colour the readout and the separator for the active theme, and
+        the toggles that are off (v0.1.316, D301: #4a4a4a on the dark bar
+        could hardly be read)."""
+        from ogr_gui.themes import theme_color
+        self.coord_label.setStyleSheet(
+            "color: %s; font-family: monospace;" % theme_color("status_text"))
+        self._sep.setStyleSheet("color: %s;" % theme_color("separator"))
+        for t in (self.snap, self.grid, self.ortho, self.osnap,
+                  *getattr(self, "_extra_toggles", {}).values()):
+            t._refresh()
+
     def update_coords(self, x: float, y: float) -> None:
         self.coord_label.setText(f"X: {x:+.3f}   Y: {y:+.3f}")
 

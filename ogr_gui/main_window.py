@@ -270,7 +270,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.315"
+    VERSION = "0.1.316"
 
     def __init__(self) -> None:
         super().__init__()
@@ -464,6 +464,8 @@ class MainWindow(QMainWindow):
         act = QAction(tr(text), self)
         if icon_key:
             act.setIcon(icon(icon_key))
+            # v0.1.316 (D301) — to build it again under another theme
+            act.setProperty("ogr_icon_key", icon_key)
         if shortcut:
             act.setShortcut(QKeySequence(shortcut))
         if checkable:
@@ -5102,8 +5104,25 @@ class MainWindow(QMainWindow):
         from .user_prefs import save_theme
         self.active_theme = name
         apply_theme(QApplication.instance(), name)
+        self._retheme()
         # v0.1.289 (D290) — kept for the next start, like the language
         save_theme(name)
+
+    def _retheme(self) -> None:
+        """Redraw what this window keeps across a change of theme.
+
+        v0.1.316 (D301). The palette and the sheet reach every widget at
+        once, but an icon, a colour written into a widget's own style and
+        the canvas are built once: the icons are built again (the theme
+        emptied their caches) and the rest asks the theme again. A dialog
+        is built each time it opens, so it needs nothing here.
+        """
+        for act in self._actions.values():
+            key = act.property("ogr_icon_key")
+            if key:
+                act.setIcon(icon(key))
+        self.ogr_status.retheme()
+        self.canvas.retheme()
 
     # ==================================================================
     # v0.1.2 — Boundary editing handlers

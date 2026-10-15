@@ -70,6 +70,9 @@ class TestTheCatalogue:
         app = _app()
         env = os.environ.get("OGR_SETTINGS_DIR")
         prev, sheet = current_language(), app.styleSheet()
+        # v0.1.316 (D301) — apply_saved_preferences sets the palette too
+        from PySide6.QtGui import QPalette
+        palette = QPalette(app.palette())
         os.environ["OGR_SETTINGS_DIR"] = tempfile.mkdtemp(prefix="ogr_test_qt_")
         t = None
         try:
@@ -81,6 +84,7 @@ class TestTheCatalogue:
                 app.removeTranslator(t)
             set_language(prev)
             app.setStyleSheet(sheet)
+            app.setPalette(palette)
             if env is None:
                 os.environ.pop("OGR_SETTINGS_DIR", None)
             else:

@@ -106,12 +106,16 @@ class TerminalWidget(QPlainTextEdit):
         self._input_start = self._cursor_pos()
 
     # ------------------------------------------------------------------
-    def _append_styled(self, text: str, color: str = "#202020",
+    def _append_styled(self, text: str, color: str | None = None,
                         bold: bool = False) -> None:
+        # v0.1.316 (D301) — plain output in the theme's ink: #202020 was
+        # black on the dark theme's #1e1e1e. Asked at each write, so what is
+        # written after a change of theme follows it.
+        from ogr_gui.themes import theme_color
         cursor = self.textCursor()
         cursor.movePosition(QTextCursor.End)
         fmt = QTextCharFormat()
-        fmt.setForeground(QColor(color))
+        fmt.setForeground(QColor(color or theme_color("ink")))
         if bold:
             f = fmt.font()
             f.setBold(True)
@@ -143,8 +147,10 @@ class TerminalWidget(QPlainTextEdit):
         self._history.append(source)
         self._history_idx = len(self._history)
 
-        out = _OutputCapture(lambda s: self._append_styled(s, color="#202020"))
-        err = _OutputCapture(lambda s: self._append_styled(s, color="#c0392b"))
+        from ogr_gui.themes import theme_color
+        out = _OutputCapture(lambda s: self._append_styled(s))
+        err = _OutputCapture(
+            lambda s: self._append_styled(s, color=theme_color("accent")))
 
         old_stdout, old_stderr = sys.stdout, sys.stderr
         sys.stdout, sys.stderr = out, err

@@ -133,6 +133,13 @@ def _region_to_item(region, material):
 
 
 # ======================================================================
+
+def _bg(grayscale: bool) -> str:
+    """The canvas background of the active theme (v0.1.316, D301): it was
+    #fafafa (#e8e8e8 in grayscale) whatever the theme."""
+    from ogr_gui.themes import theme_color
+    return theme_color("canvas_bg_gray" if grayscale else "canvas_bg")
+
 @dataclass
 class DisplayOptions:
     """Per-layer visibility and styling flags, bound to the Display
@@ -256,7 +263,7 @@ class CanvasView(QGraphicsView):
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.setMouseTracking(True)
-        self.setBackgroundBrush(QBrush(QColor("#fafafa")))
+        self.setBackgroundBrush(QBrush(QColor(_bg(False))))
         # v0.1.85 — the ruler is painted in viewport coordinates on top of
         # everything else. With the default MinimalViewportUpdate Qt
         # scrolls the already-painted pixels and repaints only the newly
@@ -502,10 +509,9 @@ class CanvasView(QGraphicsView):
         opts = self.display_options
         lw = opts.line_width
 
-        # Background grayscale
-        self.setBackgroundBrush(
-            QBrush(QColor("#e8e8e8" if opts.grayscale else "#fafafa"))
-        )
+        # Background grayscale. v0.1.316 (D301) — and the theme: the model
+        # keeps its colours, the paper under it follows the window
+        self.setBackgroundBrush(QBrush(QColor(_bg(opts.grayscale))))
 
         # v0.1.6 — Material regions.
         # Regions emerge from the planar subdivision of
@@ -3097,8 +3103,11 @@ class CanvasView(QGraphicsView):
         if rect.width() / step > 2000 or rect.height() / step > 2000:
             return
 
-        pen_minor = QPen(QColor(220, 220, 220)); pen_minor.setCosmetic(True)
-        pen_major = QPen(QColor(180, 180, 180)); pen_major.setCosmetic(True)
+        from ogr_gui.themes import theme_color
+        pen_minor = QPen(QColor(theme_color("grid_minor")))
+        pen_minor.setCosmetic(True)
+        pen_major = QPen(QColor(theme_color("grid_major")))
+        pen_major.setCosmetic(True)
 
         x0 = math.floor(rect.left() / step) * step
         x1 = math.ceil(rect.right() / step) * step
@@ -3138,7 +3147,8 @@ class CanvasView(QGraphicsView):
         painter.save()
         font = QFont(); font.setPointSize(8)
         painter.setFont(font)
-        painter.setPen(QColor(100, 100, 100))
+        from ogr_gui.themes import theme_color
+        painter.setPen(QColor(theme_color("ruler_text")))
 
         xmin_scene = self.mapToScene(vr.bottomLeft()).x()
         xmax_scene = self.mapToScene(vr.bottomRight()).x()
@@ -3174,7 +3184,14 @@ class CanvasView(QGraphicsView):
 
     def set_grayscale(self, on: bool) -> None:
         self.display_options.grayscale = on
-        self.setBackgroundBrush(QBrush(QColor("#e8e8e8" if on else "#fafafa")))
+        self.setBackgroundBrush(QBrush(QColor(_bg(on))))
+        self.viewport().update()
+
+    def retheme(self) -> None:
+        """The paper, the grid and the ruler of the active theme (v0.1.316,
+        D301). What is drawn on them keeps its colours."""
+        self.setBackgroundBrush(
+            QBrush(QColor(_bg(self.display_options.grayscale))))
         self.viewport().update()
 
 

@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 from ogr_gui.i18n import tr  # noqa: E402
+from ogr_gui.themes import theme_color
 
 
 # ======================================================================
@@ -887,7 +888,7 @@ class SurfaceOptionsDialog(QDialog):
         # while the generator walks the PAIRS of divisions, so the panel
         # published 1000 for a search that generates 4500 (defect D07c(c)).
         self._ar_total_label = QLabel()
-        self._ar_total_label.setStyleSheet("color: #666; font-size: 9pt;")
+        self._ar_total_label.setStyleSheet(f"color: {theme_color('muted_soft')}; font-size: 9pt;")
         self._ar_total_label.setToolTip(tr(
             "What the search GENERATES, which is an upper bound on what it "
             "analyses: a circle that cannot be constructed through a pair "
@@ -1145,7 +1146,7 @@ class SurfaceOptionsDialog(QDialog):
         outer.addWidget(proj_w)
         self._b_angle_note = QLabel()
         self._b_angle_note.setWordWrap(True)
-        self._b_angle_note.setStyleSheet("color: #a05a00;")
+        self._b_angle_note.setStyleSheet(f"color: {theme_color('warning')};")
         outer.addWidget(self._b_angle_note)
         # v0.1.314 (D305) — ``project`` was a name this method never had:
         # every call raised NameError, and an ``except Exception`` turned it

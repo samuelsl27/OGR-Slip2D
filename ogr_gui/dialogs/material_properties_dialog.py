@@ -54,6 +54,7 @@ from .drawdown_strength_dialog import DrawdownStrengthDialog, envelope_summary
 from ogr_core.project.rules import (  # noqa: E402
     SURFACE_READING_MODEL_IDS as _ANISOTROPIC_MODEL_IDS,
 )
+from ogr_gui.themes import theme_color
 
 
 def _exact_text(value: float) -> str:
@@ -1165,7 +1166,7 @@ class _StrengthParamPanel(QWidget):
             btn.clicked.connect(
                 lambda _checked=False, w=which: self._open_function(w))
             label = QLabel("")
-            label.setStyleSheet("color: #555; font-style: italic;")
+            label.setStyleSheet(f"color: {theme_color('muted')}; font-style: italic;")
             self._form.addRow(btn, label)
             self._function_labels[which] = label
         self._functions = given
@@ -1243,7 +1244,7 @@ class StrengthFunctionDialog(QDialog):
         lay.addWidget(self.panel)
         self.lbl_problem = QLabel("")
         self.lbl_problem.setWordWrap(True)
-        self.lbl_problem.setStyleSheet("color: #b00020;")
+        self.lbl_problem.setStyleSheet(f"color: {theme_color('error')};")
         self.lbl_problem.setVisible(False)
         lay.addWidget(self.lbl_problem)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok
@@ -1444,7 +1445,7 @@ class MaterialPropertiesDialog(QDialog):
         self.lbl_gamma_sat_warn = QLabel(
             tr("The saturated unit weight should be greater than the "
                "unit weight above the water table."))
-        self.lbl_gamma_sat_warn.setStyleSheet("color: #b00020;")
+        self.lbl_gamma_sat_warn.setStyleSheet(f"color: {theme_color('error')};")
         self.lbl_gamma_sat_warn.setWordWrap(True)
         self.lbl_gamma_sat_warn.setVisible(False)
         self.dsp_gamma.valueChanged.connect(self._refresh_gamma_warning)
@@ -1496,7 +1497,7 @@ class MaterialPropertiesDialog(QDialog):
         # Formula label, shown next to the dropdown
         self.lbl_strength_formula = QLabel("")
         self.lbl_strength_formula.setStyleSheet(
-            "color: #444; font-style: italic; padding-left: 12px;"
+            f"color: {theme_color('muted_strong')}; font-style: italic; padding-left: 12px;"
         )
         self.lbl_strength_formula.setMinimumWidth(220)
         top_row.addWidget(self.lbl_strength_formula, stretch=1)
@@ -1541,7 +1542,7 @@ class MaterialPropertiesDialog(QDialog):
         # stands between a test and the dialog.
         self.lbl_strength_problem = QLabel("")
         self.lbl_strength_problem.setWordWrap(True)
-        self.lbl_strength_problem.setStyleSheet("color: #b00020;")
+        self.lbl_strength_problem.setStyleSheet(f"color: {theme_color('error')};")
         self.lbl_strength_problem.setVisible(False)
         str_layout.addWidget(self.lbl_strength_problem)
 
@@ -1638,7 +1639,7 @@ class MaterialPropertiesDialog(QDialog):
             "Undrained envelope from isotropically consolidated undrained "
             "tests. Needed by the multi-stage drawdown procedures."))
         self.lbl_envelope = QLabel("")
-        self.lbl_envelope.setStyleSheet("color: #555; font-style: italic;")
+        self.lbl_envelope.setStyleSheet(f"color: {theme_color('muted')}; font-style: italic;")
         # The envelope being edited for the material on screen. Staged the
         # same way ``_color_hex`` is: ``_load`` fills it, ``_store`` writes
         # it back, so Cancel still discards everything.

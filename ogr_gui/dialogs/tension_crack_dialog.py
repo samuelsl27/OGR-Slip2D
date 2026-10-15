@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 from ogr_core.geometry import BoundaryType
 from ogr_core.geometry.tension_crack import TensionCrackProperties, WaterLevelMode
 from ogr_gui.i18n import tr  # noqa: E402
+from ogr_gui.themes import theme_color
 
 
 # ======================================================================
@@ -189,7 +190,7 @@ class DefineTensionCrackDialog(QDialog):
             lbl = self._labels.get(id(w))
             if lbl is not None:
                 lbl.setStyleSheet(
-                    "" if enabled else "color: #909090;"
+                    "" if enabled else f"color: {theme_color('disabled')};"
                 )
 
     # ------------------------------------------------------------------

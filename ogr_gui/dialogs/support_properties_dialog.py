@@ -29,6 +29,7 @@ from PySide6.QtGui import QColor
 
 from ogr_core.support import ForceApplication, ForceOrientation
 from ogr_gui.i18n import tr  # noqa: E402
+from ogr_gui.themes import theme_color
 
 
 class SupportInstancePropertiesDialog(QDialog):
@@ -123,13 +124,13 @@ class SupportInstancePropertiesDialog(QDialog):
             f"Length: {support.length():.2f} m   "
             f"Axis: {support.axis_angle_deg():.1f}°"
         )
-        lbl.setStyleSheet("color: #555;")
+        lbl.setStyleSheet(f"color: {theme_color('muted')};")
         form.addRow("", lbl)
 
         # v0.1.313 (D313) — why OK did not close, said here and not modal
         self.lbl_problem = QLabel("")
         self.lbl_problem.setWordWrap(True)
-        self.lbl_problem.setStyleSheet("color: #b00020;")
+        self.lbl_problem.setStyleSheet(f"color: {theme_color('error')};")
         self.lbl_problem.setVisible(False)
         form.addRow(self.lbl_problem)
 

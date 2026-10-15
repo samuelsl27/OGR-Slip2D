@@ -53,6 +53,9 @@ class _Fresh:
         self.env = os.environ.get("OGR_SETTINGS_DIR")
         self.lang = current_language()
         self.sheet = _app().styleSheet()
+        # v0.1.316 (D301) — apply_theme sets the palette too
+        from PySide6.QtGui import QPalette
+        self.palette = QPalette(_app().palette())
         self.dir = tempfile.mkdtemp(prefix="ogr_test_prefs_")
         os.environ["OGR_SETTINGS_DIR"] = self.dir
         # v0.1.292 (D302) — apply_saved_preferences installs Qt's own
@@ -66,6 +69,7 @@ class _Fresh:
                 _app().removeTranslator(t)
         set_language(self.lang)
         _app().setStyleSheet(self.sheet)
+        _app().setPalette(self.palette)
         if self.env is None:
             os.environ.pop("OGR_SETTINGS_DIR", None)
         else:

@@ -167,8 +167,46 @@ def icon(key: str, color: Optional[str] = None):
         return QIcon()
 
     qta_id, default_color = _CATALOG.get(key, ("fa6s.gear", None))
-    chosen = color or default_color
+    chosen = _for_theme(color or default_color)
     return _safe_qta_icon(qta, qta_id, chosen)
+
+
+def _for_theme(color: Optional[str]) -> Optional[str]:
+    """``color``, readable on the active theme's background.
+
+    v0.1.316 (D301). An icon with no colour of its own takes the palette's
+    text colour, which the theme now sets. One with a fixed colour that is
+    too dark for the dark theme keeps its hue but lighter, and a dark grey
+    (the External boundary is drawn in #2c2c2c) becomes the text colour:
+    either would be dark on dark.
+    """
+    if color is None:
+        return None
+    from ogr_gui.themes import current_theme
+    if current_theme() != "dark":
+        return color
+    from PySide6.QtGui import QColor
+    c = QColor(color)
+    if c.lightnessF() >= 0.35:
+        return color
+    if c.hslSaturationF() < 0.1:
+        return None
+    return c.lighter(220).name()
+
+
+def reset_cache() -> None:
+    """Forget every icon built so far (v0.1.316, D301).
+
+    Both this module and qtawesome keep what they built, and an icon built
+    under one theme has that theme's colours: ``apply_theme`` calls this so
+    the next ``icon()`` builds it again.
+    """
+    icon.cache_clear()
+    try:
+        import qtawesome as qta
+    except ImportError:
+        return
+    qta.reset_cache()
 
 
 def has(key: str) -> bool:

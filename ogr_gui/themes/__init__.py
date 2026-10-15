@@ -317,14 +317,135 @@ THEMES: dict[str, str] = {
 }
 
 
+#: v0.1.316 (D301) — the colours the widgets used to write as literals, by
+#: what they are for. The light values ARE those literals, so the light
+#: theme looks exactly as it did; the dark ones are lighter, to read on a
+#: dark background. A role whose widget paints its own background (the
+#: status-bar toggles, the stale-results band) needs no entry: it reads
+#: the same in both.
+ROLE_COLORS: dict[str, dict[str, str]] = {
+    "light": {
+        "muted": "#555555",         # notes in italics, hints
+        "muted_strong": "#444444",
+        "muted_soft": "#666666",
+        "disabled": "#909090",      # a label whose control is off
+        "error": "#b00020",         # why OK did not close
+        "warning": "#a05a00",       # what the search will do with a value
+        "caution": "#8a5a00",
+        "accent": "#c0392b",        # the factor of safety in Interpret
+        "ink": "#202020",           # plain text a widget writes itself
+        "note_bg": "#f4f4f8",       # a boxed note
+        "info_bg": "#eeeeff",
+        "status_text": "#4a4a4a",   # the coordinates of the status bar
+        "toggle_off": "#707070",
+        "separator": "#c0c0c0",
+        "canvas_bg": "#fafafa",
+        "canvas_bg_gray": "#e8e8e8",
+        "grid_minor": "#dcdcdc",
+        "grid_major": "#b4b4b4",
+        "ruler_text": "#646464",
+    },
+    "dark": {
+        "muted": "#a8a8a8",
+        "muted_strong": "#b8b8b8",
+        "muted_soft": "#9a9a9a",
+        "disabled": "#7a7a7a",
+        "error": "#ff6b6b",
+        "warning": "#f0b060",
+        "caution": "#e0a050",
+        "accent": "#ff7f6e",
+        "ink": "#e0e0e0",
+        "note_bg": "#353540",
+        "info_bg": "#34384a",
+        "status_text": "#d0d0d0",
+        "toggle_off": "#9a9a9a",
+        "separator": "#5a5a5a",
+        "canvas_bg": "#1f1f1f",
+        "canvas_bg_gray": "#2a2a2a",
+        "grid_minor": "#373737",
+        "grid_major": "#505050",
+        "ruler_text": "#aaaaaa",
+    },
+}
+
+#: The application's palette before any theme touched it, which IS the
+#: light theme's: the light theme is the platform's palette plus the sheet.
+_ORIGINAL_PALETTE = None
+
+
+def current_theme(app=None) -> str:
+    """The theme whose sheet the application has, or "light".
+
+    Read from the style sheet itself and not from a variable set by
+    :func:`apply_theme`: a test that puts the sheet back would leave such a
+    variable saying "dark" over a light application.
+    """
+    from PySide6.QtWidgets import QApplication
+    app = app or QApplication.instance()
+    sheet = app.styleSheet() if app is not None else ""
+    for name, qss in THEMES.items():
+        if sheet == qss:
+            return name
+    return "light"
+
+
+def theme_color(role: str, theme: str | None = None) -> str:
+    """The colour of ``role`` in ``theme`` (the active one by default)."""
+    theme = theme or current_theme()
+    return ROLE_COLORS.get(theme, ROLE_COLORS["light"])[role]
+
+
+def _dark_palette():
+    """The dark theme's palette, from the colours its sheet already uses."""
+    from PySide6.QtGui import QColor, QPalette
+    p = QPalette()
+    roles = {
+        QPalette.Window: "#2b2b2b", QPalette.WindowText: "#e0e0e0",
+        QPalette.Base: "#1e1e1e", QPalette.AlternateBase: "#323232",
+        QPalette.Text: "#e0e0e0", QPalette.Button: "#3f3f3f",
+        QPalette.ButtonText: "#e0e0e0", QPalette.BrightText: "#ffffff",
+        QPalette.Highlight: "#5b7398", QPalette.HighlightedText: "#ffffff",
+        QPalette.ToolTipBase: "#1e1e1e", QPalette.ToolTipText: "#e0e0e0",
+        QPalette.PlaceholderText: "#8a8a8a", QPalette.Link: "#8ab4f8",
+        QPalette.Light: "#505050", QPalette.Midlight: "#454545",
+        QPalette.Mid: "#3a3a3a", QPalette.Dark: "#202020",
+        QPalette.Shadow: "#101010",
+    }
+    for role, hexa in roles.items():
+        p.setColor(role, QColor(hexa))
+    for role in (QPalette.WindowText, QPalette.Text, QPalette.ButtonText):
+        p.setColor(QPalette.Disabled, role, QColor("#7a7a7a"))
+    return p
+
+
 def apply_theme(app, name: str = "light") -> None:
-    """Apply a named stylesheet to the running QApplication.
+    """Apply a named theme to the running QApplication.
 
     v0.1.315 (D293) — and the floor of the buttons of a button box
     (``ogr_gui.button_floor``), which replaces the ``min-width: 70px`` these
     sheets used to give every button: in a style sheet that minimum
     replaced the one the text asks for, and cut Spanish buttons.
+
+    v0.1.316 (D301) — and a palette. The sheet alone colours the widgets
+    it names; the dark one names no ``QLabel``, ``QCheckBox`` or plain
+    panel, and those kept the light palette: dark text on a dark window.
+    The dark theme now sets a dark palette, and the light one puts back
+    the palette the application had before any theme, so it does not
+    change. Icons and colours read the palette and :func:`theme_color`
+    when they are built, so a window built after this follows the theme;
+    the main window refreshes what it keeps.
     """
+    global _ORIGINAL_PALETTE
+    from PySide6.QtGui import QPalette
     from ogr_gui import button_floor
     button_floor.install(app)
-    app.setStyleSheet(THEMES.get(name, _LIGHT))
+    if _ORIGINAL_PALETTE is None:
+        _ORIGINAL_PALETTE = QPalette(app.palette())
+    name = name if name in THEMES else "light"
+    app.setPalette(_dark_palette() if name == "dark"
+                   else QPalette(_ORIGINAL_PALETTE))
+    app.setStyleSheet(THEMES[name])
+    # qtawesome colours an icon with no colour of its own from the palette
+    # when it builds it, and both it and our ``icon`` cache what they built
+    from ogr_gui.resources import icons
+    icons.reset_cache()

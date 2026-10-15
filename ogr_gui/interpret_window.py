@@ -41,6 +41,7 @@ from .canvas import CanvasView
 from .i18n import tr
 from .reported_quantity import reported_quantity
 from .resources import icon
+from ogr_gui.themes import theme_color
 
 
 # ======================================================================
@@ -546,7 +547,7 @@ class _SummaryDock(QDockWidget):
             f"{esfuerzo}"
             f"<br>"
             f"<b>{tr('Critical surface')}</b><br>"
-            f"{label} = <span style='color:#c0392b; font-size:14pt;'>"
+            f"{label} = <span style='color:{theme_color('accent')}; font-size:14pt;'>"
             f"<b>{value}</b></span>{extra}<br>"
             f"Iterations: {c.iterations}<br>"
             f"Centre: ({sd.get('centre_x', 0):.2f}, {sd.get('centre_y', 0):.2f})<br>"
