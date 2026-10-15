@@ -174,6 +174,10 @@ def status_of(project) -> dict:
     why = transient_without_stages(project)
     if why:
         notes.append(why)
+    # v0.1.313 (D313) — a support with no length, from a file or a script:
+    # no door places one any more, and the analysis gives it no force
+    from ogr_core.project.rules import degenerate_supports
+    notes.extend(degenerate_supports(project))
     # v0.1.298 (D298) — a region whose material no longer exists: a
     # warning, not a blocker (the owner's decision: say what is wrong and
     # what to change, and let the user compute anyway).

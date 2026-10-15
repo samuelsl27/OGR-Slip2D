@@ -154,6 +154,7 @@ from typing import TYPE_CHECKING, Optional
 # ``ogr_core.support`` is already imported by the time any surface is
 # priced -- the project that owns the supports came through it.
 from ogr_core.support import SupportEvaluationError
+from ogr_core.project.rules import support_has_no_length
 
 if TYPE_CHECKING:
     from ogr_core.project import Project
@@ -1343,6 +1344,14 @@ SUPPORT_NO_CAPACITY = "no_capacity"
 #: where it happens, not whether it is silent.
 SUPPORT_UNKNOWN_TYPE = "unknown_type"
 
+#: Its head and tail coincide, so there is no segment to cross anything
+#: (``rules.support_has_no_length``). v0.1.313, defect D313: no door places
+#: one any more, but a file or a script still can, and it was reported as
+#: ``SUPPORT_NO_CROSSING`` -- true, and the wrong thing to fix. Broken
+#: input, like the type above, and decided only where the support has
+#: already missed the surface, so the hot path pays nothing for it.
+SUPPORT_NO_LENGTH = "no_length"
+
 #: Pricing it raised :class:`~ogr_core.support.SupportEvaluationError`, so
 #: this ONE support is left out and the others still count. v0.1.161,
 #: defect D94: until then an exception anywhere in here was answered by
@@ -1512,7 +1521,10 @@ def compute_support_effects(
             hit = support.intersection_with_polyline(slip_xy)
             if hit is None:
                 if reasons is not None:
-                    reasons.append((support.id, SUPPORT_NO_CROSSING))
+                    reasons.append((support.id, (
+                        SUPPORT_NO_LENGTH if support_has_no_length(
+                            project, support.head, support.tail)
+                        else SUPPORT_NO_CROSSING)))
                 continue
             ix, iy, d_from_head = hit
             # Find which slice this intersection falls into
@@ -1720,8 +1732,9 @@ def compute_support_effects(
 #: How each reason reads: singular, plural, and once more with no count
 #: at all for the lone-support case, where "None of the 1 supports
 #: placed" would be plainly ungrammatical. Ordered most actionable
-#: first, so the four that describe BROKEN INPUT come before the three
-#: that describe a legitimate calculation decision. v0.1.161 put
+#: first, so the five that describe BROKEN INPUT come before the three
+#: that describe a legitimate calculation decision (v0.1.313 added
+#: ``SUPPORT_NO_LENGTH`` to the first group, D313). v0.1.161 put
 #: ``SUPPORT_NOT_PRICEABLE`` at the head of that first group: it is the
 #: only one that means the analysis could not READ the model, and it
 #: carries its own text on the result besides (defect D94). v0.1.163 put
@@ -1744,6 +1757,10 @@ _UNCONTRIBUTING_PHRASES = (
      "%d names a support class this build does not have",
      "%d name a support class this build does not have",
      "it names a support class this build does not have"),
+    (SUPPORT_NO_LENGTH,
+     "%d has no length: its head and tail coincide",
+     "%d have no length: their head and tail coincide",
+     "it has no length: its head and tail coincide"),
     (SUPPORT_NO_CREST,
      "%d is drawn with both ends at one elevation, and its type measures "
      "its diagram from the upper one",

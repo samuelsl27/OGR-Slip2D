@@ -126,6 +126,13 @@ class SupportInstancePropertiesDialog(QDialog):
         lbl.setStyleSheet("color: #555;")
         form.addRow("", lbl)
 
+        # v0.1.313 (D313) — why OK did not close, said here and not modal
+        self.lbl_problem = QLabel("")
+        self.lbl_problem.setWordWrap(True)
+        self.lbl_problem.setStyleSheet("color: #b00020;")
+        self.lbl_problem.setVisible(False)
+        form.addRow(self.lbl_problem)
+
         bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         bb.accepted.connect(self.accept)
         bb.rejected.connect(self.reject)
@@ -142,6 +149,16 @@ class SupportInstancePropertiesDialog(QDialog):
 
     def accept(self) -> None:
         from ogr_core.geometry import Vertex
+        from ogr_core.project.rules import (SUPPORT_NO_LENGTH,
+                                            support_has_no_length)
+        head = (self.spn_head_x.value(), self.spn_head_y.value())
+        tail = (self.spn_tail_x.value(), self.spn_tail_y.value())
+        # v0.1.313 (D313) — before anything is written: the API refuses a
+        # support whose ends coincide, and this dialog stored one
+        if support_has_no_length(self.project, head, tail):
+            self.lbl_problem.setText(tr(SUPPORT_NO_LENGTH))
+            self.lbl_problem.setVisible(True)
+            return
         self.support.name = self.ed_name.text()
         chosen = self.cbo_type.currentData()
         for st in self.project.support_types:
@@ -155,11 +172,7 @@ class SupportInstancePropertiesDialog(QDialog):
         self.support.force_application = self.cbo_app.currentData()
         self.support.orientation = self.cbo_ori.currentData()
         self.support.user_angle_deg = self.spn_user_angle.value()
-        self.support.head = Vertex(
-            self.spn_head_x.value(), self.spn_head_y.value(),
-        )
-        self.support.tail = Vertex(
-            self.spn_tail_x.value(), self.spn_tail_y.value(),
-        )
+        self.support.head = Vertex(*head)
+        self.support.tail = Vertex(*tail)
         self.support.color = self._chosen_color
         super().accept()

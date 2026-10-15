@@ -2514,6 +2514,10 @@ _DICTS: dict[str, dict[str, str]] = {
             "resultados transitorios",
         "initial conditions of the transient":
             "condiciones iniciales del transitorio",
+        # v0.1.313 (D313) — a support whose ends coincide
+        "A support needs two different points: its head and tail coincide.":
+            "Un soporte necesita dos puntos distintos: su cabeza y su cola "
+            "coinciden.",
         # v0.1.310 (D309) — Restore Defaults restores what the pages show
         "Puts the values shown on these pages back to their defaults. "
         "Nothing is written until Apply or OK; settings edited elsewhere "

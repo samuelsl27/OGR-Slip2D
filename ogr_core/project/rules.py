@@ -1587,6 +1587,56 @@ def transient_without_stages(project) -> Optional[str]:
     return None
 
 
+#: What a support with no length is told, an English key that the interface
+#: translates at the point of use. The API keeps its own words for the same
+#: refusal ("head and tail coincide."), which agents may already match on.
+SUPPORT_NO_LENGTH = ("A support needs two different points: its head and "
+                     "tail coincide.")
+
+#: One support of the model that has no length, for ``project_validate``.
+SUPPORT_NO_LENGTH_IN_MODEL = ("Support {0} ({1}) has no length: its head and "
+                              "tail coincide, so the analysis gives it no "
+                              "force.")
+
+
+def support_length_tolerance(project) -> float:
+    """How far apart two ends may be and still be one point.
+
+    Relative to the model (AGENTS: a geometric tolerance follows the size of
+    the model, so millimetres and metres behave alike): a billionth of the
+    diagonal of its bounding box, which an empty project gives as 100 × 50.
+    """
+    import math
+    x0, y0, x1, y1 = project.bounding_box()
+    return 1e-9 * math.hypot(x1 - x0, y1 - y0)
+
+
+def support_has_no_length(project, head, tail) -> bool:
+    """True when a support from ``head`` to ``tail`` would have no length.
+
+    v0.1.313 (D313) — only ``support_set`` refused it, with an exact
+    comparison, since spec 008; the window placed one with two clicks on
+    the same point, by stretching one end onto the other or by typing the
+    same coordinates, and the analysis then reported it as a support that
+    "does not cross the surface". Every door that places or edits a support
+    asks this. ``head`` and ``tail`` are anything with ``x`` and ``y``, or
+    ``(x, y)`` pairs.
+    """
+    import math
+    hx, hy = (head.x, head.y) if hasattr(head, "x") else head
+    tx, ty = (tail.x, tail.y) if hasattr(tail, "x") else tail
+    return math.hypot(tx - hx, ty - hy) <= support_length_tolerance(project)
+
+
+def degenerate_supports(project) -> list[str]:
+    """One message per support of the model that has no length (v0.1.313,
+    D313): one saved by an earlier version, or written by a script, which
+    no door has refused."""
+    return [SUPPORT_NO_LENGTH_IN_MODEL.format(s.name, s.id)
+            for s in getattr(project, "supports", [])
+            if support_has_no_length(project, s.head, s.tail)]
+
+
 def set_fem_mesh(project, mesh) -> list[str]:
     """Install ``mesh`` and drop what belonged to the previous one; returns
     what was dropped, in words.

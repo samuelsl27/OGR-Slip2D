@@ -296,6 +296,7 @@ def support_set(ws, project_id: Optional[str] = None,
     """Place a support (head at the slope face, tail inside), or move,
     stretch, retype or edit one (support=...)."""
     from ogr_core.geometry import Vertex
+    from ogr_core.project.rules import support_has_no_length
     from ogr_core.support.support import (ForceApplication,
                                           ForceOrientation, SupportInstance)
 
@@ -307,7 +308,8 @@ def support_set(ws, project_id: Optional[str] = None,
                 raise InvalidArgument("A new support needs head and tail "
                                       "[x, y].")
             h, t = point(head, "head"), point(tail, "tail")
-            if math.hypot(t[0] - h[0], t[1] - h[1]) <= 0:
+            # v0.1.313 (D313) — the core's rule, which the window asks too
+            if support_has_no_length(project, h, t):
                 raise InvalidArgument("head and tail coincide.")
             s = SupportInstance(
                 type_id=st.TYPE_ID, type_ref=st.id,
@@ -336,7 +338,7 @@ def support_set(ws, project_id: Optional[str] = None,
                 s.name = str(name)
             if color is not None:
                 s.color = str(color)
-            if s.length() <= 0:
+            if support_has_no_length(project, s.head, s.tail):
                 raise InvalidArgument("head and tail coincide.")
         if creating and (dx is not None or dy is not None):
             raise InvalidArgument("dx/dy move an existing support; give "

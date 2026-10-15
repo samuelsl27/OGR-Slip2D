@@ -270,7 +270,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.312"
+    VERSION = "0.1.313"
 
     def __init__(self) -> None:
         super().__init__()
@@ -4104,7 +4104,15 @@ class MainWindow(QMainWindow):
         self, x0: float, y0: float, x1: float, y1: float,
     ) -> None:
         from ogr_core.geometry import Vertex
+        from ogr_core.project.rules import (SUPPORT_NO_LENGTH,
+                                            support_has_no_length)
         from ogr_core.support import SupportInstance, ForceApplication, ForceOrientation
+        # v0.1.313 (D313) — two clicks on one point: the API refuses that
+        # support and the window stored it. Nothing is written, so no undo
+        # step either, and the tool stays for the next one.
+        if support_has_no_length(self.project, (x0, y0), (x1, y1)):
+            self.ogr_status.showMessage(tr(SUPPORT_NO_LENGTH), 5000)
+            return
         # First support type by default — the reference also uses the
         # "currently active" support type
         stype = self.project.support_types[0]
@@ -4231,6 +4239,14 @@ class MainWindow(QMainWindow):
             return
         idx, end_name = best
         s = self.project.supports[idx]
+        # v0.1.313 (D313) — one end dropped on the other leaves no support
+        from ogr_core.project.rules import (SUPPORT_NO_LENGTH,
+                                            support_has_no_length)
+        other = s.tail if end_name == "head" else s.head
+        if support_has_no_length(self.project, (x1, y1), other):
+            self.canvas.set_tool_mode(ToolMode.SELECT)
+            self.ogr_status.showMessage(tr(SUPPORT_NO_LENGTH), 5000)
+            return
         if end_name == "head":
             s.head = Vertex(x1, y1)
         else:
