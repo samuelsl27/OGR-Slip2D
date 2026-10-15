@@ -13,7 +13,6 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -57,19 +56,11 @@ class PreferencesDialog(QDialog):
 
         root.addWidget(gen)
 
-        # --- Display group -------------------------------------------
-        disp = QGroupBox(tr("Display Options..."))
-        form2 = QFormLayout(disp)
-        self.chk_show_tabs = QCheckBox(tr("Show Tabs for Multiple Windows"))
-        self.chk_show_tabs.setChecked(True)
-        self.chk_mark_modified = QCheckBox(tr("Mark file as modified after importing"))
-        self.chk_mark_modified.setChecked(True)
-        self.chk_save_compressed = QCheckBox(tr("Default to compressed format when saving"))
-        self.chk_save_compressed.setChecked(False)
-        form2.addRow(self.chk_show_tabs)
-        form2.addRow(self.chk_mark_modified)
-        form2.addRow(self.chk_save_compressed)
-        root.addWidget(disp)
+        # v0.1.317 (D299) — the "Display Options..." group is gone. Its three
+        # check boxes were read and saved by nothing (rule 7): there are no
+        # tabbed windows, importing ALWAYS marks the project modified (every
+        # import is an undo step since 0.1.302), and the .ogr has no
+        # compressed format. Every control left here is read by _accept.
 
         # --- Buttons --------------------------------------------------
         buttons = QDialogButtonBox(
