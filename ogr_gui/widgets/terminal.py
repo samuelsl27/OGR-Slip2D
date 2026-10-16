@@ -32,6 +32,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ogr_gui.i18n import tr
+
 
 # ----------------------------------------------------------------------
 class _OutputCapture(io.StringIO):
@@ -92,12 +94,10 @@ class TerminalWidget(QPlainTextEdit):
 
     # ------------------------------------------------------------------
     def _write_banner(self) -> None:
-        banner = (
-            "OGR Slip2D — embedded Python terminal\n"
-            f"Python {sys.version.split()[0]}\n"
+        banner = tr(
+            "OGR Slip2D — embedded Python terminal\nPython {0}\n"
             "Available: project, canvas, mainwindow, ogr_*, np\n"
-            "Type 'help_ogr()' for tips.\n"
-        )
+            "Type 'help_ogr()' for tips.\n").format(sys.version.split()[0])
         self._append_styled(banner, color="#707070")
 
     def _write_prompt(self, cont: bool = False) -> None:

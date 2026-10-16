@@ -76,8 +76,8 @@ class _CoordInput(QLineEdit):
         self.setPlaceholderText("x, y")
         self.setMaximumWidth(130)
         self.setToolTip(
-            "While drawing a boundary, type X,Y and press Enter to add\n"
-            "that exact vertex to the in-progress polyline."
+            tr("While drawing a boundary, type X,Y and press Enter to add\n"
+            "that exact vertex to the in-progress polyline.")
         )
         # Accept a pair of signed floats separated by comma, space, or semicolon
         rx = QRegularExpression(r"^-?\d+(\.\d+)?\s*[,;\s]\s*-?\d+(\.\d+)?$")

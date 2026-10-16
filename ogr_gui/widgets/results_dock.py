@@ -78,7 +78,7 @@ class ResultsDock(QDockWidget):
 
         self.table = QTableWidget(0, 6)
         self.table.setHorizontalHeaderLabels(
-            ["#", "FoS", "Method", "Centre X", "Centre Y", "Radius"]
+            ["#", tr("FoS"), tr("Method"), tr("Centre X"), tr("Centre Y"), tr("Radius")]
         )
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
@@ -123,15 +123,12 @@ class ResultsDock(QDockWidget):
             # over an over-design factor. One decider, and through tr().
             label = fos_label(factor_report)
             self.header_label.setText(
-                f"Method: <b>{search_result.method_id}</b>   "
-                f"Valid: {n_ok}   "
-                f"{label}: <b>{crit.fos:.3f}</b>"
+                tr('Method: <b>{0}</b>   Valid: {1}   {2}: <b>{3:.3f}</b>').format(search_result.method_id, n_ok, label, crit.fos)
                 + load_factor_lines(crit)
             )
         else:
             self.header_label.setText(
-                f"Method: {search_result.method_id}. "
-                f"No valid surfaces found ({search_result.invalid_count} invalid)."
+                tr('Method: {0}. No valid surfaces found ({1} invalid).').format(search_result.method_id, search_result.invalid_count)
             )
 
         for i, res in enumerate(search_result.top_n(50)):

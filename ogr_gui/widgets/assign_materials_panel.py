@@ -61,8 +61,8 @@ class AssignMaterialsPanel(QDockWidget):
         vbox.setContentsMargins(6, 6, 6, 6)
 
         hint = QLabel(
-            "Pick a material below, then click on a region of the canvas\n"
-            "to paint it.  Close this panel to exit.")
+            tr("Pick a material below, then click on a region of the canvas\n"
+            "to paint it.  Close this panel to exit."))
         hint.setWordWrap(True)
         hint.setStyleSheet(f"color: {theme_color('muted')}; font-size: 9pt; padding: 2px;")
         vbox.addWidget(hint)
@@ -105,7 +105,7 @@ class AssignMaterialsPanel(QDockWidget):
             return
         mid = item.data(Qt.UserRole) or ""
         name = item.text()
-        self.status.setText(f"Active: <b>{name}</b>")
+        self.status.setText(tr('Active: <b>{0}</b>').format(name))
         self.material_selected.emit(mid)
 
     def closeEvent(self, event) -> None:  # noqa: N802

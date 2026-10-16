@@ -127,7 +127,7 @@ def _region_to_item(region, material):
     mat_name = getattr(material, "name", None) or "(unassigned)"
     area = region.area
     item.setToolTip(
-        f"<b>Region</b><br>Material: {mat_name}<br>Area: {area:.2f} m²"
+        tr('<b>Region</b><br>Material: {0}<br>Area: {1:.2f} m²').format(mat_name, area)
     )
     return item
 
@@ -1013,7 +1013,7 @@ class CanvasView(QGraphicsView):
             rect.setPen(no_pen)
             rect.setBrush(QBrush(color))
             rect.setZValue(0.5)  # behind the slip surface lines
-            rect.setToolTip(f"Centre ({xc:.2f}, {yc:.2f}) — FoS = {fos:.3f}")
+            rect.setToolTip(tr('Centre ({0:.2f}, {1:.2f}) — FoS = {2:.3f}').format(xc, yc, fos))
             scene.addItem(rect)
             self._result_items.append(rect)
 
@@ -1060,8 +1060,7 @@ class CanvasView(QGraphicsView):
 
         menu = QMenu(self)
         info = QAction(
-            f"Vertex {vi + 1}/{len(b.polyline.vertices)} — "
-            f"({v.x:.3f}, {v.y:.3f})", self,
+            tr('Vertex {0}/{1} — ({2:.3f}, {3:.3f})').format(vi + 1, len(b.polyline.vertices), v.x, v.y), self,
         )
         info.setEnabled(False)
         menu.addAction(info)
@@ -1115,7 +1114,7 @@ class CanvasView(QGraphicsView):
         # Type-specific extras
         if b.btype == BoundaryType.TENSION_CRACK:
             menu.addSeparator()
-            a = QAction("Define Tension Crack…", self)
+            a = QAction(tr("Define Tension Crack…"), self)
             a.triggered.connect(
                 lambda _c=False: self.boundary_action_requested.emit(
                     "define_tension_crack", bidx,
@@ -1164,7 +1163,7 @@ class CanvasView(QGraphicsView):
         type_name = (getattr(st, "_display_name", None)
                      or getattr(st, "DISPLAY_NAME", None) or s.type_id)
 
-        info = QAction(f"Support — {s.name or type_name}", self)
+        info = QAction(tr('Support — {0}').format(s.name or type_name), self)
         info.setEnabled(False)
         menu.addAction(info)
         menu.addSeparator()
@@ -1197,23 +1196,23 @@ class CanvasView(QGraphicsView):
         menu = QMenu(self)
         if kind == "distributed":
             load = self.project.distributed_loads[idx]
-            label = f"Distributed Load — {load.magnitude_1:.1f} kN/m²"
+            label = tr('Distributed Load — {0:.1f} kN/m²').format(load.magnitude_1)
         else:
             load = self.project.line_loads[idx]
-            label = f"Line Load — {load.magnitude:.1f} kN/m"
+            label = tr('Line Load — {0:.1f} kN/m').format(load.magnitude)
 
         info = QAction(label, self)
         info.setEnabled(False)
         menu.addAction(info)
         menu.addSeparator()
 
-        act_modify = QAction("Modify…", self)
+        act_modify = QAction(tr("Modify…"), self)
         act_modify.triggered.connect(
             lambda: self.load_action_requested.emit("modify", kind, idx)
         )
         menu.addAction(act_modify)
 
-        act_delete = QAction("Delete", self)
+        act_delete = QAction(tr("Delete"), self)
         act_delete.triggered.connect(
             lambda: self.load_action_requested.emit("delete", kind, idx)
         )
@@ -1236,19 +1235,19 @@ class CanvasView(QGraphicsView):
         can_finish = len(self._draw_points) >= 2
         can_undo = bool(self._draw_points)
 
-        act_done = QAction("Done", self)
+        act_done = QAction(tr("Done"), self)
         act_done.setEnabled(can_finish)
         act_done.triggered.connect(lambda: self._finish_drawing())
         menu.addAction(act_done)
 
-        act_close = QAction("Close Boundary", self)
+        act_close = QAction(tr("Close Boundary"), self)
         act_close.setEnabled(can_close)
         act_close.triggered.connect(
             lambda: self._finish_drawing(force_close=True)
         )
         menu.addAction(act_close)
 
-        act_undo = QAction("Undo last vertex", self)
+        act_undo = QAction(tr("Undo last vertex"), self)
         act_undo.setEnabled(can_undo)
         act_undo.triggered.connect(self._undo_last_point)
         menu.addAction(act_undo)
@@ -1272,13 +1271,13 @@ class CanvasView(QGraphicsView):
 
         menu.addSeparator()
 
-        act_coords = QAction("Coordinate Table...", self)
+        act_coords = QAction(tr("Coordinate Table..."), self)
         act_coords.triggered.connect(self._show_coord_table_dialog)
         menu.addAction(act_coords)
 
         menu.addSeparator()
 
-        act_cancel = QAction("Cancel", self)
+        act_cancel = QAction(tr("Cancel"), self)
         act_cancel.triggered.connect(self._cancel_drawing)
         menu.addAction(act_cancel)
 

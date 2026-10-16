@@ -2650,6 +2650,71 @@ _DICTS: dict[str, dict[str, str]] = {
         "Free Body Diagram": "Diagrama de sólido libre",
         "Section as x0,y0,x1,y1:": "Sección como x0,y0,x1,y1:",
         "Slice index:": "Índice de la dovela:",
+        # v0.1.319 (D300, family b) — the canvas, its tool tips and context
+        # menus, the data tips, the results panel and the status bar
+        "<b>Region</b><br>Material: {0}<br>Area: {1:.2f} m²":
+            "<b>Región</b><br>Material: {0}<br>Área: {1:.2f} m²",
+        "<b>Support force</b><br>Magnitude: {0:.1f} kN/m<br>Angle: "
+        "{1:.1f}°<br>Mode: {2}":
+            "<b>Fuerza del soporte</b><br>Módulo: {0:.1f} kN/m<br>Ángulo: "
+            "{1:.1f}°<br>Modo: {2}",
+        "<b>{0}</b><br><i>Type:</i> {1}<br><i>Length:</i> {2:.2f} m<br>"
+        "<i>Axis:</i> {3:.1f}°<br><i>Application:</i> {4}<br>"
+        "<i>Orientation:</i> {5}":
+            "<b>{0}</b><br><i>Tipo:</i> {1}<br><i>Longitud:</i> {2:.2f} m"
+            "<br><i>Eje:</i> {3:.1f}°<br><i>Aplicación:</i> {4}<br>"
+            "<i>Orientación:</i> {5}",
+        "<br><i>Force at head:</i> {0:.1f} kN/m<br><i>Force at midpoint:</i> "
+        "{1:.1f} kN/m":
+            "<br><i>Fuerza en la cabeza:</i> {0:.1f} kN/m<br><i>Fuerza en el "
+            "punto medio:</i> {1:.1f} kN/m",
+        "<br><i>Force at midpoint:</i> {0:.1f} kN/m<br><i>Force at the "
+        "foot:</i> {1:.1f} kN/m":
+            "<br><i>Fuerza en el punto medio:</i> {0:.1f} kN/m<br><i>Fuerza "
+            "en el pie:</i> {1:.1f} kN/m",
+        "Active: <b>{0}</b>": "Activo: <b>{0}</b>",
+        "Centre ({0:.2f}, {1:.2f}) — FoS = {2:.3f}":
+            "Centro ({0:.2f}, {1:.2f}) — FS = {2:.3f}",
+        "Close Boundary": "Cerrar contorno",
+        "Coordinate Table...": "Tabla de coordenadas...",
+        "Define Tension Crack…": "Definir grieta de tracción…",
+        "Distributed Load — {0:.1f} kN/m²":
+            "Carga repartida — {0:.1f} kN/m²",
+        "Done": "Hecho",
+        "Line Load — {0:.1f} kN/m": "Carga lineal — {0:.1f} kN/m",
+        "Method: <b>{0}</b>   Valid: {1}   {2}: <b>{3:.3f}</b>":
+            "Método: <b>{0}</b>   Válidas: {1}   {2}: <b>{3:.3f}</b>",
+        "Method: {0}. No valid surfaces found ({1} invalid).":
+            "Método: {0}. Ninguna superficie válida ({1} no válidas).",
+        "Modify…": "Modificar…",
+        "OGR Slip2D — embedded Python terminal\nPython {0}\nAvailable: "
+        "project, canvas, mainwindow, ogr_*, np\nType 'help_ogr()' for "
+        "tips.\n":
+            "OGR Slip2D — terminal de Python integrada\nPython {0}\n"
+            "Disponibles: project, canvas, mainwindow, ogr_*, np\nEscribe "
+            "'help_ogr()' para ver consejos.\n",
+        "Pick a material below, then click on a region of the canvas\nto "
+        "paint it.  Close this panel to exit.":
+            "Elige un material abajo y haz clic en una región del lienzo\n"
+            "para pintarla.  Cierra este panel para salir.",
+        "Support — {0}": "Soporte — {0}",
+        "Undo last vertex": "Deshacer el último vértice",
+        "Vertex ({0:.3f}, {1:.3f})": "Vértice ({0:.3f}, {1:.3f})",
+        "Vertex {0}/{1} — ({2:.3f}, {3:.3f})":
+            "Vértice {0}/{1} — ({2:.3f}, {3:.3f})",
+        "While drawing a boundary, type X,Y and press Enter to add\nthat "
+        "exact vertex to the in-progress polyline.":
+            "Mientras dibujas un contorno, escribe X,Y y pulsa Intro para "
+            "añadir\nese vértice exacto a la polilínea en curso.",
+        "at ({0:.3f}, {1:.3f})": "en ({0:.3f}, {1:.3f})",
+        "from ({0:.3f}, {1:.3f}) to ({2:.3f}, {3:.3f})":
+            "de ({0:.3f}, {1:.3f}) a ({2:.3f}, {3:.3f})",
+        "pore pressure: {0}": "presión intersticial: {0}",
+        "region {0}": "región {0}",
+        "region {0}\nno material assigned":
+            "región {0}\nsin material asignado",
+        "strength: {0}": "resistencia: {0}",
+        "vertices: {0}": "vértices: {0}",
         # v0.1.315 (D293) — the note of the hydraulic dialog, wrapped
         "<i>Names and colours are defined in Properties > Define "
         "Materials.</i>":

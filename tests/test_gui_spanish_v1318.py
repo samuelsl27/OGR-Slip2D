@@ -99,13 +99,31 @@ EXCEPTIONS: dict = {
         "notation: the time of a stage",
     ("interpret_groundwater_window.py", "{}: t = {}{}{}"):
         "notation: the number and the time of a stage",
+    # v0.1.319 — units and coordinates, the same in every language
+    ("canvas/graphics_items.py", "{} kN/m²"):
+        "a load's magnitude and its unit",
+    ("canvas/graphics_items.py", "{} → {} kN/m²"):
+        "a varying load's two magnitudes and their unit",
+    ("canvas/graphics_items.py", "{} kN/m"):
+        "a line load's magnitude and its unit",
+    ("data_tips.py", "{}: {} kPa"):
+        "a quantity named by the model, its value and its unit",
+    ("widgets/legend.py", "X: 0.000   Y: 0.000"):
+        "notation: the coordinates of the pointer",
+    ("widgets/legend.py", "X: {}   Y: {}"):
+        "notation: the coordinates of the pointer",
+    ("widgets/status_bar.py", "X: {}   Y: {}"):
+        "notation: the coordinates of the pointer",
+    ("widgets/status_bar.py", "x, y"):
+        "notation: the format of the coordinates to type",
 }
 
 #: How many may be left. Lowering it is the point; raising it needs a
 #: reason in a changelog. History: 193 at 0.1.317 by these rules; 94 at
 #: 0.1.318, once the interpretation windows, the statistics window, the
-#: charts and the last messages outside tr() went through it.
-BUDGET = 94
+#: charts and the last messages outside tr() went through it; 47 at
+#: 0.1.319, the canvas, the data tips, the results panel and the status bar.
+BUDGET = 47
 
 
 def _letters(text):
@@ -300,5 +318,36 @@ class TestTheInterpretWindowSpeaksSpanish:
             menus = [a.text() for a in w.menuBar().actions()]
             assert "Groundwater" in menus and "Statistics" in menus, menus
             w.close()
+        finally:
+            set_language(before)
+
+
+class TestTheMainWindowSpeaksSpanish:
+    """v0.1.319 — the results panel, built with the window."""
+
+    def _headers(self, language):
+        from PySide6.QtWidgets import QApplication
+        from ogr_gui.i18n import set_language
+        from ogr_gui.main_window import MainWindow
+        QApplication.instance() or QApplication([])
+        set_language(language)
+        w = MainWindow()
+        try:
+            table = w.results_dock.table
+            return [table.horizontalHeaderItem(i).text()
+                    for i in range(table.columnCount())]
+        finally:
+            w.project.is_dirty = False
+            w.close()
+
+    def test_the_results_panel_headers(self):
+        from ogr_gui.i18n import current_language, set_language
+        before = current_language()
+        try:
+            assert self._headers("es") == [
+                "#", "FS", "Método", "Centro X", "Centro Y", "Radio"]
+            # control: the English is what it was
+            assert self._headers("en") == [
+                "#", "FoS", "Method", "Centre X", "Centre Y", "Radius"]
         finally:
             set_language(before)

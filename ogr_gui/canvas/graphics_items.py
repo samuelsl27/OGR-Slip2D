@@ -199,7 +199,7 @@ class VertexHandleItem(QGraphicsEllipseItem):
         self.setFlag(QGraphicsItem.ItemIgnoresTransformations, True)
         self.setAcceptHoverEvents(True)
         self.setZValue(10.0)
-        self.setToolTip(f"Vertex ({x:.3f}, {y:.3f})")
+        self.setToolTip(tr('Vertex ({0:.3f}, {1:.3f})').format(x, y))
 
     def hoverEnterEvent(self, ev) -> None:  # noqa: N802
         self.setBrush(QBrush(QColor("#ffcc33")))
@@ -396,13 +396,7 @@ class SupportItem(DomainItem):
 
         # Rich tooltip
         tooltip = (
-            f"<b>{support.name or support_type_display}</b><br>"
-            f"<i>Type:</i> {support_type_display}<br>"
-            f"<i>Length:</i> {support.length():.2f} m<br>"
-            f"<i>Axis:</i> {support.axis_angle_deg():.1f}°<br>"
-            f"<i>Application:</i> {support.force_application.value}<br>"
-            f"<i>Orientation:</i> "
-            f"{support.orientation.value.replace('_', ' ')}"
+            tr('<b>{0}</b><br><i>Type:</i> {1}<br><i>Length:</i> {2:.2f} m<br><i>Axis:</i> {3:.1f}°<br><i>Application:</i> {4}<br><i>Orientation:</i> {5}').format(support.name or support_type_display, support_type_display, support.length(), support.axis_angle_deg(), support.force_application.value, support.orientation.value.replace('_', ' '))
         )
         if support_type_obj is not None:
             # v0.1.116 — the two stress-dependent pullout laws need
@@ -460,8 +454,7 @@ class SupportItem(DomainItem):
                     Fend = support_type_obj.force_at(
                         length, length, reading.bond)
                     tooltip += (
-                        f"<br><i>Force at midpoint:</i> {Fmid:.1f} kN/m"
-                        f"<br><i>Force at the foot:</i> {Fend:.1f} kN/m"
+                        tr('<br><i>Force at midpoint:</i> {0:.1f} kN/m<br><i>Force at the foot:</i> {1:.1f} kN/m').format(Fmid, Fend)
                     )
                 else:
                     F0 = support_type_obj.force_at(0, length, bond)
@@ -469,8 +462,7 @@ class SupportItem(DomainItem):
                         0.5 * length, length, bond
                     )
                     tooltip += (
-                        f"<br><i>Force at head:</i> {F0:.1f} kN/m"
-                        f"<br><i>Force at midpoint:</i> {Fmid:.1f} kN/m"
+                        tr('<br><i>Force at head:</i> {0:.1f} kN/m<br><i>Force at midpoint:</i> {1:.1f} kN/m').format(F0, Fmid)
                     )
             except Exception:  # noqa: BLE001
                 pass
@@ -586,10 +578,7 @@ class SupportForceArrow(QGraphicsPathItem):
         self.setPen(pen)
         self.setZValue(8.5)
         self.setToolTip(
-            f"<b>Support force</b><br>"
-            f"Magnitude: {force_magnitude:.1f} kN/m<br>"
-            f"Angle: {_m.degrees(force_angle_rad):.1f}°<br>"
-            f"Mode: {'Active' if is_active else 'Passive'}"
+            tr('<b>Support force</b><br>Magnitude: {0:.1f} kN/m<br>Angle: {1:.1f}°<br>Mode: {2}').format(force_magnitude, _m.degrees(force_angle_rad), 'Active' if is_active else 'Passive')
         )
 
 

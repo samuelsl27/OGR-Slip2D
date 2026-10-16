@@ -23,6 +23,7 @@ without kPa is not information.
 Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
+from ogr_gui.i18n import tr
 
 import math
 from enum import Enum
@@ -90,7 +91,7 @@ def material_tip(material, mode: DataTipMode = DataTipMode.MAXIMUM,
         model = getattr(strength, "DISPLAY_NAME", None) or \
             getattr(strength, "MODEL_ID", "")
         if model:
-            lines.append(f"strength: {model}")
+            lines.append(tr('strength: {0}').format(model))
         for key, value in (getattr(strength, "params", {}) or {}).items():
             lines.append("  " + _line(key, value))
     attrs = ["unit_weight"]
@@ -104,7 +105,7 @@ def material_tip(material, mode: DataTipMode = DataTipMode.MAXIMUM,
             lines.append(_line(attr, v))
     pp = getattr(material, "pore_pressure", None)
     if pp is not None:
-        lines.append(f"pore pressure: {getattr(pp, 'value', pp)}")
+        lines.append(tr('pore pressure: {0}').format(getattr(pp, 'value', pp)))
     for attr in ("ru", "constant_u", "phi_b", "air_entry_value"):
         v = getattr(material, attr, None)
         if v:
@@ -142,8 +143,7 @@ def support_tip(support, mode: DataTipMode = DataTipMode.MAXIMUM,
     head = getattr(support, "head", None)
     tail = getattr(support, "tail", None)
     if head is not None and tail is not None:
-        lines.append(f"from ({tail.x:.3f}, {tail.y:.3f}) "
-                     f"to ({head.x:.3f}, {head.y:.3f})")
+        lines.append(tr('from ({0:.3f}, {1:.3f}) to ({2:.3f}, {3:.3f})').format(tail.x, tail.y, head.x, head.y))
         lines.append(_line("length", math.dist((tail.x, tail.y),
                                                (head.x, head.y))))
     for key in (getattr(stype, "PARAMETERS", {}) or {}):
@@ -181,10 +181,9 @@ def load_tip(load, mode: DataTipMode = DataTipMode.MAXIMUM) -> str:
     end = getattr(load, "end", None)
     point = getattr(load, "point", None)
     if start is not None and end is not None:
-        lines.append(f"from ({start.x:.3f}, {start.y:.3f}) "
-                     f"to ({end.x:.3f}, {end.y:.3f})")
+        lines.append(tr('from ({0:.3f}, {1:.3f}) to ({2:.3f}, {3:.3f})').format(start.x, start.y, end.x, end.y))
     elif point is not None:
-        lines.append(f"at ({point.x:.3f}, {point.y:.3f})")
+        lines.append(tr('at ({0:.3f}, {1:.3f})').format(point.x, point.y))
     return "\n".join(lines)
 
 
@@ -198,7 +197,7 @@ def boundary_tip(boundary, mode: DataTipMode = DataTipMode.MAXIMUM) -> str:
     verts = list(boundary.polyline.vertices)
     length = sum(math.dist((a.x, a.y), (b.x, b.y))
                  for a, b in zip(verts, verts[1:]))
-    lines = [label, f"vertices: {len(verts)}", _line("length", length)]
+    lines = [label, tr('vertices: {0}').format(len(verts)), _line("length", length)]
     if getattr(boundary.polyline, "closed", False):
         lines.append("closed")
     return "\n".join(lines)
@@ -253,14 +252,14 @@ def tip_at(project, x: float, y: float,
                 material = _material_of(project, region)
                 if material is not None:
                     return material_tip(material, mode,
-                                        region_name=f"region {i + 1}")
+                                        region_name=tr('region {0}').format(i + 1))
                 # A region with no material assigned yet is worth
                 # reporting too: "region 2 — no material assigned" tells
                 # the user something actionable, whereas silence looks
                 # like the tip is broken.
-                return (f"region {i + 1}\nno material assigned"
+                return (tr('region {0}\nno material assigned').format(i + 1)
                         if mode != DataTipMode.MINIMUM
-                        else f"region {i + 1}")
+                        else tr('region {0}').format(i + 1))
     except Exception:  # noqa: BLE001
         pass
 
