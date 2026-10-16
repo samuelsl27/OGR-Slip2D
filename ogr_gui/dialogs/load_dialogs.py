@@ -46,9 +46,7 @@ class _BaseLoadDialog(QDialog):
 
         root = QVBoxLayout(self)
         root.addWidget(QLabel(
-            f"<b>{title}</b><br>"
-            f"Magnitude in {magnitude_unit}. Always positive — "
-            f"direction is set by Orientation."
+            tr('<b>{0}</b><br>Magnitude in {1}. Always positive — direction is set by Orientation.').format(title, magnitude_unit)
         ))
 
         form = QFormLayout()
@@ -105,8 +103,8 @@ class _BaseLoadDialog(QDialog):
             tr("Load creates excess pore pressure (B-bar method)")
         )
         self.cb_excess.setToolTip(
-            "Only the vertical component of the load contributes to\n"
-            "excess pore pressure on undrained materials with B-bar > 0."
+            tr("Only the vertical component of the load contributes to\n"
+            "excess pore pressure on undrained materials with B-bar > 0.")
         )
         form.addRow("", self.cb_excess)
 

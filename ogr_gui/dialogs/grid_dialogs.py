@@ -64,11 +64,11 @@ class AddGridDialog(QDialog):
 
         root = QVBoxLayout(self)
         intro = QLabel(
-            "<b>Define the slip-circle centre grid.</b><br>"
+            tr("<b>Define the slip-circle centre grid.</b><br>"
             "Each cell of the grid is a candidate circle centre. "
             "For each centre, the radius is swept from a minimum to "
             "the maximum geometric extent in steps defined by the "
-            "Radius Increment (Surface Options)."
+            "Radius Increment (Surface Options).")
         )
         # v0.1.315 (D293) — unwrapped it was one 1616 px line, and the
         # minimum width of the dialog: wider than a 1366 px screen
@@ -117,8 +117,8 @@ class AddGridDialog(QDialog):
         # v0.1.9 — Pick rectangle on canvas (2-click flow)
         self.btn_pick = QPushButton(tr("Pick rectangle on canvas (2 clicks)"))
         self.btn_pick.setToolTip(
-            "Click this, then click two opposite corners of the desired "
-            "grid rectangle directly on the canvas."
+            tr("Click this, then click two opposite corners of the desired "
+            "grid rectangle directly on the canvas.")
         )
         self.btn_pick.clicked.connect(self._pick_on_canvas)
         root.addWidget(self.btn_pick)
@@ -272,9 +272,9 @@ class SurfaceOptionsDialog(QDialog):
 
         root = QVBoxLayout(self)
         root.addWidget(QLabel(
-            "<b>Failure surface generation & optimization.</b><br>"
+            tr("<b>Failure surface generation & optimization.</b><br>"
             "Configure the algorithm used to enumerate slip surfaces "
-            "and the global filters that prune candidate results."
+            "and the global filters that prune candidate results.")
         ))
 
         # ============ HEADER ============
@@ -286,7 +286,7 @@ class SurfaceOptionsDialog(QDialog):
         # Surface Type radio buttons
         st_box = QHBoxLayout()
         self.rb_circular = QRadioButton("Circular")
-        self.rb_non_circular = QRadioButton("Non-Circular")
+        self.rb_non_circular = QRadioButton(tr("Non-Circular"))
         st_box.addWidget(self.rb_circular)
         st_box.addWidget(self.rb_non_circular)
         st_box.addStretch()
@@ -304,14 +304,17 @@ class SurfaceOptionsDialog(QDialog):
         # Search Method dropdown
         self.cb_method = QComboBox()
         hf.addRow(tr("Search Method:"), self.cb_method)
+        # v0.1.320 (D300) — through tr(): handed to addItem by subscript,
+        # these were the one table of the dialog the AST census cannot see,
+        # and they showed in English with the interface in Spanish.
         self._method_labels = {
-            SearchMethod.GRID_SEARCH: "Grid Search",
-            SearchMethod.SLOPE_SEARCH: "Slope Search",
-            SearchMethod.AUTO_REFINE: "Auto Refine Search",
-            SearchMethod.BLOCK_SEARCH: "Block Search",
-            SearchMethod.PATH_SEARCH: "Path Search",
-            SearchMethod.SIMULATED_ANNEALING: "Simulated Annealing",
-            SearchMethod.PARTICLE_SWARM: "Particle Swarm Search",
+            SearchMethod.GRID_SEARCH: tr("Grid Search"),
+            SearchMethod.SLOPE_SEARCH: tr("Slope Search"),
+            SearchMethod.AUTO_REFINE: tr("Auto Refine Search"),
+            SearchMethod.BLOCK_SEARCH: tr("Block Search"),
+            SearchMethod.PATH_SEARCH: tr("Path Search"),
+            SearchMethod.SIMULATED_ANNEALING: tr("Simulated Annealing"),
+            SearchMethod.PARTICLE_SWARM: tr("Particle Swarm Search"),
         }
 
         root.addWidget(header)
@@ -761,9 +764,9 @@ class SurfaceOptionsDialog(QDialog):
         self._g_radius.setRange(1, 1000)
         self._g_radius.setValue(int(s.radius_increment))
         self._g_radius.setToolTip(
-            "Number of radius increments swept at each grid centre.\n"
+            tr("Number of radius increments swept at each grid centre.\n"
             "More = more candidate circles per centre = slower but\n"
-            "more thorough."
+            "more thorough.")
         )
         f.addRow(tr("Radius Increment:"), self._g_radius)
         self._g_composite = QCheckBox(
@@ -785,8 +788,8 @@ class SurfaceOptionsDialog(QDialog):
         self._tcrack_boxes.append(self._g_tcrack)
         self._g_tcrack.toggled.connect(self._sync_tcrack_boxes)
         self._g_tcrack.setToolTip(
-            "Insert a tension crack automatically when the slip surface\n"
-            "exhibits a concave segment (κ < 0) at the up-slope side."
+            tr("Insert a tension crack automatically when the slip surface\n"
+            "exhibits a concave segment (κ < 0) at the up-slope side.")
         )
         f.addRow("", self._g_tcrack)
         return w

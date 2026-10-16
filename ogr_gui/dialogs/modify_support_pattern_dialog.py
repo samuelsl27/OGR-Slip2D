@@ -101,8 +101,7 @@ class ModifySupportPatternDialog(QDialog):
 
         root = QVBoxLayout(self)
         info = QLabel(
-            f"Pattern detected: <b>{len(members)} supports</b> of type "
-            f"<b>{current_name}</b>"
+            tr('Pattern detected: <b>{0} supports</b> of type <b>{1}</b>').format(len(members), current_name)
         )
         info.setStyleSheet(f"padding: 6px; background: {theme_color('info_bg')}; border-radius: 4px;")
         root.addWidget(info)

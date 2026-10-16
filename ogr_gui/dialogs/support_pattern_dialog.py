@@ -81,7 +81,7 @@ class AddSupportPatternDialog(QDialog):
             self.cbo_type.setEnabled(False)
         else:
             self.cbo_type.addItem(
-                "(no support types — open Define Support first)", "",
+                tr("(no support types — open Define Support first)"), "",
             )
             self.cbo_type.setEnabled(False)
         ftype.addRow(tr("Type:"), self.cbo_type)
@@ -108,13 +108,13 @@ class AddSupportPatternDialog(QDialog):
         fori = QFormLayout(gori)
         self.cbo_orientation = QComboBox()
         self.cbo_orientation.addItem(
-            "Angle from horizontal", "angle",
+            tr("Angle from horizontal"), "angle",
         )
         self.cbo_orientation.addItem(
-            "Perpendicular to boundary", "normal",
+            tr("Perpendicular to boundary"), "normal",
         )
         self.cbo_orientation.addItem(
-            "Vertical (depth)", "depth",
+            tr("Vertical (depth)"), "depth",
         )
         self.cbo_orientation.currentIndexChanged.connect(self._on_ori_changed)
         fori.addRow(tr("Mode:"), self.cbo_orientation)

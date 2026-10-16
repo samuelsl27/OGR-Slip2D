@@ -68,11 +68,7 @@ class DefineTensionCrackDialog(QDialog):
 
         root = QVBoxLayout(self)
         root.addWidget(QLabel(
-            "<b>Tension Crack hydraulic properties.</b><br>"
-            "Defines the water level inside the tension crack zone, used "
-            "to compute the hydrostatic force on slip surfaces.<br>"
-            f"<i>γ_w = {project.settings.groundwater.pore_fluid_unit_weight:.2f} "
-            f"kN/m³ (from Project Settings)</i>"
+            tr('<b>Tension Crack hydraulic properties.</b><br>Defines the water level inside the tension crack zone, used to compute the hydrostatic force on slip surfaces.<br><i>γ_w = {0:.2f} kN/m³ (from Project Settings)</i>').format(project.settings.groundwater.pore_fluid_unit_weight)
         ))
 
         form = QFormLayout()
@@ -132,7 +128,7 @@ class DefineTensionCrackDialog(QDialog):
         for p in self._piezos:
             self.cb_piezo.addItem(p.name or f"Piezo {p.id[:8]}", p.id)
         if not self._piezos:
-            self.cb_piezo.addItem("(no piezometric line in model)", None)
+            self.cb_piezo.addItem(tr("(no piezometric line in model)"), None)
         # Pre-select
         if self._props.piezo_id is not None:
             for i in range(self.cb_piezo.count()):

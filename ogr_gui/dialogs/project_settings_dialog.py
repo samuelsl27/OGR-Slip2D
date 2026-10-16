@@ -512,16 +512,16 @@ class _GroundwaterPage(QWidget):
         self.dsp_hu.setRange(0.0, 1.0); self.dsp_hu.setDecimals(3)
         self.dsp_hu.setValue(s.groundwater.default_hu)
         self.dsp_hu.setToolTip(
-            "Default Hu coefficient (0..1) — multiplies the vertical "
-            "distance to a Water Surface to obtain the pressure head."
+            tr("Default Hu coefficient (0..1) — multiplies the vertical "
+            "distance to a Water Surface to obtain the pressure head.")
         )
 
         self.cb_auto_hu = QCheckBox(tr("Auto Hu (compute from water-surface slope)"))
         self.cb_auto_hu.setChecked(s.groundwater.auto_hu)
         self.cb_auto_hu.setToolTip(
-            "Hu = cos²(α), where α is the inclination of the water "
+            tr("Hu = cos²(α), where α is the inclination of the water "
             "surface above the slice. For a horizontal water table "
-            "α=0 and Hu=1."
+            "α=0 and Hu=1.")
         )
 
         # v0.1.125 — the cap on matric suction. Off by default, which is

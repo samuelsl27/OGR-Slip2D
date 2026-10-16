@@ -1190,7 +1190,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'General': 'General',
         'Geometry Cleanup': 'Limpieza de geometría',
         'Grayscale': 'Escala de grises',
-        'Grid Search Options': 'Opciones de búsqueda en malla',
+        'Grid Search Options': 'Opciones de búsqueda por rejilla',
         'Hatch pattern': 'Patrón de trama',
         'Initial number of surface vertices:': 'Número inicial de vértices de la superficie:',
         'K1 angle (deg from +X):': 'Ángulo de K1 (grados desde +X):',
@@ -2715,6 +2715,97 @@ _DICTS: dict[str, dict[str, str]] = {
             "región {0}\nsin material asignado",
         "strength: {0}": "resistencia: {0}",
         "vertices: {0}": "vértices: {0}",
+        # v0.1.320 (D300, families c and d) — the groundwater and search dialogs, the rest
+        # of the dialogs, and what the main window's own tests did not see
+        # The search methods of Surface Options, as the titles of their
+        # option pages already named them; «rejilla» is the grid of centres
+        # and «malla» the finite-element mesh (D240, decision of the owner).
+        "Grid Search": "Búsqueda por rejilla",
+        "Slope Search": "Búsqueda de talud",
+        "Auto Refine Search": "Búsqueda de refinado automático",
+        "Block Search": "Búsqueda por bloques",
+        "Path Search": "Búsqueda por caminos",
+        "Simulated Annealing": "Recocido simulado",
+        "\n            <table>\n            <tr><td><b>Version:</b></td><td>{0}</td></tr>\n            <tr><td><b>Build:</b></td><td>{1}</td></tr>\n            <tr><td><b>License:</b></td><td>{2}</td></tr>\n            <tr><td><b>Developer:</b></td><td>{3}</td></tr>\n            <tr><td><b>Institution:</b></td><td>{4}</td></tr>\n            <tr><td><b>Website:</b></td><td><a href='{5}'>{6}</a></td></tr>\n            </table>\n            <hr>\n            <p><b>{7}</b> is an open-source 2D slope-stability\n            analysis tool based on the Limit Equilibrium Method (LEM).\n            It is part of the <b>{8}</b>, a modular family of\n            geotechnical analysis programs developed as part of a PhD\n            research project at {9}.</p>\n            <p>{10}, released under the <b>GNU Affero General\n            Public License v3.0 or later</b>.</p>\n            <p>You may use this software freely, including for commercial\n            engineering work. If you modify it and let others use your\n            version remotely over a network, you must offer them its\n            source. There is no warranty of any kind: results must be\n            checked against independent calculations before being relied\n            on.</p>\n            ":
+            "\n            <table>\n            <tr><td><b>Versión:</b></td><td>{0}</td></tr>\n            <tr><td><b>Compilación:</b></td><td>{1}</td></tr>\n            <tr><td><b>Licencia:</b></td><td>{2}</td></tr>\n            <tr><td><b>Desarrollo:</b></td><td>{3}</td></tr>\n            <tr><td><b>Institución:</b></td><td>{4}</td></tr>\n            <tr><td><b>Web:</b></td><td><a href='{5}'>{6}</a></td></tr>\n            </table>\n            <hr>\n            <p><b>{7}</b> es un programa de código abierto de análisis\n            bidimensional de estabilidad de taludes por equilibrio\n            límite. Forma parte de <b>{8}</b>, una familia modular de\n            programas de análisis geotécnico desarrollada en un proyecto\n            de investigación doctoral en {9}.</p>\n            <p>{10}, publicado bajo la <b>GNU Affero General\n            Public License v3.0 or later</b>.</p>\n            <p>Puedes usarlo libremente, también en trabajos de\n            ingeniería comerciales. Si lo modificas y dejas que otros\n            usen tu versión a través de una red, tienes que ofrecerles su\n            código fuente. No hay garantía de ningún tipo: los resultados\n            deben contrastarse con cálculos independientes antes de\n            confiar en ellos.</p>\n            ",
+        '(no materials defined)':
+            '(no hay materiales definidos)',
+        '(no piezometric line in model)':
+            '(no hay ninguna línea piezométrica en el modelo)',
+        '(no support types — open Define Support first)':
+            '(no hay tipos de soporte — abre antes Definir soportes)',
+        '<b>Define the slip-circle centre grid.</b><br>Each cell of the grid is a candidate circle centre. For each centre, the radius is swept from a minimum to the maximum geometric extent in steps defined by the Radius Increment (Surface Options).':
+            '<b>Define la rejilla de centros de los círculos de rotura.</b><br>Cada nodo de la rejilla es un centro candidato. En cada centro, el radio se barre desde un mínimo hasta la máxima extensión geométrica, en pasos del incremento de radio (Opciones de superficie).',
+        '<b>Failure surface generation & optimization.</b><br>Configure the algorithm used to enumerate slip surfaces and the global filters that prune candidate results.':
+            '<b>Generación y optimización de superficies de rotura.</b><br>Configura el algoritmo que enumera las superficies de deslizamiento y los filtros globales que descartan candidatas.',
+        '<b>Tension Crack hydraulic properties.</b><br>Defines the water level inside the tension crack zone, used to compute the hydrostatic force on slip surfaces.<br><i>γ_w = {0:.2f} kN/m³ (from Project Settings)</i>':
+            '<b>Propiedades hidráulicas de la grieta de tracción.</b><br>Define el nivel de agua dentro de la zona de la grieta de tracción, con el que se calcula el empuje hidrostático sobre las superficies de deslizamiento.<br><i>γ_w = {0:.2f} kN/m³ (de Ajustes de proyecto)</i>',
+        '<b>{0}</b><br>Magnitude in {1}. Always positive — direction is set by Orientation.':
+            '<b>{0}</b><br>Módulo en {1}. Siempre positivo: el sentido lo da la orientación.',
+        '<i>Mesh overlays activate once the OGR FEM2D module is available (planned v0.5.0). Settings here are persisted.</i>':
+            '<i>Las capas de la malla se activan cuando el módulo OGR FEM2D esté disponible (previsto en la v0.5.0). Estos ajustes se guardan.</i>',
+        '<i>Pivot defaults to (0, 0). Use the boundary centroid by leaving it at zero and selecting a non-central boundary carefully.</i>':
+            '<i>El pivote es (0, 0) por defecto. Para usar el centroide del contorno, déjalo a cero y elige con cuidado un contorno no centrado.</i>',
+        '<i>Vertices whose deviation from the simplified line is below ε will be removed (Ramer-Douglas-Peucker).</i>':
+            '<i>Se eliminarán los vértices cuya desviación respecto a la línea simplificada sea menor que ε (Ramer-Douglas-Peucker).</i>',
+        'Advanced groundwater options are mutually exclusive: enabling this disables Excess Pore Pressure and Rapid Drawdown.':
+            'Las opciones avanzadas de agua subterránea son excluyentes: activar esta desactiva el exceso de presión intersticial y el desembalse rápido.',
+        'Angle from horizontal':
+            'Ángulo respecto a la horizontal',
+        'Calculate SF':
+            'Calcular FS',
+        'Click this, then click two opposite corners of the desired grid rectangle directly on the canvas.':
+            'Pulsa aquí y después haz clic en el lienzo en dos esquinas opuestas del rectángulo de la rejilla.',
+        'Default Hu coefficient (0..1) — multiplies the vertical distance to a Water Surface to obtain the pressure head.':
+            'Coeficiente Hu por defecto (0..1): multiplica la distancia vertical a una superficie de agua para obtener la altura de presión.',
+        'Define Materials…':
+            'Definir materiales…',
+        'Edit Coordinates — {0}':
+            'Editar coordenadas — {0}',
+        'Elevation of the horizontal force. Only affects Bishop: Janbu uses force equilibrium, where the position of a horizontal force is irrelevant.':
+            'Cota de la fuerza horizontal. Solo afecta a Bishop: Janbu usa el equilibrio de fuerzas, en el que la posición de una fuerza horizontal no importa.',
+        'Horizontal seismic coefficient. Typical values:\n  0.05 — light shaking\n  0.10 — moderate (Eurocode 8 zone 2-3)\n  0.15-0.20 — strong (zone 4)\n  0.25+ — severe (Japan, California rural)':
+            'Coeficiente sísmico horizontal. Valores típicos:\n  0,05 — sacudida leve\n  0,10 — moderada (Eurocódigo 8, zona 2-3)\n  0,15-0,20 — fuerte (zona 4)\n  0,25+ — severa (Japón, California rural)',
+        'Hu = cos²(α), where α is the inclination of the water surface above the slice. For a horizontal water table α=0 and Hu=1.':
+            'Hu = cos²(α), donde α es la inclinación de la superficie de agua sobre la dovela. Con un nivel freático horizontal, α=0 y Hu=1.',
+        'Insert a tension crack automatically when the slip surface\nexhibits a concave segment (κ < 0) at the up-slope side.':
+            'Inserta una grieta de tracción automáticamente cuando la superficie de deslizamiento\ntiene un tramo cóncavo (κ < 0) en el lado de aguas arriba.',
+        'Inverse Distance (IDW)':
+            'Inverso de la distancia (IDW)',
+        'Label':
+            'Etiqueta',
+        'Length: {0:.2f} m   Axis: {1:.1f}°':
+            'Longitud: {0:.2f} m   Eje: {1:.1f}°',
+        'Line segments':
+            'Segmentos',
+        'Main':
+            'Principal',
+        'Nodes':
+            'Nodos',
+        'Non-Circular':
+            'No circular',
+        'Number of radius increments swept at each grid centre.\nMore = more candidate circles per centre = slower but\nmore thorough.':
+            'Número de incrementos de radio que se barren en cada centro de la rejilla.\nMás = más círculos candidatos por centro = más lento pero\nmás exhaustivo.',
+        'Only the vertical component of the load contributes to\nexcess pore pressure on undrained materials with B-bar > 0.':
+            'Solo la componente vertical de la carga contribuye\nal exceso de presión intersticial en los materiales sin drenaje con B-bar > 0.',
+        'Pattern detected: <b>{0} supports</b> of type <b>{1}</b>':
+            'Patrón detectado: <b>{0} soportes</b> del tipo <b>{1}</b>',
+        'Perpendicular to boundary':
+            'Perpendicular al contorno',
+        'Stress':
+            'Tensión',
+        'The current Search Method does not use a\nslip-circle centre grid.\nSwitch to Surface Options → Grid Search to\nuse this action.':
+            'El método de búsqueda actual no usa una\nrejilla de centros de círculos.\nCambia a Opciones de superficie → Búsqueda por rejilla para\nusar esta acción.',
+        'Vertical (depth)':
+            'Vertical (profundidad)',
+        'Vertical seismic coefficient. Often taken as 1/2 or 2/3 of k_h, or zero. Positive downward.':
+            'Coeficiente sísmico vertical. Suele tomarse como 1/2 o 2/3 de k_h, o cero. Positivo hacia abajo.',
+        'Water':
+            'Agua',
+        'infiltration segments: {0}':
+            'segmentos de infiltración: {0}',
+        '{0}  ({1} nodes)':
+            '{0}  ({1} nodos)',
         # v0.1.315 (D293) — the note of the hydraulic dialog, wrapped
         "<i>Names and colours are defined in Properties > Define "
         "Materials.</i>":

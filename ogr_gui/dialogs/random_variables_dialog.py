@@ -149,7 +149,7 @@ class RandomVariablesDialog(QDialog):
         f.addRow(tr("Actual range:"), self.lbl_actual)
 
         self.cbo_corr_with = QComboBox()
-        self.cbo_corr_with.addItem("(none)", None)
+        self.cbo_corr_with.addItem(tr("(none)"), None)
         f.addRow(tr("Correlated with:"), self.cbo_corr_with)
         self.sp_corr = QDoubleSpinBox()
         self.sp_corr.setDecimals(3)
@@ -202,7 +202,7 @@ class RandomVariablesDialog(QDialog):
         current = self.cbo_corr_with.currentData()
         self.cbo_corr_with.blockSignals(True)
         self.cbo_corr_with.clear()
-        self.cbo_corr_with.addItem("(none)", None)
+        self.cbo_corr_with.addItem(tr("(none)"), None)
         for key, rv in self.defined.items():
             if key != self._current_key:
                 self.cbo_corr_with.addItem(rv.label or key, key)

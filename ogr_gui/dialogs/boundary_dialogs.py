@@ -68,7 +68,7 @@ class EditCoordinatesDialog(QDialog):
 
     def __init__(self, boundary: Boundary, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle(f"Edit Coordinates — {boundary.name}")
+        self.setWindowTitle(tr('Edit Coordinates — {0}').format(boundary.name))
         self.resize(360, 460)
         self._result_boundary: Optional[Boundary] = None
         self._source_boundary = boundary
@@ -210,9 +210,9 @@ class ScaleDialog(QDialog):
         form.addRow(tr("Pivot Y:"), self.spn_py)
         root.addLayout(form)
 
-        note = QLabel("<i>Pivot defaults to (0, 0). Use the boundary centroid "
+        note = QLabel(tr("<i>Pivot defaults to (0, 0). Use the boundary centroid "
                       "by leaving it at zero and selecting a non-central "
-                      "boundary carefully.</i>")
+                      "boundary carefully.</i>"))
         note.setWordWrap(True)
         root.addWidget(note)
 
@@ -557,8 +557,8 @@ class SimplifyBoundaryDialog(QDialog):
         self.spn_tol.setValue(0.5)
         form.addRow(tr("Tolerance (ε):"), self.spn_tol)
         root.addLayout(form)
-        note = QLabel("<i>Vertices whose deviation from the simplified line "
-                      "is below ε will be removed (Ramer-Douglas-Peucker).</i>")
+        note = QLabel(tr("<i>Vertices whose deviation from the simplified line "
+                      "is below ε will be removed (Ramer-Douglas-Peucker).</i>"))
         note.setWordWrap(True)
         root.addWidget(note)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -652,7 +652,7 @@ class AssignMaterialDialog(QDialog):
         root = QVBoxLayout(self)
         form = QFormLayout()
         self.cbo = QComboBox()
-        self.cbo.addItem("(none)", None)
+        self.cbo.addItem(tr("(none)"), None)
         for m in materials:
             self.cbo.addItem(m.name, m.id)
         if current_id is not None:

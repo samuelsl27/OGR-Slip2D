@@ -270,7 +270,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.319"
+    VERSION = "0.1.320"
 
     def __init__(self) -> None:
         super().__init__()
@@ -1039,7 +1039,7 @@ class MainWindow(QMainWindow):
 
     # ==================================================================
     def _build_toolbar(self) -> None:
-        tb = QToolBar("Main", self)
+        tb = QToolBar(tr("Main"), self)
         tb.setMovable(False)
         self.addToolBar(Qt.TopToolBarArea, tb)
 
@@ -1834,9 +1834,9 @@ class MainWindow(QMainWindow):
         sp_el.setRange(-1e6, 1e6)
         sp_el.setValue(last["elevation"])
         sp_el.setToolTip(
-            "Elevation of the horizontal force. Only affects Bishop: "
+            tr("Elevation of the horizontal force. Only affects Bishop: "
             "Janbu uses force equilibrium, where the position of a "
-            "horizontal force is irrelevant.")
+            "horizontal force is irrelevant."))
         form.addRow(tr("Elevation (y):"), sp_el)
         cbo = QComboBox()
         for mid in SUPPORTED_METHODS:
@@ -4526,10 +4526,10 @@ class MainWindow(QMainWindow):
                     )
                 else:
                     actions[key].setToolTip(
-                        "The current Search Method does not use a\n"
+                        tr("The current Search Method does not use a\n"
                         "slip-circle centre grid.\n"
                         "Switch to Surface Options → Grid Search to\n"
-                        "use this action."
+                        "use this action.")
                     )
 
         # v0.1.17 — the Block Search object action is only meaningful
@@ -5524,7 +5524,7 @@ class MainWindow(QMainWindow):
         menu.addSeparator()
 
         if self.project.materials:
-            assign_menu = menu.addMenu("Assign Material")
+            assign_menu = menu.addMenu(tr("Assign Material"))
             for mat in self.project.materials:
                 a = QAction(mat.name, self)
                 a.triggered.connect(
@@ -5533,11 +5533,11 @@ class MainWindow(QMainWindow):
                 )
                 assign_menu.addAction(a)
         else:
-            no_mat = QAction("(no materials defined)", self)
+            no_mat = QAction(tr("(no materials defined)"), self)
             no_mat.setEnabled(False)
             menu.addAction(no_mat)
 
-        a_def = QAction("Define Materials…", self)
+        a_def = QAction(tr("Define Materials…"), self)
         a_def.triggered.connect(self.act_define_materials)
         menu.addAction(a_def)
         menu.exec(global_pos)

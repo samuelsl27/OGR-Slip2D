@@ -112,15 +112,15 @@ class BoundaryConditionsDialog(QDialog):
         f.addRow("", self.chk_seepage)
 
         self.cbo_pick = QComboBox()
-        self.cbo_pick.addItem("Line segments", "segments")
-        self.cbo_pick.addItem("Nodes", "nodes")
+        self.cbo_pick.addItem(tr("Line segments"), "segments")
+        self.cbo_pick.addItem(tr("Nodes"), "nodes")
         f.addRow(tr("Pick by:"), self.cbo_pick)
         v.addWidget(gb)
 
         v.addWidget(QLabel(tr("Apply to:")))
         self.list_sides = QListWidget()
         for name, ids in self.sides.items():
-            it = QListWidgetItem(f"{name}  ({len(ids)} nodes)")
+            it = QListWidgetItem(tr('{0}  ({1} nodes)').format(name, len(ids)))
             it.setData(32, name)
             self.list_sides.addItem(it)
         # The reservoir targets. They are Total Head by construction — a
@@ -233,5 +233,5 @@ class BoundaryConditionsDialog(QDialog):
             counts[b.bc_type.value] = counts.get(b.bc_type.value, 0) + 1
         parts = [f"{k}: {v}" for k, v in sorted(counts.items())]
         if self.bcs.segments:
-            parts.append(f"infiltration segments: {len(self.bcs.segments)}")
+            parts.append(tr('infiltration segments: {0}').format(len(self.bcs.segments)))
         self.lbl_summary.setText("  |  ".join(parts) or "no conditions")

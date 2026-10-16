@@ -121,8 +121,7 @@ class SupportInstancePropertiesDialog(QDialog):
 
         # Read-only info
         lbl = QLabel(
-            f"Length: {support.length():.2f} m   "
-            f"Axis: {support.axis_angle_deg():.1f}°"
+            tr('Length: {0:.2f} m   Axis: {1:.1f}°').format(support.length(), support.axis_angle_deg())
         )
         lbl.setStyleSheet(f"color: {theme_color('muted')};")
         form.addRow("", lbl)

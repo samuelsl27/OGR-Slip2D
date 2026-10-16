@@ -45,11 +45,13 @@ _FIRST = {"setWindowTitle", "QLabel", "QPushButton", "QCheckBox",
           "addRow", "showMessage", "QToolButton", "setSpecialValueText",
           # the titles of a tool bar, a dock and a menu
           "QToolBar", "QDockWidget", "QMenu", "addMenu", "addAction",
-          "QProgressDialog", "setLabelText"}
+          "QProgressDialog", "setLabelText",
+          # the text of a combo or list item (its data is the second)
+          "addItem"}
 #: QInputDialog.get*(parent, title, label, ...): the title and the label.
 _INPUTS = ("getText", "getInt", "getDouble", "getItem", "getMultiLineText")
 #: Calls whose SECOND argument is.
-_SECOND = {"addTab", "setTabText", "insertTab"}
+_SECOND = {"addTab", "setTabText", "insertTab", "insertItem"}
 #: Calls whose first argument is a LIST of texts the user reads.
 _HEADERS = {"setHorizontalHeaderLabels", "setVerticalHeaderLabels",
             "setHeaderLabels"}
@@ -116,18 +118,48 @@ EXCEPTIONS: dict = {
         "notation: the coordinates of the pointer",
     ("widgets/status_bar.py", "x, y"):
         "notation: the format of the coordinates to type",
+    # v0.1.320 — the rest
+    ("agent_bridge.py", "The window is in the middle of an edit ({}); an "
+                        "edit now would land inside it."):
+        "returned to the agent, which reads English like every API message",
+    ("agent_bridge.py", "OGR Slip2D v{} — {}"):
+        "the product's name and the project's name",
+    ("dialogs/parameter_calculator_dialog.py", "mb:"):
+        "the symbol of a Hoek-Brown parameter",
+    ("dialogs/parameter_calculator_dialog.py", "s:"):
+        "the symbol of a Hoek-Brown parameter",
+    ("dialogs/parameter_calculator_dialog.py", "a:"):
+        "the symbol of a Hoek-Brown parameter",
+    ("main_window.py", "ΔX (m):"):
+        "notation: a displacement and its unit",
+    ("main_window.py", "ΔY (m):"):
+        "notation: a displacement and its unit",
+    ("dialogs/define_support_dialog.py", "Type {}"):
+        "the default name of a new support type, which the model keeps "
+        "(like a project's 'Untitled')",
+    ("dialogs/tension_crack_dialog.py", "Piezo {}"):
+        "an abbreviation that reads the same in Spanish, before an id",
+    ("dialogs/grid_dialogs.py", "Circular"):
+        "the same word in Spanish",
+    ("dialogs/project_settings_dialog.py", "%s %s %.3f g, %.1f s"):
+        "a seismic record: its name, its peak acceleration in g and its "
+        "duration in s",
 }
 
 #: How many may be left. Lowering it is the point; raising it needs a
 #: reason in a changelog. History: 193 at 0.1.317 by these rules; 94 at
 #: 0.1.318, once the interpretation windows, the statistics window, the
 #: charts and the last messages outside tr() went through it; 47 at
-#: 0.1.319, the canvas, the data tips, the results panel and the status bar.
-BUDGET = 47
+#: 0.1.319, the canvas, the data tips, the results panel and the status bar;
+#: 0 at 0.1.320, the groundwater and search dialogs and the rest (the rules
+#: also read combo items and skip %-style fields from this version on).
+BUDGET = 0
 
 
 def _letters(text):
-    """Letters outside replacement fields and HTML tags."""
+    """Letters outside replacement fields ({0:.2f} and %d alike) and HTML
+    tags."""
+    text = re.sub(r"%[-+ #0]*\d*(?:\.\d+)?[sdifgeEx]", "", text)
     text = re.sub(r"<[^>]*>", "", re.sub(r"[{][^}]*[}]", "", text))
     return any(c.isalpha() for c in text)
 
@@ -349,5 +381,106 @@ class TestTheMainWindowSpeaksSpanish:
             # control: the English is what it was
             assert self._headers("en") == [
                 "#", "FoS", "Method", "Centre X", "Centre Y", "Radius"]
+        finally:
+            set_language(before)
+
+
+def _shown(dialog):
+    """Every text a dialog shows or offers on hover: titles, labels, button
+    texts, group titles, tooltips, combo items and table headers. The
+    standard buttons of a button box are left out: Qt's own catalogue names
+    them, not ours (test_qt_translations)."""
+    from PySide6.QtWidgets import (QAbstractButton, QComboBox,
+                                   QDialogButtonBox, QGroupBox, QLabel,
+                                   QTableWidget, QWidget)
+    out = [dialog.windowTitle()]
+    for w in [dialog] + dialog.findChildren(QWidget):
+        if w.toolTip():
+            out.append(w.toolTip())
+        if isinstance(w, QLabel):
+            out.append(w.text())
+        elif isinstance(w, QAbstractButton) and not isinstance(
+                w.parent(), QDialogButtonBox):
+            out.append(w.text())
+        elif isinstance(w, QGroupBox):
+            out.append(w.title())
+        elif isinstance(w, QComboBox):
+            out += [w.itemText(i) for i in range(w.count())]
+        elif isinstance(w, QTableWidget):
+            out += [w.horizontalHeaderItem(i).text()
+                    for i in range(w.columnCount())
+                    if w.horizontalHeaderItem(i) is not None]
+    return [t for t in out if t]
+
+
+class TestTheDialogsSpeakSpanish:
+    """v0.1.320 — the dialogs of families (c) and (d), each opened with the
+    interface in Spanish: none shows an English text that has its Spanish,
+    and each shows in Spanish one of the texts this version wrapped."""
+
+    def _dialogs(self, language):
+        from PySide6.QtWidgets import QApplication
+        from test_slide_validation_ej1 import _ej1_project
+        from ogr_core.project.settings import GroundwaterSettings
+        from ogr_gui.dialogs.grid_dialogs import (AddGridDialog,
+                                                  SurfaceOptionsDialog)
+        from ogr_gui.dialogs.project_settings_dialog import (
+            ProjectSettingsDialog)
+        from ogr_gui.dialogs.seismic_dialog import SeismicLoadDialog
+        from ogr_gui.dialogs.tension_crack_dialog import (
+            DefineTensionCrackDialog)
+        from ogr_gui.dialogs.transient_stages_dialog import (
+            TransientStagesDialog)
+        from ogr_gui.i18n import set_language
+        QApplication.instance() or QApplication([])
+        set_language(language)
+        p = _ej1_project()
+        out = {
+            "grid": AddGridDialog(p),
+            "surface": SurfaceOptionsDialog(p),
+            "crack": DefineTensionCrackDialog(p),
+            "transient": TransientStagesDialog(GroundwaterSettings()),
+            "seismic": SeismicLoadDialog(p.seismic),
+            "settings": ProjectSettingsDialog(p.settings, None, project=p),
+        }
+        _WINDOWS.extend(out.values())
+        return out
+
+    #: One text each dialog wrapped in 0.1.320, as the start of what it shows.
+    _WRAPPED = {
+        "grid": ("<b>Define la rejilla de centros",
+                 "<b>Define the slip-circle centre grid."),
+        "surface": ("<b>Generación y optimización de superficies",
+                    "<b>Failure surface generation & optimization."),
+        "crack": ("<b>Propiedades hidráulicas de la grieta de tracción.",
+                  "<b>Tension Crack hydraulic properties."),
+        "transient": ("Calcular FS", "Calculate SF"),
+        "seismic": ("Coeficiente sísmico horizontal.",
+                    "Horizontal seismic coefficient."),
+        "settings": ("Coeficiente Hu por defecto",
+                     "Default Hu coefficient"),
+    }
+
+    def test_no_english_text_that_has_its_spanish(self):
+        from ogr_gui.i18n import _DICTS, current_language, set_language
+        es = _DICTS["es"]
+        before = current_language()
+        try:
+            for name, dialog in self._dialogs("es").items():
+                left = [t for t in _shown(dialog)
+                        if t in es and es[t] != t]
+                assert not left, (name, left)
+        finally:
+            set_language(before)
+
+    def test_each_shows_what_it_wrapped_and_english_is_unchanged(self):
+        from ogr_gui.i18n import current_language, set_language
+        before = current_language()
+        try:
+            for language, which in (("es", 0), ("en", 1)):
+                for name, dialog in self._dialogs(language).items():
+                    want = self._WRAPPED[name][which]
+                    assert any(t.startswith(want)
+                               for t in _shown(dialog)), (language, name)
         finally:
             set_language(before)

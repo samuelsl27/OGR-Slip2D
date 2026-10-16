@@ -76,9 +76,9 @@ class TransientStagesDialog(QDialog):
             tr("Transient groundwater analysis"))
         self.chk_enabled.setChecked(bool(settings.transient))
         self.chk_enabled.setToolTip(
-            "Advanced groundwater options are mutually exclusive: "
+            tr("Advanced groundwater options are mutually exclusive: "
             "enabling this disables Excess Pore Pressure and Rapid "
-            "Drawdown.")
+            "Drawdown."))
         self.chk_enabled.toggled.connect(self._on_enabled)
         v.addWidget(self.chk_enabled)
 
@@ -89,7 +89,7 @@ class TransientStagesDialog(QDialog):
         v.addWidget(QLabel(tr("Stages:")))
         self.table = QTableWidget(0, 3)
         self.table.setHorizontalHeaderLabels(
-            ["Time", "Calculate SF", "Label"])
+            [tr("Time"), tr("Calculate SF"), tr("Label")])
         self.table.horizontalHeader().setStretchLastSection(True)
         for i, st in enumerate(settings.transient_stages):
             self._add_row(st.get("time", 0.0),
@@ -158,7 +158,7 @@ class TransientStagesDialog(QDialog):
         self.sp_steps = QSpinBox()
         self.sp_steps.setRange(0, 100000)
         self.sp_steps.setValue(settings.transient_time_steps)
-        self.sp_steps.setSpecialValueText("Auto")
+        self.sp_steps.setSpecialValueText(tr("Auto"))
         f.addRow(tr("Number of time steps:"), self.sp_steps)
         v.addWidget(gb)
 

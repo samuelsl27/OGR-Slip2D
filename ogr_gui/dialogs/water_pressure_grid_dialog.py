@@ -65,8 +65,8 @@ class WaterPressureGridDialog(QDialog):
 
         row.addWidget(QLabel(tr("Interpolation:")))
         self.cbo_interp = QComboBox()
-        self.cbo_interp.addItem("Thin Plate Spline", "tps")
-        self.cbo_interp.addItem("Inverse Distance (IDW)", "idw")
+        self.cbo_interp.addItem(tr("Thin Plate Spline"), "tps")
+        self.cbo_interp.addItem(tr("Inverse Distance (IDW)"), "idw")
         i = self.cbo_interp.findData(grid.interpolation)
         if i >= 0:
             self.cbo_interp.setCurrentIndex(i)

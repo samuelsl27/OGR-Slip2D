@@ -97,9 +97,9 @@ class DisplayOptionsDialog(QDialog):
         root.addWidget(self.tabs, 1)
 
         self.tabs.addTab(self._build_general_tab(), tr("View"))
-        self.tabs.addTab(self._build_stress_tab(), "Stress")
-        self.tabs.addTab(self._build_water_tab(), "Water")
-        self.tabs.addTab(self._build_bc_tab(), "Boundary Conditions")
+        self.tabs.addTab(self._build_stress_tab(), tr("Stress"))
+        self.tabs.addTab(self._build_water_tab(), tr("Water"))
+        self.tabs.addTab(self._build_bc_tab(), tr("Boundary Conditions"))
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.Ok
@@ -225,8 +225,8 @@ class DisplayOptionsDialog(QDialog):
             form.addRow(cb)
 
         note = QLabel(
-            "<i>Mesh overlays activate once the OGR FEM2D module is available "
-            "(planned v0.5.0). Settings here are persisted.</i>"
+            tr("<i>Mesh overlays activate once the OGR FEM2D module is available "
+            "(planned v0.5.0). Settings here are persisted.</i>")
         )
         note.setWordWrap(True)
         form.addRow(note)
