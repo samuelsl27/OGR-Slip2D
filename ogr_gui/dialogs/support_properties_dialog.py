@@ -29,6 +29,8 @@ from PySide6.QtGui import QColor
 
 from ogr_core.support import ForceApplication, ForceOrientation
 from ogr_gui.i18n import tr  # noqa: E402
+from ogr_gui.labels import (force_application_label,
+                            force_orientation_label, support_type_label)  # noqa: E402
 from ogr_gui.themes import theme_color
 
 
@@ -57,7 +59,7 @@ class SupportInstancePropertiesDialog(QDialog):
         current = resolve_support_type(project, support)
         active_idx = 0
         for i, st in enumerate(project.support_types):
-            name = getattr(st, "_display_name", st.DISPLAY_NAME)
+            name = support_type_label(st)
             self.cbo_type.addItem(name, st.id)
             if st is current:
                 active_idx = i
@@ -67,7 +69,7 @@ class SupportInstancePropertiesDialog(QDialog):
         # Force application
         self.cbo_app = QComboBox()
         for fa in ForceApplication:
-            self.cbo_app.addItem(fa.value.capitalize(), fa)
+            self.cbo_app.addItem(force_application_label(fa), fa)
         idx = self.cbo_app.findData(support.force_application)
         if idx >= 0:
             self.cbo_app.setCurrentIndex(idx)
@@ -76,7 +78,7 @@ class SupportInstancePropertiesDialog(QDialog):
         # Force orientation
         self.cbo_ori = QComboBox()
         for fo in ForceOrientation:
-            self.cbo_ori.addItem(fo.value.replace("_", " ").title(), fo)
+            self.cbo_ori.addItem(force_orientation_label(fo), fo)
         idx = self.cbo_ori.findData(support.orientation)
         if idx >= 0:
             self.cbo_ori.setCurrentIndex(idx)

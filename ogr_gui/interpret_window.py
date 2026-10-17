@@ -1542,9 +1542,9 @@ class InterpretWindow(QMainWindow):
             # never existed, so every row read "capacity not defined".
             stype = (getattr(sup, "support_type", None)
                      or resolve_support_type(self.project, sup) or sup)
+            from ogr_gui.labels import support_type_label
             label = (getattr(sup, "name", "")
-                     or getattr(stype, "_display_name", None)
-                     or getattr(stype, "DISPLAY_NAME", None)
+                     or support_type_label(stype)
                      or tr('support {0}').format(i))
             cap = None
             for attr in ("anchor_capacity", "tensile_capacity",

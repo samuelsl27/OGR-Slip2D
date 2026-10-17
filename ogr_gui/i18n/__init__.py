@@ -3284,6 +3284,314 @@ _DICTS: dict[str, dict[str, str]] = {
             'x a lo largo de la superficie (m)',
         'τ avail. (kPa)':
             'τ disp. (kPa)',
+        # v0.1.322 (D300, the supports) — names, descriptions, the parameters (row label,
+        # key and description), the tabs, and the application and orientation of the force
+        'End Anchored':
+            'Anclado en el extremo',
+        'Grouted Tieback':
+            'Anclaje inyectado',
+        'Grouted Tieback with Friction':
+            'Anclaje inyectado con rozamiento',
+        'Soil Nail':
+            'Bulón de suelo',
+        'Pile / Micropile':
+            'Pilote / micropilote',
+        'Geosynthetic':
+            'Geosintético',
+        'Mechanically end-anchored rock bolt or deadman anchor. The force is constant along the bolt — equal to the anchor capacity divided by out-of-plane spacing.':
+            'Bulón anclado mecánicamente en el extremo o anclaje de muerto. La fuerza es constante a lo largo del bulón: la capacidad del anclaje dividida por la separación fuera del plano.',
+        'Tensioned tieback with grouted bond zone. Computes 3 failure modes: pullout (bond), tensile (tendon), stripping (plate).':
+            'Anclaje tesado con bulbo inyectado. Calcula 3 modos de rotura: arrancamiento (bulbo), tracción (tendón) y desprendimiento (placa).',
+        'Grouted tieback whose pullout strength is governed by a Mohr-Coulomb law (adhesion + σ·tanφ) on the grout/soil interface. Bond surface area is computed from the grout diameter.':
+            'Anclaje inyectado cuya resistencia al arrancamiento sigue una ley de Mohr-Coulomb (adherencia + σ·tanφ) en el contacto lechada-suelo. La superficie del bulbo se calcula con el diámetro de la lechada.',
+        'Fully-bonded soil nail (no free length). Computes 3 failure modes along the full length: tensile, pullout, stripping.':
+            'Bulón de suelo adherido en toda su longitud (sin longitud libre). Calcula 3 modos de rotura en toda la longitud: tracción, arrancamiento y desprendimiento.',
+        'Geotextile or geogrid sheet reinforcement. Computes tensile and pullout (interface) failure modes. Pullout acts on BOTH surfaces of the sheet.':
+            'Refuerzo de lámina de geotextil o geomalla. Calcula los modos de rotura por tracción y por arrancamiento (contacto). El arrancamiento actúa en LAS DOS caras de la lámina.',
+        'Tensile / Plate':
+            'Tracción / placa',
+        'Anchor':
+            'Anclaje',
+        'Capacities':
+            'Capacidades',
+        'Pullout & Stripping':
+            'Arrancamiento y desprendimiento',
+        'Pullout (Friction)':
+            'Arrancamiento (rozamiento)',
+        'F* vs Depth':
+            'F* frente a la profundidad',
+        'Active':
+            'Activa',
+        'Passive':
+            'Pasiva',
+        'Tangent to slip surface':
+            'Tangente a la superficie de deslizamiento',
+        'Parallel to support':
+            'Paralela al soporte',
+        'Bisector (tangent + parallel)':
+            'Bisectriz (tangente + paralela)',
+        'Perpendicular to pile':
+            'Perpendicular al pilote',
+        'User-defined angle':
+            'Ángulo definido por el usuario',
+        'application: {0}':
+            'aplicación: {0}',
+        'support':
+            'soporte',
+        'Adhesion at the grout/soil interface. Linear model: the strength at zero normal stress. Hyperbolic model: the LIMITING strength at high normal stress.':
+            'Adherencia en el contacto lechada-suelo. Modelo lineal: la resistencia con tensión normal nula. Modelo hiperbólico: la resistencia LÍMITE con tensión normal alta.',
+        'Average diameter of the helical plates. Should be comfortably larger than the shaft.':
+            'Diámetro medio de las placas helicoidales. Debe ser holgadamente mayor que el fuste.',
+        'Capacity of the head plate. If 0, stripping force can still be developed from the bond but only on the head side.':
+            'Capacidad de la placa de cabeza. Si es 0, la fuerza de desprendimiento aún puede desarrollarse por el bulbo, pero solo del lado de la cabeza.',
+        'Capacity of the plate/wedge assembly at the head. If ≥ tensile_capacity, stripping cannot occur.':
+            'Capacidad del conjunto de placa y cuña de la cabeza. Si es ≥ tensile_capacity, no puede haber desprendimiento.',
+        "Ci: τ_int = Ci · τ_soil, the fraction of the surrounding soil's own strength the interface develops":
+            'Ci: τ_int = Ci · τ_soil, la fracción de la resistencia del propio terreno circundante que desarrolla el contacto',
+        'Depth below the reference elevation at which F* takes its second value (function mode)':
+            'Profundidad bajo la cota de referencia a la que F* toma su segundo valor (modo función)',
+        'Diameter of a round shaft, or side of a square one':
+            'Diámetro de un fuste redondo, o lado de uno cuadrado',
+        'Distance between two plates, assumed equal for all. Design guides recommend 5 to 12 times the average helix diameter. Read only when there are two plates or more.':
+            'Distancia entre dos placas, supuesta igual para todas. Las guías de diseño recomiendan de 5 a 12 veces el diámetro medio de las hélices. Solo se lee cuando hay dos placas o más.',
+        'Elevation at which F* takes its entered value (function mode)':
+            'Cota a la que F* toma el valor introducido (modo función)',
+        'F* at the reference depth (function mode)':
+            'F* en la profundidad de referencia (modo función)',
+        'F* constant, or a function of depth: constant | function':
+            'F* constante, o función de la profundidad: constant | function',
+        "F*: τ_int = F* · σ'_v. Multiply the scale-effect factor α into it. In function mode, the value at the reference elevation.":
+            "F*: τ_int = F* · σ'_v. Multiplícalo por el factor de efecto de escala α. En modo función, el valor en la cota de referencia.",
+        'Force the connection at the slope face can carry. It is the force at the head of the diagram; set it to the tensile capacity to make stripping impossible.':
+            'Fuerza que resiste la conexión en el paramento del talud. Es la fuerza en la cabeza del diagrama; igualada a la capacidad a tracción, el desprendimiento no es posible.',
+        'Friction angle at the grout/soil interface. Hyperbolic model: the tangent angle at zero normal stress.':
+            'Ángulo de rozamiento en el contacto lechada-suelo. Modelo hiperbólico: el ángulo de la tangente con tensión normal nula.',
+        'How the pile is loaded: shear | ito_matsui. Shear applies a constant force you provide; Ito & Matsui derives it from the soil flowing between the piles of the row.':
+            'Cómo se carga el pilote: shear | ito_matsui. Cortante aplica una fuerza constante que das tú; Ito & Matsui la deduce del terreno que fluye entre los pilotes de la fila.',
+        'Interface adhesion (Mohr-Coulomb mode). Linear: strength at zero normal stress. Hyperbolic: the LIMITING strength at high normal stress.':
+            'Adherencia del contacto (modo Mohr-Coulomb). Lineal: resistencia con tensión normal nula. Hiperbólico: la resistencia LÍMITE con tensión normal alta.',
+        'Interface envelope in Mohr-Coulomb mode: linear | hyperbolic. The two give DIFFERENT meanings to adhesion and friction angle.':
+            'Envolvente del contacto en modo Mohr-Coulomb: linear | hyperbolic. Las dos dan significados DISTINTOS a la adherencia y al ángulo de rozamiento.',
+        'Interface envelope: linear (Mohr-Coulomb) | hyperbolic. The two give DIFFERENT meanings to adhesion and friction angle — see the help for each.':
+            'Envolvente del contacto: linear (Mohr-Coulomb) | hyperbolic. Las dos dan significados DISTINTOS a la adherencia y al ángulo de rozamiento: mira la ayuda de cada uno.',
+        'Interface friction angle (Mohr-Coulomb mode). Hyperbolic: the tangent angle at zero normal stress.':
+            'Ángulo de rozamiento del contacto (modo Mohr-Coulomb). Hiperbólico: el ángulo de la tangente con tensión normal nula.',
+        'Lateral shear strength of the pile cross-section':
+            'Resistencia a cortante lateral de la sección del pilote',
+        'Length of bonded zone as % of total bolt length (0–100%, located at the tail end)':
+            'Longitud del bulbo en % de la longitud total del bulón (0–100 %, en el extremo de la cola)',
+        'Length of bonded zone as % of total length':
+            'Longitud del bulbo en % de la longitud total',
+        'Load the head assembly connecting the anchor to the slope can sustain. Called a plate in the other support types; renamed here so it is not confused with the helical plates.':
+            'Carga que resiste el conjunto de cabeza que une el anclaje al talud. En los demás tipos de soporte se llama placa; aquí cambia de nombre para no confundirla con las placas helicoidales.',
+        'Maximum load an individual anchor can sustain before failure (pullout, tensile or plate, whichever is lowest)':
+            'Carga máxima que resiste un anclaje antes de romper (arrancamiento, tracción o placa, la menor)',
+        'Number of helical plates along the anchor. The last one sits at the end of the anchor and the rest march back towards the head.':
+            'Número de placas helicoidales a lo largo del anclaje. La última va en el extremo del anclaje y las demás retroceden hacia la cabeza.',
+        'Optional force required to shear the anchor across its axis. 0 = disabled.':
+            'Fuerza opcional necesaria para cortar el anclaje transversalmente a su eje. 0 = desactivada.',
+        'Optional perpendicular shear capacity (0 = disabled)':
+            'Capacidad opcional a cortante perpendicular (0 = desactivada)',
+        'Optional perpendicular shear capacity (dowel action). 0 = disabled.':
+            'Capacidad opcional a cortante perpendicular (efecto pasador). 0 = desactivada.',
+        'Optional shear capacity':
+            'Capacidad opcional a cortante',
+        'Out-of-plane anchor spacing (centre-to-centre)':
+            'Separación fuera del plano entre anclajes (entre ejes)',
+        'Out-of-plane bolt spacing (centre-to-centre)':
+            'Separación fuera del plano entre bulones (entre ejes)',
+        'Out-of-plane coverage A = a/(a+b)·100 for strips of width a laid at gaps b. 100 % for a continuous sheet.':
+            'Cobertura fuera del plano A = a/(a+b)·100 para bandas de ancho a separadas b. 100 % para una lámina continua.',
+        'Out-of-plane spacing':
+            'Separación fuera del plano',
+        'Out-of-plane spacing of piles, centre to centre. In Ito & Matsui mode it acts TWICE: as D1 inside the equation and as the divisor that turns force per pile into force per metre of slope.':
+            'Separación fuera del plano entre pilotes, entre ejes. En el modo Ito & Matsui actúa DOS VECES: como D1 dentro de la ecuación y como el divisor que convierte la fuerza por pilote en fuerza por metro de talud.',
+        'Out-of-plane spacing of soil nails':
+            'Separación fuera del plano entre bulones de suelo',
+        'Out-of-plane spacing of tiebacks':
+            'Separación fuera del plano entre anclajes',
+        'Outer diameter of the grout annulus (used for the bond surface area)':
+            'Diámetro exterior de la corona de lechada (para la superficie del bulbo)',
+        'Pile diameter. Only Ito & Matsui reads it, through the opening between piles D2 = spacing − diameter.':
+            'Diámetro del pilote. Solo lo lee Ito & Matsui, a través de la abertura entre pilotes D2 = separación − diámetro.',
+        'Plate/wedge assembly capacity':
+            'Capacidad del conjunto de placa y cuña',
+        'Pullout strength model: mohr_coulomb | coefficient | friction_factor':
+            'Modelo de resistencia al arrancamiento: mohr_coulomb | coefficient | friction_factor',
+        'Pullout strength per unit length of bond zone':
+            'Resistencia al arrancamiento por unidad de longitud del bulbo',
+        'Pullout strength per unit length of nail':
+            'Resistencia al arrancamiento por unidad de longitud del bulón',
+        'Shaft cross-section: round | square. Only its AREA matters, which the plate loses to it.':
+            'Sección del fuste: round | square. Solo importa su ÁREA, que la placa pierde por él.',
+        'Shape of the pressure profile over the height of the wall':
+            'Forma del perfil de presiones en la altura del muro',
+        'Tensile capacity of the nail (tendon ultimate)':
+            'Capacidad a tracción del bulón (rotura del tendón)',
+        'Tensile capacity of the sheet per metre of strip width':
+            'Capacidad a tracción de la lámina por metro de ancho de banda',
+        'Trapezoidal profile only: percentage of the wall height taken by the flat part. The rest is split evenly between the two ramps':
+            'Solo perfil trapezoidal: porcentaje de la altura del muro que ocupa la parte plana. El resto se reparte por igual entre las dos rampas',
+        'Triangular and trapezoidal profiles: equivalent fluid pressure, i.e. pressure per unit length of wall. Multiplied by the wall length it gives the peak pressure':
+            'Perfiles triangular y trapezoidal: presión de fluido equivalente, es decir, presión por unidad de longitud de muro. Multiplicada por la longitud del muro da la presión máxima',
+        'Ultimate tensile capacity of the steel shaft, independent of the helix capacity':
+            'Capacidad última a tracción del fuste de acero, independiente de la capacidad de las hélices',
+        'Ultimate tensile capacity of the tendon':
+            'Capacidad última a tracción del tendón',
+        'Uniform profile only: the pressure, constant over the whole height of the wall':
+            'Solo perfil uniforme: la presión, constante en toda la altura del muro',
+        'Where the resultant acts: at the point the slip surface cuts the wall, or at the centroid of the pressure diagram above that point. Only the methods that write a moment equation can tell the two apart':
+            'Dónde actúa la resultante: en el punto donde la superficie de deslizamiento corta el muro, o en el centroide del diagrama de presiones por encima de ese punto. Solo los métodos que plantean una ecuación de momentos distinguen los dos',
+        'Where the resultant acts: intersection | centroid. Only the four methods with a moment equation can tell the two apart.':
+            'Dónde actúa la resultante: intersection | centroid. Solo los cuatro métodos con ecuación de momentos distinguen los dos.',
+        'Which ends are anchored: none | slope_face | embedded_end | both_ends. Pullout is only possible while the embedded end is free.':
+            'Qué extremos están anclados: none | slope_face | embedded_end | both_ends. Solo hay arrancamiento mientras el extremo empotrado esté libre.',
+        'Adhesion:':
+            'Adherencia:',
+        'adhesion':
+            'adherencia',
+        'Anchor Capacity:':
+            'Capacidad del anclaje:',
+        'anchor capacity':
+            'capacidad del anclaje',
+        'Anchorage:':
+            'Extremos anclados:',
+        'anchorage':
+            'extremos anclados',
+        'Average Helix Diameter:':
+            'Diámetro medio de las hélices:',
+        'average helix diameter':
+            'diámetro medio de las hélices',
+        'Bond Length Percent:':
+            'Longitud del bulbo (%):',
+        'bond length percent':
+            'longitud del bulbo (%)',
+        'Bond Strength:':
+            'Resistencia del bulbo:',
+        'bond strength':
+            'resistencia del bulbo',
+        'Coefficient Of Interaction:':
+            'Coeficiente de interacción:',
+        'coefficient of interaction':
+            'coeficiente de interacción',
+        'Connection Strength:':
+            'Resistencia de la conexión:',
+        'connection strength':
+            'resistencia de la conexión',
+        'Distributed Over:':
+            'Repartida sobre:',
+        'distributed over':
+            'repartida sobre',
+        'Efp:':
+            'Presión de fluido equivalente:',
+        'efp':
+            'presión de fluido equivalente',
+        'Failure Mode:':
+            'Modo de rotura:',
+        'failure mode':
+            'modo de rotura',
+        'Force Location:':
+            'Punto de aplicación de la fuerza:',
+        'force location':
+            'punto de aplicación de la fuerza',
+        'Friction Angle Bond:':
+            'Ángulo de rozamiento del bulbo:',
+        'friction angle bond':
+            'ángulo de rozamiento del bulbo',
+        'Friction Angle Interface:':
+            'Ángulo de rozamiento del contacto:',
+        'friction angle interface':
+            'ángulo de rozamiento del contacto',
+        'Friction Factor:':
+            'Factor de rozamiento:',
+        'friction factor':
+            'factor de rozamiento',
+        'Friction Factor At Depth:':
+            'Factor de rozamiento en profundidad:',
+        'friction factor at depth':
+            'factor de rozamiento en profundidad',
+        'Friction Factor Mode:':
+            'Modo del factor de rozamiento:',
+        'friction factor mode':
+            'modo del factor de rozamiento',
+        'Grout Diameter:':
+            'Diámetro de la lechada:',
+        'grout diameter':
+            'diámetro de la lechada',
+        'Head Assembly Capacity:':
+            'Capacidad del conjunto de cabeza:',
+        'head assembly capacity':
+            'capacidad del conjunto de cabeza',
+        'Helix Spacing:':
+            'Separación entre hélices:',
+        'helix spacing':
+            'separación entre hélices',
+        'Number Of Helices:':
+            'Número de hélices:',
+        'number of helices':
+            'número de hélices',
+        'Out Of Plane Spacing:':
+            'Separación fuera del plano:',
+        'out of plane spacing':
+            'separación fuera del plano',
+        'Pile Diameter:':
+            'Diámetro del pilote:',
+        'pile diameter':
+            'diámetro del pilote',
+        'Pile Shear Strength:':
+            'Resistencia a cortante del pilote:',
+        'pile shear strength':
+            'resistencia a cortante del pilote',
+        'Plate Capacity:':
+            'Capacidad de la placa:',
+        'plate capacity':
+            'capacidad de la placa',
+        'Pressure:':
+            'Presión:',
+        'pressure':
+            'presión',
+        'Profile Type:':
+            'Tipo de perfil:',
+        'profile type':
+            'tipo de perfil',
+        'Pullout Mode:':
+            'Modo de arrancamiento:',
+        'pullout mode':
+            'modo de arrancamiento',
+        'Reference Depth:':
+            'Profundidad de referencia:',
+        'reference depth':
+            'profundidad de referencia',
+        'Reference Elevation:':
+            'Cota de referencia:',
+        'reference elevation':
+            'cota de referencia',
+        'Shaft Type:':
+            'Tipo de fuste:',
+        'shaft type':
+            'tipo de fuste',
+        'Shaft Width:':
+            'Ancho del fuste:',
+        'shaft width':
+            'ancho del fuste',
+        'Shear Capacity:':
+            'Capacidad a cortante:',
+        'shear capacity':
+            'capacidad a cortante',
+        'Shear Strength Model:':
+            'Modelo de resistencia del contacto:',
+        'shear strength model':
+            'modelo de resistencia del contacto',
+        'Strip Coverage:':
+            'Cobertura de las bandas:',
+        'strip coverage':
+            'cobertura de las bandas',
+        'Tensile Capacity:':
+            'Capacidad a tracción:',
+        'tensile capacity':
+            'capacidad a tracción',
+        'Custom support whose capacity-vs-distance is read from a table. Use this when none of the pre-defined types fits.':
+            'Soporte personalizado cuya capacidad frente a la distancia se lee de una tabla. Úsalo cuando no encaje ninguno de los tipos predefinidos.',
         # v0.1.315 (D293) — the note of the hydraulic dialog, wrapped
         "<i>Names and colours are defined in Properties > Define "
         "Materials.</i>":

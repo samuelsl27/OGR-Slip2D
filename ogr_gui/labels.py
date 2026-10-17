@@ -23,6 +23,7 @@ from ogr_core.loads.loads import LoadDistribution, LoadOrientation
 from ogr_core.materials.material import PorePressureType
 from ogr_core.project.settings import GroundwaterMethod, LEMMethod
 from ogr_core.project.units import PermeabilityUnit, TimeUnit
+from ogr_core.support import ForceApplication, ForceOrientation
 
 from ogr_gui.i18n import tr
 
@@ -76,6 +77,23 @@ LOAD_DISTRIBUTION = {
     LoadDistribution.TRAPEZOIDAL: "Trapezoidal",
 }
 
+#: v0.1.322 — the support's force. Define Support said "Tangent to slip
+#: surface" and the other three support dialogs ``value.title()``, "Tangent
+#: To Slip": one table now, Define Support's.
+FORCE_APPLICATION = {
+    ForceApplication.ACTIVE: "Active",
+    ForceApplication.PASSIVE: "Passive",
+}
+
+FORCE_ORIENTATION = {
+    ForceOrientation.TANGENT_TO_SLIP: "Tangent to slip surface",
+    ForceOrientation.PARALLEL_TO_SUPPORT: "Parallel to support",
+    ForceOrientation.BISECTOR: "Bisector (tangent + parallel)",
+    ForceOrientation.HORIZONTAL: "Horizontal",
+    ForceOrientation.PERPENDICULAR_TO_PILE: "Perpendicular to pile",
+    ForceOrientation.USER_DEFINED: "User-defined angle",
+}
+
 #: Symbols that read the same in Spanish stay as they are; the English
 #: abbreviations get their entry.
 TIME_UNIT = {
@@ -127,6 +145,25 @@ def load_distribution_label(distribution) -> str:
     return _of(LOAD_DISTRIBUTION, distribution)
 
 
+def force_application_label(application) -> str:
+    return _of(FORCE_APPLICATION, application)
+
+
+def force_orientation_label(orientation) -> str:
+    return _of(FORCE_ORIENTATION, orientation)
+
+
+def support_type_label(stype) -> str:
+    """The name a support type is shown with: the name the user gave the
+    set (``_display_name``, data, never translated), else the class's
+    ``DISPLAY_NAME`` through tr()."""
+    given = getattr(stype, "_display_name", None)
+    if given:
+        return str(given)
+    name = getattr(stype, "DISPLAY_NAME", None)
+    return tr(name) if name else str(getattr(stype, "TYPE_ID", ""))
+
+
 def boundary_type_label(btype: BoundaryType) -> str:
     return tr(btype.display_name)
 
@@ -156,7 +193,7 @@ def random_variable_label(rv) -> str:
     ``"seismic kh"``), and it is not touched: this builds the shown text from
     it, keeping the name part as stored and translating the parameter. A
     label that does not have the form the core writes (edited in a file or
-    by a script) is shown as it is. The supports' labels wait for 0.1.322.
+    by a script) is shown as it is.
     """
     label = rv.label or rv.key
     kind = getattr(rv.kind, "value", rv.kind)
@@ -166,9 +203,13 @@ def random_variable_label(rv) -> str:
     if kind == "seismic":
         return (tr("seismic {0}").format(param_label(param))
                 if label == "seismic " + param else label)
-    if kind == "support":
-        return label
     head, sep, tail = label.rpartition(" — ")
+    if kind == "support":
+        # the head is the class's DISPLAY_NAME (or "support"): tr() names
+        # it, and a name it does not know comes back as it is
+        if sep and tail == param:
+            return "%s — %s" % (tr(head), param_label(param))
+        return label
     if not sep:
         return label
     if not head:

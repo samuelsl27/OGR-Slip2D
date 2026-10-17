@@ -29,7 +29,8 @@ from ogr_core.loads import DistributedLoad, LineLoad
 from ogr_core.materials import Material
 from ogr_core.support import SupportInstance
 from ogr_gui.i18n import tr
-from ogr_gui.labels import (load_distribution_label, load_orientation_label,
+from ogr_gui.labels import (force_application_label, force_orientation_label,
+                            load_distribution_label, load_orientation_label,
                             param_label, pore_pressure_label)
 
 
@@ -441,7 +442,7 @@ class SupportItem(DomainItem):
 
         # Rich tooltip
         tooltip = (
-            tr('<b>{0}</b><br><i>Type:</i> {1}<br><i>Length:</i> {2:.2f} m<br><i>Axis:</i> {3:.1f}°<br><i>Application:</i> {4}<br><i>Orientation:</i> {5}').format(support.name or support_type_display, support_type_display, support.length(), support.axis_angle_deg(), support.force_application.value, support.orientation.value.replace('_', ' '))
+            tr('<b>{0}</b><br><i>Type:</i> {1}<br><i>Length:</i> {2:.2f} m<br><i>Axis:</i> {3:.1f}°<br><i>Application:</i> {4}<br><i>Orientation:</i> {5}').format(support.name or support_type_display, support_type_display, support.length(), support.axis_angle_deg(), force_application_label(support.force_application), force_orientation_label(support.orientation))
         )
         if support_type_obj is not None:
             # v0.1.116 — the two stress-dependent pullout laws need
@@ -623,7 +624,7 @@ class SupportForceArrow(QGraphicsPathItem):
         self.setPen(pen)
         self.setZValue(8.5)
         self.setToolTip(
-            tr('<b>Support force</b><br>Magnitude: {0:.1f} kN/m<br>Angle: {1:.1f}°<br>Mode: {2}').format(force_magnitude, _m.degrees(force_angle_rad), 'Active' if is_active else 'Passive')
+            tr('<b>Support force</b><br>Magnitude: {0:.1f} kN/m<br>Angle: {1:.1f}°<br>Mode: {2}').format(force_magnitude, _m.degrees(force_angle_rad), tr('Active') if is_active else tr('Passive'))
         )
 
 

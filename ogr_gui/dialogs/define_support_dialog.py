@@ -64,6 +64,8 @@ from ogr_core.support import (
     support_registry,
 )
 from ogr_gui.i18n import tr  # noqa: E402
+from ogr_gui.labels import (force_application_label,
+                            force_orientation_label)  # noqa: E402
 from ogr_gui.themes import theme_color
 
 
@@ -184,10 +186,10 @@ class _SupportParamPanel(QWidget):
                     editor = self._build_editor_for_param(
                         name, default, unit, desc, val,
                     )
-                    label = QLabel(self._pretty_name(name))
-                    label.setToolTip(desc)
+                    label = QLabel(tr(self._pretty_name(name)))
+                    label.setToolTip(tr(desc))
                     form.addRow(label, editor)
-                tabs.addTab(page, tab_name)
+                tabs.addTab(page, tr(tab_name))
             self._layout.addWidget(tabs)
         else:
             # Flat form
@@ -198,8 +200,8 @@ class _SupportParamPanel(QWidget):
                 editor = self._build_editor_for_param(
                     name, default, unit, desc, val,
                 )
-                label = QLabel(self._pretty_name(name))
-                label.setToolTip(desc)
+                label = QLabel(tr(self._pretty_name(name)))
+                label.setToolTip(tr(desc))
                 form.addRow(label, editor)
             self._layout.addWidget(form_widget)
 
@@ -272,6 +274,9 @@ class _SupportParamPanel(QWidget):
                 and combo.currentData() in shown_for)
 
     def _pretty_name(self, name: str) -> str:
+        """The row label, in English: the key in title case, which is what
+        the row has always said. v0.1.322 (D300) — the caller passes it
+        through tr(), and each key has its Spanish."""
         return name.replace("_", " ").title() + ":"
 
     def _build_editor_for_param(
@@ -288,7 +293,7 @@ class _SupportParamPanel(QWidget):
                 editor.setCurrentIndex(max(0, idx))
             else:
                 editor.addItem(str(value), value)
-            editor.setToolTip(desc)
+            editor.setToolTip(tr(desc))
             self._editors[name] = editor
             return editor
         # A COUNT is an integer, and offering 2.5 helices in a spin box
@@ -299,7 +304,7 @@ class _SupportParamPanel(QWidget):
             counter = QSpinBox()
             counter.setRange(1, 1000)
             counter.setValue(int(round(float(value))))
-            counter.setToolTip(desc)
+            counter.setToolTip(tr(desc))
             self._editors[name] = counter
             return counter
         # Numeric
@@ -309,7 +314,7 @@ class _SupportParamPanel(QWidget):
         if unit and unit != "-":
             spin.setSuffix(f" {unit}")
         spin.setValue(float(value))
-        spin.setToolTip(desc)
+        spin.setToolTip(tr(desc))
         self._editors[name] = spin
         return spin
 
@@ -490,13 +495,13 @@ class DefineSupportDialog(QDialog):
         # Support type combobox
         self.cbo_type = QComboBox()
         for tid, cls in support_registry().items():
-            self.cbo_type.addItem(cls.DISPLAY_NAME, tid)
+            self.cbo_type.addItem(tr(cls.DISPLAY_NAME), tid)
         self.cbo_type.currentIndexChanged.connect(self._on_type_changed)
         nrow.addRow(tr("Support Type:"), self.cbo_type)
         # Force application
         self.cbo_app = QComboBox()
         for fa in ForceApplication:
-            self.cbo_app.addItem(fa.value.capitalize(), fa)
+            self.cbo_app.addItem(force_application_label(fa), fa)
         self.cbo_app.currentIndexChanged.connect(self._on_app_changed)
         nrow.addRow(tr("Force Application:"), self.cbo_app)
         # Orientation
@@ -540,17 +545,13 @@ class DefineSupportDialog(QDialog):
 
     # ---- helpers ------------------------------------------------
     def _pretty_orientation(self, fo: ForceOrientation) -> str:
-        return {
-            ForceOrientation.TANGENT_TO_SLIP: "Tangent to slip surface",
-            ForceOrientation.PARALLEL_TO_SUPPORT: "Parallel to support",
-            ForceOrientation.BISECTOR: "Bisector (tangent + parallel)",
-            ForceOrientation.HORIZONTAL: "Horizontal",
-            ForceOrientation.PERPENDICULAR_TO_PILE: "Perpendicular to pile",
-            ForceOrientation.USER_DEFINED: "User-defined angle",
-        }.get(fo, fo.value)
+        # v0.1.322 (D300) — the table moved to ogr_gui.labels, which the
+        # other three support dialogs now share.
+        return force_orientation_label(fo)
 
     def _row_label(self, row: _SupportRow) -> str:
-        return f"{row.name}  [{row.support.DISPLAY_NAME}]"
+        # the set's name is data; the class name is shown translated
+        return "%s  [%s]" % (row.name, tr(row.support.DISPLAY_NAME))
 
     def _make_default_row(self) -> _SupportRow:
         cls = list(support_registry().values())[0]  # End Anchored
@@ -575,7 +576,7 @@ class DefineSupportDialog(QDialog):
         if idx >= 0:
             self.cbo_type.setCurrentIndex(idx)
         self.cbo_type.blockSignals(False)
-        self.lbl_desc.setText(type(row.support).DESCRIPTION)
+        self.lbl_desc.setText(tr(type(row.support).DESCRIPTION))
 
         # Application
         self.cbo_app.blockSignals(True)
@@ -625,7 +626,7 @@ class DefineSupportDialog(QDialog):
         row.support.id = row.id   # v0.1.149 — same set, new class
         row.orientation = cls.DEFAULT_ORIENTATION
         row.force_application = cls.DEFAULT_APPLICATION
-        self.lbl_desc.setText(cls.DESCRIPTION)
+        self.lbl_desc.setText(tr(cls.DESCRIPTION))
         item = self.list_widget.item(row_idx)
         item.setText(self._row_label(row))
         # Rebuild editor

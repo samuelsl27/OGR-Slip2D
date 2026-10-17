@@ -280,18 +280,21 @@ class TestPickSpeaksSpanish:
 # The names the model itself carries (the project's, its materials',
 # boundaries' and support types') are data and are removed first.
 
+#: v0.1.322 — without the words that are also Spanish (horizontal,
+#: vertical, material, global, local, no, factor): «Horizontal» as a support
+#: orientation read as English and was a false alarm.
 _ENGLISH = set("""the of to and or for with from by in on at is are this that
 search options method methods surface surfaces grid slope block path auto
-refine simulated annealing swarm particle analysis material materials
+refine simulated annealing swarm particle analysis materials
 boundary boundaries load loads support supports water pressure line point
 points add delete edit define apply cancel close none all show hide display
 settings project type name value values default model models number count
 min max minimum maximum left right top bottom start end table function
-functions strength unit weight angle force forces factor safety stress
+functions strength unit weight angle force forces safety stress
 stresses region regions vertex vertices crack tension seismic coefficient
-horizontal vertical stage stages time step steps mesh element elements node
+stage stages time step steps mesh element elements node
 nodes file open save new import export report results result critical
-global local enabled disabled yes no""".split())
+enabled disabled yes""".split())
 _SPANISH_WORDS = set("""de del la las el los con por para sin una uno un al
 y o en se""".split())
 
@@ -312,16 +315,8 @@ SHOWN_EXCEPTIONS = {
         "unit, for whoever writes a script against the API",
     r"^(in|min)$":
         "a unit symbol (inch, minute), the same in Spanish",
-    # The supports are their own family, translated in 0.1.322; these go
-    # when it lands (the ghost check below makes sure they do).
-    r"^(End Anchored|Grouted Tieback with Friction|Horizontal"
-    r"|Parallel To Support|Parallel to support|Perpendicular To Pile"
-    r"|Perpendicular to pile|Tangent To Slip|Tangent to slip surface"
-    r"|User-defined angle|Out Of Plane Spacing:)$":
-        "the supports: 0.1.322",
-    r"^(Maximum load an individual anchor|Mechanically end-anchored"
-    r"|Out-of-plane bolt spacing)":
-        "the supports: 0.1.322",
+    # v0.1.322 — the supports' exceptions of 0.1.321 are gone: the family
+    # is translated (test_supports_spanish_v1322).
 }
 
 
@@ -440,7 +435,9 @@ class TestNothingOnScreenReadsEnglish:
 #: of methods and unit symbols. Checked exact, so it cannot go stale.
 SAME_IN_SPANISH = {"Spencer", "GLE / Morgenstern-Price",
                    "Corps of Engineers #1", "Corps of Engineers #2",
-                   "Lowe-Karafiath", "s", "min", "h", "d", "m/s", "cm/s"}
+                   "Lowe-Karafiath", "s", "min", "h", "d", "m/s", "cm/s",
+                   # v0.1.322 — a support's force orientation
+                   "Horizontal"}
 
 
 def _label_tables():
@@ -448,8 +445,11 @@ def _label_tables():
     from ogr_core.materials.material import PorePressureType
     from ogr_core.project.settings import GroundwaterMethod
     from ogr_core.project.units import PermeabilityUnit, TimeUnit
+    from ogr_core.support import ForceApplication, ForceOrientation
     from ogr_gui import labels as L
-    return ((L.PORE_PRESSURE, PorePressureType),
+    return ((L.FORCE_APPLICATION, ForceApplication),
+            (L.FORCE_ORIENTATION, ForceOrientation),
+            (L.PORE_PRESSURE, PorePressureType),
             (L.GROUNDWATER_METHOD, GroundwaterMethod),
             (L.LOAD_ORIENTATION, LoadOrientation),
             (L.LOAD_DISTRIBUTION, LoadDistribution),

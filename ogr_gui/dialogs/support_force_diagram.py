@@ -173,7 +173,7 @@ class SupportForceDiagramWindow(QDialog):
         for i, sup in enumerate(self._supports, 1):
             stype = _resolve_type(project, sup)
             name = getattr(sup, "name", "") or f"{i}"
-            label = getattr(stype, "DISPLAY_NAME", "") if stype else ""
+            label = tr(getattr(stype, "DISPLAY_NAME", "")) if stype else ""
             self.cbo.addItem(f"{name}  [{label}]" if label else name, i - 1)
         top.addWidget(self.cbo, 1)
         lay.addLayout(top)

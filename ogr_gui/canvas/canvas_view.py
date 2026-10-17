@@ -652,9 +652,9 @@ class CanvasView(QGraphicsView):
                 # ``{TYPE_ID: type}`` dictionary lived here and put the
                 # last set of each class in every tooltip (D66).
                 type_obj = resolve_support_type(self.project, s)
-                display = (getattr(type_obj, "_display_name", None)
-                           or getattr(type_obj, "DISPLAY_NAME", None)
-                           or s.type_id)
+                from ogr_gui.labels import support_type_label
+                display = (support_type_label(type_obj) if type_obj
+                           is not None else s.type_id)
                 scene.addItem(SupportItem(
                     s, display, support_type_obj=type_obj,
                     project=self.project))
@@ -1164,8 +1164,8 @@ class CanvasView(QGraphicsView):
         menu = QMenu(self)
         from ogr_core.support import resolve_support_type
         st = resolve_support_type(self.project, s)
-        type_name = (getattr(st, "_display_name", None)
-                     or getattr(st, "DISPLAY_NAME", None) or s.type_id)
+        from ogr_gui.labels import support_type_label
+        type_name = support_type_label(st) if st is not None else s.type_id
 
         info = QAction(tr('Support — {0}').format(s.name or type_name), self)
         info.setEnabled(False)

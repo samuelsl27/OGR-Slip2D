@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 )
 
 from ogr_gui.i18n import tr
+from ogr_gui.labels import support_type_label
 
 
 def _fmt(value) -> str:
@@ -161,9 +162,7 @@ class PropertiesTableDialog(QDialog):
             head = getattr(s, "head", None)
             tail = getattr(s, "tail", None)
             row = [i,
-                   getattr(stype, "_display_name", None)
-                   or getattr(stype, "DISPLAY_NAME", None)
-                   or getattr(stype, "TYPE_ID", ""),
+                   support_type_label(stype),
                    f"({head.x:.3f}, {head.y:.3f})" if head else "—",
                    f"({tail.x:.3f}, {tail.y:.3f})" if tail else "—"]
             row += [getattr(stype, p, None) for p in params]

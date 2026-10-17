@@ -270,7 +270,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.321"
+    VERSION = "0.1.322"
 
     def __init__(self) -> None:
         super().__init__()
@@ -3227,16 +3227,15 @@ class MainWindow(QMainWindow):
     @staticmethod
     def _type_label(stype) -> str:
         """The name the user gave a property set, else its class name."""
-        return str(getattr(stype, "_display_name", None)
-                   or getattr(stype, "DISPLAY_NAME", None)
-                   or getattr(stype, "TYPE_ID", "support"))
+        from ogr_gui.labels import support_type_label
+        return support_type_label(stype) or tr("support")
 
     def _support_label(self, support) -> str:
         from ogr_core.support import resolve_support_type
         name = getattr(support, "name", "")
         stype = resolve_support_type(self.project, support)
         if stype is None:
-            return str(name or "support")
+            return str(name or tr("support"))
         return str(name or self._type_label(stype))
 
     @undo_step("Move support")

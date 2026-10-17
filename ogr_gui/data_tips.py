@@ -24,8 +24,10 @@ Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 from ogr_gui.i18n import tr
-from ogr_gui.labels import (load_distribution_label, load_orientation_label,
-                            param_label, pore_pressure_label)
+from ogr_gui.labels import (force_application_label, force_orientation_label,
+                            load_distribution_label, load_orientation_label,
+                            param_label, pore_pressure_label,
+                            support_type_label)
 from ogr_core.materials.material import PorePressureType
 
 import math
@@ -141,9 +143,7 @@ def support_tip(support, mode: DataTipMode = DataTipMode.MAXIMUM,
         stype = resolve_support_type(project, support)
     if stype is None:
         stype = support
-    label = (getattr(stype, "_display_name", None)
-             or getattr(stype, "DISPLAY_NAME", None)
-             or getattr(stype, "TYPE_ID", "support"))
+    label = support_type_label(stype) or tr("support")
     if mode == DataTipMode.MINIMUM:
         return str(label)
     lines = [str(label)]
@@ -157,11 +157,15 @@ def support_tip(support, mode: DataTipMode = DataTipMode.MAXIMUM,
         v = getattr(stype, key, None)
         if v is not None:
             lines.append("  " + _line(key, v))
-    for attr, label2 in (("force_application", "application"),
-                         ("force_orientation", "orientation")):
+    # v0.1.322 (D300) — the enum's value (``active``) was the text.
+    for attr, template, name_of in (
+            ("force_application", "application: {0}",
+             force_application_label),
+            ("force_orientation", "orientation: {0}",
+             force_orientation_label)):
         v = getattr(support, attr, None) or getattr(stype, attr, None)
         if v is not None:
-            lines.append(f"{label2}: {getattr(v, 'value', v)}")
+            lines.append(tr(template).format(name_of(v)))
     return "\n".join(lines)
 
 

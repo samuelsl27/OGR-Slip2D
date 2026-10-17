@@ -40,6 +40,8 @@ from PySide6.QtWidgets import (
 
 from ogr_core.support import ForceApplication, ForceOrientation
 from ogr_gui.i18n import tr  # noqa: E402
+from ogr_gui.labels import (force_application_label,
+                            force_orientation_label, support_type_label)  # noqa: E402
 from ogr_gui.themes import theme_color
 
 
@@ -95,9 +97,8 @@ class ModifySupportPatternDialog(QDialog):
         # v0.1.149 — the SET the anchor computes with, by identity.
         from ogr_core.support import resolve_support_type
         current = resolve_support_type(project, anchor)
-        current_name = (getattr(current, "_display_name", None)
-                        or getattr(current, "DISPLAY_NAME", None)
-                        or anchor.type_id)
+        current_name = (support_type_label(current) if current is not None
+                        else anchor.type_id)
 
         root = QVBoxLayout(self)
         info = QLabel(
@@ -111,7 +112,7 @@ class ModifySupportPatternDialog(QDialog):
         f_type = QFormLayout(g_type)
         self.cbo_type = QComboBox()
         for st in project.support_types:
-            name = getattr(st, "_display_name", st.DISPLAY_NAME)
+            name = support_type_label(st)
             self.cbo_type.addItem(name, st.id)
         idx = self.cbo_type.findData(getattr(current, "id", None))
         if idx >= 0:
@@ -160,7 +161,7 @@ class ModifySupportPatternDialog(QDialog):
         f_force = QFormLayout(g_force)
         self.cbo_app = QComboBox()
         for fa in ForceApplication:
-            self.cbo_app.addItem(fa.value.capitalize(), fa)
+            self.cbo_app.addItem(force_application_label(fa), fa)
         idx = self.cbo_app.findData(anchor.force_application)
         if idx >= 0:
             self.cbo_app.setCurrentIndex(idx)
@@ -168,7 +169,7 @@ class ModifySupportPatternDialog(QDialog):
 
         self.cbo_ori = QComboBox()
         for fo in ForceOrientation:
-            self.cbo_ori.addItem(fo.value.replace("_", " ").title(), fo)
+            self.cbo_ori.addItem(force_orientation_label(fo), fo)
         idx = self.cbo_ori.findData(anchor.orientation)
         if idx >= 0:
             self.cbo_ori.setCurrentIndex(idx)
