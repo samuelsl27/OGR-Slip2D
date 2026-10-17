@@ -776,7 +776,10 @@ class TestWhatMustNotChange:
                                              _UNWRAPPED_BUDGET_MESSAGES,
                                              _VISIBLE_MESSAGES,
                                              _unwrapped_count)
-        assert _UNWRAPPED_BUDGET == 210
+        # v0.1.321 (D300) — the other budget was lowered on purpose to its
+        # real count, with the reason in test_i18n_coverage_v141; it only
+        # goes down.
+        assert _UNWRAPPED_BUDGET <= 210
         assert _unwrapped_count(_VISIBLE_MESSAGES) == _UNWRAPPED_BUDGET_MESSAGES
 
     def test_every_wrapped_key_of_this_version_has_spanish(self):

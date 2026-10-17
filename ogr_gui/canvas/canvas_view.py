@@ -124,7 +124,7 @@ def _region_to_item(region, material):
     pen.setCosmetic(True)
     item.setPen(pen)
     item.setZValue(-1)
-    mat_name = getattr(material, "name", None) or "(unassigned)"
+    mat_name = getattr(material, "name", None) or tr("(unassigned)")
     area = region.area
     item.setToolTip(
         tr('<b>Region</b><br>Material: {0}<br>Area: {1:.2f} m²').format(mat_name, area)
@@ -1066,13 +1066,15 @@ class CanvasView(QGraphicsView):
         menu.addAction(info)
         menu.addSeparator()
 
+        # v0.1.321 (D300) — the labels of the context menus below are
+        # English in their tables and go through tr() where shown.
         for label, action_id in (
             ("Move Vertex", "move"),
             ("Insert Vertex (after)", "insert"),
             ("Edit Coordinates…", "edit_coords"),
             ("Delete Vertex", "delete"),
         ):
-            a = QAction(label, self)
+            a = QAction(tr(label), self)
             a.triggered.connect(
                 lambda _checked=False, aid=action_id:
                 self.vertex_action_requested.emit(aid, bi, vi)
@@ -1092,7 +1094,9 @@ class CanvasView(QGraphicsView):
         b = self.project.boundaries[bidx]
 
         menu = QMenu(self)
-        info = QAction(f"{b.btype.display_name} — {b.name}", self)
+        from ogr_gui.labels import boundary_type_label
+        info = QAction("%s — %s" % (boundary_type_label(b.btype), b.name),
+                       self)
         info.setEnabled(False)
         menu.addAction(info)
         menu.addSeparator()
@@ -1105,7 +1109,7 @@ class CanvasView(QGraphicsView):
             ("Delete Boundary", "delete"),
         ]
         for label, aid in common_actions:
-            a = QAction(label, self)
+            a = QAction(tr(label), self)
             a.triggered.connect(
                 lambda _c=False, aid=aid: self.boundary_action_requested.emit(aid, bidx)
             )
@@ -1138,7 +1142,7 @@ class CanvasView(QGraphicsView):
                 ("Expand / Shrink…", "expand_shrink"),
                 ("Change Slope Angle…", "change_slope"),
             ):
-                a = QAction(label, self)
+                a = QAction(tr(label), self)
                 a.triggered.connect(
                     lambda _c=False, aid=aid: self.boundary_action_requested.emit(aid, bidx)
                 )
@@ -1174,7 +1178,7 @@ class CanvasView(QGraphicsView):
             ("Modify Pattern…", "support_modify_pattern"),
             ("Delete", "support_delete"),
         ):
-            a = QAction(label, self)
+            a = QAction(tr(label), self)
             a.triggered.connect(
                 lambda _c=False, aid=aid: self.support_action_requested.emit(
                     aid, sidx,
@@ -1258,7 +1262,7 @@ class CanvasView(QGraphicsView):
         s = self.snap_settings
         for label, attr in [("Snap", "snap"), ("Ortho", "ortho"),
                             ("OSnap", "osnap")]:
-            a = QAction(label, self)
+            a = QAction(tr(label), self)
             a.setCheckable(True)
             a.setChecked(getattr(s, attr))
 

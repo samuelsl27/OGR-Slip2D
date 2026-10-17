@@ -200,12 +200,14 @@ class ToggleLabel(QLabel):
         self._text = text
         self._state = bool(state)
         self.setCursor(Qt.PointingHandCursor)
-        self.setToolTip(tr("Click to toggle %s") % text)
+        # v0.1.321 (D300) — the name is also the key of the indicator
+        # (StatusIndicators.state): only the shown text is translated.
+        self.setToolTip(tr("Click to toggle %s") % tr(text))
         self._refresh()
 
     def _refresh(self) -> None:
         on = self._state
-        self.setText(self._text)
+        self.setText(tr(self._text))
         # Enabled reads solid, disabled reads greyed: the state must be
         # legible at a glance without reading the word twice.
         self.setStyleSheet(

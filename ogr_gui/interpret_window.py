@@ -168,7 +168,7 @@ class _SliceDataDock(QDockWidget):
         ("Material",
          lambda s, r: s.material.name if s.material else "—"),
         ("Strength model",
-         lambda s, r: (s.material.strength.DISPLAY_NAME
+         lambda s, r: (tr(s.material.strength.DISPLAY_NAME)
                        if s.material else "—")),
         ("Unit weight γ (kN/m³)",
          lambda s, r: (round(s.material.unit_weight, 2)
@@ -1157,14 +1157,9 @@ class InterpretWindow(QMainWindow):
         tb.setMovable(False)
         tb.setObjectName("MethodSelectorToolbar")
 
-        method_labels = {
-            "bishop_simplified": "Bishop Simplified",
-            "janbu_simplified": "Janbu Simplified",
-            "janbu_corrected": "Janbu Corrected",
-            "ordinary_fellenius": "Ordinary / Fellenius",
-            "spencer": "Spencer",
-            "gle_morgenstern_price": "GLE / Morgenstern-Price",
-        }
+        # v0.1.321 (D300) — the names live in ogr_gui.labels; this table
+        # had six of the nine and showed the identifier of the other three.
+        from ogr_gui.labels import method_name
 
         lbl = QLabel(tr("  Method:  "))
         lbl.setStyleSheet("font-weight: bold; padding: 0 6px;")
@@ -1172,7 +1167,7 @@ class InterpretWindow(QMainWindow):
 
         self.cb_method = QComboBox()
         for mid, result in self.results_by_method.items():
-            label = method_labels.get(mid, mid)
+            label = method_name(mid)
             crit = result.critical if result is not None else None
             if crit is not None:
                 # v0.1.165 (D96) — this one still said "FoS" when the
@@ -2777,9 +2772,10 @@ class InterpretWindow(QMainWindow):
         item.setZValue(60)
         scene.addItem(item)
         self._thrust_items.append(item)
-        msg = "Line of thrust — %s" % target.method_id
+        from ogr_gui.labels import method_name
+        msg = tr("Line of thrust — %s") % method_name(target.method_id)
         if st.e_max > 0 and st.relative_closure > 0.02:
-            msg += "  (closure %.1f%%: moment-only method)" % (
+            msg += tr("  (closure %.1f%%: moment-only method)") % (
                 st.relative_closure * 100)
         self.statusBar().showMessage(msg, 4000)
 
@@ -3171,11 +3167,11 @@ class InterpretWindow(QMainWindow):
                 xs,
                 series=[
                     ("σ'ₙ (kPa)", sn),
-                    ("τ avail. (kPa)", tau),
+                    (tr("τ avail. (kPa)"), tau),
                     ("u (kPa)", u),
                     ("α (°)", alpha),
                 ],
-                xlabel="x along surface (m)",
+                xlabel=tr("x along surface (m)"),
                 title=tr('Values along surface (FoS={0:.3f})').format(target.fos),
                 parent=self,
             ).exec()
@@ -3665,8 +3661,8 @@ class InterpretWindow(QMainWindow):
             from .dialogs.chart_dialogs import ScatterDialog
             ScatterDialog(
                 xs, ys,
-                xlabel="Radius (m)",
-                ylabel="Factor of Safety",
+                xlabel=tr("Radius (m)"),
+                ylabel=tr("Factor of Safety"),
                 title=tr('FoS vs Radius — {0} surfaces').format(len(valid)),
                 parent=self,
             ).exec()

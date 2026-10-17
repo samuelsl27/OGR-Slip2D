@@ -95,7 +95,7 @@ class HistogramDialog(_ChartDialogBase):
     """FoS histogram for the full population."""
 
     def __init__(self, fos_values: Sequence[float], parent=None) -> None:
-        super().__init__("Histogram — Factor of Safety distribution", parent)
+        super().__init__(tr("Histogram — Factor of Safety distribution"), parent)
         self._values = [v for v in fos_values if v is not None]
         if self.canvas is None or not self._values:
             return
@@ -125,10 +125,10 @@ class HistogramDialog(_ChartDialogBase):
                 edgecolor="#10305a", alpha=0.85)
         if self.chk_mark_one.isChecked():
             ax.axvline(1.0, color="#c0392b", linestyle="--",
-                       linewidth=1.2, label="FoS = 1.0")
+                       linewidth=1.2, label=tr("FoS = 1.0"))
             ax.legend(loc="upper right")
-        ax.set_xlabel("Factor of Safety")
-        ax.set_ylabel("Number of surfaces")
+        ax.set_xlabel(tr("Factor of Safety"))
+        ax.set_ylabel(tr("Number of surfaces"))
         ax.set_title(tr('Distribution over {0} valid surfaces').format(len(self._values)))
         ax.grid(True, alpha=0.3)
         self.canvas.draw_idle()
@@ -139,7 +139,7 @@ class CumulativeDialog(_ChartDialogBase):
     """CDF of FoS values with P(FoS<1) annotation."""
 
     def __init__(self, fos_values: Sequence[float], parent=None) -> None:
-        super().__init__("Cumulative — FoS CDF", parent)
+        super().__init__(tr("Cumulative — FoS CDF"), parent)
         self._values = sorted(v for v in fos_values if v is not None)
         if self.canvas is None or not self._values:
             return
@@ -164,8 +164,8 @@ class CumulativeDialog(_ChartDialogBase):
             color="#c0392b", fontsize=11, fontweight="bold",
             transform=ax.transData,
         )
-        ax.set_xlabel("Factor of Safety")
-        ax.set_ylabel("Cumulative probability")
+        ax.set_xlabel(tr("Factor of Safety"))
+        ax.set_ylabel(tr("Cumulative probability"))
         ax.set_title(tr('CDF over {0} surfaces').format(len(values)))
         ax.set_ylim(0, 1.02)
         ax.grid(True, alpha=0.3)
@@ -206,7 +206,7 @@ class SFAlongSlopeDialog(_ChartDialogBase):
     """
 
     def __init__(self, critical_result, parent=None) -> None:
-        super().__init__("Factor of Safety Along Slope", parent)
+        super().__init__(tr("Factor of Safety Along Slope"), parent)
         if self.canvas is None:
             return
         ax = self.ax()
@@ -242,8 +242,8 @@ class SFAlongSlopeDialog(_ChartDialogBase):
         ax.plot(dists, local_fos, color="#3a87c8", linewidth=1.8,
                 marker="o", markersize=4)
         ax.axhline(1.0, color="#c0392b", linestyle="--", linewidth=1.0)
-        ax.set_xlabel("Normalised distance along slope (toe → crest)")
-        ax.set_ylabel("Factor of Safety")
+        ax.set_xlabel(tr("Normalised distance along slope (toe → crest)"))
+        ax.set_ylabel(tr("Factor of Safety"))
         ax.set_title(tr('Critical surface — {0} slices — global FoS = {1:.3f}').format(len(slices), fos_global))
         ax.grid(True, alpha=0.3)
         self.canvas.draw_idle()
@@ -254,7 +254,7 @@ class SensitivityDialog(_ChartDialogBase):
     """Tornado-style sensitivity plot from a dict of parameter → effect."""
 
     def __init__(self, effects: dict[str, float], parent=None) -> None:
-        super().__init__("Sensitivity — FoS vs input parameters", parent)
+        super().__init__(tr("Sensitivity — FoS vs input parameters"), parent)
         if self.canvas is None:
             return
         ax = self.ax()
@@ -273,8 +273,8 @@ class SensitivityDialog(_ChartDialogBase):
         colors = ["#c0392b" if v < 0 else "#27ae60" for v in vals]
         ax.barh(names, vals, color=colors, alpha=0.85)
         ax.axvline(0, color="#333", linewidth=0.8)
-        ax.set_xlabel("Effect on FoS (Δ per standard deviation)")
-        ax.set_title("Sensitivity — Tornado")
+        ax.set_xlabel(tr("Effect on FoS (Δ per standard deviation)"))
+        ax.set_title(tr("Sensitivity — Tornado"))
         ax.grid(True, alpha=0.3, axis="x")
         self.canvas.draw_idle()
 

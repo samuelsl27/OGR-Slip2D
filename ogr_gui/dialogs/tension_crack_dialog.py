@@ -35,7 +35,8 @@ from ogr_gui.themes import theme_color
 class DefineTensionCrackDialog(QDialog):
     """Edit the hydraulic properties of the Tension Crack zone."""
 
-    # User-facing labels for each WaterLevelMode (in display order)
+    # User-facing labels for each WaterLevelMode (in display order).
+    # v0.1.321 (D300) — English here, through tr() where shown.
     _MODES = [
         (WaterLevelMode.DRY, "Dry — no water"),
         (WaterLevelMode.FILLED, "Filled — 100% saturated"),
@@ -76,7 +77,7 @@ class DefineTensionCrackDialog(QDialog):
         # 1. Water Level mode selector
         self.cb_mode = QComboBox()
         for mode, label in self._MODES:
-            self.cb_mode.addItem(label, mode)
+            self.cb_mode.addItem(tr(label), mode)
         # Disable WT / Piezo entries that are unavailable
         for i, (mode, _) in enumerate(self._MODES):
             if mode == WaterLevelMode.USE_WATER_TABLE and not self._has_wt:

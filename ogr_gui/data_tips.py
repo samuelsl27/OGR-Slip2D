@@ -24,6 +24,9 @@ Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 from ogr_gui.i18n import tr
+from ogr_gui.labels import (load_distribution_label, load_orientation_label,
+                            param_label, pore_pressure_label)
+from ogr_core.materials.material import PorePressureType
 
 import math
 from enum import Enum
@@ -53,7 +56,7 @@ _UNITS = {
 
 def _fmt(value) -> str:
     if isinstance(value, bool):
-        return "yes" if value else "no"
+        return tr("yes") if value else tr("no")
     if isinstance(value, (int,)) and not isinstance(value, bool):
         return str(value)
     if isinstance(value, float):
@@ -69,7 +72,9 @@ def _fmt(value) -> str:
 
 def _line(name: str, value) -> str:
     unit = _UNITS.get(name, "")
-    label = name.replace("_", " ")
+    # v0.1.321 (D300) — the key with spaces is the English the tips have
+    # always shown; ogr_gui.labels translates it.
+    label = param_label(name)
     text = _fmt(value)
     return f"{label}: {text} {unit}".rstrip()
 
@@ -80,7 +85,7 @@ def material_tip(material, mode: DataTipMode = DataTipMode.MAXIMUM,
     """Properties of a material."""
     if material is None or mode == DataTipMode.NONE:
         return ""
-    name = getattr(material, "name", "material")
+    name = getattr(material, "name", None) or tr("(unnamed material)")
     if mode == DataTipMode.MINIMUM:
         return name
     lines = [name]
@@ -91,7 +96,7 @@ def material_tip(material, mode: DataTipMode = DataTipMode.MAXIMUM,
         model = getattr(strength, "DISPLAY_NAME", None) or \
             getattr(strength, "MODEL_ID", "")
         if model:
-            lines.append(tr('strength: {0}').format(model))
+            lines.append(tr('strength: {0}').format(tr(model)))
         for key, value in (getattr(strength, "params", {}) or {}).items():
             lines.append("  " + _line(key, value))
     attrs = ["unit_weight"]
@@ -105,7 +110,9 @@ def material_tip(material, mode: DataTipMode = DataTipMode.MAXIMUM,
             lines.append(_line(attr, v))
     pp = getattr(material, "pore_pressure", None)
     if pp is not None:
-        lines.append(tr('pore pressure: {0}').format(getattr(pp, 'value', pp)))
+        shown = (pore_pressure_label(pp) if isinstance(pp, PorePressureType)
+                 else str(getattr(pp, 'value', pp)))
+        lines.append(tr('pore pressure: {0}').format(shown))
     for attr in ("ru", "constant_u", "phi_b", "air_entry_value"):
         v = getattr(material, attr, None)
         if v:
@@ -162,7 +169,11 @@ def load_tip(load, mode: DataTipMode = DataTipMode.MAXIMUM) -> str:
     """Properties of a distributed or line load."""
     if load is None or mode == DataTipMode.NONE:
         return ""
-    name = getattr(load, "name", None) or type(load).__name__
+    # v0.1.321 (D300) — a load is unnamed by default, and the class name
+    # (``DistributedLoad``) was what the tip showed.
+    name = getattr(load, "name", None) or (
+        tr("Line Load") if type(load).__name__ == "LineLoad"
+        else tr("Distributed Load"))
     mag = getattr(load, "magnitude", None)
     if mag is None:
         mag = getattr(load, "magnitude_1", None)
@@ -173,10 +184,13 @@ def load_tip(load, mode: DataTipMode = DataTipMode.MAXIMUM) -> str:
         v = getattr(load, key, None)
         if v is not None:
             lines.append(_line(key, v))
-    for attr in ("orientation", "distribution"):
-        v = getattr(load, attr, None)
-        if v is not None:
-            lines.append(f"{attr}: {getattr(v, 'value', v)}")
+    v = getattr(load, "orientation", None)
+    if v is not None:
+        lines.append(tr("orientation: {0}").format(load_orientation_label(v)))
+    v = getattr(load, "distribution", None)
+    if v is not None:
+        lines.append(tr("distribution: {0}").format(
+            load_distribution_label(v)))
     start = getattr(load, "start", None)
     end = getattr(load, "end", None)
     point = getattr(load, "point", None)
@@ -191,7 +205,9 @@ def boundary_tip(boundary, mode: DataTipMode = DataTipMode.MAXIMUM) -> str:
     """Identity and size of a boundary."""
     if boundary is None or mode == DataTipMode.NONE:
         return ""
-    label = getattr(boundary.btype, "name", "boundary").replace("_", " ")
+    # v0.1.321 (D300) — the enum name in capitals (``WATER TABLE``) is the
+    # English the tip has always shown; tr() gives the Spanish.
+    label = tr(getattr(boundary.btype, "name", "boundary").replace("_", " "))
     if mode == DataTipMode.MINIMUM:
         return label
     verts = list(boundary.polyline.vertices)
@@ -199,7 +215,7 @@ def boundary_tip(boundary, mode: DataTipMode = DataTipMode.MAXIMUM) -> str:
                  for a, b in zip(verts, verts[1:]))
     lines = [label, tr('vertices: {0}').format(len(verts)), _line("length", length)]
     if getattr(boundary.polyline, "closed", False):
-        lines.append("closed")
+        lines.append(tr("closed"))
     return "\n".join(lines)
 
 

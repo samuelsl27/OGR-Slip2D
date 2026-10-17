@@ -642,13 +642,17 @@ class HydraulicPropertiesDialog(QDialog):
         lib = library_for(mdl)
         if not lib:
             return
-        names = sorted(lib)
+        # v0.1.321 (D300) — the textures read in the interface language and
+        # the choice maps back to the library key, which is the API's
+        # contract (``hydraulic_set(library=…)``) and is never translated.
+        shown = {tr(texture): texture for texture in lib}
+        names = sorted(shown)
         name, ok = QInputDialog.getItem(
             self, tr("Pick representative parameters"),
             self._pick_prompt(mdl), names, 0, False)
         if not ok:
             return
-        for key, value in lib[name].items():
+        for key, value in lib[shown[name]].items():
             widget = {
                 "bc_lambda": self.sp_bc_lambda,
                 "bc_psi_b": self.sp_bc_psib,

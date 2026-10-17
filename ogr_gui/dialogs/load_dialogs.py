@@ -25,6 +25,8 @@ from PySide6.QtWidgets import (
 
 from ogr_core.loads import LoadAction, LoadDistribution, LoadOrientation
 from ogr_gui.i18n import tr  # noqa: E402
+from ogr_gui.labels import (load_distribution_label,  # noqa: E402
+                            load_orientation_label)
 
 
 # ======================================================================
@@ -64,7 +66,7 @@ class _BaseLoadDialog(QDialog):
         if show_distribution:
             self.cb_distribution = QComboBox()
             for d in LoadDistribution:
-                self.cb_distribution.addItem(d.value.title(), d)
+                self.cb_distribution.addItem(load_distribution_label(d), d)
             form.addRow(tr("Distribution:"), self.cb_distribution)
 
             self.sb_mag2 = QDoubleSpinBox()
@@ -75,13 +77,14 @@ class _BaseLoadDialog(QDialog):
 
         # Orientation
         self.cb_orientation = QComboBox()
+        # v0.1.321 (D300) — the labels live in ogr_gui.labels, through
+        # tr(); this table went to the combo in English.
         self._orientations = [
-            (LoadOrientation.NORMAL_TO_BOUNDARY, "Normal to Boundary"),
-            (LoadOrientation.VERTICAL, "Vertical (default downward)"),
-            (LoadOrientation.HORIZONTAL, "Horizontal (against failure dir.)"),
-            (LoadOrientation.ANGLE_FROM_HORIZONTAL, "Angle from Horizontal"),
-            (LoadOrientation.ANGLE_TO_BOUNDARY, "Angle to Boundary"),
-        ]
+            (o, load_orientation_label(o)) for o in (
+                LoadOrientation.NORMAL_TO_BOUNDARY, LoadOrientation.VERTICAL,
+                LoadOrientation.HORIZONTAL,
+                LoadOrientation.ANGLE_FROM_HORIZONTAL,
+                LoadOrientation.ANGLE_TO_BOUNDARY)]
         for orient, label in self._orientations:
             self.cb_orientation.addItem(label, orient)
         form.addRow(tr("Orientation:"), self.cb_orientation)
@@ -215,7 +218,7 @@ class DistributedLoadDialog(_BaseLoadDialog):
     def __init__(self, existing=None, parent=None,
                  design_standard: bool = False) -> None:
         super().__init__(
-            title="Add Distributed Load",
+            title=tr("Add Distributed Load"),
             magnitude_unit="kN/m²",
             show_distribution=True,
             existing=existing,
@@ -229,7 +232,7 @@ class LineLoadDialog(_BaseLoadDialog):
     def __init__(self, existing=None, parent=None,
                  design_standard: bool = False) -> None:
         super().__init__(
-            title="Add Line Load",
+            title=tr("Add Line Load"),
             magnitude_unit="kN/m",
             show_distribution=False,
             existing=existing,

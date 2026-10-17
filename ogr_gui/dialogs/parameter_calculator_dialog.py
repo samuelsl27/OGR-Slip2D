@@ -57,7 +57,9 @@ class ParameterCalculatorDialog(QDialog):
         self.cbo_gsi = QComboBox()
         self.cbo_gsi.addItem(tr("(pick a rock mass description)"), None)
         for value, text in GSI_GUIDANCE:
-            self.cbo_gsi.addItem(f"{value} — {text}", value)
+            # v0.1.321 (D300) — the guidance tables of ogr_core are English;
+            # translated where shown, the values untouched.
+            self.cbo_gsi.addItem("%s — %s" % (value, tr(text)), value)
         self.cbo_gsi.currentIndexChanged.connect(self._pick_gsi)
         f.addRow("", self.cbo_gsi)
 
@@ -69,7 +71,7 @@ class ParameterCalculatorDialog(QDialog):
         self.cbo_mi = QComboBox()
         self.cbo_mi.addItem(tr("(pick a lithology)"), None)
         for name, value in MI_GUIDANCE:
-            self.cbo_mi.addItem(f"{name} — {value}", value)
+            self.cbo_mi.addItem("%s — %s" % (tr(name), value), value)
         self.cbo_mi.currentIndexChanged.connect(self._pick_mi)
         f.addRow("", self.cbo_mi)
 
@@ -82,7 +84,7 @@ class ParameterCalculatorDialog(QDialog):
         self.cbo_d = QComboBox()
         self.cbo_d.addItem(tr("(pick an excavation method)"), None)
         for value, text in DISTURBANCE_GUIDANCE:
-            self.cbo_d.addItem(f"{value} — {text}", value)
+            self.cbo_d.addItem("%s — %s" % (value, tr(text)), value)
         self.cbo_d.currentIndexChanged.connect(self._pick_d)
         f.addRow("", self.cbo_d)
         v.addWidget(gb_in)

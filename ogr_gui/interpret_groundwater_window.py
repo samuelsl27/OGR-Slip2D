@@ -92,7 +92,7 @@ class InterpretGroundwaterWindow(QMainWindow):
         bar.addWidget(QLabel(tr("Field:")))
         self.cbo_field = QComboBox()
         for key, label in _FIELDS:
-            self.cbo_field.addItem(label, key)
+            self.cbo_field.addItem(tr(label), key)
         self.cbo_field.currentIndexChanged.connect(self._redraw)
         bar.addWidget(self.cbo_field)
 

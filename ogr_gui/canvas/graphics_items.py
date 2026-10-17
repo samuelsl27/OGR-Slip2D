@@ -29,11 +29,54 @@ from ogr_core.loads import DistributedLoad, LineLoad
 from ogr_core.materials import Material
 from ogr_core.support import SupportInstance
 from ogr_gui.i18n import tr
+from ogr_gui.labels import (load_distribution_label, load_orientation_label,
+                            param_label, pore_pressure_label)
+
+
+# ----------------------------------------------------------------------
+# The hover tooltips of the domain objects. v0.1.321 (D300) — they were the
+# domain's ``tooltip_html()``, which ogr_core writes in English for every
+# caller; the interface builds the same rows here, through tr(), and leaves
+# ``tooltip_html()`` to the API.
+# ----------------------------------------------------------------------
+def material_tooltip(material) -> str:
+    swatch = ('<span style="display:inline-block;width:12px;height:12px;'
+              'background:%s;border:1px solid #000;"></span>'
+              % material.color)
+    rows = ["<b>%s&nbsp;%s</b>" % (swatch, material.name),
+            "<i>%s</i>" % tr(material.strength.DISPLAY_NAME),
+            "<hr>",
+            "γ = %g kN/m³" % material.unit_weight]
+    # Only when it can affect the analysis, as the core's tooltip does.
+    if material.use_sat_unit_weight:
+        rows.append("γ<sub>sat</sub> = %g kN/m³" % material.sat_unit_weight)
+    for key, value in material.strength.params.items():
+        unit = material.strength.PARAMETERS[key][1]
+        rows.append("%s = %g %s" % (param_label(key), value, unit))
+    rows.append(tr("u-model: {0}").format(
+        pore_pressure_label(material.pore_pressure)))
+    return "<br>".join(rows)
+
+
+def distributed_load_tooltip(load) -> str:
+    mag = "%g" % load.magnitude_1
+    if load.magnitude_2 is not None and load.magnitude_2 != load.magnitude_1:
+        mag = "%g → %g" % (load.magnitude_1, load.magnitude_2)
+    return tr("<b>Distributed Load</b><br>Magnitude: {0} kN/m²<br>"
+              "Orientation: {1}<br>Distribution: {2}").format(
+        mag, load_orientation_label(load.orientation),
+        load_distribution_label(load.distribution))
+
+
+def line_load_tooltip(load) -> str:
+    return tr("<b>Line Load</b><br>Magnitude: {0} kN/m<br>"
+              "Orientation: {1}").format(
+        "%g" % load.magnitude, load_orientation_label(load.orientation))
 
 
 # ----------------------------------------------------------------------
 # Base: every item stores a back-reference to its domain object. Hover
-# produces rich tooltips from the domain's ``tooltip_html()``.
+# produces rich tooltips (the functions above).
 # ----------------------------------------------------------------------
 class DomainItem(QGraphicsPathItem):
     """Base class for graphics items that represent a domain object."""
@@ -62,7 +105,9 @@ class BoundaryItem(DomainItem):
     def __init__(self, boundary: Boundary, parent: QGraphicsItem | None = None) -> None:
         super().__init__(parent)
         self.boundary = boundary
-        self.setToolTip(f"<b>{boundary.name}</b><br>{boundary.btype.display_name}")
+        from ogr_gui.labels import boundary_type_label
+        self.setToolTip("<b>%s</b><br>%s" % (
+            boundary.name, boundary_type_label(boundary.btype)))
         self.setZValue(self._z_for_type(boundary.btype))
         self.refresh()
 
@@ -149,7 +194,7 @@ class MaterialRegionItem(DomainItem):
         super().__init__(parent)
         self.boundary = boundary
         self.material = material
-        self.setToolTip(material.tooltip_html())
+        self.setToolTip(material_tooltip(material))
         self.setZValue(1.5)
         self.refresh()
 
@@ -222,7 +267,7 @@ class DistributedLoadItem(DomainItem):
     ) -> None:
         super().__init__(parent)
         self.load = load
-        self.setToolTip(load.tooltip_html())
+        self.setToolTip(distributed_load_tooltip(load))
         self.setZValue(8.0)
         pen = QPen(QColor("#d35400"), 1.8)
         pen.setCosmetic(True)
@@ -307,7 +352,7 @@ class LineLoadItem(DomainItem):
         super().__init__(parent)
         self.load = load
         self.ground = ground
-        self.setToolTip(load.tooltip_html())
+        self.setToolTip(line_load_tooltip(load))
         self.setZValue(8.0)
         pen = QPen(QColor("#d35400"), 2.0)
         pen.setCosmetic(True)
@@ -756,8 +801,8 @@ class SlipSurfaceItem(QGraphicsPathItem):
         # overwrites this tooltip with the reason in that case; this is what
         # it says until then, and it must not be a formatted None.
         self.setToolTip(
-            "Slip surface — FoS = %.3f" % fos if fos is not None
-            else "Slip surface — no factor of safety")
+            tr("Slip surface — FoS = %.3f") % fos if fos is not None
+            else tr("Slip surface — no factor of safety"))
 
 
 # ======================================================================

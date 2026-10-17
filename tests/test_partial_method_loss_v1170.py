@@ -665,7 +665,10 @@ class TestTheStatisticsWindowSaysWhoIsMissing:
         saw two methods where three were asked for."""
         w, sw = self._shown(True)
         try:
-            ids = [sw.cbo_method.itemText(i)
+            # v0.1.321 (D300) — the DATA: the combo now shows the method's
+            # name, so its text no longer holds the identifier, and
+            # ``_MID not in ids`` read off the text would pass for ever.
+            ids = [sw.cbo_method.itemData(i)
                    for i in range(sw.cbo_method.count())]
             assert _MID not in ids, ids
             assert _MID in sw.lbl_run_notes.text(), sw.lbl_run_notes.text()
@@ -707,9 +710,7 @@ class TestTheStatisticsWindowSaysWhoIsMissing:
         QApplication.instance() or QApplication([])
         sw = StatisticsWindow(_ej1(), res, None, None)
         try:
-            sw.cbo_method.setCurrentIndex(
-                [sw.cbo_method.itemText(i)
-                 for i in range(sw.cbo_method.count())].index(_MID))
+            sw.cbo_method.setCurrentIndex(sw.cbo_method.findData(_MID))
             sw._redraw()
             said = sw.status.text()
             assert "Composite Surfaces" in said, said

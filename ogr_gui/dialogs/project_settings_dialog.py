@@ -51,6 +51,8 @@ from ogr_core.project.units import (
     UnitSystem,
 )
 from ogr_gui.i18n import tr
+from ogr_gui.labels import (groundwater_method_label, permeability_unit_label,
+                            time_unit_label)  # noqa: E402
 from ogr_gui.themes import theme_color
 
 # v0.1.127 — the separator the Seismic page prints between a
@@ -233,7 +235,9 @@ class _GeneralPage(QWidget):
         ]
         for sid in ordered_ids:
             sys_obj = SYSTEMS[sid]
-            self.cbo_unit_system.addItem(sys_obj.label, sid)
+            # v0.1.321 (D300) — the system's label comes from ogr_core in
+            # English; it is translated where it is shown.
+            self.cbo_unit_system.addItem(tr(sys_obj.label), sid)
         # Select the project's current system
         idx = ordered_ids.index(s.units.system_id) if s.units.system_id in ordered_ids else 1
         self.cbo_unit_system.setCurrentIndex(idx)
@@ -257,12 +261,12 @@ class _GeneralPage(QWidget):
         form = QFormLayout(og)
         self.cbo_time = QComboBox()
         for t in TimeUnit:
-            self.cbo_time.addItem(t.value, t)
+            self.cbo_time.addItem(time_unit_label(t), t)
         self.cbo_time.setCurrentIndex(list(TimeUnit).index(s.units.time))
 
         self.cbo_perm = QComboBox()
         for p in PermeabilityUnit:
-            self.cbo_perm.addItem(p.value, p)
+            self.cbo_perm.addItem(permeability_unit_label(p), p)
         self.cbo_perm.setCurrentIndex(
             list(PermeabilityUnit).index(s.units.permeability)
         )
@@ -288,7 +292,7 @@ class _GeneralPage(QWidget):
         from ogr_core.units import get_system
         sid = self.cbo_unit_system.currentData()
         sys_obj = get_system(sid)
-        self._unit_summary.setText(sys_obj.summary)
+        self._unit_summary.setText(tr(sys_obj.summary))
 
     def apply(self) -> None:
         # Detailed unit system (v0.1.13)
@@ -308,16 +312,13 @@ class _GeneralPage(QWidget):
 
 # ----------------------------------------------------------------------
 class _MethodsPage(QWidget):
+    #: The order of the check boxes. v0.1.321 (D300) — the names are no
+    #: longer written here: ogr_gui.labels holds them, through tr().
     METHODS = [
-        (LEM.BISHOP_SIMPLIFIED, "Bishop Simplified"),
-        (LEM.JANBU_SIMPLIFIED, "Janbu Simplified"),
-        (LEM.JANBU_CORRECTED, "Janbu Corrected"),
-        (LEM.ORDINARY_FELLENIUS, "Ordinary / Fellenius"),
-        (LEM.SPENCER, "Spencer"),
-        (LEM.GLE_MORGENSTERN_PRICE, "GLE / Morgenstern-Price"),
-        (LEM.CORPS_OF_ENGINEERS_1, "Corps of Engineers #1"),
-        (LEM.CORPS_OF_ENGINEERS_2, "Corps of Engineers #2"),
-        (LEM.LOWE_KARAFIATH, "Lowe-Karafiath"),
+        LEM.BISHOP_SIMPLIFIED, LEM.JANBU_SIMPLIFIED, LEM.JANBU_CORRECTED,
+        LEM.ORDINARY_FELLENIUS, LEM.SPENCER, LEM.GLE_MORGENSTERN_PRICE,
+        LEM.CORPS_OF_ENGINEERS_1, LEM.CORPS_OF_ENGINEERS_2,
+        LEM.LOWE_KARAFIATH,
     ]
 
     #: The methods that read ``interslice_forces``. Same three ids as
@@ -341,8 +342,9 @@ class _MethodsPage(QWidget):
         # without pulling the analysis engine in for a settings dialog.
         from ogr_slip2d.methods import method_registry
         registry = set(method_registry())
-        for m, label in self.METHODS:
-            cb = QCheckBox(label)
+        from ogr_gui.labels import method_name
+        for m in self.METHODS:
+            cb = QCheckBox(method_name(m))
             cb.setChecked(m.value in enabled)
             # v0.1.78: ask the method registry, never a hand-written list.
             # This used to be a tuple of six ids frozen at v0.1.7; v0.1.20
@@ -499,7 +501,9 @@ class _GroundwaterPage(QWidget):
 
         self.cbo_method = QComboBox()
         for m in GroundwaterMethod:
-            self.cbo_method.addItem(m.value, m.value)
+            # v0.1.321 (D300) — the combo showed the stored identifier
+            # (``grid_total_head``) in every language.
+            self.cbo_method.addItem(groundwater_method_label(m), m.value)
         i = self.cbo_method.findData(s.groundwater.method)
         self.cbo_method.setCurrentIndex(max(0, i))
 
@@ -799,7 +803,10 @@ class ProjectSettingsDialog(QDialog):
         self._refresh_page_gates()
 
     def _add_page(self, label: str, widget: QWidget) -> None:
-        self.nav.addItem(label)
+        # v0.1.321 (D300) — the English label stays the page's identity
+        # (``_refresh_page_gates`` compares it); only the shown text is
+        # translated.
+        self.nav.addItem(tr(label))
         self.stack.addWidget(widget)
         self.pages.append(widget)
 

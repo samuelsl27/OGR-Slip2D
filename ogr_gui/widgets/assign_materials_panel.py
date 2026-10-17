@@ -78,7 +78,7 @@ class AssignMaterialsPanel(QDockWidget):
             item.setIcon(QIcon(swatch))
             self.list.addItem(item)
         # "(None)" entry at the top for unassigning
-        none_item = QListWidgetItem("(None — unassign)")
+        none_item = QListWidgetItem(tr("(None — unassign)"))
         none_item.setData(Qt.UserRole, "")
         self.list.insertItem(0, none_item)
         if self.list.count() > 1:

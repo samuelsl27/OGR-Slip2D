@@ -270,7 +270,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.320"
+    VERSION = "0.1.321"
 
     def __init__(self) -> None:
         super().__init__()
@@ -1839,8 +1839,9 @@ class MainWindow(QMainWindow):
             "horizontal force is irrelevant."))
         form.addRow(tr("Elevation (y):"), sp_el)
         cbo = QComboBox()
+        from ogr_gui.labels import method_name
         for mid in SUPPORTED_METHODS:
-            cbo.addItem(mid, mid)
+            cbo.addItem(method_name(mid), mid)
         i = cbo.findData(last["method_id"])
         cbo.setCurrentIndex(max(0, i))
         form.addRow(tr("Analysis method:"), cbo)
@@ -4434,10 +4435,12 @@ class MainWindow(QMainWindow):
             actions["add_crack"].setEnabled(
                 boundary_refusal(self.project,
                                  BoundaryType.TENSION_CRACK) is None)
+            # v0.1.321 (D300) — both branches through tr(); the conditional
+            # hid them from the AST census.
             actions["add_crack"].setToolTip(
-                "Only one Tension Crack boundary is allowed.\n"
-                "Delete the existing one to add a new one."
-                if has_tc else "Add Tension Crack"
+                tr("Only one Tension Crack boundary is allowed.\n"
+                   "Delete the existing one to add a new one.")
+                if has_tc else tr("Add Tension Crack")
             )
         if "def_tension_crack" in actions:
             # v0.1.10: Define Tension Crack action stays always enabled.
@@ -4449,9 +4452,9 @@ class MainWindow(QMainWindow):
             actions["def_tension_crack"].setToolTip(
                 tr("Define Tension Crack hydraulic properties")
                 if has_tc else
-                "Define Tension Crack hydraulic properties\n"
-                "(add a Tension Crack boundary first via "
-                "Boundaries → Add Tension Crack)"
+                tr("Define Tension Crack hydraulic properties\n"
+                   "(add a Tension Crack boundary first via "
+                   "Boundaries → Add Tension Crack)")
             )
 
         # Water Table: max one
@@ -4461,7 +4464,7 @@ class MainWindow(QMainWindow):
             actions["add_wt"].setEnabled(not has_wt)
             actions["add_wt"].setToolTip(
                 tr("Only one Water Table is allowed.")
-                if has_wt else "Add Water Table"
+                if has_wt else tr("Add Water Table")
             )
 
         # Drawdown Line: requires Rapid Drawdown enabled
@@ -4747,6 +4750,7 @@ class MainWindow(QMainWindow):
         Opens a list of all loads in the project, the user picks one
         or more (multi-select), they are deleted.
         """
+        from ogr_gui.labels import load_orientation_label
         loads_listing: list[tuple[str, int, str]] = []
         for i, ld in enumerate(self.project.distributed_loads):
             loads_listing.append((
@@ -4754,14 +4758,14 @@ class MainWindow(QMainWindow):
                 tr("Distributed: {0:.1f} kN/m² ({1:.1f}, {2:.1f}) → "
                    "({3:.1f}, {4:.1f})  [{5}]").format(
                     ld.magnitude_1, ld.start.x, ld.start.y, ld.end.x,
-                    ld.end.y, ld.orientation.value),
+                    ld.end.y, load_orientation_label(ld.orientation)),
             ))
         for i, ld in enumerate(self.project.line_loads):
             loads_listing.append((
                 "line", i,
                 tr("Line: {0:.1f} kN/m at ({1:.1f}, {2:.1f})  [{3}]").format(
                     ld.magnitude, ld.point.x, ld.point.y,
-                    ld.orientation.value),
+                    load_orientation_label(ld.orientation)),
             ))
         if not loads_listing:
             QMessageBox.information(

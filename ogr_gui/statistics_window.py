@@ -125,8 +125,12 @@ class StatisticsWindow(QMainWindow):
         bar = QHBoxLayout()
         bar.addWidget(QLabel(tr("Method:")))
         self.cbo_method = QComboBox()
+        from ogr_gui.labels import method_name
         for mid in self._method_ids():
-            self.cbo_method.addItem(mid, mid)
+            # v0.1.321 (D300) — the combo showed the identifier
+            # (``bishop_simplified``) in every language; the data keeps it.
+            self.cbo_method.addItem(
+                tr(mid) if mid == "(none)" else method_name(mid), mid)
         self.cbo_method.currentIndexChanged.connect(self._redraw)
         bar.addWidget(self.cbo_method)
 

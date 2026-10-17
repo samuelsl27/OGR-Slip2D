@@ -80,7 +80,16 @@ _VISIBLE = [
 
 # Budget of still-unwrapped strings. Lower it as coverage improves; it
 # must never be raised.
-_UNWRAPPED_BUDGET = 210
+#
+# v0.1.321 (D300) - 210 until 0.1.320, against a real count of 20 and then
+# 18, so it could not fail. Now the real count, and pinned like the message
+# budget below. None of the nine is interface text: five are the separator
+# of a `"\n".join(...)` handed to setText, which the pattern reads as the
+# argument; three are the Hoek-Brown symbols of the parameter calculator
+# ("mb:", "s:", "a:"); one is the coordinate readout of the legend. The AST
+# census of test_gui_spanish_v1318 names each exemption with its reason;
+# this count only keeps the regex view from going slack.
+_UNWRAPPED_BUDGET = 9
 
 # v0.1.167 (D103) - a SECOND list with a SECOND budget, deliberately not
 # seven more entries in _VISIBLE. The patterns above match constructors
@@ -350,7 +359,9 @@ class TestCoverageBudget:
         """The refactor that made room for the second list must not
         have moved the first count."""
         assert _unwrapped_count() == _unwrapped_count(_VISIBLE)
-        assert _UNWRAPPED_BUDGET == 210
+        # v0.1.321 (D300) - was `_UNWRAPPED_BUDGET == 210`, a pin on the
+        # constant rather than on the count; the count is what moves.
+        assert _unwrapped_count() == _UNWRAPPED_BUDGET
 
     def test_a_useful_number_of_strings_are_wrapped(self):
         assert len(_wrapped_keys()) > 250

@@ -99,7 +99,7 @@ class BoundaryConditionsDialog(QDialog):
         f = QFormLayout(gb)
         self.cbo_type = QComboBox()
         for t, label in _BC_LABELS:
-            self.cbo_type.addItem(label, t)
+            self.cbo_type.addItem(tr(label), t)
         self.cbo_type.currentIndexChanged.connect(self._on_type_changed)
         f.addRow(tr("Type:"), self.cbo_type)
 
@@ -120,7 +120,10 @@ class BoundaryConditionsDialog(QDialog):
         v.addWidget(QLabel(tr("Apply to:")))
         self.list_sides = QListWidget()
         for name, ids in self.sides.items():
-            it = QListWidgetItem(tr('{0}  ({1} nodes)').format(name, len(ids)))
+            # v0.1.321 (D300) — the side's name is also its key (the data
+            # below): only the shown text is translated.
+            it = QListWidgetItem(
+                tr('{0}  ({1} nodes)').format(tr(name), len(ids)))
             it.setData(32, name)
             self.list_sides.addItem(it)
         # The reservoir targets. They are Total Head by construction — a

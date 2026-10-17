@@ -42,6 +42,7 @@ from ogr_core.materials import (
     StrengthModel,
 )
 from ogr_gui.i18n import tr
+from ogr_gui.labels import (pore_pressure_label)  # noqa: E402
 
 from .drawdown_strength_dialog import DrawdownStrengthDialog, envelope_summary
 
@@ -423,9 +424,13 @@ class _StrengthParamPanel(QWidget):
             ed.setRange(-1e12, 1e12)
             ed.setSuffix(f" {user_label}" if user_label else "")
             ed.setValue(user_value)
-            ed.setToolTip(description)
-            label = QLabel(f"{name}:")
-            label.setToolTip(description)
+            # v0.1.321 (D300) — the row reads the core's description, in the
+            # interface language; the key and the unit stay in the tooltip
+            # for whoever writes a script against the API.
+            key_tip = f"{name} [{unit}]" if unit and unit != "-" else name
+            ed.setToolTip(key_tip)
+            label = QLabel(tr(description) + ":")
+            label.setToolTip(key_tip)
             self._form.addRow(label, ed)
             self._editors[name] = ed
             self._given[name] = (si_value, ed.value())
@@ -941,7 +946,7 @@ class _StrengthParamPanel(QWidget):
     @staticmethod
     def _model_name(rule) -> str:
         try:
-            return REGISTRY.get(rule["model"]["model_id"]).DISPLAY_NAME
+            return tr(REGISTRY.get(rule["model"]["model_id"]).DISPLAY_NAME)
         except Exception:  # noqa: BLE001 - any malformed rule: no name
             return "?"
 
@@ -1183,7 +1188,7 @@ class _StrengthParamPanel(QWidget):
         except Exception:  # noqa: BLE001 - a function a file broke
             return tr("(not a valid function)")
         table = function.get("rows", function.get("points")) or []
-        return tr("%s, %d row(s)") % (cls.DISPLAY_NAME, len(table))
+        return tr("%s, %d row(s)") % (tr(cls.DISPLAY_NAME), len(table))
 
     def _refresh_function_label(self, which: str) -> None:
         label = self._function_labels.get(which)
@@ -1491,7 +1496,7 @@ class MaterialPropertiesDialog(QDialog):
         top_row = QHBoxLayout()
         self.cbo_strength = QComboBox()
         for mid, cls in REGISTRY.all().items():
-            self.cbo_strength.addItem(cls.DISPLAY_NAME, mid)
+            self.cbo_strength.addItem(tr(cls.DISPLAY_NAME), mid)
         self.cbo_strength.currentIndexChanged.connect(self._on_strength_changed)
         top_row.addWidget(self.cbo_strength)
         # Formula label, shown next to the dropdown
@@ -1557,7 +1562,9 @@ class MaterialPropertiesDialog(QDialog):
         self._water_form = pp_form
         self.cbo_pp = QComboBox()
         for t in PorePressureType:
-            self.cbo_pp.addItem(t.value, t)
+            # v0.1.321 (D300) — the identifier (``water_table``) was the
+            # text, in every language; the data keeps the enum.
+            self.cbo_pp.addItem(pore_pressure_label(t), t)
         self.dsp_ru = _PreciseSpinBox(); self.dsp_ru.setRange(0.0, 1.0)
         # v0.1.227 (D217) — a pressure, in the project's unit; it was kPa
         # under a fixed " kPa" whatever the units.

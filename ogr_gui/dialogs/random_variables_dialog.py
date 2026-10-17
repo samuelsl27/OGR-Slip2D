@@ -50,6 +50,7 @@ from ogr_core.statistics import (
     available_variables,
 )
 from ogr_gui.i18n import tr  # noqa: E402
+from ogr_gui.labels import random_variable_label  # noqa: E402
 
 _DIST_LABELS = [
     (DistributionType.NORMAL, "Normal"),
@@ -88,7 +89,8 @@ class RandomVariablesDialog(QDialog):
         left.addWidget(QLabel(tr("Available parameters")))
         self.list_available = QListWidget()
         for rv in self.catalogue:
-            it = QListWidgetItem(rv.label or rv.key)
+            # v0.1.321 (D300) — shown translated; the stored label stays.
+            it = QListWidgetItem(random_variable_label(rv))
             it.setData(Qt.UserRole, rv.key)
             self.list_available.addItem(it)
         left.addWidget(self.list_available, 1)
@@ -114,7 +116,7 @@ class RandomVariablesDialog(QDialog):
         f = QFormLayout(gb)
         self.cbo_dist = QComboBox()
         for t, label in _DIST_LABELS:
-            self.cbo_dist.addItem(label, t)
+            self.cbo_dist.addItem(tr(label), t)
         self.cbo_dist.currentIndexChanged.connect(self._on_dist_changed)
         f.addRow(tr("Distribution:"), self.cbo_dist)
 
@@ -189,7 +191,7 @@ class RandomVariablesDialog(QDialog):
     def _refresh_defined(self):
         self.list_defined.clear()
         for key, rv in self.defined.items():
-            it = QListWidgetItem(rv.label or key)
+            it = QListWidgetItem(random_variable_label(rv))
             it.setData(Qt.UserRole, key)
             self.list_defined.addItem(it)
         self._refresh_correlation_choices()
@@ -205,7 +207,7 @@ class RandomVariablesDialog(QDialog):
         self.cbo_corr_with.addItem(tr("(none)"), None)
         for key, rv in self.defined.items():
             if key != self._current_key:
-                self.cbo_corr_with.addItem(rv.label or key, key)
+                self.cbo_corr_with.addItem(random_variable_label(rv), key)
         i = self.cbo_corr_with.findData(current)
         self.cbo_corr_with.setCurrentIndex(max(0, i))
         self.cbo_corr_with.blockSignals(False)
@@ -312,7 +314,7 @@ class RandomVariablesDialog(QDialog):
             return
         curve = rv.distribution.curve(120)
         dlg = QDialog(self)
-        dlg.setWindowTitle(rv.label or key)
+        dlg.setWindowTitle(random_variable_label(rv))
         dlg.resize(560, 400)
         v = QVBoxLayout(dlg)
         fig = Figure(figsize=(5.4, 3.8), tight_layout=True)

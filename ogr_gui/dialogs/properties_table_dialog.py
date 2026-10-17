@@ -124,8 +124,8 @@ class PropertiesTableDialog(QDialog):
         rows = []
         for m in mats:
             st = m.strength
-            model = (getattr(st, "DISPLAY_NAME", None)
-                     or getattr(st, "MODEL_ID", "")) if st else ""
+            model = tr(getattr(st, "DISPLAY_NAME", None)
+                       or getattr(st, "MODEL_ID", "")) if st else ""
             # v0.1.60 — leave the saturated column empty when the material
             # does not use it: showing a number the analysis ignores reads
             # as if it were in force.

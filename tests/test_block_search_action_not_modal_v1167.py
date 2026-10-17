@@ -311,7 +311,11 @@ class TestTheScannerAndItsTwoBudgets:
         """The ficha forbids moving it, and it could not have moved:
         none of its seven patterns sees these strings."""
         from test_i18n_coverage_v141 import _UNWRAPPED_BUDGET
-        assert _UNWRAPPED_BUDGET == 210
+        # v0.1.321 (D300) — lowered on purpose to its real count, with the
+        # reason in test_i18n_coverage_v141. What this pinned was that
+        # v0.1.167 did not move it; what still holds is that it only goes
+        # down.
+        assert _UNWRAPPED_BUDGET <= 210
 
     def test_the_seven_old_patterns_never_saw_these_two_strings(self):
         """The refuted premise of the ficha's closing criterion.

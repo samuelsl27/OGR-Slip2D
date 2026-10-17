@@ -74,10 +74,12 @@ class EditCoordinatesDialog(QDialog):
         self._source_boundary = boundary
 
         root = QVBoxLayout(self)
-        info = QLabel(
-            f"<b>{boundary.btype.display_name}</b> — "
-            f"{'closed polygon' if boundary.polyline.closed else 'open polyline'}"
-        )
+        from ogr_gui.labels import boundary_type_label
+        shape = (tr("closed polygon") if boundary.polyline.closed
+                 else tr("open polyline"))
+        heading = "<b>%s</b> — %s" % (boundary_type_label(boundary.btype),
+                                      shape)
+        info = QLabel(heading)
         root.addWidget(info)
 
         self.table = QTableWidget(len(boundary.vertices), 2)
@@ -405,8 +407,9 @@ class ConvertBoundaryDialog(QDialog):
         root = QVBoxLayout(self)
         form = QFormLayout()
         self.cbo = QComboBox()
+        from ogr_gui.labels import boundary_type_label
         for bt in BoundaryType:
-            self.cbo.addItem(bt.display_name, bt)
+            self.cbo.addItem(boundary_type_label(bt), bt)
         idx = self.cbo.findData(current_type)
         self.cbo.setCurrentIndex(max(0, idx))
         form.addRow(tr("New type:"), self.cbo)

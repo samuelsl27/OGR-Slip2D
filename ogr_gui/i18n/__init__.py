@@ -46,7 +46,6 @@ _DICTS: dict[str, dict[str, str]] = {
         '%d rows copied to the clipboard': '%d filas copiadas al portapapeles',
         '%d surfaces for method %s. A negative value in place of the factor of safety is an error code.': '%d superficies para el método %s. Un valor negativo en lugar del factor de seguridad es un código de error.',
         '0 to 6': '0 a 6',
-        'Add Query': 'Añadir consulta',
         'Add Query cancelled': 'Consulta cancelada',
         'Add Result Table (sortable)...': 'Añadir tabla de resultados (ordenable)...',
         'All Surfaces': 'Todas las superficies',
@@ -58,7 +57,6 @@ _DICTS: dict[str, dict[str, str]] = {
         'Copy': 'Copiar',
         'Data': 'Datos',
         'Data:': 'Datos:',
-        'Delete Query': 'Eliminar consulta',
         'Delete Query...': 'Eliminar consulta...',
         'Distance along surface': 'Distancia a lo largo de la superficie',
         'Every valid slip surface analysed.': 'Todas las superficies de rotura válidas analizadas.',
@@ -166,7 +164,6 @@ _DICTS: dict[str, dict[str, str]] = {
         'Support modified.': 'Soporte modificado.',
         'Support moved by (%.3f, %.3f)': 'Soporte movido (%.3f, %.3f)',
         'Support type:': 'Tipo de soporte:',
-        'Support:': 'Soporte:',
         'There are no loads to modify.': 'No hay cargas que modificar.',
         'There are no supports to modify.': 'No hay soportes que modificar.',
         'There are no supports to move.': 'No hay soportes que mover.',
@@ -346,7 +343,6 @@ _DICTS: dict[str, dict[str, str]] = {
 
         'Delete': 'Eliminar',
         'Delete:': 'Eliminar:',
-        'Model': 'Modelo',
 
         # --- v0.1.54: capa de anotación y menú Tools ----------------
         '   |   measured: %.4f': '   |   medido: %.4f',
@@ -400,7 +396,6 @@ _DICTS: dict[str, dict[str, str]] = {
         'Send to back': 'Enviar al fondo',
         'Show All Annotations': 'Mostrar todas las anotaciones',
         'Specific storage': 'Almacenamiento específico',
-        'Strength model': 'Modelo de resistencia',
         'Support Properties Table': 'Tabla de propiedades de soportes',
         'Tail': 'Cola',
         'Text': 'Texto',
@@ -473,7 +468,6 @@ _DICTS: dict[str, dict[str, str]] = {
         'Requires a computed groundwater analysis.': 'Requiere un análisis de agua subterránea calculado.',
         'Requires a probabilistic or sensitivity analysis: run Statistics → Compute Statistics in the modeller.': 'Requiere un análisis probabilístico o de sensibilidad: ejecute Estadística → Calcular estadística en el modelador.',
         'Requires a transient groundwater analysis with per-stage factors of safety.': 'Requiere un análisis de agua subterránea transitorio con factores de seguridad por etapa.',
-        'Requires at least one support in the model.': 'Requiere al menos un soporte en el modelo.',
         'Sensitivity': 'Sensibilidad',
         'Statistics exported to %s': 'Estadística exportada a %s',
         'Supports on the critical surface (FS = %.4f):': 'Soportes en la superficie crítica (FS = %.4f):',
@@ -761,7 +755,6 @@ _DICTS: dict[str, dict[str, str]] = {
         'Total head': 'Cabeza total',
 
         'Data Tips': 'Datos al pasar el cursor',
-        'None': 'Ninguno',
 
         # --- v0.1.49: leyenda e indicadores de Interpret -------------
         '   |   FS = %s': '   |   FS = %s',
@@ -810,7 +803,6 @@ _DICTS: dict[str, dict[str, str]] = {
         'No geometry was assigned to any layer.': 'No se asignó geometría a ninguna capa.',
         'No layer was mapped to the external boundary. Re-run the import and assign one in the layer table: without it the model cannot define regions at all.': 'Ninguna capa se asignó al contorno externo. Repita la importación y asigne una en la tabla de capas: sin él el modelo no puede definir regiones.',
         'No problems: the imported geometry closes correctly.': 'Sin problemas: la geometría importada cierra correctamente.',
-        'Note': 'Nota',
         'Problem': 'Problema',
         "Several closed shapes were mapped to the external boundary. The largest was kept. If the wrong one was chosen, map the others to 'Material Boundary' instead.": "Se asignaron varias formas cerradas al contorno externo. Se ha conservado la mayor. Si no era la correcta, asigne las demás a 'Contorno de material'.",
         'The external boundary arrived open and was closed with a straight segment. Check that the added segment follows the intended ground surface; if not, close the outline in the CAD drawing and import again.': 'El contorno externo llegó abierto y se ha cerrado con un segmento recto. Compruebe que el segmento añadido sigue la superficie del terreno prevista; si no, cierre el contorno en el dibujo CAD y vuelva a importar.',
@@ -861,7 +853,6 @@ _DICTS: dict[str, dict[str, str]] = {
         'regions: %d': 'regiones: %d',
         'welded: %d (%d nodes inserted)': 'soldados: %d (%d nodos insertados)',
 
-        'Assign Material': 'Asignar material',
 
         # --- v0.1.42: menús nuevos ----------------------------------
         'Groundwater': 'Agua subterránea',
@@ -956,7 +947,6 @@ _DICTS: dict[str, dict[str, str]] = {
         'A:': 'A:',
         'Actual range:': 'Rango real:',
         'Add Drawdown Line': 'Añadir línea de desembalse',
-        'Add Grid': 'Añadir malla',
         'Add Row': 'Añadir fila',
         'Add a Block Search object (search window) on the model': 'Añadir un objeto de búsqueda por bloques (ventana de búsqueda) al modelo',
         'Add stage': 'Añadir etapa',
@@ -965,7 +955,6 @@ _DICTS: dict[str, dict[str, str]] = {
         'Analysis method:': 'Método de análisis:',
         'Analysis:': 'Análisis:',
         'Angle (CCW):': 'Ángulo (antihorario):',
-        'Angle:': 'Ángulo:',
         'Apply seismic load to compute': 'Aplicar carga sísmica al cálculo',
         'Assign Material': 'Asignar material',
         'Author:': 'Autor:',
@@ -978,7 +967,6 @@ _DICTS: dict[str, dict[str, str]] = {
         'Basic': 'Básico',
         'Bins:': 'Intervalos:',
         'Block Search Options': 'Opciones de búsqueda por bloques',
-        'Boundaries': 'Contornos',
         'Boundary Condition Values': 'Valores de condiciones de contorno',
         'Boundary Conditions': 'Condiciones de contorno',
         'Bubbling pressure:': 'Presión de burbujeo:',
@@ -1010,7 +998,6 @@ _DICTS: dict[str, dict[str, str]] = {
             'la tolerancia, y se indica la de menor factor de seguridad.',
         'Lowest factor of safety among them: ':
             'Menor factor de seguridad entre ellas: ',
-        '(none)': '(ninguna)',
         'No slices available — run a compute first.':
             'No hay dovelas: calcule primero.',
         'Export Slice Data': 'Exportar datos de las dovelas',
@@ -1087,7 +1074,6 @@ _DICTS: dict[str, dict[str, str]] = {
         'Matric suction (kPa)': 'Succión matricial (kPa)',
         'C:': 'C:',
         'Calculate Excess Pore Pressure (B-bar method)': 'Calcular exceso de presión intersticial (método B-bar)',
-        'Cancel': 'Cancelar',
         'Capture as initial state': 'Capturar como estado inicial',
         'Capture current BCs': 'Capturar condiciones actuales',
         'Change Slope Angle': 'Cambiar ángulo del talud',
@@ -1158,7 +1144,6 @@ _DICTS: dict[str, dict[str, str]] = {
         'Define Hydraulic Properties': 'Definir propiedades hidráulicas',
         'Define Tension Crack': 'Definir grieta de tracción',
         'Define Tension Crack hydraulic properties': 'Definir propiedades hidráulicas de la grieta de tracción',
-        'Delete Load': 'Eliminar carga',
         'Delete Row': 'Eliminar fila',
         'Delete stage': 'Eliminar etapa',
         'Depth from crack top:': 'Profundidad desde el borde de la grieta:',
@@ -1189,7 +1174,6 @@ _DICTS: dict[str, dict[str, str]] = {
             'es negativa, actúa como mínimo.',
         'General': 'General',
         'Geometry Cleanup': 'Limpieza de geometría',
-        'Grayscale': 'Escala de grises',
         'Grid Search Options': 'Opciones de búsqueda por rejilla',
         'Hatch pattern': 'Patrón de trama',
         'Initial number of surface vertices:': 'Número inicial de vértices de la superficie:',
@@ -1284,7 +1268,6 @@ _DICTS: dict[str, dict[str, str]] = {
             'esa superficie. Cada vértice es un límite de dovela obligatorio, '
             'así que pedir más vértices que dovelas tiene el análisis hace '
             'imposible rebanar las superficies.',
-        'OK': 'Aceptar',
         'Offset distance:': 'Distancia de desplazamiento:',
         'Only one Drawdown Line is allowed.': 'Solo se permite una línea de desembalse.',
         'Only one Water Table is allowed.': 'Solo se permite un nivel freático.',
@@ -1324,7 +1307,6 @@ _DICTS: dict[str, dict[str, str]] = {
         'Pick rectangle on canvas (2 clicks)': 'Marcar un rectángulo en el lienzo (2 clics)',
         'Pick…': 'Elegir…',
         'Piezo Line:': 'Línea piezométrica:',
-        'Piezometric Line': 'Línea piezométrica',
         'Pivot X:': 'Pivote X:',
         'Pivot Y:': 'Pivote Y:',
         'Plot distribution…': 'Graficar distribución…',
@@ -1403,7 +1385,6 @@ _DICTS: dict[str, dict[str, str]] = {
         # v0.1.268 (D191) — the hydraulic-properties dialog: model and soil
         # labels (translated through a variable, so tr() needs them here),
         # the water content group and the problems it can show.
-        'Constant': 'Constante',
         'User Defined': 'Definida por el usuario',
         'Simple': 'Simple',
         'Brooks-Corey': 'Brooks-Corey',
@@ -1504,7 +1485,6 @@ _DICTS: dict[str, dict[str, str]] = {
         'Upper Angle:': 'Ángulo superior:',
         'Vertices (Nodes)': 'Vértices (nodos)',
         'Water Level:': 'Nivel de agua:',
-        'Water Table': 'Nivel freático',
         'Water pressure grid values': 'Valores de la malla de presiones de agua',
         'X max:': 'X máx:',
         'X min:': 'X mín:',
@@ -1939,7 +1919,6 @@ _DICTS: dict[str, dict[str, str]] = {
             "lambda = 1.49.",
         "Interslice force function:": "Función de fuerzas entre dovelas:",
         "Half Sine": "Medio seno",
-        "Constant": "Constante",
         "Trapezoidal": "Trapezoidal",
         "Clipped Sine": "Seno recortado",
         "Shape of the interslice force function used by GLE / "
@@ -1976,7 +1955,6 @@ _DICTS: dict[str, dict[str, str]] = {
             "encima, donde la hipótesis en fuerzas totales hace que el "
             "factor de seguridad dependa del calado. La leen "
             "Lowe-Karafiath y Corps of Engineers #1 y #2.",
-        "None": "Ninguna",
         "Transient groundwater": "Filtración transitoria",
         "Staged transient seepage. Its solver options are on the "
         "Transient page, which this switch enables.":
@@ -2806,6 +2784,506 @@ _DICTS: dict[str, dict[str, str]] = {
             'segmentos de infiltración: {0}',
         '{0}  ({1} nodes)':
             '{0}  ({1} nodos)',
+        # v0.1.321 (D300, the labels) — the strength models, the description of each
+        # parameter (the row label of Define Materials) and the USDA soil textures
+        'Undrained (φ=0)':
+            'Sin drenaje (φ=0)',
+        'Infinite Strength':
+            'Resistencia infinita',
+        'No Strength (water)':
+            'Sin resistencia (agua)',
+        'Generalized Hoek-Brown':
+            'Hoek-Brown generalizado',
+        'Power Curve':
+            'Curva potencial',
+        'Vertical Stress Ratio':
+            'Razón de tensión vertical',
+        'Drained-Undrained':
+            'Drenado-sin drenaje',
+        'Anisotropic Linear':
+            'Anisótropo lineal',
+        'Shear/Normal Function':
+            'Función tangencial/normal',
+        'Step Function (σ′ₙ)':
+            'Función escalonada (σ′ₙ)',
+        'Discrete Function':
+            'Función discreta',
+        'C/Phi Function':
+            'Función c/φ',
+        'Anisotropic Strength Function':
+            'Función de resistencia anisótropa',
+        'Generalized Anisotropic':
+            'Anisótropo generalizado',
+        'Snowden Modified Anisotropic Linear':
+            'Anisótropo lineal modificado de Snowden',
+        'Undrained, c(depth below layer top)':
+            'Sin drenaje, c(profundidad bajo el techo de la capa)',
+        'Undrained, c(depth below datum)':
+            'Sin drenaje, c(profundidad bajo la cota de referencia)',
+        'Undrained, c(distance to slope)':
+            'Sin drenaje, c(distancia al talud)',
+        'Angular distance beyond which max strength applies':
+            'Distancia angular a partir de la cual rige la resistencia máxima',
+        'Bedding strength only up to this angle, on the clockwise side of the bedding (negative angles)':
+            'Resistencia de la estratificación solo hasta este ángulo, del lado horario de la estratificación (ángulos negativos)',
+        'Bedding strength only up to this angle, on the counter-clockwise side of the bedding':
+            'Resistencia de la estratificación solo hasta este ángulo, del lado antihorario de la estratificación',
+        'Cap on (φr + JRC·log₁₀(JCS/σ)) to avoid σ→0 blow-up':
+            'Tope de (φr + JRC·log₁₀(JCS/σ)) para que no diverja cuando σ→0',
+        'Cohesion across bedding (maximum-strength dir.)':
+            'Cohesión transversal a la estratificación (dir. de resistencia máxima)',
+        'Cohesion along bedding (minimum-strength dir.)':
+            'Cohesión según la estratificación (dir. de resistencia mínima)',
+        "Cohesion at σ'ₙ = ∞":
+            "Cohesión con σ'ₙ = ∞",
+        'Cohesion intercept c':
+            'Ordenada en el origen c (cohesión)',
+        'Cutoff: a maximum, or a minimum when the rate is negative (applied only when enabled)':
+            'Límite: un máximo, o un mínimo si la tasa es negativa (solo si está activado)',
+        'Datum elevation':
+            'Cota de referencia',
+        "Effective cohesion c'":
+            "Cohesión efectiva c'",
+        "Effective friction angle φ'":
+            "Ángulo de rozamiento efectivo φ'",
+        'Friction angle across bedding':
+            'Ángulo de rozamiento transversal a la estratificación',
+        'Friction angle along bedding':
+            'Ángulo de rozamiento según la estratificación',
+        "Friction angle at σ'ₙ = 0":
+            "Ángulo de rozamiento con σ'ₙ = 0",
+        'Half-width of the minimum-strength band':
+            'Semiancho de la banda de resistencia mínima',
+        'Hoek-Brown constant m':
+            'Constante m de Hoek-Brown',
+        'Hoek-Brown constant s':
+            'Constante s de Hoek-Brown',
+        'Intact UCS, σci':
+            'Resistencia a compresión simple de la roca intacta, σci',
+        'Joint roughness coefficient (0–20)':
+            'Coeficiente de rugosidad de la junta (0–20)',
+        'Joint wall compressive strength':
+            'Resistencia a compresión de la pared de la junta',
+        'Minimum shear strength':
+            'Resistencia al corte mínima',
+        'Minimum undrained strength floor':
+            'Suelo de la resistencia sin drenaje',
+        'Normal stress above which the undrained cap applies':
+            'Tensión normal a partir de la cual rige el tope sin drenaje',
+        'Normal-stress offset d':
+            'Desplazamiento d de la tensión normal',
+        "Normally-consolidated strength ratio su/σ'v":
+            "Razón de resistencia normalmente consolidada su/σ'v",
+        'Orientation of bedding/anisotropy from horizontal':
+            'Orientación de la estratificación o anisotropía respecto a la horizontal',
+        'Orientation of the bedding (the 1-direction), counter-clockwise from horizontal':
+            'Orientación de la estratificación (la dirección 1), en sentido antihorario desde la horizontal',
+        'Over-consolidation ratio':
+            'Razón de sobreconsolidación',
+        'Power-curve coefficient a':
+            'Coeficiente a de la curva potencial',
+        'Power-curve exponent b':
+            'Exponente b de la curva potencial',
+        'Rate of change of cohesion with (y_datum − y)':
+            'Variación de la cohesión con (y_ref − y)',
+        'Rate of change of cohesion with depth below the layer top':
+            'Variación de la cohesión con la profundidad bajo el techo de la capa',
+        'Rate of change of cohesion with distance from the slope':
+            'Variación de la cohesión con la distancia al talud',
+        'Residual friction angle φr':
+            'Ángulo de rozamiento residual φr',
+        'Rock mass strength only beyond this angle, on the clockwise side of the bedding':
+            'Resistencia del macizo rocoso solo más allá de este ángulo, del lado horario de la estratificación',
+        'Rock mass strength only beyond this angle, on the counter-clockwise side of the bedding':
+            'Resistencia del macizo rocoso solo más allá de este ángulo, del lado antihorario de la estratificación',
+        'Rock-mass constant mb':
+            'Constante mb del macizo rocoso',
+        'Rock-mass constant s':
+            'Constante s del macizo rocoso',
+        'Rock-mass exponent a':
+            'Exponente a del macizo rocoso',
+        'SHANSEP exponent':
+            'Exponente de SHANSEP',
+        "Strength added to σ'v·S·OCR^m (the published formula's 'minimum undrained strength')":
+            "Resistencia que se suma a σ'v·S·OCR^m (la «resistencia sin drenaje mínima» de la fórmula publicada)",
+        "Strength ratio K = τ/σ'v":
+            "Razón de resistencia K = τ/σ'v",
+        'Undrained cohesion at the datum':
+            'Cohesión sin drenaje en la cota de referencia',
+        'Undrained cohesion at the layer top':
+            'Cohesión sin drenaje en el techo de la capa',
+        'Undrained cohesion at the slope surface':
+            'Cohesión sin drenaje en la superficie del talud',
+        'Undrained shear strength cu':
+            'Resistencia al corte sin drenaje cu',
+        'Waviness angle W (joint roughness)':
+            'Ángulo de ondulación W (rugosidad de la junta)',
+        'Loamy sand':
+            'Arena franca',
+        'Sandy loam':
+            'Franco arenoso',
+        'Silt loam':
+            'Franco limoso',
+        'Sandy clay loam':
+            'Franco arcillo-arenoso',
+        'Clay loam':
+            'Franco arcilloso',
+        'Silty clay loam':
+            'Franco arcillo-limoso',
+        'Sandy clay':
+            'Arcilla arenosa',
+        'Silty clay':
+            'Arcilla limosa',
+        # v0.1.321 (D300, the tables) — ogr_gui.labels, the label tables of the interface,
+        # the Hoek-Brown calculator and the texts the AST census could not see
+        'Bishop Simplified':
+            'Bishop simplificado',
+        'Janbu Simplified':
+            'Janbu simplificado',
+        'Janbu Corrected':
+            'Janbu corregido',
+        'Ordinary / Fellenius':
+            'Ordinario / Fellenius',
+        'Ru Coefficient':
+            'Coeficiente Ru',
+        'Finite Element Seepage':
+            'Filtración por elementos finitos',
+        'Water Pressure Grid: Total Head':
+            'Malla de presiones de agua: cabeza total',
+        'Water Pressure Grid: Pressure Head':
+            'Malla de presiones de agua: cabeza de presión',
+        'Water Pressure Grid: Pore Pressure':
+            'Malla de presiones de agua: presión intersticial',
+        'Finite Element: Steady State':
+            'Elementos finitos: régimen permanente',
+        'Finite Element: Transient':
+            'Elementos finitos: transitorio',
+        'Normal to Boundary':
+            'Normal al contorno',
+        'Vertical (default downward)':
+            'Vertical (hacia abajo por defecto)',
+        'Horizontal (against failure dir.)':
+            'Horizontal (contra la dir. de rotura)',
+        'Angle from Horizontal':
+            'Ángulo desde la horizontal',
+        'Angle to Boundary':
+            'Ángulo respecto al contorno',
+        'mo':
+            'mes',
+        'yr':
+            'año',
+        'm/day':
+            'm/día',
+        'm/year':
+            'm/año',
+        'mm/hour':
+            'mm/h',
+        'air entry value':
+            'valor de entrada de aire',
+        'angle deg':
+            'ángulo',
+        'bedding angle':
+            'ángulo de la estratificación',
+        'cohesion':
+            'cohesión',
+        'cohesion change':
+            'variación de la cohesión',
+        'cohesion datum':
+            'cohesión en la cota de referencia',
+        'cohesion top':
+            'cohesión en el techo',
+        'constant u':
+            'u constante',
+        'cutoff':
+            'límite',
+        'datum':
+            'cota de referencia',
+        'friction angle':
+            'ángulo de rozamiento',
+        'k1 angle deg':
+            'ángulo de K1',
+        'length':
+            'longitud',
+        'magnitude':
+            'módulo',
+        'magnitude 1':
+            'módulo 1',
+        'magnitude 2':
+            'módulo 2',
+        'max total friction':
+            'rozamiento total máximo',
+        'min strength':
+            'resistencia mínima',
+        'sat unit weight':
+            'peso específico saturado',
+        'sigma threshold':
+            'σ umbral',
+        'specific storage':
+            'almacenamiento específico',
+        'unit weight':
+            'peso específico',
+        'waviness':
+            'ondulación',
+        'wc res':
+            'contenido de agua residual',
+        'wc sat':
+            'contenido de agua saturado',
+        'hydraulic {0}':
+            '{0} (hidráulico)',
+        'seismic {0}':
+            'coeficiente sísmico {0}',
+        'Water table — vertical offset':
+            'Nivel freático — desplazamiento vertical',
+        'EXTERNAL':
+            'EXTERNO',
+        'WATER TABLE':
+            'NIVEL FREÁTICO',
+        'PIEZOMETRIC':
+            'PIEZOMÉTRICA',
+        'DRAWDOWN':
+            'DESEMBALSE',
+        'TENSION CRACK':
+            'GRIETA DE TRACCIÓN',
+        'BLOCK SEARCH OBJECT':
+            'OBJETO DE BÚSQUEDA POR BLOQUES',
+        'WEAK LAYER':
+            'CAPA DÉBIL',
+        'ANISOTROPIC SURFACE':
+            'SUPERFICIE ANISÓTROPA',
+        'boundary':
+            'contorno',
+        'Insert Vertex (after)':
+            'Insertar vértice (después)',
+        'Edit Coordinates…':
+            'Editar coordenadas…',
+        'Convert Boundary…':
+            'Convertir contorno…',
+        'Expand / Shrink…':
+            'Ampliar / reducir…',
+        'Change Slope Angle…':
+            'Cambiar ángulo del talud…',
+        'Properties…':
+            'Propiedades…',
+        'Stretch':
+            'Estirar',
+        'Modify Pattern…':
+            'Modificar patrón…',
+        'Ortho':
+            'Orto',
+        'OSnap':
+            'Forzado a objeto',
+        'Zero Pressure':
+            'Presión nula',
+        'Nodal Flow Rate':
+            'Caudal nodal',
+        'Infiltration':
+            'Infiltración',
+        'Unknown (P=0 or Q=0)':
+            'Desconocida (P=0 o Q=0)',
+        'Left edge':
+            'Borde izquierdo',
+        'Right edge':
+            'Borde derecho',
+        'Bottom edge':
+            'Borde inferior',
+        'Ground surface':
+            'Superficie del terreno',
+        'Dry — no water':
+            'Seca — sin agua',
+        'Filled — 100% saturated':
+            'Llena — saturada al 100 %',
+        'Percent Filled':
+            'Porcentaje de llenado',
+        'Filled below Elevation (absolute Y)':
+            'Llena por debajo de una cota (Y absoluta)',
+        'Filled to Depth (relative to crack top)':
+            'Llena hasta una profundidad (desde el techo de la grieta)',
+        'Use Water Table':
+            'Usar el nivel freático',
+        'Use Piezometric Line':
+            'Usar la línea piezométrica',
+        'Total Head H':
+            'Cabeza total H',
+        'Pressure Head P':
+            'Cabeza de presión P',
+        'Pore Pressure u':
+            'Presión intersticial u',
+        'Exponential':
+            'Exponencial',
+        'Metric, stress as kPa':
+            'Métrico, tensiones en kPa',
+        'Metric, stress as MPa':
+            'Métrico, tensiones en MPa',
+        'Metric, stress as tonnes/m²':
+            'Métrico, tensiones en toneladas/m²',
+        'Imperial, stress as tons/ft²':
+            'Imperial, tensiones en tons/ft²',
+        'Imperial, stress as ksf':
+            'Imperial, tensiones en ksf',
+        'Imperial, stress as psf':
+            'Imperial, tensiones en psf',
+        'm, tonnes, tonnes/m, tonnes/m², tonnes/m³':
+            'm, toneladas, toneladas/m, toneladas/m², toneladas/m³',
+        'ft, short tons (2000 lbs), tons/ft, tons/ft², tons/ft³':
+            'ft, toneladas cortas (2000 lb), tons/ft, tons/ft², tons/ft³',
+        'Methods':
+            'Métodos',
+        'Seismic':
+            'Sismo',
+        'Project Summary':
+            'Resumen del proyecto',
+        'Intact or massive, very good surfaces':
+            'Intacta o masiva, superficies muy buenas',
+        'Blocky, well interlocked, good surfaces':
+            'En bloques, bien trabada, superficies buenas',
+        'Very blocky, interlocked, fair surfaces':
+            'Muy fracturada en bloques, trabada, superficies regulares',
+        'Blocky / disturbed / seamy, fair to poor surfaces':
+            'En bloques / alterada / con juntas, superficies regulares a malas',
+        'Disintegrated, poor surfaces':
+            'Desintegrada, superficies malas',
+        'Laminated / sheared, very poor surfaces':
+            'Laminada / cizallada, superficies muy malas',
+        'Excellent quality controlled blasting or TBM: no disturbance':
+            'Voladura controlada de excelente calidad o tuneladora: sin alteración',
+        'Mechanical or hand excavation, no blasting':
+            'Excavación mecánica o manual, sin voladura',
+        'Mechanical excavation with squeezing problems and no invert':
+            'Excavación mecánica con problemas de fluencia y sin contrabóveda',
+        'Good blasting, small-scale slope':
+            'Buena voladura, talud de pequeña escala',
+        'Mechanical excavation in a slope':
+            'Excavación mecánica en un talud',
+        'Poor blasting, small-scale slope':
+            'Voladura deficiente, talud de pequeña escala',
+        'Production blasting, large slope, controlled':
+            'Voladura de producción, talud grande, controlada',
+        'Production blasting, large slope, uncontrolled':
+            'Voladura de producción, talud grande, sin control',
+        'Granite':
+            'Granito',
+        'Granodiorite':
+            'Granodiorita',
+        'Diorite':
+            'Diorita',
+        'Gabbro':
+            'Gabro',
+        'Dolerite':
+            'Dolerita',
+        'Basalt':
+            'Basalto',
+        'Rhyolite':
+            'Riolita',
+        'Andesite':
+            'Andesita',
+        'Gneiss':
+            'Gneis',
+        'Amphibolite':
+            'Anfibolita',
+        'Quartzite':
+            'Cuarcita',
+        'Marble':
+            'Mármol',
+        'Migmatite':
+            'Migmatita',
+        'Schist':
+            'Esquisto',
+        'Phyllite':
+            'Filita',
+        'Slate':
+            'Pizarra',
+        'Sandstone':
+            'Arenisca',
+        'Conglomerate':
+            'Conglomerado',
+        'Breccia':
+            'Brecha',
+        'Siltstone':
+            'Limolita',
+        'Claystone':
+            'Arcillita',
+        'Shale':
+            'Lutita',
+        'Greywacke':
+            'Grauvaca',
+        'Limestone (crystalline)':
+            'Caliza (cristalina)',
+        'Limestone (micritic)':
+            'Caliza (micrítica)',
+        'Dolomite':
+            'Dolomía',
+        'Gypsum':
+            'Yeso',
+        'Anhydrite':
+            'Anhidrita',
+        'Chalk':
+            'Creta',
+        'Marl':
+            'Marga',
+        '  (closure %.1f%%: moment-only method)':
+            '  (cierre %.1f%%: método solo de momentos)',
+        '(None — unassign)':
+            '(Ninguno — quitar la asignación)',
+        '(unassigned)':
+            '(sin asignar)',
+        '(unnamed material)':
+            '(material sin nombre)',
+        '<b>Distributed Load</b><br>Magnitude: {0} kN/m²<br>Orientation: {1}<br>Distribution: {2}':
+            '<b>Carga repartida</b><br>Módulo: {0} kN/m²<br>Orientación: {1}<br>Distribución: {2}',
+        '<b>Line Load</b><br>Magnitude: {0} kN/m<br>Orientation: {1}':
+            '<b>Carga lineal</b><br>Módulo: {0} kN/m<br>Orientación: {1}',
+        'Cumulative probability':
+            'Probabilidad acumulada',
+        'Cumulative — FoS CDF':
+            'Acumulada — función de distribución del FS',
+        'Define Tension Crack hydraulic properties\n(add a Tension Crack boundary first via Boundaries → Add Tension Crack)':
+            'Definir propiedades hidráulicas de la grieta de tracción\n(añade antes un contorno de grieta de tracción en Contornos → Añadir grieta de tracción)',
+        'Distributed Load':
+            'Carga repartida',
+        'Effect on FoS (Δ per standard deviation)':
+            'Efecto en el FS (Δ por desviación típica)',
+        'Factor of Safety':
+            'Factor de seguridad',
+        'FoS = 1.0':
+            'FS = 1.0',
+        'Histogram — Factor of Safety distribution':
+            'Histograma — distribución del factor de seguridad',
+        'Line Load':
+            'Carga lineal',
+        'Line of thrust — %s':
+            'Línea de empuje — %s',
+        'Normalised distance along slope (toe → crest)':
+            'Distancia normalizada a lo largo del talud (pie → coronación)',
+        'Number of surfaces':
+            'Número de superficies',
+        'Only one Tension Crack boundary is allowed.\nDelete the existing one to add a new one.':
+            'Solo se admite un contorno de grieta de tracción.\nElimina el que hay para añadir otro.',
+        'Radius (m)':
+            'Radio (m)',
+        'Sensitivity — FoS vs input parameters':
+            'Sensibilidad — FS frente a los parámetros de entrada',
+        'Sensitivity — Tornado':
+            'Sensibilidad — tornado',
+        'Slip surface — FoS = %.3f':
+            'Superficie de deslizamiento — FS = %.3f',
+        'Slip surface — no factor of safety':
+            'Superficie de deslizamiento — sin factor de seguridad',
+        'closed':
+            'cerrado',
+        'closed polygon':
+            'polígono cerrado',
+        'distribution: {0}':
+            'distribución: {0}',
+        'open polyline':
+            'polilínea abierta',
+        'orientation: {0}':
+            'orientación: {0}',
+        'u-model: {0}':
+            'modelo de u: {0}',
+        'x along surface (m)':
+            'x a lo largo de la superficie (m)',
+        'τ avail. (kPa)':
+            'τ disp. (kPa)',
         # v0.1.315 (D293) — the note of the hydraulic dialog, wrapped
         "<i>Names and colours are defined in Properties > Define "
         "Materials.</i>":
