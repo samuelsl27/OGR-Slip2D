@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from ogr_gui.i18n import tr  # noqa: E402
+from ogr_gui.labels import method_name  # noqa: E402
 from ogr_gui.reported_quantity import fos_label  # noqa: E402
 
 
@@ -51,7 +52,7 @@ class ResultsDock(QDockWidget):
     surface_selected = Signal(int)  # row index in the current SearchResult
 
     def __init__(self, parent=None) -> None:
-        super().__init__("Results", parent)
+        super().__init__(tr("Results"), parent)
         self.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea | Qt.BottomDockWidgetArea)
 
         container = QWidget()
@@ -123,12 +124,12 @@ class ResultsDock(QDockWidget):
             # over an over-design factor. One decider, and through tr().
             label = fos_label(factor_report)
             self.header_label.setText(
-                tr('Method: <b>{0}</b>   Valid: {1}   {2}: <b>{3:.3f}</b>').format(search_result.method_id, n_ok, label, crit.fos)
+                tr('Method: <b>{0}</b>   Valid: {1}   {2}: <b>{3:.3f}</b>').format(method_name(search_result.method_id), n_ok, label, crit.fos)
                 + load_factor_lines(crit)
             )
         else:
             self.header_label.setText(
-                tr('Method: {0}. No valid surfaces found ({1} invalid).').format(search_result.method_id, search_result.invalid_count)
+                tr('Method: {0}. No valid surfaces found ({1} invalid).').format(method_name(search_result.method_id), search_result.invalid_count)
             )
 
         for i, res in enumerate(search_result.top_n(50)):
@@ -136,7 +137,8 @@ class ResultsDock(QDockWidget):
             self.table.insertRow(i)
             self.table.setItem(i, 0, QTableWidgetItem(str(i + 1)))
             self.table.setItem(i, 1, QTableWidgetItem(f"{res.fos:.4f}"))
-            self.table.setItem(i, 2, QTableWidgetItem(res.method_id))
+            # v0.1.324 (D315) — the method's name, not its identifier
+            self.table.setItem(i, 2, QTableWidgetItem(method_name(res.method_id)))
             self.table.setItem(i, 3, QTableWidgetItem(f"{sd.get('centre_x', float('nan')):.2f}"))
             self.table.setItem(i, 4, QTableWidgetItem(f"{sd.get('centre_y', float('nan')):.2f}"))
             self.table.setItem(i, 5, QTableWidgetItem(f"{sd.get('radius', float('nan')):.2f}"))

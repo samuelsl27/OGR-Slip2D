@@ -107,7 +107,9 @@ _NEVER_ENTERED = {
 _HINTS_TOTAL = 34
 # v0.1.198 — 33 -> 32: the CHANGE_SLOPE_ANGLE hint was rewritten with the
 # feature and got its Spanish.
-_HINTS_WITHOUT_SPANISH = 32
+# v0.1.324 (D316) — 32 -> 0: every hint has its Spanish (the third test of
+# the interface saw two of them in English).
+_HINTS_WITHOUT_SPANISH = 0
 
 
 def _window():

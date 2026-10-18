@@ -225,6 +225,24 @@ def loose_nodes(tree):
             flag(args[1])
             flag(args[2])
 
+    # v0.1.324 (D315) — a subclass of one of those constructors passes its
+    # text up with ``super().__init__("Results", parent)``: five dock titles
+    # reached the screen in English that way, unseen by the rule above.
+    for cls in ast.walk(tree):
+        if not isinstance(cls, ast.ClassDef):
+            continue
+        bases = {getattr(b, "attr", None) or getattr(b, "id", None)
+                 for b in cls.bases}
+        if not bases & _FIRST:
+            continue
+        for node in ast.walk(cls):
+            if isinstance(node, ast.Call) and node.args \
+                    and isinstance(node.func, ast.Attribute) \
+                    and node.func.attr == "__init__" \
+                    and isinstance(node.func.value, ast.Call) \
+                    and getattr(node.func.value.func, "id", None) == "super":
+                flag(node.args[0])
+
     # 3 — every f-string with letters, unless it is not interface text
     def exempt(node):
         child = node

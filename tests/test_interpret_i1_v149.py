@@ -129,7 +129,9 @@ class TestColourScaleLegend:
 class TestActiveAlgorithmAndLabel:
     def test_algorithm_label_names_the_method(self):
         _p, _r, w = _interpret(("bishop_simplified",))
-        assert "bishop_simplified" in w.lbl_algorithm.text()
+        # v0.1.324 (D315) — the method's name, not its identifier
+        assert "Bishop Simplified" in w.lbl_algorithm.text()
+        assert "bishop_simplified" not in w.lbl_algorithm.text()
 
     def test_algorithm_label_shows_the_factor(self):
         _p, res, w = _interpret(("bishop_simplified",))
@@ -152,7 +154,8 @@ class TestMethodSwitchKeepsEverythingInStep:
     def test_algorithm_label_follows_the_switch(self):
         _p, _r, w = _interpret()
         w.cb_method.setCurrentIndex(w.cb_method.findData("spencer"))
-        assert "spencer" in w.lbl_algorithm.text()
+        # v0.1.324 (D315) — the method's name («Spencer»), not its identifier
+        assert "Spencer" in w.lbl_algorithm.text()
         assert w.active_algorithm() == "spencer"
 
     def test_legend_marker_follows_the_switch(self):

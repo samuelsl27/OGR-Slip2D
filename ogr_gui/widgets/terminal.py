@@ -242,7 +242,7 @@ class TerminalDock(QDockWidget):
     """Dockable host around :class:`TerminalWidget`."""
 
     def __init__(self, parent=None) -> None:
-        super().__init__("Terminal", parent)
+        super().__init__(tr("Terminal"), parent)
         self.setObjectName("TerminalDock")
         self.setAllowedAreas(
             Qt.BottomDockWidgetArea | Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea

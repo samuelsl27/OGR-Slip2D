@@ -74,7 +74,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Graph SF with Time...': 'Graficar FS con el tiempo...',
         'Horizontal axis:': 'Eje horizontal:',
         'Minimum Surfaces': 'Superficies mínimas',
-        'Minimum surface at each grid centre — %d shown': 'Superficie mínima en cada centro de la malla — %d mostradas',
+        'Minimum surface at each grid centre — %d shown': 'Superficie mínima en cada centro de la rejilla — %d mostradas',
         'Mobilised shear stress': 'Tensión tangencial movilizada',
         'No queries to delete.': 'No hay consultas que eliminar.',
         'No results to export.': 'No hay resultados que exportar.',
@@ -105,7 +105,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Surfaces Crossing Point...': 'Superficies que pasan por un punto...',
         'Text during Query': 'Texto durante la consulta',
         'The line of thrust is only defined for methods that resolve the interslice forces (Spencer, GLE/Morgenstern-Price, Lowe-Karafiath, Corps of Engineers).': 'La línea de empujes solo está definida para los métodos que resuelven las fuerzas entre dovelas (Spencer, GLE/Morgenstern-Price, Lowe-Karafiath, Corps of Engineers).',
-        'The lowest factor of safety at each slip-centre grid point.': 'El menor factor de seguridad en cada punto de la malla de centros.',
+        'The lowest factor of safety at each slip-centre grid point.': 'El menor factor de seguridad en cada punto de la rejilla de centros.',
         'The queried surface has no slice data.': 'La superficie consultada no tiene datos de dovelas.',
         'While picking a query, show the error code of centres where no valid surface could be computed.': 'Al seleccionar una consulta, mostrar el código de error de los centros donde no se ha podido calcular ninguna superficie válida.',
         'X coordinate': 'Coordenada X',
@@ -892,7 +892,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Free surface (P=0)': 'Superficie freática (P=0)',
         'Generate Report': 'Generar informe',
         'Geometry': 'Geometría',
-        'Grid type:': 'Tipo de malla:',
+        'Grid type:': 'Tipo de rejilla:',
         'Head (x, y):': 'Cabeza (x, y):',
         'IDW neighbours:': 'Vecinos IDW:',
         'Import CSV…': 'Importar CSV…',
@@ -930,7 +930,7 @@ _DICTS: dict[str, dict[str, str]] = {
         # v0.1.202 — the grid's type is the groundwater method's.
         'Total Head': 'Altura total',
         'Pressure Head': 'Altura de presión',
-        '(not a grid method)': '(el método no es de malla)',
+        '(not a grid method)': '(el método no es de rejilla)',
         'Set by the groundwater method in Project Settings > Groundwater.':
             'Lo fija el método de agua subterránea en Ajustes de proyecto > '
             'Agua subterránea.',
@@ -960,7 +960,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Author:': 'Autor:',
         'Auto Hu (compute from water-surface slope)': 'Hu automático (calculado de la pendiente de la superficie de agua)',
         'Auto Refine Search Options': 'Opciones de búsqueda de refinado automático',
-        'Auto-generate the slip-circle search grid': 'Generar automáticamente la malla de búsqueda de círculos',
+        'Auto-generate the slip-circle search grid': 'Generar automáticamente la rejilla de búsqueda de círculos',
         'Available parameters': 'Parámetros disponibles',
         'B:': 'B:',
         'Back Analysis of Support Force': 'Retroanálisis de la fuerza de soporte',
@@ -1379,7 +1379,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Selectable entity types': 'Tipos de entidad seleccionables',
         'Selection Filter (Ctrl+F)': 'Filtro de selección (Ctrl+F)',
         'Show Boundary Vertices': 'Mostrar vértices de contorno',
-        'Show Grid': 'Mostrar malla',
+        'Show Grid': 'Mostrar rejilla',
         'Show Ruler': 'Mostrar regla',
         'Show support face plates and anchorage': 'Mostrar placas y anclajes de los soportes',
         # v0.1.268 (D191) — the hydraulic-properties dialog: model and soil
@@ -3589,6 +3589,79 @@ _DICTS: dict[str, dict[str, str]] = {
             'capacidad a tracción',
         'Custom support whose capacity-vs-distance is read from a table. Use this when none of the pre-defined types fits.':
             'Soporte personalizado cuya capacidad frente a la distancia se lee de una tabla. Úsalo cuando no encaje ninguno de los tipos predefinidos.',
+        # v0.1.324 (D315, D316) — two dock titles and the hint of every tool mode
+        'FoS {0}':
+            'FS {0}',
+        'NOT CONVERGED':
+            'NO CONVERGIDO',
+        'Results':
+            'Resultados',
+        'Summary':
+            'Resumen',
+        'Pan: drag to move the view, Esc to exit':
+            'Desplazar: arrastra para mover la vista, Esc para salir',
+        'Zoom Window: drag a rectangle, Esc to cancel':
+            'Zoom con ventana: arrastra un rectángulo, Esc para cancelar',
+        'Zoom Mouse: left-click zooms in, right-click zooms out, Esc to exit':
+            'Zoom con el ratón: el clic izquierdo acerca y el derecho aleja, Esc para salir',
+        'Measure: click two points, Esc to finish':
+            'Medir: pulsa dos puntos, Esc para terminar',
+        'Draw External Boundary: click to add vertices, Enter or right-click to close, Esc to cancel':
+            'Dibujar el contorno exterior: pulsa para añadir vértices, Intro o botón derecho para cerrar, Esc para cancelar',
+        'Draw Material Boundary: click to add vertices, Enter or right-click to close, Esc to cancel':
+            'Dibujar un contorno de material: pulsa para añadir vértices, Intro o botón derecho para cerrar, Esc para cancelar',
+        'Draw Water Table: click to add vertices, Enter or right-click to finish, Esc to cancel':
+            'Dibujar el nivel freático: pulsa para añadir vértices, Intro o botón derecho para terminar, Esc para cancelar',
+        'Draw Drawdown Line: click to add vertices, Enter or right-click to finish, Esc to cancel':
+            'Dibujar la línea de desembalse: pulsa para añadir vértices, Intro o botón derecho para terminar, Esc para cancelar',
+        'Draw Piezometric Line: click to add vertices, Enter or right-click to finish, Esc to cancel':
+            'Dibujar una línea piezométrica: pulsa para añadir vértices, Intro o botón derecho para terminar, Esc para cancelar',
+        'Draw Tension Crack: click to add vertices, Enter or right-click to finish, Esc to cancel':
+            'Dibujar la grieta de tracción: pulsa para añadir vértices, Intro o botón derecho para terminar, Esc para cancelar',
+        'Draw Weak Layer: click to add vertices, Enter or right-click to finish, Esc to cancel':
+            'Dibujar una capa débil: pulsa para añadir vértices, Intro o botón derecho para terminar, Esc para cancelar',
+        'Draw Anisotropic Surface: click to add vertices IN ORDER (the order decides the angle at a kink), Enter or right-click to finish, Esc to cancel':
+            'Dibujar una superficie anisótropa: pulsa los vértices EN ORDEN (el orden decide el ángulo en un quiebro), Intro o botón derecho para terminar, Esc para cancelar',
+        'Expand/Shrink External: FIRST point must be ON the External (green cross). Intermediate points go OUTSIDE (expand) or INSIDE (shrink). LAST point must be ON the External. Esc to cancel.':
+            'Expandir / contraer el contorno exterior: el PRIMER punto va SOBRE el contorno exterior (cruz verde). Los intermedios van FUERA (expandir) o DENTRO (contraer). El ÚLTIMO va SOBRE el contorno exterior. Esc para cancelar.',
+        'Click a boundary to delete it, Esc to exit':
+            'Pulsa un contorno para eliminarlo, Esc para salir',
+        'Click a boundary and drag to move it, Esc to exit':
+            'Pulsa un contorno y arrástralo para moverlo, Esc para salir',
+        'Click a boundary to duplicate it, Esc to exit':
+            'Pulsa un contorno para duplicarlo, Esc para salir',
+        'Click a material boundary to assign the current material, Esc to exit':
+            'Pulsa un contorno de material para asignarle el material actual, Esc para salir',
+        'Click a boundary to convert its type, Esc to exit':
+            'Pulsa un contorno para convertir su tipo, Esc para salir',
+        'Click a vertex and drag to move it, Esc to exit':
+            'Pulsa un vértice y arrástralo para moverlo, Esc para salir',
+        'Click on an edge to insert a new vertex, Esc to exit':
+            'Pulsa sobre un lado para insertar un vértice nuevo, Esc para salir',
+        'Click a vertex to delete it, Esc to exit':
+            'Pulsa un vértice para eliminarlo, Esc para salir',
+        'Click a boundary to scale, then enter scale factor, Esc to exit':
+            'Pulsa un contorno para escalarlo y escribe el factor de escala, Esc para salir',
+        'Click a boundary, then pivot point, then target angle, Esc to exit':
+            'Pulsa un contorno, después el punto de giro y después el ángulo final, Esc para salir',
+        'Click the External boundary to expand/shrink, Esc to exit':
+            'Pulsa el contorno exterior para expandirlo o contraerlo, Esc para salir',
+        'Click start and end points on a boundary':
+            'Pulsa los puntos inicial y final sobre un contorno',
+        'Click a point to place the line load':
+            'Pulsa un punto para colocar la carga lineal',
+        'Click two opposite corners of the slip-circle search grid':
+            'Pulsa dos esquinas opuestas de la rejilla de centros de círculos',
+        'Click head, then tail of the support':
+            'Pulsa la cabeza y después la cola del soporte',
+        'Click two points along a boundary to define the pattern segment; supports will be generated at the configured spacing.':
+            'Pulsa dos puntos sobre un contorno para definir el tramo del patrón; los soportes se generarán con la separación configurada.',
+        'Click a support to delete it. Esc to exit.':
+            'Pulsa un soporte para eliminarlo. Esc para salir.',
+        'Click near the head or tail end of a support to grab it, then click the new position. Esc to cancel.':
+            'Pulsa cerca de la cabeza o de la cola de un soporte para agarrarla y después pulsa la posición nueva. Esc para cancelar.',
+        'Click the centre, then a point on the circle':
+            'Pulsa el centro y después un punto de la circunferencia',
         # v0.1.315 (D293) — the note of the hydraulic dialog, wrapped
         "<i>Names and colours are defined in Properties > Define "
         "Materials.</i>":

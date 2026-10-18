@@ -322,12 +322,15 @@ SHOWN_EXCEPTIONS = {
 
 def _shown_texts(widget):
     from PySide6.QtWidgets import (QAbstractButton, QComboBox,
-                                   QDialogButtonBox, QGroupBox, QLabel,
-                                   QTableWidget, QTabWidget, QWidget)
+                                   QDialogButtonBox, QDockWidget, QGroupBox,
+                                   QLabel, QTableWidget, QTabWidget, QWidget)
     out = [widget.windowTitle()]
     for w in [widget] + widget.findChildren(QWidget):
         if w.toolTip():
             out.append(w.toolTip())
+        if isinstance(w, QDockWidget):
+            # v0.1.324 (D315) — five dock titles were English
+            out.append(w.windowTitle())
         if isinstance(w, QLabel):
             out.append(w.text())
         elif isinstance(w, QAbstractButton) and not isinstance(
@@ -344,16 +347,38 @@ def _shown_texts(widget):
                 h = w.horizontalHeaderItem(i)
                 if h is not None:
                     out.append(h.text())
+            # v0.1.324 (D315) — and the cells: the Method column showed the
+            # method's identifier
+            for r in range(min(w.rowCount(), 20)):
+                for c in range(w.columnCount()):
+                    item = w.item(r, c)
+                    if item is not None:
+                        out.append(item.text())
     return [t for t in out if t]
 
 
-def _reads_english(text, spanish, data_names):
+def _stored_identifiers():
+    """The identifiers the .ogr keeps that have a label in ogr_gui.labels:
+    one on screen means a label was not used (D315)."""
+    from ogr_gui import labels as L
+    ids = set(L.METHOD_NAMES)
+    for table in (L.PORE_PRESSURE, L.GROUNDWATER_METHOD, L.LOAD_ORIENTATION,
+                  L.FORCE_ORIENTATION):
+        ids |= {getattr(k, "value", k) for k in table}
+    return {i for i in ids if "_" in i}
+
+
+def _reads_english(text, spanish, data_names, identifiers=()):
     import re
     if text in spanish:
         return False
     plain = re.sub(r"<[^>]+>", " ", text)
     for name in data_names:
         plain = plain.replace(name, " ")
+    # v0.1.324 (D315) — a stored identifier reads English whatever Spanish
+    # surrounds it («Método: bishop_simplified  Válidas: …»)
+    if any(re.search(r"(?<![A-Za-z0-9_])%s(?![A-Za-z0-9_])" % re.escape(i), plain) for i in identifiers):
+        return True
     if re.search(r"[áéíóúüñÁÉÍÓÚÑ¿¡]", plain):
         return False
     words = [w.lower() for w in re.findall(r"[A-Za-z]+", plain)]
@@ -383,6 +408,12 @@ class TestNothingOnScreenReadsEnglish:
             w.project.support_types = [
                 EndAnchored(anchor_capacity=120.0, out_of_plane_spacing=1.0)]
             w.project.is_dirty = False
+            # v0.1.324 (D315) — computed, so that the results panel, its
+            # table and the status bar have something to say
+            from test_design_factor_report_gui_v1165 import _compute_all
+            _compute_all(w)
+            w.project.is_dirty = False
+            ids = _stored_identifiers()
             p = w.project
             data_names = sorted(
                 {n for n in [p.name] + [m.name for m in p.materials]
@@ -390,8 +421,8 @@ class TestNothingOnScreenReadsEnglish:
                  + [getattr(s, "_display_name", "")
                     for s in p.support_types] if n},
                 key=len, reverse=True)
-            for t in _shown_texts(w):
-                if _reads_english(t, spanish, data_names):
+            for t in _shown_texts(w) + [w.ogr_status.currentMessage()]:
+                if t and _reads_english(t, spanish, data_names, ids):
                     found.setdefault(t, set()).add("MainWindow")
             opened = 0
             with fit._no_modals():
@@ -405,7 +436,7 @@ class TestNothingOnScreenReadsEnglish:
                     _WINDOWS.append(d)
                     opened += 1
                     for t in _shown_texts(d):
-                        if _reads_english(t, spanish, data_names):
+                        if _reads_english(t, spanish, data_names, ids):
                             found.setdefault(t, set()).add(name)
             assert opened > 40, opened
             # and Interpret, on the reference slope
@@ -415,7 +446,7 @@ class TestNothingOnScreenReadsEnglish:
                                                     ip.materials] if n},
                            key=len, reverse=True)
             for t in _shown_texts(iw):
-                if _reads_english(t, spanish, names):
+                if _reads_english(t, spanish, names, ids):
                     found.setdefault(t, set()).add("InterpretWindow")
         finally:
             set_language(before)

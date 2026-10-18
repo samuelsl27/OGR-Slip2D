@@ -165,6 +165,7 @@ class TestItReachesTheHistory:
         iw = InterpretGroundwaterWindow(p, p.seepage_result, None, None)
         try:
             iw.cbo_stage.setCurrentIndex(0)
-            assert "FoS bishop_simplified=" in iw.status.text()
+            # v0.1.324 (D315) — the method by its name
+            assert "FoS Bishop Simplified=" in iw.status.text()
         finally:
             iw.close()

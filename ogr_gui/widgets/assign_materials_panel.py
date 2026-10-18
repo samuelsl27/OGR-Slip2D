@@ -45,7 +45,7 @@ class AssignMaterialsPanel(QDockWidget):
     closed_by_user = Signal()
 
     def __init__(self, materials: list, parent=None) -> None:
-        super().__init__("Assign Materials", parent)
+        super().__init__(tr("Assign Materials"), parent)
         self.setObjectName("AssignMaterialsDock")
         self.setAllowedAreas(
             Qt.RightDockWidgetArea | Qt.LeftDockWidgetArea | Qt.BottomDockWidgetArea

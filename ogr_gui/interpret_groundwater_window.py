@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from ogr_gui.i18n import tr  # noqa: E402
+from ogr_gui.labels import method_name  # noqa: E402
 
 _FIELDS = [
     ("total_head", "Total Head H"),
@@ -196,10 +197,14 @@ class InterpretGroundwaterWindow(QMainWindow):
             bits.insert(1, tr("initial state"))
         fos = r.notes.get("fos") or {}
         if fos:
-            bits.append("FoS " + ", ".join(
-                f"{k}={v:.4f}" for k, v in sorted(fos.items())))
+            # v0.1.324 (D315) — the method's name, not its identifier, and
+            # the two words through tr(): appended to a list, the census of
+            # AST could not see them
+            bits.append(tr("FoS {0}").format(", ".join(
+                "%s=%.4f" % (method_name(k), v)
+                for k, v in sorted(fos.items()))))
         if not r.converged:
-            bits.append("NOT CONVERGED")
+            bits.append(tr("NOT CONVERGED"))
         warn = r.notes.get("warning")
         # v0.1.270 (D268): a stage that evolved from an unconverged steady
         # field says so, under its own warning

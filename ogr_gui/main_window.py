@@ -101,6 +101,7 @@ from .resources import icon
 from .themes import apply_theme
 from .widgets import AssignMaterialsPanel, OgrStatusBar, ResultsDock, TerminalDock
 from ogr_gui.i18n import tr  # noqa: E402
+from ogr_gui.labels import method_name  # noqa: E402
 from ogr_gui.reported_quantity import fos_label  # noqa: E402
 
 
@@ -270,7 +271,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.323"
+    VERSION = "0.1.324"
 
     def __init__(self) -> None:
         super().__init__()
@@ -3751,7 +3752,8 @@ class MainWindow(QMainWindow):
             # holds one temporary message), so on any run that found a
             # critical surface the caption is the only thing the bar shows.
             self.ogr_status.showMessage(
-                f"{fos_label(self.last_factor_report)} ({first_id}): "
+                # v0.1.324 (D315) — the method's name, not its identifier
+                f"{fos_label(self.last_factor_report)} ({method_name(first_id)}): "
                 f"{critical.fos:.3f}{extra}{warn}", 10000,
             )
             if self.project.results_path:

@@ -39,6 +39,7 @@ from ogr_core.units.quantities import Quantity
 
 from .canvas import CanvasView
 from .i18n import tr
+from .labels import method_name
 from .reported_quantity import reported_quantity
 from .resources import icon
 from ogr_gui.themes import theme_color
@@ -464,7 +465,7 @@ class _SummaryDock(QDockWidget):
     """Header summary: method, number of valid surfaces, critical FoS."""
 
     def __init__(self, parent=None) -> None:
-        super().__init__("Summary", parent)
+        super().__init__(tr("Summary"), parent)
         self.setObjectName("SummaryDock")
         container = QWidget()
         vbox = QVBoxLayout(container)
@@ -488,7 +489,7 @@ class _SummaryDock(QDockWidget):
         c = result.critical
         if c is None:
             self.label.setText(
-                tr('Method: <b>{0}</b><br><i>No valid surfaces ({1} invalid)</i>').format(result.method_id, result.invalid_count)
+                tr('Method: <b>{0}</b><br><i>No valid surfaces ({1} invalid)</i>').format(method_name(result.method_id), result.invalid_count)
             )
             # v0.1.127 - and under a seismic objective "no critical
             # surface" is not the same statement as "no valid surfaces".
@@ -500,7 +501,7 @@ class _SummaryDock(QDockWidget):
             if (getattr(result, "objective", "fos") != "fos"
                     and result.valid_count):
                 self.label.setText(
-                    tr('Method: <b>{0}</b><br><i>{1} valid surfaces, none with a critical seismic coefficient: no coefficient within the search range brings them to the target factor of safety.</i>').format(result.method_id, result.valid_count))
+                    tr('Method: <b>{0}</b><br><i>{1} valid surfaces, none with a critical seismic coefficient: no coefficient within the search range brings them to the target factor of safety.</i>').format(method_name(result.method_id), result.valid_count))
             return
         sd = c.surface.to_dict()
         # v0.1.82 — the hard-coded colour table that used to live here is
@@ -536,7 +537,7 @@ class _SummaryDock(QDockWidget):
         else:
             esfuerzo = (tr("Generation attempts: %d") % intentos) + "<br>"
         self.label.setText(
-            tr("Method: <b>{0}</b><br>Valid surfaces: <b>{1}</b> / {2}<br>{3}<br><b>{4}</b><br>{5} = <span style='color:{6}; font-size:14pt;'><b>{7}</b></span>{8}<br>Iterations: {9}<br>Centre: ({10:.2f}, {11:.2f})<br>Radius: {12:.2f} m").format(result.method_id, n_ok, getattr(result, 'total_count', len(result.evaluations)), esfuerzo, tr('Critical surface'), label, theme_color('accent'), value, extra, c.iterations, sd.get('centre_x', 0), sd.get('centre_y', 0), sd.get('radius', 0))
+            tr("Method: <b>{0}</b><br>Valid surfaces: <b>{1}</b> / {2}<br>{3}<br><b>{4}</b><br>{5} = <span style='color:{6}; font-size:14pt;'><b>{7}</b></span>{8}<br>Iterations: {9}<br>Centre: ({10:.2f}, {11:.2f})<br>Radius: {12:.2f} m").format(method_name(result.method_id), n_ok, getattr(result, 'total_count', len(result.evaluations)), esfuerzo, tr('Critical surface'), label, theme_color('accent'), value, extra, c.iterations, sd.get('centre_x', 0), sd.get('centre_y', 0), sd.get('radius', 0))
         )
 
 
@@ -547,7 +548,7 @@ class _ResultsTableDock(QDockWidget):
     surface_picked = Signal(int)
 
     def __init__(self, parent=None) -> None:
-        super().__init__("Surfaces", parent)
+        super().__init__(tr("Surfaces"), parent)
         self.setObjectName("ResultsTableDock")
         container = QWidget()
         vbox = QVBoxLayout(container)
@@ -573,7 +574,7 @@ class _ResultsTableDock(QDockWidget):
             self.table.insertRow(i)
             self.table.setItem(i, 0, QTableWidgetItem(str(i + 1)))
             self.table.setItem(i, 1, QTableWidgetItem(f"{res.fos:.4f}"))
-            self.table.setItem(i, 2, QTableWidgetItem(res.method_id))
+            self.table.setItem(i, 2, QTableWidgetItem(method_name(res.method_id)))
             self.table.setItem(i, 3, QTableWidgetItem(f"{sd.get('centre_x', 0):.2f}"))
             self.table.setItem(i, 4, QTableWidgetItem(f"{sd.get('centre_y', 0):.2f}"))
             self.table.setItem(i, 5, QTableWidgetItem(f"{sd.get('radius', 0):.2f}"))
@@ -1222,7 +1223,7 @@ class InterpretWindow(QMainWindow):
         # so it needs no key: the word arrives already translated.
         _kind, name = _reported_quantity(self.search_result,
                                          self.factor_report)
-        lab.setText(tr("Method: %s") % mid
+        lab.setText(tr("Method: %s") % method_name(mid)
                     + ("   |   %s = %s" % (name, fos) if fos else ""))
         act = getattr(self, "_act_thrust", None)
         if act is not None:
@@ -3378,7 +3379,7 @@ class InterpretWindow(QMainWindow):
 
         dlg = QDialog(self)
         dlg.setWindowTitle(
-            tr('Free Body Diagram — slice {0} ({1})').format(idx, target.method_id))
+            tr('Free Body Diagram — slice {0} ({1})').format(idx, method_name(target.method_id)))
         dlg.resize(640, 560)
         v = QVBoxLayout(dlg)
         fig = Figure(figsize=(6.6, 5.4), tight_layout=True)
