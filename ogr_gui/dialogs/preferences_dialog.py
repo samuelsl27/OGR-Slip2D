@@ -37,7 +37,9 @@ class PreferencesDialog(QDialog):
         root = QVBoxLayout(self)
 
         # --- General group --------------------------------------------
-        gen = QGroupBox(tr("File"))
+        # v0.1.325 (D318) — the group holds the language and the theme:
+        # it was titled «File» («Archivo»)
+        gen = QGroupBox(tr("Interface"))
         form = QFormLayout(gen)
         self.cbo_language = QComboBox()
         for code in available_languages():

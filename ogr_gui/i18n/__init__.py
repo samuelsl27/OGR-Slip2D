@@ -39,7 +39,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Minimum value in each bin': 'Valor mínimo en cada intervalo',
         'Number of bins:': 'Número de intervalos:',
         'Right slope intercept': 'Punto de corte derecho con el talud',
-        'Select at least one slope intercept.': 'Seleccione al menos un punto de corte con el talud.',
+        'Select at least one slope intercept.': 'Selecciona al menos un punto de corte con el talud.',
         'Surfaces discarded before slicing are not counted here.': 'Las superficies descartadas antes del dovelado no se cuentan aquí.',
         'Surfaces with error code': 'Superficies con código de error',
         '%d quer(y/ies)': '%d consulta(s)',
@@ -82,7 +82,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'No valid surfaces.': 'No hay superficies válidas.',
         'Number of surfaces:': 'Número de superficies:',
         'Only the N lowest': 'Solo las N más bajas',
-        'Pick the surface to query — Esc to cancel': 'Seleccione la superficie a consultar — Esc para cancelar',
+        'Pick the surface to query — Esc to cancel': 'Selecciona la superficie que quieres consultar — Esc para cancelar',
         'Query': 'Consulta',
         'Query %d': 'Consulta %d',
         'Query Invalid Surfaces': 'Consultar superficies no válidas',
@@ -112,14 +112,14 @@ _DICTS: dict[str, dict[str, str]] = {
         'no valid slip surface at this centre': 'ninguna superficie de rotura válida en este centro',
 
         # --- v0.1.57: M6 -------------------------------------------
-        '(pick a lithology)': '(elija una litología)',
-        '(pick a rock mass description)': '(elija una descripción del macizo)',
-        '(pick an excavation method)': '(elija un método de excavación)',
+        '(pick a lithology)': '(elige una litología)',
+        '(pick a rock mass description)': '(elige una descripción del macizo)',
+        '(pick an excavation method)': '(elige un método de excavación)',
         'Calculate mb, s and a from GSI, the intact rock constant mi and the disturbance factor D.': 'Calcular mb, s y a a partir del GSI, la constante de roca intacta mi y el factor de alteración D.',
         'Calculated': 'Calculado',
         'Close Window': 'Cerrar ventana',
         'Disturbance factor D:': 'Factor de alteración D:',
-        'GSI and D are judgement-based: use the descriptions above rather than a remembered number. Equations from Hoek, Carranza-Torres and Corkum (2002).': 'El GSI y D dependen del criterio del técnico: use las descripciones de arriba en lugar de un número recordado. Ecuaciones de Hoek, Carranza-Torres y Corkum (2002).',
+        'GSI and D are judgement-based: use the descriptions above rather than a remembered number. Equations from Hoek, Carranza-Torres and Corkum (2002).': 'El GSI y D dependen del criterio del técnico: usa las descripciones de arriba en lugar de un número recordado. Ecuaciones de Hoek, Carranza-Torres y Corkum (2002).',
         'GSI...': 'GSI...',
         'GSI:': 'GSI:',
         'Input': 'Entrada',
@@ -208,10 +208,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Block Search objects are only available with the Block Search '
         'method. Set Surface Options -> Surface Type = Non-Circular, '
         'Search Method = Block Search.':
-            'Los objetos de búsqueda por bloques sólo están disponibles '
-            'con el método Block Search. Abre Opciones de superficie y pon '
-            'Tipo de superficie = Non-Circular, Método de búsqueda = '
-            'Block Search.',
+            'Los objetos de búsqueda por bloques solo están disponibles con la búsqueda por bloques. Abre Opciones de superficie y pon Tipo de superficie = No circular y Método de búsqueda = Búsqueda por bloques.',
         'Draw a Block Search line: click its two end points.':
             'Dibuja una línea de búsqueda por bloques: pulsa en sus dos '
             'extremos.',
@@ -278,8 +275,7 @@ _DICTS: dict[str, dict[str, str]] = {
             'prueba dos puntos y el tramo de polilínea entre ellos; estas '
             'opciones dicen dónde se genera cada punto.',
         'Only a Block Search Polyline has point options.':
-            'Sólo una polilínea de búsqueda por bloques tiene opciones de '
-            'punto.',
+            'Solo una polilínea de búsqueda por bloques tiene opciones de punto.',
         # v0.1.167 (D103) — el aviso de la rama deshabilitada REUTILIZA
         # la clave de arriba: misma precondición, mismas palabras. Lo
         # único nuevo es la indicación de dibujo de la rama habilitada,
@@ -321,14 +317,14 @@ _DICTS: dict[str, dict[str, str]] = {
         'the original result is kept.':
             'La superficie optimizada no tiene factor de seguridad; '
             'se conserva el resultado original.',
-        'Optimisation applies to NON-CIRCULAR surfaces. The critical surface of this method is a circle; use a Block or Path Search first.': 'La optimización se aplica a superficies NO CIRCULARES. La superficie crítica de este método es un círculo; use antes una búsqueda por bloques o por trayectorias.',
+        'Optimisation applies to NON-CIRCULAR surfaces. The critical surface of this method is a circle; use a Block or Path Search first.': 'La optimización se aplica a superficies NO CIRCULARES. La superficie crítica de este método es un círculo; usa antes una búsqueda por bloques o por caminos.',
         'Optimised: %s': 'Optimizada: %s',
         'Optimize Surfaces...': 'Optimizar superficies...',
         'Radius:': 'Radio:',
         'Reset': 'Restablecer',
         'Reset Slope Limits': 'Restablecer límites del talud',
         'Right limit (x):': 'Límite derecho (x):',
-        'Run an analysis first: optimisation refines an existing surface, so it needs one to start from.': 'Ejecute antes un análisis: la optimización refina una superficie existente, así que necesita una de partida.',
+        'Run an analysis first: optimisation refines an existing surface, so it needs one to start from.': 'Ejecuta antes un análisis: la optimización refina una superficie existente, así que necesita una de partida.',
         'Second set of limits': 'Segundo juego de límites',
         'Slip surfaces must daylight within these limits. Positions are X coordinates.': 'Las superficies de rotura deben aflorar dentro de estos límites. Las posiciones son coordenadas X.',
         'Slope Limits': 'Límites del talud',
@@ -355,7 +351,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Added %s': 'Añadido %s',
         'Annotation:': 'Anotación:',
         'Annotations': 'Anotaciones',
-        'Annotations are drawn on the model but take no part in the analysis. Use Convert Tool to Boundary to turn one into geometry.': 'Las anotaciones se dibujan sobre el modelo pero no intervienen en el análisis. Use Convertir herramienta en contorno para transformar una en geometría.',
+        'Annotations are drawn on the model but take no part in the analysis. Use Convert Tool to Boundary to turn one into geometry.': 'Las anotaciones se dibujan sobre el modelo pero no intervienen en el análisis. Usa Convertir herramienta en contorno para transformar una en geometría.',
         'Arrow': 'Flecha',
         'Bring to front': 'Traer al frente',
         'Circle': 'Círculo',
@@ -372,16 +368,16 @@ _DICTS: dict[str, dict[str, str]] = {
         'Dimension Y': 'Cota Y',
         'Dimensions': 'Cotas',
         'Draw': 'Dibujar',
-        'Enter %d point(s) as x,y  x,y ...': 'Introduzca %d punto(s) como x,y  x,y ...',
+        'Enter %d point(s) as x,y  x,y ...': 'Introduce %d punto(s) como x,y  x,y ...',
         'Head': 'Cabeza',
         'Hide All Annotations': 'Ocultar todas las anotaciones',
         'Hydraulic Properties Table': 'Tabla de propiedades hidráulicas',
-        'Image placed over the model extent; use Manage Annotations to reposition it.': 'Imagen colocada sobre la extensión del modelo; use Gestionar anotaciones para recolocarla.',
+        'Image placed over the model extent; use Manage Annotations to reposition it.': 'Imagen colocada sobre la extensión del modelo; usa Gestionar anotaciones para recolocarla.',
         'K1 angle': 'Ángulo de K1',
         'Line': 'Línea',
         'Manage Annotations...': 'Gestionar anotaciones...',
-        'No annotation can become geometry. Dimensions, text and axes annotate the model rather than define it; draw a line, polyline, polygon, rectangle or circle first.': 'Ninguna anotación puede convertirse en geometría. Las cotas, el texto y los ejes anotan el modelo en lugar de definirlo; dibuje antes una línea, polilínea, polígono, rectángulo o círculo.',
-        'No material has hydraulic properties. Define them in Groundwater → Define Hydraulic Properties.': 'Ningún material tiene propiedades hidráulicas. Defínalas en Agua subterránea → Definir propiedades hidráulicas.',
+        'No annotation can become geometry. Dimensions, text and axes annotate the model rather than define it; draw a line, polyline, polygon, rectangle or circle first.': 'Ninguna anotación puede convertirse en geometría. Las cotas, el texto y los ejes anotan el modelo en lugar de definirlo; dibuja antes una línea, polilínea, polígono, rectángulo o círculo.',
+        'No material has hydraulic properties. Define them in Groundwater → Define Hydraulic Properties.': 'Ningún material tiene propiedades hidráulicas. Defínelas en Agua subterránea → Definir propiedades hidráulicas.',
         'No materials are defined.': 'No hay materiales definidos.',
         'No supports are defined.': 'No hay soportes definidos.',
         'Nothing to show.': 'Nada que mostrar.',
@@ -389,7 +385,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Polygon': 'Polígono',
         'Polyline': 'Polilínea',
         'Property Tables': 'Tablas de propiedades',
-        'Read-only: edit in the dedicated dialogs, where the validation lives. Click a column header to sort and compare.': 'Solo lectura: edite en los diálogos específicos, donde está la validación. Pulse una cabecera de columna para ordenar y comparar.',
+        'Read-only: edit in the dedicated dialogs, where the validation lives. Click a column header to sort and compare.': 'Solo lectura: edita en los diálogos específicos, donde está la validación. Pulsa una cabecera de columna para ordenar y comparar.',
         'Rectangle': 'Rectángulo',
         'Saturated': 'Saturado',
         'Saturated water content': 'Contenido de agua saturado',
@@ -431,7 +427,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Define User Data': 'Definir datos de usuario',
         'Delete Query': 'Eliminar consulta',
         'Elevation of the force:': 'Cota de la fuerza:',
-        'Enter two numbers: x,y': 'Introduzca dos números: x,y',
+        'Enter two numbers: x,y': 'Introduce dos números: x,y',
         'Every surface evaluated successfully.': 'Todas las superficies se evaluaron correctamente.',
         'Export All Nodal Values...': 'Exportar todos los valores nodales...',
         'Export Statistics Data...': 'Exportar datos estadísticos...',
@@ -455,8 +451,8 @@ _DICTS: dict[str, dict[str, str]] = {
         'No per-iteration history was recorded for this run.': 'No se registró historial por iteración en esta corrida.',
         'No probabilistic result.': 'Sin resultado probabilístico.',
         'No query points to delete.': 'No hay puntos de consulta que eliminar.',
-        'No query points. Use Add Query first.': 'No hay puntos de consulta. Use Añadir consulta primero.',
-        "No stage has a computed factor of safety. Tick 'Calculate SF' on the stages you need and recompute.": 'Ninguna etapa tiene factor de seguridad calculado. Marque «Calcular FS» en las etapas que necesite y recalcule.',
+        'No query points. Use Add Query first.': 'No hay puntos de consulta. Usa primero Añadir consulta.',
+        "No stage has a computed factor of safety. Tick 'Calculate SF' on the stages you need and recompute.": 'Ninguna etapa tiene factor de seguridad calculado. Marca «Calcular FS» en las etapas que necesites y vuelve a calcular.',
         'No surface passes near the query points.': 'Ninguna superficie pasa cerca de los puntos de consulta.',
         'Number of samples': 'Número de muestras',
         'Overlay iso-lines of the contoured field on top of the filled bands.': 'Superponer isolíneas del campo de contornos sobre las bandas rellenas.',
@@ -466,7 +462,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Remove:': 'Quitar:',
         'Required support force for FS = %g': 'Fuerza de soporte requerida para FS = %g',
         'Requires a computed groundwater analysis.': 'Requiere un análisis de agua subterránea calculado.',
-        'Requires a probabilistic or sensitivity analysis: run Statistics → Compute Statistics in the modeller.': 'Requiere un análisis probabilístico o de sensibilidad: ejecute Estadística → Calcular estadística en el modelador.',
+        'Requires a probabilistic or sensitivity analysis: run Statistics → Compute Statistics in the modeller.': 'Requiere un análisis probabilístico o de sensibilidad: ejecuta Estadística → Calcular estadística en el modelador.',
         'Requires a transient groundwater analysis with per-stage factors of safety.': 'Requiere un análisis de agua subterránea transitorio con factores de seguridad por etapa.',
         'Sensitivity': 'Sensibilidad',
         'Statistics exported to %s': 'Estadística exportada a %s',
@@ -629,21 +625,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'it applies it converges to the same root: on the '
         'reference-validated circle both agree to 1e-11, in 7 passes '
         'instead of 19.':
-            'Extrapolación de Aitken de la iteración sobre el factor de '
-            'seguridad. No todos los métodos tienen una que acelerar, y '
-            'el ajuste se guarda para todos igualmente.\n\nBishop '
-            'simplificado: sí, en superficies circulares. Su rama no '
-            'circular relaja al 50 % en su lugar.\nJanbu simplificado y '
-            'Janbu corregido: sí.\nLowe-Karafiath y Corps of Engineers #1 '
-            'y #2: no. Iteran sobre el factor de seguridad pero no están '
-            'conectados a ella.\nOrdinary/Fellenius: no, no tiene ninguna '
-            'iteración que acelerar.\nSpencer y GLE/Morgenstern-Price: '
-            'no. Resuelven a la vez el factor y la fuerza entre dovelas, '
-            'y extrapolar sólo el factor deja la fuerza atrás — medido, '
-            'cuesta pasadas y puede perder la rama.\n\nDonde sí se aplica '
-            'converge a la misma raíz: en el círculo validado contra la '
-            'referencia ambos coinciden hasta 1e-11, en 7 pasadas en vez '
-            'de 19.',
+            'Extrapolación de Aitken de la iteración sobre el factor de seguridad. No todos los métodos tienen una que acelerar, y el ajuste se guarda para todos igualmente.\n\nBishop simplificado: sí, en superficies circulares. Su rama no circular relaja al 50 % en su lugar.\nJanbu simplificado y Janbu corregido: sí.\nLowe-Karafiath y Corps of Engineers #1 y #2: no. Iteran sobre el factor de seguridad pero no están conectados a ella.\nOrdinary/Fellenius: no, no tiene ninguna iteración que acelerar.\nSpencer y GLE/Morgenstern-Price: no. Resuelven a la vez el factor y la fuerza entre dovelas, y extrapolar solo el factor deja la fuerza atrás — medido, cuesta pasadas y puede perder la rama.\n\nDonde sí se aplica converge a la misma raíz: en el círculo validado contra la referencia ambos coinciden hasta 1e-11, en 7 pasadas en vez de 19.',
         'Analysis type:': 'Tipo de análisis:',
         'Apply partial factors': 'Aplicar coeficientes parciales',
         'Cohesion:': 'Cohesión:',
@@ -669,7 +651,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Minimum area': 'Área mínima',
         'Monte Carlo': 'Monte Carlo',
         'Number of samples:': 'Número de muestras:',
-        'Off by default: applying partial factors silently would change every factor of safety previously compared against, so it has to be an explicit choice. Selecting a standard loads its factors; choose Custom to enter your own.': 'Desactivado por defecto: aplicar coeficientes parciales en silencio cambiaría todos los factores de seguridad con los que se haya comparado antes, así que debe ser una elección explícita. Elegir una norma carga sus coeficientes; escoja Personalizado para introducir los suyos.',
+        'Off by default: applying partial factors silently would change every factor of safety previously compared against, so it has to be an explicit choice. Selecting a standard loads its factors; choose Custom to enter your own.': 'Desactivado por defecto: aplicar coeficientes parciales en silencio cambiaría todos los factores de seguridad con los que se haya comparado antes, así que debe ser una elección explícita. Elegir una norma carga sus coeficientes; elige Personalizado para introducir los tuyos.',
         'Overall Slope': 'Talud completo',
         # v0.1.242 (D226a): el peso de la dovela, favorable o desfavorable
         'Permanent actions, unfavourable:':
@@ -792,22 +774,22 @@ _DICTS: dict[str, dict[str, str]] = {
         'skipped: %s': 'omitido: %s',
 
         # --- v0.1.47: informe de problemas DXF ----------------------
-        '%d problem(s) found (%d error(s)). The geometry has been imported anyway: select a problem to locate it and correct it in the editor.': '%d problema(s) encontrados (%d error(es)). La geometría se ha importado igualmente: seleccione un problema para localizarlo y corregirlo en el editor.',
+        '%d problem(s) found (%d error(s)). The geometry has been imported anyway: select a problem to locate it and correct it in the editor.': '%d problema(s) encontrados (%d error(es)). La geometría se ha importado igualmente: selecciona un problema para localizarlo y corregirlo en el editor.',
         '%s — %s (%d)': '%s — %s (%d)',
-        'A material boundary ends without touching anything, so its region will not close. Either extend it in the editor until it meets another boundary, or re-import with a larger welding tolerance.': 'Un contorno de material termina sin tocar nada, así que su región no cerrará. Prolónguelo en el editor hasta encontrar otro contorno, o vuelva a importar con una tolerancia de soldadura mayor.',
+        'A material boundary ends without touching anything, so its region will not close. Either extend it in the editor until it meets another boundary, or re-import with a larger welding tolerance.': 'Un contorno de material termina sin tocar nada, así que su región no cerrará. Prolóngalo en el editor hasta que encuentre otro contorno, o vuelve a importar con una tolerancia de soldadura mayor.',
         'DXF Import — Problems': 'Importación DXF — Problemas',
         'Error': 'Error',
         'Go to problem': 'Ir al problema',
-        'Increase the welding tolerance and import again. If the areas still disagree, look for a boundary that crosses another without sharing a node, or one that stops just short of the external boundary.': 'Aumente la tolerancia de soldadura y vuelva a importar. Si las áreas siguen sin cuadrar, busque un contorno que cruce a otro sin compartir nodo, o uno que se quede justo antes del contorno externo.',
+        'Increase the welding tolerance and import again. If the areas still disagree, look for a boundary that crosses another without sharing a node, or one that stops just short of the external boundary.': 'Aumenta la tolerancia de soldadura y vuelve a importar. Si las áreas siguen sin cuadrar, busca un contorno que cruce a otro sin compartir nodo, o uno que se quede justo antes del contorno exterior.',
         'Location': 'Ubicación',
         'No geometry was assigned to any layer.': 'No se asignó geometría a ninguna capa.',
-        'No layer was mapped to the external boundary. Re-run the import and assign one in the layer table: without it the model cannot define regions at all.': 'Ninguna capa se asignó al contorno externo. Repita la importación y asigne una en la tabla de capas: sin él el modelo no puede definir regiones.',
+        'No layer was mapped to the external boundary. Re-run the import and assign one in the layer table: without it the model cannot define regions at all.': 'Ninguna capa se asignó al contorno exterior. Repite la importación y asigna una en la tabla de capas: sin él el modelo no puede definir regiones.',
         'No problems: the imported geometry closes correctly.': 'Sin problemas: la geometría importada cierra correctamente.',
         'Problem': 'Problema',
-        "Several closed shapes were mapped to the external boundary. The largest was kept. If the wrong one was chosen, map the others to 'Material Boundary' instead.": "Se asignaron varias formas cerradas al contorno externo. Se ha conservado la mayor. Si no era la correcta, asigne las demás a 'Contorno de material'.",
-        'The external boundary arrived open and was closed with a straight segment. Check that the added segment follows the intended ground surface; if not, close the outline in the CAD drawing and import again.': 'El contorno externo llegó abierto y se ha cerrado con un segmento recto. Compruebe que el segmento añadido sigue la superficie del terreno prevista; si no, cierre el contorno en el dibujo CAD y vuelva a importar.',
-        'The external boundary does not have enough vertices to enclose an area.': 'El contorno externo no tiene vértices suficientes para encerrar un área.',
-        'The regions could not be built from the imported geometry. This usually means boundaries cross without sharing a node; try a larger welding tolerance.': 'No se han podido construir las regiones con la geometría importada. Suele deberse a contornos que se cruzan sin compartir nodo; pruebe una tolerancia de soldadura mayor.',
+        "Several closed shapes were mapped to the external boundary. The largest was kept. If the wrong one was chosen, map the others to 'Material Boundary' instead.": "Se asignaron varias formas cerradas al contorno exterior. Se ha conservado la mayor. Si no era la correcta, asigna las demás a 'Contorno de material'.",
+        'The external boundary arrived open and was closed with a straight segment. Check that the added segment follows the intended ground surface; if not, close the outline in the CAD drawing and import again.': 'El contorno exterior llegó abierto y se ha cerrado con un segmento recto. Comprueba que el segmento añadido sigue la superficie del terreno prevista; si no, cierra el contorno en el dibujo CAD y vuelve a importar.',
+        'The external boundary does not have enough vertices to enclose an area.': 'El contorno exterior no tiene vértices suficientes para encerrar un área.',
+        'The regions could not be built from the imported geometry. This usually means boundaries cross without sharing a node; try a larger welding tolerance.': 'No se han podido construir las regiones con la geometría importada. Suele deberse a contornos que se cruzan sin compartir nodo; prueba una tolerancia de soldadura mayor.',
         'Warning': 'Aviso',
         'Zoom all': 'Ver todo',
 
@@ -831,10 +813,10 @@ _DICTS: dict[str, dict[str, str]] = {
         'Layer': 'Capa',
         'Layers found in the drawing:': 'Capas encontradas en el dibujo:',
         'No problems found.': 'No se han encontrado problemas.',
-        'Press Preview to check the geometry before importing.': 'Pulse Vista previa para comprobar la geometría antes de importar.',
+        'Press Preview to check the geometry before importing.': 'Pulsa Vista previa para comprobar la geometría antes de importar.',
         'Preview': 'Vista previa',
         'Preview failed.': 'La vista previa ha fallado.',
-        'REGION AREAS DO NOT MATCH (%.2f vs %.2f): some region did not close. Try a larger welding tolerance.': 'LAS ÁREAS NO COINCIDEN (%.2f frente a %.2f): alguna región no ha cerrado. Pruebe una tolerancia de soldadura mayor.',
+        'REGION AREAS DO NOT MATCH (%.2f vs %.2f): some region did not close. Try a larger welding tolerance.': 'LAS ÁREAS NO COINCIDEN (%.2f frente a %.2f): alguna región no ha cerrado. Prueba una tolerancia de soldadura mayor.',
         'Reading': 'Lectura',
         'Recommended: %.3f – %.3f %% of the model diagonal': 'Recomendado: %.3f – %.3f %% de la diagonal del modelo',
         'Replace existing boundaries of the imported types': 'Sustituir los contornos existentes de los tipos importados',
@@ -842,14 +824,14 @@ _DICTS: dict[str, dict[str, str]] = {
         'Simplification tolerance:': 'Tolerancia de simplificación:',
         'Simplify polylines': 'Simplificar polilíneas',
         'The drawing could not be read.': 'No se ha podido leer el dibujo.',
-        "The file suggests '%s'; it is only a hint and is often missing or wrong, so check it.": "El archivo sugiere '%s'; es solo una indicación, a menudo ausente o incorrecta, así que compruébela.",
+        "The file suggests '%s'; it is only a hint and is often missing or wrong, so check it.": "El archivo sugiere '%s'; es solo una indicación, a menudo ausente o incorrecta, así que compruébala.",
         'Vertices': 'Vértices',
         'Vertices: %d → %d': 'Vértices: %d → %d',
-        'WARNING: region areas do not match the external boundary; some region did not close.': 'AVISO: las áreas de las regiones no coinciden con el contorno externo; alguna región no ha cerrado.',
+        'WARNING: region areas do not match the external boundary; some region did not close.': 'AVISO: las áreas de las regiones no coinciden con el contorno exterior; alguna región no ha cerrado.',
         'Welding tolerance:': 'Tolerancia de soldadura:',
         'crossings split: %d': 'cruces partidos: %d',
         'nothing': 'nada',
-        'region areas match the external boundary — geometry closes': 'las áreas de las regiones coinciden con el contorno externo — la geometría cierra',
+        'region areas match the external boundary — geometry closes': 'las áreas de las regiones coinciden con el contorno exterior — la geometría cierra',
         'regions: %d': 'regiones: %d',
         'welded: %d (%d nodes inserted)': 'soldados: %d (%d nodos insertados)',
 
@@ -874,7 +856,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Clear': 'Limpiar',
         'Color:': 'Color:',
         'Default to compressed format when saving': 'Guardar en formato comprimido por defecto',
-        'Define Support Properties': 'Definir propiedades de soporte',
+        'Define Support Properties': 'Definir soporte',
         'Delete selected': 'Eliminar lo seleccionado',
         'Discharge section…': 'Sección de descarga…',
         'Duplicate': 'Duplicar',
@@ -980,42 +962,35 @@ _DICTS: dict[str, dict[str, str]] = {
         # v0.1.201 — statistics, back analysis and optimisation go through
         # the analysis door, whose refusals the window shows through tr().
         'Define at least one random variable first.':
-            'Defina antes al menos una variable aleatoria.',
+            'Define antes al menos una variable aleatoria.',
         'Enable a probabilistic or sensitivity analysis in Project '
         'Settings first.':
-            'Active antes un análisis probabilístico o de sensibilidad en '
-            'la configuración del proyecto.',
+            'Activa antes un análisis probabilístico o de sensibilidad en los ajustes del proyecto.',
         'The deterministic analysis produced no critical surface. Check '
         'the model and the search settings.':
-            'El análisis determinista no ha dado ninguna superficie '
-            'crítica. Revise el modelo y los ajustes de búsqueda.',
+            'El análisis determinista no ha dado ninguna superficie crítica. Revisa el modelo y los ajustes de búsqueda.',
         # v0.1.201 — Interpret: the crossing-point query, the slice export.
         'Enter the coordinates of a point. The surfaces whose slip surface '
         'passes within the tolerance are counted, and the one with the '
         'lowest factor of safety is reported.':
-            'Introduzca las coordenadas de un punto. Se cuentan las '
-            'superficies cuya superficie de deslizamiento pasa a menos de '
-            'la tolerancia, y se indica la de menor factor de seguridad.',
+            'Introduce las coordenadas de un punto. Se cuentan las superficies cuya superficie de rotura pasa a menos de la tolerancia, y se indica la de menor factor de seguridad.',
         'Lowest factor of safety among them: ':
             'Menor factor de seguridad entre ellas: ',
         'No slices available — run a compute first.':
-            'No hay dovelas: calcule primero.',
+            'No hay dovelas: calcula primero.',
         'Export Slice Data': 'Exportar datos de las dovelas',
         'Slice data exported to %s': 'Datos de las dovelas exportados a %s',
         # v0.1.203 (F4) — the live bridge.
         'Agent bridge (MCP)': 'Puente para agentes (MCP)',
         "Let an AI agent drive this window: start the MCP server with "
         "'ogr-slip2d-mcp --attach'. Local connections only, with a token.":
-            'Permite que un agente de IA maneje esta ventana: arranque el '
-            "servidor MCP con 'ogr-slip2d-mcp --attach'. Solo conexiones "
-            'locales, con token.',
+            "Permite que un agente de IA maneje esta ventana: arranca el servidor MCP con 'ogr-slip2d-mcp --attach'. Solo conexiones locales, con token.",
         'Agent bridge off.': 'Puente para agentes desactivado.',
         'Agent bridge could not start: %s':
             'No se pudo arrancar el puente para agentes: %s',
         "Agent bridge on (pid %d, port %d): start the agent's server with "
         "'ogr-slip2d-mcp --attach'.":
-            'Puente para agentes activo (pid %d, puerto %d): arranque el '
-            "servidor del agente con 'ogr-slip2d-mcp --attach'.",
+            "Puente para agentes activo (pid %d, puerto %d): arranca el servidor del agente con 'ogr-slip2d-mcp --attach'.",
         # v0.1.200 — the stage checks now live in
         # ``GroundwaterSettings.set_transient``; the dialog shows its
         # message through tr(), so each one is a key.
@@ -1073,7 +1048,7 @@ _DICTS: dict[str, dict[str, str]] = {
             'El número de pasos de tiempo es 0 (automático) o más.',
         'Matric suction (kPa)': 'Succión matricial (kPa)',
         'C:': 'C:',
-        'Calculate Excess Pore Pressure (B-bar method)': 'Calcular exceso de presión intersticial (método B-bar)',
+        'Calculate Excess Pore Pressure (B-bar method)': 'Calcular exceso de presión intersticial (método B-barra)',
         'Capture as initial state': 'Capturar como estado inicial',
         'Capture current BCs': 'Capturar condiciones actuales',
         'Change Slope Angle': 'Cambiar ángulo del talud',
@@ -1129,7 +1104,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Comments:': 'Comentarios:',
         'Company:': 'Empresa:',
         'Composite Surfaces': 'Superficies compuestas',
-        'Composite Surfaces (the slip surface follows the base of the External Boundary)': 'Superficies compuestas (la superficie de rotura sigue la base del contorno externo)',
+        'Composite Surfaces (the slip surface follows the base of the External Boundary)': 'Superficies compuestas (la superficie de rotura sigue la base del contorno exterior)',
         'Constant u:': 'u constante:',
         'Convergence Options': 'Opciones de convergencia',
         'Convert Boundary': 'Convertir contorno',
@@ -1157,8 +1132,8 @@ _DICTS: dict[str, dict[str, str]] = {
         'Elevation (y):': 'Cota (y):',
         'End Angle:': 'Ángulo final:',
         'Enter X,Y:': 'Introducir X,Y:',
-        'Expand / Shrink External Boundary': 'Expandir / contraer el contorno externo',
-        'External Boundary': 'Contorno externo',
+        'Expand / Shrink External Boundary': 'Expandir / contraer el contorno exterior',
+        'External Boundary': 'Contorno exterior',
         'Failure Direction:': 'Dirección de rotura:',
         'Fill': 'Relleno',
         'Filter Surfaces': 'Filtrar superficies',
@@ -1181,7 +1156,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'K2 / K1:': 'K2 / K1:',
         'Left Projection Angle': 'Ángulo de proyección izquierdo',
         'Line Width:': 'Grosor de línea:',
-        'Load creates excess pore pressure (B-bar method)': 'La carga genera exceso de presión intersticial (método B-bar)',
+        'Load creates excess pore pressure (B-bar method)': 'La carga genera exceso de presión intersticial (método B-barra)',
         'Loads': 'Cargas',
         'Lower Angle (Initial Angle at Toe):': 'Ángulo inferior (ángulo inicial en el pie):',
         'Lower Angle:': 'Ángulo inferior:',
@@ -1367,7 +1342,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Inverse polarity': 'Polaridad inversa',
         'Average of both polarities': 'Media de las dos polaridades',
         'Allow upslope displacement': 'Permitir desplazamiento talud arriba',
-        'Off is the usual assumption: the resistance to upslope movement is taken as infinite, so the block moves only downslope.': 'Desactivado es la hipótesis habitual: la resistencia al movimiento talud arriba se toma infinita, así que el bloque sólo se mueve talud abajo.',
+        'Off is the usual assumption: the resistance to upslope movement is taken as infinite, so the block moves only downslope.': 'Desactivado es la hipótesis habitual: la resistencia al movimiento talud arriba se toma infinita, así que el bloque solo se mueve talud abajo.',
         'Direction:': 'Sentido:',
         'Scale record by a factor of:': 'Escalar el registro por un factor de:',
         'Multiplies the accelerations of the record. Leave it at 1 to use the record as it was measured.': 'Multiplica las aceleraciones del registro. Déjalo en 1 para usar el registro tal como se midió.',
@@ -1375,7 +1350,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Critical seismic coefficient': 'Coeficiente sísmico crítico',
         'Newmark displacement': 'Desplazamiento de Newmark',
         'Ky:': 'Ky:',
-        'Select one or more loads to delete:': 'Seleccione una o más cargas para eliminar:',
+        'Select one or more loads to delete:': 'Selecciona una o más cargas para eliminar:',
         'Selectable entity types': 'Tipos de entidad seleccionables',
         'Selection Filter (Ctrl+F)': 'Filtro de selección (Ctrl+F)',
         'Show Boundary Vertices': 'Mostrar vértices de contorno',
@@ -1473,7 +1448,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Tolerance for stopping criterion:': 'Tolerancia del criterio de parada:',
         'Tolerance:': 'Tolerancia:',
         'Total population size N for the random slope-tangent search.': 'Tamaño total N de la población para la búsqueda aleatoria de tangentes al talud.',
-        'Transient FEA options': 'Opciones de FEA transitorio',
+        'Transient FEA options': 'Opciones del transitorio por elementos finitos',
         'Transient Groundwater': 'Agua subterránea transitoria',
         'Transient groundwater analysis': 'Análisis de agua subterránea transitorio',
         'Type:': 'Tipo:',
@@ -1560,7 +1535,7 @@ _DICTS: dict[str, dict[str, str]] = {
         "Steady State Groundwater Mode": "Modo de flujo en régimen permanente",
         "Transient Groundwater Mode": "Modo de flujo transitorio",
         # --- Boundaries -----------------------------------------------
-        "Add External Boundary": "Añadir contorno externo",
+        "Add External Boundary": 'Añadir contorno exterior',
         "Add Material Boundary": "Añadir contorno de material",
         "Add Water Table": "Añadir nivel freático",
         "Add Piezometric Line": "Añadir línea piezométrica",
@@ -1583,14 +1558,7 @@ _DICTS: dict[str, dict[str, str]] = {
         "Every other surface is capped instead by the m-alpha check, "
         "which in purely cohesive soil is a ceiling of 78.5 deg on "
         "the base angle.":
-            "Una base de dovela más inclinada que esto no es un plano "
-            "de corte, y las ecuaciones de equilibrio límite pierden "
-            "su condicionamiento frente a ella. Se aplica SÓLO a las "
-            "superficies recortadas por una capa débil, donde una capa "
-            "que simplemente termina deja un escalón casi vertical. Al "
-            "resto lo limita en su lugar la comprobación de m-alfa, que "
-            "en suelo puramente cohesivo es un techo de 78,5° sobre el "
-            "ángulo de base.",
+            'Una base de dovela más inclinada que esto no es un plano de corte, y las ecuaciones de equilibrio límite pierden su condicionamiento frente a ella. Se aplica SOLO a las superficies recortadas por una capa débil, donde una capa que simplemente termina deja un escalón casi vertical. Al resto lo limita en su lugar la comprobación de m-alfa, que en suelo puramente cohesivo es un techo de 78,5° sobre el ángulo de base.',
         # v0.1.158 — lo que el valor tecleado hace de verdad. El motor lo
         # lee como ``0 < limite < 90``, así que los dos extremos del rango
         # no aflojan el techo: lo quitan. v0.1.190 añade la tercera rama:
@@ -1607,17 +1575,11 @@ _DICTS: dict[str, dict[str, str]] = {
         "Applies only to surfaces a weak layer has clipped. Where phi "
         "= 0 the m-alpha check caps the base at 78.5 deg, which is "
         "tighter than this value, so this one never bites there.":
-            "Se aplica sólo a las superficies recortadas por una capa "
-            "débil. Con φ = 0 la comprobación de m-alfa limita la base "
-            "a 78,5°, más estricto que este valor, así que aquí éste no "
-            "llega a actuar.",
+            'Se aplica solo a las superficies recortadas por una capa débil. Con φ = 0 la comprobación de m-alfa limita la base a 78,5°, más estricto que este valor, así que aquí este no llega a actuar.',
         "Applies only to surfaces a weak layer has clipped, and there "
         "it is the tighter of the two ceilings. Every other surface "
         "is capped at 78.5 deg by the m-alpha check where phi = 0.":
-            "Se aplica sólo a las superficies recortadas por una capa "
-            "débil, y allí es el más estricto de los dos techos. Al "
-            "resto lo limita a 78,5° la comprobación de m-alfa con "
-            "φ = 0.",
+            'Se aplica solo a las superficies recortadas por una capa débil, y allí es el más estricto de los dos techos. Al resto lo limita a 78,5° la comprobación de m-alfa con φ = 0.',
         "Weak Layer": "Capa débil",
         "Weak layer material assigned.": "Material de la capa débil asignado.",
         # v0.1.126 — búsqueda por enjambre de partículas y mínimos
@@ -1778,7 +1740,7 @@ _DICTS: dict[str, dict[str, str]] = {
         "On this computer:": "En este equipo:",
         "of": "de",
         "Splits the surfaces of a search across several processes. The circles are independent, so the result is identical to the last bit; only the clock changes.":
-            "Reparte las superficies de una búsqueda entre varios procesos. Los círculos son independientes, así que el resultado es idéntico hasta el último bit; sólo cambia el reloj.",
+            'Reparte las superficies de una búsqueda entre varios procesos. Los círculos son independientes, así que el resultado es idéntico hasta el último bit; solo cambia el reloj.',
         "Share of the processors the search may occupy. Measured on the reference grid, the speed-up is flat from two processes upwards, so taking the whole machine buys nothing and freezes everything else you have open.":
             "Porcentaje de procesadores que la búsqueda puede ocupar. Medido sobre la rejilla de referencia, la aceleración es plana a partir de dos procesos, así que tomar el equipo entero no aporta nada y bloquea todo lo demás que tengas abierto.",
         "Current Water Surface": "Superficie de agua actual",
@@ -1944,17 +1906,7 @@ _DICTS: dict[str, dict[str, str]] = {
         "where the total-force assumption makes the factor of safety "
         "depend on the depth of the water. Read by Lowe-Karafiath and "
         "Corps of Engineers #1 and #2.":
-            "Si la resultante entre dovelas cuya inclinación se impone "
-            "representa la fuerza efectiva entre dovelas, con la presión "
-            "de agua sobre las caras verticales aplicada aparte, o la "
-            "fuerza total que la incluye. La EM 1110-2-1902 del USACE da "
-            "las dos por válidas y advierte de que el factor de seguridad "
-            "difiere entre ellas. Totales es el predeterminado y es el "
-            "convenio en el que están publicados los valores de estos "
-            "métodos. Elige Efectivas en un talud con agua embalsada "
-            "encima, donde la hipótesis en fuerzas totales hace que el "
-            "factor de seguridad dependa del calado. La leen "
-            "Lowe-Karafiath y Corps of Engineers #1 y #2.",
+            'Si la resultante entre dovelas cuya inclinación se impone representa la fuerza efectiva entre dovelas, con la presión de agua sobre las caras verticales aplicada aparte, o la fuerza total que la incluye. La EM 1110-2-1902 del USACE da las dos por válidas y advierte de que el factor de seguridad difiere entre ellas. Totales es la opción por defecto y es el convenio en el que están publicados los valores de estos métodos. Elige Efectivas en un talud con agua embalsada encima, donde la hipótesis en fuerzas totales hace que el factor de seguridad dependa del calado. La leen Lowe-Karafiath y Corps of Engineers #1 y #2.',
         "Transient groundwater": "Filtración transitoria",
         "Staged transient seepage. Its solver options are on the "
         "Transient page, which this switch enables.":
@@ -2337,8 +2289,7 @@ _DICTS: dict[str, dict[str, str]] = {
             "Descabezamiento - hundimiento individual",
         "This support type publishes no failure modes; only the applied "
         "force is shown.":
-            "Este tipo de soporte no publica modos de rotura; sólo se "
-            "muestra la fuerza aplicada.",
+            'Este tipo de soporte no publica modos de rotura; solo se muestra la fuerza aplicada.',
         # v0.1.163, defecto D95 -- un perfil de adherencia que no se
         # construye deja al soporte con su envolvente a tensión nula, y
         # hasta esta versión ni el lienzo ni el diagrama lo decían.
@@ -2428,7 +2379,7 @@ _DICTS: dict[str, dict[str, str]] = {
         "Delete material": "Eliminar material",
         "Assign material": "Asignar material",
         "Define model": "Definir modelo",
-        "Reshape External boundary": "Remodelar contorno externo",
+        "Reshape External boundary": 'Remodelar contorno exterior',
         "Python script": "Script de Python",
         "Change settings": "Cambiar ajustes",
         "Set tension crack": "Definir grieta de tracción",
@@ -2438,7 +2389,7 @@ _DICTS: dict[str, dict[str, str]] = {
         "Delete user surfaces": "Eliminar superficies de usuario",
         "Set support type": "Definir tipo de soporte",
         "Delete support type": "Eliminar tipo de soporte",
-        "Set support": "Definir soporte",
+        "Set support": 'Colocar soporte',
         "Add support pattern": "Añadir patrón de soportes",
         "Delete supports": "Eliminar soportes",
         "Ungroup support pattern": "Desagrupar patrón de soportes",
@@ -2710,13 +2661,13 @@ _DICTS: dict[str, dict[str, str]] = {
         '(no piezometric line in model)':
             '(no hay ninguna línea piezométrica en el modelo)',
         '(no support types — open Define Support first)':
-            '(no hay tipos de soporte — abre antes Definir soportes)',
+            '(no hay tipos de soporte — abre antes Definir soporte)',
         '<b>Define the slip-circle centre grid.</b><br>Each cell of the grid is a candidate circle centre. For each centre, the radius is swept from a minimum to the maximum geometric extent in steps defined by the Radius Increment (Surface Options).':
             '<b>Define la rejilla de centros de los círculos de rotura.</b><br>Cada nodo de la rejilla es un centro candidato. En cada centro, el radio se barre desde un mínimo hasta la máxima extensión geométrica, en pasos del incremento de radio (Opciones de superficie).',
         '<b>Failure surface generation & optimization.</b><br>Configure the algorithm used to enumerate slip surfaces and the global filters that prune candidate results.':
-            '<b>Generación y optimización de superficies de rotura.</b><br>Configura el algoritmo que enumera las superficies de deslizamiento y los filtros globales que descartan candidatas.',
+            '<b>Generación y optimización de superficies de rotura.</b><br>Configura el algoritmo que enumera las superficies de rotura y los filtros globales que descartan candidatas.',
         '<b>Tension Crack hydraulic properties.</b><br>Defines the water level inside the tension crack zone, used to compute the hydrostatic force on slip surfaces.<br><i>γ_w = {0:.2f} kN/m³ (from Project Settings)</i>':
-            '<b>Propiedades hidráulicas de la grieta de tracción.</b><br>Define el nivel de agua dentro de la zona de la grieta de tracción, con el que se calcula el empuje hidrostático sobre las superficies de deslizamiento.<br><i>γ_w = {0:.2f} kN/m³ (de Ajustes de proyecto)</i>',
+            '<b>Propiedades hidráulicas de la grieta de tracción.</b><br>Define el nivel de agua dentro de la zona de la grieta de tracción, con el que se calcula el empuje hidrostático sobre las superficies de rotura.<br><i>γ_w = {0:.2f} kN/m³ (de Ajustes de proyecto)</i>',
         '<b>{0}</b><br>Magnitude in {1}. Always positive — direction is set by Orientation.':
             '<b>{0}</b><br>Magnitud en {1}. Siempre positiva: el sentido lo da la orientación.',
         '<i>Mesh overlays activate once the OGR FEM2D module is available (planned v0.5.0). Settings here are persisted.</i>':
@@ -2746,7 +2697,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Hu = cos²(α), where α is the inclination of the water surface above the slice. For a horizontal water table α=0 and Hu=1.':
             'Hu = cos²(α), donde α es la inclinación de la superficie de agua sobre la dovela. Con un nivel freático horizontal, α=0 y Hu=1.',
         'Insert a tension crack automatically when the slip surface\nexhibits a concave segment (κ < 0) at the up-slope side.':
-            'Inserta una grieta de tracción automáticamente cuando la superficie de deslizamiento\ntiene un tramo cóncavo (κ < 0) en el lado de aguas arriba.',
+            'Inserta una grieta de tracción automáticamente cuando la superficie de rotura\ntiene un tramo cóncavo (κ < 0) en el lado de aguas arriba.',
         'Inverse Distance (IDW)':
             'Inverso de la distancia (IDW)',
         'Label':
@@ -2764,7 +2715,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Number of radius increments swept at each grid centre.\nMore = more candidate circles per centre = slower but\nmore thorough.':
             'Número de incrementos de radio que se barren en cada centro de la rejilla.\nMás = más círculos candidatos por centro = más lento pero\nmás exhaustivo.',
         'Only the vertical component of the load contributes to\nexcess pore pressure on undrained materials with B-bar > 0.':
-            'Solo la componente vertical de la carga contribuye\nal exceso de presión intersticial en los materiales sin drenaje con B-bar > 0.',
+            'Solo la componente vertical de la carga contribuye\nal exceso de presión intersticial en los materiales sin drenaje con B-barra > 0.',
         'Pattern detected: <b>{0} supports</b> of type <b>{1}</b>':
             'Patrón detectado: <b>{0} soportes</b> del tipo <b>{1}</b>',
         'Perpendicular to boundary':
@@ -3322,7 +3273,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Passive':
             'Pasiva',
         'Tangent to slip surface':
-            'Tangente a la superficie de deslizamiento',
+            'Tangente a la superficie de rotura',
         'Parallel to support':
             'Paralela al soporte',
         'Bisector (tangent + parallel)':
@@ -3438,7 +3389,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Uniform profile only: the pressure, constant over the whole height of the wall':
             'Solo perfil uniforme: la presión, constante en toda la altura del muro',
         'Where the resultant acts: at the point the slip surface cuts the wall, or at the centroid of the pressure diagram above that point. Only the methods that write a moment equation can tell the two apart':
-            'Dónde actúa la resultante: en el punto donde la superficie de deslizamiento corta el muro, o en el centroide del diagrama de presiones por encima de ese punto. Solo los métodos que plantean una ecuación de momentos distinguen los dos',
+            'Dónde actúa la resultante: en el punto donde la superficie de rotura corta el muro, o en el centroide del diagrama de presiones por encima de ese punto. Solo los métodos que plantean una ecuación de momentos distinguen los dos',
         'Where the resultant acts: intersection | centroid. Only the four methods with a moment equation can tell the two apart.':
             'Dónde actúa la resultante: intersection | centroid. Solo los cuatro métodos con ecuación de momentos distinguen los dos.',
         'Which ends are anchored: none | slope_face | embedded_end | both_ends. Pullout is only possible while the embedded end is free.':
@@ -3662,6 +3613,31 @@ _DICTS: dict[str, dict[str, str]] = {
             'Pulsa cerca de la cabeza o de la cola de un soporte para agarrarla y después pulsa la posición nueva. Esc para cancelar.',
         'Click the centre, then a point on the circle':
             'Pulsa el centro y después un punto de la circunferencia',
+        # v0.1.325 (D318) — two keys of their own and the parameter keys by symbol
+        'Interface':
+            'Interfaz',
+        'No standard':
+            'Ninguna',
+        'phi':
+            'φ',
+        'phi b':
+            'φb',
+        'phi1':
+            'φ1',
+        'phi2':
+            'φ2',
+        'phi 0':
+            'φ0',
+        'phi r':
+            'φr',
+        'c inf':
+            'c∞',
+        'su min':
+            'su mín',
+        'kh':
+            'k_h',
+        'kv':
+            'k_v',
         # v0.1.315 (D293) — the note of the hydraulic dialog, wrapped
         "<i>Names and colours are defined in Properties > Define "
         "Materials.</i>":
@@ -4038,12 +4014,7 @@ _DICTS: dict[str, dict[str, str]] = {
         "cohesion, and with an air entry value it bounds the negative "
         "pore pressure itself. Only a material with both at zero is "
         "unaffected.":
-            "Acota la succión matricial que entra en la resistencia. "
-            "Muerde siempre que un material declare parámetros de "
-            "resistencia no saturada, y basta CUALQUIERA de los dos: con "
-            "phi_b acota la cohesión añadida, y con un valor de entrada "
-            "de aire acota la propia presión intersticial negativa. Sólo "
-            "un material con los dos a cero no se entera.",
+            'Acota la succión matricial que entra en la resistencia. Muerde siempre que un material declare parámetros de resistencia no saturada, y basta CUALQUIERA de los dos: con phi_b acota la cohesión añadida, y con un valor de entrada de aire acota la propia presión intersticial negativa. Solo un material con los dos a cero no se entera.',
 
         "This project has no transient groundwater stages, so there is "
         "no factor-of-safety history to compute. Turn on Transient "
@@ -4111,10 +4082,7 @@ _DICTS: dict[str, dict[str, str]] = {
         "before 0.1.218. Each row is now a range (angle to, c, φ), as the "
         "reference documents this strength type: review it before "
         "accepting.":
-            "Esta tabla se guardó como puntos interpolados con una versión "
-            "anterior a la 0.1.218. Cada fila es ahora un tramo (ángulo "
-            "hasta, c, φ), como documenta la referencia este tipo de "
-            "resistencia: revísela antes de aceptar.",
+            'Esta tabla se guardó como puntos interpolados con una versión anterior a la 0.1.218. Cada fila es ahora un tramo (ángulo hasta, c, φ), como documenta la referencia este tipo de resistencia: revísala antes de aceptar.',
         "Row %d of the table is not three numbers.":
             "La fila %d de la tabla no son tres números.",
         "In material %s:": "En el material %s:",
@@ -4215,16 +4183,14 @@ _DICTS: dict[str, dict[str, str]] = {
         "Anisotropic surface": "Superficie anisótropa",
         "Draw an anisotropic surface first to define the joints by "
         "surface.":
-            "Dibuje antes una superficie anisótropa para definir las juntas "
-            "por superficie.",
+            'Dibuja antes una superficie anisótropa para definir las juntas por superficie.',
         "(a surface no longer in the model)":
             "(una superficie que ya no está en el modelo)",
         "Row %d of the table: A and B must be numbers.":
             "Fila %d de la tabla: A y B tienen que ser números.",
         "This anisotropic surface is read by the joints of a Generalized "
         "Anisotropic material: change them first.":
-            "Esta superficie anisótropa la leen las juntas de un material "
-            "Generalized Anisotropic: cámbielas primero.",
+            'Esta superficie anisótropa la leen las juntas de un material anisótropo generalizado: cámbialas primero.',
         "The base needs a material, or a strength model that can be "
         "built.":
             "La base necesita un material, o un modelo de resistencia que "
@@ -4242,8 +4208,7 @@ _DICTS: dict[str, dict[str, str]] = {
             "Cada junta tiene que seguir una superficie anisótropa.",
         "A joint follows an anisotropic surface that is not in the model: "
         "choose another one.":
-            "Una junta sigue una superficie anisótropa que no está en el "
-            "modelo: elija otra.",
+            'Una junta sigue una superficie anisótropa que no está en el modelo: elige otra.',
         "How the strength goes from the joint's to the base's as the slice "
         "base turns away from the joint: A and B as in Anisotropic Linear, "
         "the S-shaped cosine curve (sin² of the offset) or a straight line "
@@ -4306,28 +4271,24 @@ _DICTS: dict[str, dict[str, str]] = {
             "(modelo propio: %s; su enlace está roto)",
         "A Generalized Anisotropic material needs its ranges, from −90° "
         "to +90°, each taking the strength of a material.":
-            "Un material Generalized Anisotropic necesita sus tramos, de "
-            "−90° a +90°, cada uno con la resistencia de un material.",
+            'Un material anisótropo generalizado necesita sus tramos, de −90° a +90°, cada uno con la resistencia de un material.',
         "Every range needs a material, or a strength model that can be "
         "built.":
             "Cada tramo necesita un material, o un modelo de resistencia "
             "que se pueda construir.",
         "A range takes a material that is not in the project: choose "
         "another one.":
-            "Un tramo toma un material que no está en el proyecto: elija "
-            "otro.",
+            'Un tramo toma un material que no está en el proyecto: elige otro.',
         "A range cannot take the strength of its own material.":
             "Un tramo no puede tomar la resistencia de su propio material.",
         "A range cannot take the strength of another Generalized "
         "Anisotropic material.":
-            "Un tramo no puede tomar la resistencia de otro material "
-            "Generalized Anisotropic.",
+            'Un tramo no puede tomar la resistencia de otro material anisótropo generalizado.',
         "Row %d of the table: «angle to» is not a number.":
             "Fila %d de la tabla: «ángulo hasta» no es un número.",
         "%s cannot be removed: the ranges of %s take its strength. Change "
         "them first.":
-            "No se puede quitar %s: los tramos de %s toman su resistencia. "
-            "Cámbielos antes.",
+            'No se puede quitar %s: los tramos de %s toman su resistencia. Cámbialos antes.',
 
         # --- v0.1.229 · D215: Snowden de la referencia y la función C/Phi
         "Bedding Strength Function...":
@@ -4371,13 +4332,7 @@ _DICTS: dict[str, dict[str, str]] = {
         "rock mass strength function, with A1, B1, A2 and B2. What is "
         "shown is the nearest such form, whose numbers are not the old "
         "ones: review it before accepting.":
-            "Este material se guardó con una versión anterior a la 0.1.229, "
-            "con c1, φ1, c2, φ2, un solo B y una transición en coseno. El "
-            "modelo es ahora el de la referencia: una transición lineal entre "
-            "una función de resistencia de la estratificación y otra del "
-            "macizo rocoso, con A1, B1, A2 y B2. Lo que se enseña es la forma "
-            "de ese modelo más parecida, cuyos números no son los de antes: "
-            "revíselo antes de aceptar.",
+            'Este material se guardó con una versión anterior a la 0.1.229, con c1, φ1, c2, φ2, un solo B y una transición en coseno. El modelo es ahora el de la referencia: una transición lineal entre una función de resistencia de la estratificación y otra del macizo rocoso, con A1, B1, A2 y B2. Lo que se enseña es la forma de ese modelo más parecida, cuyos números no son los de antes: revísalo antes de aceptar.',
 
         # --- v0.1.219 · D206: el sismo, sólo sobre el suelo -------------
         "<b>Pseudo-static seismic load.</b><br>"
@@ -4394,9 +4349,7 @@ _DICTS: dict[str, dict[str, str]] = {
             "<i>k_v positivo → hacia abajo (como la gravedad)</i>",
         "The stored k_h was negative (%g). k_h is a magnitude that "
         "always acts in the direction of failure: enter it positive.":
-            "El k_h guardado era negativo (%g). k_h es una magnitud que "
-            "actúa siempre en el sentido de la rotura: introdúzcalo "
-            "positivo.",
+            'El k_h guardado era negativo (%g). k_h es una magnitud que actúa siempre en el sentido de la rotura: introdúcelo positivo.',
     },
 }
 

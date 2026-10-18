@@ -1241,7 +1241,9 @@ class _DesignStandardPage(QWidget):
 
         self.cbo_std = QComboBox()
         for value, label in (
-            ("none", tr("None")),
+            # v0.1.325 (D318) — its own key: «Norma de diseño: Ninguna»,
+            # where the generic «None» read «Ninguno»
+            ("none", tr("No standard")),
             ("eurocode7_da1c1", tr("Eurocode 7 — DA1 Combination 1")),
             ("eurocode7_da1c2", tr("Eurocode 7 — DA1 Combination 2")),
             ("eurocode7_da2", tr("Eurocode 7 — DA2")),

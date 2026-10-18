@@ -728,7 +728,8 @@ class TestRandomVariablesAreShownTranslated:
              "Clay — peso específico"),
             (("hydraulic", "ks", "Clay — hydraulic ks"),
              "Clay — ks (hidráulico)"),
-            (("seismic", "kh", "seismic kh"), "coeficiente sísmico kh"),
+            # v0.1.325 (D318) — the parameter by its symbol
+            (("seismic", "kh", "seismic kh"), "coeficiente sísmico k_h"),
             (("water_table", "offset", "Water table — vertical offset"),
              "Nivel freático — desplazamiento vertical"),
             (("distributed_load", "magnitude_1", " — magnitude_1"),

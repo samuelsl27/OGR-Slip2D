@@ -148,7 +148,7 @@ class TestDefineSupportSpeaksSpanish:
             app = [d.cbo_app.itemText(i) for i in range(d.cbo_app.count())]
             assert app == ["Activa", "Pasiva"], app
             ori = [d.cbo_ori.itemText(i) for i in range(d.cbo_ori.count())]
-            assert "Tangente a la superficie de deslizamiento" in ori, ori
+            assert "Tangente a la superficie de rotura" in ori, ori
         finally:
             set_language(before)
 
@@ -182,7 +182,7 @@ class TestTheOtherSupportDialogsShareOneName:
         before = current_language()
         try:
             for language, want in (
-                    ("es", "Tangente a la superficie de deslizamiento"),
+                    ("es", "Tangente a la superficie de rotura"),
                     ("en", "Tangent to slip surface")):
                 QApplication.instance() or QApplication([])
                 set_language(language)
