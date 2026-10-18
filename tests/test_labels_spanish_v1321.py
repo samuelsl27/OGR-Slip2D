@@ -555,10 +555,12 @@ class TestTheCanvasMenusSpeakSpanish:
         try:
             es = self._menus("es")
             for t in ("Insertar vértice (después)", "Editar coordenadas…",
-                      "Convertir contorno…", "Ampliar / reducir…",
+                      "Convertir contorno…", "Expandir / contraer…",
                       "Cambiar ángulo del talud…", "Propiedades…",
                       "Estirar", "Modificar patrón…", "Orto",
-                      "Forzado a objeto"):
+                      # v0.1.323 — as the legend writes it (OSNAP), the
+                      # same in both languages
+                      "OSnap"):
                 assert t in es, (t, es)
             # control: the English is what it was
             en = self._menus("en")
@@ -699,7 +701,7 @@ class TestRandomVariablesAreShownTranslated:
             (("water_table", "offset", "Water table — vertical offset"),
              "Nivel freático — desplazamiento vertical"),
             (("distributed_load", "magnitude_1", " — magnitude_1"),
-             "Carga repartida — módulo 1"),
+             "Carga distribuida — magnitud 1"),
             # a label edited in a file is shown as it is
             (("material_strength", "cohesion", "my own label"),
              "my own label"),
@@ -737,7 +739,7 @@ class TestTheDataTipsSpeakSpanish:
             assert "peso específico" in material_tip(p.materials[0])
             assert boundary_tip(ext).startswith("EXTERNO")
             tip = load_tip(load, DataTipMode.MAXIMUM)
-            assert tip.splitlines()[0] == "Carga repartida", tip
+            assert tip.splitlines()[0] == "Carga distribuida", tip
             assert "orientación: Normal al contorno" in tip, tip
             # control: the English the tips have always shown
             set_language("en")

@@ -436,7 +436,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Export All Nodal Values...': 'Exportar todos los valores nodales...',
         'Export Statistics Data...': 'Exportar datos estadísticos...',
         'Exported %d nodes to %s': 'Exportados %d nodos a %s',
-        'Expression using H (total head), P (pressure head) and u (pore pressure), for example  H - 25': 'Expresión con H (cabeza total), P (cabeza de presión) y u (presión intersticial), por ejemplo  H - 25',
+        'Expression using H (total head), P (pressure head) and u (pore pressure), for example  H - 25': 'Expresión con H (altura total), P (altura de presión) y u (presión intersticial), por ejemplo  H - 25',
         'Factor of safety at query points': 'Factor de seguridad en los puntos de consulta',
         'Global minima found:': 'Mínimos globales encontrados:',
         'Groundwater Query': 'Consulta de agua subterránea',
@@ -477,7 +477,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'This run recorded no convergence history. The seepage solver reports its iteration count and final state instead: %d iterations, converged = %s.': 'Esta corrida no registró historial de convergencia. El solver de filtración informa en su lugar del número de iteraciones y el estado final: %d iteraciones, convergido = %s.',
         'This run recorded no separate global minima. They are produced by the Overall Slope analysis type, which repeats the whole search per sample.': 'Esta corrida no registró mínimos globales separados. Los produce el tipo de análisis Talud completo, que repite toda la búsqueda por muestra.',
         'Time': 'Tiempo',
-        'Total head: %.4f': 'Cabeza total: %.4f',
+        'Total head: %.4f': 'Altura total: %.4f',
         'Value': 'Valor',
         # v0.1.87 — panel de datos de dovela (Query Slice Data)
         'Slice Data': 'Datos de la dovela',
@@ -584,12 +584,12 @@ _DICTS: dict[str, dict[str, str]] = {
         'capacity not defined': 'capacidad no definida',
         'converged: %s': 'convergido: %s',
         'did not converge': 'no convergió',
-        'mean FoS': 'FoS medio',
+        'mean FoS': 'FS medio',
         'no': 'no',
         'passive: %.2f': 'pasiva: %.2f',
-        'pressure head: %.4f': 'cabeza de presión: %.4f',
+        'pressure head: %.4f': 'altura de presión: %.4f',
         'probability of failure (%)': 'probabilidad de fallo (%)',
-        'total head: %.4f': 'cabeza total: %.4f',
+        'total head: %.4f': 'altura total: %.4f',
         'yes': 'sí',
 
         'Auto': 'Auto',
@@ -745,14 +745,14 @@ _DICTS: dict[str, dict[str, str]] = {
         'Off': 'Desactivado',
         'Palette:': 'Paleta:',
         'Pore pressure': 'Presión intersticial',
-        'Pressure head': 'Cabeza de presión',
+        'Pressure head': 'Altura de presión',
         'Preview:': 'Vista previa:',
         'Range': 'Rango',
         'Reverse colours': 'Invertir colores',
         'Scalar field': 'Campo escalar',
         'Show:': 'Mostrar:',
         'Smooth gradient': 'Degradado continuo',
-        'Total head': 'Cabeza total',
+        'Total head': 'Altura total',
 
         'Data Tips': 'Datos al pasar el cursor',
 
@@ -883,7 +883,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Factor of safety vs time': 'Factor de seguridad frente al tiempo',
         'Field:': 'Campo:',
         'Flip angle 180°': 'Invertir ángulo 180°',
-        'FoS vs time…': 'FoS frente al tiempo…',
+        'FoS vs time…': 'FS frente al tiempo…',
         'Force': 'Fuerza',
         'Force Application:': 'Aplicación de la fuerza:',
         'Force Orientation:': 'Orientación de la fuerza:',
@@ -926,10 +926,10 @@ _DICTS: dict[str, dict[str, str]] = {
         'User Angle:': 'Ángulo de usuario:',
         'Value:': 'Valor:',
         'Vertex Coordinate Table': 'Tabla de coordenadas de vértices',
-        'Water Pressure Grid': 'Malla de presiones de agua',
+        'Water Pressure Grid': 'Rejilla de presiones de agua',
         # v0.1.202 — the grid's type is the groundwater method's.
-        'Total Head': 'Cabeza total',
-        'Pressure Head': 'Cabeza de presión',
+        'Total Head': 'Altura total',
+        'Pressure Head': 'Altura de presión',
         '(not a grid method)': '(el método no es de malla)',
         'Set by the groundwater method in Project Settings > Groundwater.':
             'Lo fija el método de agua subterránea en Ajustes de proyecto > '
@@ -1164,8 +1164,8 @@ _DICTS: dict[str, dict[str, str]] = {
         'Filter Surfaces': 'Filtrar superficies',
         'Filters (apply to all candidate surfaces)': 'Filtros (se aplican a todas las superficies candidatas)',
         'Flow vectors': 'Vectores de flujo',
-        'FoS max:': 'FoS máx:',
-        'FoS min:': 'FoS mín:',
+        'FoS max:': 'FS máx:',
+        'FoS min:': 'FS mín:',
         'Function points:': 'Puntos de la función:',
         'Apply cutoff': 'Aplicar límite',
         'The cutoff is a maximum strength; if the rate of change is '
@@ -1188,7 +1188,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Magnitude (end):': 'Magnitud (final):',
         'Magnitude:': 'Magnitud:',
         'Manual:': 'Manual:',
-        'Mark FoS = 1.0': 'Marcar FoS = 1.0',
+        'Mark FoS = 1.0': 'Marcar FS = 1.0',
         'Material Boundary': 'Contorno de material',
         'Material:': 'Material:',
         'Materials': 'Materiales',
@@ -1485,7 +1485,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Upper Angle:': 'Ángulo superior:',
         'Vertices (Nodes)': 'Vértices (nodos)',
         'Water Level:': 'Nivel de agua:',
-        'Water pressure grid values': 'Valores de la malla de presiones de agua',
+        'Water pressure grid values': 'Valores de la rejilla de presiones de agua',
         'X max:': 'X máx:',
         'X min:': 'X mín:',
         'X range': 'Rango X',
@@ -2447,8 +2447,8 @@ _DICTS: dict[str, dict[str, str]] = {
         "Set boundary conditions": "Definir condiciones de contorno",
         "Restore default boundary conditions":
             "Restaurar las condiciones de contorno por defecto",
-        "Water pressure grid": "Malla de presiones de agua",
-        "Delete water pressure grid": "Eliminar malla de presiones de agua",
+        "Water pressure grid": "Rejilla de presiones de agua",
+        "Delete water pressure grid": "Eliminar rejilla de presiones de agua",
         "Compute groundwater": "Calcular agua subterránea",
         # v0.1.303 (D292) — the window's own steps of this family
         "Define materials": "Definir materiales",
@@ -2634,8 +2634,7 @@ _DICTS: dict[str, dict[str, str]] = {
             "<b>Región</b><br>Material: {0}<br>Área: {1:.2f} m²",
         "<b>Support force</b><br>Magnitude: {0:.1f} kN/m<br>Angle: "
         "{1:.1f}°<br>Mode: {2}":
-            "<b>Fuerza del soporte</b><br>Módulo: {0:.1f} kN/m<br>Ángulo: "
-            "{1:.1f}°<br>Modo: {2}",
+            '<b>Fuerza del soporte</b><br>Magnitud: {0:.1f} kN/m<br>Ángulo: {1:.1f}°<br>Modo: {2}',
         "<b>{0}</b><br><i>Type:</i> {1}<br><i>Length:</i> {2:.2f} m<br>"
         "<i>Axis:</i> {3:.1f}°<br><i>Application:</i> {4}<br>"
         "<i>Orientation:</i> {5}":
@@ -2657,7 +2656,7 @@ _DICTS: dict[str, dict[str, str]] = {
         "Coordinate Table...": "Tabla de coordenadas...",
         "Define Tension Crack…": "Definir grieta de tracción…",
         "Distributed Load — {0:.1f} kN/m²":
-            "Carga repartida — {0:.1f} kN/m²",
+            'Carga distribuida — {0:.1f} kN/m²',
         "Done": "Hecho",
         "Line Load — {0:.1f} kN/m": "Carga lineal — {0:.1f} kN/m",
         "Method: <b>{0}</b>   Valid: {1}   {2}: <b>{3:.3f}</b>":
@@ -2719,7 +2718,7 @@ _DICTS: dict[str, dict[str, str]] = {
         '<b>Tension Crack hydraulic properties.</b><br>Defines the water level inside the tension crack zone, used to compute the hydrostatic force on slip surfaces.<br><i>γ_w = {0:.2f} kN/m³ (from Project Settings)</i>':
             '<b>Propiedades hidráulicas de la grieta de tracción.</b><br>Define el nivel de agua dentro de la zona de la grieta de tracción, con el que se calcula el empuje hidrostático sobre las superficies de deslizamiento.<br><i>γ_w = {0:.2f} kN/m³ (de Ajustes de proyecto)</i>',
         '<b>{0}</b><br>Magnitude in {1}. Always positive — direction is set by Orientation.':
-            '<b>{0}</b><br>Módulo en {1}. Siempre positivo: el sentido lo da la orientación.',
+            '<b>{0}</b><br>Magnitud en {1}. Siempre positiva: el sentido lo da la orientación.',
         '<i>Mesh overlays activate once the OGR FEM2D module is available (planned v0.5.0). Settings here are persisted.</i>':
             '<i>Las capas de la malla se activan cuando el módulo OGR FEM2D esté disponible (previsto en la v0.5.0). Estos ajustes se guardan.</i>',
         '<i>Pivot defaults to (0, 0). Use the boundary centroid by leaving it at zero and selecting a non-central boundary carefully.</i>':
@@ -2949,11 +2948,11 @@ _DICTS: dict[str, dict[str, str]] = {
         'Finite Element Seepage':
             'Filtración por elementos finitos',
         'Water Pressure Grid: Total Head':
-            'Malla de presiones de agua: cabeza total',
+            'Rejilla de presiones de agua: altura total',
         'Water Pressure Grid: Pressure Head':
-            'Malla de presiones de agua: cabeza de presión',
+            'Rejilla de presiones de agua: altura de presión',
         'Water Pressure Grid: Pore Pressure':
-            'Malla de presiones de agua: presión intersticial',
+            'Rejilla de presiones de agua: presión intersticial',
         'Finite Element: Steady State':
             'Elementos finitos: régimen permanente',
         'Finite Element: Transient':
@@ -3005,11 +3004,11 @@ _DICTS: dict[str, dict[str, str]] = {
         'length':
             'longitud',
         'magnitude':
-            'módulo',
+            'magnitud',
         'magnitude 1':
-            'módulo 1',
+            'magnitud 1',
         'magnitude 2':
-            'módulo 2',
+            'magnitud 2',
         'max total friction':
             'rozamiento total máximo',
         'min strength':
@@ -3059,7 +3058,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Convert Boundary…':
             'Convertir contorno…',
         'Expand / Shrink…':
-            'Ampliar / reducir…',
+            'Expandir / contraer…',
         'Change Slope Angle…':
             'Cambiar ángulo del talud…',
         'Properties…':
@@ -3070,8 +3069,6 @@ _DICTS: dict[str, dict[str, str]] = {
             'Modificar patrón…',
         'Ortho':
             'Orto',
-        'OSnap':
-            'Forzado a objeto',
         'Zero Pressure':
             'Presión nula',
         'Nodal Flow Rate':
@@ -3103,9 +3100,9 @@ _DICTS: dict[str, dict[str, str]] = {
         'Use Piezometric Line':
             'Usar la línea piezométrica',
         'Total Head H':
-            'Cabeza total H',
+            'Altura total H',
         'Pressure Head P':
-            'Cabeza de presión P',
+            'Altura de presión P',
         'Pore Pressure u':
             'Presión intersticial u',
         'Exponential':
@@ -3229,9 +3226,9 @@ _DICTS: dict[str, dict[str, str]] = {
         '(unnamed material)':
             '(material sin nombre)',
         '<b>Distributed Load</b><br>Magnitude: {0} kN/m²<br>Orientation: {1}<br>Distribution: {2}':
-            '<b>Carga repartida</b><br>Módulo: {0} kN/m²<br>Orientación: {1}<br>Distribución: {2}',
+            '<b>Carga distribuida</b><br>Magnitud: {0} kN/m²<br>Orientación: {1}<br>Distribución: {2}',
         '<b>Line Load</b><br>Magnitude: {0} kN/m<br>Orientation: {1}':
-            '<b>Carga lineal</b><br>Módulo: {0} kN/m<br>Orientación: {1}',
+            '<b>Carga lineal</b><br>Magnitud: {0} kN/m<br>Orientación: {1}',
         'Cumulative probability':
             'Probabilidad acumulada',
         'Cumulative — FoS CDF':
@@ -3239,7 +3236,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Define Tension Crack hydraulic properties\n(add a Tension Crack boundary first via Boundaries → Add Tension Crack)':
             'Definir propiedades hidráulicas de la grieta de tracción\n(añade antes un contorno de grieta de tracción en Contornos → Añadir grieta de tracción)',
         'Distributed Load':
-            'Carga repartida',
+            'Carga distribuida',
         'Effect on FoS (Δ per standard deviation)':
             'Efecto en el FS (Δ por desviación típica)',
         'Factor of Safety':
@@ -3301,11 +3298,11 @@ _DICTS: dict[str, dict[str, str]] = {
         'Mechanically end-anchored rock bolt or deadman anchor. The force is constant along the bolt — equal to the anchor capacity divided by out-of-plane spacing.':
             'Bulón anclado mecánicamente en el extremo o anclaje de muerto. La fuerza es constante a lo largo del bulón: la capacidad del anclaje dividida por la separación fuera del plano.',
         'Tensioned tieback with grouted bond zone. Computes 3 failure modes: pullout (bond), tensile (tendon), stripping (plate).':
-            'Anclaje tesado con bulbo inyectado. Calcula 3 modos de rotura: arrancamiento (bulbo), tracción (tendón) y desprendimiento (placa).',
+            'Anclaje tesado con bulbo inyectado. Calcula 3 modos de rotura: arrancamiento (bulbo), tracción (tendón) y descabezamiento (placa).',
         'Grouted tieback whose pullout strength is governed by a Mohr-Coulomb law (adhesion + σ·tanφ) on the grout/soil interface. Bond surface area is computed from the grout diameter.':
             'Anclaje inyectado cuya resistencia al arrancamiento sigue una ley de Mohr-Coulomb (adherencia + σ·tanφ) en el contacto lechada-suelo. La superficie del bulbo se calcula con el diámetro de la lechada.',
         'Fully-bonded soil nail (no free length). Computes 3 failure modes along the full length: tensile, pullout, stripping.':
-            'Bulón de suelo adherido en toda su longitud (sin longitud libre). Calcula 3 modos de rotura en toda la longitud: tracción, arrancamiento y desprendimiento.',
+            'Bulón de suelo adherido en toda su longitud (sin longitud libre). Calcula 3 modos de rotura en toda la longitud: tracción, arrancamiento y descabezamiento.',
         'Geotextile or geogrid sheet reinforcement. Computes tensile and pullout (interface) failure modes. Pullout acts on BOTH surfaces of the sheet.':
             'Refuerzo de lámina de geotextil o geomalla. Calcula los modos de rotura por tracción y por arrancamiento (contacto). El arrancamiento actúa en LAS DOS caras de la lámina.',
         'Tensile / Plate':
@@ -3315,7 +3312,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Capacities':
             'Capacidades',
         'Pullout & Stripping':
-            'Arrancamiento y desprendimiento',
+            'Arrancamiento y descabezamiento',
         'Pullout (Friction)':
             'Arrancamiento (rozamiento)',
         'F* vs Depth':
@@ -3343,9 +3340,9 @@ _DICTS: dict[str, dict[str, str]] = {
         'Average diameter of the helical plates. Should be comfortably larger than the shaft.':
             'Diámetro medio de las placas helicoidales. Debe ser holgadamente mayor que el fuste.',
         'Capacity of the head plate. If 0, stripping force can still be developed from the bond but only on the head side.':
-            'Capacidad de la placa de cabeza. Si es 0, la fuerza de desprendimiento aún puede desarrollarse por el bulbo, pero solo del lado de la cabeza.',
+            'Capacidad de la placa de cabeza. Si es 0, la fuerza de descabezamiento aún puede desarrollarse por el bulbo, pero solo del lado de la cabeza.',
         'Capacity of the plate/wedge assembly at the head. If ≥ tensile_capacity, stripping cannot occur.':
-            'Capacidad del conjunto de placa y cuña de la cabeza. Si es ≥ tensile_capacity, no puede haber desprendimiento.',
+            'Capacidad del conjunto de placa y cuña de la cabeza. Si es ≥ tensile_capacity, no puede haber descabezamiento.',
         "Ci: τ_int = Ci · τ_soil, the fraction of the surrounding soil's own strength the interface develops":
             'Ci: τ_int = Ci · τ_soil, la fracción de la resistencia del propio terreno circundante que desarrolla el contacto',
         'Depth below the reference elevation at which F* takes its second value (function mode)':
@@ -3363,7 +3360,7 @@ _DICTS: dict[str, dict[str, str]] = {
         "F*: τ_int = F* · σ'_v. Multiply the scale-effect factor α into it. In function mode, the value at the reference elevation.":
             "F*: τ_int = F* · σ'_v. Multiplícalo por el factor de efecto de escala α. En modo función, el valor en la cota de referencia.",
         'Force the connection at the slope face can carry. It is the force at the head of the diagram; set it to the tensile capacity to make stripping impossible.':
-            'Fuerza que resiste la conexión en el paramento del talud. Es la fuerza en la cabeza del diagrama; igualada a la capacidad a tracción, el desprendimiento no es posible.',
+            'Fuerza que resiste la conexión en el paramento del talud. Es la fuerza en la cabeza del diagrama; igualada a la capacidad a tracción, el descabezamiento no es posible.',
         'Friction angle at the grout/soil interface. Hyperbolic model: the tangent angle at zero normal stress.':
             'Ángulo de rozamiento en el contacto lechada-suelo. Modelo hiperbólico: el ángulo de la tangente con tensión normal nula.',
         'How the pile is loaded: shear | ito_matsui. Shear applies a constant force you provide; Ito & Matsui derives it from the soil flowing between the piles of the row.':
@@ -3479,9 +3476,9 @@ _DICTS: dict[str, dict[str, str]] = {
         'connection strength':
             'resistencia de la conexión',
         'Distributed Over:':
-            'Repartida sobre:',
+            'Distribuida sobre:',
         'distributed over':
-            'repartida sobre',
+            'distribuida sobre',
         'Efp:':
             'Presión de fluido equivalente:',
         'efp':
@@ -3679,7 +3676,7 @@ _DICTS: dict[str, dict[str, str]] = {
         "Boundary:":
             "Contorno:",
         "The Water Pressure Grid is read only with a grid groundwater method (Project Settings > Groundwater > Method), which also says what its values are.":
-            "La malla de presiones de agua solo se lee con un método de agua por malla (Ajustes de proyecto > Agua subterránea > Método), que además dice qué son sus valores.",
+            "La rejilla de presiones de agua solo se lee con un método de agua por rejilla (Ajustes de proyecto > Agua subterránea > Método), que además dice qué son sus valores.",
         # v0.1.290 (D291) — the 26 menu actions of MainWindow._mk and the messages
         # of the main window, now tr() templates
         "Generate Report...":
@@ -3689,7 +3686,7 @@ _DICTS: dict[str, dict[str, str]] = {
         "Select":
             "Seleccionar",
         "Water Pressure Grid...":
-            "Malla de presiones de agua...",
+            "Rejilla de presiones de agua...",
         "Back Analysis of Support Force...":
             "Retroanálisis de la fuerza de soporte...",
         "Random Variables...":
@@ -3767,7 +3764,7 @@ _DICTS: dict[str, dict[str, str]] = {
         "Click the start point of the load on a boundary, then the end point. Esc to cancel.":
             "Pulsa el punto inicial de la carga sobre un contorno y después el final. Esc para cancelar.",
         "Distributed Load added: {0:.1f} kN/m² between ({1:.2f},{2:.2f}) and ({3:.2f},{4:.2f})":
-            "Carga repartida añadida: {0:.1f} kN/m² entre ({1:.2f},{2:.2f}) y ({3:.2f},{4:.2f})",
+            'Carga distribuida añadida: {0:.1f} kN/m² entre ({1:.2f},{2:.2f}) y ({3:.2f},{4:.2f})',
         "Click on a boundary to place the line load. Esc to cancel.":
             "Pulsa sobre un contorno para colocar la carga lineal. Esc para cancelar.",
         "Deleted {0} distributed + {1} line loads.":
@@ -3821,7 +3818,7 @@ _DICTS: dict[str, dict[str, str]] = {
         "Compute the groundwater analysis first.":
             "Calcula primero el agua subterránea.",
         "Water pressure grid: {0} points":
-            "Malla de presiones de agua: {0} puntos",
+            "Rejilla de presiones de agua: {0} puntos",
         "No methods produced results.":
             "Ningún método dio resultados.",
         "No valid failure surface found.":
@@ -3917,7 +3914,7 @@ _DICTS: dict[str, dict[str, str]] = {
         "Seismic load disabled":
             "Carga sísmica desactivada",
         "Deleted Distributed Load: {0:.1f} kN/m²":
-            "Carga repartida eliminada: {0:.1f} kN/m²",
+            'Carga distribuida eliminada: {0:.1f} kN/m²',
         "Replace External Boundary":
             "Sustituir el contorno exterior",
         "An External Boundary already exists. Replace it with the new one?\n\n(The old external will be removed; material boundaries remain untouched.)":
