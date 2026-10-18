@@ -12,6 +12,7 @@ Author: Samuel Sáez López (UPCT)
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QDockWidget,
     QHeaderView,
@@ -23,6 +24,10 @@ from PySide6.QtWidgets import (
 )
 from ogr_gui.i18n import tr  # noqa: E402
 from ogr_gui.labels import method_name  # noqa: E402
+
+#: The critical row: a fixed pair that reads in both themes (D319).
+CRITICAL_ROW_BACKGROUND = "#fff1c2"
+CRITICAL_ROW_INK = "#5a3b00"
 from ogr_gui.reported_quantity import fos_label  # noqa: E402
 
 
@@ -144,10 +149,14 @@ class ResultsDock(QDockWidget):
             self.table.setItem(i, 5, QTableWidgetItem(f"{sd.get('radius', float('nan')):.2f}"))
 
             if i == 0:
-                # Highlight critical row
+                # Highlight critical row. v0.1.326 (D319) — a fixed ink on
+                # a fixed background, legible in both themes: a yellow
+                # background with the theme's text was white on yellow in
+                # the dark one. The pair of the stale band above.
                 for c in range(self.table.columnCount()):
                     item = self.table.item(i, c)
-                    item.setBackground(Qt.yellow)
+                    item.setBackground(QColor(CRITICAL_ROW_BACKGROUND))
+                    item.setForeground(QColor(CRITICAL_ROW_INK))
                     f = item.font()
                     f.setBold(True)
                     item.setFont(f)

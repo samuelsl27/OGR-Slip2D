@@ -57,6 +57,8 @@ from ogr_core.dxf import (
     read_dxf,
 )
 from ogr_gui.i18n import tr
+from PySide6.QtGui import QColor  # noqa: E402
+from ogr_gui.themes import theme_color  # noqa: E402
 
 _KIND_LABELS = [
     (K.IGNORE, "(ignore)"),
@@ -213,7 +215,8 @@ class DxfImportDialog(QDialog):
                 for c in range(3):
                     it = self.table.item(r, c)
                     if it is not None:
-                        it.setForeground(Qt.darkGray)
+                        # v0.1.326 (D319) — the theme's muted ink
+                        it.setForeground(QColor(theme_color("muted")))
 
     # ------------------------------------------------------------------
     def _on_simplify_toggled(self, on: bool):

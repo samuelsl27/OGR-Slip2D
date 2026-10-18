@@ -35,6 +35,16 @@ The invariants, offscreen, with the language and the theme restored:
 * control: OK and Cancel keep the 100 px the theme gave them;
 * the floor does nothing while no theme is the application's style sheet,
   so a test that puts the sheet back leaves it inert (rule 5).
+
+v0.1.326 (D319, D320, D321) widens the census past the buttons, because
+the third test of the interface found what it did not look at: Project
+Settings cut its page names («Agua sub», «Transitori») and Surface Options,
+with an explicit window minimum that REPLACES the layout's, opened with the
+Block Search boxes 2–3 px tall. At the size each dialog opens at AND at its
+minimum, ``_squeezed`` also reports a label that does not wrap and is
+narrower than its text, a check box or radio button narrower than its text,
+a combo or spin box lower than its own minimum, and a list whose items do
+not fit across.
 """
 from __future__ import annotations
 
@@ -138,6 +148,45 @@ def _cut(dialog):
             for b in dialog.findChildren(QPushButton)
             if b.isVisible() and b.text()
             and b.width() < b.sizeHint().width()]
+
+
+def _squeezed(dialog):
+    """v0.1.326 — what ``dialog`` shows cut or squashed besides its buttons,
+    as ``(kind, text, has, needs)``. Text that wraps (a word-wrapped label,
+    a ``WrappingCheckBox``) is cut when it gets fewer lines than it needs at
+    its width, so it is measured in height; a list counts when its widest
+    item is wider than what it shows across."""
+    from PySide6.QtWidgets import (QAbstractSpinBox, QCheckBox, QComboBox,
+                                   QLabel, QListWidget, QRadioButton)
+
+    def text_cut(kind, w):
+        if w.hasHeightForWidth():
+            need = w.heightForWidth(w.width())
+            if w.height() < need:
+                out.append((kind + " lines", w.text()[:60], w.height(), need))
+        elif w.width() < w.sizeHint().width():
+            out.append((kind, w.text()[:60], w.width(), w.sizeHint().width()))
+
+    out = []
+    for w in dialog.findChildren(QLabel):
+        if w.isVisible() and w.text():
+            text_cut("label", w)
+    for cls in (QCheckBox, QRadioButton):
+        for w in dialog.findChildren(cls):
+            if w.isVisible() and w.text():
+                text_cut("check", w)
+    for cls in (QAbstractSpinBox, QComboBox):
+        for w in dialog.findChildren(cls):
+            if (w.isVisible()
+                    and w.height() < w.minimumSizeHint().height()):
+                out.append(("box", type(w).__name__, w.height(),
+                            w.minimumSizeHint().height()))
+    for w in dialog.findChildren(QListWidget):
+        if (w.isVisible() and w.count()
+                and w.sizeHintForColumn(0) > w.viewport().width()):
+            out.append(("list", w.item(0).text()[:60], w.viewport().width(),
+                        w.sizeHintForColumn(0)))
+    return out
 
 
 def _named(w):
@@ -250,8 +299,9 @@ def _census(w):
 
 
 def _measure(app, build):
-    """``(minimum, cut at the minimum)`` of the dialog ``build`` returns,
-    or None when it does not open on this model."""
+    """``(minimum, cut at the minimum, squeezed where it opens or at the
+    minimum)`` of the dialog ``build`` returns, or None when it does not
+    open on this model."""
     try:
         d = build()
     except Exception:  # noqa: BLE001 - the census skips what needs more
@@ -261,10 +311,11 @@ def _measure(app, build):
     try:
         d.show()
         app.processEvents()
+        squeezed = _squeezed(d)
         ms = d.minimumSizeHint()
         d.resize(ms)
         app.processEvents()
-        return (ms.width(), ms.height()), _cut(d)
+        return (ms.width(), ms.height()), _cut(d), squeezed + _squeezed(d)
     finally:
         d.hide()
         d.deleteLater()
@@ -336,9 +387,10 @@ class TestTheCensus:
                         if got is None:
                             continue
                         measured += 1
-                        (mw, mh), cut = got
-                        if cut or mw > _SCREEN[0] or mh > _SCREEN[1]:
-                            bad.append((name, (mw, mh), cut))
+                        (mw, mh), cut, squeezed = got
+                        if (cut or squeezed or mw > _SCREEN[0]
+                                or mh > _SCREEN[1]):
+                            bad.append((name, (mw, mh), cut, squeezed))
                     # the census has to see something to mean anything
                     assert measured >= 35, measured
                     assert bad == [], (theme, bad)

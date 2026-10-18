@@ -64,6 +64,7 @@ from ogr_core.support import (
     support_registry,
 )
 from ogr_gui.i18n import tr  # noqa: E402
+from ogr_gui.dialog_size import hold_wrapped_height, list_width
 from ogr_gui.labels import (force_application_label,
                             force_orientation_label)  # noqa: E402
 from ogr_gui.themes import theme_color
@@ -434,6 +435,9 @@ class DefineSupportDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(tr("Define Support Properties"))
         self.resize(820, 540)
+        # v0.1.326 (D321) — a wrapped note asks for more height the
+        # narrower the window is, which Qt does not add to its minimum
+        hold_wrapped_height(self)
         self.project = project
 
         # Load existing support types (or seed one default if empty)
@@ -480,10 +484,8 @@ class DefineSupportDialog(QDialog):
         btn_row.addWidget(b_add); btn_row.addWidget(b_dup); btn_row.addWidget(b_del)
         left.addLayout(btn_row)
         left_w = QWidget(); left_w.setLayout(left)
-        # v0.1.315 (D293) — kept narrow, but never narrower than its row of
-        # buttons: at a flat 220 px "+ Añadir", "Duplicar" and "− Quitar"
-        # were cut
-        left_w.setMaximumWidth(max(220, left_w.minimumSizeHint().width()))
+        self._left = left_w
+        self._fit_list()
 
         # RIGHT — editor for the selected row
         right = QVBoxLayout()
@@ -549,6 +551,23 @@ class DefineSupportDialog(QDialog):
         # other three support dialogs now share.
         return force_orientation_label(fo)
 
+    def _fit_list(self) -> None:
+        """The list as wide as the labels the program writes, and its
+        column never narrower than its row of buttons.
+
+        v0.1.315 (D293) kept the column at most 220 px, or its buttons'
+        width; v0.1.326 (D321) — that cut the label of the default set
+        («Type 1  [Anclado en el extremo]», 311 of its 324 px). A name the
+        user types is not refitted, or the dialog would widen at every key:
+        each item carries its whole label as its tooltip.
+        """
+        lw = self.list_widget
+        for i in range(lw.count()):
+            lw.item(i).setToolTip(lw.item(i).text())
+        lw.setMinimumWidth(list_width(lw))
+        self._left.setMaximumWidth(
+            max(220, self._left.minimumSizeHint().width()))
+
     def _row_label(self, row: _SupportRow) -> str:
         # the set's name is data; the class name is shown translated
         return "%s  [%s]" % (row.name, tr(row.support.DISPLAY_NAME))
@@ -611,6 +630,7 @@ class DefineSupportDialog(QDialog):
         self._rows[row_idx].name = self.ed_name.text()
         item = self.list_widget.item(row_idx)
         item.setText(self._row_label(self._rows[row_idx]))
+        item.setToolTip(item.text())
 
     def _on_type_changed(self, _idx: int) -> None:
         row_idx = self.list_widget.currentRow()
@@ -629,6 +649,7 @@ class DefineSupportDialog(QDialog):
         self.lbl_desc.setText(tr(cls.DESCRIPTION))
         item = self.list_widget.item(row_idx)
         item.setText(self._row_label(row))
+        self._fit_list()
         # Rebuild editor
         self.param_panel.set_type(cls, current_values=row.support.__dict__)
         # Sync the application / orientation combos
@@ -672,6 +693,7 @@ class DefineSupportDialog(QDialog):
         row.name = f"Type {len(self._rows) + 1}"
         self._rows.append(row)
         self.list_widget.addItem(self._row_label(row))
+        self._fit_list()
         self.list_widget.setCurrentRow(len(self._rows) - 1)
 
     def _duplicate_row(self) -> None:
@@ -705,6 +727,7 @@ class DefineSupportDialog(QDialog):
         )
         self._rows.append(new_row)
         self.list_widget.addItem(self._row_label(new_row))
+        self._fit_list()
         self.list_widget.setCurrentRow(len(self._rows) - 1)
 
     def _delete_row(self) -> None:

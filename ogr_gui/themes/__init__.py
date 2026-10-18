@@ -299,6 +299,9 @@ QComboBox:disabled, QPlainTextEdit:disabled, QTextEdit:disabled,
 QTreeView:disabled, QListView:disabled, QTableView:disabled,
 QHeaderView::section:disabled, QGroupBox:disabled,
 QGroupBox::title:disabled { color: #7a7a7a; }
+/* v0.1.326 (D319): a disabled header sits on #404040, where #7a7a7a is
+   2.4:1; this is about 4.4:1 (the stages table of the transient). */
+QHeaderView::section:disabled { color: #a8a8a8; }
 QScrollBar:vertical { background: #2b2b2b; width: 12px; }
 QScrollBar::handle:vertical { background: #555; border-radius: 6px; }
 QScrollBar::handle:vertical:hover { background: #6a85b0; }

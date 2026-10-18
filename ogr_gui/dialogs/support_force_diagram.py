@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 )
 
 from ogr_gui.i18n import tr
+from ogr_gui.dialog_size import hold_wrapped_height
 
 #: Mode key -> English label. The keys are ASCII tokens that live in
 #: ``ogr_core``, which has no i18n; the label is user-visible text and
@@ -164,6 +165,9 @@ class SupportForceDiagramWindow(QDialog):
         self.critical = critical
         self.setWindowTitle(tr("Support Force Diagram"))
         self.resize(760, 500)
+        # v0.1.326 (D321) — a wrapped note asks for more height the
+        # narrower the window is, which Qt does not add to its minimum
+        hold_wrapped_height(self)
 
         lay = QVBoxLayout(self)
         top = QHBoxLayout()

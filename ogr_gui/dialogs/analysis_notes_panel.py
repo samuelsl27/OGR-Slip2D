@@ -39,6 +39,7 @@ from PySide6.QtWidgets import (
 )
 
 from ogr_gui.i18n import tr
+from ogr_gui.dialog_size import hold_wrapped_height
 
 #: Notes arrive as ``"<method id>: <sentence>"`` when they are about one
 #: method's reported surface, and bare when they are about the model —
@@ -65,6 +66,9 @@ class AnalysisNotesPanel(QDialog):
         self.setWindowTitle(tr("Analysis Notes"))
         self.setModal(False)
         self.resize(760, 420)
+        # v0.1.326 (D321) — a wrapped note asks for more height the
+        # narrower the window is, which Qt does not add to its minimum
+        hold_wrapped_height(self)
 
         v = QVBoxLayout(self)
 

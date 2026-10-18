@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (
 
 from ogr_core.materials.drawdown_envelopes import Kc1Envelope, REnvelope
 from ogr_gui.i18n import tr
+from ogr_gui.dialog_size import hold_wrapped_height
 
 
 def envelope_summary(envelope) -> str:
@@ -61,6 +62,9 @@ class DrawdownStrengthDialog(QDialog):
     def __init__(self, envelope=None, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle(tr("Define Strength"))
+        # v0.1.326 (D321) — a wrapped note asks for more height the
+        # narrower the window is, which Qt does not add to its minimum
+        hold_wrapped_height(self)
         root = QVBoxLayout(self)
 
         note = QLabel(tr(

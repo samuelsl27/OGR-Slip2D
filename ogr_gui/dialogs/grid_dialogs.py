@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 from ogr_gui.i18n import tr  # noqa: E402
+from ogr_gui.dialog_size import hold_wrapped_height
 from ogr_gui.themes import theme_color
 
 
@@ -57,8 +58,13 @@ class AddGridDialog(QDialog):
         self.setWindowTitle(tr("Add Grid"))
         self.project = project
         self.setSizeGripEnabled(True)
-        self.setMinimumSize(380, 360)
+        # v0.1.326 (D321) — no explicit minimum: it REPLACED the layout's
+        # (416 x 460 in Spanish), so the dialog could be dragged narrower
+        # than its content; and its wrapped introduction asks for more
+        # height the narrower the window is, which Qt does not add to a
+        # window's minimum (the boxes opened 21 px tall of 25)
         self.resize(440, 480)
+        hold_wrapped_height(self)
 
         s = project.settings.search
 
@@ -251,8 +257,11 @@ class SurfaceOptionsDialog(QDialog):
         self.setWindowTitle(tr("Surface Options"))
         self.project = project
         self.setSizeGripEnabled(True)
-        self.setMinimumSize(460, 520)
-        self.resize(560, 660)
+        # v0.1.326 (D321) — no explicit minimum: on a window it REPLACES the
+        # one the layout would enforce, so the dialog opened (and could be
+        # dragged) smaller than its pages and squeezed the Block Search panel
+        # to 2-3 px boxes. It opens at its content's size instead (end of
+        # this method), and the content scrolls up and down.
 
         from PySide6.QtWidgets import (
             QButtonGroup, QCheckBox, QComboBox, QDoubleSpinBox,
@@ -270,12 +279,16 @@ class SurfaceOptionsDialog(QDialog):
 
         s = project.settings.search
 
-        root = QVBoxLayout(self)
-        root.addWidget(QLabel(
+        outer = QVBoxLayout(self)
+        body = QWidget()
+        root = QVBoxLayout(body)
+        intro = QLabel(
             tr("<b>Failure surface generation & optimization.</b><br>"
             "Configure the algorithm used to enumerate slip surfaces "
             "and the global filters that prune candidate results.")
-        ))
+        )
+        intro.setWordWrap(True)
+        root.addWidget(intro)
 
         # ============ HEADER ============
         # v0.1.287 (D288) — a group box title reads «&» as a shortcut
@@ -438,7 +451,13 @@ class SurfaceOptionsDialog(QDialog):
         self.btn_cancel.clicked.connect(self.reject)
         btn_box.addWidget(self.btn_ok)
         btn_box.addWidget(self.btn_cancel)
-        root.addLayout(btn_box)
+        # v0.1.326 (D321) — the options scroll; the buttons stay in sight
+        from ogr_gui.dialog_size import VerticalScrollArea
+        self._scroll = VerticalScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setWidget(body)
+        outer.addWidget(self._scroll, 1)
+        outer.addLayout(btn_box)
 
         # Wire method dropdown change → panel swap
         self.cb_method.currentIndexChanged.connect(self._on_method_changed)
@@ -446,6 +465,9 @@ class SurfaceOptionsDialog(QDialog):
         # Initial fill of method dropdown
         self._refill_methods(initial=True)
         self._sync_auto_refine_rows()
+        from PySide6.QtCore import QSize
+        from ogr_gui.dialog_size import open_at_content_size
+        open_at_content_size(self, QSize(560, 660))
 
     # ----------------------------------------------------------------
     def _refill_methods(self, initial: bool = False) -> None:
@@ -769,7 +791,10 @@ class SurfaceOptionsDialog(QDialog):
             "more thorough.")
         )
         f.addRow(tr("Radius Increment:"), self._g_radius)
-        self._g_composite = QCheckBox(
+        # v0.1.326 (D321) — it wraps: on one line it set the minimum width
+        # of the dialog (716 px in Spanish)
+        from ogr_gui.dialog_size import WrappingCheckBox
+        self._g_composite = WrappingCheckBox(
             # v0.1.111 — the label said "a Material Boundary" and that is
             # not what it does: the surface follows the LOWER EDGE OF THE
             # EXTERNAL BOUNDARY, which is where a bedrock horizon is drawn.

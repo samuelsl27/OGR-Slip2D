@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (
 
 from ogr_core.dxf import BOUNDARY_TO_LAYER, ExportOptions
 from ogr_gui.i18n import tr
+from ogr_gui.dialog_size import hold_wrapped_height
 
 
 class DxfExportDialog(QDialog):
@@ -47,6 +48,9 @@ class DxfExportDialog(QDialog):
         self.options = ExportOptions()
         self.setWindowTitle(tr("Export DXF"))
         self.resize(560, 560)
+        # v0.1.326 (D321) — a wrapped note asks for more height the
+        # narrower the window is, which Qt does not add to its minimum
+        hold_wrapped_height(self)
 
         v = QVBoxLayout(self)
 

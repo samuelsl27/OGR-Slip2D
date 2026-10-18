@@ -33,6 +33,7 @@ from ogr_core.materials import (
     calculate_hoek_brown,
 )
 from ogr_gui.i18n import tr
+from ogr_gui.dialog_size import hold_wrapped_height
 
 
 class ParameterCalculatorDialog(QDialog):
@@ -42,6 +43,9 @@ class ParameterCalculatorDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(tr("Parameter Calculator"))
         self.resize(520, 480)
+        # v0.1.326 (D321) — a wrapped note asks for more height the
+        # narrower the window is, which Qt does not add to its minimum
+        hold_wrapped_height(self)
         self.result_params = None
 
         v = QVBoxLayout(self)

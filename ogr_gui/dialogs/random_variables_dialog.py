@@ -50,6 +50,7 @@ from ogr_core.statistics import (
     available_variables,
 )
 from ogr_gui.i18n import tr  # noqa: E402
+from ogr_gui.dialog_size import list_width
 from ogr_gui.labels import random_variable_label  # noqa: E402
 
 _DIST_LABELS = [
@@ -104,6 +105,12 @@ class RandomVariablesDialog(QDialog):
         mid.addWidget(QLabel(tr("Random variables")))
         self.list_defined = QListWidget()
         self.list_defined.currentRowChanged.connect(self._on_selected)
+        # v0.1.326 (D321) — both lists as wide as the widest parameter
+        # («Silty clay — cohesión» showed 186 of its 340 px); the defined
+        # variables are a choice among the same labels
+        need = list_width(self.list_available)
+        self.list_available.setMinimumWidth(need)
+        self.list_defined.setMinimumWidth(need)
         mid.addWidget(self.list_defined, 1)
         b_del = QPushButton(tr("Remove"))
         b_del.clicked.connect(self._remove)

@@ -36,6 +36,9 @@ from PySide6.QtWidgets import (
 )
 
 from ogr_gui.i18n import tr
+from ogr_gui.dialog_size import hold_wrapped_height
+from PySide6.QtGui import QColor  # noqa: E402
+from ogr_gui.themes import theme_color  # noqa: E402
 
 # Severity and advice per problem kind. Keeping this here rather than in
 # the sanitiser keeps engine and wording apart: the sanitiser records
@@ -91,6 +94,9 @@ class DxfProblemsPanel(QDialog):
         self.setWindowTitle(tr("DXF Import — Problems"))
         self.setModal(False)
         self.resize(720, 420)
+        # v0.1.326 (D321) — a wrapped note asks for more height the
+        # narrower the window is, which Qt does not add to its minimum
+        hold_wrapped_height(self)
 
         v = QVBoxLayout(self)
 
@@ -177,7 +183,8 @@ class DxfProblemsPanel(QDialog):
                 ""])
             top.setData(0, Qt.UserRole, ("kind", kind))
             if sev == "error":
-                top.setForeground(0, Qt.red)
+                # v0.1.326 (D319) — the theme's error ink
+                top.setForeground(0, QColor(theme_color("error")))
             self.tree.addTopLevelItem(top)
             for p in items:
                 where = ""

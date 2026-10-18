@@ -17,7 +17,7 @@ from __future__ import annotations
 import copy
 import dataclasses
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -50,6 +50,8 @@ from ogr_core.project.units import (
     TimeUnit,
     UnitSystem,
 )
+from ogr_gui.dialog_size import (VerticalScrollArea, WrappingCheckBox,
+                                  list_width, open_at_content_size)
 from ogr_gui.i18n import tr
 from ogr_gui.labels import (groundwater_method_label, permeability_unit_label,
                             time_unit_label)  # noqa: E402
@@ -713,7 +715,6 @@ class ProjectSettingsDialog(QDialog):
                  project=None) -> None:
         super().__init__(parent)
         self.setWindowTitle(tr("Project Settings..."))
-        self.resize(720, 480)
         self.settings = settings
         # v0.1.127 — optional, and only the Seismic page reads it: the
         # seismic records are project data and not settings, so the page
@@ -728,12 +729,15 @@ class ProjectSettingsDialog(QDialog):
 
         layout = QHBoxLayout(self)
 
+        # v0.1.326 (D320) — as wide as its longest page name (``_fit_nav``):
+        # a maximum of 180 px, the only part of the dialog that could give
+        # way, cut «Agua subterránea» to «Agua sub» and narrower still in
+        # the dark theme.
         self.nav = QListWidget()
-        self.nav.setMaximumWidth(180)
+        self.nav.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         layout.addWidget(self.nav)
 
         self.stack = QStackedWidget()
-        layout.addWidget(self.stack, 1)
 
         self.pages: list[QWidget] = []
         self._build_pages()
@@ -741,8 +745,6 @@ class ProjectSettingsDialog(QDialog):
         self.nav.currentRowChanged.connect(self.stack.setCurrentIndex)
         self.nav.setCurrentRow(0)
 
-        right_wrap = QVBoxLayout()
-        layout.addLayout(right_wrap, 0)
         buttons = QDialogButtonBox(
             QDialogButtonBox.Ok
             | QDialogButtonBox.Apply
@@ -759,15 +761,15 @@ class ProjectSettingsDialog(QDialog):
             "Nothing is written until Apply or OK; settings edited "
             "elsewhere (the search grid, the slope limits, back analysis, "
             "the transient stages) are kept."))
-        main = QVBoxLayout()
-        layout.takeAt(1)
-        layout.takeAt(1)
-        # Rebuild layout properly
+        # v0.1.326 (D320) — the stack and the buttons in one column; the
+        # layout it replaced added both, took them out again and left an
+        # empty layout behind.
         container = QWidget()
         vbox = QVBoxLayout(container)
         vbox.addWidget(self.stack)
         vbox.addWidget(buttons)
         layout.addWidget(container, 1)
+        open_at_content_size(self, QSize(720, 480))
 
     # ------------------------------------------------------------------
     # v0.1.74 — the nine pages, in one list. ``_defaults`` used to
@@ -807,8 +809,20 @@ class ProjectSettingsDialog(QDialog):
         # (``_refresh_page_gates`` compares it); only the shown text is
         # translated.
         self.nav.addItem(tr(label))
-        self.stack.addWidget(widget)
+        # v0.1.326 (D320) — every page scrolls up and down when it is taller
+        # than the dialog, instead of squeezing its last note out of sight
+        # (Design Standard cut its footer); ``pages`` keeps the page itself.
+        scroll = VerticalScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(widget)
+        self.stack.addWidget(scroll)
         self.pages.append(widget)
+        self._fit_nav()
+
+    def _fit_nav(self) -> None:
+        """The page list as wide as its widest name, in this language and
+        this theme (the stylesheet's padding is in ``sizeHintForColumn``)."""
+        self.nav.setFixedWidth(list_width(self.nav))
 
     def _refresh_page_gates(self) -> None:
         """Grey out the pages whose analysis is switched off.
@@ -1302,7 +1316,9 @@ class _DesignStandardPage(QWidget):
         # one source (Bond et al. 2013), so by default every slice takes
         # the unfavourable factor. Off, the dip of each slice's base
         # decides, and the favourable factor starts to be read.
-        self.chk_single_source = QCheckBox(tr(
+        # v0.1.326 (D320) — this and the anchors option wrap: on one line
+        # they set the minimum width of the whole dialog (740 px in Spanish)
+        self.chk_single_source = WrappingCheckBox(tr(
             "Single source: the unfavourable factor on the weight of every "
             "slice"))
         self.chk_single_source.setChecked(
@@ -1323,7 +1339,7 @@ class _DesignStandardPage(QWidget):
         self.factors["factor_unit_weight"].setToolTip(tr(
             "Divides the unit weights, as every material factor divides its "
             "property."))
-        self.chk_anchor = QCheckBox(tr(
+        self.chk_anchor = WrappingCheckBox(tr(
             "Anchors: the permanent-action factor on the effective stress of "
             "the bond"))
         self.chk_anchor.setChecked(

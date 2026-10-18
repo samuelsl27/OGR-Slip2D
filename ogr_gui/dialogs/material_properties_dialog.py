@@ -1505,6 +1505,9 @@ class MaterialPropertiesDialog(QDialog):
             f"color: {theme_color('muted_strong')}; font-style: italic; padding-left: 12px;"
         )
         self.lbl_strength_formula.setMinimumWidth(220)
+        # v0.1.326 (D321) — the long formulas (Hyperbolic) wrap instead of
+        # being cut at the dialog's edge
+        self.lbl_strength_formula.setWordWrap(True)
         top_row.addWidget(self.lbl_strength_formula, stretch=1)
         # v0.1.57 — the GSI calculator, shown only for the Generalised
         # Hoek-Brown criterion, whose mb, s and a are DERIVED quantities.

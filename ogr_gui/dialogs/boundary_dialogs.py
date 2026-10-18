@@ -60,6 +60,7 @@ from ogr_core.geometry import (
     simplify_rdp,
 )
 from ogr_gui.i18n import tr  # noqa: E402
+from ogr_gui.dialog_size import hold_wrapped_height
 
 
 # ======================================================================
@@ -176,6 +177,10 @@ class ScaleDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(tr("Scale Boundary"))
         self.resize(320, 200)
+        # v0.1.326 (D321) — the wrapped note about the pivot took the height
+        # of the boxes, which opened 13 px tall of 25: Qt does not add the
+        # height a wrapped label needs to a window's minimum
+        hold_wrapped_height(self)
 
         root = QVBoxLayout(self)
         form = QFormLayout()
@@ -281,6 +286,9 @@ class ExpandShrinkDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(tr("Expand / Shrink External Boundary"))
         self.resize(320, 140)
+        # v0.1.326 (D321) — a wrapped note asks for more height the
+        # narrower the window is, which Qt does not add to its minimum
+        hold_wrapped_height(self)
         root = QVBoxLayout(self)
         form = QFormLayout()
         self.spn_d = QDoubleSpinBox()
@@ -550,6 +558,9 @@ class SimplifyBoundaryDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(tr("Simplify Boundary"))
         self.resize(320, 160)
+        # v0.1.326 (D321) — a wrapped note asks for more height the
+        # narrower the window is, which Qt does not add to its minimum
+        hold_wrapped_height(self)
         root = QVBoxLayout(self)
         form = QFormLayout()
         self.spn_tol = QDoubleSpinBox()

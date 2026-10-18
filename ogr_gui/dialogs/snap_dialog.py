@@ -38,6 +38,7 @@ from PySide6.QtWidgets import (
 
 from ogr_gui.data_tips import DataTipMode
 from ogr_gui.i18n import tr
+from ogr_gui.dialog_size import hold_wrapped_height
 
 _TIP_LABELS = [
     (DataTipMode.NONE, "None"),
@@ -65,6 +66,9 @@ class SnapDialog(QDialog):
         self.data_tip_mode = data_tip_mode
         self.setWindowTitle(tr("Snap"))
         self.resize(460, 520)
+        # v0.1.326 (D321) — a wrapped note asks for more height the
+        # narrower the window is, which Qt does not add to its minimum
+        hold_wrapped_height(self)
 
         v = QVBoxLayout(self)
 
