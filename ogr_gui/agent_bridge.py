@@ -123,6 +123,13 @@ class WindowHost:
         w.last_factor_report = factor_report
         w.last_compute_warnings = list(warnings)
         w.results_dock.show_result(first, factor_report)
+        # v0.1.327 (D330) — the model this result is of, as a Compute in the
+        # window remembers it: without it an edit after an agent's analysis
+        # never marked the result stale (D304)
+        if first is not None:
+            w._remember_results_model()
+        else:
+            w._results_model_hash = None
         if first is not None:
             w.canvas.display_search_result(first)
 

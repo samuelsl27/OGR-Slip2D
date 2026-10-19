@@ -16,7 +16,8 @@ from __future__ import annotations
 import math
 
 from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPainterPath, QPen, QPolygonF
+from PySide6.QtGui import (QBrush, QColor, QFont, QPainter, QPainterPath,
+                           QPainterPathStroker, QPen, QPolygonF)
 from PySide6.QtWidgets import (
     QGraphicsEllipseItem,
     QGraphicsItem,
@@ -103,9 +104,15 @@ class DomainItem(QGraphicsPathItem):
 class BoundaryItem(DomainItem):
     """Rendering of a :class:`Boundary`."""
 
+    #: How near its line, in screen pixels, a boundary takes the pointer.
+    #: The canvas converts it to model units at each zoom
+    #: (``set_pick_tolerance``), so it is as easy to hit at every scale.
+    PICK_PX = 4.0
+
     def __init__(self, boundary: Boundary, parent: QGraphicsItem | None = None) -> None:
         super().__init__(parent)
         self.boundary = boundary
+        self._pick = 0.0
         from ogr_gui.labels import boundary_type_label
         self.setToolTip("<b>%s</b><br>%s" % (
             boundary.name, boundary_type_label(boundary.btype)))
@@ -149,6 +156,39 @@ class BoundaryItem(DomainItem):
         self.setBrush(Qt.NoBrush)
 
     # ------------------------------------------------------------------
+    # v0.1.327 (D322) — the pointer is the line's, not the interior's. The
+    # shape of a closed QGraphicsPathItem is its whole interior, brush or
+    # none, and the external boundary sits above the regions: it took every
+    # hover and click inside the slope, so the tooltip of a region never
+    # showed and a click inside selected the external boundary.
+    def _is_marker(self) -> bool:
+        """The Block Search point, drawn in screen units (``refresh``)."""
+        return bool(self.flags() & QGraphicsItem.ItemIgnoresTransformations)
+
+    def set_pick_tolerance(self, tolerance: float) -> None:
+        """How near the line, in MODEL units, the item takes the pointer:
+        ``PICK_PX`` converted at the view's current scale."""
+        tolerance = max(float(tolerance), 0.0)
+        if tolerance != self._pick and not self._is_marker():
+            self.prepareGeometryChange()
+            self._pick = tolerance
+
+    def shape(self) -> QPainterPath:  # noqa: D102
+        if self._is_marker():
+            return super().shape()
+        stroker = QPainterPathStroker()
+        # Qt turns a width of zero or less into ONE unit, a metre-wide band
+        # here: before the canvas sets the tolerance, the line alone
+        stroker.setWidth(max(2.0 * self._pick, 1e-12))
+        return stroker.createStroke(self.path())
+
+    def boundingRect(self) -> QRectF:  # noqa: D102
+        if self._is_marker() or self._pick <= 0.0:
+            return super().boundingRect()
+        p = self._pick
+        return self.path().controlPointRect().adjusted(-p, -p, p, p)
+
+    # ------------------------------------------------------------------
     def paint(self, painter: QPainter, option, widget=None) -> None:  # noqa: N802
         super().paint(painter, option, widget)
         if self._hover:
@@ -180,39 +220,6 @@ class BoundaryItem(DomainItem):
             # over the material it belongs to.
             BoundaryType.ANISOTROPIC_SURFACE: 6.5,
         }.get(btype, 1.0)
-
-
-# ======================================================================
-class MaterialRegionItem(DomainItem):
-    """Shaded closed region representing a material assignment."""
-
-    def __init__(
-        self,
-        boundary: Boundary,
-        material: Material,
-        parent: QGraphicsItem | None = None,
-    ) -> None:
-        super().__init__(parent)
-        self.boundary = boundary
-        self.material = material
-        self.setToolTip(material_tooltip(material))
-        self.setZValue(1.5)
-        self.refresh()
-
-    def refresh(self) -> None:
-        path = QPainterPath()
-        verts = self.boundary.polyline.vertices
-        if verts:
-            path.moveTo(verts[0].x, verts[0].y)
-            for v in verts[1:]:
-                path.lineTo(v.x, v.y)
-            path.closeSubpath()
-        self.setPath(path)
-        c = QColor(self.material.color)
-        self.setBrush(QBrush(QColor(c.red(), c.green(), c.blue(), 110)))
-        pen = QPen(c.darker(150), 1.0)
-        pen.setCosmetic(True)
-        self.setPen(pen)
 
 
 # ======================================================================

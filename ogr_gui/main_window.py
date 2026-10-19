@@ -271,7 +271,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.326"
+    VERSION = "0.1.327"
 
     def __init__(self) -> None:
         super().__init__()
@@ -348,6 +348,9 @@ class MainWindow(QMainWindow):
         # Central canvas
         self.canvas = CanvasView(self.project, self)
         self.canvas.selection_filter = self.selection_filter
+        # v0.1.327 (D323) — the canvas draws the result again after a redraw
+        # of the model only while it is still of this model
+        self.canvas.result_is_current = self._results_are_current
         self.setCentralWidget(self.canvas)
         self.canvas.tool_mode_changed.connect(self._sync_tool_actions)
         # v0.1.311 (D308) — what an action armed for its next pick goes
@@ -4325,6 +4328,15 @@ class MainWindow(QMainWindow):
         (v0.1.297, D304)."""
         from ogr_api.snapshot import model_hash
         self._results_model_hash = model_hash(self.project)
+
+    def _results_are_current(self) -> bool:
+        """Whether the result in the results panel is of the model as it is
+        now: the fingerprint of D304, asked by the canvas before it draws
+        the result again over a redrawn model (v0.1.327, D323)."""
+        if getattr(self, "_results_model_hash", None) is None:
+            return False
+        from ogr_api.snapshot import model_hash
+        return model_hash(self.project) == self._results_model_hash
 
     def _check_results_stale(self) -> None:
         """Mark the results panel stale when the model is no longer the one

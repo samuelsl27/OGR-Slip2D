@@ -21,7 +21,7 @@ import math
 from dataclasses import dataclass
 from typing import Optional
 
-from PySide6.QtCore import QPointF, QRectF, Qt, Signal
+from PySide6.QtCore import QEvent, QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import (
     QBrush,
     QColor,
@@ -47,7 +47,6 @@ from .graphics_items import (
     BoundaryItem,
     DistributedLoadItem,
     LineLoadItem,
-    MaterialRegionItem,
     SlipRadiiItem,
     SlipSurfaceItem,
     SupportItem,
@@ -284,6 +283,16 @@ class CanvasView(QGraphicsView):
         self.snap_engine = SnapEngine(self._snap_settings)
         self.display_options = DisplayOptions()
         self._result_items: list = []
+        # v0.1.327 (D322) — the boundary items of the scene, whose pointer
+        # tolerance follows the zoom (``_view_scaled``)
+        self._boundary_items: list = []
+        # v0.1.327 (D323) — the result last drawn, and with what, to draw
+        # it again when the model is redrawn. ``result_is_current`` is the
+        # owner's word on whether it is still of this model: the main
+        # window sets it; without it a redraw leaves the result off, as it
+        # always did (Interpret redraws its own).
+        self._shown_result = None
+        self.result_is_current = None
 
         # Tool-mode / interaction
         self._tool_mode = ToolMode.SELECT
@@ -415,6 +424,10 @@ class CanvasView(QGraphicsView):
     # ==================================================================
     def set_project(self, project: Project) -> None:
         self.project = project
+        # v0.1.327 (D323) — nothing of the previous project is drawn again:
+        # not its result, and not the snap marker, which outlived File > New
+        self._shown_result = None
+        self._last_snap = None
         project.add_listener(lambda evt: self.refresh_scene())
         self.refresh_scene()
         self.zoom_all()
@@ -467,6 +480,11 @@ class CanvasView(QGraphicsView):
         if mode is not previous and self._draw_points:
             self._draw_points = []
             self._clear_draw_preview()
+        # v0.1.327 (D323) — the snap marker belongs to the mode that snapped:
+        # it stayed where a vertex had been dropped after the mode was left
+        if mode is not previous and self._last_snap is not None:
+            self._last_snap = None
+            self.viewport().update()
 
         self.setDragMode(
             QGraphicsView.RubberBandDrag if mode == ToolMode.SELECT
@@ -488,9 +506,25 @@ class CanvasView(QGraphicsView):
     # Scene refresh
     # ==================================================================
     def refresh_scene(self) -> None:
+        """Redraw the model and, while it is still of this model, the result
+        on it (v0.1.327, D323).
+
+        A redraw clears the scene, results included. Every project event
+        redraws, so undoing an edit gave back a result the panel showed as
+        current and the canvas no longer drew; Display Options and the
+        annotations, which leave the result current, cleared it too.
+        """
+        self._draw_model()
+        shown, current = self._shown_result, self.result_is_current
+        if shown is not None and current is not None and current():
+            result, options = shown
+            self.display_search_result(result, **options)
+
+    def _draw_model(self) -> None:
         scene = self.scene()
         scene.clear()
         self._result_items.clear()
+        self._boundary_items.clear()
         # v0.1.312 (D307) — cleared with the scene; a drag in progress
         # draws it again on its next move
         self._drag_ghost = None
@@ -544,6 +578,8 @@ class CanvasView(QGraphicsView):
                 pen = QPen(QColor(override), lw)
                 pen.setCosmetic(True)
                 item.setPen(pen)
+            item.set_pick_tolerance(self._boundary_pick_tolerance())
+            self._boundary_items.append(item)
             scene.addItem(item)
             if opts.show_boundary_vertices:
                 for v in b.vertices:
@@ -742,6 +778,15 @@ class CanvasView(QGraphicsView):
         filtered away — losing the global minimum because a filter is
         active is how a reader ends up reading the wrong number.
         """
+        # v0.1.327 (D323) — remembered, to be drawn again by refresh_scene
+        self._shown_result = None if search_result is None else (
+            search_result, dict(
+                selected_id=selected_id, hover_id=hover_id,
+                hover_surface_dict=hover_surface_dict,
+                surface_mode=surface_mode, fos_filter=fos_filter,
+                query_ids=query_ids, error_filter=error_filter,
+                invalid_reason_fn=invalid_reason_fn,
+                extra_surface_dicts=extra_surface_dicts))
         scene = self.scene()
         for item in self._result_items:
             if item.scene() is scene:
@@ -1805,6 +1850,40 @@ class CanvasView(QGraphicsView):
     # ==================================================================
     # Zoom & pan
     # ==================================================================
+    # v0.1.327 (D322) — every change of scale passes through these four, so
+    # the boundaries learn their pointer tolerance in one place. They are
+    # the view's own methods; ``fitInView`` scales through C++ and is not
+    # seen by the ``scale`` above it, hence the four.
+    def setTransform(self, *args, **kwargs) -> None:  # noqa: N802
+        super().setTransform(*args, **kwargs)
+        self._view_scaled()
+
+    def scale(self, *args, **kwargs) -> None:  # noqa: D102
+        super().scale(*args, **kwargs)
+        self._view_scaled()
+
+    def fitInView(self, *args, **kwargs) -> None:  # noqa: N802
+        super().fitInView(*args, **kwargs)
+        self._view_scaled()
+
+    def resetTransform(self) -> None:  # noqa: N802
+        super().resetTransform()
+        self._view_scaled()
+
+    def _boundary_pick_tolerance(self) -> float:
+        """``BoundaryItem.PICK_PX`` in model units at the current scale."""
+        ppu = self._pixels_per_unit()
+        return BoundaryItem.PICK_PX / ppu if ppu > 0 else 0.0
+
+    def _view_scaled(self) -> None:
+        # the constructor sets the y flip before this list exists
+        items = getattr(self, "_boundary_items", None)
+        if not items:
+            return
+        tolerance = self._boundary_pick_tolerance()
+        for item in items:
+            item.set_pick_tolerance(tolerance)
+
     def zoom_all(self) -> None:
         if self.project is None or not self.project.boundaries:
             # v0.1.5: on empty project, zoom to a sensible default
@@ -1893,6 +1972,41 @@ class CanvasView(QGraphicsView):
     # ==================================================================
     # Event handling
     # ==================================================================
+    def viewportEvent(self, event) -> bool:  # noqa: N802
+        """v0.1.327 (D331) — the data tip wins over the items' own tooltips.
+
+        The window puts the data tip (``data_tips.tip_at``) in the view's own
+        tooltip, and Qt shows the tooltip of the item under the pointer
+        first, falling back to the view's only where there is no item: the
+        regions, loads and supports cover the model, so the setting changed
+        nothing that could be seen. Off, or with nothing to say, the items
+        speak as before.
+        """
+        if event.type() == QEvent.ToolTip:
+            text = self._data_tip_for(event.pos())
+            if text:
+                from PySide6.QtWidgets import QToolTip
+                QToolTip.showText(event.globalPos(), text, self.viewport())
+                return True
+        return super().viewportEvent(event)
+
+    def _data_tip_for(self, pos) -> str:
+        """The data tip to show at viewport position ``pos``, or "".
+
+        Not on a boundary's line: ``tip_at`` knows no boundaries, and by its
+        own rule the precisely placed thing goes before the material, which
+        is everywhere. Not outside Select either: the window refreshes the
+        data tip only while hovering in Select (``scene_hovered``), so in
+        any other mode it would be the last one, from elsewhere.
+        """
+        text = self.toolTip()
+        if not text or self._tool_mode != ToolMode.SELECT:
+            return ""
+        for item in self.items(pos):
+            if item.toolTip():
+                return "" if isinstance(item, BoundaryItem) else text
+        return text
+
     def wheelEvent(self, event: QWheelEvent) -> None:  # noqa: N802
         angle = event.angleDelta().y()
         factor = 1.15 if angle > 0 else (1 / 1.15)
@@ -2326,6 +2440,10 @@ class CanvasView(QGraphicsView):
             snapshot = self._vertex_drag_start_boundary
             self._dragging_vertex = None
             self._vertex_drag_start_boundary = None
+            # v0.1.327 (D323) — the drop point's marker goes with the drag;
+            # the next move draws it again if the mode still snaps
+            self._last_snap = None
+            self.viewport().update()
             shape = getattr(Qt, self._tool_mode.cursor_name, Qt.ArrowCursor)
             self.viewport().setCursor(QCursor(shape))
             # Emit so MainWindow can wrap the whole drag in a single
