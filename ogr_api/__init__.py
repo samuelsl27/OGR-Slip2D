@@ -33,7 +33,7 @@ What it adds on top of the engine, and why each piece exists:
 
 Author: Samuel Sáez López (UPCT)
 """
-__version__ = "0.1.327"
+__version__ = "0.1.328"
 
 from .errors import (  # noqa: E402
     Busy,

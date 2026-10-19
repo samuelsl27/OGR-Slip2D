@@ -38,6 +38,8 @@ from ogr_core.project import Project
 from ogr_core.units.quantities import Quantity
 
 from .canvas import CanvasView
+from .disabled_reasons import gate
+from .disabled_reasons import install as install_disabled_reasons
 from .i18n import tr
 from .labels import method_name
 from .reported_quantity import reported_quantity
@@ -597,6 +599,10 @@ class InterpretWindow(QMainWindow):
         # window positionally, and a run with no design standard has nothing
         # to say here.
         super().__init__(parent)
+        # v0.1.328 (D325) — set before anything writes to it: a long message
+        # ends in «…» where the indicators begin, whole in its tooltip
+        from .widgets.status_bar import ElidingStatusBar
+        self.setStatusBar(ElidingStatusBar(self))
         self.factor_report = factor_report
         self.setWindowTitle(tr('OGR Slip2D — Interpret — {0}').format(project.name))
         self.resize(1200, 800)
@@ -654,6 +660,9 @@ class InterpretWindow(QMainWindow):
 
         # Menus + toolbar
         self._build_menus()
+        # v0.1.328 (D324) — a disabled entry says why on the status bar, as
+        # in the main window (D289b); these said nothing
+        self._disabled_reason = install_disabled_reasons(self)
         self._build_toolbar()
         self._build_method_selector()
 
@@ -927,20 +936,22 @@ class InterpretWindow(QMainWindow):
         m_data.addSeparator()
         self._act_sf_time = QAction(tr("Graph SF with Time..."), self,
                                     triggered=self._graph_sf_with_time)
-        self._act_sf_time.setEnabled(bool(
-            getattr(self.project, "transient_results", None)))
-        self._act_sf_time.setToolTip(tr(
-            "Requires a transient groundwater analysis with per-stage "
-            "factors of safety."))
+        # v0.1.328 (D324) — the reason in the status tip too, while
+        # disabled: no menu shows a tooltip (``disabled_reasons.gate``)
+        reason = tr("Requires a transient groundwater analysis with "
+                    "per-stage factors of safety.")
+        gate(self._act_sf_time,
+             getattr(self.project, "transient_results", None), reason)
+        self._act_sf_time.setToolTip(reason)
         m_data.addAction(self._act_sf_time)
 
         self._act_support_force = QAction(
             tr("Support Force Analysis..."), self,
             triggered=self._support_force_analysis)
-        self._act_support_force.setEnabled(
-            bool(getattr(self.project, "supports", [])))
-        self._act_support_force.setToolTip(tr(
-            "Requires at least one support in the model."))
+        reason = tr("Requires at least one support in the model.")
+        gate(self._act_support_force,
+             getattr(self.project, "supports", []), reason)
+        self._act_support_force.setToolTip(reason)
         m_data.addAction(self._act_support_force)
 
         # v0.1.124 -- what ``Support Force Analysis`` cannot say: WHICH
@@ -949,10 +960,9 @@ class InterpretWindow(QMainWindow):
         self._act_support_diagram = QAction(
             tr("Support Force Diagram..."), self,
             triggered=self._support_force_diagram)
-        self._act_support_diagram.setEnabled(
-            bool(getattr(self.project, "supports", [])))
-        self._act_support_diagram.setToolTip(tr(
-            "Requires at least one support in the model."))
+        gate(self._act_support_diagram,
+             getattr(self.project, "supports", []), reason)
+        self._act_support_diagram.setToolTip(reason)
         m_data.addAction(self._act_support_diagram)
 
         m_data.addAction(QAction(tr("Back Analysis..."), self,
@@ -1046,10 +1056,11 @@ class InterpretWindow(QMainWindow):
                                     triggered=self._gw_iteration_history)
         self._act_gw_conv = QAction(tr("Convergence Plot..."), self,
                                     triggered=self._gw_convergence)
+        reason = tr("Requires a computed groundwater analysis.")
         for act in (self._act_gw_iter, self._act_gw_conv):
-            act.setEnabled(
-                getattr(self.project, "seepage_result", None) is not None)
-            act.setToolTip(tr("Requires a computed groundwater analysis."))
+            gate(act, getattr(self.project, "seepage_result", None)
+                 is not None, reason)
+            act.setToolTip(reason)
             m_gw.addAction(act)
 
         # -- Statistics -----------------------------------------------
@@ -1081,11 +1092,11 @@ class InterpretWindow(QMainWindow):
         self._act_crit_prob.toggled.connect(self._toggle_critical_prob)
         stats_acts = [self._act_sens_plot, self._act_conv_plot,
                       self._act_export_stats, self._act_crit_prob]
+        reason = tr("Requires a probabilistic or sensitivity analysis: run "
+                    "Statistics → Compute Statistics in the modeller.")
         for act in stats_acts:
-            act.setEnabled(self._has_statistics())
-            act.setToolTip(tr(
-                "Requires a probabilistic or sensitivity analysis: run "
-                "Statistics → Compute Statistics in the modeller."))
+            gate(act, self._has_statistics(), reason)
+            act.setToolTip(reason)
             m_stat.addAction(act)
 
         # v0.1.126 — the two "several minima" actions have a SECOND source
@@ -1096,8 +1107,13 @@ class InterpretWindow(QMainWindow):
         # defect rule 3 exists to catch — and it would be a new one, not
         # an inherited one.
         has_minima = bool(getattr(self.search_result, "minima", None))
+        # v0.1.328 (D324) — their tooltip says what they do; the status tip
+        # says what they need, which is two things
+        reason = tr("Requires a probabilistic or sensitivity analysis, or a "
+                    "search that reports several minima (a multimodal "
+                    "search or an Overall Slope run).")
         for act in (self._act_show_gm, self._act_pick_gm):
-            act.setEnabled(self._has_statistics() or has_minima)
+            gate(act, self._has_statistics() or has_minima, reason)
             act.setToolTip(tr(
                 "Draws every minimum the result reports: the regions a "
                 "multimodal search told apart, or the per-sample global "
@@ -1228,11 +1244,12 @@ class InterpretWindow(QMainWindow):
         act = getattr(self, "_act_thrust", None)
         if act is not None:
             available = mid in self._THRUST_METHODS
-            act.setEnabled(available)
-            act.setToolTip("" if available else tr(
+            reason = tr(
                 "The line of thrust is only defined for methods that "
                 "resolve the interslice forces (Spencer, GLE/"
-                "Morgenstern-Price, Lowe-Karafiath, Corps of Engineers)."))
+                "Morgenstern-Price, Lowe-Karafiath, Corps of Engineers).")
+            gate(act, available, reason)
+            act.setToolTip("" if available else reason)
             if not available and act.isChecked():
                 act.setChecked(False)
 

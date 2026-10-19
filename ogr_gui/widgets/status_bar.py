@@ -9,6 +9,7 @@ Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 
+import time
 from typing import Optional
 
 from PySide6.QtCore import Qt, Signal
@@ -101,7 +102,88 @@ class _CoordInput(QLineEdit):
 
 
 # ======================================================================
-class OgrStatusBar(QStatusBar):
+class ElidingStatusBar(QStatusBar):
+    """A status bar whose message ends in «…» where its indicators begin,
+    with the whole text as the bar's tooltip while it lasts (v0.1.328, D325).
+
+    QStatusBar draws its message under whatever is permanent on the right,
+    so the end of a long one was hidden behind SNAP / GRID / ORTHO / OSNAP:
+    «… un método de agua por rejilla (…), que ader…». The text is cut to the
+    room the indicators leave and cut again when the bar changes size,
+    without restarting the message's time.
+
+    ``currentMessage()`` answers the WHOLE message: what the window said,
+    not what fitted. A message Qt shows by itself (an action's status tip,
+    sent from C++) is not cut, and is answered as shown.
+    """
+
+    #: Room kept between the message and the first indicator, in pixels.
+    GAP_PX = 8
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self._full = ""
+        self._shown = ""
+        self._until: Optional[float] = None
+        self.messageChanged.connect(self._on_message_changed)
+
+    def showMessage(self, text: str, timeout: int = 0) -> None:  # noqa: N802
+        self._full = text or ""
+        self._until = (time.monotonic() + timeout / 1000.0
+                       if timeout and timeout > 0 else None)
+        self._show(timeout)
+
+    def currentMessage(self) -> str:  # noqa: N802
+        shown = super().currentMessage()
+        if shown and shown == self._shown:
+            return self._full
+        return shown
+
+    def clearMessage(self) -> None:  # noqa: N802
+        self._full = self._shown = ""
+        self._until = None
+        self.setToolTip("")
+        super().clearMessage()
+
+    def message_room(self) -> int:
+        """The width, in pixels, the message has left of the indicators."""
+        right = self.width()
+        for child in self.findChildren(QWidget, "", Qt.FindDirectChildrenOnly):
+            if child.isVisible() and child.x() > 0:
+                right = min(right, child.x())
+        return right - self.GAP_PX
+
+    def _show(self, timeout: int) -> None:
+        text = self._full
+        room = self.message_room()
+        if self.isVisible() and room > 0:
+            text = self.fontMetrics().elidedText(self._full, Qt.ElideRight,
+                                                 room)
+        self._shown = text
+        self.setToolTip(self._full if text != self._full else "")
+        super().showMessage(text, timeout)
+
+    def _on_message_changed(self, text: str) -> None:
+        if not text:
+            # the message's time ran out, or another took its place
+            self._full = self._shown = ""
+            self._until = None
+            self.setToolTip("")
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        if not self._full or super().currentMessage() != self._shown:
+            return
+        if self._until is None:
+            self._show(0)
+            return
+        left = int((self._until - time.monotonic()) * 1000)
+        if left > 0:
+            self._show(left)
+
+
+# ======================================================================
+class OgrStatusBar(ElidingStatusBar):
     """Status bar: hint message + snap toggles + X/Y readout + manual input."""
 
     snap_toggled = Signal(bool)

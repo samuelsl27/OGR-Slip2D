@@ -3638,6 +3638,12 @@ _DICTS: dict[str, dict[str, str]] = {
             'k_h',
         'kv':
             'k_v',
+        # v0.1.328 (D324) — why the GM surface entries of Interpret are grey
+        "Requires a probabilistic or sensitivity analysis, or a search that "
+        "reports several minima (a multimodal search or an Overall Slope run).":
+            "Requiere un análisis probabilístico o de sensibilidad, o una búsqueda "
+            "que informe de varios mínimos (una búsqueda multimodal o un análisis "
+            "de Talud completo).",
         # v0.1.315 (D293) — the note of the hydraulic dialog, wrapped
         "<i>Names and colours are defined in Properties > Define "
         "Materials.</i>":

@@ -213,26 +213,9 @@ class _DrawdownSweepWorker(QThread):
 
 
 # ======================================================================
-class DisabledReasonFilter(QObject):
-    """v0.1.288 (D289) — puts on the status bar the status tip of the
-    DISABLED menu entry under the pointer.
-
-    Qt shows an action's status tip only when the menu makes it the current
-    action, and with the Fusion and windows11 styles it never does that for
-    a disabled one (``SH_Menu_AllowActiveAndDisabled`` is 0): the reason a
-    groundwater entry is disabled would never be seen. Enabled entries are
-    left to Qt."""
-
-    def __init__(self, window) -> None:
-        super().__init__(window)
-        self._window = window
-
-    def eventFilter(self, obj, event) -> bool:  # noqa: N802 (Qt API)
-        if event.type() == QEvent.Type.MouseMove and isinstance(obj, QMenu):
-            act = obj.actionAt(event.position().toPoint())
-            if act is not None and not act.isEnabled() and act.statusTip():
-                self._window.statusBar().showMessage(act.statusTip(), 5000)
-        return False
+# v0.1.328 (D324) — DisabledReasonFilter lives in ogr_gui/disabled_reasons.py,
+# so the Interpret window installs it too; the name stays importable here.
+from ogr_gui.disabled_reasons import DisabledReasonFilter  # noqa: E402,F401
 
 
 # ======================================================================
@@ -271,7 +254,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.327"
+    VERSION = "0.1.328"
 
     def __init__(self) -> None:
         super().__init__()
