@@ -29,6 +29,7 @@ from typing import Callable, Tuple
 
 from ogr_core.project import Project
 
+from .. import messages as msg
 from ..external_forces import seismic_vertical_load, slice_forces
 from ..slicer import Slices
 from ..surface import SlipCircle, SurfaceProtocol
@@ -152,7 +153,7 @@ class GLEMorgensternPrice(LEMMethod):
             return LEMResult(
                 fos=None, converged=False, iterations=0,
                 method_id=self.METHOD_ID, surface=surface, slices=slices,
-                error_message="No slices",
+                **msg.failure(msg.NO_SLICES),
                 reason=REASON_NO_SLICES,
             )
 
@@ -263,7 +264,7 @@ class GLEMorgensternPrice(LEMMethod):
             return LEMResult(
                 fos=None, converged=False, iterations=0,
                 method_id=self.METHOD_ID, surface=surface, slices=slices,
-                error_message="GLE: all sampled λ diverged",
+                **msg.failure(msg.ALL_LAMBDA_DIVERGED, method="GLE"),
                 reason=REASON_ALL_LAMBDA_DIVERGED,
             )
 
@@ -463,19 +464,16 @@ class GLEMorgensternPrice(LEMMethod):
                 # 91 (Spencer) reach the engine by THIS branch and do not
                 # converge, so what the bank publishes on their circle is a
                 # fallback value, not a measurement.
-                error_message=("" if settled else
-                               "GLE: no λ-bracket; the nearest λ leaves "
-                               "F_f − F_m at %.3g" % residual),
+                **({} if settled else
+                   msg.failure(msg.NO_LAMBDA_BRACKET, method="GLE",
+                               residual=residual)),
                 reason=("" if settled else REASON_NO_LAMBDA_BRACKET),
                 admissible=not flag_inadmisible,
                 # v0.1.185 (D156) — the note follows the FLAG and its wording
                 # is untouched; see ``Spencer.compute_fos`` for why re-wording
                 # it would have measured something else.
-                admissibility_note=(
-                    "" if not flag_inadmisible else
-                    "GLE: no λ leaves the inter-slice thrust in net "
-                    "compression; the answer is reported with the criterion "
-                    "relaxed"),
+                **({} if not flag_inadmisible else
+                   msg.inadmissible(msg.RELAXED_THRUST, method="GLE")),
             )
 
         (lam_lo, g_lo, ff_lo, fm_lo), (lam_hi, g_hi, ff_hi, fm_hi) = bracket
@@ -527,7 +525,8 @@ class GLEMorgensternPrice(LEMMethod):
             return LEMResult(
                 fos=None, converged=False, iterations=iterations,
                 method_id=self.METHOD_ID, surface=surface, slices=slices,
-                error_message="GLE: divergent at final λ",
+                **msg.failure(msg.DIVERGENT_AT_FINAL_LAMBDA,
+                              method="GLE"),
                 reason=REASON_DIVERGENT_AT_LAMBDA,
             )
         # v0.1.180 (D146) — see ``Spencer.compute_fos``: measured on the pair
@@ -559,11 +558,10 @@ class GLEMorgensternPrice(LEMMethod):
             # is the OUTER search for λ, and it used to answer with the code
             # and the sentence of the factor-of-safety iteration of Bishop
             # and Janbu. See ``REASON_LAMBDA_NOT_CLOSED``.
-            error_message=("" if converged else
-                           "GLE: the λ bracket did not close; "
-                           "F_f − F_m is %.3g at λ = %.6g, with the bracket "
-                           "at %.3g after %d iterations"
-                           % (lam_residual, lam_lo, lam_width, iterations)),
+            **({} if converged else
+               msg.failure(msg.LAMBDA_NOT_CLOSED, method="GLE",
+                           residual=lam_residual, lam=lam_lo,
+                           width=lam_width, iterations=int(iterations))),
             reason="" if converged else REASON_LAMBDA_NOT_CLOSED,
             method_id=self.METHOD_ID, surface=surface, slices=slices,
             base_normal_force=normals,
@@ -574,10 +572,8 @@ class GLEMorgensternPrice(LEMMethod):
             # ``admissible``, which is where ``LEMResult`` says a converged
             # but physically unreliable answer belongs.
             admissible=not inadmissible,
-            admissibility_note=(
-                "" if not inadmissible else
-                "GLE: no λ leaves the inter-slice thrust in net compression; "
-                "the answer is reported with the criterion relaxed"),
+            **({} if not inadmissible else
+               msg.inadmissible(msg.RELAXED_THRUST, method="GLE")),
             details=support_failure_details(sup, {
                 "lambda": lam_lo,
                 "thrust_admissible": not inadmissible,

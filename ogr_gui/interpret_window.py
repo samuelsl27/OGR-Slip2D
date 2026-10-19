@@ -1957,10 +1957,10 @@ class InterpretWindow(QMainWindow):
                            for r in hits):
             return None
         for r in hits:
-            note = (getattr(r, "error_message", None)
-                    or getattr(r, "admissibility_note", None))
-            if note:
-                return note
+            if (getattr(r, "error_message", None)
+                    or getattr(r, "admissibility_note", None)):
+                # v0.1.333 (D314) -- in the reader's language, by its code
+                return self.invalid_text(r)
         return tr("no valid slip surface at this centre")
 
     # ------------------------------------------------------------------
@@ -2223,8 +2223,22 @@ class InterpretWindow(QMainWindow):
         """
         # v0.1.201 — the core's (``interpretation.invalid_reason``).
         from ogr_slip2d.interpretation import invalid_reason
-        why = invalid_reason(ev)
-        return tr(why) if why == "did not converge" else why
+        if invalid_reason(ev) is None:
+            return None
+        # v0.1.333 (D314) -- the label of its GROUP, by the message's code
+        # and in the reader's language: the sentence with the values that
+        # vary between surfaces left out. Grouping by the sentence put the
+        # same condition in one group per value (an m-alpha rejection "on
+        # N slice(s)" for every N).
+        from .core_messages import invalid_label
+        return invalid_label(ev)
+
+    @staticmethod
+    def invalid_text(ev) -> str:
+        """Why one evaluation was rejected, in full and in the reader's
+        language (v0.1.333, D314): what the hover read-out shows."""
+        from .core_messages import invalid_text
+        return invalid_text(ev)
 
     def _invalid_reasons(self) -> list:
         """``[(reason, count)]``, commonest first."""

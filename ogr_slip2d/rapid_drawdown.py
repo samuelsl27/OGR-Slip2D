@@ -112,6 +112,9 @@ from ogr_core.materials.drawdown_envelopes import (
     REnvelope,
     composite_strength,
 )
+from ogr_core.messages import nested
+
+from . import messages as msg
 
 # The three procedures, as stored in ``GroundwaterSettings``.
 DWW = "duncan_wright"
@@ -224,7 +227,34 @@ STAGE1_OWN_STRENGTH = True
 
 
 class RapidDrawdownError(RuntimeError):
-    """A modelling error the user has to resolve, not a numerical hiccup."""
+    """A modelling error the user has to resolve, not a numerical hiccup.
+
+    v0.1.333 (D314) -- ``code`` and ``values`` are the message's code in
+    ``ogr_slip2d.messages`` and what went into it, so the surface it leaves
+    invalid can be explained in the reader's language. Empty on a refusal
+    raised with a sentence only (the run-level ones, D335).
+    """
+
+    def __init__(self, message: str = "", *, code: str = "",
+                 values: Optional[dict] = None) -> None:
+        super().__init__(message)
+        self.code = code
+        self.values = dict(values or {})
+
+
+def _refusal(code: str, **values) -> RapidDrawdownError:
+    """A :class:`RapidDrawdownError` for ``code``, its sentence written from
+    the catalogue so the code and the words cannot disagree."""
+    return RapidDrawdownError(msg.text(code, **values), code=code,
+                              values=values)
+
+
+def _failure_of(exc) -> dict:
+    """The ``LEMResult`` keywords of a refused or failed surface: the
+    exception's sentence, and its code and values when it has them."""
+    return {"error_message": str(exc),
+            "message_code": getattr(exc, "code", "") or "",
+            "message_args": dict(getattr(exc, "values", None) or {})}
 
 
 class DrawdownStageFailed(RapidDrawdownError):
@@ -239,12 +269,21 @@ class DrawdownStageFailed(RapidDrawdownError):
     already refuses a drawdown on that error keeps doing so.
     """
 
-    def __init__(self, stage: int, result, where: str = "") -> None:
+    def __init__(self, stage: int, result,
+                 cap_pass: Optional[int] = None) -> None:
         self.stage = stage
         self.result = result
-        why = getattr(result, "error_message", "") or "no reason given"
-        super().__init__(
-            f"Stage {stage}{where} produced no factor of safety: {why}")
+        self.cap_pass = cap_pass
+        # v0.1.333 (D314) -- the reason is the failed pass's own message,
+        # carried whole (code and values) inside this one.
+        why = msg.error_of(result)
+        if cap_pass is None:
+            code, values = msg.DRAWDOWN_STAGE_FAILED, {"stage": stage,
+                                                       "why": why}
+        else:
+            code, values = msg.DRAWDOWN_STAGE_FAILED_CAP, {
+                "stage": stage, "cap_pass": cap_pass, "why": why}
+        super().__init__(msg.text(code, **values), code=code, values=values)
 
 
 class DrawdownStageUnconverged(DrawdownStageFailed):
@@ -272,11 +311,12 @@ class DrawdownStageUnconverged(DrawdownStageFailed):
     def __init__(self, stage: int, result) -> None:
         self.stage = stage
         self.result = result
-        why = getattr(result, "error_message", "") or "no reason given"
+        self.cap_pass = None
+        values = {"stage": stage, "factor": result.fos,
+                  "why": msg.error_of(result)}
         RapidDrawdownError.__init__(
-            self,
-            f"Stage {stage} returned an unconverged factor of safety "
-            f"(F = {result.fos:.3f}, not a solution): {why}")
+            self, msg.text(msg.DRAWDOWN_STAGE_UNCONVERGED, **values),
+            code=msg.DRAWDOWN_STAGE_UNCONVERGED, values=values)
 
 
 @dataclass
@@ -356,12 +396,8 @@ def _effective_c_phi(material) -> tuple[float, float]:
                 float(params.get("friction_angle", 0.0)))
     if mid == "undrained":
         return float(params.get("cohesion", 0.0)), 0.0
-    raise RapidDrawdownError(
-        f"Rapid drawdown needs a linear effective envelope; material "
-        f"'{getattr(material, 'name', '?')}' uses '{mid}'. A curved "
-        f"envelope cannot be carried through a procedure that rewrites "
-        f"c and phi on every slice."
-    )
+    raise _refusal(msg.DRAWDOWN_CURVED_ENVELOPE,
+                   material=getattr(material, "name", "?"), model=mid)
 
 
 def _kc1_of(material, phi_eff_deg: float) -> Kc1Envelope:
@@ -370,9 +406,8 @@ def _kc1_of(material, phi_eff_deg: float) -> Kc1Envelope:
         return env
     if isinstance(env, REnvelope):
         return env.to_kc1(phi_eff_deg)
-    raise RapidDrawdownError(
-        f"Material '{getattr(material, 'name', '?')}' is marked undrained "
-        f"but has no R or Kc=1 envelope defined.")
+    raise _refusal(msg.DRAWDOWN_NO_ENVELOPE,
+                   material=getattr(material, "name", "?"))
 
 
 def _r_of(material, phi_eff_deg: float) -> REnvelope:
@@ -381,9 +416,8 @@ def _r_of(material, phi_eff_deg: float) -> REnvelope:
         return env
     if isinstance(env, Kc1Envelope):
         return env.to_r(phi_eff_deg)
-    raise RapidDrawdownError(
-        f"Material '{getattr(material, 'name', '?')}' is marked undrained "
-        f"but has no R or Kc=1 envelope defined.")
+    raise _refusal(msg.DRAWDOWN_NO_ENVELOPE,
+                   material=getattr(material, "name", "?"))
 
 
 # ----------------------------------------------------------------------
@@ -527,12 +561,9 @@ def _stage1_state(project, surface, slices, result):
     """
     normals = list(getattr(result, "base_normal_force", ()) or ())
     if len(normals) < len(slices.slices):
-        raise RapidDrawdownError(
-            f"Method '{getattr(result, 'method_id', '?')}' reported "
-            f"{len(normals)} base normal forces for {len(slices.slices)} "
-            f"slices, so the stage-1 consolidation state cannot be "
-            f"recovered. Without it the procedure would apply no undrained "
-            f"strength at all and report the drained factor of safety.")
+        raise _refusal(msg.DRAWDOWN_STAGE1_NORMALS,
+                       method=getattr(result, "method_id", "?"),
+                       count=len(normals), slices=len(slices.slices))
     # v0.1.220 (D211) -- the F of the solution the normals belong to, which
     # is the reported one for every method but Janbu Corrected.
     from .checks import equilibrium_fos
@@ -682,7 +713,7 @@ def rapid_drawdown_fos(
     from .slicer import slice_surface
 
     if procedure not in MULTISTAGE_METHODS:
-        raise RapidDrawdownError(f"Unknown drawdown procedure: {procedure}")
+        raise _refusal(msg.DRAWDOWN_UNKNOWN_PROCEDURE, procedure=procedure)
     corps = (procedure == CORPS_2)
     drained_cap = procedure in (DWW, CORPS_2)
 
@@ -690,8 +721,7 @@ def rapid_drawdown_fos(
     p1 = _level_project(project, use_drawdown=False)
     sl1 = slice_surface(p1, surface, num_slices=num_slices)
     if sl1 is None:
-        raise RapidDrawdownError(
-            "The slip surface could not be sliced at the initial level")
+        raise _refusal(msg.DRAWDOWN_UNSLICEABLE_INITIAL)
     r1 = method.compute_fos(p1, surface, sl1)
     if r1.fos is None:
         raise DrawdownStageFailed(1, r1)
@@ -700,8 +730,7 @@ def rapid_drawdown_fos(
     if not r1.converged:
         raise DrawdownStageUnconverged(1, r1)
     if not r1.fos > 0.0:
-        raise RapidDrawdownError(
-            "Stage 1 did not produce a usable factor of safety")
+        raise _refusal(msg.DRAWDOWN_STAGE1_UNUSABLE)
     if r1.fos < 1.0:
         # The procedure assumes the slope was stable BEFORE the drawdown.
         # With FS1 < 1 the consolidation state sits above the failure
@@ -709,10 +738,7 @@ def rapid_drawdown_fos(
         # interpolating and starts extrapolating — giving strengths that
         # fall and eventually go negative. In an automatic search that
         # hands victory to surfaces with a fictitious FoS near zero.
-        raise RapidDrawdownError(
-            f"Stage 1 factor of safety is {r1.fos:.3f} < 1: the slope is "
-            f"not stable with the reservoir full, and the rapid-drawdown "
-            f"procedure does not apply to it")
+        raise _refusal(msg.DRAWDOWN_STAGE1_UNSTABLE, factor=r1.fos)
 
     state = _stage1_state(project, surface, sl1, r1)
 
@@ -720,8 +746,7 @@ def rapid_drawdown_fos(
     p2 = _level_project(project, use_drawdown=True)
     sl2 = slice_surface(p2, surface, num_slices=num_slices)
     if sl2 is None:
-        raise RapidDrawdownError(
-            "The slip surface could not be sliced at the drawn-down level")
+        raise _refusal(msg.DRAWDOWN_UNSLICEABLE_DRAWN_DOWN)
 
     tau_by_index: dict = {}
     for i, s in enumerate(sl2.slices):
@@ -782,11 +807,9 @@ def rapid_drawdown_fos(
         # stage-1 guard already catches every method that omits the column,
         # so reaching this is a NEW way of losing it.
         if len(normals2) < len(sl2.slices):
-            raise RapidDrawdownError(
-                f"Method '{getattr(last, 'method_id', '?')}' reported "
-                f"{len(normals2)} base normal forces for "
-                f"{len(sl2.slices)} slices, so the drained cap cannot be "
-                f"evaluated on all of them.")
+            raise _refusal(msg.DRAWDOWN_CAP_NORMALS,
+                           method=getattr(last, "method_id", "?"),
+                           count=len(normals2), slices=len(sl2.slices))
         nxt: dict = {}
         for i, tau_ff in tau_by_index.items():
             l = max(sl2.slices[i].base_length, 1e-9)
@@ -810,8 +833,7 @@ def rapid_drawdown_fos(
         cur = nxt
         r3 = method.compute_fos(p2, surface, _undrained_slices(sl2, cur))
         if r3.fos is None:
-            raise DrawdownStageFailed(
-                3, r3, f" (drained cap, pass {passes + 1})")
+            raise DrawdownStageFailed(3, r3, cap_pass=passes + 1)
         horn = last
         last = r3
         recent.append(r3.fos)
@@ -947,7 +969,7 @@ class MultiStageDrawdownMethod:
                 fos=None, converged=False, iterations=0,
                 method_id=self.METHOD_ID, surface=surface,
                 slices=getattr(inner, "slices", None) or slices,
-                error_message=str(exc),
+                **_failure_of(exc),
                 reason=(getattr(inner, "reason", "")
                         or (REASON_NOT_CONVERGED if unconverged
                             else REASON_NON_PHYSICAL_FOS)),
@@ -962,7 +984,7 @@ class MultiStageDrawdownMethod:
             return LEMResult(
                 fos=None, converged=False, iterations=0,
                 method_id=self.METHOD_ID, surface=surface, slices=slices,
-                error_message=str(exc),
+                **_failure_of(exc),
                 reason=REASON_DRAWDOWN_NOT_APPLICABLE,
             )
         # v0.1.107 - the per-slice columns of the stage that produced the
@@ -1043,6 +1065,12 @@ class MultiStageDrawdownMethod:
                 admissible=bool(verdict.admissible),
                 admissibility_note=verdict.admissibility_note or "",
                 admissibility_reason=verdict.admissibility_reason or "",
+                # v0.1.333 (D314) -- and the codes of the two sentences.
+                message_code=getattr(verdict, "message_code", "") or "",
+                message_args=dict(getattr(verdict, "message_args", None)
+                                  or {}),
+                note_code=getattr(verdict, "note_code", "") or "",
+                note_args=dict(getattr(verdict, "note_args", None) or {}),
             )
         # v0.1.212 (D202) -- and what stage 1's OWN method said about it. A
         # stage 1 that method declared inadmissible (Spencer and GLE with the
@@ -1055,13 +1083,29 @@ class MultiStageDrawdownMethod:
         stage1 = getattr(res, "stage1_result", None)
         stage1_admissible = bool(getattr(stage1, "admissible", True))
         if not stage1_admissible:
-            why = (getattr(stage1, "admissibility_note", "")
-                   or "declared inadmissible by its own method")
-            note = f"Stage 1 (full reservoir): {why}"
+            # v0.1.333 (D314) -- the same sentence as before, written from
+            # its codes: stage 1's own note (or "declared inadmissible…")
+            # inside "Stage 1 (full reservoir): …", ahead of the verdict's.
+            if getattr(stage1, "admissibility_note", ""):
+                why = msg.note_of(stage1)
+            else:
+                why = nested(msg.DECLARED_INADMISSIBLE, {},
+                             msg.text(msg.DECLARED_INADMISSIBLE))
+            stage_note = {"why": why}
             earlier = flags.get("admissibility_note") or ""
             flags["admissible"] = False
-            flags["admissibility_note"] = (f"{note}; {earlier}" if earlier
-                                           else note)
+            if earlier:
+                flags.update(msg.inadmissible(
+                    msg.JOIN,
+                    first=nested(msg.DRAWDOWN_STAGE1_INADMISSIBLE,
+                                 stage_note,
+                                 msg.text(msg.DRAWDOWN_STAGE1_INADMISSIBLE,
+                                          **stage_note)),
+                    second=nested(flags.get("note_code", ""),
+                                  flags.get("note_args"), earlier)))
+            else:
+                flags.update(msg.inadmissible(
+                    msg.DRAWDOWN_STAGE1_INADMISSIBLE, **stage_note))
         return LEMResult(
             fos=res.fos, iterations=3 if res.fos_stage3 else 2,
             method_id=self.METHOD_ID, surface=surface,
@@ -1194,8 +1238,7 @@ class BBarDrawdownMethod:
             return LEMResult(
                 fos=None, converged=False, iterations=0,
                 method_id=self.METHOD_ID, surface=surface, slices=slices,
-                error_message="The slip surface could not be sliced at "
-                              "the drawn-down level",
+                **msg.failure(msg.DRAWDOWN_UNSLICEABLE_DRAWN_DOWN),
                 reason=REASON_UNSLICEABLE_AT_DRAWDOWN,
             )
         n = b_bar_pore_pressures(project, sl2)

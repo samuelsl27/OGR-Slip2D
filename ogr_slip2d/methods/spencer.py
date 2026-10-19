@@ -35,6 +35,7 @@ from typing import Tuple
 
 from ogr_core.project import Project
 
+from .. import messages as msg
 from ..external_forces import seismic_vertical_load
 from ..slicer import Slices
 from ..surface import SlipCircle, SurfaceProtocol
@@ -176,7 +177,7 @@ class Spencer(LEMMethod):
             return LEMResult(
                 fos=None, converged=False, iterations=0,
                 method_id=self.METHOD_ID, surface=surface, slices=slices,
-                error_message="Spencer: all sampled λ diverged",
+                **msg.failure(msg.ALL_LAMBDA_DIVERGED, method="Spencer"),
                 reason=REASON_ALL_LAMBDA_DIVERGED,
             )
 
@@ -406,9 +407,9 @@ class Spencer(LEMMethod):
                 # moves to ``admissible``. Mixing them meant a surface with
                 # a perfectly good bracket was thrown out with the same
                 # force as one with none.
-                error_message=("" if settled else
-                               "Spencer: no λ-bracket; the nearest λ leaves "
-                               "F_f − F_m at %.3g" % residual),
+                **({} if settled else
+                   msg.failure(msg.NO_LAMBDA_BRACKET, method="Spencer",
+                               residual=residual)),
                 reason=("" if settled else REASON_NO_LAMBDA_BRACKET),
                 admissible=not flag_inadmisible,
                 # v0.1.185 (D156) — the note follows the FLAG, and its
@@ -423,11 +424,8 @@ class Spencer(LEMMethod):
                 # fact the sentence also carried — that the grid had to be
                 # re-sampled — survives in ``lambdas_lost_to_thrust_tension``,
                 # which counts exactly the λ the strict pass set aside.
-                admissibility_note=(
-                    "" if not flag_inadmisible else
-                    "Spencer: no λ leaves the inter-slice thrust in net "
-                    "compression; the answer is reported with the criterion "
-                    "relaxed"),
+                **({} if not flag_inadmisible else
+                   msg.inadmissible(msg.RELAXED_THRUST, method="Spencer")),
             )
 
         (lam_lo, g_lo, ff_lo, fm_lo), (lam_hi, g_hi, ff_hi, fm_hi) = bracket
@@ -486,7 +484,8 @@ class Spencer(LEMMethod):
             return LEMResult(
                 fos=None, converged=False, iterations=iterations,
                 method_id=self.METHOD_ID, surface=surface, slices=slices,
-                error_message="Spencer: divergent at final λ",
+                **msg.failure(msg.DIVERGENT_AT_FINAL_LAMBDA,
+                              method="Spencer"),
                 reason=REASON_DIVERGENT_AT_LAMBDA,
             )
         # v0.1.180 (D146) — what the λ search actually achieved, measured on
@@ -543,11 +542,10 @@ class Spencer(LEMMethod):
             # the OUTER search for λ, and the three numbers below are what
             # tell its four failure modes apart. See
             # ``REASON_LAMBDA_NOT_CLOSED``.
-            error_message=("" if converged else
-                           "Spencer: the λ bracket did not close; "
-                           "F_f − F_m is %.3g at λ = %.6g, with the bracket "
-                           "at %.3g after %d iterations"
-                           % (lam_residual, lam_lo, lam_width, iterations)),
+            **({} if converged else
+               msg.failure(msg.LAMBDA_NOT_CLOSED, method="Spencer",
+                           residual=lam_residual, lam=lam_lo,
+                           width=lam_width, iterations=int(iterations))),
             reason="" if converged else REASON_LAMBDA_NOT_CLOSED,
             method_id=self.METHOD_ID, surface=surface, slices=slices,
             base_normal_force=normals,
@@ -569,10 +567,8 @@ class Spencer(LEMMethod):
             # ABOVE the factor the same engine computes on the manual's own
             # circle, because that circle was solved and then erased.
             admissible=not inadmissible,
-            admissibility_note=(
-                "" if not inadmissible else
-                "Spencer: no λ leaves the inter-slice thrust in net compression; "
-                "the answer is reported with the criterion relaxed"),
+            **({} if not inadmissible else
+               msg.inadmissible(msg.RELAXED_THRUST, method="Spencer")),
             details=support_failure_details(sup, {
                 "lambda": lam_lo,
                 "thrust_admissible": not inadmissible,

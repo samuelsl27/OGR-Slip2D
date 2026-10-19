@@ -19,6 +19,7 @@ from typing import ClassVar, Optional
 
 from ogr_core.project import Project
 
+from .. import messages as msg
 from ..slicer import Slices
 from ..surface import SurfaceProtocol
 
@@ -279,6 +280,16 @@ class LEMResult:
     # ``to_dict`` on purpose: each state is a whole result of its own, and
     # what the result IS (factor, verdict, note) is already there.
     screen_states: tuple = field(default=(), repr=False, compare=False)
+    # v0.1.333 (D314) -- the code and values of ``error_message`` and of
+    # ``admissibility_note`` (``ogr_slip2d.messages``), so the interface can
+    # say them in the reader's language and group them by condition rather
+    # than by their numbers. The two sentences are unchanged. Empty on a
+    # result that has neither, and on a result from a method that writes its
+    # sentence without a code (a plugin), which is then shown as written.
+    message_code: str = ""
+    message_args: dict = field(default_factory=dict)
+    note_code: str = ""
+    note_args: dict = field(default_factory=dict)
 
     # ------------------------------------------------------------------
     def __post_init__(self) -> None:
@@ -323,6 +334,14 @@ class LEMResult:
             self.screen_states = ()
         if self.reason is None:
             self.reason = ""
+        if self.message_code is None:
+            self.message_code = ""
+        if self.message_args is None:
+            self.message_args = {}
+        if self.note_code is None:
+            self.note_code = ""
+        if self.note_args is None:
+            self.note_args = {}
 
         if self.fos is not None and not math.isfinite(self.fos):
             raise ValueError(
@@ -353,6 +372,20 @@ class LEMResult:
         """
         return self.base_normal_force
 
+    def set_error(self, code: str, reason: str, **args) -> None:
+        """Mark this result FAILED for ``code`` (``ogr_slip2d.messages``),
+        with its sentence, its values and the census ``reason``: the one way
+        to change a result's failure after it was built (v0.1.333, D314)."""
+        self.error_message = msg.text(code, **args)
+        self.message_code, self.message_args = code, dict(args)
+        self.reason = reason
+
+    def set_note(self, code: str, **args) -> None:
+        """Write why this result is inadmissible, with its code and values;
+        the counterpart of :meth:`set_error` for ``admissibility_note``."""
+        self.admissibility_note = msg.text(code, **args)
+        self.note_code, self.note_args = code, dict(args)
+
     @property
     def is_valid(self) -> bool:
         # v0.1.152 — the ``math.isfinite`` that used to stand here is gone
@@ -378,8 +411,10 @@ class LEMResult:
         ``reason``, ``admissible`` and ``admissibility_note`` are included
         because a factor that is missing without them is exactly the
         unreadable row this defect is about. ``admissibility_reason``
-        joined them in v0.1.192 (D177), for the same reason.
+        joined them in v0.1.192 (D177), for the same reason, and the codes
+        and values of the two sentences in v0.1.333 (D314).
         """
+        from ogr_core.messages import json_args
         return {
             "fos": self.fos,
             "converged": self.converged,
@@ -395,6 +430,10 @@ class LEMResult:
             "admissible": self.admissible,
             "admissibility_note": self.admissibility_note,
             "admissibility_reason": self.admissibility_reason,
+            "message_code": self.message_code,
+            "message_args": json_args(self.message_args),
+            "note_code": self.note_code,
+            "note_args": json_args(self.note_args),
         }
 
 
@@ -441,10 +480,9 @@ ENVELOPE_MAX_PASSES = 50
 #: used the same two.
 _ENVELOPE_PROBES = (5.0, 500.0)
 
-ENVELOPE_NOT_CONVERGED_NOTE = (
-    "The strength envelope depends on the normal stress, and the stress it "
-    "was read at did not settle on the stress the method resolved within "
-    "the maximum number of passes")
+# v0.1.333 (D314) -- the sentence of its code, kept under this name for the
+# callers that compare with it.
+ENVELOPE_NOT_CONVERGED_NOTE = msg.text(msg.ENVELOPE_NOT_CONVERGED)
 
 
 def _envelope_depends_on_stress(slice_, cache: dict) -> bool:
@@ -547,8 +585,8 @@ def self_consistent_envelope(compute):
         res.details["envelope_converged"] = settled
         if not settled and res.converged:
             res.converged = False
-            res.error_message = ENVELOPE_NOT_CONVERGED_NOTE
-            res.reason = REASON_ENVELOPE_NOT_CONVERGED
+            res.set_error(msg.ENVELOPE_NOT_CONVERGED,
+                          REASON_ENVELOPE_NOT_CONVERGED)
         return res
 
     return wrapper
@@ -761,10 +799,8 @@ class LEMMethod(ABC):
     #: One string, so a caller can group by it. Deliberately not passed
     #: through ``tr()``: every other engine reason is a plain English
     #: string and the interface translates at the point of display.
-    NO_SHEAR_STRENGTH_NOTE: ClassVar[str] = (
-        "Zero shear strength on the whole slip surface — "
-        "factor of safety is zero"
-    )
+    #: v0.1.333 (D314) -- the sentence of ``messages.NO_SHEAR_STRENGTH``.
+    NO_SHEAR_STRENGTH_NOTE: ClassVar[str] = msg.text(msg.NO_SHEAR_STRENGTH)
 
     #: What every iterative method says when it runs out of passes.
     #:
@@ -775,10 +811,8 @@ class LEMMethod(ABC):
     #: converge" is a fact about the surface; "within the maximum number of
     #: iterations" is the half that tells the user there is something they
     #: can do about it.
-    NOT_CONVERGED_NOTE: ClassVar[str] = (
-        "The factor of safety iteration did not converge within the "
-        "maximum number of iterations"
-    )
+    #: v0.1.333 (D314) -- the sentence of ``messages.NOT_CONVERGED``.
+    NOT_CONVERGED_NOTE: ClassVar[str] = msg.text(msg.NOT_CONVERGED)
 
     @staticmethod
     def surface_has_no_shear_strength(slices) -> bool:
@@ -846,7 +880,7 @@ class LEMMethod(ABC):
             method_id=self.METHOD_ID,
             surface=surface,
             slices=slices,
-            error_message=self.NO_SHEAR_STRENGTH_NOTE,
+            **msg.failure(msg.NO_SHEAR_STRENGTH),
             reason=REASON_NO_SHEAR_STRENGTH,
         )
 

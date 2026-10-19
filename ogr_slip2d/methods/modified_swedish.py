@@ -64,6 +64,7 @@ import math
 
 from ogr_core.project import Project
 
+from .. import messages as msg
 from ..external_forces import (interslice_water_thrust,
                                seismic_vertical_load, slice_forces)
 from ..slicer import Slices
@@ -250,7 +251,7 @@ class PrescribedInclinationMethod(LEMMethod):
             return LEMResult(
                 fos=None, converged=False, iterations=0,
                 method_id=self.METHOD_ID, surface=surface, slices=slices,
-                error_message="No slices",
+                **msg.failure(msg.NO_SLICES),
                 reason=REASON_NO_SLICES,
             )
 
@@ -294,7 +295,8 @@ class PrescribedInclinationMethod(LEMMethod):
             return LEMResult(
                 fos=None, converged=False, iterations=iters,
                 method_id=self.METHOD_ID, surface=surface, slices=slices,
-                error_message=f"{self.DISPLAY_NAME}: force balance diverged",
+                **msg.failure(msg.FORCE_BALANCE_DIVERGED,
+                              method=self.DISPLAY_NAME),
                 reason=REASON_FORCE_BALANCE_DIVERGED,
             )
 
@@ -321,9 +323,8 @@ class PrescribedInclinationMethod(LEMMethod):
             # una palabra que lo dijera: sobre una masa simetrica los tres
             # metodos de inclinacion prescrita respondian 5.0 -el TECHO de
             # su propia rejilla- con el motivo vacio.
-            error_message=("" if converged else
-                           f"{self.DISPLAY_NAME}: no F-bracket; reporting "
-                           f"the sampled F of smallest residual"),
+            **({} if converged else
+               msg.failure(msg.NO_FORCE_BRACKET, method=self.DISPLAY_NAME)),
             reason="" if converged else REASON_NO_FORCE_BRACKET,
             base_normal_force=normals,
             base_shear_force=driving,

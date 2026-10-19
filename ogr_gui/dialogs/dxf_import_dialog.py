@@ -56,6 +56,7 @@ from ogr_core.dxf import (
     preview,
     read_dxf,
 )
+from ogr_gui.dialog_size import hold_wrapped_height
 from ogr_gui.i18n import tr
 from PySide6.QtGui import QColor  # noqa: E402
 from ogr_gui.themes import theme_color  # noqa: E402
@@ -82,6 +83,12 @@ class DxfImportDialog(QDialog):
         self.options = ImportOptions()
         self.setWindowTitle(tr("Import DXF"))
         self.resize(900, 640)
+        # v0.1.333 (D338b) — the preview note wraps, and Qt does not add the
+        # height a wrapped label asks for at the minimum width to the
+        # window's minimum (D321). On the Linux runners of the CI the two
+        # tolerance boxes came out at 26 px of their 27 at the minimum
+        # size; on Windows, with a font half a point larger.
+        hold_wrapped_height(self)
 
         root = QVBoxLayout(self)
 

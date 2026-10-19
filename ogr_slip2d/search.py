@@ -28,6 +28,7 @@ from ogr_core.project.settings import SurfaceType, WeakLayerHandling
 
 from .failure_direction import slope_face, steepest_face_index  # noqa: F401
 from .methods import LEMMethod, LEMResult
+from . import messages as msg
 from .rapid_drawdown import RapidDrawdownError, drawdown_gap
 from .slicer import (REFUSED_BASE_ABOVE_GROUND, REFUSED_END_ABOVE_GROUND,
                      REFUSED_END_BELOW_GROUND, REFUSED_ORPHAN_MATERIAL,
@@ -681,25 +682,26 @@ class BaseSearch(ABC):
         ``checks.screen_surface``), so it arrives here as an ordinary
         rejection with its note, and any door that calls them says the same.
         """
-        from .checks import screen_surface
+        from .checks import screen_verdict
 
         if result is None:
             return True
         if not (self.reject_tensile or self.check_m_alpha):
             return True
-        ok, screen, reason = screen_surface(
+        verdict = screen_verdict(
             result,
             tensile=self.reject_tensile,
             tensile_percent=self.tensile_percent,
             m_alpha=self.check_m_alpha,
         )
-        if not ok:
+        if not verdict.ok:
             result.admissible = False
-            result.admissibility_note = reason or ""
+            # v0.1.333 (D314) -- the note with its code and values.
+            result.set_note(verdict.code, **verdict.args)
             # v0.1.192 (D177) — WHICH check fired, as a constant, so the
             # export writes the reference's code without reading the note.
-            result.admissibility_reason = screen
-        return ok
+            result.admissibility_reason = verdict.screen
+        return verdict.ok
 
     # ------------------------------------------------------------------
     def _analyse(self, project: Project, surface, slices) -> LEMResult:
@@ -767,7 +769,7 @@ class BaseSearch(ABC):
                 method_id=self.method.METHOD_ID,
                 surface=surface,
                 slices=slices,
-                error_message=f"Arithmetic failure: {exc}",
+                **msg.failure(msg.ARITHMETIC_FAILURE, error=str(exc)),
                 reason=REASON_NON_PHYSICAL_FOS,
             )
         self._is_admissible(res)     # marks res.admissible in place

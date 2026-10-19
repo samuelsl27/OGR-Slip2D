@@ -134,6 +134,7 @@ Author: Samuel Sáez López (UPCT)
 from __future__ import annotations
 
 import math
+from typing import NamedTuple, Optional
 
 from .external_forces import slice_forces
 
@@ -869,10 +870,36 @@ def m_alpha_check(result, limit: float = M_ALPHA_LIMIT):
 
 
 # ----------------------------------------------------------------------
+class ScreenVerdict(NamedTuple):
+    """What the post-analysis checks said about a result (v0.1.333, D314):
+    :func:`screen_surface`'s three answers, and the code of the note with
+    its values (``ogr_slip2d.messages``), empty when it passes."""
+    ok: bool
+    screen: str
+    note: Optional[str]
+    code: str = ""
+    args: dict = {}
+
+
 def screen_surface(result, tensile: bool = False,
                    tensile_percent: float = 95.0,
                    m_alpha: bool = False,
                    m_alpha_limit: float = M_ALPHA_LIMIT):
+    """Run the enabled post-analysis checks on a converged result.
+
+    Returns ``(passed, screen, note)``; :func:`screen_verdict`, which this
+    is, also gives the code of the note and its values.
+    """
+    verdict = screen_verdict(result, tensile=tensile,
+                             tensile_percent=tensile_percent,
+                             m_alpha=m_alpha, m_alpha_limit=m_alpha_limit)
+    return verdict.ok, verdict.screen, verdict.note
+
+
+def screen_verdict(result, tensile: bool = False,
+                   tensile_percent: float = 95.0,
+                   m_alpha: bool = False,
+                   m_alpha_limit: float = M_ALPHA_LIMIT) -> ScreenVerdict:
     """Run the enabled post-analysis checks on a converged result.
 
     Returns ``(passed, screen, note)``: ``screen`` is the check that
@@ -912,34 +939,39 @@ def screen_surface(result, tensile: bool = False,
     measured count (suite and verification problems 095-098) is in the
     verification bank's D184 census.
     """
+    from . import messages as msg
     from .methods.base import (SCREEN_ERROR, SCREEN_M_ALPHA,
                                SCREEN_TENSILE_STRESS)
 
+    def rejected(screen, code, **args):
+        return ScreenVerdict(False, screen, msg.text(code, **args), code,
+                             args)
+
+    passed = ScreenVerdict(True, "", None)
     if result is None:
-        return True, "", None
+        return passed
     try:
         if not getattr(result, "is_valid", False):
-            return True, "", None
+            return passed
         states = tuple(getattr(result, "screen_states", None) or ()) \
             or (result,)
         if tensile:
             for state in states:
                 ok, bad = tensile_stress_check(state, tensile_percent)
                 if not ok:
-                    return False, SCREEN_TENSILE_STRESS, (
-                        f"tensile stress on {len(bad)} slice base(s) "
-                        f"(error -120)")
+                    return rejected(SCREEN_TENSILE_STRESS,
+                                    msg.SCREEN_TENSILE_STRESS,
+                                    count=len(bad))
         if m_alpha:
             for state in states:
                 ok, bad = m_alpha_check(state, m_alpha_limit)
                 if not ok:
-                    return False, SCREEN_M_ALPHA, (
-                        f"m_alpha < {m_alpha_limit} on {len(bad)} slice(s)")
+                    return rejected(SCREEN_M_ALPHA, msg.SCREEN_M_ALPHA,
+                                    limit=m_alpha_limit, count=len(bad))
     except Exception as exc:  # noqa: BLE001 - see the docstring (D184)
-        return False, SCREEN_ERROR, (
-            f"admissibility checks could not be evaluated "
-            f"({type(exc).__name__}: {exc})")
-    return True, "", None
+        return rejected(SCREEN_ERROR, msg.SCREEN_ERROR,
+                        error_type=type(exc).__name__, error=str(exc))
+    return passed
 
 
 def check_surface(result, tensile: bool = False,

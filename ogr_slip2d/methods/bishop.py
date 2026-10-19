@@ -40,6 +40,7 @@ from typing import Optional
 from ogr_core.materials import Material
 from ogr_core.project import Project
 
+from .. import messages as msg
 from ..external_forces import seismic_vertical_load, slice_forces
 from ..slicer import Slice, Slices
 from ..surface import SlipCircle, SurfaceProtocol
@@ -329,8 +330,8 @@ class BishopSimplified(LEMMethod):
                         fos=None, converged=False, iterations=iterations,
                         method_id=self.METHOD_ID, surface=surface,
                         slices=slices,
-                        error_message=(f"mα collapsed to {m_alpha:.4g} "
-                                       f"at slice {s.index}"),
+                        **msg.failure(msg.M_ALPHA_COLLAPSED, value=m_alpha,
+                                      slice=s.index),
                         reason=REASON_M_ALPHA_COLLAPSED)
                 # Q = S·F, the resisting force with the factor divided out.
                 q = (c * s.width
@@ -384,15 +385,14 @@ class BishopSimplified(LEMMethod):
                 return LEMResult(
                     fos=None, converged=False, iterations=iterations,
                     method_id=self.METHOD_ID, surface=surface, slices=slices,
-                    error_message=("Zero driving moment — surface does not "
-                                   "slide"),
+                    **msg.failure(msg.ZERO_DRIVING_MOMENT),
                     reason=REASON_ZERO_DRIVING)
             new_fos = -terms.shear / terms.driving
             if not math.isfinite(new_fos) or new_fos <= 0.0:
                 return LEMResult(
                     fos=None, converged=False, iterations=iterations,
                     method_id=self.METHOD_ID, surface=surface, slices=slices,
-                    error_message="Non-physical factor of safety",
+                    **msg.failure(msg.NON_PHYSICAL_FOS),
                     reason=REASON_NON_PHYSICAL_FOS)
             # v0.1.100 — never on the FIRST pass. The stopping rule is a
             # STEP between two successive iterates, and the initial guess is
@@ -487,7 +487,7 @@ class BishopSimplified(LEMMethod):
                 # ``analysis_runner.zero_strength_note``.
                 "zero_strength_slices": zero,
             }),
-            error_message="" if converged else self.NOT_CONVERGED_NOTE,
+            **({} if converged else msg.failure(msg.NOT_CONVERGED)),
             reason="" if converged else REASON_NOT_CONVERGED,
         )
 
@@ -589,10 +589,7 @@ class BishopSimplified(LEMMethod):
                 surface=surface,
                 slices=slices,
                 admissible=False,
-                admissibility_note=(
-                    "Active support force exceeds the driving moment; "
-                    "the factor of safety is undefined for this surface"
-                ),
+                **msg.inadmissible(msg.ACTIVE_SUPPORT_EXCEEDS_MOMENT),
                 reason=REASON_ACTIVE_SUPPORT_EXCEEDS_DRIVING,
             )
 
@@ -604,7 +601,7 @@ class BishopSimplified(LEMMethod):
                 method_id=self.METHOD_ID,
                 surface=surface,
                 slices=slices,
-                error_message="Zero driving moment — surface does not slide",
+                **msg.failure(msg.ZERO_DRIVING_MOMENT),
                 reason=REASON_ZERO_DRIVING,
             )
 
@@ -645,9 +642,8 @@ class BishopSimplified(LEMMethod):
                     method_id=self.METHOD_ID,
                     surface=surface,
                     slices=slices,
-                    error_message=(
-                        f"mα collapsed to {m_alpha:.4g} at slice {index}"
-                    ),
+                    **msg.failure(msg.M_ALPHA_COLLAPSED, value=m_alpha,
+                                  slice=index),
                     reason=REASON_M_ALPHA_COLLAPSED,
                 )
 
@@ -674,11 +670,9 @@ class BishopSimplified(LEMMethod):
                     method_id=self.METHOD_ID,
                     surface=surface,
                     slices=slices,
-                    error_message=(
-                        f"Non-physical factor of safety {new_fos:.4g} "
-                        f"in iteration" if finite
-                        else "Non-finite FoS in iteration"
-                    ),
+                    **(msg.failure(msg.NON_PHYSICAL_FOS_ITERATION,
+                                   value=new_fos) if finite
+                       else msg.failure(msg.NON_FINITE_FOS_ITERATION)),
                     reason=REASON_NON_PHYSICAL_FOS,
                 )
 
@@ -712,7 +706,7 @@ class BishopSimplified(LEMMethod):
             fos=fos,
             converged=converged,
             iterations=iterations,
-            error_message="" if converged else self.NOT_CONVERGED_NOTE,
+            **({} if converged else msg.failure(msg.NOT_CONVERGED)),
             reason="" if converged else REASON_NOT_CONVERGED,
             method_id=self.METHOD_ID,
             surface=surface,

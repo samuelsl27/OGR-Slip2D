@@ -36,6 +36,7 @@ import math
 
 from ogr_core.project import Project
 
+from .. import messages as msg
 from ..external_forces import seismic_vertical_load, slice_forces
 from ..slicer import Slices
 from ..surface import SlipCircle, SurfaceProtocol
@@ -250,7 +251,7 @@ class OrdinaryFellenius(LEMMethod):
             return LEMResult(
                 fos=None, converged=False, iterations=0,
                 method_id=self.METHOD_ID, surface=surface, slices=slices,
-                error_message="Zero driving moment — surface does not slide",
+                **msg.failure(msg.ZERO_DRIVING_MOMENT),
                 reason=REASON_ZERO_DRIVING,
             )
         fos = -terms.shear / terms.driving
@@ -259,7 +260,7 @@ class OrdinaryFellenius(LEMMethod):
                 fos=None,
                 converged=False, iterations=0, method_id=self.METHOD_ID,
                 surface=surface, slices=slices,
-                error_message="Non-physical factor of safety",
+                **msg.failure(msg.NON_PHYSICAL_FOS),
                 reason=REASON_NON_PHYSICAL_FOS,
             )
         return LEMResult(
@@ -591,10 +592,7 @@ class OrdinaryFellenius(LEMMethod):
                 slices=slices,
                 reason=REASON_ACTIVE_SUPPORT_EXCEEDS_DRIVING,
                 admissible=False,
-                admissibility_note=(
-                    "Active support force exceeds the driving moment; "
-                    "the factor of safety is undefined for this surface"
-                ),
+                **msg.inadmissible(msg.ACTIVE_SUPPORT_EXCEEDS_MOMENT),
             )
 
         if abs(denominator) < 1e-9:
@@ -606,7 +604,7 @@ class OrdinaryFellenius(LEMMethod):
                 surface=surface,
                 slices=slices,
                 reason=REASON_ZERO_DRIVING,
-                error_message="Zero driving moment — surface does not slide",
+                **msg.failure(msg.ZERO_DRIVING_MOMENT),
             )
 
         fos = numerator / denominator

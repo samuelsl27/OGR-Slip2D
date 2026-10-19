@@ -3651,6 +3651,141 @@ _DICTS: dict[str, dict[str, str]] = {
             "Distancia: {0}   Δx: {1}   Δy: {2}",
         "(drawn in Interpret only: not saved in the model)":
             "(dibujada solo en Interpretar: no se guarda en el modelo)",
+        # v0.1.333 (D314) — the engine's per-surface messages, one entry per
+        # code of ``ogr_slip2d.messages``: the key is its English template,
+        # with the same {fields}
+        "Zero shear strength on the whole slip surface — factor of safety "
+        "is zero":
+            "Resistencia al corte nula en toda la superficie de rotura: el "
+            "factor de seguridad es cero",
+        "The factor of safety iteration did not converge within the maximum "
+        "number of iterations":
+            "La iteración del factor de seguridad no convergió dentro del "
+            "número máximo de iteraciones",
+        "The strength envelope depends on the normal stress, and the stress "
+        "it was read at did not settle on the stress the method resolved "
+        "within the maximum number of passes":
+            "La envolvente de resistencia depende de la tensión normal, y la "
+            "tensión a la que se leyó no llegó a la que resolvió el método "
+            "dentro del número máximo de pasadas",
+        "No slices":
+            "Sin dovelas",
+        "Arithmetic failure: {error}":
+            "Fallo aritmético: {error}",
+        "mα collapsed to {value:.4g} at slice {slice}":
+            "mα cayó a {value:.4g} en la dovela {slice}",
+        "nα collapsed at slice {slice}":
+            "nα se anuló en la dovela {slice}",
+        "Zero driving moment — surface does not slide":
+            "Momento motor nulo: la superficie no desliza",
+        "Zero driving force — surface does not slide":
+            "Fuerza motora nula: la superficie no desliza",
+        "Non-physical factor of safety":
+            "Factor de seguridad sin sentido físico",
+        "Non-physical factor of safety {value:.4g} in iteration":
+            "Factor de seguridad sin sentido físico ({value:.4g}) en la "
+            "iteración",
+        "Non-finite FoS":
+            "FS no finito",
+        "Non-finite FoS in iteration":
+            "FS no finito en la iteración",
+        "Active support force exceeds the driving moment; the factor of "
+        "safety is undefined for this surface":
+            "La fuerza de los soportes activos supera el momento motor; el "
+            "factor de seguridad no está definido para esta superficie",
+        "Active support force exceeds the driving force; the factor of "
+        "safety is undefined for this surface":
+            "La fuerza de los soportes activos supera la fuerza motora; el "
+            "factor de seguridad no está definido para esta superficie",
+        "{method}: all sampled λ diverged":
+            "{method}: todos los λ muestreados divergieron",
+        "{method}: no λ-bracket; the nearest λ leaves F_f − F_m at "
+        "{residual:.3g}":
+            "{method}: ningún intervalo de λ cambia de signo; el λ más "
+            "cercano deja F_f − F_m en {residual:.3g}",
+        "{method}: no λ leaves the inter-slice thrust in net compression; "
+        "the answer is reported with the criterion relaxed":
+            "{method}: ningún λ deja el empuje entre dovelas en compresión "
+            "neta; el resultado se da con el criterio relajado",
+        "{method}: divergent at final λ":
+            "{method}: diverge en el λ final",
+        "{method}: the λ bracket did not close; F_f − F_m is {residual:.3g} "
+        "at λ = {lam:.6g}, with the bracket at {width:.3g} after "
+        "{iterations} iterations":
+            "{method}: el intervalo de λ no se cerró; F_f − F_m vale "
+            "{residual:.3g} en λ = {lam:.6g}, con el intervalo en "
+            "{width:.3g} tras {iterations} iteraciones",
+        "{method}: force balance diverged":
+            "{method}: el equilibrio de fuerzas divergió",
+        "{method}: no F-bracket; reporting the sampled F of smallest "
+        "residual":
+            "{method}: ningún intervalo de F cambia de signo; se da el F "
+            "muestreado de menor residuo",
+        "tensile stress on {count} slice base(s) (error -120)":
+            "tracción en la base de {count} dovela(s) (error -120)",
+        "m_alpha < {limit} on {count} slice(s)":
+            "m_alpha < {limit} en {count} dovela(s)",
+        "admissibility checks could not be evaluated ({error_type}: "
+        "{error})":
+            "no se pudieron evaluar las comprobaciones de admisibilidad "
+            "({error_type}: {error})",
+        "Rapid drawdown needs a linear effective envelope; material "
+        "'{material}' uses '{model}'. A curved envelope cannot be carried "
+        "through a procedure that rewrites c and phi on every slice.":
+            "El desembalse rápido necesita una envolvente efectiva lineal; el "
+            "material «{material}» usa «{model}». Una envolvente curva no se "
+            "puede llevar a un procedimiento que reescribe c y φ en cada "
+            "dovela.",
+        "Material '{material}' is marked undrained but has no R or Kc=1 "
+        "envelope defined.":
+            "El material «{material}» está marcado como no drenado, pero no "
+            "tiene definida ninguna envolvente R ni Kc=1.",
+        "Method '{method}' reported {count} base normal forces for {slices} "
+        "slices, so the stage-1 consolidation state cannot be recovered. "
+        "Without it the procedure would apply no undrained strength at all "
+        "and report the drained factor of safety.":
+            "El método «{method}» dio {count} fuerzas normales en la base para "
+            "{slices} dovelas, así que no se puede recuperar el estado de "
+            "consolidación de la etapa 1. Sin él, el procedimiento no "
+            "aplicaría ninguna resistencia sin drenaje y daría el factor de "
+            "seguridad drenado.",
+        "Method '{method}' reported {count} base normal forces for {slices} "
+        "slices, so the drained cap cannot be evaluated on all of them.":
+            "El método «{method}» dio {count} fuerzas normales en la base para "
+            "{slices} dovelas, así que el tope drenado no se puede evaluar en "
+            "todas.",
+        "Unknown drawdown procedure: {procedure}":
+            "Procedimiento de desembalse desconocido: {procedure}",
+        "The slip surface could not be sliced at the initial level":
+            "La superficie de rotura no se pudo dividir en dovelas en el nivel "
+            "inicial",
+        "The slip surface could not be sliced at the drawn-down level":
+            "La superficie de rotura no se pudo dividir en dovelas en el nivel "
+            "de desembalse",
+        "Stage 1 did not produce a usable factor of safety":
+            "La etapa 1 no dio un factor de seguridad utilizable",
+        "Stage 1 factor of safety is {factor:.3f} < 1: the slope is not "
+        "stable with the reservoir full, and the rapid-drawdown procedure "
+        "does not apply to it":
+            "El factor de seguridad de la etapa 1 es {factor:.3f} < 1: el talud "
+            "no es estable con el embalse lleno, y el procedimiento de "
+            "desembalse rápido no se le aplica",
+        "Stage {stage} produced no factor of safety: {why}":
+            "La etapa {stage} no dio factor de seguridad: {why}",
+        "Stage {stage} (drained cap, pass {cap_pass}) produced no factor of "
+        "safety: {why}":
+            "La etapa {stage} (tope drenado, pasada {cap_pass}) no dio factor "
+            "de seguridad: {why}",
+        "Stage {stage} returned an unconverged factor of safety (F = "
+        "{factor:.3f}, not a solution): {why}":
+            "La etapa {stage} devolvió un factor de seguridad no convergido "
+            "(F = {factor:.3f}, no es una solución): {why}",
+        "Stage 1 (full reservoir): {why}":
+            "Etapa 1 (embalse lleno): {why}",
+        "declared inadmissible by its own method":
+            "declarada inadmisible por su propio método",
+        "no reason given":
+            "sin motivo",
         # v0.1.315 (D293) — the note of the hydraulic dialog, wrapped
         "<i>Names and colours are defined in Properties > Define "
         "Materials.</i>":

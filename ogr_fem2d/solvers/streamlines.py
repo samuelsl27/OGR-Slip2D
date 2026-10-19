@@ -138,7 +138,7 @@ def _deepest(mesh, by_id, velocity, point, sign, candidates, size):
 
 
 def _trace_one_way(mesh, velocity, start, sign, by_id, around, size,
-                   max_segments, edges=None) -> list:
+                   max_segments, edges=None, boundary=None) -> list:
     """The points of the streamline from ``start`` following ``sign *
     velocity``, up to the mesh boundary or a stagnation.
 
@@ -153,6 +153,9 @@ def _trace_one_way(mesh, velocity, start, sign, by_id, around, size,
     """
     points = [start]
     edges = mesh.edge_map() if edges is None else edges
+    if boundary is None:
+        boundary = {n for key, owners in edges.items() if len(owners) == 1
+                    for n in key}
     holding = [e.id for e in mesh.elements if _inside(e.coords(mesh), start)]
     element = _deepest(mesh, by_id, velocity, start, sign, holding, size)
     if element is None:
@@ -218,15 +221,62 @@ def _trace_one_way(mesh, velocity, start, sign, by_id, around, size,
             break             # no flow along it either: a stagnation
         node = b if along > 0.0 else a
         target = (mesh.nodes[node].x, mesh.nodes[node].y)
-        if target == point:
-            break             # already at that end, and nothing takes it
-        point = target
-        points.append(point)
+        if target != point:
+            point = target
+            points.append(point)
         element = _deepest(mesh, by_id, velocity, point, sign,
                            around.get(node, ()), size)
+        # v0.1.333 (D338c) -- at an inner node no element's own velocity
+        # leaves, the line goes on along the edge out of it whose elements'
+        # mean flow leaves the fastest (as it already did along an edge),
+        # and ends only where no edge leaves either. It used to end at every
+        # such node, and which nodes those were was decided by rounding: on
+        # the first worked example a relative noise of 1e-9 in the velocities
+        # moved the ends that reached the boundary between 16 and 19 of 22,
+        # and the CI's Linux solvers gave 11 and 13 where Windows gave 17.
+        # On the boundary the line has arrived, and it ends there.
+        while element is None and node not in boundary:
+            step = _node_outflow(mesh, velocity, edges, node, sign, slid,
+                                 around, by_id)
+            if step is None:
+                break         # no edge leaves it either: a sink
+            node, key = step
+            slid.add(key)
+            point = (mesh.nodes[node].x, mesh.nodes[node].y)
+            points.append(point)
+            element = _deepest(mesh, by_id, velocity, point, sign,
+                               around.get(node, ()), size)
         if element is None:
             break
     return points
+
+
+def _node_outflow(mesh, velocity, edges, node, sign, slid, around, by_id):
+    """Where a line that reached ``node`` with no element to take it goes
+    on: ``(other_node, edge_key)`` of the edge out of ``node`` along which
+    the mean of ``sign * velocity`` over the elements sharing it flows
+    away from the node the fastest, skipping the edges in ``slid``. None
+    when no edge leaves the node: a sink of the discrete field (v0.1.333,
+    D338c)."""
+    nx, ny = mesh.nodes[node].x, mesh.nodes[node].y
+    others = sorted({n for eid in around.get(node, ())
+                     for n in by_id[eid].nodes if n != node})
+    best, fastest = None, 0.0
+    for other in others:
+        key = (node, other) if node < other else (other, node)
+        owners = edges.get(key, ())
+        if key in slid or not owners:
+            continue
+        ex, ey = mesh.nodes[other].x - nx, mesh.nodes[other].y - ny
+        length = math.hypot(ex, ey)
+        if length <= 0.0:
+            continue
+        mx = sum(velocity[i][0] for i in owners) * sign / len(owners)
+        my = sum(velocity[i][1] for i in owners) * sign / len(owners)
+        away = (mx * ex + my * ey) / length
+        if away > fastest:
+            best, fastest = (other, key), away
+    return best
 
 
 def trace_streamline(mesh, velocity, start, *, max_segments: int = 20000,
@@ -243,10 +293,12 @@ def trace_streamline(mesh, velocity, start, *, max_segments: int = 20000,
     size = math.sqrt(max(mesh.total_area(), 0.0)
                      / max(len(mesh.elements), 1))
     edges = mesh.edge_map() if edges is None else edges
+    boundary = {n for key, owners in edges.items() if len(owners) == 1
+                for n in key}
     down = _trace_one_way(mesh, velocity, start, 1.0, by_id, around, size,
-                          max_segments, edges)
+                          max_segments, edges, boundary)
     up = _trace_one_way(mesh, velocity, start, -1.0, by_id, around, size,
-                        max_segments, edges)
+                        max_segments, edges, boundary)
     return list(reversed(up[1:])) + down
 
 

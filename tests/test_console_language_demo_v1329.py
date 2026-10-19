@@ -79,6 +79,11 @@ class TestTheChildInterpreter:
                                 console=0, frozen=False) is None
 
     def test_it_is_what_multiprocessing_starts(self):
+        """v0.1.333 (D338a) -- compared through ``os.fsdecode``: outside
+        Windows ``set_executable`` stores the path as BYTES (read in its
+        source), and this case, which asks for the Windows decision on any
+        system, compared those bytes with a string and failed on the Linux
+        runners of the CI."""
         import multiprocessing.spawn as spawn
         from ogr_slip2d.processes import windowless_children
         exe = self._folder(with_pythonw=True)
@@ -87,10 +92,10 @@ class TestTheChildInterpreter:
             got = windowless_children(platform="win32", executable=exe,
                                       console=0, frozen=False)
             assert got is not None
-            assert spawn.get_executable() == got
+            assert os.fsdecode(spawn.get_executable()) == got
         finally:
             spawn.set_executable(before)
-        assert spawn.get_executable() == before
+        assert os.fsdecode(spawn.get_executable()) == os.fsdecode(before)
 
     def test_a_split_search_under_it_is_bit_identical(self):
         """The real pythonw.exe, the real pool: the same evaluations, in

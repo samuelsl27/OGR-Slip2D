@@ -146,6 +146,15 @@ def lem_summary(res, *, with_slices: bool = False) -> Optional[dict]:
     note = getattr(res, "admissibility_note", "")
     if note:
         out["admissibility_note"] = note
+    # v0.1.333 (D314) -- the stable codes of the two sentences and their
+    # values, only when there are any, so a valid surface reads as before.
+    from ogr_core.messages import json_args
+    for key, args in (("message_code", "message_args"),
+                      ("note_code", "note_args")):
+        code = getattr(res, key, "") or ""
+        if code:
+            out[key] = code
+            out[args] = json_args(getattr(res, args, None) or {})
     extras = {k: _r(details[k]) for k in ("lambda", "ky", "ky_fos",
                                          "newmark_displacement")
               if k in details and isinstance(details[k], (int, float))}

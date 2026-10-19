@@ -935,6 +935,7 @@ class CanvasView(QGraphicsView):
     def _draw_invalid_surfaces(self, scene, search_result, reason,
                                invalid_reason_fn) -> None:
         """Draw the invalid surfaces of one error code, in purple."""
+        from ..core_messages import invalid_text
         drawn = 0
         for ev in search_result.evaluations:
             if invalid_reason_fn(ev) != reason:
@@ -955,7 +956,9 @@ class CanvasView(QGraphicsView):
             pen.setColor(QColor("#7d3c98"))
             pen.setWidthF(1.4)
             item.setPen(pen)
-            item.setToolTip(f"{reason}")
+            # v0.1.333 (D314) -- the surface's OWN reason, in the reader's
+            # language; ``reason`` is the label of the group it is drawn in
+            item.setToolTip(invalid_text(ev))
             scene.addItem(item)
             self._result_items.append(item)
             drawn += 1

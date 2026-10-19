@@ -22,15 +22,19 @@ check, none of it against what the code prints today:
 * the lines go through mesh nodes and vertices (a line started on a node,
   or crossing at a vertex, used to stop there while this was written);
 * on a real field — the seepage of the first worked example that
-  ``test_interpret_i3_v153`` solves, 107 elements — most of them run from
-  boundary to boundary. Measured while this was written: 1 of the 22 ends
-  of its streamlines reached the boundary with the first tracer, which
-  probed for the next element and took a ray leaving almost along an edge
-  for one that had not left; 17 with the element across the edge and the
-  slide along an edge where the two elements' flows meet head-on. The five
-  inside end at nodes most of whose elements' velocities point at them, on
-  material contacts: the discrete field's own convergence, not the
-  tracer's.
+  ``test_interpret_i3_v153`` solves, 107 elements — every end is on the
+  boundary or at a node no edge leaves, and rounding does not move them.
+  Measured while this was written: 1 of the 22 ends of its streamlines
+  reached the boundary with the first tracer, which probed for the next
+  element and took a ray leaving almost along an edge for one that had not
+  left; 17 with the element across the edge and the slide along an edge
+  where the two elements' flows meet head-on. v0.1.332 called the other
+  five "the discrete field's own convergence, not the tracer's", and
+  v0.1.333 (D338c) refuted it: a relative noise of 1e-9 in the velocities
+  moved the count between 16 and 19, and the CI's Linux runners gave 13
+  and 11. Every stop inside was a node no element's own velocity leaves,
+  decided by rounding; going on along the edge out of it that carries the
+  flow away fastest, 22 of 22 reach the boundary with or without noise.
 """
 from __future__ import annotations
 
@@ -163,26 +167,76 @@ class TestAUniformField:
 
 
 class TestARealField:
-    def test_most_ends_reach_the_boundary(self):
+    """v0.1.333 (D338c) -- this case asked for at least three quarters of
+    the ends on the boundary, the 17 of 22 measured on Windows when it was
+    written. The CI's Linux runners gave 13 and 11: their solvers round the
+    same field differently, and a relative noise of 1e-9 in the velocities
+    moved the count between 16 and 19 here. A threshold read off one
+    machine was standing in for what the tracer must do, so the cases now
+    ask for that: every end is on the boundary or at a node no edge leaves
+    (a sink of the discrete field), and the ends do not move with rounding.
+    """
+
+    @staticmethod
+    def _field():
         import test_interpret_i3_v153 as i3
-        from ogr_fem2d.solvers.streamlines import streamlines
         p = i3.TestGroundwaterEntries()._with_seepage()
-        mesh, velocity = p.fem_mesh, p.seepage_result.velocity
-        boundary = mesh.boundary_edges()
+        return p.fem_mesh, p.seepage_result.velocity
 
-        def on_boundary(pt):
-            for a, b in boundary:
-                ax, ay = mesh.nodes[a].x, mesh.nodes[a].y
-                ex, ey = mesh.nodes[b].x - ax, mesh.nodes[b].y - ay
-                length = math.hypot(ex, ey)
-                t = ((pt[0] - ax) * ex + (pt[1] - ay) * ey) / length ** 2
-                off = abs((pt[0] - ax) * ey - (pt[1] - ay) * ex) / length
-                if off < 1e-6 * length and -1e-6 <= t <= 1 + 1e-6:
-                    return True
+    @staticmethod
+    def _on_boundary(mesh, pt):
+        for a, b in mesh.boundary_edges():
+            ax, ay = mesh.nodes[a].x, mesh.nodes[a].y
+            ex, ey = mesh.nodes[b].x - ax, mesh.nodes[b].y - ay
+            length = math.hypot(ex, ey)
+            t = ((pt[0] - ax) * ex + (pt[1] - ay) * ey) / length ** 2
+            off = abs((pt[0] - ax) * ey - (pt[1] - ay) * ex) / length
+            if off < 1e-6 * length and -1e-6 <= t <= 1 + 1e-6:
+                return True
+        return False
+
+    @staticmethod
+    def _is_a_sink(mesh, velocity, pt, sign):
+        """Whether ``pt`` is a node whose edges all carry the mean flow of
+        their elements into it, or along none: nowhere for a line to go."""
+        from ogr_fem2d.solvers.streamlines import (_node_elements,
+                                                   _node_outflow)
+        node = next((n.id for n in mesh.nodes
+                     if math.hypot(n.x - pt[0], n.y - pt[1]) < 1e-9), None)
+        if node is None:
             return False
+        by_id = {e.id: e for e in mesh.elements}
+        return _node_outflow(mesh, velocity, mesh.edge_map(), node, sign,
+                             set(), _node_elements(mesh), by_id) is None
 
+    def test_every_end_is_on_the_boundary_or_at_a_sink(self):
+        from ogr_fem2d.solvers.streamlines import streamlines
+        mesh, velocity = self._field()
         lines = streamlines(mesh, velocity, count=12)
         assert len(lines) >= 8, len(lines)
-        ends = [end for line in lines for end in (line[0], line[-1])]
-        reached = sum(on_boundary(end) for end in ends)
-        assert reached >= 0.75 * len(ends), (reached, len(ends))
+        inside = []
+        for line in lines:
+            for end, sign in ((line[0], -1.0), (line[-1], 1.0)):
+                if self._on_boundary(mesh, end):
+                    continue
+                if not self._is_a_sink(mesh, velocity, end, sign):
+                    inside.append(end)
+        assert inside == [], inside
+
+    def test_the_ends_do_not_move_with_rounding(self):
+        import random
+        from ogr_fem2d.solvers.streamlines import streamlines
+        mesh, velocity = self._field()
+
+        def reached(v):
+            ends = [e for line in streamlines(mesh, v, count=12)
+                    for e in (line[0], line[-1])]
+            return sum(self._on_boundary(mesh, e) for e in ends), len(ends)
+
+        rng = random.Random(1)
+        counts = {reached(velocity)}
+        for _ in range(4):
+            counts.add(reached([(vx * (1 + 1e-9 * rng.uniform(-1, 1)),
+                                 vy * (1 + 1e-9 * rng.uniform(-1, 1)))
+                                for vx, vy in velocity]))
+        assert len(counts) == 1, counts
