@@ -1606,42 +1606,8 @@ class UnsaturatedSeepageSolver(SeepageSolver):
     def free_surface_points(self, result: SeepageResult,
                             samples: int = 120) -> list:
         """Trace the free surface as the P = 0 iso-line, returned as
-        (x, y) samples ordered by x.
-
-        For each of ``samples`` vertical scan lines the highest point
-        where the pressure head changes sign is located by linear
-        interpolation along mesh element edges.
-        """
-        if not result.ok:
-            return []
-        P = result.pressure_head
-        xs = [nd.x for nd in self.mesh.nodes]
-        x_min, x_max = min(xs), max(xs)
-        out: list[tuple[float, float]] = []
-        # Collect sign-changing edges once
-        seg: list[tuple[float, float]] = []
-        for key in self.mesh.edge_map():
-            a, b = key
-            pa, pb = P[a], P[b]
-            if (pa > 0.0) == (pb > 0.0):
-                continue
-            na, nb = self.mesh.nodes[a], self.mesh.nodes[b]
-            t = pa / (pa - pb) if abs(pa - pb) > 1e-30 else 0.5
-            seg.append((na.x + t * (nb.x - na.x),
-                        na.y + t * (nb.y - na.y)))
-        if not seg:
-            return []
-        # Keep the highest crossing per scan column
-        width = max(x_max - x_min, 1e-9)
-        buckets: dict[int, tuple[float, float]] = {}
-        for (px, py) in seg:
-            k = int(samples * (px - x_min) / width)
-            cur = buckets.get(k)
-            if cur is None or py > cur[1]:
-                buckets[k] = (px, py)
-        for k in sorted(buckets):
-            out.append(buckets[k])
-        return out
+        (x, y) samples ordered by x (:func:`free_surface_points`)."""
+        return free_surface_points(self.mesh, result, samples)
 
 
 # ======================================================================
@@ -2175,3 +2141,49 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
         if t_elem <= 0 or not math.isfinite(t_elem):
             return 10
         return int(min(200, max(4, math.ceil(span / t_elem))))
+
+
+def free_surface_points(mesh, result: SeepageResult,
+                        samples: int = 120) -> list:
+    """Trace the free surface as the P = 0 iso-line, returned as
+    (x, y) samples ordered by x.
+
+    For each of ``samples`` vertical scan lines the highest point
+    where the pressure head changes sign is located by linear
+    interpolation along mesh element edges.
+
+    v0.1.332 (D329b) — a function of the mesh and the result, so that a
+    window holding the project's mesh and result (Interpret) can draw it
+    without a solver; ``UnsaturatedSeepageSolver.free_surface_points``
+    calls it with its own mesh.
+    """
+    if not result.ok:
+        return []
+    P = result.pressure_head
+    xs = [nd.x for nd in mesh.nodes]
+    x_min, x_max = min(xs), max(xs)
+    out: list[tuple[float, float]] = []
+    # Collect sign-changing edges once
+    seg: list[tuple[float, float]] = []
+    for key in mesh.edge_map():
+        a, b = key
+        pa, pb = P[a], P[b]
+        if (pa > 0.0) == (pb > 0.0):
+            continue
+        na, nb = mesh.nodes[a], mesh.nodes[b]
+        t = pa / (pa - pb) if abs(pa - pb) > 1e-30 else 0.5
+        seg.append((na.x + t * (nb.x - na.x),
+                    na.y + t * (nb.y - na.y)))
+    if not seg:
+        return []
+    # Keep the highest crossing per scan column
+    width = max(x_max - x_min, 1e-9)
+    buckets: dict[int, tuple[float, float]] = {}
+    for (px, py) in seg:
+        k = int(samples * (px - x_min) / width)
+        cur = buckets.get(k)
+        if cur is None or py > cur[1]:
+            buckets[k] = (px, py)
+    for k in sorted(buckets):
+        out.append(buckets[k])
+    return out

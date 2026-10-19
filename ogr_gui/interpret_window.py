@@ -625,6 +625,9 @@ class InterpretWindow(QMainWindow):
         # Central read-only canvas
         self.canvas = CanvasView(project, self)
         self.setCentralWidget(self.canvas)
+        # v0.1.332 (D329b) — the dimensions this window leaves (D329a), kept
+        # apart from the water layers that are drawn with them
+        self._dimension_overlays: list = []
         # v0.1.20 — surface display mode (Data menu): the default is the
         # global minimum surface, matching the checked menu radio.
         self._surface_mode = "global_min"
@@ -708,6 +711,11 @@ class InterpretWindow(QMainWindow):
         # anything touched the canvas. Draw once more now that the colour
         # function is installed.
         self._refresh_canvas_with_highlights()
+        # v0.1.332 (D329b) — the water layers the Groundwater menu opens
+        # with (the phreatic surface is ticked): with a finite-element field
+        # they are this window's own drawing, which nothing else puts there
+        if self._seepage_field() is not None:
+            self._refresh_overlays()
 
     # ==================================================================
     # Result context (phase I1)
@@ -1033,10 +1041,29 @@ class InterpretWindow(QMainWindow):
 
         # -- Groundwater ----------------------------------------------
         m_gw = mb.addMenu(tr("Groundwater"))
-        m_gw.addAction(QAction(tr("Phreatic Surface"), self, checkable=True, checked=True))
-        m_gw.addAction(QAction(tr("Piezometric Lines"), self, checkable=True))
-        m_gw.addAction(QAction(tr("Flow Vectors"), self, checkable=True))
-        m_gw.addAction(QAction(tr("Streamlines"), self, checkable=True))
+        # v0.1.332 (D329b) — four check boxes that changed nothing (rule 7).
+        # Each one now draws a layer over this canvas (``_water_overlays``):
+        # the free surface of the finite-element result or, without one,
+        # the model's water table; the model's piezometric lines; the
+        # element velocities; and streamlines traced through them.
+        has_field = self._seepage_field() is not None
+        reason = tr("Requires a computed groundwater analysis.")
+        self._act_gw_phreatic = QAction(tr("Phreatic Surface"), self,
+                                        checkable=True, checked=True)
+        self._act_gw_piezo = QAction(
+            tr("Piezometric Lines"), self, checkable=True,
+            checked=bool(self.canvas.display_options.show_piezometric))
+        self._act_gw_vectors = QAction(tr("Flow Vectors"), self,
+                                       checkable=True)
+        self._act_gw_streams = QAction(tr("Streamlines"), self,
+                                       checkable=True)
+        for act in (self._act_gw_vectors, self._act_gw_streams):
+            gate(act, has_field, reason)
+            act.setToolTip(reason if not has_field else "")
+        for act in (self._act_gw_phreatic, self._act_gw_piezo,
+                    self._act_gw_vectors, self._act_gw_streams):
+            act.toggled.connect(lambda _on: self._refresh_overlays())
+            m_gw.addAction(act)
         m_gw.addSeparator()
         m_gw.addAction(QAction(tr("Export All Nodal Values..."), self,
                                 triggered=self._export_nodal_values))
@@ -1420,6 +1447,92 @@ class InterpretWindow(QMainWindow):
             if s is not None:
                 self._highlight_slice(s, res)
 
+    # ------------------------------------------------------------------
+    # v0.1.332 (D329b) — what this window draws over the model and does not
+    # store: its dimensions (D329a) and the water layers.
+    def _seepage_field(self):
+        """``(mesh, result)`` of the project's finite-element groundwater
+        analysis, or None when it has none to draw."""
+        mesh = getattr(self.project, "fem_mesh", None)
+        result = getattr(self.project, "seepage_result", None)
+        if mesh is None or result is None or not getattr(result, "ok", False):
+            return None
+        velocity = getattr(result, "velocity", None) or []
+        if len(velocity) != len(mesh.elements):
+            return None
+        return mesh, result
+
+    def _water_overlays(self) -> list:
+        """The water layers the Groundwater menu has on, as annotations
+        drawn on this canvas only (``annotation_items``)."""
+        import math
+        from ogr_core.annotations import (Annotation, AnnotationKind,
+                                          AnnotationStyle)
+        out = []
+        field = self._seepage_field()
+        if getattr(self, "_act_gw_phreatic", None) is not None \
+                and self._act_gw_phreatic.isChecked() and field is not None:
+            from ogr_fem2d.solvers.seepage import free_surface_points
+            mesh, result = field
+            surface = free_surface_points(mesh, result)
+            if len(surface) >= 2:
+                out.append(Annotation(
+                    kind=AnnotationKind.POLYLINE, points=list(surface),
+                    style=AnnotationStyle(colour="#0b3d91", line_width=2.0,
+                                          line_style="dash")))
+        if field is not None and getattr(self, "_act_gw_vectors", None) \
+                is not None and self._act_gw_vectors.isChecked():
+            mesh, result = field
+            step = max(1, len(mesh.elements) // 220)
+            chosen = mesh.elements[::step]
+            v_max = max((math.hypot(*result.velocity[e.id]) for e in chosen),
+                        default=0.0)
+            spacing = math.sqrt(mesh.total_area() * step
+                                / max(len(mesh.elements), 1))
+            if v_max > 0.0:
+                for e in chosen:
+                    vx, vy = result.velocity[e.id]
+                    speed = math.hypot(vx, vy)
+                    if speed <= 0.0:
+                        continue
+                    length = 0.8 * spacing * speed / v_max
+                    cx, cy = e.centroid(mesh)
+                    out.append(Annotation(
+                        kind=AnnotationKind.ARROW,
+                        points=[(cx, cy), (cx + length * vx / speed,
+                                           cy + length * vy / speed)],
+                        style=AnnotationStyle(colour="#c0182c")))
+        if field is not None and getattr(self, "_act_gw_streams", None) \
+                is not None and self._act_gw_streams.isChecked():
+            from ogr_fem2d.solvers.streamlines import streamlines
+            mesh, result = field
+            for line in streamlines(mesh, result.velocity, count=12):
+                out.append(Annotation(
+                    kind=AnnotationKind.POLYLINE, points=line,
+                    style=AnnotationStyle(colour="#1f6fbf")))
+        return out
+
+    def _refresh_overlays(self) -> None:
+        """Redraw the model with this window's dimensions and water layers
+        over it, and the result over both."""
+        import dataclasses
+        piezo = getattr(self, "_act_gw_piezo", None)
+        phreatic = getattr(self, "_act_gw_phreatic", None)
+        opts = self.canvas.display_options
+        changes = {}
+        if piezo is not None:
+            changes["show_piezometric"] = piezo.isChecked()
+        if phreatic is not None and self._seepage_field() is None:
+            # no finite-element field: the phreatic surface is the model's
+            # own water table
+            changes["show_water_table"] = phreatic.isChecked()
+        if changes:
+            self.canvas.display_options = dataclasses.replace(opts, **changes)
+        self.canvas.overlay_annotations = (list(self._dimension_overlays)
+                                           + self._water_overlays())
+        self.canvas.refresh_scene()
+        self._refresh_canvas_with_highlights()
+
     def _on_segment_picked(self, x0: float, y0: float,
                            x1: float, y1: float) -> None:
         """Two clicks made in Measure or Dimension Length (v0.1.331, D329a).
@@ -1437,11 +1550,10 @@ class InterpretWindow(QMainWindow):
         text = measurement_text(x0, y0, x1, y1)
         if mode is ToolMode.PICK_DIMENSION:
             from ogr_core.annotations import Annotation, AnnotationKind
-            self.canvas.overlay_annotations.append(Annotation(
+            self._dimension_overlays.append(Annotation(
                 kind=AnnotationKind.DIMENSION_LENGTH,
                 points=[(x0, y0), (x1, y1)]))
-            self.canvas.refresh_scene()
-            self._refresh_canvas_with_highlights()
+            self._refresh_overlays()
             text += "   " + tr("(drawn in Interpret only: not saved in "
                                "the model)")
         self.statusBar().showMessage(text, 15000)
