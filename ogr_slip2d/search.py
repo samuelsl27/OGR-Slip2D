@@ -2287,6 +2287,10 @@ def _parallel_grid_run(search, project, centres, workers):
     try:
         payloads = [(search, shipped, centres[a:b], a, n)
                     for a, b in batches if b > a]
+        # v0.1.329 (D326) — without a console on Windows, children that
+        # start windowless instead of each opening a terminal
+        from .processes import windowless_children
+        windowless_children()
         with ProcessPoolExecutor(max_workers=workers) as pool:
             futures = [pool.submit(_grid_batch, p) for p in payloads]
             where = {f: k for k, f in enumerate(futures)}

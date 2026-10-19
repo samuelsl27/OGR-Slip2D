@@ -67,6 +67,10 @@ class _Fresh:
         for t in self.translators:
             if t is not None:
                 _app().removeTranslator(t)
+        # v0.1.329 (D327) — choosing a language now switches Qt's catalogue
+        # too; left installed, it gave «&Sí» to test_qt_translations_v1292
+        from ogr_gui.qt_catalog import reset_qt_translator
+        reset_qt_translator(_app())
         set_language(self.lang)
         _app().setStyleSheet(self.sheet)
         _app().setPalette(self.palette)

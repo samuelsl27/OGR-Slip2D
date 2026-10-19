@@ -254,7 +254,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.328"
+    VERSION = "0.1.329"
 
     def __init__(self) -> None:
         super().__init__()
@@ -5092,9 +5092,13 @@ class MainWindow(QMainWindow):
         It used to say «Restart the application to fully apply
         translations» and store nothing, so the restart came back in
         English. The notice is in the language just chosen."""
+        from .qt_catalog import switch_qt_translator
         from .user_prefs import save_language
         set_language(code)
         save_language(code)
+        # v0.1.329 (D327) — Qt's own texts too, BEFORE the notice: its
+        # button, and the «Save first?» after it, were in the old language
+        switch_qt_translator(QApplication.instance(), code)
         QMessageBox.information(
             self, tr("Language"),
             tr("Language changed. Restart OGR Slip2D to see the menus and "

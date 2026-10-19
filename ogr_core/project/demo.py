@@ -26,13 +26,24 @@ def build_demo_project(name: str = "Demo slope"):
     External boundary (0,0)-(50,0)-(50,15)-(35,15)-(25,25)-(0,25), CCW;
     one Mohr-Coulomb material (c' = 10 kPa, phi' = 25 deg, gamma = 19
     kN/m3); a horizontal water table at y = 8 assigned to it.
+
+    v0.1.329 (D328) — it declares Left to Right, the direction of its own
+    ground (higher on the left, y = 25 against 15). It took the default,
+    Right to Left, and every run warned that it contradicted the geometry.
+    Its factors of safety do not move: the declaration is read by the water
+    thrust of a tension crack, the direction of a support and the starting
+    face of Path Search, and the demo has none of the three. Measured in one
+    process before the change: Bishop 1.0914331494631124 and Janbu
+    1.0434262254619202 under both, with the same critical circle.
     """
     from ..geometry import Boundary, BoundaryType, Polyline, Vertex
     from ..materials import Material, PorePressureType
     from ..materials.builtin_models import MohrCoulomb
     from .project import Project
+    from .units import FailureDirection
 
     p = Project(name)
+    p.settings.units.failure_direction = FailureDirection.LEFT_TO_RIGHT
     ext = Polyline(
         vertices=[Vertex(0, 0), Vertex(50, 0), Vertex(50, 15),
                   Vertex(35, 15), Vertex(25, 25), Vertex(0, 25)],

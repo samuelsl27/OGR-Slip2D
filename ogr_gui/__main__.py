@@ -44,23 +44,9 @@ def start_window(agent_bridge: bool = True):
     return win
 
 
-def install_qt_translator(app, lang: str):
-    """Qt's own catalogue for ``lang`` — the texts Qt writes itself: the
-    standard buttons «Yes», «No», «Save», «Cancel»… (v0.1.292, D302).
-
-    PySide6 ships ``qtbase_<lang>.qm`` in Qt's translations folder and
-    nothing loaded it, so a Spanish question had «Yes» and «No». Returns
-    the translator installed (the caller may remove it), or None for
-    English or when the catalogue is missing."""
-    if not lang or lang == "en":
-        return None
-    from PySide6.QtCore import QLibraryInfo, QTranslator
-    translator = QTranslator(app)
-    folder = QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)
-    if not translator.load("qtbase_" + lang, folder):
-        return None
-    app.installTranslator(translator)
-    return translator
+# v0.1.329 (D327) — the catalogue lives in ogr_gui/qt_catalog.py, where the
+# window switches it when the language is saved; the name stays here.
+from .qt_catalog import install_qt_translator, switch_qt_translator  # noqa: E402,F401
 
 
 def apply_saved_preferences(app):
@@ -78,7 +64,9 @@ def apply_saved_preferences(app):
     translator = None
     if lang:
         set_language(lang)
-        translator = install_qt_translator(app, lang)
+        # v0.1.329 (D327) — switched, so that a language saved later in
+        # this session takes its place instead of piling on it
+        translator = switch_qt_translator(app, lang)
     apply_theme(app, saved_theme() or "light")
     return translator
 
