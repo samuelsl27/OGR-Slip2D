@@ -1177,9 +1177,10 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
                            Field(description="What to draw.")] = None,
                        points_xy: Annotated[Optional[list[list[float]]],
                                             Field(
-                           description="text/axes 1 point, "
+                           description="text 1 point, "
                                        "dimension_angle 3, others 2+; "
-                                       "image: its box corners.")] = None,
+                                       "axes and image: their box "
+                                       "corners.")] = None,
                        text: Annotated[Optional[str], Field(
                            description="Text; for an image, its file path."
                        )] = None,

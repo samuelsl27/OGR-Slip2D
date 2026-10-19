@@ -31,7 +31,9 @@ from ..results import json_safe
 from . import operation
 
 #: Minimum points per annotation kind, as the interface asks for them.
-_MIN_POINTS = {"text": 1, "axes": 1, "dimension_angle": 3, "image": 2}
+# v0.1.330 (D332) — axes are drawn between two corners, as the reference
+# draws them; one point left them nowhere to go
+_MIN_POINTS = {"text": 1, "axes": 2, "dimension_angle": 3, "image": 2}
 _LINE_STYLES = ("solid", "dash", "dot", "dashdot")
 
 

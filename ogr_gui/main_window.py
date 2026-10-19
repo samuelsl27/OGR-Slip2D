@@ -254,7 +254,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.329"
+    VERSION = "0.1.330"
 
     def __init__(self) -> None:
         super().__init__()
@@ -2258,9 +2258,10 @@ class MainWindow(QMainWindow):
 
         from ogr_core.annotations import Annotation, AnnotationKind
 
+        # v0.1.330 (D332) — axes take two corners, as the reference draws
+        # them (they asked for one, which left them nowhere to end)
         needed = {AnnotationKind.TEXT: 1,
-                  AnnotationKind.DIMENSION_ANGLE: 3,
-                  AnnotationKind.AXES: 1}.get(kind, 2)
+                  AnnotationKind.DIMENSION_ANGLE: 3}.get(kind, 2)
         prompt = tr("Enter %d point(s) as x,y  x,y ...") % needed
         text, ok = QInputDialog.getText(self, tr("Draw"), prompt)
         if not ok or not text.strip():

@@ -695,6 +695,13 @@ class CanvasView(QGraphicsView):
                     s, display, support_type_obj=type_obj,
                     project=self.project))
 
+        # v0.1.330 (D332) — the annotation layer, over the model: it was
+        # stored, edited and shown or hidden, and drawn by nothing
+        from .annotation_items import annotation_items
+        for annotation in self.project.annotations.ordered():
+            for item in annotation_items(annotation):
+                scene.addItem(item)
+
         self.viewport().update()
 
     def _type_visible(self, btype: BoundaryType) -> bool:
