@@ -24,6 +24,9 @@ class ToolMode(Enum):
     ZOOM_WINDOW = "zoom_window"
     ZOOM_MOUSE = "zoom_mouse"
     MEASURE = "measure"
+    # v0.1.331 (D329a) — two clicks that leave a dimension drawn in
+    # Interpret, which never writes to the model
+    PICK_DIMENSION = "pick_dimension"
 
     # ----- Boundary drawing (click-click-click) -----
     DRAW_EXTERNAL = "draw_external"
@@ -158,6 +161,7 @@ class ToolMode(Enum):
             ToolMode.ZOOM_WINDOW: "CrossCursor",
             ToolMode.ZOOM_MOUSE: "CrossCursor",
             ToolMode.MEASURE: "CrossCursor",
+            ToolMode.PICK_DIMENSION: "CrossCursor",
             ToolMode.DRAW_EXTERNAL: "CrossCursor",
             ToolMode.DRAW_MATERIAL: "CrossCursor",
             ToolMode.DRAW_WATER_TABLE: "CrossCursor",
@@ -202,6 +206,7 @@ class ToolMode(Enum):
             ToolMode.ZOOM_WINDOW: "Zoom Window: drag a rectangle, Esc to cancel",
             ToolMode.ZOOM_MOUSE: "Zoom Mouse: left-click zooms in, right-click zooms out, Esc to exit",
             ToolMode.MEASURE: "Measure: click two points, Esc to finish",
+            ToolMode.PICK_DIMENSION: "Dimension Length: click two points, Esc to finish",
             ToolMode.DRAW_EXTERNAL: "Draw External Boundary: click to add vertices, Enter or right-click to close, Esc to cancel",
             ToolMode.DRAW_MATERIAL: "Draw Material Boundary: click to add vertices, Enter or right-click to close, Esc to cancel",
             ToolMode.DRAW_WATER_TABLE: "Draw Water Table: click to add vertices, Enter or right-click to finish, Esc to cancel",

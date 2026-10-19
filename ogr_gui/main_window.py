@@ -254,7 +254,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.330"
+    VERSION = "0.1.331"
 
     def __init__(self) -> None:
         super().__init__()
@@ -739,8 +739,11 @@ class MainWindow(QMainWindow):
         # annotation layer built in v0.1.54 instead of showing a message.
         self._mk("add_text", "Add Text",
                  lambda: self._start_annotation(_AK.TEXT), "add_text")
+        # v0.1.331 (D329a) — two clicks on the canvas, the distance on the
+        # status bar, nothing in the model: it was the typed-coordinates
+        # Dimension Length below, and stored a dimension like it
         self._mk("measure", "Measure",
-                 lambda: self._start_annotation(_AK.DIMENSION_LENGTH),
+                 lambda: self.canvas.set_tool_mode(ToolMode.MEASURE),
                  "measure")
         self._mk("dim_len", "Dimension Length",
                  lambda: self._start_annotation(_AK.DIMENSION_LENGTH),
@@ -1072,9 +1075,17 @@ class MainWindow(QMainWindow):
             ToolMode.ADD_SUPPORT: self._on_add_support_picked,
             ToolMode.ADD_SUPPORT_PATTERN: self._on_pattern_picked,
             ToolMode.STRETCH_SUPPORT: self._on_stretch_support_picked,
+            ToolMode.MEASURE: self._on_measured,
         }.get(self.canvas.tool_mode)
         if handler is not None:
             handler(x0, y0, x1, y1)
+
+    def _on_measured(self, x0: float, y0: float,
+                     x1: float, y1: float) -> None:
+        """Measure: the two points' distance on the status bar (v0.1.331,
+        D329a). The mode stays, for the next pair, until Esc."""
+        from ogr_gui.labels import measurement_text
+        self.ogr_status.showMessage(measurement_text(x0, y0, x1, y1), 15000)
 
     def _forget_pending_picks(self, mode) -> None:
         """Drop what an action armed for a mode that is no longer active.

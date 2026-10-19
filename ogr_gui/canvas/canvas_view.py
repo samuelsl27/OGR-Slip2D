@@ -293,6 +293,9 @@ class CanvasView(QGraphicsView):
         # always did (Interpret redraws its own).
         self._shown_result = None
         self.result_is_current = None
+        # v0.1.331 (D329a) — annotations drawn on THIS canvas only and never
+        # stored: the dimensions Interpret leaves, which go with its window
+        self.overlay_annotations: list = []
 
         # Tool-mode / interaction
         self._tool_mode = ToolMode.SELECT
@@ -699,6 +702,9 @@ class CanvasView(QGraphicsView):
         # stored, edited and shown or hidden, and drawn by nothing
         from .annotation_items import annotation_items
         for annotation in self.project.annotations.ordered():
+            for item in annotation_items(annotation):
+                scene.addItem(item)
+        for annotation in self.overlay_annotations:
             for item in annotation_items(annotation):
                 scene.addItem(item)
 
@@ -2193,12 +2199,16 @@ class CanvasView(QGraphicsView):
             # v0.1.14 — Add Support (head→tail), Add Support Pattern
             # (2 points along a boundary), Stretch Support (click on
             # endpoint, then new position) all reuse the 2-click flow
+            # v0.1.331 (D329a) — Measure and Dimension Length too: the
+            # mode existed with its cursor and its hint, and nothing read it
             if mode in (
                 ToolMode.ADD_DISTRIBUTED_LOAD,
                 ToolMode.PICK_GRID_RECT,
                 ToolMode.ADD_SUPPORT,
                 ToolMode.ADD_SUPPORT_PATTERN,
                 ToolMode.STRETCH_SUPPORT,
+                ToolMode.MEASURE,
+                ToolMode.PICK_DIMENSION,
             ):
                 scene_pt = self.mapToScene(event.position().toPoint())
                 snapped = self._snap_xy(scene_pt)

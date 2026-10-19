@@ -681,6 +681,8 @@ class InterpretWindow(QMainWindow):
         # Default click handler: pick the surface at the clicked grid cell
         try:
             self.canvas.scene_clicked.connect(self._on_canvas_click_default)
+            # v0.1.331 (D329a) — Measure and Dimension Length
+            self.canvas.segment_picked.connect(self._on_segment_picked)
         except AttributeError:
             pass
 
@@ -1122,8 +1124,17 @@ class InterpretWindow(QMainWindow):
 
         # -- Tools ----------------------------------------------------
         m_tools = mb.addMenu(tr("Tools"))
-        m_tools.addAction(QAction(tr("Measure"), self))
-        m_tools.addAction(QAction(tr("Dimension Length"), self))
+        # v0.1.331 (D329a) — they were QActions with nothing connected (rule
+        # 7). Two clicks on this canvas; Interpret writes nothing to the
+        # model, so a dimension stays on this window and goes with it.
+        from .canvas.tool_mode import ToolMode
+        m_tools.addAction(QAction(
+            tr("Measure"), self,
+            triggered=lambda: self.canvas.set_tool_mode(ToolMode.MEASURE)))
+        m_tools.addAction(QAction(
+            tr("Dimension Length"), self,
+            triggered=lambda: self.canvas.set_tool_mode(
+                ToolMode.PICK_DIMENSION)))
 
         # -- Window ---------------------------------------------------
         m_win = mb.addMenu(tr("Window"))
@@ -1408,6 +1419,32 @@ class InterpretWindow(QMainWindow):
             s, res = dock.current()
             if s is not None:
                 self._highlight_slice(s, res)
+
+    def _on_segment_picked(self, x0: float, y0: float,
+                           x1: float, y1: float) -> None:
+        """Two clicks made in Measure or Dimension Length (v0.1.331, D329a).
+
+        The distance goes to the status bar either way. Dimension Length
+        also leaves the dimension on this canvas, drawn as the model's own
+        dimensions are (``annotation_items``) but kept on the canvas: it is
+        not written to the project, and it goes when the window closes.
+        """
+        from .canvas.tool_mode import ToolMode
+        from .labels import measurement_text
+        mode = self.canvas.tool_mode
+        if mode not in (ToolMode.MEASURE, ToolMode.PICK_DIMENSION):
+            return
+        text = measurement_text(x0, y0, x1, y1)
+        if mode is ToolMode.PICK_DIMENSION:
+            from ogr_core.annotations import Annotation, AnnotationKind
+            self.canvas.overlay_annotations.append(Annotation(
+                kind=AnnotationKind.DIMENSION_LENGTH,
+                points=[(x0, y0), (x1, y1)]))
+            self.canvas.refresh_scene()
+            self._refresh_canvas_with_highlights()
+            text += "   " + tr("(drawn in Interpret only: not saved in "
+                               "the model)")
+        self.statusBar().showMessage(text, 15000)
 
     def _on_canvas_click_default(self, x: float, y: float) -> None:
         """Default click handler in Interpret mode.

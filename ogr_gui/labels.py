@@ -222,3 +222,12 @@ def random_variable_label(rv) -> str:
     if tail == param:
         return "%s — %s" % (head, param_label(param))
     return label
+
+
+def measurement_text(x0: float, y0: float, x1: float, y1: float) -> str:
+    """What Measure says about two points (v0.1.331, D329a): the distance
+    and its two components, in model units. Nothing of it is stored."""
+    import math
+    return tr("Distance: {0}   Δx: {1}   Δy: {2}").format(
+        "%.3f" % math.dist((x0, y0), (x1, y1)), "%.3f" % (x1 - x0),
+        "%.3f" % (y1 - y0))

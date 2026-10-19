@@ -3644,6 +3644,13 @@ _DICTS: dict[str, dict[str, str]] = {
             "Requiere un análisis probabilístico o de sensibilidad, o una búsqueda "
             "que informe de varios mínimos (una búsqueda multimodal o un análisis "
             "de Talud completo).",
+        # v0.1.331 (D329a) — Measure and Dimension Length on the canvas
+        "Dimension Length: click two points, Esc to finish":
+            "Acotar longitud: pulsa dos puntos, Esc para terminar",
+        "Distance: {0}   Δx: {1}   Δy: {2}":
+            "Distancia: {0}   Δx: {1}   Δy: {2}",
+        "(drawn in Interpret only: not saved in the model)":
+            "(dibujada solo en Interpretar: no se guarda en el modelo)",
         # v0.1.315 (D293) — the note of the hydraulic dialog, wrapped
         "<i>Names and colours are defined in Properties > Define "
         "Materials.</i>":

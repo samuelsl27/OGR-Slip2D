@@ -92,7 +92,9 @@ _REFUSAL = ("Those three points are too close to a straight line to define "
 # reenviador `_set_tool(mode)`, así que el censo es completo.
 _NEVER_ENTERED = {
     # Andamiaje puro: cursor y texto de estado, y nadie los lee siquiera.
-    "MEASURE", "ADD_SURFACE_CR",
+    # v0.1.331 (D329a) — MEASURE left this set: Measure enters it in both
+    # windows, and the canvas reads it (two clicks, the distance).
+    "ADD_SURFACE_CR",
     # Éstos SÍ los lee `_on_boundary_clicked`, pero como nadie entra en
     # ellos esas ramas `elif` son inalcanzables. La función en sí se
     # alcanza por otro camino: sus acciones están en el menú.
@@ -104,7 +106,9 @@ _NEVER_ENTERED = {
 # Los textos de estado de ToolMode NO los ve el escáner AST de
 # test_i18n_coverage_v141, porque `set_tool_mode` llama a `tr()` con una
 # VARIABLE. El techo de abajo es lo único que los mide.
-_HINTS_TOTAL = 34
+# v0.1.331 (D329a) — 34 -> 35: PICK_DIMENSION, Dimension Length in Interpret,
+# with its Spanish.
+_HINTS_TOTAL = 35
 # v0.1.198 — 33 -> 32: the CHANGE_SLOPE_ANGLE hint was rewritten with the
 # feature and got its Spanish.
 # v0.1.324 (D316) — 32 -> 0: every hint has its Spanish (the third test of
@@ -811,12 +815,15 @@ class TestTheOtherModesNobodyEnters:
         assert todos - _activated_modes() == _NEVER_ENTERED
 
     def test_two_of_them_are_pure_scaffolding_like_this_one_was(self):
-        """``MEASURE`` y ``ADD_SURFACE_CR`` tienen cursor y texto de estado
-        y nadie los lee siquiera — el andamiaje exacto de D101.
+        """``MEASURE`` y ``ADD_SURFACE_CR`` tenían cursor y texto de estado
+        y nadie los leía siquiera — el andamiaje exacto de D101.
         ``ADD_SURFACE_CR`` es además el modo del hermano que la ficha cita
         como el precedente que SÍ funciona: su acción va por diálogos y
-        nunca entra en él."""
+        nunca entra en él.
+
+        v0.1.331 (D329a) — ``MEASURE`` ya no: *Medir* entra en él en las
+        dos ventanas. Queda ``ADD_SURFACE_CR``."""
         from ogr_gui.canvas.tool_mode import ToolMode
-        for name in ("MEASURE", "ADD_SURFACE_CR"):
-            assert getattr(ToolMode, name).status_message
-            assert name not in _activated_modes()
+        assert ToolMode.ADD_SURFACE_CR.status_message
+        assert "ADD_SURFACE_CR" not in _activated_modes()
+        assert "MEASURE" in _activated_modes()
