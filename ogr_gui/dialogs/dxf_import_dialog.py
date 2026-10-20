@@ -72,6 +72,12 @@ _KIND_LABELS = [
     (K.PIEZO, "Piezometric Line"),
     (K.DRAWDOWN, "Drawdown Line"),
     (K.TENSION_CRACK, "Tension Crack"),
+    # v0.1.337 (D333) — the two kinds the exporter writes since v0.1.121
+    # and v0.1.126 and this list did not offer: ``findData`` gave -1 and the
+    # row fell to "(ignore)", so a model's own weak layer and anisotropic
+    # surface came back as nothing.
+    (K.WEAK_LAYER, "Weak Layer"),
+    (K.ANISOTROPIC_SURFACE, "Anisotropic Surface"),
     (K.SUPPORT, "Support"),
 ]
 

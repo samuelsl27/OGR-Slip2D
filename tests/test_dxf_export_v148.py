@@ -222,8 +222,9 @@ class TestLayerContract:
         silent corruption, so results live on OGR_X_ layers."""
         from ogr_core.dxf import guess_kind
         from ogr_core.dxf.reader import DxfEntityKind
+        # v0.1.337 — and the annotation layer, OGR_X_DRAWING
         for layer in ("OGR_X_LOADS", "OGR_X_MESH", "OGR_X_SLIP_SURFACE",
-                      "OGR_X_ANNOTATION"):
+                      "OGR_X_ANNOTATION", "OGR_X_DRAWING"):
             assert guess_kind(layer) == DxfEntityKind.IGNORE, layer
 
     def test_reimport_ignores_result_layers(self):

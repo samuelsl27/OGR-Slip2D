@@ -755,7 +755,6 @@ _DICTS: dict[str, dict[str, str]] = {
         'Show Legend': 'Mostrar leyenda',
 
         # --- v0.1.48: exportación DXF -------------------------------
-        'Annotations (title, factor of safety)': 'Anotaciones (título, factor de seguridad)',
         'Appearance': 'Aspecto',
         'Boundaries (geometry)': 'Contornos (geometría)',
         'Contents': 'Contenido',
@@ -3847,6 +3846,19 @@ _DICTS: dict[str, dict[str, str]] = {
         "here if you need to.</i>":
             "<i>El pivote es el punto pulsado en el lienzo; escribe otro aquí "
             "si lo necesitas.</i>",
+        # v0.1.337 — the annotation layer in the DXF export
+        "Labels (title, factor of safety)":
+            "Etiquetas (título, factor de seguridad)",
+        "Annotation layer":
+            "Capa de anotaciones",
+        "The lines, texts, dimensions, axes and images drawn with the Tools "
+        "menu, on the OGR_X_DRAWING layer: dimensions as real CAD dimensions, "
+        "measured in the drawing's unit.":
+            "Las líneas, textos, cotas, ejes e imágenes dibujados con el menú "
+            "Herramientas, en la capa OGR_X_DRAWING: las cotas como cotas de "
+            "CAD, medidas en la unidad del dibujo.",
+        "The model has no visible annotation.":
+            "El modelo no tiene ninguna anotación visible.",
         # v0.1.315 (D293) — the note of the hydraulic dialog, wrapped
         "<i>Names and colours are defined in Properties > Define "
         "Materials.</i>":

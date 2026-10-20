@@ -1301,12 +1301,19 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
             slip_surface: Annotated[bool, Field(
                 description="Include the result's surfaces.")] = True,
             annotations: Annotated[bool, Field(
-                description="Include labels.")] = True) -> dict[str, Any]:
+                description="Include the title and the factor-of-safety "
+                            "labels.")] = True,
+            annotation_layer: Annotated[bool, Field(
+                description="Include the annotation layer (lines, texts, "
+                            "dimensions, axes, images) on OGR_X_DRAWING; "
+                            "dimensions measure in the drawing unit.")] = True
+            ) -> dict[str, Any]:
         """Export the model (and a result) to DXF."""
         return run("dxf_export", path=path, project_id=project_id,
                    result_id=result_id, overwrite=overwrite, unit=unit,
                    boundaries=boundaries, supports=supports, loads=loads,
-                   slip_surface=slip_surface, annotations=annotations)
+                   slip_surface=slip_surface, annotations=annotations,
+                   annotation_layer=annotation_layer)
 
     @tool("report_generate", _EDIT)
     def report_generate(path: Annotated[str, Field(

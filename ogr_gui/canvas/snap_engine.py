@@ -338,18 +338,7 @@ def _point_to_segment(p: Vertex, a: Vertex, b: Vertex) -> Tuple[Vertex, float]:
 
 
 # ----------------------------------------------------------------------
-def nice_step(target_world: float) -> float:
-    """Round to a 1-2-5-10 decade step (for ruler / grid auto-spacing)."""
-    if target_world <= 0:
-        return 1.0
-    mag = 10 ** math.floor(math.log10(target_world))
-    normalized = target_world / mag
-    if normalized < 1.5:
-        step = 1.0
-    elif normalized < 3.5:
-        step = 2.0
-    elif normalized < 7.5:
-        step = 5.0
-    else:
-        step = 10.0
-    return step * mag
+# v0.1.337 — moved to the core, which draws the axes of the annotation layer
+# for the DXF export too; re-exported here for the canvas and the scripts
+# that import it from this module.
+from ogr_core.numbers import nice_step  # noqa: E402,F401

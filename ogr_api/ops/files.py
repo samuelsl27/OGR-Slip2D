@@ -154,8 +154,13 @@ def dxf_export(ws, path: str, project_id: Optional[str] = None,
                unit: str = "m", boundaries: bool = True,
                supports: bool = True, loads: bool = True,
                slip_surface: bool = True,
-               annotations: bool = True) -> dict:
-    """Export the model (and a result's critical surfaces) to DXF."""
+               annotations: bool = True,
+               annotation_layer: bool = True) -> dict:
+    """Export the model (and a result's critical surfaces) to DXF.
+
+    ``annotations`` writes the title and the factor-of-safety labels;
+    ``annotation_layer`` (v0.1.337) the annotation layer, on OGR_X_DRAWING,
+    its dimensions as CAD dimensions in the drawing's unit."""
     from ogr_core.dxf.exporter import ExportOptions, export_dxf
 
     results, stale = None, False
@@ -167,7 +172,8 @@ def dxf_export(ws, path: str, project_id: Optional[str] = None,
     opts = ExportOptions(unit=str(unit), boundaries=bool(boundaries),
                          supports=bool(supports), loads=bool(loads),
                          slip_surface=bool(slip_surface) and bool(results),
-                         annotations=bool(annotations))
+                         annotations=bool(annotations),
+                         annotation_layer=bool(annotation_layer))
     with ws.reading(project_id, "dxf_export") as project:
         rep = export_dxf(project, str(target), opts, results=results)
     if not rep.ok:

@@ -119,6 +119,11 @@ UNIT_FACTORS: dict[str, float] = {
 }
 
 
+#: The prefix of the layers the exporter writes for reading only — results
+#: and the annotation layer — which a re-import proposes to ignore.
+EXPORT_ONLY_PREFIX = "OGR_X_"
+
+
 def _normalise(name: str) -> str:
     """Layer name reduced to comparable form: upper case, no separators."""
     return "".join(ch for ch in str(name).upper() if ch.isalnum())
@@ -243,7 +248,25 @@ class DxfCatalogue:
         return "m"
 
     def bbox(self):
-        boxes = [p.bbox() for lay in self.layers for p in lay.polylines]
+        """The extent of the drawing, leaving out the layers the exporter
+        writes for reading only (``OGR_X_``).
+
+        v0.1.337 — those layers carry results and the annotation layer, and
+        an annotation can lie far from the model: measured, a line to
+        (1000, 1000) took the diagonal of the demo from 55.9 to 1414, the
+        sanitiser's tolerances (a percentage of it) 25 times wider, and on
+        re-import a material end 2 or 5 m short of the External was extended
+        to it with no warning instead of being reported dangling. Every
+        other layer still counts, so a third party's drawing reads as it
+        did (decision of the owner). A drawing with nothing but those layers
+        falls back to all of them."""
+        def boxes_of(layers):
+            return [p.bbox() for lay in layers for p in lay.polylines]
+        boxes = boxes_of(lay for lay in self.layers
+                         if not _normalise(lay.name).startswith(
+                             _normalise(EXPORT_ONLY_PREFIX)))
+        if not boxes:
+            boxes = boxes_of(self.layers)
         if not boxes:
             return None
         return (min(b[0] for b in boxes), min(b[1] for b in boxes),

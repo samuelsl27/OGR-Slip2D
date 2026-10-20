@@ -73,6 +73,12 @@ LAYER_LOADS = "OGR_X_LOADS"
 LAYER_MESH = "OGR_X_MESH"
 LAYER_SURFACE = "OGR_X_SLIP_SURFACE"
 LAYER_ANNOTATION = "OGR_X_ANNOTATION"
+# v0.1.337 — the annotation layer the user draws (lines, texts, dimensions,
+# axes, images), apart from the title and the factors of safety above, so a
+# CAD user can switch the two off separately (decision of the owner). Its
+# normalised name, OGRXDRAWING, contains none of the importer's aliases, so
+# it is proposed as "ignore" on re-import, like every OGR_X_ layer.
+LAYER_DRAWING = "OGR_X_DRAWING"
 
 # AutoCAD Color Index per layer, so the drawing is readable when opened.
 _LAYER_COLOURS = {
@@ -89,6 +95,7 @@ _LAYER_COLOURS = {
     LAYER_MESH: 8,            # dark grey
     LAYER_SURFACE: 1,         # red
     LAYER_ANNOTATION: 7,
+    LAYER_DRAWING: 7,         # each entity carries the annotation's colour
 }
 
 
@@ -102,7 +109,10 @@ class ExportOptions:
     loads: bool = True
     mesh: bool = False           # off by default: thousands of entities
     slip_surface: bool = True
+    # the title and the factor-of-safety labels (OGR_X_ANNOTATION)
     annotations: bool = True
+    # v0.1.337 — the user's annotation layer (OGR_X_DRAWING)
+    annotation_layer: bool = True
     # Arrow size for loads, as a fraction of the model diagonal
     arrow_pct: float = 2.0
 
@@ -204,6 +214,23 @@ def export_dxf(project, path, options: Optional[ExportOptions] = None,
         if name not in rep.layers:
             rep.layers.append(name)
         return name
+
+    # ---- the annotation layer: images first (v0.1.337) ---------------
+    # A DXF draws later entities over earlier ones and an image is a
+    # backdrop, so the images go in before the model; the rest of the layer
+    # goes in at the end, over it.
+    drawing = None
+    if opts.annotation_layer:
+        from .annotation_export import AnnotationWriter, visible_annotations
+        shown = visible_annotations(project)
+        if shown:
+            drawing = (AnnotationWriter(doc, msp, _layer(LAYER_DRAWING),
+                                        factor, _diagonal(project), rep),
+                       shown)
+            # dashes at a pitch proportional to the model, in drawing units
+            doc.header["$LTSCALE"] = max(_diagonal(project) / factor / 100.0,
+                                         1e-9)
+            drawing[0].pictures(shown)
 
     # ---- boundaries -------------------------------------------------
     if opts.boundaries:
@@ -352,6 +379,10 @@ def export_dxf(project, path, options: Optional[ExportOptions] = None,
             rep.count(LAYER_ANNOTATION)
         except Exception:  # noqa: BLE001
             pass
+
+    # ---- the annotation layer: the rest, over the model (v0.1.337) ----
+    if drawing is not None:
+        drawing[0].others(drawing[1])
 
     try:
         doc.saveas(str(path))

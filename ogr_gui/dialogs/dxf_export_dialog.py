@@ -80,11 +80,21 @@ class DxfExportDialog(QDialog):
             "which can be thousands of entities."))
         self.chk_surface = QCheckBox(tr("Critical slip surface"))
         self.chk_surface.setChecked(True)
+        # v0.1.337 — "Labels": the title and the factors of safety, which
+        # this box has always written. The annotation layer the user draws
+        # is the box below, on a layer of its own (decision of the owner).
         self.chk_annotations = QCheckBox(
-            tr("Annotations (title, factor of safety)"))
+            tr("Labels (title, factor of safety)"))
         self.chk_annotations.setChecked(True)
+        self.chk_annotation_layer = QCheckBox(tr("Annotation layer"))
+        self.chk_annotation_layer.setChecked(True)
+        self.chk_annotation_layer.setToolTip(tr(
+            "The lines, texts, dimensions, axes and images drawn with the "
+            "Tools menu, on the OGR_X_DRAWING layer: dimensions as real CAD "
+            "dimensions, measured in the drawing's unit."))
         for w in (self.chk_boundaries, self.chk_supports, self.chk_loads,
-                  self.chk_mesh, self.chk_surface, self.chk_annotations):
+                  self.chk_mesh, self.chk_surface, self.chk_annotations,
+                  self.chk_annotation_layer):
             fc.addWidget(w)
         v.addWidget(gb_c)
 
@@ -110,8 +120,13 @@ class DxfExportDialog(QDialog):
         self.chk_mesh.setEnabled(
             getattr(project, "fem_mesh", None) is not None)
         self.chk_surface.setEnabled(bool(has_results))
+        from ogr_core.dxf.annotation_export import visible_annotations
+        if not visible_annotations(project):
+            self.chk_annotation_layer.setEnabled(False)
+            self.chk_annotation_layer.setToolTip(tr(
+                "The model has no visible annotation."))
         for w in (self.chk_supports, self.chk_loads, self.chk_mesh,
-                  self.chk_surface):
+                  self.chk_surface, self.chk_annotation_layer):
             if not w.isEnabled():
                 w.setChecked(False)
 
@@ -143,6 +158,7 @@ class DxfExportDialog(QDialog):
             mesh=self.chk_mesh.isChecked(),
             slip_surface=self.chk_surface.isChecked(),
             annotations=self.chk_annotations.isChecked(),
+            annotation_layer=self.chk_annotation_layer.isChecked(),
             arrow_pct=self.sp_arrow.value(),
         )
 
