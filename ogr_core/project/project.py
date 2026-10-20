@@ -909,7 +909,7 @@ class Project:
         # v0.1.25 — FE mesh
         fm = data.get("fem_mesh")
         if fm:
-            from ogr_fem2d.mesh import Mesh as _Mesh
+            from ..fem.mesh import Mesh as _Mesh
             proj.fem_mesh = _Mesh.from_dict(fm)
         fos = data.get("focus_objects")
         if fos:
@@ -937,7 +937,7 @@ class Project:
 
         sb = data.get("seepage_bcs")
         if sb:
-            from ogr_fem2d.solvers import SeepageBoundaryConditions as _SBC
+            from ..fem.seepage_data import SeepageBoundaryConditions as _SBC
             proj.seepage_bcs = _SBC.from_dict(sb)
 
         # v0.1.78 — the seepage field, and its derived fields rebuilt.
@@ -950,8 +950,10 @@ class Project:
         # from every file without a transient
         tir = data.get("transient_initial_result")
         if sr or trs or tir:
-            from ogr_fem2d.solvers import (SeepageResult as _SR,
-                                           hydraulic_props_of, restore_derived)
+            # v0.1.342 (D337) -- the core's: no engine import on load
+            from ..fem.seepage_data import (SeepageResult as _SR,
+                                            hydraulic_props_of,
+                                            restore_derived)
             props = hydraulic_props_of(proj)
 
             def _restore(d):

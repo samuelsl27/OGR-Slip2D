@@ -109,8 +109,16 @@ class TestTheWarningsGiveFollowableAdvice:
 class TestNoWarningStringGivesTheOldAdvice:
     def test_the_seepage_module(self):
         """Every string literal of the module that is not a docstring —
-        f-string parts included — is free of the two remedies."""
-        src = Path(seepage.__file__).read_text(encoding="utf-8")
+        f-string parts included — is free of the two remedies.
+
+        v0.1.342 (D337) -- and of the core module its data moved to, so
+        the scan covers what it covered before the move."""
+        from ogr_core.fem import seepage_data
+        for module in (seepage, seepage_data):
+            self._scan(Path(module.__file__))
+
+    def _scan(self, path):
+        src = path.read_text(encoding="utf-8")
         tree = ast.parse(src)
         docstrings = set()
         for node in ast.walk(tree):
