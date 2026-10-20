@@ -81,6 +81,7 @@ def generate_report(
     company: Optional[str] = None,
     title: Optional[str] = None,
     factor_report=None,
+    figures=None,
 ) -> str:
     """Generate a PDF analysis report.
 
@@ -99,6 +100,12 @@ def generate_report(
         factors applied, the report says which, and the headline number is
         an over-design factor rather than a factor of safety. Asked of the
         run and not of ``project.settings``, which can change after it.
+    figures : list of (method id, png bytes), optional
+        v0.1.339 (D336) -- the figure of the critical surface of each
+        method (``ogr_api.report_figures.method_figures``), embedded after
+        the global minimums with the caption the report writes for it. The core draws nothing itself: the
+        figures need the engine's reading of a search, which it cannot
+        import.
 
     Returns
     -------
@@ -311,6 +318,12 @@ def generate_report(
         story.append(kv_table(rows))
         story.append(Spacer(1, 4))
 
+    # ---- 5b. Critical surface by method ---------------------------
+    if figures:
+        section("Critical Surface by Method")
+        story.extend(_figure_flowables(figures, results, fs_short,
+                                       doc.width, h_method))
+
     # ---- 6. Valid / Invalid Surfaces ------------------------------
     section("Valid / Invalid Surfaces")
     # v0.1.187 (D160) — "Attempted" beside the population. Total is the
@@ -367,6 +380,28 @@ def generate_report(
 
     doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
     return output_path
+
+
+def _figure_flowables(figures, results, fs_short, width, caption_style):
+    """One figure per method at the page's width, each under its caption:
+    the method and the number it found, called what the run calls it."""
+    import io
+
+    from reportlab.lib.utils import ImageReader
+    from reportlab.platypus import Image, KeepTogether
+    out = []
+    for mid, png in figures:
+        res = results.get(mid)
+        crit = getattr(res, "critical", None)
+        caption = f"Method: {_method_name(mid)}"
+        if crit is not None:
+            caption += f" — {fs_short} = {_fmt(crit.fos, 4)}"
+        w, h = ImageReader(io.BytesIO(png)).getSize()
+        out.append(KeepTogether([
+            Paragraph(caption, caption_style),
+            Image(io.BytesIO(png), width=width, height=width * h / max(w, 1)),
+        ]))
+    return out
 
 
 def _unit_label(enum_val, mapping):

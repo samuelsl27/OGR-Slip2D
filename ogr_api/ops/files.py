@@ -190,9 +190,21 @@ def report_generate(ws, path: str, result_id: str,
                     overwrite: bool = False,
                     author: Optional[str] = None,
                     company: Optional[str] = None,
-                    title: Optional[str] = None) -> dict:
-    """A PDF report of an analysis result."""
+                    title: Optional[str] = None,
+                    figures: bool = True,
+                    framing: str = "model",
+                    annotations: bool = True) -> dict:
+    """A PDF report of an analysis result.
+
+    v0.1.339 (D336) -- with ``figures``, one figure per method: its critical
+    surface, the annotation layer (``annotations``) and the contours of the
+    grid of centres, framed on the ``"model"`` or on the ``"search_area"``.
+    """
     from ogr_core.report.report_generator import generate_report
+
+    from ..report_figures import FRAMINGS, method_figures
+    if framing not in FRAMINGS:
+        raise unknown("framing", framing, list(FRAMINGS))
 
     handle, results, stale = _search_results(ws, result_id, None)
     # v0.1.242 (D226a) — the run's own factor report, stored with it: the
@@ -202,11 +214,17 @@ def report_generate(ws, path: str, result_id: str,
     target = ws.resolve_path(path, for_write=True, overwrite=overwrite,
                              suffix=".pdf")
     with ws.reading(handle.id, "report_generate") as project:
+        shown = (method_figures(
+            project, results, framing=framing,
+            annotations=bool(annotations),
+            factored=bool(getattr(factor_report, "applied", False)))
+            if figures else None)
         try:
             written = generate_report(project, results, str(target),
                                       author=author, company=company,
                                       title=title,
-                                      factor_report=factor_report)
+                                      factor_report=factor_report,
+                                      figures=shown)
         except RuntimeError as exc:  # reportlab missing
             raise Conflict(str(exc)) from None
     out = {"path": str(written)}

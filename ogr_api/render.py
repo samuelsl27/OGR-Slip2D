@@ -73,11 +73,48 @@ def _surface_path(res) -> Optional[tuple[list, list]]:
     return xs, ys
 
 
+def _hold_limits(ax, xlim, ylim) -> None:
+    """Set the axes' limits and leave autoscaling on.
+
+    v0.1.339 -- ``set_xlim`` turns autoscaling off, and the equal aspect
+    then widens one side at draw time with a warning ("Ignoring fixed x
+    limits to fulfill fixed data aspect..."), printed on every PNG since
+    v0.1.338: 26 times in its suite, none in v0.1.337's. Autoscaling back
+    on keeps the limits -- ``set_xlim`` marks them up to date, and nothing
+    added after this asks for a new autoscale -- and the aspect widens the
+    same side by the same amount, without the warning."""
+    ax.set_xlim(*xlim)
+    ax.set_ylim(*ylim)
+    ax.set_autoscale_on(True)
+
+
+def _draw_grid(fig, ax, grid) -> None:
+    """The minimum factor of safety at each slip centre, as filled contours
+    with their colour scale (low red, high blue), the centres as dots and
+    the critical centre as a star (v0.1.339, D336)."""
+    xs, ys, fos = grid["x"], grid["y"], grid["fos"]
+    try:
+        from matplotlib.tri import Triangulation
+        tri = Triangulation(xs, ys)
+        cs = ax.tricontourf(tri, fos, levels=12, cmap="RdYlBu", alpha=0.85,
+                            zorder=3)
+        fig.colorbar(cs, ax=ax, shrink=0.8,
+                     label=grid.get("label", "minimum factor of safety"))
+    except Exception:  # noqa: BLE001 - collinear centres: dots only
+        pass
+    ax.plot(xs, ys, ".", color="#333333", markersize=2, zorder=4)
+    crit = grid.get("critical")
+    if crit is not None:
+        ax.plot([crit[0]], [crit[1]], "*", color="#000000", markersize=11,
+                zorder=10, label="critical centre")
+
+
 def render_png(project, *, surfaces: Iterable = (), width: int = 900,
                height: int = 600, dpi: int = 100, labels: bool = True,
                title: Optional[str] = None,
                slice_lines: bool = True, field=None,
-               free_surface=None, annotations: bool = True) -> bytes:
+               free_surface=None, annotations: bool = True,
+               extent=None, grid=None) -> bytes:
     """PNG bytes of ``project`` with ``surfaces`` drawn on it.
 
     ``surfaces`` is a sequence of ``(label, LEMResult)``; each is drawn as
@@ -91,6 +128,12 @@ def render_png(project, *, surfaces: Iterable = (), width: int = 900,
 
     ``annotations`` (v0.1.338, D336) draws the model's annotation layer
     over it (``render_annotations``), inside the model's framing.
+
+    v0.1.339 (D336) -- for the report's figures: ``extent`` is the frame
+    ``(xmin, xmax, ymin, ymax)`` instead of the model's own, and ``grid`` the
+    minimum factor of safety at each slip centre (``report_figures
+    .grid_data``), drawn as filled contours with their scale, the centres as
+    dots and the critical one marked.
     """
     from matplotlib.backends.backend_agg import FigureCanvasAgg
     from matplotlib.figure import Figure
@@ -211,6 +254,8 @@ def render_png(project, *, surfaces: Iterable = (), width: int = 900,
                             [s.base_y_left, top], color=colour,
                             linewidth=0.5, alpha=0.5, zorder=8)
         ax.plot(xs, ys, color=colour, linewidth=2.2, zorder=9, label=label)
+    if grid is not None:
+        _draw_grid(fig, ax, grid)
     if surfaces or free_surface:
         ax.legend(loc="best", fontsize=8)
 
@@ -228,8 +273,17 @@ def render_png(project, *, surfaces: Iterable = (), width: int = 900,
         # in them: measured, a line to (1000, 1000) re-framed the whole
         # picture (43714 pixels moved). The model's data limits go back.
         ax.dataLim.set(model_data)
-        ax.set_xlim(xlim)
-        ax.set_ylim(ylim)
+        _hold_limits(ax, xlim, ylim)
+    if extent is not None:
+        # v0.1.339 — the frame asked for is also the data the equal aspect
+        # keeps: with the data inside the view, matplotlib may SHRINK one
+        # side down to the data, about the view's centre, and cut off the
+        # centres at the edge of a search area; with the frame as the data
+        # it can only widen it.
+        from matplotlib.transforms import Bbox
+        ax.dataLim.set(Bbox.from_extents(extent[0], extent[2], extent[1],
+                                         extent[3]))
+        _hold_limits(ax, extent[:2], extent[2:])
     if title:
         ax.set_title(title, fontsize=10)
     fig.tight_layout()

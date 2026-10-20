@@ -1332,11 +1332,23 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
             company: Annotated[Optional[str], Field(
                 description="Company on the cover.")] = None,
             title: Annotated[Optional[str], Field(
-                description="Report title.")] = None) -> dict[str, Any]:
+                description="Report title.")] = None,
+            figures: Annotated[bool, Field(
+                description="One figure per method: its critical surface "
+                            "and the contours of the grid of centres.")
+            ] = True,
+            framing: Annotated[Literal["model", "search_area"], Field(
+                description="Frame the figures on the model, or on the "
+                            "model and the whole area the grid searched.")
+            ] = "model",
+            annotations: Annotated[bool, Field(
+                description="Draw the annotation layer in the figures.")
+            ] = True) -> dict[str, Any]:
         """A PDF report of an analysis."""
         return run("report_generate", path=path, result_id=result_id,
                    overwrite=overwrite, author=author, company=company,
-                   title=title)
+                   title=title, figures=figures, framing=framing,
+                   annotations=annotations)
 
     @tool("properties_import", _EDIT)
     def properties_import(path: Annotated[str, Field(

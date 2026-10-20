@@ -255,7 +255,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.338"
+    VERSION = "0.1.339"
 
     def __init__(self) -> None:
         super().__init__()
@@ -1314,6 +1314,12 @@ class MainWindow(QMainWindow):
                 self, tr("Generate Report"),
                 tr("No analysis results available. Run Compute first."))
             return
+        # v0.1.339 (D336) — the figures of the report, asked before the file
+        from .dialogs.report_dialog import ReportDialog
+        dlg = ReportDialog(self.project, results, self)
+        if not dlg.exec():
+            return
+        options = dlg.options
         path, _ = QFileDialog.getSaveFileName(
             self, tr("Generate Report"),
             f"{self.project.name or 'analysis'}_report.pdf",
@@ -1322,15 +1328,23 @@ class MainWindow(QMainWindow):
             return
         if not path.lower().endswith(".pdf"):
             path += ".pdf"
+        factor_report = getattr(self, "last_factor_report", None)
         try:
             from ogr_core.report import generate_report
+            figures = None
+            if options["figures"]:
+                from ogr_api.report_figures import method_figures
+                figures = method_figures(
+                    self.project, results, framing=options["framing"],
+                    annotations=options["annotations"],
+                    factored=bool(getattr(factor_report, "applied", False)))
             summary = self.project.settings.summary
             generate_report(
                 self.project, results, path,
                 author=summary.author or None,
                 company=summary.company or None,
                 title=summary.title or None,
-                factor_report=getattr(self, "last_factor_report", None))
+                factor_report=factor_report, figures=figures)
         except ImportError:
             QMessageBox.critical(
                 self, tr("Generate Report"),

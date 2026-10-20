@@ -3859,6 +3859,31 @@ _DICTS: dict[str, dict[str, str]] = {
             "CAD, medidas en la unidad del dibujo.",
         "The model has no visible annotation.":
             "El modelo no tiene ninguna anotación visible.",
+        # v0.1.339 (D336) — the options of the PDF report
+        "Critical surface of each method":
+            "Superficie crítica de cada método",
+        "One figure per method: the model, that method's critical surface "
+        "and, with a grid of slip centres, the contours of the minimum "
+        "factor of safety at each centre.":
+            "Una figura por método: el modelo, la superficie crítica de ese "
+            "método y, con una rejilla de centros, las isolíneas del factor "
+            "de seguridad mínimo en cada centro.",
+        "Framing":
+            "Encuadre",
+        "Model and search area":
+            "Modelo y área de búsqueda",
+        "The model and every slip centre the search evaluated, the same "
+        "frame in every figure so that they compare.":
+            "El modelo y todos los centros que evaluó la búsqueda, con el "
+            "mismo encuadre en todas las figuras para que se puedan comparar.",
+        "The lines, texts, dimensions, axes and images drawn with the Tools "
+        "menu.":
+            "Las líneas, textos, cotas, ejes e imágenes dibujados con el menú "
+            "Herramientas.",
+        "No search of this run has a grid of slip centres.":
+            "Ninguna búsqueda de este cálculo tiene una rejilla de centros.",
+        "Generate":
+            "Generar",
         # v0.1.315 (D293) — the note of the hydraulic dialog, wrapped
         "<i>Names and colours are defined in Properties > Define "
         "Materials.</i>":

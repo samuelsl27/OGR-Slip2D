@@ -86,7 +86,7 @@ Una carga lineal «normal al contorno» o «con ángulo respecto al contorno» t
 | `dxf_inspect` | | Leer un DXF sin importarlo: capas, tipo propuesto, unidad y problemas. |
 | `dxf_import` | | Importar su geometría (un paso de deshacer). |
 | `dxf_export` | | Exportar el modelo y las superficies críticas de un resultado. |
-| `report_generate` | | Informe PDF de un análisis. |
+| `report_generate` | | Informe PDF de un análisis, con una figura por método (`figures`): su superficie crítica, la capa de anotaciones (`annotations`) y, con una rejilla de centros, las isolíneas del factor mínimo en cada centro; encuadrada en el modelo o en el modelo y el área de búsqueda (`framing`). |
 | `properties_import` | | Copiar materiales o tipos de soporte de otro `.ogr`. Un tramo de Generalized Anisotropic que tomaba un material se enlaza con su copia importada o con el material del mismo nombre; si no hay ninguno, conserva su resistencia sin enlace y lo dice una nota. |
 
 ## Agua subterránea (`groundwater`, desde v0.1.200)
@@ -144,7 +144,7 @@ Los tres cálculos pasan por la misma puerta que `analysis_run`: sin norma de di
 
 | Herramienta | C | Para qué |
 |---|---|---|
-| `model_render` | C | Imagen PNG del modelo, con las superficies críticas de un resultado o con los contornos del campo de agua (`field`, de una etapa o del estado inicial con `stage`) y su superficie libre; con el programa abierto, `source="window"` captura el lienzo real de la ventana. |
+| `model_render` | C | Imagen PNG del modelo, con las superficies críticas de un resultado o con los contornos del campo de agua (`field`, de una etapa o del estado inicial con `stage`) y su superficie libre, y la capa de anotaciones (`annotations`); con el programa abierto, `source="window"` captura el lienzo real de la ventana. |
 | `project_history` | | Deshacer, rehacer o listar las ediciones. |
 | `python_exec` | C | Python contra el modelo, para lo que aún no tiene herramienta. Ver [seguridad.md](seguridad.md). |
 
