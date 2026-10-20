@@ -171,9 +171,13 @@ class EditCoordinatesDialog(QDialog):
 
 # ======================================================================
 class ScaleDialog(QDialog):
-    """Scale factor input dialog."""
+    """Scale factor input dialog.
 
-    def __init__(self, parent=None) -> None:
+    v0.1.336 (D142b) — ``pivot`` is the point clicked on the canvas (or the
+    boundary's centroid), shown in the two fields, which stay editable: the
+    way to type another one."""
+
+    def __init__(self, parent=None, pivot=None) -> None:
         super().__init__(parent)
         self.setWindowTitle(tr("Scale Boundary"))
         self.resize(320, 200)
@@ -209,6 +213,9 @@ class ScaleDialog(QDialog):
         self.spn_py.setRange(-1e6, 1e6)
         self.spn_py.setDecimals(3)
         self.spn_py.setValue(0.0)
+        if pivot is not None:
+            self.spn_px.setValue(float(pivot[0]))
+            self.spn_py.setValue(float(pivot[1]))
 
         form.addRow(self.chk_uniform)
         form.addRow(tr("Sx:"), self.spn_sx)
@@ -217,9 +224,11 @@ class ScaleDialog(QDialog):
         form.addRow(tr("Pivot Y:"), self.spn_py)
         root.addLayout(form)
 
-        note = QLabel(tr("<i>Pivot defaults to (0, 0). Use the boundary centroid "
-                      "by leaving it at zero and selecting a non-central "
-                      "boundary carefully.</i>"))
+        # v0.1.336 (D142b) — it said "Pivot defaults to (0, 0). Use the
+        # boundary centroid by leaving it at zero…", and (0, 0) was never the
+        # centroid
+        note = QLabel(tr("<i>The pivot is the point clicked on the canvas; "
+                         "type another one here if you need to.</i>"))
         note.setWordWrap(True)
         root.addWidget(note)
 
@@ -248,9 +257,9 @@ class ScaleDialog(QDialog):
 
 # ======================================================================
 class RotateDialog(QDialog):
-    """Rotation angle + pivot input."""
+    """Rotation angle + pivot input (the pivot as ``ScaleDialog``'s)."""
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent=None, pivot=None) -> None:
         super().__init__(parent)
         self.setWindowTitle(tr("Rotate Boundary"))
         self.resize(320, 180)
@@ -263,6 +272,9 @@ class RotateDialog(QDialog):
         self.spn_angle.setValue(0.0)
         self.spn_px = QDoubleSpinBox(); self.spn_px.setRange(-1e6, 1e6); self.spn_px.setDecimals(3)
         self.spn_py = QDoubleSpinBox(); self.spn_py.setRange(-1e6, 1e6); self.spn_py.setDecimals(3)
+        if pivot is not None:
+            self.spn_px.setValue(float(pivot[0]))
+            self.spn_py.setValue(float(pivot[1]))
 
         form.addRow(tr("Angle (CCW):"), self.spn_angle)
         form.addRow(tr("Pivot X:"), self.spn_px)

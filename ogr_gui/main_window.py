@@ -255,7 +255,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.335"
+    VERSION = "0.1.336"
 
     def __init__(self) -> None:
         super().__init__()
@@ -349,6 +349,12 @@ class MainWindow(QMainWindow):
         # v0.1.168 (D101) — connected once here: it belongs to a single
         # mode and has nothing to collide with.
         self.canvas.three_points_picked.connect(self._on_surface_3pt_picked)
+        # v0.1.336 (D142b, D334) — Scale / Rotate by clicks, and the polyline
+        # of Expand / Shrink, each on a signal of its own, connected once
+        self.canvas.boundary_base_picked.connect(
+            self._on_boundary_base_picked)
+        self.canvas.expand_shrink_drawn.connect(
+            self._on_expand_shrink_polyline_drawn)
         # v0.1.335 (D142a) — Add Surface (centre and radius) on the canvas
         self.canvas.centre_radius_picked.connect(self._on_surface_cr_picked)
         self.canvas.centre_radius_typed.connect(
@@ -5319,13 +5325,6 @@ class MainWindow(QMainWindow):
             self._do_convert_boundary(index)
         elif mode == ToolMode.ASSIGN_MATERIAL:
             self._do_assign_material(index)
-        elif mode == ToolMode.SCALE_BOUNDARY:
-            self._pending_boundary_idx = index
-            self.act_scale_boundary(preselected_idx=index)
-        elif mode == ToolMode.ROTATE_BOUNDARY:
-            self.act_rotate_boundary(preselected_idx=index)
-        elif mode == ToolMode.EXPAND_SHRINK:
-            self.act_expand_shrink(preselected_idx=index)
         elif mode == ToolMode.MOVE_BOUNDARY:
             # Move by dx/dy input (simple for now)
             from PySide6.QtWidgets import QInputDialog
@@ -5670,11 +5669,38 @@ class MainWindow(QMainWindow):
         self.ogr_status.showMessage(tr("Vertex moved"), 1500)
 
     # --- dialog-launched transformations ------------------------------
-    def act_scale_boundary(self, preselected_idx: Optional[int] = None) -> None:
-        idx = preselected_idx if preselected_idx is not None else self._ask_boundary_index()
-        if idx is None:
+    def _on_boundary_base_picked(self, index: int, x: float,
+                                 y: float) -> None:
+        """Scale / Rotate (v0.1.336, D142b): the canvas has the boundary and
+        the pivot, and the dialog asks for the rest."""
+        mode = self.canvas.tool_mode
+        if mode == ToolMode.SCALE_BOUNDARY:
+            self.act_scale_boundary(index, pivot=(x, y))
+        elif mode == ToolMode.ROTATE_BOUNDARY:
+            self.act_rotate_boundary(index, pivot=(x, y))
+
+    def _boundary_pivot(self, idx: int) -> tuple:
+        """The pivot a Scale / Rotate offers when none was clicked: the
+        boundary's centroid, the API's own default (``boundary_edit``)."""
+        verts = self.project.boundaries[idx].polyline.vertices
+        n = max(len(verts), 1)
+        return (sum(v.x for v in verts) / n, sum(v.y for v in verts) / n)
+
+    # v0.1.336 (D142b, D339) — from the menu, these enter the canvas mode:
+    # the boundary, then the pivot. ``triggered`` passes ``checked`` (False)
+    # to a slot that takes a parameter, and ``preselected_idx`` took it: the
+    # list of boundaries was never asked for, and boundaries[False] -- the
+    # FIRST boundary -- was scaled or rotated whatever the user meant. A
+    # boolean is therefore not an index here.
+    def act_scale_boundary(self, preselected_idx: Optional[int] = None,
+                           pivot: Optional[tuple] = None) -> None:
+        if isinstance(preselected_idx, bool) or preselected_idx is None:
+            self._set_tool(ToolMode.SCALE_BOUNDARY)
             return
-        dlg = ScaleDialog(self)
+        idx = preselected_idx
+        if not (0 <= idx < len(self.project.boundaries)):
+            return
+        dlg = ScaleDialog(self, pivot=pivot or self._boundary_pivot(idx))
         if dlg.exec():
             sx, sy, pivot = dlg.parameters()
             orig = self.project.boundaries[idx]
@@ -5685,11 +5711,15 @@ class MainWindow(QMainWindow):
                 tr('Scaled {0} by ({1:.3f}, {2:.3f})').format(orig.name, sx, sy), 2000
             )
 
-    def act_rotate_boundary(self, preselected_idx: Optional[int] = None) -> None:
-        idx = preselected_idx if preselected_idx is not None else self._ask_boundary_index()
-        if idx is None:
+    def act_rotate_boundary(self, preselected_idx: Optional[int] = None,
+                            pivot: Optional[tuple] = None) -> None:
+        if isinstance(preselected_idx, bool) or preselected_idx is None:
+            self._set_tool(ToolMode.ROTATE_BOUNDARY)
             return
-        dlg = RotateDialog(self)
+        idx = preselected_idx
+        if not (0 <= idx < len(self.project.boundaries)):
+            return
+        dlg = RotateDialog(self, pivot=pivot or self._boundary_pivot(idx))
         if dlg.exec():
             angle, pivot = dlg.parameters()
             orig = self.project.boundaries[idx]
@@ -5714,6 +5744,11 @@ class MainWindow(QMainWindow):
              old External into a Material Boundary?" — Yes / No
           4. Everything is wrapped in an undoable MacroCommand.
         """
+        # v0.1.336 (D339) — from the menu ``triggered`` passes ``checked``
+        # (False), which is not None: the External was never looked for and
+        # boundaries[False], the FIRST boundary, became the target
+        if isinstance(preselected_idx, bool):
+            preselected_idx = None
         # Must have an External
         if preselected_idx is None:
             for i, b in enumerate(self.project.boundaries):
@@ -5767,13 +5802,15 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------
     def _expand_shrink_draw_mode(self, idx: int) -> None:
-        """Enter the interactive draw mode."""
+        """Enter the interactive draw mode.
+
+        v0.1.336 (D334) — the polyline arrives on ``expand_shrink_drawn``,
+        connected once. This used to reroute ``boundary_drawn`` to the slot
+        below and put it back when the slot ran; the canvas never emitted it
+        in this mode, so the reroute stayed, and the NEXT boundary the user
+        drew went to expand/shrink instead of into the model.
+        """
         self._expand_shrink_target_idx = idx
-        try:
-            self.canvas.boundary_drawn.disconnect(self._on_boundary_drawn)
-        except (TypeError, RuntimeError):
-            pass
-        self.canvas.boundary_drawn.connect(self._on_expand_shrink_polyline_drawn)
         self.canvas.set_tool_mode(ToolMode.DRAW_EXPAND_SHRINK)
         self.ogr_status.showMessage(
             tr("Expand/Shrink: FIRST click must be ON the External (snap — "
@@ -5784,17 +5821,11 @@ class MainWindow(QMainWindow):
         )
 
     # ------------------------------------------------------------------
-    def _on_expand_shrink_polyline_drawn(self, polyline_boundary) -> None:
-        """Called when the user finishes drawing the Expand/Shrink polyline."""
-        # Restore the normal boundary_drawn routing
-        try:
-            self.canvas.boundary_drawn.disconnect(
-                self._on_expand_shrink_polyline_drawn
-            )
-        except (TypeError, RuntimeError):
-            pass
-        self.canvas.boundary_drawn.connect(self._on_boundary_drawn)
-
+    def _on_expand_shrink_polyline_drawn(self, drawn) -> None:
+        """Called when the user finishes drawing the Expand/Shrink polyline:
+        a ``Polyline`` from the canvas (v0.1.336, D334), or a boundary
+        holding one, as a script may pass."""
+        polyline = getattr(drawn, "polyline", drawn)
         idx = getattr(self, "_expand_shrink_target_idx", None)
         if idx is None or not (0 <= idx < len(self.project.boundaries)):
             return
@@ -5806,9 +5837,7 @@ class MainWindow(QMainWindow):
                 ExpandShrinkError,
                 expand_shrink_external,
             )
-            result = expand_shrink_external(
-                old_ext.polyline, polyline_boundary.polyline,
-            )
+            result = expand_shrink_external(old_ext.polyline, polyline)
         except ExpandShrinkError as e:
             QMessageBox.warning(self, tr("Expand / Shrink"), str(e))
             return
@@ -5848,9 +5877,7 @@ class MainWindow(QMainWindow):
         # snaps to.
         from ogr_core.geometry.expand_shrink import apply_expand_shrink
         from ogr_core.project.commands import SnapshotCommand
-        drawn = polyline_boundary.polyline
-
-        def _apply(project, _drawn=drawn, _keep=convert_arc):
+        def _apply(project, _drawn=polyline, _keep=convert_arc):
             return apply_expand_shrink(project, _drawn,
                                        keep_removed_as_material=_keep)
         self.command_stack.do(self.project, SnapshotCommand(

@@ -2673,8 +2673,6 @@ _DICTS: dict[str, dict[str, str]] = {
             '<b>{0}</b><br>Magnitud en {1}. Siempre positiva: el sentido lo da la orientación.',
         '<i>Mesh overlays activate once the OGR FEM2D module is available (planned v0.5.0). Settings here are persisted.</i>':
             '<i>Las capas de la malla se activan cuando el módulo OGR FEM2D esté disponible (previsto en la v0.5.0). Estos ajustes se guardan.</i>',
-        '<i>Pivot defaults to (0, 0). Use the boundary centroid by leaving it at zero and selecting a non-central boundary carefully.</i>':
-            '<i>El pivote es (0, 0) por defecto. Para usar el centroide del contorno, déjalo a cero y elige con cuidado un contorno no centrado.</i>',
         '<i>Vertices whose deviation from the simplified line is below ε will be removed (Ramer-Douglas-Peucker).</i>':
             '<i>Se eliminarán los vértices cuya desviación respecto a la línea simplificada sea menor que ε (Ramer-Douglas-Peucker).</i>',
         'Advanced groundwater options are mutually exclusive: enabling this disables Excess Pore Pressure and Rapid Drawdown.':
@@ -3592,12 +3590,6 @@ _DICTS: dict[str, dict[str, str]] = {
             'Pulsa sobre un lado para insertar un vértice nuevo, Esc para salir',
         'Click a vertex to delete it, Esc to exit':
             'Pulsa un vértice para eliminarlo, Esc para salir',
-        'Click a boundary to scale, then enter scale factor, Esc to exit':
-            'Pulsa un contorno para escalarlo y escribe el factor de escala, Esc para salir',
-        'Click a boundary, then pivot point, then target angle, Esc to exit':
-            'Pulsa un contorno, después el punto de giro y después el ángulo final, Esc para salir',
-        'Click the External boundary to expand/shrink, Esc to exit':
-            'Pulsa el contorno exterior para expandirlo o contraerlo, Esc para salir',
         'Click start and end points on a boundary':
             'Pulsa los puntos inicial y final sobre un contorno',
         'Click a point to place the line load':
@@ -3840,6 +3832,21 @@ _DICTS: dict[str, dict[str, str]] = {
             "Regiones sin construir",
         "The areas do not match":
             "Las áreas no cuadran",
+        # v0.1.336 (D142b) — Scale and Rotate Boundary by clicks
+        "Scale Boundary: click a boundary, then the pivot, Esc to exit":
+            "Escalar contorno: pulsa un contorno y después el pivote, Esc para "
+            "salir",
+        "Rotate Boundary: click a boundary, then the pivot, Esc to exit":
+            "Rotar contorno: pulsa un contorno y después el pivote, Esc para "
+            "salir",
+        "Click a boundary first, then the pivot.":
+            "Pulsa primero un contorno y después el pivote.",
+        "Now click the pivot, Esc to choose another boundary.":
+            "Ahora pulsa el pivote; Esc para elegir otro contorno.",
+        "<i>The pivot is the point clicked on the canvas; type another one "
+        "here if you need to.</i>":
+            "<i>El pivote es el punto pulsado en el lienzo; escribe otro aquí "
+            "si lo necesitas.</i>",
         # v0.1.315 (D293) — the note of the hydraulic dialog, wrapped
         "<i>Names and colours are defined in Properties > Define "
         "Materials.</i>":

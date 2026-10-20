@@ -58,7 +58,6 @@ class ToolMode(Enum):
     # ----- Transformations (click pivot point) -----
     SCALE_BOUNDARY = "scale_boundary"
     ROTATE_BOUNDARY = "rotate_boundary"
-    EXPAND_SHRINK = "expand_shrink"                # menu entry (old)
     DRAW_EXPAND_SHRINK = "draw_expand_shrink"      # interactive draw mode
     CHANGE_SLOPE_ANGLE = "change_slope_angle"
 
@@ -184,7 +183,6 @@ class ToolMode(Enum):
             ToolMode.DELETE_VERTEX: "PointingHandCursor",
             ToolMode.SCALE_BOUNDARY: "CrossCursor",
             ToolMode.ROTATE_BOUNDARY: "CrossCursor",
-            ToolMode.EXPAND_SHRINK: "PointingHandCursor",
             ToolMode.DRAW_EXPAND_SHRINK: "CrossCursor",
             ToolMode.CHANGE_SLOPE_ANGLE: "CrossCursor",
             ToolMode.ADD_DISTRIBUTED_LOAD: "CrossCursor",
@@ -224,9 +222,11 @@ class ToolMode(Enum):
             ToolMode.MOVE_VERTEX: "Click a vertex and drag to move it, Esc to exit",
             ToolMode.INSERT_VERTEX: "Click on an edge to insert a new vertex, Esc to exit",
             ToolMode.DELETE_VERTEX: "Click a vertex to delete it, Esc to exit",
-            ToolMode.SCALE_BOUNDARY: "Click a boundary to scale, then enter scale factor, Esc to exit",
-            ToolMode.ROTATE_BOUNDARY: "Click a boundary, then pivot point, then target angle, Esc to exit",
-            ToolMode.EXPAND_SHRINK: "Click the External boundary to expand/shrink, Esc to exit",
+            # v0.1.336 (D142b) — the boundary, then the pivot, as the canvas
+            # now takes them; EXPAND_SHRINK is gone (nothing entered it, and
+            # the drawn polyline is DRAW_EXPAND_SHRINK's)
+            ToolMode.SCALE_BOUNDARY: "Scale Boundary: click a boundary, then the pivot, Esc to exit",
+            ToolMode.ROTATE_BOUNDARY: "Rotate Boundary: click a boundary, then the pivot, Esc to exit",
             ToolMode.CHANGE_SLOPE_ANGLE: "Click the toe vertex, then the crest vertex of the External boundary. Esc to cancel.",
             ToolMode.ADD_DISTRIBUTED_LOAD: "Click start and end points on a boundary",
             ToolMode.ADD_LINE_LOAD: "Click a point to place the line load",

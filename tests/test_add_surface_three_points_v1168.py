@@ -90,26 +90,27 @@ _REFUSAL = ("Those three points are too close to a straight line to define "
 # Medido por AST sobre TODA llamada a set_tool_mode/_set_tool de `ogr_gui`.
 # La única forma de llamada que no nombra un ToolMode literal es el propio
 # reenviador `_set_tool(mode)`, así que el censo es completo.
-_NEVER_ENTERED = {
+_NEVER_ENTERED = set({
     # Andamiaje puro: cursor y texto de estado, y nadie los lee siquiera.
     # v0.1.331 (D329a) — MEASURE left this set: Measure enters it in both
     # windows, and the canvas reads it (two clicks, the distance).
     # v0.1.335 (D142a) — and ADD_SURFACE_CR: Add Surface (centre and radius)
     # enters it, the centre and a point on the circle.
-    # Éstos SÍ los lee `_on_boundary_clicked`, pero como nadie entra en
-    # ellos esas ramas `elif` son inalcanzables. La función en sí se
-    # alcanza por otro camino: sus acciones están en el menú.
-    "SCALE_BOUNDARY", "ROTATE_BOUNDARY", "EXPAND_SHRINK",
+    # v0.1.336 (D142b) — and the last three: Scale and Rotate Boundary enter
+    # their modes from the menu (the boundary, then the pivot), and
+    # EXPAND_SHRINK is retired (its drawn variant is DRAW_EXPAND_SHRINK).
+    # The set is empty: D142 is closed.
     # v0.1.198 — CHANGE_SLOPE_ANGLE left this set: Change Slope Angle was
     # rewritten and now enters its mode to pick the toe and the crest.
-}
+})
 
 # Los textos de estado de ToolMode NO los ve el escáner AST de
 # test_i18n_coverage_v141, porque `set_tool_mode` llama a `tr()` con una
 # VARIABLE. El techo de abajo es lo único que los mide.
 # v0.1.331 (D329a) — 34 -> 35: PICK_DIMENSION, Dimension Length in Interpret,
 # with its Spanish.
-_HINTS_TOTAL = 35
+_HINTS_TOTAL = 34
+# v0.1.336 (D142b) — 35 -> 34: EXPAND_SHRINK retired with its hint.
 # v0.1.198 — 33 -> 32: the CHANGE_SLOPE_ANGLE hint was rewritten with the
 # feature and got its Spanish.
 # v0.1.324 (D316) — 32 -> 0: every hint has its Spanish (the third test of

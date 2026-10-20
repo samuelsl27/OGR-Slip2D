@@ -229,6 +229,13 @@ class CanvasView(QGraphicsView):
     # vertices, not coordinates: the feature works on the boundary's own
     # vertices, and an index cannot be a point that is not one.
     slope_vertices_picked = Signal(int, int)
+    # v0.1.336 (D142b) — Scale and Rotate Boundary: the boundary clicked
+    # first, as an index, and the pivot clicked after it
+    boundary_base_picked = Signal(int, float, float)
+    # v0.1.336 (D334) — the polyline Expand / Shrink draws: a Polyline, not
+    # a Boundary, because it is not one (``boundary_drawn`` carried it only
+    # when a reroute was in place, and none ever reached it)
+    expand_shrink_drawn = Signal(object)
     # v0.1.8 — load right-click action (action, kind, index)
     load_action_requested = Signal(str, str, int)
     # v0.1.9 — emitted on Move Boundary drag release (boundary_idx, dx, dy)
@@ -315,6 +322,10 @@ class CanvasView(QGraphicsView):
         # v0.1.198 — the toe picked by the first click of Change Slope
         # Angle; only trusted while ``_draw_points`` still holds its dot.
         self._slope_toe_idx: Optional[int] = None
+        # v0.1.336 (D142b) — Scale / Rotate: the boundary clicked first and
+        # its dashed ghost, until the pivot is clicked
+        self._transform_target: Optional[int] = None
+        self._transform_ghost = None
         self._draw_preview_items: list = []
         # Vertex dragging
         self._dragging_vertex: Optional[tuple[int, int]] = None  # (boundary_idx, vertex_idx)
@@ -477,6 +488,9 @@ class CanvasView(QGraphicsView):
 
         previous = self._tool_mode
         self._tool_mode = mode
+        # v0.1.336 (D142b) — nor does the boundary a Scale / Rotate picked
+        if mode is not previous:
+            self._clear_transform_target()
 
         # v0.1.168 (D101) — a pending click does not survive a change of
         # tool. ``_draw_points`` is shared by every picking mode and
@@ -1520,6 +1534,20 @@ class CanvasView(QGraphicsView):
             self._cancel_drawing()
             return
         btype = mode.boundary_type_drawn
+        # v0.1.336 (D334) — the Expand / Shrink polyline is not a boundary of
+        # any type, so it fell into the cancel below and nothing came out:
+        # the draw mode had never delivered a polyline, since v0.1.59. It is
+        # delivered on its own signal, and the mode is left.
+        if mode == ToolMode.DRAW_EXPAND_SHRINK:
+            from ogr_core.geometry import Polyline, Vertex
+            drawn = Polyline(vertices=[Vertex(x, y)
+                                       for (x, y) in self._draw_points],
+                             closed=False)
+            self._draw_points = []
+            self._clear_draw_preview()
+            self.set_tool_mode(ToolMode.SELECT)
+            self.expand_shrink_drawn.emit(drawn)
+            return
         if btype is None:
             self._cancel_drawing()
             return
@@ -1583,6 +1611,30 @@ class CanvasView(QGraphicsView):
         self.scene().addItem(ghost)
         self._drag_ghost_base = QPointF(ghost.pos())
         return ghost
+
+    def _set_transform_target(self, idx: int) -> None:
+        """Scale / Rotate (v0.1.336, D142b): ``idx`` is the boundary the
+        pivot will be asked for, shown by a dashed ghost."""
+        self._clear_transform_target()
+        if self.project is None or not (0 <= idx < len(self.project.boundaries)):
+            return
+        self._transform_target = idx
+        self._transform_ghost = self._make_drag_ghost(
+            self.project.boundaries[idx])
+
+    def _clear_transform_target(self) -> None:
+        """Forget the boundary of a Scale / Rotate in progress, and its
+        ghost."""
+        ghost = self._transform_ghost
+        self._transform_ghost = None
+        self._transform_target = None
+        if ghost is None:
+            return
+        try:
+            if ghost.scene() is self.scene():
+                self.scene().removeItem(ghost)
+        except RuntimeError:     # the scene was rebuilt: the item is gone
+            pass
 
     def _cancel_boundary_drag(self) -> None:
         """Drop a boundary drag in progress (v0.1.312, D307): the ghost
@@ -2177,11 +2229,37 @@ class CanvasView(QGraphicsView):
                 event.accept()
                 return
 
+            # v0.1.336 (D142b) — Scale and Rotate Boundary, as the reference
+            # does them: the boundary, then the pivot, and the dialog asks
+            # for the factor or the angle with that pivot filled in. They
+            # were in the one-click tuple below with a pivot nobody clicked,
+            # and nothing ever entered their modes (D142).
+            if mode in (ToolMode.SCALE_BOUNDARY, ToolMode.ROTATE_BOUNDARY):
+                scene_pt = self.mapToScene(event.position().toPoint())
+                if self._transform_target is None:
+                    idx = self._pick_boundary(scene_pt.x(), scene_pt.y())
+                    if idx < 0:
+                        self.status_message.emit(tr(
+                            "Click a boundary first, then the pivot."))
+                    else:
+                        self._set_transform_target(idx)
+                        self.status_message.emit(tr(
+                            "Now click the pivot, Esc to choose another "
+                            "boundary."))
+                    event.accept()
+                    return
+                snapped = self._snap_xy(scene_pt)
+                idx = self._transform_target
+                # Cleared BEFORE emitting, as the other pick modes do: the
+                # slot opens a dialog and redraws the scene.
+                self._clear_transform_target()
+                self.boundary_base_picked.emit(idx, snapped.x(), snapped.y())
+                event.accept()
+                return
+
             # one-click hit-test
             if mode in (ToolMode.DELETE_BOUNDARY, ToolMode.COPY_BOUNDARY,
-                        ToolMode.CONVERT_BOUNDARY,
-                        ToolMode.SCALE_BOUNDARY,
-                        ToolMode.ROTATE_BOUNDARY, ToolMode.EXPAND_SHRINK):
+                        ToolMode.CONVERT_BOUNDARY):
                 scene_pt = self.mapToScene(event.position().toPoint())
                 idx = self._pick_boundary(scene_pt.x(), scene_pt.y())
                 if idx >= 0:
@@ -2601,6 +2679,12 @@ class CanvasView(QGraphicsView):
             # drawing: the tool stays, and a second Esc leaves it
             if self._dragging_boundary is not None:
                 self._cancel_boundary_drag()
+                event.accept()
+                return
+            # v0.1.336 (D142b) — a Scale / Rotate with its boundary picked:
+            # the boundary is let go and the tool stays, as a drawing's points
+            if self._transform_target is not None:
+                self._clear_transform_target()
                 event.accept()
                 return
             # Cancel any drawing in progress first
