@@ -29,10 +29,12 @@ def model_render(ws, project_id: Optional[str] = None,
                  overwrite: bool = False,
                  field: Optional[str] = None,
                  stage: Union[int, str, None] = None,
-                 source: str = "model") -> dict:
+                 source: str = "model",
+                 annotations: bool = True) -> dict:
     """A PNG of the model, optionally with a result's critical surface
     or the groundwater field (contours and free surface); or, attached to
-    a window, a capture of its canvas (``source="window"``)."""
+    a window, a capture of its canvas (``source="window"``).
+    ``annotations`` (v0.1.338) draws the model's annotation layer."""
     from ..render import render_png
 
     if source not in ("model", "window"):
@@ -82,7 +84,8 @@ def model_render(ws, project_id: Optional[str] = None,
             title += f" — {overlay[0]}"
         png = render_png(project, surfaces=surfaces, width=width,
                          height=height, labels=bool(labels), title=title,
-                         field=overlay, free_surface=fs)
+                         field=overlay, free_surface=fs,
+                         annotations=bool(annotations))
     if target is not None:
         target.write_bytes(png)
     return {"project_id": handle.id, "png": png,

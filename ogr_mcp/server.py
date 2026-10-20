@@ -705,13 +705,18 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
                      source: Annotated[Literal["model", "window"], Field(
                          description="'window': the real canvas (only "
                                      "attached to a window).")
-                     ] = "model") -> list:
+                     ] = "model",
+                     annotations: Annotated[bool, Field(
+                         description="Draw the annotation layer (lines, "
+                                     "texts, dimensions, axes, images).")
+                     ] = True) -> list:
         """A picture (PNG) of the model, with a result's critical surface
         or the groundwater field."""
         out = run("model_render", project_id=project_id,
                   result_id=result_id, method_id=method_id, width=width,
                   height=height, save_path=save_path, overwrite=overwrite,
-                  field=field, stage=stage, source=source)
+                  field=field, stage=stage, source=source,
+                  annotations=annotations)
         note = {k: v for k, v in out.items() if k != "png"}
         return [Image(data=out["png"], format="png"), json.dumps(note)]
 

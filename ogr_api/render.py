@@ -77,7 +77,7 @@ def render_png(project, *, surfaces: Iterable = (), width: int = 900,
                height: int = 600, dpi: int = 100, labels: bool = True,
                title: Optional[str] = None,
                slice_lines: bool = True, field=None,
-               free_surface=None) -> bytes:
+               free_surface=None, annotations: bool = True) -> bytes:
     """PNG bytes of ``project`` with ``surfaces`` drawn on it.
 
     ``surfaces`` is a sequence of ``(label, LEMResult)``; each is drawn as
@@ -88,6 +88,9 @@ def render_png(project, *, surfaces: Iterable = (), width: int = 900,
     ``field`` (v0.1.200) is ``(label, nodal values, mesh)``: filled
     contours over the finite-element mesh, as the Interpret groundwater
     window draws them; ``free_surface`` a list of (x, y), drawn dashed.
+
+    ``annotations`` (v0.1.338, D336) draws the model's annotation layer
+    over it (``render_annotations``), inside the model's framing.
     """
     from matplotlib.backends.backend_agg import FigureCanvasAgg
     from matplotlib.figure import Figure
@@ -213,6 +216,20 @@ def render_png(project, *, surfaces: Iterable = (), width: int = 900,
 
     ax.margins(0.05)
     ax.autoscale_view()
+    if annotations:
+        # v0.1.338 (D336) — the layer the user drew, over the model and in
+        # its framing: an annotation far away does not shrink the slope
+        from .render_annotations import draw_annotations
+        xlim, ylim = ax.get_xlim(), ax.get_ylim()
+        model_data = ax.dataLim.frozen()
+        draw_annotations(ax, project)
+        # the equal aspect with adjustable data limits re-frames the axes
+        # from their DATA limits when drawn, and an annotation far away is
+        # in them: measured, a line to (1000, 1000) re-framed the whole
+        # picture (43714 pixels moved). The model's data limits go back.
+        ax.dataLim.set(model_data)
+        ax.set_xlim(xlim)
+        ax.set_ylim(ylim)
     if title:
         ax.set_title(title, fontsize=10)
     fig.tight_layout()
