@@ -48,8 +48,6 @@ DYNAMIC = "__import__"
 #: ``(file, enclosing function, module)``: how many times it is written.
 #: Only shrinks. Each version of the D337 batch removes its own entries.
 ALLOWED = Counter({
-    # the critical surface drawn from the engine's objects (v0.1.341)
-    ("ogr_core/dxf/exporter.py", "export_dxf", "ogr_slip2d"): 1,
     # the stored data classes (v0.1.342, v0.1.343)
     ("ogr_core/project/project.py", "Project.from_dict", "ogr_fem2d"): 3,
     ("ogr_core/project/project.py", "Project.from_dict", "ogr_slip2d"): 2,

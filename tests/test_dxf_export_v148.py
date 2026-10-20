@@ -265,7 +265,11 @@ class TestContents:
                        grid_y=(60, 85), grid_nx=4, grid_ny=4,
                        radius_increment=8, min_radius=15, num_slices=18,
                        min_area=0.5).run(p)
-        return p, {"bishop_simplified": r}
+        # v0.1.341 (D337) -- the exporter takes the drawings, built by the
+        # engine from the results
+        from ogr_slip2d.interpretation import critical_drawings
+        self._results = {"bishop_simplified": r}
+        return p, critical_drawings(self._results)
 
     def test_slip_surface_written(self):
         p, res = self._with_results()
@@ -281,7 +285,7 @@ class TestContents:
         pl = [e for e in doc.modelspace()
               if e.dxf.layer == "OGR_X_SLIP_SURFACE"][0]
         pts = [(x, y) for x, y, *_ in pl.get_points()]
-        crit = res["bishop_simplified"].critical
+        crit = self._results["bishop_simplified"].critical
         assert abs(pts[0][0] - crit.slices[0].base_x_left) < 1e-6
         assert abs(pts[-1][0] - crit.slices[-1].base_x_right) < 1e-6
 

@@ -175,7 +175,9 @@ def dxf_export(ws, path: str, project_id: Optional[str] = None,
                          annotations=bool(annotations),
                          annotation_layer=bool(annotation_layer))
     with ws.reading(project_id, "dxf_export") as project:
-        rep = export_dxf(project, str(target), opts, results=results)
+        from ogr_slip2d.interpretation import critical_drawings
+        rep = export_dxf(project, str(target), opts,
+                         surfaces=critical_drawings(results or {}))
     if not rep.ok:
         raise InvalidArgument(f"DXF export failed: {rep.error}")
     out = {"path": str(target), "summary": rep.summary()}

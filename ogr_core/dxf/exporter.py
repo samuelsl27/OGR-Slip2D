@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from collections.abc import Mapping
 from typing import Optional
 
 from ogr_core.geometry import BoundaryType
@@ -182,16 +183,30 @@ def _arrow(msp, layer, tip, angle_deg, length, factor, report):
 
 # ======================================================================
 def export_dxf(project, path, options: Optional[ExportOptions] = None,
-               results=None) -> ExportReport:
+               surfaces=()) -> ExportReport:
     """Write ``project`` to a DXF drawing.
 
     Args:
         project: the model to export (never modified).
         path: destination file.
         options: what to include and in which units.
-        results: optional mapping ``method_id -> SearchResult`` whose
-            critical surfaces are drawn.
+        surfaces: the critical surfaces to draw, as plain geometry:
+            ``(label, points, fos)`` for each, or ``(label, None, fos,
+            kind)`` for one that cannot be drawn, which is left out and
+            said. ``ogr_slip2d.interpretation.critical_drawings(results)``
+            builds them from a mapping ``method_id -> SearchResult``.
+
+    v0.1.341 (D337) -- this took the search results and asked the engine's
+    surface classes which kind each critical surface was: the core imported
+    the engine. The rule that turns a result into points is the engine's
+    now (``critical_drawings``), word for word, and this draws what it is
+    given.
     """
+    if isinstance(surfaces, Mapping):
+        raise TypeError(
+            "export_dxf takes the critical surfaces as drawings since "
+            "v0.1.341: pass ogr_slip2d.interpretation.critical_drawings("
+            "results), not the results themselves.")
     opts = options or ExportOptions()
     rep = ExportReport(path=str(path))
     if ezdxf is None:
@@ -320,37 +335,18 @@ def export_dxf(project, path, options: Optional[ExportOptions] = None,
             rep.skipped.append(f"mesh ({exc})")
 
     # ---- critical slip surface --------------------------------------
-    if opts.slip_surface and results:
-        from ogr_slip2d.surface import (CompositeSurface, SlipCircle,
-                                        WeakLayerSurface)
-        for mid, sr in results.items():
-            crit = getattr(sr, "critical", None)
-            if crit is None:
-                continue
-            surf = crit.surface
+    if opts.slip_surface and surfaces:
+        for item in surfaces:
+            mid, pts, fos = item[0], item[1], item[2]
             layer = _layer(LAYER_SURFACE)
-            if isinstance(surf, (CompositeSurface, WeakLayerSurface)):
-                # v0.1.111 — asked BEFORE the circle branch, and asked of
-                # the surface rather than reconstructed here: a composite
-                # has a centre and a radius, so ``_surface_arc`` would
-                # happily draw the arc it was clipped from — a curve that
-                # dives below the floor of the model and was never
-                # analysed. Exporting that into a drawing someone builds
-                # from is worse than exporting nothing.
-                # v0.1.252 (D251) — a weak-layer surface likewise: it has
-                # no ``polyline``, so until this version the export raised
-                # AttributeError here, before ``saveas``, and wrote no file.
-                pts = surf.drawing_vertices()
-            elif isinstance(surf, SlipCircle):
-                pts = _surface_arc(surf, crit)
-            elif hasattr(surf, "polyline"):
-                pts = [(v.x, v.y) for v in surf.polyline.vertices]
-            else:
-                # A surface class this exporter does not know: left out and
-                # said, never a crash that loses the whole drawing.
+            if pts is None:
+                # A surface class the engine's rule does not know: left out
+                # and said, never a crash that loses the whole drawing.
                 rep.skipped.append("%s critical surface (%s)"
-                                   % (mid, type(surf).__name__))
+                                   % (mid, item[3] if len(item) > 3
+                                      else "unknown"))
                 continue
+            pts = [tuple(p) for p in pts]
             if len(pts) >= 2:
                 msp.add_lwpolyline(_scaled(pts, factor),
                                    dxfattribs={"layer": layer})
@@ -358,7 +354,7 @@ def export_dxf(project, path, options: Optional[ExportOptions] = None,
             if opts.annotations and pts:
                 mid_pt = pts[len(pts) // 2]
                 txt = msp.add_text(
-                    f"{mid}  FS = {crit.fos:.4f}",
+                    f"{mid}  FS = {fos:.4f}",
                     dxfattribs={"layer": _layer(LAYER_ANNOTATION),
                                 "height": max(
                                     _diagonal(project) * 0.015, 1e-6)
@@ -389,33 +385,3 @@ def export_dxf(project, path, options: Optional[ExportOptions] = None,
     except Exception as exc:  # noqa: BLE001
         rep.error = f"Could not write the DXF file: {exc}"
     return rep
-
-
-def _surface_arc(circle, result, segments: int = 72):
-    """The slip surface as it was actually analysed.
-
-    Drawing the whole circle would be misleading — only the arc below
-    ground is the failure surface — so the slice base points are used
-    directly. They ARE the analysed surface, which also means the drawing
-    cannot drift from the calculation by re-deriving the geometry.
-    ``segments`` is kept for the fallback path, where no slices are
-    available and the arc has to be reconstructed from the circle.
-    """
-    slices = list(getattr(result, "slices", []) or [])
-    if slices:
-        pts = [(s.base_x_left, s.base_y_left) for s in slices]
-        last = slices[-1]
-        pts.append((last.base_x_right, last.base_y_right))
-        return pts
-    # Fallback: no slices, so rebuild the arc from the circle itself
-    pts = []
-    x0 = circle.centre_x - circle.radius
-    x1 = circle.centre_x + circle.radius
-    for i in range(segments + 1):
-        x = x0 + (x1 - x0) * i / segments
-        dx = x - circle.centre_x
-        under = circle.radius ** 2 - dx * dx
-        if under < 0:
-            continue
-        pts.append((x, circle.centre_y - math.sqrt(under)))
-    return pts

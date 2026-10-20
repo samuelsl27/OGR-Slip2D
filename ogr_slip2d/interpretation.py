@@ -180,6 +180,90 @@ def invalid_summary(search_result) -> dict:
 # ----------------------------------------------------------------------
 # Geometry of a priced surface
 # ----------------------------------------------------------------------
+def drawing_points(res) -> Optional[list]:
+    """The surface of ``res`` as the DXF export draws it, ``[(x, y), ...]``,
+    or None for a surface class this does not know.
+
+    v0.1.341 (D337) -- moved word for word from ``ogr_core.dxf.exporter``,
+    which asked these classes itself and so imported the engine:
+
+    * a composite or a weak-layer surface, its drawing vertices;
+    * a circle, the base of its slices (``_surface_arc``);
+    * a polyline, its vertices.
+
+    Not :func:`surface_path`: that takes the first left point and every
+    right point of the slices, this every left point and the last right
+    one, which agree only when the slices are contiguous.
+    """
+    from .surface import CompositeSurface, SlipCircle, WeakLayerSurface
+    surf = res.surface
+    if isinstance(surf, (CompositeSurface, WeakLayerSurface)):
+        # v0.1.111 — asked BEFORE the circle branch, and asked of the
+        # surface rather than reconstructed here: a composite has a centre
+        # and a radius, so ``_surface_arc`` would happily draw the arc it
+        # was clipped from — a curve that dives below the floor of the
+        # model and was never analysed. Exporting that into a drawing
+        # someone builds from is worse than exporting nothing.
+        # v0.1.252 (D251) — a weak-layer surface likewise: it has no
+        # ``polyline``, so until that version the export raised
+        # AttributeError, before ``saveas``, and wrote no file.
+        return surf.drawing_vertices()
+    if isinstance(surf, SlipCircle):
+        return _surface_arc(surf, res)
+    if hasattr(surf, "polyline"):
+        return [(v.x, v.y) for v in surf.polyline.vertices]
+    return None
+
+
+def critical_drawings(results) -> list:
+    """The critical surface of each method in ``results`` (a mapping
+    ``method_id -> SearchResult``) as the DXF export takes it:
+    ``(method_id, points, fos)``, or ``(method_id, None, fos, class name)``
+    for one :func:`drawing_points` cannot draw. A method without a critical
+    surface is left out (v0.1.341, D337)."""
+    out = []
+    for mid, sr in (results or {}).items():
+        crit = getattr(sr, "critical", None)
+        if crit is None:
+            continue
+        pts = drawing_points(crit)
+        if pts is None:
+            out.append((mid, None, crit.fos, type(crit.surface).__name__))
+        else:
+            out.append((mid, pts, crit.fos))
+    return out
+
+
+def _surface_arc(circle, result, segments: int = 72):
+    """The slip surface as it was actually analysed.
+
+    Drawing the whole circle would be misleading — only the arc below
+    ground is the failure surface — so the slice base points are used
+    directly. They ARE the analysed surface, which also means the drawing
+    cannot drift from the calculation by re-deriving the geometry.
+    ``segments`` is kept for the fallback path, where no slices are
+    available and the arc has to be reconstructed from the circle.
+    """
+    slices = list(getattr(result, "slices", []) or [])
+    if slices:
+        pts = [(s.base_x_left, s.base_y_left) for s in slices]
+        last = slices[-1]
+        pts.append((last.base_x_right, last.base_y_right))
+        return pts
+    # Fallback: no slices, so rebuild the arc from the circle itself
+    pts = []
+    x0 = circle.centre_x - circle.radius
+    x1 = circle.centre_x + circle.radius
+    for i in range(segments + 1):
+        x = x0 + (x1 - x0) * i / segments
+        dx = x - circle.centre_x
+        under = circle.radius ** 2 - dx * dx
+        if under < 0:
+            continue
+        pts.append((x, circle.centre_y - math.sqrt(under)))
+    return pts
+
+
 def surface_path(res) -> list:
     """The base of the slices, left to right, as ``[(x, y), ...]``: the
     surface the engine priced, tension-crack truncation and composite

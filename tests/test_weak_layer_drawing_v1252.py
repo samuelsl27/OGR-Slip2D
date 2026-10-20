@@ -211,11 +211,12 @@ class TestTheDxfExportWritesIt:
         import ezdxf as _ezdxf
 
         from ogr_core.dxf.exporter import ExportOptions, export_dxf
+        from ogr_slip2d.interpretation import critical_drawings
         p, r = _planar_critical()
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "weak.dxf"
-            rep = export_dxf(p, out, ExportOptions(unit="m"),
-                             {"ordinary_fellenius": SimpleNamespace(critical=r)})
+            rep = export_dxf(p, out, ExportOptions(unit="m"), critical_drawings(
+                {"ordinary_fellenius": SimpleNamespace(critical=r)}))
             assert out.exists(), rep.error
             assert rep.entities.get("OGR_X_SLIP_SURFACE") == 1
             doc = _ezdxf.readfile(str(out))
@@ -229,13 +230,14 @@ class TestTheDxfExportWritesIt:
 
     def test_an_unknown_surface_is_left_out_and_said(self):
         from ogr_core.dxf.exporter import ExportOptions, export_dxf
+        from ogr_slip2d.interpretation import critical_drawings
         p, r = _planar_critical()
         odd = SimpleNamespace(critical=SimpleNamespace(
             surface=SimpleNamespace(), fos=1.0))
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "odd.dxf"
             rep = export_dxf(p, out, ExportOptions(unit="m"),
-                             {"odd_method": odd})
+                             critical_drawings({"odd_method": odd}))
             assert out.exists(), rep.error
         assert any("odd_method" in s for s in rep.skipped), rep.skipped
 

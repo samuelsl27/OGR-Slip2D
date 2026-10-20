@@ -255,7 +255,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.340"
+    VERSION = "0.1.341"
 
     def __init__(self) -> None:
         super().__init__()
@@ -1294,7 +1294,9 @@ class MainWindow(QMainWindow):
             return
         if not path.lower().endswith(".dxf"):
             path += ".dxf"
-        rep = export_dxf(self.project, path, dlg.options, results)
+        from ogr_slip2d.interpretation import critical_drawings
+        rep = export_dxf(self.project, path, dlg.options,
+                         critical_drawings(results or {}))
         if not rep.ok:
             self._info(rep.error or tr("The drawing could not be "
                                        "written."))
