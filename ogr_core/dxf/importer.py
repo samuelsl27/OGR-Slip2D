@@ -74,6 +74,10 @@ class ImportPreview:
     external_area: float = 0.0
     boundaries: dict = field(default_factory=dict)   # kind -> count
     error: Optional[str] = None
+    # v0.1.334 (D314) -- the code of ``error`` (``ogr_core.dxf.messages``)
+    # and its values; empty with no error, or one raised without a code.
+    error_code: str = ""
+    error_args: dict = field(default_factory=dict)
     # v0.1.197 — the sanitiser's counts are in its ring format; these are
     # the same counts without the repeated closing points.
     vertices_in_file: int = 0
@@ -161,6 +165,8 @@ def preview(path, options: ImportOptions) -> ImportPreview:
                        segments_per_circle=options.segments_per_circle)
     except RuntimeError as exc:
         pv.error = str(exc)
+        pv.error_code = getattr(exc, "code", "") or ""
+        pv.error_args = dict(getattr(exc, "values", None) or {})
         return pv
     pv.catalogue = cat
 
@@ -174,8 +180,9 @@ def preview(path, options: ImportOptions) -> ImportPreview:
         if lay.kind != DxfEntityKind.IGNORE:
             by_kind.setdefault(lay.kind, []).extend(lay.polylines)
     if not by_kind:
-        pv.error = ("No layer has been assigned a geometry type. Use the "
-                    "table to say what each layer represents.")
+        from .messages import NO_LAYER_ASSIGNED, text
+        pv.error = text(NO_LAYER_ASSIGNED)
+        pv.error_code = NO_LAYER_ASSIGNED
         return pv
 
     san = GeometrySanitiser(cat.diagonal(), weld_pct=options.weld_pct,
@@ -202,9 +209,24 @@ def preview(path, options: ImportOptions) -> ImportPreview:
             pv.regions = len(regions)
             pv.region_area = sum(r.area for r in regions)
         except Exception as exc:  # noqa: BLE001
-            san.report.add_problem(
-                "regions", f"Regions could not be built: {exc}")
+            san.report.add_coded_problem("regions", error=str(exc))
     return pv
+
+
+def area_mismatch_problem(pv: ImportPreview) -> Optional[dict]:
+    """The problem the regions not tiling the external boundary is, in the
+    sanitiser's form, or None when they do (or there is no external area).
+
+    Not recorded by the sanitiser, because it only emerges once the regions
+    are built; the problems panel shows it first. Written here, with its
+    code, since v0.1.334 (D314): the panel used to word it itself.
+    """
+    if pv is None or not getattr(pv, "external_area", 0) or pv.area_matches:
+        return None
+    from .messages import AREA_MISMATCH, text
+    args = {"regions": pv.region_area, "external": pv.external_area}
+    return {"kind": "area_mismatch", "message": text(AREA_MISMATCH, **args),
+            "x": None, "y": None, "code": AREA_MISMATCH, "args": args}
 
 
 # ======================================================================

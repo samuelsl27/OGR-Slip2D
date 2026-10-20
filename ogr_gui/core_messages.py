@@ -24,9 +24,18 @@ from ogr_core.messages import render
 from .i18n import tr
 
 
+_CATALOGUE: dict = {}
+
+
 def _catalogue() -> dict:
-    from ogr_slip2d.messages import MESSAGES
-    return MESSAGES
+    """The engine's codes and the DXF import's (v0.1.334), in one table:
+    the codes do not collide, each family having its own prefix."""
+    if not _CATALOGUE:
+        from ogr_core.dxf.messages import MESSAGES as DXF
+        from ogr_slip2d.messages import MESSAGES as LEM
+        _CATALOGUE.update(LEM)
+        _CATALOGUE.update(DXF)
+    return _CATALOGUE
 
 
 def _show(kind: str, value):
@@ -77,6 +86,21 @@ def invalid_text(res) -> str:
     if parts is None:
         return tr("did not converge")
     return text(*parts)
+
+
+def problem_text(problem: dict) -> str:
+    """A DXF import problem (a sanitiser record) in the reader's language
+    (v0.1.334, D314)."""
+    return text(problem.get("code", "") or "", problem.get("args"),
+                problem.get("message", "") or "")
+
+
+def preview_error_text(pv) -> str:
+    """Why a DXF import preview failed, in the reader's language, or the
+    empty string when it did not."""
+    return text(getattr(pv, "error_code", "") or "",
+                getattr(pv, "error_args", None), getattr(pv, "error", "")
+                or "")
 
 
 def invalid_label(res) -> str:

@@ -326,14 +326,14 @@ def read_dxf(path, unit: str = "m", segments_per_circle: int = 64,
             read. Nothing partial is returned: a half-read drawing would
             be worse than a clear failure.
     """
+    from .messages import EZDXF_MISSING, UNREADABLE, DxfReadError
     if ezdxf is None:
-        raise RuntimeError(
-            "The 'ezdxf' package is required to import DXF files.")
+        raise DxfReadError(EZDXF_MISSING)
     factor = UNIT_FACTORS.get(unit, 1.0)
     try:
         doc = ezdxf.readfile(str(path))
     except Exception as exc:  # noqa: BLE001
-        raise RuntimeError(f"Could not read the DXF file: {exc}") from exc
+        raise DxfReadError(UNREADABLE, error=str(exc)) from exc
 
     cat = DxfCatalogue(unit_factor=factor)
     try:

@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from ogr_gui.core_messages import problem_text
 from ogr_gui.i18n import tr
 from ogr_gui.dialog_size import hold_wrapped_height
 from PySide6.QtGui import QColor  # noqa: E402
@@ -81,6 +82,30 @@ _PROBLEM_INFO = {
 }
 
 _SEVERITY_ORDER = {"error": 0, "warning": 1, "info": 2}
+# v0.1.334 (D314) -- the title of each kind of problem. It used to be the
+# kind with its underscores turned into spaces ("External gap", "Dangling
+# end"), passed through ``tr()`` with no entry, so the panel showed it in
+# English whatever the language.
+_TITLES = {
+    "empty": "No geometry",
+    "external": "External boundary without an area",
+    "external_gap": "Open external boundary",
+    "external_missing": "No external boundary",
+    "external_multiple": "Several external boundaries",
+    "dangling_end": "Loose end",
+    "regions": "Regions not built",
+    "area_mismatch": "The areas do not match",
+}
+
+
+def problem_title(kind: str) -> str:
+    """The title of a kind of DXF import problem, in the reader's
+    language; a kind this version does not know reads as itself."""
+    if kind in _TITLES:
+        return tr(_TITLES[kind])
+    return kind.replace("_", " ").capitalize()
+
+
 _SEVERITY_LABEL = {"error": "Error", "warning": "Warning", "info": "Note"}
 
 
@@ -142,17 +167,12 @@ class DxfProblemsPanel(QDialog):
 
         # The area mismatch is not recorded by the sanitiser (it only
         # emerges once regions are built), but it is the single most
-        # important thing to tell the user, so it is injected here.
-        if (preview is not None and getattr(preview, "external_area", 0)
-                and not preview.area_matches):
-            problems.insert(0, {
-                "kind": "area_mismatch",
-                "message": (
-                    "The region areas (%.2f) do not add up to the "
-                    "external boundary (%.2f): at least one region did "
-                    "not close." % (preview.region_area,
-                                    preview.external_area)),
-                "x": None, "y": None})
+        # important thing to tell the user, so it goes first. v0.1.334
+        # (D314) -- written by the core with its code, no longer here.
+        from ogr_core.dxf.importer import area_mismatch_problem
+        mismatch = area_mismatch_problem(preview)
+        if mismatch is not None:
+            problems.insert(0, mismatch)
 
         if not problems:
             self.lbl_head.setText(tr(
@@ -179,7 +199,7 @@ class DxfProblemsPanel(QDialog):
             sev = self._severity(kind)
             top = QTreeWidgetItem([
                 tr("%s — %s (%d)") % (tr(_SEVERITY_LABEL[sev]),
-                                      tr(self._title(kind)), len(items)),
+                                      self._title(kind), len(items)),
                 ""])
             top.setData(0, Qt.UserRole, ("kind", kind))
             if sev == "error":
@@ -190,7 +210,7 @@ class DxfProblemsPanel(QDialog):
                 where = ""
                 if p.get("x") is not None:
                     where = "%.3f, %.3f" % (p["x"], p["y"])
-                child = QTreeWidgetItem([p["message"], where])
+                child = QTreeWidgetItem([problem_text(p), where])
                 child.setData(0, Qt.UserRole,
                               ("problem", p.get("x"), p.get("y"), kind))
                 top.addChild(child)
@@ -207,7 +227,7 @@ class DxfProblemsPanel(QDialog):
 
     @staticmethod
     def _title(kind: str) -> str:
-        return kind.replace("_", " ").capitalize()
+        return problem_title(kind)
 
     @staticmethod
     def _advice(kind: str) -> str:

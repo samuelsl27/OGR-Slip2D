@@ -305,9 +305,6 @@ y o en se""".split())
 #: puts on a chart ("Back to previous view", "Save the figure"…), which
 #: stays English by decision of the owner — it is the library's text.
 SHOWN_EXCEPTIONS = {
-    r"^Could not read the DXF file: ":
-        "a message of ogr_core, which speaks English like the whole API "
-        "(the census opens the DXF dialog on no file at all)",
     r"^Corps of Engineers #[12]$":
         "the proper name of the method, like Spencer or Janbu",
     r"^[a-z][a-z0-9_]* \[[^\]]+\]$":

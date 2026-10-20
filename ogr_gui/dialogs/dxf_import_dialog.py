@@ -56,7 +56,10 @@ from ogr_core.dxf import (
     preview,
     read_dxf,
 )
+from ogr_gui.core_messages import preview_error_text, problem_text
+from ogr_gui.core_messages import text as core_text
 from ogr_gui.dialog_size import hold_wrapped_height
+from ogr_gui.dialogs.dxf_problems_panel import problem_title
 from ogr_gui.i18n import tr
 from PySide6.QtGui import QColor  # noqa: E402
 from ogr_gui.themes import theme_color  # noqa: E402
@@ -190,7 +193,10 @@ class DxfImportDialog(QDialog):
             cat = read_dxf(self.path, unit="m",
                            segments_per_circle=self.sp_segments.value())
         except RuntimeError as exc:
-            self.lbl_preview.setText(str(exc))
+            # v0.1.334 (D314) -- by its code, in the reader's language
+            self.lbl_preview.setText(core_text(
+                getattr(exc, "code", "") or "",
+                getattr(exc, "values", None), str(exc)))
             return
         self.catalogue = cat
         suggested = cat.suggested_unit()
@@ -255,7 +261,9 @@ class DxfImportDialog(QDialog):
         self.result_preview = pv
         self.list_problems.clear()
         if not pv.ok:
-            self.lbl_preview.setText(pv.error or tr("Preview failed."))
+            # v0.1.334 (D314) -- by its code, in the reader's language
+            self.lbl_preview.setText(preview_error_text(pv)
+                                     or tr("Preview failed."))
             return
 
         rep = pv.report
@@ -282,7 +290,10 @@ class DxfImportDialog(QDialog):
             where = ""
             if p.get("x") is not None:
                 where = "  (%.2f, %.2f)" % (p["x"], p["y"])
-            it = QListWidgetItem(f"[{p['kind']}] {p['message']}{where}")
+            # v0.1.334 (D314) -- the kind by its title, and the problem by
+            # its code, in the reader's language; it was "[kind] message"
+            it = QListWidgetItem("%s: %s%s" % (problem_title(p["kind"]),
+                                               problem_text(p), where))
             it.setData(Qt.UserRole, (p.get("x"), p.get("y")))
             self.list_problems.addItem(it)
         if not rep.problems:

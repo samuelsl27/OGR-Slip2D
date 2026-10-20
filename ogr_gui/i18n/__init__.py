@@ -3786,6 +3786,59 @@ _DICTS: dict[str, dict[str, str]] = {
             "declarada inadmisible por su propio método",
         "no reason given":
             "sin motivo",
+        # v0.1.334 (D314) — the DXF import's messages, one entry per code of
+        # ``ogr_core.dxf.messages`` ("No geometry was assigned to any layer."
+        # already had one, as the panel's advice), and the titles of the
+        # kinds of problem
+        "The external boundary has fewer than three vertices.":
+            "El contorno exterior tiene menos de tres vértices.",
+        "The external boundary was open by {gap:.3f} units and has been "
+        "closed with a straight segment; check the result.":
+            "El contorno exterior estaba abierto {gap:.3f} unidades y se ha "
+            "cerrado con un segmento recto; revisa el resultado.",
+        "No layer was assigned to the external boundary; the model cannot "
+        "define regions without one.":
+            "Ninguna capa se ha asignado al contorno exterior; sin él, el "
+            "modelo no puede definir regiones.",
+        "{count} external boundaries were found; the largest will be used "
+        "and the rest ignored.":
+            "Se han encontrado {count} contornos exteriores; se usará el mayor "
+            "y se ignorará el resto.",
+        "A material boundary end does not reach any other boundary, so the "
+        "region will not close.":
+            "Un extremo de un contorno de material no llega a ningún otro "
+            "contorno, así que la región no se cerrará.",
+        "Regions could not be built: {error}":
+            "No se pudieron construir las regiones: {error}",
+        "The region areas ({regions:.2f}) do not add up to the external "
+        "boundary ({external:.2f}): at least one region did not close.":
+            "Las áreas de las regiones ({regions:.2f}) no suman la del "
+            "contorno exterior ({external:.2f}): al menos una región no se "
+            "cerró.",
+        "Could not read the DXF file: {error}":
+            "No se pudo leer el archivo DXF: {error}",
+        "The 'ezdxf' package is required to import DXF files.":
+            "Para importar archivos DXF hace falta el paquete «ezdxf».",
+        "No layer has been assigned a geometry type. Use the table to say "
+        "what each layer represents.":
+            "Ninguna capa tiene asignado un tipo de geometría. Usa la tabla "
+            "para decir qué representa cada capa.",
+        "No geometry":
+            "Sin geometría",
+        "External boundary without an area":
+            "Contorno exterior sin área",
+        "Open external boundary":
+            "Contorno exterior abierto",
+        "No external boundary":
+            "Sin contorno exterior",
+        "Several external boundaries":
+            "Varios contornos exteriores",
+        "Loose end":
+            "Extremo suelto",
+        "Regions not built":
+            "Regiones sin construir",
+        "The areas do not match":
+            "Las áreas no cuadran",
         # v0.1.315 (D293) — the note of the hydraulic dialog, wrapped
         "<i>Names and colours are defined in Properties > Define "
         "Materials.</i>":

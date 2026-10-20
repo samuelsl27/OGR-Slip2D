@@ -70,9 +70,25 @@ class SanitiseReport:
 
     def add_problem(self, kind: str, message: str, x=None, y=None):
         """Record something the user must look at, with a location so the
-        dialog can centre the view on it."""
+        dialog can centre the view on it.
+
+        v0.1.334 (D314) -- a problem written this way has no code, and the
+        interface shows its sentence as it is. The importer itself writes
+        every problem through :meth:`add_coded_problem`.
+        """
         self.problems.append({"kind": kind, "message": message,
                               "x": x, "y": y})
+
+    def add_coded_problem(self, kind: str, x=None, y=None, **args):
+        """Record a problem of ``kind`` with its sentence written from its
+        code (``ogr_core.dxf.messages``, ``dxf.<kind>``) and the values that
+        went into it, so the interface can say it in the reader's language
+        (v0.1.334, D314)."""
+        from .messages import problem_code, text
+        code = problem_code(kind)
+        self.problems.append({"kind": kind, "message": text(code, **args),
+                              "x": x, "y": y, "code": code,
+                              "args": dict(args)})
 
     @property
     def ok(self) -> bool:
@@ -185,8 +201,7 @@ class GeometrySanitiser:
         flat = [(k, p) for k, ps in polylines_by_kind.items() for p in ps]
         rep.vertices_before = sum(p.n for _k, p in flat)
         if not flat:
-            rep.add_problem("empty", "No geometry was assigned to any "
-                                     "layer.")
+            rep.add_coded_problem("empty")
             return polylines_by_kind
 
         work = {k: [DxfPolyline(points=list(p.points), closed=p.closed,
@@ -241,9 +256,8 @@ class GeometrySanitiser:
         it. This is a documented requirement of the model, not a guess."""
         for p in work.get(DxfEntityKind.EXTERNAL, []):
             if p.n < 3:
-                self.report.add_problem(
-                    "external", "The external boundary has fewer than "
-                                "three vertices.",
+                self.report.add_coded_problem(
+                    "external",
                     p.points[0][0] if p.points else None,
                     p.points[0][1] if p.points else None)
                 continue
@@ -253,12 +267,9 @@ class GeometrySanitiser:
                 self.report.closed_boundaries += 1
                 if gap > self.weld_tol * 20:
                     # Closing a large gap changes the shape, so say so
-                    self.report.add_problem(
-                        "external_gap",
-                        f"The external boundary was open by {gap:.3f} "
-                        f"units and has been closed with a straight "
-                        f"segment; check the result.",
-                        p.points[0][0], p.points[0][1])
+                    self.report.add_coded_problem(
+                        "external_gap", p.points[0][0], p.points[0][1],
+                        gap=gap)
             p.closed = True
 
     # ------------------------------------------------------------------
@@ -445,18 +456,13 @@ class GeometrySanitiser:
         rep = self.report
         ext = work.get(DxfEntityKind.EXTERNAL, [])
         if not ext:
-            rep.add_problem("external_missing",
-                            "No layer was assigned to the external "
-                            "boundary; the model cannot define regions "
-                            "without one.")
+            rep.add_coded_problem("external_missing")
         elif len(ext) > 1:
             areas = [(abs(_signed_area(e.points)), e) for e in ext]
             areas.sort(reverse=True)
-            rep.add_problem(
-                "external_multiple",
-                f"{len(ext)} external boundaries were found; the largest "
-                f"will be used and the rest ignored.",
-                areas[1][1].points[0][0], areas[1][1].points[0][1])
+            rep.add_coded_problem(
+                "external_multiple", areas[1][1].points[0][0],
+                areas[1][1].points[0][1], count=len(ext))
             work[DxfEntityKind.EXTERNAL] = [areas[0][1]]
 
         # Free ends left dangling inside the model keep regions open
@@ -479,11 +485,8 @@ class GeometrySanitiser:
                         if touching:
                             break
                     if not touching:
-                        rep.add_problem(
-                            "dangling_end",
-                            "A material boundary end does not reach any "
-                            "other boundary, so the region will not "
-                            "close.", pt[0], pt[1])
+                        rep.add_coded_problem("dangling_end", pt[0],
+                                              pt[1])
 
 
 def _signed_area(points) -> float:

@@ -48,6 +48,11 @@ def _preview_info(pv) -> dict:
     out = {"ok": pv.ok, "summary": pv.summary(), "error": pv.error,
            "boundaries": dict(pv.boundaries), "regions": pv.regions,
            "areas_match": bool(pv.area_matches)}
+    # v0.1.334 (D314) -- the stable code of the error and its values, only
+    # when there are any; each problem carries its own ("code", "args").
+    if getattr(pv, "error_code", ""):
+        out["error_code"] = pv.error_code
+        out["error_args"] = dict(getattr(pv, "error_args", None) or {})
     if cat is not None:
         out["suggested_unit"] = cat.suggested_unit()
         out["layers"] = [{"name": lay.name,
