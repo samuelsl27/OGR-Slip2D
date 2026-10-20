@@ -51,6 +51,10 @@ from __future__ import annotations
 
 import math
 
+# v0.1.340 (D337) -- a function of the engine now, no longer a method of
+# ``ProjectSettings``: building an ``OptimizeSettings`` is the engine's job
+from ogr_slip2d.optimize import optimize_kwargs
+
 #: Small on purpose: nothing below needs a converged minimum.
 _NUM_SURFACES = 120
 _NUM_SLICES = 20
@@ -269,9 +273,9 @@ class TestEverySettingBites:
         p_all, every = _run(optimize_enabled=True, optimize_target="all")
         from ogr_slip2d.analysis_runner import build_search
         one = build_search(p_gm, "bishop_simplified")
-        one.optimize = p_gm.settings.optimize_kwargs()["optimize"]
+        one.optimize = optimize_kwargs(p_gm.settings)["optimize"]
         many = build_search(p_all, "bishop_simplified")
-        many.optimize = p_all.settings.optimize_kwargs()["optimize"]
+        many.optimize = optimize_kwargs(p_all.settings)["optimize"]
         assert len(one._surfaces_to_optimize(gm)) == 1
         assert len(many._surfaces_to_optimize(every)) > 1
 
@@ -620,7 +624,7 @@ class TestTheSettingsReachTheOptimiserUnchanged:
         s.optimize_snap_distance = 0.4
         s.optimize_use_depth_elevation_concave_checks = False
         s.optimize_technique = "surface_altering"   # v0.1.260 (D259)
-        o = p.settings.optimize_kwargs()["optimize"]
+        o = optimize_kwargs(p.settings)["optimize"]
         assert o.enabled is True
         assert o.target == "fos_less_than"
         assert o.fos_threshold == 1.25
@@ -640,7 +644,7 @@ class TestTheSettingsReachTheOptimiserUnchanged:
         s.optimize_enabled = True
         s.optimize_max_concave_angle_enabled = False
         s.optimize_max_concave_angle_deg = 5.0
-        assert p.settings.optimize_kwargs()["optimize"].max_concave_angle_deg \
+        assert optimize_kwargs(p.settings)["optimize"].max_concave_angle_deg \
             == 0.0
 
     def test_an_unticked_distance_box_means_automatic(self):
@@ -649,11 +653,11 @@ class TestTheSettingsReachTheOptimiserUnchanged:
         s.optimize_enabled = True
         s.optimize_snap_specify_distance = False
         s.optimize_snap_distance = 0.4
-        assert p.settings.optimize_kwargs()["optimize"].snap_distance is None
+        assert optimize_kwargs(p.settings)["optimize"].snap_distance is None
 
     def test_unticked_produces_no_settings_object_at_all(self):
         p = _slope()
-        assert p.settings.optimize_kwargs() == {"optimize": None}
+        assert optimize_kwargs(p.settings) == {"optimize": None}
 
     def test_the_defaults_are_the_same_on_both_sides(self):
         """The v0.1.89 lesson: two doors into one calculation must not

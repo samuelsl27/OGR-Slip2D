@@ -44,7 +44,8 @@ _ENGINE_PACKAGES = ("ogr_core", "ogr_slip2d", "ogr_fem2d", "ogr_cli")
 #: reach rather than an oversight. The three that were here:
 #:
 #:   * the thirteen ``optimize_*`` fields, the whole of defect D08, left in
-#:     v0.1.104: ``ProjectSettings.optimize_kwargs`` turns them into an
+#:     v0.1.104: ``optimize_kwargs`` (``ProjectSettings`` until v0.1.340,
+#:     ``ogr_slip2d.optimize`` since, D337) turns them into an
 #:     ``OptimizeSettings``, ``build_search`` hands it to the three
 #:     non-circular searches and ``BaseSearch.run`` walks the surfaces with
 #:     it;

@@ -442,7 +442,8 @@ class TestMonteCarloIsUntouched:
         from ogr_core.project.settings import ProjectSettings, SearchSettings
         assert SearchSettings().optimize_technique == "monte_carlo"
         assert SearchSettings.from_dict({}).optimize_technique == "monte_carlo"
-        assert ProjectSettings().optimize_settings().technique == "monte_carlo"
+        from ogr_slip2d.optimize import settings_from_project
+        assert settings_from_project(ProjectSettings()).technique == "monte_carlo"
 
 
 class TestTheSettingMovesTheNumber:

@@ -48,6 +48,8 @@ import random
 from dataclasses import dataclass, field
 from typing import Optional
 
+from ogr_core.project.settings import optimize_enabled_for
+
 #: How many of the most recent passes the convergence criterion averages
 #: over. The reference states the number explicitly ("the average safety
 #: factor of the last five iterations, including the current iteration"),
@@ -243,6 +245,86 @@ class OptimizeReport:
         return (f"{self.initial_fos:.4f} → {self.final_fos:.4f} "
                 f"({self.improvement:+.4f}) in {self.iterations} "
                 f"evaluations, {self.accepted} accepted")
+
+
+# ======================================================================
+# From the project's settings
+# ======================================================================
+def optimize_kwargs(settings) -> dict:
+    """Optimize Surfaces arguments of ``settings`` (a ``ProjectSettings``),
+    for the NON-CIRCULAR searches.
+
+    v0.1.104 — the third of the same family as ``admissibility_kwargs``
+    and ``surface_filter_kwargs``, and it exists for the same reason
+    the other two do: thirteen fields were editable, saved to the .ogr
+    and read by nobody at all (defect D08, anomaly A9-1). Ticking
+    "Optimize Surfaces" on a Block Search stored the tick, showed it
+    again on reopening and changed nothing.
+
+    Returns ``{"optimize": None}`` when the box is unticked, so a
+    search built from an unticked model is the search it always was,
+    argument for argument.
+
+    v0.1.119 — "unticked" is now a question for
+    :func:`optimize_enabled_for`, because the setting has three states
+    and the default is the third: ``None`` reads on for Simulated
+    Annealing and off for the rest, which is the per-method default the
+    reference documents.
+
+    Unlike its two siblings this one does NOT travel in ``common``:
+    the reference offers the option only for Surface Type =
+    Non-Circular, so handing it to Grid, Slope or the CIRCULAR Auto
+    Refine would be an argument they can only ignore.
+
+    v0.1.128 — "the circular Auto Refine", because the non-circular
+    one now exists and takes this like the other non-circular
+    searches. Which of the two is being built is a question about the
+    pair, not the method: see ``is_auto_refine_non_circular``.
+    """
+    if not optimize_enabled_for(settings.search):
+        return {"optimize": None}
+    return {"optimize": settings_from_project(settings)}
+
+
+def settings_from_project(settings) -> OptimizeSettings:
+    """The project's Optimize Surfaces settings, ticked or not, from
+    ``settings`` (a ``ProjectSettings``).
+
+    v0.1.340 (D337) -- this and :func:`optimize_kwargs` were methods of
+    ``ProjectSettings``, and the core imported the engine to build the
+    object they return. They are the engine's now, word for word.
+
+    v0.1.201 — split out of :meth:`optimize_kwargs` for the explicit
+    *Optimize Surfaces...* action, which is itself the request to
+    optimise: it read none of these (a hard-coded 400 iterations and
+    the defaults for the rest) and had no seed.
+    """
+    s = settings.search
+    return OptimizeSettings(
+        enabled=True,
+        target=str(s.optimize_target),
+        fos_threshold=float(s.optimize_fos_threshold),
+        max_iterations=int(s.optimize_max_iterations),
+        tolerance=float(s.optimize_tolerance),
+        step_reduction_factor=float(s.optimize_step_reduction_factor),
+        # Unticked means "concave angles will not be allowed", which is
+        # a limit of zero — not "no limit". Reading the unticked box as
+        # unconstrained would invert the option.
+        max_concave_angle_deg=(
+            float(s.optimize_max_concave_angle_deg)
+            if s.optimize_max_concave_angle_enabled else 0.0),
+        explore_all_vertices=bool(s.optimize_explore_all_vertices),
+        snap_shallow_to_slope=bool(s.optimize_snap_shallow_to_slope),
+        # Unticked Specify Distance means AUTOMATIC, and the value the
+        # box shows means nothing until it is ticked.
+        snap_distance=(float(s.optimize_snap_distance)
+                       if (s.optimize_snap_shallow_to_slope
+                           and s.optimize_snap_specify_distance)
+                       else None),
+        use_surface_checks=bool(
+            s.optimize_use_depth_elevation_concave_checks),
+        technique=str(s.optimize_technique),
+    )
 
 
 # ======================================================================

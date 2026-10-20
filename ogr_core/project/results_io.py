@@ -34,12 +34,14 @@ Author: Samuel Sáez López (UPCT)
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
 import numpy as np
 
-if TYPE_CHECKING:
-    from ogr_slip2d.search import SearchResult
+# v0.1.340 (D337) -- ``SearchResult`` (``ogr_slip2d.search``) is named in
+# the annotations below as a string, which ``from __future__ import
+# annotations`` never evaluates: the core does not import the engine, not
+# even for a type checker.
 
 RESULTS_FORMAT_VERSION = "0.1"
 

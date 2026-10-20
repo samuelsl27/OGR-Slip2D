@@ -2114,7 +2114,8 @@ def build_search(project, method_id: str, progress_cb: Optional[Callable] = None
         give a different answer on every run — which is exactly what the
         Random Numbers page promises it will not do.
         """
-        kw = dict(s.optimize_kwargs())
+        from .optimize import optimize_kwargs
+        kw = dict(optimize_kwargs(s))
         if kw.get("optimize") is not None:
             kw["optimize_seed"] = s.analysis_seed()
         return kw
@@ -2855,12 +2856,12 @@ def run_configured_optimization(project, method_id, surface, *,
 
     from ogr_core.project import prepare_analysis_project
 
-    from .optimize import optimize_surface
+    from .optimize import optimize_surface, settings_from_project
 
     problems = list(check_analysis_settings(project))
     if problems:
         raise AnalysisNotConfigured(problems)
-    opts = replace(project.settings.optimize_settings(), enabled=True,
+    opts = replace(settings_from_project(project.settings), enabled=True,
                    seed=project.settings.analysis_seed())
     if max_iterations is not None:
         opts = replace(opts, max_iterations=int(max_iterations))
