@@ -94,7 +94,8 @@ _NEVER_ENTERED = {
     # Andamiaje puro: cursor y texto de estado, y nadie los lee siquiera.
     # v0.1.331 (D329a) — MEASURE left this set: Measure enters it in both
     # windows, and the canvas reads it (two clicks, the distance).
-    "ADD_SURFACE_CR",
+    # v0.1.335 (D142a) — and ADD_SURFACE_CR: Add Surface (centre and radius)
+    # enters it, the centre and a point on the circle.
     # Éstos SÍ los lee `_on_boundary_clicked`, pero como nadie entra en
     # ellos esas ramas `elif` son inalcanzables. La función en sí se
     # alcanza por otro camino: sus acciones están en el menú.
@@ -276,7 +277,8 @@ class TestTheActionExistsAndIsReachable:
     def test_it_sits_next_to_the_action_that_types_the_same_object(self):
         texts = _menu_texts(_window(), "Surfaces")
         i = texts.index(_LABEL)
-        assert texts[i - 1] == "Add Surface (centre and radius)..."
+        # v0.1.335 (D142a) — without "...": it enters a canvas mode now
+        assert texts[i - 1] == "Add Surface (centre and radius)"
 
     def test_no_label_in_the_menu_prefixes_another(self):
         """CONSERVADA. La invariante de D102, que esta acción podría haber
@@ -822,8 +824,11 @@ class TestTheOtherModesNobodyEnters:
         nunca entra en él.
 
         v0.1.331 (D329a) — ``MEASURE`` ya no: *Medir* entra en él en las
-        dos ventanas. Queda ``ADD_SURFACE_CR``."""
+        dos ventanas. Quedaba ``ADD_SURFACE_CR``.
+
+        v0.1.335 (D142a) — y ya tampoco: *Añadir superficie (centro y
+        radio)* entra en él. Los dos son hoy modos con su acción."""
         from ogr_gui.canvas.tool_mode import ToolMode
         assert ToolMode.ADD_SURFACE_CR.status_message
-        assert "ADD_SURFACE_CR" not in _activated_modes()
+        assert "ADD_SURFACE_CR" in _activated_modes()
         assert "MEASURE" in _activated_modes()

@@ -185,7 +185,8 @@ _DICTS: dict[str, dict[str, str]] = {
         'Add Focus Tangent...': 'Añadir tangente de foco...',
         'Add Focus Window...': 'Añadir ventana de foco...',
         'Add Surface': 'Añadir superficie',
-        'Add Surface (centre and radius)...': 'Añadir superficie (centro y radio)...',
+        # v0.1.335 (D142a) — no "...": it enters a canvas mode now
+        'Add Surface (centre and radius)': 'Añadir superficie (centro y radio)',
         # v0.1.166 (D102) — «Add Surface» era el rótulo de esta acción,
         # que no añade ninguna superficie: dibuja un objeto de Block
         # Search. El término castellano es el que el propio diccionario

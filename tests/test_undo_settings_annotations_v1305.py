@@ -409,11 +409,16 @@ class TestSurfacesAndFocus:
         from PySide6.QtWidgets import QInputDialog
         w = _window()
         try:
+            # v0.1.335 (D142a) — the action enters the canvas mode now; the
+            # typed path is Enter in the mode, and the clicked one its slot
             with _swap(w, "_read_points", lambda title, n: [(30.0, 40.0)]), \
                     _swap(QInputDialog, "getDouble",
                           _answers((25.0, True))):
                 _accepted(w, "Add user surface",
-                          w._add_surface_centre_radius)
+                          w._type_surface_centre_radius)
+            _clean(w)
+            _accepted(w, "Add user surface",
+                      lambda: w._on_surface_cr_picked(30.0, 40.0, 30.0, 15.0))
             _clean(w)
             _accepted(w, "Add user surface",
                       lambda: w._on_surface_3pt_picked(20.0, 25.0, 30.0,

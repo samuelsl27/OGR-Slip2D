@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import functools
 import inspect
+import math
 from pathlib import Path
 from typing import Optional
 
@@ -254,7 +255,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.334"
+    VERSION = "0.1.335"
 
     def __init__(self) -> None:
         super().__init__()
@@ -348,6 +349,10 @@ class MainWindow(QMainWindow):
         # v0.1.168 (D101) — connected once here: it belongs to a single
         # mode and has nothing to collide with.
         self.canvas.three_points_picked.connect(self._on_surface_3pt_picked)
+        # v0.1.335 (D142a) — Add Surface (centre and radius) on the canvas
+        self.canvas.centre_radius_picked.connect(self._on_surface_cr_picked)
+        self.canvas.centre_radius_typed.connect(
+            self._type_surface_centre_radius)
         # v0.1.311 (D308) — ``segment_picked`` is shared by five two-click
         # modes, and each used to connect its own handler around a pick and
         # disconnect only its own: Add Support reconnected itself after
@@ -664,7 +669,7 @@ class MainWindow(QMainWindow):
                  self._manage_focus, None)
         self._mk("optimize_surfaces", "Optimize Surfaces...",
                  self._optimize_surfaces, None)
-        self._mk("surf_centre_radius", "Add Surface (centre and radius)...",
+        self._mk("surf_centre_radius", "Add Surface (centre and radius)",
                  self._add_surface_centre_radius, None)
         # v0.1.168 (D101) — the second way the reference documents to add a
         # circular surface. No ellipsis: it enters a draw mode and opens no
@@ -2698,20 +2703,47 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(
             tr("Optimised: %s") % rep.summary(), 15000)
 
-    @undo_step("Add user surface")
+    # v0.1.335 (D142a) — on the canvas, as the reference does it: the
+    # centre, then a point on the circle, or Enter to type the radius.
+    # ``ToolMode.ADD_SURFACE_CR`` had its cursor and its hint since v0.1.3
+    # and nothing entered it; this action typed the centre and the radius
+    # into two dialogs, which is what Enter does now in the mode with
+    # nothing clicked. The label loses its "...": it no longer opens a
+    # dialog (the convention of D102).
     def _add_surface_centre_radius(self) -> None:
+        """Enter the centre-and-radius circular-surface mode."""
+        self._set_tool(ToolMode.ADD_SURFACE_CR)
+
+    @undo_step("Add user surface")
+    def _on_surface_cr_picked(self, cx: float, cy: float,
+                              px: float, py: float) -> None:
+        """Add the circle of centre (cx, cy) through (px, py)."""
+        from ogr_slip2d.surface import SlipCircle
+        self._add_user_circle(SlipCircle(
+            centre_x=cx, centre_y=cy, radius=math.hypot(px - cx, py - cy)))
+
+    @undo_step("Add user surface")
+    def _type_surface_centre_radius(self, centre=None) -> None:
+        """Enter in the mode: type the radius of a clicked centre, or the
+        centre and the radius when none was clicked."""
         from PySide6.QtWidgets import QInputDialog
 
         from ogr_slip2d.surface import SlipCircle
-        pts = self._read_points(tr("Add Surface"), 1)
-        if pts is None:
-            return
+        if centre is None:
+            pts = self._read_points(tr("Add Surface"), 1)
+            if pts is None:
+                return
+            centre = pts[0]
         radius, ok = QInputDialog.getDouble(
             self, tr("Add Surface"), tr("Radius:"), 20.0, 0.001, 1e6, 4)
         if not ok:
             return
-        circle = SlipCircle(centre_x=pts[0][0], centre_y=pts[0][1],
-                            radius=radius)
+        self._add_user_circle(SlipCircle(centre_x=centre[0],
+                                         centre_y=centre[1], radius=radius))
+
+    def _add_user_circle(self, circle) -> None:
+        """Add a user circle, leave the mode and say so: what the clicked and
+        the typed paths share."""
         # v0.1.157 (D58) — ``Project`` declares the list now, so the
         # ``hasattr``/``= []`` that used to stand here is gone. It was the
         # whole defect: an attribute invented on the instance, saved by
@@ -2719,6 +2751,8 @@ class MainWindow(QMainWindow):
         # had been added.
         self.project.user_surfaces.append(circle)
         self.project.is_dirty = True
+        # Leave the mode BEFORE redrawing, as the three-point flow does.
+        self.canvas.set_tool_mode(ToolMode.SELECT)
         self.canvas.refresh_scene()
         self.statusBar().showMessage(
             tr("Circle added: centre (%.3f, %.3f), radius %.3f")

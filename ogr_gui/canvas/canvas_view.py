@@ -219,6 +219,12 @@ class CanvasView(QGraphicsView):
     # SlipCircle, which lives in ogr_slip2d and which this package has
     # never imported.
     three_points_picked = Signal(float, float, float, float, float, float)
+    # v0.1.335 (D142a) — Add Surface (centre and radius): the centre and the
+    # point on the circle, as coordinates, for the reason given above.
+    centre_radius_picked = Signal(float, float, float, float)
+    # ...and Enter instead of the second click: the centre already clicked,
+    # or None, for whatever was not clicked to be typed.
+    centre_radius_typed = Signal(object)
     # v0.1.198 — Change Slope Angle: (toe, crest) as INDICES of External
     # vertices, not coordinates: the feature works on the boundary's own
     # vertices, and an index cannot be a point that is not one.
@@ -1643,6 +1649,16 @@ class CanvasView(QGraphicsView):
             ln.setZValue(9)
             scene.addItem(ln)
             self._draw_preview_items.append(ln)
+            # v0.1.335 (D142a) — centre and radius: the circle itself, its
+            # radius being the dashed line just drawn
+            if self._tool_mode == ToolMode.ADD_SURFACE_CR:
+                cx, cy = self._draw_points[0]
+                r = math.hypot(x2 - cx, y2 - cy)
+                ring = QGraphicsEllipseItem(cx - r, cy - r, 2 * r, 2 * r)
+                ring.setPen(pen_dashed)
+                ring.setZValue(9)
+                scene.addItem(ring)
+                self._draw_preview_items.append(ring)
 
     # ----- Hit testing --------------------------------------------------
     def _pick_boundary(self, x: float, y: float, tolerance_px: float = 8.0) -> int:
@@ -2281,6 +2297,38 @@ class CanvasView(QGraphicsView):
                 event.accept()
                 return
 
+            # v0.1.335 (D142a) — Add Surface (centre and radius), as the
+            # reference draws it: the centre, then a point on the circle.
+            # ``ToolMode.ADD_SURFACE_CR`` had its cursor and its hint since
+            # v0.1.3 and nothing entered it (D142). Its own branch for the
+            # reason the three-point one has its own: a click it ignores
+            # keeps the pending centre.
+            if mode == ToolMode.ADD_SURFACE_CR:
+                scene_pt = self.mapToScene(event.position().toPoint())
+                snapped = self._snap_xy(scene_pt)
+                x, y = snapped.x(), snapped.y()
+                if not self._draw_points:
+                    self._draw_points.append((x, y))
+                    self._update_draw_preview()
+                    event.accept()
+                    return
+                cx, cy = self._draw_points[0]
+                # A second click on the centre gives no radius. With snapping
+                # on it is the likely one (``_snap_point`` feeds the pending
+                # point back as a pseudo-boundary), so it is ignored, as the
+                # three-point flow ignores a repeat; the distance in PIXELS.
+                if (math.hypot(x - cx, y - cy) * self._pixels_per_unit()
+                        < _MIN_PERP_PX):
+                    event.accept()
+                    return
+                # Cleared BEFORE emitting, as the flows above do: the slot
+                # redraws the scene.
+                self._draw_points.clear()
+                self._update_draw_preview()
+                self.centre_radius_picked.emit(cx, cy, x, y)
+                event.accept()
+                return
+
             # Move / Delete vertex — hit-test vertex
             if mode in (ToolMode.MOVE_VERTEX, ToolMode.DELETE_VERTEX):
                 scene_pt = self.mapToScene(event.position().toPoint())
@@ -2391,6 +2439,8 @@ class CanvasView(QGraphicsView):
         if self._tool_mode.is_drawing_boundary or self._tool_mode in (
             ToolMode.MOVE_VERTEX,
             ToolMode.INSERT_VERTEX,
+            # v0.1.335 (D142a) — the circle the next click would add
+            ToolMode.ADD_SURFACE_CR,
         ):
             snapped, _ = self._snap_point(pt)
             live_pt = (snapped.x(), snapped.y())
@@ -2526,6 +2576,16 @@ class CanvasView(QGraphicsView):
         super().mouseDoubleClickEvent(event)
 
     def keyPressEvent(self, event) -> None:  # noqa: N802
+        # v0.1.335 (D142a) — Enter in Add Surface (centre and radius) types
+        # what was not clicked: the radius after a centre, or both.
+        if (event.key() in (Qt.Key_Return, Qt.Key_Enter)
+                and self._tool_mode == ToolMode.ADD_SURFACE_CR):
+            centre = self._draw_points[0] if self._draw_points else None
+            self._draw_points.clear()
+            self._update_draw_preview()
+            self.centre_radius_typed.emit(centre)
+            event.accept()
+            return
         # v0.1.4 — Enter closes External/Material polygons;
         # otherwise finishes as an open polyline.
         if (event.key() in (Qt.Key_Return, Qt.Key_Enter)
