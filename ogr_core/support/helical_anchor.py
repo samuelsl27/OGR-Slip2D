@@ -398,8 +398,9 @@ class HelicalAnchor(SupportType):
         ``c`` and ``phi`` are needed SEPARATELY here — one multiplies
         ``N_c`` and the other decides both factors — so they come from the
         one linearisation this program has,
-        ``BishopSimplified._local_c_phi``, taken at the vertical effective
-        stress the formulation consumes.
+        ``ogr_core.materials.strength_model.local_c_phi`` (which
+        ``BishopSimplified._local_c_phi`` delegates to since v0.1.345),
+        taken at the vertical effective stress the formulation consumes.
         """
         from .bond import equivalent_c_phi_at
 

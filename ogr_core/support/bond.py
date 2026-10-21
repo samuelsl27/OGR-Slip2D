@@ -567,15 +567,17 @@ class _PointAsSlice:
     angle at a point along its shaft, and the reference itself says "the
     soil cohesion and friction angle (or equivalent values)". This program
     has exactly ONE linearisation of a strength envelope,
-    ``BishopSimplified._local_c_phi``, and it is the one the nine methods
-    use; writing a second one here would be a second opinion about the
-    twenty constitutive models, and the two would drift apart.
+    ``ogr_core.materials.strength_model.local_c_phi`` (the body of
+    ``BishopSimplified._local_c_phi`` until v0.1.345, which delegates to it
+    since), and it is the one the nine methods use; writing a second one
+    here would be a second opinion about the twenty constitutive models,
+    and the two would drift apart.
 
     So the point is dressed as the only argument that function knows how to
     read. The fields are the ones it actually touches, and nothing else:
     ``weight/width`` is how it recovers the total vertical stress, and the
     two ``top``/``base`` pairs are how it recovers the depth. A test pins
-    this to ``_local_c_phi`` so that the dressing cannot silently rot.
+    this to ``local_c_phi`` so that the dressing cannot silently rot.
     """
 
     __slots__ = ("width", "weight", "pore_pressure", "base_angle",
@@ -633,7 +635,8 @@ def equivalent_c_phi_at(
     """
     import math as _math
 
-    from ogr_slip2d.methods.bishop import BishopSimplified
+    # v0.1.345 (D337) -- the core's linearisation, the one the methods use
+    from ..materials.strength_model import local_c_phi
 
     from ..geometry.anisotropic_surface import (bedding_angle_at,
                                                 joint_surface_angles_at)
@@ -657,8 +660,7 @@ def equivalent_c_phi_at(
                              surface_angles=joint_surface_angles_at(
                                  project, mat, x, y))
     try:
-        c, tan_phi = BishopSimplified._local_c_phi(
-            stand_in, mat, max(0.0, sigma_v_eff))
+        c, tan_phi = local_c_phi(stand_in, mat, max(0.0, sigma_v_eff))
     except Exception as exc:  # noqa: BLE001 - declared, not swallowed
         # v0.1.231 (D227) -- see :func:`_soil_unreadable`.
         raise _soil_unreadable(mat, x, y, exc) from exc

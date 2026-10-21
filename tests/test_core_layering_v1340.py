@@ -48,8 +48,6 @@ DYNAMIC = "__import__"
 #: ``(file, enclosing function, module)``: how many times it is written.
 #: Only shrinks. Each version of the D337 batch removes its own entries.
 ALLOWED = Counter({
-    # the local strength of an envelope (v0.1.345)
-    ("ogr_core/support/bond.py", "equivalent_c_phi_at", "ogr_slip2d"): 1,
     # the statistical runners (v0.1.346)
     ("ogr_core/statistics/probabilistic.py",
      "_critical_probabilistic_excluded", "ogr_slip2d"): 1,

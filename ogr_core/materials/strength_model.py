@@ -298,8 +298,9 @@ class SliceContext:
         """The context of the base of ``slice_``, as the solvers read it.
 
         v0.1.230 (D219) -- moved here, bit for bit, from
-        ``ogr_slip2d.methods.bishop.BishopSimplified._local_c_phi``, where
-        every method built it: Janbu's soil type reads the anisotropic
+        ``ogr_slip2d.methods.bishop.BishopSimplified._local_c_phi`` (whose
+        body is :func:`local_c_phi` since v0.1.345), where every method
+        built it: Janbu's soil type reads the anisotropic
         models on each base, with the context of that base, and must read
         exactly what the solver reads. ``sigma_n_eff`` is the vertical
         stress's fallback when the slice cannot give one (a stand-in with
@@ -368,3 +369,128 @@ class SliceContext:
             # here, for "Angle or Surface" by surface.
             surface_angles=getattr(slice_, "surface_angles", None),
         )
+
+# ======================================================================
+def local_c_phi(slice_, material, sigma_n_eff: float,
+                sigma_v_probe=None) -> tuple:
+    """Linearise the constitutive envelope at σ'ₙ.
+
+    ``sigma_v_probe`` replaces the slice's own vertical effective stress
+    in the context, and is for :meth:`_zero_strength` alone (v0.1.218,
+    D207): it asks whether a model that reads σ'v has strength at SOME
+    stress, which varying σ'ₙ cannot tell. Every solver leaves it None.
+
+    v0.1.14 — uses the model's analytical tangent ``dτ/dσ`` when
+    available (any StrengthModel may implement ``tangent_slope``).
+
+    v0.1.15 — context-aware: if the strength model declares
+    ``needs_context`` (anisotropic, SHANSEP, …) we build a
+    :class:`SliceContext` from the slice and evaluate
+    ``shear_strength_ctx``. The tangent is then taken numerically
+    around that context, since the angle/σ'v are fixed for the
+    slice (only σ'ₙ varies in the linearisation).
+
+    Returns (c_local, tan φ_local) such that locally
+        τ ≈ c_local + σ'ₙ · tan φ_local
+
+    v0.1.213 (D84) — WHERE the callers linearise. This function takes
+    whatever stress it is given; the methods used to give it the
+    Fellenius estimate ``max(0, W cos a - u l) / l`` once per slice, and
+    applied the resulting straight line to the stress their own
+    equilibrium resolved. For a curved envelope that is not the
+    envelope: a tangent taken elsewhere lies above a concave curve, and
+    one taken at a clipped zero on a curve through the origin is zero.
+    Since v0.1.213 a stress-dependent envelope is read at the stress the
+    method resolves, iterated to the fixed point
+    (``base.self_consistent_envelope``); the Fellenius estimate is only
+    the first pass.
+
+    The case that settled it was misread for five versions. Perry
+    (1993), the given five-slice surface of verification problem 40, is
+    published at 0.944 (Janbu simplified) in the verification manual and
+    0.98 in Perry's own paper:
+
+        linearised at          Fellenius    own stress
+        5 slices (the statement) 0.97388      0.94889
+        100 slices               0.95454      0.92947
+
+    Measured in v0.1.153, the 100-slice figures were set against the
+    five-slice publication and read as "re-linearising is worse on Perry
+    1993". At the discretisation the number was published for, the own
+    stress is +0.52 % from the manual and the Fellenius point +3.17 %;
+    against Perry's own 0.98 the order reverses (-3.17 % and -0.62 %),
+    and that paper was not available to say how it read the envelope.
+    What decided was the identity, not the fit: the strength the solver
+    used against the envelope at the stress of its own solution was off
+    by +2.0 to +2.2 % in the sum on that surface, and by -21 % on the
+    critical surface of problem 41 (Jiang, Baker & Yamagami 2003), where
+    four slices entered with nothing; at the fixed point it is exact.
+
+    v0.1.345 (D337) -- the body and this docstring were
+    ``BishopSimplified._local_c_phi``, which is now this very function
+    (bound, not wrapped). A support's equivalent c and phi
+    (``ogr_core.support.bond``) calls it here; the methods call it through
+    the method's name.
+
+    The tangent is the model's analytical ``tangent_slope`` when it has one
+    and needs no context; otherwise a centred secant over
+    delta = max(0.001, 1e-4 sigma'_n) kPa, one-sided near zero. The cohesion
+    and the slope are clipped at zero, the matric suction of the slice
+    (extended Mohr-Coulomb, Fredlund, Morgenstern & Widger 1978) is added
+    as cohesion, and an infinite envelope gives (1e12, 0).
+    """
+    if material is None:
+        return 0.0, 0.0
+    sn = max(sigma_n_eff, 0.0)
+    strength = material.strength
+    # v0.1.28 — matric suction beyond the air entry value acts as
+    # extra cohesion (extended Mohr-Coulomb). Computed by the slicer
+    # so every LEM method picks it up here, in one place.
+    c_suction = getattr(slice_, "suction_cohesion", 0.0) or 0.0
+
+    # v0.1.15 — build a context for models that need it. v0.1.230
+    # (D219) — built by ``SliceContext.from_slice``, bit for bit what
+    # was written here, so that Janbu's soil type reads the context
+    # the solver reads.
+    ctx = None
+    if getattr(strength, "needs_context", False):
+        ctx = SliceContext.from_slice(slice_, sn, sigma_v_probe)
+
+    def _tau(s: float) -> float:
+        if ctx is not None:
+            return strength.shear_strength_ctx(s, ctx)
+        return strength.shear_strength(s)
+
+    tau_at_sn = _tau(sn)
+    if not math.isfinite(tau_at_sn):
+        return 1e12, 0.0  # InfiniteStrength
+
+    # Analytical tangent only valid for the non-context models
+    tan_phi = None
+    if ctx is None:
+        tangent_fn = getattr(strength, "tangent_slope", None)
+        if tangent_fn is not None:
+            try:
+                tan_phi = tangent_fn(sn)
+            except Exception:  # noqa: BLE001
+                tan_phi = None
+
+    if tan_phi is None:
+        base_delta = max(0.001, 0.0001 * sn)
+        delta = base_delta
+        if sn - delta < 0:
+            tau_hi = _tau(sn + delta)
+            if not math.isfinite(tau_hi):
+                return 1e12, 0.0
+            tan_phi = (tau_hi - tau_at_sn) / delta
+        else:
+            tau_lo = _tau(sn - delta)
+            tau_hi = _tau(sn + delta)
+            if not (math.isfinite(tau_lo) and math.isfinite(tau_hi)):
+                return 1e12, 0.0
+            tan_phi = (tau_hi - tau_lo) / (2.0 * delta)
+
+    tan_phi = max(0.0, tan_phi)
+    c = tau_at_sn - sn * tan_phi
+    c = max(0.0, c)
+    return c + c_suction, tan_phi
