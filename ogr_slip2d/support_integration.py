@@ -154,7 +154,13 @@ from typing import TYPE_CHECKING, Optional
 # ``ogr_core.support`` is already imported by the time any surface is
 # priced -- the project that owns the supports came through it.
 from ogr_core.support import SupportEvaluationError
+from ogr_core.messages import as_nested
 from ogr_core.project.rules import support_has_no_length
+
+from . import method_note_messages as MN
+
+#: v0.1.348 (D335) -- the notes of this module carry their codes
+_mnote = MN.method_note_text
 
 if TYPE_CHECKING:
     from ogr_core.project import Project
@@ -386,13 +392,14 @@ def _failure_text(failures) -> str:
     """
     if not failures:
         return ""
+    # v0.1.348 (D335) -- with its code; ``why`` is the exception's own
+    # message, which is data and is shown as it is
     if len(failures) == 1:
         sid, why = failures[0]
-        return "support %s could not be priced: %s" % (sid or "?", why)
-    return ("%d supports could not be priced: %s"
-            % (len(failures),
-               "; ".join("%s (%s)" % (sid or "?", why)
-                         for sid, why in failures)))
+        return _mnote(MN.SUPPORT_FAILURE_ONE, sid=sid or "?", why=str(why))
+    return _mnote(MN.SUPPORT_FAILURE_MANY, n=len(failures),
+                  entries="; ".join("%s (%s)" % (sid or "?", why)
+                                    for sid, why in failures))
 
 
 def resolve_support_terms(
@@ -1063,19 +1070,12 @@ def reversed_support_notes(project, result) -> list[str]:
         # and naming the orientation is the one part of the sentence that
         # can be missing without costing the reader anything.
         orientation = getattr(support.orientation, "value",
-                              support.orientation) or "the chosen orientation"
+                              support.orientation)
+        ends = dict(name=name, hx=support.head.x, hy=support.head.y,
+                    tx=support.tail.x, ty=support.tail.y)
         notes.append(
-            f"Support '{name}' has its head at "
-            f"({support.head.x:.2f}, {support.head.y:.2f}), on the stable "
-            f"side of the reported surface, and its tail at "
-            f"({support.tail.x:.2f}, {support.tail.y:.2f}), inside the "
-            f"sliding mass. The head is the end at the slope FACE: the "
-            f"stripping length L_i is measured from it, the pullout "
-            f"length L_o from the tail, and the force under "
-            f"'{orientation}' is placed from the axis read head to tail. "
-            f"Drawn this way round all three are reversed. Check which "
-            f"end was clicked first before quoting this factor."
-        )
+            _mnote(MN.SUPPORT_REVERSED, orientation=orientation, **ends)
+            if orientation else _mnote(MN.SUPPORT_REVERSED_ANY, **ends))
     return notes
 
 
@@ -1369,8 +1369,8 @@ SUPPORT_NOT_PRICEABLE = "not_priceable"
 #: capacity and loses its shear, so it has no business in the count of the
 #: ones that put no force on the surface. Hence a list, a sentence and a
 #: paragraph of its own rather than an entry in
-#: ``_UNCONTRIBUTING_PHRASES``, which would have said the opposite of what
-#: happened. The exception class name is appended after a colon, because
+#: ``method_note_messages.UNCONTRIBUTING``, which would have said the
+#: opposite of what happened. The exception class name is appended after a colon, because
 #: "the shear was not counted" and "the shear was not counted BECAUSE
 #: ``TypeError``" are not the same help to whoever has to fix the plugin.
 SUPPORT_SHEAR_FAILED = "shear_failed"
@@ -1729,99 +1729,6 @@ def compute_support_effects(
     return effects
 
 
-#: How each reason reads: singular, plural, and once more with no count
-#: at all for the lone-support case, where "None of the 1 supports
-#: placed" would be plainly ungrammatical. Ordered most actionable
-#: first, so the five that describe BROKEN INPUT come before the three
-#: that describe a legitimate calculation decision (v0.1.313 added
-#: ``SUPPORT_NO_LENGTH`` to the first group, D313). v0.1.161 put
-#: ``SUPPORT_NOT_PRICEABLE`` at the head of that first group: it is the
-#: only one that means the analysis could not READ the model, and it
-#: carries its own text on the result besides (defect D94). v0.1.163 put
-#: ``SUPPORT_BOND_PROFILE_NO_FORCE`` right behind it, in the same group
-#: and for the same reason: a profile that will not build is a defect in
-#: the type, not a property of the slope (defect D95).
-_UNCONTRIBUTING_PHRASES = (
-    (SUPPORT_NOT_PRICEABLE,
-     "%d could not be priced at all",
-     "%d could not be priced at all",
-     "it could not be priced at all"),
-    (SUPPORT_BOND_PROFILE_NO_FORCE,
-     "%d could not be given a bond profile, and its type prices nothing "
-     "without one",
-     "%d could not be given a bond profile, and their type prices nothing "
-     "without one",
-     "it could not be given a bond profile, and its type prices nothing "
-     "without one"),
-    (SUPPORT_UNKNOWN_TYPE,
-     "%d names a support class this build does not have",
-     "%d name a support class this build does not have",
-     "it names a support class this build does not have"),
-    (SUPPORT_NO_LENGTH,
-     "%d has no length: its head and tail coincide",
-     "%d have no length: their head and tail coincide",
-     "it has no length: its head and tail coincide"),
-    (SUPPORT_NO_CREST,
-     "%d is drawn with both ends at one elevation, and its type measures "
-     "its diagram from the upper one",
-     "%d are drawn with both ends at one elevation, and their type "
-     "measures its diagram from the upper one",
-     "it is drawn with both ends at one elevation, and its type measures "
-     "its diagram from the upper one"),
-    (SUPPORT_NO_CAPACITY,
-     "%d develops no capacity where it crosses",
-     "%d develop no capacity where they cross",
-     "it develops no capacity where it crosses"),
-    (SUPPORT_NO_SLICE,
-     "%d crosses it at a point that falls in no slice",
-     "%d cross it at a point that falls in no slice",
-     "it crosses that surface at a point that falls in no slice"),
-    (SUPPORT_NO_CROSSING,
-     "%d does not cross it",
-     "%d do not cross it",
-     "it does not cross that surface"),
-)
-
-#: The exception class, pasted onto the fragment of the reason above. It
-#: does not fit the table -- every entry there takes one ``%d`` and nothing
-#: else -- and it cannot be dropped either: naming the bug is the whole
-#: reason the reasons carry a suffix (v0.1.163, defect D95).
-_BOND_RAISED = " (building it raised %s)"
-
-#: And the two reasons deliberately NOT in the tuple above: every entry
-#: there completes "the support puts no force on the surface", and these
-#: say the opposite -- the support is in the equilibrium, priced at less
-#: than it declares. Sharing the table would have bought one loop at the
-#: price of a sentence that contradicts itself. v0.1.162, defect D98; the
-#: second one v0.1.163, defect D95.
-_SHEAR_FAILED_PHRASE = (
-    "%d support contributed only its axial capacity: shear_at raised %s, so "
-    "the shear it declares was not counted. That is a defect in the support "
-    "type rather than a property of the model, and the factor of safety is "
-    "the one for less reinforcement than the model carries.",
-    "%d supports contributed only their axial capacity: shear_at raised %s, "
-    "so the shear they declare was not counted. That is a defect in the "
-    "support type rather than a property of the model, and the factor of "
-    "safety is the one for less reinforcement than the model carries.",
-)
-
-#: Its D95 counterpart: the profile would not build and the type HAS an
-#: envelope at zero effective stress, so the support was priced off that
-#: instead. Its own sentence rather than a share of the one above, because
-#: what was lost is different -- there one vector, here every term that
-#: depends on the stress state along the reinforcement.
-_BOND_FAILED_PHRASE = (
-    "%d support was priced off its zero-stress envelope: building its bond "
-    "profile raised %s, so it carries less reinforcement than the model "
-    "declares. That is a defect in the support type rather than a property "
-    "of the model.",
-    "%d supports were priced off their zero-stress envelopes: building "
-    "their bond profiles raised %s, so they carry less reinforcement than "
-    "the model declares. That is a defect in the support type rather than "
-    "a property of the model.",
-)
-
-
 def uncontributing_support_notes(project, result) -> list[str]:
     """Say how many placed supports put no force on the reported surface.
 
@@ -1898,10 +1805,7 @@ def uncontributing_support_notes(project, result) -> list[str]:
     said = ((getattr(result, "details", None) or {}).get("support_failure")
             or "")
     if said:
-        return ["The analysis could not price the reinforcement on the "
-                "reported surface: %s. A support left out lowers no "
-                "number and raises none, so this factor of safety is the "
-                "one for the slope without it." % said]
+        return [_mnote(MN.SUPPORT_UNPRICED, said=as_nested(said))]
 
     reasons: list = []
     try:
@@ -1914,11 +1818,8 @@ def uncontributing_support_notes(project, result) -> list[str]:
         # a note must not kill a run, but it must not hide a TypeError
         # either, and the solve that produced this result already walked
         # the same code without raising.
-        return ["None of the %d supports placed reached the reported "
-                "surface: %s. The analysis prices the surface with no "
-                "reinforcement at all when that happens, so this factor "
-                "of safety is the one for the slope without any of them."
-                % (total, exc)]
+        return [_mnote(MN.SUPPORT_NONE_REACHED, total=total,
+                       error=str(exc))]
 
     # v0.1.162, defect D98 -- the two reasons that describe a support which
     # CONTRIBUTES come OFF the list before anything is counted. A support
@@ -1957,18 +1858,14 @@ def uncontributing_support_notes(project, result) -> list[str]:
     extra: list = []
     if partial:
         n = sum(partial.values())
-        # Named apart from the ``one``/``many`` of the comprehension below:
-        # that one has its own scope, so this is readability and not a bug.
-        singular, plural = _SHEAR_FAILED_PHRASE
-        extra.append((singular if n == 1 else plural)
-                     % (n, ", ".join(sorted(partial))))
+        extra.append(_mnote(MN.SUPPORT_SHEAR_FAILED, n=n,
+                            errors=", ".join(sorted(partial))))
     if fell_back:
         # AFTER the D98 sentence, deliberately: that one has been the first
         # line of ``extra`` since v0.1.162 and a test reads it there.
         n = sum(fell_back.values())
-        singular, plural = _BOND_FAILED_PHRASE
-        extra.append((singular if n == 1 else plural)
-                     % (n, ", ".join(sorted(fell_back))))
+        extra.append(_mnote(MN.SUPPORT_BOND_FAILED, n=n,
+                            errors=", ".join(sorted(fell_back))))
 
     if not reasons:
         # Not ``return []``: the tail below would otherwise reach
@@ -1984,33 +1881,33 @@ def uncontributing_support_notes(project, result) -> list[str]:
     # v0.1.163 -- a loop rather than the comprehension it replaces, because
     # one of the seven fragments carries the exception class after it and
     # the table has nowhere to put it (defect D95).
-    raised = _BOND_RAISED % ", ".join(sorted(no_profile)) if no_profile else ""
+    # v0.1.348 (D335) -- each fragment is a code of its own, nested in the
+    # sentence that lists them; the one with the exception has its own
+    # code with that name, because a suffix glued in English translates
+    # into nothing.
+    raised = ", ".join(sorted(no_profile))
+
+    def _code(prefix, reason):
+        if reason == SUPPORT_BOND_PROFILE_NO_FORCE and raised:
+            return prefix + reason + MN.RAISED, {"errors": raised}
+        return prefix + reason, {}
+
     parts = []
-    for key, one, many, _bare in _UNCONTRIBUTING_PHRASES:
+    for key, _one, _many, _bare in MN.UNCONTRIBUTING:
         n = counts.get(key)
         if not n:
             continue
-        text = (one if n == 1 else many) % n
-        if key == SUPPORT_BOND_PROFILE_NO_FORCE:
-            text += raised
-        parts.append(text)
+        code, more = _code(MN.PART, key)
+        parts.append(MN.nested_method_note(code, n=n, **more))
 
     if silent >= total:
         if total == 1:
-            key, bare = [(k, b) for k, _o, _m, b in _UNCONTRIBUTING_PHRASES
-                         if counts.get(k)][0]
-            if key == SUPPORT_BOND_PROFILE_NO_FORCE:
-                bare += raised
-            return ["The only support placed puts no force on the "
-                    "reported surface: %s. This factor of safety is the "
-                    "one for the slope with no reinforcement at all."
-                    % bare] + extra
-        return ["None of the %d supports placed put any force on the "
-                "reported surface: %s. This factor of safety is the one "
-                "for the slope with no reinforcement at all."
-                % (total, ", ".join(parts))] + extra
-    return ["%d of the %d supports placed put no force on the reported "
-            "surface: %s. A support left out lowers no number and raises "
-            "none, so the factor of safety is the one for the model "
-            "without it. Check that these are the ones meant to be left "
-            "out." % (silent, total, ", ".join(parts))] + extra
+            key = [k for k, _o, _m, _b in MN.UNCONTRIBUTING
+                   if counts.get(k)][0]
+            code, more = _code(MN.BARE, key)
+            return [_mnote(MN.SUPPORT_ONLY_ONE_SILENT,
+                           bare=MN.nested_method_note(code, **more))] + extra
+        return [_mnote(MN.SUPPORT_NONE_FORCED, total=total,
+                       parts=parts)] + extra
+    return [_mnote(MN.SUPPORT_SOME_SILENT, silent=silent, total=total,
+                   parts=parts)] + extra

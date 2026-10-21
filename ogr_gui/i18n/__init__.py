@@ -4634,6 +4634,442 @@ _DICTS: dict[str, dict[str, str]] = {
             'ya no existe. Asígnale otro material (Propiedades > Asignar '
             'materiales); una superficie que pase por ella no se puede '
             'analizar.',
+        # v0.1.348 (D335) — the notes about one method's surface
+        'The critical surface daylights at {steepest:.1f} deg from the '
+        'horizontal, which is too steep for a fixed number of slices to '
+        'resolve: its factor of safety depends on that number. It was '
+        'computed with {num_slices} slices. Re-run with more and compare '
+        'before quoting it.':
+            'La superficie crítica aflora a {steepest:.1f}° de la '
+            'horizontal, demasiado empinada para que un número fijo de '
+            'dovelas la resuelva: su factor de seguridad depende de ese '
+            'número. Se calculó con {num_slices} dovelas. Repite el cálculo '
+            'con más y compara antes de darlo.',
+        'The critical centre lies on the edge of the search grid ({edges}; '
+        'grid x {x0:g} to {x1:g}, y {y0:g} to {y1:g}). A minimum on the '
+        'boundary is the best of what was searched, not necessarily the '
+        'lowest one: widen the grid on that side and re-run before quoting '
+        'it.':
+            'El centro crítico está en el borde de la rejilla de búsqueda '
+            '({edges}; rejilla x de {x0:g} a {x1:g}, y de {y0:g} a {y1:g}). '
+            'Un mínimo en el borde es lo mejor de lo buscado, no '
+            'necesariamente el más bajo: amplía la rejilla por ese lado y '
+            'repite el cálculo antes de darlo.',
+        'no inclination of the inter-slice forces makes the force and the '
+        'moment factors of safety agree, so the factor reported is the '
+        'closest sampled inclination rather than a solved one: its two '
+        'factors differ by {residual:.3g}, against a convergence tolerance '
+        'of {tolerance:.3g}.':
+            'ninguna inclinación de las fuerzas entre dovelas hace coincidir '
+            'los factores de seguridad de fuerzas y de momentos, así que el '
+            'factor informado es el de la inclinación muestreada más próxima '
+            'y no el de una resuelta: sus dos factores difieren en '
+            '{residual:.3g}, frente a una tolerancia de convergencia de '
+            '{tolerance:.3g}.',
+        'and {n} inclinations was discarded because its inner iteration used '
+        'its whole budget of passes while still improving, so the limit that '
+        'decided this answer belongs to the solver rather than to the slope. '
+        'A looser convergence tolerance spends fewer passes per inclination '
+        'and may bracket it.':
+            'y se descartaron {n} inclinaciones porque su iteración interior '
+            'gastó todo su presupuesto de pasadas cuando aún mejoraba, así '
+            'que el límite que decidió esta respuesta es del cálculo y no '
+            'del talud. Una tolerancia de convergencia más holgada gasta '
+            'menos pasadas por inclinación y puede acotarla.',
+        'and {n} inclination was discarded because its inner iteration used '
+        'its whole budget of passes while still improving, so the limit that '
+        'decided this answer belongs to the solver rather than to the slope. '
+        'A looser convergence tolerance spends fewer passes per inclination '
+        'and may bracket it.':
+            'y se descartó {n} inclinación porque su iteración interior '
+            'gastó todo su presupuesto de pasadas cuando aún mejoraba, así '
+            'que el límite que decidió esta respuesta es del cálculo y no '
+            'del talud. Una tolerancia de convergencia más holgada gasta '
+            'menos pasadas por inclinación y puede acotarla.',
+        'and {n} inclinations were discarded because one of its two '
+        'equilibrium branches had no admissible solution there at all: the '
+        'factor of safety it was iterating towards stopped being finite and '
+        'positive, so that inclination could not be compared with its '
+        'neighbours.':
+            'y se descartaron {n} inclinaciones porque una de sus dos ramas '
+            'de equilibrio no tenía allí ninguna solución admisible: el '
+            'factor de seguridad hacia el que iteraba dejó de ser finito y '
+            'positivo, así que esa inclinación no se pudo comparar con sus '
+            'vecinas.',
+        'and {n} inclination was discarded because one of its two '
+        'equilibrium branches had no admissible solution there at all: the '
+        'factor of safety it was iterating towards stopped being finite and '
+        'positive, so that inclination could not be compared with its '
+        'neighbours.':
+            'y se descartó {n} inclinación porque una de sus dos ramas de '
+            'equilibrio no tenía allí ninguna solución admisible: el factor '
+            'de seguridad hacia el que iteraba dejó de ser finito y '
+            'positivo, así que esa inclinación no se pudo comparar con sus '
+            'vecinas.',
+        'and {n} inclinations was discarded because the inter-slice thrust '
+        'of its inner iteration ran past {limit:g} times the total force the '
+        'sliding mass has to work with, which is a runaway and not a '
+        'solution of anything.':
+            'y se descartaron {n} inclinaciones porque el empuje entre '
+            'dovelas de su iteración interior superó {limit:g} veces la '
+            'fuerza total de que dispone la masa deslizante, lo que es un '
+            'desbordamiento y no la solución de nada.',
+        'and {n} inclination was discarded because the inter-slice thrust of '
+        'its inner iteration ran past {limit:g} times the total force the '
+        'sliding mass has to work with, which is a runaway and not a '
+        'solution of anything.':
+            'y se descartó {n} inclinación porque el empuje entre dovelas de '
+            'su iteración interior superó {limit:g} veces la fuerza total de '
+            'que dispone la masa deslizante, lo que es un desbordamiento y '
+            'no la solución de nada.',
+        'and {n} inclinations was discarded because its inner iteration '
+        'stopped improving for {passes} passes, in its factor and in its '
+        'inter-slice thrust alike, and the relaxation rescue could not '
+        'settle it either, so the limit that decided this answer belongs to '
+        'the solver rather than to the slope.':
+            'y se descartaron {n} inclinaciones porque su iteración interior '
+            'dejó de mejorar durante {passes} pasadas, tanto en su factor '
+            'como en su empuje entre dovelas, y el rescate por relajación '
+            'tampoco pudo asentarla, así que el límite que decidió esta '
+            'respuesta es del cálculo y no del talud.',
+        'and {n} inclination was discarded because its inner iteration '
+        'stopped improving for {passes} passes, in its factor and in its '
+        'inter-slice thrust alike, and the relaxation rescue could not '
+        'settle it either, so the limit that decided this answer belongs to '
+        'the solver rather than to the slope.':
+            'y se descartó {n} inclinación porque su iteración interior dejó '
+            'de mejorar durante {passes} pasadas, tanto en su factor como en '
+            'su empuje entre dovelas, y el rescate por relajación tampoco '
+            'pudo asentarla, así que el límite que decidió esta respuesta es '
+            'del cálculo y no del talud.',
+        'an inclination of the inter-slice forces where the force and the '
+        'moment factors of safety cross WAS found, and refining it did not '
+        'close the gap: the two factors still differ by {residual:.3g} '
+        'against a convergence tolerance of {tolerance:.3g}, with the '
+        'interval narrowed to {width:.3g}. The factor reported is the one at '
+        'that inclination, not a solved root.':
+            'SÍ se encontró una inclinación de las fuerzas entre dovelas '
+            'donde se cruzan los factores de seguridad de fuerzas y de '
+            'momentos, y refinarla no cerró la diferencia: los dos factores '
+            'siguen difiriendo en {residual:.3g} frente a una tolerancia de '
+            'convergencia de {tolerance:.3g}, con el intervalo estrechado a '
+            '{width:.3g}. El factor informado es el de esa inclinación, no '
+            'una raíz resuelta.',
+        'The calibrated grid bracketed nothing until {n} inclinations were '
+        'put back after being set aside for an inter-slice thrust in net '
+        'tension: the crossing lay among them, so the factor reported is a '
+        'solved root rather than the closest sampled inclination.':
+            'La rejilla calibrada no acotó nada hasta que se recuperaron {n} '
+            'inclinaciones tras haberse apartado por un empuje entre dovelas '
+            'en tracción neta: el cruce estaba entre ellas, así que el '
+            'factor informado es una raíz resuelta y no la inclinación '
+            'muestreada más próxima.',
+        'The calibrated grid bracketed nothing until {n} inclination was put '
+        'back after being set aside for an inter-slice thrust in net '
+        'tension: the crossing lay among them, so the factor reported is a '
+        'solved root rather than the closest sampled inclination.':
+            'La rejilla calibrada no acotó nada hasta que se recuperó {n} '
+            'inclinación tras haberse apartado por un empuje entre dovelas '
+            'en tracción neta: el cruce estaba entre ellas, así que el '
+            'factor informado es una raíz resuelta y no la inclinación '
+            'muestreada más próxima.',
+        'The calibrated grid of inclinations bracketed nothing, so {n} '
+        'further inclinations were sampled between the last one that solved '
+        'and the first one that did not, which is where a crossing hidden by '
+        'a lost sample would be.':
+            'La rejilla calibrada de inclinaciones no acotó nada, así que se '
+            'muestrearon {n} inclinaciones más entre la última que se '
+            'resolvió y la primera que no, que es donde estaría un cruce '
+            'escondido por una muestra perdida.',
+        'The calibrated grid of inclinations bracketed nothing, so {n} '
+        'further inclination was sampled between the last one that solved '
+        'and the first one that did not, which is where a crossing hidden by '
+        'a lost sample would be.':
+            'La rejilla calibrada de inclinaciones no acotó nada, así que se '
+            'muestreó {n} inclinación más entre la última que se resolvió y '
+            'la primera que no, que es donde estaría un cruce escondido por '
+            'una muestra perdida.',
+        ' This method satisfies force AND moment equilibrium, so there is no '
+        'more complete one to check it against; what a base this steep costs '
+        'it is the conditioning of the base normal, not the equilibrium it '
+        'solves. Vary the number of slices, and compare against the other '
+        'complete-equilibrium method, which differs from it only in the '
+        'interslice force function.':
+            ' Este método cumple el equilibrio de fuerzas Y el de momentos, '
+            'así que no hay otro más completo con el que contrastarlo; lo '
+            'que le cuesta una base tan empinada es el condicionamiento de '
+            'la normal en la base, no el equilibrio que resuelve. Varía el '
+            'número de dovelas y compáralo con el otro método de equilibrio '
+            'completo, que solo se diferencia en la función de fuerzas entre '
+            'dovelas.',
+        ' A force-equilibrium method is least reliable there, and this value '
+        'is the Bishop denominator: the one this method actually divides by '
+        'carries its own interslice inclination. Compare against a '
+        'complete-equilibrium method — Spencer and GLE/Morgenstern-Price — '
+        'before quoting it.':
+            ' Un método de equilibrio de fuerzas es menos fiable ahí, y este '
+            'valor es el denominador de Bishop: el que este método divide de '
+            'verdad lleva su propia inclinación entre dovelas. Compáralo con '
+            'un método de equilibrio completo —Spencer y '
+            'GLE/Morgenstern-Price— antes de darlo.',
+        ' A method of moments is not reliable there. Compare against a '
+        'complete-equilibrium method — Spencer and GLE/Morgenstern-Price — '
+        'before quoting it.':
+            ' Un método de momentos no es fiable ahí. Compáralo con un '
+            'método de equilibrio completo —Spencer y GLE/Morgenstern-Price— '
+            'antes de darlo.',
+        ' Compare against a complete-equilibrium method — Spencer and '
+        'GLE/Morgenstern-Price — before quoting it.':
+            ' Compáralo con un método de equilibrio completo —Spencer y '
+            'GLE/Morgenstern-Price— antes de darlo.',
+        ', below the {limit} limit':
+            ', por debajo del límite de {limit}',
+        ', which clears the {limit} limit by {margin:.4f}':
+            ', que supera el límite de {limit} por {margin:.4f}',
+        ' That divides the normal force on that base by {worst:.4f}, '
+        'inflating it {factor:.1f}-fold.':
+            ' Eso divide la fuerza normal en esa base por {worst:.4f}, y la '
+            'multiplica por {factor:.1f}.',
+        'The reported surface has m_alpha down to '
+        '{worst:.4f}{where}{tail}.{effect}{advice}':
+            'La superficie informada tiene un m_alpha de hasta '
+            '{worst:.4f}{where}{tail}.{effect}{advice}',
+        ' That denominator is zero or negative, so the normal force on that '
+        'base is meaningless rather than merely large.':
+            ' Ese denominador es nulo o negativo, así que la fuerza normal '
+            'en esa base carece de sentido, no es solo grande.',
+        ' on a base at {angle:.1f} deg':
+            ' en una base a {angle:.1f}°',
+        'Newmark displacements were requested but no seismic record is '
+        'selected, so no displacement was computed.':
+            'Se pidieron desplazamientos de Newmark pero no hay ningún '
+            'registro sísmico elegido, así que no se calculó ningún '
+            'desplazamiento.',
+        "'{polarity}' is not a polarity this program knows, so the maximum "
+        'of the two was used.':
+            '«{polarity}» no es una polaridad que este programa conozca, así '
+            'que se usó la mayor de las dos.',
+        "the seismic record '{name}' cannot be integrated (it needs at least "
+        'two samples and a positive time interval), so no displacement was '
+        'computed.':
+            'el registro sísmico «{name}» no se puede integrar (necesita al '
+            'menos dos muestras y un intervalo de tiempo positivo), así que '
+            'no se calculó ningún desplazamiento.',
+        'the project applies a horizontal seismic coefficient of {kh:g}, and '
+        'the critical coefficient replaces it rather than adding to it. Ky '
+        'is solved over kh from zero.':
+            'el proyecto aplica un coeficiente sísmico horizontal de {kh:g}, '
+            'y el coeficiente crítico lo sustituye en vez de sumarse a él. '
+            'Ky se resuelve sobre kh desde cero.',
+        '{unanswered} of {valid} surfaces have no critical seismic '
+        'coefficient below {k_max:g}; they are excluded from the ranking '
+        'rather than treated as strong.':
+            '{unanswered} de {valid} superficies no tienen coeficiente '
+            'sísmico crítico por debajo de {k_max:g}; quedan fuera de la '
+            'clasificación en vez de tratarse como resistentes.',
+        'it could not be given a bond profile, and its type prices nothing '
+        'without one':
+            'no se le pudo dar un perfil de adherencia, y su tipo no calcula '
+            'nada sin él',
+        'it could not be given a bond profile, and its type prices nothing '
+        'without one (building it raised {errors})':
+            'no se le pudo dar un perfil de adherencia, y su tipo no calcula '
+            'nada sin él (construirlo lanzó {errors})',
+        'it develops no capacity where it crosses':
+            'no desarrolla capacidad donde la cruza',
+        'it is drawn with both ends at one elevation, and its type measures '
+        'its diagram from the upper one':
+            'está dibujado con los dos extremos a la misma cota, y su tipo '
+            'mide su diagrama desde el superior',
+        'it does not cross that surface':
+            'no cruza esa superficie',
+        'it has no length: its head and tail coincide':
+            'no tiene longitud: su cabeza y su cola coinciden',
+        'it crosses that surface at a point that falls in no slice':
+            'cruza esa superficie en un punto que no cae en ninguna dovela',
+        'it could not be priced at all':
+            'no se pudo calcular en absoluto',
+        'it names a support class this build does not have':
+            'nombra una clase de soporte que esta versión no tiene',
+        '{n} supports were priced off their zero-stress envelopes: building '
+        'their bond profiles raised {errors}, so they carry less '
+        'reinforcement than the model declares. That is a defect in the '
+        'support type rather than a property of the model.':
+            '{n} soportes se calcularon con sus envolventes a tensión '
+            'efectiva nula: construir sus perfiles de adherencia lanzó '
+            '{errors}, así que llevan menos refuerzo del que declara el '
+            'modelo. Es un defecto del tipo de soporte y no una propiedad '
+            'del modelo.',
+        '{n} support was priced off its zero-stress envelope: building its '
+        'bond profile raised {errors}, so it carries less reinforcement than '
+        'the model declares. That is a defect in the support type rather '
+        'than a property of the model.':
+            '{n} soporte se calculó con su envolvente a tensión efectiva '
+            'nula: construir su perfil de adherencia lanzó {errors}, así que '
+            'lleva menos refuerzo del que declara el modelo. Es un defecto '
+            'del tipo de soporte y no una propiedad del modelo.',
+        '{n} supports could not be priced: {entries}':
+            '{n} soportes no se pudieron calcular: {entries}',
+        'support {sid} could not be priced: {why}':
+            'el soporte {sid} no se pudo calcular: {why}',
+        'None of the {total} supports placed put any force on the reported '
+        'surface: {parts}. This factor of safety is the one for the slope '
+        'with no reinforcement at all.':
+            'Ninguno de los {total} soportes colocados aporta fuerza a la '
+            'superficie informada: {parts}. Este factor de seguridad es el '
+            'del talud sin ningún refuerzo.',
+        'None of the {total} supports placed reached the reported surface: '
+        '{error}. The analysis prices the surface with no reinforcement at '
+        'all when that happens, so this factor of safety is the one for the '
+        'slope without any of them.':
+            'Ninguno de los {total} soportes colocados llegó a la superficie '
+            'informada: {error}. Cuando eso pasa, el análisis calcula la '
+            'superficie sin ningún refuerzo, así que este factor de '
+            'seguridad es el del talud sin ninguno de ellos.',
+        'The only support placed puts no force on the reported surface: '
+        '{bare}. This factor of safety is the one for the slope with no '
+        'reinforcement at all.':
+            'El único soporte colocado no aporta fuerza a la superficie '
+            'informada: {bare}. Este factor de seguridad es el del talud sin '
+            'ningún refuerzo.',
+        '{n} could not be given a bond profile, and their type prices '
+        'nothing without one':
+            'a {n} no se les pudo dar un perfil de adherencia, y su tipo no '
+            'calcula nada sin él',
+        '{n} could not be given a bond profile, and its type prices nothing '
+        'without one':
+            'a {n} no se le pudo dar un perfil de adherencia, y su tipo no '
+            'calcula nada sin él',
+        '{n} could not be given a bond profile, and their type prices '
+        'nothing without one (building it raised {errors})':
+            'a {n} no se les pudo dar un perfil de adherencia, y su tipo no '
+            'calcula nada sin él (construirlo lanzó {errors})',
+        '{n} could not be given a bond profile, and its type prices nothing '
+        'without one (building it raised {errors})':
+            'a {n} no se le pudo dar un perfil de adherencia, y su tipo no '
+            'calcula nada sin él (construirlo lanzó {errors})',
+        '{n} develop no capacity where they cross':
+            '{n} no desarrollan capacidad donde la cruzan',
+        '{n} develops no capacity where it crosses':
+            '{n} no desarrolla capacidad donde la cruza',
+        '{n} are drawn with both ends at one elevation, and their type '
+        'measures its diagram from the upper one':
+            '{n} están dibujados con los dos extremos a la misma cota, y su '
+            'tipo mide su diagrama desde el superior',
+        '{n} is drawn with both ends at one elevation, and its type measures '
+        'its diagram from the upper one':
+            '{n} está dibujado con los dos extremos a la misma cota, y su '
+            'tipo mide su diagrama desde el superior',
+        '{n} do not cross it':
+            '{n} no la cruzan',
+        '{n} does not cross it':
+            '{n} no la cruza',
+        '{n} have no length: their head and tail coincide':
+            '{n} no tienen longitud: su cabeza y su cola coinciden',
+        '{n} has no length: its head and tail coincide':
+            '{n} no tiene longitud: su cabeza y su cola coinciden',
+        '{n} cross it at a point that falls in no slice':
+            '{n} la cruzan en un punto que no cae en ninguna dovela',
+        '{n} crosses it at a point that falls in no slice':
+            '{n} la cruza en un punto que no cae en ninguna dovela',
+        '{n} could not be priced at all':
+            '{n} sin poder calcularse en absoluto',
+        '{n} name a support class this build does not have':
+            '{n} nombran una clase de soporte que esta versión no tiene',
+        '{n} names a support class this build does not have':
+            '{n} nombra una clase de soporte que esta versión no tiene',
+        "Support '{name}' has its head at ({hx:.2f}, {hy:.2f}), on the "
+        'stable side of the reported surface, and its tail at ({tx:.2f}, '
+        '{ty:.2f}), inside the sliding mass. The head is the end at the '
+        'slope FACE: the stripping length L_i is measured from it, the '
+        'pullout length L_o from the tail, and the force under '
+        "'{orientation}' is placed from the axis read head to tail. Drawn "
+        'this way round all three are reversed. Check which end was clicked '
+        'first before quoting this factor.':
+            'El soporte «{name}» tiene la cabeza en ({hx:.2f}, {hy:.2f}), en '
+            'el lado estable de la superficie informada, y la cola en '
+            '({tx:.2f}, {ty:.2f}), dentro de la masa deslizante. La cabeza '
+            'es el extremo de la cara del talud: desde ella se mide la '
+            'longitud de descabezamiento L_i, la de arrancamiento L_o desde '
+            'la cola, y la fuerza con orientación «{orientation}» se coloca '
+            'a partir del eje leído de la cabeza a la cola. Dibujado al '
+            'revés, las tres quedan invertidas. Comprueba qué extremo se '
+            'pulsó primero antes de dar este factor.',
+        "Support '{name}' has its head at ({hx:.2f}, {hy:.2f}), on the "
+        'stable side of the reported surface, and its tail at ({tx:.2f}, '
+        '{ty:.2f}), inside the sliding mass. The head is the end at the '
+        'slope FACE: the stripping length L_i is measured from it, the '
+        "pullout length L_o from the tail, and the force under 'the chosen "
+        "orientation' is placed from the axis read head to tail. Drawn this "
+        'way round all three are reversed. Check which end was clicked first '
+        'before quoting this factor.':
+            'El soporte «{name}» tiene la cabeza en ({hx:.2f}, {hy:.2f}), en '
+            'el lado estable de la superficie informada, y la cola en '
+            '({tx:.2f}, {ty:.2f}), dentro de la masa deslizante. La cabeza '
+            'es el extremo de la cara del talud: desde ella se mide la '
+            'longitud de descabezamiento L_i, la de arrancamiento L_o desde '
+            'la cola, y la fuerza con la orientación elegida se coloca a '
+            'partir del eje leído de la cabeza a la cola. Dibujado al revés, '
+            'las tres quedan invertidas. Comprueba qué extremo se pulsó '
+            'primero antes de dar este factor.',
+        '{n} supports contributed only their axial capacity: shear_at raised '
+        '{errors}, so the shear they declare was not counted. That is a '
+        'defect in the support type rather than a property of the model, and '
+        'the factor of safety is the one for less reinforcement than the '
+        'model carries.':
+            '{n} soportes aportaron solo su capacidad axial: shear_at lanzó '
+            '{errors}, así que no se contó el cortante que declaran. Es un '
+            'defecto del tipo de soporte y no una propiedad del modelo, y el '
+            'factor de seguridad es el de menos refuerzo del que tiene el '
+            'modelo.',
+        '{n} support contributed only its axial capacity: shear_at raised '
+        '{errors}, so the shear it declares was not counted. That is a '
+        'defect in the support type rather than a property of the model, and '
+        'the factor of safety is the one for less reinforcement than the '
+        'model carries.':
+            '{n} soporte aportó solo su capacidad axial: shear_at lanzó '
+            '{errors}, así que no se contó el cortante que declara. Es un '
+            'defecto del tipo de soporte y no una propiedad del modelo, y el '
+            'factor de seguridad es el de menos refuerzo del que tiene el '
+            'modelo.',
+        '{silent} of the {total} supports placed put no force on the '
+        'reported surface: {parts}. A support left out lowers no number and '
+        'raises none, so the factor of safety is the one for the model '
+        'without it. Check that these are the ones meant to be left out.':
+            '{silent} de los {total} soportes colocados no aportan fuerza a '
+            'la superficie informada: {parts}. Un soporte que se queda fuera '
+            'no baja ni sube ningún número, así que el factor de seguridad '
+            'es el del modelo sin ellos. Comprueba que son los que querías '
+            'dejar fuera.',
+        'The analysis could not price the reinforcement on the reported '
+        'surface: {said}. A support left out lowers no number and raises '
+        'none, so this factor of safety is the one for the slope without it.':
+            'El análisis no pudo calcular el refuerzo en la superficie '
+            'informada: {said}. Un soporte que se queda fuera no baja ni '
+            'sube ningún número, así que este factor de seguridad es el del '
+            'talud sin él.',
+        "'{method}' is not a registered analysis method, so it was not "
+        'computed. Available: {available}.':
+            '«{method}» no es un método de análisis registrado, así que no '
+            'se calculó. Disponibles: {available}.',
+        '{n} slices entered with zero shear strength (slices {shown}): the '
+        'effective normal stress the strength envelope was read at was '
+        'negative, and the envelope has no strength at zero stress. The '
+        'factor of safety counts no resistance on those bases.':
+            '{n} dovelas entraron con resistencia al corte nula (dovelas '
+            '{shown}): la tensión normal efectiva a la que se leyó la '
+            'envolvente de resistencia era negativa, y la envolvente no '
+            'tiene resistencia a tensión nula. El factor de seguridad no '
+            'cuenta ninguna resistencia en esas bases.',
+        '{n} slice entered with zero shear strength (slice {shown}): the '
+        'effective normal stress the strength envelope was read at was '
+        'negative, and the envelope has no strength at zero stress. The '
+        'factor of safety counts no resistance on that base.':
+            '{n} dovela entró con resistencia al corte nula (dovela '
+            '{shown}): la tensión normal efectiva a la que se leyó la '
+            'envolvente de resistencia era negativa, y la envolvente no '
+            'tiene resistencia a tensión nula. El factor de seguridad no '
+            'cuenta ninguna resistencia en esa base.',
         "The model has no visible annotation.":
             "El modelo no tiene ninguna anotación visible.",
         # v0.1.339 (D336) — the options of the PDF report

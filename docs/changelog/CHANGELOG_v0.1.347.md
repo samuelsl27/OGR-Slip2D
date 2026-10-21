@@ -102,7 +102,7 @@ inglés.
 - **El test de esta versión**, 16/16. En el primer borrador fallaban dos, y los dos eran del test:
   - el censo veía cuatro formatos que son datos (el entrecomillado de un nombre, el nombre de un atributo);
   - la barra de estado no enseña la nota tras un cálculo con superficie crítica (D96, sección 0).
-- **Los vecinos:** 1214 casos de 53 archivos: las notas del modelo, los bloques, los ángulos, las capas débiles,
+- **Los vecinos:** 1214 casos de 59 archivos: las notas del modelo, los bloques, los ángulos, las capas débiles,
   los muros, Ito y Matsui, los anclajes, los soportes, la migración de ajustes, el panel de notas, el API, la
   CLI y el castellano. Fallaron tres:
   - dos, por `note.method` en `CORE_MESSAGES` (sección 0);

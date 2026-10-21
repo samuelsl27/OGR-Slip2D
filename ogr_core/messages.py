@@ -157,6 +157,28 @@ def is_nested(value) -> bool:
             and "text" in value)
 
 
+#: How a field that holds several messages joins them, as the engine always
+#: joined its lists of reasons (v0.1.348, D335).
+LIST_SEP = ", "
+
+
+def is_nested_list(value) -> bool:
+    """A field holding several messages, each nested (v0.1.348): the
+    reasons a sentence lists, which the engine joined with ``LIST_SEP``.
+    An empty list is one too, and joins to "" as ``", ".join([])`` did:
+    no template takes a list of anything else."""
+    return (isinstance(value, (list, tuple))
+            and all(is_nested(v) for v in value))
+
+
+def _english_value(value):
+    if is_nested(value):
+        return value["text"]
+    if is_nested_list(value):
+        return LIST_SEP.join(v["text"] for v in value)
+    return value
+
+
 class _Elided:
     """A value a group label leaves out: it formats as "…" whatever the
     format spec, so a template written for a number still renders."""
@@ -177,8 +199,7 @@ def english(catalogue: dict, code: str, args: Optional[dict] = None) -> str:
     a test catches them; a reader never sees this, it sees the sentence.
     """
     spec = catalogue[code]
-    values = {k: (v["text"] if is_nested(v) else v)
-              for k, v in (args or {}).items()}
+    values = {k: _english_value(v) for k, v in (args or {}).items()}
     return spec.template(args).format(**values)
 
 
@@ -207,6 +228,11 @@ def render(catalogue: dict, code: str, args: Optional[dict],
             values[key] = render(catalogue, value["code"], value["args"],
                                  value["text"], translate=translate,
                                  show=show, elide=elide)
+        elif is_nested_list(value):
+            values[key] = LIST_SEP.join(
+                render(catalogue, v["code"], v["args"], v["text"],
+                       translate=translate, show=show, elide=elide)
+                for v in value)
         elif elide and key not in spec.group_by:
             values[key] = _Elided()
         elif show is not None and key in kinds:

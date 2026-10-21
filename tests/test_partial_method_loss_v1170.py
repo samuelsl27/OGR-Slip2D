@@ -469,10 +469,15 @@ class TestTheThirdSilentRouteSaysSomething:
         """v0.1.77 published a sentence for this precondition on the
         deterministic path. A second sentence for the same precondition is
         how two texts start to contradict each other."""
+        from ogr_slip2d.method_note_messages import METHOD_NOTES, UNREGISTERED
         from ogr_slip2d.probabilistic import _NO_METHOD
         src = (Path(__file__).parent.parent / "ogr_slip2d"
                / "analysis_runner.py").read_text(encoding="utf-8")
-        assert "is not a registered analysis method, so it was " in src
+        # v0.1.348 (D335) -- the sentence lives in the catalogue of the
+        # method notes, and the deterministic path writes it by its code
+        assert ("is not a registered analysis method, so it was "
+                in METHOD_NOTES[UNREGISTERED].english)
+        assert "MN.UNREGISTERED" in src
         assert _NO_METHOD.startswith("not a registered analysis method")
 
     def test_a_missing_deterministic_is_a_different_sentence(self):

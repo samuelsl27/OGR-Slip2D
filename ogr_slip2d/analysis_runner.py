@@ -39,6 +39,7 @@ import math
 from typing import Callable, Optional
 
 from ogr_core.geometry import BoundaryType
+from ogr_core.messages import method_note
 
 from .methods import method_registry
 from .methods.gle import interslice_function
@@ -47,9 +48,14 @@ from .support_integration import (reversed_support_notes,
                                   uncontributing_support_notes)
 from .yield_acceleration import DEFAULT_K_MAX
 
+from . import method_note_messages as MN
 from . import note_messages as N
 from .note_messages import nested_note as _nested
 from .note_messages import note as _note
+
+#: v0.1.348 (D335) -- a note about one method's surface, with its code; the
+#: caller puts the method in front with ``method_note``
+_mnote = MN.method_note_text
 
 __all__ = [
     "AnalysisOutcome",
@@ -1318,32 +1324,16 @@ def lambda_fallback_notes(result) -> list[str]:
     tolerance = details.get("lambda_tolerance")
     if (fell_back and residual is not None and tolerance is not None
             and residual >= tolerance):
-        notes.append(
-            "no inclination of the inter-slice forces makes the force and "
-            "the moment factors of safety agree, so the factor reported is "
-            "the closest sampled inclination rather than a solved one: its "
-            "two factors differ by %.3g, against a convergence tolerance of "
-            "%.3g." % (residual, tolerance))
+        notes.append(_mnote(MN.LAMBDA_FALLBACK, residual=residual,
+                            tolerance=tolerance))
     elif not_closed and residual is not None and tolerance is not None:
-        notes.append(
-            "an inclination of the inter-slice forces where the force and "
-            "the moment factors of safety cross WAS found, and refining it "
-            "did not close the gap: the two factors still differ by %.3g "
-            "against a convergence tolerance of %.3g, with the interval "
-            "narrowed to %.3g. The factor reported is the one at that "
-            "inclination, not a solved root."
-            % (residual, tolerance,
-               details.get("lambda_bracket_width") or 0.0))
+        notes.append(_mnote(
+            MN.LAMBDA_NOT_CLOSED, residual=residual, tolerance=tolerance,
+            width=details.get("lambda_bracket_width") or 0.0))
 
     lost = int(details.get("lambdas_lost_to_budget") or 0)
     if lost > 0:
-        notes.append(
-            "and %d %s was discarded because its inner iteration used its "
-            "whole budget of passes while still improving, so the limit that "
-            "decided this answer belongs to the solver rather than to the "
-            "slope. A looser convergence tolerance spends fewer passes per "
-            "inclination and may bracket it."
-            % (lost, "inclination" if lost == 1 else "inclinations"))
+        notes.append(_mnote(MN.LAMBDA_LOST_BUDGET, n=lost))
 
     # v0.1.171 (D118) — the third loss, and it is worth telling apart from
     # the one above in the text as well as in the count: a budget is the
@@ -1353,14 +1343,8 @@ def lambda_fallback_notes(result) -> list[str]:
     from .interslice import THRUST_SCALE_LIMIT
     overflowed = int(details.get("lambdas_lost_to_thrust_overflow") or 0)
     if overflowed > 0:
-        notes.append(
-            "and %d %s was discarded because the inter-slice thrust of its "
-            "inner iteration ran past %g times the total force the sliding "
-            "mass has to work with, which is a runaway and not a solution "
-            "of anything."
-            % (overflowed,
-               "inclination" if overflowed == 1 else "inclinations",
-               THRUST_SCALE_LIMIT))
+        notes.append(_mnote(MN.LAMBDA_LOST_OVERFLOW, n=overflowed,
+                            limit=THRUST_SCALE_LIMIT))
 
     # v0.1.176 (D125) — the fourth loss. A stall the rescue could not
     # recover is, like the budget, the solver's limit and not the slope's;
@@ -1371,14 +1355,8 @@ def lambda_fallback_notes(result) -> list[str]:
     from .interslice import STALL_PATIENCE
     stalled = int(details.get("lambdas_lost_to_stall") or 0)
     if stalled > 0:
-        notes.append(
-            "and %d %s was discarded because its inner iteration stopped "
-            "improving for %d passes, in its factor and in its inter-slice "
-            "thrust alike, and the relaxation rescue could not settle it "
-            "either, so the limit that decided this answer belongs to the "
-            "solver rather than to the slope."
-            % (stalled, "inclination" if stalled == 1 else "inclinations",
-               STALL_PATIENCE))
+        notes.append(_mnote(MN.LAMBDA_LOST_STALL, n=stalled,
+                            passes=int(STALL_PATIENCE)))
 
     # v0.1.181 (D148) — the fifth loss, and the one that had no voice at all
     # until this version: a branch that came back with no state, so none of
@@ -1388,25 +1366,13 @@ def lambda_fallback_notes(result) -> list[str]:
     # region where a factor of safety exists, and no budget buys that back.
     lost = int(details.get("lambdas_lost_to_inadmissible") or 0)
     if lost > 0:
-        notes.append(
-            "and %d %s discarded because one of its two equilibrium branches "
-            "had no admissible solution there at all: the factor of safety "
-            "it was iterating towards stopped being finite and positive, so "
-            "that inclination could not be compared with its neighbours."
-            % (lost, "inclination was" if lost == 1
-               else "inclinations were"))
+        notes.append(_mnote(MN.LAMBDA_LOST_INADMISSIBLE, n=lost))
 
     # v0.1.181 (D148) — and the sampling, which is a statement about the
     # SEARCH and not a loss, so it is phrased as one. It only ever appears on
     # a surface that bracketed nothing with the calibrated grid.
     if refined > 0:
-        notes.append(
-            "The calibrated grid of inclinations bracketed nothing, so %d "
-            "further %s sampled between the last one that solved and the "
-            "first one that did not, which is where a crossing hidden by a "
-            "lost sample would be."
-            % (refined, "inclination was" if refined == 1
-               else "inclinations were"))
+        notes.append(_mnote(MN.LAMBDA_REFINED, n=refined))
 
     # v0.1.182 (D149) — and the inclinations that were SOLVED and then set
     # aside, which is a different sentence from the three losses above: their
@@ -1416,13 +1382,7 @@ def lambda_fallback_notes(result) -> list[str]:
     # admissible is not claimed here: ``admissibility_note`` says that, and
     # the two answers are independent.
     if recovered > 0:
-        notes.append(
-            "The calibrated grid bracketed nothing until %d %s put back "
-            "after being set aside for an inter-slice thrust in net tension: "
-            "the crossing lay among them, so the factor reported is a solved "
-            "root rather than the closest sampled inclination."
-            % (recovered, "inclination was" if recovered == 1
-               else "inclinations were"))
+        notes.append(_mnote(MN.LAMBDA_RECOVERED, n=recovered))
 
     return notes
 
@@ -1454,13 +1414,8 @@ def daylight_tangent_note(result, num_slices: int) -> list[str]:
             return []
     if steepest < _DAYLIGHT_TANGENT_WARN_DEG:
         return []
-    return [
-        f"The critical surface daylights at {steepest:.1f} deg from the "
-        f"horizontal, which is too steep for a fixed number of slices to "
-        f"resolve: its factor of safety depends on that number. It was "
-        f"computed with {num_slices} slices. Re-run with more and compare "
-        f"before quoting it."
-    ]
+    return [_mnote(MN.DAYLIGHT_STEEP, steepest=steepest,
+                   num_slices=num_slices)]
 
 
 #: Below this ``m_alpha`` the run says the reported factor leans on a
@@ -1591,11 +1546,14 @@ def m_alpha_margin_note(result) -> list[str]:
             angle = abs(math.degrees(slices[idx].base_angle))
         except Exception:  # noqa: BLE001
             angle = None
-    where = f" on a base at {angle:.1f} deg" if angle is not None else ""
-    tail = (f", which clears the {M_ALPHA_LIMIT} limit by "
-            f"{worst - M_ALPHA_LIMIT:.4f}"
+    # v0.1.348 (D335) -- a frame and four clauses, each with its code: the
+    # 4 x 2 x 2 x 2 sentences they make are one fact each
+    where = (MN.nested_method_note(MN.M_ALPHA_WHERE, angle=angle)
+             if angle is not None else MN.NOTHING)
+    tail = (MN.nested_method_note(MN.M_ALPHA_CLEARS, limit=M_ALPHA_LIMIT,
+                                  margin=worst - M_ALPHA_LIMIT)
             if worst >= M_ALPHA_LIMIT else
-            f", below the {M_ALPHA_LIMIT} limit")
+            MN.nested_method_note(MN.M_ALPHA_BELOW, limit=M_ALPHA_LIMIT))
     # ``m_alpha`` divides the NORMAL FORCE, and saying by how much is the
     # useful half of this note. It is not the factor of safety that gets
     # amplified: which way F moves from an inflated N is model-dependent,
@@ -1609,12 +1567,10 @@ def m_alpha_margin_note(result) -> list[str]:
         # of 0.2641 — larger than the limit itself — and then called that
         # near zero. The warning threshold is 0.5 and the limit is 0.2, so
         # between the two this states the amplification and lets it speak.
-        effect = (f" That divides the normal force on that base by "
-                  f"{worst:.4f}, inflating it {1.0 / worst:.1f}-fold.")
+        effect = MN.nested_method_note(MN.M_ALPHA_INFLATES, worst=worst,
+                                       factor=1.0 / worst)
     else:
-        effect = (" That denominator is zero or negative, so the normal "
-                  "force on that base is meaningless rather than merely "
-                  "large.")
+        effect = MN.nested_method_note(MN.M_ALPHA_NONPOSITIVE)
     # v0.1.158, defect D104 — which family the method belongs to decides
     # what can honestly be said to it. Spencer and GLE/Morgenstern-Price
     # satisfy both equilibrium conditions, so telling them to "compare
@@ -1627,34 +1583,18 @@ def m_alpha_margin_note(result) -> list[str]:
     # the same expression "when the interslice force inclination (theta)
     # is set to zero". This value is always the Bishop one; see D111.
     force, moment = _method_equilibrium(method_id)
-    complete = " Spencer and GLE/Morgenstern-Price"
     if force and moment:
-        advice = (" This method satisfies force AND moment equilibrium, so "
-                  "there is no more complete one to check it against; what "
-                  "a base this steep costs it is the conditioning of the "
-                  "base normal, not the equilibrium it solves. Vary the "
-                  "number of slices, and compare against the other "
-                  "complete-equilibrium method, which differs from it only "
-                  "in the interslice force function.")
+        advice = MN.M_ALPHA_ADVICE_COMPLETE
     elif force:
-        advice = (" A force-equilibrium method is least reliable there, and "
-                  "this value is the Bishop denominator: the one this "
-                  "method actually divides by carries its own interslice "
-                  "inclination. Compare against a complete-equilibrium "
-                  f"method —{complete} — before quoting it.")
+        advice = MN.M_ALPHA_ADVICE_FORCE
     elif moment:
-        advice = (" A method of moments is not reliable there. Compare "
-                  f"against a complete-equilibrium method —{complete} — "
-                  "before quoting it.")
+        advice = MN.M_ALPHA_ADVICE_MOMENT
     else:
         # An unregistered or unnamed method gets no claim about its
         # family: a getattr that failed cannot assert one.
-        advice = (" Compare against a complete-equilibrium method —"
-                  f"{complete} — before quoting it.")
-    return [
-        f"The reported surface has m_alpha down to {worst:.4f}{where}"
-        f"{tail}.{effect}{advice}"
-    ]
+        advice = MN.M_ALPHA_ADVICE_UNKNOWN
+    return [_mnote(MN.M_ALPHA_MARGIN, worst=worst, where=where, tail=tail,
+                   effect=effect, advice=MN.nested_method_note(advice))]
 
 
 def zero_strength_note(result) -> list[str]:
@@ -1689,14 +1629,7 @@ def zero_strength_note(result) -> list[str]:
     shown = ", ".join(str(i + 1) for i in idx[:8])
     if n > 8:
         shown += ", ..."
-    plural = "s" if n != 1 else ""
-    return [
-        f"{n} slice{plural} entered with zero shear strength (slice{plural} "
-        f"{shown}): the effective normal stress the strength envelope was "
-        f"read at was negative, and the envelope has no strength at zero "
-        f"stress. The factor of safety counts no resistance on "
-        f"{'those bases' if n != 1 else 'that base'}."
-    ]
+    return [_mnote(MN.ZERO_STRENGTH, n=n, shown=shown)]
 
 
 #: How close to a grid edge the critical centre must fall, as a fraction
@@ -1750,13 +1683,8 @@ def grid_edge_note(search, result) -> list[str]:
             on_edge.append(f"{name} = {value:g}")
     if not on_edge:
         return []
-    return [
-        f"The critical centre lies on the edge of the search grid "
-        f"({', '.join(on_edge)}; grid x {gx[0]:g} to {gx[1]:g}, "
-        f"y {gy[0]:g} to {gy[1]:g}). A minimum on the boundary is the best "
-        f"of what was searched, not necessarily the lowest one: widen the "
-        f"grid on that side and re-run before quoting it."
-    ]
+    return [_mnote(MN.GRID_EDGE, edges=", ".join(on_edge), x0=gx[0],
+                   x1=gx[1], y0=gy[0], y1=gy[1])]
 
 
 def build_method(project, method_id: str, num_slices: Optional[int] = None):
@@ -2242,9 +2170,8 @@ def run_analysis(project, method_ids=None,
             # how "Janbu Corrected" could be ticked in Project Settings
             # and produce nothing whatsoever. An unrunnable method now
             # leaves a trace.
-            warnings.append(
-                f"'{mid}' is not a registered analysis method, so it was "
-                f"not computed. Available: {', '.join(sorted(known))}.")
+            warnings.append(_mnote(MN.UNREGISTERED, method=mid,
+                                   available=", ".join(sorted(known))))
             continue
 
         def _progress(done, total, _i=i, _n=n_methods):
@@ -2261,7 +2188,7 @@ def run_analysis(project, method_ids=None,
         crit = getattr(results[mid], "critical", None)
         if crit is not None:
             for note in daylight_tangent_note(crit, search.num_slices):
-                line = f"{mid}: {note}"
+                line = method_note(mid, note)
                 if line not in warnings:
                     warnings.append(line)
         # v0.1.135 — and once per method, how little separated the answer
@@ -2277,12 +2204,12 @@ def run_analysis(project, method_ids=None,
         # an ``error_message``, which would be a veto.
         if crit is not None:
             for note in lambda_fallback_notes(crit):
-                line = f"{mid}: {note}"
+                line = method_note(mid, note)
                 if line not in warnings:
                     warnings.append(line)
         if crit is not None:
             for note in m_alpha_margin_note(crit):
-                line = f"{mid}: {note}"
+                line = method_note(mid, note)
                 if line not in warnings:
                     warnings.append(line)
         # v0.1.213 (D84) -- and whether any slice of it resisted nothing
@@ -2290,7 +2217,7 @@ def run_analysis(project, method_ids=None,
         # and for the same reason as the two above.
         if crit is not None:
             for note in zero_strength_note(crit):
-                line = f"{mid}: {note}"
+                line = method_note(mid, note)
                 if line not in warnings:
                     warnings.append(line)
         # v0.1.138 — and whether any reinforcement is drawn head-first
@@ -2301,7 +2228,7 @@ def run_analysis(project, method_ids=None,
         # recompute the same sentence thousands of times.
         if crit is not None:
             for note in reversed_support_notes(project, crit):
-                line = f"{mid}: {note}"
+                line = method_note(mid, note)
                 if line not in warnings:
                     warnings.append(line)
         # v0.1.155 — and how many of the placed supports put no force
@@ -2316,13 +2243,13 @@ def run_analysis(project, method_ids=None,
         # because the two have different criteria for staying quiet.
         if crit is not None:
             for note in uncontributing_support_notes(project, crit):
-                line = f"{mid}: {note}"
+                line = method_note(mid, note)
                 if line not in warnings:
                     warnings.append(line)
         # v0.1.102 — and once per method, whether the answer came off the
         # boundary of the region that was searched at all.
         for note in grid_edge_note(search, results[mid]):
-            line = f"{mid}: {note}"
+            line = method_note(mid, note)
             if line not in warnings:
                 warnings.append(line)
         # v0.1.121 — anything the search itself decided it had to say, such
@@ -2330,7 +2257,7 @@ def run_analysis(project, method_ids=None,
         # the method because the same surface can be truncated under one
         # method and not another.
         for note in getattr(results[mid], "notes", ()):
-            line = f"{mid}: {note}"
+            line = method_note(mid, note)
             if line not in warnings:
                 warnings.append(line)
         # v0.1.127 — the seismic modes have their own things to say, and
@@ -2398,9 +2325,8 @@ def evaluate_surfaces(project, surface, method_ids=None, *,
     results: dict = {}
     for mid in method_ids:
         if mid not in known:
-            warnings.append(
-                f"'{mid}' is not a registered analysis method, so it was "
-                f"not computed. Available: {', '.join(sorted(known))}.")
+            warnings.append(_mnote(MN.UNREGISTERED, method=mid,
+                                   available=", ".join(sorted(known))))
             continue
         search = build_search(project, mid)
         with project.regions_frozen():
@@ -2411,7 +2337,7 @@ def evaluate_surfaces(project, surface, method_ids=None, *,
             # itself. Every refusal used to come out as "the surface does
             # not cut the model", which is the wrong thing to tell someone
             # whose polyline ends a metre under the ground.
-            warnings.append(f"{mid}: {search.refusal_text()}")
+            warnings.append(method_note(mid, search.refusal_text()))
     return AnalysisOutcome(results, factor_report, warnings, project)
 
 
@@ -2446,11 +2372,8 @@ def _seismic_notes(project, method_id: str, result) -> list:
     seismic_load = getattr(project, "seismic", None)
     if (getattr(seismic_load, "enabled", False)
             and float(getattr(seismic_load, "kh", 0.0) or 0.0) != 0.0):
-        lines.append(
-            f"{method_id}: the project applies a horizontal seismic "
-            f"coefficient of {seismic_load.kh:g}, and the critical "
-            f"coefficient replaces it rather than adding to it. Ky is "
-            f"solved over kh from zero.")
+        lines.append(method_note(method_id, _mnote(
+            MN.SEISMIC_KH_REPLACED, kh=seismic_load.kh)))
     valid = [r for r in result.evaluations if r.is_valid]
 
     def _has_ky(res) -> bool:
@@ -2462,11 +2385,9 @@ def _seismic_notes(project, method_id: str, result) -> list:
 
     unanswered = sum(1 for r in valid if not _has_ky(r))
     if unanswered:
-        lines.append(
-            f"{method_id}: {unanswered} of {len(valid)} surfaces have no "
-            f"critical seismic coefficient below "
-            f"{DEFAULT_K_MAX:g}; they are excluded from the ranking rather "
-            f"than treated as strong.")
+        lines.append(method_note(method_id, _mnote(
+            MN.SEISMIC_NO_KY, unanswered=unanswered, valid=len(valid),
+            k_max=DEFAULT_K_MAX)))
 
     if not cfg.newmark:
         return lines
@@ -2476,15 +2397,11 @@ def _seismic_notes(project, method_id: str, result) -> list:
     if rid:
         record = project.seismic_record_by_id(rid)
     if record is None:
-        lines.append(
-            f"{method_id}: Newmark displacements were requested but no "
-            f"seismic record is selected, so no displacement was computed.")
+        lines.append(method_note(method_id, _mnote(MN.NEWMARK_NO_RECORD)))
         return lines
     if not record.is_usable():
-        lines.append(
-            f"{method_id}: the seismic record '{record.name}' cannot be "
-            f"integrated (it needs at least two samples and a positive "
-            f"time interval), so no displacement was computed.")
+        lines.append(method_note(method_id, _mnote(
+            MN.NEWMARK_UNUSABLE, name=record.name)))
         return lines
 
     from .newmark import Polarity, displacement_for_record
@@ -2492,9 +2409,8 @@ def _seismic_notes(project, method_id: str, result) -> list:
         polarity = Polarity(cfg.polarity)
     except ValueError:
         polarity = Polarity.MAXIMUM
-        lines.append(
-            f"{method_id}: '{cfg.polarity}' is not a polarity this program "
-            f"knows, so the maximum of the two was used.")
+        lines.append(method_note(method_id, _mnote(
+            MN.NEWMARK_POLARITY, polarity=cfg.polarity)))
 
     for r in valid:
         if not _has_ky(r):

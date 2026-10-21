@@ -29,16 +29,18 @@ _CATALOGUE: dict = {}
 
 def _catalogue() -> dict:
     """The engine's codes, the DXF import's (v0.1.334), the analysis notes'
-    and the project rules' (v0.1.347), in one table: the codes do not
-    collide, each family having its own prefix."""
+    and the project rules' (v0.1.347), the notes about one method's surface
+    (v0.1.348), in one table: the codes do not collide, each family having
+    its own prefix."""
     if not _CATALOGUE:
         from ogr_core.dxf.messages import MESSAGES as DXF
         from ogr_core.messages import CORE_MESSAGES, NOTE_FRAMES
         from ogr_core.project.messages import RULES
         from ogr_slip2d.messages import MESSAGES as LEM
+        from ogr_slip2d.method_note_messages import METHOD_NOTES
         from ogr_slip2d.note_messages import NOTES
         for table in (CORE_MESSAGES, NOTE_FRAMES, LEM, DXF, NOTES,
-                      RULES):
+                      RULES, METHOD_NOTES):
             _CATALOGUE.update(table)
     return _CATALOGUE
 
@@ -55,6 +57,17 @@ def _show(kind: str, value):
         return ", ".join(method_name(m) for m in str(value).split(", ") if m)
     if kind == "label":
         return tr(str(value))
+    if kind == "force_orientation":
+        # v0.1.348 (D335) -- a support's force orientation, by its value:
+        # the table is keyed by the member, and a value this build does not
+        # know shows as it is
+        from ogr_core.support import ForceOrientation
+        from .labels import force_orientation_label
+        try:
+            value = ForceOrientation(value)
+        except ValueError:
+            pass
+        return force_orientation_label(value)
     if kind == "strength_model":
         from ogr_core.materials import REGISTRY
         return tr(REGISTRY.get(value).DISPLAY_NAME)
