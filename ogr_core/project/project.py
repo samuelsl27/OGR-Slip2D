@@ -913,7 +913,7 @@ class Project:
             proj.fem_mesh = _Mesh.from_dict(fm)
         fos = data.get("focus_objects")
         if fos:
-            from ogr_slip2d.focus import FocusObject as _FO
+            from ..geometry.focus import FocusObject as _FO
             proj.focus_objects = [_FO.from_dict(d) for d in fos]
 
         # v0.1.157 (D58) — a file written before this version simply has no
@@ -922,7 +922,7 @@ class Project:
         # never written to a file in the first place.
         uss = data.get("user_surfaces")
         if uss:
-            from ogr_slip2d.surface import SlipCircle as _SC
+            from ..geometry.slip_circle import SlipCircle as _SC
             proj.user_surfaces = [_SC.from_dict(d) for d in uss]
 
         ann = data.get("annotations")

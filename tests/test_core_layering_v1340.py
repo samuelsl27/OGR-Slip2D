@@ -48,9 +48,6 @@ DYNAMIC = "__import__"
 #: ``(file, enclosing function, module)``: how many times it is written.
 #: Only shrinks. Each version of the D337 batch removes its own entries.
 ALLOWED = Counter({
-    # the stored data classes (v0.1.343; the mesh and the seepage data
-    # moved down in v0.1.342)
-    ("ogr_core/project/project.py", "Project.from_dict", "ogr_slip2d"): 2,
     # the soil columns and their switch (v0.1.344)
     ("ogr_core/hydraulic/excess_pore_pressure.py", "_loading_bands",
      "ogr_slip2d"): 1,

@@ -279,11 +279,16 @@ class TestEveryTypeThisProgramSerialisesIsAccountedFor:
         import inspect
         import re
 
+        from ogr_core.geometry import slip_circle as C
         from ogr_slip2d import surface as S
 
+        # v0.1.343 (D337) -- the circle is defined in the core and the
+        # surface module re-exports it: the fence reads both modules, so
+        # it still sees the four
+        homes = {S.__name__, C.__name__}
         declared = set()
         for _, cls in inspect.getmembers(S, inspect.isclass):
-            if cls.__module__ != S.__name__:
+            if cls.__module__ not in homes:
                 continue
             # A Protocol only DECLARES ``to_dict``; it serialises nothing.
             if getattr(cls, "_is_protocol", False):
