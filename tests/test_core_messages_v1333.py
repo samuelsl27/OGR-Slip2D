@@ -387,11 +387,9 @@ def _has_words(node) -> bool:
 
 _SENTENCES = ("error_message", "admissibility_note")
 #: The refusals that are not about one surface, raised before a search runs
-#: or for the whole run. They have no surface to explain and go to D335.
-_RUN_LEVEL_REFUSALS = {
-    ("ogr_slip2d/rapid_drawdown.py", "wrap_for_drawdown"),
-    ("ogr_slip2d/search.py", "_analyse"),
-}
+#: or for the whole run. They went to D335, and since v0.1.350 they carry
+#: their codes too: the exception is empty.
+_RUN_LEVEL_REFUSALS: set = set()
 
 
 class TestNoSiteWritesASentenceWithoutItsCode:

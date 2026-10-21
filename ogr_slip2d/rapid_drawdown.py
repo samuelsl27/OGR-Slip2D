@@ -1282,15 +1282,12 @@ def drawdown_gap(project, method) -> Optional[str]:
         return None
     if performs_drawdown(method):
         return None
-    return (
-        f"This project asks for a rapid drawdown "
-        f"('{getattr(gw, 'rapid_drawdown_method', '?')}'), and the method "
-        f"'{getattr(method, 'METHOD_ID', method.__class__.__name__)}' does "
-        f"not perform one, so the factor of safety would be the ordinary "
-        f"DRAINED one at the lowered water level. Build the method with "
-        f"ogr_slip2d.analysis_runner.build_method(project, method_id), "
-        f"which is the one place that applies the drawdown wrapper."
-    )
+    from .setting_messages import DRAWDOWN_GAP, setting_note
+    return setting_note(
+        DRAWDOWN_GAP,
+        drawdown=format(getattr(gw, "rapid_drawdown_method", "?"), ""),
+        method=format(getattr(method, "METHOD_ID",
+                              method.__class__.__name__), ""))
 
 
 def wrap_for_drawdown(method, project, num_slices: int = 25):
@@ -1315,7 +1312,8 @@ def wrap_for_drawdown(method, project, num_slices: int = 25):
         return method
     why = check_drawdown_settings(project)
     if why:
-        raise RapidDrawdownError(why)
+        # v0.1.350 (D335) -- the run-level refusal with its code too
+        raise RapidDrawdownError(why, code=why.code, values=why.args)
     if gw.rapid_drawdown_method == B_BAR:
         return BBarDrawdownMethod(method, num_slices=num_slices)
     return MultiStageDrawdownMethod(
@@ -1332,6 +1330,11 @@ def check_drawdown_settings(project) -> Optional[str]:
     analysis that quietly ignores the groundwater method the user chose
     is worse than one that refuses.
     """
+    # v0.1.350 (D335) -- each refusal with its code
+    from .setting_messages import (DRAWDOWN_LINE_ABOVE, DRAWDOWN_NEEDS_SURFACES,
+                                   DRAWDOWN_NO_UNDRAINED, DRAWDOWN_UNKNOWN,
+                                   setting_note)
+
     gw = project.settings.groundwater
     if not gw.rapid_drawdown:
         return None
@@ -1341,34 +1344,20 @@ def check_drawdown_settings(project) -> Optional[str]:
         # same condition. So a procedure name that was merely misspelt in a
         # .ogr gave a drained analysis without a word: the same silence as
         # A98-1, reached by a typo instead of by an API.
-        return (
-            f"'{gw.rapid_drawdown_method}' is not a rapid-drawdown "
-            f"procedure, so the analysis would ignore the drawdown "
-            f"entirely. Available: "
-            f"{', '.join(MULTISTAGE_METHODS + (B_BAR,))}."
-        )
+        return setting_note(
+            DRAWDOWN_UNKNOWN, method=format(gw.rapid_drawdown_method, ""),
+            available=", ".join(MULTISTAGE_METHODS + (B_BAR,)))
     allowed = ("water_table", "piezo_line")
     if gw.method not in allowed:
-        return (
-            f"Rapid drawdown defines both reservoir levels with water "
-            f"surfaces, so it cannot run with groundwater method "
-            f"'{gw.method}'. Choose Water Surfaces."
-        )
+        return setting_note(DRAWDOWN_NEEDS_SURFACES,
+                            method=format(gw.method, ""))
     if not any(getattr(m, "undrained_behaviour", False)
                for m in project.materials):
-        return (
-            "No material is marked as having undrained behaviour, so the "
-            "drawdown would not change any strength. Tick Undrained "
-            "Behaviour on the low-permeability materials."
-        )
+        return setting_note(DRAWDOWN_NO_UNDRAINED)
     # v0.1.69 — until this version the B-bar model REQUIRED this, and the
     # multi-stage ones required the opposite. Now there is one convention
     # and a line drawn on the wrong side of it is a modelling error with
     # a message, not a silent nothing.
     if drawdown_line_is_inverted(project):
-        return (
-            "The Drawdown Line lies ABOVE the Water Table. The water "
-            "table is the initial reservoir level and the drawdown line "
-            "the final, lower one; swap them."
-        )
+        return setting_note(DRAWDOWN_LINE_ABOVE)
     return None

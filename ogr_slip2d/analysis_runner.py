@@ -49,6 +49,7 @@ from .support_integration import (reversed_support_notes,
 from .yield_acceleration import DEFAULT_K_MAX
 
 from . import method_note_messages as MN
+from . import setting_messages as SM
 from . import note_messages as N
 from .note_messages import nested_note as _nested
 from .note_messages import note as _note
@@ -185,13 +186,11 @@ def check_analysis_settings(project) -> list[str]:
         method = project.settings.groundwater.method
         current = value_type_for_method(method)
         if current is not None and current != declared:
-            problems.append(
-                f"The water pressure grid was built as "
-                f"{declared.value.replace('_', ' ')} values, but the "
-                f"groundwater method is {method}. The method decides how "
-                f"the grid is read: set it to "
-                f"{method_for_value_type(declared)}, or build the grid "
-                f"without a type.")
+            # v0.1.350 (D335) -- one code per value type: its name is a
+            # word of the sentence
+            problems.append(SM.setting_note(
+                SM.GRID_TYPE_MISMATCH + declared.value, method=method,
+                wanted=method_for_value_type(declared)))
 
     # v0.1.77 — ``pore_pressure`` answers 0.0 when the finite-element
     # field is missing, so computing without one reports a dry slope in
@@ -228,21 +227,19 @@ def check_analysis_settings(project) -> list[str]:
             try:
                 line_load_direction(project, _load)
             except ValueError as exc:
-                problems.append(str(exc) + " Move it onto the ground "
-                                "surface or give it an absolute "
-                                "orientation.")
+                # the core's refusal, with its code, nested
+                from ogr_core.messages import as_nested
+                problems.append(SM.setting_note(
+                    SM.LINE_LOAD_MOVE, reason=as_nested(
+                        exc.args[0] if exc.args else str(exc))))
 
     from ogr_core.materials import PorePressureType
     uses_fem = [m.name for m in project.materials
                 if getattr(m, "pore_pressure", None) == PorePressureType.FEM_SEEPAGE]
     field = getattr(project, "seepage_result", None)
     if uses_fem and (field is None or not field.pore_pressure):
-        problems.append(
-            "These materials take their pore pressure from a "
-            "finite-element seepage field, and this project has no "
-            f"computed field: {', '.join(uses_fem)}. Run the groundwater "
-            "analysis first — computing now would report u = 0 "
-            "everywhere, which looks like a dry slope.")
+        problems.append(SM.setting_note(SM.FEM_FIELD_MISSING,
+                                        materials=", ".join(uses_fem)))
 
     # v0.1.232 (D109) — Block Search objects whose kind their geometry
     # cannot be, or an object inside the lateral extent of a Polyline. Asked
@@ -289,9 +286,10 @@ def check_analysis_settings(project) -> list[str]:
                 _why = seismic_coefficient_refusal(
                     _name, _f * float(getattr(_seis, _name, 0.0)))
                 if _why is not None:
-                    problems.append(
-                        f"With the design standard's seismic factor {_f:g}: "
-                        f"{_why.message}")
+                    from ogr_core.messages import as_nested
+                    problems.append(SM.setting_note(
+                        SM.DESIGN_SEISMIC, factor=_f,
+                        reason=as_nested(_why.message)))
 
     # v0.1.218 (D209) — a strength model that cannot be computed with: an
     # Anisotropic Strength Function saved as interpolated points before
@@ -353,17 +351,16 @@ def _shadow_setting_problems(project) -> list[str]:
             continue
         _old_default, survivor, version = _SHADOW_FIELDS[name]
         value = getattr(s_search, name)
+        # v0.1.350 (D335) -- with its code; the value as the f-string
+        # showed it, so a value that JSON cannot hold travels as text
+        shown = format(value, "")
         if survivor is None:
-            out.append(
-                f"This project sets {name} = {value}. That setting was "
-                f"removed in {version}: no analysis ever read it, and it "
-                f"has no replacement.")
+            out.append(SM.setting_note(SM.SHADOW_REMOVED, name=name,
+                                       value=shown, version=version))
         else:
-            out.append(
-                f"This project sets {name} = {value}. That name was "
-                f"removed in {version} because the interface never showed "
-                f"it; set {survivor} instead. Computing now would ignore "
-                f"the value and report a plausible number.")
+            out.append(SM.setting_note(SM.SHADOW_RENAMED, name=name,
+                                       value=shown, version=version,
+                                       survivor=survivor))
     return out
 
 

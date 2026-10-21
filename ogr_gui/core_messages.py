@@ -30,18 +30,21 @@ _CATALOGUE: dict = {}
 def _catalogue() -> dict:
     """The engine's codes, the DXF import's (v0.1.334), the analysis notes'
     and the project rules' (v0.1.347), the notes about one method's surface
-    (v0.1.348) and the search's (v0.1.349), in one table: the codes do not
-    collide, each family having its own prefix."""
+    (v0.1.348), the search's (v0.1.349) and the refusals of the settings
+    (v0.1.350), in one table: the codes do not collide, each family having
+    its own prefix."""
     if not _CATALOGUE:
         from ogr_core.dxf.messages import MESSAGES as DXF
         from ogr_core.messages import CORE_MESSAGES, NOTE_FRAMES
-        from ogr_core.project.messages import RULES
+        from ogr_core.project.messages import REFUSALS, RULES
         from ogr_slip2d.messages import MESSAGES as LEM
         from ogr_slip2d.method_note_messages import METHOD_NOTES
         from ogr_slip2d.note_messages import NOTES
         from ogr_slip2d.search_note_messages import SEARCH_NOTES
+        from ogr_slip2d.setting_messages import SETTING_NOTES
         for table in (CORE_MESSAGES, NOTE_FRAMES, LEM, DXF, NOTES,
-                      RULES, METHOD_NOTES, SEARCH_NOTES):
+                      RULES, METHOD_NOTES, SEARCH_NOTES, REFUSALS,
+                      SETTING_NOTES):
             _CATALOGUE.update(table)
     return _CATALOGUE
 
@@ -58,6 +61,15 @@ def _show(kind: str, value):
         return ", ".join(method_name(m) for m in str(value).split(", ") if m)
     if kind == "label":
         return tr(str(value))
+    if kind == "groundwater_method":
+        # v0.1.350 (D335) -- a groundwater method, by its value
+        from ogr_core.project.settings import GroundwaterMethod
+        from .labels import groundwater_method_label
+        try:
+            value = GroundwaterMethod(value)
+        except ValueError:
+            pass
+        return groundwater_method_label(value)
     if kind == "force_orientation":
         # v0.1.348 (D335) -- a support's force orientation, by its value:
         # the table is keyed by the member, and a value this build does not

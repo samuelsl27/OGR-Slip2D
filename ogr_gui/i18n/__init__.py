@@ -5406,6 +5406,210 @@ _DICTS: dict[str, dict[str, str]] = {
             'Se descartó una superficie recortada por una capa débil: la '
             'base de dovela más empinada está a {angle:.1f}°, por encima del '
             'tope de {limit:.0f}° de Ajustes de proyecto > Avanzado.',
+        # v0.1.350 (D335) — the refusals of the settings and of the model
+        ' (both in Group ID {group})':
+            ' (los dos en el identificador de grupo {group})',
+        ' Give them different Group IDs to search them separately.':
+            ' Dales identificadores de grupo distintos para buscarlos por '
+            'separado.',
+        ' To search them separately, turn Multiple Groups on and give them '
+        'different Group IDs.':
+            ' Para buscarlos por separado, activa Grupos múltiples y dales '
+            'identificadores de grupo distintos.',
+        '{other} overlaps the lateral extent of the Block Search Polyline '
+        '{polyline} (x from {lo:g} to {hi:g}){where}. This is not allowed: '
+        'the trial surface follows the polyline between its two points, and '
+        'a vertex of another object inside that range would cut the '
+        'stretch.{way_out}':
+            '{other} se solapa con la extensión lateral de la polilínea de '
+            'búsqueda por bloques {polyline} (x de {lo:g} a {hi:g}){where}. '
+            'No se permite: la superficie de tanteo sigue la polilínea entre '
+            'sus dos puntos, y un vértice de otro objeto dentro de ese tramo '
+            'cortaría el recorrido.{way_out}',
+        'The partial factor on permanent actions, unfavourable must be a '
+        'finite number, got {raw!r}.':
+            'El coeficiente parcial de las acciones permanentes '
+            'desfavorables tiene que ser un número finito; vale {raw!r}.',
+        'The partial factor on permanent actions, favourable must be a '
+        'finite number, got {raw!r}.':
+            'El coeficiente parcial de las acciones permanentes favorables '
+            'tiene que ser un número finito; vale {raw!r}.',
+        'The partial factor on variable actions, unfavourable must be a '
+        'finite number, got {raw!r}.':
+            'El coeficiente parcial de las acciones variables desfavorables '
+            'tiene que ser un número finito; vale {raw!r}.',
+        'The partial factor on variable actions, favourable must be a finite '
+        'number, got {raw!r}.':
+            'El coeficiente parcial de las acciones variables favorables '
+            'tiene que ser un número finito; vale {raw!r}.',
+        'The partial factor on unfavourable permanent actions must be at '
+        'least 1, got {value}: below 1 it would make the driving weight '
+        'lighter than the characteristic one.':
+            'El coeficiente parcial de las acciones permanentes '
+            'desfavorables tiene que ser al menos 1; vale {value}: por '
+            'debajo de 1 haría el peso que moviliza más ligero que el '
+            'característico.',
+        'The partial factor on favourable permanent actions must be at most '
+        '1, got {value}: above 1 it would make the resisting weight heavier '
+        'than the characteristic one.':
+            'El coeficiente parcial de las acciones permanentes favorables '
+            'tiene que ser como mucho 1; vale {value}: por encima de 1 haría '
+            'el peso que resiste más pesado que el característico.',
+        'The partial factor on favourable permanent actions must be above 0, '
+        'got {value}: a permanent action keeps its sign, and at 0 the slices '
+        'that resist would have no weight.':
+            'El coeficiente parcial de las acciones permanentes favorables '
+            'tiene que ser mayor que 0; vale {value}: una acción permanente '
+            'conserva su signo, y con 0 las dovelas que resisten no tendrían '
+            'peso.',
+        'The partial factor on unfavourable variable actions must be at '
+        'least 1, got {value}: below 1 it would make a load that drives the '
+        'sliding lighter than its characteristic value.':
+            'El coeficiente parcial de las acciones variables desfavorables '
+            'tiene que ser al menos 1; vale {value}: por debajo de 1 haría '
+            'una carga que moviliza el deslizamiento más ligera que su valor '
+            'característico.',
+        'The partial factor on favourable variable actions must be at most '
+        '1, got {value}: above 1 it would make a load that resists the '
+        'sliding heavier than its characteristic value.':
+            'El coeficiente parcial de las acciones variables favorables '
+            'tiene que ser como mucho 1; vale {value}: por encima de 1 haría '
+            'una carga que se opone al deslizamiento más pesada que su valor '
+            'característico.',
+        'The partial factor on favourable variable actions must not be '
+        'negative, got {value}: at 0 the load is left out, which is the most '
+        'a favourable variable action can be discounted.':
+            'El coeficiente parcial de las acciones variables favorables no '
+            'puede ser negativo; vale {value}: con 0 la carga queda fuera, '
+            'que es lo más que se puede descontar una acción variable '
+            'favorable.',
+        'Line load {name}: an orientation relative to the boundary needs the '
+        'ground surface.':
+            'Carga lineal {name}: una orientación relativa al contorno '
+            'necesita la superficie del terreno.',
+        'Line load {name} at ({x:g}, {y:g}) is not on the ground surface, so '
+        'it has no boundary to be normal to.':
+            'La carga lineal {name} en ({x:g}, {y:g}) no está sobre la '
+            'superficie del terreno, así que no tiene contorno al que ser '
+            'normal.',
+        'Unknown optimisation technique {value!r}: it has to be one of '
+        '{allowed}.':
+            'Técnica de optimización desconocida {value!r}: tiene que ser '
+            'una de {allowed}.',
+        'kh must not be negative, got {value}. It is the magnitude of the '
+        'horizontal seismic force, which always acts in the sliding '
+        'direction of each surface, out of the slope; its sign does not '
+        'choose a direction.':
+            'kh no puede ser negativo; vale {value}. Es la magnitud de la '
+            'fuerza sísmica horizontal, que siempre actúa en el sentido de '
+            'deslizamiento de cada superficie, hacia fuera del talud; su '
+            'signo no elige un sentido.',
+        '{name} must be a number, got {value!r}.':
+            '{name} tiene que ser un número; vale {value!r}.',
+        '|{name}| must be below 1 (a fraction of g), got {value}.':
+            '|{name}| tiene que ser menor que 1 (una fracción de g); vale '
+            '{value}.',
+        'The two sets of Slope Limits overlap ([{a0:g}, {a1:g}] and [{b0:g}, '
+        '{b1:g}]). With two sets, a Grid Search generates the circles that '
+        'run from one window to the other, a rule measured on separate '
+        'windows only: on the stretch two windows share it gives every '
+        'crossing to the window that starts further left, which nothing '
+        'measured supports, and with a window inside one that starts further '
+        'left it generates no circle at all. Make the two windows separate, '
+        'or use a single set.':
+            'Los dos juegos de límites del talud se solapan ([{a0:g}, '
+            '{a1:g}] y [{b0:g}, {b1:g}]). Con dos juegos, una búsqueda por '
+            'rejilla genera los círculos que van de una ventana a la otra, '
+            'una regla medida solo con ventanas separadas: en el tramo que '
+            'comparten dos ventanas da cada corte a la ventana que empieza '
+            'más a la izquierda, algo que nada medido respalda, y con una '
+            'ventana dentro de otra que empieza más a la izquierda no genera '
+            'ningún círculo. Separa las dos ventanas o usa un solo juego.',
+        "With the design standard's seismic factor {factor:g}: {reason}":
+            'Con el factor sísmico de la norma de diseño, {factor:g}: '
+            '{reason}',
+        "This project asks for a rapid drawdown ('{drawdown}'), and the "
+        "method '{method}' does not perform one, so the factor of safety "
+        'would be the ordinary DRAINED one at the lowered water level. Build '
+        'the method with ogr_slip2d.analysis_runner.build_method(project, '
+        'method_id), which is the one place that applies the drawdown '
+        'wrapper.':
+            'Este proyecto pide un desembalse rápido («{drawdown}»), y el '
+            'método «{method}» no lo hace, así que el factor de seguridad '
+            'sería el DRENADO de siempre con el nivel de agua bajado. '
+            'Construye el método con '
+            'ogr_slip2d.analysis_runner.build_method(project, method_id), '
+            'que es el único sitio que aplica el envoltorio del desembalse.',
+        'The Drawdown Line lies ABOVE the Water Table. The water table is '
+        'the initial reservoir level and the drawdown line the final, lower '
+        'one; swap them.':
+            'La línea de desembalse está POR ENCIMA del nivel freático. El '
+            'nivel freático es el nivel inicial del embalse y la línea de '
+            'desembalse el final, más bajo; intercámbialas.',
+        'Rapid drawdown defines both reservoir levels with water surfaces, '
+        "so it cannot run with groundwater method '{method}'. Choose Water "
+        'Surfaces.':
+            'El desembalse rápido define los dos niveles del embalse con '
+            'superficies de agua, así que no puede correr con el método de '
+            'agua «{method}». Elige Superficies de agua.',
+        'No material is marked as having undrained behaviour, so the '
+        'drawdown would not change any strength. Tick Undrained Behaviour on '
+        'the low-permeability materials.':
+            'Ningún material está marcado con comportamiento no drenado, así '
+            'que el desembalse no cambiaría ninguna resistencia. Marca '
+            'Comportamiento no drenado en los materiales de baja '
+            'permeabilidad.',
+        "'{method}' is not a rapid-drawdown procedure, so the analysis would "
+        'ignore the drawdown entirely. Available: {available}.':
+            '«{method}» no es un procedimiento de desembalse rápido, así que '
+            'el análisis ignoraría el desembalse por completo. Disponibles: '
+            '{available}.',
+        'These materials take their pore pressure from a finite-element '
+        'seepage field, and this project has no computed field: {materials}. '
+        'Run the groundwater analysis first — computing now would report u = '
+        '0 everywhere, which looks like a dry slope.':
+            'Estos materiales toman la presión intersticial de un campo de '
+            'filtración por elementos finitos, y este proyecto no tiene '
+            'ningún campo calculado: {materials}. Ejecuta antes el análisis '
+            'de agua subterránea: calcular ahora daría u = 0 en todas '
+            'partes, que parece un talud seco.',
+        'The water pressure grid was built as pore pressure values, but the '
+        'groundwater method is {method}. The method decides how the grid is '
+        'read: set it to {wanted}, or build the grid without a type.':
+            'La rejilla de presiones de agua se construyó con valores de '
+            'presión intersticial, pero el método de agua es {method}. El '
+            'método decide cómo se lee la rejilla: ponlo en {wanted}, o '
+            'construye la rejilla sin tipo.',
+        'The water pressure grid was built as pressure head values, but the '
+        'groundwater method is {method}. The method decides how the grid is '
+        'read: set it to {wanted}, or build the grid without a type.':
+            'La rejilla de presiones de agua se construyó con valores de '
+            'altura de presión, pero el método de agua es {method}. El '
+            'método decide cómo se lee la rejilla: ponlo en {wanted}, o '
+            'construye la rejilla sin tipo.',
+        'The water pressure grid was built as total head values, but the '
+        'groundwater method is {method}. The method decides how the grid is '
+        'read: set it to {wanted}, or build the grid without a type.':
+            'La rejilla de presiones de agua se construyó con valores de '
+            'altura total, pero el método de agua es {method}. El método '
+            'decide cómo se lee la rejilla: ponlo en {wanted}, o construye '
+            'la rejilla sin tipo.',
+        '{reason} Move it onto the ground surface or give it an absolute '
+        'orientation.':
+            '{reason} Muévela a la superficie del terreno o dale una '
+            'orientación absoluta.',
+        'This project sets {name} = {value}. That setting was removed in '
+        '{version}: no analysis ever read it, and it has no replacement.':
+            'Este proyecto pone {name} = {value}. Ese ajuste se retiró en '
+            '{version}: ningún análisis lo leyó nunca, y no tiene sustituto.',
+        'This project sets {name} = {value}. That name was removed in '
+        '{version} because the interface never showed it; set {survivor} '
+        'instead. Computing now would ignore the value and report a '
+        'plausible number.':
+            'Este proyecto pone {name} = {value}. Ese nombre se retiró en '
+            '{version} porque la interfaz nunca lo enseñó; pon {survivor} en '
+            'su lugar. Calcular ahora ignoraría el valor y daría un número '
+            'verosímil.',
         "The model has no visible annotation.":
             "El modelo no tiene ninguna anotación visible.",
         # v0.1.339 (D336) — the options of the PDF report

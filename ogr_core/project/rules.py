@@ -28,6 +28,8 @@ from typing import Iterable, Optional
 
 from ..geometry import BoundaryType
 from . import messages as M
+from .messages import nested_refusal as _nested_refusal
+from .messages import refusal_message as _refusal
 from .messages import rule_message as _msg
 
 
@@ -193,8 +195,12 @@ def block_objects_refusal(project) -> Optional[Refusal]:
     for i, b in enumerate(objects):
         why = block_object_refusal(b)
         if why is not None:
-            return Refusal(why.code, f"{_block_label(b, i)}: {why.message}",
-                           cause=why)
+            # v0.1.350 (D335) -- the object's label and its refusal, both
+            # nested with their codes
+            from ..messages import as_nested
+            return Refusal(why.code, _refusal(
+                M.BLOCK_OBJECT_NAMED, label=_block_label(b, i),
+                why=as_nested(why.message)), cause=why)
     grouped = bool(getattr(project.settings.search, "block_multiple_groups",
                            False))
     spans = []
@@ -212,27 +218,33 @@ def block_objects_refusal(project) -> Optional[Refusal]:
             if j == i or g_q != g_p:
                 continue
             if q_hi > p_lo + tol and q_lo < p_hi - tol:
-                where = (f" (both in Group ID {g_p})" if grouped else "")
-                way_out = (" Give them different Group IDs to search them "
-                           "separately." if grouped else
-                           " To search them separately, turn Multiple Groups "
-                           "on and give them different Group IDs.")
+                from ..messages import nested
+                where = (_nested_refusal(M.BLOCK_OVERLAP_GROUP, group=g_p)
+                         if grouped else nested("", {}, ""))
+                way_out = _nested_refusal(
+                    M.BLOCK_OVERLAP_WAY_GROUPED if grouped
+                    else M.BLOCK_OVERLAP_WAY_UNGROUPED)
                 return Refusal(
                     "block_polyline_overlap",
-                    f"{_block_label(q, j)} overlaps the lateral extent of "
-                    f"the Block Search Polyline {_block_label(p, i)} (x from "
-                    f"{p_lo:g} to {p_hi:g}){where}. This is not allowed: the "
-                    f"trial surface follows the polyline between its two "
-                    f"points, and a vertex of another object inside that "
-                    f"range would cut the stretch.{way_out}")
+                    _refusal(M.BLOCK_POLYLINE_OVERLAP,
+                             other=_block_label(q, j),
+                             polyline=_block_label(p, i), lo=p_lo, hi=p_hi,
+                             where=where, way_out=way_out))
     return None
 
 
 def _block_label(boundary, index: int) -> str:
     """A Block Search object named in a refusal: its name and its position
     among the model's Block Search objects, since every object drawn in
-    the interface is called the same."""
-    return f"{boundary.name or boundary.btype.display_name} #{index + 1}"
+    the interface is called the same.
+
+    v0.1.350 (D335) -- a nested message: a name the user gave is shown as
+    it is, the name of the kind through its translation."""
+    if boundary.name:
+        return _nested_refusal(M.BLOCK_LABEL_NAMED, name=boundary.name,
+                               n=index + 1)
+    return _nested_refusal(M.BLOCK_LABEL_KIND,
+                           kind=boundary.btype.display_name, n=index + 1)
 
 
 # ----------------------------------------------------------------------
@@ -1068,18 +1080,14 @@ def seismic_coefficient_refusal(name: str, value) -> Optional[Refusal]:
         v = float(value)
     except (TypeError, ValueError):
         return Refusal("seismic_coefficient_not_a_number",
-                       f"{name} must be a number, got {value!r}.")
+                       _refusal(M.SEISMIC_NOT_A_NUMBER, name=name,
+                                value=value))
     if not abs(v) < SEISMIC_COEFFICIENT_LIMIT:
         return Refusal("seismic_coefficient_out_of_range",
-                       f"|{name}| must be below 1 (a fraction of g), "
-                       f"got {v}.")
+                       _refusal(M.SEISMIC_OUT_OF_RANGE, name=name, value=v))
     if name == "kh" and v < 0.0:
         return Refusal("seismic_kh_negative",
-                       f"kh must not be negative, got {v}. It is the "
-                       f"magnitude of the horizontal seismic force, which "
-                       f"always acts in the sliding direction of each "
-                       f"surface, out of the slope; its sign does not "
-                       f"choose a direction.")
+                       _refusal(M.SEISMIC_KH_NEGATIVE, value=v))
     return None
 
 
@@ -1163,8 +1171,8 @@ def optimize_technique_refusal(search_settings) -> Optional[Refusal]:
         return None
     return Refusal(
         "optimize_technique_unknown",
-        "Unknown optimisation technique %r: it has to be one of %s."
-        % (value, ", ".join(allowed)))
+        _refusal(M.OPTIMIZE_TECHNIQUE_UNKNOWN, value=value,
+                 allowed=", ".join(allowed)))
 
 
 def slope_limit_windows(search_settings) -> Optional[tuple]:
@@ -1238,14 +1246,7 @@ def slope_limit_windows_refusal(search_settings) -> Optional[Refusal]:
     (a0, a1), (b0, b1) = slope_limit_windows(search_settings)
     return Refusal(
         "slope_limit_windows_overlap",
-        "The two sets of Slope Limits overlap ([%g, %g] and [%g, %g]). "
-        "With two sets, a Grid Search generates the circles that run from "
-        "one window to the other, a rule measured on separate windows "
-        "only: on the stretch two windows share it gives every crossing "
-        "to the window that starts further left, which nothing measured "
-        "supports, and with a window inside one that starts further left "
-        "it generates no circle at all. Make the two windows separate, or "
-        "use a single set." % (a0, a1, b0, b1))
+        _refusal(M.SLOPE_LIMIT_WINDOWS_OVERLAP, a0=a0, a1=a1, b0=b0, b1=b1))
 
 
 @dataclass(frozen=True)
@@ -1367,12 +1368,10 @@ def design_action_factors_refusal(design_standard) -> Optional[Refusal]:
     """
     import math
 
-    names = (("factor_permanent", "permanent actions, unfavourable"),
-             ("factor_permanent_favourable", "permanent actions, favourable"),
-             ("factor_variable", "variable actions, unfavourable"),
-             ("factor_variable_favourable", "variable actions, favourable"))
+    # v0.1.350 (D335) -- the four names and their phrases live with the
+    # codes (``messages.DESIGN_FACTORS``), one code each
     values = {}
-    for attr, label in names:
+    for attr, _label in M.DESIGN_FACTORS:
         raw = getattr(design_standard, attr, 1.0)
         try:
             v = float(raw)
@@ -1380,49 +1379,36 @@ def design_action_factors_refusal(design_standard) -> Optional[Refusal]:
             v = math.nan
         if not math.isfinite(v):
             return Refusal("design_action_factor_not_a_number",
-                           f"The partial factor on {label} must be a finite "
-                           f"number, got {raw!r}.")
+                           _refusal(M.DESIGN_NOT_A_NUMBER + attr, raw=raw))
         values[attr] = v
     unfav = values["factor_permanent"]
     fav = values["factor_permanent_favourable"]
     if unfav < PERMANENT_ACTION_FACTOR_BOUND:
         return Refusal(
             "design_action_factor_unfavourable_below_one",
-            f"The partial factor on unfavourable permanent actions must be "
-            f"at least 1, got {unfav}: below 1 it would make the driving "
-            f"weight lighter than the characteristic one.")
+            _refusal(M.DESIGN_PERMANENT_BELOW_ONE, value=unfav))
     if fav > PERMANENT_ACTION_FACTOR_BOUND:
         return Refusal(
             "design_action_factor_favourable_above_one",
-            f"The partial factor on favourable permanent actions must be at "
-            f"most 1, got {fav}: above 1 it would make the resisting weight "
-            f"heavier than the characteristic one.")
+            _refusal(M.DESIGN_PERMANENT_FAVOURABLE_ABOVE_ONE, value=fav))
     if not fav > 0.0:
         return Refusal(
             "design_action_factor_favourable_not_positive",
-            f"The partial factor on favourable permanent actions must be "
-            f"above 0, got {fav}: a permanent action keeps its sign, and "
-            f"at 0 the slices that resist would have no weight.")
+            _refusal(M.DESIGN_PERMANENT_FAVOURABLE_NOT_POSITIVE, value=fav))
     q_unfav = values["factor_variable"]
     q_fav = values["factor_variable_favourable"]
     if q_unfav < PERMANENT_ACTION_FACTOR_BOUND:
         return Refusal(
             "design_action_factor_variable_unfavourable_below_one",
-            f"The partial factor on unfavourable variable actions must be at "
-            f"least 1, got {q_unfav}: below 1 it would make a load that "
-            f"drives the sliding lighter than its characteristic value.")
+            _refusal(M.DESIGN_VARIABLE_BELOW_ONE, value=q_unfav))
     if q_fav > PERMANENT_ACTION_FACTOR_BOUND:
         return Refusal(
             "design_action_factor_variable_favourable_above_one",
-            f"The partial factor on favourable variable actions must be at "
-            f"most 1, got {q_fav}: above 1 it would make a load that resists "
-            f"the sliding heavier than its characteristic value.")
+            _refusal(M.DESIGN_VARIABLE_FAVOURABLE_ABOVE_ONE, value=q_fav))
     if q_fav < 0.0:
         return Refusal(
             "design_action_factor_variable_favourable_negative",
-            f"The partial factor on favourable variable actions must not be "
-            f"negative, got {q_fav}: at 0 the load is left out, which is "
-            f"the most a favourable variable action can be discounted.")
+            _refusal(M.DESIGN_VARIABLE_FAVOURABLE_NEGATIVE, value=q_fav))
     return None
 
 

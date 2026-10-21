@@ -221,19 +221,21 @@ class LineLoad:
         """
         from ..geometry.ground import ground_frame
 
+        # v0.1.350 (D335) -- with its code: ``exc.args[0]`` carries it
+        from ..project.messages import (LINE_LOAD_NEEDS_GROUND,
+                                        LINE_LOAD_OFF_GROUND,
+                                        refusal_message)
         if ground is None or len(ground.vertices) < 2:
-            raise ValueError(f"Line load {self.name or self.id}: an "
-                             f"orientation relative to the boundary needs "
-                             f"the ground surface.")
+            raise ValueError(refusal_message(
+                LINE_LOAD_NEEDS_GROUND, name=self.name or self.id))
         xs = [v.x for v in ground.vertices]
         ys = [v.y for v in ground.vertices]
         tol = 1e-3 * math.hypot(max(xs) - min(xs), max(ys) - min(ys))
         frame = ground_frame(ground, self.point.x, self.point.y, tol)
         if frame is None:
-            raise ValueError(f"Line load {self.name or self.id} at "
-                             f"({self.point.x:g}, {self.point.y:g}) is not "
-                             f"on the ground surface, so it has no boundary "
-                             f"to be normal to.")
+            raise ValueError(refusal_message(
+                LINE_LOAD_OFF_GROUND, name=self.name or self.id,
+                x=self.point.x, y=self.point.y))
         return frame
 
     def to_dict(self) -> dict:

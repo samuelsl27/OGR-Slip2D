@@ -206,7 +206,10 @@ class _DrawdownSweepWorker(QThread):
                         include_total=self.include_total,
                         progress_cb=lambda d, t: self.progress.emit(d, t))
             except AnalysisNotConfigured as exc:
-                self.failed.emit("  ".join(exc.problems))
+                # v0.1.350 (D335) -- each refusal in the reader's language
+                from .core_messages import note_text
+                self.failed.emit("  ".join(note_text(p)
+                                           for p in exc.problems))
                 return
             self.finished_result.emit(self.result)
         except Exception as e:  # noqa: BLE001
@@ -255,7 +258,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.349"
+    VERSION = "0.1.350"
 
     def __init__(self) -> None:
         super().__init__()
@@ -1888,7 +1891,10 @@ class MainWindow(QMainWindow):
             res, _report, _warnings = run_configured_back_analysis(
                 self.project, **values)
         except AnalysisNotConfigured as exc:
-            self._info("\n".join(tr(p) for p in exc.problems))
+            # v0.1.350 (D335) -- through the codes: tr() of a sentence
+            # with its values in it found nothing
+            from .core_messages import note_text
+            self._info("\n".join(note_text(p) for p in exc.problems))
             return
         self._back_analysis_result = res
         if res.critical is None:
@@ -2092,7 +2098,10 @@ class MainWindow(QMainWindow):
         try:
             out = run_configured_statistics(self.project)
         except AnalysisNotConfigured as exc:
-            self._info("\n".join(tr(p) for p in exc.problems))
+            # v0.1.350 (D335) -- through the codes: tr() of a sentence
+            # with its values in it found nothing
+            from .core_messages import note_text
+            self._info("\n".join(note_text(p) for p in exc.problems))
             return
         if not out.deterministic:
             self._info(tr(out.warnings[-1]))
@@ -2681,7 +2690,10 @@ class MainWindow(QMainWindow):
             best, res, rep, _report, _w = run_configured_optimization(
                 self.project, mid, surface, max_iterations=iters)
         except AnalysisNotConfigured as exc:
-            self._info("\n".join(tr(p) for p in exc.problems))
+            # v0.1.350 (D335) -- through the codes: tr() of a sentence
+            # with its values in it found nothing
+            from .core_messages import note_text
+            self._info("\n".join(note_text(p) for p in exc.problems))
             return
         # v0.1.349 (D335) -- the report's sentences, in the reader's language
         from .core_messages import note_text
@@ -3513,8 +3525,11 @@ class MainWindow(QMainWindow):
             # honour, and this is a Qt slot: an exception escaping here
             # is not a message, it is a window left half updated with the
             # seepage already solved and stored. Say it and stop.
+            # v0.1.350 (D335) -- each refusal in the reader's language
+            from .core_messages import note_text
             self.statusBar().showMessage(
-                tr("Cannot compute: %s") % "  ".join(exc.problems), 15000)
+                tr("Cannot compute: %s") % "  ".join(
+                    note_text(p) for p in exc.problems), 15000)
             self._gw_solver = getattr(self.project, "_gw_solver", None)
             self._update_groundwater_actions()
             return list(self.project.transient_results or [])
@@ -3719,7 +3734,9 @@ class MainWindow(QMainWindow):
         from ogr_slip2d.analysis_runner import check_analysis_settings
         _why = check_analysis_settings(self.project)
         if _why:
-            QMessageBox.warning(self, tr("Compute"), "\n\n".join(_why))
+            # v0.1.350 (D335) -- in the reader's language, through the codes
+            QMessageBox.warning(self, tr("Compute"),
+                                "\n\n".join(note_text(p) for p in _why))
             return
         if "no_materials" in _blockers:
             QMessageBox.warning(self, tr("Compute"),

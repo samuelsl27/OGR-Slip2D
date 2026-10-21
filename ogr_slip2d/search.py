@@ -761,7 +761,8 @@ class BaseSearch(ABC):
         """
         gap = drawdown_gap(project, self.method)
         if gap:
-            raise RapidDrawdownError(gap)
+            # v0.1.350 (D335) -- with its code, as every other refusal
+            raise RapidDrawdownError(gap, code=gap.code, values=gap.args)
         try:
             res = self.method.compute_fos(project, surface, slices)
         except ArithmeticError as exc:

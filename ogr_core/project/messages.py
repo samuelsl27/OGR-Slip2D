@@ -151,3 +151,130 @@ def rule_message(code: str, **args) -> Coded:
     """The message ``code`` with ``args``: its English sentence, carrying the
     code and the values."""
     return coded(RULES, code, **args)
+
+
+# ======================================================================
+# The refusals of the settings and the model (v0.1.350, D335)
+# ======================================================================
+#: A table of its own and not in ``RULES``: the refusals the analysis and
+#: every door that writes a setting ask (optimisation technique, Slope
+#: Limit windows, Block Search objects, seismic coefficients, partial
+#: factors, boundary-relative line loads).
+OPTIMIZE_TECHNIQUE_UNKNOWN = "rule.optimize_technique_unknown"
+SLOPE_LIMIT_WINDOWS_OVERLAP = "rule.slope_limit_windows_overlap"
+BLOCK_OBJECT_NAMED = "rule.block_object_named"
+BLOCK_LABEL_NAMED = "rule.block_label_named"
+BLOCK_LABEL_KIND = "rule.block_label_kind"
+BLOCK_POLYLINE_OVERLAP = "rule.block_polyline_overlap"
+BLOCK_OVERLAP_GROUP = "rule.block_overlap_group"
+BLOCK_OVERLAP_WAY_GROUPED = "rule.block_overlap_way_grouped"
+BLOCK_OVERLAP_WAY_UNGROUPED = "rule.block_overlap_way_ungrouped"
+SEISMIC_NOT_A_NUMBER = "rule.seismic_not_a_number"
+SEISMIC_OUT_OF_RANGE = "rule.seismic_out_of_range"
+SEISMIC_KH_NEGATIVE = "rule.seismic_kh_negative"
+#: One code per partial factor that is not a number: its name is a phrase
+#: of the sentence, not a value.
+DESIGN_NOT_A_NUMBER = "rule.design_not_a_number."
+DESIGN_PERMANENT_BELOW_ONE = "rule.design_permanent_below_one"
+DESIGN_PERMANENT_FAVOURABLE_ABOVE_ONE = "rule.design_permanent_favourable_above_one"
+DESIGN_PERMANENT_FAVOURABLE_NOT_POSITIVE = (
+    "rule.design_permanent_favourable_not_positive")
+DESIGN_VARIABLE_BELOW_ONE = "rule.design_variable_below_one"
+DESIGN_VARIABLE_FAVOURABLE_ABOVE_ONE = "rule.design_variable_favourable_above_one"
+DESIGN_VARIABLE_FAVOURABLE_NEGATIVE = "rule.design_variable_favourable_negative"
+LINE_LOAD_NEEDS_GROUND = "rule.line_load_needs_ground"
+LINE_LOAD_OFF_GROUND = "rule.line_load_off_ground"
+
+#: ``(attribute, the phrase that names it)``, as ``design_action_factors_
+#: refusal`` reads them.
+DESIGN_FACTORS = (
+    ("factor_permanent", "permanent actions, unfavourable"),
+    ("factor_permanent_favourable", "permanent actions, favourable"),
+    ("factor_variable", "variable actions, unfavourable"),
+    ("factor_variable_favourable", "variable actions, favourable"),
+)
+
+_OVERLAP_DETAIL = (
+    "With two sets, a Grid Search generates the circles that run from one "
+    "window to the other, a rule measured on separate windows only: on the "
+    "stretch two windows share it gives every crossing to the window that "
+    "starts further left, which nothing measured supports, and with a window "
+    "inside one that starts further left it generates no circle at all. Make "
+    "the two windows separate, or use a single set.")
+
+REFUSALS = {s.code: s for s in (
+    MessageSpec(OPTIMIZE_TECHNIQUE_UNKNOWN,
+                "Unknown optimisation technique {value!r}: it has to be one of "
+                "{allowed}."),
+    MessageSpec(SLOPE_LIMIT_WINDOWS_OVERLAP,
+                "The two sets of Slope Limits overlap ([{a0:g}, {a1:g}] and "
+                "[{b0:g}, {b1:g}]). " + _OVERLAP_DETAIL),
+    MessageSpec(BLOCK_OBJECT_NAMED, "{label}: {why}"),
+    MessageSpec(BLOCK_LABEL_NAMED, "{name} #{n}"),
+    MessageSpec(BLOCK_LABEL_KIND, "{kind} #{n}", kinds=(("kind", "label"),)),
+    MessageSpec(BLOCK_POLYLINE_OVERLAP,
+                "{other} overlaps the lateral extent of the Block Search "
+                "Polyline {polyline} (x from {lo:g} to {hi:g}){where}. This is "
+                "not allowed: the trial surface follows the polyline between "
+                "its two points, and a vertex of another object inside that "
+                "range would cut the stretch.{way_out}"),
+    MessageSpec(BLOCK_OVERLAP_GROUP, " (both in Group ID {group})"),
+    MessageSpec(BLOCK_OVERLAP_WAY_GROUPED,
+                " Give them different Group IDs to search them separately."),
+    MessageSpec(BLOCK_OVERLAP_WAY_UNGROUPED,
+                " To search them separately, turn Multiple Groups on and give "
+                "them different Group IDs."),
+    MessageSpec(SEISMIC_NOT_A_NUMBER, "{name} must be a number, got {value!r}."),
+    MessageSpec(SEISMIC_OUT_OF_RANGE,
+                "|{name}| must be below 1 (a fraction of g), got {value}."),
+    MessageSpec(SEISMIC_KH_NEGATIVE,
+                "kh must not be negative, got {value}. It is the magnitude of "
+                "the horizontal seismic force, which always acts in the "
+                "sliding direction of each surface, out of the slope; its sign "
+                "does not choose a direction."),
+    MessageSpec(DESIGN_PERMANENT_BELOW_ONE,
+                "The partial factor on unfavourable permanent actions must be "
+                "at least 1, got {value}: below 1 it would make the driving "
+                "weight lighter than the characteristic one."),
+    MessageSpec(DESIGN_PERMANENT_FAVOURABLE_ABOVE_ONE,
+                "The partial factor on favourable permanent actions must be at "
+                "most 1, got {value}: above 1 it would make the resisting "
+                "weight heavier than the characteristic one."),
+    MessageSpec(DESIGN_PERMANENT_FAVOURABLE_NOT_POSITIVE,
+                "The partial factor on favourable permanent actions must be "
+                "above 0, got {value}: a permanent action keeps its sign, and "
+                "at 0 the slices that resist would have no weight."),
+    MessageSpec(DESIGN_VARIABLE_BELOW_ONE,
+                "The partial factor on unfavourable variable actions must be at "
+                "least 1, got {value}: below 1 it would make a load that drives "
+                "the sliding lighter than its characteristic value."),
+    MessageSpec(DESIGN_VARIABLE_FAVOURABLE_ABOVE_ONE,
+                "The partial factor on favourable variable actions must be at "
+                "most 1, got {value}: above 1 it would make a load that resists "
+                "the sliding heavier than its characteristic value."),
+    MessageSpec(DESIGN_VARIABLE_FAVOURABLE_NEGATIVE,
+                "The partial factor on favourable variable actions must not be "
+                "negative, got {value}: at 0 the load is left out, which is the "
+                "most a favourable variable action can be discounted."),
+    MessageSpec(LINE_LOAD_NEEDS_GROUND,
+                "Line load {name}: an orientation relative to the boundary "
+                "needs the ground surface."),
+    MessageSpec(LINE_LOAD_OFF_GROUND,
+                "Line load {name} at ({x:g}, {y:g}) is not on the ground "
+                "surface, so it has no boundary to be normal to."),
+) + tuple(MessageSpec(DESIGN_NOT_A_NUMBER + attr,
+                      "The partial factor on " + phrase + " must be a finite "
+                      "number, got {raw!r}.")
+          for attr, phrase in DESIGN_FACTORS)}
+
+
+def refusal_message(code: str, **args) -> Coded:
+    """A refusal of the settings or the model, ``code`` with ``args``: its
+    English sentence, carrying the code and the values (v0.1.350)."""
+    return coded(REFUSALS, code, **args)
+
+
+def nested_refusal(code: str, **args) -> dict:
+    """One of these refusals as the value of another message's field."""
+    from ..messages import as_nested
+    return as_nested(refusal_message(code, **args))
