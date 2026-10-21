@@ -50,12 +50,16 @@ from ogr_gui.dialog_size import hold_wrapped_height
 _MODEL_GROUP = "Model"
 
 
-def _split(note: str) -> tuple:
-    """``(group, sentence)`` for one note line."""
-    head, sep, tail = note.partition(": ")
-    if sep and head and " " not in head:
-        return head, tail
-    return _MODEL_GROUP, note
+def _split(note) -> tuple:
+    """``(group, sentence)`` for one note, in the reader's language.
+
+    v0.1.347 (D335) -- the rule lives in ``core_messages.note_group``, which
+    also reads a note's code; this stays the one door the panel files
+    through, so a test of ``_split`` is a test of what the panel shows.
+    """
+    from ogr_gui.core_messages import note_group
+    group, sentence = note_group(note)
+    return group or _MODEL_GROUP, sentence
 
 
 class AnalysisNotesPanel(QDialog):
@@ -102,7 +106,9 @@ class AnalysisNotesPanel(QDialog):
         Re-callable, so the same panel refreshes after a recompute
         instead of a second window opening on top of the first.
         """
-        self.notes = [str(n) for n in (notes or [])]
+        # v0.1.347 (D335) -- the notes as they came, with their codes: a
+        # ``str()`` here would drop the code and leave only the English
+        self.notes = list(notes or [])
         self.tree.clear()
         if not self.notes:
             self.lbl_head.setText(tr(
@@ -142,6 +148,9 @@ class AnalysisNotesPanel(QDialog):
         """
         from PySide6.QtWidgets import QApplication
 
+        from ogr_gui.core_messages import note_line
+
         clip = QApplication.clipboard()
         if clip is not None:
-            clip.setText("\n".join(self.notes))
+            # v0.1.347 (D335) -- what the panel shows, in its language
+            clip.setText("\n".join(note_line(n) for n in self.notes))

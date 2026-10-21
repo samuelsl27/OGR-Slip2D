@@ -216,6 +216,9 @@ def results_get(ws, result_id: str, method_id: Optional[str] = None,
         return out
     if view == "warnings":
         out["warnings"] = res.summary.get("warnings", [])
+        # v0.1.347 (D335) -- the codes go where the warnings go
+        if res.summary.get("warning_codes"):
+            out["warning_codes"] = res.summary["warning_codes"]
         return out
     payload = res.payload().get("results", {})
     mids = [method_id] if method_id else list(payload)
@@ -297,9 +300,11 @@ def surface_evaluate(ws, surface: dict, project_id: Optional[str] = None,
         raise NotConfigured(str(exc),
                             details={"problems": exc.problems}) from None
     per = {mid: lem_summary(r) for mid, r in outcome.results.items()}
-    summary = {"methods": per,
-               "factor_report": factor_report_summary(outcome.factor_report),
-               "warnings": list(outcome.warnings)}
+    from ..results import with_warning_codes
+    summary = with_warning_codes(
+        {"methods": per,
+         "factor_report": factor_report_summary(outcome.factor_report),
+         "warnings": list(outcome.warnings)})
     res = ws.store_result(handle, "surface", summary,
                           model_hash=fingerprint,
                           payload={"results": outcome.results,

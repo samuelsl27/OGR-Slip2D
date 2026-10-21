@@ -457,8 +457,10 @@ def settings_diagnostics(project) -> dict:
 
     methods = list(project.settings.methods.enabled_methods) or [
         "bishop_simplified"]
-    return {"problems": list(check_analysis_settings(project)),
-            "warnings": list(settings_warnings(project, methods))}
+    from .results import with_warning_codes
+    return with_warning_codes(
+        {"problems": list(check_analysis_settings(project)),
+         "warnings": list(settings_warnings(project, methods))})
 
 
 def all_string_fields(settings) -> list[tuple[str, object]]:

@@ -284,15 +284,42 @@ def factor_report_summary(report) -> dict:
                       "notes": list(getattr(report, "notes", []))})
 
 
+def warning_codes(warnings) -> list:
+    """The code and the values of each warning that carries them, by its
+    index in ``warnings`` (v0.1.347, D335).
+
+    The warnings stay the English sentences they always were -- clients and
+    tests read them -- and a client that says them in another language reads
+    these. Only the coded ones are listed."""
+    from ogr_core.messages import json_args
+    out = []
+    for i, w in enumerate(warnings or ()):
+        code = getattr(w, "code", "")
+        if code:
+            out.append({"index": i, "code": code,
+                        "args": json_args(getattr(w, "args", None))})
+    return out
+
+
+def with_warning_codes(summary: dict, key: str = "warnings") -> dict:
+    """``summary`` with ``warning_codes`` beside ``summary[key]``, when any
+    of them has a code; unchanged otherwise, so a run without coded warnings
+    serialises as it did."""
+    codes = warning_codes(summary.get(key))
+    if codes:
+        summary["warning_codes"] = codes
+    return summary
+
+
 def outcome_summary(results: dict, factor_report=None,
                     warnings=()) -> dict:
     """Every method of one run, plus the run-level report and warnings."""
-    return {
+    return with_warning_codes({
         "methods": [search_summary(mid, sr, factor_report)
                     for mid, sr in results.items()],
         "factor_report": factor_report_summary(factor_report),
         "warnings": list(warnings),
-    }
+    })
 
 
 # ----------------------------------------------------------------------

@@ -56,15 +56,92 @@ class MessageSpec:
     english: str
     group_by: tuple = ()
     kinds: tuple = ()
+    #: v0.1.347 (D335) -- the SINGULAR of the sentence, and the field whose
+    #: value 1 chooses it. English pasted "s" and "was/were" onto a count,
+    #: which no other language can translate; a sentence with a count is two
+    #: whole templates instead, each with its own translation.
+    one: str = ""
+    count: str = ""
+
+    def template(self, args=None) -> str:
+        """The English template for ``args``: ``one`` when its count is 1."""
+        if self.one and self.count and (args or {}).get(self.count) == 1:
+            return self.one
+        return self.english
 
 
 #: Two messages one after the other, as the engine joined them with "; ".
 JOIN = "join"
+#: v0.1.347 (D335) -- a note about one method's reported surface, written
+#: ``"<method id>: <note>"`` since the analysis notes existed. The method is
+#: a value of its kind, so the interface shows its name; the note is nested.
+METHOD_NOTE = "note.method"
 
 CORE_MESSAGES = {
     JOIN: MessageSpec(JOIN, "{first}; {second}",
                       group_by=("first", "second")),
 }
+
+#: The frames of the analysis notes (v0.1.347). A table of their own, and
+#: not in ``CORE_MESSAGES``: that one is the base the engine's reasons and
+#: the DXF problems start from, and a note frame is neither.
+NOTE_FRAMES = {
+    METHOD_NOTE: MessageSpec(METHOD_NOTE, "{method_id}: {note}",
+                             group_by=("method_id", "note"),
+                             kinds=(("method_id", "method_id"),)),
+}
+
+
+class Coded(str):
+    """An English sentence that also carries its code and its values
+    (v0.1.347, D335).
+
+    It IS the sentence: equality, ``in``, ``startswith``, de-duplication by
+    value, JSON and printing see the English the engine always wrote, so
+    the tests and tools that read it are untouched. The interface reads
+    ``code`` and ``args`` to say it in the reader's language. Anything that
+    builds a NEW string from it (a concatenation, an f-string) gets a plain
+    ``str``, without the code: a note that has to keep it is built with
+    :func:`coded` or :func:`method_note`, never by hand.
+
+    It pickles with its code (``__reduce__``), because the analysis jobs of
+    the API come back from a subprocess.
+    """
+
+    def __new__(cls, text: str, code: str = "", args: Optional[dict] = None):
+        self = str.__new__(cls, text)
+        self.code = code or ""
+        self.args = dict(args or {})
+        return self
+
+    def __reduce__(self):
+        return (Coded, (str(self), self.code, self.args))
+
+
+def coded(catalogue: dict, code: str, **args) -> Coded:
+    """The message ``code`` with ``args``: its English sentence, carrying the
+    code and the values (v0.1.347, D335)."""
+    return Coded(english(catalogue, code, args), code, args)
+
+
+def parts(note) -> tuple:
+    """``(code, args, sentence)`` of a note: a :class:`Coded` one carries its
+    code and values, a plain string none."""
+    return (getattr(note, "code", "") or "",
+            dict(getattr(note, "args", None) or {}), str(note))
+
+
+def as_nested(note) -> dict:
+    """A note as the value of another message's field."""
+    code, args, text = parts(note)
+    return nested(code, args, text)
+
+
+def method_note(method_id: str, note) -> Coded:
+    """``"<method id>: <note>"`` -- the sentence the analysis notes always
+    wrote for one method -- with the method and the note kept (v0.1.347)."""
+    return Coded("%s: %s" % (method_id, note), METHOD_NOTE,
+                 {"method_id": method_id, "note": as_nested(note)})
 
 
 def nested(code: str, args: Optional[dict], text: str) -> dict:
@@ -102,7 +179,7 @@ def english(catalogue: dict, code: str, args: Optional[dict] = None) -> str:
     spec = catalogue[code]
     values = {k: (v["text"] if is_nested(v) else v)
               for k, v in (args or {}).items()}
-    return spec.english.format(**values)
+    return spec.template(args).format(**values)
 
 
 def render(catalogue: dict, code: str, args: Optional[dict],
@@ -139,9 +216,12 @@ def render(catalogue: dict, code: str, args: Optional[dict],
                 values[key] = value
         else:
             values[key] = value
-    templates = [spec.english]
+    # v0.1.347 (D335) -- the singular or the plural, chosen on the values
+    # as they are (an elided count still chooses)
+    base = spec.template(args)
+    templates = [base]
     if translate is not None:
-        templates.insert(0, translate(spec.english))
+        templates.insert(0, translate(base))
     for template in templates:
         try:
             return template.format(**values)

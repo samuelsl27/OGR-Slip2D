@@ -1599,13 +1599,9 @@ _DICTS: dict[str, dict[str, str]] = {
             "activado la búsqueda informa de la superficie más crítica "
             "de cada región en vez del único mínimo global.",
         "Grouping radius:": "Radio de agrupación:",
-        "The Particle Swarm search is reporting several minima with "
-        "Optimize Surfaces OFF. It is then looking for LOCAL minima, and "
-        "the lowest of them need not be the global minimum of the slope.":
-            "La búsqueda por enjambre está informando de varios mínimos "
-            "con Optimize Surfaces APAGADO. Entonces busca mínimos "
-            "LOCALES, y el menor de ellos no tiene por qué ser el mínimo "
-            "global del talud.",
+        # (v0.1.347, D335: the Particle Swarm note moved to the block of the
+        # analysis notes, where it is shown at last; it was translated here
+        # and never passed through ``tr``)
         "Two minima closer together than this are the same minimum. "
         "As a percentage of the span of the search space, so it means "
         "the same whatever the model measures.":
@@ -3857,6 +3853,787 @@ _DICTS: dict[str, dict[str, str]] = {
             "Las líneas, textos, cotas, ejes e imágenes dibujados con el menú "
             "Herramientas, en la capa OGR_X_DRAWING: las cotas como cotas de "
             "CAD, medidas en la unidad del dibujo.",
+        # v0.1.347 (D335) — the analysis notes about the model and the project rules
+        'The search converts each circle into {n_vert:d} vertices, which is '
+        '{segments:d} straight segments, and the analysis uses {n_slices:d} '
+        'slices. Every vertex is a mandatory slice boundary, so a surface '
+        'with more segments than slices is refused whole: this run would '
+        'return no surfaces at all. Raise the number of slices to at least '
+        '{segments:d}, or lower the vertices.':
+            'La búsqueda convierte cada círculo en {n_vert:d} vértices, que '
+            'son {segments:d} segmentos rectos, y el análisis usa '
+            '{n_slices:d} dovelas. Cada vértice es un borde obligado de '
+            'dovela, así que una superficie con más segmentos que dovelas se '
+            'rechaza entera: este cálculo no devolvería ninguna superficie. '
+            'Sube el número de dovelas al menos a {segments:d}, o baja los '
+            'vértices.',
+        'Maximum slice base angle is set to {limit:g} deg, which does not '
+        'raise the ceiling on the base of a slice — it removes it. This '
+        'model draws {n} weak layers, and no surface a weak layer clips will '
+        'be discarded for the steepness of its base, however close to '
+        'vertical the drop at the end of a layer leaves it. Any value '
+        'strictly between 0 and 90 applies the ceiling.':
+            'El ángulo máximo de base de dovela vale {limit:g}°, lo que no '
+            'afloja el tope de la base de una dovela: lo quita. Este modelo '
+            'tiene {n} capas débiles, y ninguna superficie que recorte una '
+            'capa débil se descartará por lo empinado de su base, por cerca '
+            'de la vertical que la deje el escalón del final de una capa. '
+            'Cualquier valor estrictamente entre 0 y 90 aplica el tope.',
+        'Maximum slice base angle is set to {limit:g} deg, which does not '
+        'raise the ceiling on the base of a slice — it removes it. This '
+        'model draws 1 weak layer, and no surface a weak layer clips will be '
+        'discarded for the steepness of its base, however close to vertical '
+        'the drop at the end of a layer leaves it. Any value strictly '
+        'between 0 and 90 applies the ceiling.':
+            'El ángulo máximo de base de dovela vale {limit:g}°, lo que no '
+            'afloja el tope de la base de una dovela: lo quita. Este modelo '
+            'tiene 1 capa débil, y ninguna superficie que recorte una capa '
+            'débil se descartará por lo empinado de su base, por cerca de la '
+            'vertical que la deje el escalón del final de una capa. '
+            'Cualquier valor estrictamente entre 0 y 90 aplica el tope.',
+        'No weak layer is drawn in this model, so the Maximum base angle '
+        'setting ({limit:g} deg) reached nothing: it applies only to '
+        'surfaces a weak layer has clipped. {clause}':
+            'Este modelo no tiene ninguna capa débil, así que el ajuste '
+            'Ángulo máximo de base ({limit:g}°) no alcanzó a nada: solo se '
+            'aplica a las superficies que ha recortado una capa débil. '
+            '{clause}',
+        'This model draws {n} weak layers, so the Maximum base angle setting '
+        '({limit:g} deg) reaches the surfaces they clip and nothing else. '
+        '{clause} {governs}':
+            'Este modelo tiene {n} capas débiles, así que el ajuste Ángulo '
+            'máximo de base ({limit:g}°) alcanza a las superficies que '
+            'recortan y a nada más. {clause} {governs}',
+        'This model draws 1 weak layer, so the Maximum base angle setting '
+        '({limit:g} deg) reaches the surfaces they clip and nothing else. '
+        '{clause} {governs}':
+            'Este modelo tiene 1 capa débil, así que el ajuste Ángulo máximo '
+            'de base ({limit:g}°) alcanza a las superficies que recortan y a '
+            'nada más. {clause} {governs}',
+        'On a weak-layer clip in purely cohesive material the {ceiling:.1f} '
+        'deg ceiling therefore governs, and the {limit:g} deg set here never '
+        'applies.':
+            'En un recorte de capa débil en material puramente cohesivo '
+            'manda, por tanto, el tope de {ceiling:.1f}°, y los {limit:g}° '
+            'puestos aquí no se aplican nunca.',
+        'A surface no weak layer clips therefore has no ceiling on the '
+        'inclination of its base at all in this run.':
+            'Una superficie que no recorta ninguna capa débil no tiene, por '
+            'tanto, ningún tope a la inclinación de su base en este cálculo.',
+        'On a weak-layer clip the {limit:g} deg set here is therefore the '
+        'tighter of the two, and {ceiling:.1f} deg governs everywhere else.':
+            'En un recorte de capa débil los {limit:g}° puestos aquí son, '
+            'por tanto, el más estricto de los dos topes, y en todo lo demás '
+            'manda el de {ceiling:.1f}°.',
+        'This model draws {drawn} Block Search objects, so the trial '
+        'surfaces are built from them and the Implicit Region Bands setting '
+        '— {bands} here — configures nothing. That count only divides the '
+        'region OGR falls back to when no Block Search object is drawn.':
+            'Este modelo tiene {drawn} objetos de búsqueda por bloques, así '
+            'que las superficies de tanteo se construyen con ellos y el '
+            'ajuste Bandas de la región implícita — {bands} aquí — no '
+            'configura nada. Ese número solo divide la región que OGR usa '
+            'cuando no hay ningún objeto de búsqueda por bloques dibujado.',
+        'This model draws 1 Block Search object, so the trial surfaces are '
+        'built from it and the Implicit Region Bands setting — {bands} here '
+        '— configures nothing. That count only divides the region OGR falls '
+        'back to when no Block Search object is drawn.':
+            'Este modelo tiene 1 objeto de búsqueda por bloques, así que las '
+            'superficies de tanteo se construyen con él y el ajuste Bandas '
+            'de la región implícita — {bands} aquí — no configura nada. Ese '
+            'número solo divide la región que OGR usa cuando no hay ningún '
+            'objeto de búsqueda por bloques dibujado.',
+        'Multiple Groups is on, but no Block Search object is drawn, so '
+        'there are no Group IDs to split the search by: the setting does '
+        'nothing here.':
+            'Grupos múltiples está activado, pero no hay ningún objeto de '
+            'búsqueda por bloques dibujado, así que no hay identificadores '
+            'de grupo por los que dividir la búsqueda: aquí el ajuste no '
+            'hace nada.',
+        'No Block Search object is drawn, so the sampling region is chosen '
+        'by the program and not by the model: a box over the slope face '
+        'tiled into {bands} vertical band(s) (Implicit Region Bands), one '
+        'random vertex in each. The reference requires at least one Block '
+        'Search object (window, line, point or polyline); draw one to search '
+        'where the model says the slip surface can run.':
+            'No hay ningún objeto de búsqueda por bloques dibujado, así que '
+            'la región de muestreo la elige el programa y no el modelo: una '
+            'caja sobre la cara del talud partida en {bands} banda(s) '
+            'vertical(es) (Bandas de la región implícita), con un vértice '
+            'aleatorio en cada una. La referencia exige al menos un objeto '
+            'de búsqueda por bloques (ventana, línea, punto o polilínea); '
+            'dibuja uno para buscar por donde el modelo dice que puede pasar '
+            'la superficie de rotura.',
+        'Multiple Groups is on, but every Block Search object has Group ID '
+        '{group_id}: that is one group, and the search is the same as with '
+        'the setting off. Give the objects different Group IDs to search '
+        'them separately.':
+            'Grupos múltiples está activado, pero todos los objetos de '
+            'búsqueda por bloques tienen el identificador de grupo '
+            '{group_id}: eso es un grupo, y la búsqueda es la misma que con '
+            'el ajuste desactivado. Da identificadores distintos a los '
+            'objetos para buscarlos por separado.',
+        'The Failure Direction is set to Left to Right, which puts the crest '
+        'on the left, but the ground surface is higher on the right (y = '
+        '{y_left:g} at the left end against y = {y_right:g} at the right '
+        'end). Tension-crack water thrust, support force direction and the '
+        'Path Search starting face all read this setting.':
+            'La dirección de rotura es de izquierda a derecha, lo que pone '
+            'la coronación a la izquierda, pero el terreno está más alto a '
+            'la derecha (y = {y_left:g} en el extremo izquierdo frente a y = '
+            '{y_right:g} en el derecho). El empuje del agua en la grieta de '
+            'tracción, el sentido de la fuerza de los soportes y la cara de '
+            'partida de la búsqueda por caminos leen este ajuste.',
+        'The Failure Direction is set to Right to Left, which puts the crest '
+        'on the right, but the ground surface is higher on the left (y = '
+        '{y_left:g} at the left end against y = {y_right:g} at the right '
+        'end). Tension-crack water thrust, support force direction and the '
+        'Path Search starting face all read this setting.':
+            'La dirección de rotura es de derecha a izquierda, lo que pone '
+            'la coronación a la derecha, pero el terreno está más alto a la '
+            'izquierda (y = {y_left:g} en el extremo izquierdo frente a y = '
+            '{y_right:g} en el derecho). El empuje del agua en la grieta de '
+            'tracción, el sentido de la fuerza de los soportes y la cara de '
+            'partida de la búsqueda por caminos leen este ajuste.',
+        'This search steers from one candidate surface to the next, so a '
+        'focus object narrows the path it walks as well as the answer it '
+        'returns. A narrow focus can leave it with NO surface at all even '
+        'when surfaces satisfying the focus exist; that is a limit of the '
+        'search, not a statement about the slope. A Grid, Path or Block '
+        'Search reaches a tightly focused region more reliably.':
+            'Esta búsqueda pasa de una superficie candidata a la siguiente, '
+            'así que un objeto de foco estrecha tanto el camino que recorre '
+            'como la respuesta que devuelve. Un foco estrecho puede dejarla '
+            'SIN ninguna superficie aunque existan superficies que cumplan '
+            'el foco; eso es un límite de la búsqueda, no una afirmación '
+            'sobre el talud. Una búsqueda por rejilla, por caminos o por '
+            'bloques llega con más seguridad a una región muy enfocada.',
+        'The support force is set to act at the centroid of its pressure '
+        'diagram. Only the four methods with a moment equation — Ordinary, '
+        'Bishop, Spencer and GLE — can tell that apart from acting at the '
+        'slip surface.':
+            'La fuerza del soporte está puesta en el centroide de su '
+            'diagrama de presiones. Solo los cuatro métodos con ecuación de '
+            'momentos — Ordinario, Bishop, Spencer y GLE — distinguen eso de '
+            'actuar en la superficie de rotura.',
+        'The support force is set to act at the centroid of its pressure '
+        'diagram, and {methods} cannot tell that from acting at the slip '
+        'surface: moving a force leaves a couple, and a couple has nowhere '
+        'to go in a method that writes force equilibrium alone. The four '
+        'methods with a moment equation — Ordinary, Bishop, Spencer and GLE '
+        '— do honour it.':
+            'La fuerza del soporte está puesta en el centroide de su '
+            'diagrama de presiones, y {methods} no distingue eso de actuar '
+            'en la superficie de rotura: mover una fuerza deja un par, y un '
+            'par no tiene dónde ir en un método que solo escribe el '
+            'equilibrio de fuerzas. Los cuatro métodos con ecuación de '
+            'momentos — Ordinario, Bishop, Spencer y GLE — sí lo respetan.',
+        "The shaft of support '{name}' is not narrower than its helices, so "
+        'the plates have no bearing area and the anchor carries nothing in '
+        'pullout.':
+            'El fuste del soporte «{name}» no es más estrecho que sus '
+            'hélices, así que las placas no tienen área de apoyo y el '
+            'anclaje no resiste nada al arrancamiento.',
+        "The {n:d} helices of support '{name}' do not fit at {spacing:.2f} "
+        'm: the spacing used is {used:.2f} m, the anchor length divided by '
+        'the number of gaps.':
+            'Las {n:d} hélices del soporte «{name}» no caben a {spacing:.2f} '
+            'm: la separación usada es {used:.2f} m, la longitud del anclaje '
+            'dividida entre el número de huecos.',
+        "The helix spacing of support '{name}' is {ratio:.2f} times the "
+        'average helix diameter. Design guides recommend 5 to 12.':
+            'La separación de hélices del soporte «{name}» es {ratio:.2f} '
+            'veces el diámetro medio de hélice. Las guías de diseño '
+            'recomiendan de 5 a 12.',
+        'This model has water standing over the ground, and the '
+        'prescribed-inclination methods (Lowe-Karafiath, Corps of Engineers '
+        '#1 and #2) are set to TOTAL inter-slice forces. That is the '
+        'convention the published values of these methods are in, but it '
+        'does not hold where water stands on the slope: the factor of safety '
+        'then depends on the depth of the water, the force balance can fail '
+        'to close, and it can also close on a root that is not a factor of '
+        'safety at all — measured on a fully submerged slope, the search '
+        'returned 0.20 where every other method gives 1.61. Treat these '
+        "three methods' numbers on this model as unreliable. Use buoyant "
+        'unit weights with no water surface (Duncan and Wright 2005), or set '
+        'Interslice forces = Effective in Project Settings.':
+            'Este modelo tiene agua sobre el terreno, y los métodos de '
+            'inclinación prescrita (Lowe-Karafiath, Cuerpo de Ingenieros n.º '
+            '1 y n.º 2) usan fuerzas entre dovelas TOTALES. Es el convenio '
+            'en que están los valores publicados de estos métodos, pero no '
+            'se sostiene donde hay agua sobre el talud: el factor de '
+            'seguridad pasa a depender de la profundidad del agua, el '
+            'equilibrio de fuerzas puede no cerrar, y también puede cerrar '
+            'en una raíz que no es un factor de seguridad — medido en un '
+            'talud sumergido, la búsqueda devolvió 0.20 donde todos los '
+            'demás métodos dan 1.61. Considera poco fiables los números de '
+            'estos tres métodos en este modelo. Usa pesos específicos '
+            'sumergidos sin superficie de agua (Duncan y Wright 2005), o pon '
+            'Fuerzas entre dovelas = Efectivas en Ajustes de proyecto.',
+        'The m-alpha check is off, so nothing else caps how steeply a base '
+        'may run.':
+            'La comprobación de m-alfa está desactivada, así que nada más '
+            'limita lo empinada que puede ser una base.',
+        'The m-alpha check is on, and where phi = 0 its {m_alpha_limit:g} '
+        'limit is a bare ceiling of {ceiling:.1f} deg on every surface it '
+        'screens ({named}).':
+            'La comprobación de m-alfa está activada, y donde phi = 0 su '
+            'límite de {m_alpha_limit:g} es un tope puro de {ceiling:.1f}° '
+            'en todas las superficies que criba ({named}).',
+        'The m-alpha check is on, and where phi = 0 its {m_alpha_limit:g} '
+        'limit is a bare ceiling of {ceiling:.1f} deg on every surface it '
+        'screens ({named}). It does not screen {methods}.':
+            'La comprobación de m-alfa está activada, y donde phi = 0 su '
+            'límite de {m_alpha_limit:g} es un tope puro de {ceiling:.1f}° '
+            'en todas las superficies que criba ({named}). No criba '
+            '{methods}.',
+        'The m-alpha check is on, but no method in this run is screened by '
+        'it ({methods}), so it caps nothing here.':
+            'La comprobación de m-alfa está activada, pero no criba ninguno '
+            'de los métodos de este cálculo ({methods}), así que aquí no '
+            'limita nada.',
+        'Maximum iterations is set to {value}, and for Spencer and '
+        'GLE/Morgenstern-Price that bounds the outer search for the '
+        'inter-slice inclination alone. The fixed point those two methods '
+        'solve inside every sample of that search keeps its own budget of '
+        '{passes} passes, which this setting raises only once it is above '
+        '{passes}; at or below that the inner iteration is untouched. The '
+        'methods that iterate on the factor of safety directly — Bishop and '
+        'both Janbu — do take the value as written.':
+            'Iteraciones máximas vale {value}, y para Spencer y '
+            'GLE/Morgenstern-Price eso acota solo la búsqueda exterior de la '
+            'inclinación entre dovelas. El punto fijo que esos dos métodos '
+            'resuelven dentro de cada muestra de esa búsqueda conserva su '
+            'propio presupuesto de {passes} pasadas, que este ajuste solo '
+            'sube cuando pasa de {passes}; a partir de ahí hacia abajo la '
+            'iteración interior no cambia. Los métodos que iteran '
+            'directamente sobre el factor de seguridad — Bishop y los dos '
+            'Janbu — sí toman el valor tal cual.',
+        'Maximum iterations is set to {value}, so for Spencer and '
+        'GLE/Morgenstern-Price it now bounds two loops and not one: the '
+        'outer search for the inter-slice inclination, and the fixed point '
+        'solved inside every sample of it, whose budget rises from {passes} '
+        'passes to {budget}. The extra room changes an answer only where a '
+        'branch was being cut off while it was still converging, which takes '
+        'a convergence tolerance far tighter than the default one.':
+            'Iteraciones máximas vale {value}, así que para Spencer y '
+            'GLE/Morgenstern-Price acota ahora dos bucles y no uno: la '
+            'búsqueda exterior de la inclinación entre dovelas y el punto '
+            'fijo que se resuelve dentro de cada muestra suya, cuyo '
+            'presupuesto sube de {passes} pasadas a {budget}. El margen '
+            'añadido solo cambia una respuesta donde una rama se cortaba '
+            'cuando aún convergía, y eso pide una tolerancia de convergencia '
+            'mucho más estricta que la de serie.',
+        'Optimize Surfaces is set to optimise ALL surfaces, so the '
+        'alteration runs once per surface the search generates rather than '
+        'once on the critical one. The answer is the same kind of answer; '
+        'the run takes far longer.':
+            'Optimizar superficies está configurado para optimizar TODAS las '
+            'superficies, así que la alteración se ejecuta una vez por cada '
+            'superficie que genera la búsqueda, y no una vez sobre la '
+            'crítica. La respuesta es del mismo tipo; el cálculo tarda mucho '
+            'más.',
+        'Optimize Surfaces is set to optimise ALL surfaces, so the random '
+        'walk runs once per surface the search generates rather than once on '
+        'the critical one. The answer is the same kind of answer; the run '
+        'takes far longer.':
+            'Optimizar superficies está configurado para optimizar TODAS las '
+            'superficies, así que el paseo aleatorio se ejecuta una vez por '
+            'cada superficie que genera la búsqueda, y no una vez sobre la '
+            'crítica. La respuesta es del mismo tipo; el cálculo tarda mucho '
+            'más.',
+        'Optimize Surfaces applies to non-circular surfaces, which are the '
+        'ones with vertices to move; this project searches with '
+        "'{search_method}'. The setting was ignored.":
+            'Optimizar superficies se aplica a las superficies no '
+            'circulares, que son las que tienen vértices que mover; este '
+            'proyecto busca con «{search_method}». El ajuste se ignoró.',
+        '{n} piles are more than {tolerance:.3g}° off vertical (up to '
+        '{tilt:.1f}°). Ito and Matsui (1975) derive the pressure for a '
+        'vertical row, so the force is integrated ALONG THE SHAFT rather '
+        'than over depth. The theory does not say which is right, and '
+        'projecting one onto the other here would be this program deciding.':
+            '{n} pilotes están más de {tolerance:.3g}° fuera de la vertical '
+            '(hasta {tilt:.1f}°). Ito y Matsui (1975) deducen la presión '
+            'para una fila vertical, así que la fuerza se integra A LO LARGO '
+            'DEL FUSTE y no en profundidad. La teoría no dice cuál es la '
+            'correcta, y proyectar una sobre la otra aquí sería que el '
+            'programa decidiera.',
+        '1 pile is more than {tolerance:.3g}° off vertical (up to '
+        '{tilt:.1f}°). Ito and Matsui (1975) derive the pressure for a '
+        'vertical row, so the force is integrated ALONG THE SHAFT rather '
+        'than over depth. The theory does not say which is right, and '
+        'projecting one onto the other here would be this program deciding.':
+            '1 pilote está más de {tolerance:.3g}° fuera de la vertical '
+            '(hasta {tilt:.1f}°). Ito y Matsui (1975) deducen la presión '
+            'para una fila vertical, así que la fuerza se integra A LO LARGO '
+            'DEL FUSTE y no en profundidad. La teoría no dice cuál es la '
+            'correcta, y proyectar una sobre la otra aquí sería que el '
+            'programa decidiera.',
+        'The Ito-Matsui pressure comes out negative over part of the pile, '
+        'near the surface, where the cohesion terms outweigh the overburden: '
+        'the theory is saying no plastic pressure develops there. It is '
+        'integrated as published, so that stretch reduces the total instead '
+        'of being quietly set to zero.':
+            'La presión de Ito y Matsui sale negativa en una parte del '
+            'pilote, cerca de la superficie, donde los términos de cohesión '
+            'pesan más que el peso de tierras: la teoría dice que ahí no se '
+            'desarrolla presión plástica. Se integra tal como está '
+            'publicada, así que ese tramo resta del total en vez de ponerse '
+            'a cero sin decirlo.',
+        'The pile diameter ({diameter:.3g}) is not smaller than the '
+        'out-of-plane spacing ({spacing:.3g}), so there is no opening '
+        'between piles. Ito and Matsui (1975) describe soil squeezing '
+        'THROUGH that opening and their equation diverges when it closes, so '
+        'the row applies no force at all. A continuous barrier is a wall, '
+        'not a pile row.':
+            'El diámetro del pilote ({diameter:.3g}) no es menor que la '
+            'separación fuera del plano ({spacing:.3g}), así que no queda '
+            'hueco entre pilotes. Ito y Matsui (1975) describen el suelo que '
+            'se cuela A TRAVÉS de ese hueco, y su ecuación diverge cuando se '
+            'cierra, así que la fila no aplica ninguna fuerza. Una barrera '
+            'continua es un muro, no una fila de pilotes.',
+        'It could not be checked whether the Ito-Matsui pressure goes '
+        'negative near the surface ({error}: {detail}).':
+            'No se pudo comprobar si la presión de Ito y Matsui se hace '
+            'negativa cerca de la superficie ({error}: {detail}).',
+        'It could not be checked whether there is pore pressure along an '
+        'Ito-Matsui pile ({error}: {detail}).':
+            'No se pudo comprobar si hay presión intersticial a lo largo de '
+            'un pilote de Ito y Matsui ({error}: {detail}).',
+        'There is pore pressure along an Ito-Matsui pile. The published '
+        'equation is written on the total overburden because there is no '
+        'water anywhere in the paper it comes from; with effective strength '
+        'parameters this program feeds it the EFFECTIVE vertical stress, '
+        'which is the consistent reading and the conservative one. The '
+        'theory itself is silent.':
+            'Hay presión intersticial a lo largo de un pilote de Ito y '
+            'Matsui. La ecuación publicada está escrita sobre la tensión '
+            'vertical total porque en el artículo del que sale no hay agua '
+            'en ningún sitio; con parámetros de resistencia efectivos este '
+            'programa le da la tensión vertical EFECTIVA, que es la lectura '
+            'coherente y la conservadora. La teoría misma no dice nada.',
+        'The Particle Swarm search is reporting several minima with Optimize '
+        'Surfaces OFF. It is then looking for LOCAL minima, and the lowest '
+        'of them need not be the global minimum of the slope.':
+            'La búsqueda por enjambre de partículas está dando varios '
+            'mínimos con Optimizar superficies DESACTIVADO. Así busca '
+            'mínimos LOCALES, y el menor de ellos no tiene por qué ser el '
+            'mínimo global del talud.',
+        'A seismic analysis mode is on, so the critical surface is the one '
+        'with the lowest critical seismic coefficient. The probabilistic and '
+        'sensitivity statistics are taken on the factor of safety OF THAT '
+        'SURFACE, which is not the lowest factor of safety of the sample.':
+            'Hay un modo de análisis sísmico activado, así que la superficie '
+            'crítica es la de menor coeficiente sísmico crítico. La '
+            'estadística probabilística y la de sensibilidad se toman sobre '
+            'el factor de seguridad DE ESA SUPERFICIE, que no es el menor '
+            'factor de seguridad de la muestra.',
+        'One set of Slope Limits, [{inner_lo:g}, {inner_hi:g}], lies inside '
+        'the other, [{outer_lo:g}, {outer_hi:g}]. The two sets are the '
+        'ranges where the ends of a surface may daylight, so the inner one '
+        'admits no end the outer one does not: as a filter it does nothing.':
+            'Uno de los dos juegos de límites del talud, [{inner_lo:g}, '
+            '{inner_hi:g}], queda dentro del otro, [{outer_lo:g}, '
+            '{outer_hi:g}]. Los dos juegos son los tramos donde pueden '
+            'aflorar los extremos de una superficie, así que el interior no '
+            'admite ningún extremo que el exterior no admita: como filtro no '
+            'hace nada.',
+        'One set of Slope Limits, [{inner_lo:g}, {inner_hi:g}], lies inside '
+        'the other, [{outer_lo:g}, {outer_hi:g}]. The two sets are the '
+        'ranges where the ends of a surface may daylight, so the inner one '
+        'admits no end the outer one does not: as a filter it does nothing. '
+        'A Path Search still starts its surfaces in the set nearer the toe, '
+        'so there it can change where they begin.':
+            'Uno de los dos juegos de límites del talud, [{inner_lo:g}, '
+            '{inner_hi:g}], queda dentro del otro, [{outer_lo:g}, '
+            '{outer_hi:g}]. Los dos juegos son los tramos donde pueden '
+            'aflorar los extremos de una superficie, así que el interior no '
+            'admite ningún extremo que el exterior no admita: como filtro no '
+            'hace nada. Una búsqueda por caminos sigue empezando sus '
+            'superficies en el juego más cercano al pie, así que ahí sí '
+            'puede cambiar dónde empiezan.',
+        'The second set of Slope Limits has only one side set, so it '
+        'describes no window and was ignored. Set both the left and the '
+        'right limit, or clear them both.':
+            'El segundo juego de límites del talud solo tiene un lado, así '
+            'que no describe ninguna ventana y se ignoró. Pon los dos '
+            'límites, el izquierdo y el derecho, o quita los dos.',
+        'A second set of Slope Limits is defined but the first is automatic, '
+        'and the second set is meant to be added to the first, not to '
+        'replace it. It was ignored; set the first set as well.':
+            'Hay un segundo juego de límites del talud, pero el primero es '
+            'automático, y el segundo está para sumarse al primero, no para '
+            'sustituirlo. Se ignoró; pon también el primero.',
+        'Slope Search derives its entry and exit window from the ground '
+        'profile, so the Slope Limits you set did not steer where it looked. '
+        'They were still applied as a filter, as they are for every search.':
+            'La búsqueda de talud saca su ventana de entrada y de salida del '
+            'perfil del terreno, así que los límites del talud que pusiste '
+            'no guiaron dónde buscó. Se aplicaron igualmente como filtro, '
+            'como en todas las búsquedas.',
+        'Accelerate convergence (Steffensen) is on, and not one of the '
+        'methods this run uses has an iteration it can accelerate, so the '
+        'setting reached nothing and the results are the same as they would '
+        'be with it off. The methods that ran are {methods}. Aitken '
+        'extrapolation speeds up a fixed point on the factor of safety, and '
+        'only Bishop simplified (on circular surfaces) and both Janbu solve '
+        'one. Spencer and GLE/Morgenstern-Price solve for the factor and the '
+        'inter-slice force together, and extrapolating the factor alone '
+        'leaves the force behind. Lowe-Karafiath and Corps of Engineers #1 '
+        'and #2 iterate on the factor but are not wired to it. '
+        'Ordinary/Fellenius has no iteration at all.':
+            'Acelerar convergencia (Steffensen) está activado, y ninguno de '
+            'los métodos de este cálculo tiene una iteración que acelerar, '
+            'así que el ajuste no llegó a nada y los resultados son los '
+            'mismos que sin él. Los métodos calculados son {methods}. La '
+            'extrapolación de Aitken acelera un punto fijo sobre el factor '
+            'de seguridad, y solo Bishop simplificado (en superficies '
+            'circulares) y los dos Janbu resuelven uno. Spencer y '
+            'GLE/Morgenstern-Price resuelven a la vez el factor y la fuerza '
+            'entre dovelas, y extrapolar solo el factor deja atrás la '
+            'fuerza. Lowe-Karafiath y Cuerpo de Ingenieros n.º 1 y n.º 2 '
+            'iteran sobre el factor pero no están conectados al ajuste. '
+            'Ordinario/Fellenius no itera.',
+        'Accelerate convergence (Steffensen) is on, and not one of the '
+        'methods this run uses has an iteration it can accelerate, so the '
+        'setting reached nothing and the results are the same as they would '
+        'be with it off. The methods that ran are {methods}. Bishop '
+        'simplified is in this run and does accelerate, but only on its '
+        'circular branch, and this search returns polylines. Aitken '
+        'extrapolation speeds up a fixed point on the factor of safety, and '
+        'only Bishop simplified (on circular surfaces) and both Janbu solve '
+        'one. Spencer and GLE/Morgenstern-Price solve for the factor and the '
+        'inter-slice force together, and extrapolating the factor alone '
+        'leaves the force behind. Lowe-Karafiath and Corps of Engineers #1 '
+        'and #2 iterate on the factor but are not wired to it. '
+        'Ordinary/Fellenius has no iteration at all.':
+            'Acelerar convergencia (Steffensen) está activado, y ninguno de '
+            'los métodos de este cálculo tiene una iteración que acelerar, '
+            'así que el ajuste no llegó a nada y los resultados son los '
+            'mismos que sin él. Los métodos calculados son {methods}. Bishop '
+            'simplificado está en este cálculo y sí acelera, pero solo en su '
+            'rama circular, y esta búsqueda devuelve polilíneas. La '
+            'extrapolación de Aitken acelera un punto fijo sobre el factor '
+            'de seguridad, y solo Bishop simplificado (en superficies '
+            'circulares) y los dos Janbu resuelven uno. Spencer y '
+            'GLE/Morgenstern-Price resuelven a la vez el factor y la fuerza '
+            'entre dovelas, y extrapolar solo el factor deja atrás la '
+            'fuerza. Lowe-Karafiath y Cuerpo de Ingenieros n.º 1 y n.º 2 '
+            'iteran sobre el factor pero no están conectados al ajuste. '
+            'Ordinario/Fellenius no itera.',
+        "{n} supports of class '{cls}' name no property set and the project "
+        "defines {n_sets} sets of that class ({sets}). The first, '{first}', "
+        'is used. Assign each support its set in Support Properties if that '
+        'is not the one meant.':
+            '{n} soportes de la clase «{cls}» sin juego de propiedades, y el '
+            'proyecto define {n_sets} juegos de esa clase ({sets}). Se usa '
+            'el primero, «{first}». Asigna a cada soporte su juego en '
+            'Propiedades del soporte si no es ese el que querías.',
+        "1 support of class '{cls}' name no property set and the project "
+        "defines {n_sets} sets of that class ({sets}). The first, '{first}', "
+        'is used. Assign each support its set in Support Properties if that '
+        'is not the one meant.':
+            '1 soporte de la clase «{cls}» sin juego de propiedades, y el '
+            'proyecto define {n_sets} juegos de esa clase ({sets}). Se usa '
+            'el primero, «{first}». Asigna a cada soporte su juego en '
+            'Propiedades del soporte si no es ese el que querías.',
+        "Support '{name}' ({type_name}) has about {percent:.0f} % of its "
+        'length and {hit_plates} of its {n_plates} plates in {materials}, '
+        'whose strength is not finite (Infinite Strength): the soil around '
+        'it is read as zero there. Rigid bedrock is a modelling device, not '
+        'a promise that a support cannot be pulled out of it, and letting '
+        'the infinity through would drop its pull-out or bearing from the '
+        'minimum.':
+            'El soporte «{name}» ({type_name}) tiene cerca del {percent:.0f} '
+            '% de su longitud y {hit_plates} de sus {n_plates} placas en '
+            '{materials}, cuya resistencia no es finita (resistencia '
+            'infinita): ahí el suelo que lo rodea se lee como nulo. La roca '
+            'rígida es un recurso de modelado, no la promesa de que un '
+            'soporte no pueda arrancarse de ella, y dejar pasar el infinito '
+            'sacaría su arrancamiento o su apoyo del mínimo.',
+        "Support '{name}' ({type_name}) has about {percent:.0f} % of its "
+        'length in {materials}, whose strength is not finite (Infinite '
+        'Strength): the soil around it is read as zero there. Rigid bedrock '
+        'is a modelling device, not a promise that a support cannot be '
+        'pulled out of it, and letting the infinity through would drop its '
+        'pull-out or bearing from the minimum.':
+            'El soporte «{name}» ({type_name}) tiene cerca del {percent:.0f} '
+            '% de su longitud en {materials}, cuya resistencia no es finita '
+            '(resistencia infinita): ahí el suelo que lo rodea se lee como '
+            'nulo. La roca rígida es un recurso de modelado, no la promesa '
+            'de que un soporte no pueda arrancarse de ella, y dejar pasar el '
+            'infinito sacaría su arrancamiento o su apoyo del mínimo.',
+        "Support '{name}' ({type_name}) has {hit_plates} of its {n_plates} "
+        'plates in {materials}, whose strength is not finite (Infinite '
+        'Strength): the soil around it is read as zero there. Rigid bedrock '
+        'is a modelling device, not a promise that a support cannot be '
+        'pulled out of it, and letting the infinity through would drop its '
+        'pull-out or bearing from the minimum.':
+            'El soporte «{name}» ({type_name}) tiene {hit_plates} de sus '
+            '{n_plates} placas en {materials}, cuya resistencia no es finita '
+            '(resistencia infinita): ahí el suelo que lo rodea se lee como '
+            'nulo. La roca rígida es un recurso de modelado, no la promesa '
+            'de que un soporte no pueda arrancarse de ella, y dejar pasar el '
+            'infinito sacaría su arrancamiento o su apoyo del mínimo.',
+        "Support '{name}' refers to a property set that is no longer in the "
+        'project; it is left out of the analysis.':
+            'El soporte «{name}» se refiere a un juego de propiedades que ya '
+            'no está en el proyecto; queda fuera del análisis.',
+        "Support '{name}' refers to a property set that is no longer in the "
+        "project; '{used}' is used instead, chosen by class.":
+            'El soporte «{name}» se refiere a un juego de propiedades que ya '
+            'no está en el proyecto; se usa «{used}» en su lugar, elegido '
+            'por clase.',
+        'Surface Altering does not read Step Reduction Factor or Explore All '
+        'Vertices: they configure the Monte Carlo technique, and were '
+        'ignored.':
+            'Alteración de superficie no lee Factor de reducción del paso ni '
+            'Explorar todos los vértices: configuran la técnica Monte Carlo, '
+            'y se ignoraron.',
+        "The Surface Type is set to '{surface_type}' and the Search Method "
+        "to '{search_method}', which does not search for that kind of "
+        'surface. The method is what runs, so the surfaces this analysis '
+        'returns are the ones it generates, whatever the Surface Type says.':
+            'El tipo de superficie es «{surface_type}» y el método de '
+            'búsqueda «{search_method}», que no busca ese tipo de '
+            'superficie. Lo que se ejecuta es el método, así que las '
+            'superficies que devuelve este análisis son las que él genera, '
+            'diga lo que diga el tipo de superficie.',
+        "Material '{name}': its undrained profile reaches zero at elevation "
+        '{y0:.4g}, and the material extends above that ({y_min:.4g} to '
+        '{y_max:.4g}). The soil above it has no shear strength at all, so '
+        'any surface that goes there has a factor of safety of zero. The '
+        'Cutoff cannot bound this side of the line.':
+            'Material «{name}»: su perfil no drenado llega a cero a la cota '
+            '{y0:.4g}, y el material se extiende por encima de ella '
+            '({y_min:.4g} a {y_max:.4g}). El suelo por encima de ella no '
+            'tiene resistencia al corte, así que cualquier superficie que '
+            'pase por ahí tiene un factor de seguridad nulo. El límite no '
+            'puede acotar ese lado de la recta.',
+        "Material '{name}': its undrained profile reaches zero at elevation "
+        '{y0:.4g}, and the material extends below that ({y_min:.4g} to '
+        '{y_max:.4g}). The soil below it has no shear strength at all, so '
+        'any surface that goes there has a factor of safety of zero. The '
+        'Cutoff cannot bound this side of the line.':
+            'Material «{name}»: su perfil no drenado llega a cero a la cota '
+            '{y0:.4g}, y el material se extiende por debajo de ella '
+            '({y_min:.4g} a {y_max:.4g}). El suelo por debajo de ella no '
+            'tiene resistencia al corte, así que cualquier superficie que '
+            'pase por ahí tiene un factor de seguridad nulo. El límite no '
+            'puede acotar ese lado de la recta.',
+        "Material '{name}': its undrained profile reaches zero {d0:.4g} "
+        'below its reference, and the material is {depth:.4g} deep. Below '
+        'that it has no shear strength and any surface reaching it has a '
+        'factor of safety of zero.':
+            'Material «{name}»: su perfil no drenado llega a cero {d0:.4g} '
+            'por debajo de su referencia, y el material tiene {depth:.4g} de '
+            'espesor. Por debajo de eso no tiene resistencia al corte, y '
+            'cualquier superficie que llegue ahí tiene un factor de '
+            'seguridad nulo.',
+        "{n} retaining walls are drawn horizontally. A wall's pressure "
+        'profile is defined from the crest downwards and a horizontal wall '
+        'has no crest, so it is excluded from the analysis rather than '
+        'analysed with a profile that would depend on which end was drawn '
+        'first.':
+            '{n} muros de contención están dibujados horizontales. El perfil '
+            'de presiones de un muro se define desde la coronación hacia '
+            'abajo, y un muro horizontal no tiene coronación, así que quedan '
+            'fuera del análisis en vez de calcularse con un perfil que '
+            'dependería de qué extremo se dibujó primero.',
+        "1 retaining wall is drawn horizontally. A wall's pressure profile "
+        'is defined from the crest downwards and a horizontal wall has no '
+        'crest, so it is excluded from the analysis rather than analysed '
+        'with a profile that would depend on which end was drawn first.':
+            '1 muro de contención está dibujado horizontal. El perfil de '
+            'presiones de un muro se define desde la coronación hacia abajo, '
+            'y un muro horizontal no tiene coronación, así que queda fuera '
+            'del análisis en vez de calcularse con un perfil que dependería '
+            'de qué extremo se dibujó primero.',
+        'Weak layer {name} lies entirely above the ground surface, so any '
+        'surface it clips is pushed out of the soil and discarded. Suppress '
+        'it or move it into the model.':
+            'La capa débil {name} queda entera por encima del terreno, así '
+            'que cualquier superficie que recorte sale del suelo y se '
+            'descarta. Suprímela o llévala dentro del modelo.',
+        'Weak layer {name} has no material assigned, so it carries no '
+        'strength of its own and would only change the geometry of the '
+        'surfaces it clips. Assign it a material or suppress it.':
+            'La capa débil {name} no tiene material asignado, así que no '
+            'aporta resistencia propia y solo cambiaría la geometría de las '
+            'superficies que recorta. Asígnale un material o suprímela.',
+        'The left projection angles, {lo:g}° to {hi:g}°, go outside '
+        '{limit_lo:g}° to {limit_hi:g}°, the range the reference gives for '
+        'kinematically valid surfaces on a left-facing slope. The search '
+        'uses them as given; a projection that cannot reach the ground '
+        'leaves its surface invalid.':
+            'Los ángulos de proyección izquierdos, de {lo:g}° a {hi:g}°, se '
+            'salen de {limit_lo:g}° a {limit_hi:g}°, el intervalo que da la '
+            'referencia para superficies cinemáticamente válidas en un talud '
+            'orientado a la izquierda. La búsqueda los usa tal cual; una '
+            'proyección que no llega al terreno deja inválida su superficie.',
+        'The left projection angles, {lo:g}° to {hi:g}°, go outside '
+        '{limit_lo:g}° to {limit_hi:g}°, the range the reference gives for '
+        'kinematically valid surfaces on a right-facing slope. The search '
+        'uses them as given; a projection that cannot reach the ground '
+        'leaves its surface invalid.':
+            'Los ángulos de proyección izquierdos, de {lo:g}° a {hi:g}°, se '
+            'salen de {limit_lo:g}° a {limit_hi:g}°, el intervalo que da la '
+            'referencia para superficies cinemáticamente válidas en un talud '
+            'orientado a la derecha. La búsqueda los usa tal cual; una '
+            'proyección que no llega al terreno deja inválida su superficie.',
+        'The right projection angles, {lo:g}° to {hi:g}°, go outside '
+        '{limit_lo:g}° to {limit_hi:g}°, the range the reference gives for '
+        'kinematically valid surfaces on a left-facing slope. The search '
+        'uses them as given; a projection that cannot reach the ground '
+        'leaves its surface invalid.':
+            'Los ángulos de proyección derechos, de {lo:g}° a {hi:g}°, se '
+            'salen de {limit_lo:g}° a {limit_hi:g}°, el intervalo que da la '
+            'referencia para superficies cinemáticamente válidas en un talud '
+            'orientado a la izquierda. La búsqueda los usa tal cual; una '
+            'proyección que no llega al terreno deja inválida su superficie.',
+        'The right projection angles, {lo:g}° to {hi:g}°, go outside '
+        '{limit_lo:g}° to {limit_hi:g}°, the range the reference gives for '
+        'kinematically valid surfaces on a right-facing slope. The search '
+        'uses them as given; a projection that cannot reach the ground '
+        'leaves its surface invalid.':
+            'Los ángulos de proyección derechos, de {lo:g}° a {hi:g}°, se '
+            'salen de {limit_lo:g}° a {limit_hi:g}°, el intervalo que da la '
+            'referencia para superficies cinemáticamente válidas en un talud '
+            'orientado a la derecha. La búsqueda los usa tal cual; una '
+            'proyección que no llega al terreno deja inválida su superficie.',
+        'The left projection angles are written from {start:g}° to {end:g}°, '
+        'and the reference measures them counter-clockwise from the positive '
+        'x axis with the Start Angle less than the End Angle. They were read '
+        'as {lo:g}° to {hi:g}°: the arc between the two that avoids 0°, a '
+        'direction no left projection can take.':
+            'Los ángulos de proyección izquierdos están escritos de '
+            '{start:g}° a {end:g}°, y la referencia los mide en sentido '
+            'antihorario desde el eje x positivo, con el ángulo inicial '
+            'menor que el final. Se leyeron como {lo:g}° a {hi:g}°: el arco '
+            'entre los dos que evita 0°, una dirección que ninguna '
+            'proyección izquierda puede tomar.',
+        'The right projection angles are written from {start:g}° to '
+        '{end:g}°, and the reference measures them counter-clockwise from '
+        'the positive x axis with the Start Angle less than the End Angle. '
+        'They were read as {lo:g}° to {hi:g}°: the arc between the two that '
+        'avoids 180°, a direction no right projection can take.':
+            'Los ángulos de proyección derechos están escritos de {start:g}° '
+            'a {end:g}°, y la referencia los mide en sentido antihorario '
+            'desde el eje x positivo, con el ángulo inicial menor que el '
+            'final. Se leyeron como {lo:g}° a {hi:g}°: el arco entre los dos '
+            'que evita 180°, una dirección que ninguna proyección derecha '
+            'puede tomar.',
+        'A Block Search Line is one segment given by two points; this one '
+        'has {n} vertices. A path of several segments that the surface '
+        'should follow is a Block Search Polyline.':
+            'Una línea de búsqueda por bloques es un segmento dado por dos '
+            'puntos; esta tiene {n} vértices. Un camino de varios segmentos '
+            'que la superficie deba seguir es una polilínea de búsqueda por '
+            'bloques.',
+        'A Block Search object needs at least one vertex.':
+            'Un objeto de búsqueda por bloques necesita al menos un vértice.',
+        'A Block Search Point is a single point; this one has {n} vertices.':
+            'Un punto de búsqueda por bloques es un único punto; este tiene '
+            '{n} vértices.',
+        'A Block Search Polyline has to advance in x from one end to the '
+        'other: the trial surface follows it between its two points, and a '
+        'polyline that doubles back (or has a vertical segment) would give a '
+        'surface that reverses direction.':
+            'Una polilínea de búsqueda por bloques tiene que avanzar en x de '
+            'un extremo al otro: la superficie de tanteo la sigue entre sus '
+            'dos puntos, y una polilínea que vuelve sobre sí misma (o que '
+            'tiene un tramo vertical) daría una superficie que cambia de '
+            'sentido.',
+        'The Left / Right Line Segment option places its point on the end '
+        'segment of that side, which needs a polyline of at least two '
+        'segments; this one has one. Use Any Line Segment or End Point.':
+            'La opción Segmento izquierdo / derecho pone su punto en el '
+            'segmento extremo de ese lado, y eso necesita una polilínea de '
+            'al menos dos segmentos; esta tiene uno. Usa Cualquier segmento '
+            'o Extremo.',
+        'A Block Search Polyline is an open line of at least two vertices.':
+            'Una polilínea de búsqueda por bloques es una línea abierta de '
+            'al menos dos vértices.',
+        'A Block Search Window is a closed polygon of at least three '
+        'vertices.':
+            'Una ventana de búsqueda por bloques es un polígono cerrado de '
+            'al menos tres vértices.',
+        'This model carries {shadow} = {old}, removed in v0.1.103: it held a '
+        'geometric cooling rate that no analysis ever read; the coefficient '
+        'the schedule does use is {survivor}. The stored value was NOT '
+        'converted.':
+            'Este modelo lleva {shadow} = {old}, retirado en v0.1.103: '
+            'guardaba un ritmo de enfriamiento geométrico que ningún '
+            'análisis llegó a leer; el coeficiente que sí usa el programa de '
+            'enfriamiento es {survivor}. El valor guardado NO se convirtió.',
+        'This model carries {shadow} = {old}, removed in v0.1.103: it held '
+        "an angle in the search's own toe-to-crest frame and the field "
+        'replacing it is absolute, so converting it needs the failure '
+        'direction, which is not part of this block. The field to set is '
+        '{survivor}. The stored value was NOT converted.':
+            'Este modelo lleva {shadow} = {old}, retirado en v0.1.103: '
+            'guardaba un ángulo en el sistema propio de la búsqueda, del pie '
+            'a la coronación, y el campo que lo sustituye es absoluto, así '
+            'que convertirlo necesita la dirección de rotura, que no forma '
+            'parte de este bloque. El campo que hay que poner es {survivor}. '
+            'El valor guardado NO se convirtió.',
+        'This model carries path_optimize = True, removed in v0.1.104. Path '
+        'Search used to optimise its best surfaces whether or not anything '
+        'asked it to, because that field defaulted to True and the interface '
+        'never showed it. The optimisation is now the Optimize Surfaces '
+        'checkbox, which is UNTICKED here, so this run does not optimise. '
+        'Tick it to get the old behaviour.':
+            'Este modelo lleva path_optimize = True, retirado en v0.1.104. '
+            'La búsqueda por caminos optimizaba sus mejores superficies '
+            'tanto si se le pedía como si no, porque ese campo valía True '
+            'por defecto y la interfaz nunca lo enseñaba. La optimización es '
+            'ahora la casilla Optimizar superficies, que aquí está '
+            'DESMARCADA, así que este cálculo no optimiza. Márcala para '
+            'volver al comportamiento de antes.',
+        'This model was saved before v0.1.103, and its Path Search lower '
+        'Initial Angle at Toe is ON at {angle}°. That number was read in the '
+        "search's own toe-to-crest frame then and is read as ABSOLUTE now — "
+        'counter-clockwise from the +x axis — so it does not describe the '
+        'same limit. It was NOT converted: doing so needs the failure '
+        'direction, which is not part of this block. Check '
+        'path_initial_angle_at_toe_lower_deg before trusting this run.':
+            'Este modelo se guardó antes de v0.1.103, y su ángulo inicial en '
+            'el pie inferior de la búsqueda por caminos está ACTIVADO a '
+            '{angle}°. Ese número se leía entonces en el sistema propio de '
+            'la búsqueda, del pie a la coronación, y ahora se lee como '
+            'ABSOLUTO — en sentido antihorario desde el eje +x —, así que no '
+            'describe el mismo límite. NO se convirtió: hacerlo necesita la '
+            'dirección de rotura, que no forma parte de este bloque. Revisa '
+            'path_initial_angle_at_toe_lower_deg antes de fiarte de este '
+            'cálculo.',
+        'This model was saved before v0.1.103, and its Path Search upper '
+        'Initial Angle at Toe is ON at {angle}°. That number was read in the '
+        "search's own toe-to-crest frame then and is read as ABSOLUTE now — "
+        'counter-clockwise from the +x axis — so it does not describe the '
+        'same limit. It was NOT converted: doing so needs the failure '
+        'direction, which is not part of this block. Check '
+        'path_initial_angle_at_toe_upper_deg before trusting this run.':
+            'Este modelo se guardó antes de v0.1.103, y su ángulo inicial en '
+            'el pie superior de la búsqueda por caminos está ACTIVADO a '
+            '{angle}°. Ese número se leía entonces en el sistema propio de '
+            'la búsqueda, del pie a la coronación, y ahora se lee como '
+            'ABSOLUTO — en sentido antihorario desde el eje +x —, así que no '
+            'describe el mismo límite. NO se convirtió: hacerlo necesita la '
+            'dirección de rotura, que no forma parte de este bloque. Revisa '
+            'path_initial_angle_at_toe_upper_deg antes de fiarte de este '
+            'cálculo.',
+        'No model to compute. Add an external boundary first.':
+            'No hay modelo que calcular. Añade primero un contorno exterior.',
+        'No materials defined.':
+            'No hay materiales definidos.',
+        'The region at ({x:.2f}, {y:.2f}) is assigned a material that no '
+        'longer exists. Assign it another material (Properties > Assign '
+        'Materials); a surface through it cannot be analysed.':
+            'La región en ({x:.2f}, {y:.2f}) tiene asignado un material que '
+            'ya no existe. Asígnale otro material (Propiedades > Asignar '
+            'materiales); una superficie que pase por ella no se puede '
+            'analizar.',
         "The model has no visible annotation.":
             "El modelo no tiene ninguna anotación visible.",
         # v0.1.339 (D336) — the options of the PDF report

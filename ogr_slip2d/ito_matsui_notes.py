@@ -17,6 +17,9 @@ Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 
+from . import note_messages as N
+from .note_messages import note as _note
+
 import math
 
 
@@ -61,13 +64,7 @@ def ito_matsui_notes(project, method_ids=()) -> list[str]:
         d1 = float(getattr(stype, "out_of_plane_spacing", 0.0) or 0.0)
         d = float(getattr(stype, "pile_diameter", 0.0) or 0.0)
         if d1 <= 0.0 or d1 - d <= 0.0:
-            notes.append(
-                "The pile diameter (%.3g) is not smaller than the out-of-plane "
-                "spacing (%.3g), so there is no opening between piles. Ito and "
-                "Matsui (1975) describe soil squeezing THROUGH that opening and "
-                "their equation diverges when it closes, so the row applies no "
-                "force at all. A continuous barrier is a wall, not a pile row."
-                % (d, d1))
+            notes.append(_note(N.PILES_TOUCH, diameter=d, spacing=d1))
             touching.append(stype)
     piles = [(s, st) for s, st in piles
              if not any(st is t for t in touching)]
@@ -83,14 +80,8 @@ def ito_matsui_notes(project, method_ids=()) -> list[str]:
         if tilt > _TILT_TOLERANCE_DEG:
             leaning.append(tilt)
     if leaning:
-        notes.append(
-            "%d pile%s more than %.3g° off vertical (up to %.1f°). Ito and "
-            "Matsui (1975) derive the pressure for a vertical row, so the "
-            "force is integrated ALONG THE SHAFT rather than over depth. "
-            "The theory does not say which is right, and projecting one "
-            "onto the other here would be this program deciding."
-            % (len(leaning), " is" if len(leaning) == 1 else "s are",
-               _TILT_TOLERANCE_DEG, max(leaning)))
+        notes.append(_note(N.PILES_LEANING, n=len(leaning),
+                           tolerance=_TILT_TOLERANCE_DEG, tilt=max(leaning)))
 
     # --- water on the shaft ----------------------------------------------
     # v0.1.231 (D227) -- the two checks below answered an exception with
@@ -100,38 +91,27 @@ def ito_matsui_notes(project, method_ids=()) -> list[str]:
         wet = _has_pore_pressure(project, piles)
     except Exception as exc:  # noqa: BLE001 - said, not swallowed
         wet = False
-        notes.append(_UNCHECKED % ("whether there is pore pressure along "
-                                   "an Ito-Matsui pile", type(exc).__name__,
-                                   exc))
+        notes.append(_note(N.PILES_UNCHECKED_WATER,
+                           error=type(exc).__name__, detail=str(exc)))
     if wet:
-        notes.append(
-            "There is pore pressure along an Ito-Matsui pile. The published "
-            "equation is written on the total overburden because there is "
-            "no water anywhere in the paper it comes from; with effective "
-            "strength parameters this program feeds it the EFFECTIVE "
-            "vertical stress, which is the consistent reading and the "
-            "conservative one. The theory itself is silent.")
+        notes.append(_note(N.PILES_WATER))
 
     # --- the pressure goes negative near the surface ---------------------
     try:
         negative = _has_negative_pressure(project, piles)
     except Exception as exc:  # noqa: BLE001 - said, not swallowed
         negative = False
-        notes.append(_UNCHECKED % ("whether the Ito-Matsui pressure goes "
-                                   "negative near the surface",
-                                   type(exc).__name__, exc))
+        notes.append(_note(N.PILES_UNCHECKED_NEGATIVE,
+                           error=type(exc).__name__, detail=str(exc)))
     if negative:
-        notes.append(
-            "The Ito-Matsui pressure comes out negative over part of the "
-            "pile, near the surface, where the cohesion terms outweigh the "
-            "overburden: the theory is saying no plastic pressure develops "
-            "there. It is integrated as published, so that stretch reduces "
-            "the total instead of being quietly set to zero.")
+        notes.append(_note(N.PILES_NEGATIVE))
 
     return notes
 
 
 #: v0.1.231 (D227) -- what a note says when its check could not be made.
+#: v0.1.347 (D335) -- one whole sentence per check now, with its code
+#: (``note_messages.PILES_UNCHECKED_*``); this is the shape they share.
 _UNCHECKED = "It could not be checked %s (%s: %s)."
 
 

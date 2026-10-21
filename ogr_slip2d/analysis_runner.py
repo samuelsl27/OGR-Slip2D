@@ -47,6 +47,10 @@ from .support_integration import (reversed_support_notes,
                                   uncontributing_support_notes)
 from .yield_acceleration import DEFAULT_K_MAX
 
+from . import note_messages as N
+from .note_messages import nested_note as _nested
+from .note_messages import note as _note
+
 __all__ = [
     "AnalysisOutcome",
     "build_method",
@@ -414,21 +418,12 @@ def settings_warnings(project, method_ids=()) -> list[str]:
         stats = project.settings.statistics
         if (getattr(stats, "probabilistic_analysis", False)
                 or getattr(stats, "sensitivity_analysis", False)):
-            notes.append(
-                "A seismic analysis mode is on, so the critical surface is "
-                "the one with the lowest critical seismic coefficient. The "
-                "probabilistic and sensitivity statistics are taken on the "
-                "factor of safety OF THAT SURFACE, which is not the lowest "
-                "factor of safety of the sample.")
+            notes.append(_note(N.SEISMIC_STATISTICS))
     s_search = project.settings.search
     if (s_search.search_method == "slope"
             and s_search.slope_limit_left is not None
             and s_search.slope_limit_right is not None):
-        notes.append(
-            "Slope Search derives its entry and exit window from the "
-            "ground profile, so the Slope Limits you set did not steer "
-            "where it looked. They were still applied as a filter, as "
-            "they are for every search.")
+        notes.append(_note(N.SLOPE_SEARCH_LIMITS))
     # v0.1.146 — the second set of Slope Limits is defined ON TOP of the
     # first, never instead of it, so a second set on its own describes
     # nothing this engine can apply. Said out loud rather than dropped
@@ -436,18 +431,11 @@ def settings_warnings(project, method_ids=()) -> list[str]:
     # exactly the failure rule 7 exists for.
     if ((s_search.slope_limit_left_2 is None)
             != (s_search.slope_limit_right_2 is None)):
-        notes.append(
-            "The second set of Slope Limits has only one side set, so it "
-            "describes no window and was ignored. Set both the left and "
-            "the right limit, or clear them both.")
+        notes.append(_note(N.SLOPE_LIMITS_ONE_SIDE))
     elif (s_search.slope_limit_left_2 is not None
             and (s_search.slope_limit_left is None
                  or s_search.slope_limit_right is None)):
-        notes.append(
-            "A second set of Slope Limits is defined but the first is "
-            "automatic, and the second set is meant to be added to the "
-            "first, not to replace it. It was ignored; set the first set "
-            "as well.")
+        notes.append(_note(N.SLOPE_LIMITS_SECOND_ALONE))
     # v0.1.261 (D262) — and a set that lies inside the other. The two sets
     # are ranges an end may daylight in (D50), so the inner one admits no
     # end the outer one does not: as a filter it does nothing, which is
@@ -462,18 +450,13 @@ def settings_warnings(project, method_ids=()) -> list[str]:
         _inner, _outer = (((_b0, _b1), (_a0, _a1))
                           if _b1 - _b0 <= _a1 - _a0
                           else ((_a0, _a1), (_b0, _b1)))
-        _line = ("One set of Slope Limits, [%g, %g], lies inside the other, "
-                 "[%g, %g]. The two sets are the ranges where the ends of a "
-                 "surface may daylight, so the inner one admits no end the "
-                 "outer one does not: as a filter it does nothing."
-                 % (_inner + _outer))
-        if s_search.search_method == "path":
-            # The one place the second window acts on its own: Path Search
-            # starts in the window nearest the toe (``PathSearch._run``).
-            _line += (" A Path Search still starts its surfaces in the set "
-                      "nearer the toe, so there it can change where they "
-                      "begin.")
-        notes.append(_line)
+        # The one place the second window acts on its own: Path Search
+        # starts in the window nearest the toe (``PathSearch._run``).
+        notes.append(_note(
+            N.SLOPE_LIMITS_NESTED_PATH if s_search.search_method == "path"
+            else N.SLOPE_LIMITS_NESTED,
+            inner_lo=_inner[0], inner_hi=_inner[1],
+            outer_lo=_outer[0], outer_hi=_outer[1]))
     # Anything the stored model carried that could not be migrated. It is
     # a note and not a refusal: the analysis is valid, it simply did not
     # honour a value the file still mentions.
@@ -543,25 +526,10 @@ def _max_iterations_scope_notes(project, method_ids) -> list[str]:
         return []
     budget = branch_budget(value)
     if budget <= MAX_PASSES:
-        return [
-            f"Maximum iterations is set to {value}, and for Spencer and "
-            f"GLE/Morgenstern-Price that bounds the outer search for the "
-            f"inter-slice inclination alone. The fixed point those two "
-            f"methods solve inside every sample of that search keeps its "
-            f"own budget of {MAX_PASSES} passes, which this setting raises "
-            f"only once it is above {MAX_PASSES}; at or below that the "
-            f"inner iteration is untouched. The methods that iterate on the "
-            f"factor of safety directly — Bishop and both Janbu — do take "
-            f"the value as written."]
-    return [
-        f"Maximum iterations is set to {value}, so for Spencer and "
-        f"GLE/Morgenstern-Price it now bounds two loops and not one: the "
-        f"outer search for the inter-slice inclination, and the fixed point "
-        f"solved inside every sample of it, whose budget rises from "
-        f"{MAX_PASSES} passes to {budget}. The extra room changes an answer "
-        f"only where a branch was being cut off while it was still "
-        f"converging, which takes a convergence tolerance far tighter than "
-        f"the default one."]
+        return [_note(N.MAX_ITERATIONS_FLOORED, value=value,
+                      passes=MAX_PASSES)]
+    return [_note(N.MAX_ITERATIONS_RAISED, value=value, passes=MAX_PASSES,
+                  budget=budget)]
 
 
 def _run_returns_circles(s_search) -> bool:
@@ -644,24 +612,8 @@ def _steffensen_scope_notes(project, method_ids) -> list[str]:
     # Said separately because it is the surprising half: Bishop IS a method
     # that accelerates, and on this run it is not one.
     blind = [m for m in asked if m in _STEFFENSEN_CIRCULAR_ONLY]
-    why_bishop = (
-        " Bishop simplified is in this run and does accelerate, but only on "
-        "its circular branch, and this search returns polylines." if blind
-        else "")
-
-    return [
-        "Accelerate convergence (Steffensen) is on, and not one of the "
-        "methods this run uses has an iteration it can accelerate, so the "
-        "setting reached nothing and the results are the same as they would "
-        "be with it off. The methods that ran are %s.%s Aitken extrapolation "
-        "speeds up a fixed point on the factor of safety, and only Bishop "
-        "simplified (on circular surfaces) and both Janbu solve one. Spencer "
-        "and GLE/Morgenstern-Price solve for the factor and the inter-slice "
-        "force together, and extrapolating the factor alone leaves the force "
-        "behind. Lowe-Karafiath and Corps of Engineers #1 and #2 iterate on "
-        "the factor but are not wired to it. Ordinary/Fellenius has no "
-        "iteration at all."
-        % (", ".join(asked), why_bishop)]
+    return [_note(N.STEFFENSEN_NOTHING_BISHOP if blind
+                  else N.STEFFENSEN_NOTHING, methods=", ".join(asked))]
 
 
 def _block_group_notes(project) -> list[str]:
@@ -701,40 +653,20 @@ def _block_group_notes(project) -> list[str]:
     multiple = bool(getattr(s_search, "block_multiple_groups", False))
     notes = []
     if drawn == 0:
-        notes.append(
-            f"No Block Search object is drawn, so the sampling region is "
-            f"chosen by the program and not by the model: a box over the "
-            f"slope face tiled into {s_search.block_num_groups} vertical "
-            f"band(s) (Implicit Region Bands), one random vertex in each. "
-            f"The reference requires at least one Block Search object "
-            f"(window, line, point or polyline); draw one to search where "
-            f"the model says the slip surface can run.")
+        notes.append(_note(N.BLOCK_NO_OBJECT,
+                           bands=s_search.block_num_groups))
         if multiple:
-            notes.append(
-                "Multiple Groups is on, but no Block Search object is drawn, "
-                "so there are no Group IDs to split the search by: the "
-                "setting does nothing here.")
+            notes.append(_note(N.BLOCK_MULTIPLE_NO_OBJECT))
         return notes
     # v0.1.232 (D109) — this used to say that every trial surface takes ONE
     # vertex from each object, which stopped being true when the Polyline
     # started giving two points and the stretch between them.
-    what = ("1 Block Search object, so the trial surfaces are built from it"
-            if drawn == 1 else
-            f"{drawn} Block Search objects, so the trial surfaces are built "
-            f"from them")
-    notes.append(
-        f"This model draws {what} and the Implicit Region Bands setting — "
-        f"{s_search.block_num_groups} here — configures nothing. That count "
-        f"only divides the region OGR falls back to when no Block Search "
-        f"object is drawn.")
+    notes.append(_note(N.BLOCK_BANDS_IGNORED, drawn=drawn,
+                       bands=s_search.block_num_groups))
     if multiple:
         parts = block_groups(objects, True)
         if len(parts) == 1:
-            notes.append(
-                f"Multiple Groups is on, but every Block Search object has "
-                f"Group ID {parts[0][0]}: that is one group, and the search "
-                f"is the same as with the setting off. Give the objects "
-                f"different Group IDs to search them separately.")
+            notes.append(_note(N.BLOCK_ONE_GROUP, group_id=parts[0][0]))
     return notes
 
 
@@ -795,16 +727,7 @@ def _base_angle_ceiling_notes(project) -> list[str]:
     bands = weak_layer_bands(project)
     if not bands:
         return []
-    n = len(bands)
-    what = "1 weak layer" if n == 1 else f"{n} weak layers"
-    return [
-        f"Maximum slice base angle is set to {limit:g} deg, which does not "
-        f"raise the ceiling on the base of a slice — it removes it. This "
-        f"model draws {what}, and no surface a weak layer clips will be "
-        f"discarded for the steepness of its base, however close to "
-        f"vertical the drop at the end of a layer leaves it. Any value "
-        f"strictly between 0 and 90 applies the ceiling."
-    ]
+    return [_note(N.BASE_ANGLE_NO_CEILING, limit=limit, n=len(bands))]
 
 
 def _base_angle_scope_notes(project, method_ids=()) -> list[str]:
@@ -871,48 +794,32 @@ def _base_angle_scope_notes(project, method_ids=()) -> list[str]:
     hit = sorted(set(method_ids or ()) & M_ALPHA_SCREENED)
     miss = sorted(set(method_ids or ()) - M_ALPHA_SCREENED)
     if not screening:
-        clause = ("The m-alpha check is off, so nothing else caps how "
-                  "steeply a base may run.")
-        governs = ("A surface no weak layer clips therefore has no "
-                   "ceiling on the inclination of its base at all in "
-                   "this run.")
+        clause = _nested(N.M_ALPHA_CLAUSE_OFF)
+        governs = _nested(N.BASE_GOVERNS_NONE)
     elif method_ids and not hit:
-        clause = (f"The m-alpha check is on, but no method in this run is "
-                  f"screened by it ({', '.join(miss)}), so it caps nothing "
-                  f"here.")
-        governs = ("A surface no weak layer clips therefore has no "
-                   "ceiling on the inclination of its base at all in "
-                   "this run.")
+        clause = _nested(N.M_ALPHA_CLAUSE_UNSCREENED,
+                         methods=", ".join(miss))
+        governs = _nested(N.BASE_GOVERNS_NONE)
     else:
         named = ", ".join(hit) if hit else ", ".join(sorted(M_ALPHA_SCREENED))
-        tail = (f" It does not screen {', '.join(miss)}." if miss else "")
-        clause = (f"The m-alpha check is on, and where phi = 0 its "
-                  f"{M_ALPHA_LIMIT:g} limit is a bare ceiling of "
-                  f"{ceiling:.1f} deg on every surface it screens "
-                  f"({named}).{tail}")
-        governs = (
-            (f"On a weak-layer clip in purely cohesive material the "
-             f"{ceiling:.1f} deg ceiling therefore governs, and the "
-             f"{limit:g} deg set here never applies.")
-            if limit >= ceiling else
-            (f"On a weak-layer clip the {limit:g} deg set here is "
-             f"therefore the tighter of the two, and {ceiling:.1f} deg "
-             f"governs everywhere else."))
+        clause = (_nested(N.M_ALPHA_CLAUSE_ON_PARTIAL, m_alpha_limit=M_ALPHA_LIMIT,
+                          ceiling=ceiling, named=named,
+                          methods=", ".join(miss))
+                  if miss else
+                  _nested(N.M_ALPHA_CLAUSE_ON, m_alpha_limit=M_ALPHA_LIMIT,
+                          ceiling=ceiling, named=named))
+        governs = (_nested(N.BASE_GOVERNS_M_ALPHA, ceiling=ceiling,
+                           limit=limit)
+                   if limit >= ceiling else
+                   _nested(N.BASE_GOVERNS_SETTING, ceiling=ceiling,
+                           limit=limit))
 
     if bands:
-        n = len(bands)
-        what = "1 weak layer" if n == 1 else f"{n} weak layers"
-        return [
-            f"This model draws {what}, so the Maximum base angle setting "
-            f"({limit:g} deg) reaches the surfaces they clip and nothing "
-            f"else. {clause} {governs}"
-        ]
+        return [_note(N.BASE_ANGLE_SCOPE_WEAK, n=len(bands), limit=limit,
+                      clause=clause, governs=governs)]
     if abs(limit - default) > 1e-9:
-        return [
-            f"No weak layer is drawn in this model, so the Maximum base "
-            f"angle setting ({limit:g} deg) reached nothing: it applies "
-            f"only to surfaces a weak layer has clipped. {clause}"
-        ]
+        return [_note(N.BASE_ANGLE_SCOPE_NO_WEAK, limit=limit,
+                      clause=clause)]
     # Default value and no weak layer: the setting was going to do nothing
     # and nobody chose it, so there is nothing to report. A note on every
     # run of every model is the noise D106 was scoped to avoid.
@@ -953,12 +860,7 @@ def _focus_notes(project) -> list[str]:
     if project.settings.search.search_method not in _GUIDED_SEARCHES:
         return []
     return [
-        "This search steers from one candidate surface to the next, so a "
-        "focus object narrows the path it walks as well as the answer it "
-        "returns. A narrow focus can leave it with NO surface at all even "
-        "when surfaces satisfying the focus exist; that is a limit of the "
-        "search, not a statement about the slope. A Grid, Path or Block "
-        "Search reaches a tightly focused region more reliably."]
+        _note(N.FOCUS_GUIDED)]
 
 
 def _interslice_convention_notes(project, method_ids) -> list[str]:
@@ -1018,20 +920,7 @@ def _interslice_convention_notes(project, method_ids) -> list[str]:
             break
     if not ponded:
         return []
-    return [
-        "This model has water standing over the ground, and the "
-        "prescribed-inclination methods (Lowe-Karafiath, Corps of "
-        "Engineers #1 and #2) are set to TOTAL inter-slice forces. That "
-        "is the convention the published values of these methods are in, "
-        "but it does not hold where water stands on the slope: the factor "
-        "of safety then depends on the depth of the water, the force "
-        "balance can fail to close, and it can also close on a root that "
-        "is not a factor of safety at all — measured on a fully submerged "
-        "slope, the search returned 0.20 where every other method gives "
-        "1.61. Treat these three methods' numbers on this model as "
-        "unreliable. Use buoyant unit weights with no water surface "
-        "(Duncan and Wright 2005), or set Interslice forces = Effective "
-        "in Project Settings."]
+    return [_note(N.INTERSLICE_PONDED)]
 
 
 def _undrained_profile_notes(project) -> list[str]:
@@ -1079,24 +968,16 @@ def _undrained_profile_notes(project) -> list[str]:
             # rate > 0: the line falls going UP, so the dead zone is above
             # y0; rate < 0: it falls going DOWN, and the zone is below.
             reaches = y0 < y_max if rate > 0.0 else y0 > y_min
-            where = ("above" if rate > 0.0 else "below")
             if reaches:
-                notes.append(
-                    f"Material '{mat.name}': its undrained profile reaches "
-                    f"zero at elevation {y0:.4g}, and the material extends "
-                    f"{where} that ({y_min:.4g} to {y_max:.4g}). The soil "
-                    f"{where} it has no shear strength at all, so any "
-                    f"surface that goes there has a factor of safety of "
-                    f"zero. The Cutoff cannot bound this side of the line.")
+                notes.append(_note(
+                    N.UNDRAINED_ZERO_ABOVE if rate > 0.0
+                    else N.UNDRAINED_ZERO_BELOW,
+                    name=mat.name, y0=y0, y_min=y_min, y_max=y_max))
         elif 0.0 < d0 < (y_max - y_min):
             # Layer-top and distance-to-slope measure a depth that cannot
             # be negative, so only a FALLING profile can reach zero.
-            notes.append(
-                f"Material '{mat.name}': its undrained profile reaches "
-                f"zero {d0:.4g} below its reference, and the material is "
-                f"{y_max - y_min:.4g} deep. Below that it has no shear "
-                f"strength and any surface reaching it has a factor of "
-                f"safety of zero.")
+            notes.append(_note(N.UNDRAINED_ZERO_DEPTH, name=mat.name,
+                               d0=d0, depth=y_max - y_min))
     return notes
 
 
@@ -1174,11 +1055,9 @@ def _surface_type_notes(s_search) -> list[str]:
         return []          # an unknown id is the default Grid Search's
     if method in s_search.methods_for_surface_type():
         return []
-    return ["The Surface Type is set to '%s' and the Search Method to "
-            "'%s', which does not search for that kind of surface. The "
-            "method is what runs, so the surfaces this analysis returns "
-            "are the ones it generates, whatever the Surface Type says."
-            % (s_search.surface_type, s_search.search_method)]
+    return [_note(N.SURFACE_TYPE_MISMATCH,
+                  surface_type=s_search.surface_type,
+                  search_method=s_search.search_method)]
 
 
 def _auto_refine_vertex_notes(project) -> list[str]:
@@ -1211,13 +1090,8 @@ def _auto_refine_vertex_notes(project) -> list[str]:
     n_slices = int(project.settings.methods.num_slices)
     if n_vert - 1 <= n_slices:
         return []
-    return ["The search converts each circle into %d vertices, which is "
-            "%d straight segments, and the analysis uses %d slices. Every "
-            "vertex is a mandatory slice boundary, so a surface with more "
-            "segments than slices is refused whole: this run would return "
-            "no surfaces at all. Raise the number of slices to at least "
-            "%d, or lower the vertices."
-            % (n_vert, n_vert - 1, n_slices, n_vert - 1)]
+    return [_note(N.AUTO_REFINE_VERTICES, n_vert=n_vert,
+                  segments=n_vert - 1, n_slices=n_slices)]
 
 
 def _optimize_notes(s_search) -> list[str]:
@@ -1244,10 +1118,7 @@ def _optimize_notes(s_search) -> list[str]:
         # ratio 1.4: 1.3329 without and 1.2538 with.
         if (s_search.search_method == "particle_swarm"
                 and getattr(s_search, "pso_multiple_minima", False)):
-            return ["The Particle Swarm search is reporting several minima "
-                    "with Optimize Surfaces OFF. It is then looking for "
-                    "LOCAL minima, and the lowest of them need not be the "
-                    "global minimum of the slope."]
+            return [_note(N.PSO_MINIMA_UNOPTIMISED)]
         return []
     out = []
     sao = (getattr(s_search, "optimize_technique", "monte_carlo")
@@ -1257,26 +1128,17 @@ def _optimize_notes(s_search) -> list[str]:
     # with the circular one, so the pair has to be asked.
     if (s_search.search_method not in _OPTIMIZABLE_SEARCHES
             and not is_auto_refine_non_circular(s_search)):
-        out.append(
-            "Optimize Surfaces applies to non-circular surfaces, which are "
-            "the ones with vertices to move; this project searches with "
-            "'%s'. The setting was ignored." % s_search.search_method)
+        out.append(_note(N.OPTIMIZE_NOT_APPLICABLE,
+                         search_method=s_search.search_method))
     elif getattr(s_search, "optimize_target", "") == "all":
-        walk = "the alteration" if sao else "the random walk"
-        out.append(
-            "Optimize Surfaces is set to optimise ALL surfaces, so %s "
-            "runs once per surface the search generates rather than once on "
-            "the critical one. The answer is the same kind of answer; the "
-            "run takes far longer." % walk)
+        out.append(_note(N.OPTIMIZE_ALL_ALTERATION if sao
+                         else N.OPTIMIZE_ALL_WALK))
     # v0.1.260 (D259) — two settings Surface Altering cannot honour, said
     # only when one of them was changed: they configure the random walk.
     if sao and (bool(getattr(s_search, "optimize_explore_all_vertices", False))
                 or abs(float(getattr(s_search, "optimize_step_reduction_factor",
                                      0.5)) - 0.5) > 1e-12):
-        out.append(
-            "Surface Altering does not read Step Reduction Factor or Explore "
-            "All Vertices: they configure the Monte Carlo technique, and "
-            "were ignored.")
+        out.append(_note(N.SURFACE_ALTERING_IGNORES))
     return out
 
 
@@ -1347,16 +1209,9 @@ def _failure_direction_note(project) -> list[str]:
     # Only reached when the two disagree, so the declaration is whatever
     # the ground is not.
     declared_crest_right = not crest_right
-    declared = "Right to Left" if declared_crest_right else "Left to Right"
-    higher, lower = ("right", "left") if crest_right else ("left", "right")
-    return [
-        f"The Failure Direction is set to {declared}, which puts the "
-        f"crest on the {lower}, but the ground surface is higher on the "
-        f"{higher} (y = {y_left:g} at the left end against "
-        f"y = {y_right:g} at the right end). Tension-crack water thrust, "
-        f"support force direction and the Path Search starting face all "
-        f"read this setting."
-    ]
+    return [_note(N.FAILURE_DIRECTION_R2L if declared_crest_right
+                  else N.FAILURE_DIRECTION_L2R,
+                  y_left=y_left, y_right=y_right)]
 
 
 # ======================================================================

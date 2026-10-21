@@ -255,7 +255,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.346"
+    VERSION = "0.1.347"
 
     def __init__(self) -> None:
         super().__init__()
@@ -3698,9 +3698,11 @@ class MainWindow(QMainWindow):
         # before the settings are looked at, missing materials after.
         from ogr_core.project.rules import compute_blockers
         _blockers = {r.code: r for r in compute_blockers(self.project)}
+        # v0.1.347 (D335) -- the core's message, in the reader's language
+        from .core_messages import note_text
         if "no_boundaries" in _blockers:
             QMessageBox.warning(self, tr("Compute"),
-                                _blockers["no_boundaries"].message)
+                                note_text(_blockers["no_boundaries"].message))
             return
         # v0.1.68 — a rapid drawdown that cannot run must say so instead
         # of quietly reporting the ordinary factor of safety, which looks
@@ -3718,7 +3720,7 @@ class MainWindow(QMainWindow):
             return
         if "no_materials" in _blockers:
             QMessageBox.warning(self, tr("Compute"),
-                                _blockers["no_materials"].message)
+                                note_text(_blockers["no_materials"].message))
             return
         # v0.1.298 (D298) — a region whose material no longer exists: say
         # what is wrong and what to change, and let the user compute anyway
@@ -3767,7 +3769,9 @@ class MainWindow(QMainWindow):
             # room for one, but no longer AS IF it were the only one: the
             # count says how many are being withheld and where to read
             # them. Analysis > Analysis Notes shows all of them.
-            first = self.last_compute_warnings[0]
+            # v0.1.347 (D335) -- in the reader's language, through its code
+            from .core_messages import note_line
+            first = note_line(self.last_compute_warnings[0])
             rest = len(self.last_compute_warnings) - 1
             if rest:
                 first = tr("%s  [+%d more — Analysis > Analysis Notes]") % (
@@ -5324,7 +5328,8 @@ class MainWindow(QMainWindow):
         new_b.block_object = spec
         why = block_object_refusal(new_b)
         if why is not None:
-            self.ogr_status.showMessage(why.message, 8000)
+            from .core_messages import note_text
+            self.ogr_status.showMessage(note_text(why.message), 8000)
             return False
         self.command_stack.do(
             self.project, ReplaceBoundaryCommand(index=idx, new_boundary=new_b))

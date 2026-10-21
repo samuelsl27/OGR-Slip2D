@@ -19,7 +19,7 @@ Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 
-from ogr_core.messages import render
+from ogr_core.messages import METHOD_NOTE, parts, render
 
 from .i18n import tr
 
@@ -28,13 +28,18 @@ _CATALOGUE: dict = {}
 
 
 def _catalogue() -> dict:
-    """The engine's codes and the DXF import's (v0.1.334), in one table:
-    the codes do not collide, each family having its own prefix."""
+    """The engine's codes, the DXF import's (v0.1.334), the analysis notes'
+    and the project rules' (v0.1.347), in one table: the codes do not
+    collide, each family having its own prefix."""
     if not _CATALOGUE:
         from ogr_core.dxf.messages import MESSAGES as DXF
+        from ogr_core.messages import CORE_MESSAGES, NOTE_FRAMES
+        from ogr_core.project.messages import RULES
         from ogr_slip2d.messages import MESSAGES as LEM
-        _CATALOGUE.update(LEM)
-        _CATALOGUE.update(DXF)
+        from ogr_slip2d.note_messages import NOTES
+        for table in (CORE_MESSAGES, NOTE_FRAMES, LEM, DXF, NOTES,
+                      RULES):
+            _CATALOGUE.update(table)
     return _CATALOGUE
 
 
@@ -44,6 +49,10 @@ def _show(kind: str, value):
     if kind == "method_id":
         from .labels import method_name
         return method_name(value)
+    if kind == "method_list":
+        # v0.1.347 (D335) -- the ids ", "-joined, as the engine wrote them
+        from .labels import method_name
+        return ", ".join(method_name(m) for m in str(value).split(", ") if m)
     if kind == "label":
         return tr(str(value))
     if kind == "strength_model":
@@ -110,3 +119,46 @@ def invalid_label(res) -> str:
     if parts is None:
         return tr("did not converge")
     return label(*parts)
+
+
+# ----------------------------------------------------------------------
+# The analysis notes (v0.1.347, D335)
+# ----------------------------------------------------------------------
+def note_text(note) -> str:
+    """A note -- a message the engine or the core wrote, with its code or
+    without one -- in the reader's language: through its code when it has
+    one, through its translation when it is a fixed sentence with an entry,
+    and as it was written otherwise."""
+    code, args, english = parts(note)
+    if code:
+        return text(code, args, english)
+    return tr(english)
+
+
+def note_group(note) -> tuple:
+    """``(group, sentence)`` of a note for the Analysis Notes panel.
+
+    A note about one method's reported surface is grouped under the method,
+    shown by its name; a note about the model has no group (None). A note
+    without a code keeps the rule the panel always had: an identifier
+    before ``": "`` is the method's."""
+    code, args, english = parts(note)
+    if code == METHOD_NOTE:
+        inner = args.get("note") or {}
+        sentence = (text(inner.get("code", ""), inner.get("args"),
+                         inner.get("text", ""))
+                    if inner.get("code") else tr(inner.get("text", "")))
+        return _show("method_id", args.get("method_id", "")), sentence
+    if code:
+        return None, text(code, args, english)
+    head, sep, tail = english.partition(": ")
+    if sep and head and " " not in head:
+        return head, tr(tail)
+    return None, tr(english)
+
+
+def note_line(note) -> str:
+    """A note on one line, its method first when it has one: what the status
+    bar shows and what *Copy all* copies."""
+    group, sentence = note_group(note)
+    return sentence if group is None else "%s: %s" % (group, sentence)

@@ -43,6 +43,9 @@ Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 
+from . import note_messages as N
+from .note_messages import note as _note
+
 from typing import Iterator, Optional
 
 from ogr_core.geometry import BoundaryType
@@ -236,12 +239,7 @@ def weak_layer_model_warnings(project) -> list[str]:
         mat = (project.material_by_id(band.material_id)
                if band.material_id else None)
         if mat is None:
-            out.append(
-                f"Weak layer {name} has no material assigned, so it carries "
-                f"no strength of its own and would only change the geometry "
-                f"of the surfaces it clips. Assign it a material or suppress "
-                f"it."
-            )
+            out.append(_note(N.WEAK_LAYER_NO_MATERIAL, name=name))
         if ground is None:
             continue
         from ogr_core.geometry.ground import envelope_y_at
@@ -255,9 +253,5 @@ def weak_layer_model_warnings(project) -> list[str]:
             if v.y > gy + 1e-9:
                 above += 1
         if total and above == total:
-            out.append(
-                f"Weak layer {name} lies entirely above the ground surface, "
-                f"so any surface it clips is pushed out of the soil and "
-                f"discarded. Suppress it or move it into the model."
-            )
+            out.append(_note(N.WEAK_LAYER_ABOVE_GROUND, name=name))
     return out

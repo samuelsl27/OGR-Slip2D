@@ -728,17 +728,14 @@ class SearchSettings:
                 if data.get(f"path_initial_angle_at_toe_{side}_enabled",
                             defaults[f"path_initial_angle_at_toe_{side}_enabled"]):
                     continue
-            if shadow == "sa_temperature_factor":
-                why = ("it held a geometric cooling rate that no analysis "
-                       "ever read; the coefficient the schedule does use is")
-            else:
-                why = ("it held an angle in the search's own toe-to-crest "
-                       "frame and the field replacing it is absolute, so "
-                       "converting it needs the failure direction, which is "
-                       "not part of this block. The field to set is")
-            notes.append(
-                f"This model carries {shadow} = {old}, removed in v0.1.103: "
-                f"{why} {survivor}. The stored value was NOT converted.")
+            # v0.1.347 (D335) -- one whole sentence per reason, with its
+            # code, so the interface can say it in the reader's language
+            from .messages import (MIGRATION_COOLING, MIGRATION_FRAME,
+                                   rule_message)
+            notes.append(rule_message(
+                MIGRATION_COOLING if shadow == "sa_temperature_factor"
+                else MIGRATION_FRAME,
+                shadow=shadow, old=old, survivor=survivor))
 
         # ---- v0.1.134 — the note above fires on the RETIRED twin, and for
         # the Initial Angle at Toe that is the wrong field to watch.
@@ -768,16 +765,13 @@ class SearchSettings:
                 value = f"path_initial_angle_at_toe_{side}_deg"
                 if not data.get(enabled, defaults[enabled]):
                     continue
-                notes.append(
-                    f"This model was saved before v0.1.103, and its Path "
-                    f"Search {side} Initial Angle at Toe is ON at "
-                    f"{data.get(value, defaults[value])}°. That number was "
-                    f"read in the search's own toe-to-crest frame then and "
-                    f"is read as ABSOLUTE now — counter-clockwise from the "
-                    f"+x axis — so it does not describe the same limit. It "
-                    f"was NOT converted: doing so needs the failure "
-                    f"direction, which is not part of this block. Check "
-                    f"{value} before trusting this run.")
+                from .messages import (MIGRATION_TOE_ANGLE_LOWER,
+                                       MIGRATION_TOE_ANGLE_UPPER,
+                                       rule_message)
+                notes.append(rule_message(
+                    MIGRATION_TOE_ANGLE_LOWER if side == "lower"
+                    else MIGRATION_TOE_ANGLE_UPPER,
+                    angle=data.get(value, defaults[value])))
 
         # ---- path_optimize: the ONLY shadow whose note fires on the value
         # that EQUALS its old default, and the reason is that this one is
@@ -792,14 +786,8 @@ class SearchSettings:
             old = data.pop("path_optimize")
             if old and not data.get("optimize_enabled",
                                     defaults["optimize_enabled"]):
-                notes.append(
-                    "This model carries path_optimize = True, removed in "
-                    "v0.1.104. Path Search used to optimise its best "
-                    "surfaces whether or not anything asked it to, because "
-                    "that field defaulted to True and the interface never "
-                    "showed it. The optimisation is now the Optimize "
-                    "Surfaces checkbox, which is UNTICKED here, so this run "
-                    "does not optimise. Tick it to get the old behaviour.")
+                from .messages import MIGRATION_PATH_OPTIMIZE, rule_message
+                notes.append(rule_message(MIGRATION_PATH_OPTIMIZE))
 
         # ---- read by nobody, ever: dropped without a word, because a value
         # that never reached a calculation has nothing to say.

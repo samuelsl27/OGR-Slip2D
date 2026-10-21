@@ -23,6 +23,9 @@ Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 
+from . import note_messages as N
+from .note_messages import note as _note
+
 
 def _walls(project):
     """``(instance, type)`` pairs for every EFP wall placed in the model.
@@ -57,13 +60,7 @@ def retaining_wall_notes(project, method_ids=()) -> list[str]:
     # unmentioned; and its singular sentence had no verb.
     flat = [s for s, _ in walls if s.is_level()]
     if flat:
-        notes.append(
-            "%d retaining wall%s drawn horizontally. A wall's pressure "
-            "profile is defined from the crest downwards and a horizontal "
-            "wall has no crest, so it is excluded from the analysis rather "
-            "than analysed with a profile that would depend on which end "
-            "was drawn first."
-            % (len(flat), " is" if len(flat) == 1 else "s are"))
+        notes.append(_note(N.WALLS_HORIZONTAL, n=len(flat)))
 
     # There is deliberately NO note about support patterns here. A wall
     # carries a pressure per metre of slope already, so a row of them would

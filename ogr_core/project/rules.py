@@ -27,6 +27,8 @@ from dataclasses import dataclass
 from typing import Iterable, Optional
 
 from ..geometry import BoundaryType
+from . import messages as M
+from .messages import rule_message as _msg
 
 
 @dataclass(frozen=True)
@@ -131,48 +133,32 @@ def block_object_refusal(boundary) -> Optional[Refusal]:
     verts = poly.vertices
     n = len(verts)
     spec = block_spec_of(boundary)
+    # v0.1.347 (D335) -- each message carries its own code (``M``), finer
+    # than the refusal's, which a program branches on and which is unchanged
     if spec is None:
         return Refusal("block_object_empty",
-                       "A Block Search object needs at least one vertex.")
+                       _msg(M.BLOCK_OBJECT_EMPTY))
     kind = spec.kind
     if kind is BlockObjectKind.POINT and n != 1:
-        return Refusal(
-            "block_object_geometry",
-            f"A Block Search Point is a single point; this one has {n} "
-            f"vertices.")
+        return Refusal("block_object_geometry",
+                       _msg(M.BLOCK_POINT_VERTICES, n=n))
     if kind is BlockObjectKind.LINE and n != 2:
-        return Refusal(
-            "block_object_geometry",
-            f"A Block Search Line is one segment given by two points; this "
-            f"one has {n} vertices. A path of several segments that the "
-            f"surface should follow is a Block Search Polyline.")
+        return Refusal("block_object_geometry",
+                       _msg(M.BLOCK_LINE_VERTICES, n=n))
     if kind is BlockObjectKind.WINDOW and not (poly.closed and n >= 3):
-        return Refusal(
-            "block_object_geometry",
-            "A Block Search Window is a closed polygon of at least three "
-            "vertices.")
+        return Refusal("block_object_geometry", _msg(M.BLOCK_WINDOW_OPEN))
     if kind is BlockObjectKind.POLYLINE:
         if poly.closed or n < 2:
-            return Refusal(
-                "block_object_geometry",
-                "A Block Search Polyline is an open line of at least two "
-                "vertices.")
+            return Refusal("block_object_geometry",
+                           _msg(M.BLOCK_POLYLINE_SHAPE))
         pts = left_to_right(verts)
         if any(b.x <= a.x for a, b in zip(pts, pts[1:])):
-            return Refusal(
-                "block_polyline_not_monotone",
-                "A Block Search Polyline has to advance in x from one end to "
-                "the other: the trial surface follows it between its two "
-                "points, and a polyline that doubles back (or has a vertical "
-                "segment) would give a surface that reverses direction.")
+            return Refusal("block_polyline_not_monotone",
+                           _msg(M.BLOCK_POLYLINE_NOT_MONOTONE))
         if n < 3 and PolylinePointMode.SEGMENT in (spec.left_point,
                                                    spec.right_point):
-            return Refusal(
-                "block_polyline_segment_mode",
-                "The Left / Right Line Segment option places its point on "
-                "the end segment of that side, which needs a polyline of at "
-                "least two segments; this one has one. Use Any Line Segment "
-                "or End Point.")
+            return Refusal("block_polyline_segment_mode",
+                           _msg(M.BLOCK_POLYLINE_SEGMENT_MODE))
     return None
 
 
@@ -328,11 +314,9 @@ def compute_blockers(project) -> list[Refusal]:
     """
     out: list[Refusal] = []
     if not project.boundaries:
-        out.append(Refusal(
-            "no_boundaries",
-            "No model to compute. Add an external boundary first."))
+        out.append(Refusal("no_boundaries", _msg(M.NO_BOUNDARIES)))
     if not project.materials:
-        out.append(Refusal("no_materials", "No materials defined."))
+        out.append(Refusal("no_materials", _msg(M.NO_MATERIALS)))
     return out
 
 
@@ -1317,34 +1301,31 @@ def block_angle_notes(angles, crest_on_right: bool) -> list[BlockAngleNote]:
     reversed pair with ``min``/``max`` and calculated with any angle at all.
     """
     notes: list[BlockAngleNote] = []
-    for side, label in (("left", "left"), ("right", "right")):
+    # v0.1.347 (D335) -- the side's word and its forbidden direction are in
+    # the two codes of each side, so the loop carries the side alone
+    for side in ("left", "right"):
         start = float(getattr(angles, f"block_{side}_start_angle_deg"))
         end = float(getattr(angles, f"block_{side}_end_angle_deg"))
         lo, hi = block_projection_range(start, end, side)
         limit_lo, limit_hi = block_angle_limits(side, crest_on_right)
         if (start, end) != (lo, hi):
-            forbidden = 0 if side == "left" else 180
             notes.append(BlockAngleNote(
                 "block_angle_reread", side, start, end, lo, hi,
                 limit_lo, limit_hi,
-                f"The {label} projection angles are written from {start:g}° "
-                f"to {end:g}°, and the reference measures them "
-                f"counter-clockwise from the positive x axis with the Start "
-                f"Angle less than the End Angle. They were read as {lo:g}° "
-                f"to {hi:g}°: the arc between the two that avoids "
-                f"{forbidden}°, a direction no {label} projection can "
-                f"take."))
+                _msg(M.BLOCK_ANGLE_REREAD_LEFT if side == "left"
+                     else M.BLOCK_ANGLE_REREAD_RIGHT,
+                     start=start, end=end, lo=lo, hi=hi)))
         if lo < limit_lo or hi > limit_hi:
-            facing = "left" if crest_on_right else "right"
+            code = {("left", True): M.BLOCK_ANGLE_OUT_LEFT_LEFT_FACING,
+                    ("left", False): M.BLOCK_ANGLE_OUT_LEFT_RIGHT_FACING,
+                    ("right", True): M.BLOCK_ANGLE_OUT_RIGHT_LEFT_FACING,
+                    ("right", False): M.BLOCK_ANGLE_OUT_RIGHT_RIGHT_FACING,
+                    }[(side, bool(crest_on_right))]
             notes.append(BlockAngleNote(
                 "block_angle_out_of_limits", side, start, end, lo, hi,
                 limit_lo, limit_hi,
-                f"The {label} projection angles, {lo:g}° to {hi:g}°, go "
-                f"outside {limit_lo:g}° to {limit_hi:g}°, the range the "
-                f"reference gives for kinematically valid surfaces on a "
-                f"{facing}-facing slope. The search uses them as given; a "
-                f"projection that cannot reach the ground leaves its "
-                f"surface invalid."))
+                _msg(code, lo=lo, hi=hi, limit_lo=limit_lo,
+                     limit_hi=limit_hi)))
     return notes
 
 
@@ -1824,8 +1805,11 @@ def orphan_assignment_reasons(project) -> list:
 
 
 def orphan_assignment_messages(project) -> list:
-    """The same, in English, for the API and the analysis notes."""
-    return [t.format(*args) for t, args in orphan_assignment_reasons(project)]
+    """The same, in English, for the API and the analysis notes, each one
+    carrying its code and its point (v0.1.347, D335): the sentence of
+    ``ORPHAN_ASSIGNMENT``, written with named fields."""
+    return [_msg(M.ORPHAN_REGION, x=x, y=y)
+            for _t, (x, y) in orphan_assignment_reasons(project)]
 
 
 def in_orphan_region(project, x: float, y: float) -> bool:

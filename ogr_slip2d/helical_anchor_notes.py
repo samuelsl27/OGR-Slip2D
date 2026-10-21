@@ -15,6 +15,9 @@ Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 
+from . import note_messages as N
+from .note_messages import note as _note
+
 from .support_notes import supports_by_type
 
 #: The spacing-to-diameter band the reference recommends. Outside it the
@@ -47,11 +50,8 @@ def helical_anchor_notes(project, method_ids=()) -> list[str]:
         # that does nothing rather than as a model to correct.
         if width >= diameter > 0.0:
             for sup in sups:
-                notes.append(
-                    "The shaft of support '%s' is not narrower than its "
-                    "helices, so the plates have no bearing area and the "
-                    "anchor carries nothing in pullout."
-                    % (getattr(sup, "name", "") or sup.id))
+                notes.append(_note(N.HELICAL_NO_PLATE,
+                                   name=getattr(sup, "name", "") or sup.id))
             continue
 
         if diameter > 0.0 and n >= 2:
@@ -64,17 +64,13 @@ def helical_anchor_notes(project, method_ids=()) -> list[str]:
                 # does not fit. Silent adjustment is how a model comes to
                 # mean something the user never typed.
                 if abs(used - spacing) > 1e-9:
-                    notes.append(
-                        "The %d helices of support '%s' do not fit at "
-                        "%.2f m: the spacing used is %.2f m, the anchor "
-                        "length divided by the number of gaps."
-                        % (n, getattr(sup, "name", "") or sup.id,
-                           spacing, used))
+                    notes.append(_note(
+                        N.HELICAL_RESPACED, n=n,
+                        name=getattr(sup, "name", "") or sup.id,
+                        spacing=spacing, used=used))
                 ratio = used / diameter
                 if not (SPACING_RATIO_MIN <= ratio <= SPACING_RATIO_MAX):
-                    notes.append(
-                        "The helix spacing of support '%s' is %.2f times "
-                        "the average helix diameter. Design guides "
-                        "recommend 5 to 12."
-                        % (getattr(sup, "name", "") or sup.id, ratio))
+                    notes.append(_note(
+                        N.HELICAL_SPACING_RATIO,
+                        name=getattr(sup, "name", "") or sup.id, ratio=ratio))
     return notes

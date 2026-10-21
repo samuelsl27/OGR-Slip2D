@@ -18,6 +18,9 @@ Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 
+from . import note_messages as N
+from .note_messages import note as _note
+
 #: The methods that write a moment equation, and therefore the only ones a
 #: pure couple can reach. Moving a force leaves a couple; a method that
 #: writes force equilibrium alone sees the same force either way, so the
@@ -93,23 +96,17 @@ def support_identity_notes(project, method_ids=()) -> list[str]:
         by_class.setdefault(getattr(sup, "type_id", ""),
                             (same, []))[1].append(sup)
     for tid, (same, sups) in by_class.items():
-        notes.append(
-            "%d support%s of class '%s' name no property set and the "
-            "project defines %d sets of that class (%s). The first, "
-            "'%s', is used. Assign each support its set in Support "
-            "Properties if that is not the one meant."
-            % (len(sups), "" if len(sups) == 1 else "s",
-               getattr(same[0], "DISPLAY_NAME", tid), len(same),
-               ", ".join("'%s'" % _name(st) for st in same),
-               _name(same[0])))
+        notes.append(_note(
+            N.SUPPORT_AMBIGUOUS_SET, n=len(sups),
+            cls=getattr(same[0], "DISPLAY_NAME", tid), n_sets=len(same),
+            sets=", ".join("'%s'" % _name(st) for st in same),
+            first=_name(same[0])))
     for sup, used in refs["orphan"]:
+        name = getattr(sup, "name", "") or sup.id
         notes.append(
-            "Support '%s' refers to a property set that is no longer in "
-            "the project; %s."
-            % (getattr(sup, "name", "") or sup.id,
-               ("'%s' is used instead, chosen by class" % _name(used))
-               if used is not None else
-               "it is left out of the analysis"))
+            _note(N.SUPPORT_ORPHAN_REPLACED, name=name, used=_name(used))
+            if used is not None else
+            _note(N.SUPPORT_ORPHAN_DROPPED, name=name))
     return notes
 
 
@@ -166,23 +163,15 @@ def infinite_strength_notes(project, method_ids=()) -> list[str]:
                 continue
             if not hits and not plate_hits:
                 continue
-            where = []
-            if hits:
-                where.append("about %.0f %% of its length"
-                             % (100.0 * hits / DEFAULT_SEGMENTS))
-            if plate_hits:
-                where.append("%d of its %d plates" % (plate_hits,
-                                                      len(plates)))
-            notes.append(
-                "Support '%s' (%s) has %s in %s, whose strength is not "
-                "finite (Infinite Strength): the soil around it is read as "
-                "zero there. Rigid bedrock is a modelling device, not a "
-                "promise that a support cannot be pulled out of it, and "
-                "letting the infinity through would drop its pull-out or "
-                "bearing from the minimum."
-                % (getattr(sup, "name", "") or sup.id, _name(stype),
-                   " and ".join(where),
-                   ", ".join("'%s'" % n for n in sorted(names))))
+            code = (N.SUPPORT_INFINITE_BOTH if hits and plate_hits
+                    else N.SUPPORT_INFINITE_LENGTH if hits
+                    else N.SUPPORT_INFINITE_PLATES)
+            notes.append(_note(
+                code, name=getattr(sup, "name", "") or sup.id,
+                type_name=_name(stype),
+                percent=100.0 * hits / DEFAULT_SEGMENTS,
+                hit_plates=plate_hits, n_plates=len(plates),
+                materials=", ".join("'%s'" % n for n in sorted(names))))
     return notes
 
 
@@ -199,16 +188,7 @@ def force_location_notes(project, method_ids=()) -> list[str]:
         return []
     blind = sorted(set(method_ids) & FORCE_METHODS)
     if blind:
-        return ["The support force is set to act at the centroid of its "
-                "pressure diagram, and %s cannot tell that from acting at "
-                "the slip surface: moving a force leaves a couple, and a "
-                "couple has nowhere to go in a method that writes force "
-                "equilibrium alone. The four methods with a moment "
-                "equation — Ordinary, Bishop, Spencer and GLE — do honour "
-                "it." % ", ".join(blind)]
+        return [_note(N.FORCE_AT_CENTROID_BLIND, methods=", ".join(blind))]
     if not method_ids:
-        return ["The support force is set to act at the centroid of its "
-                "pressure diagram. Only the four methods with a moment "
-                "equation — Ordinary, Bishop, Spencer and GLE — can tell "
-                "that apart from acting at the slip surface."]
+        return [_note(N.FORCE_AT_CENTROID)]
     return []

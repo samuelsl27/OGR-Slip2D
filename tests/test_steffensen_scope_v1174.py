@@ -574,10 +574,15 @@ class TestTheControlOnScreen:
         """Asked of the dictionary, not of a grep: the comment that explains
         the rename spells the old key out, so a grep answers yes."""
         from ogr_gui.i18n import _DICTS
+        from ogr_slip2d.note_messages import NOTES
 
         assert "Accelerate convergence (Steffensen)" not in _DICTS["es"]
+        # v0.1.347 (D335) -- the two notes of the scope are in the
+        # dictionary now, through their codes; what is counted is the
+        # setting's own entries, its label and its tooltip
+        notes = {t for s in NOTES.values() for t in (s.english, s.one) if t}
         live = [k for k in _DICTS["es"]
-                if "Steffensen" in k or "Aitken" in k]
+                if ("Steffensen" in k or "Aitken" in k) and k not in notes]
         assert len(live) == 2, [k[:50] for k in live]
 
     def _advanced_page(self, settings):
