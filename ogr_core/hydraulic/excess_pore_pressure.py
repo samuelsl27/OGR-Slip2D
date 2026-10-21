@@ -98,12 +98,12 @@ def _loading_bands(project: "Project", x: float, y_bottom: float,
                    y_top: float):
     """(unit weight, thickness) of each band above ``y_bottom`` that loads.
 
-    Mirrors the band decomposition of ``ogr_slip2d.slicer._column_weight``
+    Mirrors the band decomposition of ``ogr_core.loads.overburden._column_weight``
     — same cuts, same saturated/unsaturated rule — and then keeps only
     the bands whose material declares that its weight creates excess.
     """
     from ogr_core.geometry import BoundaryType
-    from ogr_slip2d.slicer import _polyline_crossings_at_x
+    from ogr_core.loads.overburden import _polyline_crossings_at_x
 
     from .water_surfaces import water_table_y_at
 
@@ -164,13 +164,14 @@ def load_delta_sigma_v(project: "Project", x: float,
     analysed (``ogr_slip2d.design_actions.load_factors``): the stress a
     load adds is the factored load's. None, the loads as drawn.
     """
-    import ogr_slip2d.slicer as _slicer
-    from ogr_slip2d.slicer import _line_load_components
+    import ogr_core.loads.overburden as _ov
+    from ogr_core.loads.overburden import _line_load_components
 
     # v0.1.241 (D232) — signed, downward positive, like the slice weight:
-    # a load pointing up unloads the ground below it. Read off the slicer's
-    # switch, so the two readers of the same pressure cannot disagree.
-    signed = _slicer.SIGNED_SURFACE_PRESSURE
+    # a load pointing up unloads the ground below it. Read off the one
+    # switch (v0.1.344: in ``overburden``, no longer in the slicer), so the
+    # two readers of the same pressure cannot disagree.
+    signed = _ov.SIGNED_SURFACE_PRESSURE
     total = 0.0
     for load in getattr(project, "distributed_loads", None) or []:
         if not getattr(load, "creates_excess_pore_pressure", False):

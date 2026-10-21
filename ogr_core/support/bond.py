@@ -272,16 +272,13 @@ def sigma_v_effective_at(
     that want a context want it, and computing it here saves asking the
     ground surface for the same abscissa twice.
     """
-    # Deferred, and reaching into the analysis package on purpose:
     # ``_column_weight`` IS the band decomposition the slice weight uses,
     # and two versions of "what is above this point" would eventually
-    # disagree about a water table or a saturated unit weight. The same
-    # deferred import is already made for the same reason in
-    # ``ogr_core/hydraulic/excess_pore_pressure.py``. There are now three
-    # readers of that decomposition and it deserves lifting into ogr_core
-    # proper — but it is the slicer's hot loop, so not in the version that
-    # is changing the pullout law.
-    from ogr_slip2d.slicer import _column_weight, _surface_pressure_at
+    # disagree about a water table or a saturated unit weight. There are
+    # three readers of it (the slice weight, this, the excess pore
+    # pressure), and v0.1.344 (D337) lifted it into the core, where this
+    # used to reach into the slicer for it.
+    from ..loads.overburden import _column_weight, _surface_pressure_at
 
     from ..geometry import Vertex
     from ..geometry.ground import envelope_y_at, ground_surface
@@ -329,7 +326,7 @@ def sigma_v_effective_at(
     if xi == 1.0:
         sigma_v += _surface_pressure_at(project, x)
     else:
-        from ogr_slip2d.slicer import _surface_pressures_at
+        from ..loads.overburden import _surface_pressures_at
         for load, p in _surface_pressures_at(project, x):
             permanent = getattr(getattr(load, "action", None), "value",
                                 "variable") == "permanent"
@@ -402,11 +399,10 @@ def _layer_top_at(project: "Project", x: float, y: float):
     """Top of the material band containing ``(x, y)``, or None.
 
     The same decomposition the slice weight uses — see the note inside
-    :func:`sigma_v_effective_at` about why this package reaches into the
-    slicer for it instead of keeping a second opinion about what is above
-    a point.
+    :func:`sigma_v_effective_at` about why there is one of it and not a
+    second opinion about what is above a point.
     """
-    from ogr_slip2d.slicer import _column_weight
+    from ..loads.overburden import _column_weight
 
     from ..geometry.ground import envelope_y_at, ground_surface
 

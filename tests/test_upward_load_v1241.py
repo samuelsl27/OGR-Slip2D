@@ -184,13 +184,15 @@ class TestTheOtherReadersAgree:
 class TestTheSwitch:
 
     def test_off_an_upward_load_presses_again(self):
-        import ogr_slip2d.slicer as S
+        # v0.1.344 (D337) -- the switch lives in the core now, with the
+        # pressure it governs
+        import ogr_core.loads.overburden as _OV
         _c, down = _sliced(_slope(_load("down")))
-        S.SIGNED_SURFACE_PRESSURE = False
+        _OV.SIGNED_SURFACE_PRESSURE = False
         try:
             _c, up = _sliced(_slope(_load("up")))
         finally:
-            S.SIGNED_SURFACE_PRESSURE = True
+            _OV.SIGNED_SURFACE_PRESSURE = True
         for a, b in zip(up.slices, down.slices):
             assert _close(a.weight, b.weight)
 

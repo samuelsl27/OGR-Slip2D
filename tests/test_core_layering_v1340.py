@@ -48,13 +48,6 @@ DYNAMIC = "__import__"
 #: ``(file, enclosing function, module)``: how many times it is written.
 #: Only shrinks. Each version of the D337 batch removes its own entries.
 ALLOWED = Counter({
-    # the soil columns and their switch (v0.1.344)
-    ("ogr_core/hydraulic/excess_pore_pressure.py", "_loading_bands",
-     "ogr_slip2d"): 1,
-    ("ogr_core/hydraulic/excess_pore_pressure.py", "load_delta_sigma_v",
-     "ogr_slip2d"): 2,
-    ("ogr_core/support/bond.py", "sigma_v_effective_at", "ogr_slip2d"): 2,
-    ("ogr_core/support/bond.py", "_layer_top_at", "ogr_slip2d"): 1,
     # the local strength of an envelope (v0.1.345)
     ("ogr_core/support/bond.py", "equivalent_c_phi_at", "ogr_slip2d"): 1,
     # the statistical runners (v0.1.346)
