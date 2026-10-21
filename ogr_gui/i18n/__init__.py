@@ -5070,6 +5070,342 @@ _DICTS: dict[str, dict[str, str]] = {
             'envolvente de resistencia era negativa, y la envolvente no '
             'tiene resistencia a tensión nula. El factor de seguridad no '
             'cuenta ninguna resistencia en esa base.',
+        # v0.1.349 (D335) — the notes of a search and of Optimize Surfaces
+        '{n} surfaces were discarded because the base rose above the ground '
+        'surface between the two ends, so part of the sliding mass would be '
+        'in the air. This is not a slice-count problem: more slices cannot '
+        'put the base back under the ground. It happens where a surface '
+        'follows a line that lies on the ground, such as a weak layer or a '
+        'Block Search polyline along an exposed bench, and the line sits a '
+        'little above the ground there.':
+            'Se descartaron {n} superficies porque la base subió por encima '
+            'de la superficie del terreno entre los dos extremos, así que '
+            'parte de la masa deslizante quedaría en el aire. No es un '
+            'problema del número de dovelas: más dovelas no devuelven la '
+            'base bajo el terreno. Ocurre donde una superficie sigue una '
+            'línea que está sobre el terreno, como una capa débil o una '
+            'polilínea de búsqueda por bloques a lo largo de una berma '
+            'expuesta, y la línea queda un poco por encima del terreno ahí.',
+        '{n} surface were discarded because the base rose above the ground '
+        'surface between the two ends, so part of the sliding mass would be '
+        'in the air. This is not a slice-count problem: more slices cannot '
+        'put the base back under the ground. It happens where a surface '
+        'follows a line that lies on the ground, such as a weak layer or a '
+        'Block Search polyline along an exposed bench, and the line sits a '
+        'little above the ground there.':
+            'Se descartó {n} superficie porque la base subió por encima de '
+            'la superficie del terreno entre los dos extremos, así que parte '
+            'de la masa deslizante quedaría en el aire. No es un problema '
+            'del número de dovelas: más dovelas no devuelven la base bajo el '
+            'terreno. Ocurre donde una superficie sigue una línea que está '
+            'sobre el terreno, como una capa débil o una polilínea de '
+            'búsqueda por bloques a lo largo de una berma expuesta, y la '
+            'línea queda un poco por encima del terreno ahí.',
+        '{n} with an end above it':
+            '{n} con un extremo por encima',
+        '{n} with an end below the ground, which would have given its end '
+        'slice a vertical face with no strength (the reference calls such a '
+        'surface -101: one intersection with the slope)':
+            '{n} con un extremo bajo el terreno, que habría dado a su dovela '
+            'extrema una cara vertical sin resistencia (la referencia llama '
+            '-101 a una superficie así: un solo corte con el talud)',
+        '{n} polyline surfaces were discarded because an end was not on the '
+        'ground surface: {parts}. This is not a slice-count problem: the '
+        'first and last vertices of a polyline have to lie on the ground.':
+            'Se descartaron {n} superficies poligonales porque un extremo no '
+            'estaba sobre la superficie del terreno: {parts}. No es un '
+            'problema del número de dovelas: el primer y el último vértice '
+            'de una polilínea tienen que estar sobre el terreno.',
+        '{n} polyline surface were discarded because an end was not on the '
+        'ground surface: {parts}. This is not a slice-count problem: the '
+        'first and last vertices of a polyline have to lie on the ground.':
+            'Se descartó {n} superficie poligonal porque un extremo no '
+            'estaba sobre la superficie del terreno: {parts}. No es un '
+            'problema del número de dovelas: el primer y el último vértice '
+            'de una polilínea tienen que estar sobre el terreno.',
+        'Minimum Area {value:g}':
+            'Área mínima {value:g}',
+        'Minimum Depth {value:g}':
+            'Profundidad mínima {value:g}',
+        'Minimum Elevation {value:g}':
+            'Cota mínima {value:g}',
+        'Slope Limits {windows}':
+            'Límites del talud {windows}',
+        'no reason declared':
+            'no se declaró ningún motivo',
+        'no reason declared.':
+            'no se declaró ningún motivo.',
+        'No trial surface gave a valid factor of safety ({total} '
+        'generated).{priced}{refused} Anything else was refused before it '
+        'could be priced, for reasons this search does not record.':
+            'Ninguna superficie de tanteo dio un factor de seguridad válido '
+            '({total} generadas).{priced}{refused} Todo lo demás se rechazó '
+            'antes de poder calcularse, por motivos que esta búsqueda no '
+            'registra.',
+        ' {n} were priced and gave none; the census of invalid surfaces has '
+        'their codes.':
+            ' Se calcularon {n} y no dieron ninguno; el censo de superficies '
+            'no válidas tiene sus códigos.',
+        ' {n} was priced and gave none; the census of invalid surfaces has '
+        'their codes.':
+            ' Se calculó {n} y no dio ninguno; el censo de superficies no '
+            'válidas tiene sus códigos.',
+        ' Refused before pricing: {parts}.':
+            ' Rechazadas antes de calcularse: {parts}.',
+        '{n} slice bases sat on the edge of the model, within the resolution '
+        'of its own geometry, and were taken as being inside it. Nothing was '
+        'discarded for this. It happens where a slip surface daylights '
+        'exactly on a vertex of the External Boundary.':
+            '{n} bases de dovela quedaron en el borde del modelo, dentro de '
+            'la resolución de su propia geometría, y se tomaron como dentro '
+            'de él. No se descartó nada por esto. Ocurre donde una '
+            'superficie de rotura aflora justo en un vértice del contorno '
+            'exterior.',
+        '{n} slice base sat on the edge of the model, within the resolution '
+        'of its own geometry, and was taken as being inside it. Nothing was '
+        'discarded for this. It happens where a slip surface daylights '
+        'exactly on a vertex of the External Boundary.':
+            '{n} base de dovela quedó en el borde del modelo, dentro de la '
+            'resolución de su propia geometría, y se tomó como dentro de él. '
+            'No se descartó nada por esto. Ocurre donde una superficie de '
+            'rotura aflora justo en un vértice del contorno exterior.',
+        '{n} ended on an inadmissible surface':
+            '{n} acabaron en una superficie inadmisible',
+        '{n} started from a surface the method has no factor of safety for '
+        '({reason})':
+            '{n} partieron de una superficie para la que el método no tiene '
+            'factor de seguridad ({reason})',
+        '{n} could not evaluate the starting surface at all':
+            '{n} no pudieron evaluar en absoluto la superficie de partida',
+        'The snapped surface could not be evaluated; the unsnapped one is '
+        'reported.':
+            'La superficie ajustada no se pudo evaluar; se informa la que no '
+            'se ajustó.',
+        'The starting surface was evaluated and has no factor of safety: '
+        '{reason}. That is not missing data, it is the answer.':
+            'La superficie de partida se evaluó y no tiene factor de '
+            'seguridad: {reason}. No es un dato que falte, es la respuesta.',
+        'The starting surface could not be evaluated: the slicer refused it '
+        'whole. A polyline that rises above the ground anywhere is refused '
+        'entirely, so a vertex a ten-thousandth over the profile is enough.':
+            'La superficie de partida no se pudo evaluar: el divisor en '
+            'dovelas la rechazó entera. Una polilínea que sube por encima '
+            'del terreno en cualquier punto se rechaza entera, así que basta '
+            'un vértice una diezmilésima por encima del perfil.',
+        '{initial:.4f} → {final:.4f} ({improvement:+.4f}) in {iterations} '
+        'evaluations, {accepted} accepted':
+            '{initial:.4f} → {final:.4f} ({improvement:+.4f}) en '
+            '{iterations} evaluaciones, {accepted} aceptadas',
+        'Optimisation needs at least three vertices: there is nothing to '
+        'move on a two-point surface.':
+            'La optimización necesita al menos tres vértices: en una '
+            'superficie de dos puntos no hay nada que mover.',
+        'Unknown optimisation technique {technique!r}: it has to be one of '
+        '{choices}.':
+            'Técnica de optimización desconocida {technique!r}: tiene que '
+            'ser una de {choices}.',
+        'Optimize Surfaces walked {walked} surface(s) and {lost} came back '
+        'unusable: {parts}. Those walks contributed nothing, and what is '
+        'reported is what the search itself found.':
+            'Optimizar superficies recorrió {walked} superficie(s) y {lost} '
+            'volvieron inservibles: {parts}. Esos recorridos no aportaron '
+            'nada, y lo que se informa es lo que encontró la propia '
+            'búsqueda.',
+        '{n} surfaces were discarded because a slice base fell in a region '
+        'whose material no longer exists. Assign that region another '
+        'material (Properties > Assign Materials).':
+            'Se descartaron {n} superficies porque la base de una dovela '
+            'cayó en una región cuyo material ya no existe. Asigna otro '
+            'material a esa región (Propiedades > Asignar materiales).',
+        '{n} surface were discarded because a slice base fell in a region '
+        'whose material no longer exists. Assign that region another '
+        'material (Properties > Assign Materials).':
+            'Se descartó {n} superficie porque la base de una dovela cayó en '
+            'una región cuyo material ya no existe. Asigna otro material a '
+            'esa región (Propiedades > Asignar materiales).',
+        '{n} surfaces were discarded because a slice base fell outside the '
+        'External Boundary, where there is no soil to give it strength. This '
+        'is not a slice-count problem: the surfaces left the model. Check '
+        'the extent of the External Boundary against the search area.':
+            'Se descartaron {n} superficies porque la base de una dovela '
+            'cayó fuera del contorno exterior, donde no hay terreno que le '
+            'dé resistencia. No es un problema del número de dovelas: las '
+            'superficies salieron del modelo. Comprueba la extensión del '
+            'contorno exterior frente al área de búsqueda.',
+        '{n} surface were discarded because a slice base fell outside the '
+        'External Boundary, where there is no soil to give it strength. This '
+        'is not a slice-count problem: the surfaces left the model. Check '
+        'the extent of the External Boundary against the search area.':
+            'Se descartó {n} superficie porque la base de una dovela cayó '
+            'fuera del contorno exterior, donde no hay terreno que le dé '
+            'resistencia. No es un problema del número de dovelas: las '
+            'superficies salieron del modelo. Comprueba la extensión del '
+            'contorno exterior frente al área de búsqueda.',
+        'The Grid Search was to be split across {workers} processes and ran '
+        'in one, because the process pool failed ({error_type}: {error}). '
+        'The result is the same; only the time is not.':
+            'La búsqueda por rejilla iba a repartirse en {workers} procesos '
+            'y corrió en uno, porque falló el grupo de procesos '
+            '({error_type}: {error}). El resultado es el mismo; solo el '
+            'tiempo no.',
+        '{n} with the base above the ground':
+            '{n} con la base por encima del terreno',
+        '{n} with an end off the ground':
+            '{n} con un extremo fuera del terreno',
+        '{n} removed by the focus objects':
+            '{n} quitadas por los objetos de foco',
+        '{n} that left the model':
+            '{n} que salieron del modelo',
+        '{n} circles that do not cut the ground twice':
+            '{n} círculos que no cortan dos veces el terreno',
+        '{n} circle that do not cut the ground twice':
+            '{n} círculo que no corta dos veces el terreno',
+        '{n} that crossed a region with no material':
+            '{n} que cruzaron una región sin material',
+        '{n} with an end outside the Slope Limits':
+            '{n} con un extremo fuera de los límites del talud',
+        '{n} with an end outside the Slope Limits {windows}':
+            '{n} con un extremo fuera de los límites del talud {windows}',
+        '{n} with an end outside the Slope Limits [{lo:g}, {hi:g}]':
+            '{n} con un extremo fuera de los límites del talud [{lo:g}, '
+            '{hi:g}]',
+        '{n} with an end outside the Slope Limits [{lo1:g}, {hi1:g}] and '
+        '[{lo2:g}, {hi2:g}]':
+            '{n} con un extremo fuera de los límites del talud [{lo1:g}, '
+            '{hi1:g}] y [{lo2:g}, {hi2:g}]',
+        '{n} that the slicer refused':
+            '{n} que el divisor en dovelas rechazó',
+        'the surface was not analysed: between its two ends its base rises '
+        'above the ground surface, so part of the mass would be in the air.':
+            'la superficie no se analizó: entre sus dos extremos su base '
+            'sube por encima de la superficie del terreno, así que parte de '
+            'la masa quedaría en el aire.',
+        'the surface does not cut the model, so there is nothing to price.':
+            'la superficie no corta el modelo, así que no hay nada que '
+            'calcular.',
+        'the surface was not analysed: its first or last vertex is above the '
+        'ground. Put both ends on the ground surface.':
+            'la superficie no se analizó: su primer o su último vértice está '
+            'por encima del terreno. Pon los dos extremos sobre la '
+            'superficie del terreno.',
+        'the surface was not analysed: its first or last vertex is below the '
+        "ground, so it meets the slope only once (the reference's error "
+        '-101) and its end slice would have a vertical face with no '
+        'strength. Put both ends on the ground surface.':
+            'la superficie no se analizó: su primer o su último vértice está '
+            'bajo el terreno, así que solo corta el talud una vez (el error '
+            '-101 de la referencia) y su dovela extrema tendría una cara '
+            'vertical sin resistencia. Pon los dos extremos sobre la '
+            'superficie del terreno.',
+        'the surface was not analysed: it dips below the External Boundary.':
+            'la superficie no se analizó: baja por debajo del contorno '
+            'exterior.',
+        'the surface was not analysed: the circle does not cut the ground '
+        "surface twice (the reference's error -101).":
+            'la superficie no se analizó: el círculo no corta dos veces la '
+            'superficie del terreno (el error -101 de la referencia).',
+        'the surface was not analysed: a slice base fell in a region whose '
+        'material no longer exists.':
+            'la superficie no se analizó: la base de una dovela cayó en una '
+            'región cuyo material ya no existe.',
+        'the surface was not analysed: a slice base fell outside the '
+        'External Boundary, where there is no soil.':
+            'la superficie no se analizó: la base de una dovela cayó fuera '
+            'del contorno exterior, donde no hay terreno.',
+        'the surface was not analysed: an end daylights outside the Slope '
+        'Limits.':
+            'la superficie no se analizó: un extremo aflora fuera de los '
+            'límites del talud.',
+        'the surface was not analysed: the slicer refused it (more mandatory '
+        'cuts than slices, a degenerate width or a tension crack it could '
+        'not place).':
+            'la superficie no se analizó: el divisor en dovelas la rechazó '
+            '(más cortes obligados que dovelas, un ancho degenerado o una '
+            'grieta de tracción que no pudo colocar).',
+        '{n} of the {total} surfaces this search formed could not be sliced '
+        'and were dropped. Every vertex of a surface is a mandatory slice '
+        'boundary, so a surface needs at least as many slices as it has '
+        'segments, and every material boundary and water table it crosses '
+        'adds one more; this analysis uses {num_slices}. The surfaces lost '
+        'are the ones that cross the most layers, so this is not an even '
+        'thinning of the search. Use more slices, or fewer vertices per '
+        'surface.':
+            '{n} de las {total} superficies que formó esta búsqueda no se '
+            'pudieron dividir en dovelas y se descartaron. Cada vértice de '
+            'una superficie es un límite obligado de dovela, así que una '
+            'superficie necesita al menos tantas dovelas como segmentos '
+            'tiene, y cada contorno de material y cada nivel freático que '
+            'cruza añade una más; este análisis usa {num_slices}. Las '
+            'superficies perdidas son las que cruzan más capas, así que no '
+            'es un aclarado uniforme de la búsqueda. Usa más dovelas o menos '
+            'vértices por superficie.',
+        '{n} of the {total} surfaces this search formed could not be sliced '
+        'and were dropped. Each circle is converted into {vertices} '
+        'vertices, which is {segments} straight segments, and this analysis '
+        'uses {num_slices} slices; every vertex is a mandatory slice '
+        'boundary, and material boundaries and the water table take slices '
+        'of their own. The surfaces lost are the ones that cross the most '
+        'layers, so this is not an even thinning of the search. Use fewer '
+        'vertices or more slices.':
+            '{n} de las {total} superficies que formó esta búsqueda no se '
+            'pudieron dividir en dovelas y se descartaron. Cada círculo se '
+            'convierte en {vertices} vértices, que son {segments} segmentos '
+            'rectos, y este análisis usa {num_slices} dovelas; cada vértice '
+            'es un límite obligado de dovela, y los contornos de material y '
+            'el nivel freático se llevan dovelas propias. Las superficies '
+            'perdidas son las que cruzan más capas, así que no es un '
+            'aclarado uniforme de la búsqueda. Usa menos vértices o más '
+            'dovelas.',
+        '{n} user-defined circular surfaces were not analysed: the Surface '
+        'Type of this analysis is Non-Circular, and one analysis carries one '
+        'Surface Type. Set Surface Options -> Surface Type = Circular to '
+        'include them.':
+            'No se analizaron {n} superficies circulares definidas por el '
+            'usuario porque el tipo de superficie de este análisis es no '
+            'circular, y un análisis lleva un solo tipo de superficie. Pon '
+            'Opciones de superficie -> Tipo de superficie = Circular para '
+            'incluirlas.',
+        '{n} user-defined circular surface was not analysed: the Surface '
+        'Type of this analysis is Non-Circular, and one analysis carries one '
+        'Surface Type. Set Surface Options -> Surface Type = Circular to '
+        'include it.':
+            'No se analizó {n} superficie circular definida por el usuario '
+            'porque el tipo de superficie de este análisis es no circular, y '
+            'un análisis lleva un solo tipo de superficie. Pon Opciones de '
+            'superficie -> Tipo de superficie = Circular para incluirla.',
+        'The user-defined surface at centre ({x:.4g}, {y:.4g}) with radius '
+        '{r:.4g} has no factor of safety: {reason}':
+            'La superficie definida por el usuario con centro en ({x:.4g}, '
+            '{y:.4g}) y radio {r:.4g} no tiene factor de seguridad: {reason}',
+        'The user-defined surface at centre ({x:.4g}, {y:.4g}) with radius '
+        '{r:.4g} produced no result, so it is not in the reported '
+        'population. No surface filter is active on this run, so the circle '
+        'does not meet the ground twice inside the External Boundary.':
+            'La superficie definida por el usuario con centro en ({x:.4g}, '
+            '{y:.4g}) y radio {r:.4g} no dio ningún resultado, así que no '
+            'está en la población informada. No hay ningún filtro de '
+            'superficies activo en este cálculo, así que el círculo no corta '
+            'dos veces el terreno dentro del contorno exterior.',
+        'The user-defined surface at centre ({x:.4g}, {y:.4g}) with radius '
+        '{r:.4g} produced no result, so it is not in the reported '
+        'population. Filters active on this run that can remove it: '
+        '{filters}.':
+            'La superficie definida por el usuario con centro en ({x:.4g}, '
+            '{y:.4g}) y radio {r:.4g} no dio ningún resultado, así que no '
+            'está en la población informada. Filtros activos en este cálculo '
+            'que pueden quitarla: {filters}.',
+        'The surface reported for this method is one the user defined by '
+        'hand (centre ({x:.4g}, {y:.4g}), radius {r:.4g}), not one the '
+        'search generated.':
+            'La superficie informada para este método es una que el usuario '
+            'definió a mano (centro en ({x:.4g}, {y:.4g}), radio {r:.4g}), '
+            'no una que generase la búsqueda.',
+        'A surface clipped by a weak layer was discarded: its steepest slice '
+        'base is {angle:.1f} deg, past the {limit:.0f} deg ceiling in '
+        'Project Settings > Advanced.':
+            'Se descartó una superficie recortada por una capa débil: la '
+            'base de dovela más empinada está a {angle:.1f}°, por encima del '
+            'tope de {limit:.0f}° de Ajustes de proyecto > Avanzado.',
         "The model has no visible annotation.":
             "El modelo no tiene ninguna anotación visible.",
         # v0.1.339 (D336) — the options of the PDF report

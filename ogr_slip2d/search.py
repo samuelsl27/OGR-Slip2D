@@ -29,6 +29,7 @@ from ogr_core.project.settings import SurfaceType, WeakLayerHandling
 from .failure_direction import slope_face, steepest_face_index  # noqa: F401
 from .methods import LEMMethod, LEMResult
 from . import messages as msg
+from . import search_note_messages as SN
 from .rapid_drawdown import RapidDrawdownError, drawdown_gap
 from .slicer import (REFUSED_BASE_ABOVE_GROUND, REFUSED_END_ABOVE_GROUND,
                      REFUSED_END_BELOW_GROUND, REFUSED_ORPHAN_MATERIAL,
@@ -45,6 +46,9 @@ from .surface import SlipCircle, WeakLayerSurface, lowest_elevation
 #: here and not in ``slicer``.
 REFUSED_OUTSIDE_SLOPE_LIMITS = "outside_slope_limits"
 REFUSED_MISSES_GROUND = "misses_ground"
+
+#: v0.1.349 (D335) -- a note of the search, with its code
+_snote = SN.search_note
 
 #: v0.1.261 (D255) — every counter a run keeps ON THE SEARCH rather than
 #: on its result. One list, read by ``BaseSearch.run`` to reset them and
@@ -868,16 +872,8 @@ class BaseSearch(ABC):
         """
         n = getattr(self, "_unsliceable", 0)
         total = n + getattr(result, "valid_count", 0)
-        return [
-            f"{n} of the {total} surfaces this search formed could not be "
-            f"sliced and were dropped. Every vertex of a surface is a "
-            f"mandatory slice boundary, so a surface needs at least as many "
-            f"slices as it has segments, and every material boundary and "
-            f"water table it crosses adds one more; this analysis uses "
-            f"{self.num_slices}. The surfaces lost are the ones that cross "
-            f"the most layers, so this is not an even thinning of the "
-            f"search. Use more slices, or fewer vertices per surface."
-        ]
+        return [_snote(SN.UNSLICEABLE, n=n, total=total,
+                       num_slices=self.num_slices)]
 
     def _outside_model_note(self) -> str:
         """What to say when surfaces were refused for leaving the soil.
@@ -890,25 +886,13 @@ class BaseSearch(ABC):
         a door those guards do not watch — which is worth saying out loud
         rather than counting in silence.
         """
-        n = getattr(self, "_outside_model", 0)
-        return (
-            "%d surface%s were discarded because a slice base fell outside "
-            "the External Boundary, where there is no soil to give it "
-            "strength. This is not a slice-count problem: the surfaces left "
-            "the model. Check the extent of the External Boundary against "
-            "the search area." % (n, "" if n == 1 else "s")
-        )
+        return _snote(SN.OUTSIDE_MODEL, n=getattr(self, "_outside_model", 0))
 
     def _orphan_material_note(self) -> str:
         """What to say when surfaces were refused for crossing a region
         whose material no longer exists (v0.1.298, D298)."""
-        n = getattr(self, "_orphan_material", 0)
-        return (
-            "%d surface%s were discarded because a slice base fell in a "
-            "region whose material no longer exists. Assign that region "
-            "another material (Properties > Assign Materials)."
-            % (n, "" if n == 1 else "s")
-        )
+        return _snote(SN.ORPHAN_MATERIAL,
+                      n=getattr(self, "_orphan_material", 0))
 
     def _end_off_ground_note(self) -> str:
         """What to say when polylines were refused at an end.
@@ -922,18 +906,10 @@ class BaseSearch(ABC):
         above = getattr(self, "_end_above_ground", 0)
         parts = []
         if below:
-            parts.append("%d with an end below the ground, which would have "
-                         "given its end slice a vertical face with no "
-                         "strength (the reference calls such a surface "
-                         "-101: one intersection with the slope)" % below)
+            parts.append(SN.nested_search_note(SN.END_BELOW, n=below))
         if above:
-            parts.append("%d with an end above it" % above)
-        n = below + above
-        return ("%d polyline surface%s were discarded because an end was not "
-                "on the ground surface: %s. This is not a slice-count "
-                "problem: the first and last vertices of a polyline have to "
-                "lie on the ground." % (n, "" if n == 1 else "s",
-                                        "; ".join(parts)))
+            parts.append(SN.nested_search_note(SN.END_ABOVE, n=above))
+        return _snote(SN.END_OFF_GROUND, n=below + above, parts=parts)
 
     def _base_above_ground_note(self) -> str:
         """What to say when surfaces were refused for a base in the air.
@@ -944,15 +920,8 @@ class BaseSearch(ABC):
         because the remedy is the opposite one: no number of slices puts
         the base back under the ground.
         """
-        n = getattr(self, "_base_above_ground", 0)
-        return ("%d surface%s were discarded because the base rose above "
-                "the ground surface between the two ends, so part of the "
-                "sliding mass would be in the air. This is not a slice-count "
-                "problem: more slices cannot put the base back under the "
-                "ground. It happens where a surface follows a line that lies "
-                "on the ground, such as a weak layer or a Block Search "
-                "polyline along an exposed bench, and the line sits a "
-                "little above the ground there." % (n, "" if n == 1 else "s"))
+        return _snote(SN.BASE_ABOVE_GROUND,
+                      n=getattr(self, "_base_above_ground", 0))
 
     def _no_valid_surface_note(self, result) -> str:
         """What to say when the run ends with no valid surface at all.
@@ -972,47 +941,55 @@ class BaseSearch(ABC):
         circles that miss the ground, and of pieces (masses, weak-layer
         cases) for the slicer's reasons.
         """
+        # v0.1.349 (D335) -- every reason a fragment with its code, in the
+        # list the sentence joins with "; "; the windows of the Slope Limits
+        # are one code per count, because the "and" between two of them is
+        # a word of the sentence and not data
         parts = []
         n = int(getattr(result, "outside_slope_limits", 0) or 0)
         if n:
-            windows = " and ".join(
-                "[%g, %g]" % (lo, hi)
-                for lo, hi in (self.slope_limit_sets or ()))
-            parts.append("%d with an end outside the Slope Limits%s"
-                         % (n, (" " + windows) if windows else ""))
+            sets = list(self.slope_limit_sets or ())
+            if not sets:
+                parts.append(SN.nested_search_note(SN.R_SLOPE_LIMITS, n=n))
+            elif len(sets) == 1:
+                (lo, hi), = sets
+                parts.append(SN.nested_search_note(SN.R_SLOPE_LIMITS_ONE,
+                                                   n=n, lo=lo, hi=hi))
+            elif len(sets) == 2:
+                (lo1, hi1), (lo2, hi2) = sets
+                parts.append(SN.nested_search_note(
+                    SN.R_SLOPE_LIMITS_TWO, n=n, lo1=lo1, hi1=hi1, lo2=lo2,
+                    hi2=hi2))
+            else:
+                parts.append(SN.nested_search_note(
+                    SN.R_SLOPE_LIMITS_MANY, n=n, windows=" and ".join(
+                        "[%g, %g]" % (lo, hi) for lo, hi in sets)))
         n = int(getattr(result, "misses_ground", 0) or 0)
         if n:
-            parts.append("%d circle%s that do not cut the ground twice"
-                         % (n, "" if n == 1 else "s"))
-        for attr, what in (("_outside_model", "that left the model"),
-                           ("_orphan_material", "that crossed a region "
-                                                "with no material"),
-                           ("_unsliceable", "that the slicer refused")):
+            parts.append(SN.nested_search_note(SN.R_MISSES_GROUND, n=n))
+        for attr, code in (("_outside_model", SN.R_LEFT_MODEL),
+                           ("_orphan_material", SN.R_ORPHAN),
+                           ("_unsliceable", SN.R_UNSLICEABLE)):
             n = getattr(self, attr, 0)
             if n:
-                parts.append("%d %s" % (n, what))
+                parts.append(SN.nested_search_note(code, n=n))
         n = (int(getattr(result, "ends_below_ground", 0) or 0)
              + int(getattr(result, "ends_above_ground", 0) or 0))
         if n:
-            parts.append("%d with an end off the ground" % n)
+            parts.append(SN.nested_search_note(SN.R_END_OFF, n=n))
         n = int(getattr(result, "bases_above_ground", 0) or 0)
         if n:
-            parts.append("%d with the base above the ground" % n)
+            parts.append(SN.nested_search_note(SN.R_BASE_ABOVE, n=n))
         n = int(getattr(result, "focus_rejected", 0) or 0)
         if n:
-            parts.append("%d removed by the focus objects" % n)
+            parts.append(SN.nested_search_note(SN.R_FOCUS, n=n))
         priced = sum(1 for r in result.evaluations if not r.is_valid)
-        line = ("No trial surface gave a valid factor of safety (%d "
-                "generated)." % result.total_count)
-        if priced:
-            line += (" %d %s priced and gave none; the census of invalid "
-                     "surfaces has their codes."
-                     % (priced, "was" if priced == 1 else "were"))
-        if parts:
-            line += " Refused before pricing: " + "; ".join(parts) + "."
-        line += (" Anything else was refused before it could be priced, "
-                 "for reasons this search does not record.")
-        return line
+        return _snote(
+            SN.NO_VALID, total=result.total_count,
+            priced=(SN.nested_search_note(SN.NO_VALID_PRICED, n=priced)
+                    if priced else SN.NOTHING),
+            refused=(SN.nested_search_note(SN.NO_VALID_REFUSED, parts=parts)
+                     if parts else SN.NOTHING))
 
     def _on_model_edge_note(self) -> str:
         """What to say when a tolerance decided a base was inside.
@@ -1032,15 +1009,7 @@ class BaseSearch(ABC):
         External Boundary — and the user is the one who can say whether
         that is what was meant.
         """
-        n = getattr(self, "_on_model_edge", 0)
-        return (
-            "%d slice base%s sat on the edge of the model, within the "
-            "resolution of its own geometry, and %s taken as being inside "
-            "it. Nothing was discarded for this. It happens where a slip "
-            "surface daylights exactly on a vertex of the External "
-            "Boundary." % (n, "" if n == 1 else "s",
-                            "was" if n == 1 else "were")
-        )
+        return _snote(SN.ON_MODEL_EDGE, n=getattr(self, "_on_model_edge", 0))
 
     def _base_angle_ok(self, project: Project, trial, slices) -> bool:
         """Reject a clipped surface whose base turns too steeply to solve.
@@ -1080,12 +1049,9 @@ class BaseSearch(ABC):
         limit_rad = math.radians(limit)
         for sl in slices:
             if abs(sl.base_angle) > limit_rad:
-                self._note(
-                    f"A surface clipped by a weak layer was discarded: its "
-                    f"steepest slice base is "
-                    f"{math.degrees(abs(sl.base_angle)):.1f} deg, past the "
-                    f"{limit:.0f} deg ceiling in Project Settings > Advanced."
-                )
+                self._note(_snote(
+                    SN.WEAK_LAYER_STEEP,
+                    angle=math.degrees(abs(sl.base_angle)), limit=limit))
                 return False
         return True
 
@@ -1615,50 +1581,13 @@ class BaseSearch(ABC):
             return None
         return self._best_of_masses(project, (surface,))
 
-    #: v0.1.258 (D244) — what to tell a caller about ``_last_refusal``.
-    _REFUSAL_TEXT = {
-        REFUSED_END_BELOW_GROUND: (
-            "the surface was not analysed: its first or last vertex is "
-            "below the ground, so it meets the slope only once (the "
-            "reference's error -101) and its end slice would have a "
-            "vertical face with no strength. Put both ends on the ground "
-            "surface."),
-        REFUSED_END_ABOVE_GROUND: (
-            "the surface was not analysed: its first or last vertex is "
-            "above the ground. Put both ends on the ground surface."),
-        REFUSED_OUTSIDE_MODEL: (
-            "the surface was not analysed: a slice base fell outside the "
-            "External Boundary, where there is no soil."),
-        # v0.1.298 (D298).
-        REFUSED_ORPHAN_MATERIAL: (
-            "the surface was not analysed: a slice base fell in a region "
-            "whose material no longer exists."),
-        REFUSED_BASE_ABOVE_GROUND: (
-            "the surface was not analysed: between its two ends its base "
-            "rises above the ground surface, so part of the mass would be "
-            "in the air."),
-        "leaves_soil": (
-            "the surface was not analysed: it dips below the External "
-            "Boundary."),
-        "unsliceable": (
-            "the surface was not analysed: the slicer refused it (more "
-            "mandatory cuts than slices, a degenerate width or a tension "
-            "crack it could not place)."),
-        # v0.1.261 (D263).
-        REFUSED_OUTSIDE_SLOPE_LIMITS: (
-            "the surface was not analysed: an end daylights outside the "
-            "Slope Limits."),
-        REFUSED_MISSES_GROUND: (
-            "the surface was not analysed: the circle does not cut the "
-            "ground surface twice (the reference's error -101)."),
-    }
-
     def refusal_text(self) -> str:
-        """Why the last :meth:`evaluate_surface` gave nothing, in words."""
-        return self._REFUSAL_TEXT.get(
-            getattr(self, "_last_refusal", None),
-            "the surface does not cut the model, so there is nothing to "
-            "price.")
+        """Why the last :meth:`evaluate_surface` gave nothing, in words.
+
+        v0.1.349 (D335) -- with its code: the sentences are the catalogue's
+        (``search_note_messages.refusal``), keyed by the refusal recorded.
+        """
+        return SN.refusal(getattr(self, "_last_refusal", None))
 
     def _leaves_soil(self, project: Project, surface) -> bool:
         """Whether a non-circular surface dips below the External."""
@@ -1775,18 +1704,24 @@ class BaseSearch(ABC):
         answers None without a reason, so this is what can honestly be said
         without threading a reason channel through the hot loop.
         """
+        # v0.1.349 (D335) -- each filter a fragment with its code, the name
+        # of the setting being a word of the sentence; the windows are data
         bits = []
         if self.slope_limit_sets is not None:
-            bits.append("Slope Limits %s" % (
-                ", ".join("[%g, %g]" % (min(a, b), max(a, b))
-                          for a, b in self.slope_limit_sets)))
+            bits.append(SN.nested_search_note(
+                SN.F_SLOPE_LIMITS, windows=", ".join(
+                    "[%g, %g]" % (min(a, b), max(a, b))
+                    for a, b in self.slope_limit_sets)))
         if self.min_area:
-            bits.append("Minimum Area %g" % self.min_area)
+            bits.append(SN.nested_search_note(SN.F_MIN_AREA,
+                                              value=self.min_area))
         if self.min_depth is not None:
-            bits.append("Minimum Depth %g" % self.min_depth)
+            bits.append(SN.nested_search_note(SN.F_MIN_DEPTH,
+                                              value=self.min_depth))
         if self.min_elevation is not None:
-            bits.append("Minimum Elevation %g" % self.min_elevation)
-        return ", ".join(bits)
+            bits.append(SN.nested_search_note(SN.F_MIN_ELEVATION,
+                                              value=self.min_elevation))
+        return bits
 
     def _evaluate_user_surfaces(self, project: Project, result) -> None:
         """Analyse the slip surfaces the user defined by hand (v0.1.157, D58).
@@ -1825,38 +1760,25 @@ class BaseSearch(ABC):
         # them in silence, which is the failure this whole defect was.
         stype = getattr(project.settings.search, "surface_type", None)
         if stype == SurfaceType.NON_CIRCULAR.value:
-            self._note(
-                "%d user-defined circular surface%s not analysed: the "
-                "Surface Type of this analysis is Non-Circular, and one "
-                "analysis carries one Surface Type. Set Surface Options -> "
-                "Surface Type = Circular to include %s."
-                % (len(surfaces), " was" if len(surfaces) == 1 else "s were",
-                   "it" if len(surfaces) == 1 else "them"))
+            self._note(_snote(SN.USER_CIRCULAR_SKIPPED, n=len(surfaces)))
             return
 
         for circle in surfaces:
             res = self.evaluate_circle(project, circle)
             if res is None:
                 filters = self._user_surface_filters()
+                at = dict(x=circle.centre_x, y=circle.centre_y,
+                          r=circle.radius)
                 self._note(
-                    "The user-defined surface at centre (%.4g, %.4g) with "
-                    "radius %.4g produced no result, so it is not in the "
-                    "reported population. %s"
-                    % (circle.centre_x, circle.centre_y, circle.radius,
-                       ("Filters active on this run that can remove it: %s."
-                        % filters) if filters else
-                       "No surface filter is active on this run, so the "
-                       "circle does not meet the ground twice inside the "
-                       "External Boundary."))
+                    _snote(SN.USER_NO_RESULT_FILTERED, filters=filters, **at)
+                    if filters else _snote(SN.USER_NO_RESULT, **at))
                 continue
             result.user_evaluations.append(res)
             if not res.is_valid:
-                self._note(
-                    "The user-defined surface at centre (%.4g, %.4g) with "
-                    "radius %.4g has no factor of safety: %s"
-                    % (circle.centre_x, circle.centre_y, circle.radius,
-                       res.error_message or res.admissibility_note
-                       or "no reason declared."))
+                self._note(_snote(
+                    SN.USER_NO_FACTOR, x=circle.centre_x, y=circle.centre_y,
+                    r=circle.radius,
+                    reason=SN.reason_of(res, SN.NO_REASON_STOP)))
 
         # Said only when it happened, and it is the point of the note: a
         # minimum that came from a surface the user typed reads exactly like
@@ -1864,13 +1786,10 @@ class BaseSearch(ABC):
         crit = result.critical
         if crit is not None and result.is_user_surface(crit):
             sd = crit.surface
-            self._note(
-                "The surface reported for this method is one the user "
-                "defined by hand (centre (%.4g, %.4g), radius %.4g), not "
-                "one the search generated."
-                % (getattr(sd, "centre_x", float("nan")),
-                   getattr(sd, "centre_y", float("nan")),
-                   getattr(sd, "radius", float("nan"))))
+            self._note(_snote(
+                SN.USER_REPORTED, x=getattr(sd, "centre_x", float("nan")),
+                y=getattr(sd, "centre_y", float("nan")),
+                r=getattr(sd, "radius", float("nan"))))
 
     # ------------------------------------------------------------------
     def _optimisation_note(self, walked: int, sin_resultado: int,
@@ -1894,21 +1813,20 @@ class BaseSearch(ABC):
         perdidas = sin_resultado + sin_factor + inadmisible
         if not perdidas:
             return
+        # v0.1.349 (D335) -- each loss a fragment with its code, and the
+        # reason the start had no factor nested with the code D314 gave it
         partes = []
         if sin_resultado:
-            partes.append("%d could not evaluate the starting surface at "
-                          "all" % sin_resultado)
+            partes.append(SN.nested_search_note(SN.O_NO_RESULT,
+                                                n=sin_resultado))
         if sin_factor:
-            partes.append("%d started from a surface the method has no "
-                          "factor of safety for (%s)" % (sin_factor, motivo))
+            partes.append(SN.nested_search_note(SN.O_NO_FACTOR, n=sin_factor,
+                                                reason=motivo))
         if inadmisible:
-            partes.append("%d ended on an inadmissible surface"
-                          % inadmisible)
-        self._note(
-            "Optimize Surfaces walked %d surface(s) and %d came back "
-            "unusable: %s. Those walks contributed nothing, and what is "
-            "reported is what the search itself found."
-            % (walked, perdidas, "; ".join(partes)))
+            partes.append(SN.nested_search_note(SN.O_INADMISSIBLE,
+                                                n=inadmisible))
+        self._note(_snote(SN.OPTIMISATION_LOST, walked=walked, lost=perdidas,
+                          parts=partes))
 
     def _optimize_result(self, project: Project, result) -> None:
         """Run Optimize Surfaces over what the search found.
@@ -1987,9 +1905,9 @@ class BaseSearch(ABC):
                 else:
                     sin_factor += 1
                     if motivo is None:
-                        motivo = rep.notes.get("start_invalid") or (
-                            res.error_message or res.admissibility_note
-                            or "no reason declared")
+                        # v0.1.349 (D335) -- the same sentence as
+                        # ``rep.notes["start_invalid"]``, with its code
+                        motivo = SN.reason_of(res)
                 continue
             if not getattr(res, "admissible", True):
                 inadmisible += 1
@@ -2052,9 +1970,9 @@ class BaseSearch(ABC):
                 elif not res.is_valid:
                     sin_factor += 1
                     if motivo is None:
-                        motivo = rep.notes.get("start_invalid") or (
-                            res.error_message or res.admissibility_note
-                            or "no reason declared")
+                        # v0.1.349 (D335) -- the same sentence as
+                        # ``rep.notes["start_invalid"]``, with its code
+                        motivo = SN.reason_of(res)
                 elif not getattr(res, "admissible", True):
                     inadmisible += 1
                 if (res is not None and res.is_valid
@@ -2315,11 +2233,9 @@ def _parallel_grid_run(search, project, centres, workers):
             # v0.1.262 (D247) — falling back is right; doing it in silence
             # was not: the window ran every grid in one process for as long
             # as it existed and nothing said so.
-            search._note(
-                "The Grid Search was to be split across %d processes and ran "
-                "in one, because the process pool failed (%s: %s). The result "
-                "is the same; only the time is not."
-                % (workers, type(exc).__name__, str(exc)[:200]))
+            search._note(_snote(SN.PARALLEL_FALLBACK, workers=workers,
+                                error_type=type(exc).__name__,
+                                error=str(exc)[:200]))
             return None
     finally:
         search.progress_cb = cb
@@ -4043,18 +3959,10 @@ class AutoRefineNonCircularSearch(AutoRefineSearch):
         """The general note, said in terms of the control that caused it."""
         n = getattr(self, "_unsliceable", 0)
         total = n + getattr(result, "valid_count", 0)
-        return [
-            "%d of the %d surfaces this search formed could not be "
-            "sliced and were dropped. Each circle is converted into "
-            "%d vertices, which is %d straight segments, and this "
-            "analysis uses %d slices; every vertex is a mandatory "
-            "slice boundary, and material boundaries and the water "
-            "table take slices of their own. The surfaces lost are "
-            "the ones that cross the most layers, so this is not an "
-            "even thinning of the search. Use fewer vertices or more "
-            "slices." % (n, total, self.num_vertices,
-                         self.num_vertices - 1, self.num_slices)
-        ]
+        return [_snote(SN.UNSLICEABLE_CIRCLE, n=n, total=total,
+                       vertices=int(self.num_vertices),
+                       segments=int(self.num_vertices - 1),
+                       num_slices=int(self.num_slices))]
 
     # ------------------------------------------------------------------
     def _evaluate_trial(self, project, circle):

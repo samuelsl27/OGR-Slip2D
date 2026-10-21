@@ -50,6 +50,8 @@ from typing import Optional
 
 from ogr_core.project.settings import optimize_enabled_for
 
+from . import search_note_messages as SN
+
 #: How many of the most recent passes the convergence criterion averages
 #: over. The reference states the number explicitly ("the average safety
 #: factor of the last five iterations, including the current iteration"),
@@ -242,9 +244,12 @@ class OptimizeReport:
         return self.improvement > 0.0
 
     def summary(self) -> str:
-        return (f"{self.initial_fos:.4f} → {self.final_fos:.4f} "
-                f"({self.improvement:+.4f}) in {self.iterations} "
-                f"evaluations, {self.accepted} accepted")
+        # v0.1.349 (D335) -- with its code: the window says it in Spanish
+        return SN.search_note(SN.OPT_SUMMARY, initial=self.initial_fos,
+                              final=self.final_fos,
+                              improvement=self.improvement,
+                              iterations=self.iterations,
+                              accepted=self.accepted)
 
 
 # ======================================================================
@@ -553,9 +558,9 @@ def optimize_surface(project, search, surface, settings=None):
         # ``check_analysis_settings``, because scripts reach this function
         # without going through an analysis. ``error`` is the key the menu
         # action stops on.
-        rep.notes["error"] = (
-            "Unknown optimisation technique %r: it has to be one of %s."
-            % (opts.technique, ", ".join(TECHNIQUES)))
+        rep.notes["error"] = SN.search_note(
+            SN.OPT_UNKNOWN_TECHNIQUE, technique=opts.technique,
+            choices=", ".join(TECHNIQUES))
         return surface, None, rep
     rng = random.Random(opts.seed)
 
@@ -563,9 +568,7 @@ def optimize_surface(project, search, surface, settings=None):
     if opts.densify_to and len(pts) < opts.densify_to:
         pts = _densify(pts, opts.densify_to)
     if len(pts) < 3:
-        rep.notes["error"] = (
-            "Optimisation needs at least three vertices: there is "
-            "nothing to move on a two-point surface.")
+        rep.notes["error"] = SN.search_note(SN.OPT_THREE_VERTICES)
         return surface, None, rep
 
     evaluator = _evaluator_for(search, opts)
@@ -623,19 +626,14 @@ def optimize_surface(project, search, surface, settings=None):
         if opts.densify_to and len(pts) > len(surface.polyline.vertices):
             rep.notes["start_densified_to"] = len(pts)
         if best_res is None:
-            rep.notes["error"] = (
-                "The starting surface could not be evaluated: the slicer "
-                "refused it whole. A polyline that rises above the ground "
-                "anywhere is refused entirely, so a vertex a "
-                "ten-thousandth over the profile is enough.")
+            rep.notes["error"] = SN.search_note(SN.OPT_START_REFUSED)
         else:
-            motivo = (best_res.error_message or best_res.admissibility_note
-                      or "no reason declared")
-            rep.notes["start_invalid"] = motivo
-            rep.notes["error"] = (
-                "The starting surface was evaluated and has no factor of "
-                "safety: %s. That is not missing data, it is the answer."
-                % motivo)
+            # v0.1.349 (D335) -- the reason with the code D314 gave it;
+            # ``start_invalid`` keeps the sentence, which callers read
+            motivo = SN.reason_of(best_res)
+            rep.notes["start_invalid"] = motivo["text"]
+            rep.notes["error"] = SN.search_note(SN.OPT_START_INVALID,
+                                                reason=motivo)
         # The surface returned is the one that was EVALUATED, densified
         # points and all. Handing back the undensified original described
         # a different surface from the result beside it, and a caller that
@@ -696,9 +694,7 @@ def optimize_surface(project, search, surface, settings=None):
                     best_pts, best_fos, best_res = snapped, res.fos, res
                     best_score = _objective(res)
                 else:
-                    rep.notes["snap"] = (
-                        "The snapped surface could not be evaluated; the "
-                        "unsnapped one is reported.")
+                    rep.notes["snap"] = SN.search_note(SN.OPT_SNAP_FAILED)
         rep.final_fos = best_fos
         return _make(best_pts), best_res, rep
 

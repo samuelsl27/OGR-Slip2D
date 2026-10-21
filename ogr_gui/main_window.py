@@ -255,7 +255,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.348"
+    VERSION = "0.1.349"
 
     def __init__(self) -> None:
         super().__init__()
@@ -2683,12 +2683,15 @@ class MainWindow(QMainWindow):
         except AnalysisNotConfigured as exc:
             self._info("\n".join(tr(p) for p in exc.problems))
             return
+        # v0.1.349 (D335) -- the report's sentences, in the reader's language
+        from .core_messages import note_text
         if "error" in rep.notes:
-            self._info(rep.notes["error"])
+            self._info(note_text(rep.notes["error"]))
             return
         if not rep.improved:
             self.statusBar().showMessage(
-                tr("No improvement found: %s") % rep.summary(), 12000)
+                tr("No improvement found: %s") % note_text(rep.summary()),
+                12000)
             return
         # The optimised surface replaces the critical one in the stored
         # result, so Interpret shows what the optimisation produced
@@ -2723,7 +2726,7 @@ class MainWindow(QMainWindow):
         self._remember_results_model()
         self.canvas.display_search_result(new)
         self.statusBar().showMessage(
-            tr("Optimised: %s") % rep.summary(), 15000)
+            tr("Optimised: %s") % note_text(rep.summary()), 15000)
 
     # v0.1.335 (D142a) — on the canvas, as the reference does it: the
     # centre, then a point on the circle, or Enter to type the radius.

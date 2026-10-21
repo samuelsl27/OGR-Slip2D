@@ -62,12 +62,20 @@ class MessageSpec:
     #: whole templates instead, each with its own translation.
     one: str = ""
     count: str = ""
+    #: v0.1.349 (D335) -- ``(field, separator)`` for a field holding several
+    #: messages that the engine joined with something else than
+    #: ``LIST_SEP`` ("; " between the reasons of a search, for instance).
+    seps: tuple = ()
 
     def template(self, args=None) -> str:
         """The English template for ``args``: ``one`` when its count is 1."""
         if self.one and self.count and (args or {}).get(self.count) == 1:
             return self.one
         return self.english
+
+    def sep(self, field: str) -> str:
+        """How the messages of ``field`` are joined."""
+        return dict(self.seps).get(field, LIST_SEP)
 
 
 #: Two messages one after the other, as the engine joined them with "; ".
@@ -171,11 +179,11 @@ def is_nested_list(value) -> bool:
             and all(is_nested(v) for v in value))
 
 
-def _english_value(value):
+def _english_value(value, sep: str = LIST_SEP):
     if is_nested(value):
         return value["text"]
     if is_nested_list(value):
-        return LIST_SEP.join(v["text"] for v in value)
+        return sep.join(v["text"] for v in value)
     return value
 
 
@@ -199,7 +207,8 @@ def english(catalogue: dict, code: str, args: Optional[dict] = None) -> str:
     a test catches them; a reader never sees this, it sees the sentence.
     """
     spec = catalogue[code]
-    values = {k: _english_value(v) for k, v in (args or {}).items()}
+    values = {k: _english_value(v, spec.sep(k))
+              for k, v in (args or {}).items()}
     return spec.template(args).format(**values)
 
 
@@ -229,7 +238,7 @@ def render(catalogue: dict, code: str, args: Optional[dict],
                                  value["text"], translate=translate,
                                  show=show, elide=elide)
         elif is_nested_list(value):
-            values[key] = LIST_SEP.join(
+            values[key] = spec.sep(key).join(
                 render(catalogue, v["code"], v["args"], v["text"],
                        translate=translate, show=show, elide=elide)
                 for v in value)
