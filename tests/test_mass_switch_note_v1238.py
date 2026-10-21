@@ -89,7 +89,8 @@ def _narrow():
 
 
 def _global_minimum(var, det=None):
-    from ogr_core.statistics import SamplingMethod, run_global_minimum
+    from ogr_core.statistics import SamplingMethod
+    from ogr_slip2d.probabilistic import run_global_minimum
     p, V = _model()
     det = det if det is not None else _deterministic()
     return run_global_minimum(p, {_MID: det}, [var], num_samples=_N,
@@ -100,8 +101,7 @@ def _global_minimum(var, det=None):
 def _replay(res, var):
     """Every counted sample again, outside the engine: ``[(fos, extent)]``."""
     from ogr_core.project import prepare_analysis_project
-    from ogr_core.statistics.probabilistic import (_rebuild_surface,
-                                                   counts_as_sample)
+    from ogr_slip2d.probabilistic import _rebuild_surface, counts_as_sample
     from ogr_core.statistics.random_variables import (apply_sample,
                                                       clone_project)
     p, _V = _model()
@@ -140,7 +140,7 @@ class TestTheHelpers:
         assert r.surface.x_right < det.surface.x_left      # disjoint
 
     def test_extent_and_circle_read_objects_and_dictionaries(self):
-        from ogr_core.statistics.probabilistic import _circle_of, _extent
+        from ogr_slip2d.probabilistic import _circle_of, _extent
         s = _deterministic().surface
         d = s.to_dict()
         assert _extent(s) == _extent(d) == (s.x_left, s.x_right)
@@ -151,7 +151,7 @@ class TestTheHelpers:
         assert _circle_of(bare) == (1.0, 2.0, 3.0) and _extent(bare) is None
 
     def test_another_circle_is_not_a_change_of_mass(self):
-        from ogr_core.statistics.probabilistic import _MassSwitches
+        from ogr_slip2d.probabilistic import _MassSwitches
         sw = _MassSwitches(_deterministic().surface)
         other = types.SimpleNamespace(
             fos=0.5, surface=types.SimpleNamespace(
@@ -243,7 +243,8 @@ class _OnlyTheCircle:
 class TestOverallSlopeSaysIt:
 
     def _run(self, var):
-        from ogr_core.statistics import SamplingMethod, run_overall_slope
+        from ogr_core.statistics import SamplingMethod
+        from ogr_slip2d.probabilistic import run_overall_slope
         p, _V = _model()
         return run_overall_slope(p, lambda mid: _OnlyTheCircle(), [var],
                                  [_MID], num_samples=_N,
@@ -272,16 +273,16 @@ class TestOverallSlopeSaysIt:
 class TestTheSweepSaysIt:
 
     def _sweep(self, var):
-        from ogr_core.statistics import run_sensitivity
+        from ogr_slip2d.sensitivity import run_sensitivity
         p, V = _model()
         return run_sensitivity(p, {_MID: _deterministic()}, [var],
                                num_slices=V._SLICES)
 
     def test_the_points_are_the_replay_s_and_the_variable_keeps_its_rank(self):
         from ogr_core.project import prepare_analysis_project
-        from ogr_core.statistics.probabilistic import _rebuild_surface
+        from ogr_slip2d.probabilistic import _rebuild_surface
         from ogr_core.statistics.random_variables import clone_project
-        from ogr_core.statistics.sensitivity import set_value
+        from ogr_slip2d.sensitivity import set_value
         var = _wide()
         res = self._sweep(var)
         vs = res.by_method[_MID][var.key]

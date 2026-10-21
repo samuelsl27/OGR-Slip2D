@@ -630,7 +630,8 @@ class TestTheStatisticsKeepTheDrawdown:
         return p, {"bishop_simplified": det}, [var]
 
     def test_the_mean_is_the_drawdown_answer_and_not_the_drained_one(self):
-        from ogr_core.statistics import SamplingMethod, run_global_minimum
+        from ogr_core.statistics import SamplingMethod
+        from ogr_slip2d.probabilistic import run_global_minimum
 
         p, det, variables = self._fixture()
         res = run_global_minimum(p, det, variables, num_samples=4,
@@ -647,7 +648,7 @@ class TestTheStatisticsKeepTheDrawdown:
         assert mean < 0.9 * _drained("bishop_simplified")
 
     def test_the_sensitivity_sweep_too(self):
-        from ogr_core.statistics import run_sensitivity
+        from ogr_slip2d.sensitivity import run_sensitivity
 
         p, det, variables = self._fixture()
         res = run_sensitivity(p, det, variables, intervals=2, num_slices=25)

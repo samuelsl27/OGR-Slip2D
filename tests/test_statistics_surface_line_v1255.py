@@ -102,7 +102,7 @@ class TestTheSurfaceText:
 class TestTheSummaryCarriesTheKey:
 
     def test_it_is_the_deterministic_surface_s_key(self):
-        from ogr_core.statistics.probabilistic import _surface_key
+        from ogr_slip2d.probabilistic import _surface_key
         _p, res = _mass_switch_run(wide=False)
         (mres,) = res.by_method.values()
         key = mres.summary()["surface_key"]
@@ -126,7 +126,7 @@ class TestTheWindow:
     def test_overall_slope_has_no_surface_line(self):
         import dataclasses
         _app()
-        from ogr_core.statistics import ProbabilisticType
+        from ogr_slip2d.probabilistic import ProbabilisticType
         from ogr_gui.statistics_window import StatisticsWindow
         p, res = _mass_switch_run(wide=False)
         os_res = dataclasses.replace(
@@ -156,7 +156,7 @@ class TestTheWindow:
     def test_a_sweep_that_changes_mass_has_it_too(self):
         _app()
         import test_mass_switch_note_v1238 as M
-        from ogr_core.statistics import run_sensitivity
+        from ogr_slip2d.sensitivity import run_sensitivity
         from ogr_gui.statistics_window import StatisticsWindow
         p, V = M._model()
         sens = run_sensitivity(p, {M._MID: M._deterministic()}, [M._wide()],

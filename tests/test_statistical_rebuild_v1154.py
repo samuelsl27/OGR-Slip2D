@@ -307,9 +307,7 @@ class TestEveryTypeThisProgramSerialisesIsAccountedFor:
     def test_none_of_them_raises(self):
         """The KeyError of D59, and the TypeError of its sibling, in one
         assertion."""
-        from ogr_core.statistics.probabilistic import (
-            _rebuild_surface, _surface_key,
-        )
+        from ogr_slip2d.probabilistic import _rebuild_surface, _surface_key
 
         for name, d in _the_four_dicts().items():
             _rebuild_surface(d)          # must not raise
@@ -324,8 +322,9 @@ class TestEveryTypeThisProgramSerialisesIsAccountedFor:
         holds the numbers). The refused branch stays alive with the one
         weak-layer surface that still cannot be seeded: one without a base,
         refused under its own name."""
-        from ogr_core.statistics.probabilistic import (
-            _cannot_reevaluate, _rebuild_surface,
+        from ogr_slip2d.probabilistic import (
+            _cannot_reevaluate,
+            _rebuild_surface,
         )
         from ogr_slip2d.surface import SlipCircle, SlipSurface
 
@@ -350,8 +349,9 @@ class TestEveryTypeThisProgramSerialisesIsAccountedFor:
     def test_a_bare_dictionary_without_a_type_is_still_a_circle(self):
         """``run_global_minimum`` accepts a bare dict as ``det.surface``.
         Dropping that would be a side effect, not a decision."""
-        from ogr_core.statistics.probabilistic import (
-            _cannot_reevaluate, _rebuild_surface,
+        from ogr_slip2d.probabilistic import (
+            _cannot_reevaluate,
+            _rebuild_surface,
         )
         from ogr_slip2d.surface import SlipCircle
 
@@ -360,8 +360,9 @@ class TestEveryTypeThisProgramSerialisesIsAccountedFor:
         assert _cannot_reevaluate(_project(), bare) is None
 
     def test_an_empty_surface_is_refused_and_not_seeded(self):
-        from ogr_core.statistics.probabilistic import (
-            _cannot_reevaluate, _rebuild_surface,
+        from ogr_slip2d.probabilistic import (
+            _cannot_reevaluate,
+            _rebuild_surface,
         )
 
         for empty in (None, {}):
@@ -384,7 +385,7 @@ class TestTheSurfaceTheSampleAnalysesIsTheCompositeAgain:
     def test_the_seed_is_a_circle_without_endpoints(self):
         """v0.1.131 (D36) dropped them on purpose, and this fix keeps that:
         every sample resolves its own mass."""
-        from ogr_core.statistics.probabilistic import _rebuild_surface
+        from ogr_slip2d.probabilistic import _rebuild_surface
         from ogr_slip2d.surface import SlipCircle
 
         seed = _rebuild_surface(_deterministic(_project()).surface.to_dict())
@@ -392,9 +393,7 @@ class TestTheSurfaceTheSampleAnalysesIsTheCompositeAgain:
         assert seed.x_left is None and seed.x_right is None
 
     def test_the_sample_analyses_a_composite_and_the_same_digits(self):
-        from ogr_core.statistics.probabilistic import (
-            _evaluate_on, _rebuild_surface,
-        )
+        from ogr_slip2d.probabilistic import _evaluate_on, _rebuild_surface
         from ogr_core.statistics.random_variables import clone_project
         from ogr_slip2d.surface import CompositeSurface
 
@@ -424,7 +423,7 @@ class TestWhenTheOptionIsGoneTheRunSaysSoInsteadOfAnswering:
 
     def test_the_probabilistic_run_refuses_and_names_the_option(self):
         from ogr_core.statistics import SamplingMethod as SM
-        from ogr_core.statistics import run_global_minimum
+        from ogr_slip2d.probabilistic import run_global_minimum
 
         p = _project()
         det = {"bishop_simplified": _deterministic(p)}
@@ -441,7 +440,7 @@ class TestWhenTheOptionIsGoneTheRunSaysSoInsteadOfAnswering:
             "the reason must not blame the ranges, which are innocent")
 
     def test_the_sensitivity_run_refuses_it_too(self):
-        from ogr_core.statistics import run_sensitivity
+        from ogr_slip2d.sensitivity import run_sensitivity
 
         p = _project()
         det = {"bishop_simplified": _deterministic(p)}
@@ -466,9 +465,9 @@ class TestWhenTheOptionIsGoneTheRunSaysSoInsteadOfAnswering:
         v0.1.239 refuses the mechanism, naming ``weak_layer`` as the type
         that did not come back."""
         from ogr_core.statistics import SamplingMethod as SM
-        from ogr_core.statistics import run_global_minimum, run_sensitivity
-        from ogr_core.statistics.probabilistic import (_NOT_ITSELF,
-                                                       _cannot_reevaluate)
+        from ogr_slip2d.probabilistic import run_global_minimum
+        from ogr_slip2d.sensitivity import run_sensitivity
+        from ogr_slip2d.probabilistic import _NOT_ITSELF, _cannot_reevaluate
         from ogr_slip2d.surface import WeakLayerSurface
 
         p = _project()
@@ -495,7 +494,7 @@ class TestWhenTheOptionIsGoneTheRunSaysSoInsteadOfAnswering:
         """``_compute_statistics`` looks at ``notes['error']`` and nowhere
         else. A note nobody shows is a note that does not exist."""
         from ogr_core.statistics import SamplingMethod as SM
-        from ogr_core.statistics import run_global_minimum
+        from ogr_slip2d.probabilistic import run_global_minimum
 
         p = _project()
         off = _without_the_option(p)
@@ -530,8 +529,10 @@ class TestTheOtherSlidingMassNeverBecomesTheAnswer:
         """The identity that names the defect: the extent answered must be
         the extent the deterministic run found, or there must be no
         answer at all."""
-        from ogr_core.statistics.probabilistic import (
-            _cannot_reevaluate, _evaluate_on, _rebuild_surface,
+        from ogr_slip2d.probabilistic import (
+            _cannot_reevaluate,
+            _evaluate_on,
+            _rebuild_surface,
         )
         from ogr_core.statistics.random_variables import clone_project
 
@@ -562,14 +563,14 @@ class TestOverallSlopeCanIndexASurfaceItAnalysed:
     point."""
 
     def test_a_polyline_gets_a_key_instead_of_a_TypeError(self):
-        from ogr_core.statistics.probabilistic import _surface_key
+        from ogr_slip2d.probabilistic import _surface_key
 
         key = _surface_key(_the_four_dicts()["polyline"])
         assert key.startswith("p:") and key != "p:", key
 
     def test_two_different_polylines_are_two_different_keys(self):
         from ogr_core.geometry import Polyline, Vertex
-        from ogr_core.statistics.probabilistic import _surface_key
+        from ogr_slip2d.probabilistic import _surface_key
         from ogr_slip2d.surface import SlipSurface
 
         a = SlipSurface(polyline=Polyline(vertices=[
@@ -579,7 +580,7 @@ class TestOverallSlopeCanIndexASurfaceItAnalysed:
         assert _surface_key(a) != _surface_key(b)
 
     def test_weak_layer_surfaces_no_longer_collapse_onto_one_key(self):
-        from ogr_core.statistics.probabilistic import _surface_key
+        from ogr_slip2d.probabilistic import _surface_key
         from ogr_slip2d.surface import SlipCircle, WeakLayerSurface
 
         def one(radius):
@@ -599,7 +600,7 @@ class TestOverallSlopeCanIndexASurfaceItAnalysed:
         apart, shared one too). The identity is now the type and the
         geometry to the last digit; ``test_surface_key_endpoints_v1237``
         has the rest."""
-        from ogr_core.statistics.probabilistic import _surface_key
+        from ogr_slip2d.probabilistic import _surface_key
 
         d = _the_four_dicts()
         assert _surface_key(d["circle"]) == "circle:%r:%r:%r" % (

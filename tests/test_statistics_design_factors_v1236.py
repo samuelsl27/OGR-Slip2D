@@ -146,7 +146,8 @@ def _same_list(a, b):
 
 
 def _gm(p, det, **kw):
-    from ogr_core.statistics import SamplingMethod, run_global_minimum
+    from ogr_core.statistics import SamplingMethod
+    from ogr_slip2d.probabilistic import run_global_minimum
     st = p.settings.statistics
     return run_global_minimum(
         p, det, list(p.random_variables), num_samples=st.num_samples,
@@ -157,7 +158,8 @@ def _gm(p, det, **kw):
 
 def _os(p, det, **kw):
     from ogr_core.project import prepare_analysis_project
-    from ogr_core.statistics import SamplingMethod, run_overall_slope
+    from ogr_core.statistics import SamplingMethod
+    from ogr_slip2d.probabilistic import run_overall_slope
     from ogr_slip2d.analysis_runner import build_search
     st = p.settings.statistics
     ready = prepare_analysis_project(p)[0]
@@ -169,7 +171,7 @@ def _os(p, det, **kw):
 
 
 def _sens(p, det, **kw):
-    from ogr_core.statistics import run_sensitivity
+    from ogr_slip2d.sensitivity import run_sensitivity
     return run_sensitivity(
         p, det, list(p.random_variables),
         intervals=p.settings.statistics.sensitivity_intervals,
@@ -280,9 +282,14 @@ class TestALinkedRangeFollowsItsMaterialsSample:
     def _run(self, **kw):
         from test_generalized_links_v1228 import CIRCLE, _linked_project
 
-        from ogr_core.statistics import (Distribution, DistributionType,
-                                         RandomVariable, SamplingMethod,
-                                         VariableKind, run_global_minimum)
+        from ogr_core.statistics import (
+            Distribution,
+            DistributionType,
+            RandomVariable,
+            SamplingMethod,
+            VariableKind,
+        )
+        from ogr_slip2d.probabilistic import run_global_minimum
         from ogr_slip2d.analysis_runner import evaluate_surfaces
         from ogr_slip2d.surface import SlipCircle
 
@@ -439,7 +446,7 @@ class TestOneDoor:
         import ast
         import inspect
 
-        from ogr_core.statistics import probabilistic
+        from ogr_slip2d import probabilistic
         tree = ast.parse(inspect.getsource(probabilistic._analysis_copy))
         called = {n.func.id for n in ast.walk(tree)
                   if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
@@ -447,7 +454,7 @@ class TestOneDoor:
         for fn in (probabilistic.run_global_minimum,
                    probabilistic.run_overall_slope):
             assert "_analysis_copy" in inspect.getsource(fn), fn.__name__
-        from ogr_core.statistics import sensitivity
+        from ogr_slip2d import sensitivity
         assert "_analysis_copy" in inspect.getsource(
             sensitivity.run_sensitivity)
 

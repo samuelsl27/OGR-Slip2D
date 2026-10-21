@@ -187,7 +187,7 @@ class _Recorder:
 
 
 def _recording(action):
-    import ogr_core.statistics.probabilistic as P
+    import ogr_slip2d.probabilistic as P
 
     saved = P._evaluate_on
     rec = _Recorder(saved)
@@ -200,7 +200,7 @@ def _recording(action):
 
 def _gm(p, det, variables, method, n, seed):
     from ogr_core.statistics import SamplingMethod as SM
-    from ogr_core.statistics import run_global_minimum
+    from ogr_slip2d.probabilistic import run_global_minimum
 
     return run_global_minimum(p, {method: det}, variables, num_samples=n,
                               sampling=SM.LATIN_HYPERCUBE, seed=seed,
@@ -208,7 +208,7 @@ def _gm(p, det, variables, method, n, seed):
 
 
 def _layers(surface):
-    from ogr_core.statistics.probabilistic import _active_layers
+    from ogr_slip2d.probabilistic import _active_layers
     return _active_layers(surface)
 
 
@@ -223,8 +223,10 @@ class TestThePremise:
             det.fos / _closed_form(5.0, 20.0) - 1.0) < 1e-12
 
     def test_it_is_seeded_from_its_base(self):
-        from ogr_core.statistics.probabilistic import (_cannot_reevaluate,
-                                                       _rebuild_surface)
+        from ogr_slip2d.probabilistic import (
+            _cannot_reevaluate,
+            _rebuild_surface,
+        )
         p = _planar()
         sd = _det_surface(p, _ORD, _below_the_joint()).surface.to_dict()
         assert _cannot_reevaluate(p, sd) is None
@@ -278,7 +280,7 @@ class TestTheClosedFormSampleBySample:
         assert not res.notes and not res.note_lines
 
     def test_the_sensitivity_sweep_is_the_closed_form_too(self):
-        from ogr_core.statistics import run_sensitivity
+        from ogr_slip2d.sensitivity import run_sensitivity
         p = _planar()
         det = _det_surface(p, _ORD, _below_the_joint())
         vc = _variable(p, 1, "cohesion", 5.0, 1.5, 4.5)
@@ -327,7 +329,7 @@ class TestAnotherCaseIsRefusedNotAnswered:
     """The probe of v0.1.239, with the layers compared too."""
 
     def _refused_by_the_probe(self, res, method=_BISHOP):
-        from ogr_core.statistics.probabilistic import _NOT_ITSELF
+        from ogr_slip2d.probabilistic import _NOT_ITSELF
         head = _NOT_ITSELF.split(" (", 1)[0]
         reason = res.notes.get(method, "")
         return (method not in res.by_method and reason.startswith(head)
@@ -367,8 +369,7 @@ class TestAnotherCaseIsRefusedNotAnswered:
         assert _BISHOP in res.by_method and not res.notes, res.notes
 
     def test_the_new_sentence_keeps_the_head_and_no_inner_separator(self):
-        from ogr_core.statistics.probabilistic import (_NOT_ITSELF,
-                                                       _NOT_ITSELF_CASE)
+        from ogr_slip2d.probabilistic import _NOT_ITSELF, _NOT_ITSELF_CASE
         assert (_NOT_ITSELF_CASE.split(" (", 1)[0]
                 == _NOT_ITSELF.split(" (", 1)[0])
         assert ": " not in _NOT_ITSELF_CASE
@@ -420,7 +421,7 @@ class TestAChangeOfCaseIsSaidAndMovesNothing:
 
     def test_the_sensitivity_says_it_too(self):
         from ogr_core.project.settings import WeakLayerHandling as H
-        from ogr_core.statistics import run_sensitivity
+        from ogr_slip2d.sensitivity import run_sensitivity
         p = _two_joints(H.AUTO_CASES.value)
         det = _det_circle(p)
         v = _variable(p, 2, "friction_angle", 5.0, 12.0, 4.5, 40.0)
@@ -437,8 +438,10 @@ class TestAChangeOfCaseIsSaidAndMovesNothing:
 class TestWhatIsStillRefusedSaysWhy:
 
     def test_a_weak_layer_without_its_base(self):
-        from ogr_core.statistics.probabilistic import (_cannot_reevaluate,
-                                                       _rebuild_surface)
+        from ogr_slip2d.probabilistic import (
+            _cannot_reevaluate,
+            _rebuild_surface,
+        )
         sd = {"type": "weak_layer", "x_left": 2.0, "x_right": 30.0}
         assert _rebuild_surface(sd) is None
         said = _cannot_reevaluate(_planar(), sd)
@@ -446,7 +449,7 @@ class TestWhatIsStillRefusedSaysWhy:
 
     def test_a_composite_base_needs_composite_surfaces(self):
         from ogr_core.geometry import Polyline, Vertex
-        from ogr_core.statistics.probabilistic import _cannot_reevaluate
+        from ogr_slip2d.probabilistic import _cannot_reevaluate
         from ogr_slip2d.surface import (CompositeSurface, SlipCircle,
                                         WeakLayerSurface)
         circle = SlipCircle(centre_x=120.0, centre_y=90.0, radius=80.0)
@@ -468,8 +471,8 @@ class TestWhatIsStillRefusedSaysWhy:
         """The ``continue`` after ``_rebuild_surface`` used to drop the
         method without a word; reachable only when ``_cannot_reevaluate``
         is replaced, as here."""
-        import ogr_core.statistics.probabilistic as P
-        from ogr_core.statistics import run_sensitivity
+        import ogr_slip2d.probabilistic as P
+        from ogr_slip2d.sensitivity import run_sensitivity
 
         p = _planar()
         det = _det_surface(p, _ORD, _below_the_joint())

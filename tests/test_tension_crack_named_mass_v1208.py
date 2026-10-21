@@ -264,7 +264,7 @@ class TestARebuiltPolylineKeepsItsWall:
         assert math.isclose(_fos(p, r, sl_r), _fos(p, s, sl), rel_tol=1e-12)
 
     def test_the_probabilistic_rebuild_too(self):
-        from ogr_core.statistics.probabilistic import _rebuild_surface
+        from ogr_slip2d.probabilistic import _rebuild_surface
         p, s, sl = self._evaluated()
         r = _rebuild_surface(s.to_dict())
         sl_r = slice_surface(p, r, num_slices=60)

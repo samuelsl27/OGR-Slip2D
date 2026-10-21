@@ -62,7 +62,8 @@ def _projects():
 
 def _gm(samples_project, det, **kw):
     import test_statistical_rebuild_v1154 as V
-    from ogr_core.statistics import SamplingMethod, run_global_minimum
+    from ogr_core.statistics import SamplingMethod
+    from ogr_slip2d.probabilistic import run_global_minimum
     return run_global_minimum(samples_project, {_MID: det},
                               [V._cohesion_var(samples_project)],
                               num_samples=6,
@@ -72,7 +73,7 @@ def _gm(samples_project, det, **kw):
 
 def _sweep(samples_project, det):
     import test_statistical_rebuild_v1154 as V
-    from ogr_core.statistics import run_sensitivity
+    from ogr_slip2d.sensitivity import run_sensitivity
     return run_sensitivity(samples_project, {_MID: det},
                            [V._cohesion_var(samples_project)], intervals=2,
                            num_slices=V._SLICES)
@@ -84,7 +85,7 @@ def _refused_by_the_probe(res):
     reason = res.notes.get(_MID, "")
     if _MID in res.by_method or not reason:
         return False
-    from ogr_core.statistics.probabilistic import _NOT_ITSELF
+    from ogr_slip2d.probabilistic import _NOT_ITSELF
     head = _NOT_ITSELF.split(" (", 1)[0]
     return (reason.startswith(head)
             and ("%s: %s" % (_MID, reason)) in res.note_lines)
@@ -94,7 +95,7 @@ def _refused_by_the_probe(res):
 class TestBothDirectionsAreRefused:
 
     def test_the_premise_the_old_guard_lets_this_direction_through(self):
-        from ogr_core.statistics.probabilistic import _cannot_reevaluate
+        from ogr_slip2d.probabilistic import _cannot_reevaluate
         V, on, off, _f = _projects()
         det = V._deterministic(off, _MID)
         assert type(det.surface).__name__ == "SlipCircle"
@@ -130,7 +131,7 @@ class TestBothDirectionsAreRefused:
         """The panel groups a line by its first ": ", which the method id
         brings; one inside the reason would be harmless today and a trap the
         day someone splits on the last one."""
-        from ogr_core.statistics.probabilistic import _NOT_ITSELF
+        from ogr_slip2d.probabilistic import _NOT_ITSELF
         assert ": " not in _NOT_ITSELF
 
 
@@ -138,7 +139,7 @@ class TestBothDirectionsAreRefused:
 class TestTheProbeChangesNothingElse:
 
     def test_the_same_project_gives_the_samples_a_run_without_it_gives(self):
-        import ogr_core.statistics.probabilistic as P
+        import ogr_slip2d.probabilistic as P
         V, on, _off, _f = _projects()
         det = V._deterministic(on, _MID)
         with_probe = _gm(on, det)
@@ -153,7 +154,7 @@ class TestTheProbeChangesNothingElse:
                 == without.by_method[_MID].statistics.values)
 
     def test_it_does_not_go_through_evaluate_on(self):
-        import ogr_core.statistics.probabilistic as P
+        import ogr_slip2d.probabilistic as P
         V, on, _off, _f = _projects()
         det = V._deterministic(on, _MID)
         calls = []

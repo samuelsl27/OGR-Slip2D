@@ -86,7 +86,7 @@ def _sampling() -> list[str]:
 
 
 def _prob_types() -> list[str]:
-    from ogr_core.statistics.probabilistic import ProbabilisticType
+    from ogr_slip2d.probabilistic import ProbabilisticType
     return [ProbabilisticType.GLOBAL_MINIMUM, ProbabilisticType.OVERALL_SLOPE]
 
 

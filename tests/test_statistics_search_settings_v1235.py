@@ -169,7 +169,8 @@ def _close(a: float, b: float, rel: float = _SAME) -> bool:
 
 
 def _run_samples(project, n: int = 5, seed: int = 7):
-    from ogr_core.statistics import SamplingMethod, run_global_minimum
+    from ogr_core.statistics import SamplingMethod
+    from ogr_slip2d.probabilistic import run_global_minimum
 
     det = _configured(project).evaluate_circle(project, _circle())
     var = _cohesion_var(project)
@@ -182,9 +183,7 @@ def _run_samples(project, n: int = 5, seed: int = 7):
 def _replay(project, var, res, i: int, search):
     """Sample ``i`` evaluated again, by hand, with ``search``."""
     from ogr_core.statistics import apply_sample, clone_project
-    from ogr_core.statistics.probabilistic import (
-        _evaluate_on, _rebuild_surface,
-    )
+    from ogr_slip2d.probabilistic import _evaluate_on, _rebuild_surface
 
     clone = clone_project(project)
     apply_sample(clone, [var], {k: v[i] for k, v in res.samples.items()})
@@ -251,12 +250,9 @@ class TestTheSensitivitySweepToo:
     search; the same identity, point by point."""
 
     def test_each_point_equals_the_configured_search(self):
-        from ogr_core.statistics import (
-            clone_project, run_sensitivity, set_value,
-        )
-        from ogr_core.statistics.probabilistic import (
-            _evaluate_on, _rebuild_surface,
-        )
+        from ogr_core.statistics import clone_project, set_value
+        from ogr_slip2d.sensitivity import run_sensitivity
+        from ogr_slip2d.probabilistic import _evaluate_on, _rebuild_surface
 
         p = _model("notched")
         det = _configured(p).evaluate_circle(p, _circle())
@@ -356,9 +352,18 @@ class TestOneDoor:
 
     def test_no_GridSearch_is_called_in_ogr_core_statistics(self):
         import ogr_core.statistics as pkg
+        import ogr_slip2d.probabilistic as prob
+        import ogr_slip2d.sensitivity as sens
 
+        # v0.1.346 (D337) -- the runners moved up to ogr_slip2d, and the
+        # scan follows them: over the core package alone it would find
+        # nothing to find, and pass without looking
+        files = sorted(Path(pkg.__file__).parent.glob("*.py"))
+        files += [Path(prob.__file__), Path(sens.__file__)]
+        assert any(p.name == "probabilistic.py"
+                   and p.parent.name == "ogr_slip2d" for p in files)
         calls = []
-        for path in sorted(Path(pkg.__file__).parent.glob("*.py")):
+        for path in files:
             tree = ast.parse(path.read_text(encoding="utf-8"))
             for node in ast.walk(tree):
                 if not isinstance(node, ast.Call):

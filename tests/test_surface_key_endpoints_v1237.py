@@ -57,7 +57,7 @@ _MID = "bishop_simplified"
 
 def _old_key(sd, tol=0.5):
     """The key of v0.1.236, written out for the contrasts of rule 7."""
-    from ogr_core.statistics.probabilistic import _surface_type
+    from ogr_slip2d.probabilistic import _surface_type
     st = _surface_type(sd)
     if st is None:
         return ""
@@ -132,7 +132,7 @@ class TestTheKeyIsTheSurface:
         assert a1 < b0, m                      # disjoint, left to right
 
     def test_the_two_masses_get_two_keys(self):
-        from ogr_core.statistics.probabilistic import _surface_key
+        from ogr_slip2d.probabilistic import _surface_key
         a, b = _masses()
         ka, kb = _surface_key(_circle_dict(a)), _surface_key(_circle_dict(b))
         assert ka and kb and ka != kb, (ka, kb)
@@ -140,7 +140,7 @@ class TestTheKeyIsTheSurface:
 
     def test_a_composite_is_not_its_uncut_circle_even_on_one_extent(self):
         """The type is part of the identity, not only the extent."""
-        from ogr_core.statistics.probabilistic import _surface_key
+        from ogr_slip2d.probabilistic import _surface_key
         extent = (56.0, 158.0)
         kc = _surface_key(_circle_dict(extent))
         kk = _surface_key(_circle_dict(extent, cls="composite"))
@@ -151,7 +151,7 @@ class TestTheKeyIsTheSurface:
         problem 36 (grid centre (4, 18.75), two consecutive radii): one key
         in v0.1.236, ``c:8:38:28``, for two circles with different masses
         and factors (1.3404 and 1.5541 at the mean)."""
-        from ogr_core.statistics.probabilistic import _surface_key
+        from ogr_slip2d.probabilistic import _surface_key
         a = {"type": "circle", "centre_x": 4.0, "centre_y": 18.75,
              "radius": 13.775, "x_left": 5.01, "x_right": 17.26}
         b = {"type": "circle", "centre_x": 4.0, "centre_y": 18.75,
@@ -164,7 +164,7 @@ class TestTheKeyIsTheSurface:
         surface, and the same surface keeps its key through the JSON round
         trip a saved result goes through, and whether a coordinate arrives
         as an integer or as a float."""
-        from ogr_core.statistics.probabilistic import _surface_key
+        from ogr_slip2d.probabilistic import _surface_key
         a, _b = _masses()
         d = _circle_dict(a)
         nudged = _circle_dict((a[0] + 1e-9, a[1]))
@@ -178,7 +178,7 @@ class TestTheKeyIsTheSurface:
 
     def test_polylines_are_exact_too_and_keep_their_prefix(self):
         """v1154 pins the ``p:`` prefix of a vertex-keyed surface."""
-        from ogr_core.statistics.probabilistic import _surface_key
+        from ogr_slip2d.probabilistic import _surface_key
         a = _polyline_dict((0.0, 0.0), (10.0, -4.0), (20.0, 0.0))
         b = _polyline_dict((0.0, 0.0), (10.0, -4.000001), (20.0, 0.0))
         assert _surface_key(a).startswith("p:")
@@ -188,7 +188,7 @@ class TestTheKeyIsTheSurface:
     def test_a_dictionary_without_type_or_extent_is_still_a_circle(self):
         """The ``_surface_type`` fallback for a bare dictionary stays, and a
         circle with no extent has a key — just not the one of any mass."""
-        from ogr_core.statistics.probabilistic import _surface_key
+        from ogr_slip2d.probabilistic import _surface_key
         bare = {"centre_x": 1.0, "centre_y": 2.0, "radius": 3.0}
         typed = dict(bare, type="circle")
         assert _surface_key(bare) == _surface_key(typed) != ""
@@ -199,7 +199,7 @@ class TestTheKeyIsTheSurface:
         """Rule 7: a parameter that no longer does anything is not kept."""
         import inspect
 
-        from ogr_core.statistics.probabilistic import _surface_key
+        from ogr_slip2d.probabilistic import _surface_key
         assert list(inspect.signature(_surface_key).parameters) == ["sd"]
 
 
@@ -231,7 +231,7 @@ class TestWhichSearchesAnalyseTheSameSurfaces:
         and every walked surface is in ``evaluations`` and in ``steered``."""
         import test_overall_slope_v137 as T
         from ogr_core.materials.builtin_models import MohrCoulomb
-        from ogr_core.statistics.probabilistic import _surface_key
+        from ogr_slip2d.probabilistic import _surface_key
         from ogr_slip2d import BishopSimplified
         from ogr_slip2d.search import SlopeSearch
 
@@ -256,7 +256,7 @@ class TestWhichSearchesAnalyseTheSameSurfaces:
         last digit (measured: 176 of 176)."""
         import test_overall_slope_v137 as T
         from ogr_core.materials.builtin_models import MohrCoulomb
-        from ogr_core.statistics.probabilistic import _surface_key
+        from ogr_slip2d.probabilistic import _surface_key
 
         def keys(c):
             p = T._ej1_project()
@@ -285,7 +285,7 @@ class _Circles:
         self.steered = steered
 
     def run(self, project):
-        from ogr_core.statistics.probabilistic import counts_as_sample
+        from ogr_slip2d.probabilistic import counts_as_sample
         evs = [self.evaluator.evaluate_circle(project, c)
                for c in self.circles]
         evs = [r for r in evs if r is not None]
@@ -311,7 +311,7 @@ def _overall(circles, *, cls=_Circles, key=None, n=30, **kw):
     """Overall Slope on the notched slope, cohesion of the upper soil
     uniform from 50 to 450 psf: about a quarter of the samples fall below
     the switch, so both masses answer in some sample."""
-    import ogr_core.statistics.probabilistic as P
+    import ogr_slip2d.probabilistic as P
     from ogr_core.statistics import (Distribution, DistributionType,
                                      SamplingMethod, available_variables)
     from ogr_slip2d.analysis_runner import build_evaluator
@@ -343,7 +343,7 @@ class TestOneSurfaceOneProbability:
         analysed in every sample, so neither has a probability of failure
         of its own — and the old key pooled both into one surface whose PF
         was simply the run's."""
-        from ogr_core.statistics.probabilistic import _CPS_NOT_IN_EVERY_SAMPLE
+        from ogr_slip2d.probabilistic import _CPS_NOT_IN_EVERY_SAMPLE
         import test_statistical_rebuild_v1154 as V
         new = _overall([V._circle()]).by_method[_MID]
         assert new.notes["surfaces_tracked"] == 2
@@ -397,7 +397,7 @@ class TestOneSurfaceOneProbability:
         assert cp.statistics.n == 30
 
     def test_a_search_that_steers_has_none_and_says_why(self):
-        from ogr_core.statistics.probabilistic import _CPS_STEERED
+        from ogr_slip2d.probabilistic import _CPS_STEERED
         a, b = _masses()
         o = _overall([_named(a), _named(b)], cls=_Steered).by_method[_MID]
         assert o.critical_probabilistic is None
@@ -409,14 +409,14 @@ class TestOneSurfaceOneProbability:
         assert o.summary()["critical_probabilistic_note"] == _CPS_STEERED
 
     def test_the_ky_objective_has_none_and_says_why(self):
-        from ogr_core.statistics.probabilistic import _CPS_KY
+        from ogr_slip2d.probabilistic import _CPS_KY
         a, b = _masses()
         o = _overall([_named(a), _named(b)], objective="ky").by_method[_MID]
         assert o.critical_probabilistic is None
         assert o.notes["critical_probabilistic"] == _CPS_KY
 
     def test_too_few_samples_says_so(self):
-        from ogr_core.statistics.probabilistic import _CPS_TOO_FEW
+        from ogr_slip2d.probabilistic import _CPS_TOO_FEW
         a, b = _masses()
         o = _overall([_named(a), _named(b)], n=6,
                      min_evaluations=1000).by_method[_MID]
@@ -443,7 +443,7 @@ class TestOnARealGrid:
         """Its circles answer for one mass and its radii are more than half
         a unit apart, so exact identity finds the same distinct minima as
         the old rounding in the three configurations of v137."""
-        import ogr_core.statistics.probabilistic as P
+        import ogr_slip2d.probabilistic as P
         import test_overall_slope_v137 as T
         for n, wide in ((20, True), (10, False), (16, True)):
             _p, new = T._run(n=n, wide=wide)
@@ -507,7 +507,7 @@ class TestTheInterfaceSaysWhichSurface:
     def test_every_engine_reason_has_its_spanish(self):
         """Interpret looks the engine's sentence up BY VALUE, so a reworded
         sentence would silently stay in English."""
-        from ogr_core.statistics import probabilistic as P
+        from ogr_slip2d import probabilistic as P
         from ogr_gui.i18n import _DICTS
         es = _DICTS["es"]
         for name in ("_CPS_STEERED", "_CPS_KY", "_CPS_TOO_FEW",
@@ -517,7 +517,7 @@ class TestTheInterfaceSaysWhichSurface:
     def test_the_toggle_gives_the_reason_of_the_run(self):
         if not _qt():
             return
-        from ogr_core.statistics.probabilistic import _CPS_STEERED
+        from ogr_slip2d.probabilistic import _CPS_STEERED
         from ogr_gui.i18n import _DICTS
         import test_interpret_i3_v153 as I
         a, b = _masses()

@@ -288,9 +288,7 @@ class TestTheSameObjectReusedAnswersLikeAFreshOne:
         evaluates it on every sample. Five identical clones, nothing
         perturbed, so five identical factors — before the fix the first
         differed from the other four by 43 %."""
-        from ogr_core.statistics.probabilistic import (
-            _evaluate_on, _rebuild_surface,
-        )
+        from ogr_slip2d.probabilistic import _evaluate_on, _rebuild_surface
         from ogr_core.statistics.random_variables import clone_project
 
         p, ev = _project(), _search()

@@ -204,13 +204,14 @@ class TestASampleNeedsAFactorOfSafety:
     N = 30
 
     def _run(self, p, det, rv):
-        from ogr_core.statistics import SamplingMethod, run_global_minimum
+        from ogr_core.statistics import SamplingMethod
+        from ogr_slip2d.probabilistic import run_global_minimum
         return run_global_minimum(p, det, [rv], num_samples=self.N,
                                   sampling=SamplingMethod.LATIN_HYPERCUBE,
                                   seed=11, num_slices=25)
 
     def test_screened_samples_are_not_counted(self):
-        from ogr_core.statistics import sample_pairs
+        from ogr_slip2d.probabilistic import sample_pairs
         p, det, rv = _screen_case()
         m = self._run(p, det, rv).by_method["bishop_simplified"]
         assert m.failed_samples > 0 and m.statistics.n > 0
@@ -235,8 +236,7 @@ class TestASampleNeedsAFactorOfSafety:
     def test_an_inadmissible_critical_is_a_lost_search(self):
         from types import SimpleNamespace
 
-        from ogr_core.statistics.probabilistic import (_search_failure,
-                                                       counts_as_sample)
+        from ogr_slip2d.probabilistic import _search_failure, counts_as_sample
         crit = SimpleNamespace(is_valid=True, admissible=False, fos=1.2)
         assert not counts_as_sample(crit)
         assert _search_failure(None, SimpleNamespace(critical=crit)) == \

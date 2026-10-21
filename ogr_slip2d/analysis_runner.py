@@ -2742,8 +2742,9 @@ def run_configured_statistics(project, method_ids=None, *,
     the deterministic one instead of replacing a factored value.
     """
     from ogr_core.project import prepare_analysis_project
-    from ogr_core.statistics import (SamplingMethod, run_global_minimum,
-                                     run_overall_slope, run_sensitivity)
+    from ogr_core.statistics import SamplingMethod
+    from ogr_slip2d.probabilistic import run_global_minimum, run_overall_slope
+    from ogr_slip2d.sensitivity import run_sensitivity
 
     st = project.settings.statistics
     problems = list(check_analysis_settings(project))

@@ -155,8 +155,9 @@ def _vars(project):
 
 def _run_gm(project, replacement, num_samples=20, methods=(_MID,)):
     """A Global Minimum run with ``_evaluate_on`` replaced."""
-    import ogr_core.statistics.probabilistic as P
-    from ogr_core.statistics import SamplingMethod as SM, run_global_minimum
+    import ogr_slip2d.probabilistic as P
+    from ogr_core.statistics import SamplingMethod as SM
+    from ogr_slip2d.probabilistic import run_global_minimum
 
     det = _det(project, methods)
     with _instead_of(P, "_evaluate_on", replacement):
@@ -193,7 +194,7 @@ def _invalid(*_a, **_k):
 
 def _fails_first(k, replacement):
     """Lose the first ``k`` samples and let the rest through untouched."""
-    import ogr_core.statistics.probabilistic as P
+    import ogr_slip2d.probabilistic as P
     real = P._evaluate_on
     state = {"n": 0}
 
@@ -249,7 +250,7 @@ class TestThePremiseTwoWaysToLoseEverySample:
         """Two of one cause and two of another, both named with their
         count — which is the shape the reference reports and what D56 made
         ``reason`` a named constant for."""
-        import ogr_core.statistics.probabilistic as P
+        import ogr_slip2d.probabilistic as P
         state = {"n": 0}
 
         def _mixed(*a, **kw):
@@ -313,9 +314,8 @@ class TestOverallSlopeSaysItWithoutLosingTheCount:
     """Why the two loops DIVERGE, pinned so nobody unifies them."""
 
     def _run(self, factory, num_samples=5, mids=(_MID,)):
-        from ogr_core.statistics import (
-            SamplingMethod as SM, run_overall_slope,
-        )
+        from ogr_core.statistics import SamplingMethod as SM
+        from ogr_slip2d.probabilistic import run_overall_slope
         p = _project()
         return p, run_overall_slope(p, factory, _vars(p), list(mids),
                                     num_samples=num_samples,
@@ -396,12 +396,11 @@ class TestAMixedRunIsStillARun:
         order, so the first ``num_samples`` evaluations are the first
         method's and no others.
         """
-        from ogr_core.statistics import (
-            SamplingMethod as SM, run_global_minimum,
-        )
+        from ogr_core.statistics import SamplingMethod as SM
+        from ogr_slip2d.probabilistic import run_global_minimum
         p = _project()
         det = _det(p, (_MID, _OTHER))
-        import ogr_core.statistics.probabilistic as P
+        import ogr_slip2d.probabilistic as P
         with _instead_of(P, "_evaluate_on",
                          _fails_first(num_samples, _boom)):
             return run_global_minimum(p, det, _vars(p),
@@ -432,7 +431,7 @@ class TestAMixedRunIsStillARun:
     def test_nothing_is_said_when_nothing_was_lost(self):
         """CONSERVATION, and the twin of regla 7: a guard that speaks on a
         sound run is a guard that has stopped measuring."""
-        import ogr_core.statistics.probabilistic as P
+        import ogr_slip2d.probabilistic as P
         p = _project()
         res = _run_gm(p, P._evaluate_on, num_samples=4)
         assert res.ok
@@ -538,7 +537,7 @@ class TestTheInterfaceShowsANumberOrTheReason:
         return _window(p)
 
     def test_an_all_failed_run_prints_the_reason_instead_of_nan(self):
-        import ogr_core.statistics.probabilistic as P
+        import ogr_slip2d.probabilistic as P
         w = self._window()
         try:
             with _instead_of(P, "_evaluate_on", _boom):
@@ -552,7 +551,7 @@ class TestTheInterfaceShowsANumberOrTheReason:
     def test_the_reason_also_reaches_the_analysis_notes_panel(self):
         """A note nobody can still read is a note that does not exist: the
         status bar keeps one message and drops it after twelve seconds."""
-        import ogr_core.statistics.probabilistic as P
+        import ogr_slip2d.probabilistic as P
         w = self._window()
         try:
             with _instead_of(P, "_evaluate_on", _boom):

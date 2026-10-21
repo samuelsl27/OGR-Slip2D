@@ -345,7 +345,7 @@ class StatisticsWindow(QMainWindow):
         v0.1.255 (D128). Only there: in Overall Slope every sample searches
         anew and no single surface was sampled. No surface, no line.
         """
-        from ogr_core.statistics import ProbabilisticType
+        from ogr_slip2d.probabilistic import ProbabilisticType
         if (getattr(self.prob, "analysis_type", None)
                 != ProbabilisticType.GLOBAL_MINIMUM):
             return ""
@@ -430,6 +430,6 @@ class StatisticsWindow(QMainWindow):
         (``sample_pairs``): a zip shifted every pair after the first
         sample that failed.
         """
-        from ogr_core.statistics import sample_pairs
+        from ogr_slip2d.probabilistic import sample_pairs
         return [(v, f) for _i, v, f in sample_pairs(self.prob, mid,
                                                      variable_key)]

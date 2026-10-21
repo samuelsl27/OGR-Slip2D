@@ -503,7 +503,7 @@ def _search_view(ws, sr, view, point_xy, tolerance, bins, rank, fos_min,
 
 def _stat_view(ws, payload, view, method_id, bins, n, save_path,
                overwrite) -> dict:
-    from ogr_core.statistics import sample_pairs
+    from ogr_slip2d.probabilistic import sample_pairs
 
     if view == "sensitivity":
         sens = payload.get("sensitivity")

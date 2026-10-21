@@ -63,7 +63,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from test_slide_validation_ej1 import _ej1_project  # noqa: E402
 
-from ogr_core.statistics import (  # noqa: E402
+from ogr_core.statistics import (
     Distribution,
     DistributionType as DT,
     RandomVariable,
@@ -72,12 +72,11 @@ from ogr_core.statistics import (  # noqa: E402
     apply_sample,
     available_variables,
     clone_project,
-    run_global_minimum,
-    run_overall_slope,
-    run_sensitivity,
     set_value,
     unwritable_variables,
 )
+from ogr_slip2d.probabilistic import run_global_minimum, run_overall_slope
+from ogr_slip2d.sensitivity import run_sensitivity
 from ogr_slip2d.analysis_runner import build_method  # noqa: E402
 from ogr_slip2d.search import GridSearch  # noqa: E402
 from ogr_slip2d.surface import SlipCircle  # noqa: E402

@@ -24,13 +24,13 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from test_slide_validation_ej1 import _ej1_project  # noqa: E402
 
-from ogr_core.statistics import (  # noqa: E402
+from ogr_core.statistics import (
     Distribution,
     DistributionType as DT,
     VariableKind as VK,
     available_variables,
-    run_sensitivity,
 )
+from ogr_slip2d.sensitivity import run_sensitivity
 from ogr_slip2d.analysis_runner import build_method  # noqa: E402
 from ogr_slip2d.search import GridSearch  # noqa: E402
 
@@ -288,7 +288,7 @@ class TestErrorHandling:
 
     def test_empty_sweep_is_safe(self):
         vs_cls = __import__(
-            "ogr_core.statistics.sensitivity", fromlist=["x"]
+            "ogr_slip2d.sensitivity", fromlist=["x"]
         ).VariableSensitivity
         vs = vs_cls()
         assert vs.n == 0

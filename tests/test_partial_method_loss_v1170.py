@@ -112,8 +112,9 @@ _SPENCER = "spencer"
 # is what lets the groupings below be asserted without a search.
 def _result(*with_samples):
     from ogr_core.statistics import SampleStatistics
-    from ogr_core.statistics.probabilistic import (
-        MethodProbabilisticResult, ProbabilisticResult,
+    from ogr_slip2d.probabilistic import (
+        MethodProbabilisticResult,
+        ProbabilisticResult,
     )
     res = ProbabilisticResult()
     for mid in with_samples:
@@ -130,17 +131,17 @@ def _lose(res, mid, sentence):
 
 def _refusal():
     """A real refusal sentence, from the real guard."""
-    from ogr_core.statistics.probabilistic import _cannot_reevaluate
+    from ogr_slip2d.probabilistic import _cannot_reevaluate
     return _cannot_reevaluate(object(), {"type": "composite"})
 
 
 def _no_samples(n=10):
-    from ogr_core.statistics.probabilistic import _STEM_GM, _no_sample_note
+    from ogr_slip2d.probabilistic import _STEM_GM, _no_sample_note
     return _no_sample_note(n, _STEM_GM, {"zero_driving": n})
 
 
 def _publish(res, lost):
-    from ogr_core.statistics.probabilistic import _publish_method_losses
+    from ogr_slip2d.probabilistic import _publish_method_losses
     _publish_method_losses(res, lost)
     return res
 
@@ -170,7 +171,8 @@ def _real_partial():
 
 
 def _run_real_partial(num_samples=2):
-    from ogr_core.statistics import SamplingMethod as SM, run_global_minimum
+    from ogr_core.statistics import SamplingMethod as SM
+    from ogr_slip2d.probabilistic import run_global_minimum
 
     off, det, V = _real_partial()
     return run_global_minimum(off, det, [V._cohesion_var(off)],
@@ -186,7 +188,7 @@ def _refusing(first_only=True):
     it is the reason door two exists next to it: a channel measured only
     through a test double has not been shown to be reachable.
     """
-    import ogr_core.statistics.probabilistic as P
+    import ogr_slip2d.probabilistic as P
 
     state = {"n": 0}
 
@@ -305,9 +307,8 @@ class TestTheRealPathWithNothingPatched:
     def test_the_patched_door_agrees_with_the_real_one(self):
         """The two doors have to produce the same SHAPE, or one of them is
         measuring something else."""
-        from ogr_core.statistics import (
-            SamplingMethod as SM, run_global_minimum,
-        )
+        from ogr_core.statistics import SamplingMethod as SM
+        from ogr_slip2d.probabilistic import run_global_minimum
         p = _ej1()
         det = _det(p, (_MID, _OTHER))
         with _refusing():
@@ -325,7 +326,7 @@ class TestSensitivityHasThePartialRollUpAtLast:
     per-method refusal ONLY when no method survived at all."""
 
     def _partial(self):
-        from ogr_core.statistics import run_sensitivity
+        from ogr_slip2d.sensitivity import run_sensitivity
 
         off, det, V = _real_partial()
         return run_sensitivity(off, det, [V._cohesion_var(off)], intervals=2,
@@ -344,7 +345,7 @@ class TestSensitivityHasThePartialRollUpAtLast:
     def test_a_healthy_sensitivity_run_says_nothing(self):
         """Regla 7's twin: the channel must stay quiet with nothing to
         say, or every sound run grows a warning."""
-        from ogr_core.statistics import run_sensitivity
+        from ogr_slip2d.sensitivity import run_sensitivity
 
         import test_statistical_rebuild_v1154 as V
         off = V._without_the_option(V._notched())
@@ -359,7 +360,7 @@ class TestSensitivityHasThePartialRollUpAtLast:
         """CONSERVATION of the v0.1.154 roll-up that this version
         replaced: with nothing surviving, the reason has to reach the one
         key the interface prints."""
-        from ogr_core.statistics import run_sensitivity
+        from ogr_slip2d.sensitivity import run_sensitivity
 
         import test_statistical_rebuild_v1154 as V
         on = V._notched()
@@ -384,10 +385,12 @@ class TestTheChannelAndTheStringAreTheSameContent:
     """
 
     def _runs(self):
-        from ogr_core.statistics import (
-            SamplingMethod as SM, run_global_minimum, run_overall_slope,
-            run_sensitivity,
+        from ogr_core.statistics import SamplingMethod as SM
+        from ogr_slip2d.probabilistic import (
+            run_global_minimum,
+            run_overall_slope,
         )
+        from ogr_slip2d.sensitivity import run_sensitivity
         import test_statistical_rebuild_v1154 as V
 
         on = V._notched()
@@ -443,9 +446,8 @@ class TestTheThirdSilentRouteSaysSomething:
     nothing whatsoever."""
 
     def _run(self, det):
-        from ogr_core.statistics import (
-            SamplingMethod as SM, run_global_minimum,
-        )
+        from ogr_core.statistics import SamplingMethod as SM
+        from ogr_slip2d.probabilistic import run_global_minimum
         import test_statistical_rebuild_v1154 as V
         off = V._without_the_option(V._notched())
         return run_global_minimum(off, det, [V._cohesion_var(off)],
@@ -467,7 +469,7 @@ class TestTheThirdSilentRouteSaysSomething:
         """v0.1.77 published a sentence for this precondition on the
         deterministic path. A second sentence for the same precondition is
         how two texts start to contradict each other."""
-        from ogr_core.statistics.probabilistic import _NO_METHOD
+        from ogr_slip2d.probabilistic import _NO_METHOD
         src = (Path(__file__).parent.parent / "ogr_slip2d"
                / "analysis_runner.py").read_text(encoding="utf-8")
         assert "is not a registered analysis method, so it was " in src
@@ -476,9 +478,7 @@ class TestTheThirdSilentRouteSaysSomething:
     def test_a_missing_deterministic_is_a_different_sentence(self):
         """Two causes, two sentences -- the same reason ``_sample_failure``
         tells an exception apart from a declared failure."""
-        from ogr_core.statistics.probabilistic import (
-            _NO_DETERMINISTIC, _NO_METHOD,
-        )
+        from ogr_slip2d.probabilistic import _NO_DETERMINISTIC, _NO_METHOD
         res = self._run({_MID: None})
         assert res.notes.get(_MID) == _NO_DETERMINISTIC
         assert _NO_DETERMINISTIC != _NO_METHOD
@@ -521,9 +521,7 @@ class TestTheTwentyPercentWarningReachesThePanel:
         """Measured: a healthy Overall Slope run carries
         ``surfaces_tracked`` on every method, so surfacing ``mres.notes``
         wholesale would put a diagnostic count on every sound run."""
-        from ogr_core.statistics.probabilistic import (
-            _publish_method_warnings,
-        )
+        from ogr_slip2d.probabilistic import _publish_method_warnings
         res = _result(_MID)
         res.by_method[_MID].notes["surfaces_tracked"] = 115
         _publish_method_warnings(res)
@@ -533,14 +531,10 @@ class TestTheTwentyPercentWarningReachesThePanel:
         """A method that lost everything KEEPS its entry in Overall Slope
         and already has a line from the losses; without the ``n > 0``
         filter it would be named twice for one fault."""
-        from ogr_core.statistics.probabilistic import (
-            _publish_method_warnings,
-        )
+        from ogr_slip2d.probabilistic import _publish_method_warnings
         res = _result()            # no method has a sample
         from ogr_core.statistics import SampleStatistics
-        from ogr_core.statistics.probabilistic import (
-            MethodProbabilisticResult,
-        )
+        from ogr_slip2d.probabilistic import MethodProbabilisticResult
         m = MethodProbabilisticResult(method_id=_MID)
         m.statistics = SampleStatistics(values=[])
         m.notes["warning"] = "20 of 20 searches produced no valid surface."
@@ -701,9 +695,7 @@ class TestTheStatisticsWindowSaysWhoIsMissing:
         # The selector is driven by ``by_method``; put the lost method back
         # in it the way Overall Slope does, with no samples behind it.
         from ogr_core.statistics import SampleStatistics
-        from ogr_core.statistics.probabilistic import (
-            MethodProbabilisticResult,
-        )
+        from ogr_slip2d.probabilistic import MethodProbabilisticResult
         m = MethodProbabilisticResult(method_id=_MID)
         m.statistics = SampleStatistics(values=[])
         res.by_method[_MID] = m

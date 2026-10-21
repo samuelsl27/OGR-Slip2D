@@ -96,7 +96,7 @@ def _sample(result, k):
 
 def _global_minimum(p, v, **kw):
     from ogr_core.statistics import SamplingMethod as SM
-    from ogr_core.statistics import run_global_minimum
+    from ogr_slip2d.probabilistic import run_global_minimum
     return run_global_minimum(p, {"bishop_simplified": _deterministic(p)}, [v],
                               num_samples=5, sampling=SM.LATIN_HYPERCUBE,
                               seed=3, **kw)
@@ -134,7 +134,7 @@ class TestADirectCallSlicesLikeTheProject:
 
     def test_the_sensitivity_midpoint_is_the_deterministic_factor(self):
         """Fails on v0.1.262: the midpoint was the 25-slice factor."""
-        from ogr_core.statistics import run_sensitivity
+        from ogr_slip2d.sensitivity import run_sensitivity
         p = _project()
         v = _cohesion(p)
         det = _deterministic(p)

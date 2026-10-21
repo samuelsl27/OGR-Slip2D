@@ -374,9 +374,12 @@ class TestStatisticsEntries:
         from test_slide_validation_ej1 import _ej1_project
 
         from ogr_core.statistics import (
-            Distribution, DistributionType as DT, SamplingMethod as SM,
-            available_variables, run_global_minimum,
+            Distribution,
+            DistributionType as DT,
+            SamplingMethod as SM,
+            available_variables,
         )
+        from ogr_slip2d.probabilistic import run_global_minimum
         from ogr_slip2d import BishopSimplified
         from ogr_slip2d.search import GridSearch
         p = _ej1_project()

@@ -156,9 +156,13 @@ class TestTheStatisticalRebuildKeepsTheThrust:
     deterministic model and must give the deterministic factor."""
 
     def _run(self):
-        from ogr_core.statistics import (Distribution, DistributionType,
-                                         SamplingMethod, available_variables,
-                                         run_global_minimum)
+        from ogr_core.statistics import (
+            Distribution,
+            DistributionType,
+            SamplingMethod,
+            available_variables,
+        )
+        from ogr_slip2d.probabilistic import run_global_minimum
         from ogr_slip2d.analysis_runner import build_search
         p = _slope(extra_material=True)
         det = build_search(p, _MID).evaluate_surface(p, _arc())

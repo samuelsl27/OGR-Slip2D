@@ -27,16 +27,16 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from test_slide_validation_ej1 import _ej1_project  # noqa: E402
 
-from ogr_core.statistics import (  # noqa: E402
+from ogr_core.statistics import (
     Distribution,
     DistributionType as DT,
     SamplingMethod as SM,
     apply_sample,
     available_variables,
     clone_project,
-    run_global_minimum,
     sample_project_variables,
 )
+from ogr_slip2d.probabilistic import run_global_minimum
 from ogr_slip2d.analysis_runner import build_method  # noqa: E402
 from ogr_slip2d.search import GridSearch  # noqa: E402
 
@@ -78,7 +78,7 @@ def _sampled_on(run):
     ``finally``: a module function left patched would leak into every test
     that runs after this one (rule 5).
     """
-    import ogr_core.statistics.probabilistic as P
+    import ogr_slip2d.probabilistic as P
     seen: dict = {}
     original = P._evaluate_on
 
@@ -100,7 +100,7 @@ def _sampled_on(run):
 def _not_on_their_own_surfaces(res, det, seen) -> list:
     """What breaks "each method is sampled on its own deterministic
     surface", one line per problem; empty when nothing does."""
-    from ogr_core.statistics.probabilistic import _surface_key
+    from ogr_slip2d.probabilistic import _surface_key
     problems = []
     for mid, crit in det.items():
         key = _surface_key(crit.surface.to_dict())
@@ -256,7 +256,7 @@ class TestGlobalMinimumEngine:
         mass (D89). ``test_a_shared_seed_is_denounced`` proves the check
         can fail.
         """
-        from ogr_core.statistics.probabilistic import _surface_key
+        from ogr_slip2d.probabilistic import _surface_key
         p, det = self._two_methods()
         keys = {mid: _surface_key(c.surface.to_dict())
                 for mid, c in det.items()}
@@ -278,7 +278,7 @@ class TestGlobalMinimumEngine:
         one of its evaluations was on another surface. Both patches undone
         in ``finally`` (rule 5).
         """
-        import ogr_core.statistics.probabilistic as P
+        import ogr_slip2d.probabilistic as P
         p, det = self._two_methods()
         bishop = det["bishop_simplified"].surface.to_dict()
         rebuild, probe = P._rebuild_surface, P._does_not_reevaluate_to_itself

@@ -47,23 +47,9 @@ DYNAMIC = "__import__"
 
 #: ``(file, enclosing function, module)``: how many times it is written.
 #: Only shrinks. Each version of the D337 batch removes its own entries.
-ALLOWED = Counter({
-    # the statistical runners (v0.1.346)
-    ("ogr_core/statistics/probabilistic.py",
-     "_critical_probabilistic_excluded", "ogr_slip2d"): 1,
-    ("ogr_core/statistics/probabilistic.py",
-     "_does_not_reevaluate_to_itself", "ogr_slip2d"): 1,
-    ("ogr_core/statistics/probabilistic.py", "_evaluate_on",
-     "ogr_slip2d"): 1,
-    ("ogr_core/statistics/probabilistic.py", "_rebuild_surface",
-     "ogr_slip2d"): 1,
-    ("ogr_core/statistics/probabilistic.py", "_sample_failure",
-     "ogr_slip2d"): 1,
-    ("ogr_core/statistics/probabilistic.py", "run_global_minimum",
-     "ogr_slip2d"): 1,
-    ("ogr_core/statistics/sensitivity.py", "run_sensitivity",
-     "ogr_slip2d"): 1,
-})
+ALLOWED = Counter()
+#: v0.1.346 (D337) -- empty: the core imports none of the layers above it.
+#: ``test_core_layering_closed_v1346`` adds the runtime check.
 
 
 def census_of(path: Path, root: Path) -> Counter:

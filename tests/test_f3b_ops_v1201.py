@@ -214,7 +214,8 @@ class TestStatisticsThroughTheDoor:
                 standard, det, vals)
 
     def test_with_the_standard_off_it_is_the_old_path(self):
-        from ogr_core.statistics import SamplingMethod, run_global_minimum
+        from ogr_core.statistics import SamplingMethod
+        from ogr_slip2d.probabilistic import run_global_minimum
         from ogr_slip2d.analysis_runner import (run_analysis,
                                                 run_configured_statistics)
         ws, pid, _key = _stats_project(samples=12)
@@ -235,8 +236,8 @@ class TestStatisticsThroughTheDoor:
         """Every third sample fails (through ``prepare``). The factor
         grows with the cohesion, so the pairs sorted by cohesion must be
         sorted by factor; the old zip is not."""
-        from ogr_core.statistics import (SamplingMethod, run_global_minimum,
-                                         sample_pairs)
+        from ogr_core.statistics import SamplingMethod
+        from ogr_slip2d.probabilistic import run_global_minimum, sample_pairs
         from ogr_slip2d.analysis_runner import run_analysis
         ws, pid, key = _stats_project(samples=24)
         p = ws.get(pid).project
