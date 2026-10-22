@@ -216,7 +216,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Draw a Block Search point: click the point every trial surface '
         'must pass through.':
             'Dibuja un punto de búsqueda por bloques: pulsa en el punto por '
-            'el que tiene que pasar toda superficie de prueba.',
+            'el que tiene que pasar toda superficie de tanteo.',
         'Draw a Block Search polyline: click its vertices from one end to '
         'the other, right-click or Enter to finish.':
             'Dibuja una polilínea de búsqueda por bloques: pulsa sus '
@@ -225,14 +225,14 @@ _DICTS: dict[str, dict[str, str]] = {
         'Add a Block Search line: every trial surface gets one vertex at '
         'a random place along it':
             'Añadir una línea de búsqueda por bloques: cada superficie de '
-            'prueba recibe un vértice en un punto al azar de ella',
+            'tanteo recibe un vértice en un punto al azar de ella',
         'Add a Block Search point: every trial surface passes through it':
             'Añadir un punto de búsqueda por bloques: toda superficie de '
-            'prueba pasa por él',
+            'tanteo pasa por él',
         'Add a Block Search polyline: every trial surface follows it '
         'between two points generated on it':
             'Añadir una polilínea de búsqueda por bloques: cada superficie '
-            'de prueba la sigue entre dos puntos generados sobre ella',
+            'de tanteo la sigue entre dos puntos generados sobre ella',
         'Block Search Object...': 'Objeto de búsqueda por bloques...',
         'Block Search Object': 'Objeto de búsqueda por bloques',
         'Point': 'Punto',
@@ -273,7 +273,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'the stretch of polyline between them; these options say where '
         'each point is generated.':
             'Una polilínea de búsqueda por bloques da a cada superficie de '
-            'prueba dos puntos y el tramo de polilínea entre ellos; estas '
+            'tanteo dos puntos y el tramo de polilínea entre ellos; estas '
             'opciones dicen dónde se genera cada punto.',
         'Only a Block Search Polyline has point options.':
             'Solo una polilínea de búsqueda por bloques tiene opciones de punto.',
@@ -1776,7 +1776,7 @@ _DICTS: dict[str, dict[str, str]] = {
         "Army Corp. Eng. 2 Stage (1970)":
             "Cuerpo de Ingenieros 2 etapas (1970)",
         "Lowe and Karafiath (1960)": "Lowe y Karafiath (1960)",
-        "Rapid Drawdown": "Descenso rápido",
+        "Rapid Drawdown": "Desembalse rápido",
         "Undrained envelope:": "Envolvente no drenada:",
         "Total Stress R Envelope": "Envolvente R en tensiones totales",
         "Kc = 1 Envelope": "Envolvente Kc = 1",
@@ -1802,12 +1802,12 @@ _DICTS: dict[str, dict[str, str]] = {
         "not a prerequisite for it: the two are mutually exclusive.":
             "Exceso de presión intersticial por carga, en materiales "
             "marcados como no drenados. Es un análisis distinto del "
-            "descenso rápido, no un requisito: son excluyentes.",
+            "desembalse rápido, no un requisito: son excluyentes.",
         "Enables the Drawdown Line tool and computes the factor of "
         "safety after the drawdown. The water table is the INITIAL "
         "level and the drawdown line the final, lower one.":
             "Habilita la herramienta de línea de desembalse y calcula el "
-            "factor de seguridad tras el descenso. El nivel freático es el "
+            "factor de seguridad tras el desembalse. El nivel freático es el "
             "nivel INICIAL y la línea de desembalse el final, más bajo.",
         # --- Excess pore pressure, B-bar method (v0.1.75) -------------
         "Excess Pore Pressure": "Exceso de presión intersticial",
@@ -1964,7 +1964,7 @@ _DICTS: dict[str, dict[str, str]] = {
         "R: Cr = %.4g, φR = %.4g°": "R: Cr = %.4g, φR = %.4g°",
         "Kc = 1: d = %.4g, ψ = %.4g°": "Kc = 1: d = %.4g, ψ = %.4g°",
         # --- Rapid drawdown parameters (v0.1.62) ----------------------
-        "Rapid Drawdown Parameters": "Parámetros de descenso rápido",
+        "Rapid Drawdown Parameters": "Parámetros de desembalse rápido",
         "Undrained Behaviour": "Comportamiento no drenado",
         "B-bar:": "B-barra:",
         "Skempton's B̄: Δu = B̄ · Δσv. Only a material that behaves "
@@ -1974,7 +1974,7 @@ _DICTS: dict[str, dict[str, str]] = {
             "intersticial tras el desembalse.",
         "Enable Rapid Drawdown analysis in Project Settings "
         "→ Groundwater → Advanced first.":
-            "Activa antes el análisis de descenso rápido en Ajustes del "
+            "Activa antes el análisis de desembalse rápido en Ajustes del "
             "proyecto → Agua subterránea → Avanzado.",
         # --- Drawdown level sweep (v0.1.70) ---------------------------
         "Drawdown Level Sweep...": "Barrido de niveles de desembalse...",
@@ -2007,7 +2007,7 @@ _DICTS: dict[str, dict[str, str]] = {
             "no siempre es el crítico.",
         "Enable Rapid Drawdown analysis in Project Settings "
         "> Groundwater > Advanced first.":
-            "Activa antes el análisis de descenso rápido en Ajustes del "
+            "Activa antes el análisis de desembalse rápido en Ajustes del "
             "proyecto > Agua subterránea > Avanzado.",
         # --- Tools ----------------------------------------------------
         "Add Text": "Añadir texto",
@@ -2138,7 +2138,7 @@ _DICTS: dict[str, dict[str, str]] = {
             "por los factores de seguridad que calcula, así que analiza "
             "superficies distintas en cada muestra y ninguna tiene una "
             "probabilidad de rotura propia. Solo se calcula con las "
-            "búsquedas Grid, Slope, Path y Block.",
+            "búsquedas por rejilla, de talud, por caminos y por bloques.",
         "No critical probabilistic surface: the search minimised the "
         "critical seismic coefficient Ky, and the critical probabilistic "
         "surface is defined on the factor of safety.":
@@ -6244,6 +6244,22 @@ _DICTS: dict[str, dict[str, str]] = {
             'está desactivada en el proyecto sobre el que corren las '
             'muestras, así que esa superficie no se puede volver a formar; '
             'así que no se ha calculado este método.',
+        # v0.1.354 (D335) -- the DXF export
+        "The 'ezdxf' package is required to export DXF files.":
+            "Hace falta el paquete 'ezdxf' para exportar archivos DXF.",
+        'failed':
+            'falló',
+        'mesh ({error})':
+            'malla ({error})',
+        'image {path} (file not found or not readable): drawn as its frame':
+            'imagen {path} (no se encuentra el archivo o no se puede leer): '
+            'se dibuja su marco',
+        '{method_id} critical surface ({kind})':
+            'superficie crítica de {method_id} ({kind})',
+        '{total} entities — {layers}':
+            '{total} entidades — {layers}',
+        'Could not write the DXF file: {error}':
+            'No se ha podido escribir el archivo DXF: {error}',
         # v0.1.352 (D335) -- the runner's refusals
         'The back analysis supports {methods}, not {method}.':
             'El retroanálisis admite {methods}, no {method}.',

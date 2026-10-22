@@ -34,9 +34,11 @@ def _catalogue() -> dict:
     (v0.1.350) and of the strength models (v0.1.351), the seepage solver's,
     the transient's, the back analysis', the sweep's and the Hoek-Brown
     calculator's (v0.1.352), the statistical runs', the design standard's
-    and the strength models' factoring (v0.1.353), in one table: the codes
-    do not collide, each family having its own prefix."""
+    and the strength models' factoring (v0.1.353), and the DXF export's
+    (v0.1.354), in one table: the codes do not collide, each family having
+    its own prefix."""
     if not _CATALOGUE:
+        from ogr_core.dxf.messages import EXPORT_MESSAGES
         from ogr_core.dxf.messages import MESSAGES as DXF
         from ogr_core.materials.messages import (CALCULATOR_NOTES,
                                                  FACTORING_NOTES)
@@ -57,7 +59,8 @@ def _catalogue() -> dict:
                       RULES, METHOD_NOTES, SEARCH_NOTES, REFUSALS,
                       SETTING_NOTES, STRENGTH_REFUSALS, SEEPAGE_NOTES,
                       RUN_NOTES, SWEEP_NOTES, CALCULATOR_NOTES,
-                      STAT_NOTES, DESIGN_NOTES, FACTORING_NOTES):
+                      STAT_NOTES, DESIGN_NOTES, FACTORING_NOTES,
+                      EXPORT_MESSAGES):
             _CATALOGUE.update(table)
     return _CATALOGUE
 

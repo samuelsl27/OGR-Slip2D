@@ -258,7 +258,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.353"
+    VERSION = "0.1.354"
 
     def __init__(self) -> None:
         super().__init__()
@@ -1300,14 +1300,16 @@ class MainWindow(QMainWindow):
         from ogr_slip2d.interpretation import critical_drawings
         rep = export_dxf(self.project, path, dlg.options,
                          critical_drawings(results or {}))
+        # v0.1.354 (D335) -- what the export says, through its codes
+        from .core_messages import note_text
         if not rep.ok:
-            self._info(rep.error or tr("The drawing could not be "
-                                       "written."))
+            self._info(note_text(rep.error) if rep.error
+                       else tr("The drawing could not be written."))
             return
-        msg = tr("Exported to %s   |   %s") % (path, rep.summary())
+        msg = tr("Exported to %s   |   %s") % (path, note_text(rep.summary()))
         if rep.skipped:
             msg += "   |   " + tr("skipped: %s") % ", ".join(
-                sorted(set(rep.skipped)))
+                note_text(s) for s in sorted(set(rep.skipped)))
         self.statusBar().showMessage(msg, 20000)
 
     def act_generate_report(self) -> None:

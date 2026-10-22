@@ -23,6 +23,12 @@ carga distribuida»), «magnitud» (the load dialog's «Magnitud:»), «Expandir
 contraer» (the menu's) and «OSnap» in the drawing menu (the legend's OSNAP).
 This file fails if an old name comes back anywhere in the dictionary.
 
+v0.1.354 (D335) — two more, found while translating D314 and D335: Rapid
+Drawdown was «descenso rápido» in five entries (and «tras el descenso» in a
+sixth) and «desembalse rápido» in twelve, and a trial surface «superficie de
+prueba» in five and «de tanteo» in five. The term the program already used
+most stays: «desembalse rápido» and «superficie de tanteo».
+
 Controls: «malla» still names the finite-element mesh, and «cabeza» the head
 of a support, which are the meanings these words keep.
 """
@@ -47,6 +53,9 @@ _RETIRED = {
     r"forzado a objeto": "OSnap",
     # the factor of safety is «FS» in Spanish, as 31 entries already said
     r"\bFoS\b": "FS",
+    # v0.1.354 (D335)
+    r"descenso rápido": "desembalse rápido",
+    r"superficies? de prueba": "superficie de tanteo",
 }
 
 
@@ -69,6 +78,12 @@ class TestOneTermForEachThing:
         assert es["Distributed Load"] == "Carga distribuida"
         assert es["Expand / Shrink…"] == "Expandir / contraer…"
         assert "OSnap" not in es
+        assert es["Rapid Drawdown"] == "Desembalse rápido"
+        assert es["Rapid Drawdown Parameters"] == \
+            "Parámetros de desembalse rápido"
+        assert es["Add a Block Search point: every trial surface passes "
+                  "through it"].endswith("toda superficie de tanteo pasa "
+                                         "por él")
 
     def test_a_magnitude_is_a_magnitude(self):
         """«Módulo» keeps what it means elsewhere (the OGR FEM2D module); a

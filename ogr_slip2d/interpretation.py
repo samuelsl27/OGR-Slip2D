@@ -94,6 +94,27 @@ def invalid_reason(res) -> Optional[str]:
             or "did not converge")
 
 
+def invalid_group(res) -> Optional[str]:
+    """The group an evaluation's rejection is filed under, in English: its
+    reason with the values that vary between surfaces left out ("…"), as
+    the interpretation window groups them (v0.1.354, D335); a reason
+    without a code is its own group. None if it was not rejected."""
+    if res.is_valid and getattr(res, "admissible", True):
+        return None
+    from ogr_core.messages import render
+
+    from .messages import MESSAGES
+    for attr, code_attr, args_attr in (
+            ("error_message", "message_code", "message_args"),
+            ("admissibility_note", "note_code", "note_args")):
+        sentence = getattr(res, attr, None)
+        if sentence:
+            return render(MESSAGES, getattr(res, code_attr, "") or "",
+                          getattr(res, args_attr, None) or {}, sentence,
+                          elide=True)
+    return "did not converge"
+
+
 def raw_data_rows(search_result) -> list:
     """One row per surface analysed, valid or not: ``[centre_x, centre_y,
     radius, x_left, x_right, fos or error code]`` as strings — the
@@ -113,10 +134,20 @@ def raw_data_rows(search_result) -> list:
 
 
 def invalid_summary(search_result) -> dict:
-    """The census of rejected surfaces: by code, by reason, and the ones
-    that were never sliced or a focus object removed."""
+    """The census of rejected surfaces: by code, by reason, by group, and
+    the ones that were never sliced or a focus object removed.
+
+    ``by_reason`` keys on the whole sentence, values and all, so one
+    condition found at several slice counts is several entries. v0.1.354
+    (D335) -- ``by_group`` keys on the group the interpretation window files
+    a rejection under since v0.1.333 (D314): the reason's code with the
+    values that vary from surface to surface left out ("…"). A reason
+    without a code is its own group. ``by_code`` is the reference's error
+    code (-112, -101 ...), as it always was.
+    """
     by_code: dict = {}
     by_reason: dict = {}
+    by_group: dict = {}
     for ev in getattr(search_result, "evaluations", []) or []:
         code = error_code(ev)
         if code is None:
@@ -124,6 +155,8 @@ def invalid_summary(search_result) -> dict:
         by_code[code] = by_code.get(code, 0) + 1
         why = invalid_reason(ev)
         by_reason[why] = by_reason.get(why, 0) + 1
+        group = invalid_group(ev)
+        by_group[group] = by_group.get(group, 0) + 1
     # v0.1.258 (D244) — polylines refused at an end leave no evaluation,
     # so they arrive as a count on the result. A surface with an end off
     # the ground meets the slope once or not at all, which is the
@@ -137,6 +170,7 @@ def invalid_summary(search_result) -> dict:
         by_code[ERROR_OTHER] = by_code.get(ERROR_OTHER, 0) + off
         why = "an end of the polyline is not on the ground surface"
         by_reason[why] = by_reason.get(why, 0) + off
+        by_group[why] = by_group.get(why, 0) + off
     # v0.1.259 (D256) — and the surfaces whose base rose above the ground
     # between the ends. Under OGR's "any other rejection" −101, with a
     # reason of their own.
@@ -145,6 +179,7 @@ def invalid_summary(search_result) -> dict:
         by_code[ERROR_OTHER] = by_code.get(ERROR_OTHER, 0) + air
         why = "the base rises above the ground surface between the ends"
         by_reason[why] = by_reason.get(why, 0) + air
+        by_group[why] = by_group.get(why, 0) + air
     # v0.1.261 (D263) — the surfaces refused because an end daylights
     # outside the Slope Limits, which the reference does not code, and the
     # circles that do not cut the ground twice, which ARE its −101 in its
@@ -159,6 +194,7 @@ def invalid_summary(search_result) -> dict:
         if n:
             by_code[ERROR_OTHER] = by_code.get(ERROR_OTHER, 0) + n
             by_reason[why] = by_reason.get(why, 0) + n
+            by_group[why] = by_group.get(why, 0) + n
     generated = getattr(search_result, "total_count",
                         len(getattr(search_result, "evaluations", [])))
     analysed = getattr(search_result, "analysed_count",
@@ -171,6 +207,7 @@ def invalid_summary(search_result) -> dict:
         "by_code": dict(sorted(by_code.items())),
         "by_reason": dict(sorted(by_reason.items(),
                                  key=lambda kv: -kv[1])),
+        "by_group": dict(sorted(by_group.items(), key=lambda kv: -kv[1])),
         # Rejected before slicing: counted in the total, with no result.
         "not_sliced": max(0, (generated - analysed) - with_code),
         "focus_removed": getattr(search_result, "focus_rejected", 0),

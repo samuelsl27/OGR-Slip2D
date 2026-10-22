@@ -32,6 +32,7 @@ from typing import Optional
 
 from ogr_core.geometry import BoundaryType
 
+from . import messages as M
 from .reader import UNIT_FACTORS
 from .importer import KIND_TO_BOUNDARY
 
@@ -140,10 +141,15 @@ class ExportReport:
         self.entities[layer] = self.entities.get(layer, 0) + n
 
     def summary(self) -> str:
+        # v0.1.354 (D335) -- with its code, the layers as a list
+        from .messages import (EXPORT_FAILED, EXPORT_LAYER, EXPORT_SUMMARY,
+                               export_note)
+        from ..messages import as_nested
         if not self.ok:
-            return self.error or "failed"
-        parts = [f"{k}: {v}" for k, v in sorted(self.entities.items())]
-        return f"{self.total} entities — " + ", ".join(parts)
+            return self.error or export_note(EXPORT_FAILED)
+        layers = [as_nested(export_note(EXPORT_LAYER, layer=k, n=v))
+                  for k, v in sorted(self.entities.items())]
+        return export_note(EXPORT_SUMMARY, total=self.total, layers=layers)
 
 
 # ======================================================================
@@ -210,8 +216,7 @@ def export_dxf(project, path, options: Optional[ExportOptions] = None,
     opts = options or ExportOptions()
     rep = ExportReport(path=str(path))
     if ezdxf is None:
-        rep.error = ("The 'ezdxf' package is required to export DXF "
-                     "files.")
+        rep.error = M.export_note(M.EXPORT_EZDXF_MISSING)
         return rep
 
     factor = UNIT_FACTORS.get(opts.unit, 1.0)
@@ -332,7 +337,8 @@ def export_dxf(project, path, options: Optional[ExportOptions] = None,
                     rep.count(LAYER_MESH)
             del edges
         except Exception as exc:  # noqa: BLE001
-            rep.skipped.append(f"mesh ({exc})")
+            rep.skipped.append(M.export_note(M.EXPORT_SKIPPED_MESH,
+                                             error=str(exc)))
 
     # ---- critical slip surface --------------------------------------
     if opts.slip_surface and surfaces:
@@ -342,9 +348,9 @@ def export_dxf(project, path, options: Optional[ExportOptions] = None,
             if pts is None:
                 # A surface class the engine's rule does not know: left out
                 # and said, never a crash that loses the whole drawing.
-                rep.skipped.append("%s critical surface (%s)"
-                                   % (mid, item[3] if len(item) > 3
-                                      else "unknown"))
+                rep.skipped.append(M.export_note(
+                    M.EXPORT_SKIPPED_SURFACE, method_id=mid,
+                    kind=item[3] if len(item) > 3 else "unknown"))
                 continue
             pts = [tuple(p) for p in pts]
             if len(pts) >= 2:
@@ -383,5 +389,5 @@ def export_dxf(project, path, options: Optional[ExportOptions] = None,
     try:
         doc.saveas(str(path))
     except Exception as exc:  # noqa: BLE001
-        rep.error = f"Could not write the DXF file: {exc}"
+        rep.error = M.export_note(M.EXPORT_WRITE_FAILED, error=str(exc))
     return rep

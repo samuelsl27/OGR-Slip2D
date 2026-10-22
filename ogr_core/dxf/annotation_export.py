@@ -226,9 +226,9 @@ class AnnotationWriter:
         from ogr_core.annotations.image_size import pixel_size
         size = pixel_size(pic.path) if pic.path else None
         if size is None:
-            self.report.skipped.append(
-                "image %s (file not found or not readable): drawn as its "
-                "frame" % (pic.path or "(none)"))
+            from .messages import EXPORT_SKIPPED_PICTURE, export_note
+            self.report.skipped.append(export_note(
+                EXPORT_SKIPPED_PICTURE, path=pic.path or "(none)"))
             for prim in d.picture_fallback(pic):
                 self._primitive(prim, a)
             return

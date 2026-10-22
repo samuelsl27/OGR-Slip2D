@@ -68,6 +68,45 @@ def text(code: str, **args) -> str:
     return english(MESSAGES, code, args)
 
 
+# ----------------------------------------------------------------------
+# The export (v0.1.354, D335)
+# ----------------------------------------------------------------------
+#: What the DXF export says it wrote, skipped or could not do. A table of
+#: its own, and not in ``MESSAGES``: the test of v0.1.334 holds every code
+#: of that one to a sample of the import of v0.1.333.
+EXPORT_EZDXF_MISSING = "dxf.export.ezdxf_missing"
+EXPORT_WRITE_FAILED = "dxf.export.write_failed"
+EXPORT_FAILED = "dxf.export.failed"
+EXPORT_SUMMARY = "dxf.export.summary"
+EXPORT_LAYER = "dxf.export.layer"
+EXPORT_SKIPPED_MESH = "dxf.export.skipped_mesh"
+EXPORT_SKIPPED_SURFACE = "dxf.export.skipped_surface"
+EXPORT_SKIPPED_PICTURE = "dxf.export.skipped_picture"
+
+EXPORT_MESSAGES = {s.code: s for s in (
+    MessageSpec(EXPORT_EZDXF_MISSING,
+                "The 'ezdxf' package is required to export DXF files."),
+    MessageSpec(EXPORT_WRITE_FAILED, "Could not write the DXF file: {error}"),
+    MessageSpec(EXPORT_FAILED, "failed"),
+    MessageSpec(EXPORT_SUMMARY, "{total} entities — {layers}"),
+    MessageSpec(EXPORT_LAYER, "{layer}: {n}"),
+    MessageSpec(EXPORT_SKIPPED_MESH, "mesh ({error})"),
+    MessageSpec(EXPORT_SKIPPED_SURFACE, "{method_id} critical surface "
+                                        "({kind})",
+                kinds=(("method_id", "method_id"),)),
+    MessageSpec(EXPORT_SKIPPED_PICTURE,
+                "image {path} (file not found or not readable): drawn as its "
+                "frame"),
+)}
+
+
+def export_note(code: str, **args):
+    """The export's message ``code`` with ``args``: its English sentence,
+    carrying the code and the values."""
+    from ogr_core.messages import coded
+    return coded(EXPORT_MESSAGES, code, **args)
+
+
 def problem_code(kind: str) -> str:
     """The code of a sanitiser problem of ``kind``."""
     return "dxf." + kind
