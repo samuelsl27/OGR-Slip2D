@@ -258,7 +258,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.351"
+    VERSION = "0.1.352"
 
     def __init__(self) -> None:
         super().__init__()
@@ -1898,7 +1898,11 @@ class MainWindow(QMainWindow):
             return
         self._back_analysis_result = res
         if res.critical is None:
-            self._info(res.notes.get("error", "Back analysis failed."))
+            # v0.1.352 (D335) -- the reason through its code, and the
+            # fallback through tr()
+            from .core_messages import note_text
+            self._info(note_text(res.notes.get("error")
+                                 or tr("Back analysis failed.")))
             return
         c = res.critical
         self.statusBar().showMessage(
@@ -1985,8 +1989,9 @@ class MainWindow(QMainWindow):
         """Report the critical level and chart the sweep."""
         self.last_drawdown_sweep = result
         if result.notes.get("error"):
+            from .core_messages import note_text
             QMessageBox.warning(self, tr("Drawdown Level Sweep"),
-                                result.notes["error"])
+                                note_text(result.notes["error"]))
             return
         worst = result.worst()
         if worst is None:
@@ -2164,8 +2169,8 @@ class MainWindow(QMainWindow):
                 if warning:
                     messages.append(warning)
             else:
-                messages.append(res.notes.get("error", "sensitivity run "
-                                                       "failed"))
+                messages.append(res.notes.get("error")
+                                or tr("sensitivity run failed"))
             self.last_statistics_notes.extend(
                 getattr(res, "note_lines", None) or [])
 
@@ -3533,12 +3538,13 @@ class MainWindow(QMainWindow):
             self._gw_solver = getattr(self.project, "_gw_solver", None)
             self._update_groundwater_actions()
             return list(self.project.transient_results or [])
+        from .core_messages import note_text
         for note in outcome.warnings:
-            # tr() at the point of use: the driver has no interface and
-            # must not, so the English it returns is the KEY and the
-            # translation happens here. Without this the Spanish entries
-            # for these two warnings could never be reached.
-            self.statusBar().showMessage(tr(note), 9000)
+            # Translated at the point of use: the driver has no interface
+            # and must not. v0.1.352 (D335): through the code each warning
+            # carries -- tr() of a sentence with its reason in it found
+            # nothing
+            self.statusBar().showMessage(note_text(note), 9000)
         self._gw_solver = getattr(self.project, "_gw_solver", None)
         return list(self.project.transient_results or [])
 
@@ -3586,6 +3592,19 @@ class MainWindow(QMainWindow):
                 return
             result = results[-1]
             self._update_groundwater_actions()
+            # v0.1.352 (D341) -- a transient whose initial steady state could
+            # not be solved comes back as one result with no field and the
+            # solver's reason in its notes: min() of that empty field raised
+            # inside this slot, and the reason reached nobody
+            if not result.pore_pressure:
+                from .core_messages import note_text
+                why = (result.notes.get("error")
+                       or result.notes.get("warning"))
+                self.statusBar().showMessage(
+                    tr("Groundwater analysis: %s") % (
+                        note_text(why) if why else tr("did not converge")),
+                    15000)
+                return
             bad = [i for i, r in enumerate(results) if not r.converged]
             # v0.1.293 (D291b) — templates
             msg = tr("Transient: {0} stage(s) solved; final u from {1:.1f} "
@@ -3600,7 +3619,9 @@ class MainWindow(QMainWindow):
                    for r in results):
                 from ogr_slip2d.transient_stability import (
                     INITIAL_STATE_NOT_CONVERGED)
-                msg += "  " + tr(INITIAL_STATE_NOT_CONVERGED)
+
+                from .core_messages import note_text
+                msg += "  " + note_text(INITIAL_STATE_NOT_CONVERGED)
             self.statusBar().showMessage(msg, 9000)
             return
 
@@ -3618,10 +3639,14 @@ class MainWindow(QMainWindow):
             # path also became far easier to reach in this version: the
             # seepage face now reports honestly that it never settled
             # instead of freezing its nodes and calling that convergence.
-            msg = result.notes.get("error") or result.notes.get(
-                "warning", "did not converge")
+            # v0.1.352 (D335) -- the solver's reason through its code, and
+            # the fallback through tr()
+            from .core_messages import note_text
+            why = result.notes.get("error") or result.notes.get("warning")
             self.statusBar().showMessage(
-                tr("Groundwater analysis: %s") % msg, 15000)
+                tr("Groundwater analysis: %s") % (
+                    note_text(why) if why else tr("did not converge")),
+                15000)
             return
         note = ""
         if missing:

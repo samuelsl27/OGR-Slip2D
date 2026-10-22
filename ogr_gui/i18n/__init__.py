@@ -5867,6 +5867,129 @@ _DICTS: dict[str, dict[str, str]] = {
         'Function, got {data}':
             'la función del macizo rocoso tiene que ser una función '
             'tangencial/normal o una función c/φ; es {data}',
+        # v0.1.352 (D335) -- seepage, transient, back analysis, sweep, calculator
+        'D = 2 makes mb undefined (28 − 14 D = 0); it has been clamped to '
+        '1.999.':
+            'Con D = 2, mb queda indefinido (28 − 14 D = 0); se ha limitado '
+            'a 1.999.',
+        'GSI was clamped to the range 0 to 100.':
+            'El GSI se ha limitado al intervalo de 0 a 100.',
+        '{n} composite surface(s) were left out: back analysis is written in '
+        'the circular form of the method, which does not hold on the '
+        'straight stretches of a composite. Turn Composite Surfaces off to '
+        'back-analyse this model, and read the result as being about '
+        'circular surfaces only.':
+            'Se dejaron fuera {n} superficie(s) compuesta(s): el '
+            'retroanálisis está escrito en la forma circular del método, que '
+            'no se cumple en los tramos rectos de una superficie compuesta. '
+            'Desactiva Superficies compuestas para retroanalizar este '
+            'modelo, y lee el resultado como referido solo a superficies '
+            'circulares.',
+        'The strength envelope depends on the normal stress, and on at least '
+        'one slice the stress it is read at did not settle on the stress the '
+        'method resolves at the target factor of safety; the surface was '
+        'left out rather than back-analysed at a point the method does not '
+        'use.':
+            'La envolvente de resistencia depende de la tensión normal, y en '
+            'al menos una dovela la tensión a la que se lee no convergió a '
+            'la que resuelve el método con el factor de seguridad objetivo; '
+            'la superficie se dejó fuera en vez de retroanalizarla en un '
+            'punto que el método no usa.',
+        '{n} surface(s) were left out: The strength envelope depends on the '
+        'normal stress, and on at least one slice the stress it is read at '
+        'did not settle on the stress the method resolves at the target '
+        'factor of safety; the surface was left out rather than '
+        'back-analysed at a point the method does not use.':
+            'Se dejaron fuera {n} superficie(s): la envolvente de '
+            'resistencia depende de la tensión normal, y en al menos una '
+            'dovela la tensión a la que se lee no convergió a la que '
+            'resuelve el método con el factor de seguridad objetivo; se '
+            'dejaron fuera en vez de retroanalizarlas en un punto que el '
+            'método no usa.',
+        'No surface could be back-analysed. Check the target factor of '
+        'safety and the search settings.':
+            'No se pudo retroanalizar ninguna superficie. Revisa el factor '
+            'de seguridad objetivo y los ajustes de la búsqueda.',
+        'Back analysis is only available for {methods}.':
+            'El retroanálisis solo está disponible para {methods}.',
+        'search failed: {error}':
+            'la búsqueda falló: {error}',
+        'The target factor of safety must be positive.':
+            'El factor de seguridad objetivo tiene que ser positivo.',
+        'Could not build the search for: {methods}':
+            'No se ha podido construir la búsqueda para: {methods}',
+        'The groundwater analysis produced no field: {why}':
+            'El análisis de agua subterránea no dio ningún campo: {why}',
+        'empty mesh':
+            'malla vacía',
+        'the seepage face never settled: {unsettled} boundary node(s) still '
+        "want to switch between 'P = 0' and 'no flow' ({frozen} were frozen "
+        'by the switch budget of {budget}). The free surface this reports is '
+        'not the converged one.':
+            'la cara de rezume no se estabilizó: {unsettled} nodo(s) del '
+            'contorno siguen queriendo cambiar entre «P = 0» y «sin flujo» '
+            '({frozen} quedaron congelados por el límite de {budget} '
+            'cambios). La superficie libre que se da no es la convergida.',
+        'final solve failed':
+            'falló la resolución final',
+        'initial steady state failed':
+            'falló el estado permanente inicial',
+        'initial steady state failed: {why}':
+            'falló el estado permanente inicial: {why}',
+        'the initial steady state did not converge':
+            'el estado permanente inicial no convergió',
+        'the initial steady state did not converge: {why}':
+            'el estado permanente inicial no convergió: {why}',
+        'linear solve failed':
+            'falló la resolución del sistema lineal',
+        'the mesh has {n} flat element(s) (three collinear nodes): nodes '
+        'under them do not count as boundary and the conductivity matrix is '
+        'badly conditioned. Regenerate the mesh.':
+            'la malla tiene {n} elemento(s) plano(s) (tres nodos alineados): '
+            'los nodos bajo ellos no cuentan como contorno y la matriz de '
+            'conductividad está mal condicionada. Regenera la malla.',
+        'no Dirichlet (head) boundary condition: the problem is singular. '
+        'Prescribe Total Head, Pressure Head or Zero Pressure somewhere on '
+        'the boundary.':
+            'no hay ninguna condición de contorno de altura (Dirichlet): el '
+            'problema es singular. Impón Altura total, Altura de presión o '
+            'Presión nula en algún tramo del contorno.',
+        'no time step computed':
+            'no se calculó ningún paso de tiempo',
+        'linear solve failed at Picard iteration {it}':
+            'falló la resolución del sistema lineal en la iteración de '
+            'Picard {it}',
+        'Picard iteration did not converge in {steps} steps (last change '
+        '{change:.3e} m), and the rescue is switched off.':
+            'La iteración de Picard no convergió en {steps} pasos (último '
+            'cambio {change:.3e} m), y el rescate está desactivado.',
+        'Picard iteration did not converge in {steps} steps (last change '
+        '{change:.3e} m), and neither did the rescue (Anderson acceleration, '
+        "then continuation with Newton's method; last change "
+        '{rescue_change:.3e} m). A permeability function that drops many '
+        'decades over a short suction range is the usual cause: check the '
+        'curves of the materials near the water table.':
+            'La iteración de Picard no convergió en {steps} pasos (último '
+            'cambio {change:.3e} m), y el rescate tampoco (aceleración de '
+            'Anderson y después continuación con el método de Newton; último '
+            'cambio {rescue_change:.3e} m). La causa habitual es una función '
+            'de permeabilidad que cae muchos órdenes de magnitud en un '
+            'intervalo corto de succión: revisa las curvas de los materiales '
+            'cerca del nivel freático.',
+        'stage {k}: some time steps did not converge; try more time steps or '
+        'more Picard iterations per step':
+            'etapa {k}: algunos pasos de tiempo no convergieron; prueba con '
+            'más pasos de tiempo o más iteraciones de Picard por paso',
+        'The drawdown level sweep needs a Rapid Drawdown analysis: enable it '
+        'in Project Settings > Groundwater > Advanced.':
+            'El barrido de niveles de desembalse necesita un análisis de '
+            'desembalse rápido: actívalo en Ajustes de proyecto > Agua '
+            'subterránea > Avanzado.',
+        'No analysis method selected.':
+            'No hay ningún método de análisis seleccionado.',
+        # v0.1.352 (D335) -- the runner's refusals
+        'The back analysis supports {methods}, not {method}.':
+            'El retroanálisis admite {methods}, no {method}.',
         "The model has no visible annotation.":
             "El modelo no tiene ninguna anotación visible.",
         # v0.1.339 (D336) — the options of the PDF report
@@ -5958,6 +6081,10 @@ _DICTS: dict[str, dict[str, str]] = {
             "PF = {0:.2f} %, β = {1:.3f}",
         "probabilistic run failed":
             "el análisis probabilista falló",
+        # v0.1.352 (D335) -- the two fallbacks the window wrote without tr()
+        "sensitivity run failed":
+            "el análisis de sensibilidad falló",
+        "Back analysis failed.": "El retroanálisis falló.",
         "most sensitive: {0}":
             "la más influyente: {0}",
         "{0}. {1} ({2} pts)":

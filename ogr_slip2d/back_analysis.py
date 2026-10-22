@@ -53,6 +53,8 @@ import math
 from dataclasses import dataclass, field
 from typing import Optional
 
+from . import run_messages as RM
+
 SUPPORTED_METHODS = ("bishop_simplified", "janbu_simplified",
                      "janbu_corrected")
 
@@ -113,11 +115,8 @@ class BackAnalysisResult:
 
 #: Why a surface was left out of the back analysis when a curved envelope
 #: could not be read at the stress the method resolves (v0.1.215, D204).
-ENVELOPE_NOT_SETTLED_NOTE = (
-    "The strength envelope depends on the normal stress, and on at least "
-    "one slice the stress it is read at did not settle on the stress the "
-    "method resolves at the target factor of safety; the surface was left "
-    "out rather than back-analysed at a point the method does not use.")
+#: v0.1.352 (D335): with its code; the sentence is ``run_messages``'.
+ENVELOPE_NOT_SETTLED_NOTE = RM.run_note(RM.BACK_ENVELOPE)
 
 
 class EnvelopeNotSettled(Exception):
@@ -535,12 +534,11 @@ def run_back_analysis(project, search, target_fos=1.3, elevation=0.0,
     out = BackAnalysisResult(method_id=method_id, target_fos=target_fos,
                              elevation=elevation)
     if method_id not in SUPPORTED_METHODS:
-        out.notes["error"] = (
-            f"Back analysis is only available for "
-            f"{', '.join(SUPPORTED_METHODS)}.")
+        out.notes["error"] = RM.run_note(
+            RM.BACK_ONLY_FOR, methods=", ".join(SUPPORTED_METHODS))
         return out
     if not (math.isfinite(target_fos) and target_fos > 0):
-        out.notes["error"] = "The target factor of safety must be positive."
+        out.notes["error"] = RM.run_note(RM.BACK_TARGET_POSITIVE)
         return out
 
     from .surface import CompositeSurface
@@ -551,7 +549,8 @@ def run_back_analysis(project, search, target_fos=1.3, elevation=0.0,
     try:
         run = search.run(project)
     except Exception as exc:  # noqa: BLE001
-        out.notes["error"] = f"search failed: {exc}"
+        out.notes["error"] = RM.run_note(RM.BACK_SEARCH_FAILED,
+                                         error=str(exc))
         return out
 
     best = None
@@ -603,20 +602,13 @@ def run_back_analysis(project, search, target_fos=1.3, elevation=0.0,
 
     out.critical = best
     if n_composite:
-        out.notes["composite_skipped"] = (
-            f"{n_composite} composite surface(s) were left out: back "
-            f"analysis is written in the circular form of the method, which "
-            f"does not hold on the straight stretches of a composite. Turn "
-            f"Composite Surfaces off to back-analyse this model, and read "
-            f"the result as being about circular surfaces only.")
+        out.notes["composite_skipped"] = RM.run_note(
+            RM.BACK_COMPOSITE_LEFT_OUT, n=n_composite)
     if n_unsettled:
-        out.notes["envelope_not_settled"] = (
-            f"{n_unsettled} surface(s) were left out: "
-            f"{ENVELOPE_NOT_SETTLED_NOTE}")
+        out.notes["envelope_not_settled"] = RM.run_note(
+            RM.BACK_ENVELOPE_LEFT_OUT, n=n_unsettled)
     if best is None:
-        out.notes["error"] = (
-            "No surface could be back-analysed. Check the target factor "
-            "of safety and the search settings.")
+        out.notes["error"] = RM.run_note(RM.BACK_NONE)
     if progress_cb:
         progress_cb(total, total)
     return out

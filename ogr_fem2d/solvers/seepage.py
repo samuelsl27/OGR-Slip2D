@@ -51,6 +51,9 @@ from enum import Enum
 from typing import Optional
 
 from ogr_core.hydraulic.hydraulic_properties import HydraulicProperties
+from ogr_core.messages import as_nested
+
+from .. import messages as M
 # v0.1.342 (D337) -- the stored data and the identities that rebuild it are
 # the core's (``ogr_core.fem.seepage_data``); every name is re-exported here.
 from ogr_core.fem.seepage_data import (  # noqa: F401
@@ -116,11 +119,8 @@ class SeepageSolver:
                                 else 0)
         if self._degenerate:
             res.notes["degenerate_elements"] = self._degenerate
-            res.notes["mesh_warning"] = (
-                f"the mesh has {self._degenerate} flat element(s) (three "
-                f"collinear nodes): nodes under them do not count as "
-                f"boundary and the conductivity matrix is badly "
-                f"conditioned. Regenerate the mesh.")
+            res.notes["mesh_warning"] = M.seepage_note(
+                M.MESH_FLAT, n=self._degenerate)
 
     def _note_default_props(self, res: SeepageResult) -> None:
         """v0.1.280 (D284) — say how many elements are solved with
@@ -220,7 +220,7 @@ class SeepageSolver:
         res = SeepageResult()
         n = self.mesh.node_count
         if n == 0 or not self.mesh.elements:
-            res.notes["error"] = "empty mesh"
+            res.notes["error"] = M.seepage_note(M.EMPTY_MESH)
             return res
         # before any early return: a node that only flat elements touch
         # makes the system singular, and that failure needs this reason
@@ -234,11 +234,7 @@ class SeepageSolver:
             # Pure Neumann problem → head is defined only up to a
             # constant; the system is singular. Report instead of
             # returning a meaningless field.
-            res.notes["error"] = (
-                "no Dirichlet (head) boundary condition: the problem is "
-                "singular. Prescribe Total Head, Pressure Head or Zero "
-                "Pressure somewhere on the boundary."
-            )
+            res.notes["error"] = M.seepage_note(M.NO_DIRICHLET)
             return res
 
         rows, cols, vals, q = self.assemble(bcs, kr)
@@ -268,7 +264,7 @@ class SeepageSolver:
 
         H = self._linear_solve(keep_rows, keep_cols, keep_vals, q, n)
         if H is None:
-            res.notes["error"] = "linear solve failed"
+            res.notes["error"] = M.seepage_note(M.LINEAR_FAILED)
             return res
 
         res.total_head = list(H)
@@ -877,7 +873,7 @@ class UnsaturatedSeepageSolver(SeepageSolver):
         n = self.mesh.node_count
         if n == 0 or not self.mesh.elements:
             res = SeepageResult()
-            res.notes["error"] = "empty mesh"
+            res.notes["error"] = M.seepage_note(M.EMPTY_MESH)
             return res
 
         unknown = [b.node_id for b in bcs.nodes
@@ -915,8 +911,8 @@ class UnsaturatedSeepageSolver(SeepageSolver):
             step = super().solve(bcs, kr=kr, extra_dirichlet=extra)
             if not step.converged:
                 res = SeepageResult()
-                res.notes["error"] = (
-                    f"linear solve failed at Picard iteration {it}")
+                res.notes["error"] = M.seepage_note(
+                    M.PICARD_LINEAR_FAILED, it=it)
                 res.iterations = it
                 return res
 
@@ -956,7 +952,7 @@ class UnsaturatedSeepageSolver(SeepageSolver):
         extra = {nid: self.mesh.nodes[nid].y for nid in active}
         final = super().solve(bcs, kr=kr, extra_dirichlet=extra)
         if not final.converged:
-            final.notes["error"] = "final solve failed"
+            final.notes["error"] = M.seepage_note(M.FINAL_FAILED)
             return final
         final.converged = converged
         final.iterations = it + (rescue["iterations"] if rescue else 0)
@@ -991,13 +987,9 @@ class UnsaturatedSeepageSolver(SeepageSolver):
         final.notes["unsettled_nodes"] = len(unsettled)
         if unsettled:
             final.converged = False
-            final.notes["warning"] = (
-                f"the seepage face never settled: {len(unsettled)} "
-                f"boundary node(s) still want to switch between "
-                f"'P = 0' and 'no flow' "
-                f"({len(frozen)} were frozen by the switch budget of "
-                f"{self.max_node_switches}). The free surface this "
-                f"reports is not the converged one.")
+            final.notes["warning"] = M.seepage_note(
+                M.FACE_UNSETTLED, unsettled=len(unsettled),
+                frozen=len(frozen), budget=self.max_node_switches)
         elif not converged and rescue is None:
             # v0.1.273 (D266) — this told the user to try "a smaller
             # relaxation factor or a finer mesh". Neither is advice: the
@@ -1005,23 +997,16 @@ class UnsaturatedSeepageSolver(SeepageSolver):
             # ``solve_project_groundwater``), and a finer mesh is what brings
             # on the cycle the rescue exists for (D124). This branch is only
             # reached with the rescue switched off.
-            final.notes["warning"] = (
-                f"Picard iteration did not converge in "
-                f"{self.max_iterations} steps (last change "
-                f"{history[-1]:.3e} m), and the rescue is switched off.")
+            final.notes["warning"] = M.seepage_note(
+                M.PICARD_NO_RESCUE, steps=self.max_iterations,
+                change=history[-1])
         elif not converged:
             # v0.1.266 — the old advice is wrong on both counts when the
             # rescue has run: no relaxation breaks the cycle it exists
             # for, and refining is what brings the cycle on (D124).
-            final.notes["warning"] = (
-                f"Picard iteration did not converge in "
-                f"{self.max_iterations} steps (last change "
-                f"{history[-1]:.3e} m), and neither did the rescue "
-                f"(Anderson acceleration, then continuation with Newton's "
-                f"method; last change {rescue['residual']:.3e} m). A "
-                f"permeability function that drops many decades over a "
-                f"short suction range is the usual cause: check the "
-                f"curves of the materials near the water table.")
+            final.notes["warning"] = M.seepage_note(
+                M.PICARD_RESCUE_FAILED, steps=self.max_iterations,
+                change=history[-1], rescue_change=rescue["residual"])
         return final
 
     # ------------------------------------------------------------------
@@ -1716,8 +1701,8 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
                 why = (steady.notes.get("error")
                        or steady.notes.get("warning") or "")
                 out.notes["error"] = (
-                    f"initial steady state failed: {why}" if why
-                    else "initial steady state failed")
+                    M.seepage_note(M.INITIAL_FAILED_WHY, why=as_nested(why))
+                    if why else M.seepage_note(M.INITIAL_FAILED))
                 return [out]
             H = list(steady.total_head)
             self.initial_result = steady
@@ -1726,8 +1711,9 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
                 why = (steady.notes.get("warning")
                        or steady.notes.get("error") or "")
                 initial_notes["initial_state_warning"] = (
-                    "the initial steady state did not converge"
-                    + (f": {why}" if why else ""))
+                    M.seepage_note(M.INITIAL_NOT_CONVERGED_WHY,
+                                   why=as_nested(why))
+                    if why else M.seepage_note(M.INITIAL_NOT_CONVERGED))
 
         results: list = []
         active: set = set()
@@ -1776,7 +1762,7 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
                 advanced = True
             if last is None:
                 last = SeepageResult()
-                last.notes["error"] = "no time step computed"
+                last.notes["error"] = M.seepage_note(M.NO_TIME_STEP)
                 last.notes.update(initial_notes)
                 results.append(last)
                 t_prev = stage.time
@@ -1801,9 +1787,7 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
                 # v0.1.273 (D266) — both are settings of the project (the
                 # transient's time steps and Picard iterations per step); the
                 # relaxation factor this used to suggest is not
-                last.notes["warning"] = (
-                    f"stage {k}: some time steps did not converge; try "
-                    f"more time steps or more Picard iterations per step")
+                last.notes["warning"] = M.seepage_note(M.STAGE_STEPS, k=k)
             results.append(last)
             t_prev = stage.time
         return results

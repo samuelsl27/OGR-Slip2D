@@ -54,6 +54,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
+from . import messages as SM
 from ..hydraulic.drawdown_levels import (
     ground_elevation_span,
     levels_at,
@@ -189,12 +190,10 @@ def run_drawdown_sweep(
     """
     result = DrawdownSweepResult()
     if not method_ids:
-        result.notes["error"] = "No analysis method selected."
+        result.notes["error"] = SM.sweep_note(SM.SWEEP_NO_METHOD)
         return result
     if not project.settings.groundwater.rapid_drawdown:
-        result.notes["error"] = (
-            "The drawdown level sweep needs a Rapid Drawdown analysis: "
-            "enable it in Project Settings > Groundwater > Advanced.")
+        result.notes["error"] = SM.sweep_note(SM.SWEEP_NEEDS_DRAWDOWN)
         return result
 
     if levels is None:

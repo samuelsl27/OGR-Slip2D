@@ -41,6 +41,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
+from ogr_core.messages import as_nested
+
+from . import run_messages as RM
+
 __all__ = [
     "StageStability",
     "TransientStabilityOutcome",
@@ -53,13 +57,10 @@ __all__ = [
     "INITIAL_STATE_NOT_CONVERGED",
 ]
 
-#: v0.1.270 (D268). A fixed sentence, because the interface translates the
-#: driver's warnings by using them as keys; the reason itself travels on
-#: every stage as ``notes["initial_state_warning"]``.
-INITIAL_STATE_NOT_CONVERGED = (
-    "The initial steady state of the transient analysis did not converge, "
-    "so every stage starts from an unconverged field (see each stage's "
-    "initial-state warning).")
+#: v0.1.270 (D268). A fixed sentence; the reason itself travels on every
+#: stage as ``notes["initial_state_warning"]``. v0.1.352 (D335): it carries
+#: its code, as the driver's other warnings do.
+INITIAL_STATE_NOT_CONVERGED = RM.run_note(RM.TRANSIENT_INITIAL_NOT_CONVERGED)
 
 #: The steady solve of the door: relaxation, Picard passes and tolerance
 #: (why w is fixed: ``solve_project_groundwater``). One place, because the
@@ -376,10 +377,7 @@ def run_transient_stability(project, method_ids=None, *,
     gw = project.settings.groundwater
     out = TransientStabilityOutcome()
     if not (gw.transient and gw.transient_stages):
-        out.warnings.append(
-            "This project has no transient groundwater stages, so there "
-            "is no factor-of-safety history to compute. Turn on "
-            "Transient Groundwater and define the stages first.")
+        out.warnings.append(RM.run_note(RM.TRANSIENT_NO_STAGES))
         return out
 
     mesh = _mesh_of(project, **mesh_kwargs)
@@ -411,8 +409,8 @@ def run_transient_stability(project, method_ids=None, *,
     for r in results:
         why = r.notes.get("error")
         if why:
-            out.warnings.append(
-                f"The groundwater analysis produced no field: {why}")
+            out.warnings.append(RM.run_note(RM.TRANSIENT_NO_FIELD,
+                                            why=as_nested(why)))
             break
 
     # v0.1.270 (D268) — a transient that starts from a steady field which
@@ -425,10 +423,7 @@ def run_transient_stability(project, method_ids=None, *,
     # materials set to FEM_SEEPAGE. Saying so beats reporting a dry slope.
     couples = any(m.pore_pressure == PorePressureType.FEM_SEEPAGE
                   for m in project.materials)
-    _NO_COUPLING = (
-        "No material takes its pore pressure from the finite-element "
-        "seepage field, so the stage factors of safety would ignore "
-        "the computed water pressures entirely.")
+    _NO_COUPLING = RM.run_note(RM.TRANSIENT_NO_COUPLING)
     if not couples:
         out.warnings.append(_NO_COUPLING)
 

@@ -31,21 +31,28 @@ def _catalogue() -> dict:
     """The engine's codes, the DXF import's (v0.1.334), the analysis notes'
     and the project rules' (v0.1.347), the notes about one method's surface
     (v0.1.348), the search's (v0.1.349), the refusals of the settings
-    (v0.1.350) and of the strength models (v0.1.351), in one table: the
-    codes do not collide, each family having its own prefix."""
+    (v0.1.350) and of the strength models (v0.1.351), the seepage solver's,
+    the transient's, the back analysis', the sweep's and the Hoek-Brown
+    calculator's (v0.1.352), in one table: the codes do not collide, each
+    family having its own prefix."""
     if not _CATALOGUE:
         from ogr_core.dxf.messages import MESSAGES as DXF
+        from ogr_core.materials.messages import CALCULATOR_NOTES
         from ogr_core.messages import CORE_MESSAGES, NOTE_FRAMES
         from ogr_core.project.messages import (REFUSALS, RULES,
                                                STRENGTH_REFUSALS)
+        from ogr_core.statistics.messages import SWEEP_NOTES
+        from ogr_fem2d.messages import SEEPAGE_NOTES
         from ogr_slip2d.messages import MESSAGES as LEM
         from ogr_slip2d.method_note_messages import METHOD_NOTES
         from ogr_slip2d.note_messages import NOTES
+        from ogr_slip2d.run_messages import RUN_NOTES
         from ogr_slip2d.search_note_messages import SEARCH_NOTES
         from ogr_slip2d.setting_messages import SETTING_NOTES
         for table in (CORE_MESSAGES, NOTE_FRAMES, LEM, DXF, NOTES,
                       RULES, METHOD_NOTES, SEARCH_NOTES, REFUSALS,
-                      SETTING_NOTES, STRENGTH_REFUSALS):
+                      SETTING_NOTES, STRENGTH_REFUSALS, SEEPAGE_NOTES,
+                      RUN_NOTES, SWEEP_NOTES, CALCULATOR_NOTES):
             _CATALOGUE.update(table)
     return _CATALOGUE
 

@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from ogr_gui.core_messages import note_text  # noqa: E402
 from ogr_gui.i18n import tr  # noqa: E402
 from ogr_gui.labels import method_name  # noqa: E402
 
@@ -167,7 +168,7 @@ class InterpretGroundwaterWindow(QMainWindow):
             warn = next((r.notes.get("fos_warning") for r in self.stages
                          if r.notes.get("fos_warning")), None)
             self.statusBar().showMessage(
-                tr(warn) if warn else tr(
+                note_text(warn) if warn else tr(
                     "No stage has a computed factor of safety. Tick "
                     "'Calculate SF' on the stages you need and recompute."),
                 15000)
@@ -211,6 +212,11 @@ class InterpretGroundwaterWindow(QMainWindow):
         init = r.notes.get("initial_state_warning")
         # v0.1.271 (D270): a mesh saved with flat elements says so
         mesh_warn = r.notes.get("mesh_warning")
+        # v0.1.352 (D335) -- the solver's notes in the reader's language,
+        # through the codes they carry (a field read back from a file has
+        # lost them, and reads as it was written)
+        warn, init, mesh_warn = (note_text(n) if n else n
+                                 for n in (warn, init, mesh_warn))
         self.status.setText("   |   ".join(bits)
                             + (f"\n{warn}" if warn else "")
                             + (f"\n{init}" if init and init != warn else "")

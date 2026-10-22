@@ -52,6 +52,8 @@ from . import method_note_messages as MN
 from . import setting_messages as SM
 from . import note_messages as N
 from .note_messages import nested_note as _nested
+from .run_messages import (BACK_SUPPORTS, BACK_TARGET_POSITIVE,
+                           SEARCH_NOT_BUILT, SWEEP_ENABLE_DRAWDOWN, run_note)
 from .note_messages import note as _note
 
 #: v0.1.348 (D335) -- a note about one method's surface, with its code; the
@@ -2451,9 +2453,7 @@ def run_configured_drawdown_sweep(project, method_ids=None, *,
         # The interface's precondition, moved here with the rest: without
         # the rapid drawdown analysis there are no two reservoir levels to
         # sweep between.
-        problems = list(problems) + [
-            "Enable Rapid Drawdown analysis in Project Settings > "
-            "Groundwater > Advanced first."]
+        problems = list(problems) + [run_note(SWEEP_ENABLE_DRAWDOWN)]
     if problems:
         raise AnalysisNotConfigured(problems)
     method_ids = (list(method_ids) if method_ids else
@@ -2465,7 +2465,7 @@ def run_configured_drawdown_sweep(project, method_ids=None, *,
     missing = [mid for mid, s in searches.items() if s is None]
     if missing:
         raise AnalysisNotConfigured(
-            [f"Could not build the search for: {', '.join(missing)}"])
+            [run_note(SEARCH_NOT_BUILT, methods=", ".join(missing))])
     result = run_drawdown_sweep(factored, searches.__getitem__, method_ids,
                                 n_levels=int(n_levels),
                                 include_total=bool(include_total),
@@ -2594,10 +2594,11 @@ def run_configured_back_analysis(project, *, target_fos=None,
     mid = cfg.method_id if method_id is None else method_id
     problems = list(check_analysis_settings(project))
     if mid not in SUPPORTED_METHODS:
-        problems.append(f"The back analysis supports "
-                        f"{', '.join(SUPPORTED_METHODS)}, not {mid}.")
+        problems.append(run_note(BACK_SUPPORTS,
+                                 methods=", ".join(SUPPORTED_METHODS),
+                                 method=mid))
     if not target > 0:
-        problems.append("The target factor of safety must be positive.")
+        problems.append(run_note(BACK_TARGET_POSITIVE))
     if problems:
         raise AnalysisNotConfigured(problems)
     factored, report = prepare_analysis_project(project)
@@ -2605,7 +2606,7 @@ def run_configured_back_analysis(project, *, target_fos=None,
     search = build_search(factored, mid)
     if search is None:
         raise AnalysisNotConfigured(
-            [f"Could not build the search for: {mid}"])
+            [run_note(SEARCH_NOT_BUILT, methods=mid)])
     result = run_back_analysis(factored, search, target, y, mid,
                                progress_cb=progress_cb)
     return result, report, warnings
@@ -2639,6 +2640,6 @@ def run_configured_optimization(project, method_id, surface, *,
     search = build_search(factored, method_id)
     if search is None:
         raise AnalysisNotConfigured(
-            [f"Could not build the search for: {method_id}"])
+            [run_note(SEARCH_NOT_BUILT, methods=method_id)])
     best, res, rep = optimize_surface(factored, search, surface, opts)
     return best, res, rep, report, warnings

@@ -34,6 +34,8 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
+from . import messages as CM
+
 # Disturbance factor guidance (Hoek et al., 2002). Excavation method
 # matters as much as rock quality, which is why it deserves a table.
 DISTURBANCE_GUIDANCE = (
@@ -113,14 +115,12 @@ def calculate_hoek_brown(gsi: float, mi: float,
         # Clamped rather than left to divide by zero: mb would become
         # infinite, and an infinite strength constant silently produces a
         # meaningless envelope instead of an error.
-        res.notes.append(
-            "D = 2 makes mb undefined (28 − 14 D = 0); it has been "
-            "clamped to 1.999.")
+        res.notes.append(CM.calculator_note(CM.D_CLAMPED))
         d = _D_LIMIT
     res.d = d
 
     if res.gsi != gsi:
-        res.notes.append("GSI was clamped to the range 0 to 100.")
+        res.notes.append(CM.calculator_note(CM.GSI_CLAMPED))
 
     res.mb = res.mi * math.exp((res.gsi - 100.0) / (28.0 - 14.0 * d))
     res.s = math.exp((res.gsi - 100.0) / (9.0 - 3.0 * d))

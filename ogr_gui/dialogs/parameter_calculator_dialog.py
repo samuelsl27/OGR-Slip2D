@@ -32,6 +32,7 @@ from ogr_core.materials import (
     MI_GUIDANCE,
     calculate_hoek_brown,
 )
+from ogr_gui.core_messages import note_text
 from ogr_gui.i18n import tr
 from ogr_gui.dialog_size import hold_wrapped_height
 
@@ -150,7 +151,8 @@ class ParameterCalculatorDialog(QDialog):
         # would show 0.000000 for a poor rock mass.
         self.lbl_s.setText(f"{r.s:.3e}" if r.s < 1e-3 else f"{r.s:.6f}")
         self.lbl_a.setText(f"{r.a:.4f}")
-        self.lbl_note.setText("\n".join(r.notes))
+        # v0.1.352 (D335) -- the calculator's notes carry codes
+        self.lbl_note.setText("\n".join(note_text(n) for n in r.notes))
 
     def _accept(self) -> None:
         self._recalculate()
