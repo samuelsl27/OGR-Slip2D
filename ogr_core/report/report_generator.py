@@ -82,6 +82,8 @@ def generate_report(
     title: Optional[str] = None,
     factor_report=None,
     figures=None,
+    translate=None,
+    method_name=None,
 ) -> str:
     """Generate a PDF analysis report.
 
@@ -106,6 +108,17 @@ def generate_report(
         the global minimums with the caption the report writes for it. The core draws nothing itself: the
         figures need the engine's reading of a search, which it cannot
         import.
+    translate : callable, optional
+        v0.1.355 (D335) -- the report in the reader's language: every fixed
+        text of the report, and every message with a code (the design
+        standard's summary and notes), is passed through it. The window
+        passes its own (``ogr_gui.core_messages.note_text``); the core cannot
+        import the interface's dictionary, so without it the report is in
+        English, as the API and the MCP server write it.
+    method_name : callable, optional
+        A method's name from its identifier, in the reader's language (the
+        window's ``ogr_gui.labels.method_name``). Without it, the report's
+        own English names.
 
     Returns
     -------
@@ -118,10 +131,13 @@ def generate_report(
             "(pip install reportlab)."
         )
 
+    T = translate or _same
+    name_of = method_name or _method_name
     summary = project.settings.summary
     author = author or summary.author or ""
     company = company or summary.company or ""
-    title = title or summary.title or "OGR Slip2D — Slope Stability Analysis"
+    title = (title or summary.title
+             or T("OGR Slip2D — Slope Stability Analysis"))
 
     doc = SimpleDocTemplate(
         output_path, pagesize=A4,
@@ -184,67 +200,68 @@ def generate_report(
         "OGR Slip2D — OpenGeoRock Suite", h_sub))
 
     # ---- 1. Project Summary ---------------------------------------
-    section("Project Summary")
+    section(T("Project Summary"))
     story.append(kv_table([
-        ("Project Title", title),
-        ("File", getattr(project, "name", "—")),
-        ("Author", author or "—"),
-        ("Company", company or "—"),
-        ("Date Created", summary.date_created
+        (T("Project Title"), title),
+        (T("File"), getattr(project, "name", "—")),
+        (T("Author"), author or "—"),
+        (T("Company"), company or "—"),
+        (T("Date Created"), summary.date_created
          or datetime.now().strftime("%d/%m/%Y, %H:%M:%S")),
-        ("Report Generated",
+        (T("Report Generated"),
          datetime.now().strftime("%d/%m/%Y, %H:%M:%S")),
     ]))
     if summary.comments:
         story.append(Spacer(1, 4))
-        story.append(Paragraph(f"<b>Comments:</b> {summary.comments}", body))
+        story.append(Paragraph("<b>%s</b> %s" % (T("Comments:"),
+                                                 summary.comments), body))
 
     # ---- 2. General Settings --------------------------------------
     units = project.settings.units
-    section("General Settings")
+    section(T("General Settings"))
     story.append(kv_table([
-        ("Units of Measurement", _unit_label(
+        (T("Units of Measurement"), T(_unit_label(
             getattr(units, "system", None),
-            {"metric": "Metric Units", "imperial": "Imperial Units"})),
-        ("Time Units", _unit_label(
+            {"metric": "Metric Units", "imperial": "Imperial Units"}))),
+        (T("Time Units"), T(_unit_label(
             getattr(units, "time", None),
-            {"d": "days", "s": "seconds", "h": "hours"})),
-        ("Permeability Units", _unit_label(
+            {"d": "days", "s": "seconds", "h": "hours"}))),
+        (T("Permeability Units"), T(_unit_label(
             getattr(units, "permeability", None),
             {"m/s": "meters/second", "cm/s": "cm/second",
-             "ft/s": "feet/second"})),
-        ("Failure Direction", _unit_label(
+             "ft/s": "feet/second"}))),
+        (T("Failure Direction"), T(_unit_label(
             getattr(units, "failure_direction", None),
-            {"R2L": "Right to Left", "L2R": "Left to Right"})),
+            {"R2L": "Right to Left", "L2R": "Left to Right"}))),
     ]))
 
     # ---- 3. Analysis Options --------------------------------------
     m = project.settings.methods
     s = project.settings.search
-    section("Analysis Options")
-    story.append(Paragraph("<b>Analysis Methods Used</b>", body))
+    section(T("Analysis Options"))
+    story.append(Paragraph("<b>%s</b>" % T("Analysis Methods Used"), body))
     method_ids = list(results.keys()) or list(m.enabled_methods)
     for mid in method_ids:
-        story.append(Paragraph(f"&nbsp;&nbsp;&nbsp;• {_method_name(mid)}",
+        story.append(Paragraph(f"&nbsp;&nbsp;&nbsp;• {name_of(mid)}",
                                body))
     story.append(Spacer(1, 4))
     story.append(kv_table([
-        ("Number of Slices", m.num_slices),
-        ("Tolerance", m.tolerance),
-        ("Maximum Iterations", m.max_iterations),
+        (T("Number of Slices"), m.num_slices),
+        (T("Tolerance"), m.tolerance),
+        (T("Maximum Iterations"), m.max_iterations),
     ]))
     story.append(Spacer(1, 6))
-    story.append(Paragraph("<b>Surface Options</b>", body))
+    story.append(Paragraph("<b>%s</b>" % T("Surface Options"), body))
     story.append(kv_table([
-        ("Surface Type",
-         "Circular" if s.surface_type in ("circular", "Circular")
-         else str(s.surface_type).title()),
-        ("Search Method",
-         _search_method_name(s.search_method)),
-        ("Radius Increment", s.radius_increment),
-        ("Composite Surfaces",
-         "Enabled" if getattr(s, "composite_surfaces", False)
-         else "Disabled"),
+        (T("Surface Type"),
+         T("Circular") if s.surface_type in ("circular", "Circular")
+         else T(str(s.surface_type).title())),
+        (T("Search Method"),
+         T(_search_method_name(s.search_method))),
+        (T("Radius Increment"), s.radius_increment),
+        (T("Composite Surfaces"),
+         T("Enabled") if getattr(s, "composite_surfaces", False)
+         else T("Disabled")),
     ]))
 
     # ---- 3b. Design Standard --------------------------------------
@@ -255,30 +272,33 @@ def generate_report(
     if factored:
         from xml.sax.saxutils import escape
         story.append(Spacer(1, 6))
-        story.append(Paragraph("<b>Design Standard</b>", body))
+        story.append(Paragraph("<b>%s</b>" % T("Design Standard"), body))
         story.append(kv_table([
-            ("Standard", str(getattr(factor_report, "standard", "—"))),
-            ("Factored", factor_report.summary()),
+            (T("Standard"), str(getattr(factor_report, "standard", "—"))),
+            # v0.1.355 (D335) -- the summary and the notes carry their codes
+            (T("Factored"), T(factor_report.summary())),
         ]))
         for note in getattr(factor_report, "notes", None) or []:
             story.append(Paragraph(
-                f"&nbsp;&nbsp;&nbsp;• {escape(str(note))}", body))
+                f"&nbsp;&nbsp;&nbsp;• {escape(str(T(note)))}", body))
     # The caption follows the value printed: with partial factors on the
     # inputs the number is an over-design factor, which must exceed 1.
-    fs_label = "Over-design Factor" if factored else "Factor of Safety (FS)"
-    fs_short = "ODF" if factored else "FS"
+    fs_label = (T("Over-design Factor") if factored
+                else T("Factor of Safety (FS)"))
+    fs_short = T("ODF") if factored else T("FS")
 
     # ---- 4. Material Properties -----------------------------------
-    section("Material Properties")
-    story.append(_materials_table(project, body))
+    section(T("Material Properties"))
+    story.append(_materials_table(project, body, T))
 
     # ---- 5. Global Minimums ---------------------------------------
-    section("Global Minimums")
+    section(T("Global Minimums"))
     for mid in method_ids:
         res = results.get(mid)
-        story.append(Paragraph(f"Method: {_method_name(mid)}", h_method))
+        story.append(Paragraph(T("Method: {0}").format(name_of(mid)),
+                               h_method))
         if res is None or res.critical is None:
-            story.append(Paragraph("No valid critical surface found.",
+            story.append(Paragraph(T("No valid critical surface found."),
                                    body))
             continue
         crit = res.critical
@@ -286,9 +306,9 @@ def generate_report(
         rows = [(fs_label, _fmt(crit.fos, 4))]
         if hasattr(surf, "centre_x") and surf.centre_x is not None:
             rows += [
-                ("Centre", f"({_fmt(surf.centre_x)}, "
-                           f"{_fmt(surf.centre_y)})"),
-                ("Radius", _fmt(surf.radius)),
+                (T("Centre"), f"({_fmt(surf.centre_x)}, "
+                              f"{_fmt(surf.centre_y)})"),
+                (T("Radius"), _fmt(surf.radius)),
             ]
         x_l = getattr(surf, "x_left", None)
         x_r = getattr(surf, "x_right", None)
@@ -296,9 +316,9 @@ def generate_report(
             y_l = surf.base_y_at(x_l) if hasattr(surf, "base_y_at") else None
             y_r = surf.base_y_at(x_r) if hasattr(surf, "base_y_at") else None
             rows += [
-                ("Left Slip Surface Endpoint",
+                (T("Left Slip Surface Endpoint"),
                  f"({_fmt(x_l)}, {_fmt(y_l)})"),
-                ("Right Slip Surface Endpoint",
+                (T("Right Slip Surface Endpoint"),
                  f"({_fmt(x_r)}, {_fmt(y_r)})"),
             ]
         # Slice-area sum
@@ -307,39 +327,40 @@ def generate_report(
                 0.5 * ((sl.top_y_left - sl.base_y_left)
                        + (sl.top_y_right - sl.base_y_right)), 0.0)
                 for sl in crit.slices.slices)
-            rows.append(("Total Slice Area", f"{_fmt(area)} m²"))
+            rows.append((T("Total Slice Area"), f"{_fmt(area)} m²"))
         except Exception:  # noqa: BLE001
             pass
         # v0.1.243 (D226b) — how the design standard classed each load on
         # this surface: whether a load drives depends on the surface, so it
         # is said here and not in the run's section.
-        for name, text in _load_factor_rows(crit):
-            rows.append((f"Load '{name}'", text))
+        for name, text in _load_factor_rows(crit, T):
+            rows.append((T("Load '{0}'").format(name), text))
         story.append(kv_table(rows))
         story.append(Spacer(1, 4))
 
     # ---- 5b. Critical surface by method ---------------------------
     if figures:
-        section("Critical Surface by Method")
+        section(T("Critical Surface by Method"))
         story.extend(_figure_flowables(figures, results, fs_short,
-                                       doc.width, h_method))
+                                       doc.width, h_method, T, name_of))
 
     # ---- 6. Valid / Invalid Surfaces ------------------------------
-    section("Valid / Invalid Surfaces")
+    section(T("Valid / Invalid Surfaces"))
     # v0.1.187 (D160) — "Attempted" beside the population. Total is the
     # population the search ANALYSED; attempted is what it cost to get
     # it, and the two differ by the candidates a focus object removed,
     # which belong to neither of the first two columns.
-    vi_rows = [["Method", "Valid", "Invalid", "Total", "Attempted"]]
+    vi_rows = [[T("Method"), T("Valid"), T("Invalid"), T("Total"),
+                T("Attempted")]]
     for mid in method_ids:
         res = results.get(mid)
         if res is None:
-            vi_rows.append([_method_name(mid), "—", "—", "—", "—"])
+            vi_rows.append([name_of(mid), "—", "—", "—", "—"])
         else:
             v = res.valid_count
             iv = res.invalid_count
             at = getattr(res, "attempts", 0)
-            vi_rows.append([_method_name(mid), str(v), str(iv),
+            vi_rows.append([name_of(mid), str(v), str(iv),
                             str(v + iv), str(at) if at else "—"])
     t = Table(vi_rows,
               colWidths=[64 * mm, 24 * mm, 24 * mm, 24 * mm, 28 * mm])
@@ -348,41 +369,49 @@ def generate_report(
 
     # ---- 7. Slice Data --------------------------------------------
     story.append(PageBreak())
-    section("Slice Data (Global Minimum Query)")
+    section(T("Slice Data (Global Minimum Query)"))
     for mid in method_ids:
         res = results.get(mid)
         if res is None or res.critical is None:
             continue
         story.append(Paragraph(
-            f"Method: {_method_name(mid)} — {fs_short} = "
-            f"{_fmt(res.critical.fos, 4)}", h_method))
-        story.append(_slice_table(res.critical, project))
+            T("Method: {0}").format(name_of(mid)) + " — %s = %s" % (
+                fs_short, _fmt(res.critical.fos, 4)), h_method))
+        story.append(_slice_table(res.critical, project, T))
         story.append(Spacer(1, 8))
 
     # ---- 8. List of Coordinates -----------------------------------
     story.append(PageBreak())
-    section("List of Coordinates")
-    story.extend(_coordinates_flowables(project, h_method))
+    section(T("List of Coordinates"))
+    story.extend(_coordinates_flowables(project, h_method, T))
 
     # ---- Footer ----------------------------------------------------
     def _footer(canvas, doc_):
         canvas.saveState()
         canvas.setFont("Helvetica", 7)
         canvas.setFillColor(colors.HexColor("#888"))
+        # v0.1.355 -- the program's licence, AGPL-3.0-or-later: the footer
+        # said GPL-3.0, which is not the licence of this program
         canvas.drawString(
             18 * mm, 8 * mm,
-            "OGR Slip2D — OpenGeoRock Suite  ·  GPL-3.0  ·  "
+            "OGR Slip2D — OpenGeoRock Suite  ·  AGPL-3.0-or-later  ·  "
             "Samuel Sáez López, UPCT")
         canvas.drawRightString(
             doc_.pagesize[0] - 18 * mm, 8 * mm,
-            f"Page {doc_.page}")
+            T("Page {0}").format(doc_.page))
         canvas.restoreState()
 
     doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
     return output_path
 
 
-def _figure_flowables(figures, results, fs_short, width, caption_style):
+def _same(text):
+    """The report's text as written: the default of ``translate``."""
+    return text
+
+
+def _figure_flowables(figures, results, fs_short, width, caption_style,
+                      T=_same, name_of=None):
     """One figure per method at the page's width, each under its caption:
     the method and the number it found, called what the run calls it."""
     import io
@@ -393,7 +422,7 @@ def _figure_flowables(figures, results, fs_short, width, caption_style):
     for mid, png in figures:
         res = results.get(mid)
         crit = getattr(res, "critical", None)
-        caption = f"Method: {_method_name(mid)}"
+        caption = T("Method: {0}").format((name_of or _method_name)(mid))
         if crit is not None:
             caption += f" — {fs_short} = {_fmt(crit.fos, 4)}"
         w, h = ImageReader(io.BytesIO(png)).getSize()
@@ -445,18 +474,18 @@ def _grid_style():
     ])
 
 
-def _materials_table(project, body):
+def _materials_table(project, body, T=_same):
     from reportlab.lib.units import mm
     mats = project.materials
-    header = ["Property"] + [mm_name(mat) for mat in mats]
+    header = [T("Property")] + [mm_name(mat) for mat in mats]
     rows = [header]
 
     def srow(label, fn):
         return [label] + [fn(mat) for mat in mats]
 
     def strength_type(mat):
-        return getattr(mat.strength, "DISPLAY_NAME", None) \
-            or type(mat.strength).__name__
+        shown = getattr(mat.strength, "DISPLAY_NAME", None)
+        return T(shown) if shown else type(mat.strength).__name__
 
     def _param(mat, key):
         params = getattr(mat.strength, "params", None)
@@ -464,17 +493,17 @@ def _materials_table(project, body):
             return params[key]
         return getattr(mat.strength, key, None)
 
-    rows.append(srow("Strength Type", strength_type))
-    rows.append(srow("Unit Weight [kN/m³]",
+    rows.append(srow(T("Strength Type"), strength_type))
+    rows.append(srow(T("Unit Weight") + " [kN/m³]",
                      lambda m: _fmt(getattr(m, "unit_weight", None), 1)))
     # v0.1.60 — only report γsat for materials that actually use it, so the
     # report never states a weight the analysis did not apply.
-    rows.append(srow("Sat. Unit Weight [kN/m³]",
+    rows.append(srow(T("Sat. Unit Weight") + " [kN/m³]",
                      lambda m: _fmt(getattr(m, "sat_unit_weight", None), 1)
                      if getattr(m, "use_sat_unit_weight", False) else "—"))
-    rows.append(srow("Cohesion [kPa]",
+    rows.append(srow(T("Cohesion") + " [kPa]",
                      lambda m: _fmt(_param(m, "cohesion"), 1)))
-    rows.append(srow("Friction Angle [deg]",
+    rows.append(srow(T("Friction Angle") + " [deg]",
                      lambda m: _fmt(_param(m, "friction_angle"), 1)))
     ncol = len(mats) + 1
     w0 = 50 * mm
@@ -494,23 +523,25 @@ def mm_name(mat):
     return getattr(mat, "name", "Material")
 
 
-def _load_factor_rows(crit) -> list:
+def _load_factor_rows(crit, T=_same) -> list:
     """``[(load name, "variable, drives the sliding: × 1.5")]`` for the loads
     a design standard factored on ``crit``'s surface; empty without one."""
     factors = getattr(getattr(crit, "slices", None), "load_factors", None)
     if not factors:
         return []
     return [(name,
-             f"{action}, {'drives' if drives else 'resists'} the sliding: "
-             f"× {factor:g}")
+             (T("{0}, drives the sliding: × {1:g}") if drives
+              else T("{0}, resists the sliding: × {1:g}")).format(
+                  T(f"{action}"), factor))
             for _load_id, (action, drives, factor, name) in factors.items()]
 
 
-def _slice_table(crit, project):
+def _slice_table(crit, project, T=_same):
     from reportlab.lib.units import mm
-    header = ["#", "Width\n[m]", "Weight\n[kN]", "Base\nMat.",
-              "c\n[kPa]", "φ\n[°]", "α\n[°]", "Base σ\n[kPa]",
-              "Shear str.\n[kPa]", "u\n[kPa]"]
+    header = ["#", T("Width") + "\n[m]", T("Weight") + "\n[kN]",
+              T("Base\nMat."), "c\n[kPa]", "φ\n[°]", "α\n[°]",
+              T("Base σ") + "\n[kPa]", T("Shear str.") + "\n[kPa]",
+              "u\n[kPa]"]
     slices = crit.slices.slices
     # v0.1.242 (D226a) — the permanent-action factor each weight carries,
     # beside it, when the run applied one: the weight column is the
@@ -518,7 +549,7 @@ def _slice_table(crit, project):
     weighted = any(getattr(sl, "weight_factor", 1.0) != 1.0
                    for sl in slices)
     if weighted:
-        header.insert(3, "Weight\nfactor")
+        header.insert(3, T("Weight\nfactor"))
     rows = [header]
     fos = crit.fos
     for i, sl in enumerate(slices):
@@ -566,7 +597,7 @@ def _slice_table(crit, project):
     return t
 
 
-def _coordinates_flowables(project, h_method):
+def _coordinates_flowables(project, h_method, T=_same):
     """Return a flat list of flowables: a heading + coordinate table
     per boundary. Wrapping each (heading, table) pair in KeepTogether
     keeps them on the same page."""
@@ -581,7 +612,7 @@ def _coordinates_flowables(project, h_method):
         return t
 
     for b in project.boundaries:
-        label = b.btype.display_name
+        label = T(b.btype.display_name)
         out.append(KeepTogether([
             Paragraph(label, h_method),
             coord_table(b.polyline.vertices),

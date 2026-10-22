@@ -95,16 +95,22 @@ def figure_extent(project, results, framing: str = "model") -> tuple:
 
 def method_figures(project, results, *, framing: str = "model",
                    annotations: bool = True, factored: bool = False,
-                   width: int = 1400, height: int = 900) -> list:
+                   width: int = 1400, height: int = 900,
+                   translate=None) -> list:
     """``[(method id, png bytes)]``: one figure per method with a critical
     surface, all with the same frame; the report writes their captions.
 
     ``factored`` -- the run applied partial factors, so the number on the
-    contours is an over-design factor and its scale says so."""
+    contours is an over-design factor and its scale says so.
+
+    ``translate`` (v0.1.355, D335) -- the words drawn on the figure (the
+    scale, the legend) in the reader's language, as ``generate_report``
+    takes it; without it, English."""
     from .render import render_png
+    T = translate or (lambda text: text)
     extent = figure_extent(project, results, framing)
-    label = ("minimum over-design factor" if factored
-             else "minimum factor of safety")
+    label = (T("minimum over-design factor") if factored
+             else T("minimum factor of safety"))
     out = []
     for mid, sr in (results or {}).items():
         crit = getattr(sr, "critical", None)
@@ -113,7 +119,8 @@ def method_figures(project, results, *, framing: str = "model",
         grid = grid_data(sr)
         if grid is not None:
             grid["label"] = label
-        png = render_png(project, surfaces=[("critical surface", crit)],
+            grid["critical_label"] = T("critical centre")
+        png = render_png(project, surfaces=[(T("critical surface"), crit)],
                          width=width, height=height, labels=True,
                          annotations=annotations, extent=extent, grid=grid)
         out.append((mid, png))

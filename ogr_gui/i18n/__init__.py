@@ -6260,6 +6260,138 @@ _DICTS: dict[str, dict[str, str]] = {
             '{total} entidades — {layers}',
         'Could not write the DXF file: {error}':
             'No se ha podido escribir el archivo DXF: {error}',
+        # v0.1.355 (D335) -- the PDF report
+        'Analysis Methods Used':
+            'Métodos de análisis usados',
+        'Analysis Options':
+            'Opciones de análisis',
+        'Attempted':
+            'Intentadas',
+        'Author':
+            'Autor',
+        'Base\nMat.':
+            'Mat.\nbase',
+        'Base σ':
+            'σ en la base',
+        'Centre':
+            'Centro',
+        'Company':
+            'Empresa',
+        'Critical Surface by Method':
+            'Superficie crítica por método',
+        'Date Created':
+            'Fecha de creación',
+        'Disabled':
+            'Desactivado',
+        'Enabled':
+            'Activado',
+        'Factor of Safety (FS)':
+            'Factor de seguridad (FS)',
+        'Factored':
+            'Coeficientes aplicados',
+        'Failure Direction':
+            'Dirección de rotura',
+        'General Settings':
+            'Ajustes generales',
+        'Global Minimums':
+            'Mínimos globales',
+        'Imperial Units':
+            'Unidades imperiales',
+        'Invalid':
+            'Inválidas',
+        'Left Slip Surface Endpoint':
+            'Extremo izquierdo de la superficie de rotura',
+        'List of Coordinates':
+            'Lista de coordenadas',
+        "Load '{0}'":
+            "Carga '{0}'",
+        'Material Properties':
+            'Propiedades de los materiales',
+        'Maximum Iterations':
+            'Iteraciones máximas',
+        'Method: {0}':
+            'Método: {0}',
+        'Metric Units':
+            'Unidades métricas',
+        'No valid critical surface found.':
+            'No se encontró ninguna superficie crítica válida.',
+        'Number of Slices':
+            'Número de dovelas',
+        'ODF':
+            'FSD',
+        'OGR Slip2D — Slope Stability Analysis':
+            'OGR Slip2D — Análisis de estabilidad de taludes',
+        'Over-design Factor':
+            'Factor de sobredimensionamiento',
+        'Page {0}':
+            'Página {0}',
+        'Permeability Units':
+            'Unidades de permeabilidad',
+        'Project Title':
+            'Título del proyecto',
+        'Radius Increment':
+            'Incremento de radio',
+        'Report Generated':
+            'Informe generado',
+        'Right Slip Surface Endpoint':
+            'Extremo derecho de la superficie de rotura',
+        'Sat. Unit Weight':
+            'Peso específico sat.',
+        'Search Method':
+            'Método de búsqueda',
+        'Shear str.':
+            'Resist. al corte',
+        'Slice Data (Global Minimum Query)':
+            'Datos de las dovelas (consulta del mínimo global)',
+        'Standard':
+            'Norma',
+        'Surface Type':
+            'Tipo de superficie',
+        'Time Units':
+            'Unidades de tiempo',
+        'Tolerance':
+            'Tolerancia',
+        'Total Slice Area':
+            'Área total de las dovelas',
+        'Units of Measurement':
+            'Unidades de medida',
+        'Valid':
+            'Válidas',
+        'Valid / Invalid Surfaces':
+            'Superficies válidas / inválidas',
+        'Weight':
+            'Peso',
+        'Weight\nfactor':
+            'Coef.\ndel peso',
+        'Width':
+            'Ancho',
+        'cm/second':
+            'cm/segundo',
+        'days':
+            'días',
+        'feet/second':
+            'pies/segundo',
+        'hours':
+            'horas',
+        'meters/second':
+            'metros/segundo',
+        'permanent':
+            'permanente',
+        'seconds':
+            'segundos',
+        '{0}, drives the sliding: × {1:g}':
+            '{0}, empuja el deslizamiento: × {1:g}',
+        '{0}, resists the sliding: × {1:g}':
+            '{0}, resiste el deslizamiento: × {1:g}',
+        # v0.1.355 (D335) -- the report's figures
+        'critical centre':
+            'centro crítico',
+        'critical surface':
+            'superficie crítica',
+        'minimum factor of safety':
+            'factor de seguridad mínimo',
+        'minimum over-design factor':
+            'factor de sobredimensionamiento mínimo',
         # v0.1.352 (D335) -- the runner's refusals
         'The back analysis supports {methods}, not {method}.':
             'El retroanálisis admite {methods}, no {method}.',

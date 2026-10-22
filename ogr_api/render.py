@@ -106,7 +106,8 @@ def _draw_grid(fig, ax, grid) -> None:
     crit = grid.get("critical")
     if crit is not None:
         ax.plot([crit[0]], [crit[1]], "*", color="#000000", markersize=11,
-                zorder=10, label="critical centre")
+                zorder=10, label=grid.get("critical_label",
+                                          "critical centre"))
 
 
 def render_png(project, *, surfaces: Iterable = (), width: int = 900,

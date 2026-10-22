@@ -258,7 +258,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.354"
+    VERSION = "0.1.355"
 
     def __init__(self) -> None:
         super().__init__()
@@ -1336,6 +1336,11 @@ class MainWindow(QMainWindow):
         if not path.lower().endswith(".pdf"):
             path += ".pdf"
         factor_report = getattr(self, "last_factor_report", None)
+        # v0.1.355 (D335) -- the report in the interface's language: its
+        # fixed texts and its coded messages through ``note_text``, the
+        # methods by their names; the API writes it in English
+        from .core_messages import note_text
+        from .labels import method_name
         try:
             from ogr_core.report import generate_report
             figures = None
@@ -1344,14 +1349,16 @@ class MainWindow(QMainWindow):
                 figures = method_figures(
                     self.project, results, framing=options["framing"],
                     annotations=options["annotations"],
-                    factored=bool(getattr(factor_report, "applied", False)))
+                    factored=bool(getattr(factor_report, "applied", False)),
+                    translate=note_text)
             summary = self.project.settings.summary
             generate_report(
                 self.project, results, path,
                 author=summary.author or None,
                 company=summary.company or None,
                 title=summary.title or None,
-                factor_report=factor_report, figures=figures)
+                factor_report=factor_report, figures=figures,
+                translate=note_text, method_name=method_name)
         except ImportError:
             QMessageBox.critical(
                 self, tr("Generate Report"),
