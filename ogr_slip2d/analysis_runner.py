@@ -2516,12 +2516,12 @@ def run_configured_statistics(project, method_ids=None, *,
 
     st = project.settings.statistics
     problems = list(check_analysis_settings(project))
+    from . import stat_messages as STM
     if not (st.probabilistic_analysis or st.sensitivity_analysis):
-        problems.append("Enable a probabilistic or sensitivity analysis "
-                        "in Project Settings first.")
+        problems.append(STM.stat_note(STM.ENABLE_STATISTICS))
     variables = list(getattr(project, "random_variables", []) or [])
     if not variables:
-        problems.append("Define at least one random variable first.")
+        problems.append(STM.stat_note(STM.DEFINE_VARIABLE))
     if problems:
         raise AnalysisNotConfigured(problems)
     method_ids = (list(method_ids) if method_ids else
@@ -2534,9 +2534,7 @@ def run_configured_statistics(project, method_ids=None, *,
                          for mid, sr in (base.results or {}).items()
                          if sr is not None and sr.critical is not None}
     if not out.deterministic:
-        out.warnings.append("The deterministic analysis produced no "
-                            "critical surface. Check the model and the "
-                            "search settings.")
+        out.warnings.append(STM.stat_note(STM.NO_DETERMINISTIC_CRITICAL))
         return out
     factored, _rep = prepare_analysis_project(project)
 

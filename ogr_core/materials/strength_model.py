@@ -176,10 +176,11 @@ class StrengthModel(ABC):
         parameters picked by NAME, and every model whose names did not match
         was left unfactored without a word.
         """
+        from .messages import NO_FACTOR, factoring_note
         return FactoredStrength(
             self, {}, "",
-            note=(f"{self.DISPLAY_NAME or self.MODEL_ID}: this strength model "
-                  f"declares no partial factor, so it was NOT factored."))
+            note=factoring_note(NO_FACTOR,
+                                model=self.DISPLAY_NAME or self.MODEL_ID))
 
     def _with_params(self, **new) -> "StrengthModel":
         """A copy of this model with some parameters replaced; any state it

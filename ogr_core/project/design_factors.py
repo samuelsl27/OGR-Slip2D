@@ -69,6 +69,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from ..messages import as_nested
+from . import design_messages as DM
+
 from ogr_core.materials.strength_model import (MaterialFactors,
                                                tan_factored_angle)
 
@@ -114,10 +117,11 @@ class FactorReport:
     notes: list = field(default_factory=list)
 
     def summary(self) -> str:
+        # v0.1.353 (D335) -- with its code, as every note of the report
         if not self.applied:
-            return "no partial factors applied"
-        return (f"{self.standard}: {len(self.materials)} material(s) and "
-                f"{self.loads} load(s) factored")
+            return DM.design_note(DM.NONE)
+        return DM.design_note(DM.SUMMARY, standard=self.standard,
+                              materials=len(self.materials), loads=self.loads)
 
 
 def factor_friction_angle(phi_deg: float, factor: float) -> float:
@@ -211,7 +215,8 @@ def apply_design_factors(project, settings=None):
             changed.update(done.changes)
             category = done.category
             if done.note:
-                rep.notes.append(f"Material {mat.name!r}: {done.note}.")
+                rep.notes.append(DM.design_note(
+                    DM.MATERIAL, name=mat.name, note=as_nested(done.note)))
         phi_b = float(getattr(mat, "phi_b", 0.0) or 0.0)
         if phi_b and mf.tan_phi != 1.0:
             mat.phi_b = tan_factored_angle(phi_b, mf.tan_phi)
@@ -258,50 +263,36 @@ def apply_design_factors(project, settings=None):
         sa = getattr(getattr(factored, "settings", None), "seismic", None)
         if sa is not None and (getattr(sa, "compute_ky", False)
                                or getattr(sa, "newmark", False)):
-            rep.notes.append(
-                f"Seismic: the factor {f_seis:g} is not applied — the run "
-                f"seeks the critical seismic coefficient, so there is no "
-                f"coefficient to factor.")
+            rep.notes.append(DM.design_note(DM.SEISMIC_NOT_APPLIED,
+                                            factor=f_seis))
         else:
             seis.kh = float(seis.kh) * f_seis
             seis.kv = float(seis.kv) * f_seis
-            rep.notes.append(
-                f"Seismic: kh and kv multiplied by {f_seis:g}.")
+            rep.notes.append(DM.design_note(DM.SEISMIC, factor=f_seis))
 
     # v0.1.242 (D226a) — the permanent action is applied now, to the weight
     # of each slice, and the note says how; what is still not done is said
     # too (v0.1.225: never left for the user to find).
     if not actions.weight_is_identity():
         if actions.single_source_weight:
-            rep.notes.append(
-                f"Soil weight: the permanent-action factor "
-                f"{actions.permanent_unfavourable:g} multiplies the weight of "
-                f"every slice (single source assumption).")
+            rep.notes.append(DM.design_note(
+                DM.WEIGHT_SINGLE, factor=actions.permanent_unfavourable))
         else:
-            rep.notes.append(
-                f"Soil weight: the permanent-action factor "
-                f"{actions.permanent_unfavourable:g} multiplies the weight of "
-                f"the slices whose base drives the sliding, and "
-                f"{actions.permanent_favourable:g} that of the others.")
+            rep.notes.append(DM.design_note(
+                DM.WEIGHT, unfavourable=actions.permanent_unfavourable,
+                favourable=actions.permanent_favourable))
     if rep.loads and by_action:
-        rep.notes.append(
-            f"Loads: each one is factored as a whole, by its action and by "
-            f"whether it drives the sliding of the surface: a permanent load "
-            f"by {actions.permanent_unfavourable:g} or "
-            f"{actions.permanent_favourable:g}, a variable one by "
-            f"{actions.variable_unfavourable:g} or "
-            f"{actions.variable_favourable:g}.")
+        rep.notes.append(DM.design_note(
+            DM.LOADS_BY_ACTION, pu=actions.permanent_unfavourable,
+            pf=actions.permanent_favourable, vu=actions.variable_unfavourable,
+            vf=actions.variable_favourable))
     elif rep.loads:
-        rep.notes.append(
-            f"Every load takes the variable-action factor ({f_var:g}): a "
-            f"load carries no action type in this version.")
+        rep.notes.append(DM.design_note(DM.LOADS_VARIABLE, factor=f_var))
 
     factors = (mf.cohesion, mf.tan_phi, mf.undrained, mf.shear, f_gamma,
                1.0 if by_action else f_var, f_seis)
     if all(f == 1.0 for f in factors) and actions.is_identity():
-        rep.notes.append(
-            "The standard is enabled but every factor is 1.0, so nothing "
-            "changed.")
+        rep.notes.append(DM.design_note(DM.IDENTITY))
     rep.applied = True
     return factored, rep
 

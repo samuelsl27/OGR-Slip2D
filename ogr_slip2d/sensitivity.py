@@ -49,7 +49,10 @@ import math
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
+from ogr_core.messages import method_note
 from ogr_core.statistics.random_variables import clone_project, set_value
+
+from . import stat_messages as SM
 
 DEFAULT_INTERVALS = 50
 
@@ -267,16 +270,10 @@ def run_sensitivity(
     usable = [rv for rv in variables
               if abs(rv.distribution.high - rv.distribution.low) > 1e-15]
     if not usable:
-        _publish_note(
-            res, "error",
-            "No variable has a range: enter a relative minimum and "
-            "maximum for at least one parameter.")
+        _publish_note(res, "error", SM.stat_note(SM.NO_RANGE))
         return res
     if not critical_surfaces:
-        _publish_note(
-            res, "error",
-            "No deterministic result: run the regular analysis first so "
-            "the global minimum surface is known.")
+        _publish_note(res, "error", SM.stat_note(SM.NO_DETERMINISTIC_RESULT))
         return res
     # v0.1.236 (D93) — the method and the evaluator from the project as the
     # analysis prepares it, as in ``run_global_minimum``.
@@ -380,7 +377,7 @@ def run_sensitivity(
                     # from the model, so every remaining point would answer
                     # the deterministic factor again: the sweep stops here
                     # and says so instead of drawing a flat line.
-                    vs.note = "no longer matches the model: %s" % rv.key
+                    vs.note = SM.stat_note(SM.VAR_ORPHAN, key=rv.key)
                     orphan_keys[rv.key] = None
                     # The points not evaluated are still counted: the final
                     # ``progress_cb(total, total)`` would hide the gap, but
@@ -408,20 +405,18 @@ def run_sensitivity(
                 # v0.1.238 (D89) — a curve that changes mechanism part way
                 # is two curves drawn as one; said, never redrawn.
                 at = vs.mass_switch_values
-                line = "%s: %s" % (mid, switches.sentence(
-                    "The sweep of %s answered for another sliding mass of "
-                    "the deterministic circle at %d of %d points, from %g to "
-                    "%g" % (vs.label, len(at), vs.n, min(at), max(at))))
+                line = method_note(mid, switches.sentence(SM.stat_note(
+                    SM.HEAD_SENS_MASS, label=vs.label, n=len(at),
+                    total=vs.n, lo=min(at), hi=max(at))))
                 res.note_lines.append(line)
                 res.switch_lines.append(line)       # v0.1.255 (D128)
             if vs.case_switch_values:
                 # v0.1.251 (D85) — and a curve that changes weak-layer case
                 # part way, for the same reason.
                 at = vs.case_switch_values
-                line = "%s: %s" % (mid, cases.sentence(
-                    "The sweep of %s answered for another weak-layer case of "
-                    "the deterministic surface at %d of %d points, from %g to "
-                    "%g" % (vs.label, len(at), vs.n, min(at), max(at))))
+                line = method_note(mid, cases.sentence(SM.stat_note(
+                    SM.HEAD_SENS_CASE, label=vs.label, n=len(at),
+                    total=vs.n, lo=min(at), hi=max(at))))
                 res.note_lines.append(line)
                 res.switch_lines.append(line)       # v0.1.255 (D128)
 
@@ -444,14 +439,12 @@ def run_sensitivity(
         if res.by_method:
             _publish_note(
                 res, "warning",
-                "%d of the %d random variables no longer match the model "
-                "and were not swept: %s"
-                % (len(orphan_keys), len(usable), keys))
+                SM.stat_note(SM.VARS_NOT_SWEPT, n=len(orphan_keys),
+                             total=len(usable), keys=keys))
         else:
             _publish_note(
                 res, "variables",
-                "none of the %d random variables matches the model: %s"
-                % (len(usable), keys))
+                SM.stat_note(SM.VARS_NONE, n=len(usable), keys=keys))
 
     # v0.1.154 — if no method survived, the reason rises to the only key
     # the interface prints.

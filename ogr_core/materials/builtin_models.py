@@ -1464,10 +1464,9 @@ class AnisotropicStrengthFunction(StrengthModel):
 
     def design_factored(self, factors: MaterialFactors) -> FactoredStrength:
         if self.legacy_points is not None:
-            return FactoredStrength(
-                self, {}, "c′, tan φ′",
-                note=("a table saved as points before 0.1.218 is refused by "
-                      "the analysis, so it was not factored"))
+            from .messages import LEGACY_POINTS, factoring_note
+            return FactoredStrength(self, {}, "c′, tan φ′",
+                                    note=factoring_note(LEGACY_POINTS))
         f_c, f_t = factors.cohesion, factors.tan_phi
         rows, changes = [], {}
         for i, (a, c, phi) in enumerate(self.rows, start=1):
@@ -1977,6 +1976,11 @@ class GeneralizedAnisotropic(StrengthModel):
         ranges, or the base and the joints (v0.1.248); the reference
         documentation says the design factors apply to the child
         materials."""
+        # v0.1.353 (D335) -- each note with its code, the child's label
+        # nested with its own (``ogr_core.project.messages.child_label``)
+        from ogr_core.project.messages import child_label as _label
+
+        from . import messages as FM
         new, changes, notes = {}, {}, []
         for key, entry in self.children_items(active_only=True):
             label = self.child_label(key)
@@ -1988,8 +1992,8 @@ class GeneralizedAnisotropic(StrengthModel):
             try:
                 child = self._child_model(key, entry)
             except IncompleteGeneralizedAnisotropic:
-                notes.append(f"{label}: its model cannot be built, so it "
-                             f"was not factored")
+                notes.append(FM.factoring_note(FM.CHILD_UNBUILT,
+                                               label=_label(key)))
                 continue
             done = child.design_factored(factors)
             if done.changes:
@@ -1999,12 +2003,15 @@ class GeneralizedAnisotropic(StrengthModel):
                 for k, v in done.changes.items():
                     changes[f"{label} {k}"] = v
             if done.note:
-                notes.append(f"{label}: {done.note}")
+                notes.append(FM.factoring_note(
+                    FM.CHILD_NOTE, label=_label(key),
+                    note=FM.as_nested(done.note)))
         out = self.with_children(new) if changes else self
         how = ("the base and each joint by its own model"
                if self.angle_or_surface else "each rule by its own model")
-        return FactoredStrength(out, changes, how,
-                                note="; ".join(notes) or None)
+        return FactoredStrength(
+            out, changes, how,
+            note=FM.factoring_joined(notes) if notes else None)
 
     def to_dict(self) -> dict:
         d = super().to_dict()
@@ -2268,19 +2275,17 @@ class SnowdenModifiedAnisotropicLinear(StrengthModel):
         """Each function by its own model (D224): a shear-normal function as
         τ, a C/Phi function as c′ and tan φ′. The transition is linear in the
         two strengths, so dividing both divides the blend."""
+        from . import messages as FM
         if self.legacy_params is not None:
-            return FactoredStrength(
-                self, {}, "each function by its own model",
-                note=("a material saved before 0.1.229 is refused by the "
-                      "analysis, so it was not factored"))
+            return FactoredStrength(self, {}, "each function by its own model",
+                                    note=FM.factoring_note(FM.LEGACY_SNOWDEN))
         import copy
         changes, notes, new = {}, [], {}
         for which in ("bedding", "rock_mass"):
             try:
                 fn = self.function(which)
             except IncompleteSnowden:
-                notes.append(f"its {which.replace('_', ' ')} function cannot "
-                             f"be built, so it was not factored")
+                notes.append(FM.factoring_note(FM.SNOWDEN_UNBUILT + which))
                 continue
             done = fn.design_factored(factors)
             if done.changes:
@@ -2288,15 +2293,17 @@ class SnowdenModifiedAnisotropicLinear(StrengthModel):
                 for k, v in done.changes.items():
                     changes[f"{which.replace('_', ' ')} {k}"] = v
             if done.note:
-                notes.append(f"{which.replace('_', ' ')}: {done.note}")
+                notes.append(FM.factoring_note(FM.SNOWDEN_NOTE + which,
+                                               note=FM.as_nested(done.note)))
         out = self
         if new:
             out = copy.deepcopy(self)
             for which, data in new.items():
                 setattr(out, which, data)
             out._built = {}
-        return FactoredStrength(out, changes, "each function by its own model",
-                                note="; ".join(notes) or None)
+        return FactoredStrength(
+            out, changes, "each function by its own model",
+            note=FM.factoring_joined(notes) if notes else None)
 
     def to_dict(self) -> dict:
         import copy

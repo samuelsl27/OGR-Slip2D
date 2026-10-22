@@ -146,10 +146,14 @@ class TestTheWindow:
         assert line in res.note_lines          # every other reader keeps it
         w = StatisticsWindow(p, res, None, None)
         try:
+            # v0.1.353 (D335) -- the window says the line through its code:
+            # the method by its name, the sentence in the reader's language
+            from ogr_gui.core_messages import note_line
+            shown = note_line(line)
             assert not w.lbl_switch_notes.isHidden()
             assert w.lbl_switch_notes.text() == (
-                "Samples that answered for another mechanism:\n" + line)
-            assert line not in w.lbl_run_notes.text()
+                "Samples that answered for another mechanism:\n" + shown)
+            assert shown not in w.lbl_run_notes.text()
         finally:
             w.deleteLater()
 
@@ -165,8 +169,10 @@ class TestTheWindow:
         assert sens.switch_lines[0] in sens.note_lines
         w = StatisticsWindow(p, None, sens, None)
         try:
-            assert sens.switch_lines[0] in w.lbl_switch_notes.text()
-            assert sens.switch_lines[0] not in w.lbl_run_notes.text()
+            from ogr_gui.core_messages import note_line
+            shown = note_line(sens.switch_lines[0])
+            assert shown in w.lbl_switch_notes.text()
+            assert shown not in w.lbl_run_notes.text()
         finally:
             w.deleteLater()
 

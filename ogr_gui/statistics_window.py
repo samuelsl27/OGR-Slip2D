@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from ogr_gui.core_messages import note_line, note_text  # noqa: E402
 from ogr_gui.i18n import tr  # noqa: E402
 from ogr_gui.themes import theme_color
 
@@ -169,9 +170,10 @@ class StatisticsWindow(QMainWindow):
         self.lbl_run_notes.setStyleSheet(f"color: {theme_color('error')};")
         _lines = self._run_notes()
         if _lines:
+            # v0.1.353 (D335) -- each line through its code
             self.lbl_run_notes.setText(
                 tr("What this run could not do:") + "\n"
-                + "\n".join(_lines))
+                + "\n".join(note_line(n) for n in _lines))
         # Regla 7 in interface form: with nothing to say, the window of a
         # sound run is pixel for pixel the one it has always been.
         self.lbl_run_notes.setVisible(bool(_lines))
@@ -189,7 +191,7 @@ class StatisticsWindow(QMainWindow):
         if _switches:
             self.lbl_switch_notes.setText(
                 tr("Samples that answered for another mechanism:") + "\n"
-                + "\n".join(_switches))
+                + "\n".join(note_line(n) for n in _switches))
         self.lbl_switch_notes.setVisible(bool(_switches))
         v.addWidget(self.lbl_switch_notes)
 
@@ -245,7 +247,8 @@ class StatisticsWindow(QMainWindow):
         for res in (self.prob, self.sens):
             note = (getattr(res, "notes", None) or {}).get(mid)
             if note:
-                return str(note)
+                # v0.1.353 (D335) -- in the reader's language
+                return note_text(note)
         return ""
 
     def _with_reason(self, text: str, mid) -> str:

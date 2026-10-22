@@ -5987,6 +5987,263 @@ _DICTS: dict[str, dict[str, str]] = {
             'subterránea > Avanzado.',
         'No analysis method selected.':
             'No hay ningún método de análisis seleccionado.',
+        # v0.1.353 (D335) -- statistics, design standard, factoring
+        'The standard is enabled but every factor is 1.0, so nothing '
+        'changed.':
+            'La norma está activada pero todos los coeficientes valen 1.0, '
+            'así que no ha cambiado nada.',
+        'Loads: each one is factored as a whole, by its action and by '
+        'whether it drives the sliding of the surface: a permanent load by '
+        '{pu:g} or {pf:g}, a variable one by {vu:g} or {vf:g}.':
+            'Cargas: cada una se afecta entera, según su acción y según '
+            'empuje o no el deslizamiento de la superficie: una carga '
+            'permanente por {pu:g} o {pf:g}, una variable por {vu:g} o '
+            '{vf:g}.',
+        'Every load takes the variable-action factor ({factor:g}): a load '
+        'carries no action type in this version.':
+            'Todas las cargas toman el coeficiente de las acciones variables '
+            '({factor:g}): en esta versión una carga no lleva tipo de '
+            'acción.',
+        'Material {name!r}: {note}.':
+            'En el material {name!r}: {note}.',
+        'no partial factors applied':
+            'sin coeficientes parciales aplicados',
+        'Seismic: kh and kv multiplied by {factor:g}.':
+            'Sismo: kh y kv multiplicados por {factor:g}.',
+        'Seismic: the factor {factor:g} is not applied — the run seeks the '
+        'critical seismic coefficient, so there is no coefficient to factor.':
+            'Sismo: no se aplica el coeficiente {factor:g}, porque el '
+            'análisis busca el coeficiente sísmico crítico y no hay '
+            'coeficiente que afectar.',
+        '{standard}: {materials} material(s) and {loads} load(s) factored':
+            '{standard}: {materials} material(es) y {loads} carga(s) '
+            'afectados por los coeficientes',
+        'Soil weight: the permanent-action factor {unfavourable:g} '
+        'multiplies the weight of the slices whose base drives the sliding, '
+        'and {favourable:g} that of the others.':
+            'Peso del terreno: el coeficiente de las acciones permanentes '
+            '{unfavourable:g} multiplica el peso de las dovelas cuya base '
+            'empuja el deslizamiento, y {favourable:g} el de las demás.',
+        'Soil weight: the permanent-action factor {factor:g} multiplies the '
+        'weight of every slice (single source assumption).':
+            'Peso del terreno: el coeficiente de las acciones permanentes '
+            '{factor:g} multiplica el peso de cada dovela (hipótesis de '
+            'fuente única).',
+        '{label}: its model cannot be built, so it was not factored':
+            '{label}: su modelo no se puede construir, así que no se le han '
+            'aplicado los coeficientes',
+        'a table saved as points before 0.1.218 is refused by the analysis, '
+        'so it was not factored':
+            'una tabla guardada como puntos antes de la 0.1.218 la rechaza '
+            'el análisis, así que no se le han aplicado los coeficientes',
+        'a material saved before 0.1.229 is refused by the analysis, so it '
+        'was not factored':
+            'un material guardado antes de la 0.1.229 lo rechaza el '
+            'análisis, así que no se le han aplicado los coeficientes',
+        '{model}: this strength model declares no partial factor, so it was '
+        'NOT factored.':
+            '{model}: este modelo de resistencia no declara ningún '
+            'coeficiente parcial, así que NO se le han aplicado.',
+        'bedding: {note}':
+            'estratificación: {note}',
+        'rock mass: {note}':
+            'macizo rocoso: {note}',
+        'its bedding function cannot be built, so it was not factored':
+            'su función de la estratificación no se puede construir, así que '
+            'no se le han aplicado los coeficientes',
+        'its rock mass function cannot be built, so it was not factored':
+            'su función del macizo rocoso no se puede construir, así que no '
+            'se le han aplicado los coeficientes',
+        'all {n} samples failed on the deterministic critical surface, so '
+        'this method has no probability of failure. Reasons: {reasons}.':
+            'las {n} muestras fallaron sobre la superficie crítica '
+            'determinista, así que este método no tiene probabilidad de '
+            'rotura. Causas: {reasons}.',
+        'all {n} samples produced no valid surface, so this method has no '
+        'probability of failure. Reasons: {reasons}.':
+            'ninguna de las {n} muestras dio una superficie válida, así que '
+            'este método no tiene probabilidad de rotura. Causas: {reasons}.',
+        '{case} in {n}':
+            '{case} en {n}',
+        'along weak layers over {spans}':
+            'por capas débiles en {spans}',
+        'on no weak layer':
+            'sin ninguna capa débil',
+        'a {stype} along weak layers over {spans}':
+            'una superficie {stype} por capas débiles en {spans}',
+        'a {stype} on no weak layer':
+            'una superficie {stype} sin ninguna capa débil',
+        'inadmissible (-101)':
+            'inadmisible (-101)',
+        '-112 m-alpha':
+            '-112 m-alfa',
+        '-120 tensile stress':
+            '-120 tracción',
+        'The deterministic critical surface is a composite one, and '
+        'Composite Surfaces is off in the project the samples run on, so '
+        'that surface cannot be formed again; this method was skipped.':
+            'La superficie crítica determinista es compuesta, y Superficies '
+            'compuestas está desactivada en el proyecto sobre el que corren '
+            'las muestras, así que esa superficie no se puede volver a '
+            'formar; así que no se ha calculado este método.',
+        '{label} x {n}':
+            '{label} × {n}',
+        'The project handed to this statistical run is the design-factored '
+        'copy an analysis computes on, not the model: its samples would '
+        'overwrite factored values with unfactored ones and be factored a '
+        'second time. Pass the model itself; every sample is prepared like '
+        'the analysis.':
+            'El proyecto que recibe este análisis estadístico es la copia '
+            'afectada por los coeficientes de cálculo sobre la que calcula '
+            'un análisis, no el modelo: sus muestras sobrescribirían valores '
+            'minorados con valores sin minorar y se minorarían otra vez. '
+            'Pasa el propio modelo; cada muestra se prepara como el '
+            'análisis.',
+        '{failed} of {n} samples could not be evaluated; check the variable '
+        'ranges.':
+            '{failed} de {n} muestras no se pudieron evaluar; revisa los '
+            'intervalos de las variables.',
+        '{n} of {total} samples answered for another weak-layer case of the '
+        'deterministic surface':
+            '{n} de {total} muestras respondieron por otro caso de capas '
+            'débiles de la superficie determinista',
+        '{n} of {total} samples answered for another sliding mass of the '
+        'deterministic circle':
+            '{n} de {total} muestras respondieron por otra masa deslizante '
+            'del círculo determinista',
+        '{n} of {total} samples had the deterministic circle as their '
+        'critical surface, answering for another sliding mass':
+            '{n} de {total} muestras tuvieron el círculo determinista como '
+            'superficie crítica, respondiendo por otra masa deslizante',
+        'The sweep of {label} answered for another weak-layer case of the '
+        'deterministic surface at {n} of {total} points, from {lo:g} to '
+        '{hi:g}':
+            'El barrido de {label} respondió por otro caso de capas débiles '
+            'de la superficie determinista en {n} de {total} puntos, de '
+            '{lo:g} a {hi:g}',
+        'The sweep of {label} answered for another sliding mass of the '
+        'deterministic circle at {n} of {total} points, from {lo:g} to '
+        '{hi:g}':
+            'El barrido de {label} respondió por otra masa deslizante del '
+            'círculo determinista en {n} de {total} puntos, de {lo:g} a '
+            '{hi:g}',
+        'inadmissible':
+            'inadmisible',
+        'no admissible surface':
+            'ninguna superficie admisible',
+        'no critical surface':
+            'ninguna superficie crítica',
+        'the deterministic run left no critical surface for this method, so '
+        'there is nothing to re-evaluate.':
+            'el análisis determinista no dejó superficie crítica para este '
+            'método, así que no hay nada que volver a evaluar.',
+        'No deterministic result: run the regular analysis first so the '
+        'global minimum surface is known.':
+            'No hay resultado determinista: ejecuta antes el análisis normal '
+            'para que se conozca la superficie del mínimo global.',
+        'not a registered analysis method, so it was not computed.':
+            'no es un método de análisis registrado, así que no se ha '
+            'calculado.',
+        'No variable has a range: enter a relative minimum and maximum for '
+        'at least one parameter.':
+            'Ninguna variable tiene intervalo: introduce un mínimo y un '
+            'máximo relativos para al menos un parámetro.',
+        'no result':
+            'sin resultado',
+        'no sample was drawn, so this method has no probability of failure.':
+            'no se extrajo ninguna muestra, así que este método no tiene '
+            'probabilidad de rotura.',
+        'The deterministic result carries no serialised surface, so there is '
+        'nothing to re-evaluate.':
+            'El resultado determinista no lleva la superficie guardada, así '
+            'que no hay nada que volver a evaluar.',
+        'No random variables defined. At least one model input parameter '
+        'must be given a statistical distribution.':
+            'No hay variables aleatorias definidas. Al menos un parámetro '
+            'del modelo tiene que tener una distribución estadística.',
+        'The deterministic critical surface does not re-evaluate to itself '
+        'on the project the samples run on (it answers for x from {x0:.2f} '
+        'to {x1:.2f}, {there_type}, instead of x from {hx0:.2f} to '
+        '{hx1:.2f}, {home_type}); a setting that decides the sliding mass, '
+        'such as Composite Surfaces or a surface filter, differs between the '
+        'two runs, so this method was skipped.':
+            'La superficie crítica determinista no se reproduce a sí misma '
+            'en el proyecto sobre el que corren las muestras (responde por x '
+            'de {x0:.2f} a {x1:.2f}, {there_type}, en vez de x de {hx0:.2f} '
+            'a {hx1:.2f}, {home_type}); un ajuste que decide la masa '
+            'deslizante, como Superficies compuestas o un filtro de '
+            'superficies, es distinto en los dos análisis, así que no se ha '
+            'calculado este método.',
+        'The deterministic critical surface does not re-evaluate to itself '
+        'on the project the samples run on (it answers for the same mass as '
+        '{there}, instead of {home}); a setting that decides the weak-layer '
+        'case, such as the weak-layer handling or a suppressed weak layer, '
+        'differs between the two runs, so this method was skipped.':
+            'La superficie crítica determinista no se reproduce a sí misma '
+            'en el proyecto sobre el que corren las muestras (responde por '
+            'la misma masa como {there}, en vez de {home}); un ajuste que '
+            'decide el caso de capas débiles, como el tratamiento de capas '
+            'débiles o una capa débil suprimida, es distinto en los dos '
+            'análisis, así que no se ha calculado este método.',
+        '{failed} of {n} searches produced no valid surface.':
+            '{failed} de {n} búsquedas no dieron ninguna superficie válida.',
+        'raised {exc}':
+            'lanzó {exc}',
+        'x from {x0:.2f} to {x1:.2f}':
+            'x de {x0:.2f} a {x1:.2f}',
+        'x from {x0:.2f} to {x1:.2f} in {n}':
+            'x de {x0:.2f} a {x1:.2f} en {n}',
+        '{head} ({where}), not for its own ({own}).':
+            '{head} ({where}), no por el suyo ({own}).',
+        '{head} ({where}), not for its own ({own}); {below} of the {total} '
+        'with a factor below 1 are among them, and the probability of '
+        'failure counts them.':
+            '{head} ({where}), no por el suyo ({own}); {below} de las '
+            '{total} con un factor por debajo de 1 están entre ellas, y la '
+            'probabilidad de rotura las cuenta.',
+        '{head} ({where}), not for its own (x from {x0:.2f} to {x1:.2f}).':
+            '{head} ({where}), no por la suya (x de {x0:.2f} a {x1:.2f}).',
+        '{head} ({where}), not for its own (x from {x0:.2f} to {x1:.2f}); '
+        '{below} of the {total} with a factor below 1 are among them, and '
+        'the probability of failure counts them.':
+            '{head} ({where}), no por la suya (x de {x0:.2f} a {x1:.2f}); '
+            '{below} de las {total} con un factor por debajo de 1 están '
+            'entre ellas, y la probabilidad de rotura las cuenta.',
+        "The deterministic critical surface is of type '{stype}', which a "
+        'statistical run cannot re-evaluate; this method was skipped.':
+            "La superficie crítica determinista es de tipo '{stype}', que un "
+            'análisis estadístico no puede volver a evaluar; así que no se '
+            'ha calculado este método.',
+        "The deterministic critical surface is of type '{stype}' on a base "
+        "of type '{btype}', which a statistical run cannot re-evaluate; this "
+        'method was skipped.':
+            "La superficie crítica determinista es de tipo '{stype}' sobre "
+            "una base de tipo '{btype}', que un análisis estadístico no "
+            'puede volver a evaluar; así que no se ha calculado este método.',
+        'unstated':
+            'sin causa declarada',
+        'no longer matches the model: {key}':
+            'ya no corresponde al modelo: {key}',
+        'none of the {n} random variables matches the model: {keys}':
+            'ninguna de las {n} variables aleatorias corresponde al modelo: '
+            '{keys}',
+        '{n} of the {total} random variables no longer match the model and '
+        'were not sampled: {keys}':
+            '{n} de las {total} variables aleatorias ya no corresponden al '
+            'modelo y no se han muestreado: {keys}',
+        '{n} of the {total} random variables no longer match the model and '
+        'were not swept: {keys}':
+            '{n} de las {total} variables aleatorias ya no corresponden al '
+            'modelo y no se han barrido: {keys}',
+        'The deterministic critical surface runs along a weak layer from a '
+        'composite one, and Composite Surfaces is off in the project the '
+        'samples run on, so that surface cannot be formed again; this method '
+        'was skipped.':
+            'La superficie crítica determinista va por una capa débil a '
+            'partir de una superficie compuesta, y Superficies compuestas '
+            'está desactivada en el proyecto sobre el que corren las '
+            'muestras, así que esa superficie no se puede volver a formar; '
+            'así que no se ha calculado este método.',
         # v0.1.352 (D335) -- the runner's refusals
         'The back analysis supports {methods}, not {method}.':
             'El retroanálisis admite {methods}, no {method}.',

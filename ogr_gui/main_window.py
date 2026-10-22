@@ -258,7 +258,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.352"
+    VERSION = "0.1.353"
 
     def __init__(self) -> None:
         super().__init__()
@@ -2108,8 +2108,10 @@ class MainWindow(QMainWindow):
             from .core_messages import note_text
             self._info("\n".join(note_text(p) for p in exc.problems))
             return
+        from .core_messages import note_text
         if not out.deterministic:
-            self._info(tr(out.warnings[-1]))
+            # v0.1.353 (D335) -- through the code it carries
+            self._info(note_text(out.warnings[-1]))
             return
 
         self._prob_result = None
@@ -2146,12 +2148,15 @@ class MainWindow(QMainWindow):
                 # v0.1.164 (D91) — a run that sampled only SOME of the
                 # declared variables still reports PF, but not as if
                 # nothing were missing.
+                # v0.1.353 (D335) -- the run's sentences through their
+                # codes; the status bar showed them as they came
                 warning = res.notes.get("warning")
                 if warning:
-                    messages.append(warning)
+                    messages.append(note_text(warning))
             else:
-                messages.append(
-                    res.notes.get("error") or tr("probabilistic run failed"))
+                error = res.notes.get("error")
+                messages.append(note_text(error) if error
+                                else tr("probabilistic run failed"))
             # v0.1.170 (D129) — the panel is fed from ``note_lines`` alone;
             # ``notes`` goes only to the status bar.
             self.last_statistics_notes.extend(
@@ -2167,10 +2172,11 @@ class MainWindow(QMainWindow):
                         tr("most sensitive: {0}").format(rows[0][1]))
                 warning = res.notes.get("warning")
                 if warning:
-                    messages.append(warning)
+                    messages.append(note_text(warning))
             else:
-                messages.append(res.notes.get("error")
-                                or tr("sensitivity run failed"))
+                error = res.notes.get("error")
+                messages.append(note_text(error) if error
+                                else tr("sensitivity run failed"))
             self.last_statistics_notes.extend(
                 getattr(res, "note_lines", None) or [])
 
@@ -3913,15 +3919,17 @@ class MainWindow(QMainWindow):
         """
         if not bool(getattr(report, "applied", False)):
             return []
-        # The frame is translated here; what goes INSIDE it is not. The
-        # summary and the engine's own notes are built in ``ogr_core``,
-        # which cannot import ``ogr_gui.i18n``, so they arrive in English
-        # and stay in English — the same treatment every other engine note
-        # in this list already gets.
+        # The frame is translated here. The summary and the core's own
+        # notes are built in ``ogr_core``, which cannot import
+        # ``ogr_gui.i18n``: since v0.1.353 (D335) they carry their codes, so
+        # the summary is said here and the notes go to the panel as they
+        # are, which says them (``str()`` would drop the code).
+        from .core_messages import note_text
         lines = [tr("Design standard applied: %s — the reported value is an "
                     "over-design factor, not a factor of safety, and must "
-                    "exceed 1") % report.summary()]
-        lines += [str(n) for n in (getattr(report, "notes", None) or [])]
+                    "exceed 1") % note_text(report.summary())]
+        lines += [n if isinstance(n, str) else str(n)
+                  for n in (getattr(report, "notes", None) or [])]
         return lines
 
     def _analysis_notes(self) -> list:

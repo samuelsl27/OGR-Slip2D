@@ -152,6 +152,14 @@ def _groups(lines):
     return [_split(n)[0] for n in lines]
 
 
+def _shown(*mids):
+    """The groups those methods are filed under: by their NAME since
+    v0.1.353 (D335) -- the line carries its method as a code
+    (``method_note``), as the analysis notes have since v0.1.348."""
+    from ogr_gui.labels import method_name
+    return [method_name(m) for m in mids]
+
+
 # ----------------------------------------------------------------------
 # DOOR TWO: the real path, with nothing patched. On the notched model of
 # v1154 the published circle cuts the ground four times, so with Composite
@@ -223,7 +231,7 @@ class TestThePrefixIsPutOnceAndOnlyOnce:
         was skipped" with no way of telling which one."""
         res = _result(_SPENCER)
         _publish(res, [_lose(res, _MID, _refusal())])
-        assert _groups(res.note_lines) == [_MID], res.note_lines
+        assert _groups(res.note_lines) == _shown(_MID), res.note_lines
         assert res.note_lines[0].startswith(_MID + ": ")
 
     def test_the_name_is_not_put_on_twice(self):
@@ -243,7 +251,7 @@ class TestThePrefixIsPutOnceAndOnlyOnce:
         _publish(a, [_lose(a, _MID, _no_samples())])
         b = _result(_SPENCER)
         _publish(b, [_lose(b, _MID, _refusal())])
-        assert _groups(a.note_lines) == _groups(b.note_lines) == [_MID]
+        assert _groups(a.note_lines) == _groups(b.note_lines) == _shown(_MID)
 
 
 # ======================================================================
@@ -262,7 +270,7 @@ class TestOneLinePerLostMethod:
     def test_the_panel_groups_them_apart(self):
         res = self._two()
         groups = _groups(res.note_lines)
-        assert groups == [_MID, "janbu_simplified"], groups
+        assert groups == _shown(_MID, "janbu_simplified"), groups
         assert "Model" not in groups
 
     def test_the_joined_string_still_names_both(self):
@@ -295,7 +303,7 @@ class TestTheRealPathWithNothingPatched:
 
     def test_the_lost_method_is_named_on_its_own_line(self):
         res = _run_real_partial()
-        assert _groups(res.note_lines) == [_LOST], res.note_lines
+        assert _groups(res.note_lines) == _shown(_LOST), res.note_lines
         assert "Composite Surfaces" in res.note_lines[0]
 
     def test_the_surviving_method_still_reports_a_number(self):
@@ -317,7 +325,7 @@ class TestTheRealPathWithNothingPatched:
                                      num_slices=14)
         assert res.ok
         assert len(res.note_lines) == 1
-        assert _groups(res.note_lines) == [_MID]
+        assert _groups(res.note_lines) == _shown(_MID)
 
 
 # ======================================================================
@@ -340,7 +348,7 @@ class TestSensitivityHasThePartialRollUpAtLast:
 
     def test_the_line_reaches_the_channel_too(self):
         res = self._partial()
-        assert _groups(res.note_lines) == [_LOST], res.note_lines
+        assert _groups(res.note_lines) == _shown(_LOST), res.note_lines
 
     def test_a_healthy_sensitivity_run_says_nothing(self):
         """Regla 7's twin: the channel must stay quiet with nothing to
@@ -463,7 +471,7 @@ class TestTheThirdSilentRouteSaysSomething:
         res = self._run({"no_such_method": self._det_for(_MID)})
         assert not res.ok
         assert "no_such_method" in res.notes.get("error", ""), res.notes
-        assert _groups(res.note_lines) == ["no_such_method"]
+        assert _groups(res.note_lines) == _shown("no_such_method")
 
     def test_it_reuses_the_words_the_deterministic_path_already_uses(self):
         """v0.1.77 published a sentence for this precondition on the
@@ -670,7 +678,9 @@ class TestTheStatisticsWindowSaysWhoIsMissing:
             ids = [sw.cbo_method.itemData(i)
                    for i in range(sw.cbo_method.count())]
             assert _MID not in ids, ids
-            assert _MID in sw.lbl_run_notes.text(), sw.lbl_run_notes.text()
+            # v0.1.353 (D335) -- the line names the method as the window
+            # names it everywhere
+            assert _shown(_MID)[0] in sw.lbl_run_notes.text(),                 sw.lbl_run_notes.text()
             assert sw.lbl_run_notes.isVisibleTo(sw) is True
         finally:
             sw.close()

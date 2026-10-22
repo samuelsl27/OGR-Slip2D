@@ -37,6 +37,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
+from ogr_core.messages import as_nested, method_note
 from ogr_core.statistics.distributions import SampleStatistics, SamplingMethod
 from ogr_core.statistics.random_variables import (
     apply_sample,
@@ -44,6 +45,8 @@ from ogr_core.statistics.random_variables import (
     sample_project_variables,
     unwritable_variables,
 )
+
+from . import stat_messages as SM
 
 
 class ProbabilisticType:
@@ -326,12 +329,9 @@ def _evaluate_on(project, search, surface):
 
 #: v0.1.236 (D93) — what a statistical run says when it is handed the
 #: design-factored copy an analysis computes on instead of the model. A
-#: constant because the three runs say the same thing.
-_FACTORED_COPY = (
-    "The project handed to this statistical run is the design-factored copy "
-    "an analysis computes on, not the model: its samples would overwrite "
-    "factored values with unfactored ones and be factored a second time. "
-    "Pass the model itself; every sample is prepared like the analysis.")
+#: constant because the three runs say the same thing. v0.1.353 (D335):
+#: every sentence of these runs carries its code (``stat_messages``).
+_FACTORED_COPY = SM.stat_note(SM.FACTORED_COPY)
 
 
 def _analysis_copy(project):
@@ -417,21 +417,14 @@ def _cannot_reevaluate(project, surface_dict) -> Optional[str]:
     (``_does_not_reevaluate_to_itself``).
     """
     if not isinstance(surface_dict, dict) or not surface_dict:
-        return ("The deterministic result carries no serialised surface, "
-                "so there is nothing to re-evaluate.")
+        return SM.stat_note(SM.NO_SURFACE)
     source = _seed_source(surface_dict)
     if source is None:
         return _type_refusal(surface_dict)
     if source[0] == "composite" and not _composite_surfaces(project):
         if _surface_type(surface_dict) in _WEAK_LAYER_SEEDED:
-            return ("The deterministic critical surface runs along a weak "
-                    "layer from a composite one, and Composite Surfaces is "
-                    "off in the project the samples run on, so that surface "
-                    "cannot be formed again; this method was skipped.")
-        return ("The deterministic critical surface is a composite one, "
-                "and Composite Surfaces is off in the project the samples "
-                "run on, so that surface cannot be formed again; this "
-                "method was skipped.")
+            return SM.stat_note(SM.WEAK_COMPOSITE_OFF)
+        return SM.stat_note(SM.COMPOSITE_OFF)
     return None
 
 
@@ -446,12 +439,8 @@ def _type_refusal(surface_dict) -> str:
     stype = _surface_type(surface_dict)
     if stype in _WEAK_LAYER_SEEDED:
         btype = _surface_type((surface_dict or {}).get("base"))
-        return (f"The deterministic critical surface is of type "
-                f"'{stype}' on a base of type '{btype}', which a statistical "
-                f"run cannot re-evaluate; this method was skipped.")
-    return (f"The deterministic critical surface is of type "
-            f"'{stype}', which a statistical run cannot re-evaluate; "
-            f"this method was skipped.")
+        return SM.stat_note(SM.TYPE_WEAK, stype=stype, btype=btype)
+    return SM.stat_note(SM.TYPE, stype=stype)
 
 
 # ======================================================================
@@ -472,7 +461,8 @@ def _publish_note(result, key: str, sentence: str) -> None:
     exactly how the string and the list stop being the same content.
     """
     previous = result.notes.get(key)
-    result.notes[key] = (previous + "; " + sentence if previous
+    # v0.1.353 (D335) -- joined as a list, each sentence with its code
+    result.notes[key] = (SM.joined(previous, sentence) if previous
                          else sentence)
     result.note_lines.append(sentence)
 
@@ -506,15 +496,14 @@ def _stale_variables_stop(result, project, active, first, applied) -> bool:
     if len(orphans) == len(active):
         _publish_note(
             result, "error",
-            "none of the %d random variables matches the model: %s"
-            % (len(active), ", ".join(orphans)))
+            SM.stat_note(SM.VARS_NONE, n=len(active), keys=", ".join(orphans)))
         return True
     # Partial: the ones that DO write still carry a meaningful sampling, so
     # the run goes on. What it may not do is go on quietly.
     _publish_note(
         result, "warning",
-        "%d of the %d random variables no longer match the model and were "
-        "not sampled: %s" % (len(orphans), len(active), ", ".join(orphans)))
+        SM.stat_note(SM.VARS_NOT_SAMPLED, n=len(orphans), total=len(active),
+                     keys=", ".join(orphans)))
     return False
 
 
@@ -532,12 +521,13 @@ def _stale_variables_stop(result, project, active, first, applied) -> bool:
 #: method because ``_method_lines`` puts the name on; the deterministic
 #: path writes the id inside the sentence because it has no prefix
 #: convention to lean on.
-_NO_METHOD = "not a registered analysis method, so it was not computed."
-_NO_DETERMINISTIC = ("the deterministic run left no critical surface for "
-                     "this method, so there is nothing to re-evaluate.")
+_NO_METHOD = SM.stat_note(SM.NO_METHOD)
+_NO_DETERMINISTIC = SM.stat_note(SM.NO_DETERMINISTIC)
 
-_STEM_GM = "failed on the deterministic critical surface"
-_STEM_OS = "produced no valid surface"
+#: v0.1.353 (D335) -- the sentence of each analysis type, by its code: the
+#: stem was a fragment of English pasted into one shared sentence.
+_STEM_GM = SM.ALL_FAILED_GM
+_STEM_OS = SM.ALL_FAILED_OS
 
 #: v0.1.237 (D87) — why an Overall Slope method names no critical
 #: probabilistic surface, in its ``notes["critical_probabilistic"]``. The
@@ -545,24 +535,10 @@ _STEM_OS = "produced no valid surface"
 #: factors nor with the Ky objective; the other two follow from what the
 #: surface is. Interpret shows them through ``tr()`` BY VALUE, so each has
 #: its Spanish entry in ``ogr_gui/i18n`` and a test keeps the two in step.
-_CPS_STEERED = (
-    "No critical probabilistic surface: this search steers on the "
-    "factors of safety it computes, so it analyses different surfaces "
-    "in every sample and none of them has a probability of failure of "
-    "its own. It is computed for the Grid, Slope, Path and Block "
-    "searches.")
-_CPS_KY = (
-    "No critical probabilistic surface: the search minimised the "
-    "critical seismic coefficient Ky, and the critical probabilistic "
-    "surface is defined on the factor of safety.")
-_CPS_TOO_FEW = (
-    "No critical probabilistic surface: too few valid samples to "
-    "estimate one.")
-_CPS_NOT_IN_EVERY_SAMPLE = (
-    "No critical probabilistic surface: no surface of the search had a "
-    "factor of safety in every sample, and a probability of failure "
-    "counted over some of the samples only is not comparable with the "
-    "others.")
+_CPS_STEERED = SM.stat_note(SM.CPS_STEERED)
+_CPS_KY = SM.stat_note(SM.CPS_KY)
+_CPS_TOO_FEW = SM.stat_note(SM.CPS_TOO_FEW)
+_CPS_NOT_IN_EVERY_SAMPLE = SM.stat_note(SM.CPS_NOT_IN_EVERY_SAMPLE)
 
 
 def _critical_probabilistic_excluded(search, run) -> Optional[str]:
@@ -681,21 +657,20 @@ class _MassSwitches:
         more than one, since otherwise the head of the sentence says it."""
         if len(self.at) == 1:
             (xl, xr), = self.at
-            return "x from %.2f to %.2f" % (xl, xr)
-        return "; ".join("x from %.2f to %.2f in %d" % (xl, xr, n)
-                         for (xl, xr), n in sorted(self.at.items()))
+            return SM.stat_note(SM.SPAN, x0=xl, x1=xr)
+        return SM.joined(*(SM.stat_note(SM.SPAN_IN, x0=xl, x1=xr, n=n)
+                           for (xl, xr), n in sorted(self.at.items())))
 
     def sentence(self, head: str, below_one: Optional[int] = None) -> str:
         """``head`` says what changed mass, in the caller's words; with
         ``below_one`` (the samples under 1 of the run), how much of the
         probability of failure is theirs."""
-        text = "%s (%s), not for its own (x from %.2f to %.2f)" % (
-            head, self.where(), self.home[0], self.home[1])
+        args = {"head": as_nested(head), "where": as_nested(self.where()),
+                "x0": self.home[0], "x1": self.home[1]}
         if below_one:
-            text += ("; %d of the %d with a factor below 1 are among them, "
-                     "and the probability of failure counts them"
-                     % (self.below_one, below_one))
-        return text + "."
+            return SM.stat_note(SM.SWITCH_MASS_BELOW, below=self.below_one,
+                                total=below_one, **args)
+        return SM.stat_note(SM.SWITCH_MASS, **args)
 
 
 def _active_layers(surface) -> tuple:
@@ -730,9 +705,23 @@ def _case_text(stype, layers) -> str:
     drawing.
     """
     if not layers:
-        return "a %s on no weak layer" % stype
-    return "a %s along weak layers over %s" % (stype, ", ".join(
-        "x from %.2f to %.2f" % (x0, x1) for _bid, x0, x1 in layers))
+        return SM.stat_note(SM.CASE_TEXT_NONE, stype=stype)
+    return SM.stat_note(SM.CASE_TEXT_LAYERS, stype=stype,
+                        spans=_spans(layers))
+
+
+def _spans(layers) -> list:
+    """The stretches of ``layers``, by x, each a message of its own."""
+    return [as_nested(SM.stat_note(SM.SPAN, x0=x0, x1=x1))
+            for _bid, x0, x1 in layers]
+
+
+def _case(layers):
+    """A case of a mass in words: on no weak layer, or along the stretches
+    of its layers."""
+    if not layers:
+        return SM.stat_note(SM.CASE_NONE)
+    return SM.stat_note(SM.CASE_LAYERS, spans=_spans(layers))
 
 
 class _CaseSwitches:
@@ -790,57 +779,40 @@ class _CaseSwitches:
     def where(self) -> str:
         """The cases it went to; how many went to each only when there is
         more than one, since otherwise the head of the sentence says it."""
-        def case(layers):
-            if not layers:
-                return "on no weak layer"
-            return "along weak layers over " + ", ".join(
-                "x from %.2f to %.2f" % (x0, x1) for _b, x0, x1 in layers)
         if len(self.at) == 1:
             (layers,) = self.at
-            return case(layers)
+            return _case(layers)
         # Sorted by their text: a boundary id may be None on a stand-in,
         # and None does not compare with a string.
-        return "; ".join("%s in %d" % (case(layers), n)
-                         for layers, n in sorted(self.at.items(),
-                                                 key=lambda kv: repr(kv[0])))
+        return SM.joined(*(SM.stat_note(SM.CASE_IN,
+                                        case=as_nested(_case(layers)), n=n)
+                           for layers, n in sorted(self.at.items(),
+                                                   key=lambda kv: repr(kv[0]))))
 
     def sentence(self, head: str, below_one: Optional[int] = None) -> str:
         """``head`` says what changed case, in the caller's words; with
         ``below_one`` (the samples under 1 of the run), how much of the
         probability of failure is theirs."""
-        own = ("on no weak layer" if not self.layers
-               else "along weak layers over " + ", ".join(
-                   "x from %.2f to %.2f" % (x0, x1)
-                   for _b, x0, x1 in self.layers))
-        text = "%s (%s), not for its own (%s)" % (head, self.where(), own)
+        args = {"head": as_nested(head), "where": as_nested(self.where()),
+                "own": as_nested(_case(self.layers))}
         if below_one:
-            text += ("; %d of the %d with a factor below 1 are among them, "
-                     "and the probability of failure counts them"
-                     % (self.below_one, below_one))
-        return text + "."
+            return SM.stat_note(SM.SWITCH_CASE_BELOW, below=self.below_one,
+                                total=below_one, **args)
+        return SM.stat_note(SM.SWITCH_CASE, **args)
 
 
 #: v0.1.239 (D88) — the refusal of the probe below. No ": " inside: the
 #: panel groups a line by the first one, which ``_method_lines`` puts after
-#: the method id.
-_NOT_ITSELF = (
-    "The deterministic critical surface does not re-evaluate to itself on "
-    "the project the samples run on (it answers for x from %.2f to %.2f, "
-    "%s, instead of x from %.2f to %.2f, %s); a setting that decides the "
-    "sliding mass, such as Composite Surfaces or a surface filter, differs "
-    "between the two runs, so this method was skipped.")
+#: the method id. v0.1.353 (D335): the sentence is its code's; this is its
+#: English template, which the bank and the tests read the head of.
+_NOT_ITSELF = SM.STAT_NOTES[SM.NOT_ITSELF].english
 
 #: v0.1.251 (D85) — the same refusal when the MASS comes back and the
 #: weak-layer CASE does not: the same head, because the bank's closure of
 #: D88 and ``test_reevaluation_symmetry_v1239`` recognise the probe by it,
 #: and a tail that names the settings that decide a case instead of the
 #: ones that decide a mass. ``_NOT_ITSELF`` keeps its six fields.
-_NOT_ITSELF_CASE = (
-    "The deterministic critical surface does not re-evaluate to itself on "
-    "the project the samples run on (it answers for the same mass as %s, "
-    "instead of %s); a setting that decides the weak-layer case, such as "
-    "the weak-layer handling or a suppressed weak layer, differs between "
-    "the two runs, so this method was skipped.")
+_NOT_ITSELF_CASE = SM.STAT_NOTES[SM.NOT_ITSELF_CASE].english
 
 
 def _does_not_reevaluate_to_itself(project, prepare, search, surface,
@@ -909,10 +881,13 @@ def _does_not_reevaluate_to_itself(project, prepare, search, surface,
             and there_layers == home_layers):
         return None
     if there == home and "weak_layer" in (home_type, there_type):
-        return _NOT_ITSELF_CASE % (_case_text(there_type, there_layers),
-                                   _case_text(home_type, home_layers))
-    return _NOT_ITSELF % (there[0], there[1], there_type,
-                          home[0], home[1], home_type)
+        return SM.stat_note(
+            SM.NOT_ITSELF_CASE,
+            there=as_nested(_case_text(there_type, there_layers)),
+            home=as_nested(_case_text(home_type, home_layers)))
+    return SM.stat_note(SM.NOT_ITSELF, x0=there[0], x1=there[1],
+                        there_type=there_type, hx0=home[0], hx1=home[1],
+                        home_type=home_type)
 
 
 def _accumulate_surfaces(run, per_surface: dict) -> None:
@@ -963,8 +938,9 @@ def counts_as_sample(r) -> bool:
             and bool(getattr(r, "admissible", True)))
 
 
-_CODE_LABELS = {-120: "-120 tensile stress", -112: "-112 m-alpha",
-                -101: "inadmissible (-101)"}
+_CODE_LABELS = {-120: SM.stat_note(SM.CODE_120),
+                -112: SM.stat_note(SM.CODE_112),
+                -101: SM.stat_note(SM.CODE_101)}
 
 
 def _sample_failure(exc, r) -> str:
@@ -985,16 +961,17 @@ def _sample_failure(exc, r) -> str:
     surfaces gave it.
     """
     if exc is not None:
-        return "raised %s" % type(exc).__name__
+        return SM.stat_note(SM.RAISED, exc=type(exc).__name__)
     if r is None:
-        return "no result"
+        return SM.stat_note(SM.NO_RESULT)
     if r.is_valid and not getattr(r, "admissible", True):
         # v0.1.202 — screened out: the reference's error code, from the
         # one mapping (``interpretation.error_code``).
         from ogr_slip2d.interpretation import error_code
-        return _CODE_LABELS.get(error_code(r), "inadmissible")
+        return _CODE_LABELS.get(error_code(r), SM.stat_note(SM.INADMISSIBLE))
+    # the engine's reason is an identifier, shown as it is
     return getattr(r, "reason", "") or getattr(r, "error_message",
-                                               "") or "unstated"
+                                               "") or SM.stat_note(SM.UNSTATED)
 
 
 def _search_failure(exc, run) -> str:
@@ -1007,15 +984,15 @@ def _search_failure(exc, run) -> str:
     code collapses them into one counter.
     """
     if exc is not None:
-        return "raised %s" % type(exc).__name__
+        return SM.stat_note(SM.RAISED, exc=type(exc).__name__)
     if run is None:
-        return "no result"
+        return SM.stat_note(SM.NO_RESULT)
     if run.critical is not None:
         # v0.1.202 — ``critical`` falls back to an inadmissible surface
         # when the search found no admissible one; that sample has no
         # factor of safety either.
-        return "no admissible surface"
-    return "no critical surface"
+        return SM.stat_note(SM.NO_ADMISSIBLE)
+    return SM.stat_note(SM.NO_CRITICAL)
 
 
 def _counted_reasons(counts: dict) -> str:
@@ -1024,8 +1001,9 @@ def _counted_reasons(counts: dict) -> str:
     Ordered by frequency and then by name, never by insertion, so two runs
     over the same data read the same way.
     """
-    return ", ".join("%s x %d" % (k, n) for k, n in
-                     sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])))
+    return SM.stat_note(SM.REASONS, reasons=[
+        as_nested(SM.stat_note(SM.COUNTED, label=as_nested(k), n=n))
+        for k, n in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))])
 
 
 def _no_sample_note(num_samples: int, stem: str, counts: dict) -> str:
@@ -1049,11 +1027,10 @@ def _no_sample_note(num_samples: int, stem: str, counts: dict) -> str:
     combo's own label, and a sentence repeating it would be noise.
     """
     if not counts:
-        return ("no sample was drawn, so this method has no probability "
-                "of failure.")
-    return ("all %d samples %s, so this method has no probability of "
-            "failure. Reasons: %s."
-            % (num_samples, stem, _counted_reasons(counts)))
+        return SM.stat_note(SM.NO_SAMPLE)
+    # v0.1.353 (D335) -- ``stem`` is the code of the analysis type's sentence
+    return SM.stat_note(stem, n=num_samples,
+                        reasons=as_nested(_counted_reasons(counts)))
 
 
 def _method_lines(result, lost: list) -> list:
@@ -1071,7 +1048,7 @@ def _method_lines(result, lost: list) -> list:
     which comes later -- so the prefix put here is always the one that
     decides the group.
     """
-    return ["%s: %s" % (mid, result.notes[mid]) for mid in lost
+    return [method_note(mid, result.notes[mid]) for mid in lost
             if mid in result.notes]
 
 
@@ -1107,9 +1084,8 @@ def _publish_method_losses(result, lost: list) -> None:
     if result.ok:
         if lines:
             previous = result.notes.get("warning")
-            text = "; ".join(lines)
-            result.notes["warning"] = (previous + "; " + text if previous
-                                       else text)
+            result.notes["warning"] = (SM.joined(previous, *lines)
+                                       if previous else SM.joined(*lines))
         return
 
     if "error" in result.notes:
@@ -1126,9 +1102,10 @@ def _publish_method_losses(result, lost: list) -> None:
     # having to know such a key exists -- and the day D88 adds another one,
     # ``rest`` carries it unaided.
     lost_keys = set(lost)
-    rest = [str(v) for k, v in result.notes.items()
+    rest = [v if isinstance(v, str) else str(v)
+            for k, v in result.notes.items()
             if k != "warning" and k not in lost_keys]
-    joined = "; ".join(lines + rest)
+    joined = SM.joined(*(lines + rest)) if lines or rest else ""
     # Structural, not defensive: with nothing lost and nothing else to say
     # -- a healthy run -- this writes no key at all, which is what
     # ``test_nothing_is_said_when_nothing_was_lost`` demands and what the
@@ -1183,7 +1160,7 @@ def _publish_method_warnings(result) -> None:
         for key in ("warning", "mass_switch", "case_switch"):
             said = notes.get(key)
             if said:
-                line = "%s: %s" % (mid, said)
+                line = method_note(mid, said)
                 result.note_lines.append(line)
                 if key != "warning":
                     result.switch_lines.append(line)
@@ -1270,16 +1247,11 @@ def run_global_minimum(
 
     active = [rv for rv in variables if rv.distribution.is_random]
     if not active:
-        _publish_note(
-            result, "error",
-            "No random variables defined. At least one model input "
-            "parameter must be given a statistical distribution.")
+        _publish_note(result, "error", SM.stat_note(SM.NO_VARIABLES))
         return result
     if not critical_surfaces:
-        _publish_note(
-            result, "error",
-            "No deterministic result: run the regular analysis first so "
-            "the global minimum surface is known.")
+        _publish_note(result, "error",
+                      SM.stat_note(SM.NO_DETERMINISTIC_RESULT))
         return result
     configured = _analysis_copy(project)
 
@@ -1453,15 +1425,15 @@ def run_global_minimum(
         mres.mass_switches = switches.count
         if switches.count:
             mres.notes["mass_switch"] = switches.sentence(
-                "%d of %d samples answered for another sliding mass of the "
-                "deterministic circle" % (switches.count, len(values)),
+                SM.stat_note(SM.HEAD_GM_MASS, n=switches.count,
+                             total=len(values)),
                 sum(1 for v in values if v < 1.0))
         # v0.1.251 (D85) — and so is a change of weak-layer case.
         mres.case_switches = cases.count
         if cases.count:
             mres.notes["case_switch"] = cases.sentence(
-                "%d of %d samples answered for another weak-layer case of "
-                "the deterministic surface" % (cases.count, len(values)),
+                SM.stat_note(SM.HEAD_GM_CASE, n=cases.count,
+                             total=len(values)),
                 sum(1 for v in values if v < 1.0))
         # The 20 % warning and its wording are untouched, and it is now
         # only reached when at least one sample DID survive -- which is
@@ -1476,9 +1448,8 @@ def run_global_minimum(
         if mres.failed_samples > 0.2 * num_samples:
             # The sentence stays as it was (test_probabilistic_all_failed_
             # v1169 holds it); the causes are in ``lost_by_cause``.
-            mres.notes["warning"] = (
-                f"{mres.failed_samples} of {num_samples} samples could "
-                f"not be evaluated; check the variable ranges.")
+            mres.notes["warning"] = SM.stat_note(
+                SM.GM_FAILED, failed=mres.failed_samples, n=num_samples)
         result.by_method[mid] = mres
 
     # v0.1.154 — if no method survived, the reason rises to the key the
@@ -1733,13 +1704,10 @@ def run_overall_slope(
 
     active = [rv for rv in variables if rv.distribution.is_random]
     if not active:
-        _publish_note(
-            result, "error",
-            "No random variables defined. At least one model input "
-            "parameter must be given a statistical distribution.")
+        _publish_note(result, "error", SM.stat_note(SM.NO_VARIABLES))
         return result
     if not method_ids:
-        _publish_note(result, "error", "No analysis method selected.")
+        _publish_note(result, "error", SM.stat_note(SM.NO_METHOD_SELECTED))
         return result
 
     result.variables = [rv.key for rv in active]
@@ -1861,17 +1829,15 @@ def run_overall_slope(
         ores.mass_switches = switches.count
         if switches.count:
             ores.notes["mass_switch"] = switches.sentence(
-                "%d of %d samples had the deterministic circle as their "
-                "critical surface, answering for another sliding mass"
-                % (switches.count, len(values)),
+                SM.stat_note(SM.HEAD_OS_MASS, n=switches.count,
+                             total=len(values)),
                 sum(1 for v in values if v < 1.0))
         ores.notes["surfaces_tracked"] = len(per_surface)
         if ores.failed_samples:
             ores.notes["lost_by_cause"] = _counted_reasons(counts)
         if ores.failed_samples:
-            ores.notes["warning"] = (
-                f"{ores.failed_samples} of {num_samples} searches "
-                f"produced no valid surface.")
+            ores.notes["warning"] = SM.stat_note(
+                SM.OS_FAILED, failed=ores.failed_samples, n=num_samples)
         if not values:
             # v0.1.169 (D127) — same state as in ``run_global_minimum``,
             # said the same way, and DELIBERATELY not fixed the same way:

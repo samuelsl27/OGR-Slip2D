@@ -111,14 +111,17 @@ def statistics_factor_lines(factor_report=None) -> list:
     first since v0.1.165 (D96). Its own sentence, because what it qualifies
     is not one reported value but every sample, and so the probability of
     failure and the reliability index computed from them. The report's own
-    notes follow, untranslated, as the deterministic path carries them
-    (``ogr_core`` cannot import ``ogr_gui.i18n``). Empty without a standard,
-    so the notes of a run without one are exactly what they were.
+    notes follow as the deterministic path carries them: with their codes
+    since v0.1.353 (D335), which the notes panel says in the reader's
+    language. Empty without a standard, so the notes of a run without one
+    are exactly what they were.
     """
     if not bool(getattr(factor_report, "applied", False)):
         return []
+    from .core_messages import note_text
     lines = [tr("Design standard applied to every sample: %s — the "
                 "statistics describe the over-design factor, not the factor "
-                "of safety") % factor_report.summary()]
-    lines += [str(n) for n in (getattr(factor_report, "notes", None) or [])]
+                "of safety") % note_text(factor_report.summary())]
+    lines += [n if isinstance(n, str) else str(n)
+              for n in (getattr(factor_report, "notes", None) or [])]
     return lines

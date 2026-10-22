@@ -2710,7 +2710,9 @@ class InterpretWindow(QMainWindow):
                 # dictionary.
                 why = (getattr(prob.reported, "notes", None) or {}).get(
                     "critical_probabilistic")
-                self._info(tr(why) if why else tr(
+                # v0.1.353 (D335) -- through its code
+                from .core_messages import note_text
+                self._info(note_text(why) if why else tr(
                     "No critical probabilistic surface: it comes from the "
                     "Overall Slope analysis type."))
             return
