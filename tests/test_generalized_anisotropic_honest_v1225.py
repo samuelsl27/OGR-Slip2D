@@ -444,11 +444,17 @@ class TestTheDialog:
 
     def test_every_refusal_text_has_its_spanish(self):
         """The dialog translates these through a variable, which the
-        coverage test cannot see; this is its guard."""
+        coverage test cannot see; this is its guard.
+
+        v0.1.351 (D335) -- through their codes now, with their values: the
+        dialog's table of fixed sentences is gone, and what has to have its
+        Spanish is every refusal of the catalogue."""
+        from ogr_core.project.messages import STRENGTH_REFUSALS
         from ogr_gui.dialogs.material_properties_dialog import (
             MaterialPropertiesDialog)
         from ogr_gui.i18n import _DICTS
         es = _DICTS["es"]
-        missing = [t for t in MaterialPropertiesDialog._TABLE_REFUSALS.values()
-                   if t not in es]
+        assert not hasattr(MaterialPropertiesDialog, "_TABLE_REFUSALS")
+        missing = [s.english for s in STRENGTH_REFUSALS.values()
+                   if s.english not in es]
         assert not missing, missing

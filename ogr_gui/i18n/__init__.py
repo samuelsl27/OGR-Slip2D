@@ -5610,6 +5610,263 @@ _DICTS: dict[str, dict[str, str]] = {
             '{version} porque la interfaz nunca lo enseñó; pon {survivor} en '
             'su lugar. Calcular ahora ignoraría el valor y daría un número '
             'verosímil.',
+        # v0.1.351 (D335) — the refusals of the strength models
+        'The table has no rows: at least one range, ending at +90 degrees, '
+        'is needed.':
+            'La tabla no tiene filas: hace falta al menos un rango, que '
+            'acabe en +90°.',
+        'The Anisotropic Strength Function of material {name!r} was saved as '
+        'interpolated points by a version before 0.1.218. Its table is now a '
+        'list of angular RANGES (angle to, c, phi), as the reference '
+        'documents this strength type, so the same rows would mean something '
+        'else. Open the material, review the table as ranges and accept it.':
+            'La función de resistencia anisótropa del material {name!r} se '
+            'guardó como puntos interpolados con una versión anterior a la '
+            '0.1.218. Su tabla es ahora una lista de RANGOS angulares '
+            '(ángulo hasta, c, phi), como documenta la referencia este tipo '
+            'de resistencia, así que las mismas filas significarían otra '
+            'cosa. Abre el material, revisa la tabla como rangos y acéptala.',
+        'The table must be a list of (angle to, c, phi) rows.':
+            'La tabla tiene que ser una lista de filas (ángulo hasta, c, '
+            'phi).',
+        'Row {i} is not three numbers (angle to, c, phi): {row}.':
+            'La fila {i} no son tres números (ángulo hasta, c, phi): {row}.',
+        'The ranges must be ordered counter-clockwise: row {next} ends at '
+        '{end_next:g} degrees, not after row {i} ({end_i:g}).':
+            'Los rangos tienen que ir en sentido antihorario: la fila {next} '
+            'acaba en {end_next:g}°, no después de la fila {i} ({end_i:g}).',
+        "The first range starts at -90 degrees, so its 'angle to' must be "
+        'above -90; got {first:g}.':
+            'El primer rango empieza en -90°, así que su «ángulo hasta» '
+            'tiene que ser mayor que -90; vale {first:g}.',
+        'A and B must satisfy 0 <= A <= B degrees; got A = {a:g}, B = {b:g}.':
+            'A y B tienen que cumplir 0 <= A <= B grados; valen A = {a:g}, B '
+            '= {b:g}.',
+        'Joint {j}: A and B must satisfy 0 <= A <= B <= 90 degrees; got A = '
+        '{a}, B = {b}.':
+            'Junta {j}: A y B tienen que cumplir 0 <= A <= B <= 90°; valen A '
+            '= {a}, B = {b}.',
+        'The base needs a strength: a material or a model of its own.':
+            'La base necesita una resistencia: un material o un modelo '
+            'propio.',
+        'use_base_if_weaker must be true or false, not {value}.':
+            'use_base_if_weaker tiene que ser verdadero o falso, no {value}.',
+        "The anisotropy is defined by 'angle' or 'surface', not {value}.":
+            "La anisotropía se define por 'angle' o 'surface', no {value}.",
+        'The angle of joint {j} must be a number of degrees.':
+            'El ángulo de la junta {j} tiene que ser un número de grados.',
+        'Joint {j} needs a strength: a material or a model of its own.':
+            'La junta {j} necesita una resistencia: un material o un modelo '
+            'propio.',
+        'Joint {j} must name its anisotropic surface.':
+            'La junta {j} tiene que nombrar su superficie anisótropa.',
+        'At least one joint is needed, with its angle and its strength.':
+            'Hace falta al menos una junta, con su ángulo y su resistencia.',
+        'The mapping function is one of {choices}, not {value}.':
+            'La función de transición es una de {choices}, no {value}.',
+        'The strength model of {child} cannot be built: {error}':
+            'El modelo de resistencia de {child} no se puede construir: '
+            '{error}',
+        '{child} holds a Generalized Anisotropic model; it takes a plain '
+        'strength.':
+            '{child} tiene un modelo anisótropo generalizado; necesita una '
+            'resistencia simple.',
+        'The joint selection is one of {choices}, not {value}.':
+            'La selección de juntas es una de {choices}, no {value}.',
+        'the base':
+            'la base',
+        'joint {n}':
+            'la junta {n}',
+        'rule {n}':
+            'la regla {n}',
+        'The base':
+            'La base',
+        'Joint {n}':
+            'La junta {n}',
+        'Rule {n}':
+            'La regla {n}',
+        'The table has no rows: at least one (normal stress, cohesion, '
+        'friction angle) row is needed.':
+            'La tabla no tiene filas: hace falta al menos una fila (tensión '
+            'normal, cohesión, ángulo de rozamiento).',
+        'The table must be a list of (normal stress, cohesion, friction '
+        'angle) rows.':
+            'La tabla tiene que ser una lista de filas (tensión normal, '
+            'cohesión, ángulo de rozamiento).',
+        'Row {i} is not three numbers (normal stress, cohesion, friction '
+        'angle): {row}.':
+            'La fila {i} no son tres números (tensión normal, cohesión, '
+            'ángulo de rozamiento): {row}.',
+        'The normal stresses must increase strictly: row {next} ({s_next:g}) '
+        'does not exceed row {i} ({s_i:g}).':
+            'Las tensiones normales tienen que crecer estrictamente: la fila '
+            '{next} ({s_next:g}) no supera a la fila {i} ({s_i:g}).',
+        'Point {i}: the friction angle must be in [0, 90), got {phi:g}.':
+            'Punto {i}: el ángulo de rozamiento tiene que estar en [0, 90); '
+            'vale {phi:g}.',
+        'Point {i}: the cohesion must be zero or more, got {c:g}.':
+            'Punto {i}: la cohesión tiene que ser cero o más; vale {c:g}.',
+        'The table has no points: at least one {what} point is needed.':
+            'La tabla no tiene puntos: hace falta al menos un punto {what}.',
+        'The interpolation method must be one of {choices}, got {value}.':
+            'El método de interpolación tiene que ser uno de {choices}; vale '
+            '{value}.',
+        'The table must be a list of {what} points.':
+            'La tabla tiene que ser una lista de puntos {what}.',
+        'Point {i} is not {what}: {point}.':
+            'El punto {i} no es {what}: {point}.',
+        'Point {i} repeats the place ({x:g}, {y:g}): two strengths for one '
+        'point.':
+            'El punto {i} repite el lugar ({x:g}, {y:g}): dos resistencias '
+            'para un mismo punto.',
+        'The function type must be one of {choices}, got {value}.':
+            'El tipo de función tiene que ser uno de {choices}; vale '
+            '{value}.',
+        'Rule {i} must go from a lower to a higher angle within [-90, 90] '
+        'degrees; it goes from {amin:g} to {amax:g}.':
+            'La regla {i} tiene que ir de un ángulo menor a otro mayor '
+            'dentro de [-90, 90]°; va de {amin:g} a {amax:g}.',
+        'The angles of rule {i} are not numbers.':
+            'Los ángulos de la regla {i} no son números.',
+        'There are no rules: at least one range, from -90 to +90 degrees, '
+        'with its strength model, is needed.':
+            'No hay reglas: hace falta al menos un rango, de -90 a +90°, con '
+            'su modelo de resistencia.',
+        'Rule {next} must start where rule {i} ends ({end:g} degrees); it '
+        'starts at {start:g}, which leaves the angles between {end:g} and '
+        '{start:g} degrees with no strength.':
+            'La regla {next} tiene que empezar donde acaba la regla {i} '
+            '({end:g}°); empieza en {start:g}, lo que deja sin resistencia '
+            'los ángulos entre {end:g} y {start:g}°.',
+        'the input is one of {choices}, not {value}.':
+            'la entrada es una de {choices}, no {value}.',
+        'The strength model of rule {i} cannot be built: {error}':
+            'El modelo de resistencia de la regla {i} no se puede construir: '
+            '{error}',
+        'Rule {i} has no strength model.':
+            'La regla {i} no tiene modelo de resistencia.',
+        'The rules must be a list of {{angle_min, angle_max, model}} '
+        'objects.':
+            'Las reglas tienen que ser una lista de objetos {{angle_min, '
+            'angle_max, model}}.',
+        'Rule {i} is not an {{angle_min, angle_max, model}} object: {rule}.':
+            'La regla {i} no es un objeto {{angle_min, angle_max, model}}: '
+            '{rule}.',
+        'Rule {next} must start where rule {i} ends ({end:g} degrees); it '
+        'starts at {start:g}, which overlaps it, so part of a range can '
+        'never be reached.':
+            'La regla {next} tiene que empezar donde acaba la regla {i} '
+            '({end:g}°); empieza en {start:g}, lo que la solapa, así que '
+            'parte de un rango no se puede alcanzar nunca.',
+        'use_parent_water must be true or false, not {value}.':
+            'use_parent_water tiene que ser verdadero o falso, no {value}.',
+        'The first range starts at -90 degrees; it starts at {first:g}.':
+            'El primer rango empieza en -90°; empieza en {first:g}.',
+        'The Generalized Anisotropic material {name!r} links an anisotropic '
+        'surface. Its angle ranges are ABSOLUTE slice base inclinations, '
+        'measured from the horizontal, as the reference defines this input; '
+        "until 0.1.225 OGR subtracted the surface's bedding from the base "
+        'angle first, so the same ranges would now select other rules. Open '
+        'the material, review the ranges as absolute inclinations and accept '
+        'it: the link is removed.':
+            'El material anisótropo generalizado {name!r} enlaza una '
+            'superficie anisótropa. Sus rangos de ángulos son inclinaciones '
+            'ABSOLUTAS de la base de la dovela, medidas desde la horizontal, '
+            'como define la referencia esta entrada; hasta la 0.1.225, OGR '
+            'restaba antes la estratificación de la superficie al ángulo de '
+            'la base, así que los mismos rangos elegirían ahora otras '
+            'reglas. Abre el material, revisa los rangos como inclinaciones '
+            'absolutas y acéptalo: el enlace se quita.',
+        'The last range must end at +90 degrees; it ends at {end:g}.':
+            'El último rango tiene que acabar en +90°; acaba en {end:g}.',
+        '{who} links {other}, another Generalized Anisotropic material; a '
+        'range takes a plain strength model.':
+            '{who} enlaza {other}, otro material anisótropo generalizado; un '
+            'rango necesita un modelo de resistencia simple.',
+        '{who} links a material that is not in the project.':
+            '{who} enlaza un material que no está en el proyecto.',
+        '{who} links the material itself.':
+            '{who} se enlaza a sí mismo.',
+        'Material {name!r}, {model}: {why}':
+            'En el material {name!r}, {model}: {why}',
+        'Point {i} holds a value that is not finite.':
+            'El punto {i} tiene un valor que no es finito.',
+        'The table has no points: at least one (normal stress, shear '
+        'strength) point is needed.':
+            'La tabla no tiene puntos: hace falta al menos un punto (tensión '
+            'normal, resistencia al corte).',
+        'Point {i}: the shear strength must be zero or more, got {tau:g}.':
+            'Punto {i}: la resistencia al corte tiene que ser cero o más; '
+            'vale {tau:g}.',
+        'The table must be a list of (normal stress, shear strength) points.':
+            'La tabla tiene que ser una lista de puntos (tensión normal, '
+            'resistencia al corte).',
+        'Point {i} is not two numbers (normal stress, shear strength): '
+        '{point}.':
+            'El punto {i} no son dos números (tensión normal, resistencia al '
+            'corte): {point}.',
+        'The normal stresses must increase strictly: point {next} '
+        '({s_next:g}) does not exceed point {i} ({s_i:g}).':
+            'Las tensiones normales tienen que crecer estrictamente: el '
+            'punto {next} ({s_next:g}) no supera al punto {i} ({s_i:g}).',
+        'Row {i} holds a value that is not finite.':
+            'La fila {i} tiene un valor que no es finito.',
+        'Row {i}: the cohesion must be ≥ 0 and the friction angle in [0, '
+        '90), got c = {c:g}, phi = {phi:g}.':
+            'Fila {i}: la cohesión tiene que ser ≥ 0 y el ángulo de '
+            'rozamiento estar en [0, 90); vale c = {c:g}, phi = {phi:g}.',
+        'A{side} and B{side} must satisfy 0 <= A{side} <= B{side} <= 90 '
+        'degrees; got A{side} = {a:g}, B{side} = {b:g}.':
+            'A{side} y B{side} tienen que cumplir 0 <= A{side} <= B{side} <= '
+            '90°; valen A{side} = {a:g}, B{side} = {b:g}.',
+        'The bedding strength function: {why}':
+            'La función de resistencia de la estratificación: {why}',
+        'The rock mass strength function: {why}':
+            'La función de resistencia del macizo rocoso: {why}',
+        'The bedding strength function: {error}.':
+            'La función de resistencia de la estratificación: {error}.',
+        'The rock mass strength function: {error}.':
+            'La función de resistencia del macizo rocoso: {error}.',
+        'The Snowden Modified Anisotropic Linear material {name!r} was saved '
+        'by a version before 0.1.229, with c1, phi1, c2, phi2 and a single B '
+        'and a cosine transition of the friction ANGLE. The model is now the '
+        'one the reference documents: a linear transition of the shear '
+        'strength between a bedding and a rock mass strength function, with '
+        'A1, B1, A2 and B2. The material shows the nearest such form (A1 = '
+        'A2 = 0, B1 = B2 = B, one C/Phi row per function), whose numbers are '
+        'not the old ones: review it and accept it.':
+            'El material anisótropo lineal modificado de Snowden {name!r} se '
+            'guardó con una versión anterior a la 0.1.229, con c1, phi1, c2, '
+            'phi2, una sola B y una transición coseno del ÁNGULO de '
+            'rozamiento. El modelo es ahora el que documenta la referencia: '
+            'una transición lineal de la resistencia al corte entre una '
+            'función de resistencia de la estratificación y otra del macizo '
+            'rocoso, con A1, B1, A2 y B2. El material enseña la forma así '
+            'más cercana (A1 = A2 = 0, B1 = B2 = B, una fila c/φ por '
+            'función), cuyos números no son los de antes: revísalo y '
+            'acéptalo.',
+        '{model} is not a shear-normal or a C/Phi function.':
+            '{model} no es una función tangencial/normal ni una función c/φ.',
+        'The anisotropic surface is read by the joints of {users}; change '
+        'them first.':
+            'La superficie anisótropa la leen las juntas de {users}; '
+            'cámbialas antes.',
+        'joint {j} names an anisotropic surface that is not in the model.':
+            'la junta {j} nombra una superficie anisótropa que no está en el '
+            'modelo.',
+        # v0.1.351 (D335) — Snowden's two functions
+        'the bedding function cannot be built: {error}':
+            'la función de la estratificación no se puede construir: {error}',
+        'the rock mass function cannot be built: {error}':
+            'la función del macizo rocoso no se puede construir: {error}',
+        'the bedding function must be a Shear/Normal Function or a C/Phi '
+        'Function, got {data}':
+            'la función de la estratificación tiene que ser una función '
+            'tangencial/normal o una función c/φ; es {data}',
+        'the rock mass function must be a Shear/Normal Function or a C/Phi '
+        'Function, got {data}':
+            'la función del macizo rocoso tiene que ser una función '
+            'tangencial/normal o una función c/φ; es {data}',
         "The model has no visible annotation.":
             "El modelo no tiene ninguna anotación visible.",
         # v0.1.339 (D336) — the options of the PDF report
@@ -6085,43 +6342,8 @@ _DICTS: dict[str, dict[str, str]] = {
         "Row %d of the table is not three numbers.":
             "La fila %d de la tabla no son tres números.",
         "In material %s:": "En el material %s:",
-        "The table has no rows: at least one range, ending at +90°, "
-        "is needed.":
-            "La tabla no tiene filas: hace falta al menos un tramo, que "
-            "termine en +90°.",
-        "Every row must be three numbers: angle to, c and φ.":
-            "Cada fila tiene que ser tres números: ángulo hasta, c y φ.",
-        "The cohesion must be zero or more and the friction angle "
-        "between 0° and 90°.":
-            "La cohesión tiene que ser cero o mayor y el ángulo de "
-            "rozamiento estar entre 0° y 90°.",
-        "The first range starts at −90°, so its «angle to» must be "
-        "greater than −90°.":
-            "El primer tramo empieza en −90°, así que su «ángulo hasta» "
-            "tiene que ser mayor que −90°.",
-        "The ranges must be in order: each «angle to» greater than the "
-        "one before.":
-            "Los tramos tienen que ir en orden: cada «ángulo hasta» mayor "
-            "que el anterior.",
-        "The last range must end at +90°.":
-            "El último tramo tiene que terminar en +90°.",
 
         # --- v0.1.225 · D218 y D216: Generalized Anisotropic y A, B -----
-        "Every rule must be a range of angles with a strength model.":
-            "Cada regla tiene que ser un tramo de ángulos con un modelo de "
-            "resistencia.",
-        "Each range must go from a lower to a higher angle, between "
-        "−90° and +90°.":
-            "Cada tramo tiene que ir de un ángulo menor a otro mayor, entre "
-            "−90° y +90°.",
-        "The first range must start at −90°.":
-            "El primer tramo tiene que empezar en −90°.",
-        "Each range must start where the previous one ends: no gaps and "
-        "no overlaps.":
-            "Cada tramo tiene que empezar donde acaba el anterior: sin "
-            "huecos ni solapes.",
-        "A and B must satisfy 0° ≤ A ≤ B.":
-            "A y B tienen que cumplir 0° ≤ A ≤ B.",
         "This material links an anisotropic surface. Since 0.1.225 "
         "its ranges are absolute slice base inclinations, measured "
         "from the horizontal, as the reference defines them; before, "
@@ -6190,24 +6412,6 @@ _DICTS: dict[str, dict[str, str]] = {
         "This anisotropic surface is read by the joints of a Generalized "
         "Anisotropic material: change them first.":
             'Esta superficie anisótropa la leen las juntas de un material anisótropo generalizado: cámbialas primero.',
-        "The base needs a material, or a strength model that can be "
-        "built.":
-            "La base necesita un material, o un modelo de resistencia que "
-            "se pueda construir.",
-        "At least one joint is needed.":
-            "Hace falta al menos una junta.",
-        "Every joint needs a material, or a strength model that can be "
-        "built.":
-            "Cada junta necesita un material, o un modelo de resistencia "
-            "que se pueda construir.",
-        "A and B of every joint must satisfy 0 <= A <= B <= 90 degrees.":
-            "A y B de cada junta tienen que cumplir 0 <= A <= B <= 90 "
-            "grados.",
-        "Every joint must follow an anisotropic surface.":
-            "Cada junta tiene que seguir una superficie anisótropa.",
-        "A joint follows an anisotropic surface that is not in the model: "
-        "choose another one.":
-            'Una junta sigue una superficie anisótropa que no está en el modelo: elige otra.',
         "How the strength goes from the joint's to the base's as the slice "
         "base turns away from the joint: A and B as in Anisotropic Linear, "
         "the S-shaped cosine curve (sin² of the offset) or a straight line "
@@ -6240,19 +6444,6 @@ _DICTS: dict[str, dict[str, str]] = {
             "tramo.",
         "Row %d of the table is not %d numbers.":
             "La fila %d de la tabla no son %d números.",
-        "The table has no points: at least one (normal stress, shear "
-        "strength) point is needed.":
-            "La tabla no tiene puntos: hace falta al menos un punto (tensión "
-            "normal, resistencia al corte).",
-        "Every point must be two numbers: normal stress and shear "
-        "strength.":
-            "Cada punto tiene que ser dos números: tensión normal y "
-            "resistencia al corte.",
-        "The shear strength must be zero or more.":
-            "La resistencia al corte tiene que ser cero o mayor.",
-        "The normal stresses must increase from one row to the next.":
-            "Las tensiones normales tienen que crecer de una fila a la "
-            "siguiente.",
         "Unsaturated shear strength angle. 0 means matric suction "
         "does not contribute to strength (conservative default).":
             "Ángulo de resistencia no saturada. Con 0 la succión matricial "
@@ -6268,21 +6459,6 @@ _DICTS: dict[str, dict[str, str]] = {
         "(own model: %s)": "(modelo propio: %s)",
         "(own model: %s; its link is broken)":
             "(modelo propio: %s; su enlace está roto)",
-        "A Generalized Anisotropic material needs its ranges, from −90° "
-        "to +90°, each taking the strength of a material.":
-            'Un material anisótropo generalizado necesita sus tramos, de −90° a +90°, cada uno con la resistencia de un material.',
-        "Every range needs a material, or a strength model that can be "
-        "built.":
-            "Cada tramo necesita un material, o un modelo de resistencia "
-            "que se pueda construir.",
-        "A range takes a material that is not in the project: choose "
-        "another one.":
-            'Un tramo toma un material que no está en el proyecto: elige otro.',
-        "A range cannot take the strength of its own material.":
-            "Un tramo no puede tomar la resistencia de su propio material.",
-        "A range cannot take the strength of another Generalized "
-        "Anisotropic material.":
-            'Un tramo no puede tomar la resistencia de otro material anisótropo generalizado.',
         "Row %d of the table: «angle to» is not a number.":
             "Fila %d de la tabla: «ángulo hasta» no es un número.",
         "%s cannot be removed: the ranges of %s take its strength. Change "
@@ -6306,25 +6482,6 @@ _DICTS: dict[str, dict[str, str]] = {
         "one is shown.":
             "Esta función no es corte-normal ni C/Phi; se muestra una "
             "nueva.",
-        "The table has no rows: at least one (normal stress, cohesion, "
-        "friction angle) row is needed.":
-            "La tabla no tiene filas: hace falta al menos una fila (tensión "
-            "normal, cohesión, ángulo de rozamiento).",
-        "Every row must be three numbers: normal stress, cohesion and "
-        "friction angle.":
-            "Cada fila tiene que ser tres números: tensión normal, cohesión "
-            "y ángulo de rozamiento.",
-        "A1, B1, A2 and B2 must satisfy 0° ≤ A ≤ B ≤ 90° on each side of "
-        "the bedding.":
-            "A1, B1, A2 y B2 tienen que cumplir 0° ≤ A ≤ B ≤ 90° a cada lado "
-            "de la estratificación.",
-        "The bedding strength function is not valid:":
-            "La función de resistencia de la estratificación no es válida:",
-        "The rock mass strength function is not valid:":
-            "La función de resistencia del macizo rocoso no es válida:",
-        "it must be a shear-normal or a C/Phi function that can be built.":
-            "tiene que ser una función corte-normal o C/Phi que se pueda "
-            "construir.",
         "This material was saved by a version before 0.1.229, with c1, "
         "φ1, c2, φ2 and a single B and a cosine transition. The model is "
         "now the reference's: a linear transition between a bedding and a "

@@ -2200,19 +2200,22 @@ class SnowdenModifiedAnisotropicLinear(StrengthModel):
         data = getattr(self, which)
         cached = self._built.get(which)
         if cached is None or cached[0] is not data or cached[1] != data:
+            # v0.1.351 (D335) -- with its code (imported here: the
+            # catalogue imports this module for its legacy notes)
+            from ..project.messages import (S_SNOWDEN_CANNOT_BUILD,
+                                            S_SNOWDEN_NOT_A_FUNCTION,
+                                            strength_refusal)
             if not isinstance(data, dict) or \
                     data.get("model_id") not in self.FUNCTION_IDS:
-                built = IncompleteSnowden(
-                    f"the {which.replace('_', ' ')} function must be a "
-                    f"Shear/Normal Function or a C/Phi Function, got "
-                    f"{data!r}")
+                built = IncompleteSnowden(strength_refusal(
+                    S_SNOWDEN_NOT_A_FUNCTION + which, data=repr(data)))
             else:
                 try:
                     built = StrengthModel.from_dict(data)
                 except Exception as exc:  # noqa: BLE001 - reported below
-                    built = IncompleteSnowden(
-                        f"the {which.replace('_', ' ')} function cannot be "
-                        f"built: {type(exc).__name__}: {exc}")
+                    built = IncompleteSnowden(strength_refusal(
+                        S_SNOWDEN_CANNOT_BUILD + which,
+                        error="%s: %s" % (type(exc).__name__, exc)))
             cached = (data, copy.deepcopy(data), built)
             self._built[which] = cached
         if isinstance(cached[2], Exception):

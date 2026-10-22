@@ -278,3 +278,282 @@ def nested_refusal(code: str, **args) -> dict:
     """One of these refusals as the value of another message's field."""
     from ..messages import as_nested
     return as_nested(refusal_message(code, **args))
+
+
+# ======================================================================
+# The refusals of the strength models (v0.1.351, D335)
+# ======================================================================
+#: Why a material's strength model cannot be computed with: the tables of
+#: the function models, Snowden, the anisotropic models and the links of a
+#: Generalized Anisotropic one. A value the old f-string wrote with ``!r``
+#: of an object that is not a plain string (a row, a list) travels as its
+#: ``repr`` already made, so the sentence is the same in the window, in the
+#: API's JSON and after a pickle.
+from ..materials.builtin_models import (  # noqa: E402
+    ANISOTROPIC_FUNCTION_LEGACY_NOTE as _ANISO_LEGACY,
+    GENERALIZED_SURFACE_NOTE as _GEN_SURFACE_LEGACY,
+    SNOWDEN_LEGACY_NOTE as _SNOWDEN_LEGACY)
+
+S_MATERIAL = "strength.material"
+S_POINT_NOT_FINITE = "strength.point_not_finite"
+S_ROW_NOT_FINITE = "strength.row_not_finite"
+S_ROW_STRENGTH = "strength.row_strength"
+S_LAST_RANGE_END = "strength.last_range_end"
+S_POINTS_NOT_LIST = "strength.points.not_list"
+S_POINTS_EMPTY = "strength.points.empty"
+S_POINTS_NOT_TWO = "strength.points.not_two"
+S_POINTS_NEGATIVE = "strength.points.negative"
+S_POINTS_ORDER = "strength.points.order"
+S_DISCRETE_TYPE = "strength.discrete.type"
+S_DISCRETE_METHOD = "strength.discrete.method"
+S_DISCRETE_NOT_LIST = "strength.discrete.not_list"
+S_DISCRETE_EMPTY = "strength.discrete.empty"
+S_DISCRETE_NOT_POINT = "strength.discrete.not_point"
+S_DISCRETE_COHESION = "strength.discrete.cohesion"
+S_DISCRETE_ANGLE = "strength.discrete.angle"
+S_DISCRETE_REPEATED = "strength.discrete.repeated"
+S_CPHI_NOT_LIST = "strength.cphi.not_list"
+S_CPHI_EMPTY = "strength.cphi.empty"
+S_CPHI_NOT_THREE = "strength.cphi.not_three"
+S_CPHI_ORDER = "strength.cphi.order"
+S_ANISO_NOT_LIST = "strength.aniso.not_list"
+S_ANISO_EMPTY = "strength.aniso.empty"
+S_ANISO_NOT_THREE = "strength.aniso.not_three"
+S_ANISO_START = "strength.aniso.start"
+S_ANISO_ORDER = "strength.aniso.order"
+S_ANISO_LEGACY = "strength.aniso.legacy"
+S_SNOWDEN_AB = "strength.snowden.ab"
+S_SNOWDEN_FUNCTION = "strength.snowden.function."
+S_SNOWDEN_FUNCTION_ERROR = "strength.snowden.function_error."
+S_SNOWDEN_NOT_FUNCTION = "strength.snowden.not_function"
+#: Why Snowden could not build one of its two functions
+#: (``IncompleteSnowden``), one code per role.
+S_SNOWDEN_NOT_A_FUNCTION = "strength.snowden.not_a_function."
+S_SNOWDEN_CANNOT_BUILD = "strength.snowden.cannot_build."
+S_SNOWDEN_LEGACY = "strength.snowden.legacy"
+S_ANISO_LINEAR_AB = "strength.aniso_linear.ab"
+S_GEN_NOT_LIST = "strength.gen.not_list"
+S_GEN_EMPTY = "strength.gen.empty"
+S_GEN_NOT_RULE = "strength.gen.not_rule"
+S_GEN_ANGLES_NAN = "strength.gen.angles_nan"
+S_GEN_ANGLES = "strength.gen.angles"
+S_GEN_START = "strength.gen.start"
+S_GEN_GAP = "strength.gen.gap"
+S_GEN_OVERLAP = "strength.gen.overlap"
+S_GEN_NO_MODEL = "strength.gen.no_model"
+S_GEN_MODEL_ERROR = "strength.gen.model_error"
+S_GEN_INPUT_TYPE = "strength.gen.input_type"
+S_GEN_PARENT_WATER = "strength.gen.parent_water"
+S_GEN_SURFACE_LEGACY = "strength.gen.surface_legacy"
+S_AOS_DEFINITION = "strength.aos.definition"
+S_AOS_MAPPING = "strength.aos.mapping"
+S_AOS_SELECTION = "strength.aos.selection"
+S_AOS_BASE_IF_WEAKER = "strength.aos.base_if_weaker"
+S_AOS_BASE = "strength.aos.base"
+S_AOS_JOINTS = "strength.aos.joints"
+S_AOS_JOINT_MODEL = "strength.aos.joint_model"
+S_AOS_JOINT_SURFACE = "strength.aos.joint_surface"
+S_AOS_JOINT_ANGLE = "strength.aos.joint_angle"
+S_AOS_AB = "strength.aos.ab"
+S_AOS_MODEL_ERROR = "strength.aos.model_error"
+S_AOS_NESTED = "strength.aos.nested"
+#: ``rule 2``, ``the base``, ``joint 1`` -- and capitalised -- as a fragment.
+S_CHILD = "strength.child."
+S_CHILD_CAP = "strength.child_cap."
+S_LINK_MISSING = "strength.link.missing"
+S_LINK_SELF = "strength.link.self"
+S_LINK_GENERALIZED = "strength.link.generalized"
+S_SURFACE_MISSING = "strength.surface_missing"
+S_SURFACE_IN_USE = "strength.surface_in_use"
+
+_NS_ST = "(normal stress, shear strength)"
+_NS_C_PHI = "(normal stress, cohesion, friction angle)"
+_INCREASE = "The normal stresses must increase strictly: "
+_TO_C_PHI = "(angle to, c, phi)"
+_ROLES = (("bedding", "bedding"), ("rock_mass", "rock mass"))
+
+STRENGTH_REFUSALS = {s.code: s for s in (
+    MessageSpec(S_MATERIAL, "Material {name!r}, {model}: {why}",
+                kinds=(("model", "label"),)),
+    MessageSpec(S_POINT_NOT_FINITE, "Point {i} holds a value that is not finite."),
+    MessageSpec(S_ROW_NOT_FINITE, "Row {i} holds a value that is not finite."),
+    MessageSpec(S_ROW_STRENGTH,
+                "Row {i}: the cohesion must be ≥ 0 and the friction angle in "
+                "[0, 90), got c = {c:g}, phi = {phi:g}."),
+    MessageSpec(S_LAST_RANGE_END,
+                "The last range must end at +90 degrees; it ends at {end:g}."),
+    MessageSpec(S_POINTS_NOT_LIST,
+                "The table must be a list of " + _NS_ST + " points."),
+    MessageSpec(S_POINTS_EMPTY,
+                "The table has no points: at least one " + _NS_ST + " point is "
+                "needed."),
+    MessageSpec(S_POINTS_NOT_TWO,
+                "Point {i} is not two numbers " + _NS_ST + ": {point}."),
+    MessageSpec(S_POINTS_NEGATIVE,
+                "Point {i}: the shear strength must be zero or more, got "
+                "{tau:g}."),
+    MessageSpec(S_POINTS_ORDER,
+                _INCREASE + "point {next} ({s_next:g}) does not exceed point "
+                "{i} ({s_i:g})."),
+    MessageSpec(S_DISCRETE_TYPE,
+                "The function type must be one of {choices}, got {value}."),
+    MessageSpec(S_DISCRETE_METHOD,
+                "The interpolation method must be one of {choices}, got "
+                "{value}."),
+    MessageSpec(S_DISCRETE_NOT_LIST, "The table must be a list of {what} points."),
+    MessageSpec(S_DISCRETE_EMPTY,
+                "The table has no points: at least one {what} point is "
+                "needed."),
+    MessageSpec(S_DISCRETE_NOT_POINT, "Point {i} is not {what}: {point}."),
+    MessageSpec(S_DISCRETE_COHESION,
+                "Point {i}: the cohesion must be zero or more, got {c:g}."),
+    MessageSpec(S_DISCRETE_ANGLE,
+                "Point {i}: the friction angle must be in [0, 90), got "
+                "{phi:g}."),
+    MessageSpec(S_DISCRETE_REPEATED,
+                "Point {i} repeats the place ({x:g}, {y:g}): two strengths for "
+                "one point."),
+    MessageSpec(S_CPHI_NOT_LIST,
+                "The table must be a list of " + _NS_C_PHI + " rows."),
+    MessageSpec(S_CPHI_EMPTY,
+                "The table has no rows: at least one " + _NS_C_PHI + " row is "
+                "needed."),
+    MessageSpec(S_CPHI_NOT_THREE,
+                "Row {i} is not three numbers " + _NS_C_PHI + ": {row}."),
+    MessageSpec(S_CPHI_ORDER,
+                _INCREASE + "row {next} ({s_next:g}) does not exceed row {i} "
+                "({s_i:g})."),
+    MessageSpec(S_ANISO_NOT_LIST,
+                "The table must be a list of " + _TO_C_PHI + " rows."),
+    MessageSpec(S_ANISO_EMPTY,
+                "The table has no rows: at least one range, ending at +90 "
+                "degrees, is needed."),
+    MessageSpec(S_ANISO_NOT_THREE,
+                "Row {i} is not three numbers " + _TO_C_PHI + ": {row}."),
+    MessageSpec(S_ANISO_START,
+                "The first range starts at -90 degrees, so its 'angle to' must "
+                "be above -90; got {first:g}."),
+    MessageSpec(S_ANISO_ORDER,
+                "The ranges must be ordered counter-clockwise: row {next} ends "
+                "at {end_next:g} degrees, not after row {i} ({end_i:g})."),
+    MessageSpec(S_ANISO_LEGACY, _ANISO_LEGACY),
+    MessageSpec(S_SNOWDEN_AB,
+                "A{side} and B{side} must satisfy 0 <= A{side} <= B{side} <= 90 "
+                "degrees; got A{side} = {a:g}, B{side} = {b:g}."),
+    MessageSpec(S_SNOWDEN_NOT_FUNCTION,
+                "{model} is not a shear-normal or a C/Phi function.",
+                kinds=(("model", "label"),)),
+    MessageSpec(S_SNOWDEN_LEGACY, _SNOWDEN_LEGACY),
+    MessageSpec(S_ANISO_LINEAR_AB,
+                "A and B must satisfy 0 <= A <= B degrees; got A = {a:g}, B = "
+                "{b:g}."),
+    MessageSpec(S_GEN_NOT_LIST,
+                "The rules must be a list of {{angle_min, angle_max, model}} "
+                "objects."),
+    MessageSpec(S_GEN_EMPTY,
+                "There are no rules: at least one range, from -90 to +90 "
+                "degrees, with its strength model, is needed."),
+    MessageSpec(S_GEN_NOT_RULE,
+                "Rule {i} is not an {{angle_min, angle_max, model}} object: "
+                "{rule}."),
+    MessageSpec(S_GEN_ANGLES_NAN, "The angles of rule {i} are not numbers."),
+    MessageSpec(S_GEN_ANGLES,
+                "Rule {i} must go from a lower to a higher angle within [-90, "
+                "90] degrees; it goes from {amin:g} to {amax:g}."),
+    MessageSpec(S_GEN_START,
+                "The first range starts at -90 degrees; it starts at "
+                "{first:g}."),
+    MessageSpec(S_GEN_GAP,
+                "Rule {next} must start where rule {i} ends ({end:g} degrees); "
+                "it starts at {start:g}, which leaves the angles between "
+                "{end:g} and {start:g} degrees with no strength."),
+    MessageSpec(S_GEN_OVERLAP,
+                "Rule {next} must start where rule {i} ends ({end:g} degrees); "
+                "it starts at {start:g}, which overlaps it, so part of a range "
+                "can never be reached."),
+    MessageSpec(S_GEN_NO_MODEL, "Rule {i} has no strength model."),
+    MessageSpec(S_GEN_MODEL_ERROR,
+                "The strength model of rule {i} cannot be built: {error}"),
+    MessageSpec(S_GEN_INPUT_TYPE, "the input is one of {choices}, not {value}."),
+    MessageSpec(S_GEN_PARENT_WATER,
+                "use_parent_water must be true or false, not {value}."),
+    MessageSpec(S_GEN_SURFACE_LEGACY, _GEN_SURFACE_LEGACY),
+    MessageSpec(S_AOS_DEFINITION,
+                "The anisotropy is defined by 'angle' or 'surface', not "
+                "{value}."),
+    MessageSpec(S_AOS_MAPPING, "The mapping function is one of {choices}, not "
+                               "{value}."),
+    MessageSpec(S_AOS_SELECTION,
+                "The joint selection is one of {choices}, not {value}."),
+    MessageSpec(S_AOS_BASE_IF_WEAKER,
+                "use_base_if_weaker must be true or false, not {value}."),
+    MessageSpec(S_AOS_BASE,
+                "The base needs a strength: a material or a model of its own."),
+    MessageSpec(S_AOS_JOINTS,
+                "At least one joint is needed, with its angle and its "
+                "strength."),
+    MessageSpec(S_AOS_JOINT_MODEL,
+                "Joint {j} needs a strength: a material or a model of its own."),
+    MessageSpec(S_AOS_JOINT_SURFACE, "Joint {j} must name its anisotropic surface."),
+    MessageSpec(S_AOS_JOINT_ANGLE,
+                "The angle of joint {j} must be a number of degrees."),
+    MessageSpec(S_AOS_AB,
+                "Joint {j}: A and B must satisfy 0 <= A <= B <= 90 degrees; got "
+                "A = {a}, B = {b}."),
+    MessageSpec(S_AOS_MODEL_ERROR,
+                "The strength model of {child} cannot be built: {error}"),
+    MessageSpec(S_AOS_NESTED,
+                "{child} holds a Generalized Anisotropic model; it takes a "
+                "plain strength."),
+    MessageSpec(S_CHILD + "rules", "rule {n}"),
+    MessageSpec(S_CHILD + "base", "the base"),
+    MessageSpec(S_CHILD + "joints", "joint {n}"),
+    MessageSpec(S_CHILD_CAP + "rules", "Rule {n}"),
+    MessageSpec(S_CHILD_CAP + "base", "The base"),
+    MessageSpec(S_CHILD_CAP + "joints", "Joint {n}"),
+    MessageSpec(S_LINK_MISSING, "{who} links a material that is not in the "
+                                "project."),
+    MessageSpec(S_LINK_SELF, "{who} links the material itself."),
+    MessageSpec(S_LINK_GENERALIZED,
+                "{who} links {other}, another Generalized Anisotropic material; "
+                "a range takes a plain strength model."),
+    MessageSpec(S_SURFACE_MISSING,
+                "joint {j} names an anisotropic surface that is not in the "
+                "model."),
+    MessageSpec(S_SURFACE_IN_USE,
+                "The anisotropic surface is read by the joints of {users}; "
+                "change them first."),
+) + tuple(MessageSpec(S_SNOWDEN_FUNCTION + role,
+                      "The " + label + " strength function: {why}")
+          for role, label in _ROLES)
+  + tuple(MessageSpec(S_SNOWDEN_FUNCTION_ERROR + role,
+                      "The " + label + " strength function: {error}.")
+          for role, label in _ROLES)
+  + tuple(MessageSpec(S_SNOWDEN_NOT_A_FUNCTION + role,
+                      "the " + label + " function must be a Shear/Normal "
+                      "Function or a C/Phi Function, got {data}")
+          for role, label in _ROLES)
+  + tuple(MessageSpec(S_SNOWDEN_CANNOT_BUILD + role,
+                      "the " + label + " function cannot be built: {error}")
+          for role, label in _ROLES)}
+
+
+def strength_refusal(code: str, **args) -> Coded:
+    """A refusal of a strength model, ``code`` with ``args``: its English
+    sentence, carrying the code and the values (v0.1.351)."""
+    return coded(STRENGTH_REFUSALS, code, **args)
+
+
+def nested_strength(code: str, **args) -> dict:
+    """One of these refusals as the value of another message's field."""
+    from ..messages import as_nested
+    return as_nested(strength_refusal(code, **args))
+
+
+def child_label(key, capital: bool = False) -> dict:
+    """``rule 2``, ``the base`` or ``joint 1`` of a Generalized Anisotropic
+    child, nested (``GeneralizedAnisotropic.child_label``'s words)."""
+    kind, i = key
+    code = (S_CHILD_CAP if capital else S_CHILD) + kind
+    return (nested_strength(code) if kind == "base"
+            else nested_strength(code, n=i + 1))

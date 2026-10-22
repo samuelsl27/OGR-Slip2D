@@ -29,6 +29,8 @@ from typing import Iterable, Optional
 from ..geometry import BoundaryType
 from . import messages as M
 from .messages import nested_refusal as _nested_refusal
+from .messages import nested_strength as _nested_strength
+from .messages import strength_refusal as _st
 from .messages import refusal_message as _refusal
 from .messages import rule_message as _msg
 
@@ -355,43 +357,34 @@ def anisotropic_function_rows_refusal(rows) -> Optional[Refusal]:
         rows = [tuple(r) for r in rows]
     except TypeError:
         return Refusal("anisotropic_table_not_rows",
-                       "The table must be a list of (angle to, c, phi) "
-                       "rows.")
+                       _st(M.S_ANISO_NOT_LIST))
     if not rows:
-        return Refusal("anisotropic_table_empty",
-                       "The table has no rows: at least one range, ending "
-                       "at +90 degrees, is needed.")
+        return Refusal("anisotropic_table_empty", _st(M.S_ANISO_EMPTY))
     angles = []
     for i, row in enumerate(rows, start=1):
         try:
             a, c, phi = (float(v) for v in row)
         except (TypeError, ValueError):
             return Refusal("anisotropic_table_not_rows",
-                           f"Row {i} is not three numbers (angle to, c, "
-                           f"phi): {row!r}.")
+                           _st(M.S_ANISO_NOT_THREE, i=i, row=repr(row)))
         if not all(math.isfinite(v) for v in (a, c, phi)):
             return Refusal("anisotropic_table_not_rows",
-                           f"Row {i} holds a value that is not finite.")
+                           _st(M.S_ROW_NOT_FINITE, i=i))
         if c < 0.0 or not 0.0 <= phi < 90.0:
             return Refusal("anisotropic_table_strength",
-                           f"Row {i}: the cohesion must be ≥ 0 and the "
-                           f"friction angle in [0, 90), got c = {c:g}, "
-                           f"phi = {phi:g}.")
+                           _st(M.S_ROW_STRENGTH, i=i, c=c, phi=phi))
         angles.append(a)
     if angles[0] <= -90.0:
         return Refusal("anisotropic_table_start",
-                       f"The first range starts at -90 degrees, so its "
-                       f"'angle to' must be above -90; got {angles[0]:g}.")
+                       _st(M.S_ANISO_START, first=angles[0]))
     for i in range(1, len(angles)):
         if not angles[i] > angles[i - 1]:
             return Refusal("anisotropic_table_order",
-                           f"The ranges must be ordered counter-clockwise: "
-                           f"row {i + 1} ends at {angles[i]:g} degrees, not "
-                           f"after row {i} ({angles[i - 1]:g}).")
+                           _st(M.S_ANISO_ORDER, next=i + 1,
+                               end_next=angles[i], i=i, end_i=angles[i - 1]))
     if abs(angles[-1] - 90.0) > 1e-9:
         return Refusal("anisotropic_table_end",
-                       f"The last range must end at +90 degrees; it ends "
-                       f"at {angles[-1]:g}.")
+                       _st(M.S_LAST_RANGE_END, end=angles[-1]))
     return None
 
 
@@ -411,34 +404,28 @@ def function_points_refusal(points) -> Optional[Refusal]:
         pts = [tuple(p) for p in (points or [])]
     except TypeError:
         return Refusal("function_points_not_points",
-                       "The table must be a list of (normal stress, shear "
-                       "strength) points.")
+                       _st(M.S_POINTS_NOT_LIST))
     if not pts:
-        return Refusal("function_points_empty",
-                       "The table has no points: at least one (normal "
-                       "stress, shear strength) point is needed.")
+        return Refusal("function_points_empty", _st(M.S_POINTS_EMPTY))
     sigmas = []
     for i, p in enumerate(pts, start=1):
         try:
             s, tau = (float(v) for v in p)
         except (TypeError, ValueError):
             return Refusal("function_points_not_points",
-                           f"Point {i} is not two numbers (normal stress, "
-                           f"shear strength): {p!r}.")
+                           _st(M.S_POINTS_NOT_TWO, i=i, point=repr(p)))
         if not (math.isfinite(s) and math.isfinite(tau)):
             return Refusal("function_points_not_points",
-                           f"Point {i} holds a value that is not finite.")
+                           _st(M.S_POINT_NOT_FINITE, i=i))
         if tau < 0.0:
             return Refusal("function_points_strength",
-                           f"Point {i}: the shear strength must be zero or "
-                           f"more, got {tau:g}.")
+                           _st(M.S_POINTS_NEGATIVE, i=i, tau=tau))
         sigmas.append(s)
     for i in range(1, len(sigmas)):
         if not sigmas[i] > sigmas[i - 1]:
             return Refusal("function_points_order",
-                           f"The normal stresses must increase strictly: "
-                           f"point {i + 1} ({sigmas[i]:g}) does not exceed "
-                           f"point {i} ({sigmas[i - 1]:g}).")
+                           _st(M.S_POINTS_ORDER, next=i + 1, s_next=sigmas[i],
+                               i=i, s_i=sigmas[i - 1]))
     return None
 
 
@@ -458,24 +445,25 @@ def discrete_function_refusal(strength) -> Optional[Refusal]:
     ftype = getattr(strength, "function_type", None)
     if ftype not in strength.FUNCTION_TYPES:
         return Refusal("discrete_function_type",
-                       f"The function type must be one of "
-                       f"{list(strength.FUNCTION_TYPES)}, got {ftype!r}.")
+                       _st(M.S_DISCRETE_TYPE,
+                           choices=str(list(strength.FUNCTION_TYPES)),
+                           value=repr(ftype)))
     method = getattr(strength, "method", None)
     if method not in strength.METHODS:
         return Refusal("discrete_function_method",
-                       f"The interpolation method must be one of "
-                       f"{list(strength.METHODS)}, got {method!r}.")
+                       _st(M.S_DISCRETE_METHOD,
+                           choices=str(list(strength.METHODS)),
+                           value=repr(method)))
     width = 3 if ftype == "undrained" else 4
     what = ("(x, y, cu)" if ftype == "undrained" else "(x, y, c, phi)")
     try:
         rows = [tuple(r) for r in (strength.points or [])]
     except TypeError:
         return Refusal("discrete_function_not_points",
-                       f"The table must be a list of {what} points.")
+                       _st(M.S_DISCRETE_NOT_LIST, what=what))
     if not rows:
         return Refusal("discrete_function_empty",
-                       f"The table has no points: at least one {what} point "
-                       f"is needed.")
+                       _st(M.S_DISCRETE_EMPTY, what=what))
     seen = set()
     for i, r in enumerate(rows, start=1):
         try:
@@ -484,22 +472,21 @@ def discrete_function_refusal(strength) -> Optional[Refusal]:
             vals = ()
         if len(vals) != width:
             return Refusal("discrete_function_not_points",
-                           f"Point {i} is not {what}: {r!r}.")
+                           _st(M.S_DISCRETE_NOT_POINT, i=i, what=what,
+                               point=repr(r)))
         if not all(math.isfinite(v) for v in vals):
             return Refusal("discrete_function_not_points",
-                           f"Point {i} holds a value that is not finite.")
+                           _st(M.S_POINT_NOT_FINITE, i=i))
         if vals[2] < 0.0:
             return Refusal("discrete_function_strength",
-                           f"Point {i}: the cohesion must be zero or more, "
-                           f"got {vals[2]:g}.")
+                           _st(M.S_DISCRETE_COHESION, i=i, c=vals[2]))
         if width == 4 and not 0.0 <= vals[3] < 90.0:
             return Refusal("discrete_function_angle",
-                           f"Point {i}: the friction angle must be in "
-                           f"[0, 90), got {vals[3]:g}.")
+                           _st(M.S_DISCRETE_ANGLE, i=i, phi=vals[3]))
         if vals[:2] in seen:
             return Refusal("discrete_function_repeated",
-                           f"Point {i} repeats the place ({vals[0]:g}, "
-                           f"{vals[1]:g}): two strengths for one point.")
+                           _st(M.S_DISCRETE_REPEATED, i=i, x=vals[0],
+                               y=vals[1]))
         seen.add(vals[:2])
     return None
 
@@ -517,36 +504,28 @@ def c_phi_rows_refusal(rows) -> Optional[Refusal]:
     try:
         rows = [tuple(r) for r in (rows or [])]
     except TypeError:
-        return Refusal("c_phi_rows_not_rows",
-                       "The table must be a list of (normal stress, cohesion, "
-                       "friction angle) rows.")
+        return Refusal("c_phi_rows_not_rows", _st(M.S_CPHI_NOT_LIST))
     if not rows:
-        return Refusal("c_phi_rows_empty",
-                       "The table has no rows: at least one (normal stress, "
-                       "cohesion, friction angle) row is needed.")
+        return Refusal("c_phi_rows_empty", _st(M.S_CPHI_EMPTY))
     sigmas = []
     for i, row in enumerate(rows, start=1):
         try:
             s, c, phi = (float(v) for v in row)
         except (TypeError, ValueError):
             return Refusal("c_phi_rows_not_rows",
-                           f"Row {i} is not three numbers (normal stress, "
-                           f"cohesion, friction angle): {row!r}.")
+                           _st(M.S_CPHI_NOT_THREE, i=i, row=repr(row)))
         if not all(math.isfinite(v) for v in (s, c, phi)):
             return Refusal("c_phi_rows_not_rows",
-                           f"Row {i} holds a value that is not finite.")
+                           _st(M.S_ROW_NOT_FINITE, i=i))
         if c < 0.0 or not 0.0 <= phi < 90.0:
             return Refusal("c_phi_rows_strength",
-                           f"Row {i}: the cohesion must be ≥ 0 and the "
-                           f"friction angle in [0, 90), got c = {c:g}, "
-                           f"phi = {phi:g}.")
+                           _st(M.S_ROW_STRENGTH, i=i, c=c, phi=phi))
         sigmas.append(s)
     for i in range(1, len(sigmas)):
         if not sigmas[i] > sigmas[i - 1]:
             return Refusal("c_phi_rows_order",
-                           f"The normal stresses must increase strictly: row "
-                           f"{i + 1} ({sigmas[i]:g}) does not exceed row {i} "
-                           f"({sigmas[i - 1]:g}).")
+                           _st(M.S_CPHI_ORDER, next=i + 1, s_next=sigmas[i],
+                               i=i, s_i=sigmas[i - 1]))
     return None
 
 
@@ -573,28 +552,31 @@ def snowden_refusal(strength) -> Optional[Refusal]:
         if not (math.isfinite(a) and math.isfinite(b)) or \
                 not 0.0 <= a <= b <= 90.0:
             return Refusal("snowden_ab",
-                           f"A{side} and B{side} must satisfy 0 <= A{side} "
-                           f"<= B{side} <= 90 degrees; got A{side} = {a:g}, "
-                           f"B{side} = {b:g}.")
+                           _st(M.S_SNOWDEN_AB, side=side, a=a, b=b))
+    from ..messages import as_nested
     for which in ("bedding", "rock_mass"):
-        label = which.replace("_", " ")
+        # v0.1.351 (D335) -- the role is a word of the sentence: one code
+        # per role, and the function's own refusal nested with its code
         try:
             fn = strength.function(which)
         except ValueError as exc:
+            said = exc.args[0] if exc.args else str(exc)
             return Refusal("snowden_" + which,
-                           f"The {label} strength function: {exc}.",
-                           cause=Refusal("snowden_function_type", str(exc)))
+                           _st(M.S_SNOWDEN_FUNCTION_ERROR + which,
+                               error=as_nested(said)),
+                           cause=Refusal("snowden_function_type", said))
         if isinstance(fn, ShearNormalFunction):
             why = function_points_refusal(fn.points)
         elif isinstance(fn, CPhiFunction):
             why = c_phi_rows_refusal(fn.rows)
         else:                                  # guarded by ``function``
             why = Refusal("snowden_function_type",
-                          f"{fn.DISPLAY_NAME} is not a shear-normal or a "
-                          f"C/Phi function.")
+                          _st(M.S_SNOWDEN_NOT_FUNCTION,
+                              model=fn.DISPLAY_NAME))
         if why is not None:
             return Refusal("snowden_" + which,
-                           f"The {label} strength function: {why.message}",
+                           _st(M.S_SNOWDEN_FUNCTION + which,
+                               why=as_nested(why.message)),
                            cause=why)
     return None
 
@@ -622,63 +604,50 @@ def generalized_anisotropic_rules_refusal(rules) -> Optional[Refusal]:
     try:
         rules = list(rules or [])
     except TypeError:
-        return Refusal("generalized_rules_not_rules",
-                       "The rules must be a list of {angle_min, angle_max, "
-                       "model} objects.")
+        return Refusal("generalized_rules_not_rules", _st(M.S_GEN_NOT_LIST))
     if not rules:
-        return Refusal("generalized_rules_empty",
-                       "There are no rules: at least one range, from -90 to "
-                       "+90 degrees, with its strength model, is needed.")
+        return Refusal("generalized_rules_empty", _st(M.S_GEN_EMPTY))
     bounds = []
     for i, rule in enumerate(rules, start=1):
         if not isinstance(rule, dict):
             return Refusal("generalized_rules_not_rules",
-                           f"Rule {i} is not an {{angle_min, angle_max, "
-                           f"model}} object: {rule!r}.")
+                           _st(M.S_GEN_NOT_RULE, i=i, rule=repr(rule)))
         try:
             amin = float(rule.get("angle_min", -90.0))
             amax = float(rule.get("angle_max", 90.0))
         except (TypeError, ValueError):
             return Refusal("generalized_rules_not_rules",
-                           f"The angles of rule {i} are not numbers.")
+                           _st(M.S_GEN_ANGLES_NAN, i=i))
         if not (math.isfinite(amin) and math.isfinite(amax)) or not (
                 -90.0 - 1e-9 <= amin < amax <= 90.0 + 1e-9):
             return Refusal("generalized_rules_angles",
-                           f"Rule {i} must go from a lower to a higher angle "
-                           f"within [-90, 90] degrees; it goes from {amin:g} "
-                           f"to {amax:g}.")
+                           _st(M.S_GEN_ANGLES, i=i, amin=amin, amax=amax))
         bounds.append((amin, amax))
     if abs(bounds[0][0] + 90.0) > 1e-9:
         return Refusal("generalized_rules_start",
-                       f"The first range starts at -90 degrees; it starts at "
-                       f"{bounds[0][0]:g}.")
+                       _st(M.S_GEN_START, first=bounds[0][0]))
     for i in range(1, len(bounds)):
         if abs(bounds[i][0] - bounds[i - 1][1]) > 1e-9:
-            kind = ("leaves the angles between {a:g} and {b:g} degrees "
-                    "with no strength" if bounds[i][0] > bounds[i - 1][1]
-                    else "overlaps it, so part of a range can never be "
-                         "reached")
+            # v0.1.351 (D335) -- a gap or an overlap: two whole sentences
+            code = (M.S_GEN_GAP if bounds[i][0] > bounds[i - 1][1]
+                    else M.S_GEN_OVERLAP)
             return Refusal("generalized_rules_order",
-                           f"Rule {i + 1} must start where rule {i} ends "
-                           f"({bounds[i - 1][1]:g} degrees); it starts at "
-                           f"{bounds[i][0]:g}, which "
-                           + kind.format(a=bounds[i - 1][1], b=bounds[i][0])
-                           + ".")
+                           _st(code, next=i + 1, i=i, end=bounds[i - 1][1],
+                               start=bounds[i][0]))
     if abs(bounds[-1][1] - 90.0) > 1e-9:
         return Refusal("generalized_rules_end",
-                       f"The last range must end at +90 degrees; it ends at "
-                       f"{bounds[-1][1]:g}.")
+                       _st(M.S_LAST_RANGE_END, end=bounds[-1][1]))
     for i, rule in enumerate(rules, start=1):
         data = rule.get("model")
         if not data:
             return Refusal("generalized_rules_model",
-                           f"Rule {i} has no strength model.")
+                           _st(M.S_GEN_NO_MODEL, i=i))
         try:
             StrengthModel.from_dict(data)
         except Exception as exc:  # noqa: BLE001 - the message says which
             return Refusal("generalized_rules_model",
-                           f"The strength model of rule {i} cannot be built: "
-                           f"{type(exc).__name__}: {exc}")
+                           _st(M.S_GEN_MODEL_ERROR, i=i,
+                               error="%s: %s" % (type(exc).__name__, exc)))
     return None
 
 
@@ -705,42 +674,36 @@ def generalized_angle_or_surface_refusal(strength) -> Optional[Refusal]:
 
     if strength.definition not in _G.DEFINITIONS:
         return Refusal("generalized_aos_definition",
-                       f"The anisotropy is defined by 'angle' or 'surface', "
-                       f"not {strength.definition!r}.")
+                       _st(M.S_AOS_DEFINITION,
+                           value=repr(strength.definition)))
     if strength.mapping not in _G.MAPPINGS:
         return Refusal("generalized_aos_mapping",
-                       f"The mapping function is one of {list(_G.MAPPINGS)}, "
-                       f"not {strength.mapping!r}.")
+                       _st(M.S_AOS_MAPPING, choices=str(list(_G.MAPPINGS)),
+                           value=repr(strength.mapping)))
     if strength.joint_selection not in _G.JOINT_SELECTIONS:
         return Refusal("generalized_aos_selection",
-                       f"The joint selection is one of "
-                       f"{list(_G.JOINT_SELECTIONS)}, not "
-                       f"{strength.joint_selection!r}.")
+                       _st(M.S_AOS_SELECTION,
+                           choices=str(list(_G.JOINT_SELECTIONS)),
+                           value=repr(strength.joint_selection)))
     if not isinstance(strength.use_base_if_weaker, bool):
         return Refusal("generalized_aos_base_if_weaker",
-                       f"use_base_if_weaker must be true or false, not "
-                       f"{strength.use_base_if_weaker!r}.")
+                       _st(M.S_AOS_BASE_IF_WEAKER,
+                           value=repr(strength.use_base_if_weaker)))
     base = strength.base
     if not isinstance(base, dict) or not base.get("model"):
-        return Refusal("generalized_aos_base",
-                       "The base needs a strength: a material or a model of "
-                       "its own.")
+        return Refusal("generalized_aos_base", _st(M.S_AOS_BASE))
     joints = strength.joints
     if not isinstance(joints, list) or not joints:
-        return Refusal("generalized_aos_joints",
-                       "At least one joint is needed, with its angle and its "
-                       "strength.")
+        return Refusal("generalized_aos_joints", _st(M.S_AOS_JOINTS))
     for j, joint in enumerate(joints, start=1):
         if not isinstance(joint, dict) or not joint.get("model"):
             return Refusal("generalized_aos_joint_model",
-                           f"Joint {j} needs a strength: a material or a "
-                           f"model of its own.")
+                           _st(M.S_AOS_JOINT_MODEL, j=j))
         if strength.definition == "surface":
             sid = joint.get("surface_id")
             if not isinstance(sid, str) or not sid:
                 return Refusal("generalized_aos_joint_surface",
-                               f"Joint {j} must name its anisotropic "
-                               f"surface.")
+                               _st(M.S_AOS_JOINT_SURFACE, j=j))
         else:
             try:
                 angle = float(joint.get("angle"))
@@ -748,8 +711,7 @@ def generalized_angle_or_surface_refusal(strength) -> Optional[Refusal]:
                 angle = float("nan")
             if not math.isfinite(angle):
                 return Refusal("generalized_aos_joint_angle",
-                               f"The angle of joint {j} must be a number of "
-                               f"degrees.")
+                               _st(M.S_AOS_JOINT_ANGLE, j=j))
         if strength.mapping == "ab":
             try:
                 a = float(joint.get("A"))
@@ -761,22 +723,20 @@ def generalized_angle_or_surface_refusal(strength) -> Optional[Refusal]:
             if not (math.isfinite(a) and math.isfinite(b)) or \
                     not 0.0 <= a <= b <= 90.0:
                 return Refusal("generalized_aos_ab",
-                               f"Joint {j}: A and B must satisfy 0 <= A <= B "
-                               f"<= 90 degrees; got A = {joint.get('A')!r}, B = "
-                               f"{joint.get('B')!r}.")
+                               _st(M.S_AOS_AB, j=j, a=repr(joint.get("A")),
+                                   b=repr(joint.get("B"))))
     for key, entry in strength.children_items(active_only=True):
         try:
             child = StrengthModel.from_dict(entry["model"])
         except Exception as exc:  # noqa: BLE001 - the message says which
             return Refusal("generalized_aos_model",
-                           f"The strength model of "
-                           f"{strength.child_label(key)} cannot be built: "
-                           f"{type(exc).__name__}: {exc}")
+                           _st(M.S_AOS_MODEL_ERROR,
+                               child=M.child_label(key),
+                               error="%s: %s" % (type(exc).__name__, exc)))
         if isinstance(child, _G):
             return Refusal("generalized_aos_nested",
-                           f"{strength.child_label(key).capitalize()} holds "
-                           f"a Generalized Anisotropic model; it takes a "
-                           f"plain strength.")
+                           _st(M.S_AOS_NESTED,
+                               child=M.child_label(key, capital=True)))
     return None
 
 
@@ -795,8 +755,7 @@ def anisotropic_linear_refusal(strength) -> Optional[Refusal]:
     b = float(strength.params.get("B", 0.0))
     if not (math.isfinite(a) and math.isfinite(b)) or not 0.0 <= a <= b:
         return Refusal("anisotropic_linear_ab",
-                       f"A and B must satisfy 0 <= A <= B degrees; got "
-                       f"A = {a:g}, B = {b:g}.")
+                       _st(M.S_ANISO_LINEAR_AB, a=a, b=b))
     return None
 
 
@@ -816,9 +775,7 @@ def strength_model_refusal(strength, name: Optional[str] = None
     asked about the models of its rules, since one of them can be such a
     table. ``name`` is the material's, for the message.
     """
-    from ..materials.builtin_models import (ANISOTROPIC_FUNCTION_LEGACY_NOTE,
-                                            SNOWDEN_LEGACY_NOTE,
-                                            AnisotropicLinear,
+    from ..materials.builtin_models import (AnisotropicLinear,
                                             AnisotropicStrengthFunction,
                                             CPhiFunction,
                                             DiscreteFunction,
@@ -829,83 +786,90 @@ def strength_model_refusal(strength, name: Optional[str] = None
     from ..materials.strength_model import StrengthModel
 
     label = name if name is not None else "?"
+
+    def framed(why, model):
+        # v0.1.351 (D335) -- "Material 'x', <model>: <why>", the model shown
+        # through its translation and the refusal nested with its code
+        from ..messages import as_nested
+        return _st(M.S_MATERIAL, name=label, model=model,
+                   why=as_nested(why.message))
+
     if isinstance(strength, (ShearNormalFunction, StepFunction)):
         # v0.1.227 (D217); the step function was called Discrete Function
         # until v0.1.246 (D229).
         why = function_points_refusal(strength.points)
         if why is None:
             return None
-        return Refusal(why.code, f"Material {label!r}, "
-                                 f"{strength.DISPLAY_NAME}: {why.message}")
+        return Refusal(why.code, framed(why, strength.DISPLAY_NAME))
     if isinstance(strength, DiscreteFunction):
         # v0.1.246 (D229) — the reference's field over the material.
         why = discrete_function_refusal(strength)
         if why is None:
             return None
-        return Refusal(why.code, f"Material {label!r}, Discrete Function: "
-                                 f"{why.message}")
+        return Refusal(why.code, framed(why, "Discrete Function"))
     if isinstance(strength, CPhiFunction):
         why = c_phi_rows_refusal(strength.rows)
         if why is None:
             return None
-        return Refusal(why.code, f"Material {label!r}, C/Phi Function: "
-                                 f"{why.message}")
+        return Refusal(why.code, framed(why, "C/Phi Function"))
     if isinstance(strength, SnowdenModifiedAnisotropicLinear):
         if strength.legacy_params is not None:
             return Refusal("snowden_legacy",
-                           SNOWDEN_LEGACY_NOTE.format(name=label))
+                           _st(M.S_SNOWDEN_LEGACY, name=label))
         why = snowden_refusal(strength)
         if why is None:
             return None
-        return Refusal(why.code, f"Material {label!r}, Snowden Modified "
-                                 f"Anisotropic Linear: {why.message}",
+        return Refusal(why.code,
+                       framed(why, "Snowden Modified Anisotropic Linear"),
                        cause=why.cause)
     if isinstance(strength, AnisotropicStrengthFunction):
         if strength.legacy_points is not None:
             return Refusal("anisotropic_table_legacy",
-                           ANISOTROPIC_FUNCTION_LEGACY_NOTE.format(
-                               name=label))
+                           _st(M.S_ANISO_LEGACY, name=label))
         why = anisotropic_function_rows_refusal(strength.rows)
         if why is None:
             return None
-        return Refusal(why.code, f"Material {label!r}, Anisotropic Strength "
-                                 f"Function: {why.message}")
+        return Refusal(why.code,
+                       framed(why, "Anisotropic Strength Function"))
     if isinstance(strength, AnisotropicLinear):
         why = anisotropic_linear_refusal(strength)
         if why is None:
             return None
-        return Refusal(why.code, f"Material {label!r}, Anisotropic Linear: "
-                                 f"{why.message}")
+        return Refusal(why.code, framed(why, "Anisotropic Linear"))
     if isinstance(strength, GeneralizedAnisotropic):
         # v0.1.248 (D231a) -- the input that computes is judged: the ranges
         # of "Angle Range" or the base and joints of "Angle or Surface".
         if strength.input_type not in strength.INPUT_TYPES:
-            return Refusal("generalized_input_type",
-                           f"Material {label!r}, Generalized Anisotropic: "
-                           f"the input is one of "
-                           f"{list(strength.INPUT_TYPES)}, not "
-                           f"{strength.input_type!r}.")
+            return Refusal("generalized_input_type", framed(
+                Refusal("", _st(M.S_GEN_INPUT_TYPE,
+                                choices=str(list(strength.INPUT_TYPES)),
+                                value=repr(strength.input_type))),
+                "Generalized Anisotropic"))
         if strength.angle_or_surface:
             why = generalized_angle_or_surface_refusal(strength)
         else:
             why = generalized_anisotropic_rules_refusal(strength.rules)
         if why is not None:
-            return Refusal(why.code, f"Material {label!r}, Generalized "
-                                     f"Anisotropic: {why.message}")
+            return Refusal(why.code, framed(why, "Generalized Anisotropic"))
         # v0.1.247 (D230) -- a switch, so a bool: a 0, a "false" or a None
         # would be read as true or false by whoever reads it next.
         if not isinstance(getattr(strength, "use_parent_water", True), bool):
-            return Refusal(
-                "generalized_parent_water",
-                f"Material {label!r}, Generalized Anisotropic: "
-                f"use_parent_water must be true or false, not "
-                f"{strength.use_parent_water!r}.")
+            return Refusal("generalized_parent_water", framed(
+                Refusal("", _st(M.S_GEN_PARENT_WATER,
+                                value=repr(strength.use_parent_water))),
+                "Generalized Anisotropic"))
         for _key, entry in strength.children_items(active_only=True):
             why = strength_model_refusal(
                 StrengthModel.from_dict(entry["model"]), name)
             if why is not None:
                 return why
     return None
+
+
+def _framed_generalized(name, code, **args):
+    """``Material 'x', Generalized Anisotropic: <code>``, nested (v0.1.351)."""
+    return _st(M.S_MATERIAL, name=name, model="Generalized Anisotropic",
+               why=_nested_strength(code, **args))
 
 
 def generalized_links_refusal(material, materials) -> Optional[Refusal]:
@@ -929,27 +893,23 @@ def generalized_links_refusal(material, materials) -> Optional[Refusal]:
     by_id = {m.id: m for m in materials}
     label = getattr(material, "name", "?")
     for key, entry in strength.children_items(active_only=True):
-        who = strength.child_label(key)
+        who = M.child_label(key)
         link = entry.get("material_id") if isinstance(entry, dict) else None
         if not link:
             continue
         src = by_id.get(link)
         if src is None:
-            return Refusal("generalized_link_missing",
-                           f"Material {label!r}, Generalized Anisotropic: "
-                           f"{who} links a material that is not in the "
-                           f"project.")
+            return Refusal("generalized_link_missing", _framed_generalized(
+                label, M.S_LINK_MISSING, who=who))
         if src is material:
-            return Refusal("generalized_link_self",
-                           f"Material {label!r}, Generalized Anisotropic: "
-                           f"{who} links the material itself.")
+            return Refusal("generalized_link_self", _framed_generalized(
+                label, M.S_LINK_SELF, who=who))
         if isinstance(getattr(src, "strength", None),
                       GeneralizedAnisotropic):
             return Refusal("generalized_link_generalized",
-                           f"Material {label!r}, Generalized Anisotropic: "
-                           f"{who} links {src.name!r}, another "
-                           f"Generalized Anisotropic material; a range takes "
-                           f"a plain strength model.")
+                           _framed_generalized(label, M.S_LINK_GENERALIZED,
+                                               who=who,
+                                               other=repr(src.name)))
     return None
 
 
@@ -995,9 +955,8 @@ def generalized_surfaces_refusal(material, project) -> Optional[Refusal]:
         sid = joint.get("surface_id") if isinstance(joint, dict) else None
         if sid not in ids:
             return Refusal("generalized_surface_missing",
-                           f"Material {getattr(material, 'name', '?')!r}, "
-                           f"Generalized Anisotropic: joint {j} names an "
-                           f"anisotropic surface that is not in the model.")
+                           _framed_generalized(getattr(material, "name", "?"),
+                                               M.S_SURFACE_MISSING, j=j))
     return None
 
 
@@ -1020,8 +979,7 @@ def surface_in_use_refusal(project, boundary_id) -> Optional[Refusal]:
     if not users:
         return None
     return Refusal("surface_in_use",
-                   "The anisotropic surface is read by the joints of "
-                   + ", ".join(users) + "; change them first.")
+                   _st(M.S_SURFACE_IN_USE, users=", ".join(users)))
 
 
 def material_surface_refusal(material) -> Optional[Refusal]:
@@ -1036,13 +994,12 @@ def material_surface_refusal(material) -> Optional[Refusal]:
     link from any other model that does not read it was inert before and
     stays inert.
     """
-    from ..materials.builtin_models import (GENERALIZED_SURFACE_NOTE,
-                                            GeneralizedAnisotropic)
+    from ..materials.builtin_models import GeneralizedAnisotropic
 
     if getattr(material, "anisotropic_surface_id", None) and isinstance(
             getattr(material, "strength", None), GeneralizedAnisotropic):
         return Refusal("generalized_surface_legacy",
-                       GENERALIZED_SURFACE_NOTE.format(
+                       _st(M.S_GEN_SURFACE_LEGACY,
                            name=getattr(material, "name", "?")))
     return None
 

@@ -1298,8 +1298,9 @@ class StrengthFunctionDialog(QDialog):
                if isinstance(model, ShearNormalFunction)
                else c_phi_rows_refusal(model.rows))
         if why is not None:
-            self._show(tr(MaterialPropertiesDialog._TABLE_REFUSALS.get(
-                why.code, why.message)))
+            # v0.1.351 (D335) -- with its values, through its code
+            from ogr_gui.core_messages import note_text
+            self._show(note_text(why.message))
             return False
         self._result = model.to_dict()
         self.accept()
@@ -2304,123 +2305,25 @@ class MaterialPropertiesDialog(QDialog):
             item.setText(m.name)
             item.setForeground(QColor(m.color))
 
-    #: v0.1.218 (D209) — what the dialog says for each refusal of
-    #: ``rules.anisotropic_function_rows_refusal``. The rule's own messages
-    #: are English, like every message of the engine; the interface
-    #: translates its own, keyed by the code that never changes wording.
-    _TABLE_REFUSALS = {
-        "anisotropic_table_empty":
-            "The table has no rows: at least one range, ending at +90°, "
-            "is needed.",
-        "anisotropic_table_not_rows":
-            "Every row must be three numbers: angle to, c and φ.",
-        "anisotropic_table_strength":
-            "The cohesion must be zero or more and the friction angle "
-            "between 0° and 90°.",
-        "anisotropic_table_start":
-            "The first range starts at −90°, so its «angle to» must be "
-            "greater than −90°.",
-        "anisotropic_table_order":
-            "The ranges must be in order: each «angle to» greater than the "
-            "one before.",
-        "anisotropic_table_end":
-            "The last range must end at +90°.",
-        # v0.1.225 (D218) — ``rules.generalized_anisotropic_rules_refusal``.
-        # v0.1.228 (D218b) — the ranges are edited here, each taking a
-        # material, so the messages say so.
-        "generalized_rules_empty":
-            "A Generalized Anisotropic material needs its ranges, from −90° "
-            "to +90°, each taking the strength of a material.",
-        "generalized_rules_not_rules":
-            "Every rule must be a range of angles with a strength model.",
-        "generalized_rules_angles":
-            "Each range must go from a lower to a higher angle, between "
-            "−90° and +90°.",
-        "generalized_rules_start":
-            "The first range must start at −90°.",
-        "generalized_rules_order":
-            "Each range must start where the previous one ends: no gaps and "
-            "no overlaps.",
-        "generalized_rules_end":
-            "The last range must end at +90°.",
-        "generalized_rules_model":
-            "Every range needs a material, or a strength model that can be "
-            "built.",
-        # v0.1.228 (D218b) — ``rules.generalized_links_refusal``.
-        "generalized_link_missing":
-            "A range takes a material that is not in the project: choose "
-            "another one.",
-        "generalized_link_self":
-            "A range cannot take the strength of its own material.",
-        "generalized_link_generalized":
-            "A range cannot take the strength of another Generalized "
-            "Anisotropic material.",
-        # v0.1.248–0.1.249 (D231) — ``rules.generalized_angle_or_surface_
-        # refusal`` and ``rules.generalized_surfaces_refusal``.
-        "generalized_aos_base":
-            "The base needs a material, or a strength model that can be "
-            "built.",
-        "generalized_aos_joints":
-            "At least one joint is needed.",
-        "generalized_aos_joint_model":
-            "Every joint needs a material, or a strength model that can be "
-            "built.",
-        "generalized_aos_ab":
-            "A and B of every joint must satisfy 0 <= A <= B <= 90 degrees.",
-        "generalized_aos_joint_surface":
-            "Every joint must follow an anisotropic surface.",
-        "generalized_surface_missing":
-            "A joint follows an anisotropic surface that is not in the "
-            "model: choose another one.",
-        # v0.1.225 (D216) — ``rules.anisotropic_linear_refusal``.
-        "anisotropic_linear_ab":
-            "A and B must satisfy 0° ≤ A ≤ B.",
-        # v0.1.227 (D217) — ``rules.function_points_refusal``.
-        "function_points_empty":
-            "The table has no points: at least one (normal stress, shear "
-            "strength) point is needed.",
-        "function_points_not_points":
-            "Every point must be two numbers: normal stress and shear "
-            "strength.",
-        "function_points_strength":
-            "The shear strength must be zero or more.",
-        "function_points_order":
-            "The normal stresses must increase from one row to the next.",
-        # v0.1.229 (D215) — ``rules.c_phi_rows_refusal``.
-        "c_phi_rows_empty":
-            "The table has no rows: at least one (normal stress, cohesion, "
-            "friction angle) row is needed.",
-        "c_phi_rows_not_rows":
-            "Every row must be three numbers: normal stress, cohesion and "
-            "friction angle.",
-        "c_phi_rows_strength":
-            "The cohesion must be zero or more and the friction angle "
-            "between 0° and 90°.",
-        "c_phi_rows_order":
-            "The normal stresses must increase from one row to the next.",
-        # v0.1.229 (D215) — ``rules.snowden_refusal``. The two function
-        # codes are followed by the text of their ``cause``.
-        "snowden_ab":
-            "A1, B1, A2 and B2 must satisfy 0° ≤ A ≤ B ≤ 90° on each side "
-            "of the bedding.",
-        "snowden_bedding":
-            "The bedding strength function is not valid:",
-        "snowden_rock_mass":
-            "The rock mass strength function is not valid:",
-        "snowden_function_type":
-            "it must be a shear-normal or a C/Phi function that can be "
-            "built.",
-    }
 
     def _refusal_text(self, why) -> str:
-        """A refusal in the user's language, by its code; with the text of
-        its ``cause`` after it when it has one (v0.1.229)."""
-        text = tr(self._TABLE_REFUSALS.get(why.code, why.message))
-        cause = getattr(why, "cause", None)
-        if cause is not None:
-            text += " " + tr(self._TABLE_REFUSALS.get(cause.code,
-                                                      cause.message))
-        return text
+        """A refusal in the user's language, through its code.
+
+        v0.1.351 (D335) -- with its values, which the table of fixed
+        sentences it replaces could not carry; a refusal with a ``cause``
+        has it nested in its own message. The caller names the material
+        ("In material X:"), so a refusal the core framed as "Material 'X',
+        <model>: ..." is said without that frame, as the table did.
+        """
+        from ogr_core.project.messages import S_MATERIAL
+        from ogr_gui.core_messages import note_text, text
+
+        msg = why.message
+        if getattr(msg, "code", "") == S_MATERIAL:
+            inner = msg.args.get("why") or {}
+            return text(inner.get("code", ""), inner.get("args"),
+                        inner.get("text", ""))
+        return note_text(msg)
 
     def _show_strength_problem(self, text: str) -> None:
         self.lbl_strength_problem.setText(text)
