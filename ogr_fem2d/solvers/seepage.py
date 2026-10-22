@@ -507,6 +507,27 @@ RESCUE_NEWTON_PER_STEP = 30
 #: Smallest continuation step before the continuation gives up.
 RESCUE_MIN_STEP = 1e-3
 
+#: v0.1.356 (D285) -- a road of the rescue is accepted only when its answer
+#: also settles the seepage face (``_unsettled_nodes``); a road that reaches
+#: the tolerance with the face unsettled is set aside and the next road is
+#: tried (``_rescue``). Each road starts a switch budget of its own and may
+#: freeze a node of the face in the wrong state; until 0.1.355 that road was
+#: accepted, the final check of ``solve_unsaturated`` reported the face
+#: unsettled, and the roads after it were never tried. Measured on problem 4
+#: of the groundwater verification bank (the toe-drain dam of Harr 1990)
+#: with permeability curves of six decades over 0.5 kPa: in the four cases
+#: where a road was accepted with one to four nodes taking water in or free
+#: under pressure, the continuation settles the face. In three of them
+#: another road reaches the same fixed point (the loop alone, within 2e-6 m;
+#: the second Anderson depth at w = 0.25, within 6e-7 m); in all four the
+#: face ends 0.18-0.19 m from the toe (Casagrande's correction gives 0.172)
+#: where the accepted road had it up to 0.49 m. Over the 53 unsaturated
+#: steady rows of the bank, with w from 0.2 to 0.8, no road is set aside.
+#: When no road settles the face, the state published is the first one set
+#: aside -- the one 0.1.355 published -- and the face is reported unsettled.
+#: Switch off to rebuild 0.1.355.
+RESCUE_SETTLED_FACE = True
+
 #: v0.1.274 (D269) — the seepage face of a transient time step follows the
 #: steady solver's rule (``_switch_seepage_face``) instead of its own copy.
 #:
@@ -817,7 +838,11 @@ class UnsaturatedSeepageSolver(SeepageSolver):
             measure max|G(H) - H|: one per Anderson evaluation of the map,
             and the final one of the continuation (its intermediate steps
             solve other problems, with kr raised to t < 1, and are left
-            out). Four significant figures; None where there is no number.
+            out; a continuation that fails before t = 1 leaves none). Every
+            road tried is there, those set aside because their answer left
+            the seepage face unsettled too (v0.1.356, D285); ``rescue``
+            names the road whose state is published. Four significant
+            figures; None where there is no number.
         ``history_segments``
             ``[name, first index]`` of each part of the series:
             ``"picard"``, ``"anderson <depth>"``, ``"continuation"``.
@@ -1086,11 +1111,34 @@ class UnsaturatedSeepageSolver(SeepageSolver):
         Each road starts a switch budget of its own: it is a new attempt,
         and the loop may have spent its budget on the cycle.
 
+        What a road must settle (v0.1.356, D285)
+        ----------------------------------------
+        A road is accepted only when its answer also obeys the seepage-face
+        condition (``_unsettled_nodes``; ``RESCUE_SETTLED_FACE``). Where a
+        road accepts, its switching rule has just run on the same linear
+        solve with the same bands, so a node can still break the face there
+        only if the road's own budget froze it. Such a road is set aside and
+        the next one is tried. If none settles the face, the first road set
+        aside is returned, marked converged as before, and the face check
+        of ``solve_unsaturated`` reports it: the state 0.1.355 published,
+        with ``iterations``, ``history`` and ``segments`` covering every
+        road tried. Until 0.1.355 the first road to reach the tolerance was
+        taken whatever its face, and the roads after it never ran.
+
+        Measured on problem 4 of the groundwater verification bank (see the
+        switch): the continuation settled all four cases Anderson had
+        accepted with the face unsettled. The second Anderson depth settled
+        none of them -- it froze the same nodes as the first -- and is tried
+        all the same, in the written order: it is the road that settles
+        other cases once the first depth fails on the tolerance.
+
         Returns a dict: ``converged``, ``method``, ``iterations`` (map
         evaluations plus Newton iterations), ``residual`` (the last
-        max|G(H) - H|, m), ``head``, ``active`` and ``switches``; and
-        ``history`` and ``segments``, its part of the published series
-        (see ``solve_unsaturated``), indexed from the rescue's start.
+        max|G(H) - H|, m; that of the road returned), ``head``, ``active``
+        and ``switches``; and ``history`` and ``segments``, its part of the
+        published series (see ``solve_unsaturated``), indexed from the
+        rescue's start. A road set aside also carries ``unsettled``, the
+        number of face nodes it left unsettled.
         """
         out = {"converged": False, "method": "failed", "iterations": 0,
                "residual": float("nan"), "head": H, "active": set(active),
@@ -1105,6 +1153,9 @@ class UnsaturatedSeepageSolver(SeepageSolver):
             r["history"], r["segments"] = out["history"], out["segments"]
             return r
 
+        # v0.1.356 (D285): the first road that reached the tolerance with
+        # the face unsettled, kept in case no road settles it
+        aside = None
         start = 0.5 * (_np.asarray(H, dtype=float)
                        + _np.asarray(H_prev, dtype=float))
         for depth in RESCUE_ANDERSON_DEPTHS:
@@ -1118,17 +1169,27 @@ class UnsaturatedSeepageSolver(SeepageSolver):
                 out["history"] += r["history"]
             if r["converged"]:
                 return _done(r, f"anderson (depth {depth})")
-        if _csr is None or _spsolve is None:
-            return out
-        r = self._continuation_newton(bcs, H_saturated, unknown, p_tol,
-                                      q_tol)
-        out["iterations"] += r["iterations"]
-        out["residual"] = r["residual"]
-        if math.isfinite(r["residual"]):
-            out["segments"].append(["continuation", len(out["history"])])
-            out["history"].append(r["residual"])
-        if r["converged"]:
-            return _done(r, "continuation-newton")
+            if aside is None and r.get("unsettled"):
+                aside = (r, f"anderson (depth {depth})")
+        if _csr is not None and _spsolve is not None:
+            r = self._continuation_newton(bcs, H_saturated, unknown, p_tol,
+                                          q_tol)
+            out["iterations"] += r["iterations"]
+            out["residual"] = r["residual"]
+            if math.isfinite(r["residual"]):
+                out["segments"].append(["continuation",
+                                        len(out["history"])])
+                out["history"].append(r["residual"])
+            if r["converged"]:
+                return _done(r, "continuation-newton")
+            if aside is None and r.get("unsettled"):
+                aside = (r, "continuation-newton")
+        if aside is not None:
+            # No road settled the face: hand over what 0.1.355 published,
+            # and let the final check of solve_unsaturated report the face
+            r, method = aside
+            r["converged"] = True
+            return _done(r, method)
         return out
 
     # ------------------------------------------------------------------
@@ -1138,7 +1199,12 @@ class UnsaturatedSeepageSolver(SeepageSolver):
         mixing parameter 1): x_{k+1} = G(x_k) - dG gamma, where gamma
         minimises |F(x_k) - dF gamma| over the last ``depth`` differences
         of the residual F = G(x) - x and of G. The history is emptied
-        whenever the seepage-face set changes, since G changes with it."""
+        whenever the seepage-face set changes, since G changes with it.
+
+        A state that reaches the tolerance with the seepage face unsettled
+        ends the road unaccepted, marked ``unsettled`` (v0.1.356, D285; see
+        ``_rescue``): only a node this road froze can be the cause, and
+        iterating on cannot unfreeze it."""
         x = _np.asarray(x0, dtype=float)
         switches: dict[int, int] = {}
         dF: list = []
@@ -1164,10 +1230,19 @@ class UnsaturatedSeepageSolver(SeepageSolver):
                 x = g
                 continue
             if residual < self.tolerance:
-                return {"converged": True, "iterations": k,
-                        "residual": residual, "head": x.tolist(),
-                        "active": active, "switches": switches,
-                        "history": residuals}
+                result = {"converged": True, "iterations": k,
+                          "residual": residual, "head": x.tolist(),
+                          "active": active, "switches": switches,
+                          "history": residuals}
+                if RESCUE_SETTLED_FACE:
+                    # v0.1.356 (D285): the switching just ran on this very
+                    # solve, so a node can only break the face if frozen
+                    bad = self._unsettled_nodes(step, unknown, active, p_tol,
+                                                q_tol)
+                    if bad:
+                        result["converged"] = False
+                        result["unsettled"] = len(bad)
+                return result
             if F_prev is not None:
                 dF.append(f - F_prev)
                 dG.append(g - G_prev)
@@ -1201,6 +1276,10 @@ class UnsaturatedSeepageSolver(SeepageSolver):
         repeating the step until the set stops changing. Newton's method
         on this equation is compared with Picard's by Paniconi & Putti
         (1994).
+
+        The answer must be a fixed point of the Picard map itself and, since
+        v0.1.356 (D285, see ``_rescue``), settle the seepage face: one that
+        does not is returned unaccepted, marked ``unsettled``.
         """
         system = _NewtonSystem(self, bcs)
         H = _np.asarray(H0, dtype=float)
@@ -1249,9 +1328,17 @@ class UnsaturatedSeepageSolver(SeepageSolver):
         residual = (float(_np.max(_np.abs(
             _np.asarray(step.total_head, dtype=float) - H)))
             if step.converged else float("inf"))
-        return {"converged": residual < self.tolerance, "iterations": newton,
-                "residual": residual, "head": H.tolist(), "active": active,
-                "switches": switches}
+        result = {"converged": residual < self.tolerance,
+                  "iterations": newton, "residual": residual,
+                  "head": H.tolist(), "active": active, "switches": switches}
+        if result["converged"] and RESCUE_SETTLED_FACE:
+            # v0.1.356 (D285): and settle the face, which only a node frozen
+            # by this road's budget can break here
+            bad = self._unsettled_nodes(step, unknown, active, p_tol, q_tol)
+            if bad:
+                result["converged"] = False
+                result["unsettled"] = len(bad)
+        return result
 
     # ------------------------------------------------------------------
     def _unsettled_nodes(self, result, unknown, active, p_tol, q_tol
