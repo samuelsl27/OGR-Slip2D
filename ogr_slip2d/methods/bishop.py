@@ -1002,8 +1002,12 @@ def base_forces_no_interslice_shear(
         # The envelope is evaluated through the LINEARISATION rather than
         # through ``shear_strength`` so this stays correct for the
         # non-linear models too: for Mohr-Coulomb it is exact, and for
-        # Hoek-Brown it is the tangent at the air-entry point extended
-        # into tension, which is the natural reading and beats truncating.
+        # Hoek-Brown it is the tangent at σ' = 0 extended into tension,
+        # which is the natural reading and beats truncating. Since v0.1.357
+        # (D171) that tangent starts at the envelope's own τ(0) > 0, so in
+        # [σt, 0) the extended line runs a little above the exact envelope;
+        # measured on the slopes of Hammah et al. (2005), linearising at the
+        # base's own σ' instead does not move the factor.
         # Floored at zero because a negative shear STRENGTH is not a
         # physical quantity - that is what the Tensile Stress Check is for.
         sigma_eff = N / l - s.pore_pressure

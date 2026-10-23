@@ -18,9 +18,13 @@ criterion defines a finite tensile strength, and the two Hoek-Brown models
 override it with the parameters of their own instance.
 
 WHAT THIS FILE DOES NOT CLAIM. It does not say the Hoek-Brown shear
-envelope is right: it is not (``shear_strength`` gives tau(0) = 0 where the
-criterion's Mohr envelope gives 307.5 kPa with the default constants —
-defect D171, reported, not fixed here). And when it was written it did not
+envelope is right: when it was written it was not (``shear_strength`` gave
+tau(0) = 0 where the criterion's Mohr envelope gives 307.5 kPa with the
+default constants — defect D171). v0.1.357 made it the criterion's envelope,
+ending at minus this allowance, and checks that in
+``test_hoek_brown_envelope_v1357.py``; and since then Hoek, Carranza-Torres
+& Corkum (2002) is held and read, while Hoek (1983) is still cited and not
+read, which the docstring now says one by one. And when it was written it did not
 claim the reach the defect report assumed: ``AdvancedSettings.from_dict``
 switched the check off on every reload (D178), so the allowance reached only
 runs made in the same session, through the API or the CLI. v0.1.192 closed
@@ -338,7 +342,9 @@ class TestTheVerdictMoves:
 class TestTheSourceSaysWhatItIs:
     """Weak by construction — a literal — and here for one reason: the
     formula is an INFERENCE of this program, and the sources are cited and
-    NOT held, which is the convention checks.py:40-44 already keeps. A
+    NOT held, which is the convention checks.py:40-44 already keeps. (Since
+    v0.1.357 Hoek, Carranza-Torres & Corkum 2002 is held and read; the
+    «not read» this asks for is now Hoek 1983's, which is still not.) A
     docstring that dropped either admission would be claiming more."""
 
     def test_the_override_cites_its_source_and_says_it_is_not_read(self):

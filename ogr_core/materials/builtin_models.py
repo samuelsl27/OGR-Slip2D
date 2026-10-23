@@ -71,8 +71,12 @@ class _DesignDivisor:
     these models carry a divisor of their shear strength instead. Only the
     analysis copy made by ``ogr_core.project.design_factors`` sets it; it
     travels in ``to_dict`` so a copy of that copy keeps it, and it is 1 --
-    bit for bit the model as before -- everywhere else. The tangent is taken
-    from ``shear_strength``, so it follows.
+    bit for bit the model as before -- everywhere else. Barton-Bandis takes
+    its tangent as a difference over ``shear_strength``, so it follows; the
+    two Hoek-Brown models compute theirs analytically and divide it
+    themselves (v0.1.357, D171). A factor of safety would not show a tangent
+    that forgot: at the fixed point of ``ENVELOPE_AT_OWN_STRESS`` it depends
+    on τ alone, which is why the Hoek-Brown test checks the tangent itself.
     """
 
     design_divisor: float = 1.0
@@ -179,13 +183,108 @@ class NoStrength(StrengthModel):
 
 
 # ----------------------------------------------------------------------
+_EPS = 2.220446049250313e-16
+
+
+def _hoek_brown_mohr(sigma_n: float, sigci: float, mb: float, s: float,
+                     a: float) -> tuple[float, float]:
+    """(τ, dτ/dσ'ₙ) on the Mohr envelope of σ'₁ = σ'₃ + σci·(mb·σ'₃/σci + s)^a.
+
+    v0.1.357 (D171). The envelope is the locus of the points where each
+    failure circle of the criterion touches it. For the circle of a given
+    σ'₃ that point is (Balmer 1952, as corrected by Hoek, Carranza-Torres &
+    Corkum 2002, eqs. 8-10)
+
+        k   = dσ'₁/dσ'₃ = 1 + a·mb·x^(a−1),   x = mb·σ'₃/σci + s,
+        σ'ₙ = σ'₃ + (σ'₁ − σ'₃)/(k + 1),     τ = (σ'₁ − σ'₃)·√k/(k + 1),
+
+    and the slope of the envelope there is tan φᵢ = (k − 1)/(2·√k), from
+    sin φᵢ = (k − 1)/(k + 1) (Hoek 1990, eq. 11, for a = 0.5). With
+    σ'₁ − σ'₃ = σci·x^a and u = x^(1−a), the first two give
+
+        g(x) = x/mb + x/(2·u + a·mb) = (σ'ₙ − σt)/σci,   σt = −s·σci/mb,
+
+    whose left side is increasing and concave in x for 0 < a <= 1, so a σ'ₙ
+    above σt has exactly one x, and σ'₃ <= σ'ₙ bounds it by
+    x <= mb·σ'ₙ/σci + s. Newton from that bound overshoots once and then
+    climbs monotonically; the bracket catches anything else. The right side
+    is formed as σ'ₙ/σci + s/mb and never through σ'₃, which near σt would
+    cancel: what is left there is the rounding of σ'ₙ itself.
+
+    The envelope ends at (σt, 0), the circle of zero diameter, so τ = 0 at
+    and below σt -- the tension ``tensile_strength`` gives (D165). The slope
+    is infinite at σt (for a < 1) and is returned as inf there.
+
+    Outside 0 < a <= 1, mb > 0, σci > 0, s >= 0 the inversion has no unique
+    root; ``ogr_core.project.rules.hoek_brown_refusal`` refuses such a
+    material before any analysis, and this returns (0, 0) for it.
+    """
+    if not (sigci > 0.0 and mb > 0.0 and s >= 0.0 and 0.0 < a <= 1.0
+            and all(math.isfinite(v) for v in (sigma_n, sigci, mb, s, a))):
+        return 0.0, 0.0
+    r = sigma_n / sigci + s / mb
+    if not r > 0.0:
+        return 0.0, 0.0
+    lo, hi = 0.0, mb * r
+    x = hi
+    # Measured: 5 iterations at most and 4 on average over 1e-7 to 1e2 of
+    # s in x; the cap only guards a bracket that stops shrinking
+    for _ in range(100):
+        u = x ** (1.0 - a)
+        den = 2.0 * u + a * mb
+        g = x / mb + x / den - r
+        if g > 0.0:
+            hi = x
+        elif g < 0.0:
+            lo = x
+        else:
+            break
+        xn = x - g / (1.0 / mb + a * (2.0 * u + mb) / (den * den))
+        if not lo < xn < hi:
+            xn = 0.5 * (lo + hi)
+        if abs(xn - x) <= 4.0 * _EPS * x:
+            x = xn
+            break
+        x = xn
+    u = x ** (1.0 - a)
+    if not u > 0.0:
+        return 0.0, math.inf
+    k = 1.0 + a * mb / u
+    root = math.sqrt(k)
+    return sigci * x * root / (2.0 * u + a * mb), (k - 1.0) / (2.0 * root)
+
+
+def _hoek_brown_slope(model, sigma_n_eff: float, sigci: float, mb: float,
+                      s: float, a: float) -> float:
+    """``tangent_slope`` of both Hoek-Brown models: dτ/dσ'ₙ at max(σ'ₙ, 0).
+
+    Clamped at zero like the tangent always was, because ``local_c_phi``
+    linearises there for a base in tension. Where the slope is not finite --
+    s = 0 puts σt at 0, where the envelope stands vertical -- the secant
+    over the step the finite difference used to take (max(1e-3, 1e-4·σ'ₙ)
+    kPa) stands in for it, so the linearisation stays a number.
+    """
+    sn = max(sigma_n_eff, 0.0)
+    tau, slope = _hoek_brown_mohr(sn, sigci, mb, s, a)
+    if not math.isfinite(slope) or (slope == 0.0 and tau == 0.0):
+        d = max(1e-3, 1e-4 * sn)
+        slope = (_hoek_brown_mohr(sn + d, sigci, mb, s, a)[0] - tau) / d
+    return max(0.0, slope) / model.design_divisor
+
+
 @register
 class GeneralizedHoekBrown(_DesignDivisor, StrengthModel):
-    """Generalized Hoek-Brown rock-mass failure criterion.
+    """Generalized Hoek-Brown rock-mass failure criterion (Hoek,
+    Carranza-Torres & Corkum 2002).
 
-    Strength at a given σ'ₙ is obtained by solving the local tangent of
-    the non-linear envelope. Here we use the tangent Mohr-Coulomb
-    approximation (Balmer's method simplification).
+    Principal-stress form:
+        σ'₁ = σ'₃ + σci · (mb · σ'₃ / σci + s)^a
+
+    The shear strength on a plane of normal stress σ'ₙ is the Mohr
+    envelope of that criterion, evaluated exactly: :func:`_hoek_brown_mohr`.
+    v0.1.357 (D171) -- until then it was Balmer's parametric form with σ'₃
+    replaced by σ'ₙ, which gave τ(0) = 0 and a strength inside the rock
+    mass's own uniaxial-compression circle.
     """
 
     MODEL_ID = "hoek_brown"
@@ -197,43 +296,25 @@ class GeneralizedHoekBrown(_DesignDivisor, StrengthModel):
         "a": (0.5, "-", "Rock-mass exponent a"),
     }
 
+    def _hb(self) -> tuple:
+        P = self.params
+        return P["sigci"], P["mb"], P["s"], P["a"]
+
     def shear_strength(self, sigma_n_eff: float) -> float:
-        sigma_n = max(sigma_n_eff, 1e-6)
-        sci = self.params["sigci"]
-        mb = self.params["mb"]
-        s = self.params["s"]
-        a = self.params["a"]
-        # Instantaneous friction angle from HB tangent (Balmer):
-        # h = 1 + a·mb·(mb·σ'ₙ/σci + s)^(a-1)
-        arg = mb * sigma_n / sci + s
-        if arg <= 0:
-            return 0.0
-        h = 1.0 + a * mb * (arg ** (a - 1.0))
-        # Instantaneous shear strength:
-        tau = (sigma_n * (h - 1.0) * math.sqrt(h)) / (h + 1.0)
+        tau, _ = _hoek_brown_mohr(sigma_n_eff, *self._hb())
         # v0.1.225 (D224) -- 1 except on a design-factored copy.
-        return max(0.0, tau) / self.design_divisor
+        return tau / self.design_divisor
 
     def tangent_slope(self, sigma_n_eff: float) -> float:
-        """v0.1.14 — analytical-style tangent at σ'ₙ.
+        """dτ/dσ'ₙ of the envelope, tan φᵢ = (k − 1)/(2·√k) -- v0.1.357 (D171).
 
-        The Generalized Hoek-Brown envelope is highly non-linear at low
-        confining stress: a centred secant with a fixed Δ is a poor
-        approximation. Here we use a centred finite-difference with a
-        step scaled to σ'ₙ (1% of σ', floored at 1e-3 kPa) which gives
-        machine-precision accuracy for the smooth Balmer form.
+        Analytical since v0.1.357; before it was a centred difference over
+        ``shear_strength``. It divides by the design divisor itself: at the
+        fixed point of ``ENVELOPE_AT_OWN_STRESS`` (D84) the factor of safety
+        depends on τ alone, so a tangent that forgot the divisor would not
+        show in any factor (3e-10, measured).
         """
-        sigma_n = max(sigma_n_eff, 0.0)
-        # Step scaled to σ'ₙ for relative accuracy ~1e-6
-        delta = max(1e-3, 1e-4 * sigma_n)
-        if sigma_n - delta <= 0:
-            # Forward difference at very low σ
-            tau_hi = self.shear_strength(sigma_n + delta)
-            tau_0 = self.shear_strength(sigma_n)
-            return max(0.0, (tau_hi - tau_0) / delta)
-        tau_hi = self.shear_strength(sigma_n + delta)
-        tau_lo = self.shear_strength(sigma_n - delta)
-        return max(0.0, (tau_hi - tau_lo) / (2.0 * delta))
+        return _hoek_brown_slope(self, sigma_n_eff, *self._hb())
 
     def tensile_strength(self) -> float:
         """Tensile strength of the rock mass, sigma_t = s*sigci/mb [kPa].
@@ -242,12 +323,13 @@ class GeneralizedHoekBrown(_DesignDivisor, StrengthModel):
         sigma'1 = sigma'3 + sigci*(mb*sigma'3/sigci + s)^a, and what is left
         is (mb*sigma_t/sigci + s)^a = 0: the root of the bracket, which does
         not depend on a. It is biaxial tension, and Hoek, Carranza-Torres &
-        Corkum (2002) take it as the tensile strength of the rock mass,
-        citing Hoek (1983) for the uniaxial and the biaxial values being
-        equal in brittle materials. Both sources are cited and not read
-        here — no copy is held with this project's references — and the
-        anchor is the algebra of the criterion itself, which this docstring
-        states and ``tests/test_tensile_strength_rock_v1191.py`` checks.
+        Corkum (2002) take it as the tensile strength of the rock mass (their
+        eq. 7), citing Hoek (1983) for the uniaxial and the biaxial values
+        being equal in brittle materials. Since v0.1.357 the first is held
+        with this project's references and read; Hoek (1983) is cited and
+        not read. The anchor is still the algebra of the criterion itself,
+        which this docstring states and
+        ``tests/test_tensile_strength_rock_v1191.py`` checks.
 
         Why the biaxial root and not the uniaxial one (sigma'1 = 0): the
         check this feeds compares the NORMAL stress on a plane, and the
@@ -262,11 +344,9 @@ class GeneralizedHoekBrown(_DesignDivisor, StrengthModel):
         among those that CAN carry a finite tensile strength and gives no
         rule.
 
-        Caveat, measured and reported (D171): the envelope
-        :meth:`shear_strength` evaluates is not yet this criterion's Mohr
-        envelope — it gives tau(0) = 0 where the criterion gives 307.5 kPa
-        with the default constants — so this strength belongs to the
-        criterion, not to that approximation.
+        Since v0.1.357 (D171) :meth:`shear_strength` is this criterion's
+        Mohr envelope, and the envelope ends exactly here: its tau is zero at
+        minus this value.
 
         Zero when sigci, mb or s is not positive and finite: no finite
         tensile strength follows from them.
@@ -287,16 +367,13 @@ class HoekBrown(_DesignDivisor, StrengthModel):
     Principal-stress form:
         σ'₁ = σ'₃ + σ_ci · √(m · σ'₃ / σ_ci + s)
 
-    The shear strength on a plane of normal stress σ'ₙ is obtained from
-    the tangent to this envelope. Following Hoek (Brown & Hoek 1992),
-    the instantaneous shear strength is computed via Balmer's method
-    using a fixed exponent a = 0.5:
-
-        h = 1 + 0.5·m·(m·σ'ₙ/σ_ci + s)^(-0.5)
-        τ = σ'ₙ · (h - 1) · √h / (h + 1)
-
-    This is the special case of the Generalized Hoek-Brown with a=0.5,
-    which is mathematically equivalent to the original 1980 form.
+    This is the Generalized Hoek-Brown criterion with a = 0.5 and mb = m,
+    and its shear strength on a plane of normal stress σ'ₙ is the same
+    exact Mohr envelope, :func:`_hoek_brown_mohr` -- v0.1.357 (D171). For
+    a = 0.5 that envelope also has a closed form (Hoek 1990, eqs. 9-12,
+    Bray's solution reported in Hoek 1983), which the tests compare against;
+    the code keeps the single inversion so that the two models cannot
+    drift apart.
 
     Parameters as the reference documents them: UCS (intact), m, s.
     """
@@ -309,42 +386,27 @@ class HoekBrown(_DesignDivisor, StrengthModel):
         "s": (0.0017, "-", "Hoek-Brown constant s"),
     }
 
+    def _hb(self) -> tuple:
+        P = self.params
+        return P["sigci"], P["m"], P["s"], 0.5
+
     def shear_strength(self, sigma_n_eff: float) -> float:
-        sigma_n = max(sigma_n_eff, 1e-6)
-        sci = self.params["sigci"]
-        m = self.params["m"]
-        s = self.params["s"]
-        # Classic HB has a = 0.5
-        arg = m * sigma_n / sci + s
-        if arg <= 0:
-            return 0.0
-        # h = 1 + a·m·(arg)^(a-1), with a = 0.5
-        h = 1.0 + 0.5 * m * (arg ** (-0.5))
-        if h <= 0:
-            return 0.0
-        tau = (sigma_n * (h - 1.0) * math.sqrt(h)) / (h + 1.0)
+        tau, _ = _hoek_brown_mohr(sigma_n_eff, *self._hb())
         # v0.1.225 (D224) -- 1 except on a design-factored copy.
-        return max(0.0, tau) / self.design_divisor
+        return tau / self.design_divisor
 
     def tangent_slope(self, sigma_n_eff: float) -> float:
-        """v0.1.14 — high-precision finite-difference tangent."""
-        sigma_n = max(sigma_n_eff, 0.0)
-        delta = max(1e-3, 1e-4 * sigma_n)
-        if sigma_n - delta <= 0:
-            tau_hi = self.shear_strength(sigma_n + delta)
-            tau_0 = self.shear_strength(sigma_n)
-            return max(0.0, (tau_hi - tau_0) / delta)
-        tau_hi = self.shear_strength(sigma_n + delta)
-        tau_lo = self.shear_strength(sigma_n - delta)
-        return max(0.0, (tau_hi - tau_lo) / (2.0 * delta))
+        """dτ/dσ'ₙ of the envelope -- v0.1.357 (D171); see
+        :meth:`GeneralizedHoekBrown.tangent_slope`."""
+        return _hoek_brown_slope(self, sigma_n_eff, *self._hb())
 
     def tensile_strength(self) -> float:
         """Tensile strength, sigma_t = s*sigci/m [kPa] — v0.1.191 (D165).
 
         The classic criterion is the generalised one with a = 0.5, and the
-        root of its bracket is the same; the derivation, the sources (cited,
-        not read here) and the D171 caveat are at
-        :meth:`GeneralizedHoekBrown.tensile_strength` and hold for both.
+        root of its bracket is the same; the derivation and its sources are
+        at :meth:`GeneralizedHoekBrown.tensile_strength` and hold for both,
+        and so does the envelope ending there (D171, v0.1.357).
         Zero when sigci, m or s is not positive and finite.
         """
         sci = self.params["sigci"]

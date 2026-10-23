@@ -44,6 +44,7 @@ Cita siempre la fuente original, nunca el programa que la implementa.
 | Morgenstern-Price / GLE | Morgenstern y Price (1965) |
 | Lowe-Karafiath | Lowe y Karafiath (1960) |
 | Hoek-Brown generalizado | Hoek, Carranza-Torres y Corkum (2002) |
+| Envolvente de Mohr de Hoek-Brown | Balmer (1952), corregida en Hoek, Carranza-Torres y Corkum (2002), ecs. 8-10; forma cerrada con a = 0,5 en Hoek (1990), ecs. 9-12 |
 | Resistencia no saturada | Fredlund et al. (1978), envolvente bilineal con φ_b |
 | Richards en forma mixta | Celia, Bouloutas y Zarba (1990) |
 | Optimización por paseo aleatorio | Greco (1996) |

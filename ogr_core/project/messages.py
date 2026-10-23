@@ -332,6 +332,9 @@ S_SNOWDEN_NOT_A_FUNCTION = "strength.snowden.not_a_function."
 S_SNOWDEN_CANNOT_BUILD = "strength.snowden.cannot_build."
 S_SNOWDEN_LEGACY = "strength.snowden.legacy"
 S_ANISO_LINEAR_AB = "strength.aniso_linear.ab"
+# v0.1.357 (D171) -- the constants the exact Hoek-Brown envelope can invert
+S_HB_DOMAIN = "strength.hoek_brown.domain"
+S_HB_CLASSIC_DOMAIN = "strength.hoek_brown_classic.domain"
 S_GEN_NOT_LIST = "strength.gen.not_list"
 S_GEN_EMPTY = "strength.gen.empty"
 S_GEN_NOT_RULE = "strength.gen.not_rule"
@@ -447,6 +450,13 @@ STRENGTH_REFUSALS = {s.code: s for s in (
     MessageSpec(S_ANISO_LINEAR_AB,
                 "A and B must satisfy 0 <= A <= B degrees; got A = {a:g}, B = "
                 "{b:g}."),
+    MessageSpec(S_HB_DOMAIN,
+                "The envelope needs sigci > 0, mb > 0, s >= 0 and 0 < a <= 1, "
+                "all finite; got sigci = {sigci:g}, mb = {mb:g}, s = {s:g}, "
+                "a = {a:g}."),
+    MessageSpec(S_HB_CLASSIC_DOMAIN,
+                "The envelope needs sigci > 0, m > 0 and s >= 0, all finite; "
+                "got sigci = {sigci:g}, m = {m:g}, s = {s:g}."),
     MessageSpec(S_GEN_NOT_LIST,
                 "The rules must be a list of {{angle_min, angle_max, model}} "
                 "objects."),

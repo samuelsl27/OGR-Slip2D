@@ -5642,6 +5642,15 @@ _DICTS: dict[str, dict[str, str]] = {
         'A and B must satisfy 0 <= A <= B degrees; got A = {a:g}, B = {b:g}.':
             'A y B tienen que cumplir 0 <= A <= B grados; valen A = {a:g}, B '
             '= {b:g}.',
+        'The envelope needs sigci > 0, mb > 0, s >= 0 and 0 < a <= 1, all '
+        'finite; got sigci = {sigci:g}, mb = {mb:g}, s = {s:g}, a = {a:g}.':
+            'La envolvente necesita sigci > 0, mb > 0, s >= 0 y 0 < a <= 1, '
+            'todos finitos; valen sigci = {sigci:g}, mb = {mb:g}, s = {s:g}, '
+            'a = {a:g}.',
+        'The envelope needs sigci > 0, m > 0 and s >= 0, all finite; got '
+        'sigci = {sigci:g}, m = {m:g}, s = {s:g}.':
+            'La envolvente necesita sigci > 0, m > 0 y s >= 0, todos '
+            'finitos; valen sigci = {sigci:g}, m = {m:g}, s = {s:g}.',
         'Joint {j}: A and B must satisfy 0 <= A <= B <= 90 degrees; got A = '
         '{a}, B = {b}.':
             'Junta {j}: A y B tienen que cumplir 0 <= A <= B <= 90°; valen A '

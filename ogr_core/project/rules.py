@@ -759,6 +759,41 @@ def anisotropic_linear_refusal(strength) -> Optional[Refusal]:
     return None
 
 
+def hoek_brown_refusal(strength) -> Optional[Refusal]:
+    """Why a Hoek-Brown model's constants cannot be computed with, or None.
+
+    v0.1.357 (D171) -- the shear strength is the exact Mohr envelope of the
+    criterion (``builtin_models._hoek_brown_mohr``), found by inverting
+    Balmer's (1952) parametric form, and that inversion has exactly one
+    root only for σci > 0, mb > 0, s >= 0 and 0 < a <= 1: with a > 1 the
+    normal stress can turn back as σ'₃ grows, and σci <= 0 or mb <= 0 leave
+    no criterion at all. Until v0.1.357 such constants computed in silence.
+    The classic model has a = 0.5 and calls mb ``m``.
+    """
+    import math
+
+    from ..materials.builtin_models import HoekBrown
+
+    def num(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return float("nan")
+
+    keys = ("sigci", "m", "s") if isinstance(strength, HoekBrown) \
+        else ("sigci", "mb", "s", "a")
+    vals = {k: num(strength.params.get(k)) for k in keys}
+    mb = vals.get("mb", vals.get("m"))
+    a = vals.get("a", 0.5)
+    if (all(math.isfinite(v) for v in vals.values()) and vals["sigci"] > 0.0
+            and mb > 0.0 and vals["s"] >= 0.0 and 0.0 < a <= 1.0):
+        return None
+    if isinstance(strength, HoekBrown):
+        return Refusal("hoek_brown_classic_domain",
+                       _st(M.S_HB_CLASSIC_DOMAIN, **vals))
+    return Refusal("hoek_brown_domain", _st(M.S_HB_DOMAIN, **vals))
+
+
 def strength_model_refusal(strength, name: Optional[str] = None
                            ) -> Optional[Refusal]:
     """Why a material's strength model cannot be computed with, or None.
@@ -780,6 +815,8 @@ def strength_model_refusal(strength, name: Optional[str] = None
                                             CPhiFunction,
                                             DiscreteFunction,
                                             GeneralizedAnisotropic,
+                                            GeneralizedHoekBrown,
+                                            HoekBrown,
                                             ShearNormalFunction,
                                             SnowdenModifiedAnisotropicLinear,
                                             StepFunction)
@@ -836,6 +873,12 @@ def strength_model_refusal(strength, name: Optional[str] = None
         if why is None:
             return None
         return Refusal(why.code, framed(why, "Anisotropic Linear"))
+    if isinstance(strength, (GeneralizedHoekBrown, HoekBrown)):
+        # v0.1.357 (D171) -- the constants the exact envelope can invert
+        why = hoek_brown_refusal(strength)
+        if why is None:
+            return None
+        return Refusal(why.code, framed(why, strength.DISPLAY_NAME))
     if isinstance(strength, GeneralizedAnisotropic):
         # v0.1.248 (D231a) -- the input that computes is judged: the ranges
         # of "Angle Range" or the base and joints of "Angle or Surface".

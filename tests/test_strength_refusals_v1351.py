@@ -673,6 +673,10 @@ class TestTheEnglishIsTheOldOne:
         # and the joints only, so no input reaches it; the labels are held
         # to the model's own words below
         missing = set(STRENGTH_REFUSALS) - seen
+        # v0.1.357 (D171): two codes born after v0.1.350, so they have no
+        # frozen sentence here; test_hoek_brown_envelope_v1357.py reaches them
+        missing -= {"strength.hoek_brown.domain",
+                    "strength.hoek_brown_classic.domain"}
         assert missing == {"strength.child_cap.rules"}, missing
 
     def test_the_labels_are_the_models_words(self):
