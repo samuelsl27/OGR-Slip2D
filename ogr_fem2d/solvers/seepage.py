@@ -563,6 +563,33 @@ RESCUE_SETTLED_FACE = True
 #: dry ground. Switch off to rebuild 0.1.357.
 LOOP_SETTLED_FACE = True
 
+#: v0.1.359 (D364) -- the flux band of the seepage face scales with a flow
+#: that exists.
+#:
+#: The band is 1e-4 of the largest nodal flux of the first, saturated,
+#: solve (``_face_q_tol``). When every prescribed head is one level and no
+#: flux is applied -- a dam that drains only through its seepage face --
+#: that solve is the level itself and carries no flow, and the band was
+#: round-off: 5e-24 on the dam of problem 102 without its tailwater, whose
+#: face carries 1.3e-6. Any positive round-off reaction then released a
+#: held node or counted it unsettled. Switched on, such a model takes the
+#: scale from the first solve of the loop with the face held, before the
+#: switching that reads it (the band is read only for held nodes), as each
+#: transient step does since D269 (``TRANSIENT_FACE_RULE``).
+#:
+#: Measured on the groundwater verification bank (_auditoria/P6_0359): 60
+#: of the 255 steady unsaturated runs (12 rows, w from 0.2 to 0.8) are of
+#: this kind. In them the new scale is 0.9 to 65 times the largest nodal
+#: flux of the answer (65 on the toe-drain dam 2 of problem 9, whose drain
+#: carries the whole face in the second pass), and none of their 6854
+#: decisions that read the band had a flux below 1e-4 of that of the
+#: answer. 254 runs are identical to the bit; one (problem 11 on the
+#: coarse mesh, w = 0.3) keeps held a node the old band released at 1.9e-4
+#: of the final flux, and lands on the same face 2.3e-8 m off. The rescue
+#: failing on dam 2 of problem 9 on a fine mesh (D365) is not this (see
+#: ``_rescue``). Switch off to rebuild 0.1.358.
+FACE_FLUX_SCALE_FROM_FLOW = True
+
 #: v0.1.274 (D269) — the seepage face of a transient time step follows the
 #: steady solver's rule (``_switch_seepage_face``) instead of its own copy.
 #:
@@ -828,10 +855,37 @@ class UnsaturatedSeepageSolver(SeepageSolver):
     @staticmethod
     def _face_q_tol(q_scale: float) -> float:
         """The flux band: a held node is released only when its inflow
-        exceeds this fraction of the largest nodal flux of the first solve,
-        1e-4 (``FACE_BANDS_TIGHT``; 1e-3 until v0.1.283, D280)."""
+        exceeds this fraction of ``q_scale``, 1e-4 (``FACE_BANDS_TIGHT``;
+        1e-3 until v0.1.283, D280).
+
+        ``q_scale`` is the largest nodal flux of the first solve; when that
+        solve carries no flow (``_saturated_carries_no_flow``), of the first
+        solve with the face held (v0.1.359, D364,
+        ``FACE_FLUX_SCALE_FROM_FLOW``). Until then such a model got a band
+        of round-off, which the 1e-14 below did not catch: round-off is
+        not zero."""
         f = 1e-4 if FACE_BANDS_TIGHT else 1e-3
         return f * q_scale if q_scale > 0 else 1e-14
+
+    def _saturated_carries_no_flow(self, bcs) -> bool:
+        """True when the saturated solve of ``bcs`` has no flow at all:
+        every prescribed head is one level and no flux is applied (v0.1.359,
+        D364). The level then satisfies the equations and the conditions
+        (the rows of a conductivity matrix sum to zero) and the solution is
+        unique, so every nodal flux of that solve is round-off.
+
+        Decided from the conditions and not from the solved field: its
+        round-off grows with the conductivity contrast (a relative head
+        range from 3e-14 to 7e-12 on the verification bank, against 0.19
+        and up where there is flow), and a threshold of 1e-12 missed a dam
+        with a drain. Two levels one ulp apart count as two: the doubtful
+        case keeps the band of the saturated solve, as before."""
+        fixed = self._dirichlet_values(bcs)
+        if not fixed or max(fixed.values()) != min(fixed.values()):
+            return False
+        if any(b.bc_type == BCType.NODAL_FLOW and b.value for b in bcs.nodes):
+            return False
+        return not any(s.q for s in bcs.segments)
 
     # ------------------------------------------------------------------
     def _element_kr(self, H: list) -> list:
@@ -945,6 +999,16 @@ class UnsaturatedSeepageSolver(SeepageSolver):
         is published. If none does, the loop's own state is, as before:
         unconverged, with ``rescue`` "failed", and a history that holds the
         loop, ending below ``tolerance / w``, and every road tried.
+
+        A model that drains only through its face (v0.1.359, D364)
+        -----------------------------------------------------------
+        The flux band is 1e-4 of the largest nodal flux of the saturated
+        solve (``_face_q_tol``). With one prescribed level and no applied
+        flux that solve carries no flow (``_saturated_carries_no_flow``)
+        and its fluxes are round-off; the band is then taken from the first
+        pass solved with the face held, the first whose switching reads it
+        (``FACE_FLUX_SCALE_FROM_FLOW``). The rescue and the final check use
+        that band too.
         """
         n = self.mesh.node_count
         if n == 0 or not self.mesh.elements:
@@ -969,10 +1033,14 @@ class UnsaturatedSeepageSolver(SeepageSolver):
         # flux band scales with the largest nodal flux of the saturated
         # solve (v0.1.274: this said "the total Dirichlet throughput",
         # which is not what is computed), so it is dimensionally
-        # consistent across permeabilities.
+        # consistent across permeabilities. A saturated solve with no flow
+        # has only round-off to give: the scale then waits for the first
+        # solve with the face held (v0.1.359, D364).
         p_tol = self._face_p_tol()
         q_scale = max((abs(r) for r in first.reactions), default=0.0)
         q_tol = self._face_q_tol(q_scale)
+        scale_from_flow = (FACE_FLUX_SCALE_FROM_FLOW
+                           and self._saturated_carries_no_flow(bcs))
         history: list[float] = []
         # v0.1.269 (D265): the unrelaxed change of every pass, published
         # (``history`` above stays the relaxed one the stop test reads)
@@ -1001,6 +1069,12 @@ class UnsaturatedSeepageSolver(SeepageSolver):
             H = H_relaxed
             history.append(delta)
 
+            if scale_from_flow and active:
+                # D364: the first solve with the face held, before the
+                # first switching that reads the band
+                q_tol = self._face_q_tol(
+                    max((abs(r) for r in step.reactions), default=0.0))
+                scale_from_flow = False
             new_active = self._switch_seepage_face(
                 active, switches, unknown, H, step.reactions, p_tol, q_tol)
             set_changed = (new_active != active)
@@ -1213,6 +1287,40 @@ class UnsaturatedSeepageSolver(SeepageSolver):
         reports "failed", so that ``solve_unsaturated`` publishes the
         loop's state. ``active`` is then the loop's face without its frozen
         nodes (``LOOP_SETTLED_FACE``).
+
+        Where every road fails on a fine mesh (D365, closed as documented)
+        -------------------------------------------------------------------
+        Dam 2 of problem 9 of the groundwater verification bank (the
+        toe-drain dam of Chapuis et al. 2001, whose drain loses six decades
+        of permeability over 2.9 kPa of suction), on the generator's
+        4000-element mesh with the groundwater door's settings (w = 0.4,
+        200 passes, tolerance 1e-5): the loop cycles and the three roads
+        fail, and the run comes out unconverged. Measured
+        (_auditoria/P6_0359), it is none of the things a setting reaches:
+        * not the flux band (D364): with any band, from round-off to 1e-3
+          of the real flow, the three roads are identical. None of them
+          changes the face (one node held throughout), and the band is read
+          only to release a held node;
+        * not a missing answer: started from the field the bank converges
+          to with w = 0.3, Anderson accepts it in 5 evaluations with the
+          door's tolerance and bands;
+        * Anderson's outcome hangs on where the loop's cycle leaves it and
+          on round-off. From four other starts neither depth reaches the
+          tolerance, and the same iteration written in the mixing form of
+          Walker & Ni (2011) with parameter 1, equal to this one but for
+          rounding, ends 3.1 m off instead of 2.0;
+        * the continuation stops at t = 0.62 with its step halved to the
+          minimum: Newton's line search cannot reduce |R|, frozen to eight
+          figures. It is not the budget (266 of 1000 iterations), the
+          per-step budget or the face. The Jacobian is not turning singular
+          there (its smallest singular value falls smoothly along t), which
+          points to a kink of the piecewise curves rather than a fold, but
+          no measurement here shows the kink itself.
+        Of five meshes from 1921 to 4095 elements, two fail (3691 and
+        3886); the other three converge, by three different roads, with the
+        discharge between -2.5 % and +0.8 % of the published one. The owner
+        decided to leave the rescue as it is and to look for a road robust
+        to near-step curves under its own entry (D366).
 
         Returns a dict: ``converged``, ``method``, ``iterations`` (map
         evaluations plus Newton iterations), ``residual`` (the last
