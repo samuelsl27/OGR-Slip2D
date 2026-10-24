@@ -1314,13 +1314,50 @@ class UnsaturatedSeepageSolver(SeepageSolver):
           figures. It is not the budget (266 of 1000 iterations), the
           per-step budget or the face. The Jacobian is not turning singular
           there (its smallest singular value falls smoothly along t), which
-          points to a kink of the piecewise curves rather than a fold, but
-          no measurement here shows the kink itself.
+          was read as a kink of the piecewise curves rather than a fold; it
+          is both, a fold that sits on a kink (D366, below).
         Of five meshes from 1921 to 4095 elements, two fail (3691 and
         3886); the other three converge, by three different roads, with the
         discharge between -2.5 % and +0.8 % of the published one. The owner
         decided to leave the rescue as it is and to look for a road robust
         to near-step curves under its own entry (D366).
+
+        Why the continuation stops: a fold on a kink (D366, documented)
+        ----------------------------------------------------------------
+        Measured on the same two meshes (_auditoria/P6_0360): Newton stops
+        because one element of the drain sits on the kink at 9.8 kPa where
+        the drain's curve meets its floor ``kr_min``. From the wet side the
+        step sends it dry, from the dry side wet, and the step the line
+        search accepts shrinks with its distance to the kink. The Jacobian
+        is exact on either side; what changes across the kink is the sign
+        of its determinant, +1 with the dry slope and -1 with the wet one.
+        Below t* two solutions exist, the element dry and the element wet,
+        and they meet on the kink (between t = 0.6172 and 0.6177 on 3886
+        elements, 0.6489 and 0.6504 on 3691): past it neither is a solution.
+        The path of solutions turns back at a non-smooth fold, which no
+        one-sided singular value shows, and continuation in the natural
+        parameter cannot cross it however its steps are searched.
+
+        Roads measured from the continuation's last state, each written two
+        algebraically equal ways:
+        * a non-monotone line search (Grippo, Lampariello & Lucidi 1986):
+          fails on both meshes, there being no root nearby;
+        * pseudo-arclength continuation (Keller 1977; Allgower & Georg
+          1990): fails on both, its tangent turning vertical at the fold;
+        * Anderson with systematic restarts (Henderson & Varadhan 2019):
+          converges on 3886 and fails on 3691;
+        * pseudo-transient continuation (Kelley & Keyes 1998; Fowler &
+          Kelley 2005 for non-smooth equations): converges on 3886 only
+          for one decade of its initial step, and fails on 3691;
+        * Newton with one-sided derivatives (Qi & Sun 1993) was not tried:
+          the derivative is not what fails.
+        The solution exists on both meshes (discharge -1.44 % and -1.39 %
+        of the published one), but which start, Anderson variant and depth
+        reaches it depends on the mesh: of 24 combinations, 2 converge on
+        3886, 4 on 3691 and none on both. A road chosen because it covers
+        these two meshes would be fitted to them. The owner closed D366 as
+        documented and opened D367 for a road that follows the path of
+        solutions across such folds.
 
         Returns a dict: ``converged``, ``method``, ``iterations`` (map
         evaluations plus Newton iterations), ``residual`` (the last
@@ -1465,7 +1502,10 @@ class UnsaturatedSeepageSolver(SeepageSolver):
         held fixed for Newton and switched with the loop's rule afterwards,
         repeating the step until the set stops changing. Newton's method
         on this equation is compared with Picard's by Paniconi & Putti
-        (1994).
+        (1994). Continuation in the natural parameter cannot cross a
+        turning point of the path, and with piecewise curves one can sit on
+        a kink, where no one-sided Jacobian turns singular (D366, see
+        ``_rescue``).
 
         The answer must be a fixed point of the Picard map itself and, since
         v0.1.356 (D285, see ``_rescue``), settle the seepage face: one that
