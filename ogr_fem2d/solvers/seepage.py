@@ -467,7 +467,9 @@ def solve_project_seepage(project, bcs: Optional[
 #:
 #: The rescue runs ONLY after the loop has failed, so every model that
 #: converges today goes through exactly the arithmetic it went through
-#: before. Off, the v0.1.265 behaviour.
+#: before. Off, the v0.1.265 behaviour. Since v0.1.358 (D356) "failed"
+#: includes a loop that stops with the seepage face unsettled
+#: (``LOOP_SETTLED_FACE``).
 PICARD_RESCUE = True
 
 #: v0.1.283 (D279) — the seepage face's switch budget, when not given,
@@ -524,9 +526,42 @@ RESCUE_MIN_STEP = 1e-3
 #: where the accepted road had it up to 0.49 m. Over the 53 unsaturated
 #: steady rows of the bank, with w from 0.2 to 0.8, no road is set aside.
 #: When no road settles the face, the state published is the first one set
-#: aside -- the one 0.1.355 published -- and the face is reported unsettled.
-#: Switch off to rebuild 0.1.355.
+#: aside -- the one 0.1.355 published -- and the face is reported unsettled
+#: (after a loop that stopped with the face unsettled, the loop's own state:
+#: ``LOOP_SETTLED_FACE``). Switch off to rebuild 0.1.355.
 RESCUE_SETTLED_FACE = True
+
+#: v0.1.358 (D356) -- a Picard loop that stops with the seepage face
+#: unsettled has not converged, and the rescue runs.
+#:
+#: The loop stops when the relaxed change is below the tolerance and the
+#: face set has stopped changing. A node frozen by the switch budget cannot
+#: change the set, so the loop could stop with a frozen node held at P = 0
+#: and water going in; the final check of ``solve_unsaturated`` reported the
+#: face unsettled, and the rescue, which ran only after a loop that failed,
+#: was never tried. Switched on, the loop's final state is asked before the
+#: loop is believed (the very solve the end publishes, computed once). When
+#: its face is unsettled the rescue runs with Anderson started from the
+#: loop's face WITHOUT its frozen nodes, the ones the loop could not revise;
+#: a road that settles the face is published, and if none does the loop's
+#: own state is, as 0.1.357 published it, with the rescue reported "failed".
+#:
+#: Measured in the groundwater verification bank (_auditoria/P6_0358):
+#: dam 2 of problem 9 (Bowles 1984, the toe-drain dam of Chapuis et al.
+#: 2001) on the generator's 1000-element mesh, solved with the groundwater
+#: door's settings (w = 0.4, 200 passes, tolerance 1e-5), stopped with a
+#: node of the downstream face, in the drain, held while water went in at
+#: 35 times the flow through the dam, and came out unconverged, with no
+#: discharge and the free surface 3 to 4 m high; rescued, its discharge is
+#: 4.2105e-6 m3/(min m), 0.46 % below the 4.23e-6 published. Of the 255 steady
+#: unsaturated runs of the bank (51 rows, w from 0.2 to 0.8) only that dam
+#: at w = 0.4, 0.6 and 0.8 moves; the other 252 are identical to the bit.
+#: In 14 cases forced with a starved budget the rescue reaches the
+#: reference fixed point in 10 and falls back to the loop's state in 4;
+#: started from the loop's face as it was, it published as converged once
+#: another face admissible within the bands, 4.2 cm off at a node held in
+#: dry ground. Switch off to rebuild 0.1.357.
+LOOP_SETTLED_FACE = True
 
 #: v0.1.274 (D269) — the seepage face of a transient time step follows the
 #: steady solver's rule (``_switch_seepage_face``) instead of its own copy.
@@ -763,11 +798,12 @@ class UnsaturatedSeepageSolver(SeepageSolver):
         the foot of the face spent the 25 and froze held at P = 0 with
         water going in, the run came out unconverged 0.129 m from the fixed
         point, and the rescue could not step in (the frozen set no longer
-        changes, so the loop "ends"); with 50 or more it converges within
-        1.3 tolerance. 10/w is 25 at w = 0.4, the groundwater door's, so
-        the door and every w >= 0.4 keep exactly the budget they had. It is
-        read when used, so the initial steady state of a transient, solved
-        with the door's w (D277), gets the budget of that w."""
+        changes, so the loop "ends"; it can since v0.1.358, D356); with 50
+        or more it converges within 1.3 tolerance. 10/w is 25 at w = 0.4,
+        the groundwater door's, so the door and every w >= 0.4 keep exactly
+        the budget they had. It is read when used, so the initial steady
+        state of a transient, solved with the door's w (D277), gets the
+        budget of that w."""
         if self._max_node_switches is not None:
             return self._max_node_switches
         if SWITCH_BUDGET_SCALES_WITH_OMEGA:
@@ -841,7 +877,8 @@ class UnsaturatedSeepageSolver(SeepageSolver):
             out; a continuation that fails before t = 1 leaves none). Every
             road tried is there, those set aside because their answer left
             the seepage face unsettled too (v0.1.356, D285); ``rescue``
-            names the road whose state is published. Four significant
+            names the road whose state is published, or says "failed" when
+            it is the loop's (v0.1.358, D356; see below). Four significant
             figures; None where there is no number.
         ``history_segments``
             ``[name, first index]`` of each part of the series:
@@ -869,13 +906,14 @@ class UnsaturatedSeepageSolver(SeepageSolver):
 
         What a very small w does instead: with w = 0.1 the relaxation is so
         slow that the face set changes at every pass for the first thirty,
-        and a node at the foot of the face spends its switch budget
-        (``DEFAULT_MAX_NODE_SWITCHES``) and freezes held at P = 0 with water
-        going in. The run is then NOT reported converged — ``converged`` is
-        False, ``unsettled_nodes`` 1 and the warning says the face never
-        settled — and its heads are 0.13 m off; with a budget of 50 or more
-        it converges within 1.3 tolerance. That budget against slow
-        relaxation is D279; the groundwater door uses w = 0.4.
+        and with a budget of 25 (``DEFAULT_MAX_NODE_SWITCHES``) a node at the
+        foot of the face spends it and freezes held at P = 0 with water
+        going in. The loop then stops 0.13 m from the fixed point. Until
+        v0.1.357 the run was reported unconverged there, the face never
+        settled; since v0.1.358 the rescue takes over and lands 6e-7 m from
+        the fixed point (D356, below). With a budget of 50 or more the loop
+        converges by itself within 1.3 tolerance, and since D279 the
+        default budget scales with 1/w; the groundwater door uses w = 0.4.
 
         How precisely the seepage face is resolved (v0.1.273, D266)
         -----------------------------------------------------------
@@ -894,6 +932,19 @@ class UnsaturatedSeepageSolver(SeepageSolver):
         Gardner curve) two sets 2.1 mm apart. The exit point is resolved
         to a node and the face pressures to ``p_tol``; that is the
         precision of this algorithm, not a convergence error.
+
+        A loop that stops with the face unsettled (v0.1.358, D356)
+        ----------------------------------------------------------
+        The stop test reads the face set, and a node frozen by the switch
+        budget no longer changes it: the loop can stop with a frozen node
+        held at P = 0 while water goes in. The loop's final state is asked
+        (``_unsettled_nodes``) before the loop is believed, and when its
+        face is unsettled the run goes to the rescue like a loop that
+        failed, with Anderson started from the loop's face without its
+        frozen nodes (``LOOP_SETTLED_FACE``). A road that settles the face
+        is published. If none does, the loop's own state is, as before:
+        unconverged, with ``rescue`` "failed", and a history that holds the
+        loop, ending below ``tolerance / w``, and every road tried.
         """
         n = self.mesh.node_count
         if n == 0 or not self.mesh.elements:
@@ -960,22 +1011,46 @@ class UnsaturatedSeepageSolver(SeepageSolver):
                 break
 
         # ---- the rescue (v0.1.266, D124) ----------------------------
-        # Only after the loop has failed: whatever converged above went
-        # through exactly the arithmetic it went through before.
+        # Only after the loop has failed: whatever converged above with
+        # its face settled goes through exactly the arithmetic it went
+        # through before.
         rescue = None
+        final = None
+        unsettled_loop = False
+        if converged and PICARD_RESCUE and LOOP_SETTLED_FACE:
+            # v0.1.358 (D356): a loop that stopped with the face unsettled
+            # has failed too. Its final state is the solve the end makes,
+            # computed here once, so a settled loop publishes the same bits.
+            kr = self._element_kr(H)
+            extra = {nid: self.mesh.nodes[nid].y for nid in active}
+            final = super().solve(bcs, kr=kr, extra_dirichlet=extra)
+            if final.converged and self._unsettled_nodes(
+                    final, unknown, active, p_tol, q_tol):
+                converged = False
+                unsettled_loop = True
         if not converged and PICARD_RESCUE:
-            rescue = self._rescue(bcs, H, H_prev, active, unknown, p_tol,
-                                  q_tol, first.total_head)
+            start_face = active
+            if unsettled_loop:
+                # the frozen nodes are the ones the loop could not revise;
+                # started with them, Anderson kept a node held in dry
+                # ground whose inflow stayed below the band (D356)
+                start_face = {nid for nid in active
+                              if switches.get(nid, 0) < self.max_node_switches}
+            rescue = self._rescue(bcs, H, H_prev, start_face, unknown, p_tol,
+                                  q_tol, first.total_head,
+                                  fallback=not unsettled_loop)
             if rescue["converged"]:
                 H = rescue["head"]
                 active = rescue["active"]
                 switches = rescue["switches"]
                 converged = True
+                final = None
 
         # ---- final consistent state ---------------------------------
-        kr = self._element_kr(H)
-        extra = {nid: self.mesh.nodes[nid].y for nid in active}
-        final = super().solve(bcs, kr=kr, extra_dirichlet=extra)
+        if final is None:
+            kr = self._element_kr(H)
+            extra = {nid: self.mesh.nodes[nid].y for nid in active}
+            final = super().solve(bcs, kr=kr, extra_dirichlet=extra)
         if not final.converged:
             final.notes["error"] = M.seepage_note(M.FINAL_FAILED)
             return final
@@ -1087,7 +1162,7 @@ class UnsaturatedSeepageSolver(SeepageSolver):
 
     # ------------------------------------------------------------------
     def _rescue(self, bcs, H, H_prev, active, unknown, p_tol, q_tol,
-                H_saturated) -> dict:
+                H_saturated, fallback: bool = True) -> dict:
         """Look for the fixed point the Picard loop failed to reach
         (v0.1.266, D124; see ``PICARD_RESCUE``).
 
@@ -1131,6 +1206,13 @@ class UnsaturatedSeepageSolver(SeepageSolver):
         none of them -- it froze the same nodes as the first -- and is tried
         all the same, in the written order: it is the road that settles
         other cases once the first depth fails on the tolerance.
+
+        A loop that stopped with the face unsettled (v0.1.358, D356) has a
+        state of its own to fall back on, the one 0.1.357 published: with
+        ``fallback`` False a road set aside is not returned, and the rescue
+        reports "failed", so that ``solve_unsaturated`` publishes the
+        loop's state. ``active`` is then the loop's face without its frozen
+        nodes (``LOOP_SETTLED_FACE``).
 
         Returns a dict: ``converged``, ``method``, ``iterations`` (map
         evaluations plus Newton iterations), ``residual`` (the last
@@ -1184,7 +1266,7 @@ class UnsaturatedSeepageSolver(SeepageSolver):
                 return _done(r, "continuation-newton")
             if aside is None and r.get("unsettled"):
                 aside = (r, "continuation-newton")
-        if aside is not None:
+        if aside is not None and fallback:
             # No road settled the face: hand over what 0.1.355 published,
             # and let the final check of solve_unsaturated report the face
             r, method = aside

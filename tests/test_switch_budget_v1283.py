@@ -22,7 +22,9 @@ What these tests protect:
 * with the default budget, w = 0.1 converges on that dam, with no frozen
   node, within twice the tolerance of the fixed point solved to 1e-12
   (rule 1: against the fixed point, not a snapshot);
-* switched off, the old budget and the old outcome come back (rule 7);
+* switched off, the old budget and the old outcome come back (rule 7) --
+  since v0.1.358 together with ``LOOP_SETTLED_FACE`` (D356), whose rescue
+  would otherwise settle the frozen face;
 * a budget given explicitly is not scaled
   (``test_transient_coupling_v1125::test_a_starved_budget…`` still starves).
 """
@@ -81,15 +83,22 @@ class TestASlowRelaxationConverges:
         assert t._off(r) < 2 * t.TOL, t._off(r)     # measured 1.3 tolerance
 
     def test_switched_off_it_freezes_again(self):
+        # v0.1.358 (D356): a loop that stops with a frozen node in the wrong
+        # state now hands over to the rescue, which settles this dam
+        # (test_picard_tolerance_v1272); rebuilding 0.1.282 takes both
+        # switches off
         t = _helpers()
         mesh, props, bcs = t._dam()
-        old = seepage.SWITCH_BUDGET_SCALES_WITH_OMEGA
+        old = (seepage.SWITCH_BUDGET_SCALES_WITH_OMEGA,
+               seepage.LOOP_SETTLED_FACE)
         seepage.SWITCH_BUDGET_SCALES_WITH_OMEGA = False
+        seepage.LOOP_SETTLED_FACE = False
         try:
             r = UnsaturatedSeepageSolver(
                 mesh, props, relaxation=0.1, max_iterations=5000,
                 tolerance=t.TOL).solve_unsaturated(bcs)
         finally:
-            seepage.SWITCH_BUDGET_SCALES_WITH_OMEGA = old
+            (seepage.SWITCH_BUDGET_SCALES_WITH_OMEGA,
+             seepage.LOOP_SETTLED_FACE) = old
         assert r.converged is False
         assert r.notes["frozen_nodes"] >= 1
