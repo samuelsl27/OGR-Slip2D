@@ -32,11 +32,30 @@ from the loop's face as it was, the rescue published as converged, once in
 but not the answer: a node held in dry ground, 4.2 cm off (measured in the
 bank, ``_auditoria/P6_0358``).
 
+Whether the door's loop stops is decided by round-off (v0.1.361)
+-----------------------------------------------------------------
+On dam 2 the loop stops on the edge of the tolerance: its last relaxed
+change is 6e-6 to 9.9e-6 against 1e-5. A machine that rounds differently
+can keep it cycling to the 200th pass instead, and then the loop has simply
+failed and the rescue runs switched on or off. The continuous integration
+on Python 3.12 did exactly that, while 3.11, 3.13 and Windows stopped with
+the face unsettled. Emulated here by moving w a few units in the last place
+(_auditoria/P6_0361 of the bank): of 9 runs, 7 stop with the face unsettled
+and 2 (w moved by 2 ulp either way) cycle and are rescued. The toe-drain
+dam of Harr with a switch budget of 1 stops with the face unsettled in all
+9, identically. So the switch is shown to move the number on Harr's dam,
+and at the door only what holds in both regimes is asked.
+
 The invariants
 --------------
-* switched off, the defect at the door: the loop stopped (its last relaxed
-  change is below the tolerance) with the face unsettled, no rescue ran, the
-  run is unconverged and there is no discharge;
+* switched off, the defect, on Harr's dam with a budget of 1: the loop
+  stopped (its last relaxed change is below the tolerance) with the face
+  unsettled, no rescue ran and the run is unconverged. Rule 7: the switch
+  moves the number it exists for;
+* switched off at the door, the run is never published converged with the
+  face unsettled: either the loop stopped with it unsettled, and the run is
+  unconverged, with no rescue and no discharge, or the loop failed and the
+  rescue settled it;
 * switched on, the rescue settles it: converged, every face node obeys the
   condition (checked here with the solver's bands, not its
   ``_unsettled_nodes``), and the discharge is the published one, 4.23e-6
@@ -58,7 +77,7 @@ The invariants
 The slow-relaxation case of the defect (the Gardner dam at w = 0.1 with a
 budget of 25) is in ``test_picard_tolerance_v1272``.
 
-Cost: about 80 s; the rescued dam 2 alone takes 30, the continuation being
+Cost: about 90 s; the rescued dam 2 alone takes 30, the continuation being
 the only road that converges there. Every test restores the switch it
 touches (rule 5).
 """
@@ -248,14 +267,20 @@ class TestTheDoorOnDam2:
         assert mesh.element_count == T3, (
             "not the mesh this case was measured on", mesh.element_count)
 
-    def test_switched_off_the_loop_stops_with_the_face_unsettled(self):
+    def test_switched_off_it_is_never_published_settled_when_it_is_not(self):
+        """Two regimes, chosen by round-off (see the module's docstring)."""
+        mesh, props, bcs = _dam2()
         s, r = _door(False)
-        assert r.converged is False
-        assert "rescue" not in r.notes, r.notes
-        assert r.notes["picard_delta"] < STEADY_TOLERANCE   # it stopped
-        assert r.notes["unsettled_nodes"] >= 1
-        assert r.notes["warning"].code == "seepage.face_unsettled"
-        assert math.isnan(_discharge(s, r))
+        if r.notes["picard_delta"] < STEADY_TOLERANCE:      # the loop stopped
+            assert r.converged is False
+            assert "rescue" not in r.notes, r.notes
+            assert r.notes["unsettled_nodes"] >= 1
+            assert r.notes["warning"].code == "seepage.face_unsettled"
+            assert math.isnan(_discharge(s, r))
+        else:                                              # the loop failed
+            assert r.notes["rescue"] == "continuation-newton", r.notes
+            assert r.converged and r.notes["unsettled_nodes"] == 0, r.notes
+            assert _breaches(mesh, props, bcs, r) == []
 
     def test_switched_on_the_rescue_settles_it(self):
         mesh, props, bcs = _dam2()
@@ -275,16 +300,30 @@ class TestTheDoorOnDam2:
 # ======================================================================
 # The start of the rescue: the toe-drain dam of Harr, budget 1
 # ======================================================================
-def _harr(budget=None):
-    key = ("harr", budget)
+def _harr(budget=None, on=True):
+    key = ("harr", budget, on)
     if key not in _CACHE:
         t = _module("test_rescue_face_v1356")
         mesh, props, bcs = t._case()
         kw = {} if budget is None else {"max_node_switches": budget}
-        _CACHE[key] = _solve(mesh, props, bcs, True, gamma_w=GAMMA_W,
+        _CACHE[key] = _solve(mesh, props, bcs, on, gamma_w=GAMMA_W,
                              relaxation=t.W, max_iterations=200,
                              tolerance=t.TOL, **kw)[1]
     return _CACHE[key]
+
+
+class TestSwitchedOffTheDefect:
+    def test_the_loop_stops_with_the_face_unsettled(self):
+        """Harr's dam with a budget of 1, switched off: what 0.1.357 did.
+        It stops with a node of the drain's face held while water goes in
+        (measured: the same in all 9 runs with w moved by up to 8 ulp)."""
+        t = _module("test_rescue_face_v1356")
+        r = _harr(budget=1, on=False)
+        assert r.converged is False
+        assert "rescue" not in r.notes, r.notes
+        assert r.notes["picard_delta"] < t.TOL               # it stopped
+        assert r.notes["unsettled_nodes"] >= 1
+        assert r.notes["warning"].code == "seepage.face_unsettled"
 
 
 class TestTheRescueStartsWithoutTheFrozenNodes:
