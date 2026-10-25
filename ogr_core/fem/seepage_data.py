@@ -230,6 +230,31 @@ class SeepageResult:
             out[str(k)] = v
         return out
 
+    @staticmethod
+    def _note_codes(notes: dict) -> dict:
+        """``{key: {"code", "args"}}`` for every note that carries a code.
+
+        v0.1.364 (D342) — a note is written as its English sentence, which
+        is what older versions, the API, the tests and the bank read, and
+        it is kept that way; its code and its values go BESIDE it, so that a
+        field read back from a file says its notes in the reader's language
+        as the one just computed does. The values follow ``json_args``: a
+        non-finite one is written as its ``repr``.
+        """
+        from ogr_core.messages import json_args
+        out = {}
+        for k, v in (notes or {}).items():
+            code = getattr(v, "code", "") if isinstance(v, str) else ""
+            if not code:
+                continue
+            entry = {"code": code, "args": json_args(getattr(v, "args", None))}
+            try:
+                json.dumps(entry, allow_nan=False)
+            except (TypeError, ValueError):
+                continue
+            out[str(k)] = entry
+        return out
+
     def to_dict(self) -> dict:
         d = {
             "schema": self.SCHEMA,
@@ -240,6 +265,14 @@ class SeepageResult:
             "iterations": int(self.iterations),
             "notes": self._json_safe(self.notes),
         }
+        # v0.1.364 (D342) -- only when a note has a code: a key that is
+        # always there would change the fingerprint of every saved field
+        # (``model_hash``, and the bank's ``modelo_huella``), and an older
+        # version reads past it
+        codes = {k: v for k, v in self._note_codes(self.notes).items()
+                 if k in d["notes"]}
+        if codes:
+            d["note_codes"] = codes
         if self.kr is not None:
             d["kr"] = self._round(self.kr)
         return d
@@ -264,6 +297,16 @@ class SeepageResult:
         r.converged = bool(d.get("converged", False))
         r.iterations = int(d.get("iterations", 1))
         r.notes = dict(d.get("notes") or {})
+        # v0.1.364 (D342) -- a note comes back with the code it was saved
+        # with, as the sentence it always was: the interface says it in its
+        # language again. A file without codes reads as it always did.
+        from ogr_core.messages import Coded, args_from_json
+        for k, entry in (d.get("note_codes") or {}).items():
+            text = r.notes.get(k)
+            code = entry.get("code") if isinstance(entry, dict) else None
+            if isinstance(text, str) and code:
+                r.notes[k] = Coded(text, code,
+                                   args_from_json(entry.get("args")))
         return r
 
 

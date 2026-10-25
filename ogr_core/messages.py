@@ -279,3 +279,25 @@ def json_args(args) -> dict:
             return [conv(x) for x in v]
         return v
     return {str(k): conv(v) for k, v in (args or {}).items()}
+
+
+#: The strings :func:`json_args` writes for the floats JSON has no number for.
+_NON_FINITE = {"nan": math.nan, "inf": math.inf, "-inf": -math.inf}
+
+
+def args_from_json(args) -> dict:
+    """The inverse of :func:`json_args` for what it changed: ``"nan"``,
+    ``"inf"`` and ``"-inf"`` are floats again (v0.1.364, D342).
+
+    Without it a note whose value was not finite renders its English
+    sentence, because a template written for a number does not format the
+    string ``"nan"``. A tuple stays a list, which formats the same."""
+    def conv(v):
+        if isinstance(v, str) and v in _NON_FINITE:
+            return _NON_FINITE[v]
+        if isinstance(v, dict):
+            return {str(k): conv(x) for k, x in v.items()}
+        if isinstance(v, list):
+            return [conv(x) for x in v]
+        return v
+    return {str(k): conv(v) for k, v in (args or {}).items()}
