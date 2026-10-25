@@ -189,6 +189,9 @@ class _DrawdownSweepWorker(QThread):
         self.n_levels = int(n_levels)
         self.include_total = bool(include_total)
         self.result = None
+        # v0.1.363 (D340) — kept, as ``_ComputeWorker`` keeps its own: the
+        # window reads them when the sweep is done
+        self.warnings: list = []
 
     def run(self) -> None:                       # noqa: D102
         try:
@@ -199,7 +202,7 @@ class _DrawdownSweepWorker(QThread):
             from ogr_slip2d.analysis_runner import (
                 AnalysisNotConfigured, run_configured_drawdown_sweep)
             try:
-                self.result, _report, _warnings = \
+                self.result, _report, self.warnings = \
                     run_configured_drawdown_sweep(
                         self.project, self.method_ids,
                         n_levels=self.n_levels,
@@ -258,7 +261,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.362"
+    VERSION = "0.1.363"
 
     def __init__(self) -> None:
         super().__init__()
@@ -291,6 +294,11 @@ class MainWindow(QMainWindow):
         # to get its critical surfaces, so merging would have the run erase
         # its own note.
         self.last_statistics_notes: list[str] = []
+        # v0.1.363 (D340) — the notes of the calculations that are not
+        # Compute (back analysis, optimisation, drawdown sweep, transient),
+        # one entry each, ``[(subtitle or None, notes)]``. Every one of them
+        # returned its warnings to this window, which threw them away.
+        self.last_task_notes: dict = {}
         # v0.1.165 (D96) — the design-standard report of the last run, kept
         # here for the same reason and cleared in the same three places: it
         # describes THAT run. Read from the settings instead and the caption
@@ -1897,15 +1905,26 @@ class MainWindow(QMainWindow):
         # v0.1.201 — the analysis door: design factors, the settings
         # checks, the configured search. This searched the raw project.
         try:
-            res, _report, _warnings = run_configured_back_analysis(
+            res, _report, warnings = run_configured_back_analysis(
                 self.project, **values)
         except AnalysisNotConfigured as exc:
+            # v0.1.363 (D340) -- a refused run has no notes, and the last
+            # run's would read as this one's
+            self._set_task_notes("back_analysis", [])
             # v0.1.350 (D335) -- through the codes: tr() of a sentence
             # with its values in it found nothing
             from .core_messages import note_text
             self._info("\n".join(note_text(p) for p in exc.problems))
             return
         self._back_analysis_result = res
+        # v0.1.363 (D340) — the run's warnings, and the two notes of its own
+        # (surfaces left out as composite, envelopes that did not settle):
+        # the window read ``notes["error"]`` and nothing else
+        own = [res.notes[key] for key in ("composite_skipped",
+                                          "envelope_not_settled")
+               if res.notes.get(key)]
+        n_notes = self._set_task_notes(
+            "back_analysis", [(None, list(warnings or []) + own)])
         if res.critical is None:
             # v0.1.352 (D335) -- the reason through its code, and the
             # fallback through tr()
@@ -1914,14 +1933,14 @@ class MainWindow(QMainWindow):
                                  or tr("Back analysis failed.")))
             return
         c = res.critical
-        self.statusBar().showMessage(
+        self.statusBar().showMessage(self._with_notes_hint(
             tr('Back analysis ({0}): required force {1:.1f} for FS = '
                '{2:g}  (active {3:.1f}, passive {4:.1f}; surface FoS '
                'without support {5:.4f}, {6} surfaces)').format(
                 values["method_id"], res.required_force,
                 values["target_fos"],
                 c.active_force, c.passive_force, c.unsupported_fos,
-                res.surfaces_analysed),
+                res.surfaces_analysed), n_notes),
             15000)
 
     # ==================================================================
@@ -1983,6 +2002,9 @@ class MainWindow(QMainWindow):
         method_ids = list(
             self.project.settings.methods.enabled_methods) or [
             "bishop_simplified"]
+        # v0.1.363 (D340) -- the last sweep's notes go: a refused run brings
+        # none of its own, and theirs would read as this one's
+        self._set_task_notes("drawdown_sweep", [])
         self.prog = ComputeProgressDialog(self)
         self.sweep_worker = _DrawdownSweepWorker(
             self.project, method_ids, sp_n.value(), chk_total.isChecked())
@@ -1997,6 +2019,12 @@ class MainWindow(QMainWindow):
     def _on_drawdown_sweep_done(self, result) -> None:
         """Report the critical level and chart the sweep."""
         self.last_drawdown_sweep = result
+        # v0.1.363 (D340) — the sweep's warnings, which its worker received
+        # and dropped
+        worker = getattr(self, "sweep_worker", None)
+        n_notes = self._set_task_notes(
+            "drawdown_sweep", [(None, list(getattr(worker, "warnings", None)
+                                           or []))])
         if result.notes.get("error"):
             from .core_messages import note_text
             QMessageBox.warning(self, tr("Drawdown Level Sweep"),
@@ -2024,7 +2052,8 @@ class MainWindow(QMainWindow):
             # line break and the module does not parse at all.
             overstate = tr("the total drawdown alone would overstate it by")
             msg += f"  — {overstate} {100 * margin:.1f} %"
-        self.statusBar().showMessage(msg, 20000)
+        self.statusBar().showMessage(self._with_notes_hint(msg, n_notes),
+                                     20000)
 
         xs, series = [], []
         for m_id, sw in result.by_method.items():
@@ -2189,9 +2218,7 @@ class MainWindow(QMainWindow):
             self.last_statistics_notes.extend(
                 getattr(res, "note_lines", None) or [])
 
-        panel = getattr(self, "_analysis_notes_panel", None)
-        if panel is not None and not panel.isHidden():
-            panel.populate(self._analysis_notes())
+        self._refresh_notes_panel()
 
         self._update_statistics_actions()
         if not messages:
@@ -2707,23 +2734,31 @@ class MainWindow(QMainWindow):
         # settings and seed: this read none of them and had no seed, so
         # two runs of the same model answered differently.
         try:
-            best, res, rep, _report, _w = run_configured_optimization(
+            best, res, rep, _report, warnings = run_configured_optimization(
                 self.project, mid, surface, max_iterations=iters)
         except AnalysisNotConfigured as exc:
+            # v0.1.363 (D340) -- a refused run has no notes
+            self._set_task_notes("optimize", [])
             # v0.1.350 (D335) -- through the codes: tr() of a sentence
             # with its values in it found nothing
             from .core_messages import note_text
             self._info("\n".join(note_text(p) for p in exc.problems))
             return
+        # v0.1.363 (D340) — the run's warnings, and the report's note that
+        # the snap to the ground failed, neither of which was shown
+        snap = rep.notes.get("snap")
+        n_notes = self._set_task_notes(
+            "optimize", [(None, list(warnings or []) + ([snap] if snap
+                                                       else []))])
         # v0.1.349 (D335) -- the report's sentences, in the reader's language
         from .core_messages import note_text
         if "error" in rep.notes:
             self._info(note_text(rep.notes["error"]))
             return
         if not rep.improved:
-            self.statusBar().showMessage(
+            self.statusBar().showMessage(self._with_notes_hint(
                 tr("No improvement found: %s") % note_text(rep.summary()),
-                12000)
+                n_notes), 12000)
             return
         # The optimised surface replaces the critical one in the stored
         # result, so Interpret shows what the optimisation produced
@@ -2757,8 +2792,8 @@ class MainWindow(QMainWindow):
         self.results_dock.show_result(new, self.last_factor_report)
         self._remember_results_model()
         self.canvas.display_search_result(new)
-        self.statusBar().showMessage(
-            tr("Optimised: %s") % note_text(rep.summary()), 15000)
+        self.statusBar().showMessage(self._with_notes_hint(
+            tr("Optimised: %s") % note_text(rep.summary()), n_notes), 15000)
 
     # v0.1.335 (D142a) — on the canvas, as the reference does it: the
     # centre, then a point on the circle, or Enter to type the radius.
@@ -3547,19 +3582,40 @@ class MainWindow(QMainWindow):
             # seepage already solved and stored. Say it and stop.
             # v0.1.350 (D335) -- each refusal in the reader's language
             from .core_messages import note_text
+            self._set_task_notes("transient", [])
             self.statusBar().showMessage(
                 tr("Cannot compute: %s") % "  ".join(
                     note_text(p) for p in exc.problems), 15000)
             self._gw_solver = getattr(self.project, "_gw_solver", None)
             self._update_groundwater_actions()
             return list(self.project.transient_results or [])
-        from .core_messages import note_text
-        for note in outcome.warnings:
-            # Translated at the point of use: the driver has no interface
-            # and must not. v0.1.352 (D335): through the code each warning
-            # carries -- tr() of a sentence with its reason in it found
-            # nothing
-            self.statusBar().showMessage(note_text(note), 9000)
+        # v0.1.363 (D340) — every warning of the run to the panel, a stage's
+        # under its stage. Each used to go to the status bar for the moment
+        # before the next one replaced it, and the stages' own (what their
+        # searches said) were read by nobody.
+        parts = [(None, outcome.warnings)]
+        if outcome.initial is not None:
+            parts.append((tr("0: t = 0 (initial state)"),
+                          outcome.initial.warnings))
+        for st in outcome.stages:
+            caption = tr("Stage {0}: t = {1:g}").format(st.index + 1, st.time)
+            if st.label:
+                caption += " " + st.label
+            parts.append((caption, st.warnings))
+        self._set_task_notes("transient", parts)
+        notes = [n for _sub, ns in self.last_task_notes.get("transient", [])
+                 for n in ns]
+        if notes:
+            # As Compute says its notes: the first, and how many more there
+            # are. Translated at the point of use: the driver has no
+            # interface and must not. v0.1.352 (D335): through the code
+            # each warning carries.
+            from .core_messages import note_line
+            first = note_line(notes[0])
+            if len(notes) > 1:
+                first = tr("%s  [+%d more — Analysis > Analysis Notes]") % (
+                    first, len(notes) - 1)
+            self.statusBar().showMessage(first, 9000)
         self._gw_solver = getattr(self.project, "_gw_solver", None)
         return list(self.project.transient_results or [])
 
@@ -3607,6 +3663,10 @@ class MainWindow(QMainWindow):
                 return
             result = results[-1]
             self._update_groundwater_actions()
+            # v0.1.363 (D340) -- the line below replaces the notes' line, so
+            # it says where they are
+            n_notes = sum(len(ns) for _sub, ns
+                          in self.last_task_notes.get("transient", []))
             # v0.1.352 (D341) -- a transient whose initial steady state could
             # not be solved comes back as one result with no field and the
             # solver's reason in its notes: min() of that empty field raised
@@ -3615,10 +3675,10 @@ class MainWindow(QMainWindow):
                 from .core_messages import note_text
                 why = (result.notes.get("error")
                        or result.notes.get("warning"))
-                self.statusBar().showMessage(
+                self.statusBar().showMessage(self._with_notes_hint(
                     tr("Groundwater analysis: %s") % (
                         note_text(why) if why else tr("did not converge")),
-                    15000)
+                    n_notes), 15000)
                 return
             bad = [i for i, r in enumerate(results) if not r.converged]
             # v0.1.293 (D291b) — templates
@@ -3637,9 +3697,13 @@ class MainWindow(QMainWindow):
 
                 from .core_messages import note_text
                 msg += "  " + note_text(INITIAL_STATE_NOT_CONVERGED)
-            self.statusBar().showMessage(msg, 9000)
+            self.statusBar().showMessage(self._with_notes_hint(msg, n_notes),
+                                         9000)
             return
 
+        # v0.1.363 (D340) -- a steady field replaces the transient one, and
+        # with it the notes that described that run
+        self._set_task_notes("transient", [])
         # v0.1.125 — one door for the steady solve too, shared with the
         # command line and with any script: what used to be assembled
         # here is now ``solve_project_groundwater``.
@@ -3841,9 +3905,7 @@ class MainWindow(QMainWindow):
         # notes left the PREVIOUS run's notes on an open panel, even though
         # the list had just been emptied two lines above: the one case where
         # the panel is guaranteed to be wrong is the one it never refreshed.
-        panel = getattr(self, "_analysis_notes_panel", None)
-        if panel is not None and not panel.isHidden():
-            panel.populate(self._analysis_notes())
+        self._refresh_notes_panel()
         if not results:
             self.last_search_result = None
             self.ogr_status.showMessage(tr("No methods produced results."), 6000)
@@ -3951,6 +4013,51 @@ class MainWindow(QMainWindow):
         return (list(getattr(self, "last_compute_warnings", []) or [])
                 + list(getattr(self, "last_statistics_notes", []) or []))
 
+    def _task_note_sections(self) -> list:
+        """The other calculations' notes, as the panel's sections:
+        ``[(title, [(subtitle or None, notes)])]`` (v0.1.363, D340).
+
+        Under the name each calculation has in its menu, so a note can be
+        traced back to the action that wrote it."""
+        titles = {"back_analysis": tr("Back Analysis of Support Force"),
+                  "optimize": tr("Optimize Surfaces"),
+                  "drawdown_sweep": tr("Drawdown Level Sweep"),
+                  "transient": tr("Transient Groundwater")}
+        kept = getattr(self, "last_task_notes", None) or {}
+        return [(titles[key], kept[key]) for key in titles if kept.get(key)]
+
+    def _set_task_notes(self, key: str, parts) -> int:
+        """Keep the notes of one calculation's last run in place of its
+        previous ones, refresh an open panel, and say how many there are.
+
+        v0.1.363 (D340) — ``parts`` is ``[(subtitle or None, notes)]``; the
+        transient is the one that needs subtitles, one per stage."""
+        parts = [(sub, list(ns)) for sub, ns in parts if ns]
+        if parts:
+            self.last_task_notes[key] = parts
+        else:
+            self.last_task_notes.pop(key, None)
+        self._refresh_notes_panel()
+        return sum(len(ns) for _sub, ns in parts)
+
+    @staticmethod
+    def _with_notes_hint(message: str, n: int) -> str:
+        """``message``, plus where to read the ``n`` notes it does not say.
+
+        v0.1.363 (D340) — the status bar holds one line, and on these
+        calculations that line is the result; the notes go to the panel and
+        this is what says they are there, as Compute's own line does."""
+        if not n:
+            return message
+        return tr("{0}  [{1} note(s) — Analysis > Analysis Notes]").format(
+            message, n)
+
+    def _refresh_notes_panel(self) -> None:
+        """Rebuild an open Analysis Notes panel from everything kept."""
+        panel = getattr(self, "_analysis_notes_panel", None)
+        if panel is not None and not panel.isHidden():
+            panel.populate(self._analysis_notes(), self._task_note_sections())
+
     def act_analysis_notes(self) -> None:
         """Open (or refresh) the non-modal panel with the run's notes.
 
@@ -3963,12 +4070,14 @@ class MainWindow(QMainWindow):
         from .dialogs.analysis_notes_panel import AnalysisNotesPanel
 
         notes = self._analysis_notes()
+        # v0.1.363 (D340) -- and the other calculations', each under its name
+        sections = self._task_note_sections()
         panel = getattr(self, "_analysis_notes_panel", None)
         if panel is not None and not panel.isHidden():
-            panel.populate(notes)
+            panel.populate(notes, sections)
             panel.raise_()
             return
-        panel = AnalysisNotesPanel(notes, self)
+        panel = AnalysisNotesPanel(notes, self, sections)
         panel.show()
         # Kept on the window so Python does not collect it.
         self._analysis_notes_panel = panel
@@ -4500,6 +4609,7 @@ class MainWindow(QMainWindow):
         self.last_search_results = {}
         self.last_compute_warnings = []
         self.last_statistics_notes = []
+        self.last_task_notes = {}
         self.last_factor_report = None
         self.last_statistics_factor_report = None
         self._prob_result = None

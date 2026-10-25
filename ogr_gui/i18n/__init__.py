@@ -6866,6 +6866,11 @@ _DICTS: dict[str, dict[str, str]] = {
             "factor de seguridad.",
         "%s  [+%d more — Analysis > Analysis Notes]":
             "%s  [+%d más — Análisis > Notas del análisis]",
+        # --- v0.1.363 (D340) · los avisos de los otros cálculos, en el
+        # panel bajo su nombre, y la barra diciendo que están ahí.
+        "{0}  [{1} note(s) — Analysis > Analysis Notes]":
+            "{0}  [{1} nota(s) — Análisis > Notas del análisis]",
+        "Stage {0}: t = {1:g}": "Etapa {0}: t = {1:g}",
 
         # --- v0.1.160 · cadenas que dejan de nombrar al
         # producto de referencia, y los nombres de paleta, que se

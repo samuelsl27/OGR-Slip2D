@@ -65,7 +65,7 @@ def _split(note) -> tuple:
 class AnalysisNotesPanel(QDialog):
     """Non-modal list of the notes from the last analysis."""
 
-    def __init__(self, notes=(), parent=None):
+    def __init__(self, notes=(), parent=None, sections=()):
         super().__init__(parent)
         self.setWindowTitle(tr("Analysis Notes"))
         self.setModal(False)
@@ -97,20 +97,32 @@ class AnalysisNotesPanel(QDialog):
         bb.rejected.connect(self.close)
         v.addWidget(bb)
 
-        self.populate(notes)
+        self.populate(notes, sections)
 
     # ==================================================================
-    def populate(self, notes=()) -> None:
+    def populate(self, notes=(), sections=()) -> None:
         """Fill the tree from a list of note lines.
 
         Re-callable, so the same panel refreshes after a recompute
         instead of a second window opening on top of the first.
+
+        ``sections`` (v0.1.363, D340) are the notes of the calculations
+        that are not Compute — back analysis, optimisation, the drawdown
+        sweep, the transient — as ``[(title, [(subtitle or None, notes)])]``.
+        Each one goes under its own name: their model notes are the same
+        sentences Compute writes, and filed together nobody could tell
+        which run said what. Without sections the tree is the one it was.
         """
         # v0.1.347 (D335) -- the notes as they came, with their codes: a
         # ``str()`` here would drop the code and leave only the English
         self.notes = list(notes or [])
+        self.sections = [(title, [(sub, list(ns)) for sub, ns in parts if ns])
+                         for title, parts in (sections or ())]
+        self.sections = [(t, parts) for t, parts in self.sections if parts]
+        total = len(self.notes) + sum(len(ns) for _t, parts in self.sections
+                                      for _s, ns in parts)
         self.tree.clear()
-        if not self.notes:
+        if not total:
             self.lbl_head.setText(tr(
                 "The last analysis produced no notes."))
             self.btn_copy.setEnabled(False)
@@ -120,7 +132,7 @@ class AnalysisNotesPanel(QDialog):
         self.lbl_head.setText(tr(
             "%d note(s) from the last analysis. They report what the run "
             "decided or could not do; none of them changes a factor of "
-            "safety.") % len(self.notes))
+            "safety.") % total)
 
         groups: dict = {}
         for note in self.notes:
@@ -138,6 +150,25 @@ class AnalysisNotesPanel(QDialog):
             self.tree.addTopLevelItem(top)
             top.setExpanded(True)
 
+        # v0.1.363 (D340) -- after Compute's, each calculation under its
+        # name; a note keeps its method in front (``note_line``), because
+        # inside one calculation that is all there is left to tell apart
+        from ogr_gui.core_messages import note_line
+        for title, parts in self.sections:
+            top = QTreeWidgetItem(["%s (%d)" % (
+                title, sum(len(ns) for _s, ns in parts))])
+            # in the tree first: an item expands only once it is in one
+            self.tree.addTopLevelItem(top)
+            top.setExpanded(True)
+            for sub, ns in parts:
+                holder = top
+                if sub is not None:
+                    holder = QTreeWidgetItem(["%s (%d)" % (sub, len(ns))])
+                    top.addChild(holder)
+                    holder.setExpanded(True)
+                for n in ns:
+                    holder.addChild(QTreeWidgetItem([note_line(n)]))
+
     # ==================================================================
     def _copy_all(self) -> None:
         """Put every note on the clipboard, one per line.
@@ -153,4 +184,10 @@ class AnalysisNotesPanel(QDialog):
         clip = QApplication.clipboard()
         if clip is not None:
             # v0.1.347 (D335) -- what the panel shows, in its language
-            clip.setText("\n".join(note_line(n) for n in self.notes))
+            lines = [note_line(n) for n in self.notes]
+            # v0.1.363 (D340) -- and each other calculation's, with its name
+            for title, parts in getattr(self, "sections", ()):
+                for sub, ns in parts:
+                    head = title if sub is None else "%s, %s" % (title, sub)
+                    lines += ["%s: %s" % (head, note_line(n)) for n in ns]
+            clip.setText("\n".join(lines))
