@@ -2430,6 +2430,10 @@ class InterpretWindow(QMainWindow):
             elif name.startswith("anderson"):
                 label = (tr("Rescue: Anderson acceleration (depth %s)")
                          % name.split()[-1])
+            elif name == "continuation-piecewise":
+                # v0.1.362 (D367)
+                label = tr("Rescue: continuation followed across the kinks "
+                           "of the curves")
             else:
                 label = tr("Rescue: continuation with Newton's method")
             out.append((label, list(range(start + 1, end + 1)),

@@ -29,6 +29,7 @@ FINAL_FAILED = "seepage.final_failed"
 FACE_UNSETTLED = "seepage.face_unsettled"
 PICARD_NO_RESCUE = "seepage.picard_no_rescue"
 PICARD_RESCUE_FAILED = "seepage.picard_rescue_failed"
+PICARD_RESCUE_PIECEWISE_NA = "seepage.picard_rescue_piecewise_na"
 INITIAL_FAILED = "seepage.initial_failed"
 INITIAL_FAILED_WHY = "seepage.initial_failed_why"
 NO_TIME_STEP = "seepage.no_time_step"
@@ -62,6 +63,17 @@ SEEPAGE_NOTES = {s.code: s for s in (
                 "{rescue_change:.3e} m). A permeability function that drops "
                 "many decades over a short suction range is the usual cause: "
                 "check the curves of the materials near the water table."),
+    # v0.1.362 (D367): the continuation stopped where its path turns back,
+    # and the road that follows such turns works only with User Defined
+    # curves
+    MessageSpec(PICARD_RESCUE_PIECEWISE_NA,
+                _PICARD + "neither did the rescue (Anderson acceleration, then "
+                "continuation with Newton's method; last change "
+                "{rescue_change:.3e} m). The continuation stopped where its "
+                "path of solutions turns back; the road that follows the "
+                "path across such turns works only when every material has "
+                "a User Defined permeability curve, and this model has "
+                "others."),
     MessageSpec(INITIAL_FAILED, "initial steady state failed"),
     MessageSpec(INITIAL_FAILED_WHY, "initial steady state failed: {why}"),
     MessageSpec(NO_TIME_STEP, "no time step computed"),

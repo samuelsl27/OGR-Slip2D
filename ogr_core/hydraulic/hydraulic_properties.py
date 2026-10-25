@@ -265,6 +265,59 @@ class HydraulicProperties:
                            "Lower kr_min to use them.")
         return out
 
+    def log_kr_pieces(self):
+        """The pieces on which ln kr is linear in the suction, or None
+        (v0.1.362, D367: the piecewise path of the seepage rescue).
+
+        A User Defined curve is log-linear between its points
+        (``kr_user_defined``) and :meth:`relative_permeability` clamps it to
+        [kr_min, 1], so ln kr is piecewise linear in the suction, with kinks
+        at the points of the table and where a segment crosses the floor or
+        the ceiling. Returns ``(kinks, a, b)``: on piece j, which runs from
+        ``kinks[j - 1]`` to ``kinks[j]`` (from minus and to plus infinity at
+        the ends), ln kr = a[j] + b[j] s, s in the model's suction unit.
+        A kink is kept only where the slope changes, so every kink is a
+        place where the derivative of kr jumps. None for every other model,
+        whose curve is not piecewise log-linear, and for a table the
+        solver cannot use (``problems``)."""
+        if self.model != PermeabilityModel.USER_DEFINED or self.problems():
+            return None
+        pts = sorted(self.user_curve, key=lambda q: q[0])
+        k_sat = pts[0][1]
+        floor = math.log(self.kr_min)
+
+        def ln_kr(s):
+            return math.log(self.relative_permeability(s))
+
+        breaks = {0.0} | {float(s) for s, _k in pts}
+        for (s0, k0), (s1, k1) in zip(pts[:-1], pts[1:]):
+            a, b = math.log(k0 / k_sat), math.log(k1 / k_sat)
+            for level in (floor, 0.0):
+                if (a - level) * (b - level) < 0:
+                    s = s0 + (level - a) / (b - a) * (s1 - s0)
+                    # a crossing on a point of the table, off by round-off,
+                    # is that point: not a sliver of a piece
+                    if min(abs(s - s0), abs(s1 - s)) > 1e-9 * max(1.0, abs(s)):
+                        breaks.add(s)
+        edges = [-math.inf] + sorted(breaks) + [math.inf]
+        pieces = []
+        for lo, hi in zip(edges[:-1], edges[1:]):
+            # two points inside the piece fix its line exactly
+            if math.isinf(lo):
+                x1, x2 = hi - 2.0, hi - 1.0
+            elif math.isinf(hi):
+                x1, x2 = lo + 1.0, lo + 2.0
+            else:
+                x1, x2 = lo + (hi - lo) / 3.0, lo + 2.0 * (hi - lo) / 3.0
+            slope = (ln_kr(x2) - ln_kr(x1)) / (x2 - x1)
+            line = [lo, ln_kr(x1) - slope * x1, slope]
+            if pieces and abs(slope - pieces[-1][2]) <= 1e-9 * max(
+                    1.0, abs(slope), abs(pieces[-1][2])):
+                continue            # the same line: no kink between them
+            pieces.append(line)
+        kinks = [p[0] for p in pieces[1:]]
+        return kinks, [p[1] for p in pieces], [p[2] for p in pieces]
+
     def suction_unit(self) -> str:
         """'m' or 'kPa': the unit this model's suction is written in."""
         from .permeability_models import SUCTION_UNIT

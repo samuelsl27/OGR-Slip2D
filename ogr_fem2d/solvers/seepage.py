@@ -76,9 +76,11 @@ except ImportError:  # pragma: no cover
 
 try:
     from scipy.sparse import csr_matrix as _csr
+    from scipy.sparse.linalg import splu as _splu
     from scipy.sparse.linalg import spsolve as _spsolve
 except ImportError:  # pragma: no cover
     _csr = None
+    _splu = None
     _spsolve = None
 
 
@@ -590,6 +592,35 @@ LOOP_SETTLED_FACE = True
 #: ``_rescue``). Switch off to rebuild 0.1.358.
 FACE_FLUX_SCALE_FROM_FLOW = True
 
+#: v0.1.362 (D367) -- when the continuation of the rescue stops on its
+#: smallest step, the rescue follows the path of solutions on from the last
+#: state it accepted, piece by piece across the kinks of the permeability
+#: curves (``_piecewise_path``; Allgower & Georg 1990). With User Defined
+#: curves the continuation can stop at a fold of the path that sits on a
+#: kink, where no one-sided Jacobian turns singular and continuation in t
+#: cannot pass (D366). The path is followed with no Newton budget of its
+#: own, by the owner's decision: it ends at t = 1, or as a piecewise-linear
+#: algorithm ends (its smallest step, a tangent that does not enter the next
+#: piece, t below 0). With other permeability models it does not run, and
+#: the rescue says so (``seepage.picard_rescue_piecewise_na``).
+#:
+#: Measured on dam 2 of problem 9 of the groundwater verification bank,
+#: whose two finest meshes failed with the door's settings
+#: (_auditoria/P6_0362): from where the continuation stops, from the state
+#: before it and from t = 0 the path is one, a Z with three folds on the
+#: drain's kink at 9.8 kPa and one smooth fold, and it reaches the answer
+#: already known: 7.8e-7 m from the bank's on 3886 elements and 3.1e-7 m
+#: from the one Anderson finds on 3691, the discharge -1.44 % and -1.39 %
+#: of the published one. It costs 1242 to 1433 Newton iterations (some 720
+#: kinks crossed, most of them three times along the Z), about 30 s; the
+#: continuation's budget leaves 734 to 749. It runs only where the
+#: continuation stopped on its smallest step: over the 255 steady
+#: unsaturated runs of the bank (w from 0.2 to 0.8), on the three runs of
+#: that dam's x4 mesh that failed, which now converge; the other 252 are
+#: identical to the bit, as are the three meshes of that dam that converged
+#: with the door. Switch off to rebuild 0.1.361.
+RESCUE_PIECEWISE_PATH = True
+
 #: v0.1.274 (D269) — the seepage face of a transient time step follows the
 #: steady solver's rule (``_switch_seepage_face``) instead of its own copy.
 #:
@@ -729,6 +760,155 @@ class _NewtonSystem:
                     return H, False, k
             H = Hn
         return H, False, max_iterations
+
+
+#: kPa: an element this close to a kink of its curve is ON the kink (the
+#: round-off of a converged state, far below the solver's tolerance)
+_KINK_ROUNDING = 1e-9
+
+
+class _PiecewiseSystem:
+    """The residual of ``_NewtonSystem`` piece by piece (v0.1.362, D367).
+
+    Every element sits on one piece of its permeability curve
+    (``HydraulicProperties.log_kr_pieces``): between two points of a User
+    Defined table, or on its floor ``kr_min``. Held on its piece, ln kr =
+    a + b s is linear in the element's mean suction s (kPa), so
+
+        kr^t = exp(t (a + b s))
+
+    is smooth: the residual of the CELL, the problem's own while every
+    element stays on its piece. These are the pieces of smoothness of
+    Allgower & Georg (1990, §11.7), and the kinks of the curves are the
+    facets between them. ``applicable`` is False when an element has a
+    curve that is not piecewise log-linear (every model but User Defined).
+    The seepage-face nodes ``active`` are held at P = 0."""
+
+    def __init__(self, system, active, gamma_w):
+        self.sy = system
+        self.gw = float(gamma_w)
+        fixed = dict(system.fixed)
+        fixed.update({nid: system.node_y[nid] for nid in active})
+        self.free = _np.array([i for i in range(system.n) if i not in fixed],
+                              dtype=int)
+        self.fix_i = _np.array(sorted(fixed), dtype=int)
+        self.fix_v = _np.array([fixed[i] for i in self.fix_i], dtype=float)
+        self.pos = -_np.ones(system.n, dtype=int)
+        self.pos[self.free] = _np.arange(self.free.size)
+        index, curves, mat = {}, [], []
+        for pr in system.props:
+            if id(pr) not in index:
+                index[id(pr)] = len(curves)
+                curves.append(pr.log_kr_pieces()
+                              if pr.suction_unit() == "kPa" else None)
+            mat.append(index[id(pr)])
+        self.applicable = all(c is not None for c in curves)
+        if not self.applicable:
+            return
+        self.curves = [tuple(_np.asarray(v, dtype=float) for v in c)
+                       for c in curves]
+        self.mat = _np.asarray(mat, dtype=int)
+        n_el = self.mat.size
+        self.j = _np.zeros(n_el, dtype=int)
+        self.a, self.b = _np.zeros(n_el), _np.zeros(n_el)
+        self.lo, self.hi = _np.zeros(n_el), _np.zeros(n_el)
+
+    def complete(self, Hf):
+        """The whole head vector from the free nodes."""
+        H = _np.empty(self.sy.n)
+        H[self.free] = Hf
+        H[self.fix_i] = self.fix_v
+        return H
+
+    def suction(self, H):
+        """Mean suction of every element, kPa."""
+        return -self.gw * _np.mean(H[self.sy.EN] - self.sy.Y, axis=1)
+
+    def _set(self, e):
+        kinks, a, b = self.curves[self.mat[e]]
+        j = self.j[e]
+        self.a[e], self.b[e] = a[j], b[j]
+        self.lo[e] = kinks[j - 1] if j > 0 else -math.inf
+        self.hi[e] = kinks[j] if j < kinks.size else math.inf
+
+    def assign(self, H):
+        """Every element to the piece its suction is on."""
+        s = self.suction(H)
+        for m, (kinks, _a, _b) in enumerate(self.curves):
+            sel = self.mat == m
+            self.j[sel] = _np.searchsorted(kinks, s[sel])
+        for e in range(self.j.size):
+            self._set(e)
+
+    def cross(self, e, side):
+        """Element ``e`` to the next piece up ("hi") or down ("lo")."""
+        self.j[e] += 1 if side == "hi" else -1
+        self._set(e)
+
+    def outside(self, s, skip=None):
+        """Elements whose suction has left their piece."""
+        out = (s < self.lo - _KINK_ROUNDING) | (s > self.hi + _KINK_ROUNDING)
+        if skip is not None:
+            out[skip] = False
+        return _np.flatnonzero(out)
+
+    def residual(self, H, t):
+        """(R, J, R_t) of the cell over the free nodes: the residual, its
+        Jacobian and its derivative in t. d(kr^t)/dp = kr^t t b (-gamma_w),
+        and d(kr^t)/dt = kr^t ln kr."""
+        sy = self.sy
+        He = H[sy.EN]
+        ln_kr = self.a + self.b * (-self.gw * _np.mean(He - sy.Y, axis=1))
+        krt = _np.exp(t * ln_kr)
+        KH = _np.einsum("eij,ej->ei", sy.K0, He)
+        R = -sy.q.copy()
+        _np.add.at(R, sy.EN.ravel(), (krt[:, None] * KH).ravel())
+        dk = krt * t * self.b * (-self.gw)
+        Je = (krt[:, None, None] * sy.K0
+              + KH[:, :, None] * (dk / 3.0)[:, None, None])
+        J = _csr((Je.ravel(), (sy.rows, sy.cols)), shape=(sy.n, sy.n))
+        Rt = _np.zeros(sy.n)
+        _np.add.at(Rt, sy.EN.ravel(), ((ln_kr * krt)[:, None] * KH).ravel())
+        free = self.free
+        return R[free], J[free][:, free].tocsc(), Rt[free]
+
+    def suction_gradient(self, e):
+        """d s_e / dH over the free nodes."""
+        g = _np.zeros(self.free.size)
+        for nid in self.sy.EN[e]:
+            if self.pos[nid] >= 0:
+                g[self.pos[nid]] += -self.gw / 3.0
+        return g
+
+    def suction_rate(self, tau_h):
+        """d s / d(arc) of every element along the tangent's head part."""
+        T = _np.zeros(self.sy.n)
+        T[self.free] = tau_h
+        return -self.gw * _np.mean(T[self.sy.EN], axis=1)
+
+
+def _det_sign(lu) -> int:
+    """sign(det A) from ``splu`` (Pr A Pc = L U, L with a unit diagonal):
+    that of diag(U) times the parities of the two permutations."""
+    d = lu.U.diagonal()
+    if _np.any(d == 0):
+        return 0
+    sign = -1 if _np.count_nonzero(d < 0) % 2 else 1
+    return sign * _parity(lu.perm_r) * _parity(lu.perm_c)
+
+
+def _parity(perm) -> int:
+    perm = _np.asarray(perm)
+    seen = _np.zeros(perm.size, dtype=bool)
+    cycles = 0
+    for i in range(perm.size):
+        if not seen[i]:
+            cycles += 1
+            j = i
+            while not seen[j]:
+                seen[j] = True
+                j = perm[j]
+    return -1 if (perm.size - cycles) % 2 else 1
 
 
 # ======================================================================
@@ -1139,6 +1319,9 @@ class UnsaturatedSeepageSolver(SeepageSolver):
             final.notes["rescue"] = rescue["method"]
             final.notes["rescue_iterations"] = rescue["iterations"]
             final.notes["rescue_residual"] = rescue["residual"]
+            if rescue.get("piecewise"):
+                # v0.1.362 (D367): the piecewise path could not run
+                final.notes["rescue_piecewise"] = rescue["piecewise"]
         segments = [["picard", 0]]
         if rescue is not None:
             segments += [[name, len(changes) + i]
@@ -1177,9 +1360,12 @@ class UnsaturatedSeepageSolver(SeepageSolver):
         elif not converged:
             # v0.1.266 — the old advice is wrong on both counts when the
             # rescue has run: no relaxation breaks the cycle it exists
-            # for, and refining is what brings the cycle on (D124).
+            # for, and refining is what brings the cycle on (D124). Since
+            # v0.1.362 (D367) it says when the continuation stopped at a
+            # turn of its path that the piecewise path could not follow.
             final.notes["warning"] = M.seepage_note(
-                M.PICARD_RESCUE_FAILED, steps=self.max_iterations,
+                M.PICARD_RESCUE_PIECEWISE_NA if rescue.get("piecewise")
+                else M.PICARD_RESCUE_FAILED, steps=self.max_iterations,
                 change=history[-1], rescue_change=rescue["residual"])
         return final
 
@@ -1253,7 +1439,10 @@ class UnsaturatedSeepageSolver(SeepageSolver):
         2. **Continuation with Newton's method** (``_continuation_newton``):
            the steepness of every permeability function is brought from
            zero to its own, each step solved by Newton from the previous
-           one.
+           one. Where it stops on its smallest step, since v0.1.362 (D367)
+           its path of solutions is followed on from there, piece by piece
+           across the kinks of the curves (``_piecewise_path``,
+           ``RESCUE_PIECEWISE_PATH``).
 
         Convergence is judged on the UNRELAXED change, max|G(H) - H| below
         the tolerance, which is stricter than the loop's relaxed test.
@@ -1359,13 +1548,41 @@ class UnsaturatedSeepageSolver(SeepageSolver):
         documented and opened D367 for a road that follows the path of
         solutions across such folds.
 
+        The path followed across the folds (D367, v0.1.362)
+        ----------------------------------------------------
+        The continuation stops at the fold because it moves in t; the path
+        goes on. Followed by its arc length, piece by piece
+        (``_piecewise_path``, after Allgower & Georg 1990), on both meshes
+        it is a Z. There are three folds on the drain's kink at 9.8 kPa and
+        one smooth fold: the path runs forward to t = 0.93-0.97, back to
+        0.66-0.67 and forward to 1, so between those two values the
+        intermediate problem has three solutions. Started where the
+        continuation stops, at the state before it, or at t = 0, it is one
+        path and it ends at one point, the answer already known. On 3886
+        elements that is 7.8e-7 m from the bank's; on 3691, 3.1e-7 m from
+        Anderson's. The discharge is -1.44 % and -1.39 % of the published
+        one, and both meshes now converge with the door's settings
+        (_auditoria/P6_0362).
+
+        The pseudo-transient continuation was measured again, with the
+        storage scale of the transient (the lumped capacity of Celia et al.
+        1990) in place of diag|J|. It converges for no initial step over
+        eleven decades, on either mesh.
+
+        The path costs 1242 to 1433 Newton iterations, more than the
+        continuation's budget leaves (734 and 749). By the owner's decision
+        it has no budget of its own, and it runs only when every material
+        has a User Defined curve.
+
         Returns a dict: ``converged``, ``method``, ``iterations`` (map
         evaluations plus Newton iterations), ``residual`` (the last
         max|G(H) - H|, m; that of the road returned), ``head``, ``active``
         and ``switches``; and ``history`` and ``segments``, its part of the
         published series (see ``solve_unsaturated``), indexed from the
         rescue's start. A road set aside also carries ``unsettled``, the
-        number of face nodes it left unsettled.
+        number of face nodes it left unsettled. ``piecewise`` is "not
+        applicable" when the continuation stopped on its smallest step and
+        the piecewise path could not run.
         """
         out = {"converged": False, "method": "failed", "iterations": 0,
                "residual": float("nan"), "head": H, "active": set(active),
@@ -1411,6 +1628,23 @@ class UnsaturatedSeepageSolver(SeepageSolver):
                 return _done(r, "continuation-newton")
             if aside is None and r.get("unsettled"):
                 aside = (r, "continuation-newton")
+            if RESCUE_PIECEWISE_PATH and r.get("stopped") == "min_step":
+                # v0.1.362 (D367): on from where the continuation stopped
+                r = self._piecewise_path(bcs, r["last"], unknown, p_tol,
+                                         q_tol)
+                if r.get("applicable") is False:
+                    out["piecewise"] = "not applicable"
+                else:
+                    out["iterations"] += r["iterations"]
+                    out["residual"] = r["residual"]
+                    if math.isfinite(r["residual"]):
+                        out["segments"].append(["continuation-piecewise",
+                                                len(out["history"])])
+                        out["history"].append(r["residual"])
+                    if r["converged"]:
+                        return _done(r, "continuation-piecewise")
+                    if aside is None and r.get("unsettled"):
+                        aside = (r, "continuation-piecewise")
         if aside is not None and fallback:
             # No road settled the face: hand over what 0.1.355 published,
             # and let the final check of solve_unsaturated report the face
@@ -1505,7 +1739,10 @@ class UnsaturatedSeepageSolver(SeepageSolver):
         (1994). Continuation in the natural parameter cannot cross a
         turning point of the path, and with piecewise curves one can sit on
         a kink, where no one-sided Jacobian turns singular (D366, see
-        ``_rescue``).
+        ``_rescue``). Stopped on its smallest step, it returns, since
+        v0.1.362 (D367), ``stopped`` = "min_step" and ``last``, its last
+        accepted state and the one before it, for ``_piecewise_path`` to
+        follow the path on from there.
 
         The answer must be a fixed point of the Picard map itself and, since
         v0.1.356 (D285, see ``_rescue``), settle the seepage face: one that
@@ -1516,6 +1753,7 @@ class UnsaturatedSeepageSolver(SeepageSolver):
         active: set = set()
         switches: dict[int, int] = {}
         t, dt = 0.0, 0.25
+        t_prev, H_prev = t, H
         newton = 0
         fail = {"converged": False, "iterations": 0,
                 "residual": float("nan"), "head": list(H0),
@@ -1544,6 +1782,7 @@ class UnsaturatedSeepageSolver(SeepageSolver):
                 fail["iterations"] = newton
                 return fail
             if ok_step:
+                t_prev, H_prev = t, H
                 H, active, switches, t = Hn, act_n, sw_n, tn
                 if t >= 1.0:
                     break
@@ -1552,6 +1791,11 @@ class UnsaturatedSeepageSolver(SeepageSolver):
                 dt *= 0.5
                 if dt < RESCUE_MIN_STEP:
                     fail["iterations"] = newton
+                    # v0.1.362 (D367): where it stopped, for the piecewise
+                    # path to go on from (``_piecewise_path``)
+                    fail["stopped"] = "min_step"
+                    fail["last"] = (t, H, set(active), dict(switches),
+                                    t_prev, H_prev)
                     return fail
         # The answer must be a fixed point of the Picard map itself.
         step = self._picard_map(bcs, H, active)
@@ -1569,6 +1813,228 @@ class UnsaturatedSeepageSolver(SeepageSolver):
                 result["converged"] = False
                 result["unsettled"] = len(bad)
         return result
+
+    # ------------------------------------------------------------------
+    def _piecewise_path(self, bcs, last, unknown, p_tol, q_tol) -> dict:
+        """Follow the continuation's path of solutions on from where it
+        stopped, piece by piece across the kinks of the permeability curves
+        (v0.1.362, D367; ``RESCUE_PIECEWISE_PATH``, see ``_rescue``).
+
+        The continuation solves R(H, t) = 0 with every kr raised to t, from
+        0 to 1. Its solutions form a path in (H, t) that can turn back in
+        t. Continuation in t cannot follow a turn, and with piecewise
+        curves a turn can sit on a kink (D366). Here the path is followed
+        by its arc length, after Allgower & Georg (1990):
+
+        * the orientation (their 2.1.7): the sign of det [A; tau*], with
+          A = [J R_t], is constant along the path. By Cramer's rule, with
+          tau = c (v, 1) and v = -J^-1 R_t, det [A; tau*] = c det J
+          (1 + |v|^2), so tau_t has the sign of det J. At t = 0, J is K0 on
+          the free nodes, positive definite, and the path leaves towards
+          t > 0; where det J < 0 it goes on with t decreasing;
+        * the pieces of smoothness (their §11.7): with every element held
+          on a piece of its curve the residual is smooth
+          (``_PiecewiseSystem``). Each step is a tangent predictor and
+          Keller's (1977) bordered Newton corrector on that residual;
+        * the facets (their ch. 14): the step is cut short at the first
+          kink an element would reach along the tangent, a minimum-ratio
+          test (their 14.1.2). There the corrector holds that element's
+          suction on the kink instead of the arc length. The element
+          passes to the next piece, the tangent is taken again with that
+          piece's Jacobian, and it must enter the piece: the path crosses a
+          facet transversally (their 14.1.11-17). Where det J changed sign,
+          t turns back: the fold on a kink.
+
+        A corrected point is accepted when every element is still on its
+        piece, where the residual of the cell is the problem's; otherwise
+        the step is halved. A corrector fails when it does not converge in
+        ``RESCUE_NEWTON_PER_STEP`` iterations or stops contracting. The
+        seepage face is held along the path, as Newton holds it within a
+        step of the continuation. At t = 1 the continuation's own closing
+        follows: the face rule, with Newton at t = 1 whenever it changes
+        the face, then a fixed point of the Picard map and a settled face.
+
+        There is no Newton budget of its own (the owner's decision, D367):
+        the path that leaves the regular linear problem at t = 0 cannot
+        come back to t = 0 and, bounded, reaches t = 1 (their ch. 1 and
+        14.2). It also ends, failing, as a piecewise-linear algorithm ends:
+        an arc step below the smallest, a tangent that does not enter the
+        next piece, or t below 0. The smallest arc step is the
+        continuation's ratio of its smallest step to its first (1e-3 to
+        0.25) times the arc of its last accepted step.
+
+        ``last`` is the continuation's last accepted state (t, H, face,
+        switches) and the one before it (t, H). Returns the continuation's
+        dict. ``applicable`` is False, with nothing computed, when a
+        material's curve is not piecewise log-linear.
+        """
+        t, H, active, switches, t_prev, H_prev = last
+        active, switches = set(active), dict(switches)
+        out = {"converged": False, "iterations": 0, "residual": float("nan"),
+               "head": list(H), "active": set(active),
+               "switches": dict(switches)}
+        system = _NewtonSystem(self, bcs)
+        cells = _PiecewiseSystem(system, active, self.gamma_w)
+        if _splu is None or not cells.applicable:
+            out["applicable"] = False
+            return out
+        free = cells.free
+        H = _np.asarray(H, dtype=float).copy()
+        length = float(_np.linalg.norm(
+            _np.append(H[free], t)
+            - _np.append(_np.asarray(H_prev, dtype=float)[free], t_prev)))
+        smallest = length * RESCUE_MIN_STEP / 0.25
+        H[cells.fix_i] = cells.fix_v
+        cells.assign(H)
+        tau = self._path_tangent(cells, H, t)
+        newton = 0
+        while True:
+            # the first kink an element reaches along the tangent
+            s = cells.suction(H)
+            rate = cells.suction_rate(tau[:-1])
+            with _np.errstate(divide="ignore", invalid="ignore"):
+                up = _np.where(rate > 0, (cells.hi - s) / rate, _np.inf)
+                down = _np.where(rate < 0, (s - cells.lo) / (-rate), _np.inf)
+            to_kink = _np.minimum(_np.maximum(up, 0.0), _np.maximum(down, 0.0))
+            e = int(_np.argmin(to_kink))
+            at_kink = float(to_kink[e])
+            side = "hi" if up[e] <= down[e] else "lo"
+            at_end = (1.0 - t) / tau[-1] if tau[-1] > 0 else math.inf
+            arc = min(length, at_kink, at_end)
+            if arc == at_kink and at_kink <= length:
+                kind = "kink"
+            elif arc == at_end and at_end <= length:
+                kind = "end"
+            else:
+                kind = "arc"
+            u0 = _np.append(H[free], t)
+            guess = u0 + arc * tau
+            if kind == "arc":
+                held = ("arc", tau, u0, arc)
+            elif kind == "kink":
+                held = ("kink", e, cells.hi[e] if side == "hi" else cells.lo[e])
+            else:
+                held = ("end",)
+                guess[-1] = 1.0
+            Hf, tc, ok, k = self._path_corrector(cells, guess[:-1],
+                                                 float(guess[-1]), held)
+            newton += k
+            if ok:
+                Hc = cells.complete(Hf)
+                ok = cells.outside(cells.suction(Hc),
+                                   skip=e if kind == "kink" else None).size == 0
+            if not ok:
+                length = 0.5 * arc
+                # only a failed arc step measures the step: one cut short at
+                # a kink or at t = 1 can be any length
+                if kind == "arc" and length < smallest:
+                    out["iterations"] = newton
+                    return out
+                continue
+            H, t = Hc, tc
+            if kind == "kink":
+                cells.cross(e, side)
+            tau = self._path_tangent(cells, H, t)
+            if kind == "kink":
+                enters = cells.suction_rate(tau[:-1])[e]
+                if not (enters > 0 if side == "hi" else enters < 0):
+                    out["iterations"] = newton
+                    return out
+            elif kind == "arc":
+                length = 2.0 * length
+            if kind == "end":
+                break
+            if t < 0.0:
+                out["iterations"] = newton
+                return out
+        # at t = 1, the continuation's own closing
+        for _ in range(len(unknown) + 2):
+            step = self._picard_map(bcs, H, active)
+            if not step.converged:
+                break
+            new_active = self._switch_seepage_face(
+                active, switches, unknown, step.total_head, step.reactions,
+                p_tol, q_tol)
+            if new_active == active:
+                residual = float(_np.max(_np.abs(
+                    _np.asarray(step.total_head, dtype=float) - H)))
+                out.update(converged=residual < self.tolerance,
+                           residual=residual, head=H.tolist(),
+                           active=active, switches=switches)
+                if out["converged"] and RESCUE_SETTLED_FACE:
+                    bad = self._unsettled_nodes(step, unknown, active, p_tol,
+                                                q_tol)
+                    if bad:
+                        out["converged"] = False
+                        out["unsettled"] = len(bad)
+                break
+            active = new_active
+            H, ok, k = system.newton(H, active, 1.0, self.tolerance,
+                                     RESCUE_NEWTON_PER_STEP)
+            newton += k
+            if not ok:
+                break
+        out["iterations"] = newton
+        return out
+
+    @staticmethod
+    def _path_tangent(cells, H, t):
+        """The unit tangent of positive orientation: tau_t has the sign of
+        det J (``_piecewise_path``)."""
+        _R, J, Rt = cells.residual(H, t)
+        lu = _splu(J)
+        tau = _np.append(lu.solve(-Rt), 1.0)
+        tau /= _np.linalg.norm(tau)
+        return -tau if _det_sign(lu) < 0 else tau
+
+    def _path_corrector(self, cells, Hf, t, held):
+        """Bordered Newton (Keller 1977) on [R(H, t); g(H, t)] = 0 from
+        (Hf, t), the residual of the cell, with g by ``held``:
+        ("arc", tau, u0, arc): tau . (u - u0) - arc; ("kink", e, s_b):
+        s_e(H) - s_b; ("end",): t - 1. The bordered system is solved by
+        blocks with one LU of J. Full steps; converged when the step is
+        below the tolerance (the rule of ``_NewtonSystem.newton``), failed
+        when it does not converge in ``RESCUE_NEWTON_PER_STEP`` iterations,
+        a step is not finite or a step is longer than the one before.
+        Returns (Hf, t, ok, iterations)."""
+        Hf = _np.array(Hf, dtype=float)
+        before = math.inf
+        if held[0] == "kink":
+            grad = cells.suction_gradient(held[1])
+        for k in range(1, RESCUE_NEWTON_PER_STEP + 1):
+            H = cells.complete(Hf)
+            R, J, Rt = cells.residual(H, t)
+            if held[0] == "arc":
+                tau, u0, arc = held[1], held[2], held[3]
+                g = float(tau[:-1] @ (Hf - u0[:-1]) + tau[-1] * (t - u0[-1])
+                          - arc)
+                c, ct = tau[:-1], tau[-1]
+            elif held[0] == "kink":
+                g = float(cells.suction(H)[held[1]] - held[2])
+                c, ct = grad, 0.0
+            else:
+                g = t - 1.0
+                c, ct = _np.zeros(Hf.size), 1.0
+            try:
+                lu = _splu(J)
+                a = lu.solve(R)
+                b = lu.solve(Rt)
+                dt = (-g + float(c @ a)) / (ct - float(c @ b))
+                dh = -a - b * dt
+            except Exception:  # noqa: BLE001 — a singular cell ends it
+                return Hf, t, False, k
+            if not (_np.all(_np.isfinite(dh)) and math.isfinite(dt)):
+                return Hf, t, False, k
+            size = max(float(_np.max(_np.abs(dh))) if dh.size else 0.0,
+                       abs(dt))
+            Hf = Hf + dh
+            t = t + dt
+            if size < self.tolerance:
+                return Hf, t, True, k
+            if size > before:
+                return Hf, t, False, k
+            before = size
+        return Hf, t, False, RESCUE_NEWTON_PER_STEP
 
     # ------------------------------------------------------------------
     def _unsettled_nodes(self, result, unknown, active, p_tol, q_tol

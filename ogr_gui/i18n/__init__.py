@@ -444,6 +444,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Picard loop': 'Bucle de Picard',
         'Rescue: Anderson acceleration (depth %s)': 'Rescate: aceleración de Anderson (profundidad %s)',
         "Rescue: continuation with Newton's method": 'Rescate: continuación con el método de Newton',
+        'Rescue: continuation followed across the kinks of the curves': 'Rescate: continuación seguida a través de los quiebros de las curvas',
         'Stop threshold of the loop (tolerance / relaxation)': 'Umbral de parada del bucle (tolerancia / relajación)',
         'Stop threshold of the rescue (tolerance)': 'Umbral de parada del rescate (tolerancia)',
         'No critical probabilistic surface: it comes from the Overall Slope analysis type.': 'Sin superficie probabilística crítica: proviene del tipo de análisis Talud completo.',
@@ -5985,6 +5986,21 @@ _DICTS: dict[str, dict[str, str]] = {
             'de permeabilidad que cae muchos órdenes de magnitud en un '
             'intervalo corto de succión: revisa las curvas de los materiales '
             'cerca del nivel freático.',
+        'Picard iteration did not converge in {steps} steps (last change '
+        '{change:.3e} m), and neither did the rescue (Anderson acceleration, '
+        "then continuation with Newton's method; last change "
+        '{rescue_change:.3e} m). The continuation stopped where its path of '
+        'solutions turns back; the road that follows the path across such '
+        'turns works only when every material has a User Defined '
+        'permeability curve, and this model has others.':
+            'La iteración de Picard no convergió en {steps} pasos (último '
+            'cambio {change:.3e} m), y el rescate tampoco (aceleración de '
+            'Anderson y después continuación con el método de Newton; último '
+            'cambio {rescue_change:.3e} m). La continuación se detuvo donde '
+            'su camino de soluciones da la vuelta; el camino que sigue esas '
+            'vueltas solo funciona cuando todos los materiales tienen una '
+            'curva de permeabilidad definida por el usuario, y este modelo '
+            'tiene otras.',
         'stage {k}: some time steps did not converge; try more time steps or '
         'more Picard iterations per step':
             'etapa {k}: algunos pasos de tiempo no convergieron; prueba con '

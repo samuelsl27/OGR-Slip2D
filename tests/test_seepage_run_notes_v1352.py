@@ -259,6 +259,22 @@ _V1351 = [{'cat': 'seepage',
   'english': 'GSI was clamped to the range 0 to 100.',
   'args': {}}]
 
+#: Codes born after v0.1.351, with the sentence of the version that added
+#: them (same form as ``_V1351``).
+_LATER = [
+ # v0.1.362 (D367): the continuation stopped at a turn of its path that the
+ # piecewise path cannot follow with this model's curves
+ {'cat': 'seepage',
+  'code': 'seepage.picard_rescue_piecewise_na',
+  'english': 'Picard iteration did not converge in 200 steps (last change '
+             '1.235e-02 m), and neither did the rescue (Anderson '
+             "acceleration, then continuation with Newton's method; last "
+             'change 3.500e-04 m). The continuation stopped where its path of '
+             'solutions turns back; the road that follows the path across '
+             'such turns works only when every material has a User Defined '
+             'permeability curve, and this model has others.',
+  'args': {'steps': 200, 'change': 0.0123456, 'rescue_change': 0.00035}}]
+
 
 def _cat(name):
     if name == "seepage":
@@ -316,11 +332,11 @@ class _Spanish:
 class TestTheEnglishIsTheOldOne:
 
     def test_every_code_with_its_sample(self):
-        for case in _V1351:
+        for case in _V1351 + _LATER:
             assert _message(case) == case["english"], case["code"]
 
     def test_the_samples_cover_every_code(self):
-        seen = {case["code"] for case in _V1351}
+        seen = {case["code"] for case in _V1351 + _LATER}
         every = set()
         for name in _CATS:
             every |= set(_cat(name))
@@ -350,7 +366,7 @@ class TestEveryCodeSaysItselfInSpanish:
     def test_each_sample_renders_in_spanish(self):
         from ogr_gui.core_messages import note_text
         with _Spanish():
-            for case in _V1351:
+            for case in _V1351 + _LATER:
                 said = note_text(_message(case))
                 assert said and said != case["english"], case["code"]
                 assert "{" not in said, (case["code"], said)
