@@ -61,8 +61,12 @@ R_FOCUS = "search.refused.focus"
 USER_CIRCULAR_SKIPPED = "search.user_circular_skipped"
 USER_NO_RESULT = "search.user_no_result"
 USER_NO_RESULT_FILTERED = "search.user_no_result_filtered"
+# v0.1.367 (D346) -- the reason, when the search knows it, before the filters
+USER_MISSES_GROUND = "search.user_misses_ground"
+USER_REFUSED = "search.user_refused"
 F_SLOPE_LIMITS = "search.filter.slope_limits"
 F_MIN_AREA = "search.filter.min_area"
+F_MIN_AREA_DEFAULT = "search.filter.min_area_default"
 F_MIN_DEPTH = "search.filter.min_depth"
 F_MIN_ELEVATION = "search.filter.min_elevation"
 USER_NO_FACTOR = "search.user_no_factor"
@@ -233,8 +237,17 @@ SEARCH_NOTES = {s.code: s for s in (
     MessageSpec(USER_NO_RESULT_FILTERED,
                 _USER_AT + _NO_RESULT + "Filters active on this run that can "
                 "remove it: {filters}."),
+    MessageSpec(USER_MISSES_GROUND,
+                _USER_AT + _NO_RESULT + "It does not cut the ground surface "
+                "twice inside the External Boundary, so there is no sliding "
+                "mass to analyse."),
+    MessageSpec(USER_REFUSED,
+                _USER_AT + _NO_RESULT + "The search says why: {reason}"),
     MessageSpec(F_SLOPE_LIMITS, "Slope Limits {windows}"),
     MessageSpec(F_MIN_AREA, "Minimum Area {value:g}"),
+    MessageSpec(F_MIN_AREA_DEFAULT,
+                "Minimum Area {value:g} (the search's default, not a setting "
+                "of this model)"),
     MessageSpec(F_MIN_DEPTH, "Minimum Depth {value:g}"),
     MessageSpec(F_MIN_ELEVATION, "Minimum Elevation {value:g}"),
     MessageSpec(USER_NO_FACTOR, _USER_AT + "has no factor of safety: {reason}"),

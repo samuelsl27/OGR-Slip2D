@@ -5126,6 +5126,11 @@ _DICTS: dict[str, dict[str, str]] = {
             'de una polilínea tienen que estar sobre el terreno.',
         'Minimum Area {value:g}':
             'Área mínima {value:g}',
+        # v0.1.367 (D346) -- un filtro por defecto se dice como tal
+        "Minimum Area {value:g} (the search's default, not a setting of "
+        "this model)":
+            'Área mínima {value:g} (valor por defecto de la búsqueda, no un '
+            'ajuste de este modelo)',
         'Minimum Depth {value:g}':
             'Profundidad mínima {value:g}',
         'Minimum Elevation {value:g}':
@@ -5395,6 +5400,23 @@ _DICTS: dict[str, dict[str, str]] = {
             '{y:.4g}) y radio {r:.4g} no dio ningún resultado, así que no '
             'está en la población informada. Filtros activos en este cálculo '
             'que pueden quitarla: {filters}.',
+        # v0.1.367 (D346) -- el motivo, cuando la búsqueda lo sabe
+        'The user-defined surface at centre ({x:.4g}, {y:.4g}) with radius '
+        '{r:.4g} produced no result, so it is not in the reported '
+        'population. It does not cut the ground surface twice inside the '
+        'External Boundary, so there is no sliding mass to analyse.':
+            'La superficie definida por el usuario con centro en ({x:.4g}, '
+            '{y:.4g}) y radio {r:.4g} no dio ningún resultado, así que no '
+            'está en la población informada. No corta dos veces el terreno '
+            'dentro del contorno exterior, así que no hay ninguna masa '
+            'deslizante que analizar.',
+        'The user-defined surface at centre ({x:.4g}, {y:.4g}) with radius '
+        '{r:.4g} produced no result, so it is not in the reported '
+        'population. The search says why: {reason}':
+            'La superficie definida por el usuario con centro en ({x:.4g}, '
+            '{y:.4g}) y radio {r:.4g} no dio ningún resultado, así que no '
+            'está en la población informada. La búsqueda dice por qué: '
+            '{reason}',
         'The surface reported for this method is one the user defined by '
         'hand (centre ({x:.4g}, {y:.4g}), radius {r:.4g}), not one the '
         'search generated.':

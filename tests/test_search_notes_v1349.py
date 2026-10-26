@@ -398,6 +398,38 @@ def _resolve(v):
     return v
 
 
+#: v0.1.367 (D346) — codes added after D335, with the English they were
+#: written with (not 0.1.348's: they did not exist): the reason of a
+#: hand-drawn circle that the search knows, and a Minimum Area that is the
+#: search's default.
+_LATER = [
+    {'code': 'search.user_misses_ground',
+     'english': 'The user-defined surface at centre (200, 200) with radius 5 '
+                'produced no result, so it is not in the reported population. '
+                'It does not cut the ground surface twice inside the External '
+                'Boundary, so there is no sliding mass to analyse.',
+     'args': {'x': 200.0, 'y': 200.0, 'r': 5.0}},
+    {'code': 'search.user_refused',
+     'english': 'The user-defined surface at centre (31.23, 48.5) with radius '
+                '22 produced no result, so it is not in the reported '
+                'population. The search says why: the surface was not '
+                'analysed: a slice base fell outside the External Boundary, '
+                'where there is no soil.',
+     'args': {'x': 31.234567, 'y': 48.5, 'r': 22.0001,
+              'reason': {'$code': 'search.refused_surface.outside_model',
+                         '$args': {}}}},
+    {'code': 'search.user_no_result_filtered',
+     'english': 'The user-defined surface at centre (31.23, 48.5) with radius '
+                '22 produced no result, so it is not in the reported '
+                "population. Filters active on this run that can remove it: "
+                "Minimum Area 1 (the search's default, not a setting of this "
+                "model).",
+     'args': {'x': 31.234567, 'y': 48.5, 'r': 22.0001,
+              'filters': [{'$code': 'search.filter.min_area_default',
+                           '$args': {'value': 1.0}}]}},
+]
+
+
 def _note(case):
     from ogr_slip2d import search_note_messages as SN
     return SN.search_note(case["code"], **_resolve(case["args"]))
@@ -436,18 +468,18 @@ def _fields(t):
 class TestTheEnglishIsTheOldOne:
 
     def test_every_code_with_its_sample(self):
-        for case in _V1348:
+        for case in _V1348 + _LATER:
             assert _note(case) == case["english"], case["code"]
 
     def test_the_samples_cover_every_code_and_both_numbers(self):
         from ogr_slip2d.search_note_messages import SEARCH_NOTES
         seen = set()
-        for case in _V1348:
+        for case in _V1348 + _LATER:
             seen.add(case["code"])
             seen.update(_nested_codes(case["args"]))
         assert seen == set(SEARCH_NOTES), set(SEARCH_NOTES) ^ seen
-        pairs = [(c["code"], c["args"]) for c in _V1348]
-        for c in _V1348:
+        pairs = [(c["code"], c["args"]) for c in _V1348 + _LATER]
+        for c in _V1348 + _LATER:
             pairs.extend(_with_args(c["args"]))
         for code, spec in SEARCH_NOTES.items():
             if spec.one:
@@ -474,7 +506,7 @@ class TestEveryCodeSaysItselfInSpanish:
         before = current_language()
         set_language("es")
         try:
-            for case in _V1348:
+            for case in _V1348 + _LATER:
                 said = note_text(_note(case))
                 assert said and said != case["english"], case["code"]
                 assert "{" not in said, (case["code"], said)
@@ -648,9 +680,11 @@ class TestARealRun:
         from ogr_slip2d.analysis_runner import run_analysis
         out = run_analysis(_project_with_a_stray_circle(),
                            ["bishop_simplified"])
+        # v0.1.367 (D346) -- the circle far above the ground gets the note
+        # that says so: it was one of the two "no result" notes
         hits = [w for w in out.warnings
                 if getattr(w, "code", "") == METHOD_NOTE
-                and w.args["note"]["code"].startswith("search.user_no_result")]
+                and w.args["note"]["code"] == "search.user_misses_ground"]
         assert len(hits) == 1, out.warnings
         assert hits[0].startswith("bishop_simplified: The user-defined "
                                   "surface at centre (45, 200)"), hits[0]

@@ -1701,13 +1701,18 @@ class BaseSearch(ABC):
             return result
 
     # ------------------------------------------------------------------
-    def _user_surface_filters(self) -> str:
+    def _user_surface_filters(self, project=None) -> list:
         """The configured filters that can remove a hand-drawn surface.
 
         Named with their values because a note that says "some filter" sends
         the reader to the settings dialog to guess; ``evaluate_circle``
         answers None without a reason, so this is what can honestly be said
         without threading a reason channel through the hot loop.
+
+        v0.1.367 (D346) — only when the search does not know the reason
+        (``_evaluate_user_surfaces`` asks it first), and a Minimum Area the
+        model does not declare is said to be the search's default: "Minimum
+        Area 1" read as a setting of the model, and no dialog shows it.
         """
         # v0.1.349 (D335) -- each filter a fragment with its code, the name
         # of the setting being a word of the sentence; the windows are data
@@ -1718,8 +1723,13 @@ class BaseSearch(ABC):
                     "[%g, %g]" % (min(a, b), max(a, b))
                     for a, b in self.slope_limit_sets)))
         if self.min_area:
-            bits.append(SN.nested_search_note(SN.F_MIN_AREA,
-                                              value=self.min_area))
+            # null (or 0, which the analysis door also replaces) in the
+            # model: the value is the search's fallback, not the user's
+            declared = getattr(getattr(getattr(project, "settings", None),
+                                       "search", None), "min_area", None)
+            bits.append(SN.nested_search_note(
+                SN.F_MIN_AREA if declared or project is None
+                else SN.F_MIN_AREA_DEFAULT, value=self.min_area))
         if self.min_depth is not None:
             bits.append(SN.nested_search_note(SN.F_MIN_DEPTH,
                                               value=self.min_depth))
@@ -1769,11 +1779,28 @@ class BaseSearch(ABC):
             return
 
         for circle in surfaces:
+            # v0.1.367 (D346) — the reason of THIS circle: the value left by
+            # the search loop before it would otherwise be read as its own
+            self._last_refusal = None
             res = self.evaluate_circle(project, circle)
             if res is None:
-                filters = self._user_surface_filters()
                 at = dict(x=circle.centre_x, y=circle.centre_y,
                           r=circle.radius)
+                # v0.1.367 (D346) — the reason, when the search knows it,
+                # before the filters that MIGHT have removed it: a circle in
+                # the air was reported as filtered by a Minimum Area the
+                # model never declared. Asked once per hand-drawn circle,
+                # outside the search's own loop.
+                why = self._last_refusal
+                if why == REFUSED_MISSES_GROUND:
+                    self._note(_snote(SN.USER_MISSES_GROUND, **at))
+                    continue
+                if why is not None:
+                    from ogr_core.messages import as_nested
+                    self._note(_snote(SN.USER_REFUSED, **at,
+                                      reason=as_nested(SN.refusal(why))))
+                    continue
+                filters = self._user_surface_filters(project)
                 self._note(
                     _snote(SN.USER_NO_RESULT_FILTERED, filters=filters, **at)
                     if filters else _snote(SN.USER_NO_RESULT, **at))
