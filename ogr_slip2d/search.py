@@ -1642,7 +1642,11 @@ class BaseSearch(ABC):
             result.outside_slope_limits = self._outside_slope_limits
             result.misses_ground = self._misses_ground
             if self.optimize is not None and self.optimize.enabled:
-                self._optimize_result(project, result)
+                # v0.1.366 (D362) — said, so a watcher can name the phase:
+                # its bar starts again here, over the optimisation
+                from ogr_core.progress import OPTIMIZE, progress_phase
+                with progress_phase(OPTIMIZE):
+                    self._optimize_result(project, result)
             # v0.1.135 — surfaces the slicer refused whole. Raised after the
             # optimisation for the same reason the drain below is: the walk
             # slices too, and a surface it could not slice is one it silently
@@ -1891,8 +1895,12 @@ class BaseSearch(ABC):
             # as a hung analysis.
             if self.progress_cb is not None and len(targets) > 1:
                 self.progress_cb(i + 1, len(targets))
+            # v0.1.366 (D362) — with ONE surface (Global Minimum, the
+            # default) the bar stood still for the whole walk, minutes on a
+            # large model: the walk reports its own evaluations then
             _surface, res, rep = optimize_surface(
-                project, self, start.surface, walk)
+                project, self, start.surface, walk,
+                progress_cb=self.progress_cb if len(targets) == 1 else None)
             if res is None or not res.is_valid:
                 # v0.1.187 — these were ONE silent ``continue``, and the
                 # silence is the defect: the menu action of the interface
@@ -1961,7 +1969,10 @@ class BaseSearch(ABC):
             start = self._as_optimisable(r.surface, opts.densify_to)
             keep = r
             if start is not None:
-                _s, res, rep = optimize_surface(project, self, start, opts)
+                _s, res, rep = optimize_surface(
+                    project, self, start, opts,
+                    progress_cb=(self.progress_cb
+                                 if len(result.minima) == 1 else None))
                 # v0.1.187 — counted here too. The multimodal path had the
                 # same silence as the ordinary one, and a search that
                 # reports several minima is exactly where losing one
@@ -2220,15 +2231,26 @@ def _parallel_grid_run(search, project, centres, workers):
             # sequential list.
             parts = [None] * len(futures)
             done = 0
-            for fut in as_completed(futures):
-                k = where[fut]
-                parts[k] = fut.result()
-                done += len(payloads[k][2])
-                if cb is not None and cb_error is None:
-                    try:
-                        cb(done, n)
-                    except Exception as exc:  # noqa: BLE001 - re-raised below
-                        cb_error = exc
+            try:
+                for fut in as_completed(futures):
+                    k = where[fut]
+                    parts[k] = fut.result()
+                    done += len(payloads[k][2])
+                    if cb is not None and cb_error is None:
+                        try:
+                            cb(done, n)
+                        except Exception as exc:  # noqa: BLE001 - re-raised below
+                            cb_error = exc
+            except BaseException:
+                # v0.1.366 (D362) — the caller stopped the run (the
+                # window's Cancel raises from its callback; a Ctrl+C is the
+                # same). Leaving the pool's own exit to it would WAIT for
+                # every batch still queued, i.e. finish the grid the user
+                # cancelled: the queued ones are dropped, and only the
+                # batches already running — one per worker, a small slice of
+                # the grid each — are waited for.
+                pool.shutdown(wait=False, cancel_futures=True)
+                raise
     except Exception as exc:  # noqa: BLE001 - see the docstring
         if cb_error is None:
             # v0.1.262 (D247) — falling back is right; doing it in silence

@@ -126,12 +126,17 @@ class TaskProgressDialog(ComputeProgressDialog):
     it, and it does NOT close until the calculation has returned: Esc and the
     title bar's button would otherwise hand the window back with the thread
     still running, which is how *Compute*'s Cancel let a recompute start on
-    top of a running one (D362). There is no Cancel button until a
-    calculation can actually be stopped — a button that does nothing is the
-    one thing worse than none (rule 7).
+    top of a running one (D362).
+
+    v0.1.366 (D362) — Cancel, Esc and the title bar's button ask the
+    calculation to stop (``on_cancel``) and the dialog says so and stays:
+    it closes when the thread has returned, which a stopped calculation does
+    at its next checkpoint. Before this version the button closed the dialog
+    and set a flag that nothing read.
     """
 
-    def __init__(self, parent=None, title: str = "") -> None:
+    def __init__(self, parent=None, title: str = "",
+                 on_cancel=None) -> None:
         super().__init__(parent)
         from PySide6.QtCore import Qt
         if title:
@@ -139,22 +144,38 @@ class TaskProgressDialog(ComputeProgressDialog):
         self.setWindowModality(Qt.ApplicationModal)
         # busy until a calculation that counts its steps says how many
         self.bar.setRange(0, 0)
-        self.btn_cancel.hide()
+        self._on_cancel = on_cancel
+        self.btn_cancel.setVisible(on_cancel is not None)
         self._finished = False
 
-    def update_progress(self, done: int, total: int) -> None:
+    def update_progress(self, done: int, total: int, phase: str = "") -> None:
+        if self.cancelled:
+            return
         if total > 0 and self.bar.maximum() == 0:
             self.bar.setRange(0, 100)
         super().update_progress(done, total)
+        # v0.1.366 (D362) — the phase the engine says it is in: over the
+        # optimisation the bar starts again, and without its name that read
+        # as the whole run starting again
+        from ogr_core.progress import OPTIMIZE
+        if phase == OPTIMIZE and total > 0:
+            self.lbl_status.setText("%s %d/%d" % (
+                tr("Optimizing the critical surface..."), done, total))
 
     def finish(self) -> None:
         """Close it: the calculation has returned."""
         self._finished = True
         self.accept()
 
-    def reject(self) -> None:                   # Esc, the title bar's button
+    def reject(self) -> None:          # Cancel, Esc, the title bar's button
         if self._finished:
             super().reject()
+            return
+        if self._on_cancel is not None and not self.cancelled:
+            self.cancelled = True
+            self._on_cancel()
+            self.btn_cancel.setEnabled(False)
+            self.lbl_status.setText(tr("Cancelling..."))
 
     def closeEvent(self, event) -> None:        # noqa: N802 - Qt's name
         if self._finished:

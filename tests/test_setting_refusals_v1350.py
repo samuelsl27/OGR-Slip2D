@@ -447,7 +447,10 @@ class TestNoSentenceWithoutItsCode:
         assert '"  ".join(exc.problems)' not in src
         assert '"\\n\\n".join(_why)' not in src
         flat = " ".join(src.split())
-        assert flat.count("note_text(p) for p in exc.problems") == 5
+        # v0.1.366 (D362): six — the drawdown sweep's refusal is said by the
+        # window, which runs it through ``run_task``, and its worker's own
+        # ``run`` keeps the one it had
+        assert flat.count("note_text(p) for p in exc.problems") == 6
         assert "note_text(p) for p in _why" in flat
 
 

@@ -144,19 +144,30 @@ class _ComputeWorker(QThread):
         except Exception:  # noqa: BLE001
             return None
 
+    def compute(self, progress_cb=None) -> dict:
+        """The analysis, on whichever thread calls it; the results are kept
+        on the instance and returned.
+
+        v0.1.366 (D362) — apart from :meth:`run`, so *Compute* runs it
+        through ``ogr_gui.background.run_task``, the door that can stop it;
+        ``run`` stays for the callers that drive the worker themselves.
+        """
+        from ogr_slip2d.analysis_runner import run_analysis
+        outcome = run_analysis(self.project, self.method_ids,
+                               progress_cb=progress_cb)
+        # v0.1.31 — keep the results on the instance so the same
+        # search-building logic can be reused synchronously (the
+        # per-stage transient factors of safety do exactly that).
+        self.results = outcome.results
+        self.warnings = outcome.warnings
+        self.factor_report = outcome.factor_report
+        return outcome.results
+
     def run(self) -> None:
         try:
-            from ogr_slip2d.analysis_runner import run_analysis
-            outcome = run_analysis(
-                self.project, self.method_ids,
-                progress_cb=lambda done, total: self.progress.emit(done, total))
-            # v0.1.31 — keep the results on the instance so the same
-            # search-building logic can be reused synchronously (the
-            # per-stage transient factors of safety do exactly that).
-            self.results = outcome.results
-            self.warnings = outcome.warnings
-            self.factor_report = outcome.factor_report
-            self.finished_result.emit(outcome.results)
+            results = self.compute(
+                lambda done, total: self.progress.emit(done, total))
+            self.finished_result.emit(results)
         except Exception as e:  # noqa: BLE001
             # v0.1.74 found what this blanket handler costs: it catches a
             # TypeError from a programming mistake exactly as it catches a
@@ -195,21 +206,25 @@ class _DrawdownSweepWorker(QThread):
         # window reads them when the sweep is done
         self.warnings: list = []
 
+    def compute(self, progress_cb=None):
+        """The sweep, on whichever thread calls it (v0.1.366, D362: apart
+        from :meth:`run`, as ``_ComputeWorker.compute``). Raises
+        ``AnalysisNotConfigured`` when the project cannot be swept."""
+        # v0.1.200 — through ``run_configured_drawdown_sweep``, the door
+        # ``run_analysis`` uses: the design-factored copy, the settings
+        # checks and warnings. This searched the raw project, so with a
+        # design standard on it answered a different model from Compute.
+        from ogr_slip2d.analysis_runner import run_configured_drawdown_sweep
+        self.result, _report, self.warnings = run_configured_drawdown_sweep(
+            self.project, self.method_ids, n_levels=self.n_levels,
+            include_total=self.include_total, progress_cb=progress_cb)
+        return self.result
+
     def run(self) -> None:                       # noqa: D102
         try:
-            # v0.1.200 — through ``run_configured_drawdown_sweep``, the door
-            # ``run_analysis`` uses: the design-factored copy, the settings
-            # checks and warnings. This searched the raw project, so with a
-            # design standard on it answered a different model from Compute.
-            from ogr_slip2d.analysis_runner import (
-                AnalysisNotConfigured, run_configured_drawdown_sweep)
+            from ogr_slip2d.analysis_runner import AnalysisNotConfigured
             try:
-                self.result, _report, self.warnings = \
-                    run_configured_drawdown_sweep(
-                        self.project, self.method_ids,
-                        n_levels=self.n_levels,
-                        include_total=self.include_total,
-                        progress_cb=lambda d, t: self.progress.emit(d, t))
+                self.compute(lambda d, t: self.progress.emit(d, t))
             except AnalysisNotConfigured as exc:
                 # v0.1.350 (D335) -- each refusal in the reader's language
                 from .core_messages import note_text
@@ -263,7 +278,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.365"
+    VERSION = "0.1.366"
 
     def __init__(self) -> None:
         super().__init__()
@@ -1907,12 +1922,16 @@ class MainWindow(QMainWindow):
         # v0.1.201 — the analysis door: design factors, the settings
         # checks, the configured search. This searched the raw project.
         # v0.1.365 (D348) — off the window's thread: it is a full search
-        from .background import run_task
+        from .background import TaskCancelled, run_task
         try:
             res, _report, warnings = run_task(
                 self, lambda cb: run_configured_back_analysis(
                     self.project, progress_cb=cb, **values),
                 tr("Back Analysis of Support Force"))
+        except TaskCancelled:
+            # v0.1.366 (D362) — nothing of the run is kept
+            self._said_cancelled(tr("Back Analysis of Support Force"))
+            return
         except AnalysisNotConfigured as exc:
             # v0.1.363 (D340) -- a refused run has no notes, and the last
             # run's would read as this one's
@@ -2011,16 +2030,29 @@ class MainWindow(QMainWindow):
         # v0.1.363 (D340) -- the last sweep's notes go: a refused run brings
         # none of its own, and theirs would read as this one's
         self._set_task_notes("drawdown_sweep", [])
-        self.prog = ComputeProgressDialog(self)
         self.sweep_worker = _DrawdownSweepWorker(
             self.project, method_ids, sp_n.value(), chk_total.isChecked())
-        self.sweep_worker.progress.connect(self.prog.update_progress)
-        self.sweep_worker.finished_result.connect(self._on_drawdown_sweep_done)
-        self.sweep_worker.failed.connect(
-            lambda msg: QMessageBox.critical(self, tr("Error"), msg))
-        self.sweep_worker.finished.connect(self.prog.accept)
-        self.sweep_worker.start()
-        self.prog.exec()
+        # v0.1.366 (D362) — through the door that can stop it: its Cancel
+        # closed the dialog and the sweep went on
+        from ogr_slip2d.analysis_runner import AnalysisNotConfigured
+
+        from .background import TaskCancelled, run_task
+        try:
+            run_task(self, self.sweep_worker.compute,
+                     tr("Drawdown Level Sweep"))
+        except TaskCancelled:
+            self._said_cancelled(tr("Drawdown Level Sweep"))
+            return
+        except AnalysisNotConfigured as exc:
+            # v0.1.350 (D335) -- each refusal in the reader's language
+            from .core_messages import note_text
+            QMessageBox.critical(self, tr("Error"), "  ".join(
+                note_text(p) for p in exc.problems))
+            return
+        except Exception as e:  # noqa: BLE001 - the worker said it the same way
+            QMessageBox.critical(self, tr("Error"), f"{type(e).__name__}: {e}")
+            return
+        self._on_drawdown_sweep_done(self.sweep_worker.result)
 
     def _on_drawdown_sweep_done(self, result) -> None:
         """Report the critical level and chart the sweep."""
@@ -2145,13 +2177,17 @@ class MainWindow(QMainWindow):
         from ogr_slip2d.analysis_runner import (AnalysisNotConfigured,
                                                 run_configured_statistics)
 
-        from .background import run_task
+        from .background import TaskCancelled, run_task
         try:
             # v0.1.365 (D348) — off the window's thread, with its progress:
             # the deterministic run and every sample are searches, and
             # fifty samples held the window for about forty seconds
             out = run_task(self, lambda cb: run_configured_statistics(
                 self.project, progress_cb=cb), tr("Compute Statistics"))
+        except TaskCancelled:
+            # v0.1.366 (D362) — the last run's results stay as they were
+            self._said_cancelled(tr("Compute Statistics"))
+            return
         except AnalysisNotConfigured as exc:
             # v0.1.350 (D335) -- through the codes: tr() of a sentence
             # with its values in it found nothing
@@ -2745,14 +2781,22 @@ class MainWindow(QMainWindow):
         # v0.1.201 — the analysis door, with the project's optimisation
         # settings and seed: this read none of them and had no seed, so
         # two runs of the same model answered differently.
-        # v0.1.365 (D348) — off the window's thread. The optimisation
-        # reports no progress (D362), so the dialog shows it busy.
-        from .background import run_task
+        # v0.1.365 (D348) — off the window's thread; v0.1.366 (D362) with
+        # its progress, which can stop it, and the model's fingerprint as
+        # the walk starts
+        from ogr_api.snapshot import model_hash
+
+        from .background import TaskCancelled, run_task
+        fingerprint = model_hash(self.project)
         try:
             best, res, rep, _report, warnings = run_task(
-                self, lambda _cb: run_configured_optimization(
-                    self.project, mid, surface, max_iterations=iters),
+                self, lambda cb: run_configured_optimization(
+                    self.project, mid, surface, max_iterations=iters,
+                    progress_cb=cb),
                 tr("Optimize Surfaces"))
+        except TaskCancelled:
+            self._said_cancelled(tr("Optimize Surfaces"))
+            return
         except AnalysisNotConfigured as exc:
             # v0.1.363 (D340) -- a refused run has no notes
             self._set_task_notes("optimize", [])
@@ -2807,7 +2851,7 @@ class MainWindow(QMainWindow):
         if self.last_search_result is candidates[mid]:
             self.last_search_result = new
         self.results_dock.show_result(new, self.last_factor_report)
-        self._remember_results_model()
+        self._remember_results_model(fingerprint)
         self.canvas.display_search_result(new)
         self.statusBar().showMessage(self._with_notes_hint(
             tr("Optimised: %s") % note_text(rep.summary()), n_notes), 15000)
@@ -3712,8 +3756,15 @@ class MainWindow(QMainWindow):
                    if m.hydraulic is None and m.id in used]
         transient = bool(self.project.settings.groundwater.transient
                          and self.project.settings.groundwater.transient_stages)
+        from .background import TaskCancelled
         if transient:
-            results = self._compute_transient()
+            try:
+                results = self._compute_transient()
+            except TaskCancelled:
+                # v0.1.366 (D362) — the copy is dropped: the field, the
+                # undo history and the notes are those of before
+                self._said_cancelled(tr("Compute Groundwater"))
+                return
             if not results:
                 self._info(tr("Transient analysis produced no results."))
                 return
@@ -3757,9 +3808,6 @@ class MainWindow(QMainWindow):
                                          9000)
             return
 
-        # v0.1.363 (D340) -- a steady field replaces the transient one, and
-        # with it the notes that described that run
-        self._set_task_notes("transient", [])
         # v0.1.125 — one door for the steady solve too, shared with the
         # command line and with any script: what used to be assembled
         # here is now ``solve_project_groundwater``.
@@ -3767,9 +3815,18 @@ class MainWindow(QMainWindow):
         # is taken back here, as the API's groundwater_run does
         from .background import run_task
         work = self._field_copy()
-        result = run_task(self, lambda cb: solve_project_groundwater(
-            work[0], progress_cb=cb), tr("Compute Groundwater"))
+        try:
+            result = run_task(self, lambda cb: solve_project_groundwater(
+                work[0], progress_cb=cb), tr("Compute Groundwater"))
+        except TaskCancelled:
+            # v0.1.366 (D362) — the copy is dropped
+            self._said_cancelled(tr("Compute Groundwater"))
+            return
         self._take_field(work)
+        # v0.1.363 (D340) -- a steady field replaces the transient one, and
+        # with it the notes that described that run (v0.1.366: once it HAS
+        # replaced it, so a cancelled solve leaves them)
+        self._set_task_notes("transient", [])
         self._gw_solver = getattr(self.project, "_gw_solver", None)
         self._update_groundwater_actions()
         if not result.converged:
@@ -3919,16 +3976,35 @@ class MainWindow(QMainWindow):
         method_ids = list(self.project.settings.methods.enabled_methods) or [
             "bishop_simplified",
         ]
-        self.prog = ComputeProgressDialog(self)
         self.worker = _ComputeWorker(self.project, method_ids)
-        self.worker.progress.connect(self.prog.update_progress)
-        self.worker.finished_result.connect(self._on_compute_done)
-        self.worker.failed.connect(lambda msg: QMessageBox.critical(self, tr("Error"), msg))
-        self.worker.finished.connect(self.prog.accept)
-        self.worker.start()
-        self.prog.exec()
+        # v0.1.366 (D362) — the fingerprint of the model the run STARTS from:
+        # the result is of that model, and taken when the run ended it
+        # stamped as current a result computed on a model edited meanwhile
+        from ogr_api.snapshot import model_hash
 
-    def _on_compute_done(self, results) -> None:
+        from .background import TaskCancelled, run_task
+        fingerprint = model_hash(self.project)
+        # v0.1.366 (D362) — through the door that can stop it: Cancel closed
+        # the dialog and set a flag nothing read, the thread published its
+        # result anyway, and a second Compute on top of it aborted the
+        # process when the first thread lost its last reference
+        try:
+            results = run_task(self, self.worker.compute, tr("Compute"))
+        except TaskCancelled:
+            self._said_cancelled(tr("Compute"))
+            return
+        except Exception as e:  # noqa: BLE001 - as the worker's failed signal
+            QMessageBox.critical(self, tr("Error"), f"{type(e).__name__}: {e}")
+            return
+        self._on_compute_done(results, fingerprint)
+
+    def _said_cancelled(self, what: str) -> None:
+        """The status bar after a cancelled calculation (v0.1.366, D362):
+        what was cancelled, and that nothing of it was kept."""
+        self.statusBar().showMessage(
+            tr("{0} cancelled: nothing was changed.").format(what), 10000)
+
+    def _on_compute_done(self, results, fingerprint=None) -> None:
         """Handle the dict {method_id: SearchResult} from the worker.
 
         v0.1.9: Compute now produces results for every enabled method.
@@ -3977,7 +4053,7 @@ class MainWindow(QMainWindow):
         first_result = results[first_id]
         self.last_search_result = first_result  # back-compat
         self.results_dock.show_result(first_result, self.last_factor_report)
-        self._remember_results_model()
+        self._remember_results_model(fingerprint)
         self.canvas.display_search_result(first_result)
         critical = first_result.critical
         if critical:
@@ -4611,9 +4687,16 @@ class MainWindow(QMainWindow):
             if timer is not None:
                 timer.start()
 
-    def _remember_results_model(self) -> None:
+    def _remember_results_model(self, fingerprint=None) -> None:
         """The results panel was just filled: remember the model it is of
-        (v0.1.297, D304)."""
+        (v0.1.297, D304).
+
+        v0.1.366 (D362) — ``fingerprint`` is the model's as the run STARTED,
+        when the caller took it: the result is of that model, and if an edit
+        got in while it ran the result reads as stale instead of current."""
+        if fingerprint is not None:
+            self._results_model_hash = fingerprint
+            return
         from ogr_api.snapshot import model_hash
         self._results_model_hash = model_hash(self.project)
 

@@ -6871,6 +6871,13 @@ _DICTS: dict[str, dict[str, str]] = {
         "{0}  [{1} note(s) — Analysis > Analysis Notes]":
             "{0}  [{1} nota(s) — Análisis > Notas del análisis]",
         "Stage {0}: t = {1:g}": "Etapa {0}: t = {1:g}",
+        # --- v0.1.366 (D362) · Cancelar que para, y la fase de la
+        # optimización en el diálogo de progreso.
+        "Cancelling...": "Cancelando...",
+        "Optimizing the critical surface...":
+            "Optimizando la superficie crítica...",
+        "{0} cancelled: nothing was changed.":
+            "Se ha cancelado «{0}»: no se ha cambiado nada.",
 
         # --- v0.1.160 · cadenas que dejan de nombrar al
         # producto de referencia, y los nombres de paleta, que se

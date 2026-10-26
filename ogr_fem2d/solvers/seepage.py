@@ -52,6 +52,7 @@ from typing import Optional
 
 from ogr_core.hydraulic.hydraulic_properties import HydraulicProperties
 from ogr_core.messages import as_nested
+from ogr_core.progress import checkpoint
 
 from .. import messages as M
 # v0.1.342 (D337) -- the stored data and the identities that rebuild it are
@@ -1230,6 +1231,8 @@ class UnsaturatedSeepageSolver(SeepageSolver):
         H_prev = H
 
         for it in range(1, self.max_iterations + 1):
+            # v0.1.366 (D362) -- where a watcher may stop the solve
+            checkpoint()
             kr = self._element_kr(H)
             extra = {nid: self.mesh.nodes[nid].y for nid in active}
             step = super().solve(bcs, kr=kr, extra_dirichlet=extra)
@@ -1675,6 +1678,7 @@ class UnsaturatedSeepageSolver(SeepageSolver):
         residuals: list[float] = []          # v0.1.269 (D265)
         k = 0
         for k in range(1, RESCUE_ANDERSON_EVALUATIONS + 1):
+            checkpoint()                     # v0.1.366 (D362)
             step = self._picard_map(bcs, x, active)
             if not step.converged:
                 break
@@ -2002,6 +2006,7 @@ class UnsaturatedSeepageSolver(SeepageSolver):
         if held[0] == "kink":
             grad = cells.suction_gradient(held[1])
         for k in range(1, RESCUE_NEWTON_PER_STEP + 1):
+            checkpoint()                     # v0.1.366 (D362)
             H = cells.complete(Hf)
             R, J, Rt = cells.residual(H, t)
             if held[0] == "arc":
@@ -2273,6 +2278,7 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
         q_tol: Optional[float] = None
 
         for it in range(1, self.max_picard + 1):
+            checkpoint()                     # v0.1.366 (D362)
             kr = self._element_kr(H)
             # Storage and mixed-form correction, both lumped
             extra_q = [0.0] * n

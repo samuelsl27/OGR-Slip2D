@@ -529,7 +529,8 @@ def optimisation_refusal(surface) -> Optional[str]:
     return OPTIMISE_A_CIRCLE
 
 
-def optimize_surface(project, search, surface, settings=None):
+def optimize_surface(project, search, surface, settings=None, *,
+                     progress_cb=None):
     """Random-walk a non-circular surface towards a lower factor.
 
     Greco, V.R. (1996), "Efficient Monte Carlo technique for locating
@@ -545,6 +546,9 @@ def optimize_surface(project, search, surface, settings=None):
             produced the starting surface.
         surface: the starting :class:`SlipSurface`.
         settings: :class:`OptimizeSettings`.
+        progress_cb: ``(evaluations, max_iterations)`` before each
+            evaluation (v0.1.366, D362), or None. It reports and may stop
+            the walk by raising; it changes nothing the walk computes.
 
     Returns ``(best_surface, best_result, report)``.
     """
@@ -577,7 +581,16 @@ def optimize_surface(project, search, surface, settings=None):
         return SlipSurface(polyline=Polyline(
             vertices=[Vertex(x, y) for x, y in points], closed=False))
 
+    from ogr_core.progress import checkpoint
+
     def _evaluate(points):
+        # v0.1.366 (D362) — every evaluation is a point where the walk can
+        # be watched and stopped: both techniques evaluate through here
+        if progress_cb is not None:
+            progress_cb(min(rep.iterations, opts.max_iterations),
+                        opts.max_iterations)
+        else:
+            checkpoint()
         surface_ = _make(points)
         # v0.1.129 — the walk may not leave the focus. This callback goes
         # STRAIGHT to ``evaluate_surface``, so until now it was the one

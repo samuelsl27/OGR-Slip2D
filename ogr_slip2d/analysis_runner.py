@@ -2461,7 +2461,13 @@ def run_configured_drawdown_sweep(project, method_ids=None, *,
                   or ["bishop_simplified"])
     factored, report = prepare_analysis_project(project)
     warnings = list(settings_warnings(factored, method_ids))
-    searches = {mid: build_search(factored, mid) for mid in method_ids}
+    # v0.1.366 (D362) — each level's search can be stopped by a watcher of
+    # this thread (``ogr_core.progress``); the bar keeps the levels, which
+    # ``run_drawdown_sweep`` reports
+    from ogr_core.progress import checkpoint
+    searches = {mid: build_search(factored, mid,
+                                  progress_cb=lambda _d, _t: checkpoint())
+                for mid in method_ids}
     missing = [mid for mid, s in searches.items() if s is None]
     if missing:
         raise AnalysisNotConfigured(
@@ -2527,7 +2533,10 @@ def run_configured_statistics(project, method_ids=None, *,
     method_ids = (list(method_ids) if method_ids else
                   list(project.settings.methods.enabled_methods)
                   or ["bishop_simplified"])
-    base = run_analysis(project, method_ids)
+    # v0.1.366 (D362) — with the caller's progress: the deterministic run is
+    # a full search, and without it the bar stood still and the run could
+    # not be stopped until the samples began
+    base = run_analysis(project, method_ids, progress_cb=progress_cb)
     out = StatisticsOutcome(factor_report=base.factor_report,
                             warnings=list(base.warnings))
     out.deterministic = {mid: sr.critical
@@ -2601,7 +2610,9 @@ def run_configured_back_analysis(project, *, target_fos=None,
         raise AnalysisNotConfigured(problems)
     factored, report = prepare_analysis_project(project)
     warnings = list(settings_warnings(factored, [mid]))
-    search = build_search(factored, mid)
+    # v0.1.366 (D362) — the search reports too: it is the long part, and
+    # without it the bar stood still and the run could not be stopped
+    search = build_search(factored, mid, progress_cb=progress_cb)
     if search is None:
         raise AnalysisNotConfigured(
             [run_note(SEARCH_NOT_BUILT, methods=mid)])
@@ -2611,7 +2622,7 @@ def run_configured_back_analysis(project, *, target_fos=None,
 
 
 def run_configured_optimization(project, method_id, surface, *,
-                                max_iterations=None):
+                                max_iterations=None, progress_cb=None):
     """Optimize Surfaces on one surface, through the analysis door.
 
     ``(best_surface, best_result, OptimizeReport, factor_report,
@@ -2639,5 +2650,9 @@ def run_configured_optimization(project, method_id, surface, *,
     if search is None:
         raise AnalysisNotConfigured(
             [run_note(SEARCH_NOT_BUILT, methods=method_id)])
-    best, res, rep = optimize_surface(factored, search, surface, opts)
+    # v0.1.366 (D362) — with its progress, and the phase said
+    from ogr_core.progress import OPTIMIZE, progress_phase
+    with progress_phase(OPTIMIZE):
+        best, res, rep = optimize_surface(factored, search, surface, opts,
+                                          progress_cb=progress_cb)
     return best, res, rep, report, warnings

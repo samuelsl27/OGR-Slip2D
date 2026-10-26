@@ -436,7 +436,10 @@ def run_transient_stability(project, method_ids=None, *,
         standing water of ``water``; the factors go on ``stage`` and on the
         result's notes."""
         with with_stage_water(project, r, water):
-            outcome = run_analysis(project, method_ids)
+            # v0.1.366 (D362) — with the caller's progress, so a stage's
+            # search reports and can be stopped like any Compute
+            outcome = run_analysis(project, method_ids,
+                                   progress_cb=progress_cb)
         for mid, sr in (outcome.results or {}).items():
             crit = sr.critical if sr else None
             if crit is not None:

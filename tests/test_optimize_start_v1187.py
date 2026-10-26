@@ -282,7 +282,8 @@ class TestTheSearchSaysWhatItSkipped:
         import ogr_slip2d.optimize as opt_mod
         original = opt_mod.optimize_surface
 
-        def falla(project, evaluator, surface, settings=None):
+        # v0.1.366 (D362): ``**_kw`` — the search passes ``progress_cb``
+        def falla(project, evaluator, surface, settings=None, **_kw):
             from ogr_slip2d.optimize import OptimizeReport
             rep = OptimizeReport()
             rep.notes["error"] = "forced for the test"
