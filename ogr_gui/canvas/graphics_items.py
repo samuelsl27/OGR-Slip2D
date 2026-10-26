@@ -690,16 +690,26 @@ class SlipSurfaceItem(QGraphicsPathItem):
                 if left_crack is not None:
                     path.moveTo(xl, left_crack[1])
                     path.lineTo(xl, left_crack[0])
+                # v0.1.368 (D347) — the arc is asked of the core, whose rule
+                # takes an end a few ulps outside the circle as ON it: a
+                # circle centred at the crest's elevation meets the crest
+                # with a vertical tangent, and its x_left lands just past R.
+                # This loop skipped that first point (``disc < 0``), and the
+                # path then started with a lineTo — which a QPainterPath
+                # draws from (0, 0): the straight segment from the origin of
+                # the demo slope to (20, 21) of the fifth interface test.
+                from ogr_core.geometry.slip_circle import SlipCircle
+                arc = SlipCircle(centre_x=xc, centre_y=yc, radius=r)
+                started = left_crack is not None
                 n = 60
                 for i in range(n + 1):
                     x = xl + (xr - xl) * i / n
-                    dx = x - xc
-                    disc = r * r - dx * dx
-                    if disc < 0:
+                    y = arc.base_y_at(x)
+                    if y is None:
                         continue
-                    y = yc - math.sqrt(disc)
-                    if i == 0 and left_crack is None:
+                    if not started:
                         path.moveTo(x, y)
+                        started = True
                     else:
                         path.lineTo(x, y)
                 right_crack = cracks.get(round(float(xr), 9))
@@ -848,15 +858,21 @@ class SlipRadiiItem(QGraphicsPathItem):
             xc = circle["centre_x"]
             yc = circle["centre_y"]
             r = circle["radius"]
+            # v0.1.368 (D347) — the core's rule for the arc, as in
+            # SlipSurfaceItem: with ``disc < 0`` the radius to an end a few
+            # ulps outside the circle (vertical tangent at the crest) was
+            # not drawn at all
+            from ogr_core.geometry.slip_circle import SlipCircle
+            arc = SlipCircle(centre_x=xc, centre_y=yc, radius=r)
             for key in ("x_left", "x_right"):
                 x = surface_dict.get(key)
                 if x is None:
                     continue
-                disc = r * r - (x - xc) ** 2
-                if disc < 0:
+                y = arc.base_y_at(x)
+                if y is None:
                     continue
                 path.moveTo(xc, yc)
-                path.lineTo(x, yc - math.sqrt(disc))
+                path.lineTo(x, y)
         self.setPath(path)
         pen = QPen(QColor(colour), width)
         pen.setCosmetic(True)
