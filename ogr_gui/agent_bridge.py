@@ -23,7 +23,8 @@ server calls. What makes it "live":
 * ``model_render(source="window")`` is a capture of the real canvas.
 
 While the window is computing (its own Compute or drawdown sweep, which use
-the live model on another thread) an edit answers ``Busy``.
+the live model on another thread, and since v0.1.365 its statistics,
+groundwater, back analysis and optimisation) an edit answers ``Busy``.
 
 Author: Samuel Sáez López (UPCT)
 """
@@ -63,7 +64,9 @@ class WindowHost:
         if step:
             return (f"The window is in the middle of an edit ({step}); an "
                     f"edit now would land inside it.")
-        for name in ("worker", "sweep_worker"):
+        # v0.1.365 (D348) — and the thread of Compute Statistics, Compute
+        # Groundwater, the back analysis and Optimize Surfaces
+        for name in ("worker", "sweep_worker", "task_worker"):
             t = getattr(w, name, None)
             try:
                 if t is not None and t.isRunning():

@@ -171,10 +171,12 @@ class _DrawdownSweepWorker(QThread):
     """The drawdown level sweep, off the GUI thread.
 
     v0.1.70 — a sweep is N full searches, so it cannot run the way
-    ``_compute_statistics`` does, synchronously on the GUI thread with no
+    ``_compute_statistics`` did, synchronously on the GUI thread with no
     progress: on a real model the window would simply stop responding for
     minutes. It reuses ``_ComputeWorker.build_search`` so the sweep
-    honours exactly the search the user configured.
+    honours exactly the search the user configured. (v0.1.365, D348: the
+    statistics, the groundwater, the back analysis and the optimisation
+    have a thread too now, ``ogr_gui.background.run_task``.)
     """
 
     finished_result = Signal(object)
@@ -261,7 +263,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.364"
+    VERSION = "0.1.365"
 
     def __init__(self) -> None:
         super().__init__()
@@ -1904,9 +1906,13 @@ class MainWindow(QMainWindow):
 
         # v0.1.201 — the analysis door: design factors, the settings
         # checks, the configured search. This searched the raw project.
+        # v0.1.365 (D348) — off the window's thread: it is a full search
+        from .background import run_task
         try:
-            res, _report, warnings = run_configured_back_analysis(
-                self.project, **values)
+            res, _report, warnings = run_task(
+                self, lambda cb: run_configured_back_analysis(
+                    self.project, progress_cb=cb, **values),
+                tr("Back Analysis of Support Force"))
         except AnalysisNotConfigured as exc:
             # v0.1.363 (D340) -- a refused run has no notes, and the last
             # run's would read as this one's
@@ -2138,8 +2144,14 @@ class MainWindow(QMainWindow):
         """
         from ogr_slip2d.analysis_runner import (AnalysisNotConfigured,
                                                 run_configured_statistics)
+
+        from .background import run_task
         try:
-            out = run_configured_statistics(self.project)
+            # v0.1.365 (D348) — off the window's thread, with its progress:
+            # the deterministic run and every sample are searches, and
+            # fifty samples held the window for about forty seconds
+            out = run_task(self, lambda cb: run_configured_statistics(
+                self.project, progress_cb=cb), tr("Compute Statistics"))
         except AnalysisNotConfigured as exc:
             # v0.1.350 (D335) -- through the codes: tr() of a sentence
             # with its values in it found nothing
@@ -2733,9 +2745,14 @@ class MainWindow(QMainWindow):
         # v0.1.201 — the analysis door, with the project's optimisation
         # settings and seed: this read none of them and had no seed, so
         # two runs of the same model answered differently.
+        # v0.1.365 (D348) — off the window's thread. The optimisation
+        # reports no progress (D362), so the dialog shows it busy.
+        from .background import run_task
         try:
-            best, res, rep, _report, warnings = run_configured_optimization(
-                self.project, mid, surface, max_iterations=iters)
+            best, res, rep, _report, warnings = run_task(
+                self, lambda _cb: run_configured_optimization(
+                    self.project, mid, surface, max_iterations=iters),
+                tr("Optimize Surfaces"))
         except AnalysisNotConfigured as exc:
             # v0.1.363 (D340) -- a refused run has no notes
             self._set_task_notes("optimize", [])
@@ -3558,6 +3575,34 @@ class MainWindow(QMainWindow):
                 tr('Transient: {0}, {1} stage(s)').format(
                     tr("on") if gw.transient else tr("off"), n), 5000)
 
+    #: v0.1.365 (D348) — what solving the groundwater writes on the project
+    #: (``solve_project_groundwater`` and ``_solve_transient``), all of it.
+    _FIELD_ATTRS = ("seepage_result", "transient_results",
+                    "transient_initial_result", "_fea_ponding_cache",
+                    "_gw_solver")
+
+    def _field_copy(self) -> tuple:
+        """A detached copy of the project to solve the groundwater on, and
+        what its field attributes held before (v0.1.365, D348)."""
+        from ogr_core.project.copies import detached_copy
+        work = detached_copy(self.project)
+        return work, {a: getattr(work, a, None) for a in self._FIELD_ATTRS}
+
+    def _take_field(self, work: tuple) -> None:
+        """Write the field solved on ``work`` back onto the live project.
+
+        All of it or nothing: the solve writes these together, and only a
+        solve that ran changes any of them. ``_fea_ponding_cache`` is the
+        one that matters most to get right — the solve clears it, and a
+        live project that kept its cache would keep the ponding of the
+        field it had before.
+        """
+        copy_, before = work
+        if all(getattr(copy_, a, None) is before[a] for a in self._FIELD_ATTRS):
+            return
+        for a in self._FIELD_ATTRS:
+            setattr(self.project, a, getattr(copy_, a, None))
+
     def _compute_transient(self):
         """Run the staged transient analysis and the per-stage factors.
 
@@ -3573,9 +3618,19 @@ class MainWindow(QMainWindow):
         from ogr_slip2d.analysis_runner import AnalysisNotConfigured
         from ogr_slip2d.transient_stability import run_transient_stability
 
+        # v0.1.365 (D348) — off the window's thread, on a copy whose field
+        # is taken back here (``_take_field``): each stage's search swaps its
+        # water into the project, and a reader of the live model meanwhile
+        # (the agent, the stale check) would see another model
+        from .background import run_task
+        work = self._field_copy()
         try:
-            outcome = run_transient_stability(self.project)
+            outcome = run_task(self, lambda cb: run_transient_stability(
+                work[0], progress_cb=cb), tr("Compute Groundwater"))
         except AnalysisNotConfigured as exc:
+            # the field is kept when a stage's search refuses: it was solved
+            # and stored before, as it always was
+            self._take_field(work)
             # v0.1.125 — ``run_analysis`` refuses a project it cannot
             # honour, and this is a Qt slot: an exception escaping here
             # is not a message, it is a window left half updated with the
@@ -3589,6 +3644,7 @@ class MainWindow(QMainWindow):
             self._gw_solver = getattr(self.project, "_gw_solver", None)
             self._update_groundwater_actions()
             return list(self.project.transient_results or [])
+        self._take_field(work)
         # v0.1.363 (D340) — every warning of the run to the panel, a stage's
         # under its stage. Each used to go to the status bar for the moment
         # before the next one replaced it, and the stages' own (what their
@@ -3707,7 +3763,13 @@ class MainWindow(QMainWindow):
         # v0.1.125 — one door for the steady solve too, shared with the
         # command line and with any script: what used to be assembled
         # here is now ``solve_project_groundwater``.
-        result = solve_project_groundwater(self.project)
+        # v0.1.365 (D348) — off the window's thread, on a copy whose field
+        # is taken back here, as the API's groundwater_run does
+        from .background import run_task
+        work = self._field_copy()
+        result = run_task(self, lambda cb: solve_project_groundwater(
+            work[0], progress_cb=cb), tr("Compute Groundwater"))
+        self._take_field(work)
         self._gw_solver = getattr(self.project, "_gw_solver", None)
         self._update_groundwater_actions()
         if not result.converged:

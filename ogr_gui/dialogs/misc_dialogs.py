@@ -116,3 +116,48 @@ class ComputeProgressDialog(QDialog):
         pct = int(100 * done / total)
         self.bar.setValue(pct)
         self.lbl_status.setText(f"{tr('Computing...')} {done}/{total}")
+
+
+class TaskProgressDialog(ComputeProgressDialog):
+    """The progress of a calculation that runs off the window's thread
+    (v0.1.365, D348, ``ogr_gui.background.run_task``).
+
+    Window-modal, so the model cannot be edited while another thread reads
+    it, and it does NOT close until the calculation has returned: Esc and the
+    title bar's button would otherwise hand the window back with the thread
+    still running, which is how *Compute*'s Cancel let a recompute start on
+    top of a running one (D362). There is no Cancel button until a
+    calculation can actually be stopped — a button that does nothing is the
+    one thing worse than none (rule 7).
+    """
+
+    def __init__(self, parent=None, title: str = "") -> None:
+        super().__init__(parent)
+        from PySide6.QtCore import Qt
+        if title:
+            self.setWindowTitle(title)
+        self.setWindowModality(Qt.ApplicationModal)
+        # busy until a calculation that counts its steps says how many
+        self.bar.setRange(0, 0)
+        self.btn_cancel.hide()
+        self._finished = False
+
+    def update_progress(self, done: int, total: int) -> None:
+        if total > 0 and self.bar.maximum() == 0:
+            self.bar.setRange(0, 100)
+        super().update_progress(done, total)
+
+    def finish(self) -> None:
+        """Close it: the calculation has returned."""
+        self._finished = True
+        self.accept()
+
+    def reject(self) -> None:                   # Esc, the title bar's button
+        if self._finished:
+            super().reject()
+
+    def closeEvent(self, event) -> None:        # noqa: N802 - Qt's name
+        if self._finished:
+            super().closeEvent(event)
+        else:
+            event.ignore()
