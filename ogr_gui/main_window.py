@@ -278,7 +278,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.368"
+    VERSION = "0.1.369"
 
     def __init__(self) -> None:
         super().__init__()
@@ -1958,15 +1958,35 @@ class MainWindow(QMainWindow):
                                  or tr("Back analysis failed.")))
             return
         c = res.critical
+        # v0.1.369 (D343) — the method by its name, and the three forces in
+        # the project's units for a force per unit length (they are kN/m,
+        # SI, as every force of a 2-D section is): the identifier and a
+        # bare number were what the Spanish window showed
+        force, unit = self._force_per_length()
         self.statusBar().showMessage(self._with_notes_hint(
-            tr('Back analysis ({0}): required force {1:.1f} for FS = '
-               '{2:g}  (active {3:.1f}, passive {4:.1f}; surface FoS '
+            tr('Back analysis ({0}): required force {1:.1f} {7} for FS = '
+               '{2:g}  (active {3:.1f} {7}, passive {4:.1f} {7}; surface FoS '
                'without support {5:.4f}, {6} surfaces)').format(
-                values["method_id"], res.required_force,
+                method_name(values["method_id"]), force(res.required_force),
                 values["target_fos"],
-                c.active_force, c.passive_force, c.unsupported_fos,
-                res.surfaces_analysed), n_notes),
+                force(c.active_force), force(c.passive_force),
+                c.unsupported_fos, res.surfaces_analysed, unit), n_notes),
             15000)
+
+    def _force_per_length(self):
+        """``(convert, unit)`` for a force per unit length in the project's
+        units (v0.1.369, D343): the quantity the unit system names "force
+        per unit length", whose labels are kN/m, lbs/ft and the rest. With
+        no unit system to ask, SI as computed."""
+        from ogr_core.units.quantities import Quantity
+        units = getattr(getattr(self.project, "settings", None), "units",
+                        None)
+        try:
+            system = units.get_system()
+            return ((lambda v: system.to_user(v, Quantity.BOND_STRENGTH)),
+                    system.label_for(Quantity.BOND_STRENGTH))
+        except (AttributeError, ValueError, KeyError):
+            return (lambda v: v), "kN/m"
 
     # ==================================================================
     # Drawdown level sweep (v0.1.70)
@@ -2080,8 +2100,10 @@ class MainWindow(QMainWindow):
         where = (tr("total drawdown") if level is None
                  else "y = {0:.2f}".format(level))
         # v0.1.293 (D291b) — a template
+        # v0.1.369 (D343) -- the method by its name, as the rest of the
+        # window says it since D315
         msg = tr("Critical drawdown level ({0}): {1}, FS = {2:.4f}").format(
-            mid, where, fos)
+            method_name(mid), where, fos)
         if margin is not None and margin > 0.005:
             # v0.1.76 — the lookup stays OUTSIDE the f-string. Splitting an
             # implicitly concatenated literal across lines inside a
@@ -2103,7 +2125,7 @@ class MainWindow(QMainWindow):
             lows = [lv for lv, _f, _s in valid if lv is not None]
             floor = min(lows) if lows else 0.0
             xs = [floor if lv is None else lv for lv, _f, _s in valid]
-            series.append((m_id, [f for _lv, f, _s in valid]))
+            series.append((method_name(m_id), [f for _lv, f, _s in valid]))
         if not series:
             return
         try:
@@ -2117,7 +2139,7 @@ class MainWindow(QMainWindow):
         except Exception:  # noqa: BLE001
             html = f"<b>{tr('Factor of safety vs drawdown level')}</b><pre>"
             for m_id, sw in result.by_method.items():
-                html += f"<br>{m_id}<br>"
+                html += f"<br>{method_name(m_id)}<br>"
                 for lv, f, _s in sw.valid:
                     lab = tr("total drawdown") if lv is None else f"{lv:8.2f}"
                     html += f"  {lab}   {f:.4f}<br>"
@@ -2743,12 +2765,16 @@ class MainWindow(QMainWindow):
             return
         mid = next(iter(candidates))
         if len(candidates) > 1:
+            # v0.1.369 (D343) -- the methods by their names; the choice is
+            # mapped back to its identifier
+            ids = list(candidates)
+            names = [method_name(m) for m in ids]
             choice, ok = QInputDialog.getItem(
                 self, tr("Optimize Surfaces"), tr("Method:"),
-                list(candidates), 0, False)
+                names, 0, False)
             if not ok:
                 return
-            mid = choice
+            mid = ids[names.index(choice)] if choice in names else choice
         crit = candidates[mid].critical
         surface = crit.surface
         # v0.1.252 (D251) — the engine's one question (``optimisation_

@@ -65,6 +65,38 @@ def reported_quantity(result, factor_report=None):
     return "fos", tr("Factor of safety")
 
 
+def column_caption(result, factor_report=None) -> str:
+    """The short heading of a column of per-surface values (v0.1.369,
+    D345): "FoS", "ODF" with a design standard, "Ky" on a search for the
+    critical seismic coefficient (and on a Newmark one, whose surfaces each
+    have a Ky and only the critical one a displacement).
+
+    The same decider as :func:`reported_quantity`, and the column prints
+    what it names (:func:`column_value`): the *Surfaces* tables said "FoS"
+    over an over-design factor, and on a Ky run over the factors of surfaces
+    ordered by their Ky."""
+    from ogr_slip2d.reported import KY, NEWMARK, OVERDESIGN, reported_caption
+
+    caption = reported_caption(result, factor_report)
+    if caption in (KY, NEWMARK):
+        return tr("Ky")
+    if caption == OVERDESIGN:
+        return tr("ODF")
+    return tr("FoS")
+
+
+def column_value(result, item, factor_report=None) -> str:
+    """The value of ``item`` in the column :func:`column_caption` heads:
+    its Ky on a seismic search, its ``fos`` (a factor of safety or an
+    over-design factor) otherwise (v0.1.369, D345)."""
+    from ogr_slip2d.reported import KY, NEWMARK, reported_caption
+
+    if reported_caption(result, factor_report) in (KY, NEWMARK):
+        ky = (getattr(item, "details", None) or {}).get("ky")
+        return "" if ky is None else "%.4f" % ky
+    return "%.4f" % item.fos
+
+
 def fos_label(factor_report=None) -> str:
     """The caption for a widget that always prints ``critical.fos``.
 

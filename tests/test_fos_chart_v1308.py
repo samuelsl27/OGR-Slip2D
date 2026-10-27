@@ -185,7 +185,12 @@ class TestBothWindowsPlotOneSeries:
                 stand_in._plot_xy = types.MethodType(
                     InterpretWindow._plot_xy, stand_in)
                 InterpretWindow._graph_sf_with_time(stand_in)
-            assert seen == [expected, expected]
+            # v0.1.369 (D343): the same series, each labelled by its
+            # method's NAME in the legend; ``fos_history`` keeps the id
+            from ogr_gui.labels import method_name
+            named = [(method_name(m), t, f) for m, t, f in expected]
+            assert named != expected
+            assert seen == [named, named]
         finally:
             if iw is not None:
                 iw.close()

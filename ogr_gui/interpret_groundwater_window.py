@@ -173,6 +173,11 @@ class InterpretGroundwaterWindow(QMainWindow):
                     "'Calculate SF' on the stages you need and recompute."),
                 15000)
             return None
+        # v0.1.369 (D343) — each series by its method's name in the legend
+        # ("bishop_simplified" was what the Spanish window showed);
+        # ``fos_history`` keeps the identifier, which the API reads
+        series = [(method_name(mid), times, factors)
+                  for mid, times, factors in series]
         dlg = show_xy_chart(self, tr("Factor of safety vs time"), series,
                             tr("Time"), tr("Factor of safety"))
         if dlg is None:

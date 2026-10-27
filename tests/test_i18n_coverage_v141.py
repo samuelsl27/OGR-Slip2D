@@ -286,6 +286,9 @@ class TestTranslationCompleteness:
                    # "Aceleracion critica:"), which is what says this one
                    # is a symbol and not a forgotten entry.
                    "Ky:",
+                   # v0.1.369 (D345) - and the column heading of the
+                   # Surfaces tables on a Ky search: the same symbol
+                   "Ky",
                    # v0.1.200 - "A:" and "a:" above with their units, now
                    # that each hydraulic parameter says which one.
                    "A (kPa):", "a (1/m^n):",

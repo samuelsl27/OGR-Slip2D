@@ -137,11 +137,19 @@ class ResultsDock(QDockWidget):
                 tr('Method: {0}. No valid surfaces found ({1} invalid).').format(method_name(search_result.method_id), search_result.invalid_count)
             )
 
+        # v0.1.369 (D345) — the column says what it prints: FoS, an
+        # over-design factor with a standard, or each surface's Ky on a
+        # seismic search (whose surfaces this table lists by Ky). The line
+        # above keeps the critical's ``.fos``, captioned by ``fos_label``.
+        from ogr_gui.reported_quantity import column_caption, column_value
+        self.table.setHorizontalHeaderItem(1, QTableWidgetItem(
+            column_caption(search_result, factor_report)))
         for i, res in enumerate(search_result.top_n(50)):
             sd = res.surface.to_dict()
             self.table.insertRow(i)
             self.table.setItem(i, 0, QTableWidgetItem(str(i + 1)))
-            self.table.setItem(i, 1, QTableWidgetItem(f"{res.fos:.4f}"))
+            self.table.setItem(i, 1, QTableWidgetItem(
+                column_value(search_result, res, factor_report)))
             # v0.1.324 (D315) — the method's name, not its identifier
             self.table.setItem(i, 2, QTableWidgetItem(method_name(res.method_id)))
             self.table.setItem(i, 3, QTableWidgetItem(f"{sd.get('centre_x', float('nan')):.2f}"))

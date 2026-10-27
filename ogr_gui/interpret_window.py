@@ -567,15 +567,23 @@ class _ResultsTableDock(QDockWidget):
         vbox.addWidget(self.table)
         self.setWidget(container)
 
-    def show_result(self, result) -> None:
+    def show_result(self, result, factor_report=None) -> None:
         self.table.setRowCount(0)
         if result is None:
             return
+        # v0.1.369 (D345) — the heading is the run's, every time a result
+        # arrives: "FoS" was fixed, and said it over an over-design factor
+        # (the summary and the PDF said FSD) and over the factors of a list
+        # ordered by Ky. The value follows the heading.
+        from ogr_gui.reported_quantity import column_caption, column_value
+        self.table.setHorizontalHeaderItem(1, QTableWidgetItem(
+            column_caption(result, factor_report)))
         for i, res in enumerate(result.top_n(100)):
             sd = res.surface.to_dict()
             self.table.insertRow(i)
             self.table.setItem(i, 0, QTableWidgetItem(str(i + 1)))
-            self.table.setItem(i, 1, QTableWidgetItem(f"{res.fos:.4f}"))
+            self.table.setItem(i, 1, QTableWidgetItem(
+                column_value(result, res, factor_report)))
             self.table.setItem(i, 2, QTableWidgetItem(method_name(res.method_id)))
             self.table.setItem(i, 3, QTableWidgetItem(f"{sd.get('centre_x', 0):.2f}"))
             self.table.setItem(i, 4, QTableWidgetItem(f"{sd.get('centre_y', 0):.2f}"))
@@ -650,7 +658,7 @@ class InterpretWindow(QMainWindow):
 
         self.results_dock = _ResultsTableDock(self)
         self.addDockWidget(Qt.RightDockWidgetArea, self.results_dock)
-        self.results_dock.show_result(self.search_result)
+        self.results_dock.show_result(self.search_result, self.factor_report)
         self.results_dock.surface_picked.connect(self._on_surface_picked)
 
         self.slice_dock = _SliceDataDock(self)
@@ -1302,7 +1310,7 @@ class InterpretWindow(QMainWindow):
         self._refresh_canvas_with_highlights()
         self.summary_dock.show_result(result, self.project,
                                       self.factor_report)
-        self.results_dock.show_result(result)
+        self.results_dock.show_result(result, self.factor_report)
         # v0.1.49 — the legend range and the algorithm read-out belong to
         # the ACTIVE method: each one has its own critical surface and its
         # own spread of factors, so both must follow the switch.
@@ -1692,6 +1700,10 @@ class InterpretWindow(QMainWindow):
                 "No stage has a computed factor of safety. Tick "
                 "'Calculate SF' on the stages you need and recompute."))
             return
+        # v0.1.369 (D343) — each series by its method's name in the legend;
+        # ``fos_history`` keeps the identifier, which the API reads
+        series = [(method_name(mid), times, factors)
+                  for mid, times, factors in series]
         self._plot_xy(tr("Factor of safety vs time"), series,
                       tr("Time"), tr("Factor of safety"))
 

@@ -1351,6 +1351,8 @@ _DICTS: dict[str, dict[str, str]] = {
         'Critical seismic coefficient': 'Coeficiente sísmico crítico',
         'Newmark displacement': 'Desplazamiento de Newmark',
         'Ky:': 'Ky:',
+        # v0.1.369 (D345) -- la cabecera de la columna en una busqueda de Ky
+        'Ky': 'Ky',
         'Select one or more loads to delete:': 'Selecciona una o más cargas para eliminar:',
         'Selectable entity types': 'Tipos de entidad seleccionables',
         'Selection Filter (Ctrl+F)': 'Filtro de selección (Ctrl+F)',
@@ -6633,8 +6635,9 @@ _DICTS: dict[str, dict[str, str]] = {
             "Pulsa dos esquinas opuestas en el lienzo. El diálogo se actualizará con los límites elegidos; pulsa Aceptar para aplicarlos.",
         "FE mesh cleared":
             "Malla de elementos finitos borrada",
-        "Back analysis ({0}): required force {1:.1f} for FS = {2:g}  (active {3:.1f}, passive {4:.1f}; surface FoS without support {5:.4f}, {6} surfaces)":
-            "Retroanálisis ({0}): fuerza necesaria {1:.1f} para FS = {2:g}  (activa {3:.1f}, pasiva {4:.1f}; FS de la superficie sin soporte {5:.4f}, {6} superficies)",
+        # v0.1.369 (D343) -- el metodo por su nombre y la fuerza con sus unidades
+        "Back analysis ({0}): required force {1:.1f} {7} for FS = {2:g}  (active {3:.1f} {7}, passive {4:.1f} {7}; surface FoS without support {5:.4f}, {6} surfaces)":
+            "Retroanálisis ({0}): fuerza necesaria {1:.1f} {7} para FS = {2:g}  (activa {3:.1f} {7}, pasiva {4:.1f} {7}; FS de la superficie sin soporte {5:.4f}, {6} superficies)",
         "Groundwater solved in {0} iterations; u from {1:.1f} to {2:.1f}{3}":
             "Agua subterránea resuelta en {0} iteraciones; u de {1:.1f} a {2:.1f}{3}",
         "Support added ({0} total). Click again to add another, or Esc to finish.":
