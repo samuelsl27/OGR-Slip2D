@@ -79,14 +79,15 @@ tarea: es un deseo.
       Python, acciones de CI, capas (censo estático y en tiempo de
       ejecución, con un modelo construido solo con el núcleo) y versión.
       Cada censo afirma que encontró algo.
-- [ ] 2.7 En un venv limpio: `pip install -e .` sin PySide6, y suite
-      completa en verde. **Suite completa en verde: 499 de 499.** El venv
-      limpio lo hará la CI al subir (instalar dependencias aquí exige el
-      OK del propietario).
+- [x] 2.7 En un venv limpio: `pip install -e .` sin PySide6, y suite
+      completa en verde. Local: 499 de 499. CI del primer push (run
+      40505694412): instalación limpia con solo las dependencias declaradas
+      y 499 de 499 en Python 3.11, 3.12 y 3.13; licencia en verde.
 - [x] 2.8 `LICENSE`, `CLA.md`, `CONTRIBUTORS.md`, README, `AGENTS.md`,
       `CLAUDE.md`, `CONTRIBUTING.md`, CI (acciones en versiones mayores
       comprobadas, como en `test_ci_actions_v181`), changelog.
-- [ ] 2.9 Etiqueta `v0.1.0` (P2, P3): al subir, con el OK del propietario.
+- [x] 2.9 Etiqueta `v0.1.0` (P2, P3): subida a `samuelsl27/OGR-Core` con
+      `main` el 2026-10-27, con el OK del propietario.
 
 ## F3 · Slip2D depende de `ogr-core`
 
