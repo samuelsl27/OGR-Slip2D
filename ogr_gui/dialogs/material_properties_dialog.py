@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import copy
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -41,6 +42,7 @@ from ogr_core.materials import (
     PorePressureType,
     StrengthModel,
 )
+from ogr_gui.dialog_size import VerticalScrollArea
 from ogr_gui.i18n import tr
 from ogr_gui.labels import (pore_pressure_label)  # noqa: E402
 
@@ -829,6 +831,37 @@ class _StrengthParamPanel(QWidget):
         return [tbl.horizontalHeaderItem(c).text()
                 for c in range(tbl.columnCount())]
 
+    #: v0.1.371 (D352) — the rows a points table shows at least.
+    _TABLE_MIN_ROWS = 3
+
+    def _fit_table(self, tbl) -> None:
+        """Every heading whole, and room for three rows (v0.1.371, D352).
+
+        Measured in the fifth interface test (1920 × 1080 at 125 %): the
+        table of a Shear/Normal Function was one row tall, and its first
+        heading read «nsión normal (kF». Nothing asked for a height, and
+        the columns kept Qt's default width. Each column now takes the
+        width of its contents, heading included, and the last one is not
+        stretched: a stretched last section gets the space that is left,
+        and between "fits" and "scrolls" there is a band of widths where
+        that is less than its heading and no scroll bar shows (measured:
+        266 px for a 316 px heading). When the columns do not fit, the
+        table scrolls sideways instead of cutting a heading, and its height
+        counts that bar, so three rows still show. And it asks for the
+        width of its columns, so a window that opens at what it holds (the
+        strength function of a Snowden material) opens wide enough for
+        them instead of with the bar.
+        """
+        from PySide6.QtWidgets import QAbstractScrollArea
+        tbl.horizontalHeader().setStretchLastSection(False)
+        tbl.resizeColumnsToContents()
+        tbl.setSizeAdjustPolicy(QAbstractScrollArea.AdjustToContents)
+        rows = (self._TABLE_MIN_ROWS
+                * tbl.verticalHeader().defaultSectionSize())
+        tbl.setMinimumHeight(tbl.horizontalHeader().sizeHint().height()
+                             + rows + 2 * tbl.frameWidth()
+                             + tbl.horizontalScrollBar().sizeHint().height())
+
     def _build_points_table(self, current_params, kind, default):
         """Build an editable table for function-based models."""
         from PySide6.QtWidgets import (
@@ -850,7 +883,6 @@ class _StrengthParamPanel(QWidget):
             headers.append(header)
         tbl = QTableWidget(len(pts), ncol)
         tbl.setHorizontalHeaderLabels(headers)
-        tbl.horizontalHeader().setStretchLastSection(True)
         shown = []
         for r, row in enumerate(pts):
             # A rule is shown as (angle to, the material it takes), a joint
@@ -892,7 +924,12 @@ class _StrengthParamPanel(QWidget):
                 texts.append(text)
                 tbl.setItem(r, c, QTableWidgetItem(text))
             shown.append(texts)
-        self._form.addRow(QLabel(tr(self._TABLE_CAPTIONS[kind])), tbl)
+        self._fit_table(tbl)
+        # v0.1.371 (D352) — the caption above the table, which spans the
+        # form: beside it, the label column took some 200 px of the width
+        # the headings need.
+        self._form.addRow(QLabel(tr(self._TABLE_CAPTIONS[kind])))
+        self._form.addRow(tbl)
         # Add/remove buttons
         btns = QWidget()
         hl = QHBoxLayout(btns)
@@ -1360,7 +1397,6 @@ class MaterialPropertiesDialog(QDialog):
         # water table exists to separate the saturated zone from the rest.
         self._has_water_table = bool(has_water_table)
         self.setWindowTitle(tr("Define Materials..."))
-        self.resize(720, 500)
         # v0.1.60 — work on deep copies, so the user can move freely
         # between materials and still have Cancel discard everything. A
         # shallow ``list(materials)`` shared the Material instances with
@@ -1400,8 +1436,11 @@ class MaterialPropertiesDialog(QDialog):
         left.addLayout(hb)
         layout.addLayout(left)
 
-        # Right: editor form
-        right = QVBoxLayout()
+        # Right: editor form. v0.1.371 (D352) — in a scroll area that only
+        # scrolls up and down (see the end of this method).
+        self._editor = QWidget()
+        right = QVBoxLayout(self._editor)
+        right.setContentsMargins(0, 0, 0, 0)
 
         # Identity group
         gen_grp = QGroupBox(tr("General"))
@@ -1696,7 +1735,18 @@ class MaterialPropertiesDialog(QDialog):
             self._refresh_water_parameters)
 
         right.addStretch(1)
-        layout.addLayout(right, 1)
+        # v0.1.371 (D352) — General, Strength and Water stacked in one
+        # column had no room left for a table of points: with the rules of
+        # Generalized Anisotropic it showed half a row, and three rows made
+        # the dialog 818 px tall on a 1536 × 816 screen (125 %). The column
+        # scrolls instead of the window growing; OK and Cancel stay below.
+        self.scroll = VerticalScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setFrameShape(QFrame.NoFrame)
+        self.scroll.setWidget(self._editor)
+        column = QVBoxLayout()
+        column.addWidget(self.scroll, 1)
+        layout.addLayout(column, 1)
 
         # Buttons — v0.1.60: no Apply. Edits are committed to the working
         # copy as soon as the user moves to another material, so Apply had
@@ -1705,12 +1755,42 @@ class MaterialPropertiesDialog(QDialog):
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         self.buttons.accepted.connect(self._ok)
         self.buttons.rejected.connect(self.reject)
-        right.addWidget(self.buttons)
+        column.addWidget(self.buttons)
 
         if self.materials:
             self.list.setCurrentRow(0)
         else:
             self._set_editor_enabled(False)
+        self._open_at_content_size()
+
+    def _open_at_content_size(self) -> None:
+        """Open at the size the content asks for, as before the scroll area
+        (v0.1.371, D352): never under 720 × 500, the size this dialog was
+        given, and never over the screen.
+
+        A scroll area asks for almost no height, so the window's minimum no
+        longer holds its content; for the opening size the column is asked
+        for the height of what it holds, and then let go, so the window can
+        be made smaller and the column scrolls. The layouts are activated
+        from the innermost out first: in a window never shown, a child's
+        new size reaches its parent's layout only when an event loop runs,
+        and the column asked for its strength group without the parameters
+        the first material had just put in it (504 px of the 570 it takes
+        on screen).
+        """
+        self.ensurePolished()
+        for child in reversed(self.findChildren(QWidget)):
+            if child.layout() is not None:
+                child.layout().activate()
+        self.scroll.setMinimumHeight(
+            self._editor.minimumSizeHint().height()
+            + 2 * self.scroll.frameWidth())
+        size = self.minimumSizeHint().expandedTo(QSize(720, 500))
+        self.scroll.setMinimumHeight(0)
+        screen = self.screen()
+        if screen is not None:
+            size = size.boundedTo(screen.availableGeometry().size())
+        self.resize(size)
 
     # ------------------------------------------------------------------
     def _append_item(self, m: Material) -> None:
