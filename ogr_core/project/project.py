@@ -69,7 +69,7 @@ class Project:
         self.water_pressure_grid = None  # Optional[WaterPressureGrid]
         # v0.1.25 — FE mesh for the groundwater (seepage) analysis;
         # generated in Groundwater mode, consumed by OGR FEM2D.
-        self.fem_mesh = None  # Optional[ogr_fem2d.mesh.Mesh]
+        self.fem_mesh = None  # Optional[ogr_core.fem.Mesh]
         # v0.1.28 — converged seepage field feeding PorePressureType
         # .FEM_SEEPAGE. Saved since v0.1.78 (heads and kr only; the rest
         # is rebuilt by ``restore_derived``) — this said "not serialised"

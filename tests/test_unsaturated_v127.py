@@ -40,10 +40,12 @@ from ogr_core.hydraulic import (  # noqa: E402
     available_models,
     library_for,
 )
-from ogr_fem2d.mesh import generate_mesh  # noqa: E402
-from ogr_fem2d.solvers import (  # noqa: E402
+from ogr_core.fem.generator import generate_mesh  # noqa: E402
+from ogr_core.fem import (  # noqa: E402
     BCType,
     SeepageBoundaryConditions,
+)
+from ogr_core.fem.seepage import (  # noqa: E402
     SeepageSolver,
     UnsaturatedSeepageSolver,
 )
@@ -406,7 +408,7 @@ class TestUnsaturatedDam:
         # unconverged (the rescue finishes it), and this test would pass
         # on its conditional without checking anything. It is the
         # loop's report that is under test, so the loop runs alone.
-        from ogr_fem2d.solvers import seepage
+        from ogr_core.fem import seepage
         props = HydraulicProperties(ks=K_DAM,
                                     model=PermeabilityModel.VAN_GENUCHTEN,
                                     vg_alpha=5.0, vg_n=3.0, kr_min=1e-12)
@@ -430,7 +432,7 @@ class TestUnsaturatedDam:
         assert abs(r.notes["kr_max"] - 1.0) < 1e-9
 
     def test_empty_mesh_reported(self):
-        from ogr_fem2d.mesh import Mesh
+        from ogr_core.fem import Mesh
         s = UnsaturatedSeepageSolver(Mesh(), {})
         r = s.solve_unsaturated(SeepageBoundaryConditions())
         assert not r.converged

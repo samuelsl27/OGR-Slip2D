@@ -9,7 +9,7 @@ with stable codes (v0.1.352, D335). The drawdown level sweep is the core's
 Their warnings and ``notes["error"]`` were English sentences; each is a code
 here with that English, so the sentence is the one the engine wrote, and the
 interface translates it. A reason the seepage solver gave is nested with its
-own code (``ogr_fem2d.messages``).
+own code (``ogr_core.fem.messages``).
 
 Codes are ``run.*``.
 

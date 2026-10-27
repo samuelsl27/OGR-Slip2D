@@ -314,7 +314,7 @@ class TestContents:
         assert opts.mesh is False
 
     def test_mesh_written_when_requested(self):
-        from ogr_fem2d.mesh import generate_mesh_for_project
+        from ogr_core.fem.generator import generate_mesh_for_project
         p = _model()
         p.fem_mesh = generate_mesh_for_project(p, target_elements=60)
         rep = export_dxf(p, _OUT, ExportOptions(unit="m", mesh=True))
@@ -362,7 +362,7 @@ class TestDialog:
         assert d.chk_surface.isEnabled() is True
 
     def test_mesh_enabled_when_present(self):
-        from ogr_fem2d.mesh import generate_mesh_for_project
+        from ogr_core.fem.generator import generate_mesh_for_project
         p = _model()
         p.fem_mesh = generate_mesh_for_project(p, target_elements=60)
         d = self._dlg(p)

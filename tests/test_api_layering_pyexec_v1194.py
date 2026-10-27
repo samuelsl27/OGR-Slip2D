@@ -9,7 +9,7 @@ Invariants protected:
 * **Layering**, read from the source with the AST, not from what happens
   to be importable: ``ogr_api`` imports neither PySide6, nor ``ogr_gui``,
   nor ``mcp``/``ogr_mcp`` (it must run headless and without the MCP SDK);
-  the engine (``ogr_core``, ``ogr_slip2d``, ``ogr_fem2d``) never imports
+  the engine (``ogr_core``, ``ogr_slip2d``) never imports
   ``ogr_api``; and ``ogr_core/project/rules.py`` imports neither Qt nor
   the solver. A layer that reached upwards would make the headless server
   need a display, or the engine need its own front end.
@@ -57,7 +57,7 @@ class TestLayering:
         assert not found, found
 
     def test_the_engine_never_imports_the_operations_layer(self):
-        for pkg in ("ogr_core", "ogr_slip2d", "ogr_fem2d"):
+        for pkg in ("ogr_core", "ogr_slip2d"):
             found = [f for f, i in _package_imports(pkg).items()
                      if "ogr_api" in i]
             assert not found, (pkg, found)

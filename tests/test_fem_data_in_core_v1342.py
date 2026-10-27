@@ -10,18 +10,27 @@ twenty imports of the engine D337 counted in the core. They are data and
 the closed-form identities that rebuild a result's derived fields, so they
 moved, whole, to ``ogr_core.fem``, and ``ogr_fem2d`` re-exports them.
 
+Spec 009 (F1) — the solvers followed the data. The mesh generator, the
+seepage solvers, the streamlines and the ``seepage.*`` codes moved from
+``ogr_fem2d`` to ``ogr_core.fem`` too, and ``ogr_fem2d`` left this
+repository: its name is the finite-element program's (OGR FEM2D), and a
+re-export left behind under it would keep that name taken. So "one class,
+at both paths" became one class at ONE path.
+
 The invariants:
 
-* **one class, at both paths**: every name imported from its old place
-  (``ogr_fem2d.mesh``, ``ogr_fem2d.mesh.mesh``, ``ogr_fem2d.solvers``,
-  ``ogr_fem2d.solvers.seepage``) is the very object of ``ogr_core.fem``, so
-  ``isinstance`` and every existing import keep working;
+* **one class, at one path**: there is no ``ogr_fem2d`` in this tree; the
+  data classes are ``ogr_core.fem``'s, and the names the solver module
+  re-exports are the very same objects, so ``isinstance`` holds wherever a
+  name is imported from;
 * **the solver's fluxes are the core's function**: on a solved unsaturated
   field, ``SeepageSolver._element_fluxes`` and ``element_fluxes`` give the
   same numbers, exactly, and so does the field the solver produced;
 * **a model with a mesh, a seepage field and transient stages loads without
-  the engine**: in a fresh interpreter ``Project.load`` brings neither
-  ``ogr_fem2d`` nor ``ogr_slip2d`` into ``sys.modules``, and the velocities
+  the solver**: in a fresh interpreter ``Project.load`` brings neither the
+  solver (``ogr_core.fem.seepage``) nor the mesh generator
+  (``ogr_core.fem.generator``) nor ``ogr_slip2d`` into ``sys.modules`` —
+  nor ``ogr_fem2d``, which the core must never import — and the velocities
   it rebuilds are the solver's own fluxes over the saved heads and kr,
   digit for digit. (Not the field in memory: the file keeps nine
   significant figures, by design, and measured on this field that moves a
@@ -56,27 +65,29 @@ def _project():
 
 
 # ======================================================================
-class TestOneClassAtBothPaths:
+class TestOneClassAtOnePath:
 
-    def test_every_old_name_is_the_core_object(self):
+    def test_there_is_no_ogr_fem2d_in_this_tree(self):
+        """Read from the tree and not asked of the import system: on a
+        machine where another checkout is installed in editable mode,
+        ``ogr_fem2d`` can still resolve — to THAT tree, which is the
+        v0.1.84 trap the runner's ``tree:`` line exists for."""
+        assert not (_ROOT / "ogr_fem2d").exists()
+
+    def test_every_name_is_the_core_object(self):
         import ogr_core.fem as core
-        import ogr_fem2d.mesh as mesh_pkg
-        import ogr_fem2d.mesh.mesh as mesh_mod
-        import ogr_fem2d.solvers as solvers_pkg
-        import ogr_fem2d.solvers.seepage as seepage_mod
-        for name in ("Mesh", "Node", "Element"):
-            assert getattr(mesh_pkg, name) is getattr(core, name), name
-            assert getattr(mesh_mod, name) is getattr(core, name), name
-        for name in ("DEGENERATE_SHAPE_RATIO", "triangle_shape_ratio"):
-            assert getattr(mesh_mod, name) is getattr(core, name), name
+        import ogr_core.fem.generator as generator
+        import ogr_core.fem.seepage as seepage_mod
+        for name in ("Mesh", "Node", "Element", "DEGENERATE_SHAPE_RATIO"):
+            assert getattr(generator, name) is getattr(core, name), name
         for name in ("BCType", "NodeBC", "SegmentBC",
                      "SeepageBoundaryConditions", "SeepageResult",
                      "hydraulic_props_of", "restore_derived"):
-            assert getattr(solvers_pkg, name) is getattr(core, name), name
             assert getattr(seepage_mod, name) is getattr(core, name), name
         assert seepage_mod.element_fluxes is core.element_fluxes
         assert core.Mesh.__module__ == "ogr_core.fem.mesh"
         assert core.SeepageResult.__module__ == "ogr_core.fem.seepage_data"
+        assert seepage_mod.SeepageSolver.__module__ == "ogr_core.fem.seepage"
 
     def test_a_pickled_mesh_and_result_come_back_as_the_same_classes(self):
         import ogr_core.fem as core
@@ -92,7 +103,7 @@ class TestTheSolversFluxesAreTheCoresFunction:
 
     def test_same_numbers_exactly(self):
         from ogr_core.fem import element_fluxes, hydraulic_props_of
-        from ogr_fem2d.solvers import SeepageSolver
+        from ogr_core.fem.seepage import SeepageSolver
         p = _project()
         r = p.seepage_result
         assert r.velocity and r.kr is not None
@@ -123,7 +134,9 @@ class TestAModelLoadsWithoutTheEngine:
             "q = Project.load(sys.argv[1])\n"
             "print(json.dumps({\n"
             "    'engine': sorted(m for m in sys.modules\n"
-            "                     if m.split('.')[0] in ('ogr_fem2d', 'ogr_slip2d')),\n"
+            "                     if m.split('.')[0] in ('ogr_fem2d', 'ogr_slip2d')\n"
+            "                     or m in ('ogr_core.fem.seepage',\n"
+            "                              'ogr_core.fem.generator')),\n"
             "    'velocity': [list(v) for v in q.seepage_result.velocity],\n"
             "    'stages': [[list(v) for v in r.velocity]\n"
             "               for r in q.transient_results],\n"
@@ -147,7 +160,7 @@ class TestAModelLoadsWithoutTheEngine:
         # nine significant figures (``SeepageResult._round``), so this, and
         # not the field in memory, is what a load can give back exactly
         from ogr_core.fem import hydraulic_props_of
-        from ogr_fem2d.solvers import SeepageSolver
+        from ogr_core.fem.seepage import SeepageSolver
         r = here.seepage_result
         solver = SeepageSolver(here.fem_mesh, hydraulic_props_of(here))
         expected = [list(v) for v in

@@ -30,10 +30,12 @@ sys.path.insert(0, str(Path(__file__).parent))
 from ogr_core.geometry import Polyline, Vertex  # noqa: E402
 from ogr_core.geometry.regions import MaterialRegion  # noqa: E402
 from ogr_core.hydraulic import HydraulicProperties  # noqa: E402
-from ogr_fem2d.mesh import generate_mesh  # noqa: E402
-from ogr_fem2d.solvers import (  # noqa: E402
+from ogr_core.fem.generator import generate_mesh  # noqa: E402
+from ogr_core.fem import (  # noqa: E402
     BCType,
     SeepageBoundaryConditions,
+)
+from ogr_core.fem.seepage import (  # noqa: E402
     SeepageSolver,
     default_boundary_conditions,
 )
@@ -339,7 +341,7 @@ class TestBoundaryConditionTypes:
         assert "singular" in r.notes.get("error", "").lower()
 
     def test_empty_mesh_reported(self):
-        from ogr_fem2d.mesh import Mesh
+        from ogr_core.fem import Mesh
         s = SeepageSolver(Mesh(), {})
         r = s.solve(SeepageBoundaryConditions())
         assert not r.converged
@@ -393,7 +395,7 @@ class TestProjectIntegration:
     def test_solve_project_reports_singular_with_defaults(self):
         """The default BCs alone are a pure-Neumann problem; the driver
         must say so instead of returning a bogus field."""
-        from ogr_fem2d.solvers import solve_project_seepage
+        from ogr_core.fem.seepage import solve_project_seepage
         from test_slide_validation_ej1 import _ej1_project
         p = _ej1_project()
         for m in p.materials:
@@ -404,16 +406,18 @@ class TestProjectIntegration:
 
     def test_solve_project_with_head_bcs(self):
         """Reference slope with a head difference across the model."""
-        from ogr_fem2d.solvers import (
+        from ogr_core.fem import (
             BCType as BT,
             SeepageBoundaryConditions as SBC,
+        )
+        from ogr_core.fem.seepage import (
             solve_project_seepage,
         )
         from test_slide_validation_ej1 import _ej1_project
         p = _ej1_project()
         for m in p.materials:
             m.hydraulic = HydraulicProperties(ks=1e-6)
-        from ogr_fem2d.mesh import generate_mesh_for_project
+        from ogr_core.fem.generator import generate_mesh_for_project
         p.fem_mesh = generate_mesh_for_project(p, target_elements=400)
         mesh = p.fem_mesh
         xs = [mesh.nodes[i].x for i in mesh.boundary_node_ids()]

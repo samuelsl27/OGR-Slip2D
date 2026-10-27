@@ -29,7 +29,6 @@ _SOURCES = {
     "pyproject.toml": r'^version\s*=\s*"([^"]+)"',
     "ogr_core/__init__.py": r'^__version__\s*=\s*"([^"]+)"',
     "ogr_slip2d/__init__.py": r'^__version__\s*=\s*"([^"]+)"',
-    "ogr_fem2d/__init__.py": r'^__version__\s*=\s*"([^"]+)"',
     "ogr_gui/__init__.py": r'^__version__\s*=\s*"([^"]+)"',
     "ogr_cli/__init__.py": r'^__version__\s*=\s*"([^"]+)"',
     "ogr_gui/main_window.py": r'^\s*VERSION\s*=\s*"([^"]+)"',
@@ -38,6 +37,9 @@ _SOURCES = {
     "ogr_api/__init__.py": r'^__version__\s*=\s*"([^"]+)"',
     # v0.1.195 — and the MCP server package, the ninth site.
     "ogr_mcp/__init__.py": r'^__version__\s*=\s*"([^"]+)"',
+    # Spec 009 (F1) — eight: ``ogr_fem2d`` left, its mesh and seepage
+    # moved to ``ogr_core/fem`` and its name is the finite-element
+    # program's now.
 }
 
 

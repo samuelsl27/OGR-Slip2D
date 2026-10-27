@@ -86,10 +86,13 @@ def _error_18(hp):
     from ogr_core.materials import Material
     from ogr_core.materials.builtin_models import MohrCoulomb
     from ogr_core.project import Project
-    from ogr_fem2d.mesh import generate_mesh_for_project
-    from ogr_fem2d.solvers.seepage import (BCType, SeepageBoundaryConditions,
-                                           TransientSeepageSolver,
-                                           TransientStage)
+    from ogr_core.fem.generator import generate_mesh_for_project
+    from ogr_core.fem.seepage import (
+        BCType,
+        SeepageBoundaryConditions,
+        TransientSeepageSolver,
+        TransientStage,
+    )
     p = Project("18")
     ext = Polyline(vertices=[Vertex(x, y) for x, y in
                              [(0.0, 0.0), (BASE, 0.0), (P_ARR + CORONA, ALT),
@@ -236,7 +239,7 @@ def _dam():
 
 
 def _steady(hp):
-    from ogr_fem2d.solvers.seepage import UnsaturatedSeepageSolver
+    from ogr_core.fem.seepage import UnsaturatedSeepageSolver
     t, mesh, bcs = _dam()
     hp.ks = t.K_DAM
     r = UnsaturatedSeepageSolver(mesh, {"m": hp}, gamma_w=9.81,

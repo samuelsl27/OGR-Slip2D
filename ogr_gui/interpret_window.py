@@ -1480,7 +1480,7 @@ class InterpretWindow(QMainWindow):
         field = self._seepage_field()
         if getattr(self, "_act_gw_phreatic", None) is not None \
                 and self._act_gw_phreatic.isChecked() and field is not None:
-            from ogr_fem2d.solvers.seepage import free_surface_points
+            from ogr_core.fem.seepage import free_surface_points
             mesh, result = field
             surface = free_surface_points(mesh, result)
             if len(surface) >= 2:
@@ -1512,7 +1512,7 @@ class InterpretWindow(QMainWindow):
                         style=AnnotationStyle(colour="#c0182c")))
         if field is not None and getattr(self, "_act_gw_streams", None) \
                 is not None and self._act_gw_streams.isChecked():
-            from ogr_fem2d.solvers.streamlines import streamlines
+            from ogr_core.fem.streamlines import streamlines
             mesh, result = field
             for line in streamlines(mesh, result.velocity, count=12):
                 out.append(Annotation(

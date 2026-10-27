@@ -49,9 +49,8 @@ totals. Before opening a pull request, run the suite with no arguments.
 
 | Package | Contents |
 |---|---|
-| `ogr_core` | Geometry, materials, loads, supports, project model, hydraulics, statistics |
+| `ogr_core` | Geometry, materials, loads, supports, project model, hydraulics, statistics, and the finite-element mesh and seepage (`ogr_core/fem`) |
 | `ogr_slip2d` | Limit-equilibrium engine: 7 methods, 6 search algorithms, slicer, post-processing, back analysis |
-| `ogr_fem2d` | Finite-element seepage: mesh generation and solvers |
 | `ogr_gui` | PySide6 interface: canvas, dialogs, interpret windows, i18n |
 | `ogr_cli` | Command-line interface |
 | `ogr_data` | Placeholder for the shared materials database (planned for v0.2.0) |
@@ -154,8 +153,9 @@ that proves it **moves the number**.
 ## Versioning
 
 Semantic-ish: `0.MINOR.PATCH` while pre-1.0. Each release bumps the
-version in `pyproject.toml`, `ogr_gui/main_window.py`,
-`ogr_slip2d/__init__.py` and `ogr_fem2d/__init__.py`, and adds a changelog
+version in the eight places `tests/test_version_consistency_v176.py`
+lists (`pyproject.toml`, `ogr_gui/main_window.py` and the `__version__`
+of each package), and adds a changelog
 entry recording **what was found**, not only what was written — including
 wrong turns, because those are the parts worth remembering.
 

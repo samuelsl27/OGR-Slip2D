@@ -91,8 +91,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from ogr_core.hydraulic import HydraulicProperties, PermeabilityModel  # noqa: E402
-from ogr_fem2d.solvers import seepage  # noqa: E402
-from ogr_fem2d.solvers.seepage import (  # noqa: E402
+from ogr_core.fem import seepage  # noqa: E402
+from ogr_core.fem.seepage import (  # noqa: E402
     BCType,
     SeepageBoundaryConditions,
     SeepageSolver,
@@ -194,7 +194,7 @@ def _dam2():
         from ogr_core.materials import Material
         from ogr_core.materials.builtin_models import MohrCoulomb
         from ogr_core.project import Project
-        from ogr_fem2d.mesh import generate_mesh_for_project
+        from ogr_core.fem.generator import generate_mesh_for_project
         p = Project("toe-drain dam 2")
         ext = Polyline(vertices=[Vertex(x, y) for x, y in DAM2], closed=True)
         ext.ensure_ccw()
@@ -351,8 +351,13 @@ class TestTheRescueStartsWithoutTheFrozenNodes:
 def _starved_102(on):
     key = ("102", on)
     if key not in _CACHE:
-        from ogr_fem2d.solvers import (SIDE_LEFT, apply_reservoir,
-                                       default_boundary_conditions)
+        from ogr_core.fem.bc_targets import (
+            SIDE_LEFT,
+            apply_reservoir,
+        )
+        from ogr_core.fem.seepage import (
+            default_boundary_conditions,
+        )
         t = _module("test_transient_coupling_v1125")
         p, m = t._dam_project(elements=1200)
         mesh = p.fem_mesh

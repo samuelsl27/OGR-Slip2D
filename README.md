@@ -225,9 +225,8 @@ suite finishes, not a measurement.
 
 | Package | Contents |
 |---|---|
-| `ogr_core/` | Geometry, materials, loads, supports, project model, hydraulics, statistics, annotations, DXF |
+| `ogr_core/` | Geometry, materials, loads, supports, project model, hydraulics, statistics, annotations, DXF, and the finite-element meshing and seepage solvers |
 | `ogr_slip2d/` | Limit-equilibrium engine: methods, searches, slicer, focus, optimisation, back analysis |
-| `ogr_fem2d/` | Finite elements: meshing and seepage solvers |
 | `ogr_gui/` | PySide6 interface: canvas, dialogs, interpret windows, translations |
 | `ogr_cli/` | Command-line interface |
 | `ogr_api/` | Operations layer without Qt: validated edits, undo, background analyses, PNG render |

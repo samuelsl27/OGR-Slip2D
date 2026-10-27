@@ -1808,7 +1808,7 @@ class MainWindow(QMainWindow):
             tr("Approximate number of elements:"), 1000, 20, 200000, 100)
         if not ok:
             return
-        from ogr_fem2d.mesh import generate_mesh_for_project
+        from ogr_core.fem.generator import generate_mesh_for_project
         try:
             mesh = generate_mesh_for_project(self.project,
                                              target_elements=n)
@@ -3609,7 +3609,7 @@ class MainWindow(QMainWindow):
         """
         import copy
 
-        from ogr_fem2d.solvers import default_boundary_conditions
+        from ogr_core.fem.seepage import default_boundary_conditions
         bcs = getattr(self.project, "seepage_bcs", None)
         mesh = self.project.fem_mesh
         node_ids = {b.node_id for b in bcs.nodes} if bcs else set()

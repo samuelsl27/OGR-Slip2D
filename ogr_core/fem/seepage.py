@@ -54,7 +54,7 @@ from ogr_core.hydraulic.hydraulic_properties import HydraulicProperties
 from ogr_core.messages import as_nested
 from ogr_core.progress import checkpoint
 
-from .. import messages as M
+from . import messages as M
 # v0.1.342 (D337) -- the stored data and the identities that rebuild it are
 # the core's (``ogr_core.fem.seepage_data``); every name is re-exported here.
 from ogr_core.fem.seepage_data import (  # noqa: F401
@@ -94,7 +94,7 @@ class SeepageSolver:
                  default_props: Optional[HydraulicProperties] = None) -> None:
         """
         Args:
-            mesh: an ``ogr_fem2d.mesh.Mesh``.
+            mesh: an ``ogr_core.fem.Mesh``.
             materials: mapping ``material_id -> HydraulicProperties``.
                 Elements with an unmapped material use ``default_props``.
             gamma_w: unit weight of water (for pore pressure output).
@@ -431,7 +431,7 @@ def solve_project_seepage(project, bcs: Optional[
     """
     mesh = getattr(project, "fem_mesh", None)
     if mesh is None or mesh.element_count == 0:
-        from ogr_fem2d.mesh import generate_mesh_for_project
+        from ogr_core.fem.generator import generate_mesh_for_project
         mesh = generate_mesh_for_project(project, **mesh_kwargs)
         project.fem_mesh = mesh
     props: dict = {}

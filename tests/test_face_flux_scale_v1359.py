@@ -48,14 +48,18 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from ogr_fem2d.solvers import (  # noqa: E402
+from ogr_core.fem.bc_targets import (  # noqa: E402
     SIDE_LEFT,
     SIDE_RIGHT,
     apply_reservoir,
+)
+from ogr_core.fem.seepage import (  # noqa: E402
     default_boundary_conditions,
+)
+from ogr_core.fem import (  # noqa: E402
     seepage,
 )
-from ogr_fem2d.solvers.seepage import (  # noqa: E402
+from ogr_core.fem.seepage import (  # noqa: E402
     BCType,
     SeepageSolver,
     UnsaturatedSeepageSolver,

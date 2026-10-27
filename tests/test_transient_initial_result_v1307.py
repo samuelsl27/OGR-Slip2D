@@ -62,8 +62,8 @@ def _dam(h_left):
     from ogr_core.materials.builtin_models import MohrCoulomb
     from ogr_core.project import Project
     from ogr_core.project.settings import GroundwaterMethod
-    from ogr_fem2d.mesh import generate_mesh_for_project
-    from ogr_fem2d.solvers.seepage import BCType, SeepageBoundaryConditions
+    from ogr_core.fem.generator import generate_mesh_for_project
+    from ogr_core.fem.seepage import BCType, SeepageBoundaryConditions
     p = Project("D295")
     ext = Polyline(vertices=[Vertex(0, 0), Vertex(L, 0), Vertex(L, H),
                              Vertex(0, H)], closed=True)
@@ -134,7 +134,7 @@ class TestTheInitialStateIsTheSteadyAnalysis:
 
     def test_a_new_mesh_drops_it_and_says_so(self):
         from ogr_core.project.rules import set_fem_mesh
-        from ogr_fem2d.mesh import generate_mesh_for_project
+        from ogr_core.fem.generator import generate_mesh_for_project
         from ogr_slip2d.transient_stability import solve_project_groundwater
         p = _drawdown()
         solve_project_groundwater(p)

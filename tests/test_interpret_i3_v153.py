@@ -272,9 +272,13 @@ class TestGroundwaterEntries:
         from test_slide_validation_ej1 import _ej1_project
 
         from ogr_core.hydraulic import HydraulicProperties
-        from ogr_fem2d.mesh import generate_mesh_for_project
-        from ogr_fem2d.solvers import (
-            BCType, UnsaturatedSeepageSolver, default_boundary_conditions,
+        from ogr_core.fem.generator import generate_mesh_for_project
+        from ogr_core.fem import (
+            BCType,
+        )
+        from ogr_core.fem.seepage import (
+            UnsaturatedSeepageSolver,
+            default_boundary_conditions,
         )
         p = _ej1_project()
         for m in p.materials:

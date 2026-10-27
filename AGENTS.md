@@ -66,9 +66,8 @@ de una versión, la suite entera y sin argumentos.
 
 | Ruta | Contenido |
 |---|---|
-| `ogr_core/` | Geometría, materiales, cargas, soportes, proyecto, hidráulica, estadística, anotaciones, DXF |
+| `ogr_core/` | Geometría, materiales, cargas, soportes, proyecto, hidráulica, estadística, anotaciones, DXF, y la malla y la filtración por elementos finitos (`ogr_core/fem/`) |
 | `ogr_slip2d/` | Motor LEM: 9 métodos, 7 búsquedas, rebanado, foco, optimización, retroanálisis |
-| `ogr_fem2d/` | Elementos finitos: mallado y solvers de filtración |
 | `ogr_gui/` | Interfaz PySide6: lienzo, ~30 diálogos, ventanas de interpretación, i18n |
 | `ogr_cli/` | Interfaz de línea de comandos |
 | `ogr_api/` | Capa de operaciones sin Qt (spec 008): *handles*, validación, deshacer, trabajos en subproceso, render PNG, `python_exec`. La usan el servidor MCP y un script; **no** importa PySide6, `ogr_gui` ni `mcp` |
@@ -77,8 +76,11 @@ de una versión, la suite entera y sin argumentos.
 | `docs/` | Planes, auditorías, changelog |
 | `spec/` | Especificaciones SDD (constitución y features) |
 
-Capas en un solo sentido: `ogr_core → ogr_slip2d / ogr_fem2d → ogr_api →
-{ogr_gui, ogr_cli, ogr_mcp}`. Una regla que hoy solo impone la interfaz se
+Capas en un solo sentido: `ogr_core → ogr_slip2d → ogr_api → {ogr_gui,
+ogr_cli, ogr_mcp}`. El núcleo contiene la malla y el solver de filtración
+(`ogr_core/fem/`, spec 009), porque los usan los dos programas de la suite;
+`ogr_fem2d` es el nombre del programa de elementos finitos, y el núcleo no
+lo importa nunca. Una regla que hoy solo impone la interfaz se
 **mueve** a `ogr_core/project/rules.py` y la interfaz pasa a preguntarla;
 copiarla es cómo acaban diciendo cosas distintas.
 
@@ -190,12 +192,13 @@ opción, añade también el test que demuestra que **mueve el número**.
   resultado posible aquí, porque parece que funciona.
 - **Sé escéptico con lo que te pido.** Si algo huele mal, dilo.
 - **Al terminar, lista qué probaste y qué falta por probar.**
-- Cada versión sube el número en **nueve** sitios y añade un changelog en
+- Cada versión sube el número en **ocho** sitios y añade un changelog en
   `docs/changelog/`: `pyproject.toml`, `ogr_gui/main_window.py`
   (`MainWindow.VERSION`) y el `__version__` de `ogr_core`, `ogr_slip2d`,
-  `ogr_fem2d`, `ogr_gui`, `ogr_cli`, `ogr_api` (desde v0.1.194) y
-  `ogr_mcp` (desde v0.1.195). Esta lista decía cuatro hasta v0.1.76, y los
-  tres que omitía llevaban congelados en 0.1.59 desde v0.1.59. Hay un test
+  `ogr_gui`, `ogr_cli`, `ogr_api` (desde v0.1.194) y `ogr_mcp` (desde
+  v0.1.195). Fueron nueve hasta la spec 009, que sacó `ogr_fem2d`. Esta
+  lista decía cuatro hasta v0.1.76, y los tres que omitía llevaban
+  congelados en 0.1.59 desde v0.1.59. Hay un test
   que falla si discrepan (`tests/test_version_consistency_v176.py`, que es
   la lista que manda), porque una lista en un documento solo vale lo que
   valga la atención de quien la lee.

@@ -47,8 +47,8 @@ from ogr_core.hydraulic import (  # noqa: E402
     PermeabilityModel,
     SimpleSoilType,
 )
-from ogr_fem2d.mesh.mesh import Element, Mesh, Node  # noqa: E402
-from ogr_fem2d.solvers.seepage import (  # noqa: E402
+from ogr_core.fem.mesh import Element, Mesh, Node  # noqa: E402
+from ogr_core.fem.seepage import (  # noqa: E402
     BCType,
     SeepageBoundaryConditions,
     UnsaturatedSeepageSolver,

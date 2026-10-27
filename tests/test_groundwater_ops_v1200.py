@@ -91,8 +91,8 @@ def _kr_via_solver(props, P, gamma_w=9.81):
     """k_r the solver uses for an element whose pressure head is P."""
     from ogr_core.geometry import Polyline, Vertex
     from ogr_core.geometry.regions import MaterialRegion
-    from ogr_fem2d.mesh import generate_mesh
-    from ogr_fem2d.solvers import UnsaturatedSeepageSolver
+    from ogr_core.fem.generator import generate_mesh
+    from ogr_core.fem.seepage import UnsaturatedSeepageSolver
 
     poly = Polyline(vertices=[Vertex(0, 0), Vertex(2, 0), Vertex(2, 1),
                               Vertex(0, 1)], closed=True)
@@ -911,7 +911,7 @@ class TestTheInterface:
             return
         from ogr_core.project import Project
         from ogr_gui.main_window import MainWindow
-        from ogr_fem2d.mesh import generate_mesh_for_project
+        from ogr_core.fem.generator import generate_mesh_for_project
         from ogr_api import Workspace, call
         ws = Workspace()
         try:
@@ -942,7 +942,7 @@ class TestTheInterface:
         from PySide6.QtWidgets import QMessageBox
 
         from ogr_core.project.settings import GroundwaterSettings
-        from ogr_fem2d.solvers import BCType, SeepageBoundaryConditions
+        from ogr_core.fem import BCType, SeepageBoundaryConditions
         from ogr_gui.dialogs.transient_stages_dialog import (
             TransientStagesDialog)
         bcs = SeepageBoundaryConditions()

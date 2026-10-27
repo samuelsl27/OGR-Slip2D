@@ -226,8 +226,8 @@ def mesh_generate(ws, project_id: Optional[str] = None,
     """Generate the finite-element mesh; drops the boundary conditions and
     fields of the previous one."""
     from ogr_core.project.rules import set_fem_mesh
-    from ogr_fem2d.mesh import generate_mesh_for_project
-    from ogr_fem2d.solvers.bc_targets import boundary_sides
+    from ogr_core.fem.generator import generate_mesh_for_project
+    from ogr_core.fem.bc_targets import boundary_sides
 
     if target_elements is not None and target_size is not None:
         raise Conflict("Give target_elements or target_size, not both: the "
@@ -299,7 +299,7 @@ def mesh_reset(ws, project_id: Optional[str] = None) -> dict:
 # ----------------------------------------------------------------------
 def bc_summary(bcs, mesh) -> dict:
     """How many nodes carry each condition, per side of the model."""
-    from ogr_fem2d.solvers.bc_targets import boundary_sides
+    from ogr_core.fem.bc_targets import boundary_sides
 
     side_of = {nid: side for side, ids in boundary_sides(mesh).items()
                for nid in ids}
@@ -318,12 +318,16 @@ def bc_summary(bcs, mesh) -> dict:
 def _assign(bcs, mesh, spec: dict, where: str) -> tuple[int, list]:
     """Apply one assignment ``spec`` (the arguments of ``seepage_bc_set``)
     to ``bcs``; returns how many nodes or edges it set, and notes."""
-    from ogr_fem2d.solvers import BCType
-    from ogr_fem2d.solvers.bc_targets import (SIDES, allows_seepage_face,
-                                              apply_reservoir,
-                                              assign_to_nodes,
-                                              boundary_sides, needs_value,
-                                              nodes_along)
+    from ogr_core.fem import BCType
+    from ogr_core.fem.bc_targets import (
+        SIDES,
+        allows_seepage_face,
+        apply_reservoir,
+        assign_to_nodes,
+        boundary_sides,
+        needs_value,
+        nodes_along,
+    )
 
     if not isinstance(spec, dict):
         raise InvalidArgument(f"{where} must be an object.")
@@ -415,8 +419,8 @@ def _assign(bcs, mesh, spec: dict, where: str) -> tuple[int, list]:
 
 def _editable_bcs(project, mesh, *, for_edit: bool):
     """A copy of the model's conditions, or the defaults when it has none."""
-    from ogr_fem2d.solvers import default_boundary_conditions
-    from ogr_fem2d.solvers.bc_targets import fits_mesh
+    from ogr_core.fem.seepage import default_boundary_conditions
+    from ogr_core.fem.bc_targets import fits_mesh
 
     bcs = project.seepage_bcs
     if bcs is None:
@@ -461,7 +465,7 @@ def seepage_bc_set(ws, project_id: Optional[str] = None,
 def seepage_bc_clear(ws, project_id: Optional[str] = None) -> dict:
     """Restore the default boundary conditions: unknown (seepage face) on
     the ground surface, no flow on the other sides."""
-    from ogr_fem2d.solvers import default_boundary_conditions
+    from ogr_core.fem.seepage import default_boundary_conditions
 
     def edit(project):
         mesh = _need_mesh(project)
@@ -480,9 +484,13 @@ def _bcs_from_spec(project, mesh, spec, where: str) -> dict:
     """A condition set, as stored in a stage, from an agent's ``spec``:
     'current', {'base': 'current'|'defaults', 'assign': [...]}, or the
     stored form {'nodes': [...], 'segments': [...]}."""
-    from ogr_fem2d.solvers import (SeepageBoundaryConditions,
-                                   default_boundary_conditions)
-    from ogr_fem2d.solvers.bc_targets import fits_mesh
+    from ogr_core.fem import (
+        SeepageBoundaryConditions,
+    )
+    from ogr_core.fem.seepage import (
+        default_boundary_conditions,
+    )
+    from ogr_core.fem.bc_targets import fits_mesh
 
     if mesh is None:
         raise NotConfigured(f"{where}: conditions need a mesh.",
@@ -738,8 +746,8 @@ def groundwater_run(ws, project_id: Optional[str] = None,
                     wait_seconds: float = 30.0) -> dict:
     """Solve the groundwater (steady, or the transient stages with their
     factors of safety) as a background job; the field is written back."""
-    from ogr_fem2d.solvers.bc_targets import fits_mesh
-    from ogr_fem2d.solvers import SeepageBoundaryConditions
+    from ogr_core.fem.bc_targets import fits_mesh
+    from ogr_core.fem import SeepageBoundaryConditions
 
     wait = coerce_value(wait_seconds, float, "wait_seconds")
     if wait < 0:
@@ -942,7 +950,7 @@ def groundwater_results(ws, project_id: Optional[str] = None,
     flow through a section, the free surface, the stages, or every node.
     ``stage`` is a transient stage (0-based) or ``"initial"``, the state
     the transient started from (v0.1.307, D295)."""
-    from ogr_fem2d.solvers import UnsaturatedSeepageSolver
+    from ogr_core.fem.seepage import UnsaturatedSeepageSolver
     from ogr_slip2d.transient_stability import groundwater_query_solver
 
     if view not in _RESULT_VIEWS:

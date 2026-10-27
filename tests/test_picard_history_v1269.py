@@ -52,7 +52,7 @@ except ImportError:  # pragma: no cover
     _QT = False
 
 from ogr_core.hydraulic import HydraulicProperties, PermeabilityModel  # noqa: E402
-from ogr_fem2d.solvers.seepage import (  # noqa: E402
+from ogr_core.fem.seepage import (  # noqa: E402
     SeepageResult,
     TransientSeepageSolver,
     TransientStage,
