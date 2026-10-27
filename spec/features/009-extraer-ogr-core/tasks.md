@@ -64,26 +64,29 @@ tarea: es un deseo.
 - [x] 2.1 Carpeta `C:\Samuel\OpenGeoRock_Core\OGR-Core` y repositorio
       público `samuelsl27/OGR-Core`, vacío (2026-10-27; creado con permiso
       del propietario).
-- [ ] 2.2 Copiar `ogr_core/` del commit de F1 y citar ese commit en el
-      primer commit (P5).
-- [ ] 2.3 `pyproject.toml` con las dependencias del censo; versión 0.1.0
+- [x] 2.2 Copiar `ogr_core/` del commit de F1 y citar ese commit en el
+      primer commit (P5). Copiado de `2d68c29`; primer commit de OGR-Core
+      `ae1c83e` (local, sin subir).
+- [x] 2.3 `pyproject.toml` con las dependencias del censo; versión 0.1.0
       (P2), y el changelog 0.1.0 dice de qué commit de Slip2D sale.
 - [x] 2.4 Runner compartido (P4) con gancho opcional para `gc_guard`; tests
       del runner (selección, salida 2 con patrón vacío, procedencia), y uno
       nuevo para los paquetes compartidos y la versión fijada.
-- [ ] 2.5 Mover los 34 tests de `censo.md` §3 sin tocar valores ni tolerancias.
-- [ ] 2.6 Tests propios del núcleo: licencia, nombres de productos, suelo de
-      Python, capas (censo estático y en tiempo de ejecución), versión.
-      Cada censo afirma que encontró algo. **Hechos**: licencia, nombres de
-      productos, suelo de Python, acciones de CI y versión (en
-      `test_runner_shared_v10`). **Faltan** los de capas, que necesitan el
-      código.
+- [x] 2.5 Mover los 34 tests de `censo.md` §3 sin tocar valores ni
+      tolerancias (copiados byte a byte de `2d68c29`). En F3 se borran de
+      Slip2D.
+- [x] 2.6 Tests propios del núcleo: licencia, nombres de productos, suelo de
+      Python, acciones de CI, capas (censo estático y en tiempo de
+      ejecución, con un modelo construido solo con el núcleo) y versión.
+      Cada censo afirma que encontró algo.
 - [ ] 2.7 En un venv limpio: `pip install -e .` sin PySide6, y suite
-      completa en verde.
-- [ ] 2.8 (**hecho salvo el changelog**) `LICENSE`, `CLA.md`, `CONTRIBUTORS.md`, README, `AGENTS.md`,
+      completa en verde. **Suite completa en verde: 499 de 499.** El venv
+      limpio lo hará la CI al subir (instalar dependencias aquí exige el
+      OK del propietario).
+- [x] 2.8 `LICENSE`, `CLA.md`, `CONTRIBUTORS.md`, README, `AGENTS.md`,
       `CLAUDE.md`, `CONTRIBUTING.md`, CI (acciones en versiones mayores
       comprobadas, como en `test_ci_actions_v181`), changelog.
-- [ ] 2.9 Etiqueta `v0.1.0` (P2, P3).
+- [ ] 2.9 Etiqueta `v0.1.0` (P2, P3): al subir, con el OK del propietario.
 
 ## F3 · Slip2D depende de `ogr-core`
 
