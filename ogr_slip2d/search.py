@@ -2276,7 +2276,21 @@ def _parallel_grid_run(search, project, centres, workers):
                 # cancelled: the queued ones are dropped, and only the
                 # batches already running — one per worker, a small slice of
                 # the grid each — are waited for.
-                pool.shutdown(wait=False, cancel_futures=True)
+                #
+                # v0.1.372 (D368) — dropped HERE, one future at a time.
+                # ``shutdown(wait=False, cancel_futures=True)`` only left a
+                # flag for the pool's manager thread, and the ``with`` exit
+                # that follows calls ``shutdown(wait=True)``, which sets that
+                # flag back to False and, the thread already forgotten, waits
+                # for nothing (CPython's ``ProcessPoolExecutor.shutdown``).
+                # When the exit won the race, the workers ran the rest of the
+                # grid in the background: measured, three times out of three
+                # with the machine loaded. ``cancel()`` refuses only the
+                # batches already handed to a worker, and those are the ones
+                # waited for.
+                for f in futures:
+                    f.cancel()
+                pool.shutdown(wait=True, cancel_futures=True)
                 raise
     except Exception as exc:  # noqa: BLE001 - see the docstring
         if cb_error is None:

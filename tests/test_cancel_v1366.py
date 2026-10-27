@@ -390,8 +390,9 @@ class TestEveryCalculationStops:
 class TestTheParallelGridDropsItsQueue:
 
     def test_the_queue_is_cancelled_and_no_worker_is_left(self):
+        import multiprocessing
+
         import pytest
-        import psutil
         import test_window_grid_parallel_v1262 as gp
         from concurrent.futures import ProcessPoolExecutor
 
@@ -414,12 +415,18 @@ class TestTheParallelGridDropsItsQueue:
         with _swap(ProcessPoolExecutor, "shutdown", spy):
             with pytest.raises(Stop):
                 search.run(p)
-        assert (False, True) in calls, calls
-        me = psutil.Process()
+        # v0.1.372 (D368) — the cancel waits for the batches running: a
+        # shutdown that did not wait left the queue to a race it could lose
+        # (test_grid_cancel_v1372.py)
+        assert (True, True) in calls, calls
+        # v0.1.372 — the workers as the standard library sees them: psutil,
+        # used here until then, is not a requirement of the project, and CI
+        # failed on the import (test_test_imports_v1372.py)
         end = time.time() + 30
-        while me.children() and time.time() < end:
+        while multiprocessing.active_children() and time.time() < end:
             time.sleep(0.2)
-        assert not me.children(), [c.name() for c in me.children()]
+        left = multiprocessing.active_children()
+        assert not left, [c.name for c in left]
 
 
 # ======================================================================
