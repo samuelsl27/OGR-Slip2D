@@ -18,6 +18,7 @@ the enum or the identifier as its data.
 """
 from __future__ import annotations
 
+from ogr_core.annotations.annotation import AnnotationKind
 from ogr_core.geometry import BoundaryType
 from ogr_core.loads.loads import LoadDistribution, LoadOrientation
 from ogr_core.materials.material import PorePressureType
@@ -113,6 +114,26 @@ PERMEABILITY_UNIT = {
     PermeabilityUnit.MM_HOUR: "mm/hour",
 }
 
+#: v0.1.370 (D344) — the annotation kinds, as nouns: the status bar said
+#: "Añadido line" with the enum's value in it. The menu's actions are verbs
+#: ("Dimension Length" is «Acotar longitud»), so the two dimension kinds
+#: have their own names here.
+ANNOTATION_KIND = {
+    AnnotationKind.LINE: "Line",
+    AnnotationKind.ARROW: "Arrow",
+    AnnotationKind.POLYLINE: "Polyline",
+    AnnotationKind.POLYGON: "Polygon",
+    AnnotationKind.RECTANGLE: "Rectangle",
+    AnnotationKind.CIRCLE: "Circle",
+    AnnotationKind.TEXT: "Text",
+    AnnotationKind.DIMENSION_LENGTH: "Length dimension",
+    AnnotationKind.DIMENSION_ANGLE: "Angle dimension",
+    AnnotationKind.DIMENSION_X: "Dimension X",
+    AnnotationKind.DIMENSION_Y: "Dimension Y",
+    AnnotationKind.AXES: "Axes",
+    AnnotationKind.IMAGE: "Image",
+}
+
 
 def _of(table, key) -> str:
     """``tr`` of the label of ``key``; an identifier with no label (a file
@@ -127,6 +148,11 @@ def method_name(method_id) -> str:
     """The name of a limit-equilibrium method, from its identifier (a
     ``LEMMethod`` or its value)."""
     return _of(METHOD_NAMES, getattr(method_id, "value", method_id))
+
+
+def annotation_kind_label(kind) -> str:
+    """The name of an annotation kind (an ``AnnotationKind``), v0.1.370."""
+    return _of(ANNOTATION_KIND, kind)
 
 
 def pore_pressure_label(kind) -> str:

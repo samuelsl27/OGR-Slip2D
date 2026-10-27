@@ -80,7 +80,10 @@ class AnnotationsDialog(QDialog):
         for ann in self.layer.ordered():
             r = self.table.rowCount()
             self.table.insertRow(r)
-            cells = [ann.kind.value, str(len(ann.points)), ann.text,
+            # v0.1.370 (D344) -- the kind by its name, not the enum's value
+            from ogr_gui.labels import annotation_kind_label
+            cells = [annotation_kind_label(ann.kind), str(len(ann.points)),
+                     ann.text,
                      str(ann.z_order),
                      tr("yes") if ann.style.visible else tr("no")]
             for c, text in enumerate(cells):

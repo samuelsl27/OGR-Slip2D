@@ -2499,7 +2499,7 @@ class InterpretWindow(QMainWindow):
         from PySide6.QtWidgets import QFileDialog
         path, _f = QFileDialog.getSaveFileName(
             self, tr("Export All Nodal Values..."), "",
-            "CSV (*.csv);;All files (*)")
+            tr("CSV (*.csv);;All files (*)"))
         if not path:
             return
         if not path.lower().endswith(".csv"):
@@ -2576,7 +2576,7 @@ class InterpretWindow(QMainWindow):
         from PySide6.QtWidgets import QFileDialog
         path, _f = QFileDialog.getSaveFileName(
             self, tr("Export Statistics Data..."), "",
-            "CSV (*.csv);;All files (*)")
+            tr("CSV (*.csv);;All files (*)"))
         if not path:
             return
         if not path.lower().endswith(".csv"):
@@ -2775,7 +2775,9 @@ class InterpretWindow(QMainWindow):
 
     def _export_image(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
-            self, "Export Image", "", "PNG (*.png);;JPEG (*.jpg)"
+            # v0.1.370 (D344) -- the title through tr(): the census of
+            # untranslated text did not see QFileDialog
+            self, tr("Export Image"), "", "PNG (*.png);;JPEG (*.jpg)"
         )
         if not path:
             return
@@ -2816,7 +2818,7 @@ class InterpretWindow(QMainWindow):
             self._info(tr("No results to export."))
             return
         path, _ = QFileDialog.getSaveFileName(
-            self, "Export Raw Data", "", "CSV (*.csv)"
+            self, tr("Export Raw Data"), "", "CSV (*.csv)"
         )
         if not path:
             return
@@ -2890,7 +2892,8 @@ class InterpretWindow(QMainWindow):
 
         def do_save():
             path, _ = QFileDialog.getSaveFileName(
-                dlg, tr("Export Raw Data"), "", "Text (*.txt);;CSV (*.csv)")
+                dlg, tr("Export Raw Data"), "",
+                tr("Text (*.txt);;CSV (*.csv)"))
             if not path:
                 return
             body = text.replace("\t", ",") if path.lower().endswith(".csv") \

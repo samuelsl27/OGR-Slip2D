@@ -139,8 +139,9 @@ class WaterPressureGridDialog(QDialog):
     # ------------------------------------------------------------------
     def _import_csv(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, "Import grid points", "",
-            "CSV / text files (*.csv *.txt *.dat);;All files (*)")
+            # v0.1.370 (D344) -- the title and the filter through tr()
+            self, tr("Import grid points"), "",
+            tr("CSV / text files (*.csv *.txt *.dat);;All files (*)"))
         if not path:
             return
         pts = parse_grid_csv_text(open(path, encoding="utf-8",

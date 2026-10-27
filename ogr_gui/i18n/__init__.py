@@ -349,7 +349,8 @@ _DICTS: dict[str, dict[str, str]] = {
         'Add Axes': 'Añadir ejes',
         'Add Image': 'Añadir imagen',
         'Add Image...': 'Añadir imagen...',
-        'Added %s': 'Añadido %s',
+        # v0.1.370 (D344): con el nombre del tipo de anotación, de cualquier género
+        'Added %s': 'Anotación añadida: %s',
         'Annotation:': 'Anotación:',
         'Annotations': 'Anotaciones',
         'Annotations are drawn on the model but take no part in the analysis. Use Convert Tool to Boundary to turn one into geometry.': 'Las anotaciones se dibujan sobre el modelo pero no intervienen en el análisis. Usa Convertir herramienta en contorno para transformar una en geometría.',
@@ -6903,6 +6904,48 @@ _DICTS: dict[str, dict[str, str]] = {
             "Optimizando la superficie crítica...",
         "{0} cancelled: nothing was changed.":
             "Se ha cancelado «{0}»: no se ha cambiado nada.",
+        # --- v0.1.370 (D344) · las fórmulas de Definir materiales que llevan
+        # palabras (los símbolos, iguales), y textos fijos que seguían en inglés.
+        # Las fórmulas solo de símbolos no llevan entrada: tr() las devuelve tal cual.
+        'c and tan φ vary linearly with angle to bedding':
+            'c y tan φ varían linealmente con el ángulo respecto a la estratificación',
+        'τ = f(σ′ₙ)  (piecewise-linear table)':
+            'τ = f(σ′ₙ)  (tabla lineal a tramos)',
+        'τ = c(σ′ₙ) + σ′ₙ · tan φ(σ′ₙ)  (c, φ interpolated)':
+            'τ = c(σ′ₙ) + σ′ₙ · tan φ(σ′ₙ)  (c, φ interpolados)',
+        'τ = f(σ′ₙ)  (step function table)':
+            'τ = f(σ′ₙ)  (tabla de función escalonada)',
+        'cu(x, y), or c(x, y) + σ′ₙ · tan φ(x, y), interpolated':
+            'cu(x, y), o c(x, y) + σ′ₙ · tan φ(x, y), interpolados',
+        'τ = A + σ′_v · S · OCR^m  (≥ su_min)':
+            'τ = A + σ′_v · S · OCR^m  (≥ su_mín)',
+        '(c, φ) per range of base angle, −90° to +90°':
+            '(c, φ) por intervalo del ángulo de base, de −90° a +90°',
+        'material per range of base angle, −90° to +90°':
+            'material por intervalo del ángulo de base, de −90° a +90°',
+        'τ = (1 − t)·τ_bedding + t·τ_rock mass, t linear in the angle to bedding':
+            'τ = (1 − t)·τ_estratificación + t·τ_macizo rocoso, t lineal en el ángulo respecto a la estratificación',
+        'τ = c_top + Δc·(distance to slope)':
+            'τ = c_top + Δc·(distancia al talud)',
+        'SF': 'FS',
+        'probability of failure': 'probabilidad de rotura',
+        'Probability of failure (%)': 'Probabilidad de rotura (%)',
+        'Length dimension': 'Cota de longitud',
+        'Angle dimension': 'Cota angular',
+        'Axes': 'Ejes',
+        'Image': 'Imagen',
+        '{0}_report.pdf': '{0}_informe.pdf',
+        'analysis': 'análisis',
+        'PDF Files (*.pdf)': 'Archivos PDF (*.pdf)',
+        'OGR Project (*.ogr *.json);;All Files (*)': 'Proyecto OGR (*.ogr *.json);;Todos los archivos (*)',
+        'OGR Project (*.ogr);;All Files (*)': 'Proyecto OGR (*.ogr);;Todos los archivos (*)',
+        'DXF drawings (*.dxf);;All files (*)': 'Dibujos DXF (*.dxf);;Todos los archivos (*)',
+        'OGR projects (*.ogr);;All files (*)': 'Proyectos OGR (*.ogr);;Todos los archivos (*)',
+        'PNG (*.png);;All files (*)': 'PNG (*.png);;Todos los archivos (*)',
+        'CSV (*.csv);;All files (*)': 'CSV (*.csv);;Todos los archivos (*)',
+        'Text (*.txt);;CSV (*.csv)': 'Texto (*.txt);;CSV (*.csv)',
+        'Import grid points': 'Importar puntos de la rejilla',
+        'CSV / text files (*.csv *.txt *.dat);;All files (*)': 'CSV / archivos de texto (*.csv *.txt *.dat);;Todos los archivos (*)',
 
         # --- v0.1.160 · cadenas que dejan de nombrar al
         # producto de referencia, y los nombres de paleta, que se

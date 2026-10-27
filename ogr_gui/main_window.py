@@ -278,7 +278,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.369"
+    VERSION = "0.1.370"
 
     def __init__(self) -> None:
         super().__init__()
@@ -1196,7 +1196,7 @@ class MainWindow(QMainWindow):
     def act_open(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self, tr("Open Project..."), "",
-            "OGR Project (*.ogr *.json);;All Files (*)",
+            tr("OGR Project (*.ogr *.json);;All Files (*)"),
         )
         if not path:
             return
@@ -1227,7 +1227,8 @@ class MainWindow(QMainWindow):
 
     def act_save_as(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
-            self, tr("Save As..."), "", "OGR Project (*.ogr);;All Files (*)",
+            self, tr("Save As..."), "",
+            tr("OGR Project (*.ogr);;All Files (*)"),
         )
         if not path:
             return
@@ -1251,7 +1252,7 @@ class MainWindow(QMainWindow):
 
         path, _flt = QFileDialog.getOpenFileName(
             self, tr("Import DXF..."), "",
-            "DXF drawings (*.dxf);;All files (*)")
+            tr("DXF drawings (*.dxf);;All files (*)"))
         if not path:
             return
         dlg = DxfImportDialog(path, self)
@@ -1317,7 +1318,7 @@ class MainWindow(QMainWindow):
             return
         path, _flt = QFileDialog.getSaveFileName(
             self, tr("Export DXF..."), "",
-            "DXF drawings (*.dxf);;All files (*)")
+            tr("DXF drawings (*.dxf);;All files (*)"))
         if not path:
             return
         if not path.lower().endswith(".dxf"):
@@ -1354,8 +1355,10 @@ class MainWindow(QMainWindow):
         options = dlg.options
         path, _ = QFileDialog.getSaveFileName(
             self, tr("Generate Report"),
-            f"{self.project.name or 'analysis'}_report.pdf",
-            "PDF Files (*.pdf)")
+            # v0.1.370 (D344) -- the proposed name and the filters in the
+            # interface's language ("Demo slope_report.pdf" in Spanish)
+            tr("{0}_report.pdf").format(self.project.name or tr("analysis")),
+            tr("PDF Files (*.pdf)"))
         if not path:
             return
         if not path.lower().endswith(".pdf"):
@@ -2452,7 +2455,10 @@ class MainWindow(QMainWindow):
         self.project.is_dirty = True
         self.canvas.refresh_scene()
         value = ann.measured_value()
-        msg = tr("Added %s") % kind.value
+        # v0.1.370 (D344) -- the kind by its name: the enum's value made
+        # "Añadido line"
+        from .labels import annotation_kind_label
+        msg = tr("Added %s") % annotation_kind_label(kind)
         if value is not None:
             msg += tr("   |   measured: %.4f") % value
         self.statusBar().showMessage(msg, 6000)
@@ -2526,8 +2532,9 @@ class MainWindow(QMainWindow):
                 "axes annotate the model rather than define it; draw a "
                 "line, polyline, polygon, rectangle or circle first."))
             return
+        from .labels import annotation_kind_label
         labels = [tr("{0}. {1} ({2} pts)").format(
-                      i + 1, a.kind.value, len(a.outline()))
+                      i + 1, annotation_kind_label(a.kind), len(a.outline()))
                   for i, a in enumerate(candidates)]
         choice, ok = QInputDialog.getItem(
             self, tr("Convert Tool to Boundary"), tr("Annotation:"),
@@ -3250,7 +3257,7 @@ class MainWindow(QMainWindow):
         from ogr_core.project import Project
         path, _f = QFileDialog.getOpenFileName(
             self, tr("Import Properties..."), "",
-            "OGR projects (*.ogr);;All files (*)")
+            tr("OGR projects (*.ogr);;All files (*)"))
         if not path:
             return
         try:
@@ -3287,7 +3294,7 @@ class MainWindow(QMainWindow):
 
         path, _f = QFileDialog.getSaveFileName(
             self, tr("Export Image..."), "",
-            "PNG (*.png);;All files (*)")
+            tr("PNG (*.png);;All files (*)"))
         if not path:
             return
         if not path.lower().endswith(".png"):

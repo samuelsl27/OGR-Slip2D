@@ -2199,7 +2199,13 @@ class MaterialPropertiesDialog(QDialog):
         self.param_panel.set_model(cls)
         self._show_strength_problem("")
         # Update formula label
-        self.lbl_strength_formula.setText(self._FORMULA_TEXT.get(mid, ""))
+        # v0.1.370 (D344) — translated when it is WRITTEN: ten of these
+        # carry words ("piecewise-linear table", "per range of base
+        # angle"…), and a class dictionary is not a tr() call, so neither
+        # the key census nor the budget of unwrapped strings saw them. The
+        # symbols are the same in both languages.
+        formula = self._FORMULA_TEXT.get(mid, "")
+        self.lbl_strength_formula.setText(tr(formula) if formula else "")
         # v0.1.57 — the GSI calculator only makes sense for the
         # Generalised Hoek-Brown criterion, whose mb, s and a are derived
         # quantities rather than things to be typed from memory.

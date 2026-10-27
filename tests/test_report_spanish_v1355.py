@@ -265,7 +265,10 @@ _AGPL = "OpenGeoRock Suite  ·  AGPL-3.0-or-later  ·  "
 class TestWithoutTranslateItIsTheOldReport:
 
     def test_text_for_text(self):
-        expected = [(k, t.replace(_GPL, _AGPL)) for k, t in _V1354]
+        # v0.1.370 (D344): and "[deg]" is "[°]", in both languages, as the
+        # slice table writes φ -- a deliberate change of the English
+        expected = [(k, t.replace(_GPL, _AGPL).replace(
+            "Friction Angle [deg]", "Friction Angle [°]")) for k, t in _V1354]
         said = _capture()
         assert said == expected, [x for x in said if x not in expected]
 

@@ -375,8 +375,11 @@ class StatisticsWindow(QMainWindow):
         ax.grid(True, alpha=0.3)
         ax2 = ax.twinx()
         ax2.plot([c[0] for c in conv], [100.0 * c[2] for c in conv],
-                 color="crimson", ls="--", label="probability of failure")
-        ax2.set_ylabel("Probability of failure (%)")
+                 color="crimson", ls="--",
+                 # v0.1.370 (D344) -- the legend and the right axis, which
+                 # the budget of unwrapped strings never saw (matplotlib)
+                 label=tr("probability of failure"))
+        ax2.set_ylabel(tr("Probability of failure (%)"))
         lines = ax.get_lines() + ax2.get_lines()
         ax.legend(lines, [ln.get_label() for ln in lines], fontsize=8)
         self._show(fig)

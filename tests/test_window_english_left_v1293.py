@@ -119,7 +119,7 @@ _DATA = {
     "OGR Slip2D v{} — Untitled",
     "OGR Slip2D v{} — Demo slope",
     "OGR Slip2D v{} — {}",
-    "{}_report.pdf",
+    # v0.1.370 (D344): the report's file name goes through tr() now
 }
 
 

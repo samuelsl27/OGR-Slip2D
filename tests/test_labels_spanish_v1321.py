@@ -474,8 +474,11 @@ def _label_tables():
     from ogr_core.project.settings import GroundwaterMethod
     from ogr_core.project.units import PermeabilityUnit, TimeUnit
     from ogr_core.support import ForceApplication, ForceOrientation
+    from ogr_core.annotations.annotation import AnnotationKind
     from ogr_gui import labels as L
-    return ((L.FORCE_APPLICATION, ForceApplication),
+    # v0.1.370 (D344): and the annotation kinds
+    return ((L.ANNOTATION_KIND, AnnotationKind),
+            (L.FORCE_APPLICATION, ForceApplication),
             (L.FORCE_ORIENTATION, ForceOrientation),
             (L.PORE_PRESSURE, PorePressureType),
             (L.GROUNDWATER_METHOD, GroundwaterMethod),

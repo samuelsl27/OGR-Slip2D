@@ -85,8 +85,7 @@ EXCEPTIONS: dict = {
         "the product's name and the project's name",
     ("main_window.py", "OGR Slip2D v{} — Demo slope"):
         "the product's name and the name of the demo project",
-    ("main_window.py", "{}_report.pdf"):
-        "a file name",
+    # v0.1.370 (D344): "{}_report.pdf" left, the name goes through tr()
     # notation that reads the same in Spanish: a translation would be the
     # English again, which test_i18n_coverage_v141 counts as untranslated
     ("interpret_window.py", "FS ={}"):

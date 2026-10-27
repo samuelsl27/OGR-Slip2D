@@ -503,7 +503,9 @@ def _materials_table(project, body, T=_same):
                      if getattr(m, "use_sat_unit_weight", False) else "—"))
     rows.append(srow(T("Cohesion") + " [kPa]",
                      lambda m: _fmt(_param(m, "cohesion"), 1)))
-    rows.append(srow(T("Friction Angle") + " [deg]",
+    # v0.1.370 (D344) -- "[°]" in both languages, as the slice table writes
+    # φ: "[deg]" read as English in the Spanish report
+    rows.append(srow(T("Friction Angle") + " [°]",
                      lambda m: _fmt(_param(m, "friction_angle"), 1)))
     ncol = len(mats) + 1
     w0 = 50 * mm

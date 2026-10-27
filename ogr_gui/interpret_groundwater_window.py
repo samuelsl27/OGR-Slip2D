@@ -78,7 +78,9 @@ class InterpretGroundwaterWindow(QMainWindow):
             for i, r in enumerate(self.stages):
                 t = r.notes.get("time", 0.0)
                 lbl = r.notes.get("label") or ""
-                sf = "  [SF]" if r.notes.get("calculate_sf") else ""
+                # v0.1.370 (D344) -- the flag as the window says it: "[FS]"
+                # in Spanish, like every factor of safety of the program
+                sf = ("  [%s]" % tr("SF")) if r.notes.get("calculate_sf") else ""
                 self.cbo_stage.addItem(
                     f"{i + 1}: t = {t:g}{(' ' + lbl) if lbl else ''}{sf}", i)
             self.cbo_stage.setCurrentIndex(self.cbo_stage.count() - 1)
@@ -287,7 +289,8 @@ class InterpretGroundwaterWindow(QMainWindow):
             if fs:
                 ax.plot([p[0] for p in fs], [p[1] for p in fs],
                         color="#0b3d91", lw=2.2, ls="--",
-                        label="free surface (P=0)")
+                        # v0.1.370 (D344) -- the name its checkbox has
+                        label=tr("Free surface (P=0)"))
                 ax.legend(loc="upper right", fontsize=8)
 
         ax.set_aspect("equal")
