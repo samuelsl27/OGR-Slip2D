@@ -56,6 +56,11 @@ import time
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+# v0.1.375 — it gives its server 40 s to start and times a refusal (at
+# least 0.9 s, which load cannot break; the start can): with --jobs this
+# file runs alone, after the chunks (tests/_runner.py).
+SERIAL_LANE = True
+
 _ROOT = Path(__file__).resolve().parent.parent
 _TOKEN = "owner-token-" + "x" * 20
 _CHATGPT = "https://chatgpt.com/connector/oauth/cb-test-123"

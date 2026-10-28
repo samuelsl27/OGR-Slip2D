@@ -11,7 +11,7 @@
 Slope stability, groundwater flow and rock mechanics — in Python, readable,
 tested and free.
 
-[![tests](https://img.shields.io/badge/tests-6654%20passing-brightgreen)](#tests)
+[![tests](https://img.shields.io/badge/tests-6678%20passing-brightgreen)](#tests)
 [![licence](https://img.shields.io/badge/licence-AGPL--3.0--or--later-blue)](LICENSE)
 [![python](https://img.shields.io/badge/python-3.11%2B-blue)](#installation)
 [![status](https://img.shields.io/badge/status-active%20development-orange)](#roadmap)
@@ -219,7 +219,17 @@ behind is reported as `✗ [LEAK] key: before → after` under the file that
 left it, the totals add `Leaks: N`, and the run fails even when every test
 passed. What may change, and why, is listed in `tests/_leaks.py`.
 
-About **84,600 lines** of implementation and **90,700 of tests**, **6654 of
+To use several cores, `--jobs N` cuts the selection into N contiguous
+pieces of the alphabetical order, balanced by how long each file took last
+time, and runs each in a process of its own with the same checks; the files
+that compare with the clock run after them, alone. A piece that dies fails
+the run, named with its exit code and the file it died in.
+`--list --jobs N` shows the pieces without running anything. On the
+development laptop (4 cores, 16 GB) `--jobs 4` takes about 35 minutes
+against 75 in series. The serial run without `--jobs` is still the one CI
+runs and the one a release needs.
+
+About **84,600 lines** of implementation and **90,700 of tests**, **6678 of
 them passing**, with no known failures. The full suite takes 50 to 90 minutes
 on the same machine (50 to 72 from v0.1.278 to v0.1.300; 74, 83.5 and 92 for
 v0.1.356 to v0.1.358, each partly alongside other runs); the clock

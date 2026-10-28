@@ -461,6 +461,13 @@ def to_windowless(was, now, new) -> bool:
     return "pythonw" in str(now).lower()
 
 
+def FILLED_ONCE(was, now, new) -> bool:  # noqa: N802
+    """The same container, from empty to filled (see value_of)."""
+    head = str(was).split(":len=", 1)
+    return (len(head) == 2 and head[1].split("#", 1)[0] == "0"
+            and str(now).startswith(head[0] + ":len="))
+
+
 @dataclass(frozen=True)
 class Allow:
     key: str
@@ -488,6 +495,12 @@ ALLOWED = (
     Allow("mod:ogr_gui.gc_guard._kept", ANY,
           "garbage the collector found on another thread, waiting to be "
           "freed on the main one: the runner frees it before every file"),
+    Allow("mod:ogr_gui.core_messages._CATALOGUE", FILLED_ONCE,
+          "the table of every message code, filled from constant tables the "
+          "first time a message is shown. In the serial run that is in the "
+          "file that imports the module, and a new key is no change; a "
+          "chunk of --jobs can import it in one file and fill it in "
+          "another (v0.1.375)"),
     # Installed once in the application.
     Allow("mod:ogr_gui.wheel_guard._guard", INSTALLED,
           "the wheel guard, installed in the application by the first "
@@ -498,6 +511,11 @@ ALLOWED = (
     Allow("mod:ogr_gui.themes._ORIGINAL_PALETTE", INSTALLED,
           "the application's palette, captured the first time a theme is "
           "applied, to go back to"),
+    Allow("builtins.qApp", INSTALLED,
+          "PySide6 names the QApplication in builtins when it is made, once "
+          "per process, by the first file that needs one. Seen as a change "
+          "when PySide6 was imported by an earlier file without making it, "
+          "which a chunk of --jobs can do (v0.1.375)"),
     # What a library does to the process the first time it is imported.
     Allow("env:PATH", first_import("PySide6"),
           "PySide6 puts its folder first on PATH when imported, for its "

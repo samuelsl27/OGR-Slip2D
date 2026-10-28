@@ -36,8 +36,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 try:
-    import matplotlib
-    matplotlib.use("Agg")
+    # v0.1.375 — no matplotlib.use("Agg") here: four files import this one
+    # for its helpers, and the backend changed for whichever process
+    # imported it first (a leak in a chunk of --jobs). Nothing here draws
+    # through pyplot; the windows under test pick QtAgg themselves.
+    import matplotlib  # noqa: F401
     from PySide6.QtWidgets import QApplication
     _QT = True
 except ImportError:  # pragma: no cover

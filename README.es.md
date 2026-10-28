@@ -11,7 +11,7 @@
 Estabilidad de taludes, flujo subterráneo y mecánica de rocas — en Python,
 legible, testeado y libre.
 
-[![tests](https://img.shields.io/badge/tests-6654%20passing-brightgreen)](#tests)
+[![tests](https://img.shields.io/badge/tests-6678%20passing-brightgreen)](#tests)
 [![licence](https://img.shields.io/badge/licencia-AGPL--3.0--or--later-blue)](LICENSE)
 [![python](https://img.shields.io/badge/python-3.11%2B-blue)](#instalación)
 [![estado](https://img.shields.io/badge/estado-en%20desarrollo%20activo-orange)](#hoja-de-ruta)
@@ -223,7 +223,17 @@ guardadas…). Un cambio que se queda sale como
 añaden `Leaks: N` y la corrida falla aunque pasen todos los tests. Lo que
 puede cambiar, y por qué, está en `tests/_leaks.py`.
 
-Unas **84 600 líneas** de implementación y **90 700 de tests**, **6654 de
+Para usar varios núcleos, `--jobs N` parte la selección en N trozos
+contiguos del orden alfabético, equilibrados por lo que tardó cada archivo
+la última vez, y corre cada uno en su propio proceso con las mismas
+comprobaciones; los archivos que se comparan con el reloj corren después,
+solos. Un trozo que muere hace fallar la corrida, con su código de salida y
+el archivo donde murió. `--list --jobs N` enseña los trozos sin ejecutar
+nada. En el portátil de desarrollo (4 núcleos, 16 GB), `--jobs 4` tarda unos
+35 minutos frente a 75 en serie. La corrida en serie, sin `--jobs`, sigue
+siendo la de la CI y la que exige publicar una versión.
+
+Unas **84 600 líneas** de implementación y **90 700 de tests**, **6678 de
 ellos en verde**, sin fallos conocidos. La suite completa tarda de 50 a 90
 minutos en la misma máquina (de 50 a 72 entre v0.1.278 y v0.1.300; 74, 83,5 y 92
 en v0.1.356 a v0.1.358, cada una en parte junto a otras corridas); el

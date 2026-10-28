@@ -270,6 +270,24 @@ class TestTheRules:
         assert _leaks.diff(_snap(**{"mpl.backend": "'QtAgg'"}),
                            _snap(**{"mpl.backend": "'Agg'"})) != []
 
+    def test_a_table_filled_once_from_empty(self):
+        # v0.1.375 — what a chunk of --jobs can fill in another file than
+        # the one that imported it
+        key = "mod:ogr_gui.core_messages._CATALOGUE"
+        assert _leaks.diff(_snap(**{key: "dict@7:len=0#1"}),
+                           _snap(**{key: "dict@7:len=482"})) == []
+        assert _leaks.diff(_snap(**{key: "dict@7:len=482"}),
+                           _snap(**{key: "dict@7:len=483"})) != []
+        assert _leaks.diff(_snap(**{key: "dict@7:len=0#1"}),
+                           _snap(**{key: "dict@8:len=482"})) != []
+
+    def test_the_application_is_made_once_and_never_unmade(self):
+        key = "builtins.qApp"
+        assert _leaks.diff(_snap(**{key: "None"}),
+                           _snap(**{key: "QApplication@1"})) == []
+        assert _leaks.diff(_snap(**{key: "QApplication@1"}),
+                           _snap(**{key: "None"})) != []
+
     def test_choosing_the_backend_may_turn_off_its_fallback_only(self):
         key = "mpl.rcParams"
         assert _leaks.diff(_snap(**{key: "[]"}),
@@ -313,6 +331,6 @@ class TestTheAllowList:
 
     def test_every_entry_names_a_kind_of_key_the_snapshot_takes(self):
         kinds = ("mod:", "cls:", "env:", "qt.", "sys.", "warnings.",
-                 "random.", "mpl.", "mp.")
+                 "random.", "mpl.", "mp.", "builtins.")
         for a in _leaks.ALLOWED:
             assert a.key.startswith(kinds), a.key

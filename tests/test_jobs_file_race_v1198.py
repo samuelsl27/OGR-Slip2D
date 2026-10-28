@@ -32,6 +32,11 @@ import threading
 import time
 from pathlib import Path
 
+# v0.1.375 — test_a_final_write_waits_for_the_reader times a write against
+# the clock (< 5 s): with --jobs this file runs alone, after the chunks
+# (tests/_runner.py).
+SERIAL_LANE = True
+
 _SOIL = {"model": "mohr_coulomb",
          "params": {"cohesion": 3.0, "friction_angle": 19.6}}
 

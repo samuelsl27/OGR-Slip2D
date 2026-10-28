@@ -12,6 +12,11 @@ Verifies:
 """
 from __future__ import annotations
 
+# v0.1.375 — test_grid_completes_quickly times a grid against the clock
+# (< 5 s): with --jobs this file runs alone, after the chunks
+# (tests/_runner.py), so that no other process shares its cores.
+SERIAL_LANE = True
+
 
 def _make_two_layer():
     from ogr_core.geometry import Boundary, BoundaryType, Polyline, Vertex
