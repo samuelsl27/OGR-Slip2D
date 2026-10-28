@@ -309,7 +309,12 @@ la suite termina: dos corridas iguales de v0.1.374 difirieron 3,7 min.
    (`full serial run recorded`), con el commit en
    `%TEMP%/ogr-slip2d-serial-run.json`.
 
-La CI corre en serie en cada push y sigue siendo la referencia.
+La CI corre en serie en cada push y sigue siendo la referencia. Desde
+v0.1.377, fuera de Windows, el runner termina con `os._exit` tras los
+totales, así que su código de salida es el veredicto de los tests. El
+precio es que el segfault al cerrar el intérprete, que la CI de Linux daba
+desde v0.1.276, ya no se ve: es D370, abierta. En Windows no: allí
+`os._exit` rompía la salida de los tramos (medido con un A/B).
 
 Lanza la suite en segundo plano, guarda el código de salida del proceso
 (`echo EXIT=$?`) y no toques el programa mientras corre. Nunca lances dos

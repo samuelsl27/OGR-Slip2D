@@ -64,9 +64,13 @@ jobs:
         # thread if the process dies on a signal: the 3.12 job of v0.1.230
         # died with a bare "Segmentation fault" in the middle of a file, and
         # nothing said which test or which Qt object it was.
+        # v0.1.377 -- PYTHONUNBUFFERED: a redirected stdout is block
+        # buffered, so the log gained text in bursts and its timestamps could
+        # not say how long each file took; unbuffered, they do.
         env:
           QT_QPA_PLATFORM: offscreen
           PYTHONFAULTHANDLER: "1"
+          PYTHONUNBUFFERED: "1"
         run: python tests/_runner.py
 
   licence:
