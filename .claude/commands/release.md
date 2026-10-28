@@ -19,5 +19,16 @@ Prepara la versión $ARGUMENTS.
 3. Escribe `docs/changelog/CHANGELOG_v$ARGUMENTS.md` siguiendo el estilo
    de los anteriores: registra **qué se encontró**, no solo qué se
    escribió, incluidos los caminos equivocados.
-4. Ejecuta la suite completa y confirma que está en verde.
+4. Ejecuta la suite entera con
+   `QT_QPA_PLATFORM=offscreen python tests/_runner.py --jobs 4` (desde
+   v0.1.376, decisión de la propietaria) y confirma que está en verde:
+   `Failed: 0`, sin `Leaks` ni `Chunks died`. `--fast` o un patrón no
+   valen.
+   - **Si termina con `SERIAL RUN DUE`**, esta versión se publica con la
+     suite en serie: `python tests/_runner.py`, sin argumentos. Toca cada
+     100 commits, y la serie en verde se apunta sola (AGENTS.md, «Coste de
+     los tests»).
+   - **Si termina con `SLOW, NOT IN tests/_slow.txt`**, decide con la
+     propietaria si esos tests se abaratan o entran en la lista
+     (`--write-slow-list`), y cuéntalo en el changelog.
 5. Muéstrame el resumen antes de hacer ningún commit.

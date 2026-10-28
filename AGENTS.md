@@ -33,7 +33,8 @@ AGPL-3.0-or-later.
 ## Comandos
 
 ```bash
-QT_QPA_PLATFORM=offscreen python tests/_runner.py   # toda la suite
+QT_QPA_PLATFORM=offscreen python tests/_runner.py --jobs 4  # toda la suite, en 4 procesos
+QT_QPA_PLATFORM=offscreen python tests/_runner.py   # toda la suite, en serie (la CI)
 python -m ogr_gui                                    # abrir la aplicación
 python -m ogr_cli --help                             # interfaz de terminal
 pip install -e .                                     # instalar en editable
@@ -51,6 +52,7 @@ python tests/_runner.py transient          # archivos que contengan eso
 python tests/_runner.py transient seepage  # unión de los dos
 python tests/_runner.py -k erfc            # solo tests con ese nombre
 python tests/_runner.py --list transient   # enseña la selección, no ejecuta
+python tests/_runner.py --fast --jobs 4    # todo menos los lentos (desde v0.1.376)
 ```
 
 El patrón admite fragmento, nombre de archivo o ruta —`transient`,
@@ -58,9 +60,11 @@ El patrón admite fragmento, nombre de archivo o ruta —`transient`,
 mismo— y no distingue mayúsculas. Un patrón que no case con nada **sale
 con código 2**, para que una errata no se lea como una suite en verde.
 
-**Una ejecución filtrada no es evidencia para publicar.** Lleva un aviso
-`FILTERED RUN` antes y después de los totales precisamente por eso: antes
-de una versión, la suite entera y sin argumentos.
+**Una ejecución filtrada no es evidencia para publicar**, y `--fast`
+tampoco. Lleva un aviso `FILTERED RUN` antes y después de los totales
+precisamente por eso: antes de una versión, la suite entera con
+`--jobs 4`, y en serie cuando el runner lo pida (ver «Coste de los
+tests»).
 
 ## Estructura del proyecto
 
@@ -262,16 +266,108 @@ lista funciones añadidas ha desperdiciado la mitad de su valor.
 
 ## Coste de los tests
 
-La suite entera tarda **entre 50 y 72 minutos** desde v0.1.278: así
-salieron todas las corridas de v0.1.278 a v0.1.300, con 5830–5955 casos,
-en la misma máquina. Antes tardaba unos 25 minutos (24,9 min con 3782
-casos en v0.1.175; 26 min 10 s y 25 min 29 s con 4175 en v0.1.191), y
-antes aún «entre 5 y 7½». Las dos cifras siguieron escritas aquí muchas
-versiones después de dejar de ser ciertas, y en v0.1.191 se leyó como
-anomalía un tiempo normal. No se ha medido por qué se duplicó. **El reloj
-total no es una medida**, es una comprobación de que la suite termina. Con
-este tiempo, lánzala en segundo plano, guarda el código de salida del
-proceso (`echo EXIT=$?`) y no toques el programa mientras corre.
+Medido en el portátil de desarrollo (Windows, 4 núcleos físicos y 8
+lógicos, 15,9 GB):
+
+| Corrida | Orden | Tiempo |
+|---|---|---|
+| Entera, en serie | `python tests/_runner.py` | 68,6 min (6678 casos, v0.1.375) |
+| Entera, en 4 procesos | `python tests/_runner.py --jobs 4` | 34,6 min (6708 casos, v0.1.376) |
+| Sin los lentos, en 4 procesos | `python tests/_runner.py --fast --jobs 4` | 12,7 min (5971 casos, v0.1.376) |
+| CI (Linux), en serie | — | ~1 h 10 por versión de Python |
+
+Era «entre 5 y 7½» en v0.1.80, unos 25 min en v0.1.175–0.1.193, 50–72
+en v0.1.278–0.1.300 y 134 en v0.1.372. Cada cifra siguió escrita aquí
+muchas versiones después de dejar de ser cierta, y en v0.1.191 se leyó
+como anomalía un tiempo normal. De los 134 min, la mitad era la máquina:
+`TextInputHost.exe` llevaba días colgado girando en un núcleo, y sin él
+eran 87,6. Unos 20 de esos 87,6 eran estado acumulado en el proceso, que
+v0.1.373 cortó (`docs/audits/AUDITORIA_SUITE_v0.1.372.md`). **Antes de
+llamar anomalía a una duración, mira la CPU de los procesos de la
+máquina.** El reloj total no es una medida, es una comprobación de que
+la suite termina: dos corridas iguales de v0.1.374 difirieron 3,7 min.
+
+### Qué corrida pide cada momento
+
+1. **Desarrollo:** `python tests/_runner.py --fast --jobs 4`, o un área
+   con patrones o `-k`. `--fast` deja fuera los archivos de
+   `tests/_slow.txt` y lo dice con `FILTERED RUN`: no vale para publicar.
+2. **Publicar una versión:** la suite entera con
+   `python tests/_runner.py --jobs 4` (decisión de la propietaria,
+   v0.1.376). Lleva el detector de fugas archivo a archivo, y sale en rojo
+   si a un tramo se le muere el proceso o le faltan tests. Verde es
+   `Failed: 0` sin `Leaks` ni `Chunks died`.
+3. **En serie, cada 100 commits:** `python tests/_runner.py`, sin
+   argumentos. Es la única corrida que mantiene la suite entera en un solo
+   proceso: así se vio el aborto de v0.1.302, que con la suite repartida
+   habría quedado escondido. Es también la que ejecuta la CI. Cada
+   corrida entera con `--jobs` termina diciendo cuántos commits hace de la
+   última serie en verde en esta máquina. A partir de 100 dice
+   `SERIAL RUN DUE`, y también cuando no puede saberlo: sin registro, o
+   con un commit que no está en la historia. Con ese aviso, la versión se
+   publica con la serie. La serie en verde se apunta sola al terminar
+   (`full serial run recorded`), con el commit en
+   `%TEMP%/ogr-slip2d-serial-run.json`.
+
+La CI corre en serie en cada push y sigue siendo la referencia.
+
+Lanza la suite en segundo plano, guarda el código de salida del proceso
+(`echo EXIT=$?`) y no toques el programa mientras corre. Nunca lances dos
+corridas a la vez: compiten por los mismos núcleos y falsean el tiempo, y
+la máquina se comparte con la sesión de OGR-FEM2D. **Nunca uses
+`PYTHONFAULTHANDLER=1` ni `-X faulthandler` con la suite:** llegan a los
+trabajadores `pythonw.exe` de un test, que mueren al arrancar sin decir
+nada, y la suite se cuelga.
+
+### Dónde y cómo van los tests nuevos
+
+La suite pasó de 25 a 70 minutos sin que nadie lo decidiera. Un test
+nuevo cuesta en las tres corridas. Para que el tiempo no vuelva a crecer
+sin verse:
+
+- **Dónde:** en `tests/test_<area>_v<version>.py`, uno por área, con la
+  cabecera del invariante (ver «Convenciones de código»). El orden
+  alfabético no cuenta para el tiempo, porque `--jobs` reparte según lo
+  que tardó cada archivo la última vez.
+- **Cuánto:** un test nuevo debería tardar menos de 1 s. Si pasa de 5 s,
+  que sea porque valida contra una referencia (regla 1), y que su
+  cabecera lo diga. Mídelo solo: `python tests/_runner.py <archivo>`.
+- **Comparte lo caro** entre los casos de un archivo: el modelo, la malla
+  y la búsqueda, calculados una vez a nivel de módulo o de clase. Un
+  archivo bajó de 48 s a 12 s compartiendo la superficie de partida, sin
+  perder ningún caso. Pero **nunca bajes mallas, dovelas ni tolerancias de
+  un test de validación** para ganar segundos: su finura puede ser el
+  invariante.
+- **Prueba en la capa más baja que tenga la regla:** `ogr_core`,
+  `ogr_slip2d` u `ogr_api`, sin Qt. Abre una `MainWindow` solo para
+  probar la ventana: cada una sigue viva hasta el final del proceso, en
+  memoria, y un cambio de tema las recorre todas.
+- **Búsquedas pequeñas:** una rejilla de 400 círculos o más abre un pool
+  de procesos (`_PARALLEL_MIN_CIRCLES`, en `ogr_slip2d/search.py`). En
+  Windows cada pool cuesta 0,6–0,8 s en arrancar, y más con la máquina
+  cargada. Úsala solo si el test es del camino en paralelo.
+- **Mallas de filtración gruesas,** salvo que el test valide la
+  convergencia: mallar y resolver es lo más caro de la suite.
+- **Nada de segundos en un test,** salvo que el reloj sea lo que se
+  prueba. Entonces el archivo lleva `SERIAL_LANE = True` con su porqué, y
+  en una corrida con `--jobs` corre solo, al final.
+- **Archivos en carpetas temporales** (`tmp_path`, `tempfile`), nunca en
+  una ruta fija: dos tramos de `--jobs` chocarían en ella.
+- **Restaura todo estado global** (regla 5): el runner falla el archivo
+  que lo deje cambiado.
+
+**Un archivo lento nuevo sigue en `--fast` hasta que alguien lo decida.**
+`tests/_slow.txt` se versiona, y solo lo escribe
+`python tests/_runner.py --write-slow-list`. Por defecto mete los archivos
+de 45 s o más en su última corrida en esta máquina, que suele ser una
+entera con `--jobs 4`: con cuatro tramos a la vez cada test tarda casi el
+doble que solo. Van archivos enteros y no tests sueltos porque los tests
+de un archivo comparten lo caro: si se quita el que lo pagaba, lo paga el
+siguiente (v0.1.376). Lo reescribe quien prepara una versión, a propósito,
+y el changelog cuenta qué entra y qué sale. Para que no se olvide, cada
+corrida entera termina con `SLOW, NOT IN tests/_slow.txt` y los archivos
+de 90 s o más que la lista deja dentro: o se abaratan, o se reescribe la
+lista.
 
 **Un corte sin totales con código 127** no es un test fallado: en Git Bash,
 127 es un proceso que terminó con 0xC0000409, lo que hace `abort()`. En
@@ -283,11 +379,6 @@ pasar, es otra causa. Para ver la pila nativa hace falta un manejador de
 SIGABRT del CRT, y `faulthandler` no basta en Windows
 (`docs/changelog/CHANGELOG_v0.1.302.md`). Al abortar quedan trabajadores
 `spawn_main` huérfanos que hay que cerrar.
-
-Que el tiempo suba no es un problema por sí solo. Lo que sí importa es no
-meter un test caro sin darse cuenta: los caros son los que mallan y
-resuelven filtración. Un archivo que tardaba 48 s bajó a 12 s compartiendo
-la superficie de partida entre casos, sin perder ninguno.
 
 ### Cómo medir el coste de un cambio
 

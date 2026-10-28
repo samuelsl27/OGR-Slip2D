@@ -68,6 +68,28 @@ run behind: the run passes only if every chunk ends with its code, every
 selected file reports its end, and the tests run are the tests declared
 (see :func:`partition` and ``_run_jobs``). Without ``--jobs`` nothing
 changes, and that serial run is what CI executes.
+
+What a release needs (v0.1.376, the owner's decision): the whole suite in
+chunks, ``--jobs 4``, and the serial run once every :data:`SERIAL_EVERY`
+commits. A green serial run of this folder records its commit in the
+temporary folder, and every whole run in chunks ends saying how many commits
+ago that was, or ``SERIAL RUN DUE``. Only the serial run keeps the whole
+suite in one process, as the abort of v0.1.302 needed in order to show.
+
+Leaving the slow files out
+--------------------------
+
+    python tests/_runner.py --fast --jobs 4          # what development runs
+    python tests/_runner.py --write-slow-list        # rewrite tests/_slow.txt
+
+v0.1.376 — ``--fast`` leaves out the files listed in ``tests/_slow.txt``
+and says so before and after the totals, as any filtered run does: it is not
+evidence for a release. Whole files and not single tests, because a file's
+tests share what is expensive: leave out the test that paid for it and the
+next one pays (measured: 19.3 min instead of 11). The list is versioned and
+written on purpose, from each file's last measured seconds; a run never
+rewrites it, so a new slow file stays in ``--fast`` until someone decides
+otherwise. A whole run names the files of twice the threshold it leaves in.
 """
 from __future__ import annotations
 
@@ -321,6 +343,12 @@ def match_test(class_name: str, method_name: str, expr: str | None) -> bool:
     return expr.lower() in f"{class_name}.{method_name}".lower()
 
 
+def node_id(path: Path, class_name: str, method_name: str) -> str:
+    """``file.py::Class::method``: how ``--list`` and the test times name a
+    test."""
+    return f"{path.name}::{class_name}::{method_name}"
+
+
 def _declared_tests(files, expr: str | None = None):
     """Every ``(file, class, method)`` the selection declares, WITHOUT
     importing anything.
@@ -469,25 +497,22 @@ def serial_lane(path: Path) -> bool:
     return False
 
 
-def load_durations(path: Path = DURATIONS) -> dict:
+#: v0.1.376 — the same, test by test (by :func:`node_id`): which tests make a
+#: file slow, for whoever studies what the suite costs. Not the slow list,
+#: which goes by file (see SLOW_LIST).
+TEST_TIMES = Path(tempfile.gettempdir()) / "ogr-slip2d-test-times.json"
+
+
+def _read_json(path: Path):
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return {}
-    if not isinstance(data, dict):
-        return {}
-    return {k: float(v) for k, v in data.items()
-            if isinstance(v, (int, float)) and v >= 0}
+        return None
 
 
-def save_durations(times: dict, path: Path = DURATIONS) -> None:
-    """Merge ``times`` into the file: a filtered run updates its own files
-    and keeps the rest. Written aside and moved, so that a run reading it
-    never sees half a file; a failure to write costs balance, not a run."""
-    if not times:
-        return
-    data = load_durations(path)
-    data.update({k: round(v, 3) for k, v in times.items()})
+def _write_json(path: Path, data) -> None:
+    """Written aside and moved, so that a run reading it never sees half a
+    file; a failure to write costs what the file was for, not a run."""
     tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
     try:
         tmp.write_text(json.dumps(data, indent=0, sort_keys=True),
@@ -496,6 +521,193 @@ def save_durations(times: dict, path: Path = DURATIONS) -> None:
     except OSError:
         with suppress(OSError):
             tmp.unlink()
+
+
+# The paths are looked up when called, not bound as defaults, so that a test
+# can point a copy of this runner at files of its own.
+def load_durations(path: Path | None = None) -> dict:
+    data = _read_json(path or DURATIONS)
+    if not isinstance(data, dict):
+        return {}
+    return {k: float(v) for k, v in data.items()
+            if isinstance(v, (int, float)) and v >= 0}
+
+
+def save_durations(times: dict, path: Path | None = None) -> None:
+    """Merge ``times`` into the file: a filtered run updates its own files
+    and keeps the rest."""
+    if not times:
+        return
+    path = path or DURATIONS
+    data = load_durations(path)
+    data.update({k: round(v, 3) for k, v in times.items()})
+    _write_json(path, data)
+
+
+# --- What a release needs (v0.1.376) -------------------------------------
+#: A release runs the whole suite in chunks (``--jobs 4``), and the serial
+#: run once every this many commits: the owner's decision, in AGENTS.md
+#: with the same number (a test holds the two together).
+SERIAL_EVERY = 100
+#: The commit of the last green serial run of the whole suite, on this
+#: machine: what the serial run proves is about this machine too.
+SERIAL_RECORD = Path(tempfile.gettempdir()) / "ogr-slip2d-serial-run.json"
+
+
+def _git(repo_root: Path, *args) -> str | None:
+    """What ``git <args>`` prints in ``repo_root``, or None when git cannot
+    answer (no git, not a repository, a commit it does not know)."""
+    try:
+        out = subprocess.run(["git", *args], cwd=repo_root, timeout=60,
+                             capture_output=True, text=True,
+                             stdin=subprocess.DEVNULL)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return out.stdout.strip() if out.returncode == 0 else None
+
+
+def record_serial_run(repo_root: Path, tests: int,
+                      path: Path | None = None) -> str | None:
+    """Remember that the whole suite passed in series at HEAD; the commit,
+    or None when there is no commit to name (and nothing is written)."""
+    sha = _git(repo_root, "rev-parse", "HEAD")
+    if not sha:
+        return None
+    _write_json(path or SERIAL_RECORD,
+                {"commit": sha, "date": time.strftime("%Y-%m-%d %H:%M"),
+                 "tests": tests})
+    return sha
+
+
+def serial_notice(repo_root: Path, path: Path | None = None,
+                  every: int | None = None) -> str:
+    """How long ago the last green serial run was, or ``SERIAL RUN DUE``.
+
+    Due also when it cannot be told — no record on this machine, a commit
+    this history does not have, no git: the doubt costs one serial run, the
+    other answer could skip one for good."""
+    every = every or SERIAL_EVERY
+    rec = _read_json(path or SERIAL_RECORD)
+    todo = ("run `python tests/_runner.py` with no arguments before the next "
+            f"release (AGENTS.md: every {every} commits)")
+    if not (isinstance(rec, dict) and isinstance(rec.get("commit"), str)):
+        return f"SERIAL RUN DUE — no full serial run recorded on this machine; {todo}"
+    sha, date = rec["commit"][:7], rec.get("date", "?")
+    count = _git(repo_root, "rev-list", "--count", f"{rec['commit']}..HEAD")
+    if count is None or not count.isdigit():
+        return (f"SERIAL RUN DUE — the last full serial run ({sha}, {date}) "
+                f"is not in this history; {todo}")
+    n = int(count)
+    if n >= every:
+        return (f"SERIAL RUN DUE — {n} commits since the last full serial run "
+                f"({sha}, {date}); {todo}")
+    return (f"last full serial run: {sha}, {date}, {n} commit(s) ago "
+            f"(the next is due at {every})")
+
+
+# --- The slow files (v0.1.376) -------------------------------------------
+#: The files ``--fast`` leaves out. Versioned, and written on purpose by
+#: ``--write-slow-list``: a run that rewrote it would drop each new slow
+#: file from development runs without anyone deciding so.
+#:
+#: Files, not tests. The first list named the 174 tests of 10 s or more, and
+#: ``--fast --jobs 4`` took 19.3 min where its chunks were planned at 11: a
+#: file's tests share what is expensive (a module-level search, a mesh, a
+#: solved model), the test that ran first paid for it in the whole run, and
+#: once it was left out the next one paid instead — 0.0 s to 275 s for one of
+#: them. Rewriting the list from those times would not settle it either: the
+#: next whole run gives the cost back to the first test.
+SLOW_LIST = Path(__file__).resolve().with_name("_slow.txt")
+#: What ``--write-slow-list`` writes by default: the files of this many
+#: seconds or more in their last whole run, which is a run with --jobs 4 now
+#: (each test takes about twice what it takes alone). A whole run names the
+#: files of twice this that the list leaves in; twice, so that a file near
+#: the line does not come and go each run.
+SLOW_SECONDS = 45.0
+
+
+def load_slow_list(path: Path | None = None) -> frozenset:
+    """The file names in the list; ``#`` starts a comment."""
+    try:
+        text = (path or SLOW_LIST).read_text(encoding="utf-8")
+    except OSError:
+        return frozenset()
+    return frozenset(line.split("#", 1)[0].strip()
+                     for line in text.splitlines()
+                     if line.split("#", 1)[0].strip())
+
+
+def write_slow_list(tests_dir: Path, seconds: float,
+                    durations_path: Path | None = None,
+                    path: Path | None = None) -> int:
+    """Write the list from each file's last whole-file time on this machine:
+    the test files in the folder today that took ``seconds`` or more, in
+    their order."""
+    path = path or SLOW_LIST
+    durations = load_durations(durations_path or DURATIONS)
+    files = [f.name for f in sorted(tests_dir.glob("test_*.py"))]
+    timed = [f for f in files if f in durations]
+    if not timed:
+        print("No test file has a time on this machine yet: run the whole "
+              "suite first (`--jobs 4` is enough), then write the list.")
+        return 2
+    slow = [f for f in timed if durations[f] >= seconds]
+    counts: dict = {}
+    for f, _cls, _m in (_declared_tests(sorted(tests_dir.glob("test_*.py")))
+                        or ()):
+        counts[f.name] = counts.get(f.name, 0) + 1
+    # The licence lines are this file's own first two, not a copy of them in
+    # a string: the licence test reads every identifier written in the
+    # sources, quotes included.
+    licence = Path(__file__).read_text(encoding="utf-8").splitlines(True)[:2]
+    head = (
+        "".join(licence) +
+        "#\n"
+        "# The test files `python tests/_runner.py --fast` leaves out. Written "
+        "by\n"
+        f"# `python tests/_runner.py --write-slow-list {seconds:g}` on "
+        f"{time.strftime('%Y-%m-%d')}:\n"
+        f"# the files that took {seconds:g} s or more in their last whole run "
+        "on the\n"
+        "# development machine (seconds and tests after each). Written on "
+        "purpose, never\n"
+        "# by a run; a whole run, which a release needs, runs every one of "
+        "them\n"
+        "# (AGENTS.md, «Coste de los tests»).\n")
+    path.write_text(head + "".join(
+        f"{f}  # {durations[f]:.0f} s, {counts.get(f, 0)} tests\n"
+        for f in slow), encoding="utf-8", newline="\n")
+    print(f"{len(slow)} file(s) of {seconds:g} s or more written to {path}, "
+          f"with {sum(counts.get(f, 0) for f in slow)} of the "
+          f"{sum(counts.values())} tests: "
+          f"{sum(durations[f] for f in slow) / 60:.1f} of the "
+          f"{sum(durations[f] for f in timed) / 60:.1f} min timed. "
+          f"{len(files) - len(timed)} of the {len(files)} file(s) have no "
+          f"time yet, and stay in --fast.")
+    return 0
+
+
+def slow_unlisted(times: dict, listed, seconds: float) -> list:
+    """``[(name, seconds)]``, slowest first: the files of ``seconds`` or
+    more that the slow list leaves in ``--fast``."""
+    return sorted(((i, s) for i, s in times.items()
+                   if s >= seconds and i not in listed),
+                  key=lambda x: (-x[1], x[0]))
+
+
+def _print_slow_unlisted(times: dict) -> None:
+    seconds = 2 * SLOW_SECONDS
+    found = slow_unlisted(times, load_slow_list(), seconds)
+    if not found:
+        return
+    print(f"SLOW, NOT IN tests/{SLOW_LIST.name} — {len(found)} file(s) took "
+          f"{seconds:g} s or more and --fast still runs them:")
+    for i, s in found[:10]:
+        print(f"  {i}  {s:.1f} s")
+    if len(found) > 10:
+        print(f"  … and {len(found) - 10} more")
+    print("  (AGENTS.md, «Coste de los tests»: make it cheaper, or write the "
+          "list again with --write-slow-list)")
 
 
 def file_weights(files, counts: dict, durations: dict) -> list:
@@ -618,8 +830,8 @@ def _run_files(test_files, k, tally: _Tally, leaks, gc_guard, *,
 
     ``on_file(f, record)`` is called for every file that reached its end
     (not for one an interrupt cut short) with what it counted, its leaks,
-    its failure details and its seconds: what a chunk reports to the run
-    that started it, and what a serial run keeps as its durations.
+    its failure details, its seconds and each test's: what a chunk reports
+    to the run that started it, and what a serial run keeps as its durations.
     """
     n_files = n_files or len(test_files)
     for i_file, f in enumerate(test_files, 1):
@@ -647,6 +859,7 @@ def _run_files(test_files, k, tally: _Tally, leaks, gc_guard, *,
         start = (tally.passed, tally.failed, tally.skipped,
                  len(tally.fail_details))
         before = leaks.snapshot()
+        test_times: dict = {}
         t0 = time.perf_counter()
         finished = False
         try:
@@ -672,7 +885,10 @@ def _run_files(test_files, k, tally: _Tally, leaks, gc_guard, *,
                     continue
                 print(f"  {name}:")
                 for m_name, m in methods:
+                    t1 = time.perf_counter()
                     outcome, why, tb = run_test(cls, m)
+                    test_times[node_id(f, name, m_name)] = round(
+                        time.perf_counter() - t1, 3)
                     if outcome == "passed":
                         tally.passed += 1
                         print(f"    {tally.tag()} ✓ {m_name}")
@@ -712,7 +928,8 @@ def _run_files(test_files, k, tally: _Tally, leaks, gc_guard, *,
                             "skipped": tally.skipped - start[2],
                             "leaks": lines,
                             "details": tally.fail_details[start[3]:],
-                            "seconds": round(seconds, 3)})
+                            "seconds": round(seconds, 3),
+                            "tests": test_times})
 
 
 def _run_chunk(spec_path: Path, leaks, gc_guard) -> int:
@@ -861,6 +1078,7 @@ def _run_jobs(tests_dir: Path, test_files, k, jobs: int, declared,
     details: list = []
     died: list = []
     times: dict = {}
+    test_times: dict = {}
     for i, ((label, files), proc) in enumerate(zip(plan, procs)):
         try:
             records = [json.loads(line) for line in
@@ -876,6 +1094,7 @@ def _run_jobs(tests_dir: Path, test_files, k, jobs: int, declared,
             leaked += bool(r["leaks"])
             details += [tuple(d) for d in r["details"]]
             times[r["file"]] = r["seconds"]
+            test_times.update(r.get("tests", {}))
         names = [f.name for f in files]
         names_done = [r["file"] for r in done]
         ended = any(r.get("end") for r in records)
@@ -901,14 +1120,18 @@ def _run_jobs(tests_dir: Path, test_files, k, jobs: int, declared,
     for line in died:
         print(f"✗ [CHUNK] {line}")
     print(_totals_line(passed, failed, skipped, leaked, len(died)))
-    # Until the owner decides otherwise (plan of the suite audit, stage 4),
-    # the release check is the serial run: said with the numbers, so that
-    # they cannot be pasted as one.
     print(f"PARALLEL RUN — {len(chunks)} chunk(s)"
-          + (" + serial lane" if lane else "")
-          + "; a release still needs the serial run (AGENTS.md)")
+          + (" + serial lane" if lane else ""))
+    own = tests_dir.resolve() == Path(__file__).resolve().parent
     if banner:
         print(banner)
+    else:
+        # v0.1.376 — a whole run in chunks is what a release needs, and once
+        # every SERIAL_EVERY commits the serial run too: said with the
+        # numbers, where the release check reads them.
+        if own:
+            _print_slow_unlisted(times)
+        print(serial_notice(tests_dir.parent))
     if details or died:
         print("\n--- FAILURE DETAILS ---")
         for line in died:
@@ -916,8 +1139,10 @@ def _run_jobs(tests_dir: Path, test_files, k, jobs: int, declared,
         for name, tb in details[:10]:
             print(f"\n[{name}]\n{tb}")
 
-    if not k and tests_dir.resolve() == Path(__file__).resolve().parent:
-        save_durations(times)
+    if own:
+        if not k:
+            save_durations(times)
+        save_durations(test_times, TEST_TIMES)
     if not died:
         shutil.rmtree(work, ignore_errors=True)
     return 0 if failed == 0 and leaked == 0 and not died else 1
@@ -925,7 +1150,8 @@ def _run_jobs(tests_dir: Path, test_files, k, jobs: int, declared,
 
 def main(tests_dir: Path, patterns=(), k: str | None = None,
          list_only: bool = False, jobs: int = 1,
-         child: str | None = None) -> int:
+         child: str | None = None, fast: bool = False,
+         write_slow: float | None = None) -> int:
     # The ✓/✗ marks below are not printable in the console codepage Windows
     # picks when stdout is redirected (cp1252), and the UnicodeEncodeError
     # lands *inside* the except branch that reports a failure — so a single
@@ -982,11 +1208,35 @@ def main(tests_dir: Path, patterns=(), k: str | None = None,
     if jobs < 1:
         print(f"--jobs takes a number of processes, 1 or more; got {jobs}.")
         return 2
+    if write_slow is not None:
+        if patterns or k or fast:
+            print("--write-slow-list writes the list of the whole folder; "
+                  "it takes no patterns, -k or --fast.")
+            return 2
+        return write_slow_list(tests_dir, write_slow)
+    slow = frozenset()
+    if fast:
+        slow = load_slow_list()
+        if not slow:
+            # Rule 7: a --fast that left nothing out would be a whole run
+            # under a FILTERED banner, and a list that went missing would
+            # never be noticed.
+            print(f"--fast has nothing to leave out: tests/{SLOW_LIST.name} "
+                  "is missing or empty. Write it with --write-slow-list "
+                  "after a whole run.")
+            return 2
 
     patterns = list(patterns)
     every = sorted(tests_dir.glob("test_*.py"))
     test_files = select_files(tests_dir, patterns)
-    filtered = bool(patterns) or bool(k)
+    filtered = bool(patterns) or bool(k) or fast
+    left_out = [f for f in test_files if f.name in slow]
+    if fast:
+        if test_files and len(left_out) == len(test_files):
+            print(f"Every selected file is in tests/{SLOW_LIST.name}: "
+                  "--fast leaves nothing to run.")
+            return 2
+        test_files = [f for f in test_files if f.name not in slow]
 
     def _banner() -> str:
         bits = []
@@ -994,6 +1244,9 @@ def main(tests_dir: Path, patterns=(), k: str | None = None,
             bits.append(f"patterns: {patterns}")
         if k:
             bits.append(f"-k {k!r}")
+        if fast:
+            bits.append(f"--fast: {len(left_out)} slow file(s) left out "
+                        f"(tests/{SLOW_LIST.name})")
         return (f"FILTERED RUN — {len(test_files)} of {len(every)} files"
                 f", {', '.join(bits)} — NOT the full suite")
 
@@ -1039,9 +1292,13 @@ def main(tests_dir: Path, patterns=(), k: str | None = None,
     if filtered:
         print(_banner())
     times: dict = {}
-    _run_files(test_files, k, tally, leaks, gc_guard,
-               on_file=lambda f, record: times.update(
-                   {f.name: record["seconds"]}))
+    test_times: dict = {}
+
+    def on_file(f, record):
+        times[f.name] = record["seconds"]
+        test_times.update(record["tests"])
+
+    _run_files(test_files, k, tally, leaks, gc_guard, on_file=on_file)
 
     print("\n" + "=" * 60)
     print(_totals_line(tally.passed, tally.failed, tally.skipped,
@@ -1051,6 +1308,17 @@ def main(tests_dir: Path, patterns=(), k: str | None = None,
     # green full suite unless the line travels with the numbers.
     if filtered:
         print(_banner())
+    code = 0 if tally.failed == 0 and tally.leaked == 0 else 1
+    own = tests_dir.resolve() == Path(__file__).resolve().parent
+    if own and not filtered:
+        _print_slow_unlisted(times)
+        # v0.1.376 — the serial run a release needs every SERIAL_EVERY
+        # commits is remembered only when it is the whole suite and green.
+        sha = (record_serial_run(repo_root, tally.passed + tally.skipped)
+               if code == 0 else None)
+        if sha:
+            print(f"full serial run recorded: {sha[:7]}; the next is due in "
+                  f"{SERIAL_EVERY} commits")
 
     if tally.fail_details:
         print("\n--- FAILURE DETAILS ---")
@@ -1059,10 +1327,13 @@ def main(tests_dir: Path, patterns=(), k: str | None = None,
 
     # v0.1.375 — what each file took, for the chunks of a later --jobs; not
     # under -k (part of a file), nor for a copy of this runner pointed at
-    # another folder (the self-tests' throwaway files).
-    if not k and tests_dir.resolve() == Path(__file__).resolve().parent:
-        save_durations(times)
-    return 0 if tally.failed == 0 and tally.leaked == 0 else 1
+    # another folder (the self-tests' throwaway files). Each test's own
+    # seconds are right under any filter (v0.1.376).
+    if own:
+        if not k:
+            save_durations(times)
+        save_durations(test_times, TEST_TIMES)
+    return code
 
 
 def _parse_args(argv):
@@ -1089,7 +1360,19 @@ def _parse_args(argv):
         help="run in N processes at once: contiguous chunks of the "
              "alphabetical order, balanced by the last durations, then the "
              "files marked SERIAL_LANE alone. A chunk that dies fails the "
-             "run. Without it the run is serial, as in CI.")
+             "run. Without it the run is serial, as in CI. A release runs "
+             "the whole suite with --jobs 4, and in series once every "
+             f"{SERIAL_EVERY} commits (the run says when).")
+    p.add_argument(
+        "--fast", action="store_true",
+        help=f"leave out the files listed in tests/{SLOW_LIST.name}; a "
+             "filtered run, not evidence for a release.")
+    p.add_argument(
+        "--write-slow-list", dest="write_slow", type=float, nargs="?",
+        const=SLOW_SECONDS, default=None, metavar="SECONDS",
+        help=f"rewrite tests/{SLOW_LIST.name} with the test files that took "
+             f"SECONDS or more (default {SLOW_SECONDS:g}) in their last "
+             "whole run on this machine, and run nothing.")
     # How a run with --jobs starts each chunk; not for typing.
     p.add_argument("--child", metavar="SPEC", default=None,
                    help=argparse.SUPPRESS)
@@ -1101,4 +1384,5 @@ if __name__ == "__main__":
     sys.path.insert(0, str(root.parent))
     ns = _parse_args(sys.argv[1:])
     sys.exit(main(root, patterns=ns.patterns, k=ns.k, list_only=ns.list_only,
-                  jobs=ns.jobs, child=ns.child))
+                  jobs=ns.jobs, child=ns.child, fast=ns.fast,
+                  write_slow=ns.write_slow))

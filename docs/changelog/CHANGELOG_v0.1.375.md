@@ -39,8 +39,10 @@ exige publicar: si `--jobs` vale también para eso es decisión de la propietari
     12,6 de la serie medida igual, con los trabajadores de sus pools (§2). La máquina tiene 15,9 GB.
   - Manda entonces el reloj: N=4 es la más rápida medida (§2), y **no hay N por defecto**. `--jobs` pide el
     número, y el README da la medida.
-  - De los 6,2 GB libres al empezar, faltaban 3 GB ocupados por 11 procesos de Python ajenos a la suite:
-    servidores MCP de Claude Desktop abiertos desde el 22 y el 23 de octubre.
+  - De los 6,2 GB libres al empezar, faltaban 3 GB ocupados por procesos de Python ajenos a la suite:
+    10 servidores MCP `ogr-slip2d-mcp`, cada uno de una sesión de Claude Code en VS Code, abiertos
+    entre el 22 y el 27 de octubre. *Corregido en 0.1.376: esto decía «11 procesos» y «de Claude
+    Desktop».*
 - **La duración de un archivo en serie no predice la que tiene en un tramo.** Con N=4 se esperaban unos
   17 min por tramo, a partir de las duraciones de 0.1.373, y cada uno tardó 27–34 min.
   - Compiten por 4 núcleos físicos los tramos y los pools de procesos que abren sus tests, y además pagina.

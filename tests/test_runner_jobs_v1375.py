@@ -264,8 +264,15 @@ class TestTheSameRunAsTheSerialOne:
         assert [int(a) for a, _ in tags] == list(range(1, 12))
         assert {b for _, b in tags} == {"11"}
 
-    def test_it_says_it_is_not_the_release_check(self):
-        assert "a release still needs the serial run" in _jobs()["text"]
+    def test_it_ends_saying_when_the_serial_run_is_due(self):
+        # v0.1.376 — the owner adopted the run in chunks for releases, with
+        # the serial run once every SERIAL_EVERY commits: the line that said
+        # a release still needed the serial run is now that count
+        # (test_runner_fast_v1376).
+        text = _jobs()["text"]
+        assert "a release still needs the serial run" not in text
+        assert re.search(r"^(SERIAL RUN DUE — |last full serial run: )",
+                         text, flags=re.M)
 
 
 class TestTheChunks:
