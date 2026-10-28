@@ -148,6 +148,13 @@ módulo— debe restaurarse. Un test que dejó el idioma en español hizo
 fallar tests de menús no relacionados **solo al ejecutar la suite
 completa**, que es el peor fallo posible de diagnosticar.
 
+Desde v0.1.374 lo comprueba el runner archivo a archivo
+(`tests/_leaks.py`): lo que un archivo deja cambiado sale como
+`✗ [LEAK] clave: antes → después` bajo ese archivo y hace fallar la
+corrida. Se arregla en el test; solo un cambio que no es del test (lo que
+hace una librería al importarse, una caché acotada del programa) va a la
+lista blanca, **con su porqué**.
+
 ### 6. Las anomalías se reportan ANTES de corregirlas
 
 Si encuentras comportamiento que parece incorrecto, **dilo y muestra la

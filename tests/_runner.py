@@ -420,6 +420,20 @@ def run_test(cls, method):
 _RUN_FOLDERS = ("OGR_BRIDGE_DIR", "OGR_SETTINGS_DIR")
 
 
+def _leak_detector():
+    """``tests/_leaks.py``, by its path next to this file: tests load this
+    runner by path too, with no promise that ``tests/`` is on sys.path. Kept
+    as ``_leaks`` in sys.modules, the module tests import its helpers from."""
+    mod = sys.modules.get("_leaks")
+    if mod is None:
+        spec = importlib.util.spec_from_file_location(
+            "_leaks", Path(__file__).resolve().with_name("_leaks.py"))
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules["_leaks"] = mod
+        spec.loader.exec_module(mod)
+    return mod
+
+
 def main(tests_dir: Path, patterns=(), k: str | None = None,
          list_only: bool = False) -> int:
     # The ✓/✗ marks below are not printable in the console codepage Windows
@@ -469,6 +483,7 @@ def main(tests_dir: Path, patterns=(), k: str | None = None,
     # it imports from the tree just checked.
     from ogr_gui import gc_guard
     gc_guard.install()
+    leaks = _leak_detector()
 
     patterns = list(patterns)
     every = sorted(tests_dir.glob("test_*.py"))
@@ -518,6 +533,7 @@ def main(tests_dir: Path, patterns=(), k: str | None = None,
     passed = 0
     failed = 0
     skipped = 0
+    leaked = 0     # files, not tests: see the loop
     fail_details: list[tuple[str, str]] = []
 
     total_tests = len(declared) if declared is not None else 0
@@ -557,6 +573,7 @@ def main(tests_dir: Path, patterns=(), k: str | None = None,
         # the folders through a second main() (audit D-d).
         saved_path = list(sys.path)
         saved_folders = {v: os.environ.get(v) for v in _RUN_FOLDERS}
+        before = leaks.snapshot()
         try:
             try:
                 mod = _load_module(f)
@@ -598,13 +615,27 @@ def main(tests_dir: Path, patterns=(), k: str | None = None,
                     os.environ.pop(var, None)
                 else:
                     os.environ[var] = value
+            # v0.1.374 — anything else the file left in the process is
+            # named here, at the file that left it, and fails the run (rule
+            # 5). Before, a leak showed only if a later test happened to
+            # depend on it, and only in the full run. What is looked at and
+            # what is allowed: tests/_leaks.py.
+            found = leaks.diff(before, leaks.snapshot())
+            if found:
+                leaked += 1
+                lines = [leaks.describe(*leak) for leak in found]
+                for line in lines:
+                    print(f"  ✗ [LEAK] {line}")
+                fail_details.append((f"{f.name} [LEAK]", "\n".join(lines)))
 
     print("\n" + "=" * 60)
     # A skip is counted apart and named: it is neither a pass (it measured
     # nothing) nor a failure (nothing was wrong). Absent when there is none,
-    # so a run without skips prints exactly what it always printed.
+    # so a run without skips prints exactly what it always printed. So are
+    # the files that leaked (v0.1.374): their tests passed, the file did not.
     print(f"Total: {passed + failed + skipped}    Passed: {passed}    "
-          f"Failed: {failed}" + (f"    Skipped: {skipped}" if skipped else ""))
+          f"Failed: {failed}" + (f"    Skipped: {skipped}" if skipped else "")
+          + (f"    Leaks: {leaked}" if leaked else ""))
     # Repeated after the totals on purpose: a green partial run pasted
     # into a changelog or a release check is indistinguishable from a
     # green full suite unless the line travels with the numbers.
@@ -616,7 +647,7 @@ def main(tests_dir: Path, patterns=(), k: str | None = None,
         for name, tb in fail_details[:10]:
             print(f"\n[{name}]\n{tb}")
 
-    return 0 if failed == 0 else 1
+    return 0 if failed == 0 and leaked == 0 else 1
 
 
 def _parse_args(argv):

@@ -371,7 +371,11 @@ class TestTheMcpServerForwards:
                     return {"projects": []}
                 return {"ok": True, "state": "done", "job_id": "j_x"}
 
-        srv = build_server(None, backend=Backend())
+        from _leaks import root_logging_kept
+        # v0.1.374 — building the server configures the root logger
+        # (audit D-f)
+        with root_logging_kept():
+            srv = build_server(None, backend=Backend())
         value = base._value
 
         async def scenario():
@@ -409,8 +413,12 @@ class TestTheMcpServerForwards:
                 import mcp  # noqa: F401
             except ImportError:
                 return
-            assert main(["--attach", "--headless"]) == 2
-            assert main(["--attach", "not-a-pid"]) == 2
+            from _leaks import root_logging_kept
+            # v0.1.374 — the entry point configures the root logger, as it
+            # should in its own process (audit D-f)
+            with root_logging_kept():
+                assert main(["--attach", "--headless"]) == 2
+                assert main(["--attach", "not-a-pid"]) == 2
         finally:
             if old is None:
                 os.environ.pop("OGR_BRIDGE_DIR", None)

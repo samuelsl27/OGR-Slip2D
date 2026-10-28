@@ -69,7 +69,10 @@ def _info(window_version=None, *, window=True):
     fake = _FakeClient(window_version)
     router = WindowRouter(ws, finder=lambda: fake if window else None,
                           connect=lambda info: info)
-    srv = build_server(ws, backend=router)
+    from _leaks import root_logging_kept
+    # v0.1.374 — building the server configures the root logger (audit D-f)
+    with root_logging_kept():
+        srv = build_server(ws, backend=router)
 
     async def scenario():
         async with Client(srv) as c:

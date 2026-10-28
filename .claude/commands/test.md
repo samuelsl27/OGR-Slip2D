@@ -9,9 +9,13 @@ QT_QPA_PLATFORM=offscreen python tests/_runner.py
 
 Después:
 
-1. Da el recuento total (pasados / fallados).
+1. Da el recuento total (pasados / fallados) y, si aparece, `Leaks: N`:
+   desde v0.1.374 un archivo que deja estado global cambiado
+   (`✗ [LEAK] clave: antes → después`) hace fallar la corrida aunque
+   `Failed` sea 0.
 2. Si algo falla, para **cada** fallo indica: qué invariante protegía el
-   test, qué valor esperaba y cuál obtuvo.
+   test, qué valor esperaba y cuál obtuvo. Para una fuga, qué archivo la
+   deja y qué cambia.
 3. **No corrijas nada todavía.** Diagnostica y espera mi OK.
 
 Si la suite tarda más de lo que permite tu entorno, ejecútala por mitades

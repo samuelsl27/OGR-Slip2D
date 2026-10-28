@@ -261,9 +261,13 @@ class TestTheCommandLine:
             import mcp  # noqa: F401
         except ImportError:
             return
+        from _leaks import root_logging_kept
         from ogr_mcp.cli import main
-        assert main(["--attach", "--headless"]) == 2
-        assert main(["--attach", "not-a-pid"]) == 2
+        # v0.1.374 — the entry point configures the root logger, as it
+        # should in its own process (audit D-f)
+        with root_logging_kept():
+            assert main(["--attach", "--headless"]) == 2
+            assert main(["--attach", "not-a-pid"]) == 2
 
     def test_the_run_cannot_see_the_users_windows(self):
         """The runner's own guard, checked from inside a test: any server a

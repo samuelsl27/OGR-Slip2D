@@ -93,7 +93,10 @@ class TestOpenForgetsThePreviousProject:
         path = folder / "other.ogr"
         Project("Other").save(path)
         w = MainWindow()
-        raw = QFileDialog.getOpenFileName
+        # v0.1.374 — kept from the class dict: once qtpy is imported the
+        # attribute is its Python wrapper, and putting back what the class
+        # returns leaves a bare function where its staticmethod was
+        raw = QFileDialog.__dict__["getOpenFileName"]
         QFileDialog.getOpenFileName = staticmethod(
             lambda *a, **k: (str(path), ""))
         try:

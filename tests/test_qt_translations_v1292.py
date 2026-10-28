@@ -74,14 +74,16 @@ class TestTheCatalogue:
         from PySide6.QtGui import QPalette
         palette = QPalette(app.palette())
         os.environ["OGR_SETTINGS_DIR"] = tempfile.mkdtemp(prefix="ogr_test_qt_")
-        t = None
         try:
             user_prefs.save_language("es")
-            t = apply_saved_preferences(app)
+            apply_saved_preferences(app)
             assert _yes() == "&Sí"
         finally:
-            if t is not None:
-                app.removeTranslator(t)
+            # v0.1.374 — through the module that installed it: a bare
+            # removeTranslator(t) left qt_catalog._CURRENT naming a
+            # translator no longer installed (audit D-e)
+            from ogr_gui.qt_catalog import reset_qt_translator
+            reset_qt_translator(app)
             set_language(prev)
             app.setStyleSheet(sheet)
             app.setPalette(palette)

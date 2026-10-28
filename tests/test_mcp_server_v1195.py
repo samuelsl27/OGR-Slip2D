@@ -75,8 +75,11 @@ def _run(coro):
 def _server(profile="full", ws=None):
     from ogr_api import Workspace
     from ogr_mcp.server import build_server
+    from _leaks import root_logging_kept
     ws = ws or Workspace()
-    return ws, build_server(ws, profile=profile)
+    # v0.1.374 — building the server configures the root logger (audit D-f)
+    with root_logging_kept():
+        return ws, build_server(ws, profile=profile)
 
 
 async def _tools(srv):

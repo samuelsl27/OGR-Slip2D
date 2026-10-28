@@ -32,12 +32,17 @@ The invariants:
 * an icon with no colour of its own reads on the dark menu, and the window
   builds its icons again when the theme changes;
 * the canvas paper follows the theme and a material keeps its colour;
-* the sheet, the palette, the language and the icon caches are put back.
+* the sheet, the palette, the language and the icon caches are put back,
+  and so is the saved theme (v0.1.374): ``_apply_theme`` saves it, and
+  from this file on every window of the run opened dark (audit D-c,
+  docs/audits/AUDITORIA_SUITE_v0.1.372.md §9).
 """
 from __future__ import annotations
 
 import contextlib
+import os
 import sys
+import tempfile
 from collections import Counter
 from pathlib import Path
 
@@ -80,17 +85,25 @@ def _no_modals():
 
 @contextlib.contextmanager
 def _themed():
-    """Put back the sheet, the palette, the language and the icons."""
+    """Put back the sheet, the palette, the language and the icons; and
+    the saved theme, by saving into a folder of the block's own, as
+    test_qt_translations_v1292 does."""
     from PySide6.QtGui import QPalette
     from ogr_gui.i18n import current_language, set_language
     from ogr_gui.resources import icons
     app = QApplication.instance() or QApplication([])
     sheet, palette = app.styleSheet(), QPalette(app.palette())
     language = current_language()
+    settings = os.environ.get("OGR_SETTINGS_DIR")
+    os.environ["OGR_SETTINGS_DIR"] = tempfile.mkdtemp(prefix="ogr_test_theme_")
     try:
         set_language("en")
         yield app
     finally:
+        if settings is None:
+            os.environ.pop("OGR_SETTINGS_DIR", None)
+        else:
+            os.environ["OGR_SETTINGS_DIR"] = settings
         set_language(language)
         app.setStyleSheet(sheet)
         app.setPalette(palette)
