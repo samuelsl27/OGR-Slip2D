@@ -416,6 +416,10 @@ def run_test(cls, method):
         raise
 
 
+#: The folders a run gives itself (see ``main``), put back after every file.
+_RUN_FOLDERS = ("OGR_BRIDGE_DIR", "OGR_SETTINGS_DIR")
+
+
 def main(tests_dir: Path, patterns=(), k: str | None = None,
          list_only: bool = False) -> int:
     # The ✓/✗ marks below are not printable in the console codepage Windows
@@ -537,39 +541,63 @@ def main(tests_dir: Path, patterns=(), k: str | None = None,
         # trips the collector (where Qt objects go to a deferred deletion).
         gc_guard.release()
         gc.collect()
+        # v0.1.373 — and what survives is frozen, so the next collections
+        # (this one, and the automatic ones on any thread) walk only what was
+        # made since. Each full collection cost ~320 ns per live object: 0.4 s
+        # per file at the start of the suite, 3.4 s at the end, 13.6 of 87.6
+        # minutes (docs/audits/AUDITORIA_SUITE_v0.1.372.md §3). Collected
+        # first, frozen after: the previous file's garbage is still freed.
+        gc.freeze()
         print(f"\n=== {f.name} ===  ({i_file}/{n_files})")
+        # v0.1.373 — sys.path and the run's own folders are put back after
+        # each file. 242 files insert tests/, which is already sys.path[0],
+        # and nothing took it out: 369 entries at the end, walked with one
+        # stat each by every import of every spawn worker (a pool of 4 went
+        # from 0.5 s to 2.4-3.6 s, audit §4.3). Two runner self-tests repoint
+        # the folders through a second main() (audit D-d).
+        saved_path = list(sys.path)
+        saved_folders = {v: os.environ.get(v) for v in _RUN_FOLDERS}
         try:
-            mod = _load_module(f)
-        except Exception as e:  # noqa: BLE001
-            print(f"  [LOAD ERROR] {e}")
-            fail_details.append((f.name, traceback.format_exc()))
-            failed += 1
-            continue
+            try:
+                mod = _load_module(f)
+            except Exception as e:  # noqa: BLE001
+                print(f"  [LOAD ERROR] {e}")
+                fail_details.append((f.name, traceback.format_exc()))
+                failed += 1
+                continue
 
-        for name, cls in inspect.getmembers(mod, inspect.isclass):
-            if not name.startswith("Test"):
-                continue
-            if cls.__module__ != mod.__name__:
-                continue
-            methods = [(m_name, m)
-                       for m_name, m in inspect.getmembers(cls, inspect.isfunction)
-                       if m_name.startswith("test_")
-                       and match_test(name, m_name, k)]
-            if not methods:
-                continue
-            print(f"  {name}:")
-            for m_name, m in methods:
-                outcome, why, tb = run_test(cls, m)
-                if outcome == "passed":
-                    passed += 1
-                    print(f"    {_tag()} ✓ {m_name}")
-                elif outcome == "skipped":
-                    skipped += 1
-                    print(f"    {_tag()} ○ {m_name} — skipped: {why}")
+            for name, cls in inspect.getmembers(mod, inspect.isclass):
+                if not name.startswith("Test"):
+                    continue
+                if cls.__module__ != mod.__name__:
+                    continue
+                methods = [(m_name, m)
+                           for m_name, m in inspect.getmembers(cls, inspect.isfunction)
+                           if m_name.startswith("test_")
+                           and match_test(name, m_name, k)]
+                if not methods:
+                    continue
+                print(f"  {name}:")
+                for m_name, m in methods:
+                    outcome, why, tb = run_test(cls, m)
+                    if outcome == "passed":
+                        passed += 1
+                        print(f"    {_tag()} ✓ {m_name}")
+                    elif outcome == "skipped":
+                        skipped += 1
+                        print(f"    {_tag()} ○ {m_name} — skipped: {why}")
+                    else:
+                        failed += 1
+                        print(f"    {_tag()} ✗ {m_name}: {why}")
+                        fail_details.append((f"{name}.{m_name}", tb))
+        finally:
+            # In place: whoever holds the sys.path list keeps the same one.
+            sys.path[:] = saved_path
+            for var, value in saved_folders.items():
+                if value is None:
+                    os.environ.pop(var, None)
                 else:
-                    failed += 1
-                    print(f"    {_tag()} ✗ {m_name}: {why}")
-                    fail_details.append((f"{name}.{m_name}", tb))
+                    os.environ[var] = value
 
     print("\n" + "=" * 60)
     # A skip is counted apart and named: it is neither a pass (it measured
