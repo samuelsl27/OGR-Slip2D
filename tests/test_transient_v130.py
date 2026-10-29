@@ -461,6 +461,25 @@ class TestTransientGui:
         assert p.transient_results == []
 
 
+# v0.1.379 -- the default drawdown (stages at 1e4 and 1e6 s, both flagged)
+# costs ~14 s, nearly all of it the factor of safety of each stage, and seven
+# tests only read it: four below and the three of TestInterpretStageNavigation,
+# whose viewer is read-only. Computed once. What keeps its own run: the
+# calc_sf=False variant, and the test that turns the materials' seepage off
+# and recomputes, because it changes the project. The helper itself,
+# TestStageFactorsOfSafety._drawdown, stays unmemoized: test_fos_chart_v1308
+# and test_transient_initial_result_v1307 call it and change what they get.
+# File-local: test_shared_test_caches_v1378 fails if another file reaches it.
+_SHARED: dict = {}
+
+
+def _shared_drawdown():
+    """``TestStageFactorsOfSafety()._drawdown()`` with its defaults: (p, w)."""
+    if "drawdown" not in _SHARED:
+        _SHARED["drawdown"] = TestStageFactorsOfSafety()._drawdown()
+    return _SHARED["drawdown"]
+
+
 # ======================================================================
 @_requires_qt
 class TestStageFactorsOfSafety:
@@ -513,7 +532,7 @@ class TestStageFactorsOfSafety:
         return p, w
 
     def test_fos_computed_for_flagged_stages(self):
-        p, _w = self._drawdown()
+        p, _w = _shared_drawdown()
         for r in p.transient_results:
             assert r.notes.get("fos"), r.notes
             assert "fos_min" in r.notes
@@ -527,7 +546,7 @@ class TestStageFactorsOfSafety:
         """Without per-stage boundary conditions the initial state and
         every stage would share the same conditions and NOTHING would
         change in time — the bug this test pins down."""
-        p, _w = self._drawdown(times=(1e4, 1e6))
+        p, _w = _shared_drawdown()
         u_early = max(p.transient_results[0].pore_pressure)
         u_late = max(p.transient_results[-1].pore_pressure)
         assert u_late < u_early, (u_early, u_late)
@@ -536,7 +555,7 @@ class TestStageFactorsOfSafety:
         """Classic rapid-drawdown behaviour: the factor of safety is
         lowest right after the level drops (pressures not yet dissipated)
         and recovers as they do."""
-        p, _w = self._drawdown(times=(1e4, 1e6))
+        p, _w = _shared_drawdown()
         f0 = p.transient_results[0].notes["fos_min"]
         f1 = p.transient_results[-1].notes["fos_min"]
         assert f1 > f0, (f0, f1)
@@ -553,14 +572,14 @@ class TestStageFactorsOfSafety:
     def test_active_seepage_result_restored(self):
         """Computing per-stage factors must not leave the project
         pointing at an intermediate stage."""
-        p, _w = self._drawdown()
+        p, _w = _shared_drawdown()
         assert p.seepage_result is p.transient_results[-1]
 
 
 @_requires_qt
 class TestInterpretStageNavigation:
     def _window(self):
-        p, w = TestStageFactorsOfSafety()._drawdown(times=(1e4, 1e6))
+        p, w = _shared_drawdown()
         from ogr_gui.interpret_groundwater_window import (
             InterpretGroundwaterWindow,
         )

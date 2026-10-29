@@ -127,9 +127,10 @@ def _best_of(project, method, seeds, *, first=None, **kw):
     """The best of a few runs, and the surface that produced it.
 
     ``first`` is the run of ``seeds[0]``, when the caller already has it
-    computed with these same arguments (v0.1.378: the shared seed-1234 run
-    below). It takes that seed's place, so the order the runs are compared
-    in, and with it which of two equal factors wins, does not change."""
+    computed with these same arguments on an equal model (v0.1.378: the
+    shared seed-1234 run below, made on its own ``_sa_slope()``). It takes
+    that seed's place, so the order the runs are compared in, and with it
+    which of two equal factors wins, does not change."""
     best = None
     for i, seed in enumerate(seeds):
         if i == 0 and first is not None:
