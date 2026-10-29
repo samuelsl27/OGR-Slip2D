@@ -220,8 +220,10 @@ camino rápido de antes y se ha conservado a propósito.
 El barrido es intrínsecamente N búsquedas. Su rejilla de test es la más
 barata que **sigue resolviendo el mínimo intermedio** (3 × 4 centros,
 pasos de radio de 70 ft, 18 dovelas), y cada barrido se calcula una vez y
-lo comparten todos los tests que lo leen — el mismo truco que bajó un
-archivo de filtración de 48 s a 12 s.
+lo comparten todos los tests que lo leen — el mismo truco que bajó
+`test_focus_optimize_m4_v155` de 48 s a 12 s compartiendo la superficie de
+partida (corregido en 0.1.378: aquí decía «un archivo de filtración», y no lo
+era).
 
 ---
 

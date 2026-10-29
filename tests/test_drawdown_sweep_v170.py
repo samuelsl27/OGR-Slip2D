@@ -42,7 +42,8 @@ A sweep is one full search per level, so this file is the expensive kind.
 The grid is deliberately the coarsest that still resolves the
 intermediate minimum (3 x 4 centres, 70 ft radius steps, 18 slices), and
 each sweep is computed ONCE and shared by every test that reads it — the
-same trick that took a seepage file from 48 s to 12 s. Around 20 s total.
+same trick that took test_focus_optimize_m4_v155 from 48 s to 12 s by
+sharing its starting surface. Around 20 s total.
 """
 from __future__ import annotations
 

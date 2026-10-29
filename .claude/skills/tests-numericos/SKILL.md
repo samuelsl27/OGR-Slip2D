@@ -39,9 +39,12 @@ funciona.
 
 ## Coste
 
-Los tests que mallan y resuelven filtración son los caros. Comparte la
-geometría de partida entre casos de una misma clase: un archivo pasó de
-48 s a 12 s sin perder ningún test. Pero no bajes la finura de un test de
+Los tests que mallan y resuelven filtración son de los caros. Comparte lo
+caro entre los casos de un archivo —el modelo, la malla, la búsqueda—:
+`test_focus_optimize_m4_v155` pasó de 48 s a 12 s compartiendo la superficie
+de partida, sin perder ningún test. El memo, local al archivo: otro archivo
+que lo alcance recibe en la serie lo que calculó el primero
+(`tests/test_shared_test_caches_v1378.py`). Pero no bajes la finura de un test de
 validación para ganar tiempo: puede ser el invariante. El resto de las
 reglas (cuánto puede tardar un test, rejillas, ventanas, la lista de
 lentos) está en AGENTS.md, «Dónde y cómo van los tests nuevos».

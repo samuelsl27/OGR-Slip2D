@@ -123,15 +123,53 @@ def _annealing(method, seed, *, num_slices=25, steps=300, optimize=True,
     return s
 
 
-def _best_of(project, method, seeds, **kw):
-    """The best of a few runs, and the surface that produced it."""
+def _best_of(project, method, seeds, *, first=None, **kw):
+    """The best of a few runs, and the surface that produced it.
+
+    ``first`` is the run of ``seeds[0]``, when the caller already has it
+    computed with these same arguments (v0.1.378: the shared seed-1234 run
+    below). It takes that seed's place, so the order the runs are compared
+    in, and with it which of two equal factors wins, does not change."""
     best = None
-    for seed in seeds:
-        r = _annealing(method, seed, **kw).run(project)
+    for i, seed in enumerate(seeds):
+        if i == 0 and first is not None:
+            r = first
+        else:
+            r = _annealing(method, seed, **kw).run(project)
         assert r.critical is not None, f"seed {seed} found nothing"
         if best is None or r.min_fos < best.min_fos:
             best = r
     return best
+
+
+# v0.1.378 -- the two runs this file used to repeat are computed once and
+# read by every test that runs exactly that search: the Bishop annealing with
+# seed 1234 on the annealing slope (six readers) and the best of Spencer over
+# seeds 1234 and 2024 on case 002 (two). Both are deterministic -- the search
+# draws from its own random.Random, and so does the walk -- and every reader
+# only reads. Computing again is the point of what keeps its own run: the
+# rule-7 'off' run of the m-alpha gate, the narrow slope limits, the seed-77
+# reproducibility runs and the unseeded ones. File-local on purpose:
+# test_shared_test_caches_v1378.py fails if another file reaches them.
+_SHARED: dict = {}
+
+
+def _shared_bishop_1234():
+    """``_annealing(_bishop(), 1234).run(...)`` on a fresh ``_sa_slope()``."""
+    if "bishop_1234" not in _SHARED:
+        p, _toe, _crest = _sa_slope()
+        _SHARED["bishop_1234"] = _annealing(_bishop(), 1234).run(p)
+    return _SHARED["bishop_1234"]
+
+
+def _shared_spencer_best():
+    """``_best_of`` Spencer over seeds 1234 and 2024 on case 002."""
+    if "spencer_best" not in _SHARED:
+        from ogr_slip2d import Spencer
+        _SHARED["spencer_best"] = _best_of(
+            TestAgainstThePublishedNonCircularMinimum._model(), Spencer(),
+            (1234, 2024))
+    return _SHARED["spencer_best"]
 
 
 def _circular_minimum(project, method, num_slices=25, **grid):
@@ -152,7 +190,8 @@ class TestTheInequalityHoldsForTheAnnealing:
         p, _toe, _crest = _sa_slope()
         circular = _circular_minimum(p, _bishop(), grid_nx=12, grid_ny=12,
                                      radius_increment=20)
-        best = _best_of(p, _bishop(), (1234, 3, 42))
+        best = _best_of(p, _bishop(), (1234, 3, 42),
+                        first=_shared_bishop_1234())
         n = len(best.critical.surface.polyline.vertices) - 1
         ref = _chord_reference(p, circular.surface, n)
         assert best.min_fos <= ref + 1e-9, (
@@ -218,9 +257,7 @@ class TestAgainstThePublishedNonCircularMinimum:
             / "002-yamagami-ueta-1988" / "modelo.ogr")
 
     def test_spencer_lands_in_the_published_band(self):
-        from ogr_slip2d import Spencer
-
-        best = _best_of(self._model(), Spencer(), (1234, 2024))
+        best = _shared_spencer_best()
         lo, hi = self.BAND
         assert lo <= best.min_fos <= hi, (
             "annealing %.4f outside the published non-circular band "
@@ -234,7 +271,7 @@ class TestAgainstThePublishedNonCircularMinimum:
         p = self._model()
         circular = _circular_minimum(p, Spencer(), grid_nx=10, grid_ny=10,
                                      radius_increment=15)
-        best = _best_of(p, Spencer(), (1234, 2024))
+        best = _shared_spencer_best()
         assert best.min_fos < circular.fos, (best.min_fos, circular.fos)
 
 
@@ -247,7 +284,7 @@ class TestTheSearchDoesNotSteerByWhatItWillNotPublish:
         is free to descend where it used to. Same seed, same everything
         else: if the gate ever stops applying, this goes red."""
         p, _toe, _crest = _sa_slope()
-        gated = _annealing(_bishop(), 1234).run(p)
+        gated = _shared_bishop_1234()
         ungated = _annealing(_bishop(), 1234, check_m_alpha=False).run(p)
         assert gated.critical is not None and ungated.critical is not None
         assert abs(gated.min_fos - ungated.min_fos) > 1e-9, (
@@ -259,8 +296,7 @@ class TestTheSearchDoesNotSteerByWhatItWillNotPublish:
         and the LAST FIFTY inadmissible in every seed. The threshold is
         deliberately loose — what is being excluded is a search living
         inside the forbidden basin, not a handful of rejects on the way."""
-        p, _toe, _crest = _sa_slope()
-        r = _annealing(_bishop(), 1234).run(p)
+        r = _shared_bishop_1234()
         valid = [q for q in r.evaluations if q.is_valid]
         assert valid
         bad = sum(1 for q in valid if not getattr(q, "admissible", True))
@@ -270,8 +306,7 @@ class TestTheSearchDoesNotSteerByWhatItWillNotPublish:
         """Not steered by, but not hidden either: they were generated and
         analysed, and ``inadmissible_count`` has to keep meaning here what
         it means in the other five searches."""
-        p, _toe, _crest = _sa_slope()
-        r = _annealing(_bishop(), 1234).run(p)
+        r = _shared_bishop_1234()
         assert r.valid_count == len([q for q in r.evaluations if q.is_valid])
         assert r.analysed_count <= r.valid_count
 
@@ -283,8 +318,8 @@ class TestTheExtremitiesAreControlVariables:
     They were nailed to the ends of the steepest ground segment."""
 
     def test_the_critical_surface_leaves_the_steepest_segment(self):
-        p, toe, crest = _sa_slope()
-        r = _annealing(_bishop(), 1234).run(p)
+        _p, toe, crest = _sa_slope()
+        r = _shared_bishop_1234()
         v = r.critical.surface.polyline.vertices
         assert v[0].x < toe - 1e-6 or v[-1].x > crest + 1e-6, (
             "both ends still pinned at [%.3f, %.3f]: %.3f .. %.3f"
@@ -294,7 +329,7 @@ class TestTheExtremitiesAreControlVariables:
         """Rule 7 — and this is where the Slope Limits reach the
         GENERATION of this search and not only the mass filter."""
         p, _toe, _crest = _sa_slope()
-        wide = _annealing(_bishop(), 1234).run(p)
+        wide = _shared_bishop_1234()
         narrow = _annealing(_bishop(), 1234,
                             slope_limits=(31.0, 49.0)).run(p)
         assert wide.critical is not None and narrow.critical is not None
