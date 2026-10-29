@@ -88,27 +88,64 @@ def _run(project=None, n=16, seed=5, wide=True, **kw):
     return p, res
 
 
+# v0.1.380 -- the runs several tests repeat with the same arguments are computed
+# once: _run(n) on a fresh Ej_1 model for n = 16, 10 and 14 (two, four and three
+# readers), and the Global Minimum / Overall Slope pair of TestPhysicalInvariant
+# (two readers), as its tests compute it. Every reader only reads. What keeps
+# its own run: test_project_is_not_modified, whose point is the project it
+# passes in, the single readers, and every call with its own seed or option.
+# _det is not shared (the owner's decision): it is cheap. _run itself stays
+# unmemoized, because test_surface_key_endpoints_v1237 calls it, once under a
+# patched key. File-local: test_shared_test_caches_v1378 fails if another file
+# reaches these.
+_SHARED: dict = {}
+
+
+def _shared_run(n=16, wide=True):
+    """``_run(n=n, wide=wide)`` on a fresh Ej_1 model, once per (n, wide)."""
+    if (n, wide) not in _SHARED:
+        _SHARED[(n, wide)] = _run(n=n, wide=wide)
+    return _SHARED[(n, wide)]
+
+
+def _shared_gm_os():
+    """TestPhysicalInvariant's Global Minimum and Overall Slope runs, made as
+    its two tests made them, the same variables passed to both: (gm, os_)."""
+    if "gm_os" not in _SHARED:
+        p = _ej1_project()
+        det = _det(p)
+        variables = _vars(p)
+        gm = run_global_minimum(p, det, variables, num_samples=16,
+                                sampling=SM.LATIN_HYPERCUBE, seed=5,
+                                num_slices=14)
+        os_ = run_overall_slope(p, _search, variables, [_MID],
+                                num_samples=16,
+                                sampling=SM.LATIN_HYPERCUBE, seed=5,
+                                deterministic=det)
+        _SHARED["gm_os"] = (gm, os_)
+    return _SHARED["gm_os"]
+
 class TestOverallSlopeBasics:
     def test_produces_statistics(self):
-        _p, res = _run()
+        _p, res = _shared_run()
         assert res.ok
         o = res.by_method[_MID]
         assert o.statistics.n + o.failed_samples == 16
         assert o.statistics.std_dev > 0
 
     def test_analysis_type_recorded(self):
-        _p, res = _run(n=10)
+        _p, res = _shared_run(n=10)
         assert res.analysis_type == "overall_slope"
 
     def test_probability_of_failure_is_the_counted_fraction(self):
-        _p, res = _run(n=14)
+        _p, res = _shared_run(n=14)
         o = res.by_method[_MID]
         vals = o.statistics.values
         expected = sum(1 for v in vals if v < 1.0) / len(vals)
         assert abs(o.probability_of_failure - expected) < 1e-12
 
     def test_reliability_index_formula(self):
-        _p, res = _run(n=14)
+        _p, res = _shared_run(n=14)
         o = res.by_method[_MID]
         st = o.statistics
         assert abs(o.reliability_index
@@ -138,31 +175,13 @@ class TestPhysicalInvariant:
         Slope mean factor of safety must not exceed the Global Minimum
         mean. This ties the two analysis types together and would catch a
         search that silently failed to re-run."""
-        p = _ej1_project()
-        det = _det(p)
-        variables = _vars(p)
-        gm = run_global_minimum(p, det, variables, num_samples=16,
-                                sampling=SM.LATIN_HYPERCUBE, seed=5,
-                                num_slices=14)
-        os_ = run_overall_slope(p, _search, variables, [_MID],
-                                num_samples=16,
-                                sampling=SM.LATIN_HYPERCUBE, seed=5,
-                                deterministic=det)
+        gm, os_ = _shared_gm_os()
         mean_gm = gm.by_method[_MID].statistics.mean
         mean_os = os_.by_method[_MID].statistics.mean
         assert mean_os <= mean_gm + 1e-6, (mean_os, mean_gm)
 
     def test_probability_of_failure_not_lower(self):
-        p = _ej1_project()
-        det = _det(p)
-        variables = _vars(p)
-        gm = run_global_minimum(p, det, variables, num_samples=16,
-                                sampling=SM.LATIN_HYPERCUBE, seed=5,
-                                num_slices=14)
-        os_ = run_overall_slope(p, _search, variables, [_MID],
-                                num_samples=16,
-                                sampling=SM.LATIN_HYPERCUBE, seed=5,
-                                deterministic=det)
+        gm, os_ = _shared_gm_os()
         assert (os_.by_method[_MID].probability_of_failure
                 >= gm.by_method[_MID].probability_of_failure - 1e-12)
 
@@ -179,14 +198,14 @@ class TestMovingGlobalMinimum:
         assert res.by_method[_MID].distinct_minima <= 2
 
     def test_minima_are_surface_dicts(self):
-        _p, res = _run(n=10)
+        _p, res = _shared_run(n=10)
         for sd in res.by_method[_MID].global_minima:
             assert "radius" in sd or "polyline" in sd
 
 
 class TestCriticalProbabilisticSurface:
     def test_identified(self):
-        _p, res = _run(n=16)
+        _p, res = _shared_run(n=16)
         cp = res.by_method[_MID].critical_probabilistic
         assert cp is not None
         assert cp.surface is not None
@@ -231,19 +250,19 @@ class TestCriticalProbabilisticSurface:
         assert res.by_method[_MID].critical_probabilistic is None
 
     def test_times_global_minimum_counted(self):
-        _p, res = _run(n=14)
+        _p, res = _shared_run(n=14)
         cp = res.by_method[_MID].critical_probabilistic
         assert cp.times_global_minimum >= 0
         assert cp.times_global_minimum <= 14
 
     def test_surfaces_tracked_reported(self):
-        _p, res = _run(n=10)
+        _p, res = _shared_run(n=10)
         assert res.by_method[_MID].notes["surfaces_tracked"] > 1
 
 
 class TestSummaryAndErrors:
     def test_summary_fields(self):
-        _p, res = _run(n=10)
+        _p, res = _shared_run(n=10)
         s = res.by_method[_MID].summary()
         for key in ("method", "deterministic_fos", "samples", "mean_fos",
                     "pf", "reliability_index", "distinct_global_minima",

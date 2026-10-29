@@ -307,6 +307,30 @@ class _Steered(_Circles):
     SAME_SURFACES_EVERY_SAMPLE = False
 
 
+# v0.1.380 -- the two runs this file repeats with the same arguments and today's
+# key are computed once: test_overall_slope_v137._run(n=16, wide=True) (two
+# readers) and the default two-mass Overall Slope (two readers). The runs under
+# the old key, and every other configuration, keep their own. _run of v137 is
+# called, not v137's own memo: test_shared_test_caches_v1378 fails if this file
+# reaches another file's memo.
+_SHARED: dict = {}
+
+
+def _shared_v137_16():
+    """``test_overall_slope_v137._run(n=16, wide=True)``, under today's key."""
+    if "v137_16" not in _SHARED:
+        import test_overall_slope_v137 as T
+        _SHARED["v137_16"] = T._run(n=16, wide=True)
+    return _SHARED["v137_16"]
+
+
+def _shared_overall_ab():
+    """``_overall([_named(a), _named(b)])`` with its defaults, today's key."""
+    if "overall_ab" not in _SHARED:
+        a, b = _masses()
+        _SHARED["overall_ab"] = _overall([_named(a), _named(b)])
+    return _SHARED["overall_ab"]
+
 def _overall(circles, *, cls=_Circles, key=None, n=30, **kw):
     """Overall Slope on the notched slope, cohesion of the upper soil
     uniform from 50 to 450 psf: about a quarter of the samples fall below
@@ -357,7 +381,7 @@ class TestOneSurfaceOneProbability:
         has one factor per sample, and the one named critical has the
         higher probability — never above the run's."""
         a, b = _masses()
-        res = _overall([_named(a), _named(b)])
+        res = _shared_overall_ab()
         o = res.by_method[_MID]
         cp = o.critical_probabilistic
         assert o.notes["surfaces_tracked"] == 2
@@ -404,7 +428,7 @@ class TestOneSurfaceOneProbability:
         assert o.notes["critical_probabilistic"] == _CPS_STEERED
         assert o.notes["surfaces_tracked"] == 0
         # The run itself is untouched: its statistics do not depend on it.
-        same = _overall([_named(a), _named(b)]).by_method[_MID]
+        same = _shared_overall_ab().by_method[_MID]
         assert o.statistics.values == same.statistics.values
         assert o.summary()["critical_probabilistic_note"] == _CPS_STEERED
 
@@ -430,8 +454,7 @@ class TestOnARealGrid:
     the run reads as before, and the candidate set is the full one."""
 
     def test_the_critical_probabilistic_surface_has_every_sample(self):
-        import test_overall_slope_v137 as T
-        _p, res = T._run(n=16, wide=True)
+        _p, res = _shared_v137_16()
         o = res.by_method[_MID]
         cp = o.critical_probabilistic
         assert cp is not None
@@ -446,7 +469,8 @@ class TestOnARealGrid:
         import ogr_slip2d.probabilistic as P
         import test_overall_slope_v137 as T
         for n, wide in ((20, True), (10, False), (16, True)):
-            _p, new = T._run(n=n, wide=wide)
+            _p, new = (_shared_v137_16() if (n, wide) == (16, True)
+                       else T._run(n=n, wide=wide))
             old = P._surface_key
             P._surface_key = _old_key
             try:
