@@ -489,6 +489,10 @@ ALLOWED = (
           "module that imports it; a change of theme empties it on purpose"),
     Allow("mod:ogr_api.coerce._HINTS", ANY,
           "the type hints of each operation, read once and kept"),
+    Allow("mod:ogr_core.fem.mesh._INDEX_EPOCH", ANY,
+          "moved by every python_exec script and terminal command "
+          "(v0.1.383): it only decides whether a mesh index is rebuilt, "
+          "never what Mesh.locate answers"),
     Allow("cls:ogr_gui.main_window.MainWindow._sessions", ANY,
           "the windows open in the process. They stay alive between files "
           "on purpose since 0.1.302 (ogr_gui/gc_guard.py; audit D-b)"),

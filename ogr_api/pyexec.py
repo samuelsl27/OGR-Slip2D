@@ -37,6 +37,8 @@ import sys
 import threading
 import traceback
 
+from ogr_core.fem.mesh import invalidate_mesh_indexes
+
 _MAX_OUT = 20_000
 _MAX_REPR = 5_000
 
@@ -120,6 +122,10 @@ def run_python(code: str, namespace: dict) -> dict:
     bufs = _enter()
     value = None
     error = None
+    # v0.1.383 (V5): the script can edit a mesh in place, which the index
+    # behind Mesh.locate would not notice: every index is stale before it
+    # starts and again once it ends.
+    invalidate_mesh_indexes()
     try:
         try:
             tree = ast.parse(code, mode="exec")
@@ -139,6 +145,7 @@ def run_python(code: str, namespace: dict) -> dict:
             except BaseException:  # noqa: BLE001 - returned as data
                 error = traceback.format_exc()
     finally:
+        invalidate_mesh_indexes()
         _leave()
     return {"ok": error is None,
             "stdout": _clip(bufs["out"].getvalue(), _MAX_OUT),

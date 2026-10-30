@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ogr_core.fem.mesh import invalidate_mesh_indexes
 from ogr_gui.i18n import tr
 
 
@@ -154,6 +155,10 @@ class TerminalWidget(QPlainTextEdit):
 
         old_stdout, old_stderr = sys.stdout, sys.stderr
         sys.stdout, sys.stderr = out, err
+        # v0.1.383 (V5): a command can edit a mesh in place, which the index
+        # behind Mesh.locate would not notice: every index is stale before
+        # it runs and again once it ends, as in python_exec.
+        invalidate_mesh_indexes()
         try:
             # v0.1.305 (D292) — through the window's undo step when it gives
             # one (``step_runner``): a command that changes the model is
@@ -168,6 +173,7 @@ class TerminalWidget(QPlainTextEdit):
         except Exception:  # noqa: BLE001
             err.write(traceback.format_exc())
         finally:
+            invalidate_mesh_indexes()
             sys.stdout, sys.stderr = old_stdout, old_stderr
 
         self.command_executed.emit(source)
