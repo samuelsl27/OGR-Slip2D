@@ -2,50 +2,45 @@
 # Copyright (C) 2026 Samuel Sáez López — Universidad Politécnica de Cartagena
 #
 # The test files `python tests/_runner.py --fast` leaves out. Written by
-# `python tests/_runner.py --write-slow-list 45` on 2026-10-28:
+# `python tests/_runner.py --write-slow-list 45` on 2026-10-30:
 # the files that took 45 s or more in their last whole run on the
 # development machine (seconds and tests after each). Written on purpose, never
 # by a run; a whole run, which a release needs, runs every one of them
 # (AGENTS.md, «Coste de los tests»).
-test_acads_validation_v178.py  # 67 s, 15 tests
-test_annealing_inequality_v1119.py  # 678 s, 13 tests
-test_auto_refine_noncircular_family_v1264.py  # 274 s, 2 tests
-test_background_tasks_v1365.py  # 45 s, 9 tests
-test_cancel_v1366.py  # 90 s, 17 tests
-test_cli_wiring_v177.py  # 81 s, 26 tests
-test_dark_theme_v1316.py  # 94 s, 7 tests
-test_dialogs_fit_v1315.py  # 53 s, 5 tests
-test_drawdown_sweep_v170.py  # 89 s, 18 tests
-test_focus_all_searches_v1129.py  # 127 s, 46 tests
-test_fos_chart_v1308.py  # 65 s, 5 tests
-test_groundwater_ops_v1200.py  # 164 s, 48 tests
-test_initial_factor_v1309.py  # 50 s, 5 tests
-test_janbu_wedge_v1142.py  # 51 s, 28 tests
-test_language_saved_v1289.py  # 53 s, 8 tests
-test_multimodal_v1126.py  # 148 s, 23 tests
-test_names_and_headings_v1369.py  # 50 s, 6 tests
+test_annealing_inequality_v1119.py  # 392 s, 13 tests
+test_auto_refine_noncircular_family_v1264.py  # 248 s, 2 tests
+test_cancel_v1366.py  # 85 s, 17 tests
+test_cli_wiring_v177.py  # 72 s, 26 tests
+test_dark_theme_v1316.py  # 76 s, 7 tests
+test_dialogs_fit_more_v1326.py  # 62 s, 11 tests
+test_dialogs_fit_v1315.py  # 127 s, 5 tests
+test_drawdown_sweep_v170.py  # 76 s, 18 tests
+test_face_tie_search_v1136.py  # 46 s, 11 tests
+test_focus_all_searches_v1129.py  # 120 s, 46 tests
+test_fos_chart_v1308.py  # 59 s, 5 tests
+test_groundwater_ops_v1200.py  # 149 s, 48 tests
+test_janbu_wedge_v1142.py  # 48 s, 28 tests
+test_language_saved_v1289.py  # 54 s, 8 tests
+test_multimodal_v1126.py  # 84 s, 23 tests
+test_names_and_headings_v1369.py  # 65 s, 6 tests
 test_noncircular_v115.py  # 72 s, 13 tests
-test_optimize_wiring_v1104.py  # 124 s, 36 tests
-test_overall_slope_v137.py  # 216 s, 22 tests
-test_picard_loop_face_v1358.py  # 121 s, 9 tests
-test_picard_steep_curve_v1266.py  # 70 s, 10 tests
-test_published_cases_v179.py  # 77 s, 13 tests
-test_rescue_face_v1356.py  # 162 s, 10 tests
-test_rescue_fold_v1362.py  # 623 s, 12 tests
-test_retention_alpha_v1278.py  # 54 s, 23 tests
-test_reverse_curvature_v182.py  # 71 s, 14 tests
-test_sa_autorefine_v117.py  # 53 s, 6 tests
+test_optimize_wiring_v1104.py  # 84 s, 36 tests
+test_overall_slope_v137.py  # 119 s, 22 tests
+test_picard_loop_face_v1358.py  # 115 s, 9 tests
+test_picard_steep_curve_v1266.py  # 56 s, 10 tests
+test_probabilistic_v135.py  # 47 s, 18 tests
+test_published_cases_v179.py  # 56 s, 13 tests
+test_remote_oauth_v1204.py  # 46 s, 8 tests
+test_rescue_face_v1356.py  # 138 s, 10 tests
+test_rescue_fold_v1362.py  # 586 s, 12 tests
+test_retention_alpha_v1278.py  # 72 s, 23 tests
 test_search_inequality_v1118.py  # 56 s, 10 tests
-test_slope_face_collinear_v1234.py  # 187 s, 15 tests
-test_statistics_gui_v138.py  # 48 s, 28 tests
-test_surface_altering_v1260.py  # 64 s, 25 tests
-test_surface_key_endpoints_v1237.py  # 99 s, 24 tests
-test_texts_spanish_v1370.py  # 46 s, 10 tests
-test_transient_celia_v1268.py  # 45 s, 3 tests
-test_transient_coupling_v1125.py  # 73 s, 52 tests
-test_transient_face_rule_v1274.py  # 67 s, 4 tests
-test_transient_initial_result_v1307.py  # 57 s, 14 tests
-test_transient_v130.py  # 382 s, 35 tests
-test_unsaturated_v127.py  # 48 s, 29 tests
-test_user_surfaces_v1157.py  # 65 s, 30 tests
-test_validation_cases.py  # 97 s, 9 tests
+test_slope_face_collinear_v1234.py  # 173 s, 15 tests
+test_statistics_gui_v138.py  # 55 s, 28 tests
+test_surface_altering_v1260.py  # 56 s, 25 tests
+test_surface_key_endpoints_v1237.py  # 77 s, 24 tests
+test_transient_coupling_v1125.py  # 65 s, 52 tests
+test_transient_face_rule_v1274.py  # 80 s, 4 tests
+test_transient_initial_result_v1307.py  # 58 s, 14 tests
+test_transient_v130.py  # 161 s, 35 tests
+test_validation_cases.py  # 101 s, 9 tests

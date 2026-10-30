@@ -124,9 +124,39 @@ def _search(_mid=None):
                       min_area=0.5)
 
 
+def _model_key(project) -> str:
+    """The model as the deterministic search reads it, comparable between
+    two constructions of it: the dates a construction stamps are left out
+    and every uuid is renamed by its order of first appearance.
+
+    v0.1.382 -- ``_det`` was keyed by the method set alone, so a call with
+    ANOTHER model and the same methods got this file's surfaces back. It was
+    safe only because every caller passed the same Ej_1 model, and nothing
+    would have said so the day one did not (test_shared_test_caches_v1378
+    listed it as a latent hazard).
+    """
+    import json
+    import re
+    uuid = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+    names: dict = {}
+
+    def canon(x):
+        if isinstance(x, dict):
+            return {k: canon(v) for k, v in x.items()
+                    if k not in ("date_created", "date_modified")}
+        if isinstance(x, list):
+            return [canon(v) for v in x]
+        if isinstance(x, str) and uuid.match(x):
+            return names.setdefault(x, f"U{len(names)}")
+        return x
+
+    return json.dumps(canon(project.to_dict()), sort_keys=True, default=str)
+
+
 def _det(project, methods=(_MID,)):
-    """A deterministic critical surface per method, cached by method set."""
-    key = tuple(methods)
+    """A deterministic critical surface per method, cached by model and
+    method set."""
+    key = (_model_key(project), tuple(methods))
     if key not in _CACHE:
         from ogr_slip2d.analysis_runner import build_method
         from ogr_slip2d.search import GridSearch
@@ -570,3 +600,25 @@ class TestTheInterfaceShowsANumberOrTheReason:
             assert "nan" not in w.ogr_status.currentMessage()
         finally:
             w.close()
+
+
+# ======================================================================
+class TestTheDeterministicMemoKnowsTheModel:
+    """v0.1.382 -- ``_det`` is keyed by the model as well as the methods.
+
+    Two constructions of the same model must share the key (that is what
+    lets the tests of this file, each building its own Ej_1, share one
+    search), and a different model must get its own surfaces rather than
+    this file's.
+    """
+
+    def test_the_same_model_built_twice_shares_a_key(self):
+        assert _model_key(_project()) == _model_key(_project())
+
+    def test_another_model_gets_its_own_surfaces(self):
+        same = _det(_project())[_MID]
+        heavier = _project()
+        heavier.materials[0].unit_weight += 2.0
+        assert _model_key(heavier) != _model_key(_project())
+        other = _det(heavier)[_MID]
+        assert other.fos != same.fos, (other.fos, same.fos)

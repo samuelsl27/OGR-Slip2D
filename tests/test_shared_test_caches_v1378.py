@@ -42,9 +42,10 @@ Known limit, on purpose: dynamic access (``getattr(T, "_run")``,
 
 The reaches that existed when this guard was written are listed in
 ``ALLOWED`` with the reason each one is safe: every one of them hands out an
-object its readers only read. Two keep a latent hazard, said in their
-entries: ``test_probabilistic_all_failed_v1169._det`` keys its memo by the
-method set and not by the project, and ``_run_gm`` reads it.
+object its readers only read. Two kept a latent hazard until v0.1.382:
+``test_probabilistic_all_failed_v1169._det`` keyed its memo by the method
+set and not by the project, and ``_run_gm`` reads it; the key now carries
+the model.
 
 History: v0.1.378 recognised a memo only by its name and only one call
 away. The adversarial review of v0.1.379 found reaches it could not see (two
@@ -87,11 +88,11 @@ ALLOWED = {
     ("test_own_base_stress_v1210", "test_slide_validation_ej2_piezo_v194", "_result"):
         "one method's result on a reference circle, memoised by (method, circle), only read",
     ("test_partial_method_loss_v1170", "test_probabilistic_all_failed_v1169", "_det"):
-        "LATENT: the memo is keyed by the method set and not by the project; safe "
-        "only because every caller passes the same Ej_1 model, built afresh",
+        "the deterministic surfaces, only read; keyed by the model and the method "
+        "set since v0.1.382 (it was the method set alone: a latent hazard then)",
     ("test_partial_method_loss_v1170", "test_probabilistic_all_failed_v1169", "_run_gm"):
-        "LATENT, the same hazard one call away: _run_gm reads _det; its one caller "
-        "here passes the same Ej_1 model, built afresh",
+        "a Global Minimum run on _det's surfaces; the engine clones per sample, and "
+        "_det is keyed by the model since v0.1.382",
     ("test_mass_switch_note_v1238", "test_statistical_rebuild_v1154", "_notched"):
         "the two-mass model, only read: the engine clones it per sample, and the "
         "one reader here that changes it deep-copies it first",
