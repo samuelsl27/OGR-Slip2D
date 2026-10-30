@@ -203,16 +203,14 @@ class TestTheCountAddsUp:
                           num_slices=25, min_area=0.5).run(project)
 
     def test_valid_plus_invalid_is_every_circle_generated(self):
-        p = _ej1_project()
-        r = self._run(p)
+        r = _shared_grid()
         assert r.total_count == self._GENERATED, (
             r.valid_count, r.invalid_count, r.total_count)
 
     def test_the_denominator_does_not_move_with_the_setting(self):
         """The property that makes the number comparable at all."""
+        on = _shared_grid()   # on is the default
         p = _ej1_project()
-        p.settings.search.create_tension_crack_reverse_curvature = True
-        on = self._run(p)
         p.settings.search.create_tension_crack_reverse_curvature = False
         off = self._run(p)
         assert on.total_count == off.total_count == self._GENERATED
@@ -226,9 +224,31 @@ class TestTheCountAddsUp:
     def test_evaluations_is_not_the_denominator(self):
         """Pins why ``total_count`` had to exist: a surface with no
         LEMResult is still a surface that was generated."""
-        p = _ej1_project()
-        r = self._run(p)
-        assert len(r.evaluations) < r.total_count
+        r = _shared_grid()
+        assert r.evaluations < r.total_count
+
+
+# v0.1.381 -- the default 4851-circle grid on Ej_1 (reverse-curvature cracks on,
+# the default) is read by four tests; computed once and kept as a summary of
+# what they read, not the result: a whole result of 4851 circles would stay
+# alive to the end of the process (the owner's decision). The 'off' side of the
+# rule-7 test keeps its own run. File-local: test_shared_test_caches_v1378 fails
+# if another file reaches it.
+_SHARED: dict = {}
+
+
+def _shared_grid():
+    """What the four readers read of the default grid on a fresh Ej_1."""
+    if "grid" not in _SHARED:
+        import types
+        r = TestTheCountAddsUp._run(_ej1_project())
+        _SHARED["grid"] = types.SimpleNamespace(
+            total_count=r.total_count, valid_count=r.valid_count,
+            invalid_count=r.invalid_count, evaluations=len(r.evaluations),
+            critical_fos=r.critical.fos,
+            critical_surface=r.critical.surface.to_dict(),
+            critical_reverse_curvature=r.critical.surface.reverse_curvature)
+    return _SHARED["grid"]
 
 
 # ======================================================================
@@ -243,15 +263,10 @@ class TestGlobalMinimumUnaffected:
         assert abs(res.fos - 0.882889) / 0.882889 < 0.005, res.fos
 
     def test_grid_search_still_finds_it(self):
-        p = _ej1_project()
-        gs = GridSearch(method=BishopSimplified(), grid_x=(40, 120),
-                        grid_y=(30, 120), grid_nx=20, grid_ny=20,
-                        radius_increment=10, min_radius=2.0,
-                        num_slices=25, min_area=0.5)
-        r = gs.run(p)
-        sd = r.critical.surface.to_dict()
+        r = _shared_grid()   # the same grid as TestTheCountAddsUp._run
+        sd = r.critical_surface
         assert abs(sd["centre_x"] - 88.0) < 1e-6, sd["centre_x"]
         assert abs(sd["centre_y"] - 70.5) < 1e-6, sd["centre_y"]
-        assert abs(r.critical.fos - 0.882889) / 0.882889 < 0.01, \
-            r.critical.fos
-        assert r.critical.surface.reverse_curvature is False
+        assert abs(r.critical_fos - 0.882889) / 0.882889 < 0.01, \
+            r.critical_fos
+        assert r.critical_reverse_curvature is False

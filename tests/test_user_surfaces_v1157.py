@@ -88,6 +88,33 @@ def _evaluate_alone(project, **circle):
     return ev.evaluate_circle(project, SlipCircle(**circle))
 
 
+# v0.1.381 -- the runs that only read a fresh project in one of four states are
+# computed once per state: no user surface, the winning circle, a circle far
+# outside the model, and the winning circle with a non-circular analysis. What
+# keeps its own runs, because the same object or the change of one project is
+# what it checks: the two doors on one project, removing the circle, the pair
+# that proves a project without circles inert, the stored circle left without
+# endpoints, and the same circle twice. File-local: test_shared_test_caches_v1378
+# fails if another file reaches it.
+_SHARED: dict = {}
+
+
+def _shared_run(state: str):
+    """``_run`` on a fresh demo slope in ``state``: "none", "winner", "far" or
+    "winner_nc"."""
+    if state not in _SHARED:
+        from ogr_core.project.settings import SurfaceType
+        p = _project()
+        if state in ("winner", "winner_nc"):
+            _give(p, _circle(**_WINNER))
+        elif state == "far":
+            _give(p, _circle(centre_x=500.0, centre_y=500.0, radius=3.0))
+        if state == "winner_nc":
+            p.settings.search.surface_type = SurfaceType.NON_CIRCULAR.value
+        _SHARED[state] = _run(p)
+    return _SHARED[state]
+
+
 class TestPersistence:
     """The circle survives the file. It did not before."""
 
@@ -148,18 +175,14 @@ class TestTheNumberMoves:
     """Rule 7: the surface changes the published factor of safety."""
 
     def test_it_is_evaluated_at_all(self):
-        p = _project()
-        assert _run(p).user_evaluations == []
-        _give(p, _circle(**_WINNER))
-        assert len(_run(p).user_evaluations) == 1
+        assert _shared_run("none").user_evaluations == []
+        assert len(_shared_run("winner").user_evaluations) == 1
 
     def test_it_wins_the_global_minimum_and_the_number_changes(self):
-        p = _project()
-        without = _run(p)
+        without = _shared_run("none")
         assert not without.is_user_surface(without.critical)
 
-        _give(p, _circle(**_WINNER))
-        with_it = _run(p)
+        with_it = _shared_run("winner")
 
         assert with_it.is_user_surface(with_it.critical)
         assert with_it.critical.fos < without.critical.fos
@@ -188,10 +211,8 @@ class TestTheNumberMoves:
 
     def test_it_joins_the_drawn_population(self):
         """``valid()`` is what the canvas, Interpret and the exporters read."""
-        p = _project()
-        n = len(_run(p).valid())
-        _give(p, _circle(**_WINNER))
-        assert len(_run(p).valid()) == n + 1
+        n = len(_shared_run("none").valid())
+        assert len(_shared_run("winner").valid()) == n + 1
 
 
 class TestTheCountersDoNotLie:
@@ -204,10 +225,8 @@ class TestTheCountersDoNotLie:
     """
 
     def test_search_counters_are_untouched(self):
-        p = _project()
-        without = _run(p)
-        _give(p, _circle(**_WINNER))
-        with_it = _run(p)
+        without = _shared_run("none")
+        with_it = _shared_run("winner")
 
         assert with_it.total_count == without.total_count
         assert with_it.valid_count == without.valid_count
@@ -216,18 +235,14 @@ class TestTheCountersDoNotLie:
         assert with_it.analysed_count == without.analysed_count
 
     def test_the_population_identity_still_holds(self):
-        p = _project()
-        _give(p, _circle(**_WINNER))
-        result = _run(p)
+        result = _shared_run("winner")
         expected = ((_GRID["grid_nx"] + 1) * (_GRID["grid_ny"] + 1)
                     * (_GRID["radius_increment"] + 1))
         assert result.total_count == expected
 
     def test_evaluations_stays_the_search_alone(self):
-        p = _project()
-        n = len(_run(p).evaluations)
-        _give(p, _circle(**_WINNER))
-        after = _run(p)
+        n = len(_shared_run("none").evaluations)
+        after = _shared_run("winner")
         assert len(after.evaluations) == n
         assert len(after.all_evaluations()) == n + 1
 
@@ -245,7 +260,7 @@ class TestInertWhenThereAreNone:
 
     def test_all_evaluations_is_the_same_list_object(self):
         """No copy where there is nothing to join: this runs per method."""
-        result = _run(_project())
+        result = _shared_run("none")
         assert result.all_evaluations() is result.evaluations
 
 
@@ -308,9 +323,7 @@ class TestTheResultsFile:
             return
         from ogr_core.project import save_results
 
-        p = _project()
-        _give(p, _circle(**_WINNER))
-        result = _run(p)
+        result = _shared_run("winner")
         out = tmp_path / "r.h5"
         save_results(out, result, project_id="t")
 
@@ -332,7 +345,7 @@ class TestTheResultsFile:
         from ogr_core.project import save_results
 
         out = tmp_path / "plain.h5"
-        save_results(out, _run(_project()), project_id="t")
+        save_results(out, _shared_run("none"), project_id="t")
         with h5py.File(out, "r") as f:
             assert "user_surfaces" not in f
             assert "n_user_surfaces" not in f.attrs
@@ -368,9 +381,7 @@ class TestTheNotes:
     """Said when it happened, and only then."""
 
     def test_a_user_minimum_is_announced(self):
-        p = _project()
-        _give(p, _circle(**_WINNER))
-        notes = " ".join(_run(p).notes)
+        notes = " ".join(_shared_run("winner").notes)
         assert "user defined by hand" in notes
 
     def test_silent_when_the_search_wins(self):
@@ -383,24 +394,18 @@ class TestTheNotes:
         assert not [n for n in result.notes if "user defined by hand" in n]
 
     def test_silent_when_there_are_no_user_surfaces(self):
-        assert _run(_project()).notes == []
+        assert _shared_run("none").notes == []
 
     def test_an_unanalysable_surface_says_so_and_names_itself(self):
-        p = _project()
         # Far outside the model: no ground to meet.
-        _give(p, _circle(centre_x=500.0, centre_y=500.0, radius=3.0))
-        notes = [n for n in _run(p).notes if "produced no result" in n]
+        notes = [n for n in _shared_run("far").notes
+                 if "produced no result" in n]
         assert len(notes) == 1
         # It names the circle, so the reader does not have to guess which.
         assert "500" in notes[0] and "radius 3" in notes[0]
 
     def test_a_non_circular_analysis_says_it_skipped_them(self):
-        from ogr_core.project.settings import SurfaceType
-
-        p = _project()
-        _give(p, _circle(**_WINNER))
-        p.settings.search.surface_type = SurfaceType.NON_CIRCULAR.value
-        result = _run(p)
+        result = _shared_run("winner_nc")
         assert result.user_evaluations == []
         assert [n for n in result.notes if "Non-Circular" in n]
 
@@ -410,21 +415,9 @@ class TestTheNotes:
         Wider than it looks: "unstable" contains "stable" and "ahead"
         contains "head", so the check is on the substrings themselves.
         """
-        from ogr_core.project.settings import SurfaceType
-
         collected = []
-        for setup in ("wins", "rejected", "non_circular"):
-            p = _project()
-            if setup == "wins":
-                _give(p, _circle(**_WINNER))
-            elif setup == "rejected":
-                _give(p, _circle(centre_x=500.0, centre_y=500.0,
-                                 radius=3.0))
-            else:
-                _give(p, _circle(**_WINNER))
-                p.settings.search.surface_type = (
-                    SurfaceType.NON_CIRCULAR.value)
-            collected += list(_run(p).notes)
+        for state in ("winner", "far", "winner_nc"):
+            collected += list(_shared_run(state).notes)
 
         assert collected, "no notes were produced, so nothing was checked"
         forbidden = (("stable", "head"), ("edge of the search grid",),

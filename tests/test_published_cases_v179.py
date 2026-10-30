@@ -146,13 +146,26 @@ class TestSlopeSearchOnThePublishedModels:
         """The defining property of a directed search, on a slope four
         times taller than ACADS 1(a)."""
         from ogr_slip2d import BishopSimplified
-        from ogr_slip2d.analysis_runner import build_search
         case = "004-arai-tagyo-1985-ej1"
-        p = _case(case)
-        grid = build_search(p, "bishop_simplified").run(p)
+        grid_fos = _shared_grid_fos_004()
         slope = self._slope(case, BishopSimplified())
-        assert slope.critical.fos <= grid.critical.fos * 1.01, (
-            slope.critical.fos, grid.critical.fos)
+        assert slope.critical.fos <= grid_fos * 1.01, (
+            slope.critical.fos, grid_fos)
+
+
+# v0.1.381 -- the declared grid of case 004 is run by two tests that read only
+# its critical factor; computed once and kept as that number (8788 circles of
+# 30 slices would otherwise stay alive to the end of the process). File-local.
+_SHARED: dict = {}
+
+
+def _shared_grid_fos_004():
+    """The critical factor of case 004's declared grid, Bishop."""
+    if "004" not in _SHARED:
+        from ogr_slip2d.analysis_runner import build_search
+        p = _case("004-arai-tagyo-1985-ej1")
+        _SHARED["004"] = build_search(p, "bishop_simplified").run(p).critical.fos
+    return _SHARED["004"]
 
 
 class TestTheWaterTableMovesTheNumber:
@@ -194,9 +207,10 @@ class TestTheWaterTableMovesTheNumber:
         land in the same neighbourhood, not merely be lower."""
         from ogr_slip2d.analysis_runner import build_search
         out = {}
-        for name in ("004-arai-tagyo-1985-ej1", "005-arai-tagyo-1985-ej3"):
-            p = _case(name)
-            out[name] = build_search(p, "bishop_simplified").run(p).critical.fos
+        out["004-arai-tagyo-1985-ej1"] = _shared_grid_fos_004()
+        p = _case("005-arai-tagyo-1985-ej3")
+        out["005-arai-tagyo-1985-ej3"] = build_search(
+            p, "bishop_simplified").run(p).critical.fos
         dry = out["004-arai-tagyo-1985-ej1"]
         wet = out["005-arai-tagyo-1985-ej3"]
         drop = (dry - wet) / dry

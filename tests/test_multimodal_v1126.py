@@ -192,7 +192,7 @@ class TestTheSwarmFindsBothMechanisms:
     """Problem 103, and the structure the manual publishes."""
 
     def test_multimodal_separates_deep_from_shallow(self):
-        r = _swarm(multiple_minima=True).run(_p103(90.0))   # ratio 1.5
+        r = _shared_swarm_90(True)   # ratio 1.5
         assert len(r.minima) >= 2, (
             "only %d minimum reported on the ratio the reference calls "
             "the transition" % len(r.minima))
@@ -202,7 +202,7 @@ class TestTheSwarmFindsBothMechanisms:
             % [(round(m.fos, 4), _is_deep(m)) for m in r.minima])
 
     def test_unimodal_reports_exactly_one(self):
-        r = _swarm(multiple_minima=False).run(_p103(90.0))
+        r = _shared_swarm_90(False)
         assert len(r.minima) == 1
         assert r.minima[0].fos == pytest.approx(r.critical.fos, rel=1e-12)
 
@@ -213,7 +213,8 @@ class TestTheSwarmFindsBothMechanisms:
         not."""
         shallow = {}
         for cu2 in (90.0, 96.0):
-            r = _swarm(multiple_minima=True).run(_p103(cu2))
+            r = (_shared_swarm_90(True) if cu2 == 90.0
+                 else _swarm(multiple_minima=True).run(_p103(cu2)))
             vals = [m.fos for m in r.minima if not _is_deep(m)]
             assert vals, "no shallow minimum at cu2 = %g" % cu2
             shallow[cu2] = min(vals)
@@ -227,7 +228,8 @@ class TestTheSwarmFindsBothMechanisms:
         numbers give 1.290/1.215 = 1.0617 from ratio 1.4 to 1.5."""
         deep = {}
         for cu2 in (84.0, 90.0):
-            r = _swarm(multiple_minima=True).run(_p103(cu2))
+            r = (_shared_swarm_90(True) if cu2 == 90.0
+                 else _swarm(multiple_minima=True).run(_p103(cu2)))
             vals = [m.fos for m in r.minima if _is_deep(m)]
             assert vals, "no deep minimum at cu2 = %g" % cu2
             deep[cu2] = min(vals)
@@ -238,6 +240,26 @@ class TestTheSwarmFindsBothMechanisms:
 
 
 # ======================================================================
+# v0.1.381 -- the two swarm runs this file repeats on the cu2 = 90 model are
+# computed once: multiple minima on (four readers) and the defaults, which are
+# multiple minima off and the enhanced algorithm on (three readers). Kept as
+# what the readers read, the minima and the critical result, not the swarm's
+# evaluations. test_it_is_reproducible computes its two runs itself (the
+# owner's decision). File-local: test_shared_test_caches_v1378 fails if another
+# file reaches these.
+_SHARED: dict = {}
+
+
+def _shared_swarm_90(multiple_minima: bool):
+    """``_swarm(multiple_minima=...).run(_p103(90.0))``: minima and critical."""
+    if multiple_minima not in _SHARED:
+        import types
+        r = _swarm(multiple_minima=multiple_minima).run(_p103(90.0))
+        _SHARED[multiple_minima] = types.SimpleNamespace(
+            minima=r.minima, critical=r.critical)
+    return _SHARED[multiple_minima]
+
+
 class TestTheSwarmIsASearch:
     """It has to be as good as the searches it sits beside."""
 
@@ -268,8 +290,8 @@ class TestRuleSeven:
     """Every setting has to move the number, or the count."""
 
     def test_one_min_or_several_changes_the_count(self):
-        one = _swarm(multiple_minima=False).run(_p103(90.0))
-        many = _swarm(multiple_minima=True).run(_p103(90.0))
+        one = _shared_swarm_90(False)
+        many = _shared_swarm_90(True)
         assert len(many.minima) > len(one.minima)
 
     def test_the_radius_changes_the_count(self):
@@ -292,7 +314,7 @@ class TestRuleSeven:
         """Its portion is this program's own choice — the reference does
         not publish one — so the least that can be asked of it is that it
         decides something."""
-        on = _swarm(enhanced=True).run(_p103(90.0))
+        on = _shared_swarm_90(False)   # enhanced=True is the default
         off = _swarm(enhanced=False).run(_p103(90.0))
         assert on.critical.fos != pytest.approx(off.critical.fos, rel=1e-9)
 

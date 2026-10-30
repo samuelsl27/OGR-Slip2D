@@ -47,6 +47,25 @@ def _slope():
     return p
 
 
+# v0.1.381 -- the 1500-surface Slope Search (seed 42) is run by two tests that
+# read its critical factor and centre; computed once, kept as those numbers.
+# The reproducibility pair keeps its two runs (the owner's decision). File-local.
+_SHARED: dict = {}
+
+
+def _shared_slope_1500():
+    """Critical factor and centre of the 1500-surface Slope Search."""
+    if "slope" not in _SHARED:
+        import types
+        from ogr_slip2d import BishopSimplified
+        from ogr_slip2d.search import SlopeSearch
+        c = SlopeSearch(method=BishopSimplified(), num_surfaces=1500,
+                        num_slices=25, seed=42).run(_slope()).critical
+        _SHARED["slope"] = types.SimpleNamespace(
+            fos=c.fos, centre_x=c.surface.centre_x, centre_y=c.surface.centre_y)
+    return _SHARED["slope"]
+
+
 class TestSlopeSearch:
     def test_finds_valid_circles(self):
         from ogr_slip2d import BishopSimplified
@@ -79,10 +98,9 @@ class TestSlopeSearch:
             grid_x=(20, 60), grid_y=(15, 40), grid_nx=16, grid_ny=16,
             radius_increment=8.0, min_radius=8.0, num_slices=25,
             min_area=0.5).run(p)
-        slope = SlopeSearch(method=BishopSimplified(),
-            num_surfaces=1500, num_slices=25, seed=42).run(p)
-        assert abs(slope.critical.fos - grid.critical.fos) < 0.05 * grid.critical.fos, (
-            f"Slope {slope.critical.fos:.3f} vs Grid {grid.critical.fos:.3f}"
+        slope = _shared_slope_1500()
+        assert abs(slope.fos - grid.critical.fos) < 0.05 * grid.critical.fos, (
+            f"Slope {slope.fos:.3f} vs Grid {grid.critical.fos:.3f}"
         )
 
     def test_critical_circle_at_least_as_good_as_grid(self):
@@ -107,17 +125,16 @@ class TestSlopeSearch:
             grid_x=(20, 60), grid_y=(15, 40), grid_nx=12, grid_ny=12,
             radius_increment=4.0, min_radius=8.0, num_slices=25,
             min_area=0.5).run(p)
-        slope = SlopeSearch(method=BishopSimplified(),
-            num_surfaces=1500, num_slices=25, seed=42).run(p)
-        assert slope.critical is not None and grid.critical is not None
+        slope = _shared_slope_1500()
+        assert grid.critical is not None
         # At least as critical as the coarse grid (small tolerance for
         # the grid occasionally landing right on a good circle).
-        assert slope.critical.fos <= grid.critical.fos * 1.02, (
-            f"Slope {slope.critical.fos:.4f} worse than "
+        assert slope.fos <= grid.critical.fos * 1.02, (
+            f"Slope {slope.fos:.4f} worse than "
             f"Grid {grid.critical.fos:.4f}"
         )
         # And the circle must sit in the slope's own neighbourhood.
-        sc = slope.critical.surface
+        sc = slope
         assert 10.0 <= sc.centre_x <= 70.0, sc.centre_x
         assert 10.0 <= sc.centre_y <= 50.0, sc.centre_y
 
