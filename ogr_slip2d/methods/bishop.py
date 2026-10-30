@@ -521,13 +521,14 @@ class BishopSimplified(LEMMethod):
         # v0.1.213 (D84) -- as in ``_general_moment_fos``.
         zero: list[int] = []
         imposed = self._imposed_reader()
+        memo: dict = {}   # v0.1.384 (V6): what the passes of this solve share
         for it in range(1, self.max_iterations + 1):
             iterations = it
             # v0.1.220 (D210) -- the resisting sum at this F, from the one
             # function the back analysis also calls; see
             # :func:`x0_resisting_pass` for what enters each term.
             pas = x0_resisting_pass(s_list, kh, kv, slide_sign, sup, fos,
-                                    imposed)
+                                    imposed, memo=memo)
             sigma_load, zero = pas.sigma_load, pas.zero
             support_force = pas.support_force
             if pas.collapsed is not None:
@@ -770,7 +771,8 @@ class X0Pass:
 
 def x0_resisting_pass(slices, kh: float, kv: float, slide_sign: float, sup,
                       fos: float, imposed=None, *,
-                      janbu: bool = False) -> X0Pass:
+                      janbu: bool = False, memo: Optional[dict] = None
+                      ) -> X0Pass:
     """The resisting sum of Bishop (1955) or Janbu (1954) at the factor of
     safety ``fos``, held fixed:
 
@@ -791,6 +793,20 @@ def x0_resisting_pass(slices, kh: float, kv: float, slide_sign: float, sup,
 
     v0.1.220 (D210) -- the loops of the two solvers, moved here unchanged so
     that the back analysis evaluates the very sum the method solves.
+
+    v0.1.384 (V6 of the compute audit) -- ``memo``, a dict the caller keeps
+    for the passes of ONE solve (a fresh one per ``compute_fos``, so each
+    pass of the envelope and each drawdown stage has its own). The first
+    pass fills it with what does not read F, per slice: the numerator term,
+    the trigonometry, the envelope's linearisation and the zero-strength
+    flag, the support's load and force. Later passes form only the
+    denominator and the quotient, with the same operations in the same
+    order, so every float is the one a full pass would give. Not stored: a
+    slice a PASSIVE support crosses, whose load is ``t_passive / F`` (the
+    test of ``support_vertical_load``, mirrored), which is computed whole
+    every pass. It relies on ``imposed`` answering the same for a slice in
+    every pass of the solve, as ``LEMMethod._imposed_reader`` does; the back
+    analysis, whose ``imposed`` may raise, passes no memo.
     """
     s_list = slices.slices if hasattr(slices, "slices") else slices
     out = X0Pass(sigma_load=[0.0] * len(s_list) if sup.present else None,
@@ -799,8 +815,28 @@ def x0_resisting_pass(slices, kh: float, kv: float, slide_sign: float, sup,
         # Only a reinforced surface pays for the import (every pass).
         from ..support_integration import (support_force_on_slice,
                                            support_vertical_load)
+    rows = None
+    if memo is not None:
+        rows = memo.get("rows")
+        if rows is None:
+            rows = memo["rows"] = [None] * len(s_list)
     total = 0.0
     for i_s, s in enumerate(s_list):
+        row = rows[i_s] if rows is not None else None
+        if row is not None:
+            num, trig, mob, flagged, load, force = row
+            if sup.present:
+                out.sigma_load[i_s] = load
+                out.support_force[i_s] = list(force)
+            if flagged:
+                out.zero.append(i_s)
+            den = trig * (1.0 + mob / fos) if janbu else trig + mob / fos
+            if abs(den) < 1e-6:
+                out.collapsed = (s.index, den)
+                out.total = total
+                return out
+            total += num / den
+            continue
         # v0.1.61 — the base normal follows from the VERTICAL
         # equilibrium of the slice, so it carries the ponded-water
         # weight but not the horizontal thrust, exactly as the
@@ -812,14 +848,16 @@ def x0_resisting_pass(slices, kh: float, kv: float, slide_sign: float, sup,
         # joins the vertical equilibrium m_alpha comes from instead of
         # being bolted on outside it. See
         # ``support_integration.support_vertical_load``.
+        load = force = None
         if sup.present:
             load = support_vertical_load(
                 sup, i_s, s.base_angle, slide_sign, fos)
             W_eff += load
             out.sigma_load[i_s] = load
             # v0.1.221 (D212) -- the same force, whole, at the same F.
-            out.support_force[i_s] = list(support_force_on_slice(
-                sup, i_s, s.base_angle, slide_sign, fos))
+            force = support_force_on_slice(
+                sup, i_s, s.base_angle, slide_sign, fos)
+            out.support_force[i_s] = list(force)
 
         N_est = W_eff * math.cos(s.base_angle)
         raw = N_est - s.pore_pressure * s.base_length
@@ -835,27 +873,33 @@ def x0_resisting_pass(slices, kh: float, kv: float, slide_sign: float, sup,
         c, tan_phi = BishopSimplified._local_c_phi(s, s.material,
                                                    sigma_n_eff)
         # v0.1.213 (D84) -- reported, not changed; see ``_zero_strength``.
-        if raw < 0.0 and BishopSimplified._zero_strength(s, raw, c, tan_phi):
+        flagged = (raw < 0.0
+                   and BishopSimplified._zero_strength(s, raw, c, tan_phi))
+        if flagged:
             out.zero.append(i_s)
 
+        # The F-free factors of the denominator, then the denominator with
+        # the operations of the one-line form, in its order:
+        # (sign * trig(a) * tan phi) / F. A memo row keeps the factors.
         if janbu:
             # n_α = cos²α · (1 + tan α · tan φ' / F)  (with sliding sign)
-            den = (math.cos(s.base_angle) ** 2) * (
-                1.0 + slide_sign * math.tan(s.base_angle) * tan_phi / fos
-            )
+            trig = math.cos(s.base_angle) ** 2
+            mob = slide_sign * math.tan(s.base_angle) * tan_phi
+            den = trig * (1.0 + mob / fos)
         else:
-            den = math.cos(s.base_angle) + (
-                slide_sign * math.sin(s.base_angle) * tan_phi / fos
-            )
+            trig = math.cos(s.base_angle)
+            mob = slide_sign * math.sin(s.base_angle) * tan_phi
+            den = trig + mob / fos
         if abs(den) < 1e-6:
             out.collapsed = (s.index, den)
             out.total = total
             return out
 
         # [c'·b + (W − u·b)·tan φ'] / m_α   (or / n_α)
-        total += (
-            c * b + (W_eff - s.pore_pressure * b) * tan_phi
-        ) / den
+        num = c * b + (W_eff - s.pore_pressure * b) * tan_phi
+        if rows is not None and not (sup.present and sup.t_passive[i_s]):
+            rows[i_s] = (num, trig, mob, flagged, load, force)
+        total += num / den
     out.total = total
     return out
 

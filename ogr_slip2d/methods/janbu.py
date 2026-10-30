@@ -172,6 +172,7 @@ class JanbuSimplified(LEMMethod):
         # ``BishopSimplified._zero_strength``.
         zero: list[int] = []
         imposed = self._imposed_reader()
+        memo: dict = {}   # v0.1.384 (V6), as in Bishop
         for it in range(1, self.max_iterations + 1):
             iterations = it
             # v0.1.220 (D210) -- the resisting sum at this F, from the one
@@ -193,7 +194,7 @@ class JanbuSimplified(LEMMethod):
             # ``tests/test_janbu_wedge_v1142.py`` and the header of
             # ``tests/test_support_projection_v1113.py``.
             pas = x0_resisting_pass(s_list, kh, kv, slide_sign, sup, fos,
-                                    imposed, janbu=True)
+                                    imposed, janbu=True, memo=memo)
             sigma_load, zero = pas.sigma_load, pas.zero
             support_force = pas.support_force
             if pas.collapsed is not None:
