@@ -28,6 +28,23 @@ from ..geometry import BoundaryType
 from .water_surfaces import interp_y_on_polyline
 
 
+def _water_copy(project):
+    """A shallow copy of ``project`` for another water level.
+
+    Shallow on purpose: the level copies are evaluated surface by surface
+    inside the analysis's freeze, and they share its regions and bounding
+    box, which do not read the water. v0.1.385 (D380) -- but not the bond
+    profiles of its supports, which do: a copy shared the source's slot, and
+    an agent's read that filled it while the window computed left the
+    lowered level with the profile of the full reservoir (B-bar F = 0.8197
+    where it is 0.6287). Each level copy builds its own; on a run nobody
+    reads into, the slot was already empty and nothing moves."""
+    p = copy.copy(project)
+    if "_support_bond_cache" in p.__dict__:
+        p._support_bond_cache = None
+    return p
+
+
 def drawdown_boundary(project):
     """The drawdown line, or None. At most one is allowed per model."""
     for b in project.boundaries:
@@ -53,7 +70,7 @@ def level_project(project, use_drawdown: bool):
     No drawdown line at all means TOTAL drawdown: no water left, which is
     the reference's convention for an undefined final level.
     """
-    p = copy.copy(project)
+    p = _water_copy(project)
     p.boundaries = list(project.boundaries)
     if not use_drawdown:
         p.boundaries = [b for b in p.boundaries
@@ -141,7 +158,7 @@ def project_at_level(project, y: Optional[float]):
     """
     from ..geometry import Boundary, Polyline, Vertex
 
-    p = copy.copy(project)
+    p = _water_copy(project)
     p.boundaries = [b for b in project.boundaries
                     if b.btype != BoundaryType.DRAWDOWN]
     if y is None:

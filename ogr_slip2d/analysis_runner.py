@@ -2328,7 +2328,11 @@ def evaluate_surfaces(project, surface, method_ids=None, *,
                                    available=", ".join(sorted(known))))
             continue
         search = build_search(project, mid)
-        with project.regions_frozen():
+        # v0.1.385 (V7) -- the freeze every door outside a search now takes,
+        # without its fallback: a model where freezing raises let that error
+        # out of here before, and still does.
+        from .search import frozen_evaluation
+        with frozen_evaluation(search, project, fallback=False):
             results[mid] = search.evaluate_surface(project,
                                                    copy.deepcopy(surface))
         if results[mid] is None:

@@ -561,7 +561,9 @@ _CODED = {
         "AutoRefineNonCircularSearch._unsliceable_note",
         "BaseSearch.refusal_text"),
     "ogr_slip2d/optimize.py": (
-        "optimize_surface", "_finish", "OptimizeReport.summary"),
+        # v0.1.385 (V7) -- the walk's body moved from optimize_surface to
+        # _walk, and the census goes with it.
+        "optimize_surface", "_walk", "_finish", "OptimizeReport.summary"),
 }
 #: Two formats left, both DATA: a window of the Slope Limits, "[a, b]".
 _DATA = {

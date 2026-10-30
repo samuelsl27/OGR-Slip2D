@@ -17,6 +17,7 @@ Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 
+import contextlib
 import math
 import random
 from abc import ABC, abstractmethod
@@ -477,6 +478,59 @@ class SearchResult:
 
     def top_n(self, n: int = 10) -> list[LEMResult]:
         return sorted(self.valid(), key=self.score)[:n]
+
+
+# ======================================================================
+@contextlib.contextmanager
+def frozen_evaluation(search, project, *, fallback: bool = True):
+    """Evaluate under ``project.regions_frozen()``, as a search run does,
+    from a door that evaluates OUTSIDE one (v0.1.385, V7 of the compute
+    audit): a Global Minimum sample and a sensitivity point
+    (``probabilistic._evaluate_on``), the probe of D88, a walk of Optimize
+    and a fixed surface (``analysis_runner.evaluate_surfaces``). Unfrozen,
+    every evaluation rebuilt the region signature about a hundred times
+    (K19: 129 162 calls, 41 % of its samples); frozen, twice on entering.
+
+    - Already frozen (a walk inside a search run): nothing at all.
+    - Otherwise the search's weak-band cache is emptied before entering and
+      again on leaving. It lives on the SEARCH, which these doors reuse
+      across projects (each sample is another clone), and a frozen project
+      trusts it whoever built it.
+    - Entering resolves the regions and the bounding box eagerly. A model
+      where that raises used to fail INSIDE the evaluation, where each door
+      turns it into what it always said (a refused start of Optimize, a
+      failed sample, None from the probe). With ``fallback`` the evaluation
+      then runs unfrozen and fails where it did; without it the error leaves
+      from here, as it did from the freeze ``evaluate_surfaces`` entered
+      itself.
+    - The body is never caught here: an exception of the evaluation leaves
+      as it came, with the freeze released and the cache emptied.
+    """
+    if getattr(project, "_regions_freeze_depth", 0):
+        yield
+        return
+    _forget_weak_bands(search)
+    freeze = None
+    try:
+        freeze = project.regions_frozen()
+        freeze.__enter__()
+    except Exception:  # noqa: BLE001 — see "Entering" above
+        if not fallback:
+            raise
+        freeze = None
+    try:
+        yield
+    finally:
+        if freeze is not None:
+            freeze.__exit__(None, None, None)
+        _forget_weak_bands(search)
+
+
+def _forget_weak_bands(search) -> None:
+    """Empties the weak-band cache of a search (``BaseSearch._weak_bands``);
+    an evaluator without one has nothing to forget."""
+    if hasattr(search, "_weak_bands"):
+        search._weak_bands_cache = None
 
 
 # ======================================================================

@@ -58,6 +58,18 @@ def detached_copy(project, *, cold_caches: bool = True):
     clone = copy.deepcopy(project, memo)
     if "_listeners" in clone.__dict__:
         clone._listeners = []
+    # v0.1.385 (D380) -- a detached copy does not inherit the freeze of the
+    # project it was taken from. ``regions_frozen`` is a promise about THAT
+    # object for the length of a block; a detached copy is changed afterwards
+    # (a sample, a point, an agent's job), and one born frozen trusted its
+    # caches for good: the support bond profiles of the original among them,
+    # so a water table moved 5 m gave F = 1.9559 where the unfrozen
+    # evaluation gives 1.9019. It happened when the agent bridge copied the
+    # live project while the window was computing (and froze it). The
+    # shallow copies made inside an evaluation keep it, on purpose (see
+    # ``Project.regions_frozen``).
+    if "_regions_freeze_depth" in clone.__dict__:
+        clone._regions_freeze_depth = 0
     if cold_caches:
         clone.invalidate_regions_cache()
     return clone

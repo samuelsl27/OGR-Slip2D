@@ -319,12 +319,20 @@ def _rebuild_surface(surface_dict: dict):
 
 
 def _evaluate_on(project, search, surface):
-    """Evaluate a known surface on a (possibly modified) project."""
+    """Evaluate a known surface on a (possibly modified) project.
+
+    v0.1.385 (V7) -- frozen (``search.frozen_evaluation``): ``project`` is the
+    sample or point already perturbed and prepared, which this evaluation
+    does not change, so its region signature need not be rebuilt a hundred
+    times. A model where freezing raises is evaluated unfrozen, and the
+    sample fails as it always did."""
+    from ogr_slip2d.search import frozen_evaluation
     from ogr_slip2d.surface import SlipCircle
 
-    if isinstance(surface, SlipCircle):
-        return search.evaluate_circle(project, surface)
-    return search.evaluate_surface(project, surface)
+    with frozen_evaluation(search, project):
+        if isinstance(surface, SlipCircle):
+            return search.evaluate_circle(project, surface)
+        return search.evaluate_surface(project, surface)
 
 
 #: v0.1.236 (D93) — what a statistical run says when it is handed the
@@ -860,14 +868,18 @@ def _does_not_reevaluate_to_itself(project, prepare, search, surface,
     home = _extent(surface_dict)
     if home is None:
         return None
+    from ogr_slip2d.search import frozen_evaluation
     from ogr_slip2d.surface import SlipCircle
 
     try:
         unperturbed = prepare(clone_project(project))
-        if isinstance(surface, SlipCircle):
-            r = search.evaluate_circle(unperturbed, surface)
-        else:
-            r = search.evaluate_surface(unperturbed, surface)
+        # v0.1.385 (V7) -- frozen, as the samples are; a model where
+        # freezing raises is evaluated unfrozen and answers None as before.
+        with frozen_evaluation(search, unperturbed):
+            if isinstance(surface, SlipCircle):
+                r = search.evaluate_circle(unperturbed, surface)
+            else:
+                r = search.evaluate_surface(unperturbed, surface)
     except Exception:  # noqa: BLE001 - see the docstring
         return None
     there = _extent(getattr(r, "surface", None))

@@ -1236,6 +1236,11 @@ def _bond_profiles(project: "Project") -> dict:
     caller is a canvas tooltip, with a handful of supports. That contract
     is also what makes the two failure registers of :class:`_BondProfiles`
     safe: they are dropped with the profiles they explain, never after.
+    v0.1.385 (D380) -- it held for the project itself and not for its
+    copies: a copy that inherits the freeze trusts a slot it did not fill.
+    A detached copy now starts unfrozen, and a drawdown level copy, which
+    changes the water, starts with an empty slot; and the diagnostics of a
+    read (``settings_warnings``) do fill the slot outside any analysis.
 
     v0.1.163, defect D95 -- what could not be built is RECORDED rather
     than passed over. The entry is simply absent from the mapping either

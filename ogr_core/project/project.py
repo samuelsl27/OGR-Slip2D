@@ -543,6 +543,12 @@ class Project:
         where a stronger guarantee already holds: an analysis must not
         modify the user's project (design coefficients are applied to a
         *copy*, which is a different Project with its own caches).
+        v0.1.385 (D380) -- what a copy keeps of the freeze: a detached copy
+        (``copies.detached_copy``, every sample and every job) starts
+        unfrozen; the shallow copies an evaluation makes INSIDE the block
+        (the Ky trial, the drawdown levels) share it and the region and box
+        caches on purpose, and a level copy drops the bond profiles, which
+        read the water it changes.
 
         Entering populates both caches once, so a frozen block never serves
         a cache that was empty when it started. Reentrant, and released in

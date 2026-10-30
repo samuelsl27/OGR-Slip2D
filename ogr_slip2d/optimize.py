@@ -552,9 +552,6 @@ def optimize_surface(project, search, surface, settings=None, *,
 
     Returns ``(best_surface, best_result, report)``.
     """
-    from ogr_core.geometry import Polyline, Vertex
-    from ogr_slip2d.surface import SlipSurface
-
     opts = settings or OptimizeSettings()
     rep = OptimizeReport(technique=str(opts.technique))
     if opts.technique not in TECHNIQUES:
@@ -574,6 +571,25 @@ def optimize_surface(project, search, surface, settings=None, *,
     if len(pts) < 3:
         rep.notes["error"] = SN.search_note(SN.OPT_THREE_VERTICES)
         return surface, None, rep
+
+    # v0.1.385 (V7) — the walk evaluates thousands of surfaces against the
+    # same model, which it never changes: frozen, as inside a search run,
+    # where this is nothing because the run has frozen it already. Entered
+    # BEFORE the evaluator is chosen: the shallow copy ``_evaluator_for``
+    # makes takes the weak-band cache as it finds it, and the freeze empties
+    # it first. A model where freezing raises walks unfrozen, and its start
+    # is refused as it always was.
+    from .search import frozen_evaluation
+    with frozen_evaluation(search, project):
+        return _walk(project, search, surface, opts, rep, rng, pts,
+                     progress_cb)
+
+
+def _walk(project, search, surface, opts, rep, rng, pts, progress_cb):
+    """The walk of :func:`optimize_surface` from its starting points, under
+    its freeze (v0.1.385, V7: moved here unchanged)."""
+    from ogr_core.geometry import Polyline, Vertex
+    from ogr_slip2d.surface import SlipSurface
 
     evaluator = _evaluator_for(search, opts)
 
