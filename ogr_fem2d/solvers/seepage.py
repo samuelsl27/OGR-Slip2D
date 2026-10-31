@@ -46,6 +46,7 @@ from __future__ import annotations
 
 import json
 import math
+import struct
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
@@ -69,6 +70,9 @@ from ogr_core.fem.seepage_data import (  # noqa: F401
     hydraulic_props_of,
     restore_derived,
 )
+# v0.1.393 (V14) -- the mesh index epoch, read where an element cache is
+# checked (``SeepageSolver._element_matrices``).
+from ogr_core.fem import mesh as _core_mesh
 
 try:
     import numpy as _np
@@ -83,6 +87,29 @@ except ImportError:  # pragma: no cover
     _csr = None
     _splu = None
     _spsolve = None
+
+
+def _element_matrix(dNdx, dNdy, area, kxx, kyy, kxy) -> list:
+    """The nine entries ``area * (grad Ni)^T K (grad Nj)`` of a T3, i then
+    j: the expression the assembly has always used, in its order, so an
+    entry is the same float whoever forms it (v0.1.393, V14)."""
+    return [area * (dNdx[i] * (kxx * dNdx[j] + kxy * dNdy[j])
+                    + dNdy[i] * (kxy * dNdx[j] + kyy * dNdy[j]))
+            for i in range(3) for j in range(3)]
+
+
+_PACK_TENSOR = struct.Struct("<3d").pack
+
+
+def _tensor_bits(kxx, kyy, kxy):
+    """The bits of a conductivity tensor of three Python floats, or None.
+    A kept element matrix stands for another only when the bits agree:
+    ``==`` would let one formed with ``kxy = 0.0`` stand for ``-0.0``, and
+    a tensor of other numbers is formed every time, as it always was
+    (v0.1.393, V14)."""
+    if type(kxx) is float and type(kyy) is float and type(kxy) is float:
+        return _PACK_TENSOR(kxx, kyy, kxy)
+    return None
 
 
 # ======================================================================
@@ -151,32 +178,55 @@ class SeepageSolver:
 
         Returns ``(rows, cols, vals, q)`` in COO triplet form plus the
         right-hand side, before Dirichlet elimination.
+
+        v0.1.393 (V14 of the compute audit) -- the geometry of each element
+        and its triplet positions are built once per solver
+        (:meth:`_element_matrices`), in the first call's pass and in its
+        order, and so is its matrix at the saturated conductivity (``K0``)
+        the first time one is needed. Each call reads the conductivity once
+        per material; an element whose ``kr`` is absent or exactly the float
+        1.0 (``x * 1.0`` is ``x``) and whose tensor has the bits ``K0`` was
+        formed with takes ``K0`` as it stands, and any other is formed again
+        from the stored geometry with the expression below, so every entry
+        is the float the loop always gave. Bank 05/015 assembled 1600 times,
+        13.7 s of 46.4, every element with ``kr`` = 1.
         """
         n = self.mesh.node_count
-        rows: list[int] = []
-        cols: list[int] = []
-        vals: list[float] = []
         q = [0.0] * n
-
-        for e in self.mesh.elements:
-            g = e.shape_gradients(self.mesh)
-            if g is None:
-                continue
-            dNdx, dNdy, area = g
-            kxx, kyy, kxy = self.props_for(e).conductivity_tensor()
-            if kr is not None:
-                f = kr[e.id]
-                kxx, kyy, kxy = kxx * f, kyy * f, kxy * f
-            for i in range(3):
-                for j in range(3):
-                    # (grad Ni)^T K (grad Nj)
-                    kij = area * (
-                        dNdx[i] * (kxx * dNdx[j] + kxy * dNdy[j])
-                        + dNdy[i] * (kxy * dNdx[j] + kyy * dNdy[j])
-                    )
-                    rows.append(e.nodes[i])
-                    cols.append(e.nodes[j])
-                    vals.append(kij)
+        cached = self._element_matrices()
+        if cached is None:
+            rows, cols, vals = self._assemble_and_keep(kr)
+        else:
+            rows_c, cols_c, entries = cached
+            rows = list(rows_c)
+            cols = list(cols_c)
+            vals: list[float] = []
+            tensors: dict = {}   # this call: id(props) -> (props, k.., bits)
+            for entry in entries:
+                e, dNdx, dNdy, area, bits0, k0 = entry
+                p = self.props_for(e)
+                known = tensors.get(id(p))
+                if known is None or known[0] is not p:
+                    kxx, kyy, kxy = p.conductivity_tensor()
+                    known = tensors[id(p)] = (
+                        p, kxx, kyy, kxy, _tensor_bits(kxx, kyy, kxy))
+                _p, kxx, kyy, kxy, bits = known
+                if kr is not None:
+                    f = kr[e.id]
+                    if not (type(f) is float and f == 1.0):
+                        vals.extend(_element_matrix(
+                            dNdx, dNdy, area, kxx * f, kyy * f, kxy * f))
+                        continue
+                if bits is not None and bits == bits0:
+                    vals.extend(k0)
+                    continue
+                k0 = _element_matrix(dNdx, dNdy, area, kxx, kyy, kxy)
+                if bits is not None:
+                    # Kept at this tensor: one edited between calls is
+                    # formed once more, not at every call.
+                    entry[4] = bits
+                    entry[5] = k0
+                vals.extend(k0)
 
         # Neumann: point fluxes
         for b in bcs.nodes:
@@ -192,6 +242,68 @@ class SeepageSolver:
             q[s.node_b] += half
 
         return rows, cols, vals, q
+
+    def _element_matrices(self):
+        """``(rows, cols, entries)`` kept from an earlier call, or None: the
+        triplet positions of every element that has an area, in mesh order,
+        and per element ``[element, dNdx, dNdy, area, bits, K0]``, ``K0``
+        its nine entries at the tensor whose bits are ``bits`` (both None
+        until one is formed).
+
+        v0.1.393 (V14). Valid against the mesh's element and node lists
+        themselves, their lengths, the index epoch a script's run moves
+        (``ogr_core.fem.mesh.invalidate_mesh_indexes``, v0.1.383) and the
+        mesh's own count of :meth:`Mesh.forget_index` calls: a new mesh, one
+        grown or shrunk, one a script may have edited, or one that code
+        editing it in place has declared, is built again."""
+        mesh = self.mesh
+        cache = getattr(self, "_k0_cache", None)
+        if (cache is not None and cache[0] is mesh.elements
+                and cache[1] is mesh.nodes
+                and cache[2] == len(mesh.elements)
+                and cache[3] == len(mesh.nodes)
+                and cache[4] == _core_mesh._INDEX_EPOCH
+                and cache[5] == getattr(mesh, "_forgets", 0)):
+            return cache[6], cache[7], cache[8]
+        return None
+
+    def _assemble_and_keep(self, kr):
+        """The assembly's loop as it always ran, element by element in one
+        pass — so a bad mesh, a bad material or a short ``kr`` raises where
+        it raised — keeping what :meth:`_element_matrices` serves next."""
+        mesh = self.mesh
+        # Read before the lists: a script that starts during the pass
+        # leaves this cache stale at once (as _build_locator does).
+        epoch = _core_mesh._INDEX_EPOCH
+        forgets = getattr(mesh, "_forgets", 0)
+        rows: list[int] = []
+        cols: list[int] = []
+        vals: list[float] = []
+        entries = []
+        for e in mesh.elements:
+            g = e.shape_gradients(mesh)
+            if g is None:
+                continue
+            dNdx, dNdy, area = g
+            kxx, kyy, kxy = self.props_for(e).conductivity_tensor()
+            bits = _tensor_bits(kxx, kyy, kxy)
+            if kr is not None:
+                f = kr[e.id]
+                kxx, kyy, kxy = kxx * f, kyy * f, kxy * f
+                if not (type(f) is float and f == 1.0):
+                    bits = None     # K0 is formed when an element needs it
+            k = _element_matrix(dNdx, dNdy, area, kxx, kyy, kxy)
+            vals.extend(k)
+            entries.append([e, dNdx, dNdy, area, bits,
+                            k if bits is not None else None])
+            for i in range(3):
+                for j in range(3):
+                    rows.append(e.nodes[i])
+                    cols.append(e.nodes[j])
+        self._k0_cache = (mesh.elements, mesh.nodes, len(mesh.elements),
+                          len(mesh.nodes), epoch, forgets, list(rows),
+                          list(cols), entries)
+        return rows, cols, vals
 
     # ------------------------------------------------------------------
     def _dirichlet_values(self, bcs: SeepageBoundaryConditions

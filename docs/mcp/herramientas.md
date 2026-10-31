@@ -146,7 +146,7 @@ Los tres cálculos pasan por la misma puerta que `analysis_run`: sin norma de di
 |---|---|---|
 | `model_render` | C | Imagen PNG del modelo, con las superficies críticas de un resultado o con los contornos del campo de agua (`field`, de una etapa o del estado inicial con `stage`) y su superficie libre, y la capa de anotaciones (`annotations`); con el programa abierto, `source="window"` captura el lienzo real de la ventana. |
 | `project_history` | | Deshacer, rehacer o listar las ediciones. |
-| `python_exec` | C | Python contra el modelo, para lo que aún no tiene herramienta. Ver [seguridad.md](seguridad.md). Desde v0.1.383, cada script deja caducos los índices con que se localiza un punto en las mallas, porque un script puede editar una malla en el sitio. Si un script edita una malla y vuelve a consultarla dentro de sí mismo, que llame antes a `forget_index()` de esa malla. |
+| `python_exec` | C | Python contra el modelo, para lo que aún no tiene herramienta. Ver [seguridad.md](seguridad.md). Desde v0.1.383, cada script deja caducos los índices con que se localiza un punto en las mallas, y desde v0.1.393 lo que un solucionador de filtración guarda de sus elementos, porque un script puede editar una malla en el sitio. Si un script edita una malla y vuelve a consultarla o a resolverla dentro de sí mismo, que llame antes a `forget_index()` de esa malla. |
 
 ## Recursos
 

@@ -311,12 +311,15 @@ class Mesh:
         self._locator = loc
 
     def forget_index(self) -> None:
-        """Drops the locator (v0.1.383, V5). The program replaces a mesh and
+        """Drops the locator (v0.1.383, V5) and makes stale what a seepage
+        solver keeps of this mesh's elements (``_forgets``, which the
+        solver compares; v0.1.393, V14). The program replaces a mesh and
         never edits one in place; code that edits ``nodes``, ``elements`` or
         an ``Element.nodes`` in place calls this, or the index keeps
-        answering for the old geometry."""
+        answering for the old geometry, and a solver keeps assembling it."""
         self.__dict__.pop("_locator", None)
         self.__dict__.pop("_locate_scans", None)
+        self.__dict__["_forgets"] = self.__dict__.get("_forgets", 0) + 1
 
     def __getstate__(self) -> dict:
         """v0.1.383 (V5) — the index and its scan count stay behind: they
@@ -328,6 +331,9 @@ class Mesh:
         state = self.__dict__.copy()
         state.pop("_locator", None)
         state.pop("_locate_scans", None)
+        # v0.1.393 (V14): the count of forget_index calls is of these lists
+        # too; a copy's solver keys on the copy's lists.
+        state.pop("_forgets", None)
         return state
 
     def interpolate(self, values: list[float], x: float,
@@ -398,7 +404,8 @@ _INDEX_EPOCH = 0
 
 
 def invalidate_mesh_indexes() -> None:
-    """Makes every mesh index built so far stale. The code runners
+    """Makes every mesh index built so far stale, and what every seepage
+    solver keeps of a mesh's elements (v0.1.393, V14). The code runners
     (``ogr_api.pyexec.run_python`` for python_exec, and the window's
     terminal) call it before and after a user's script, which can edit a
     mesh in place — through the project, a stored result or a solver —

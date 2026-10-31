@@ -44,8 +44,10 @@ from enum import Enum
 
 
 from .permeability_models import (  # noqa: E402
+    SUCTION_UNIT,
     PermeabilityModel,
     SimpleSoilType,
+    _MODEL_FUNCS,
     library_for,
 )
 
@@ -180,7 +182,8 @@ class HydraulicProperties:
         ``kr_min`` so the conductivity matrix stays non-singular in very
         dry zones, which is what keeps the Picard iteration solvable.
         """
-        from .permeability_models import _MODEL_FUNCS
+        # v0.1.393 (V14 of the compute audit) -- imported with the module:
+        # a transient's kr reads this for every element of every pass.
         func = _MODEL_FUNCS.get(self.model)
         if func is None:
             return 1.0
@@ -320,8 +323,7 @@ class HydraulicProperties:
 
     def suction_unit(self) -> str:
         """'m' or 'kPa': the unit this model's suction is written in."""
-        from .permeability_models import SUCTION_UNIT
-        return SUCTION_UNIT.get(self.model, "m")
+        return SUCTION_UNIT.get(self.model, "m")   # v0.1.393 (V14): see above
 
     def kr_at_pressure_head(self, pressure_head: float,
                             gamma_w: float) -> float:

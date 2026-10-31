@@ -278,7 +278,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.392"
+    VERSION = "0.1.393"
 
     def __init__(self) -> None:
         super().__init__()
