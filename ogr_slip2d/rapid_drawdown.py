@@ -96,7 +96,7 @@ from __future__ import annotations
 
 import copy
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import Optional
 
 from ogr_core.geometry import Vertex
@@ -603,30 +603,58 @@ def _sample_state(state, x: float):
     return state[-1][2], state[-1][3]
 
 
+#: The ``id`` a new :class:`Material` gets (a fresh ``uuid4``), for a
+#: stage-2 material copied from another rather than constructed (v0.1.395).
+_NEW_MATERIAL_ID = next(f.default_factory for f in fields(Material)
+                        if f.name == "id")
+
+
 def _undrained_slices(slices, tau_by_index: dict):
     """Copy of the slices with the undrained ones in total stresses.
 
     ``c = τ_ff``, ``φ = 0`` and ``u = 0``: the strength is a total-stress
     one, so feeding it a pore pressure as well would subtract the water
     twice.
+
+    v0.1.395 (V16 of the compute audit) -- the first stage-2 material of
+    each base in a call is constructed, as before; the next ones are
+    shallow copies of it with their own ``Undrained`` (constructed) and
+    their own id, the one the constructor would draw. Every other field is
+    one the constructor sets from the same base or a default, and none is
+    mutable (``Material`` has no default factory but ``id``, no
+    ``__post_init__`` and no ``__slots__``: a test guards that), so each
+    copy is field for field, in the same order, the material the
+    constructor gives. Bank 097 built 2.41 million of them, 23.5 s of 173,
+    one base per call: the constructor assigns its 26 fields through a
+    Python ``__setattr__``.
     """
     from ogr_core.materials.builtin_models import Undrained
 
     out = copy.copy(slices)
     out.slices = []
+    firsts: dict = {}           # id(base) -> (base, its first material)
     for i, s in enumerate(slices.slices):
         if i not in tau_by_index:
             out.slices.append(s)
             continue
         s2 = copy.copy(s)
         base = s.material
-        s2.material = Material(
-            name=f"{getattr(base, 'name', 'soil')} (stage 2)",
-            strength=Undrained(cohesion=tau_by_index[i]),
-            unit_weight=getattr(base, "unit_weight", 20.0),
-            sat_unit_weight=getattr(base, "sat_unit_weight", 21.0),
-            use_sat_unit_weight=getattr(base, "use_sat_unit_weight", False),
-        )
+        first = firsts.get(id(base))
+        if first is None or first[0] is not base:
+            s2.material = Material(
+                name=f"{getattr(base, 'name', 'soil')} (stage 2)",
+                strength=Undrained(cohesion=tau_by_index[i]),
+                unit_weight=getattr(base, "unit_weight", 20.0),
+                sat_unit_weight=getattr(base, "sat_unit_weight", 21.0),
+                use_sat_unit_weight=getattr(base, "use_sat_unit_weight",
+                                            False),
+            )
+            firsts[id(base)] = (base, s2.material)
+        else:
+            mat = copy.copy(first[1])
+            mat.strength = Undrained(cohesion=tau_by_index[i])
+            mat.id = _NEW_MATERIAL_ID()
+            s2.material = mat
         s2.pore_pressure = 0.0
         s2.raw_pore_pressure = 0.0
         s2.suction_cohesion = 0.0
@@ -749,6 +777,11 @@ def rapid_drawdown_fos(
         raise _refusal(msg.DRAWDOWN_UNSLICEABLE_DRAWN_DOWN)
 
     tau_by_index: dict = {}
+    # v0.1.395 (V16 of the compute audit) -- the c', phi' of each undrained
+    # slice, which every pass of the drained cap read again with the same
+    # call on the same slice of the same project (bank 097: 2.85 million
+    # times, 7 s of 173).
+    c_phi_by_index: dict = {}
     for i, s in enumerate(sl2.slices):
         mat = _drawdown_material(p2, s)
         if not getattr(mat, "undrained_behaviour", False):
@@ -758,6 +791,7 @@ def rapid_drawdown_fos(
             continue
         sigma_fc, tau_fc = sampled
         c_eff, phi_eff = _effective_c_phi(mat)
+        c_phi_by_index[i] = (c_eff, phi_eff)
         if corps:
             # Corps 1970: the R envelope read directly at the effective
             # consolidation stress. The other half of the composite — the
@@ -814,8 +848,7 @@ def rapid_drawdown_fos(
         for i, tau_ff in tau_by_index.items():
             l = max(sl2.slices[i].base_length, 1e-9)
             sigma_d = max(0.0, normals2[i]) / l               # (9)
-            c_eff, phi_eff = _effective_c_phi(
-                _drawdown_material(p2, sl2.slices[i]))
+            c_eff, phi_eff = c_phi_by_index[i]
             # The cap is always taken against the ORIGINAL undrained
             # strength, never against the already-capped value: feeding
             # the capped one back would let it ratchet down without a
