@@ -533,6 +533,58 @@ def _forget_weak_bands(search) -> None:
         search._weak_bands_cache = None
 
 
+def detach_materials(project, results) -> None:
+    """Give the slices of ``results`` their own copies of the materials of
+    ``project`` they cut.
+
+    v0.1.387 (D381). The slicer hands each slice the ``Material`` object of
+    the project it analyses — the user's own one when no design standard or
+    Generalized Anisotropic link made a copy — and a result solved in this
+    process kept it, where a result back from the pool holds an unpickled
+    copy. An edit in place after the run (an agent's ``material_set``, a
+    script) then changed what the stored result showed: Interpret's table
+    and the interslice forces it recomputes, next to the old factor of
+    safety. Undo, which puts deep copies back, cleared the stale mark while
+    the result still read the edited object.
+
+    One deep copy per material, shared by every slice that cut it, holds
+    what was solved, and its ``id`` is the material's, so a lookup by id
+    still finds it. A slice whose material is not one of the project's own
+    objects (a pooled result, the drawdown's stage-2 materials) is left as
+    it is, and so is a result met twice. Nothing the run computed reads the
+    copies. Measured: 59 ms for 120 350 slices, 33 ms to walk them when
+    there is nothing to replace.
+    """
+    import copy
+
+    live = {id(m): m for m in getattr(project, "materials", None) or ()}
+    if not live:
+        return
+    copies = {}
+    for res in results:
+        slices = getattr(res, "slices", None)
+        if not slices:
+            continue
+        for s in slices:
+            m = s.material
+            if m is not None and id(m) in live:
+                c = copies.get(id(m))
+                if c is None:
+                    c = copies[id(m)] = copy.deepcopy(m)
+                s.material = c
+
+
+def _results_of(result) -> list:
+    """Every surface result a search run hands back: its evaluations and
+    the user's, and the minima and the optimised one, which a search may
+    keep outside them."""
+    out = list(result.all_evaluations())
+    out.extend(r for r in result.minima if hasattr(r, "slices"))
+    if result.optimized is not None:
+        out.append(result.optimized)
+    return out
+
+
 # ======================================================================
 class BaseSearch(ABC):
     """Base class for search strategies."""
@@ -1752,6 +1804,10 @@ class BaseSearch(ABC):
             for line in getattr(self, "_pending_notes", ()):
                 if line not in result.notes:
                     result.notes.append(line)
+            # v0.1.387 (D381) — last, after the user's surfaces and the
+            # optimisation: the result keeps the materials it was solved
+            # with, not the project's own objects.
+            detach_materials(project, _results_of(result))
             return result
 
     # ------------------------------------------------------------------

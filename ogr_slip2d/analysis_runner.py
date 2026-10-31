@@ -2341,6 +2341,10 @@ def evaluate_surfaces(project, surface, method_ids=None, *,
             # not cut the model", which is the wrong thing to tell someone
             # whose polyline ends a metre under the ground.
             warnings.append(method_note(mid, search.refusal_text()))
+    # v0.1.387 (D381) — as a search's run does: the results hold the
+    # materials they were solved with, not the project's own objects.
+    from .search import detach_materials
+    detach_materials(project, [r for r in results.values() if r is not None])
     return AnalysisOutcome(results, factor_report, warnings, project)
 
 
@@ -2659,4 +2663,8 @@ def run_configured_optimization(project, method_id, surface, *,
     with progress_phase(OPTIMIZE):
         best, res, rep = optimize_surface(factored, search, surface, opts,
                                           progress_cb=progress_cb)
+    # v0.1.387 (D381) — the window keeps this result in place of the
+    # critical one: it holds the materials it was solved with.
+    from .search import detach_materials
+    detach_materials(factored, [res])
     return best, res, rep, report, warnings
