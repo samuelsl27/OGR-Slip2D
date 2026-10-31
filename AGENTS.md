@@ -271,9 +271,9 @@ lógicos, 15,9 GB):
 
 | Corrida | Orden | Tiempo |
 |---|---|---|
-| Entera, en serie | `python tests/_runner.py` | 68,6 min (6678 casos, v0.1.375) |
-| Entera, en 4 procesos | `python tests/_runner.py --jobs 4` | 34,6 min (6708 casos, v0.1.376) |
-| Sin los lentos, en 4 procesos | `python tests/_runner.py --fast --jobs 4` | 12,7 min (5971 casos, v0.1.376) |
+| Entera, en serie | `python tests/_runner.py` | 39,7 min (6926 casos, v0.1.397) |
+| Entera, en 4 procesos | `python tests/_runner.py --jobs 4` | 20,1 min (6926 casos, v0.1.397) |
+| Sin los lentos, en 4 procesos | `python tests/_runner.py --fast --jobs 4` | 9,8 min (6262 casos, v0.1.397) |
 | CI (Linux), en serie | — | ~1 h 10 por versión de Python |
 
 Era «entre 5 y 7½» en v0.1.80, unos 25 min en v0.1.175–0.1.193, 50–72
@@ -282,7 +282,12 @@ muchas versiones después de dejar de ser cierta, y en v0.1.191 se leyó
 como anomalía un tiempo normal. De los 134 min, la mitad era la máquina:
 `TextInputHost.exe` llevaba días colgado girando en un núcleo, y sin él
 eran 87,6. Unos 20 de esos 87,6 eran estado acumulado en el proceso, que
-v0.1.373 cortó (`docs/audits/AUDITORIA_SUITE_v0.1.372.md`). **Antes de
+v0.1.373 cortó (`docs/audits/AUDITORIA_SUITE_v0.1.372.md`). Después
+fueron 68,6 en serie y 34,6 con `--jobs 4` (v0.1.375–0.1.376), y la
+fase 3 de la auditoría del cómputo
+(`docs/audits/AUDITORIA_COMPUTO_v0.1.377.md`, v0.1.378–0.1.397) los
+dejó en 39,7 y 20,1 sin mover un número: los tests dejaron de repetir
+lo que calculaban igual, y el motor, de rehacer trabajo. **Antes de
 llamar anomalía a una duración, mira la CPU de los procesos de la
 máquina.** El reloj total no es una medida, es una comprobación de que
 la suite termina: dos corridas iguales de v0.1.374 difirieron 3,7 min.

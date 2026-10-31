@@ -20,6 +20,7 @@ from __future__ import annotations
 import contextlib
 import math
 import random
+import struct
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from typing import Callable, Optional
@@ -586,8 +587,168 @@ def _results_of(result) -> list:
 
 
 # ======================================================================
+#: v0.1.397 (V18) — what a state key cannot spell exactly
+_NO_KEY = object()
+
+
+def _exact(value):
+    """``value`` spelled so that two spellings are equal only when the
+    values are the same bit for bit and type for type, or ``_NO_KEY``
+    (v0.1.397, V18). A float by its bytes: ``0.0 == -0.0`` would merge two
+    surfaces, and so would ``1 == 1.0``; tuples and lists item by item, as
+    the crack wall and each crack are tuples of floats. Anything else, an
+    object above all, is not keyed, and its surface is sliced as always."""
+    t = type(value)
+    if t is float:
+        return ("f", struct.pack("<d", value))
+    if value is None or t is int or t is bool or t is str:
+        return (t.__name__, value)
+    if t is tuple or t is list:
+        items = tuple(_exact(v) for v in value)
+        if any(i is _NO_KEY for i in items):
+            return _NO_KEY
+        return (t.__name__, items)
+    return _NO_KEY
+
+
+def _state_key(surface, num_slices):
+    """The exact state of a trial surface before slicing, with the slice
+    count: every attribute but its ``id`` (a ``uuid4`` of its own in each
+    search). None when some attribute cannot be keyed exactly."""
+    items = []
+    for name, value in vars(surface).items():
+        if name == "id":
+            continue
+        spelled = _exact(value)
+        if spelled is _NO_KEY:
+            return None
+        items.append((name, spelled))
+    return (type(surface), num_slices, tuple(items))
+
+
+def _shallow(obj):
+    """``copy.copy(obj)`` for an instance with a plain ``__dict__`` and no
+    copy hooks, which is what ``copy.copy`` does for it (a new instance by
+    ``__new__``, then the dict) without its generic dispatch: a fifth of the
+    cost, and ``Slice`` and ``Slices`` are copied by the hundred thousand
+    (a test guards that they have no ``__slots__`` and no copy hooks)."""
+    new = obj.__class__.__new__(obj.__class__)
+    new.__dict__.update(obj.__dict__)
+    return new
+
+
+def _copy_slices(slices):
+    """A copy of ``slices`` with new ``Slices`` and ``Slice`` objects and
+    their own lists and dicts, the materials still the project's: the
+    object graph ``slice_surface`` hands out (v0.1.397, V18)."""
+    out = _shallow(slices)
+    out.slices = []
+    for s in slices.slices:
+        c = _shallow(s)
+        c.load_parts = list(s.load_parts)
+        if s.surface_angles is not None:
+            c.surface_angles = dict(s.surface_angles)
+        out.slices.append(c)
+    if slices.load_factors is not None:
+        out.load_factors = dict(slices.load_factors)
+    return out
+
+
+def _fresh(value):
+    """A value of a keyed surface state with lists of its own (floats,
+    strings and tuples of them are immutable and stay as they are)."""
+    if type(value) is list:
+        return [_fresh(v) for v in value]
+    if type(value) is tuple and any(type(v) is list for v in value):
+        return tuple(_fresh(v) for v in value)
+    return value
+
+
+class SliceShare:
+    """What the first grid search of a run sliced, for the methods after it
+    (v0.1.397, V18 of the compute audit; the owner's decisions: a copy for
+    each method, grid searches only).
+
+    Every method of a Compute ran its grid over the same circles and sliced
+    every one of them again: slicing is half of a serial grid (bank 001 at
+    51 x 51 x 12, Bishop and Janbu Corrected: 32.7 and 34.0 s of 52.3 and
+    58.8, the same 32 053 surfaces). ``run_analysis`` gives its grid
+    searches one share. The first to slice (the leader) records, for each
+    trial surface, the exact state it had before slicing (``_state_key``),
+    a clean copy of the slices taken before any method writes on them, the
+    reasons, and the surface's whole state after (the slicer moves its
+    ends, sets and removes its cracks). A later method that meets the same
+    state takes that instead of slicing: its surface is left in the state
+    the slicer would have left it, its reasons are the slicer's, and its
+    slices are a copy of its own, which ``detach_materials`` and the B-bar
+    procedure may write on as they always did. The record is released at
+    its last use. Everything after the slicing runs in each method's own
+    code.
+
+    Only in series: a pool's workers receive the search pickled, and a
+    share pickles as None, so each worker slices for itself as before.
+    It assumes the project does not change between the methods of one
+    run, which the window guarantees with its modal progress dialog."""
+
+    def __init__(self, followers: int) -> None:
+        self.followers = followers
+        self.leader = None
+        self._records: dict = {}
+
+    def __reduce__(self):
+        # pickled (a batch for a pool, a deep copy) as None: the slices it
+        # holds belong to this process and this run
+        return (type(None), ())
+
+    def slice(self, search, project, trial, num_slices, reasons):
+        """``slice_surface(project, trial, num_slices, reasons=reasons)``,
+        or what the leader sliced for the same state."""
+        key = _state_key(trial, num_slices)
+        if self.leader is None:
+            self.leader = search
+        if key is not None and search is not self.leader:
+            record = self._records.get(key)
+            if record is not None:
+                record[0] -= 1
+                if record[0] <= 0:
+                    del self._records[key]
+                    slices = record[1]
+                else:
+                    slices = (_copy_slices(record[1])
+                              if record[1] is not None else None)
+                state = vars(trial)
+                for name in [n for n in state
+                             if n != "id" and n not in record[3]]:
+                    del state[name]
+                for name, value in record[3].items():
+                    setattr(trial, name, _fresh(value))
+                reasons.extend(record[2])
+                return slices
+        start = len(reasons)
+        slices = slice_surface(project, trial, num_slices=num_slices,
+                               reasons=reasons)
+        if key is not None and search is self.leader and self.followers > 0:
+            after = {name: value for name, value in vars(trial).items()
+                     if name != "id"}
+            # a state the slicer left that cannot be spelled exactly is not
+            # recorded: the later methods slice that surface themselves
+            if all(_exact(v) is not _NO_KEY for v in after.values()):
+                self._records[key] = [
+                    self.followers,
+                    _copy_slices(slices) if slices is not None else None,
+                    tuple(reasons[start:]),
+                    {name: _fresh(value) for name, value in after.items()}]
+        return slices
+
+
 class BaseSearch(ABC):
     """Base class for search strategies."""
+
+    #: v0.1.397 (V18) — the run's :class:`SliceShare`, given by
+    #: ``run_analysis`` to its grid searches, and the share in force while a
+    #: grid evaluates its centres in this process (``_run_centres``)
+    slice_share = None
+    _active_share = None
 
     #: v0.1.237 (D87) — whether this search analyses the SAME surfaces on
     #: every run over one geometry, whatever the material values: its
@@ -1263,9 +1424,7 @@ class BaseSearch(ABC):
                     if y_low is not None and y_low < self.min_elevation:
                         continue
                 _why = []
-                slices = slice_surface(project, trial,
-                                       num_slices=self.num_slices,
-                                       reasons=_why)
+                slices = self._slice_trial(project, trial, _why)
                 if TOUCHED_MODEL_EDGE in _why:
                     # v0.1.151 — NOT a refusal: a base on the edge of the
                     # model that a tolerance ruled inside. Counted before
@@ -1391,6 +1550,16 @@ class BaseSearch(ABC):
                 self, "_outside_slope_limits", 0) + 1
             self._last_refusal = REFUSED_OUTSIDE_SLOPE_LIMITS
         return best
+
+    def _slice_trial(self, project: Project, trial, reasons: list):
+        """``slice_surface`` for one trial surface — through the run's
+        :class:`SliceShare` while a grid evaluates its centres in this
+        process (v0.1.397, V18), directly otherwise."""
+        share = self._active_share
+        if share is None:
+            return slice_surface(project, trial, num_slices=self.num_slices,
+                                 reasons=reasons)
+        return share.slice(self, project, trial, self.num_slices, reasons)
 
     # ------------------------------------------------------------------
     def _weak_layer_cases(self, project: Project, mass):
@@ -3223,7 +3392,10 @@ class GridSearch(BaseSearch):
         processed = done_before
         n_circles = self.radius_increment + 1  # circles per centre
 
-        if True:
+        # v0.1.397 (V18) — the run's slice share, for the grid's own circles
+        # and only while they are evaluated here (None in a pool's worker)
+        self._active_share = self.slice_share
+        try:
             for xc, yc in centres:
                 processed += 1
                 if self.progress_cb:
@@ -3289,6 +3461,8 @@ class GridSearch(BaseSearch):
                         result.valid_count += 1
                     else:
                         result.invalid_count += 1
+        finally:
+            self._active_share = None
 
         return result
 

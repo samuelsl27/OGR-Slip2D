@@ -2164,6 +2164,11 @@ def run_analysis(project, method_ids=None,
     warnings = orphan_assignment_messages(project) + warnings
     results: dict = {}
     n_methods = len(method_ids)
+    # v0.1.397 (V18) — the grid's circles sliced once for every method, in
+    # series (``search.SliceShare``): read by each method after the first
+    from .search import GridSearch, SliceShare
+    n_known = sum(1 for mid in method_ids if mid in known)
+    share = SliceShare(followers=n_known - 1) if n_known > 1 else None
 
     for i, mid in enumerate(method_ids):
         if mid not in known:
@@ -2182,6 +2187,8 @@ def run_analysis(project, method_ids=None,
         search = build_search(project, mid, progress_cb=_progress)
         if search is None:  # pragma: no cover - guarded by the check above
             continue
+        if share is not None and isinstance(search, GridSearch):
+            search.slice_share = share
         results[mid] = search.run(project)
         # v0.1.100 — a surface that daylights near-vertically has a factor
         # of safety that moves with the slice count. Said once per method,
