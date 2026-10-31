@@ -256,6 +256,59 @@ def moment_terms(
 
     Returns:
         The :class:`MomentTerms`.
+
+    v0.1.389 (V10 of the compute audit) — the sum is split in two:
+    :func:`moment_geometry` takes everything that does not read ``normals``
+    or ``resisting``, and :func:`moment_terms_at` adds those two. A caller
+    that sums again and again over the same surface — the moment branch of
+    Spencer and GLE, at every pass of every lambda — builds the geometry once.
+    This function is the two in a row, and gives the same floats.
+    """
+    return moment_terms_at(
+        moment_geometry(axis, s_list, weights, kh=kh, kv=kv, sup=sup,
+                        tangential=tangential,
+                        tangential_passive=tangential_passive,
+                        rotation=rotation, forces=forces, couple=couple),
+        resisting, normals)
+
+
+@dataclass(frozen=True)
+class MomentGeometry:
+    """What :func:`moment_terms` sums that the iterate does not move.
+
+    ``frames`` holds, per slice, ``(x_mid, y_mid, tx, ty, nx, ny,
+    shear_sign)``; ``passive`` the moment of each slice's passive
+    tangential force, or None where there is none; ``weight`` and
+    ``external`` the two sums that read neither normals nor resistance.
+    """
+
+    axis: tuple
+    rotation: float
+    frames: tuple
+    passive: tuple
+    weight: float
+    external: float
+
+
+def moment_geometry(
+    axis,
+    s_list,
+    weights: Sequence[float],
+    kh: float = 0.0,
+    kv: float = 0.0,
+    sup=None,
+    tangential: Optional[Sequence[float]] = None,
+    tangential_passive: Optional[Sequence[float]] = None,
+    rotation: Optional[float] = None,
+    forces: Optional[Sequence] = None,
+    couple: float = 0.0,
+) -> MomentGeometry:
+    """The part of :func:`moment_terms` that does not read the iterate.
+
+    The arguments are :func:`moment_terms`'s, without ``resisting`` and
+    ``normals``. Every product below is the one :func:`moment_terms` made
+    until v0.1.388, in the same order and with the same ``moment(...)``
+    calls — the zero components included — so each sum is the same float.
     """
     ox, oy = axis
     if rotation is None:
@@ -264,18 +317,18 @@ def moment_terms(
     def moment(px, py, fx, fy):
         return (px - ox) * fy - (py - oy) * fx
 
-    m_weight = m_normal = m_shear = m_extra = 0.0
+    frames = []
+    passive = []
+    m_weight = m_extra = 0.0
     for i, s in enumerate(s_list):
         xm, ym, tx, ty, nx, ny = base_frame(axis, s)
         w = weights[i]
         m_weight += moment(xm, ym, 0.0, -w)
-        m_normal += moment(xm, ym, normals[i] * nx, normals[i] * ny)
 
         # The base point moves with the rotation; the shear opposes it.
         vx, vy = -rotation * (ym - oy), rotation * (xm - ox)
         shear_sign = -1.0 if (vx * tx + vy * ty) >= 0.0 else 1.0
-        q = resisting[i]
-        m_shear += moment(xm, ym, shear_sign * q * tx, shear_sign * q * ty)
+        frames.append((xm, ym, tx, ty, nx, ny, shear_sign))
         if tangential is not None and tangential[i]:
             t_extra = tangential[i]
             m_extra += moment(xm, ym, shear_sign * t_extra * tx,
@@ -283,10 +336,14 @@ def moment_terms(
         if tangential_passive is not None and tangential_passive[i]:
             # Same force, same sign, the OTHER side of the fraction bar:
             # ``driving`` collects ``m_extra`` while ``factor_of_safety``
-            # divides by it, and ``m_shear`` is the numerator.
+            # divides by it, and the shear sum is the numerator. Added to it
+            # right after its own slice's shear (``moment_terms_at``), which
+            # is where the sum always took it.
             t_pas = tangential_passive[i]
-            m_shear += moment(xm, ym, shear_sign * t_pas * tx,
-                              shear_sign * t_pas * ty)
+            passive.append(moment(xm, ym, shear_sign * t_pas * tx,
+                                  shear_sign * t_pas * ty))
+        else:
+            passive.append(None)
 
         f = slice_forces(s, kh, kv) if forces is None else forces[i]
         if f.h_seismic:
@@ -319,5 +376,30 @@ def moment_terms(
     # slice in particular.
     m_extra += couple
 
-    return MomentTerms(axis=(ox, oy), rotation=rotation, weight=m_weight,
-                       normal=m_normal, external=m_extra, shear=m_shear)
+    return MomentGeometry(axis=(ox, oy), rotation=rotation,
+                          frames=tuple(frames), passive=tuple(passive),
+                          weight=m_weight, external=m_extra)
+
+
+def moment_terms_at(geometry: MomentGeometry, resisting: Sequence[float],
+                    normals: Sequence[float]) -> MomentTerms:
+    """:func:`moment_terms` on a :class:`MomentGeometry` built before: the
+    two sums that read the iterate, slice by slice in the same order."""
+    ox, oy = geometry.axis
+
+    def moment(px, py, fx, fy):
+        return (px - ox) * fy - (py - oy) * fx
+
+    passive = geometry.passive
+    m_normal = m_shear = 0.0
+    for i, (xm, ym, tx, ty, nx, ny, shear_sign) in enumerate(geometry.frames):
+        m_normal += moment(xm, ym, normals[i] * nx, normals[i] * ny)
+        q = resisting[i]
+        m_shear += moment(xm, ym, shear_sign * q * tx, shear_sign * q * ty)
+        p = passive[i]
+        if p is not None:
+            m_shear += p
+
+    return MomentTerms(axis=(ox, oy), rotation=geometry.rotation,
+                       weight=geometry.weight, normal=m_normal,
+                       external=geometry.external, shear=m_shear)

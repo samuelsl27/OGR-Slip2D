@@ -2177,7 +2177,7 @@ class GLESystem:
         self._state_cache_sig = None
 
         if circle_R is None:
-            from .moment_balance import moment_terms
+            from .moment_balance import moment_geometry, moment_terms_at
             # Weights in SLICE order, which is what ``moment_terms`` walks
             # alongside ``s_list``. The SOIL weight: the support's normal part
             # is applied at its own point by ``moment_terms``, not smeared to
@@ -2191,15 +2191,28 @@ class GLESystem:
                 t_act = list(sup.t_active)
                 t_pas = list(sup.t_passive)
 
+            # v0.1.389 (V10 of the compute audit) — the geometry of the sum,
+            # its weight and its external terms do not read the iterate, and
+            # nothing they read moves during the solve: the surface, the
+            # loads and ``sup`` are resolved once, before this system is
+            # built. So they are summed once, at the first call, and each
+            # pass adds only the normals and the resistance. At the first
+            # call and not here, so that a geometry that raises still raises
+            # where the sum did. Bank 104 (Spencer, particle swarm) called
+            # the whole sum 704 399 times, 34.7 s of 115.5.
+            geometry = []
+
             def moment_fos(normals, resisting):
-                terms = moment_terms(
-                    axis, self.s_list, weights,
-                    self.to_slice_order(resisting),
-                    self.to_slice_order(normals),
-                    kh=kh, kv=kv, sup=sup, tangential=t_act,
-                    tangential_passive=t_pas, forces=self.forces,
-                    couple=sup.couple if (sup is not None and sup.present)
-                    else 0.0)
+                if not geometry:
+                    geometry.append(moment_geometry(
+                        axis, self.s_list, weights,
+                        kh=kh, kv=kv, sup=sup, tangential=t_act,
+                        tangential_passive=t_pas, forces=self.forces,
+                        couple=sup.couple if (sup is not None and sup.present)
+                        else 0.0))
+                terms = moment_terms_at(geometry[0],
+                                        self.to_slice_order(resisting),
+                                        self.to_slice_order(normals))
                 return terms.factor_of_safety()
         else:
             # A circle divides its radius out of every term, so the whole
