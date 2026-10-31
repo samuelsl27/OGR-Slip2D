@@ -156,14 +156,29 @@ class BishopSimplified(LEMMethod):
         Reference for the method: Bishop (1955); the general form with a
         moment axis follows Abramson, Lee, Sharma & Boyce (2001), which the
         reference's documentation cites for the equations of every method.
+
+        v0.1.390 (V11 of the compute audit) — the passes of one call share
+        what does not read F, as the circular path's do since v0.1.384 (V6).
+        The first pass keeps, per slice, its loads, the trigonometry, the
+        envelope's linearisation and the zero-strength flag, the numerator
+        of Q and the support's load and force; later passes form only
+        m_alpha, Q and the base normal, with the same operations in the same
+        order. The moment sum's geometry (``moment_balance.moment_geometry``,
+        v0.1.389) is built once, at the end of the first pass, where the
+        whole sum was. A slice a PASSIVE support crosses, whose load is
+        ``t_passive / F``, is computed whole every pass. Both live in this
+        call: each pass of the envelope and each drawdown stage has its own.
+        Tutorial 20 made 59 510 passes in 6573 calls, 31.9 s of 57.5.
         """
-        from ..moment_balance import axis_for, moment_terms
+        from ..moment_balance import axis_for, moment_geometry, moment_terms_at
         from ..support_integration import (support_failure_details,
                                            support_force_on_slice,
                                            support_moments,
                                            support_vertical_load)
 
         axis = axis_for(project, surface)
+        rows = [None] * len(s_list)
+        geometry = None
 
         fos = max(0.05, self.initial_fos)
         converged = False
@@ -188,6 +203,34 @@ class BishopSimplified(LEMMethod):
             support_force = [None] * len(s_list) if sup.present else None
             zero = []
             for i_s, s in enumerate(s_list):
+                row = rows[i_s]
+                if row is not None:
+                    (f, w, w_n, cos_a, sin_a, max_cos, mob, num, flagged,
+                     load, sf) = row
+                    if sup.present:
+                        sigma_load[i_s] = load
+                        support_force[i_s] = list(sf)
+                    if flagged:
+                        zero.append(i_s)
+                    m_alpha = cos_a + mob / fos
+                    if abs(m_alpha) < 1e-6:
+                        return LEMResult(
+                            fos=None, converged=False, iterations=iterations,
+                            method_id=self.METHOD_ID, surface=surface,
+                            slices=slices,
+                            **msg.failure(msg.M_ALPHA_COLLAPSED,
+                                          value=m_alpha, slice=s.index),
+                            reason=REASON_M_ALPHA_COLLAPSED)
+                    q = num / m_alpha
+                    normal = (w_n - (q / fos) * sin_a) / max_cos
+                    forces.append(f)
+                    weights.append(w)
+                    resisting.append(q)
+                    normals.append(normal)
+                    if tangential is not None:
+                        tangential[i_s] = sup.t_active[i_s]
+                        tangential_passive[i_s] = sup.t_passive[i_s]
+                    continue
                 f = slice_forces(s, kh, kv)
                 w = f.w_total
                 alpha = slide_sign * s.base_angle
@@ -199,14 +242,16 @@ class BishopSimplified(LEMMethod):
                 # moment from ``sup`` and the two tangential lists, so
                 # feeding it here as well would count that force twice.
                 w_n = w
+                load = sf = None
                 if sup.present:
                     load = support_vertical_load(
                         sup, i_s, s.base_angle, slide_sign, fos)
                     w_n += load
                     sigma_load[i_s] = load
                     # v0.1.221 (D212) -- the same force, whole, at the same F.
-                    support_force[i_s] = list(support_force_on_slice(
-                        sup, i_s, s.base_angle, slide_sign, fos))
+                    sf = support_force_on_slice(
+                        sup, i_s, s.base_angle, slide_sign, fos)
+                    support_force[i_s] = list(sf)
                 n_est = w_n * math.cos(s.base_angle)
                 raw = n_est - s.pore_pressure * s.base_length
                 sigma = max(0.0, raw)
@@ -219,9 +264,16 @@ class BishopSimplified(LEMMethod):
                 c, tan_phi = self._local_c_phi(s, s.material, sigma)
                 # v0.1.213 (D84) -- reported, not changed; see
                 # ``_zero_strength``.
-                if raw < 0.0 and self._zero_strength(s, raw, c, tan_phi):
+                flagged = (raw < 0.0
+                           and self._zero_strength(s, raw, c, tan_phi))
+                if flagged:
                     zero.append(i_s)
-                m_alpha = math.cos(alpha) + math.sin(alpha) * tan_phi / fos
+                # The F-free factors, then m_alpha with the operations of the
+                # one-line form, in its order: cos a + (sin a * tan phi) / F.
+                cos_a = math.cos(alpha)
+                sin_a = math.sin(alpha)
+                mob = sin_a * tan_phi
+                m_alpha = cos_a + mob / fos
                 if abs(m_alpha) < 1e-6:
                     return LEMResult(
                         fos=None, converged=False, iterations=iterations,
@@ -231,16 +283,20 @@ class BishopSimplified(LEMMethod):
                                       slice=s.index),
                         reason=REASON_M_ALPHA_COLLAPSED)
                 # Q = S·F, the resisting force with the factor divided out.
-                q = (c * s.width
-                     + (w_n - s.pore_pressure * s.width) * tan_phi) / m_alpha
+                num = (c * s.width
+                       + (w_n - s.pore_pressure * s.width) * tan_phi)
+                q = num / m_alpha
                 # N from the slice's own vertical equilibrium, the same one
                 # m_alpha comes from. On a circle this force points at the
                 # centre and takes no moment; on a polyline it does, and the
                 # reference's documentation is explicit that it accounts for
                 # it ("the normal force does not pass through the center of
                 # rotation").
-                normal = ((w_n - (q / fos) * math.sin(alpha))
-                          / max(math.cos(alpha), 1e-9))
+                max_cos = max(cos_a, 1e-9)
+                normal = (w_n - (q / fos) * sin_a) / max_cos
+                if not (sup.present and sup.t_passive[i_s]):
+                    rows[i_s] = (f, w, w_n, cos_a, sin_a, max_cos, mob, num,
+                                 flagged, load, sf)
                 forces.append(f)
                 weights.append(w)
                 resisting.append(q)
@@ -272,12 +328,15 @@ class BishopSimplified(LEMMethod):
             # carries the base normal at its true value, support included,
             # which is the force whose moment this axis needs. Spencer and
             # GLE have called ``moment_terms`` this way since v0.1.115.
-            terms = moment_terms(
-                axis, s_list, weights, resisting, normals, kh=kh, kv=kv,
-                sup=sup if sup.present else None,
-                tangential=tangential, tangential_passive=tangential_passive,
-                forces=forces,
-                couple=sup.couple if sup.present else 0.0)
+            if geometry is None:
+                geometry = moment_geometry(
+                    axis, s_list, weights, kh=kh, kv=kv,
+                    sup=sup if sup.present else None,
+                    tangential=tangential,
+                    tangential_passive=tangential_passive,
+                    forces=forces,
+                    couple=sup.couple if sup.present else 0.0)
+            terms = moment_terms_at(geometry, resisting, normals)
             if abs(terms.driving) < 1e-9:
                 return LEMResult(
                     fos=None, converged=False, iterations=iterations,
