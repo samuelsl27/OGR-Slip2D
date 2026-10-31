@@ -124,6 +124,20 @@ class StrengthModel(ABC):
         """
         return self.shear_strength(sigma_n_eff)
 
+    def shear_strength_reader(self, ctx: "SliceContext | None"):
+        """:meth:`shear_strength_ctx` with ``ctx`` held fixed: a function of
+        σ'ₙ alone, for a caller that reads one slice at several stresses
+        (:func:`local_c_phi` reads three).
+
+        v0.1.391 (V12 of the compute audit) — the default asks
+        :meth:`shear_strength_ctx` at every call. A model whose context costs
+        something to resolve overrides it to resolve it once (Generalized
+        Anisotropic finds the rule that holds the base), with its
+        :meth:`shear_strength_ctx` built on the same resolution, so the
+        formula stays in one place.
+        """
+        return lambda s: self.shear_strength_ctx(s, ctx)
+
     @property
     def needs_context(self) -> bool:
         """True if this model's strength depends on more than σ'ₙ
@@ -454,12 +468,21 @@ def local_c_phi(slice_, material, sigma_n_eff: float,
     # was written here, so that Janbu's soil type reads the context
     # the solver reads.
     ctx = None
+    tau_ctx = None
     if getattr(strength, "needs_context", False):
         ctx = SliceContext.from_slice(slice_, sn, sigma_v_probe)
+        # v0.1.391 (V12 of the compute audit) -- the context resolved once
+        # for the stresses read below, not once per stress: Tutorial 20
+        # found the rule of each base 2.98 times per linearisation. Where a
+        # resolution raises, it raises here, before the first stress is read,
+        # which is where it raised before.
+        reader = getattr(strength, "shear_strength_reader", None)
+        tau_ctx = (reader(ctx) if reader is not None
+                   else (lambda s: strength.shear_strength_ctx(s, ctx)))
 
     def _tau(s: float) -> float:
-        if ctx is not None:
-            return strength.shear_strength_ctx(s, ctx)
+        if tau_ctx is not None:
+            return tau_ctx(s)
         return strength.shear_strength(s)
 
     tau_at_sn = _tau(sn)

@@ -2034,15 +2034,32 @@ class GeneralizedAnisotropic(StrengthModel):
         return min(m.shear_strength(sigma_n_eff) for m in children)
 
     def shear_strength_ctx(self, sigma_n_eff, ctx: SliceContext | None = None):
+        return self._ctx_reader(ctx)(sigma_n_eff)
+
+    def shear_strength_reader(self, ctx: SliceContext | None):
+        """v0.1.391 (V12 of the compute audit) -- the rule that holds the base
+        found once for every stress read at this context
+        (``strength_model.local_c_phi`` reads three). A subclass with a
+        ``shear_strength_ctx`` of its own is read through it, as before."""
+        if (type(self).shear_strength_ctx
+                is not GeneralizedAnisotropic.shear_strength_ctx):
+            return super().shear_strength_reader(ctx)
+        return self._ctx_reader(ctx)
+
+    def _ctx_reader(self, ctx: SliceContext | None):
+        """The strength at ``ctx`` as a function of σ'ₙ: the one place the
+        context is resolved, for :meth:`shear_strength_ctx` and
+        :meth:`shear_strength_reader` alike. Raises where the model cannot
+        answer for this base, as the strength always did."""
         angle = math.degrees(ctx.base_angle_rad) if ctx is not None else 0.0
         # v0.1.225 (D218) -- the ABSOLUTE base inclination; no bedding is
         # subtracted. See the class docstring.
         if self.angle_or_surface:
-            return self._angle_or_surface_strength(sigma_n_eff, ctx, angle)
+            return lambda s: self._angle_or_surface_strength(s, ctx, angle)
         m = self._model_for_angle(angle)
         if getattr(m, "needs_context", False):
-            return m.shear_strength_ctx(sigma_n_eff, ctx)
-        return m.shear_strength(sigma_n_eff)
+            return lambda s: m.shear_strength_ctx(s, ctx)
+        return m.shear_strength
 
     def design_factored(self, factors: MaterialFactors) -> FactoredStrength:
         """Each child's model by its own category (v0.1.225, D224): the
