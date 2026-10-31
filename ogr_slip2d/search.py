@@ -2167,8 +2167,32 @@ class BaseSearch(ABC):
 
 #: Below this many circles the process pool costs more than it saves. On
 #: Windows every worker re-imports the package, which is most of the
-#: ~0.5 s startup, so the floor is deliberately generous.
+#: half-second startup, so the floor is deliberately generous. Since v0.1.386 a
+#: Grid Search with a focus also applies it to the circles that pass the
+#: focus (``GridSearch._too_few_reach_the_solver``).
 _PARALLEL_MIN_CIRCLES = 400
+
+#: v0.1.386 — the largest grid whose surviving circles are counted before
+#: that decision. Counting walks the grid in series, and so does the run it
+#: keeps in-process, so both walks have to stay cheap next to the half a
+#: second a pool takes to start (0.55 s measured in this version's bench,
+#: more on a loaded machine). A walk costs 2–3 µs a circle for each point,
+#: line or tangent it is tested against, and 0.4–0.7 µs a centre for every
+#: point of the slope surface, which the radius bracket measures distances
+#: to (122 µs a centre on a profile of 204 points, 723 µs on one of 1004);
+#: within the three limits, under a tenth of a second. A larger grid keeps
+#: the nominal rule, because walking it is itself the work the pool shares
+#: out: measured, a focused grid of 316 000 circles took 4.5–5.1 s counted
+#: and run in series, against 2.2 s in a pool. The profile limit also keeps
+#: out the dense ground lines that make every surface dearer: with 100
+#: points, 1000 centres and plain Bishop, the review measured +13 to +30 %
+#: in series at 185–390 circles, where a profile of 7 points ran faster
+#: than the pool. Every focused bank grid V8 keeps in-process is inside:
+#: 13 671 to 14 973 circles, one focus object, 441 to 496 centres, External
+#: boundaries of 6 or 7 vertices.
+_COUNT_MAX_CENTRES = 1000
+_COUNT_MAX_FOCUS_TESTS = 20000     # circles x active focus objects
+_COUNT_MAX_PROFILE_WORK = 20000    # centres x vertices of the External
 
 #: More workers than this and the per-process import cost and the parent's
 #: deserialisation start to dominate. Measured, not guessed: see the
@@ -2193,6 +2217,10 @@ def _worker_count(project, n_circles: int) -> int:
     Independently of both, a small search stays in-process: below
     ``_PARALLEL_MIN_CIRCLES`` the pool costs more than it saves, and that
     is what keeps a 25-circle test from starting eight interpreters.
+
+    v0.1.386 — not the whole decision for a Grid Search: with a focus it
+    also asks how many circles pass it (``GridSearch._run``), and may stay
+    in-process when this says more than one.
     """
     import os
 
@@ -2208,6 +2236,32 @@ def _worker_count(project, n_circles: int) -> int:
     pct = max(1, min(100, pct))
     total = os.cpu_count() or 1
     return max(1, min(_MAX_WORKERS, int(total * pct / 100)))
+
+
+def _focus_is_cheap(focus_objects) -> bool:
+    """Whether a grid has a focus, and its test costs a few distances a
+    circle: some enabled, well-formed point, line or tangent, and no
+    enabled, well-formed window.
+
+    v0.1.386. A WINDOW samples the circumference: ``FocusObject.accepts_circle``
+    tries 72 points of the circle against the quadrilateral, and all 72 for
+    every circle it rejects. Measured on the grid of bank 078 case 3b: 67 µs
+    a circle, against 3 µs for a point, a line or a tangent. A disabled or
+    malformed object accepts at once, as it filters nothing, and costs
+    nothing. An object that is not a ``FocusObject`` has a test of unknown
+    cost, and keeps the nominal rule as before.
+    """
+    from ogr_core.geometry.focus import FocusKind, FocusObject
+    active = False
+    for fo in focus_objects or ():
+        if not isinstance(fo, FocusObject):
+            return False
+        if not (fo.enabled and fo.valid):
+            continue
+        if fo.kind is FocusKind.WINDOW:
+            return False
+        active = True
+    return active
 
 
 def _grid_batch(payload):
@@ -2895,6 +2949,117 @@ class GridSearch(BaseSearch):
             r_max = r_min
         return r_min, r_max
 
+    @staticmethod
+    def _grid_radius(r_min, r_max, k, n_circles):
+        """The ``k``-th of the ``n_circles`` radii sampled in a bracket,
+        both ends included.
+
+        v0.1.386 — one function for the two places that sample, the run
+        (:meth:`_run_centres`) and the count that decides whether it runs in
+        a pool (:meth:`_circles_reaching_the_solver`), so the count cannot
+        drift from the circles it counts.
+        """
+        if n_circles > 1:
+            return r_min + (r_max - r_min) * k / (n_circles - 1)
+        return r_min
+
+    def _circles_reaching_the_solver(self, project: Project, centres: list,
+                                     stop_at: Optional[int] = None) -> int:
+        """How many circles of ``centres`` reach :meth:`evaluate_circle`.
+
+        v0.1.386 — the three refusals of :meth:`_run_centres`, in its order
+        and nothing else: a centre with no radius bracket, ``r <= 0`` and a
+        focus rejection. So the number is the population a pool would share
+        out, and none of the three counts or notes anything here. Stops as
+        soon as it reaches ``stop_at``, because its caller only asks
+        whether the grid crosses a floor.
+
+        It reports no progress of its own, so every centre is a
+        ``checkpoint``: the window's Cancel acts here as it does in the run
+        (D362's rule for such loops). Without a watcher it does nothing.
+        """
+        from ogr_core.progress import checkpoint
+        slope_pts = self._slope_surface(project)
+        n_circles = self.radius_increment + 1
+        count = 0
+        for xc, yc in centres:
+            checkpoint()
+            bracket = self._radius_bracket(xc, yc, slope_pts)
+            if bracket is None:
+                continue
+            r_min, r_max = bracket
+            for k in range(n_circles):
+                r = self._grid_radius(r_min, r_max, k, n_circles)
+                if r <= 0 or self._focus_rejects_circle(xc, yc, r):
+                    continue
+                count += 1
+                if stop_at is not None and count >= stop_at:
+                    return count
+        return count
+
+    def _too_few_reach_the_solver(self, project: Project,
+                                  centres: list) -> bool:
+        """Whether the floor of :func:`_worker_count`, applied to the circles
+        a pool would SOLVE rather than to the circles the grid names, keeps
+        this run in-process.
+
+        v0.1.386 — a focus object can leave a few dozen circles of a grid of
+        thousands, and each method still opened a pool for them: bank 078
+        case 3b keeps 43 of 13 671, and its four methods took 2.45 s with a
+        pool each against 1.15 s in series, the count included. The floor is
+        the same 400 the nominal count uses (the owner's decision), and so is
+        its price: a surface far dearer than a plain Bishop circle — a dearer
+        method, or a dearer geometry — runs slower in series just under it
+        than a pool would have run it. Measured on that model, Spencer +33 %
+        at 146 circles and +48 % at 348, Bishop with Ky +27 % at 348; it is
+        what a grid of fewer than 400 circles with no focus has always cost.
+
+        Asked only where walking the grid twice in series (this count, then
+        the run it keeps here) is cheap next to starting a pool, because the
+        pool shares that walk out and the floor does not see it (the
+        owner's decision, after the review measured it):
+
+        * a focus of point, line or tangent (:func:`_focus_is_cheap`). With
+          no focus the count drops only what the grid's own geometry
+          refuses — a centre with no radius bracket, a radius of zero —,
+          which on a working model is a few circles at most; a window
+          samples the circumference, and with 150 circles left of the same
+          13 671 the count and a series run measured +60 to +80 % over the
+          pool;
+        * at most one window of Slope Limits: with two, the radius bracket
+          grows with the square of the profile segments inside them (5.5 to
+          8.8 times slower in series on a profile of 206 points);
+        * a grid within ``_COUNT_MAX_CENTRES``, ``_COUNT_MAX_FOCUS_TESTS``
+          and ``_COUNT_MAX_PROFILE_WORK``. The profile is measured by the
+          vertices of the External boundary, an upper bound of the slope
+          surface's points that needs no ground envelope: building one only
+          to decide would be paid in the parent even where the pool then
+          opens and builds its own.
+
+        Anything else keeps the nominal floor, exactly as before. The one
+        cost left is a count that reaches the floor late: it walks most of
+        the grid before the same pool opens, under a tenth of a second
+        within the limits.
+        """
+        if not _focus_is_cheap(self.focus_objects):
+            return False
+        sets = self.slope_limit_sets
+        if sets is not None and len(sets) >= 2:
+            return False
+        n_circles = self.radius_increment + 1
+        n_active = sum(1 for fo in self.focus_objects
+                       if fo.enabled and fo.valid)
+        ext = project.external_boundary()
+        n_vertices = len(ext.polyline.vertices) if ext is not None else 0
+        if (len(centres) > _COUNT_MAX_CENTRES
+                or len(centres) * n_circles * n_active
+                > _COUNT_MAX_FOCUS_TESTS
+                or len(centres) * n_vertices > _COUNT_MAX_PROFILE_WORK):
+            return False
+        return (self._circles_reaching_the_solver(
+            project, centres, stop_at=_PARALLEL_MIN_CIRCLES)
+            < _PARALLEL_MIN_CIRCLES)
+
     # ------------------------------------------------------------------
     def _centres(self, project: Project) -> list:
         """Every grid centre, in the order the sequential run visits them.
@@ -2923,6 +3088,14 @@ class GridSearch(BaseSearch):
         centres = self._centres(project)
         n_circles = self.radius_increment + 1
         workers = _worker_count(project, len(centres) * n_circles)
+        # v0.1.386 — asked only when the nominal count would open a pool, so
+        # a grid the nominal floor already keeps in-process pays nothing for
+        # it; one the count keeps here has walked the grid once more. A run
+        # kept here never tries the pool, and a machine that cannot open one
+        # no longer says so for it (SN.PARALLEL_FALLBACK): the owner's
+        # decision, since nothing was going to be shared out.
+        if workers > 1 and self._too_few_reach_the_solver(project, centres):
+            workers = 1
         if workers > 1:
             out = _parallel_grid_run(self, project, centres, workers)
             if out is not None:
@@ -2966,10 +3139,7 @@ class GridSearch(BaseSearch):
                     # a recorded number. That is also what makes
                     # ``attempts - total_count == focus_rejected`` hold.
                     result.attempts += 1
-                    if n_circles > 1:
-                        r = r_min + (r_max - r_min) * k / (n_circles - 1)
-                    else:
-                        r = r_min
+                    r = self._grid_radius(r_min, r_max, k, n_circles)
                     if r <= 0:
                         # Only reachable when the centre IS a limit point,
                         # so d_min = d_max = 0. Counted, not skipped: the

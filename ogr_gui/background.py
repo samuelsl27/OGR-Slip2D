@@ -72,6 +72,8 @@ class _TaskWorker(QThread):
         self.error: Optional[BaseException] = None
         #: Set by the window's Cancel; read by the calculation's thread.
         self.stop = threading.Event()
+        #: The (percent, total, phase) the dialog was last sent.
+        self._last_sent = None
 
     def run(self) -> None:                       # noqa: D102
         from ogr_core.progress import watching
@@ -88,7 +90,21 @@ class _TaskWorker(QThread):
     def _progress(self, done, total) -> None:
         self._check()
         from ogr_core.progress import phase
-        self.progress.emit(int(done), int(total), phase() or "")
+        now = phase() or ""
+        # v0.1.386 — one signal per percent, not one per call. A Grid Search
+        # run in-process calls back once per centre, and every signal queues
+        # a Python slot on the window's thread, which has to win the GIL back
+        # from this one: on a focused grid of 200 x 200 centres the window
+        # froze for up to 7 s, and a Cancel was read after the run had ended,
+        # so its result was published. The dialog shows a percentage, and a
+        # done/total nobody reads at that rate; the stop flag above is still
+        # read on every call.
+        sent = (int(100 * done / total) if total > 0 else None,
+                int(total), now)
+        if sent == self._last_sent:
+            return
+        self._last_sent = sent
+        self.progress.emit(int(done), int(total), now)
 
 
 def runs_inline(window) -> bool:

@@ -348,9 +348,15 @@ sin verse:
   probar la ventana: cada una sigue viva hasta el final del proceso, en
   memoria, y un cambio de tema las recorre todas.
 - **Búsquedas pequeñas:** una rejilla de 400 círculos o más abre un pool
-  de procesos (`_PARALLEL_MIN_CIRCLES`, en `ogr_slip2d/search.py`). En
-  Windows cada pool cuesta 0,6–0,8 s en arrancar, y más con la máquina
-  cargada. Úsala solo si el test es del camino en paralelo.
+  de procesos (`_PARALLEL_MIN_CIRCLES`, en `ogr_slip2d/search.py`). Desde
+  v0.1.386 cuentan los círculos que pasan el foco, y no los de la rejilla,
+  cuando el foco es de punto, línea o tangente (sin ninguna ventana activa),
+  hay como mucho una ventana de límites y la rejilla cabe en las cotas
+  `_COUNT_MAX_*` (1000 centros; 20 000 círculos por objeto de foco activo;
+  20 000 centros por vértice del contorno exterior). La regla está en
+  `GridSearch._too_few_reach_the_solver`. En Windows cada pool cuesta
+  0,6–0,8 s en arrancar, y más con la máquina cargada. Úsala solo si el test
+  es del camino en paralelo.
 - **Mallas de filtración gruesas,** salvo que el test valide la
   convergencia: mallar y resolver es lo más caro de la suite.
 - **Nada de segundos en un test,** salvo que el reloj sea lo que se
