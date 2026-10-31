@@ -212,13 +212,20 @@ class SeepageSolver:
     # ------------------------------------------------------------------
     def solve(self, bcs: SeepageBoundaryConditions,
               kr: Optional[list] = None,
-              extra_dirichlet: Optional[dict] = None) -> SeepageResult:
+              extra_dirichlet: Optional[dict] = None, *,
+              fluxes: bool = True) -> SeepageResult:
         """Solve one linear steady-state problem.
 
         ``kr`` optionally scales each element's conductivity (used by the
         unsaturated Picard iteration); ``extra_dirichlet`` adds prescribed
         heads on top of the boundary conditions (used by the seepage-face
         switching, which converts Unknown nodes into P = 0 nodes).
+
+        v0.1.392 (V13 of the compute audit) -- ``fluxes=False`` leaves the
+        element velocities and gradients empty, for an internal caller that
+        reads only the heads and the reactions of the solve (the passes of
+        the Picard loop). Every result that leaves the solver has them, as
+        before.
         """
         res = SeepageResult()
         n = self.mesh.node_count
@@ -273,7 +280,8 @@ class SeepageSolver:
         res.total_head = list(H)
         res.pressure_head = [H[i] - self.mesh.nodes[i].y for i in range(n)]
         res.pore_pressure = [self.gamma_w * ph for ph in res.pressure_head]
-        res.velocity, res.gradient = self._element_fluxes(H, kr)
+        if fluxes:
+            res.velocity, res.gradient = self._element_fluxes(H, kr)
         # Recorded so the derived fields can be rebuilt after a save.
         # Every result that gets velocities passes through here, saturated
         # or not, so this is the one place that needs to remember.
@@ -1203,7 +1211,10 @@ class UnsaturatedSeepageSolver(SeepageSolver):
         unknown = sorted(set(unknown))
 
         # ---- initial guess: linear (saturated) solve -----------------
-        first = super().solve(bcs)
+        # v0.1.392 (V13) -- the passes below read heads and reactions only,
+        # so they are solved without element fluxes. This one is returned
+        # only when it failed, and a failed solve stops before its fluxes.
+        first = super().solve(bcs, fluxes=False)
         if not first.converged:
             return first
         H = list(first.total_head)
@@ -1235,7 +1246,8 @@ class UnsaturatedSeepageSolver(SeepageSolver):
             checkpoint()
             kr = self._element_kr(H)
             extra = {nid: self.mesh.nodes[nid].y for nid in active}
-            step = super().solve(bcs, kr=kr, extra_dirichlet=extra)
+            step = super().solve(bcs, kr=kr, extra_dirichlet=extra,
+                                 fluxes=False)
             if not step.converged:
                 res = SeepageResult()
                 res.notes["error"] = M.seepage_note(
@@ -2248,6 +2260,14 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
         passes, and on 05-020 by 1-4e-5 m; nothing in the bank's published
         figures is that precise, and the steady solver keeps the same test.
         """
+        return self._step(bcs, H_old, dt, active)
+
+    def _step(self, bcs: SeepageBoundaryConditions, H_old: list,
+              dt: float, active: Optional[set] = None, *,
+              fluxes: bool = True):
+        """:meth:`step`, with ``fluxes=False`` returning the result without
+        its element fluxes (v0.1.392, V13): ``solve_transient`` publishes the
+        last step of each stage only, and completes that one."""
         n = self.mesh.node_count
         mass = self._lumped_mass()
         nprops = self._node_props()
@@ -2296,10 +2316,14 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
                               - mass[i] * (theta_m - theta_old[i]) / dt)
 
             extra_dirichlet = {nid: ys[nid] for nid in active}
+            # v0.1.392 (V13) -- without element fluxes: the loop reads heads
+            # and reactions, and only the solve it returns is published,
+            # which ``_with_fluxes`` completes at either exit.
             step_result = self._solve_linear_step(
-                bcs, kr, extra_dirichlet, diag, extra_q)
+                bcs, kr, extra_dirichlet, diag, extra_q, fluxes=False)
             if step_result is None or not step_result.converged:
-                return H, active, False, it, step_result
+                return (H, active, False, it,
+                        self._with_fluxes(step_result) if fluxes else step_result)
 
             H_new = step_result.total_head
             w = self.relaxation
@@ -2358,12 +2382,27 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
         if converged and TRANSIENT_CARRY_LAST_SOLVE:
             # v0.1.282 (D276): carry what is published (see the docstring)
             H = list(step_result.total_head)
-        return H, active, converged, it, step_result
+        return (H, active, converged, it,
+                self._with_fluxes(step_result) if fluxes else step_result)
+
+    def _with_fluxes(self, result):
+        """``result`` with the element fluxes of its own heads and ``kr``,
+        computed now if its solve left them out (v0.1.392, V13): the same
+        function on the same numbers as at the solve. Bank 05/015 (1-D
+        consolidation, two meshes) computed them 1600 times for the 20 stage
+        results it publishes, and 05/004 (a steady unsaturated dam) 58 times
+        for 2."""
+        if result is not None and not result.velocity and result.total_head:
+            result.velocity, result.gradient = self._element_fluxes(
+                result.total_head, result.kr)
+        return result
 
     # ------------------------------------------------------------------
-    def _solve_linear_step(self, bcs, kr, extra_dirichlet, diag, extra_q):
+    def _solve_linear_step(self, bcs, kr, extra_dirichlet, diag, extra_q,
+                           fluxes: bool = True):
         """One linear solve with the storage terms added to the diagonal
-        and to the right-hand side."""
+        and to the right-hand side. ``fluxes=False`` leaves the element
+        fluxes out (v0.1.392, V13), as :meth:`SeepageSolver.solve`."""
         n = self.mesh.node_count
         rows, cols, vals, q = self.assemble(bcs, kr)
         for i in range(n):
@@ -2406,7 +2445,8 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
         res.total_head = list(H)
         res.pressure_head = [H[i] - self.mesh.nodes[i].y for i in range(n)]
         res.pore_pressure = [self.gamma_w * p for p in res.pressure_head]
-        res.velocity, res.gradient = self._element_fluxes(H, kr)
+        if fluxes:
+            res.velocity, res.gradient = self._element_fluxes(H, kr)
         res.gamma_w = self.gamma_w          # see SeepageResult.to_dict
         res.kr = list(kr) if kr is not None else None
         KH = [0.0] * n
@@ -2545,10 +2585,14 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
             iters = 0
             last = None
             for _ in range(nsteps):
-                H, active, ok, it, last = self.step(bcs, H, dt, active)
+                # v0.1.392 (V13) -- only the last step of the stage is
+                # published, and only it gets its element fluxes
+                H, active, ok, it, last = self._step(bcs, H, dt, active,
+                                                     fluxes=False)
                 iters += it
                 all_ok = all_ok and ok
                 advanced = True
+            self._with_fluxes(last)
             if last is None:
                 last = SeepageResult()
                 last.notes["error"] = M.seepage_note(M.NO_TIME_STEP)
