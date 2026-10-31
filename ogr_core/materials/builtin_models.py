@@ -1782,30 +1782,41 @@ class GeneralizedAnisotropic(StrengthModel):
         Kept against a COPY of the dict and compared by value, so a dict
         edited in place is rebuilt rather than served stale. Raises
         :class:`IncompleteGeneralizedAnisotropic` when it cannot be built.
+
+        v0.1.388 (V9 of the compute audit) — the hit asks nothing else: the
+        two imports and the child's label, which only a message reads, are
+        paid by :meth:`_build_child` on a miss. Tutorial 20 calls this
+        6 745 641 times with 3 misses; the comparison by value stays, since
+        it is what catches a rule edited in place.
         """
+        mdict = entry.get("model") if isinstance(entry, dict) else None
+        cached = self._built.get(key)
+        if cached is None or cached[0] is not mdict or cached[1] != mdict:
+            cached = self._build_child(key, mdict)
+        if isinstance(cached[2], Exception):
+            raise cached[2]
+        return cached[2]
+
+    def _build_child(self, key, mdict):
+        """Build and keep the model of a child: :meth:`_child_model`'s miss."""
         import copy
 
         from .strength_model import StrengthModel as _SM
 
         label = self.child_label(key)
-        mdict = entry.get("model") if isinstance(entry, dict) else None
-        cached = self._built.get(key)
-        if cached is None or cached[0] is not mdict or cached[1] != mdict:
-            if not mdict:
+        if not mdict:
+            built = IncompleteGeneralizedAnisotropic(
+                f"{label} has no model")
+        else:
+            try:
+                built = _SM.from_dict(mdict)
+            except Exception as exc:  # noqa: BLE001 - reported below
                 built = IncompleteGeneralizedAnisotropic(
-                    f"{label} has no model")
-            else:
-                try:
-                    built = _SM.from_dict(mdict)
-                except Exception as exc:  # noqa: BLE001 - reported below
-                    built = IncompleteGeneralizedAnisotropic(
-                        f"the model of {label} cannot be built: "
-                        f"{type(exc).__name__}: {exc}")
-            cached = (mdict, copy.deepcopy(mdict), built)
-            self._built[key] = cached
-        if isinstance(cached[2], Exception):
-            raise cached[2]
-        return cached[2]
+                    f"the model of {label} cannot be built: "
+                    f"{type(exc).__name__}: {exc}")
+        cached = (mdict, copy.deepcopy(mdict), built)
+        self._built[key] = cached
+        return cached
 
     def _rule_model(self, i: int, rule):
         """The model of rule ``i``; see :meth:`_child_model`."""
