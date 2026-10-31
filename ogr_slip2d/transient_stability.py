@@ -44,6 +44,7 @@ from typing import Callable, Optional
 from ogr_core.messages import as_nested
 
 from . import run_messages as RM
+from .processes import pooled
 
 __all__ = [
     "StageStability",
@@ -350,6 +351,7 @@ class with_stage_water:
 
 
 # ======================================================================
+@pooled   # v0.1.396 (V17): one process pool for every stage's search
 def run_transient_stability(project, method_ids=None, *,
                             progress_cb: Optional[Callable] = None,
                             **mesh_kwargs) -> TransientStabilityOutcome:

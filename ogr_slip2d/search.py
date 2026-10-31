@@ -2344,6 +2344,78 @@ def _grid_batch(payload):
     return part
 
 
+def _run_batches(pool, payloads, n, cb, hold, drop):
+    """Submit the batches to ``pool`` and return their parts in submission
+    order, calling ``cb(done, n)`` as each finishes. An error raised by
+    ``cb`` is kept in ``hold["cb_error"]`` and the batches are still
+    collected; ``drop()`` closes the pool when the run is stopped.
+
+    v0.1.396 (V17) — the loop ``_parallel_grid_run`` always ran, moved here
+    unchanged so that a pool of its own and a borrowed one go through the
+    same lines, the Cancel's above all."""
+    from concurrent.futures import as_completed
+    futures = [pool.submit(_grid_batch, p) for p in payloads]
+    where = {f: k for k, f in enumerate(futures)}
+    # Reassembled by SUBMISSION order, whatever order they finish in: that
+    # is what keeps ``evaluations`` byte-identical to the sequential list.
+    parts = [None] * len(futures)
+    done = 0
+    try:
+        for fut in as_completed(futures):
+            k = where[fut]
+            parts[k] = fut.result()
+            done += len(payloads[k][2])
+            if cb is not None and hold["cb_error"] is None:
+                try:
+                    cb(done, n)
+                except Exception as exc:  # noqa: BLE001 - re-raised by the caller
+                    hold["cb_error"] = exc
+    except BaseException:
+        # v0.1.366 (D362) — the caller stopped the run (the window's Cancel
+        # raises from its callback; a Ctrl+C is the same). Leaving the
+        # pool's own exit to it would WAIT for every batch still queued,
+        # i.e. finish the grid the user cancelled: the queued ones are
+        # dropped, and only the batches already running — one per worker, a
+        # small slice of the grid each — are waited for.
+        #
+        # v0.1.372 (D368) — dropped HERE, one future at a time.
+        # ``shutdown(wait=False, cancel_futures=True)`` only left a flag for
+        # the pool's manager thread, and the ``with`` exit that follows
+        # calls ``shutdown(wait=True)``, which sets that flag back to False
+        # and, the thread already forgotten, waits for nothing (CPython's
+        # ``ProcessPoolExecutor.shutdown``). When the exit won the race, the
+        # workers ran the rest of the grid in the background: measured,
+        # three times out of three with the machine loaded. ``cancel()``
+        # refuses only the batches already handed to a worker, and those
+        # are the ones waited for.
+        for f in futures:
+            f.cancel()
+        drop()
+        raise
+    return parts
+
+
+def _run_borrowed(scope, workers, payloads, n, cb, hold):
+    """:func:`_run_batches` on the pool ``scope`` lends (v0.1.396, V17).
+
+    A borrowed pool can be broken by what happened before this search — a
+    worker that died while it waited — where a pool of its own, the only
+    kind there was, would not be: that pool is discarded and a new one
+    tried once, so the run does not fall back to series, and say so, where
+    it used to split. Broken again, it is this search's failure and falls
+    back as before. Any other failure, and a stop, discard it too: the next
+    search starts afresh."""
+    from concurrent.futures.process import BrokenProcessPool
+    for attempt in (1, 2):
+        pool = scope.borrow(workers)
+        try:
+            return _run_batches(pool, payloads, n, cb, hold, scope.discard)
+        except BrokenProcessPool:
+            scope.discard()
+            if attempt == 2 or hold["cb_error"] is not None:
+                raise
+
+
 def _parallel_grid_run(search, project, centres, workers):
     """Evaluate ``centres`` across processes, or return None to fall back.
 
@@ -2355,6 +2427,12 @@ def _parallel_grid_run(search, project, centres, workers):
     v0.1.262 (D247) — but it is said: the search records a note with the
     reason. Too few centres for the workers is not a failure and says
     nothing.
+
+    v0.1.396 (V17 of the compute audit) — inside a ``processes.pool_scope``
+    the batches go to the scope's pool (:func:`_run_borrowed`) instead of
+    one made and closed here; outside one, which is every search a script,
+    a test or the API runs on its own, nothing changed. The batches, their
+    order and their merge are the same either way.
     """
     from concurrent.futures import ProcessPoolExecutor
 
@@ -2398,8 +2476,11 @@ def _parallel_grid_run(search, project, centres, workers):
     # error raised by the CALLER's callback is kept apart from a failure of
     # the pool: the latter falls back to the sequential run, the former is
     # the caller's and goes back to it, as it would in series.
-    from concurrent.futures import as_completed
-    cb_error = None
+    hold = {"cb_error": None}
+    # v0.1.396 (V17) — a calculation that runs several searches lends its
+    # pool (``processes.pool_scope``); with none, this search makes its own
+    from .processes import current_pool_scope
+    scope = current_pool_scope()
     # v0.1.262 (D247) — the project travels as a shippable copy: the
     # window's carries listeners that do not pickle (the canvas's lambda,
     # the window's own method), so *Compute* could never split a grid and
@@ -2410,54 +2491,23 @@ def _parallel_grid_run(search, project, centres, workers):
     try:
         payloads = [(search, shipped, centres[a:b], a, n)
                     for a, b in batches if b > a]
-        # v0.1.329 (D326) — without a console on Windows, children that
-        # start windowless instead of each opening a terminal
-        from .processes import windowless_children
-        windowless_children()
-        with ProcessPoolExecutor(max_workers=workers) as pool:
-            futures = [pool.submit(_grid_batch, p) for p in payloads]
-            where = {f: k for k, f in enumerate(futures)}
-            # Reassembled by SUBMISSION order, whatever order they finish
-            # in: that is what keeps ``evaluations`` byte-identical to the
-            # sequential list.
-            parts = [None] * len(futures)
-            done = 0
-            try:
-                for fut in as_completed(futures):
-                    k = where[fut]
-                    parts[k] = fut.result()
-                    done += len(payloads[k][2])
-                    if cb is not None and cb_error is None:
-                        try:
-                            cb(done, n)
-                        except Exception as exc:  # noqa: BLE001 - re-raised below
-                            cb_error = exc
-            except BaseException:
-                # v0.1.366 (D362) — the caller stopped the run (the
-                # window's Cancel raises from its callback; a Ctrl+C is the
-                # same). Leaving the pool's own exit to it would WAIT for
-                # every batch still queued, i.e. finish the grid the user
-                # cancelled: the queued ones are dropped, and only the
-                # batches already running — one per worker, a small slice of
-                # the grid each — are waited for.
-                #
-                # v0.1.372 (D368) — dropped HERE, one future at a time.
-                # ``shutdown(wait=False, cancel_futures=True)`` only left a
-                # flag for the pool's manager thread, and the ``with`` exit
-                # that follows calls ``shutdown(wait=True)``, which sets that
-                # flag back to False and, the thread already forgotten, waits
-                # for nothing (CPython's ``ProcessPoolExecutor.shutdown``).
-                # When the exit won the race, the workers ran the rest of the
-                # grid in the background: measured, three times out of three
-                # with the machine loaded. ``cancel()`` refuses only the
-                # batches already handed to a worker, and those are the ones
-                # waited for.
-                for f in futures:
-                    f.cancel()
-                pool.shutdown(wait=True, cancel_futures=True)
-                raise
+        if scope is None:
+            # v0.1.329 (D326) — without a console on Windows, children
+            # that start windowless instead of each opening a terminal
+            from .processes import windowless_children
+            windowless_children()
+            with ProcessPoolExecutor(max_workers=workers) as pool:
+                parts = _run_batches(
+                    pool, payloads, n, cb, hold,
+                    lambda: pool.shutdown(wait=True, cancel_futures=True))
+        else:
+            parts = _run_borrowed(scope, workers, payloads, n, cb, hold)
     except Exception as exc:  # noqa: BLE001 - see the docstring
-        if cb_error is None:
+        if hold["cb_error"] is None:
+            if scope is not None:
+                # what a failed search leaves is not lent to the next one:
+                # it starts a pool of its own, as it always did
+                scope.discard()
             # v0.1.262 (D247) — falling back is right; doing it in silence
             # was not: the window ran every grid in one process for as long
             # as it existed and nothing said so.
@@ -2467,8 +2517,8 @@ def _parallel_grid_run(search, project, centres, workers):
             return None
     finally:
         search.progress_cb = cb
-    if cb_error is not None:
-        raise cb_error
+    if hold["cb_error"] is not None:
+        raise hold["cb_error"]
 
     merged = SearchResult(method_id=search.method.METHOD_ID,
                           objective=search.objective)

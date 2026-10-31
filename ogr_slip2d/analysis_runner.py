@@ -43,6 +43,7 @@ from ogr_core.messages import method_note
 
 from .methods import method_registry
 from .methods.gle import interslice_function
+from .processes import pooled
 from .rapid_drawdown import check_drawdown_settings, wrap_for_drawdown
 from .support_integration import (reversed_support_notes,
                                   uncontributing_support_notes)
@@ -2116,6 +2117,7 @@ class AnalysisNotConfigured(ValueError):
         super().__init__("  ".join(self.problems))
 
 
+@pooled   # v0.1.396 (V17): one process pool for every method's search
 def run_analysis(project, method_ids=None,
                  progress_cb: Optional[Callable] = None,
                  *, allow_unconfigured: bool = False) -> AnalysisOutcome:
@@ -2438,6 +2440,7 @@ def _seismic_notes(project, method_id: str, result) -> list:
 
 
 # ======================================================================
+@pooled   # v0.1.396 (V17): one process pool for every level
 def run_configured_drawdown_sweep(project, method_ids=None, *,
                                   n_levels: int = 11,
                                   include_total: bool = True,
@@ -2510,6 +2513,7 @@ class StatisticsOutcome:
     warnings: list = _field(default_factory=list)
 
 
+@pooled   # v0.1.396 (V17): one for the deterministic run and every sample
 def run_configured_statistics(project, method_ids=None, *,
                               progress_cb=None) -> StatisticsOutcome:
     """Compute Statistics: the deterministic run, then the probabilistic
