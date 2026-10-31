@@ -112,6 +112,107 @@ def _tensor_bits(kxx, kyy, kxy):
     return None
 
 
+def _mesh_stamp(mesh) -> tuple:
+    """What a cache of a mesh's geometry is valid against (v0.1.393, V14;
+    shared with the lumped mass in v0.1.394, V15): the index epoch a
+    script's run moves (``ogr_core.fem.mesh.invalidate_mesh_indexes``,
+    v0.1.383), the mesh's own count of :meth:`Mesh.forget_index` calls, its
+    element and node lists themselves (``is``: a new list can reuse an
+    ``id``) and their lengths. The epoch is read first, as
+    ``_build_locator`` does: a script that starts while the cache is built
+    leaves it stale at once."""
+    epoch = _core_mesh._INDEX_EPOCH
+    return (epoch, getattr(mesh, "_forgets", 0), mesh.elements, mesh.nodes,
+            len(mesh.elements), len(mesh.nodes))
+
+
+def _stamp_fits(stamp, mesh) -> bool:
+    """``mesh`` is still the geometry ``stamp`` was taken of: a new mesh,
+    one grown or shrunk, one a script may have edited, or one that code
+    editing it in place has declared, is not."""
+    return (stamp[0] == _core_mesh._INDEX_EPOCH
+            and stamp[1] == getattr(mesh, "_forgets", 0)
+            and stamp[2] is mesh.elements and stamp[3] is mesh.nodes
+            and stamp[4] == len(mesh.elements)
+            and stamp[5] == len(mesh.nodes))
+
+
+_JUST_FLOAT = frozenset((float,))
+
+
+def _float_bits(values):
+    """The bits of a list of Python floats, or None when one is not exactly
+    a float (v0.1.394, V15). ``struct`` takes a numpy number or an int as
+    the same double, and a system kept from floats must not stand for one
+    with numpy numbers: its reactions come out as numpy numbers."""
+    if set(map(type, values)) <= _JUST_FLOAT:
+        return struct.pack("<%dd" % len(values), *values)
+    return None
+
+
+class _EliminatedSystem:
+    """The Dirichlet elimination of one assembled transient system
+    (v0.1.394, V15 of the compute audit): what
+    ``TransientSeepageSolver._solve_linear_step`` built at every call from
+    the triplets and the fixed nodes, kept while they repeat.
+
+    ``rows``, ``cols`` and ``vals`` are copies of the assembled triplets,
+    storage diagonal included (the reactions read them); ``carried`` the
+    ``(r, c, v)`` whose column is fixed and row is not, in triplet order,
+    whose products leave the right-hand side in that order; ``kept_*`` the
+    triplets of the reduced matrix, then a unit diagonal per fixed node in
+    the order of ``fixed``; ``csc`` the sparse matrix built from them by
+    the ``_csr`` of the module at the time (``csr``), or None until a solve
+    builds one. ``bits`` is ``_float_bits(vals)``."""
+
+    __slots__ = ("rows", "cols", "vals", "n", "order", "bits", "csr",
+                 "carried", "kept_rows", "kept_cols", "kept_vals", "csc")
+
+    def __init__(self, rows, cols, vals, fixed, n, bits) -> None:
+        self.rows, self.cols, self.vals = list(rows), list(cols), list(vals)
+        self.n, self.order, self.bits, self.csr = n, tuple(fixed), bits, _csr
+        self.carried = [(r, c, v) for r, c, v in zip(rows, cols, vals)
+                        if c in fixed and r not in fixed]
+        kept_rows: list = []
+        kept_cols: list = []
+        kept_vals: list = []
+        for r, c, v in zip(rows, cols, vals):
+            if r in fixed or c in fixed:
+                continue
+            kept_rows.append(r)
+            kept_cols.append(c)
+            kept_vals.append(v)
+        for nid in fixed:
+            kept_rows.append(nid)
+            kept_cols.append(nid)
+            kept_vals.append(1.0)
+        self.kept_rows, self.kept_cols, self.kept_vals = (
+            kept_rows, kept_cols, kept_vals)
+        self.csc = None
+
+    def repeats(self, rows, cols, vals, fixed, n) -> bool:
+        """The same triplets, bit for bit and type for type, the same fixed
+        nodes in the same order and the same ``_csr``: then the elimination
+        and the matrix are what they were. ``==`` first, which is cheap and
+        settles most misses; the bits then tell 0.0 from -0.0 and the types
+        a float from a numpy number."""
+        return (self.n == n and self.csr is _csr
+                and self.order == tuple(fixed)
+                and self.rows == rows and self.cols == cols
+                and self.vals == vals and self.bits is not None
+                and _float_bits(vals) == self.bits)
+
+
+def _reuse_ok(solver) -> bool:
+    """A kept system is solved through the steps of
+    ``SeepageSolver._linear_solve`` (``_linear_solve_from``), so it is kept
+    only where that method is the one that would be called: not one a
+    subclass or a test redefined, on the class or on the instance
+    (v0.1.394, V15)."""
+    return (type(solver)._linear_solve is SeepageSolver._linear_solve
+            and "_linear_solve" not in vars(solver))
+
+
 # ======================================================================
 class SeepageSolver:
     """Steady-state saturated FE seepage solver over a T3 mesh."""
@@ -250,21 +351,13 @@ class SeepageSolver:
         its nine entries at the tensor whose bits are ``bits`` (both None
         until one is formed).
 
-        v0.1.393 (V14). Valid against the mesh's element and node lists
-        themselves, their lengths, the index epoch a script's run moves
-        (``ogr_core.fem.mesh.invalidate_mesh_indexes``, v0.1.383) and the
-        mesh's own count of :meth:`Mesh.forget_index` calls: a new mesh, one
-        grown or shrunk, one a script may have edited, or one that code
-        editing it in place has declared, is built again."""
-        mesh = self.mesh
+        v0.1.393 (V14). Valid while the mesh fits the stamp taken when they
+        were built (:func:`_mesh_stamp`): a new mesh, one grown or shrunk,
+        one a script may have edited, or one that code editing it in place
+        has declared, is built again."""
         cache = getattr(self, "_k0_cache", None)
-        if (cache is not None and cache[0] is mesh.elements
-                and cache[1] is mesh.nodes
-                and cache[2] == len(mesh.elements)
-                and cache[3] == len(mesh.nodes)
-                and cache[4] == _core_mesh._INDEX_EPOCH
-                and cache[5] == getattr(mesh, "_forgets", 0)):
-            return cache[6], cache[7], cache[8]
+        if cache is not None and _stamp_fits(cache[0], self.mesh):
+            return cache[1], cache[2], cache[3]
         return None
 
     def _assemble_and_keep(self, kr):
@@ -272,10 +365,7 @@ class SeepageSolver:
         pass — so a bad mesh, a bad material or a short ``kr`` raises where
         it raised — keeping what :meth:`_element_matrices` serves next."""
         mesh = self.mesh
-        # Read before the lists: a script that starts during the pass
-        # leaves this cache stale at once (as _build_locator does).
-        epoch = _core_mesh._INDEX_EPOCH
-        forgets = getattr(mesh, "_forgets", 0)
+        stamp = _mesh_stamp(mesh)
         rows: list[int] = []
         cols: list[int] = []
         vals: list[float] = []
@@ -300,9 +390,7 @@ class SeepageSolver:
                 for j in range(3):
                     rows.append(e.nodes[i])
                     cols.append(e.nodes[j])
-        self._k0_cache = (mesh.elements, mesh.nodes, len(mesh.elements),
-                          len(mesh.nodes), epoch, forgets, list(rows),
-                          list(cols), entries)
+        self._k0_cache = (stamp, list(rows), list(cols), entries)
         return rows, cols, vals
 
     # ------------------------------------------------------------------
@@ -417,12 +505,23 @@ class SeepageSolver:
     # ------------------------------------------------------------------
     def _linear_solve(self, rows, cols, vals, rhs, n):
         """Sparse solve with graceful degradation."""
+        return self._linear_solve_from(None, rows, cols, vals, rhs, n)[0]
+
+    def _linear_solve_from(self, csc, rows, cols, vals, rhs, n):
+        """:meth:`_linear_solve`, returning ``(x, csc)``: ``csc`` is the
+        sparse matrix of these triplets the sparse solve used — the one
+        given, or the one it built — or None when none could be built
+        (v0.1.394, V15). A transient step solves the same matrix many times
+        over (bank 05/015: 1590 of 1600 solves), and building it took longer
+        than ``spsolve``. A construction that fails is tried again by the
+        next call, as before; ``spsolve`` runs every time."""
         if _csr is not None and _spsolve is not None and _np is not None:
             try:
-                A = _csr((vals, (rows, cols)), shape=(n, n))
-                x = _spsolve(A.tocsc(), _np.asarray(rhs, dtype=float))
+                if csc is None:
+                    csc = _csr((vals, (rows, cols)), shape=(n, n)).tocsc()
+                x = _spsolve(csc, _np.asarray(rhs, dtype=float))
                 if x is not None and _np.all(_np.isfinite(x)):
-                    return [float(v) for v in x]
+                    return [float(v) for v in x], csc
             except Exception:  # noqa: BLE001
                 pass
         # Dense fallback
@@ -432,10 +531,10 @@ class SeepageSolver:
                 for r, c, v in zip(rows, cols, vals):
                     A[r, c] += v
                 x = _np.linalg.solve(A, _np.asarray(rhs, dtype=float))
-                return [float(v) for v in x]
+                return [float(v) for v in x], csc
             except Exception:  # noqa: BLE001
                 pass
-        return self._gauss(rows, cols, vals, rhs, n)
+        return self._gauss(rows, cols, vals, rhs, n), csc
 
     @staticmethod
     def _gauss(rows, cols, vals, rhs, n):
@@ -2308,12 +2407,23 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
     # ------------------------------------------------------------------
     def _lumped_mass(self) -> list:
         """Row-summed (lumped) mass matrix: for a T3 each node receives
-        one third of every element area it belongs to."""
-        m = [0.0] * self.mesh.node_count
-        for e in self.mesh.elements:
-            a3 = e.area(self.mesh) / 3.0
+        one third of every element area it belongs to.
+
+        v0.1.394 (V15 of the compute audit) -- kept per solver while the
+        mesh fits its stamp (:func:`_mesh_stamp`), and handed out as a new
+        list: every step summed it again (bank 05/015: 840 times for two
+        meshes)."""
+        mesh = self.mesh
+        kept = getattr(self, "_mass_cache", None)
+        if kept is not None and _stamp_fits(kept[0], mesh):
+            return list(kept[1])
+        stamp = _mesh_stamp(mesh)
+        m = [0.0] * mesh.node_count
+        for e in mesh.elements:
+            a3 = e.area(mesh) / 3.0
             for nid in e.nodes:
                 m[nid] += a3
+        self._mass_cache = (stamp, list(m))
         return m
 
     def _node_props(self):
@@ -2514,7 +2624,17 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
                            fluxes: bool = True):
         """One linear solve with the storage terms added to the diagonal
         and to the right-hand side. ``fluxes=False`` leaves the element
-        fluxes out (v0.1.392, V13), as :meth:`SeepageSolver.solve`."""
+        fluxes out (v0.1.392, V13), as :meth:`SeepageSolver.solve`.
+
+        v0.1.394 (V15 of the compute audit) -- the Dirichlet elimination and
+        the sparse matrix it leaves are a function of the assembled triplets
+        (storage diagonal included) and of which nodes are fixed, in their
+        order. The solver keeps the last ones (:class:`_EliminatedSystem`)
+        and builds them again when one of those differs in a bit or a type;
+        the right-hand side, ``spsolve`` and the reactions are computed at
+        every call, with the same operations in the same order. Bank 05/015
+        solved 1600 systems for 800 steps, 1590 of them the one before: in
+        a saturated column only the right-hand side moves."""
         n = self.mesh.node_count
         rows, cols, vals, q = self.assemble(bcs, kr)
         for i in range(n):
@@ -2532,25 +2652,27 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
             # (storage regularises them), so this is allowed here.
             fixed = {}
 
-        rows0, cols0, vals0 = list(rows), list(cols), list(vals)
+        reuse = _reuse_ok(self)
+        system = getattr(self, "_step_system", None) if reuse else None
+        if system is None or not system.repeats(rows, cols, vals, fixed, n):
+            system = _EliminatedSystem(rows, cols, vals, fixed, n,
+                                       _float_bits(vals) if reuse else None)
+            if system.bits is not None:
+                self._step_system = system
+        rows0, cols0, vals0 = system.rows, system.cols, system.vals
         q0 = list(q)
-        for r, c, v in zip(rows, cols, vals):
-            if c in fixed and r not in fixed:
-                q[r] -= v * fixed[c]
-        kr_, kc_, kv_ = [], [], []
-        for r, c, v in zip(rows, cols, vals):
-            if r in fixed or c in fixed:
-                continue
-            kr_.append(r)
-            kc_.append(c)
-            kv_.append(v)
+        for r, c, v in system.carried:
+            q[r] -= v * fixed[c]
         for nid, hv in fixed.items():
-            kr_.append(nid)
-            kc_.append(nid)
-            kv_.append(1.0)
             q[nid] = hv
 
-        H = self._linear_solve(kr_, kc_, kv_, q, n)
+        if reuse:
+            H, system.csc = self._linear_solve_from(
+                system.csc, system.kept_rows, system.kept_cols,
+                system.kept_vals, q, n)
+        else:
+            H = self._linear_solve(system.kept_rows, system.kept_cols,
+                                   system.kept_vals, q, n)
         if H is None:
             return None
         res = SeepageResult()
