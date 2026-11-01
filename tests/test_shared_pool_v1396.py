@@ -59,8 +59,12 @@ def _inline_pools(broken=0, failing=0):
     made = []
 
     class Inline:
-        def __init__(self, max_workers=None):
+        # v0.1.399 (D384) — a pool is made with the initializer that hands
+        # each worker its stop event; kept, not run: the batches run here,
+        # in this process, where no event is installed
+        def __init__(self, max_workers=None, initializer=None, initargs=()):
             self.max_workers = max_workers
+            self.initializer, self.initargs = initializer, initargs
             self.shutdowns = []
             self.broken = len(made) < broken
             self.failing = len(made) < failing

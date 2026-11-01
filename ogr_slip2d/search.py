@@ -2397,6 +2397,12 @@ class BaseSearch(ABC):
 #: focus (``GridSearch._too_few_reach_the_solver``).
 _PARALLEL_MIN_CIRCLES = 400
 
+#: v0.1.399 (D384) — how often, in seconds, the wait for a pool's batches
+#: stops for a ``checkpoint`` (``_run_batches``): a Cancel is read within
+#: this, not when the next batch finishes. Five wake-ups a second cost
+#: nothing next to batches of seconds.
+_STOP_POLL_S = 0.2
+
 #: v0.1.386 — the largest grid whose surviving circles are counted before
 #: that decision. Counting walks the grid in series, and so does the run it
 #: keeps in-process, so both walks have to stay cheap next to the half a
@@ -2502,8 +2508,18 @@ def _grid_batch(payload):
     # counts from an earlier run cannot have them added twice.
     before = {name: getattr(search, name, 0) for name in _RUN_COUNTERS}
     notes_before = list(getattr(search, "_pending_notes", None) or ())
+    from . import processes
     with project.regions_frozen():
-        part = search._run_centres(project, centres, done_before, total)
+        if processes._stop is None:
+            part = search._run_centres(project, centres, done_before, total)
+        else:
+            # v0.1.399 (D384) — in a pool's worker the batch stops at the
+            # next grid centre once the pool's event is set, instead of
+            # running to its end for a run that was cancelled
+            from ogr_core.progress import watching
+            with watching(processes.stop_check):
+                part = search._run_centres(project, centres, done_before,
+                                           total)
     part._worker_counters = {
         name: getattr(search, name, 0) - before[name]
         for name in _RUN_COUNTERS}
@@ -2521,24 +2537,36 @@ def _run_batches(pool, payloads, n, cb, hold, drop):
 
     v0.1.396 (V17) — the loop ``_parallel_grid_run`` always ran, moved here
     unchanged so that a pool of its own and a borrowed one go through the
-    same lines, the Cancel's above all."""
-    from concurrent.futures import as_completed
+    same lines, the Cancel's above all.
+
+    v0.1.399 (D384) — the wait is cut every ``_STOP_POLL_S`` for a
+    ``checkpoint``. ``as_completed`` waited with no limit, so the window's
+    Cancel was read only after the next batch had finished, and a batch is
+    1/32 of a method's grid. The batches finished in one wait are taken in
+    submission order; what reaches ``parts`` does not depend on it."""
+    from concurrent.futures import FIRST_COMPLETED, wait
+    from ogr_core.progress import checkpoint
     futures = [pool.submit(_grid_batch, p) for p in payloads]
     where = {f: k for k, f in enumerate(futures)}
     # Reassembled by SUBMISSION order, whatever order they finish in: that
     # is what keeps ``evaluations`` byte-identical to the sequential list.
     parts = [None] * len(futures)
     done = 0
+    pending = set(futures)
     try:
-        for fut in as_completed(futures):
-            k = where[fut]
-            parts[k] = fut.result()
-            done += len(payloads[k][2])
-            if cb is not None and hold["cb_error"] is None:
-                try:
-                    cb(done, n)
-                except Exception as exc:  # noqa: BLE001 - re-raised by the caller
-                    hold["cb_error"] = exc
+        while pending:
+            finished, pending = wait(pending, timeout=_STOP_POLL_S,
+                                     return_when=FIRST_COMPLETED)
+            for fut in sorted(finished, key=where.__getitem__):
+                k = where[fut]
+                parts[k] = fut.result()
+                done += len(payloads[k][2])
+                if cb is not None and hold["cb_error"] is None:
+                    try:
+                        cb(done, n)
+                    except Exception as exc:  # noqa: BLE001 - re-raised by the caller
+                        hold["cb_error"] = exc
+            checkpoint()
     except BaseException:
         # v0.1.366 (D362) — the caller stopped the run (the window's Cancel
         # raises from its callback; a Ctrl+C is the same). Leaving the
@@ -2557,6 +2585,10 @@ def _run_batches(pool, payloads, n, cb, hold, drop):
         # three times out of three with the machine loaded. ``cancel()``
         # refuses only the batches already handed to a worker, and those
         # are the ones waited for.
+        #
+        # v0.1.399 (D384) — and they end at their next grid centre: ``drop``
+        # sets the pool's event (``processes.stoppable_pool``) before it
+        # waits.
         for f in futures:
             f.cancel()
         drop()
@@ -2603,8 +2635,6 @@ def _parallel_grid_run(search, project, centres, workers):
     a test or the API runs on its own, nothing changed. The batches, their
     order and their merge are the same either way.
     """
-    from concurrent.futures import ProcessPoolExecutor
-
     n = len(centres)
     if n < workers:
         return None
@@ -2663,12 +2693,16 @@ def _parallel_grid_run(search, project, centres, workers):
         if scope is None:
             # v0.1.329 (D326) — without a console on Windows, children
             # that start windowless instead of each opening a terminal
-            from .processes import windowless_children
-            windowless_children()
-            with ProcessPoolExecutor(max_workers=workers) as pool:
-                parts = _run_batches(
-                    pool, payloads, n, cb, hold,
-                    lambda: pool.shutdown(wait=True, cancel_futures=True))
+            # (``stoppable_pool`` sees to it). v0.1.399 (D384) — and that
+            # stop between grid centres once the run is dropped.
+            from .processes import stoppable_pool
+            pool, stop = stoppable_pool(workers)
+
+            def drop():
+                stop.set()
+                pool.shutdown(wait=True, cancel_futures=True)
+            with pool:
+                parts = _run_batches(pool, payloads, n, cb, hold, drop)
         else:
             parts = _run_borrowed(scope, workers, payloads, n, cb, hold)
     except Exception as exc:  # noqa: BLE001 - see the docstring
@@ -3385,6 +3419,7 @@ class GridSearch(BaseSearch):
         keeps reporting against the WHOLE grid while a worker sees a slice
         of it.
         """
+        from ogr_core.progress import checkpoint
         slope_pts = self._slope_surface(project)
 
         result = SearchResult(method_id=self.method.METHOD_ID,
@@ -3400,6 +3435,12 @@ class GridSearch(BaseSearch):
                 processed += 1
                 if self.progress_cb:
                     self.progress_cb(processed, total)
+                else:
+                    # v0.1.399 (D384) — with no callback (a pool's worker)
+                    # every centre is a checkpoint, D362's rule for the
+                    # loops that report no progress. Without a watcher it
+                    # does nothing.
+                    checkpoint()
 
                 bracket = self._radius_bracket(xc, yc, slope_pts)
                 if bracket is None:

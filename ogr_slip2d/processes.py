@@ -23,6 +23,9 @@ for bit (``tests/test_parallel_search_v197.py``).
 v0.1.396 (V17 of the compute audit) -- and how a calculation that runs
 several searches keeps ONE pool for all of them (:class:`pool_scope`).
 
+v0.1.399 (D384) -- and how a pool's workers stop when the run is cancelled
+(:func:`stoppable_pool`).
+
 Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
@@ -31,6 +34,53 @@ import os
 import sys
 import threading
 from typing import Optional
+
+
+class BatchStopped(BaseException):
+    """A pool's worker stopped its batch because the run was cancelled
+    (v0.1.399, D384). A ``BaseException``, as the window's ``TaskCancelled``
+    is: the engine catches ``Exception`` around a surface it cannot
+    evaluate, and a stop must not be counted as one more failed surface."""
+
+
+#: In a pool's worker, the event its pool sets when the run is stopped
+#: (v0.1.399, D384); None in every other process, so that a batch run in
+#: this one (a test's executor) computes exactly as before.
+_stop = None
+
+
+def _install_stop(event) -> None:
+    """The initializer of a :func:`stoppable_pool`: runs once in each
+    worker process, as it starts."""
+    global _stop
+    _stop = event
+
+
+def stop_check() -> None:
+    """The watcher of a pool's worker (``ogr_core.progress.watching``):
+    raises :class:`BatchStopped` once its pool's event is set."""
+    if _stop is not None and _stop.is_set():
+        raise BatchStopped()
+
+
+def stoppable_pool(workers: int):
+    """A process pool and the event that stops its batches, ``(pool,
+    event)`` (v0.1.399, D384).
+
+    The interface test of 0.1.397 measured a Cancel of a split grid at about
+    34 s: the workers had no point at which to stop, so the run waited for
+    every batch already handed to one, each 1/32 of a method's grid. Each
+    worker now receives the event as it starts (an initializer, the only way
+    a ``multiprocessing.Event`` reaches a pool's worker), and its batch
+    checks it between grid centres (``search._grid_batch``). Whoever drops
+    the pool sets the event first."""
+    import multiprocessing
+    from concurrent.futures import ProcessPoolExecutor
+    windowless_children()
+    stop = multiprocessing.Event()
+    pool = ProcessPoolExecutor(max_workers=workers, initializer=_install_stop,
+                               initargs=(stop,))
+    return pool, stop
 
 
 def child_executable(platform: Optional[str] = None,
@@ -100,6 +150,7 @@ class pool_scope:
         if self._outer is None:
             self._pool = None
             self._workers = None
+            self._stop = None
             _local.scope = self
         return self
 
@@ -118,18 +169,23 @@ class pool_scope:
         if self._pool is not None and self._workers != workers:
             self.discard()
         if self._pool is None:
-            from concurrent.futures import ProcessPoolExecutor
-            windowless_children()
-            self._pool = ProcessPoolExecutor(max_workers=workers)
+            self._pool, self._stop = stoppable_pool(workers)
             self._workers = workers
         return self._pool
 
     def discard(self) -> None:
         """Close the pool, dropping what is queued and waiting for what
         runs. Idempotent: a stopped search and the scope's own end both
-        come here, and so does a failed search before falling back."""
-        pool, self._pool, self._workers = self._pool, None, None
+        come here, and so does a failed search before falling back.
+
+        v0.1.399 (D384) — the pool's event is set first, so a batch that is
+        running ends at its next grid centre instead of being waited for to
+        its end. At the scope's own end no batch runs, and it changes
+        nothing."""
+        pool, stop = self._pool, self._stop
+        self._pool, self._workers, self._stop = None, None, None
         if pool is not None:
+            stop.set()
             pool.shutdown(wait=True, cancel_futures=True)
 
 
