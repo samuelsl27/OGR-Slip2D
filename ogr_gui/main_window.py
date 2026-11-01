@@ -278,7 +278,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.406"
+    VERSION = "0.1.407"
 
     def __init__(self) -> None:
         super().__init__()
@@ -1182,14 +1182,11 @@ class MainWindow(QMainWindow):
         return "cancel"
 
     def act_new(self) -> None:
-        if self.project.is_dirty:
-            answer = self._ask_unsaved(
-                tr("New Project"),
-                tr("Current project has unsaved changes. Save first?"))
-            if answer == "save":
-                self.act_save()
-            elif answer == "cancel":
-                return
+        # v0.1.407 (D392) — the rule Open follows: Save went on to the new
+        # project whether or not it saved, so Save As cancelled (or a write
+        # that failed) lost the changes the user had just asked to keep.
+        if not self._may_replace_project(tr("New Project")):
+            return
         self._attach_project(Project("Untitled"))
         self.terminal_dock.attach_context(self.project, self.canvas, self)
         self.command_stack.clear()
@@ -6532,14 +6529,11 @@ class MainWindow(QMainWindow):
     # Demo project
     def act_load_demo(self) -> None:
         """Replace current project with the demo slope."""
-        if self.project.is_dirty:
-            r = QMessageBox.question(
-                self, tr("Load Demo Slope"),
-                tr("Current project has unsaved changes. Load demo anyway?"),
-                QMessageBox.Yes | QMessageBox.No,
-            )
-            if r != QMessageBox.Yes:
-                return
+        # v0.1.407 (D392) — the question of New and Open, by the owner's
+        # decision: its own Yes/No offered no Save and, with no offscreen
+        # guard, would have blocked a test on a project with changes.
+        if not self._may_replace_project(tr("Load Demo Slope")):
+            return
         # v0.1.196 — the demo is built by ``ogr_core.project.demo``, the same
         # function the command line and an agent use; this window's own copy
         # left its water table assigned to nothing (spec 008, F2).
