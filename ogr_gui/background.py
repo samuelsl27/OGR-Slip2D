@@ -150,6 +150,19 @@ def run_task(window, fn: Callable, title: str = ""):
     finally:
         prog.finish()
         window.task_worker = None
-    if worker.error is not None:
-        raise worker.error
-    return worker.result
+    # v0.1.398 (D382) — taken out of the worker, and raised from a local
+    # cleared on the way out, as ``concurrent.futures.Future.result`` does.
+    # The traceback holds the frames of the calculation, and they hold what
+    # it had computed; it also holds the frame of ``run`` and this one, both
+    # with the worker, and the worker held the exception: a cycle that only
+    # the cyclic collector frees, and an idle window never runs a full
+    # collection. A cancelled Compute kept its partial result (3.3 GB in the
+    # interface test of 0.1.397) until the next calculation.
+    error, worker.error = worker.error, None
+    result, worker.result = worker.result, None
+    if error is not None:
+        try:
+            raise error
+        finally:
+            error = None
+    return result
