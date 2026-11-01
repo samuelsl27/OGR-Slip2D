@@ -278,7 +278,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.402"
+    VERSION = "0.1.403"
 
     def __init__(self) -> None:
         super().__init__()
@@ -3754,7 +3754,12 @@ class MainWindow(QMainWindow):
                     first, len(notes) - 1)
             self.statusBar().showMessage(first, 9000)
         self._gw_solver = getattr(self.project, "_gw_solver", None)
-        return list(self.project.transient_results or [])
+        # v0.1.403 (D388) — the run's own stage results, not the project's:
+        # a transient whose initial state failed no longer writes its empty
+        # result over the project's stages, and the caller reads that result
+        # for the reason. When the run solved, they are the same objects
+        # that ``_take_field`` has just put on the project.
+        return [st.result for st in outcome.stages]
 
     # v0.1.303 (D292) — a step with the field, as the API's; and a
     # recorded step marks the project modified, which computing the

@@ -130,6 +130,33 @@ def _with_mesh(w, elements=80):
     _clean(w)
 
 
+#: A head the demo's groundwater can be solved with, on the left side.
+_LEFT_HEAD = 23.0
+
+
+def _with_head(w):
+    """The mesh's default conditions plus a head on the left side, outside
+    any undo step.
+
+    v0.1.403 (D388) — the default conditions prescribe no head, so the demo's
+    groundwater solve was always the solver's refusal ("no Dirichlet
+    boundary condition"). These tests passed on its empty result, which was
+    written over the project and counted as the step. A refusal now leaves
+    the project, and the history, as they were."""
+    from ogr_fem2d.solvers import BCType, default_boundary_conditions
+    mesh = w.project.fem_mesh
+    # what the groundwater door puts when the project has none
+    # (``transient_stability._current_bcs``)
+    bcs = w.project.seepage_bcs or default_boundary_conditions(mesh)
+    w.project.seepage_bcs = bcs
+    side = sorted(mesh.boundary_node_ids())
+    x_min = min(mesh.nodes[i].x for i in side)
+    for i in side:
+        if abs(mesh.nodes[i].x - x_min) < 1e-9:
+            bcs.add_node(i, BCType.TOTAL_HEAD, _LEFT_HEAD)
+    _clean(w)
+
+
 # ----------------------------------------------------------------------
 class TestMaterialsAndProperties:
     def test_define_materials(self):
@@ -374,9 +401,10 @@ class TestGroundwater:
         w = _window()
         try:
             _with_mesh(w)
+            _with_head(w)
             assert w.project.seepage_result is None
             _accepted(w, "Compute groundwater", w._compute_groundwater)
-            assert w.project.seepage_result is not None
+            assert w.project.seepage_result.total_head
             w.act_undo()
             assert w.project.seepage_result is None
         finally:
@@ -394,8 +422,10 @@ class TestGroundwater:
         br = AgentBridge(w)
         try:
             _with_mesh(w)
+            _with_head(w)
             w._compute_groundwater()
             field = copy.deepcopy(w.project.seepage_result)
+            assert field is not None and field.total_head
             w.act_undo()
             _clean(w)
 
@@ -421,14 +451,20 @@ class TestGroundwater:
             s1 = _json(w.project)
             call(br.ws, "settings_set", changes={"methods.num_slices": 31})
             s2 = _json(w.project)
+            # v0.1.403 (D388) — a head, by the agent too, so that the solve
+            # has a field to record (see _with_head)
+            call(br.ws, "seepage_bc_set", bc_type="total_head", side="left",
+                 value=_LEFT_HEAD)
+            s2b = _json(w.project)
             w._compute_groundwater()
             s3 = _json(w.project)
             assert w.command_stack.history()[0] == [
-                "Generate FE mesh", "Change settings", "Compute groundwater"]
-            for expected in (s2, s1, s0):
+                "Generate FE mesh", "Change settings",
+                "Set boundary conditions", "Compute groundwater"]
+            for expected in (s2b, s2, s1, s0):
                 w.act_undo()
                 assert _json(w.project) == expected
-            for expected in (s1, s2, s3):
+            for expected in (s1, s2, s2b, s3):
                 w.act_redo()
                 assert _json(w.project) == expected
         finally:

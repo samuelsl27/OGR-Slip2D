@@ -568,9 +568,10 @@ class TestTheWindowSaysThemInSpanish:
                 w._compute_groundwater()
             finally:
                 w.close()
-        results = list(p.transient_results or [])
-        assert len(results) == 1 and not results[0].pore_pressure
-        assert results[0].notes["error"].code == "seepage.initial_failed_why"
+        # v0.1.403 (D388) — the failed run no longer writes its empty result
+        # over the project's stages: the project had none and keeps none.
+        # Its reason is still said, below, from the run's own result.
+        assert list(p.transient_results or []) == []
         # the driver's warning, and the window's own line after it
         assert any(s.startswith(
             "El análisis de agua subterránea no dio ningún campo: falló el "

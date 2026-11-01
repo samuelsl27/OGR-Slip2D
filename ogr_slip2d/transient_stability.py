@@ -226,6 +226,23 @@ def solve_project_groundwater(project, *, progress_cb: Optional[Callable]
     state of the face inside its band is not one a user could act on
     (rule 7), so there is none. The transient's own settings — time steps,
     Picard iterations per step, tolerance — are in the project settings.
+
+    A solve that produced no field leaves the project as it was (v0.1.403,
+    D388)
+    -------------------------------------------------------------------
+    The solver refuses some problems before solving them — no prescribed
+    head anywhere (the system is singular), an empty mesh — and returns a
+    result with its reason and no heads; a transient whose initial steady
+    state cannot be solved does the same (D341). That result used to be
+    written over the project's field anyway: the interface test of 0.1.402
+    opened bank problem 010, whose stored field gives its published
+    factors, pressed *Compute Groundwater*, got the solver's refusal, and
+    the field was gone, so the next Compute refused too. Such a result is
+    returned with its reason and nothing on the project changes: the field,
+    the transient stages, the initial state, the caches. A field that was
+    computed is written as before, converged or not (with its notes). The
+    API's door has applied the same test since v0.1.200
+    (``ogr_api.ops.groundwater._finish_groundwater``).
     """
     from ogr_core.project.rules import (mesh_mismatch,
                                         transient_without_stages)
@@ -253,6 +270,8 @@ def solve_project_groundwater(project, *, progress_cb: Optional[Callable]
                                       max_iterations=STEADY_MAX_ITERATIONS,
                                       tolerance=STEADY_TOLERANCE)
     result = solver.solve_unsaturated(_current_bcs(project, mesh))
+    if not _has_field([result]):
+        return result                   # v0.1.403 (D388): see the docstring
     project.seepage_result = result
     project.transient_results = []
     project.transient_initial_result = None
@@ -262,6 +281,12 @@ def solve_project_groundwater(project, *, progress_cb: Optional[Callable]
     # produced the field it is drawing.
     project._gw_solver = solver
     return result
+
+
+def _has_field(results) -> bool:
+    """Whether any of ``results`` carries a field (v0.1.403, D388): the
+    heads the solver computed, converged or not. A refusal has none."""
+    return any(r is not None and r.total_head for r in results)
 
 
 def _solve_transient(project, mesh, props, gamma_w, *, progress_cb=None):
@@ -295,6 +320,12 @@ def _solve_transient(project, mesh, props, gamma_w, *, progress_cb=None):
             bcs=stage_boundary_conditions(project, st, current),
         ))
     results = solver.solve_transient(stages, initial_bcs=initial)
+    if not _has_field(results):
+        # v0.1.403 (D388) — the initial state could not be solved (D341):
+        # the stages of the last transient that ran stay as they were
+        if progress_cb is not None:
+            progress_cb(len(results), len(results) or 1)
+        return results
     project.transient_results = results
     # v0.1.307 (D295) — the state at t = 0, which the reference shows first
     # in Interpret and which every stage evolved from: the steady analysis
