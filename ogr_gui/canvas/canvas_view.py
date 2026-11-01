@@ -306,6 +306,9 @@ class CanvasView(QGraphicsView):
         # always did (Interpret redraws its own).
         self._shown_result = None
         self.result_is_current = None
+        # v0.1.404 (D389) — the listener this canvas put on its project, to
+        # take it off again (``set_project``, ``detach_project``)
+        self._project_listener = None
         # v0.1.331 (D329a) — annotations drawn on THIS canvas only and never
         # stored: the dimensions Interpret leaves, which go with its window
         self.overlay_annotations: list = []
@@ -443,14 +446,33 @@ class CanvasView(QGraphicsView):
     # Public API
     # ==================================================================
     def set_project(self, project: Project) -> None:
+        # v0.1.404 (D389) — off the previous project first: a canvas listened
+        # to every project it was ever given, and the same one twice
+        # refreshed it twice
+        self._stop_listening()
         self.project = project
         # v0.1.327 (D323) — nothing of the previous project is drawn again:
         # not its result, and not the snap marker, which outlived File > New
         self._shown_result = None
         self._last_snap = None
-        project.add_listener(lambda evt: self.refresh_scene())
+        self._project_listener = lambda evt: self.refresh_scene()
+        project.add_listener(self._project_listener)
         self.refresh_scene()
         self.zoom_all()
+
+    def detach_project(self) -> None:
+        """Stop listening to the project and forget the result drawn
+        (v0.1.404, D389): what a view that is closing calls. The project
+        held the canvas of every Interpret window ever opened, and with it
+        the result it showed, for the rest of the session."""
+        self._stop_listening()
+        self.display_search_result(None)
+
+    def _stop_listening(self) -> None:
+        cb, self._project_listener = self._project_listener, None
+        project = getattr(self, "project", None)
+        if cb is not None and project is not None:
+            project.remove_listener(cb)
 
     def refresh(self) -> None:
         """Alias for :meth:`refresh_scene`.

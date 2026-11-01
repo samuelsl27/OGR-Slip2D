@@ -278,7 +278,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.403"
+    VERSION = "0.1.404"
 
     def __init__(self) -> None:
         super().__init__()
@@ -4308,6 +4308,10 @@ class MainWindow(QMainWindow):
         # a method selector
         win = InterpretWindow(self.project, results, self,
                               factor_report=self.last_factor_report)
+        # v0.1.404 (D389) — deleted when closed. As a child of this window it
+        # was only hidden, and kept alive with its result until the program
+        # closed; its own charts, its children, go with it.
+        win.setAttribute(Qt.WA_DeleteOnClose)
         win.closed.connect(lambda: self._forget_interpret(win))
         self.interpret_windows.append(win)
         win.show()

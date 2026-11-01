@@ -174,6 +174,16 @@ class Project:
     def add_listener(self, cb: Callable[[str], None]) -> None:
         self._listeners.append(cb)
 
+    def remove_listener(self, cb: Callable[[str], None]) -> None:
+        """Stop notifying ``cb`` (v0.1.404, D389); nothing if it is not a
+        listener. A view that outlives its interest in the project — a
+        closed Interpret window — has to say so: the project held every
+        canvas that ever listened to it, and what each one drew."""
+        try:
+            self._listeners.remove(cb)
+        except ValueError:
+            pass
+
     def _notify(self, event: str) -> None:
         # v0.1.203 — not for "saved": ``save`` clears the flag and then
         # notifies, and this set it again, so a project was "unsaved" the

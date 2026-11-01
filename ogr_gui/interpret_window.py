@@ -3929,4 +3929,15 @@ class InterpretWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:  # noqa: N802
         self.closed.emit()
+        # v0.1.404 (D389) — a closed Interpret window lets its result go.
+        # It stayed alive, hidden, with every result it was opened on (the
+        # interface test of 0.1.402 reached 8 GB), and its canvas stayed on
+        # the project's listeners even once the window itself was deleted.
+        # The main window deletes it on close (``act_interpret``), and taking
+        # the canvas off the listeners is what lets it go. What it holds is
+        # dropped as well, for a window closed without being deleted (a
+        # script's): the object outlives its closing, and holds nothing.
+        self.canvas.detach_project()
+        self.results_by_method = {}
+        self.search_result = None
         super().closeEvent(event)
