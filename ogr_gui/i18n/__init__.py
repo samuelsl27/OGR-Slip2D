@@ -6904,6 +6904,12 @@ _DICTS: dict[str, dict[str, str]] = {
             "Optimizando la superficie crítica...",
         "{0} cancelled: nothing was changed.":
             "Se ha cancelado «{0}»: no se ha cambiado nada.",
+        # --- v0.1.400 (D385) · el archivo de resultados, fuera del hilo de
+        # la ventana: lo que se dice al esperarlo y si no se pudo escribir.
+        "Saving the results file...":
+            "Guardando el archivo de resultados...",
+        "The results file could not be saved: {0}":
+            "No se pudo guardar el archivo de resultados: {0}",
         # --- v0.1.370 (D344) · las fórmulas de Definir materiales que llevan
         # palabras (los símbolos, iguales), y textos fijos que seguían en inglés.
         # Las fórmulas solo de símbolos no llevan entrada: tr() las devuelve tal cual.

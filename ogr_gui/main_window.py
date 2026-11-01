@@ -52,7 +52,7 @@ from ogr_core.geometry import (
     convert_boundary,
 )
 from ogr_core.materials import Material, MohrCoulomb
-from ogr_core.project import Project, save_results
+from ogr_core.project import Project
 from ogr_core.project.commands import (
     AddBoundaryCommand,
     AssignMaterialCommand,
@@ -278,7 +278,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.399"
+    VERSION = "0.1.400"
 
     def __init__(self) -> None:
         super().__init__()
@@ -349,6 +349,8 @@ class MainWindow(QMainWindow):
         self._gc_release_timer.setInterval(2000)
         self._gc_release_timer.timeout.connect(gc_guard.release)
         self._gc_release_timer.start()
+        # v0.1.400 (D385) — the thread writing a Compute's results file
+        self._results_writer = None
 
         # v0.1.2 — selection filter state
         self.selection_filter = SelectionFilterState()
@@ -3164,6 +3166,8 @@ class MainWindow(QMainWindow):
             elif answer == "cancel":
                 event.ignore()
                 return
+        # v0.1.400 (D385) — a results file still being written is finished
+        self._wait_results_writer()
         self.unregister_session()
         self._stop_agent_bridge()
         super().closeEvent(event)
@@ -4108,13 +4112,49 @@ class MainWindow(QMainWindow):
                 f"{critical.fos:.3f}{extra}{warn}", 10000,
             )
             if self.project.results_path:
-                try:
-                    save_results(self.project.results_path, first_result,
-                                 project_id=self.project.id)
-                except Exception:  # noqa: BLE001
-                    pass
+                self._write_results(self.project.results_path, first_result)
         else:
             self.ogr_status.showMessage(tr("No valid failure surface found."), 6000)
+
+    def _write_results(self, path, result) -> None:
+        """The results file of a Compute, written off this thread
+        (v0.1.400, D385; ``ogr_gui.background.ResultsWriter``): the result
+        is on screen at once, and the window answers while the file is
+        written. Without a display it is written here, as before.
+
+        One file at a time: the previous write is waited for first, which is
+        also what keeps its thread alive until it has finished. Nothing is
+        said when it is written: the bar holds one message, and it is the
+        factor of safety's (D96). A failure is said; it used to be silent."""
+        from .background import ResultsWriter, runs_inline, write_results_file
+        self._wait_results_writer()
+        if runs_inline(self):
+            self._on_results_written(
+                write_results_file(path, result, self.project.id))
+            return
+        writer = ResultsWriter(path, result, self.project.id)
+        writer.written.connect(self._on_results_written)
+        self._results_writer = writer
+        writer.start()
+
+    def _wait_results_writer(self) -> None:
+        """Wait for a results file still being written (v0.1.400, D385):
+        before the next one, and before the window closes (the owner's
+        decision: wait rather than leave the file unwritten)."""
+        writer, self._results_writer = self._results_writer, None
+        if writer is not None and writer.isRunning():
+            self.ogr_status.showMessage(tr("Saving the results file..."))
+            QApplication.setOverrideCursor(Qt.WaitCursor)
+            try:
+                writer.wait()
+            finally:
+                QApplication.restoreOverrideCursor()
+
+    def _on_results_written(self, error: str) -> None:
+        if error:
+            self.ogr_status.showMessage(
+                tr("The results file could not be saved: {0}").format(error),
+                15000)
 
     @staticmethod
     def _ordinary_pore_pressure_warning(results) -> str:

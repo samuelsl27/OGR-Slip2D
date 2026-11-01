@@ -166,3 +166,55 @@ def run_task(window, fn: Callable, title: str = ""):
         finally:
             error = None
     return result
+
+
+def write_results_file(path, result, project_id: str) -> str:
+    """``save_results`` into ``<path>.tmp``, then moved over ``path``: ''
+    when written, otherwise what went wrong (v0.1.400, D385).
+
+    The temporary file is there so that a write cut short never leaves half
+    a file under the results file's name. A failed write removes it."""
+    import os
+    from pathlib import Path
+    from ogr_core.project import save_results
+    path = Path(path)
+    tmp = path.with_name(path.name + ".tmp")
+    try:
+        save_results(tmp, result, project_id=project_id)
+        os.replace(tmp, path)
+        return ""
+    except Exception as exc:  # noqa: BLE001 - said by the window
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return f"{type(exc).__name__}: {exc}"
+
+
+class ResultsWriter(QThread):
+    """Writes the results file of a Compute off the window's thread
+    (v0.1.400, D385).
+
+    The window wrote it on its own thread when a Compute ended, one HDF5
+    group and one compressed dataset per surface: the interface test of
+    0.1.397 saw the window "not responding" for one to three minutes after
+    a big grid, and the compute audit had measured 47 s for the Bishop of
+    K03. Measured on that result, 55 s inline and 55 s on this thread, with
+    a 50 ms heartbeat on the window's thread never more than 0.095 s apart,
+    and the same bytes (``_auditoria/P8_interfaz/d385_guardado_h5.py``).
+
+    ``written`` carries '' or what went wrong. The window keeps the thread
+    until it has finished: a QThread destroyed while it runs aborts the
+    process (D362)."""
+
+    written = Signal(str)
+
+    def __init__(self, path, result, project_id: str) -> None:
+        super().__init__()
+        self._job = (path, result, project_id)
+
+    def run(self) -> None:                       # noqa: D102
+        path, result, project_id = self._job
+        # the result is not kept past the write: the thread can outlive it
+        self._job = None
+        self.written.emit(write_results_file(path, result, project_id))
