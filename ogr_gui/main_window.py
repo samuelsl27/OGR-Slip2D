@@ -278,7 +278,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.405"
+    VERSION = "0.1.406"
 
     def __init__(self) -> None:
         super().__init__()
@@ -1195,7 +1195,28 @@ class MainWindow(QMainWindow):
         self.command_stack.clear()
         self.setWindowTitle(f"OGR Slip2D v{self.VERSION} — Untitled")
 
+    def _may_replace_project(self, title: str) -> bool:
+        """Whether the project may be replaced: yes when it has nothing
+        unsaved; otherwise the question of New and of closing the window
+        (``_ask_unsaved``), and yes only to Discard, or to Save when the
+        save did save (v0.1.406, D391). Save As cancelled, or a save that
+        failed, leaves the changes unsaved, and the project stays."""
+        if not self.project.is_dirty:
+            return True
+        answer = self._ask_unsaved(
+            title, tr("Current project has unsaved changes. Save first?"))
+        if answer == "save":
+            self.act_save()
+            return not self.project.is_dirty
+        return answer == "discard"
+
     def act_open(self) -> None:
+        # v0.1.406 (D391) — Open replaced a project with unsaved changes
+        # without a word, where New and closing the window ask (D283): the
+        # interface test of 0.1.402 lost its edits that way three times.
+        # Asked before the file dialog, as New asks before anything.
+        if not self._may_replace_project(tr("Open Project...")):
+            return
         path, _ = QFileDialog.getOpenFileName(
             self, tr("Open Project..."), "",
             tr("OGR Project (*.ogr *.json);;All Files (*)"),
