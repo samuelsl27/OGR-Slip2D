@@ -39,16 +39,33 @@ def detached_copy(project):
     return _detached_copy(project, cold_caches=True)
 
 
+#: v0.1.401 (D386) — the settings of ``settings.advanced`` that say how a
+#: calculation runs, not what it computes. A grid split across processes is
+#: the sequential one bit for bit: the batches are contiguous and are put back
+#: in submission order (``ogr_slip2d.search._run_batches``), and the compute
+#: bench's ``version_serie`` checks it on every case with a pool.
+COMPUTATION_MODE = ("parallel_search", "parallel_cpu_percent")
+
+
 def model_hash(project) -> str:
     """SHA-256 of what an ANALYSIS reads, to tell whether a result is stale.
 
     The annotation layer is left out (v0.1.196): the solver never reads it
     (``tech-stack.md``: "the solver never reads ``Project.annotations``"), so
     drawing a dimension line must not mark a result as computed on another
-    model. Everything else in ``to_dict`` is in.
+    model.
+
+    v0.1.401 (D386) — and so is :data:`COMPUTATION_MODE` (the owner's
+    decision): ticking «search in parallel» left the result marked as
+    computed on an earlier model, with the same factors to the last bit
+    (the interface test of 0.1.397). Everything else in ``to_dict`` is in;
+    :func:`document_hash` still sees both, since they are saved.
     """
     data = project.to_dict()
     data.pop("annotations", None)
+    advanced = data.get("settings", {}).get("advanced", {})
+    for key in COMPUTATION_MODE:
+        advanced.pop(key, None)
     return _sha(data)
 
 
