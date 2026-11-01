@@ -131,6 +131,8 @@ def run_task(window, fn: Callable, title: str = ""):
         return fn(None)
     from ogr_gui.dialogs.misc_dialogs import TaskProgressDialog
 
+    # v0.1.405 (D390) — a results file still being written comes first
+    wait_for_results_file(window)
     worker = _TaskWorker(fn)
     prog = TaskProgressDialog(window, title, on_cancel=worker.stop.set)
     worker.progress.connect(prog.update_progress)
@@ -166,6 +168,46 @@ def run_task(window, fn: Callable, title: str = ""):
         finally:
             error = None
     return result
+
+
+def wait_for_results_file(window) -> None:
+    """Before a calculation starts, wait for the results file of the last
+    Compute if it is still being written (v0.1.405, D390).
+
+    The writer of D385 (``ResultsWriter``) shares the interpreter with the
+    calculation's thread, and makes tens of thousands of short calls into
+    HDF5, each one waiting for its turn back: measured on the Bishop result
+    of ACADS 1(a) at 25 x 25 x 12, 24.6 s alone and 122.3 s with a serial
+    Compute running (``_auditoria/P8_interfaz/h5_escritor_concurrente.py``).
+    The interface test of 0.1.402 chained calculations for six minutes after
+    a Compute and its file never appeared meanwhile. Before 0.1.400 the file
+    was always written before the next calculation; it is again, and the
+    wait is what the writer had left, alone.
+
+    A window-modal dialog with a busy bar and no Cancel, in a local event
+    loop: the window stays responsive, and the model cannot be edited
+    meanwhile. With no writer running it does nothing."""
+    writer = getattr(window, "_results_writer", None)
+    if writer is None:
+        return
+    from ogr_gui.dialogs.misc_dialogs import TaskProgressDialog
+    from ogr_gui.i18n import tr
+    loop = QEventLoop()
+    # connected BEFORE asking whether it runs: a ``finished`` emitted in
+    # between is queued to this thread and quits the loop once it starts
+    writer.finished.connect(loop.quit)
+    try:
+        if not writer.isRunning():
+            return
+        prog = TaskProgressDialog(window, tr("Saving the results file..."))
+        try:
+            prog.show()
+            loop.exec()
+            writer.wait()
+        finally:
+            prog.finish()
+    finally:
+        writer.finished.disconnect(loop.quit)
 
 
 def write_results_file(path, result, project_id: str) -> str:
