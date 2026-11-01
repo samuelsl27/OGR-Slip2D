@@ -53,13 +53,17 @@ def store_job_result(ws, job, handle, summary, kind: str):
 
 
 def _finish_analysis(ws, job, handle, summary) -> dict:
-    store_job_result(ws, job, handle, summary, "analysis")
+    res = store_job_result(ws, job, handle, summary, "analysis")
     host = getattr(ws, "host", None)
     if host is not None and handle.id == host.handle_id and \
             model_hash(handle.project) == job.model_hash:
         # v0.1.203 — attached to a window, and the model is still the one
         # analysed: the result is shown there, as a Compute would be.
-        payload = job.load_results()
+        # v0.1.402 (D387) — loaded through the stored result, which keeps
+        # it: ``job.load_results()`` here and the stored result's own loader
+        # at the first question left two full copies, slices and all, in the
+        # window's process. The window holds these objects anyway.
+        payload = res.payload()
         host.show_analysis(payload.get("results", {}),
                            payload.get("factor_report"),
                            payload.get("warnings", []))
