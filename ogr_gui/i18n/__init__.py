@@ -652,6 +652,11 @@ _DICTS: dict[str, dict[str, str]] = {
         'Minimum elevation': 'Cota mínima',
         'Minimum depth': 'Profundidad mínima',
         'Minimum area': 'Área mínima',
+        # v0.1.412 (D369)
+        'Unchecked, the default of the selected search method applies. 0 '
+        'keeps every surface.':
+            'Sin marcar, se aplica el valor por defecto del método de '
+            'búsqueda elegido. Con 0 no se descarta ninguna superficie.',
         'Monte Carlo': 'Monte Carlo',
         'Number of samples:': 'Número de muestras:',
         'Off by default: applying partial factors silently would change every factor of safety previously compared against, so it has to be an explicit choice. Selecting a standard loads its factors; choose Custom to enter your own.': 'Desactivado por defecto: aplicar coeficientes parciales en silencio cambiaría todos los factores de seguridad con los que se haya comparado antes, así que debe ser una elección explícita. Elegir una norma carga sus coeficientes; elige Personalizado para introducir los tuyos.',

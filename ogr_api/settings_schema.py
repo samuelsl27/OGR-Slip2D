@@ -190,6 +190,9 @@ _BOUNDS: dict[str, tuple[Optional[float], Optional[float], str]] = {
     "methods.max_iterations": (1, None, "at least 1"),
     "search.grid_nx": (1, None, "at least 1"),
     "search.grid_ny": (1, None, "at least 1"),
+    # v0.1.412 (D369) — 0 switches the area filter off; below 0 filtered
+    # nothing either, and read as a size
+    "search.min_area": (0.0, None, "at least 0"),
     **{f"design_standard.{f}": (0.1, 10.0, "between 0.1 and 10")
        for f in _DESIGN_FACTORS},
     # v0.1.243 (D226b) — γQ,fav is 0 in the Eurocode 7 sets: a favourable

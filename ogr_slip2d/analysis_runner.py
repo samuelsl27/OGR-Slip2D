@@ -136,6 +136,37 @@ _MIN_AREA_FALLBACK = {
 }
 
 
+def effective_min_area(search_settings, search_method: Optional[str] = None
+                       ) -> float:
+    """The Minimum Area the search will filter with.
+
+    What the model declares, or, when it declares nothing (``None``), the
+    fallback of its search method in :data:`_MIN_AREA_FALLBACK`. A declared
+    0 is a value: it switches the filter off.
+
+    v0.1.412 (D369) — the analysis door read ``min_area or fallback``, so a
+    declared 0 became 1 in the Grid Search, 2 in the Block Search and 0.5
+    in Auto Refine, the same as an empty field. Public so that the dialog
+    shows the value that applies instead of keeping its own copy of the
+    rule. ``search_method`` overrides the one in the settings, for a
+    dialog whose choice has not been written yet.
+    """
+    declared = search_settings.min_area
+    if declared is not None:
+        return float(declared)
+    return min_area_fallback(search_method or search_settings.search_method)
+
+
+def min_area_fallback(search_method) -> float:
+    """The Minimum Area a search filters with when the model declares none.
+
+    Takes the method's id or its ``SearchMethod`` member. v0.1.412 (D369)
+    — public so that the dialog's unchecked row says what will apply.
+    """
+    return _MIN_AREA_FALLBACK.get(getattr(search_method, "value",
+                                          search_method), 1.0)
+
+
 class AnalysisOutcome:
     """What one call to :func:`run_analysis` produced.
 
@@ -1797,8 +1828,10 @@ def _search_common(project, method, num_slices,
         # What that cost, on verification problem 86: Spencer 1.1728
         # (-26.4 %) on a 2.41 ft2 skin, against 1.5841 (-0.62 %) on the
         # 201.95 ft2 mechanism the manual publishes. Defect D51.
-        min_area=(s_search.min_area
-                  or _MIN_AREA_FALLBACK.get(s_search.search_method, 1.0)),
+        # v0.1.412 (D369) — through ``effective_min_area``: the ``or`` that
+        # stood here read a declared 0 ("no area filter") as an empty
+        # field and filtered with the fallback.
+        min_area=effective_min_area(s_search),
     )
 
 

@@ -2077,14 +2077,16 @@ class BaseSearch(ABC):
                 SN.F_SLOPE_LIMITS, windows=", ".join(
                     "[%g, %g]" % (min(a, b), max(a, b))
                     for a, b in self.slope_limit_sets)))
-        if self.min_area:
-            # null (or 0, which the analysis door also replaces) in the
-            # model: the value is the search's fallback, not the user's
+        # v0.1.412 (D369) -- 0 or less filters nothing, so it is no reason;
+        # and only null is the search's fallback: a declared 0 used to be
+        # replaced by the analysis door, and this read it the same way
+        if self.min_area and self.min_area > 0:
             declared = getattr(getattr(getattr(project, "settings", None),
                                        "search", None), "min_area", None)
             bits.append(SN.nested_search_note(
-                SN.F_MIN_AREA if declared or project is None
-                else SN.F_MIN_AREA_DEFAULT, value=self.min_area))
+                SN.F_MIN_AREA_DEFAULT
+                if project is not None and declared is None
+                else SN.F_MIN_AREA, value=self.min_area))
         if self.min_depth is not None:
             bits.append(SN.nested_search_note(SN.F_MIN_DEPTH,
                                               value=self.min_depth))

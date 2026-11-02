@@ -403,6 +403,15 @@ class SurfaceOptionsDialog(QDialog):
             tr("Minimum area"), 0.5, " m²", s.min_area,
             allow_negative=False,
         )
+        # v0.1.412 (D369) — unchecked is the search's own default, and the
+        # grey value said 0.5 where the Grid Search filters at 1 and the
+        # Block Search at 2. It now shows the engine's value for the chosen
+        # search (``_sync_min_area_default``) and says what it is.
+        hint = tr("Unchecked, the default of the selected search method "
+                  "applies. 0 keeps every surface.")
+        self.cb_filter_min_area.setToolTip(hint)
+        self.sb_min_area.setToolTip(hint)
+        self.cb_filter_min_area.toggled.connect(self._sync_min_area_default)
         root.addWidget(g_filt)
 
         # ============ WEAK LAYER HANDLING (v0.1.121) ============
@@ -597,6 +606,18 @@ class SurfaceOptionsDialog(QDialog):
         panel = self._panels.get(m)
         if panel is not None:
             self.stack.setCurrentWidget(panel)
+        self._sync_min_area_default()
+
+    def _sync_min_area_default(self, *_args) -> None:
+        """Show, in the unchecked Minimum Area row, the value the chosen
+        search will filter with (asked to the engine, not copied)."""
+        if self.cb_filter_min_area.isChecked():
+            return
+        m = self.cb_method.currentData()
+        if m is None:
+            return
+        from ogr_slip2d.analysis_runner import min_area_fallback
+        self.sb_min_area.setValue(min_area_fallback(m))
 
     def _on_defaults(self) -> None:
         """Reset the current panel to engineering defaults from SearchSettings()."""
