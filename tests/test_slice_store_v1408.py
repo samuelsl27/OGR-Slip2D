@@ -259,7 +259,11 @@ class TestTheStoreGoesWithItsResults:
         sr = out.results["bishop_simplified"]
         store = _spilled(sr)[0].slices.store
         path, ref = store.path, weakref.ref(store)
-        assert pickle.loads(pickle.dumps(store)) is None   # never to a worker
+        # never its file to a worker: since v0.1.409 (V2) a store in the
+        # worker's memory, without a folder
+        shipped = pickle.loads(pickle.dumps(store))
+        assert shipped is not store and shipped.path is None
+        del shipped
         assert os.path.isdir(path)
         del store, sr
         gc.collect()

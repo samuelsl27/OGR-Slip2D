@@ -37,6 +37,16 @@ Decided there, and why:
   they are more than :data:`ORPHAN_AGE_S` old and removing them works: the
   open file of a live session forbids it on Windows, and on Linux its open
   descriptor goes on reading.
+
+v0.1.409 (D383, V2) — a grid split across a process pool spills too. The
+search reaches each worker with a :class:`_BatchStore`, the same store kept
+in that worker's memory for its batch: every evaluation is pickled and
+compressed there, and the batch comes back as records (:class:`_Pending`)
+and the batch's table of materials, not as objects. The parent writes the
+records to its file as each batch arrives (:meth:`SliceStore.adopt_part`),
+and the batch's table goes on the end of its own: a record keeps the
+positions of its batch's table, so its slices know where that table starts
+(``_base``). The parent no longer unpickles every slice of the grid.
 """
 from __future__ import annotations
 
@@ -82,23 +92,26 @@ _LOADING = threading.local()
 
 def _material_at(i):
     """A material of a record, by its position in the table of the store
-    being read (set by :func:`_unpickle` on this thread)."""
-    return _LOADING.table[i]
+    being read (set by :func:`_unpickle` on this thread), counted from where
+    the record's batch starts in it."""
+    return _LOADING.table[_LOADING.base + i]
 
 
-def _unpickle(data: bytes, table: list) -> list:
+def _unpickle(data: bytes, table: list, base: int = 0) -> list:
     _LOADING.table = table
+    _LOADING.base = base
     try:
         return pickle.loads(zlib.decompress(data))
     finally:
         _LOADING.table = None
 
 
-def _from_record(data: bytes, table: list, count: int, scalars: dict):
+def _from_record(data: bytes, table: list, count: int, scalars: dict,
+                 base: int = 0):
     """A ``Slices`` from a record that crossed a process: what a pickled
     :class:`SpilledSlices` becomes when it is read back."""
     from .slicer import Slices
-    return Slices(slices=_unpickle(data, table), **scalars)
+    return Slices(slices=_unpickle(data, table, base), **scalars)
 
 
 def _close_and_remove(fh, path: str) -> None:
@@ -106,6 +119,27 @@ def _close_and_remove(fh, path: str) -> None:
         fh.close()
     finally:
         shutil.rmtree(path, ignore_errors=True)
+
+
+def remove_folders_of(pid: int) -> int:
+    """Remove the store folders of process ``pid``, which has ended; how
+    many went. A process that is killed (an agent's job cancelled: its whole
+    tree is) never runs its finalizers, and its folder would wait for
+    :func:`remove_orphans`. A folder whose file a live process holds open,
+    as a later process given the same number would, cannot be removed on
+    Windows and is left as it is."""
+    root = os.path.join(tempfile.gettempdir(), FOLDER)
+    prefix = "%d_" % pid
+    gone = 0
+    try:
+        entries = list(os.scandir(root))
+    except OSError:
+        return 0
+    for e in entries:
+        if e.name.startswith(prefix) and e.is_dir():
+            shutil.rmtree(e.path, ignore_errors=True)
+            gone += not os.path.exists(e.path)
+    return gone
 
 
 def remove_orphans(root: str, age_s: float = ORPHAN_AGE_S,
@@ -161,9 +195,10 @@ class SliceStore:
                                            self._fh, self.path)
 
     def __reduce__(self):
-        # pickled (a search shipped to a pool's worker) as None: the file
-        # belongs to this process, and a worker keeps its slices
-        return (type(None), ())
+        # v0.1.409 (V2) — pickled (a search shipped to a pool's worker) as
+        # a store in that worker's memory: the file belongs to this process,
+        # and the batch's records come back to it (``adopt_part``)
+        return (_BatchStore, ())
 
     # ------------------------------------------------------------------
     def _material_reduce(self, m):
@@ -201,13 +236,13 @@ class SliceStore:
             self._fh.seek(off)
             return self._fh.read(n)
 
-    def load(self, off: int, n: int) -> list:
+    def load(self, off: int, n: int, base: int = 0) -> list:
         """The slice list of one record, read from the file."""
-        lst = _unpickle(self._read(off, n), self.table)
+        lst = _unpickle(self._read(off, n), self.table, base)
         self.loads += 1
         return lst
 
-    def recent(self, off: int, n: int) -> list:
+    def recent(self, off: int, n: int, base: int = 0) -> list:
         """The slice list of one record, from the latest read when it is
         one of them."""
         with self._lock:
@@ -215,7 +250,7 @@ class SliceStore:
             if lst is not None:
                 self._recent.move_to_end(off)
                 return lst
-        lst = self.load(off, n)
+        lst = self.load(off, n, base)
         with self._lock:
             self._recent[off] = lst
             while len(self._recent) > _RECENT:
@@ -234,6 +269,7 @@ class SliceStore:
         stub = SpilledSlices()
         stub._store = self
         stub._off, stub._n = self._write(self._dumps(sl.slices))
+        stub._base = 0
         stub._count = len(sl)
         # the base, as ``surface_path`` reads it: the left end of the first
         # slice, then the right end of every slice
@@ -260,6 +296,93 @@ class SliceStore:
             self._position = {id(m): i for i, m in enumerate(self.table)}
             self._recent.clear()
 
+    def adopt_part(self, part) -> None:
+        """The records of a pool's batch into this store (v0.1.409, V2):
+        ``part`` is the batch's ``SearchResult`` as it arrived, its
+        evaluations holding :class:`_Pending` records and ``_worker_table``
+        the batch's materials. A batch from a worker without a store has
+        neither and is left as it is."""
+        table = getattr(part, "_worker_table", None)
+        if table is None:
+            return
+        with self._lock:
+            base = len(self.table)
+            self.table.extend(table)
+            for i, m in enumerate(table):
+                self._position.setdefault(id(m), base + i)
+        part._worker_table = None
+        for res in part.evaluations:
+            p = res.slices
+            if type(p) is not _Pending:
+                continue
+            stub = SpilledSlices()
+            stub._store = self
+            stub._off, stub._n = self._write(p.data)
+            stub._base = base
+            stub._count, stub._xs, stub._ys, stub.area = (p.count, p.xs, p.ys,
+                                                          p.area)
+            for k, v in zip(_SCALARS, p.scalars):
+                setattr(stub, k, v)
+            res.slices = stub
+
+    def _reduce_stub(self, stub):
+        # the record as it is on disk and the store's table, never the
+        # objects: a pickler keeps every object it wrote until the end, so
+        # a result pickled whole (the API's result.pkl) would hold every
+        # evaluation's slices in memory again
+        return (_from_record,
+                (self._read(stub._off, stub._n), self.table, stub._count,
+                 {k: getattr(stub, k) for k in _SCALARS}, stub._base))
+
+
+class _BatchStore(SliceStore):
+    """A :class:`SliceStore` kept in a pool worker's memory for one batch
+    (v0.1.409, V2): what a store shipped with the search becomes there.
+    Its records go back to the parent as records (:class:`_Pending`), with
+    the batch's table of materials."""
+
+    def __init__(self) -> None:
+        self.path = None
+        self._chunks: list = []
+        self._lock = threading.Lock()
+        self.table = []
+        self._position = {}
+        self._dispatch = None
+        self._recent = collections.OrderedDict()
+        self.records = 0
+        self.loads = 0
+
+    def __reduce__(self):
+        return (type(None), ())
+
+    def _write(self, data: bytes) -> tuple:
+        self._chunks.append(data)
+        self.records += 1
+        return len(self._chunks) - 1, len(data)
+
+    def _read(self, off: int, n: int) -> bytes:
+        return self._chunks[off]
+
+    def _reduce_stub(self, stub):
+        return (_Pending, (self._chunks[stub._off], stub._count, stub._xs,
+                           stub._ys, stub.area,
+                           tuple(getattr(stub, k) for k in _SCALARS)))
+
+
+class _Pending:
+    """One record of a pool's batch on its way to the parent's store: the
+    bytes and what a :class:`SpilledSlices` keeps in memory. Never read:
+    :meth:`SliceStore.adopt_part` replaces it as the batch arrives."""
+
+    __slots__ = ("data", "count", "xs", "ys", "area", "scalars")
+
+    def __init__(self, data, count, xs, ys, area, scalars):
+        self.data, self.count, self.xs, self.ys = data, count, xs, ys
+        self.area, self.scalars = area, scalars
+
+    def __len__(self) -> int:
+        return self.count
+
 
 class SpilledSlices:
     """In place of the ``Slices`` of one evaluation whose records are in a
@@ -271,8 +394,8 @@ class SpilledSlices:
     one of the store's latest, and different but equal ones after.
     """
 
-    __slots__ = ("_store", "_off", "_n", "_count", "_xs", "_ys", "area"
-                 ) + _SCALARS
+    __slots__ = ("_store", "_off", "_n", "_base", "_count", "_xs", "_ys",
+                 "area") + _SCALARS
 
     def __len__(self) -> int:
         return self._count
@@ -287,7 +410,7 @@ class SpilledSlices:
 
     @property
     def slices(self) -> list:
-        return self._store.recent(self._off, self._n)
+        return self._store.recent(self._off, self._n, self._base)
 
     def __iter__(self):
         return iter(self.slices)
@@ -304,7 +427,7 @@ class SpilledSlices:
     def materialize(self):
         """A ``Slices`` of its own, read from the file."""
         from .slicer import Slices
-        return Slices(slices=self._store.load(self._off, self._n),
+        return Slices(slices=self._store.load(self._off, self._n, self._base),
                       **{k: getattr(self, k) for k in _SCALARS})
 
     def __eq__(self, other):
@@ -315,13 +438,9 @@ class SpilledSlices:
     __hash__ = None
 
     def __reduce__(self):
-        # the record as it is on disk and the store's table, never the
-        # objects: a pickler keeps every object it wrote until the end, so
-        # a result pickled whole (the API's result.pkl) would hold every
-        # evaluation's slices in memory again
-        return (_from_record,
-                (self._store._read(self._off, self._n), self._store.table,
-                 self._count, {k: getattr(self, k) for k in _SCALARS}))
+        # what crosses is the record, never the objects: the store says how
+        # (a pool worker's batch sends it on to the parent's store)
+        return self._store._reduce_stub(self)
 
     def __repr__(self) -> str:
         return "SpilledSlices(%d slices at %d)" % (self._count, self._off)
@@ -354,4 +473,5 @@ def rehydrate_special(result) -> None:
 
 
 __all__ = ["SPILL_MIN_CIRCLES", "SliceStore", "SpilledSlices", "rehydrate",
-           "rehydrate_special", "remove_orphans", "wants_store"]
+           "rehydrate_special", "remove_folders_of", "remove_orphans",
+           "wants_store"]

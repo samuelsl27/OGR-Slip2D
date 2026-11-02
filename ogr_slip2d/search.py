@@ -766,7 +766,8 @@ class BaseSearch(ABC):
     #: v0.1.408 (D383) — where the grid puts the slices of every evaluation
     #: it keeps (``slice_store.SliceStore``), given by the caller that keeps
     #: the population (``run_analysis``, the back analysis); None keeps them
-    #: in memory. Pickled as None: a pool's worker keeps its own.
+    #: in memory. v0.1.409 (V2): shipped to a pool's worker, it is a store in
+    #: that worker's memory, and the batch's records come back to this one.
     slice_store = None
 
     #: v0.1.237 (D87) — whether this search analyses the SAME surfaces on
@@ -2553,14 +2554,24 @@ def _grid_batch(payload):
     part._worker_notes = [
         line for line in (getattr(search, "_pending_notes", None) or ())
         if line not in notes_before]
+    # v0.1.409 (D383, V2) — a batch spilled in this worker's memory goes
+    # back as records and the table of materials they name
+    # (``SliceStore.adopt_part`` in the parent)
+    store = getattr(search, "slice_store", None)
+    if store is not None:
+        part._worker_table = store.table
     return part
 
 
-def _run_batches(pool, payloads, n, cb, hold, drop):
+def _run_batches(pool, payloads, n, cb, hold, drop, store=None):
     """Submit the batches to ``pool`` and return their parts in submission
     order, calling ``cb(done, n)`` as each finishes. An error raised by
     ``cb`` is kept in ``hold["cb_error"]`` and the batches are still
     collected; ``drop()`` closes the pool when the run is stopped.
+
+    v0.1.409 (D383, V2) — with the search's ``store``, each part's records
+    are written to it as the part arrives, so the run never holds more than
+    the batches that have not yet been written.
 
     v0.1.396 (V17) — the loop ``_parallel_grid_run`` always ran, moved here
     unchanged so that a pool of its own and a borrowed one go through the
@@ -2587,6 +2598,8 @@ def _run_batches(pool, payloads, n, cb, hold, drop):
             for fut in sorted(finished, key=where.__getitem__):
                 k = where[fut]
                 parts[k] = fut.result()
+                if store is not None:
+                    store.adopt_part(parts[k])
                 done += len(payloads[k][2])
                 if cb is not None and hold["cb_error"] is None:
                     try:
@@ -2623,7 +2636,7 @@ def _run_batches(pool, payloads, n, cb, hold, drop):
     return parts
 
 
-def _run_borrowed(scope, workers, payloads, n, cb, hold):
+def _run_borrowed(scope, workers, payloads, n, cb, hold, store=None):
     """:func:`_run_batches` on the pool ``scope`` lends (v0.1.396, V17).
 
     A borrowed pool can be broken by what happened before this search — a
@@ -2637,7 +2650,8 @@ def _run_borrowed(scope, workers, payloads, n, cb, hold):
     for attempt in (1, 2):
         pool = scope.borrow(workers)
         try:
-            return _run_batches(pool, payloads, n, cb, hold, scope.discard)
+            return _run_batches(pool, payloads, n, cb, hold, scope.discard,
+                                store)
         except BrokenProcessPool:
             scope.discard()
             if attempt == 2 or hold["cb_error"] is not None:
@@ -2729,9 +2743,11 @@ def _parallel_grid_run(search, project, centres, workers):
                 stop.set()
                 pool.shutdown(wait=True, cancel_futures=True)
             with pool:
-                parts = _run_batches(pool, payloads, n, cb, hold, drop)
+                parts = _run_batches(pool, payloads, n, cb, hold, drop,
+                                     search.slice_store)
         else:
-            parts = _run_borrowed(scope, workers, payloads, n, cb, hold)
+            parts = _run_borrowed(scope, workers, payloads, n, cb, hold,
+                                  search.slice_store)
     except Exception as exc:  # noqa: BLE001 - see the docstring
         if hold["cb_error"] is None:
             if scope is not None:

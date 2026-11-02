@@ -221,6 +221,14 @@ def _run(folder: Path) -> None:
 def main(argv=None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     folder = Path(argv[0])
+    # v0.1.409 (D383) — this interpreter's own number, which names the
+    # folder of its slice store: the parent's ``Popen`` may know only a
+    # launcher's (a venv's python.exe on Windows starts the real one), and
+    # removes the folder a killed job leaves (``Job._finish``)
+    try:
+        (folder / "pid").write_text(str(os.getpid()), encoding="ascii")
+    except OSError:
+        pass
     try:
         _run(folder)
         return 0

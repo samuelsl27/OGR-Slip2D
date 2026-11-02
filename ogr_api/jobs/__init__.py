@@ -120,6 +120,24 @@ class Job:
         self.ended = self.ended or time.time()
         out["elapsed_s"] = round(self.ended - self.started, 1)
         self._final = dict(out)
+        self._remove_store_folders()
+
+    def _remove_store_folders(self) -> None:
+        """v0.1.409 (D383) — the folder of the job's slice store, once its
+        process has ended. A job that ends by itself removes it on the way
+        out; one that is cancelled or crashes is killed and never runs its
+        finalizers, and the folder (354 MB for the population of the
+        interface test of 0.1.397) would wait an hour for a later store to
+        sweep it. Named by the process's number: the worker's own, which it
+        writes in its folder, and the one ``Popen`` knows."""
+        from ogr_slip2d.slice_store import remove_folders_of
+        pids = {self.proc.pid}
+        try:
+            pids.add(int((self.folder / "pid").read_text(encoding="ascii")))
+        except (OSError, ValueError):
+            pass
+        for pid in pids:
+            remove_folders_of(pid)
 
     @property
     def done(self) -> bool:
