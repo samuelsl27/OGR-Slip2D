@@ -37,7 +37,8 @@ from .slicer import (REFUSED_BASE_ABOVE_GROUND, REFUSED_END_ABOVE_GROUND,
                      REFUSED_END_BELOW_GROUND, REFUSED_ORPHAN_MATERIAL,
                      REFUSED_OUTSIDE_MODEL, TOUCHED_MODEL_EDGE,
                      slice_surface)
-from .slice_store import SpilledSlices, rehydrate_special
+from .slice_store import (SliceRecords, SpilledSlices, rehydrate_special,
+                          wants_store)
 from .surface import SlipCircle, WeakLayerSurface, lowest_elevation
 
 
@@ -702,12 +703,29 @@ class SliceShare:
     Only in series: a pool's workers receive the search pickled, and a
     share pickles as None, so each worker slices for itself as before.
     It assumes the project does not change between the methods of one
-    run, which the window guarantees with its modal progress dialog."""
+    run, which the window guarantees with its modal progress dialog.
+
+    v0.1.411 (D393) — the clean copies grew to cover the whole grid while
+    the leader ran, and made the run's peak: 2.8 GB for the 0.8 GB the
+    interface test of 0.1.397 keeps (51 x 51 x 12, four methods), and three
+    times the memory kept at the end, freed in between the objects that
+    stay. When the leader plans as many surfaces as a population worth
+    spilling (``slice_store.wants_store``, the owner's decision), the
+    copies are kept as records (:class:`~ogr_slip2d.slice_store.SliceRecords`,
+    3 kB each, in memory), and every later method reads its own: 0.2 ms to
+    write one and 0.25 to read it, against 0.08 for a copy and about 1 ms
+    to slice the surface again. The peak falls to 0.83 GB; the run takes
+    2 to 5 % more than with the copies, and V18 keeps most of its saving
+    (measured with ``_auditoria/P8_interfaz/d393_medir.py`` and
+    ``d393_ab.py`` in the verification bench). A smaller grid keeps the
+    copies."""
 
     def __init__(self, followers: int) -> None:
         self.followers = followers
         self.leader = None
         self._records: dict = {}
+        #: the records of a large grid's clean copies; None keeps copies
+        self.serialized: Optional[SliceRecords] = None
 
     def __reduce__(self):
         # pickled (a batch for a pool, a deep copy) as None: the slices it
@@ -720,16 +738,24 @@ class SliceShare:
         key = _state_key(trial, num_slices)
         if self.leader is None:
             self.leader = search
+            if self.followers > 0 and wants_store(search):
+                self.serialized = SliceRecords()
         if key is not None and search is not self.leader:
             record = self._records.get(key)
             if record is not None:
                 record[0] -= 1
+                kept = record[1]
                 if record[0] <= 0:
                     del self._records[key]
-                    slices = record[1]
+                if kept is None:
+                    slices = None
+                elif type(kept) is bytes:
+                    # a record: every read is a graph of its own
+                    slices = self.serialized.load(kept)
+                elif record[0] <= 0:
+                    slices = kept
                 else:
-                    slices = (_copy_slices(record[1])
-                              if record[1] is not None else None)
+                    slices = _copy_slices(kept)
                 state = vars(trial)
                 for name in [n for n in state
                              if n != "id" and n not in record[3]]:
@@ -747,10 +773,14 @@ class SliceShare:
             # a state the slicer left that cannot be spelled exactly is not
             # recorded: the later methods slice that surface themselves
             if all(_exact(v) is not _NO_KEY for v in after.values()):
+                if slices is None:
+                    kept = None
+                elif self.serialized is not None:
+                    kept = self.serialized.dump(slices)
+                else:
+                    kept = _copy_slices(slices)
                 self._records[key] = [
-                    self.followers,
-                    _copy_slices(slices) if slices is not None else None,
-                    tuple(reasons[start:]),
+                    self.followers, kept, tuple(reasons[start:]),
                     {name: _fresh(value) for name, value in after.items()}]
         return slices
 

@@ -57,6 +57,11 @@ reading an agent's job) is spilled again into a store of the process that
 reads it, instead of bringing every slice back into memory (the owner's
 decision of the review). The walk a search steered (``steered``) stays on
 disk: only its identity is ever asked for.
+
+v0.1.411 (D393) — the clean copies of a run's ``SliceShare`` (the first
+method's slices, kept for the methods after it) are records too, in memory
+(:class:`SliceRecords`): as objects they made the run's peak, 2.8 GB for the
+0.8 GB that the interface test of 0.1.397 keeps.
 """
 from __future__ import annotations
 
@@ -234,7 +239,32 @@ def remove_orphans(root: str, age_s: float = ORPHAN_AGE_S,
     return gone
 
 
-class SliceStore:
+class _Table:
+    """Pickling with a table of materials: a ``Material`` goes in a record as
+    its position in ``table``, which the reader resolves (the review's
+    ``dispatch_table``). The subclass sets ``table``, ``_position`` and
+    ``_dispatch``."""
+
+    def _material_reduce(self, m):
+        i = self._position.get(id(m))
+        if i is None:
+            i = self._position[id(m)] = len(self.table)
+            self.table.append(m)
+        return _material_at, (i,)
+
+    def _dumps(self, obj) -> bytes:
+        if self._dispatch is None:
+            from ogr_core.materials import Material
+            self._dispatch = copyreg.dispatch_table.copy()
+            self._dispatch[Material] = self._material_reduce
+        buf = io.BytesIO()
+        p = pickle.Pickler(buf, protocol=pickle.HIGHEST_PROTOCOL)
+        p.dispatch_table = self._dispatch
+        p.dump(obj)
+        return zlib.compress(buf.getvalue(), _LEVEL)
+
+
+class SliceStore(_Table):
     """The slices of one run's population, on disk.
 
     One folder and one append-only file, open while the store lives; one
@@ -269,24 +299,6 @@ class SliceStore:
         return (_BatchStore, ())
 
     # ------------------------------------------------------------------
-    def _material_reduce(self, m):
-        i = self._position.get(id(m))
-        if i is None:
-            i = self._position[id(m)] = len(self.table)
-            self.table.append(m)
-        return _material_at, (i,)
-
-    def _dumps(self, slice_list: list) -> bytes:
-        if self._dispatch is None:
-            from ogr_core.materials import Material
-            self._dispatch = copyreg.dispatch_table.copy()
-            self._dispatch[Material] = self._material_reduce
-        buf = io.BytesIO()
-        p = pickle.Pickler(buf, protocol=pickle.HIGHEST_PROTOCOL)
-        p.dispatch_table = self._dispatch
-        p.dump(slice_list)
-        return zlib.compress(buf.getvalue(), _LEVEL)
-
     def _write(self, data: bytes) -> tuple:
         with self._lock:
             if not self._at_end:
@@ -536,6 +548,35 @@ class SpilledSlices:
         return "SpilledSlices(%d slices at %d)" % (self._count, self._off)
 
 
+class SliceRecords(_Table):
+    """``Slices`` kept as records in memory, with a table of materials of
+    their own (v0.1.411, D393): the clean copies a run's ``SliceShare``
+    keeps for the methods after the first.
+
+    A record is a few bytes for a whole ``Slices`` (3 kB against 44 kB of
+    objects), and every read is a new object graph whose materials are the
+    ones that were written, the project's: the table is the records' own,
+    which ``detach_materials`` never rebinds, as it does a store's at the
+    end of each method. In memory and not in a file, by the owner's decision
+    of 2026-11-02: measured, both leave the run's peak where its population
+    puts it, because the records are released before the population passes
+    them."""
+
+    def __init__(self) -> None:
+        self.table: list = []
+        self._position: dict = {}
+        self._dispatch = None
+
+    def dump(self, slices) -> bytes:
+        """``slices``, a ``Slices``, as a record."""
+        return self._dumps(slices)
+
+    def load(self, data: bytes):
+        """The ``Slices`` of a record: every object its own but the
+        materials."""
+        return _unpickle(data, self.table)
+
+
 def wants_store(search) -> bool:
     """Whether ``search`` keeps a population worth spilling: one that plans
     :data:`SPILL_MIN_CIRCLES` surfaces or more (a grid's nominal circles;
@@ -576,7 +617,7 @@ def rehydrate_special(result) -> None:
             rehydrate(r)
 
 
-__all__ = ["SPILL_MIN_CIRCLES", "SliceStore", "SpilledSlices", "arriving",
-           "rehydrate",
+__all__ = ["SPILL_MIN_CIRCLES", "SliceRecords", "SliceStore",
+           "SpilledSlices", "arriving", "rehydrate",
            "rehydrate_special", "remove_folders_of", "remove_orphans",
            "wants_store"]
