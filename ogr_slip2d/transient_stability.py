@@ -471,8 +471,11 @@ def run_transient_stability(project, method_ids=None, *,
         with with_stage_water(project, r, water):
             # v0.1.366 (D362) — with the caller's progress, so a stage's
             # search reports and can be stopped like any Compute
+            # v0.1.408 (D383) — a stage keeps its factors only: nothing
+            # to spill
             outcome = run_analysis(project, method_ids,
-                                   progress_cb=progress_cb)
+                                   progress_cb=progress_cb,
+                                   spill_slices=False)
         for mid, sr in (outcome.results or {}).items():
             crit = sr.critical if sr else None
             if crit is not None:

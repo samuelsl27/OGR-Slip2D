@@ -546,12 +546,23 @@ def run_back_analysis(project, search, target_fos=1.3, elevation=0.0,
     kh = project.seismic.kh if project.seismic.enabled else 0.0
     kv = project.seismic.kv if project.seismic.enabled else 0.0
 
+    # v0.1.408 (D383) — the population is read once, in order, and thrown
+    # away: a large grid spills it as a Compute does, and it comes back one
+    # surface at a time below. The search keeps no store afterwards.
+    from .slice_store import SliceStore, SpilledSlices, wants_store
+    own_store = (getattr(search, "slice_store", None) is None
+                 and wants_store(search))
+    if own_store:
+        search.slice_store = SliceStore()
     try:
         run = search.run(project)
     except Exception as exc:  # noqa: BLE001
         out.notes["error"] = RM.run_note(RM.BACK_SEARCH_FAILED,
                                          error=str(exc))
         return out
+    finally:
+        if own_store:
+            search.slice_store = None
 
     best = None
     total = len(run.evaluations)
@@ -571,7 +582,10 @@ def run_back_analysis(project, search, target_fos=1.3, elevation=0.0,
         if isinstance(ev.surface, CompositeSurface):
             n_composite += 1
             continue
-        r = required_force(ev.slices, ev.surface, target_fos, method_id,
+        slices = ev.slices
+        if type(slices) is SpilledSlices:
+            slices = slices.materialize()
+        r = required_force(slices, ev.surface, target_fos, method_id,
                            elevation, kh, kv, project=project)
         out.surfaces_analysed += 1
         if r is None:

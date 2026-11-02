@@ -3312,7 +3312,10 @@ class InterpretWindow(QMainWindow):
         """
         candidates = self._slice_surfaces()
         target = getattr(self, "_query_slice_target", None)
-        if target is not None and target not in candidates:
+        # v0.1.408 (D383) — by identity: ``in`` falls back to the
+        # dataclass ``==``, which compares the slices of two results field
+        # by field, and a spilled population reads them from disk for it
+        if target is not None and not any(c is target for c in candidates):
             candidates = [target] + candidates
         best, best_d = None, float("inf")
         for res in candidates:

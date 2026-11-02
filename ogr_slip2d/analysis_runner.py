@@ -2120,7 +2120,8 @@ class AnalysisNotConfigured(ValueError):
 @pooled   # v0.1.396 (V17): one process pool for every method's search
 def run_analysis(project, method_ids=None,
                  progress_cb: Optional[Callable] = None,
-                 *, allow_unconfigured: bool = False) -> AnalysisOutcome:
+                 *, allow_unconfigured: bool = False,
+                 spill_slices: bool = True) -> AnalysisOutcome:
     """Run one configured search per method and return every result.
 
     ``progress_cb(done, total)`` is called across the whole run, not per
@@ -2142,6 +2143,14 @@ def run_analysis(project, method_ids=None,
 
     ``allow_unconfigured`` runs anyway, for a caller that has already
     read the problems and decided.
+
+    v0.1.408 (D383) — a grid of ``slice_store.SPILL_MIN_CIRCLES`` nominal
+    circles or more keeps the slices of its population in a
+    ``slice_store.SliceStore``, one for the run, and only the special
+    surfaces in memory. ``spill_slices=False`` is for a caller that keeps
+    only the critical surfaces (the deterministic run of the statistics,
+    the stages of a transient), which would write the population for
+    nothing.
     """
     if not allow_unconfigured:
         problems = check_analysis_settings(project)
@@ -2167,8 +2176,10 @@ def run_analysis(project, method_ids=None,
     # v0.1.397 (V18) — the grid's circles sliced once for every method, in
     # series (``search.SliceShare``): read by each method after the first
     from .search import GridSearch, SliceShare
+    from .slice_store import SliceStore, wants_store
     n_known = sum(1 for mid in method_ids if mid in known)
     share = SliceShare(followers=n_known - 1) if n_known > 1 else None
+    store = None
 
     for i, mid in enumerate(method_ids):
         if mid not in known:
@@ -2189,6 +2200,11 @@ def run_analysis(project, method_ids=None,
             continue
         if share is not None and isinstance(search, GridSearch):
             search.slice_share = share
+        # v0.1.408 (D383) — one store for every method of the run
+        if spill_slices and wants_store(search):
+            if store is None:
+                store = SliceStore()
+            search.slice_store = store
         results[mid] = search.run(project)
         # v0.1.100 — a surface that daylights near-vertically has a factor
         # of safety that moves with the slice count. Said once per method,
@@ -2555,7 +2571,10 @@ def run_configured_statistics(project, method_ids=None, *,
     # v0.1.366 (D362) — with the caller's progress: the deterministic run is
     # a full search, and without it the bar stood still and the run could
     # not be stopped until the samples began
-    base = run_analysis(project, method_ids, progress_cb=progress_cb)
+    # v0.1.408 (D383) — only its critical surfaces are kept: nothing to
+    # spill
+    base = run_analysis(project, method_ids, progress_cb=progress_cb,
+                        spill_slices=False)
     out = StatisticsOutcome(factor_report=base.factor_report,
                             warnings=list(base.warnings))
     out.deterministic = {mid: sr.critical

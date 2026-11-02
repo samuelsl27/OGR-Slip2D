@@ -37,6 +37,7 @@ from .slicer import (REFUSED_BASE_ABOVE_GROUND, REFUSED_END_ABOVE_GROUND,
                      REFUSED_END_BELOW_GROUND, REFUSED_ORPHAN_MATERIAL,
                      REFUSED_OUTSIDE_MODEL, TOUCHED_MODEL_EDGE,
                      slice_surface)
+from .slice_store import SpilledSlices, rehydrate_special
 from .surface import SlipCircle, WeakLayerSurface, lowest_elevation
 
 
@@ -562,17 +563,30 @@ def detach_materials(project, results) -> None:
     if not live:
         return
     copies = {}
+
+    def copy_of(m):
+        c = copies.get(id(m))
+        if c is None:
+            c = copies[id(m)] = copy.deepcopy(m)
+        return c
+
+    stores = {}
     for res in results:
         slices = getattr(res, "slices", None)
+        # v0.1.408 (D383) — a spilled population is rebound in its store's
+        # table, once per store, without reading a record; the slices left
+        # in memory get the same copies
+        if type(slices) is SpilledSlices:
+            stores[id(slices.store)] = slices.store
+            continue
         if not slices:
             continue
         for s in slices:
             m = s.material
             if m is not None and id(m) in live:
-                c = copies.get(id(m))
-                if c is None:
-                    c = copies[id(m)] = copy.deepcopy(m)
-                s.material = c
+                s.material = copy_of(m)
+    for store in stores.values():
+        store.detach(live, copy_of)
 
 
 def _results_of(result) -> list:
@@ -749,6 +763,11 @@ class BaseSearch(ABC):
     #: grid evaluates its centres in this process (``_run_centres``)
     slice_share = None
     _active_share = None
+    #: v0.1.408 (D383) — where the grid puts the slices of every evaluation
+    #: it keeps (``slice_store.SliceStore``), given by the caller that keeps
+    #: the population (``run_analysis``, the back analysis); None keeps them
+    #: in memory. Pickled as None: a pool's worker keeps its own.
+    slice_store = None
 
     #: v0.1.237 (D87) — whether this search analyses the SAME surfaces on
     #: every run over one geometry, whatever the material values: its
@@ -1910,6 +1929,12 @@ class BaseSearch(ABC):
             setattr(self, name, 0)
         with project.regions_frozen():
             result = self._run(project)
+            # v0.1.408 (D383) — the critical surface of a spilled population
+            # back in memory before anything reads it whole (the walk starts
+            # from it); the rest of the special ones at the end. Asked only
+            # with a store: ``critical`` walks the whole population
+            if self.slice_store is not None:
+                rehydrate_special(result)
             # v0.1.261 (D263) — taken HERE, before the optimisation and the
             # user's surfaces, which go through the same doors and would
             # otherwise add surfaces the search never generated to its
@@ -1973,6 +1998,8 @@ class BaseSearch(ABC):
             for line in getattr(self, "_pending_notes", ()):
                 if line not in result.notes:
                     result.notes.append(line)
+            if self.slice_store is not None:
+                rehydrate_special(result)
             # v0.1.387 (D381) — last, after the user's surfaces and the
             # optimisation: the result keeps the materials it was solved
             # with, not the project's own objects.
@@ -2821,6 +2848,13 @@ class GridSearch(BaseSearch):
         self.radius_increment = max(1, int(round(radius_increment)))
         self.min_radius = min_radius
 
+    def nominal_circles(self) -> int:
+        """(grid_nx+1)·(grid_ny+1)·(radius_increment+1): the circles the
+        grid generates before any focus rejects one (v0.1.408, D383, the
+        measure of :data:`slice_store.SPILL_MIN_CIRCLES`)."""
+        return ((self.grid_nx + 1) * (self.grid_ny + 1)
+                * (self.radius_increment + 1))
+
     # ------------------------------------------------------------------
     def _auto_grid(self, project: Project) -> tuple[tuple[float, float], tuple[float, float]]:
         xmin, ymin, xmax, ymax = project.bounding_box()
@@ -3426,6 +3460,7 @@ class GridSearch(BaseSearch):
                               objective=self.objective)
         processed = done_before
         n_circles = self.radius_increment + 1  # circles per centre
+        store = self.slice_store
 
         # v0.1.397 (V18) — the run's slice share, for the grid's own circles
         # and only while they are evaluated here (None in a pool's worker)
@@ -3498,6 +3533,10 @@ class GridSearch(BaseSearch):
                         result.invalid_count += 1
                         continue
                     result.evaluations.append(res)
+                    # v0.1.408 (D383) — after ``_analyse``: the admissibility
+                    # checks and Ky have read the slices in memory
+                    if store is not None:
+                        store.spill(res)
                     if res.is_valid:
                         result.valid_count += 1
                     else:

@@ -30,6 +30,8 @@ from __future__ import annotations
 import math
 from typing import Optional
 
+from .slice_store import SpilledSlices
+
 #: The codes the reference writes in place of a factor of safety.
 ERROR_TENSILE = -120
 ERROR_M_ALPHA = -112
@@ -308,6 +310,10 @@ def surface_path(res) -> list:
     slices = getattr(res, "slices", None)
     if not slices or len(slices) == 0:
         return []
+    # v0.1.408 (D383) — a spilled surface keeps this in memory: Add Query
+    # asks it of every surface on every mouse move
+    if type(slices) is SpilledSlices:
+        return slices.trace()
     pts = [(slices[0].base_x_left, slices[0].base_y_left)]
     for s in slices:
         pts.append((s.base_x_right, s.base_y_right))
@@ -350,9 +356,14 @@ def surface_area(res) -> float:
     """Area of the sliding mass, sum of width x mean height of the slices.
 
     v0.1.201 — the interface's result table divided each weight by a unit
-    weight the slice does not have, so every row read 0.0."""
-    return sum(s.width * s.height for s in (getattr(res, "slices", None)
-                                            or []))
+    weight the slice does not have, so every row read 0.0.
+
+    v0.1.408 (D383) — a spilled surface keeps the value this function gave
+    when it was spilled: the result table asks it of every surface."""
+    slices = getattr(res, "slices", None)
+    if type(slices) is SpilledSlices:
+        return slices.area
+    return sum(s.width * s.height for s in (slices or []))
 
 
 def slip_centre(surface_dict) -> Optional[tuple]:
