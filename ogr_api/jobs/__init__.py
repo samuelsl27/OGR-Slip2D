@@ -164,8 +164,14 @@ class Job:
         return _read_json(self.folder / "summary.json")
 
     def load_results(self) -> dict:
-        """The full results; only ever the file this job's child wrote."""
-        with open(self.folder / "result.pkl", "rb") as fh:
+        """The full results; only ever the file this job's child wrote.
+
+        v0.1.410 (D383 V3) — read ``arriving``: the slices the child had
+        spilled are spilled again into a store of this process, instead of
+        coming back into memory whole (the 124 848 evaluations of the
+        interface test of 0.1.397 were 7.1 GB)."""
+        from ogr_slip2d.slice_store import arriving
+        with open(self.folder / "result.pkl", "rb") as fh, arriving():
             return pickle.load(fh)
 
     def cancel(self) -> dict:

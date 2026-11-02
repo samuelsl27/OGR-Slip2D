@@ -1144,6 +1144,24 @@ class BaseSearch(ABC):
         if line not in notes:
             notes.append(line)
 
+    def nominal_surfaces(self) -> Optional[int]:
+        """The surfaces this search plans to evaluate, the measure of
+        ``slice_store.SPILL_MIN_CIRCLES`` (v0.1.410, D383 V3). None: a
+        search that does not say keeps its population in memory."""
+        return None
+
+    def _keep(self, result, res) -> None:
+        """Add ``res`` to the population, and with a ``slice_store`` hand
+        its slices to it: the one door of every search's population
+        (v0.1.410, D383 V3). After ``_analyse``, so the admissibility
+        checks and Ky have read the slices in memory. The surfaces an
+        optimisation adds are not kept here: they are special, and stay in
+        memory as the critical does."""
+        result.evaluations.append(res)
+        store = self.slice_store
+        if store is not None:
+            store.spill(res)
+
     def _count_misses_ground(self) -> None:
         """One circle that does not cut the ground twice (v0.1.261, D263)."""
         self._misses_ground = getattr(self, "_misses_ground", 0) + 1
@@ -2871,6 +2889,9 @@ class GridSearch(BaseSearch):
         return ((self.grid_nx + 1) * (self.grid_ny + 1)
                 * (self.radius_increment + 1))
 
+    def nominal_surfaces(self) -> int:
+        return self.nominal_circles()
+
     # ------------------------------------------------------------------
     def _auto_grid(self, project: Project) -> tuple[tuple[float, float], tuple[float, float]]:
         xmin, ymin, xmax, ymax = project.bounding_box()
@@ -3476,7 +3497,6 @@ class GridSearch(BaseSearch):
                               objective=self.objective)
         processed = done_before
         n_circles = self.radius_increment + 1  # circles per centre
-        store = self.slice_store
 
         # v0.1.397 (V18) — the run's slice share, for the grid's own circles
         # and only while they are evaluated here (None in a pool's worker)
@@ -3548,11 +3568,9 @@ class GridSearch(BaseSearch):
                     if res.is_valid and not (0.2 <= res.fos <= 100.0):
                         result.invalid_count += 1
                         continue
-                    result.evaluations.append(res)
                     # v0.1.408 (D383) — after ``_analyse``: the admissibility
                     # checks and Ky have read the slices in memory
-                    if store is not None:
-                        store.spill(res)
+                    self._keep(result, res)
                     if res.is_valid:
                         result.valid_count += 1
                     else:
@@ -3764,6 +3782,12 @@ class SlopeSearch(BaseSearch):
         self.initial_angle_upper_deg = initial_angle_upper_deg
         self.rng = random.Random(seed)
 
+    def nominal_surfaces(self) -> int:
+        # the population and the refinement walk after it, at most 120
+        # steps on each of the best 8: measured, the walk keeps ten times a
+        # population of 80
+        return self.num_surfaces + 8 * 120
+
     def _run(self, project: Project) -> SearchResult:
         result = SearchResult(method_id=self.method.METHOD_ID,
                               objective=self.objective)
@@ -3834,7 +3858,7 @@ class SlopeSearch(BaseSearch):
                 if res.is_valid and not (0.2 <= res.fos <= 100.0):
                     result.invalid_count += 1
                     continue
-                result.evaluations.append(res)
+                self._keep(result, res)
                 if res.is_valid:
                     result.valid_count += 1
                     best.append((self.score(res), cx, cy, radius))
@@ -3882,7 +3906,7 @@ class SlopeSearch(BaseSearch):
                         continue
                     if not (0.2 <= res.fos <= 100.0):
                         continue
-                    result.evaluations.append(res)
+                    self._keep(result, res)
                     # v0.1.237 (D87) — where the walk goes depends on the
                     # factors, so another sample walks elsewhere.
                     result.steered.append(res)
@@ -4063,6 +4087,11 @@ class AutoRefineSearch(BaseSearch):
         """
         d = max(2, int(divisions))
         return math.comb(d, 2) * max(1, int(circles_per_division))
+
+    def nominal_surfaces(self) -> int:
+        return self.surfaces_generated(self.divisions,
+                                       self.circles_per_division,
+                                       self.iterations)
 
     @classmethod
     def surfaces_generated(cls, divisions: int, circles_per_division: int,
@@ -4281,7 +4310,7 @@ class AutoRefineSearch(BaseSearch):
                         if not (0.2 <= res.fos <= 100.0):
                             result.invalid_count += 1
                             continue
-                        result.evaluations.append(res)
+                        self._keep(result, res)
                         result.valid_count += 1
                         sc_val = self.score(res)
                         for d in (i, j):
@@ -4942,6 +4971,9 @@ class BlockSearch(BaseSearch):
         self.seed = seed
         self.progress_cb = progress_cb
 
+    def nominal_surfaces(self) -> int:
+        return self.num_surfaces
+
     def _run(self, project) -> SearchResult:
         import random
         from ogr_core.geometry import Polyline, Vertex, BoundaryType
@@ -5262,7 +5294,7 @@ class BlockSearch(BaseSearch):
             if res.is_valid and not (0.2 <= res.fos <= 100.0):
                 result.invalid_count += 1
                 continue
-            result.evaluations.append(res)
+            self._keep(result, res)
             if res.is_valid:
                 result.valid_count += 1
                 if tagged:
@@ -5717,6 +5749,9 @@ class PathSearch(BaseSearch):
         self._top = None
         self._y_floor = None
 
+    def nominal_surfaces(self) -> int:
+        return self.num_surfaces
+
     # ------------------------------------------------------------------
     def _run(self, project) -> SearchResult:
         import random
@@ -5986,7 +6021,7 @@ class PathSearch(BaseSearch):
             if res.is_valid and not (0.2 <= res.fos <= 100.0):
                 result.invalid_count += 1
                 continue
-            result.evaluations.append(res)
+            self._keep(result, res)
             if res.is_valid:
                 result.valid_count += 1
             else:
@@ -6321,6 +6356,11 @@ class SimulatedAnnealingSearch(BaseSearch):
         self._top = None
         self.progress_cb = progress_cb
 
+    def nominal_surfaces(self) -> int:
+        # the steps the user asks for: the schedule makes about as many
+        # (K outer loops of generation_steps // K), plus a short bootstrap
+        return self.generation_steps
+
     # ==================================================================
     # Top-level: HSA = VFSA + LMC
     # ==================================================================
@@ -6650,7 +6690,7 @@ class SimulatedAnnealingSearch(BaseSearch):
         res, fos = self._evaluate_polyline(project, verts)
         if res is None:
             return None, None
-        result.evaluations.append(res)
+        self._keep(result, res)
         result.valid_count += 1
         if not getattr(res, "admissible", True):
             return None, None
@@ -6807,7 +6847,7 @@ class SimulatedAnnealingSearch(BaseSearch):
             res, fos = self._evaluate_polyline(project, verts)
             if res is None:
                 return False
-            result.evaluations.append(res)
+            self._keep(result, res)
             result.valid_count += 1
             if not getattr(res, "admissible", True):
                 if fallback is None or fos < fallback[1]:

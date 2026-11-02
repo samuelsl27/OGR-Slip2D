@@ -294,7 +294,7 @@ class ParticleSwarmSearch(BaseSearch):
         if res.is_valid and not (0.2 <= res.fos <= 100.0):
             result.invalid_count += 1
             return _INVALID, None
-        result.evaluations.append(res)
+        self._keep(result, res)
         if not res.is_valid:
             result.invalid_count += 1
             return _INVALID, None
@@ -344,6 +344,10 @@ class ParticleSwarmSearch(BaseSearch):
                 elif nu > 1.0:
                     nu = 2.0 - nu
                 p.u[d] = 0.0 if nu < 0.0 else (1.0 if nu > 1.0 else nu)
+
+    def nominal_surfaces(self) -> int:
+        # v0.1.410 (D383 V3) — one circle per particle and iteration
+        return self.num_particles * self.num_iterations
 
     # ------------------------------------------------------------------
     def _run(self, project: Project) -> SearchResult:

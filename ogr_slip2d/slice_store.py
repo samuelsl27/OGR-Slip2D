@@ -47,11 +47,22 @@ records to its file as each batch arrives (:meth:`SliceStore.adopt_part`),
 and the batch's table goes on the end of its own: a record keeps the
 positions of its batch's table, so its slices know where that table starts
 (``_base``). The parent no longer unpickles every slice of the grid.
+
+v0.1.410 (D383, V3) — every search spills, not only the grid: each says how
+many surfaces it plans (``nominal_surfaces``) and keeps every evaluation
+through one door (``BaseSearch._keep``). A rapid drawdown's ``screen_states``
+are spilled with their result, sharing its record where they share its
+slices. A result that crosses a process inside :func:`arriving` (the API
+reading an agent's job) is spilled again into a store of the process that
+reads it, instead of bringing every slice back into memory (the owner's
+decision of the review). The walk a search steered (``steered``) stays on
+disk: only its identity is ever asked for.
 """
 from __future__ import annotations
 
 import array
 import collections
+import contextlib
 import copyreg
 import io
 import os
@@ -65,6 +76,7 @@ import zlib
 
 #: The owner's decision (2026-11-01): a grid of fewer nominal circles keeps
 #: its slices in memory, as every run did before v0.1.408. Tests set it to 0.
+#: v0.1.410 (V3): every search, by the surfaces it plans (``nominal_surfaces``).
 SPILL_MIN_CIRCLES = 2000
 
 #: How old a folder of another session has to be before a new store removes
@@ -89,6 +101,10 @@ _SCALARS = ("tension_crack_force", "tension_crack_arm", "tension_crack_wall",
 
 _LOADING = threading.local()
 
+#: The store that records arriving from another process go to, inside
+#: :func:`arriving` on this thread.
+_ARRIVING = threading.local()
+
 
 def _material_at(i):
     """A material of a record, by its position in the table of the store
@@ -107,11 +123,63 @@ def _unpickle(data: bytes, table: list, base: int = 0) -> list:
 
 
 def _from_record(data: bytes, table: list, count: int, scalars: dict,
-                 base: int = 0):
-    """A ``Slices`` from a record that crossed a process: what a pickled
-    :class:`SpilledSlices` becomes when it is read back."""
+                 base: int = 0, xs=None, ys=None, area=None):
+    """What a pickled :class:`SpilledSlices` becomes when it is read back:
+    inside :func:`arriving`, a :class:`SpilledSlices` of this process's
+    store (v0.1.410); elsewhere, a ``Slices`` read from the record."""
+    arrivals = getattr(_ARRIVING, "arrivals", None)
+    if arrivals is not None and xs is not None:
+        return arrivals.respill(data, table, count, scalars, base, xs, ys,
+                                area)
     from .slicer import Slices
     return Slices(slices=_unpickle(data, table, base), **scalars)
+
+
+class _Arrivals:
+    """The records of one :func:`arriving` block: one store, made on the
+    first, and where each sender's table starts in its table."""
+
+    def __init__(self) -> None:
+        self.store = None
+        self._bases: dict = {}
+        self._tables: list = []    # alive, so their ids stay theirs
+
+    def respill(self, data, table, count, scalars, base, xs, ys, area):
+        if self.store is None:
+            self.store = SliceStore()
+        store = self.store
+        start = self._bases.get(id(table))
+        if start is None:
+            with store._lock:
+                start = self._bases[id(table)] = len(store.table)
+                store.table.extend(table)
+                for i, m in enumerate(table):
+                    store._position.setdefault(id(m), start + i)
+            self._tables.append(table)
+        stub = SpilledSlices()
+        stub._store = store
+        stub._off, stub._n = store._write(data)
+        stub._base = start + base
+        stub._count, stub._xs, stub._ys, stub.area = count, xs, ys, area
+        for k, v in scalars.items():
+            setattr(stub, k, v)
+        return stub
+
+
+@contextlib.contextmanager
+def arriving():
+    """Unpickle results inside this block to keep their spilled slices on
+    disk: each record that arrives is written to one new store of this
+    process (made only if one arrives) instead of being read back into
+    memory. Used where a result crosses a process and stays: the API
+    reading the file an agent's job wrote (v0.1.410, the owner's decision
+    "volver a volcar")."""
+    previous = getattr(_ARRIVING, "arrivals", None)
+    _ARRIVING.arrivals = _Arrivals()
+    try:
+        yield
+    finally:
+        _ARRIVING.arrivals = previous
 
 
 def _close_and_remove(fh, path: str) -> None:
@@ -284,6 +352,16 @@ class SliceStore:
         for k in _SCALARS:
             setattr(stub, k, getattr(sl, k))
         res.slices = stub
+        # v0.1.410 (V3) — a rapid drawdown's screen states, each a result of
+        # its own: the one whose slices the result publishes shares its
+        # record, the other gets one
+        for state in getattr(res, "screen_states", None) or ():
+            if state is res:
+                continue
+            if getattr(state, "slices", None) is sl:
+                state.slices = stub
+            else:
+                self.spill(state)
 
     def detach(self, live: dict, copy_of) -> None:
         """``detach_materials`` for the records: the project's own
@@ -311,28 +389,40 @@ class SliceStore:
             for i, m in enumerate(table):
                 self._position.setdefault(id(m), base + i)
         part._worker_table = None
+        made: dict = {}
+
+        def adopt(p):
+            # one record per _Pending: a screen state that shared its
+            # result's slices arrives sharing the same _Pending (V3)
+            stub = made.get(id(p))
+            if stub is None:
+                stub = made[id(p)] = SpilledSlices()
+                stub._store = self
+                stub._off, stub._n = self._write(p.data)
+                stub._base = base
+                stub._count, stub._xs, stub._ys, stub.area = (p.count, p.xs,
+                                                              p.ys, p.area)
+                for k, v in zip(_SCALARS, p.scalars):
+                    setattr(stub, k, v)
+            return stub
         for res in part.evaluations:
-            p = res.slices
-            if type(p) is not _Pending:
-                continue
-            stub = SpilledSlices()
-            stub._store = self
-            stub._off, stub._n = self._write(p.data)
-            stub._base = base
-            stub._count, stub._xs, stub._ys, stub.area = (p.count, p.xs, p.ys,
-                                                          p.area)
-            for k, v in zip(_SCALARS, p.scalars):
-                setattr(stub, k, v)
-            res.slices = stub
+            if type(res.slices) is _Pending:
+                res.slices = adopt(res.slices)
+            for state in getattr(res, "screen_states", None) or ():
+                if type(getattr(state, "slices", None)) is _Pending:
+                    state.slices = adopt(state.slices)
 
     def _reduce_stub(self, stub):
         # the record as it is on disk and the store's table, never the
         # objects: a pickler keeps every object it wrote until the end, so
         # a result pickled whole (the API's result.pkl) would hold every
         # evaluation's slices in memory again
+        # v0.1.410 (V3) — with the base and the area, so a process that
+        # reads it ``arriving`` keeps it spilled
         return (_from_record,
                 (self._read(stub._off, stub._n), self.table, stub._count,
-                 {k: getattr(stub, k) for k in _SCALARS}, stub._base))
+                 {k: getattr(stub, k) for k in _SCALARS}, stub._base,
+                 stub._xs, stub._ys, stub.area))
 
 
 class _BatchStore(SliceStore):
@@ -447,31 +537,46 @@ class SpilledSlices:
 
 
 def wants_store(search) -> bool:
-    """Whether ``search`` keeps a population worth spilling: a grid of
-    :data:`SPILL_MIN_CIRCLES` nominal circles or more. The one rule
+    """Whether ``search`` keeps a population worth spilling: one that plans
+    :data:`SPILL_MIN_CIRCLES` surfaces or more (a grid's nominal circles;
+    since v0.1.410 every search's ``nominal_surfaces``). The one rule
     ``run_analysis`` and the back analysis ask."""
-    nominal = getattr(search, "nominal_circles", None)
-    return nominal is not None and nominal() >= SPILL_MIN_CIRCLES
+    nominal = getattr(search, "nominal_surfaces", None)
+    planned = nominal() if nominal is not None else None
+    return planned is not None and planned >= SPILL_MIN_CIRCLES
 
 
 def rehydrate(res) -> None:
-    """Give ``res`` its slices back in memory, if they were spilled."""
+    """Give ``res`` its slices back in memory, if they were spilled, and its
+    screen states theirs (the one that shared them shares them again)."""
     sl = getattr(res, "slices", None)
+    back = None
     if type(sl) is SpilledSlices:
-        res.slices = sl.materialize()
+        back = res.slices = sl.materialize()
+    for state in getattr(res, "screen_states", None) or ():
+        if state is res:
+            continue
+        if back is not None and getattr(state, "slices", None) is sl:
+            state.slices = back
+        else:
+            rehydrate(state)
 
 
 def rehydrate_special(result) -> None:
     """The surfaces a search result names, back in memory: the critical,
-    the minima, the steered ones, the optimised one and the user's. Their
-    slices are read whole by the notes of the run, the window and the
-    report."""
+    the minima, the optimised one and the user's. Their slices are read
+    whole by the notes of the run, the window and the report.
+
+    v0.1.410 (V3) — not the steered ones: a Slope Search's walk puts
+    hundreds there, and only their identity is asked for (the statistics
+    leave them out); the optimised surfaces among them are here anyway."""
     for r in (result.critical, result.optimized, *result.minima,
-              *result.steered, *result.user_evaluations):
+              *result.user_evaluations):
         if r is not None:
             rehydrate(r)
 
 
-__all__ = ["SPILL_MIN_CIRCLES", "SliceStore", "SpilledSlices", "rehydrate",
+__all__ = ["SPILL_MIN_CIRCLES", "SliceStore", "SpilledSlices", "arriving",
+           "rehydrate",
            "rehydrate_special", "remove_folders_of", "remove_orphans",
            "wants_store"]
