@@ -73,6 +73,24 @@ class ToolMode(Enum):
     ADD_SURFACE_3PT = "add_surface_3pt"
     ADD_SURFACE_CR = "add_surface_cr"
 
+    # ----- Annotations (v0.1.416, D354): clicked, like a boundary -----
+    # Tools -> Draw, Dimensions and Add Axes asked for their points in a
+    # typed dialog. They draw with the boundaries' machinery now: snapping,
+    # the preview, Enter / Done, Esc, the right-click menu with the
+    # Coordinate Table and the status bar's X,Y box for an exact point.
+    DRAW_ANN_LINE = "draw_annotation_line"
+    DRAW_ANN_ARROW = "draw_annotation_arrow"
+    DRAW_ANN_POLYLINE = "draw_annotation_polyline"
+    DRAW_ANN_POLYGON = "draw_annotation_polygon"
+    DRAW_ANN_RECTANGLE = "draw_annotation_rectangle"
+    DRAW_ANN_CIRCLE = "draw_annotation_circle"
+    DRAW_ANN_TEXT = "draw_annotation_text"
+    DRAW_ANN_DIM_LENGTH = "draw_annotation_dimension_length"
+    DRAW_ANN_DIM_ANGLE = "draw_annotation_dimension_angle"
+    DRAW_ANN_DIM_X = "draw_annotation_dimension_x"
+    DRAW_ANN_DIM_Y = "draw_annotation_dimension_y"
+    DRAW_ANN_AXES = "draw_annotation_axes"
+
     # ==================================================================
     @property
     def is_drawing_boundary(self) -> bool:
@@ -94,15 +112,64 @@ class ToolMode(Enum):
         }
 
     @property
+    def collects_points(self) -> bool:
+        """True if clicks add points to a drawing: a boundary's or an
+        annotation's (v0.1.416, D354)."""
+        return self.is_drawing_boundary or self.is_drawing_annotation
+
+    @property
+    def is_drawing_annotation(self) -> bool:
+        """True if this mode draws an annotation (v0.1.416, D354)."""
+        return self.annotation_kind_drawn is not None
+
+    @property
+    def annotation_kind_drawn(self):
+        """The :class:`AnnotationKind` this mode draws, or None."""
+        from ogr_core.annotations import AnnotationKind as K
+        return {
+            ToolMode.DRAW_ANN_LINE: K.LINE,
+            ToolMode.DRAW_ANN_ARROW: K.ARROW,
+            ToolMode.DRAW_ANN_POLYLINE: K.POLYLINE,
+            ToolMode.DRAW_ANN_POLYGON: K.POLYGON,
+            ToolMode.DRAW_ANN_RECTANGLE: K.RECTANGLE,
+            ToolMode.DRAW_ANN_CIRCLE: K.CIRCLE,
+            ToolMode.DRAW_ANN_TEXT: K.TEXT,
+            ToolMode.DRAW_ANN_DIM_LENGTH: K.DIMENSION_LENGTH,
+            ToolMode.DRAW_ANN_DIM_ANGLE: K.DIMENSION_ANGLE,
+            ToolMode.DRAW_ANN_DIM_X: K.DIMENSION_X,
+            ToolMode.DRAW_ANN_DIM_Y: K.DIMENSION_Y,
+            ToolMode.DRAW_ANN_AXES: K.AXES,
+        }.get(self)
+
+    @property
+    def annotation_min_points(self) -> int:
+        """The fewest points the annotation this mode draws is made of:
+        the rules of ``Annotation.outline`` and ``measured_value`` (a text
+        is one point, an angle three — the vertex the middle one —, a
+        polygon three, everything else two)."""
+        return {ToolMode.DRAW_ANN_TEXT: 1,
+                ToolMode.DRAW_ANN_DIM_ANGLE: 3,
+                ToolMode.DRAW_ANN_POLYGON: 3}.get(
+                    self, 2 if self.is_drawing_annotation else 0)
+
+    @property
     def points_to_finish(self) -> int:
         """Clicks after which the drawing finishes by itself, or 0.
 
         v0.1.232 (D109) — a Block Search Point is one click and a Block
         Search Line two, by definition; every other drawing finishes when
         the user says so.
+
+        v0.1.416 (D354) — and an annotation of a fixed number of points
+        finishes at its last one: a polyline or a polygon at Enter or Done.
         """
-        return {ToolMode.DRAW_BLOCK_POINT: 1,
-                ToolMode.DRAW_BLOCK_LINE: 2}.get(self, 0)
+        fixed = {ToolMode.DRAW_BLOCK_POINT: 1,
+                 ToolMode.DRAW_BLOCK_LINE: 2}.get(self)
+        if fixed is not None:
+            return fixed
+        if self in (ToolMode.DRAW_ANN_POLYLINE, ToolMode.DRAW_ANN_POLYGON):
+            return 0
+        return self.annotation_min_points
 
     @property
     def block_kind_drawn(self):
@@ -194,7 +261,8 @@ class ToolMode(Enum):
             ToolMode.STRETCH_SUPPORT: "PointingHandCursor",
             ToolMode.ADD_SURFACE_3PT: "CrossCursor",
             ToolMode.ADD_SURFACE_CR: "CrossCursor",
-        }.get(self, "ArrowCursor")
+        }.get(self, "CrossCursor" if self.is_drawing_annotation
+              else "ArrowCursor")
 
     @property
     def status_message(self) -> str:
@@ -246,4 +314,17 @@ class ToolMode(Enum):
             ),
             ToolMode.ADD_SURFACE_3PT: "Click three points to define a circular surface",
             ToolMode.ADD_SURFACE_CR: "Click the centre, then a point on the circle",
+            # v0.1.416 (D354) — the annotations, by clicks
+            ToolMode.DRAW_ANN_LINE: "Draw Line: click its two ends, Esc to cancel",
+            ToolMode.DRAW_ANN_ARROW: "Draw Arrow: click the tail, then the head, Esc to cancel",
+            ToolMode.DRAW_ANN_POLYLINE: "Draw Polyline: click to add vertices, Enter or right-click to finish, Esc to cancel",
+            ToolMode.DRAW_ANN_POLYGON: "Draw Polygon: click to add vertices, Enter or right-click to finish, Esc to cancel",
+            ToolMode.DRAW_ANN_RECTANGLE: "Draw Rectangle: click two opposite corners, Esc to cancel",
+            ToolMode.DRAW_ANN_CIRCLE: "Draw Circle: click the centre, then a point on the circle, Esc to cancel",
+            ToolMode.DRAW_ANN_TEXT: "Add Text: click where the text goes, Esc to cancel",
+            ToolMode.DRAW_ANN_DIM_LENGTH: "Dimension Length: click the two ends, Esc to cancel",
+            ToolMode.DRAW_ANN_DIM_ANGLE: "Dimension Angle: click a point on one side, the vertex, then a point on the other side, Esc to cancel",
+            ToolMode.DRAW_ANN_DIM_X: "Dimension X: click the two points, Esc to cancel",
+            ToolMode.DRAW_ANN_DIM_Y: "Dimension Y: click the two points, Esc to cancel",
+            ToolMode.DRAW_ANN_AXES: "Add Axes: click two opposite corners, Esc to cancel",
         }.get(self, "")

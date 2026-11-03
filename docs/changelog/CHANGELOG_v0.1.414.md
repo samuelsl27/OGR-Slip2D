@@ -61,7 +61,9 @@ Es la tercera de la tanda P8n. Ningún número se mueve.
 - **El banco:**
   - `verificar_cierres.py` entero en la raíz da 126 comprobaciones con 0 bajadas; D353 y D354, registradas ya,
     siguen abiertas, como deben;
-  - el del 02 en seco da los mismos veredictos (234 de 234);
+  - el del 02 en seco da los mismos veredictos (234 de 234). **Es falso, corregido en 0.1.416:** D102 había
+    bajado, por un texto del docstring de D349, y mi comparación leía la línea equivocada (sección 3 del
+    changelog de 0.1.416);
   - D349 se cierra: instantánea, retirada, `PAQUETES` podado, cadena tachada, prompts y auditorías con 0 ERROR en la
     raíz y en el 02.
   - Un tropiezo del cierre, corregido antes de la instantánea final: al podar D349 de `PAQUETES` se quedaron

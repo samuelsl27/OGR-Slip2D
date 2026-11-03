@@ -3609,6 +3609,41 @@ _DICTS: dict[str, dict[str, str]] = {
             'Pulsa cerca de la cabeza o de la cola de un soporte para agarrarla y después pulsa la posición nueva. Esc para cancelar.',
         'Click the centre, then a point on the circle':
             'Pulsa el centro y después un punto de la circunferencia',
+        # v0.1.416 (D354) — the annotation tools, by clicks
+        "Draw Line: click its two ends, Esc to cancel":
+            "Dibujar línea: pulsa sus dos extremos, Esc para cancelar",
+        "Draw Arrow: click the tail, then the head, Esc to cancel":
+            "Dibujar flecha: pulsa el origen y después la punta, Esc para "
+            "cancelar",
+        "Draw Polyline: click to add vertices, Enter or right-click to "
+        "finish, Esc to cancel":
+            "Dibujar polilínea: pulsa para añadir vértices, Intro o botón "
+            "derecho para terminar, Esc para cancelar",
+        "Draw Polygon: click to add vertices, Enter or right-click to "
+        "finish, Esc to cancel":
+            "Dibujar polígono: pulsa para añadir vértices, Intro o botón "
+            "derecho para terminar, Esc para cancelar",
+        "Draw Rectangle: click two opposite corners, Esc to cancel":
+            "Dibujar rectángulo: pulsa dos esquinas opuestas, Esc para "
+            "cancelar",
+        "Draw Circle: click the centre, then a point on the circle, Esc to "
+        "cancel":
+            "Dibujar círculo: pulsa el centro y después un punto de la "
+            "circunferencia, Esc para cancelar",
+        "Add Text: click where the text goes, Esc to cancel":
+            "Añadir texto: pulsa donde va el texto, Esc para cancelar",
+        "Dimension Length: click the two ends, Esc to cancel":
+            "Acotar longitud: pulsa los dos extremos, Esc para cancelar",
+        "Dimension Angle: click a point on one side, the vertex, then a "
+        "point on the other side, Esc to cancel":
+            "Acotar ángulo: pulsa un punto de un lado, el vértice y un punto "
+            "del otro lado, Esc para cancelar",
+        "Dimension X: click the two points, Esc to cancel":
+            "Cota X: pulsa los dos puntos, Esc para cancelar",
+        "Dimension Y: click the two points, Esc to cancel":
+            "Cota Y: pulsa los dos puntos, Esc para cancelar",
+        "Add Axes: click two opposite corners, Esc to cancel":
+            "Añadir ejes: pulsa dos esquinas opuestas, Esc para cancelar",
         # v0.1.325 (D318) — two keys of their own and the parameter keys by symbol
         'Interface':
             'Interfaz',

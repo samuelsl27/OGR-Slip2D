@@ -237,6 +237,9 @@ class CanvasView(QGraphicsView):
     # a Boundary, because it is not one (``boundary_drawn`` carried it only
     # when a reroute was in place, and none ever reached it)
     expand_shrink_drawn = Signal(object)
+    # v0.1.416 (D354) — an annotation drawn with clicks: its kind and its
+    # points; the window stores it (an annotation is not a boundary)
+    annotation_drawn = Signal(object, object)
     # v0.1.8 — load right-click action (action, kind, index)
     load_action_requested = Signal(str, str, int)
     # v0.1.9 — emitted on Move Boundary drag release (boundary_idx, dx, dy)
@@ -1507,7 +1510,7 @@ class CanvasView(QGraphicsView):
         Called by the status-bar coordinate input field. Returns True
         if the point was added (a drawing mode was active), else False.
         """
-        if not self._tool_mode.is_drawing_boundary:
+        if not self._tool_mode.collects_points:
             return False
         self._draw_points.append((x, y))
         self._update_draw_preview()
@@ -1526,7 +1529,7 @@ class CanvasView(QGraphicsView):
             self._finish_drawing()
 
     def is_drawing(self) -> bool:
-        return bool(self._draw_points) and self._tool_mode.is_drawing_boundary
+        return bool(self._draw_points) and self._tool_mode.collects_points
 
     # ==================================================================
     # v0.1.2 — interactive drawing / picking helpers
@@ -1546,7 +1549,7 @@ class CanvasView(QGraphicsView):
         from ogr_core.geometry import Boundary, BoundaryType, Polyline, Vertex
 
         # Set the reference point for ortho
-        if self._draw_points and self._tool_mode.is_drawing_boundary:
+        if self._draw_points and self._tool_mode.collects_points:
             lx, ly = self._draw_points[-1]
             self.snap_engine.set_reference(Vertex(lx, ly))
         else:
@@ -1589,6 +1592,27 @@ class CanvasView(QGraphicsView):
         ensured to be distinct and the polyline is flagged closed.
         """
         mode = self._tool_mode
+        # v0.1.416 (D354) — an annotation is delivered on its own signal and
+        # the mode is left, as the Expand / Shrink polyline is. Too few
+        # points to be one: said, and the drawing stays.
+        kind = mode.annotation_kind_drawn
+        if kind is not None:
+            need = mode.annotation_min_points
+            if not self._draw_points:
+                self._cancel_drawing()
+                return
+            if len(self._draw_points) < need:
+                self.status_message.emit(
+                    tr("This shape needs %d point(s).") % need)
+                return
+            points = list(self._draw_points)
+            self._draw_points = []
+            self._clear_draw_preview()
+            self._last_snap = None
+            self.set_tool_mode(ToolMode.SELECT)
+            self.viewport().update()
+            self.annotation_drawn.emit(kind, points)
+            return
         # v0.1.232 (D109) — a Block Search Point is the one boundary made of
         # a single vertex; everything else needs two.
         if len(self._draw_points) < (1 if mode.points_to_finish == 1 else 2):
@@ -1776,6 +1800,28 @@ class CanvasView(QGraphicsView):
             ln.setZValue(9)
             scene.addItem(ln)
             self._draw_preview_items.append(ln)
+            # v0.1.416 (D354) — a rectangle, a circle or a polygon in the
+            # making is previewed as the shape it will be, from the same
+            # ``outline`` the drawing and the exports use
+            kind = self._tool_mode.annotation_kind_drawn
+            from ogr_core.annotations import AnnotationKind as _AK
+            if kind in (_AK.RECTANGLE, _AK.CIRCLE, _AK.POLYGON):
+                from PySide6.QtGui import QPainterPath
+                from PySide6.QtWidgets import QGraphicsPathItem
+                from ogr_core.annotations import Annotation
+                outline = Annotation(
+                    kind=kind,
+                    points=list(self._draw_points) + [live_cursor]).outline()
+                if len(outline) >= 2:
+                    path = QPainterPath()
+                    path.moveTo(*outline[0])
+                    for q in outline[1:]:
+                        path.lineTo(*q)
+                    shape = QGraphicsPathItem(path)
+                    shape.setPen(pen_dashed)
+                    shape.setZValue(9)
+                    scene.addItem(shape)
+                    self._draw_preview_items.append(shape)
             # v0.1.335 (D142a) — centre and radius: the circle itself, its
             # radius being the dashed line just drawn
             if self._tool_mode == ToolMode.ADD_SURFACE_CR:
@@ -2187,7 +2233,7 @@ class CanvasView(QGraphicsView):
 
         # v0.1.4 — Right-click during a drawing: open context menu with
         # Done / Close / Undo / Snap / Ortho / OSnap / Coord Table / Cancel
-        if event.button() == Qt.RightButton and mode.is_drawing_boundary:
+        if event.button() == Qt.RightButton and mode.collects_points:
             self._show_drawing_context_menu(event.globalPosition().toPoint())
             event.accept()
             return
@@ -2240,7 +2286,7 @@ class CanvasView(QGraphicsView):
         # ============ v0.1.2 INTERACTIVE TOOLS ============
         if event.button() == Qt.LeftButton:
             # Boundary drawing (click-click-click)
-            if mode.is_drawing_boundary:
+            if mode.collects_points:
                 scene_pt = self.mapToScene(event.position().toPoint())
                 snapped = self._snap_xy(scene_pt)
                 # v0.1.4 — auto-close detection: if this click lands
@@ -2589,7 +2635,7 @@ class CanvasView(QGraphicsView):
         # v0.1.3 — when a drawing tool is active, always resolve the
         # snap so glyphs (circle/X/dot) and ortho projection are shown
         # live — even if no vertex has been placed yet.
-        if self._tool_mode.is_drawing_boundary or self._tool_mode in (
+        if self._tool_mode.collects_points or self._tool_mode in (
             ToolMode.MOVE_VERTEX,
             ToolMode.INSERT_VERTEX,
             # v0.1.335 (D142a) — the circle the next click would add
@@ -2742,7 +2788,7 @@ class CanvasView(QGraphicsView):
         # v0.1.4 — Enter closes External/Material polygons;
         # otherwise finishes as an open polyline.
         if (event.key() in (Qt.Key_Return, Qt.Key_Enter)
-                and self._tool_mode.is_drawing_boundary
+                and self._tool_mode.collects_points
                 and len(self._draw_points) >= 2):
             self._finish_drawing(
                 force_close=self._tool_mode.draws_closed_polygon

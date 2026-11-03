@@ -278,7 +278,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.415"
+    VERSION = "0.1.416"
 
     def __init__(self) -> None:
         super().__init__()
@@ -383,6 +383,7 @@ class MainWindow(QMainWindow):
         # of Expand / Shrink, each on a signal of its own, connected once
         self.canvas.boundary_base_picked.connect(
             self._on_boundary_base_picked)
+        self.canvas.annotation_drawn.connect(self._on_annotation_drawn)
         self.canvas.expand_shrink_drawn.connect(
             self._on_expand_shrink_polyline_drawn)
         # v0.1.335 (D142a) — Add Surface (centre and radius) on the canvas
@@ -750,8 +751,6 @@ class MainWindow(QMainWindow):
                  self.act_assign_water_surface, None)
 
         # Tools
-        from ogr_core.annotations import AnnotationKind as _AK
-
         # v0.1.56 (phase M5) — the remaining minor-menu entries.
         self._mk("import_props", "Import Properties...",
                  self._import_properties, None)
@@ -778,8 +777,11 @@ class MainWindow(QMainWindow):
 
         # v0.1.56 — these three were placeholders; they now write to the
         # annotation layer built in v0.1.54 instead of showing a message.
+        # v0.1.416 (D354) — each tool enters its canvas mode, named here so
+        # the census of entered modes reads it (``mode=``)
         self._mk("add_text", "Add Text",
-                 lambda: self._start_annotation(_AK.TEXT), "add_text")
+                 lambda: self._start_annotation(mode=ToolMode.DRAW_ANN_TEXT),
+                 "add_text")
         # v0.1.331 (D329a) — two clicks on the canvas, the distance on the
         # status bar, nothing in the model: it was the typed-coordinates
         # Dimension Length below, and stored a dimension like it
@@ -787,10 +789,12 @@ class MainWindow(QMainWindow):
                  lambda: self.canvas.set_tool_mode(ToolMode.MEASURE),
                  "measure")
         self._mk("dim_len", "Dimension Length",
-                 lambda: self._start_annotation(_AK.DIMENSION_LENGTH),
+                 lambda: self._start_annotation(
+                     mode=ToolMode.DRAW_ANN_DIM_LENGTH),
                  "dim_length")
         self._mk("dim_ang", "Dimension Angle",
-                 lambda: self._start_annotation(_AK.DIMENSION_ANGLE),
+                 lambda: self._start_annotation(
+                     mode=ToolMode.DRAW_ANN_DIM_ANGLE),
                  "dim_angle")
         self._mk("mat_tab", "Material Properties Table",
                  lambda: self._properties_table("materials"),
@@ -798,27 +802,28 @@ class MainWindow(QMainWindow):
         # v0.1.54 (phase M3) — drawing primitives, property tables and
         # object management. Primitives write to the ANNOTATION layer,
         # which the solver never reads.
-        for key, label, kind in (
-            ("draw_line", "Line", _AK.LINE),
-            ("draw_arrow", "Arrow", _AK.ARROW),
-            ("draw_polyline", "Polyline", _AK.POLYLINE),
-            ("draw_polygon", "Polygon", _AK.POLYGON),
-            ("draw_rect", "Rectangle", _AK.RECTANGLE),
-            ("draw_circle", "Circle", _AK.CIRCLE),
-        ):
-            self._mk(key, label,
-                     lambda _c=False, k=kind: self._start_annotation(k),
-                     None)
+        self._mk("draw_line", "Line", lambda: self._start_annotation(
+            mode=ToolMode.DRAW_ANN_LINE), None)
+        self._mk("draw_arrow", "Arrow", lambda: self._start_annotation(
+            mode=ToolMode.DRAW_ANN_ARROW), None)
+        self._mk("draw_polyline", "Polyline", lambda: self._start_annotation(
+            mode=ToolMode.DRAW_ANN_POLYLINE), None)
+        self._mk("draw_polygon", "Polygon", lambda: self._start_annotation(
+            mode=ToolMode.DRAW_ANN_POLYGON), None)
+        self._mk("draw_rect", "Rectangle", lambda: self._start_annotation(
+            mode=ToolMode.DRAW_ANN_RECTANGLE), None)
+        self._mk("draw_circle", "Circle", lambda: self._start_annotation(
+            mode=ToolMode.DRAW_ANN_CIRCLE), None)
         self._mk("sup_tab", "Support Properties Table",
                  lambda: self._properties_table("supports"), None)
         self._mk("hyd_tab", "Hydraulic Properties Table",
                  lambda: self._properties_table("hydraulic"), None)
-        self._mk("dim_x", "Dimension X",
-                 lambda: self._start_annotation(_AK.DIMENSION_X), None)
-        self._mk("dim_y", "Dimension Y",
-                 lambda: self._start_annotation(_AK.DIMENSION_Y), None)
-        self._mk("add_axes", "Add Axes",
-                 lambda: self._start_annotation(_AK.AXES), None)
+        self._mk("dim_x", "Dimension X", lambda: self._start_annotation(
+            mode=ToolMode.DRAW_ANN_DIM_X), None)
+        self._mk("dim_y", "Dimension Y", lambda: self._start_annotation(
+            mode=ToolMode.DRAW_ANN_DIM_Y), None)
+        self._mk("add_axes", "Add Axes", lambda: self._start_annotation(
+            mode=ToolMode.DRAW_ANN_AXES), None)
         self._mk("add_image", "Add Image...", self._add_image, None)
         self._mk("convert_tool", "Convert Tool to Boundary...",
                  self._convert_tool_to_boundary, None)
@@ -2432,46 +2437,35 @@ class MainWindow(QMainWindow):
     # ==================================================================
     # Annotation layer and property tables (phase M3)
     # ==================================================================
-    @undo_step("Set annotation")
-    def _start_annotation(self, kind) -> None:
-        """Begin drawing an annotation.
+    def _start_annotation(self, mode: ToolMode) -> None:
+        """Begin drawing an annotation: enter its canvas mode.
 
-        Coordinates are typed rather than picked for now: the canvas
-        picking modes belong to the drawing tools, and an annotation that
-        can be placed exactly is more useful for a figure than one placed
-        approximately by mouse.
+        v0.1.416 (D354) — the points are clicked, with snapping and a
+        preview, as a boundary's; they were typed in a dialog ("Enter 2
+        point(s) as x,y  x,y ...") so that a figure could be placed exactly.
+        Exactness is kept the way every drawing has it: the status bar's
+        X,Y box and the Coordinate Table of the right-click menu. The
+        drawing ends in ``_on_annotation_drawn``, which is the undo step.
         """
+        self._set_tool(mode)
+
+    @undo_step("Set annotation")
+    def _on_annotation_drawn(self, kind, points) -> Optional[object]:
+        """Store the annotation the canvas drew; a text asks for its words
+        after the click, and Cancel leaves nothing (v0.1.416, D354)."""
         from PySide6.QtWidgets import QInputDialog
 
         from ogr_core.annotations import Annotation, AnnotationKind
 
-        # v0.1.330 (D332) — axes take two corners, as the reference draws
-        # them (they asked for one, which left them nowhere to end)
-        needed = {AnnotationKind.TEXT: 1,
-                  AnnotationKind.DIMENSION_ANGLE: 3}.get(kind, 2)
-        prompt = tr("Enter %d point(s) as x,y  x,y ...") % needed
-        text, ok = QInputDialog.getText(self, tr("Draw"), prompt)
-        if not ok or not text.strip():
-            return
-        pts = []
-        for chunk in text.replace(";", " ").split():
-            try:
-                x, y = (float(v) for v in chunk.split(","))
-            except ValueError:
-                self._info(tr("Could not read '%s' as x,y") % chunk)
-                return
-            pts.append((x, y))
-        if len(pts) < needed:
-            self._info(tr("This shape needs %d point(s).") % needed)
-            return
         label = ""
         if kind == AnnotationKind.TEXT:
             label, ok = QInputDialog.getText(self, tr("Text"),
                                              tr("Text:"))
             if not ok:
-                return
+                return STEP_CANCELLED
         ann = self.project.annotations.add(
-            Annotation(kind=kind, points=pts, text=label))
+            Annotation(kind=kind, points=[(float(x), float(y))
+                                          for x, y in points], text=label))
         self.project.is_dirty = True
         self.canvas.refresh_scene()
         value = ann.measured_value()

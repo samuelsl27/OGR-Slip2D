@@ -44,7 +44,7 @@ class Command(ABC):
 # ----------------------------------------------------------------------
 def add_boundary_step_name(btype) -> str:
     """The undo step of adding a boundary of ``btype``: "Add Weak Layer",
-    "Add Block Search Object"… The English name is what an agent reads in
+    "Add Tension Crack"… The English name is what an agent reads in
     ``project_history``; the window translates it.
 
     v0.1.414 (D349) — the one rule for it. The canvas called every added

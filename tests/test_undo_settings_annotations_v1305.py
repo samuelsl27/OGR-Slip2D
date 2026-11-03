@@ -438,14 +438,16 @@ class TestAnnotations:
         from ogr_core.annotations import AnnotationKind
         w = _window()
         try:
+            # v0.1.416 (D354) — the step is the drawn annotation's, not
+            # the menu entry's: the points are clicked now, and a text whose
+            # words are cancelled leaves nothing
             with _swap(QInputDialog, "getText",
                        _answers(("", False))):
-                _cancelled(w, lambda: w._start_annotation(
-                    AnnotationKind.LINE))
-            with _swap(QInputDialog, "getText",
-                       _answers(("0,0 10,10", True))):
-                _accepted(w, "Set annotation",
-                          lambda: w._start_annotation(AnnotationKind.LINE))
+                _cancelled(w, lambda: w._on_annotation_drawn(
+                    AnnotationKind.TEXT, [(5.0, 30.0)]))
+            _accepted(w, "Set annotation",
+                      lambda: w._on_annotation_drawn(
+                          AnnotationKind.LINE, [(0.0, 0.0), (10.0, 10.0)]))
             _clean(w)
             with _swap(QFileDialog, "getOpenFileName",
                        staticmethod(lambda *a, **k: ("photo.png", ""))):

@@ -109,7 +109,9 @@ _NEVER_ENTERED = set({
 # VARIABLE. El techo de abajo es lo único que los mide.
 # v0.1.331 (D329a) — 34 -> 35: PICK_DIMENSION, Dimension Length in Interpret,
 # with its Spanish.
-_HINTS_TOTAL = 34
+_HINTS_TOTAL = 46
+# v0.1.416 (D354) — 34 -> 46: the twelve annotation tools, drawn with clicks
+# in modes of their own, each with its hint and its Spanish.
 # v0.1.336 (D142b) — 35 -> 34: EXPAND_SHRINK retired with its hint.
 # v0.1.198 — 33 -> 32: the CHANGE_SLOPE_ANGLE hint was rewritten with the
 # feature and got its Spanish.

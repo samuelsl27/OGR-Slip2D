@@ -252,21 +252,22 @@ class TestAxesTakeTwoCorners:
         call(ws, "annotation_set", project_id=pid, kind="axes",
              points_xy=[[0, 0], [50, 25]])
 
-    def test_the_window_asks_for_two(self):
-        from PySide6.QtWidgets import QInputDialog
+    def test_the_window_takes_two(self):
+        """v0.1.416 (D354) — clicked, no longer typed: the Axes tool waits
+        after one corner and makes the axes at the second."""
         from ogr_core.annotations import AnnotationKind as K
-        asked = []
-        raw = QInputDialog.__dict__.get("getText")
+        from ogr_gui.canvas.tool_mode import ToolMode
         w = _window()
         try:
-            QInputDialog.getText = staticmethod(
-                lambda _p, _t, prompt, *a, **k: (asked.append(prompt),
-                                                 ("", False))[1])
-            w._start_annotation(K.AXES)
+            w._actions["add_axes"].trigger()
+            assert w.canvas.tool_mode == ToolMode.DRAW_ANN_AXES
+            n = len(w.project.annotations)
+            w.canvas.add_manual_point(0.0, 0.0)
+            assert w.canvas.tool_mode == ToolMode.DRAW_ANN_AXES
+            assert len(w.project.annotations) == n
+            w.canvas.add_manual_point(50.0, 25.0)
+            axes = list(w.project.annotations)[-1]
+            assert axes.kind == K.AXES
+            assert axes.points == [(0.0, 0.0), (50.0, 25.0)]
         finally:
-            if raw is None:
-                del QInputDialog.getText
-            else:
-                QInputDialog.getText = raw
             _done(w)
-        assert asked and "2" in asked[0], asked

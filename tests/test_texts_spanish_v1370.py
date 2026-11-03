@@ -192,8 +192,6 @@ class TestTheConvergenceChart:
 class TestAnAnnotationAdded:
 
     def test_it_is_said_by_its_kind_name(self):
-        from PySide6.QtWidgets import QInputDialog
-
         from ogr_core.annotations import AnnotationKind
         from ogr_gui.main_window import MainWindow
         _app()
@@ -201,9 +199,10 @@ class TestAnAnnotationAdded:
             w = MainWindow()
             try:
                 w.act_load_demo()
-                with _swap(QInputDialog, "getText", staticmethod(
-                        lambda *a, **k: ("0,0 10,10", True))):
-                    w._start_annotation(AnnotationKind.LINE)
+                # v0.1.416 (D354) — drawn with clicks: what the canvas
+                # hands the window when the line is finished
+                w._on_annotation_drawn(AnnotationKind.LINE,
+                                       [(0.0, 0.0), (10.0, 10.0)])
                 bar = w.statusBar().currentMessage()
             finally:
                 w.project.is_dirty = False
