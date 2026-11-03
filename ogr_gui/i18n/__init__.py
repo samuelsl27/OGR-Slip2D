@@ -27,7 +27,7 @@ _DICTS: dict[str, dict[str, str]] = {
         # (query), «línea de empujes» (line of thrust).
         '%d more were discarded before slicing, so they carry no error code and cannot be displayed.': '%d más se descartaron antes del dovelado, así que no llevan código de error y no se pueden mostrar.',
         '%d surface(s) rejected of %d generated:': '%d superficie(s) rechazada(s) de %d generadas:',
-        'A focus object also removed %d candidate(s) before they were analysed. They are in neither count above: the population stays comparable to an unfocused run.': 'Un objeto de enfoque retiró además %d candidata(s) antes de analizarlas. No están en ninguno de los recuentos anteriores: así la población sigue siendo comparable a la de una corrida sin enfoque.',
+        'A focus object also removed %d candidate(s) before they were analysed. They are in neither count above: the population stays comparable to an unfocused run.': 'Un objeto de enfoque retiró además %d candidata(s) antes de analizarlas. No están en ninguno de los recuentos anteriores: así la población sigue siendo comparable a la de un cálculo sin enfoque.',
         'Generation attempts: %d': 'Intentos de generación: %d',
         'Generation attempts: %d (%d rejected by the focus object)': 'Intentos de generación: %d (%d rechazados por el objeto de enfoque)',
         'All data': 'Todos los datos',
@@ -451,7 +451,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'No critical probabilistic surface: it comes from the Overall Slope analysis type.': 'Sin superficie probabilística crítica: proviene del tipo de análisis Talud completo.',
         'No critical surface with slice data.': 'Sin superficie crítica con datos de dovelas.',
         'No critical surface.': 'Sin superficie crítica.',
-        'No per-iteration history was recorded for this run.': 'No se registró historial por iteración en esta corrida.',
+        'No per-iteration history was recorded for this run.': 'No se registró historial por iteración en este cálculo.',
         'No probabilistic result.': 'Sin resultado probabilístico.',
         'No query points to delete.': 'No hay puntos de consulta que eliminar.',
         'No query points. Use Add Query first.': 'No hay puntos de consulta. Usa primero Añadir consulta.',
@@ -473,8 +473,8 @@ _DICTS: dict[str, dict[str, str]] = {
         'The expression could not be evaluated: %s': 'No se ha podido evaluar la expresión: %s',
         'The passive value is the larger and therefore the conservative one for design.': 'El valor pasivo es el mayor y por tanto el conservador para diseño.',
         'The point lies outside the mesh.': 'El punto queda fuera de la malla.',
-        'This run recorded no convergence history. The seepage solver reports its iteration count and final state instead: %d iterations, converged = %s.': 'Esta corrida no registró historial de convergencia. El solver de filtración informa en su lugar del número de iteraciones y el estado final: %d iteraciones, convergido = %s.',
-        'This run recorded no separate global minima. They are produced by the Overall Slope analysis type, which repeats the whole search per sample.': 'Esta corrida no registró mínimos globales separados. Los produce el tipo de análisis Talud completo, que repite toda la búsqueda por muestra.',
+        'This run recorded no convergence history. The seepage solver reports its iteration count and final state instead: %d iterations, converged = %s.': 'Este cálculo no registró historial de convergencia. El solver de filtración informa en su lugar del número de iteraciones y el estado final: %d iteraciones, convergido = %s.',
+        'This run recorded no separate global minima. They are produced by the Overall Slope analysis type, which repeats the whole search per sample.': 'Este cálculo no registró mínimos globales separados. Los produce el tipo de análisis Talud completo, que repite toda la búsqueda por muestra.',
         'Time': 'Tiempo',
         'Total head: %.4f': 'Altura total: %.4f',
         'Value': 'Valor',
@@ -602,7 +602,7 @@ _DICTS: dict[str, dict[str, str]] = {
 
         # --- v0.1.52: páginas nuevas de Project Settings ------------
         '%d stage(s), %d with a factor of safety': '%d etapa(s), %d con factor de seguridad',
-        'A pseudo-random stream is reproducible: the same seed gives the same answer, which is what makes a probabilistic result defensible in a report and comparable between runs. A random stream is seeded from the clock, so successive runs explore differently — useful to check that a conclusion is not an artefact of one seed.': 'Un flujo pseudoaleatorio es reproducible: la misma semilla da la misma respuesta, que es lo que hace defendible un resultado probabilístico en un informe y comparable entre corridas. Un flujo aleatorio toma la semilla del reloj, así que corridas sucesivas exploran de forma distinta — útil para comprobar que una conclusión no es un artefacto de una semilla concreta.',
+        'A pseudo-random stream is reproducible: the same seed gives the same answer, which is what makes a probabilistic result defensible in a report and comparable between runs. A random stream is seeded from the clock, so successive runs explore differently — useful to check that a conclusion is not an artefact of one seed.': 'Un flujo pseudoaleatorio es reproducible: la misma semilla da la misma respuesta, que es lo que hace defendible un resultado probabilístico en un informe y comparable entre cálculos. Un flujo aleatorio toma la semilla del reloj, así que cálculos sucesivos exploran de forma distinta — útil para comprobar que una conclusión no es un artefacto de una semilla concreta.',
         # v0.1.174 (D115) - el rotulo dice el alcance porque el
         # ajuste no tiene UN alcance: seis de los nueve metodos
         # lo guardan y no lo consultan nunca. A diferencia de
@@ -1220,7 +1220,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'No sensitivity result for this method.': 'Sin resultado de sensibilidad para este método.',
         'No sensitivity result.': 'Sin resultado de sensibilidad.',
         'not swept, no longer in the model: ': 'sin barrer, ya no está en el modelo: ',
-        'What this run could not do:': 'Lo que esta corrida no pudo hacer:',
+        'What this run could not do:': 'Lo que este cálculo no pudo hacer:',
         'Node Numbers': 'Números de nodo',
         'Not yet implemented in OGR Slip2D': 'Todavía no implementado en OGR Slip2D',
         'Number of Iterations:': 'Número de iteraciones:',
@@ -1567,7 +1567,7 @@ _DICTS: dict[str, dict[str, str]] = {
         "Every other surface is capped instead by the m-alpha check, "
         "which in purely cohesive soil is a ceiling of 78.5 deg on "
         "the base angle.":
-            'Una base de dovela más inclinada que esto no es un plano de corte, y las ecuaciones de equilibrio límite pierden su condicionamiento frente a ella. Se aplica SOLO a las superficies recortadas por una capa débil, donde una capa que simplemente termina deja un escalón casi vertical. Al resto lo limita en su lugar la comprobación de m-alfa, que en suelo puramente cohesivo es un techo de 78,5° sobre el ángulo de base.',
+            'Una base de dovela más inclinada que esto no es un plano de corte, y las ecuaciones de equilibrio límite pierden su condicionamiento frente a ella. Se aplica SOLO a las superficies recortadas por una capa débil, donde una capa que simplemente termina deja un escalón casi vertical. Al resto lo limita en su lugar la comprobación de m-alfa, que en suelo puramente cohesivo es un techo de 78.5° sobre el ángulo de base.',
         # v0.1.158 — lo que el valor tecleado hace de verdad. El motor lo
         # lee como ``0 < limite < 90``, así que los dos extremos del rango
         # no aflojan el techo: lo quitan. v0.1.190 añade la tercera rama:
@@ -1580,15 +1580,15 @@ _DICTS: dict[str, dict[str, str]] = {
             "A 90° este techo queda desactivado: ninguna superficie "
             "recortada por una capa débil se descarta por la "
             "inclinación de su base. La comprobación de m-alfa sigue "
-            "limitando a 78,5° toda superficie cribada con φ = 0.",
+            "limitando a 78.5° toda superficie cribada con φ = 0.",
         "Applies only to surfaces a weak layer has clipped. Where phi "
         "= 0 the m-alpha check caps the base at 78.5 deg, which is "
         "tighter than this value, so this one never bites there.":
-            'Se aplica solo a las superficies recortadas por una capa débil. Con φ = 0 la comprobación de m-alfa limita la base a 78,5°, más estricto que este valor, así que aquí este no llega a actuar.',
+            'Se aplica solo a las superficies recortadas por una capa débil. Con φ = 0 la comprobación de m-alfa limita la base a 78.5°, más estricto que este valor, así que aquí este no llega a actuar.',
         "Applies only to surfaces a weak layer has clipped, and there "
         "it is the tighter of the two ceilings. Every other surface "
         "is capped at 78.5 deg by the m-alpha check where phi = 0.":
-            'Se aplica solo a las superficies recortadas por una capa débil, y allí es el más estricto de los dos techos. Al resto lo limita a 78,5° la comprobación de m-alfa con φ = 0.',
+            'Se aplica solo a las superficies recortadas por una capa débil, y allí es el más estricto de los dos techos. Al resto lo limita a 78.5° la comprobación de m-alfa con φ = 0.',
         "Weak Layer": "Capa débil",
         "Weak layer material assigned.": "Material de la capa débil asignado.",
         # v0.1.126 — búsqueda por enjambre de partículas y mínimos
@@ -1631,7 +1631,7 @@ _DICTS: dict[str, dict[str, str]] = {
         "minima of an Overall Slope run.":
             "Dibuja todos los mínimos que informa el resultado: las "
             "regiones que una búsqueda multimodal ha sabido separar, o "
-            "los mínimos globales de cada muestra de una corrida "
+            "los mínimos globales de cada muestra de un cálculo "
             "Overall Slope.",
         "Show GM Surfaces": "Ver superficies de mínimo global",
         "%d distinct minimum surface(s)":
@@ -1727,6 +1727,10 @@ _DICTS: dict[str, dict[str, str]] = {
         "Define Materials...": "Definir materiales...",
         "Define Support...": "Definir soporte...",
         "Assign Materials": "Asignar materiales",
+        # v0.1.418 (D355) -- las dos entradas de Propiedades: el modo solo y
+        # el panel, cada una con un nombre que dice cuál es
+        "Assign Material by Clicking": "Asignar material con clic",
+        "Assign Materials Panel...": "Panel de asignar materiales...",
         # --- Water surfaces (v0.1.62) ---------------------------------
         "Assign Water Surface...": "Asignar superficie de agua...",
         "Assign Water Surface": "Asignar superficie de agua",
@@ -1846,24 +1850,25 @@ _DICTS: dict[str, dict[str, str]] = {
         "simplified, both Janbu, Spencer and GLE / Morgenstern-Price; "
         "the other methods are not screened by it.":
             "Rechaza las superficies cuyo denominador de la normal de "
-            "base baja de 0,2 (Whitman y Bailey, 1967). En suelo "
+            "base baja de 0.2 (Whitman y Bailey, 1967). En suelo "
             "puramente cohesivo ese denominador es exactamente el "
             "coseno del ángulo de base, así que la comprobación se "
-            "convierte en un techo de 78,5° sobre él. Se aplica a "
+            "convierte en un techo de 78.5° sobre él. Se aplica a "
             "Bishop simplificado, los dos Janbu, Spencer y GLE / "
             "Morgenstern-Price; los demás métodos no se criban con "
             "ella.",
+        # v0.1.418 (D355) -- sin el código de error de la referencia
         "The m-alpha check is ON by default, as in the reference, "
-        "which screens surfaces with it and reports them as error "
-        "-112. Surfaces it rejects keep their factor of safety and "
+        "which screens surfaces with it. Surfaces it rejects are "
+        "marked inadmissible: they keep their factor of safety and "
         "stay in the results; they are only barred from being the "
         "critical surface. Switch it off to see them compete.":
             "La comprobación de m-alfa está ACTIVADA por defecto, como en "
-            "la referencia, que filtra superficies con ella y las informa "
-            "como error -112. Las superficies que rechaza conservan su "
-            "factor de seguridad y siguen en los resultados; solo se les "
-            "impide ser la superficie crítica. Desactívala para verlas "
-            "competir.",
+            "la referencia, que filtra superficies con ella. Las "
+            "superficies que rechaza se marcan como no admisibles: "
+            "conservan su factor de seguridad y siguen en los resultados; "
+            "solo se les impide ser la superficie crítica. Desactívala "
+            "para verlas competir.",
         "Percentage of slices:": "Porcentaje de dovelas:",
         "Percentage of slices, counted from the toe, over which the "
         "tensile check applies.":
@@ -2009,7 +2014,7 @@ _DICTS: dict[str, dict[str, str]] = {
         "this is the cost of the run.":
             "Niveles del embalse entre el nivel freático inicial y la cota "
             "de terreno más baja del modelo. Cada uno es una búsqueda "
-            "completa, así que es lo que cuesta la corrida.",
+            "completa, así que es lo que cuesta el cálculo.",
         "Search at a range of reservoir levels. The total "
         "drawdown is not always the critical one.":
             "Busca en un rango de niveles del embalse. El desembalse total "
@@ -2075,13 +2080,14 @@ _DICTS: dict[str, dict[str, str]] = {
         # parciales se aplican a los DATOS, así que lo que sale no es
         # un factor de seguridad.
         "Over-design factor": "Factor de sobredimensionamiento",
-        "Design standard applied: %s — the reported value is an over-design factor, not a factor of safety, and must exceed 1":
-            "Norma de diseño aplicada: %s — el valor indicado es un factor de sobredimensionamiento, no un factor de seguridad, y debe ser mayor que 1",
+        # v0.1.418 (D355) -- con su punto final, en los dos idiomas
+        "Design standard applied: %s — the reported value is an over-design factor, not a factor of safety, and must exceed 1.":
+            "Norma de diseño aplicada: %s — el valor indicado es un factor de sobredimensionamiento, no un factor de seguridad, y debe ser mayor que 1.",
         # v0.1.236 (D93) — la estadística dice lo mismo: con una norma
         # activa cada muestra se factoriza, y lo que se cuenta es el factor
         # de sobredimensionamiento.
-        "Design standard applied to every sample: %s — the statistics describe the over-design factor, not the factor of safety":
-            "Norma de diseño aplicada a cada muestra: %s — la estadística describe el factor de sobredimensionamiento, no el factor de seguridad",
+        "Design standard applied to every sample: %s — the statistics describe the over-design factor, not the factor of safety.":
+            "Norma de diseño aplicada a cada muestra: %s — la estadística describe el factor de sobredimensionamiento, no el factor de seguridad.",
         "Histogram of FoS": "Histograma del FS",
         "Histogram of the over-design factor":
             "Histograma del factor de sobredimensionamiento",
@@ -2585,8 +2591,9 @@ _DICTS: dict[str, dict[str, str]] = {
         "Slice index:": "Índice de la dovela:",
         # v0.1.319 (D300, family b) — the canvas, its tool tips and context
         # menus, the data tips, the results panel and the status bar
-        "<b>Region</b><br>Material: {0}<br>Area: {1:.2f} m²":
-            "<b>Región</b><br>Material: {0}<br>Área: {1:.2f} m²",
+        # v0.1.418 (D355) -- the canvas tip of a region: the data tip's head
+        # (``data_tips.region_heading``) and the area under it
+        "area: {0:.2f} m²": "área: {0:.2f} m²",
         "<b>Support force</b><br>Magnitude: {0:.1f} kN/m<br>Angle: "
         "{1:.1f}°<br>Mode: {2}":
             '<b>Fuerza del soporte</b><br>Magnitud: {0:.1f} kN/m<br>Ángulo: {1:.1f}°<br>Modo: {2}',
@@ -3174,8 +3181,6 @@ _DICTS: dict[str, dict[str, str]] = {
             '  (cierre %.1f%%: método solo de momentos)',
         '(None — unassign)':
             '(Ninguno — quitar la asignación)',
-        '(unassigned)':
-            '(sin asignar)',
         '(unnamed material)':
             '(material sin nombre)',
         '<b>Distributed Load</b><br>Magnitude: {0} kN/m²<br>Orientation: {1}<br>Distribution: {2}':
@@ -4687,7 +4692,7 @@ _DICTS: dict[str, dict[str, str]] = {
             'horizontal, demasiado empinada para que un número fijo de '
             'dovelas la resuelva: su factor de seguridad depende de ese '
             'número. Se calculó con {num_slices} dovelas. Repite el cálculo '
-            'con más y compara antes de darlo.',
+            'con más y compara antes de darlo por bueno.',
         'The critical centre lies on the edge of the search grid ({edges}; '
         'grid x {x0:g} to {x1:g}, y {y0:g} to {y1:g}). A minimum on the '
         'boundary is the best of what was searched, not necessarily the '
@@ -4697,7 +4702,7 @@ _DICTS: dict[str, dict[str, str]] = {
             '({edges}; rejilla x de {x0:g} a {x1:g}, y de {y0:g} a {y1:g}). '
             'Un mínimo en el borde es lo mejor de lo buscado, no '
             'necesariamente el más bajo: amplía la rejilla por ese lado y '
-            'repite el cálculo antes de darlo.',
+            'repite el cálculo antes de darlo por bueno.',
         'no inclination of the inter-slice forces makes the force and the '
         'moment factors of safety agree, so the factor reported is the '
         'closest sampled inclination rather than a solved one: its two '
@@ -4854,17 +4859,17 @@ _DICTS: dict[str, dict[str, str]] = {
             'valor es el denominador de Bishop: el que este método divide de '
             'verdad lleva su propia inclinación entre dovelas. Compáralo con '
             'un método de equilibrio completo —Spencer y '
-            'GLE/Morgenstern-Price— antes de darlo.',
+            'GLE/Morgenstern-Price— antes de darlo por bueno.',
         ' A method of moments is not reliable there. Compare against a '
         'complete-equilibrium method — Spencer and GLE/Morgenstern-Price — '
         'before quoting it.':
             ' Un método de momentos no es fiable ahí. Compáralo con un '
             'método de equilibrio completo —Spencer y GLE/Morgenstern-Price— '
-            'antes de darlo.',
+            'antes de darlo por bueno.',
         ' Compare against a complete-equilibrium method — Spencer and '
         'GLE/Morgenstern-Price — before quoting it.':
             ' Compáralo con un método de equilibrio completo —Spencer y '
-            'GLE/Morgenstern-Price— antes de darlo.',
+            'GLE/Morgenstern-Price— antes de darlo por bueno.',
         ', below the {limit} limit':
             ', por debajo del límite de {limit}',
         ', which clears the {limit} limit by {margin:.4f}':
@@ -6793,8 +6798,8 @@ _DICTS: dict[str, dict[str, str]] = {
             "{0} movido ({1:.2f}, {2:.2f})",
         "Converted to {0}":
             "Convertido en {0}",
-        "Assign Material applies to Material and Weak Layer boundaries only. Use Properties → Assign Materials to paint regions.":
-            "Asignar material solo se aplica a contornos de material y a capas débiles. Para pintar regiones, usa Propiedades → Asignar materiales.",
+        "Assign Material by Clicking applies to Material and Weak Layer boundaries only. Use Properties → Assign Materials Panel to paint regions.":
+            "Asignar material con clic solo se aplica a contornos de material y a capas débiles. Para pintar regiones, usa Propiedades → Panel de asignar materiales.",
         "Material assigned.":
             "Material asignado.",
         "Click and drag a vertex to move it.":
@@ -6928,8 +6933,8 @@ _DICTS: dict[str, dict[str, str]] = {
         "%d note(s) from the last analysis. They report what the run "
         "decided or could not do; none of them changes a factor of "
         "safety.":
-            "%d nota(s) del último análisis. Informan de lo que la "
-            "corrida decidió o no pudo hacer; ninguna de ellas cambia un "
+            "%d nota(s) del último análisis. Informan de lo que el "
+            "cálculo decidió o no pudo hacer; ninguna de ellas cambia un "
             "factor de seguridad.",
         "%s  [+%d more — Analysis > Analysis Notes]":
             "%s  [+%d más — Análisis > Notas del análisis]",

@@ -539,7 +539,7 @@ class TestTheTranslation:
             sentence = tr(
                 "Design standard applied: %s — the reported value is an "
                 "over-design factor, not a factor of safety, and must "
-                "exceed 1")
+                "exceed 1.")
             assert "sobredimensionamiento" in sentence
             assert "factor de seguridad" in sentence
             assert sentence.startswith("Norma de diseño aplicada")

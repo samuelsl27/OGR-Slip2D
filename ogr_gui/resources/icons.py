@@ -75,6 +75,8 @@ _CATALOG: dict[str, tuple[str, Optional[str]]] = {
     "add_support":       ("fa6s.thumbtack", "#4b0082"),
     "support_pattern":   ("fa6s.table-cells", "#4b0082"),
     "delete_support":    ("fa6s.eraser", None),
+    # v0.1.418 (D355) -- its own: it borrowed Delete Support's eraser
+    "stretch_support":   ("fa6s.arrows-left-right-to-line", "#4b0082"),
     # --- Surfaces -----------------------------------------------------
     "surface_options":   ("fa6s.arrows-split-up-and-left", None),
     "auto_grid":         ("fa6s.border-all", None),
@@ -89,6 +91,8 @@ _CATALOG: dict[str, tuple[str, Optional[str]]] = {
     "define_support":    ("fa6s.screwdriver-wrench", None),
     "define_crack":      ("fa6s.bolt-lightning", None),
     "assign":            ("fa6s.paintbrush", None),
+    # v0.1.418 (D355) -- the canvas mode alone, apart from the panel's brush
+    "assign_by_click":   ("fa6s.fill-drip", None),
     # --- Tools --------------------------------------------------------
     "add_text":          ("fa6s.font", None),
     "add_line":          ("fa6s.slash", None),

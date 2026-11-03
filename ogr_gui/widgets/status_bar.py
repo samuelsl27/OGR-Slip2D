@@ -114,7 +114,10 @@ class ElidingStatusBar(QStatusBar):
 
     ``currentMessage()`` answers the WHOLE message: what the window said,
     not what fitted. A message Qt shows by itself (an action's status tip,
-    sent from C++) is not cut, and is answered as shown.
+    sent from C++) is cut the same way since v0.1.418 (D355): it never goes
+    through ``showMessage`` here, and it was hidden behind the indicators
+    with no «…» -- which is how the reason of a disabled action reached the
+    reader, half of it.
     """
 
     #: Room kept between the message and the first indicator, in pixels.
@@ -169,6 +172,14 @@ class ElidingStatusBar(QStatusBar):
             self._full = self._shown = ""
             self._until = None
             self.setToolTip("")
+            return
+        if text != self._shown:
+            # A message Qt put here from C++ (the status tip of the action
+            # under the pointer): shown again through ``_show``, whose own
+            # message comes back here equal to ``_shown`` and stops
+            self._full = text
+            self._until = None
+            self._show(0)
 
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)

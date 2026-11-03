@@ -244,7 +244,7 @@ def compute(
         console.print(f"[cyan]Design standard applied:[/cyan] "
                       f"{outcome.factor_report.summary()} — the reported "
                       f"value is an over-design factor, not a factor of "
-                      f"safety, and must exceed 1")
+                      f"safety, and must exceed 1.")
         # v0.1.225 (D224) — the report's notes too: what the standard asks
         # for and was not applied. The interface and the API showed them;
         # this printed the summary alone.

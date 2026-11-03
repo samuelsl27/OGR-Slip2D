@@ -82,12 +82,26 @@ def _line(name: str, value) -> str:
 
 
 # ======================================================================
+def _named(material) -> str:
+    return getattr(material, "name", None) or tr("(unnamed material)")
+
+
+def region_heading(material, number: int) -> str:
+    """The head both region tips start with (v0.1.418, D355): «Silty clay
+    (region 1)», or the region and that it has no material. The data tip of
+    Select said «Silty clay  (region 1)» and the canvas tip of the drawing
+    modes «Region / Material: Silty clay / Area», for the same region."""
+    if material is None:
+        return tr('region {0}\nno material assigned').format(number)
+    return f"{_named(material)}  ({tr('region {0}').format(number)})"
+
+
 def material_tip(material, mode: DataTipMode = DataTipMode.MAXIMUM,
                  region_name: Optional[str] = None) -> str:
     """Properties of a material."""
     if material is None or mode == DataTipMode.NONE:
         return ""
-    name = getattr(material, "name", None) or tr("(unnamed material)")
+    name = _named(material)
     if mode == DataTipMode.MINIMUM:
         return name
     lines = [name]
@@ -277,7 +291,7 @@ def tip_at(project, x: float, y: float,
                 # reporting too: "region 2 — no material assigned" tells
                 # the user something actionable, whereas silence looks
                 # like the tip is broken.
-                return (tr('region {0}\nno material assigned').format(i + 1)
+                return (region_heading(None, i + 1)
                         if mode != DataTipMode.MINIMUM
                         else tr('region {0}').format(i + 1))
     except Exception:  # noqa: BLE001

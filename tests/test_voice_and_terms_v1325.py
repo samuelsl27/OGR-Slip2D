@@ -66,6 +66,9 @@ RETIRED = {
     r"\bGeneralized Anisotropic\b": "anisótropo generalizado",
     r"\bBlock Search\b": "búsqueda por bloques",
     r"\bpredeterminad[oa]s?\b": "por defecto",
+    # v0.1.418 (D355) -- a «run» is a «cálculo», as the Compute button says
+    # it; «corrida» stood beside «cálculo» and «análisis» for the same thing
+    r"\bcorridas?\b": "cálculo",
 }
 
 #: Usted imperatives the dictionary used; tú is the program's voice.

@@ -29,7 +29,6 @@ from PySide6.QtCore import QEvent, QObject, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
-    QFileDialog,
     QMainWindow,
     QMenu,
     QMessageBox,
@@ -76,6 +75,7 @@ _WITH_FIELDS = LIGHT_ATTRS + HEAVY_ATTRS
 # for the same one.
 
 from .canvas import CanvasView, DisplayOptions, ToolMode
+from .file_folders import get_open_file_name, get_save_file_name
 from .dialogs import (
     AboutDialog,
     AssignMaterialDialog,
@@ -278,7 +278,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.417"
+    VERSION = "0.1.418"
 
     def __init__(self) -> None:
         super().__init__()
@@ -646,8 +646,11 @@ class MainWindow(QMainWindow):
         self._mk("delete_vertex", "Delete Vertex",
                  lambda: self._set_tool(ToolMode.DELETE_VERTEX), "delete_vertex")
 
-        self._mk("assign_material", "Assign Material",
-                 lambda: self._set_tool(ToolMode.ASSIGN_MATERIAL), "assign")
+        # v0.1.418 (D355) -- the two entries of Properties say which is
+        # which: this one is the canvas mode alone, the other opens the panel
+        self._mk("assign_material", "Assign Material by Clicking",
+                 lambda: self._set_tool(ToolMode.ASSIGN_MATERIAL),
+                 "assign_by_click")
 
         self._mk("selection_filter", "Selection Filter...",
                  self.act_selection_filter, None, "Ctrl+F")
@@ -668,7 +671,7 @@ class MainWindow(QMainWindow):
         self._mk("del_support", "Delete Support",
                  self.act_delete_support_mode, "delete_support")
         self._mk("stretch_support", "Stretch Support",
-                 self.act_stretch_support_mode, "delete_support")
+                 self.act_stretch_support_mode, "stretch_support")
 
         # Surfaces — Surface Options is HERE (as per spec)
         self._mk("surface_opts", "Surface Options...",
@@ -741,7 +744,7 @@ class MainWindow(QMainWindow):
         self._mk("def_materials", "Define Materials...", self.act_define_materials, "define_materials")
         self._mk("def_support", "Define Support...",
                  self.act_define_support, "define_support")
-        self._mk("assign", "Assign Materials",
+        self._mk("assign", "Assign Materials Panel...",
                  self.act_open_assign_panel, "assign")
         # v0.1.7
         self._mk("def_tension_crack", "Define Tension Crack...",
@@ -1219,8 +1222,8 @@ class MainWindow(QMainWindow):
         # Asked before the file dialog, as New asks before anything.
         if not self._may_replace_project(tr("Open Project...")):
             return
-        path, _ = QFileDialog.getOpenFileName(
-            self, tr("Open Project..."), "",
+        path, _ = get_open_file_name(
+            self, tr("Open Project..."),
             tr("OGR Project (*.ogr *.json);;All Files (*)"),
         )
         if not path:
@@ -1251,8 +1254,8 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, tr("Error"), str(e))
 
     def act_save_as(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(
-            self, tr("Save As..."), "",
+        path, _ = get_save_file_name(
+            self, tr("Save As..."),
             tr("OGR Project (*.ogr);;All Files (*)"),
         )
         if not path:
@@ -1269,14 +1272,13 @@ class MainWindow(QMainWindow):
     @undo_step("Import DXF")
     def act_import_dxf(self) -> None:
         """v0.1.46 — import geometry from a DXF drawing (Phase D2)."""
-        from PySide6.QtWidgets import QFileDialog
 
         from ogr_core.dxf import apply_to_project
 
         from .dialogs.dxf_import_dialog import DxfImportDialog
 
-        path, _flt = QFileDialog.getOpenFileName(
-            self, tr("Import DXF..."), "",
+        path, _flt = get_open_file_name(
+            self, tr("Import DXF..."),
             tr("DXF drawings (*.dxf);;All files (*)"))
         if not path:
             return
@@ -1331,7 +1333,6 @@ class MainWindow(QMainWindow):
 
     def act_export_dxf(self) -> None:
         """v0.1.48 — write the model to a DXF drawing."""
-        from PySide6.QtWidgets import QFileDialog
 
         from ogr_core.dxf import export_dxf
 
@@ -1341,8 +1342,8 @@ class MainWindow(QMainWindow):
         dlg = DxfExportDialog(self.project, bool(results), self)
         if not dlg.exec():
             return
-        path, _flt = QFileDialog.getSaveFileName(
-            self, tr("Export DXF..."), "",
+        path, _flt = get_save_file_name(
+            self, tr("Export DXF..."),
             tr("DXF drawings (*.dxf);;All files (*)"))
         if not path:
             return
@@ -1378,12 +1379,13 @@ class MainWindow(QMainWindow):
         if not dlg.exec():
             return
         options = dlg.options
-        path, _ = QFileDialog.getSaveFileName(
-            self, tr("Generate Report"),
-            # v0.1.370 (D344) -- the proposed name and the filters in the
-            # interface's language ("Demo slope_report.pdf" in Spanish)
-            tr("{0}_report.pdf").format(self.project.name or tr("analysis")),
-            tr("PDF Files (*.pdf)"))
+        # v0.1.370 (D344) -- the proposed name and the filters in the
+        # interface's language ("Demo slope_report.pdf" in Spanish).
+        # v0.1.418 (D355) -- inside the dialogs' folder: a bare name was
+        # resolved against the program's working folder
+        path, _ = get_save_file_name(
+            self, tr("Generate Report"), tr("PDF Files (*.pdf)"),
+            tr("{0}_report.pdf").format(self.project.name or tr("analysis")))
         if not path:
             return
         if not path.lower().endswith(".pdf"):
@@ -2594,11 +2596,10 @@ class MainWindow(QMainWindow):
 
     @undo_step("Set annotation")
     def _add_image(self) -> None:
-        from PySide6.QtWidgets import QFileDialog
 
         from ogr_core.annotations import Annotation, AnnotationKind
-        path, _f = QFileDialog.getOpenFileName(
-            self, tr("Add Image..."), "",
+        path, _f = get_open_file_name(
+            self, tr("Add Image..."),
             tr("Images (*.png *.jpg *.jpeg *.bmp);;All files (*)"))
         if not path:
             return
@@ -3270,11 +3271,11 @@ class MainWindow(QMainWindow):
         a material that a region already references would change results
         without the user seeing it happen.
         """
-        from PySide6.QtWidgets import QFileDialog, QInputDialog
+        from PySide6.QtWidgets import QInputDialog
 
         from ogr_core.project import Project
-        path, _f = QFileDialog.getOpenFileName(
-            self, tr("Import Properties..."), "",
+        path, _f = get_open_file_name(
+            self, tr("Import Properties..."),
             tr("OGR projects (*.ogr);;All files (*)"))
         if not path:
             return
@@ -3308,10 +3309,10 @@ class MainWindow(QMainWindow):
         """The model view as a PNG."""
         from PySide6.QtCore import QRectF
         from PySide6.QtGui import QImage, QPainter
-        from PySide6.QtWidgets import QFileDialog, QInputDialog
+        from PySide6.QtWidgets import QInputDialog
 
-        path, _f = QFileDialog.getSaveFileName(
-            self, tr("Export Image..."), "",
+        path, _f = get_save_file_name(
+            self, tr("Export Image..."),
             tr("PNG (*.png);;All files (*)"))
         if not path:
             return
@@ -4231,9 +4232,10 @@ class MainWindow(QMainWindow):
         # the summary is said here and the notes go to the panel as they
         # are, which says them (``str()`` would drop the code).
         from .core_messages import note_text
+        # v0.1.418 (D355) -- with its full stop, in both languages
         lines = [tr("Design standard applied: %s — the reported value is an "
                     "over-design factor, not a factor of safety, and must "
-                    "exceed 1") % note_text(report.summary())]
+                    "exceed 1.") % note_text(report.summary())]
         lines += [n if isinstance(n, str) else str(n)
                   for n in (getattr(report, "notes", None) or [])]
         return lines
@@ -5858,9 +5860,9 @@ class MainWindow(QMainWindow):
         # its strength after it has been drawn.
         if b.btype not in (BoundaryType.MATERIAL, BoundaryType.WEAK_LAYER):
             self.ogr_status.showMessage(
-                tr("Assign Material applies to Material and Weak Layer "
-                   "boundaries only. Use Properties → Assign Materials to "
-                   "paint regions."),
+                tr("Assign Material by Clicking applies to Material and "
+                   "Weak Layer boundaries only. Use Properties → Assign "
+                   "Materials Panel to paint regions."),
                 3000,
             )
             return

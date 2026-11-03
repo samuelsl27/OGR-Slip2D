@@ -22,7 +22,6 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QDockWidget,
-    QFileDialog,
     QHeaderView,
     QLabel,
     QMainWindow,
@@ -39,6 +38,7 @@ from ogr_core.units.quantities import Quantity
 
 from .canvas import CanvasView
 from .disabled_reasons import gate
+from .file_folders import get_save_file_name
 from .disabled_reasons import install as install_disabled_reasons
 from .i18n import tr
 from .labels import method_name
@@ -2496,9 +2496,8 @@ class InterpretWindow(QMainWindow):
         if seepage is None or mesh is None:
             self._info(tr("Requires a computed groundwater analysis."))
             return
-        from PySide6.QtWidgets import QFileDialog
-        path, _f = QFileDialog.getSaveFileName(
-            self, tr("Export All Nodal Values..."), "",
+        path, _f = get_save_file_name(
+            self, tr("Export All Nodal Values..."),
             tr("CSV (*.csv);;All files (*)"))
         if not path:
             return
@@ -2573,9 +2572,8 @@ class InterpretWindow(QMainWindow):
         if prob is None or not prob.ok:
             self._info(tr("No probabilistic result."))
             return
-        from PySide6.QtWidgets import QFileDialog
-        path, _f = QFileDialog.getSaveFileName(
-            self, tr("Export Statistics Data..."), "",
+        path, _f = get_save_file_name(
+            self, tr("Export Statistics Data..."),
             tr("CSV (*.csv);;All files (*)"))
         if not path:
             return
@@ -2774,10 +2772,10 @@ class InterpretWindow(QMainWindow):
                 scientific=chk_sci.isChecked(), mark=self.legend._mark)
 
     def _export_image(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(
+        path, _ = get_save_file_name(
             # v0.1.370 (D344) -- the title through tr(): the census of
             # untranslated text did not see QFileDialog
-            self, tr("Export Image"), "", "PNG (*.png);;JPEG (*.jpg)"
+            self, tr("Export Image"), "PNG (*.png);;JPEG (*.jpg)"
         )
         if not path:
             return
@@ -2795,8 +2793,8 @@ class InterpretWindow(QMainWindow):
         if target is None or not getattr(target, "slices", None):
             self._info(tr("No slices available — run a compute first."))
             return
-        path, _ = QFileDialog.getSaveFileName(
-            self, tr("Export Slice Data"), "", "CSV (*.csv)")
+        path, _ = get_save_file_name(
+            self, tr("Export Slice Data"), "CSV (*.csv)")
         if not path:
             return
         rows = slice_rows(target)
@@ -2817,8 +2815,8 @@ class InterpretWindow(QMainWindow):
         if self.search_result is None:
             self._info(tr("No results to export."))
             return
-        path, _ = QFileDialog.getSaveFileName(
-            self, tr("Export Raw Data"), "", "CSV (*.csv)"
+        path, _ = get_save_file_name(
+            self, tr("Export Raw Data"), "CSV (*.csv)"
         )
         if not path:
             return
@@ -2891,9 +2889,9 @@ class InterpretWindow(QMainWindow):
                 tr("%d rows copied to the clipboard") % len(rows), 3000)
 
         def do_save():
-            path, _ = QFileDialog.getSaveFileName(
-                dlg, tr("Export Raw Data"), "",
-                tr("Text (*.txt);;CSV (*.csv)"))
+            path, _ = get_save_file_name(
+                self, tr("Export Raw Data"),
+                tr("Text (*.txt);;CSV (*.csv)"), parent=dlg)
             if not path:
                 return
             body = text.replace("\t", ",") if path.lower().endswith(".csv") \

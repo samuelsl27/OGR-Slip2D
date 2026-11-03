@@ -1581,10 +1581,12 @@ class _AdvancedPage(QWidget):
             "the other methods are not screened by it."))
         form.addRow("", self.chk_m_alpha)
 
+        # v0.1.418 (D355) -- without the reference's error code, which the
+        # note handed the reader as if it were a word of the program
         note = QLabel(tr(
             "The m-alpha check is ON by default, as in the reference, "
-            "which screens surfaces with it and reports them as error "
-            "-112. Surfaces it rejects keep their factor of safety and "
+            "which screens surfaces with it. Surfaces it rejects are "
+            "marked inadmissible: they keep their factor of safety and "
             "stay in the results; they are only barred from being the "
             "critical surface. Switch it off to see them compete."))
         note.setWordWrap(True)

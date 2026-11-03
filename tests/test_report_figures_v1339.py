@@ -594,15 +594,19 @@ class TestTheWindowAction:
 
             warning = critical = information
 
-        saved = (ReportDialog.exec, mw.QFileDialog, mw.QMessageBox)
+        # v0.1.418 (D355) -- the window asks for the file through
+        # ``ogr_gui.file_folders``, which starts it in a sensible folder:
+        # the dialog is swapped where that module looks it up
+        import ogr_gui.file_folders as ff
+        saved = (ReportDialog.exec, ff.QFileDialog, mw.QMessageBox)
         ReportDialog.exec = _exec
-        mw.QFileDialog, mw.QMessageBox = _Files, _Box
+        ff.QFileDialog, mw.QMessageBox = _Files, _Box
         try:
             w.act_generate_report()
             pdf = tmp / "r.pdf"
             return asked, (pdf.read_bytes() if pdf.exists() else None)
         finally:
-            ReportDialog.exec, mw.QFileDialog, mw.QMessageBox = saved
+            ReportDialog.exec, ff.QFileDialog, mw.QMessageBox = saved
             shutil.rmtree(tmp, ignore_errors=True)
 
     def test_the_options_come_first_and_the_figures_follow(self):

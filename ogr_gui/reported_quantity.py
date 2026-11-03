@@ -153,7 +153,7 @@ def statistics_factor_lines(factor_report=None) -> list:
     from .core_messages import note_text
     lines = [tr("Design standard applied to every sample: %s — the "
                 "statistics describe the over-design factor, not the factor "
-                "of safety") % note_text(factor_report.summary())]
+                "of safety.") % note_text(factor_report.summary())]
     lines += [n if isinstance(n, str) else str(n)
               for n in (getattr(factor_report, "notes", None) or [])]
     return lines

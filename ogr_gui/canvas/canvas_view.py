@@ -90,8 +90,9 @@ def _point_segment_distance(
 
 
 # ----------------------------------------------------------------------
-def _region_to_item(region, material):
-    """Turn a :class:`MaterialRegion` into a QGraphicsPathItem."""
+def _region_to_item(region, material, number: int = 1):
+    """Turn a :class:`MaterialRegion` into a QGraphicsPathItem; ``number``
+    is the region's, from 1, in ``resolve_regions()``'s order."""
     from PySide6.QtGui import QPainterPath, QPolygonF
     from PySide6.QtWidgets import QGraphicsPathItem
 
@@ -124,11 +125,11 @@ def _region_to_item(region, material):
     pen.setCosmetic(True)
     item.setPen(pen)
     item.setZValue(-1)
-    mat_name = getattr(material, "name", None) or tr("(unassigned)")
-    area = region.area
-    item.setToolTip(
-        tr('<b>Region</b><br>Material: {0}<br>Area: {1:.2f} m²').format(mat_name, area)
-    )
+    # v0.1.418 (D355) -- the head of the data tip, so the two tips of one
+    # region read alike: it was «Region / Material: … / Area: …» here
+    from ogr_gui.data_tips import region_heading
+    item.setToolTip(region_heading(material, number) + "\n"
+                    + tr("area: {0:.2f} m²").format(region.area))
     return item
 
 
@@ -614,10 +615,10 @@ class CanvasView(QGraphicsView):
                 regions = self.project.resolve_regions()
             except Exception:  # noqa: BLE001
                 regions = []
-            for region in regions:
+            for number, region in enumerate(regions, start=1):
                 mid = getattr(region, "material_id", None)
                 mat = self.project.material_by_id(mid) if mid else None
-                item = _region_to_item(region, mat)
+                item = _region_to_item(region, mat, number)
                 if item is not None:
                     scene.addItem(item)
 

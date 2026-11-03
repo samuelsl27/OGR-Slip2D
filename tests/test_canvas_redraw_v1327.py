@@ -101,7 +101,9 @@ class TestTheBoundaryTakesItsLineOnly:
         w = _shown_window(computed=False)
         try:
             assert _boundaries_at(w.canvas, 10.0, 10.0) == []
-            assert "Region" in _tooltip_at(w.canvas, 10.0, 10.0), \
+            # v0.1.418 (D355) -- the region's tip starts as the data tip
+            # does, «Silty clay  (region 1)»; it said «Region / Material: …»
+            assert "(region 1)" in _tooltip_at(w.canvas, 10.0, 10.0), \
                 _tooltip_at(w.canvas, 10.0, 10.0)
         finally:
             _done(w)
@@ -260,7 +262,8 @@ class TestTheDataTipIsSeen:
             assert "Silty clay" in on and "Mohr" in on, on
             off = self._decided(w, 10.0, 10.0, DataTipMode.NONE)
             assert off == ""
-            assert "Region" in _tooltip_at(w.canvas, 10.0, 10.0)
+            # v0.1.418 (D355) -- the region's own tip, in its new form
+            assert "(region 1)" in _tooltip_at(w.canvas, 10.0, 10.0)
         finally:
             _done(w)
 
