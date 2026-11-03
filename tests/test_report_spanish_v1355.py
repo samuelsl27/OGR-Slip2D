@@ -269,6 +269,16 @@ class TestWithoutTranslateItIsTheOldReport:
         # slice table writes φ -- a deliberate change of the English
         expected = [(k, t.replace(_GPL, _AGPL).replace(
             "Friction Angle [deg]", "Friction Angle [°]")) for k, t in _V1354]
+        # v0.1.417 (D351), two deliberate changes: «File» of a project never
+        # saved says so (it said the project's name, "Report", the title's
+        # text and so not a new entry), and the creation date is shown as
+        # the generation date (it was the ISO stamp, which has no letters
+        # and was dropped), so the first ``<date>`` is now its row's
+        expected.insert(expected.index(("p", "<b>File</b>")) + 1,
+                        ("p", "not saved"))
+        expected.remove(("p", "<date>"))
+        expected.insert(expected.index(("p", "<b>Date Created</b>")) + 1,
+                        ("p", "<date>"))
         said = _capture()
         assert said == expected, [x for x in said if x not in expected]
 

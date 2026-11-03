@@ -499,6 +499,10 @@ ALLOWED = (
     Allow("mod:ogr_gui.gc_guard._kept", ANY,
           "garbage the collector found on another thread, waiting to be "
           "freed on the main one: the runner frees it before every file"),
+    Allow("mod:ogr_core.report.report_generator._FONTS", FILLED_ONCE,
+          "the report's four font names, filled once by the first report "
+          "after registering DejaVu Sans with reportlab (v0.1.417, D351): a "
+          "function of matplotlib's installed fonts only"),
     Allow("mod:ogr_gui.core_messages._CATALOGUE", FILLED_ONCE,
           "the table of every message code, filled from constant tables the "
           "first time a message is shown. In the serial run that is in the "

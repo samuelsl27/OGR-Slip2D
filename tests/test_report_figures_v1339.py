@@ -114,29 +114,19 @@ def _images_in(pdf: bytes) -> int:
     return pdf.count(b"/Subtype /Image") - len(masks)
 
 
-def _page_text(pdf: bytes) -> bytes:
-    """The content streams of a PDF, decoded: reportlab writes them as
-    ASCII85 over Flate."""
-    import base64
-    import re
-    import zlib
-    out = b""
-    for m in re.finditer(rb"<<(.{0,400}?)>>\s*stream\r?\n(.*?)endstream", pdf,
-                         re.S):
-        head, body = m.group(1), m.group(2).strip()
-        if b"/Image" in head:
-            continue
-        try:
-            if b"ASCII85Decode" in head:
-                # reportlab ends the data with ``~>`` and does not open it
-                body = body.removeprefix(b"<~").removesuffix(b"~>")
-                body = base64.a85decode(body)
-            if b"FlateDecode" in head:
-                body = zlib.decompress(body)
-        except (ValueError, zlib.error):
-            continue
-        out += body
-    return out
+def _pdf_text(path) -> str:
+    """Every page's text of a PDF, as pdfium (QtPdf) reads it."""
+    from PySide6.QtPdf import QPdfDocument
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    doc = QPdfDocument()
+    doc.load(str(path))
+    text = "\n".join(doc.getAllText(i).text()
+                     for i in range(doc.pageCount()))
+    doc.close()
+    return text
+
+
 
 
 def _centres(sr, valid_only: bool):
@@ -217,16 +207,17 @@ class TestOneFigurePerMethod:
             generate_report(project, results, str(tmp / "with.pdf"),
                             figures=method_figures(project, results))
             generate_report(project, results, str(tmp / "without.pdf"))
-            on = _page_text((tmp / "with.pdf").read_bytes())
-            off = _page_text((tmp / "without.pdf").read_bytes())
+            # v0.1.417 (D351) -- read as pdfium reads it: in the embedded
+            # font the dash is a glyph of the subset, no longer the octal
+            # 227 of WinAnsi this test looked for in the content stream
+            on = _pdf_text(tmp / "with.pdf")
+            off = _pdf_text(tmp / "without.pdf")
             for mid in _METHODS:
                 name, fos = _method_name(mid), results[mid].critical.fos
-                # the dash is octal 227 in the font's encoding
-                caption = ("(Method: %s \\227 FS = %.4f)"
-                           % (name, fos)).encode()
+                caption = "Method: %s — FS = %.4f" % (name, fos)
                 assert on.count(caption) == off.count(caption) + 1, mid
-            assert b"(Critical Surface by Method)" in on
-            assert b"(Critical Surface by Method)" not in off
+            assert "Critical Surface by Method" in on
+            assert "Critical Surface by Method" not in off
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 

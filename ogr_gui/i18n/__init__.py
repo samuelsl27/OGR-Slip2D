@@ -6406,6 +6406,9 @@ _DICTS: dict[str, dict[str, str]] = {
             'No se encontró ninguna superficie crítica válida.',
         'Number of Slices':
             'Número de dovelas',
+        # v0.1.417 (D351) -- the «File» row of a project never saved
+        'not saved':
+            'sin guardar',
         'ODF':
             'FSD',
         'OGR Slip2D — Slope Stability Analysis':

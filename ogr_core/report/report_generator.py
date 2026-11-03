@@ -23,8 +23,10 @@ Author: Samuel Sáez López (UPCT)
 from __future__ import annotations
 
 import math
-from datetime import datetime
+import os
+from datetime import datetime, timezone
 from typing import Optional
+from xml.sax.saxutils import escape
 
 try:
     from reportlab.lib import colors
@@ -33,10 +35,88 @@ try:
     from reportlab.lib.units import mm
     from reportlab.platypus import (
         SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak,
+        HRFlowable,
     )
     _HAS_REPORTLAB = True
 except ImportError:  # pragma: no cover
     _HAS_REPORTLAB = False
+
+#: The format the report writes its dates in.
+STAMP_FORMAT = "%d/%m/%Y, %H:%M:%S"
+
+#: reportlab's default Frame pads its content by 6 pt on each side, so the
+#: width a flowable may take is the page's minus the margins minus these.
+_FRAME_PADDING = 6
+
+#: v0.1.417 (D351) -- the four faces the report is set in, DejaVu Sans,
+#: registered once and EMBEDDED in the PDF. With the 14 standard fonts
+#: nothing is embedded and the text is in WinAnsi: a viewer without
+#: Helvetica's metrics drew «[kN/m ]» for «[kN/m³]», and σ, φ, α or ≤ are
+#: not in WinAnsi at all. The files are the copy matplotlib ships (a
+#: dependency already), so nothing is installed; licence: Bitstream Vera,
+#: with DejaVu's changes in the public domain.
+_DEJAVU = {"regular": "DejaVuSans", "bold": "DejaVuSans-Bold",
+           "italic": "DejaVuSans-Oblique",
+           "boldItalic": "DejaVuSans-BoldOblique"}
+#: Only if matplotlib's copy cannot be read: the standard fonts, as before.
+_STANDARD = {"regular": "Helvetica", "bold": "Helvetica-Bold",
+             "italic": "Helvetica-Oblique",
+             "boldItalic": "Helvetica-BoldOblique"}
+_FONTS: dict = {}
+
+
+def report_fonts() -> dict:
+    """``{"regular", "bold", "italic", "boldItalic"}`` -> the font names
+    the report uses: DejaVu Sans, embedded (registered with reportlab on
+    the first call, as one family so that ``<b>`` and ``<i>`` find their
+    faces), or the standard Helvetica if its files cannot be read."""
+    if not _FONTS:
+        _FONTS.update(_register_dejavu() or _STANDARD)
+    return _FONTS
+
+
+def _register_dejavu() -> Optional[dict]:
+    try:
+        import matplotlib
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFError, TTFont
+    except ImportError:  # pragma: no cover - both are dependencies
+        return None
+    folder = os.path.join(matplotlib.get_data_path(), "fonts", "ttf")
+    try:
+        known = set(pdfmetrics.getRegisteredFontNames())
+        for name in _DEJAVU.values():
+            if name not in known:
+                pdfmetrics.registerFont(
+                    TTFont(name, os.path.join(folder, name + ".ttf")))
+    except (OSError, TTFError):
+        return None
+    pdfmetrics.registerFontFamily(
+        _DEJAVU["regular"], normal=_DEJAVU["regular"],
+        bold=_DEJAVU["bold"], italic=_DEJAVU["italic"],
+        boldItalic=_DEJAVU["boldItalic"])
+    return dict(_DEJAVU)
+
+
+def local_timestamp(text: str) -> str:
+    """``summary.date_created`` as the report writes its own dates: in local
+    time and as ``dd/mm/YYYY, HH:MM:SS`` (v0.1.417, D351).
+
+    The project stamps it in ISO 8601, in UTC and without the zone
+    (``Project.__init__``), so a stamp without a zone is read as UTC; one
+    with a zone is read with it. Anything else -- a date typed through the
+    API, a date with no time, which has no hour to move -- is shown as
+    written. The file keeps what it had: only the report converts."""
+    text = text or ""
+    if "T" not in text and " " not in text.strip():
+        return text
+    try:
+        when = datetime.fromisoformat(text.strip())
+    except ValueError:
+        return text
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    return when.astimezone().strftime(STAMP_FORMAT)
 
 
 # Method id → human-readable name (matches the reference program)
@@ -147,25 +227,38 @@ def generate_report(
     )
 
     styles = getSampleStyleSheet()
+    font = report_fonts()
+    # v0.1.417 (D351) -- the width a flowable may take, the same for the
+    # rules, the tables and the figures: they used the page's width minus
+    # the margins, 2 mm wider on each side than the frame lets them be
+    width = project_width(project)
     h_title = ParagraphStyle(
         "OGRTitle", parent=styles["Title"], fontSize=18,
+        fontName=font["bold"],
         textColor=colors.HexColor("#1a3a5c"), spaceAfter=4,
     )
     h_sub = ParagraphStyle(
         "OGRSub", parent=styles["Normal"], fontSize=11,
+        fontName=font["regular"],
         textColor=colors.HexColor("#456"), alignment=1, spaceAfter=14,
     )
+    # v0.1.417 (D351) -- a heading stays with what follows it: «Global
+    # Minimums» was left alone at the foot of page 1
     h_sec = ParagraphStyle(
         "OGRSection", parent=styles["Heading2"], fontSize=13,
+        fontName=font["bold"],
         textColor=colors.HexColor("#1a3a5c"), spaceBefore=12, spaceAfter=6,
-        borderWidth=0, leading=16,
+        borderWidth=0, leading=16, keepWithNext=1,
     )
     h_method = ParagraphStyle(
         "OGRMethod", parent=styles["Heading3"], fontSize=11,
+        fontName=font["boldItalic"],
         textColor=colors.HexColor("#2a5a8c"), spaceBefore=8, spaceAfter=3,
+        keepWithNext=1,
     )
     body = ParagraphStyle(
         "OGRBody", parent=styles["Normal"], fontSize=9, leading=12,
+        fontName=font["regular"],
     )
 
     story = []
@@ -175,18 +268,19 @@ def generate_report(
         story.append(_hrule())
 
     def _hrule():
-        t = Table([[""]], colWidths=[doc.width])
-        t.setStyle(TableStyle([
-            ("LINEBELOW", (0, 0), (-1, -1), 0.8,
-             colors.HexColor("#1a3a5c")),
-            ("TOPPADDING", (0, 0), (-1, -1), 0),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-        ]))
-        return t
+        # The frame's width, as the tables under it: the one-cell table it
+        # was took the page's and crossed their edges
+        rule = HRFlowable(width=width, thickness=0.8,
+                          color=colors.HexColor("#1a3a5c"),
+                          spaceBefore=0, spaceAfter=2)
+        # the platypus way to say «with the next one»: the document groups
+        # the heading, this rule and what follows in one KeepTogether
+        rule.keepWithNext = 1
+        return rule
 
     def kv_table(rows):
         t = Table([[Paragraph(f"<b>{k}</b>", body), Paragraph(str(v), body)]
-                   for k, v in rows], colWidths=[55 * mm, doc.width - 55 * mm])
+                   for k, v in rows], colWidths=[55 * mm, width - 55 * mm])
         t.setStyle(TableStyle([
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
             ("TOPPADDING", (0, 0), (-1, -1), 1),
@@ -201,20 +295,29 @@ def generate_report(
 
     # ---- 1. Project Summary ---------------------------------------
     section(T("Project Summary"))
+    # v0.1.417 (D351) -- «File» is the file the project was saved in; it
+    # said the project's name, and the demo had never been saved
+    path = getattr(project, "file_path", None)
+    now = datetime.now().strftime(STAMP_FORMAT)
     story.append(kv_table([
         (T("Project Title"), title),
-        (T("File"), getattr(project, "name", "—")),
+        (T("File"), escape(str(path)) if path else T("not saved")),
         (T("Author"), author or "—"),
         (T("Company"), company or "—"),
-        (T("Date Created"), summary.date_created
-         or datetime.now().strftime("%d/%m/%Y, %H:%M:%S")),
-        (T("Report Generated"),
-         datetime.now().strftime("%d/%m/%Y, %H:%M:%S")),
+        # v0.1.417 (D351) -- in local time and in the format of the line
+        # below: it was the stored ISO stamp, in UTC and to the microsecond
+        (T("Date Created"), local_timestamp(summary.date_created) or now),
+        (T("Report Generated"), now),
     ]))
     if summary.comments:
+        # v0.1.417 -- one line per comment: ``comments`` is a list, and the
+        # report printed its Python repr, brackets and quotes included
+        lines = ([summary.comments] if isinstance(summary.comments, str)
+                 else list(summary.comments))
         story.append(Spacer(1, 4))
-        story.append(Paragraph("<b>%s</b> %s" % (T("Comments:"),
-                                                 summary.comments), body))
+        story.append(Paragraph("<b>%s</b> %s" % (
+            T("Comments:"),
+            "<br/>".join(escape(str(c)) for c in lines)), body))
 
     # ---- 2. General Settings --------------------------------------
     units = project.settings.units
@@ -270,7 +373,6 @@ def generate_report(
     # carries each slice's weight factor, which comes from the result.
     factored = bool(getattr(factor_report, "applied", False))
     if factored:
-        from xml.sax.saxutils import escape
         story.append(Spacer(1, 6))
         story.append(Paragraph("<b>%s</b>" % T("Design Standard"), body))
         story.append(kv_table([
@@ -342,7 +444,7 @@ def generate_report(
     if figures:
         section(T("Critical Surface by Method"))
         story.extend(_figure_flowables(figures, results, fs_short,
-                                       doc.width, h_method, T, name_of))
+                                       width, h_method, T, name_of))
 
     # ---- 6. Valid / Invalid Surfaces ------------------------------
     section(T("Valid / Invalid Surfaces"))
@@ -362,8 +464,10 @@ def generate_report(
             at = getattr(res, "attempts", 0)
             vi_rows.append([name_of(mid), str(v), str(iv),
                             str(v + iv), str(at) if at else "—"])
-    t = Table(vi_rows,
-              colWidths=[64 * mm, 24 * mm, 24 * mm, 24 * mm, 28 * mm])
+    # v0.1.417 (D351) -- at the frame's width, as the rule above it: at
+    # 164 mm the rule crossed its edges
+    cw = [64, 24, 24, 24, 28]
+    t = Table(vi_rows, colWidths=[c * width / sum(cw) for c in cw])
     t.setStyle(_grid_style())
     story.append(t)
 
@@ -388,7 +492,7 @@ def generate_report(
     # ---- Footer ----------------------------------------------------
     def _footer(canvas, doc_):
         canvas.saveState()
-        canvas.setFont("Helvetica", 7)
+        canvas.setFont(font["regular"], 7)
         canvas.setFillColor(colors.HexColor("#888"))
         # v0.1.355 -- the program's licence, AGPL-3.0-or-later: the footer
         # said GPL-3.0, which is not the licence of this program
@@ -463,7 +567,8 @@ def _grid_style():
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1a3a5c")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
         ("FONTSIZE", (0, 0), (-1, -1), 8),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTNAME", (0, 0), (-1, -1), report_fonts()["regular"]),
+        ("FONTNAME", (0, 0), (-1, 0), report_fonts()["bold"]),
         ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#bbb")),
         ("ROWBACKGROUNDS", (0, 1), (-1, -1),
          [colors.white, colors.HexColor("#eef2f6")]),
@@ -516,9 +621,12 @@ def _materials_table(project, body, T=_same):
 
 
 def project_width(project):
+    """The width a flowable may take on the report's page: A4 minus the
+    18 mm margins minus the frame's padding (v0.1.417, D351 -- without the
+    padding the full-width tables stood 2 mm out of the frame each side)."""
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm
-    return A4[0] - 36 * mm
+    return A4[0] - 36 * mm - 2 * _FRAME_PADDING
 
 
 def mm_name(mat):

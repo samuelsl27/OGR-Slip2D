@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import contextlib
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Optional
 from uuid import uuid4
@@ -45,7 +45,10 @@ class Project:
 
         self.settings: ProjectSettings = ProjectSettings()
         self.settings.summary.title = name
-        self.settings.summary.date_created = datetime.utcnow().isoformat()
+        # In UTC and without the zone, as every file has it: ``utcnow`` is
+        # deprecated since Python 3.12, and this writes the same text
+        self.settings.summary.date_created = datetime.now(
+            timezone.utc).replace(tzinfo=None).isoformat()
 
         # Model content
         self.boundaries: list[Boundary] = []
