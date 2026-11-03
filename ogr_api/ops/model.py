@@ -318,7 +318,9 @@ def boundary_add(ws, type: str, points: list,
                 "regions": len(project.resolve_regions()),
                 "notes": notes}
 
-    return ws.mutate(project_id, f"Add {btype.display_name}", edit)
+    # v0.1.414 (D349) — the name the window gives the same step
+    from ogr_core.project.commands import add_boundary_step_name
+    return ws.mutate(project_id, add_boundary_step_name(btype), edit)
 
 
 _EDIT_OPS = ("set_vertices", "translate", "move_vertex", "insert_vertex",

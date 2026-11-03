@@ -278,7 +278,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.413"
+    VERSION = "0.1.414"
 
     def __init__(self) -> None:
         super().__init__()
@@ -2581,8 +2581,10 @@ class MainWindow(QMainWindow):
             self._info(tr("This annotation has no usable geometry."))
             return
         # v0.1.305 (D292) — one undo step, named as boundary_add names it
+        # (v0.1.414, D349: by the one rule in ogr_core)
+        from ogr_core.project.commands import add_boundary_step_name
         self._model_step(
-            f"Add {btype.display_name}",
+            add_boundary_step_name(btype),
             lambda: self.project.add_boundary(Boundary(
                 btype=btype,
                 polyline=Polyline(vertices=[Vertex(x, y) for x, y in pts],

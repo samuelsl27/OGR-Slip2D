@@ -42,10 +42,28 @@ class Command(ABC):
 
 
 # ----------------------------------------------------------------------
+def add_boundary_step_name(btype) -> str:
+    """The undo step of adding a boundary of ``btype``: "Add Weak Layer",
+    "Add Block Search Object"… The English name is what an agent reads in
+    ``project_history``; the window translates it.
+
+    v0.1.414 (D349) — the one rule for it. The canvas called every added
+    boundary "Add Boundary", whatever it was, while ``boundary_add`` and
+    Convert Tool to Boundary each wrote ``f"Add {display_name}"``: the same
+    object had two names depending on who drew it.
+    """
+    return f"Add {btype.display_name}"
+
+
 @dataclass
 class AddBoundaryCommand(Command):
     boundary: Boundary
-    description: str = "Add Boundary"
+    #: None names the step by the boundary's type (D349)
+    description: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if self.description is None:
+            self.description = add_boundary_step_name(self.boundary.btype)
 
     def execute(self, project: Project) -> None:
         project.add_boundary(self.boundary)

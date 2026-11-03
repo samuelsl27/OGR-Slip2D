@@ -720,13 +720,16 @@ class TestTheNames:
     def test_every_step_name_has_spanish(self):
         from ogr_gui.i18n import _DICTS
         names = _literal_step_names()
+        # v0.1.414 (D349) — "Add Boundary" left the literals: an added
+        # boundary is named by its type (the next test)
         assert {"Set material", "Change settings", "Compute groundwater",
-                "Add Boundary", "Change slope angle"} <= names, names
+                "Remove Boundary", "Change slope angle"} <= names, names
         missing = sorted(n for n in names if n not in _DICTS["es"])
         assert not missing, missing
 
     def test_an_add_of_every_boundary_type_has_spanish(self):
-        """``f"Add {btype.display_name}"`` (boundary_add, the canvas)."""
+        """``add_boundary_step_name`` (boundary_add, the canvas, Convert
+        Tool to Boundary)."""
         from ogr_core.geometry import BoundaryType
         from ogr_gui.i18n import _DICTS
         missing = [f"Add {b.display_name}" for b in BoundaryType

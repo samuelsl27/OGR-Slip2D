@@ -2362,7 +2362,6 @@ _DICTS: dict[str, dict[str, str]] = {
         "Redone: {0}": "Rehecho: {0}",
         "(kept, changed since: {0})": "(se conserva lo cambiado después: {0})",
         "Finish the edit in progress first.": "Termina antes la edición en curso.",
-        "Add Boundary": "Añadir contorno",
         "Remove Boundary": "Eliminar contorno",
         "Add Material": "Añadir material",
         "Add Distributed Load": "Añadir carga distribuida",
