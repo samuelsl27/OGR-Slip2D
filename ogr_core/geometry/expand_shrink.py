@@ -182,7 +182,13 @@ def expand_shrink_external(
     # Ensure CCW and build Polyline
     if _signed_area(new_verts) < 0:
         new_verts = list(reversed(new_verts))
-    new_pline = Polyline(vertices=_dedupe(new_verts), closed=True)
+    # v0.1.415 (D353) — the two cut points are vertices of the new External
+    # whatever the shape, and where the polyline leaves the old edge in its
+    # own direction they are no corner: expanding the demo to the right left
+    # (50, 0) and (50, 15) on its new bottom and top edges. Dropped when they
+    # lie on the segment of their neighbours; any other vertex is the user's.
+    new_verts = _drop_straight(_dedupe(new_verts), (cut1_v, cut2_v))
+    new_pline = Polyline(vertices=new_verts, closed=True)
 
     removed_arc = None
     if len(removed_verts) >= 2:
@@ -358,6 +364,36 @@ def _splice(a, b):
     the join. (Placeholder kept for readability — not used in the
     streamlined algorithm above.)"""
     return list(a) + list(b)
+
+
+def _drop_straight(verts: List[Vertex], candidates) -> List[Vertex]:
+    """``verts`` (a closed ring) without those of ``candidates`` that lie
+    on the segment between their two neighbours.
+
+    The test is relative to the ring's size (the project's rule for
+    geometric tolerances): the distance to the neighbours' line under 1e-9
+    of the bounding-box diagonal, and the point between them, so that a
+    spike back along the same line is kept. Area and shape do not change.
+    """
+    from .cleanup import _perpendicular_distance
+
+    xs = [v.x for v in verts]
+    ys = [v.y for v in verts]
+    tol = 1e-9 * math.hypot(max(xs) - min(xs), max(ys) - min(ys))
+    out = list(verts)
+    for c in candidates:
+        if len(out) <= 3:
+            break
+        for i, v in enumerate(out):
+            if abs(v.x - c.x) > tol or abs(v.y - c.y) > tol:
+                continue
+            a, b = out[i - 1], out[(i + 1) % len(out)]
+            between = ((v.x - a.x) * (b.x - v.x)
+                       + (v.y - a.y) * (b.y - v.y)) > 0.0
+            if between and _perpendicular_distance(v, a, b) <= tol:
+                del out[i]
+            break
+    return out
 
 
 def _dedupe(verts: List[Vertex], tol: float = 1e-9) -> List[Vertex]:

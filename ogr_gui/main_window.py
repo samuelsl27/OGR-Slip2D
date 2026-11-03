@@ -278,7 +278,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.414"
+    VERSION = "0.1.415"
 
     def __init__(self) -> None:
         super().__init__()
@@ -6152,9 +6152,9 @@ class MainWindow(QMainWindow):
             new_b = g_scale(orig, pivot, sx, sy)
             new_b.id = orig.id
             self.command_stack.do(self.project, ReplaceBoundaryCommand(index=idx, new_boundary=new_b))
-            self.ogr_status.showMessage(
-                tr('Scaled {0} by ({1:.3f}, {2:.3f})').format(orig.name, sx, sy), 2000
-            )
+            factor = ("%g" % sx if sx == sy else "(%g, %g)" % (sx, sy))
+            self._transform_done(tr("Scaled ×{0}: {1}").format(
+                factor, self._boundary_label(orig)))
 
     def act_rotate_boundary(self, preselected_idx: Optional[int] = None,
                             pivot: Optional[tuple] = None) -> None:
@@ -6171,9 +6171,31 @@ class MainWindow(QMainWindow):
             new_b = g_rotate(orig, pivot, angle)
             new_b.id = orig.id
             self.command_stack.do(self.project, ReplaceBoundaryCommand(index=idx, new_boundary=new_b))
-            self.ogr_status.showMessage(
-                tr('Rotated {0} by {1:.2f}°').format(orig.name, angle), 2000
-            )
+            self._transform_done(tr("Rotated {0:g}°: {1}").format(
+                angle, self._boundary_label(orig)))
+
+    @staticmethod
+    def _boundary_label(boundary) -> str:
+        """A boundary's name as the user reads it: its type's name in the
+        interface's language when it keeps the default name (the stored name
+        is the English type name), the name given otherwise."""
+        from .labels import boundary_type_label
+        if boundary.name == boundary.btype.display_name:
+            return boundary_type_label(boundary.btype)
+        return boundary.name
+
+    def _transform_done(self, message: str) -> None:
+        """The status line after a Scale or a Rotate.
+
+        v0.1.415 (D353) — the fifth interface test saw Rotate's message and
+        not Scale's. Measured: nothing overwrote it. Both lasted 2 s, and both
+        were cut where the indicators begin (~240 px left at 1200 px:
+        "External Boundary escalado…", "External Boundary rotado 9…"), the
+        result first to go. Now they share one form, the result first and
+        the boundary's name after it in the interface's language, for 6 s
+        (as an added annotation's).
+        """
+        self.ogr_status.showMessage(message, 6000)
 
     def act_expand_shrink(self, preselected_idx: Optional[int] = None) -> None:
         """Expand or shrink the External Boundary.

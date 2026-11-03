@@ -6767,10 +6767,9 @@ _DICTS: dict[str, dict[str, str]] = {
             "No hay ninguna región en ({0:.2f}, {1:.2f}).",
         "Cannot delete — boundary must keep at least 2 vertices.":
             "No se puede eliminar: el contorno debe conservar al menos 2 vértices.",
-        "Scaled {0} by ({1:.3f}, {2:.3f})":
-            "{0} escalado ({1:.3f}, {2:.3f})",
-        "Rotated {0} by {1:.2f}°":
-            "{0} rotado {1:.2f}°",
+        # v0.1.415 (D353) — the result first, the boundary after it
+        "Scaled ×{0}: {1}": "Escalado ×{0}: {1}",
+        "Rotated {0:g}°: {1}": "Rotado {0:g}°: {1}",
         "Expand / Shrink":
             "Expandir / contraer",
         "No External Boundary in the project.":

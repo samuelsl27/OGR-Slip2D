@@ -170,6 +170,21 @@ class EditCoordinatesDialog(QDialog):
 
 
 # ======================================================================
+def _pivot_note() -> QLabel:
+    """The note under the pivot of Scale and Rotate, the same in both.
+
+    v0.1.415 (D353) — only Scale had it, and both dialogs open with the
+    pivot clicked on the canvas filled in.
+    """
+    # v0.1.336 (D142b) — it said "Pivot defaults to (0, 0). Use the
+    # boundary centroid by leaving it at zero…", and (0, 0) was never the
+    # centroid
+    note = QLabel(tr("<i>The pivot is the point clicked on the canvas; "
+                     "type another one here if you need to.</i>"))
+    note.setWordWrap(True)
+    return note
+
+
 class ScaleDialog(QDialog):
     """Scale factor input dialog.
 
@@ -223,14 +238,7 @@ class ScaleDialog(QDialog):
         form.addRow(tr("Pivot X:"), self.spn_px)
         form.addRow(tr("Pivot Y:"), self.spn_py)
         root.addLayout(form)
-
-        # v0.1.336 (D142b) — it said "Pivot defaults to (0, 0). Use the
-        # boundary centroid by leaving it at zero…", and (0, 0) was never the
-        # centroid
-        note = QLabel(tr("<i>The pivot is the point clicked on the canvas; "
-                         "type another one here if you need to.</i>"))
-        note.setWordWrap(True)
-        root.addWidget(note)
+        root.addWidget(_pivot_note())
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
@@ -263,6 +271,8 @@ class RotateDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(tr("Rotate Boundary"))
         self.resize(320, 180)
+        # the wrapped note, as in ScaleDialog (D321)
+        hold_wrapped_height(self)
         root = QVBoxLayout(self)
         form = QFormLayout()
         self.spn_angle = QDoubleSpinBox()
@@ -280,6 +290,7 @@ class RotateDialog(QDialog):
         form.addRow(tr("Pivot X:"), self.spn_px)
         form.addRow(tr("Pivot Y:"), self.spn_py)
         root.addLayout(form)
+        root.addWidget(_pivot_note())
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)

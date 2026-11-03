@@ -1685,7 +1685,16 @@ class CanvasView(QGraphicsView):
 
     def _clear_transform_target(self) -> None:
         """Forget the boundary of a Scale / Rotate in progress, and its
-        ghost."""
+        ghost.
+
+        v0.1.415 (D353) — and the snap marker of the pivot: the pivot click
+        resolves the snap, the mode never moves it again (``mouseMoveEvent``
+        does not snap in it), and the orange circle stayed on the pivot after
+        the dialog — the pattern of D323.
+        """
+        if self._last_snap is not None:
+            self._last_snap = None
+            self.viewport().update()
         ghost = self._transform_ghost
         self._transform_ghost = None
         self._transform_target = None
@@ -1710,6 +1719,11 @@ class CanvasView(QGraphicsView):
     def _cancel_drawing(self) -> None:
         self._draw_points = []
         self._clear_draw_preview()
+        # v0.1.415 (D353) — the snap marker goes with the drawing, as when it
+        # finishes (``_finish_drawing``)
+        if self._last_snap is not None:
+            self._last_snap = None
+            self.viewport().update()
         self.status_message.emit("Drawing cancelled.")
 
     def _clear_draw_preview(self) -> None:
