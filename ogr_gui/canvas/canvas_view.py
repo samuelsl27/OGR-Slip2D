@@ -18,6 +18,7 @@ Author: Samuel Sáez López (UPCT)
 from __future__ import annotations
 
 import math
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Optional
 
@@ -312,6 +313,11 @@ class CanvasView(QGraphicsView):
         # v0.1.331 (D329a) — annotations drawn on THIS canvas only and never
         # stored: the dimensions Interpret leaves, which go with its window
         self.overlay_annotations: list = []
+        # v0.1.413 (D350) — the annotation items of the scene, built again
+        # alone when the theme changes or a figure goes on white paper
+        # (``_draw_annotations``), and whether they are drawn for paper
+        self._annotation_items: list = []
+        self._annotations_on_paper = False
 
         # Tool-mode / interaction
         self._tool_mode = ToolMode.SELECT
@@ -570,6 +576,7 @@ class CanvasView(QGraphicsView):
         scene.clear()
         self._result_items.clear()
         self._boundary_items.clear()
+        self._annotation_items.clear()
         # v0.1.312 (D307) — cleared with the scene; a drag in progress
         # draws it again on its next move
         self._drag_ghost = None
@@ -742,15 +749,47 @@ class CanvasView(QGraphicsView):
 
         # v0.1.330 (D332) — the annotation layer, over the model: it was
         # stored, edited and shown or hidden, and drawn by nothing
-        from .annotation_items import annotation_items
-        for annotation in self.project.annotations.ordered():
-            for item in annotation_items(annotation):
-                scene.addItem(item)
-        for annotation in self.overlay_annotations:
-            for item in annotation_items(annotation):
-                scene.addItem(item)
+        self._draw_annotations()
 
         self.viewport().update()
+
+    def _draw_annotations(self) -> None:
+        """Draw the annotation layer and this canvas's overlays again, and
+        nothing else (v0.1.413, D350: a change of theme, and a figure on
+        white paper, recolour them without redrawing the model)."""
+        scene = self.scene()
+        for item in self._annotation_items:
+            try:
+                if item.scene() is scene:
+                    scene.removeItem(item)
+            except RuntimeError:     # the scene was rebuilt: the item is gone
+                pass
+        self._annotation_items.clear()
+        if self.project is None:
+            return
+        from .annotation_items import annotation_items
+        for annotation in (list(self.project.annotations.ordered())
+                           + list(self.overlay_annotations)):
+            for item in annotation_items(
+                    annotation, on_paper=self._annotations_on_paper):
+                scene.addItem(item)
+                self._annotation_items.append(item)
+
+    @contextmanager
+    def on_paper(self):
+        """Draw the annotations with their stored colours for the block.
+
+        v0.1.413 (D350) — Export Image and Print render the scene on white
+        paper, so the ink the dark theme gives a default-coloured annotation
+        would vanish there; the paper gets what the DXF and the PNG get.
+        """
+        self._annotations_on_paper = True
+        self._draw_annotations()
+        try:
+            yield
+        finally:
+            self._annotations_on_paper = False
+            self._draw_annotations()
 
     def _type_visible(self, btype: BoundaryType) -> bool:
         opts = self.display_options
@@ -3496,9 +3535,12 @@ class CanvasView(QGraphicsView):
 
     def retheme(self) -> None:
         """The paper, the grid and the ruler of the active theme (v0.1.316,
-        D301). What is drawn on them keeps its colours."""
+        D301). What is drawn on them keeps its colours — except an
+        annotation with the default colour, which is the theme's ink
+        (v0.1.413, D350)."""
         self.setBackgroundBrush(
             QBrush(QColor(_bg(self.display_options.grayscale))))
+        self._draw_annotations()
         self.viewport().update()
 
 

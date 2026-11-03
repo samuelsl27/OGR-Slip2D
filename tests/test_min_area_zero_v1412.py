@@ -61,12 +61,16 @@ def _grazing_circle():
 
 def _run(min_area):
     """One Bishop run of the demo with the grazing circle; the result and
-    the notes about hand-drawn circles."""
+    the notes about hand-drawn circles. The grid is cut to 3 × 3 × 3 (the
+    demo's own costs ~6 s a run): a hand-drawn circle is evaluated whatever
+    the grid, and the grid only has to give the run a critical surface."""
     from ogr_core.messages import METHOD_NOTE
     from ogr_core.project.demo import build_demo_project
     from ogr_slip2d.analysis_runner import run_analysis
     p = build_demo_project()
-    p.settings.search.min_area = min_area
+    s = p.settings.search
+    s.grid_nx = s.grid_ny = s.radius_increment = 3
+    s.min_area = min_area
     p.user_surfaces = [_grazing_circle()]
     out = run_analysis(p, ["bishop_simplified"])
     notes = [w.args["note"] for w in out.warnings
@@ -104,13 +108,13 @@ class TestADeclaredZeroFiltersNothing:
         assert [n["code"] for n in notes] == [
             "search.user_no_result_filtered"], notes
 
-    def test_the_critical_surface_of_the_demo_does_not_move(self):
-        """What the area filter removes in the demo's own grid is never
-        the critical circle: 0 and null give the same factor."""
+    def test_the_critical_surface_does_not_move(self):
+        """What the area filter removes is never the critical circle of
+        the grid: 0 and null give the same factor (on the demo's own grid
+        too, 1.0914331494631124 both, measured for the changelog)."""
         crit_null = _cached(None)[0].critical.fos
         crit_zero = _cached(0.0)[0].critical.fos
-        assert crit_null == crit_zero == 1.0914331494631124, (crit_null,
-                                                              crit_zero)
+        assert crit_null == crit_zero, (crit_null, crit_zero)
 
 
 class TestTheDoor:

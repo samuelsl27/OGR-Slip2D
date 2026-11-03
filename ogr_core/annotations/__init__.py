@@ -3,6 +3,7 @@
 """Annotation layer: drawing primitives that take no part in the analysis."""
 from .annotation import (  # noqa: F401
     CONVERTIBLE_KINDS,
+    DEFAULT_COLOUR,
     Annotation,
     AnnotationKind,
     AnnotationLayer,
@@ -12,5 +13,5 @@ from .annotation import (  # noqa: F401
 
 __all__ = [
     "Annotation", "AnnotationKind", "AnnotationStyle", "AnnotationLayer",
-    "to_boundary_points", "CONVERTIBLE_KINDS",
+    "to_boundary_points", "CONVERTIBLE_KINDS", "DEFAULT_COLOUR",
 ]

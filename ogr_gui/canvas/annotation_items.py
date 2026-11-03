@@ -28,7 +28,7 @@ from PySide6.QtGui import (QBrush, QColor, QFont, QPainterPath, QPen,
 from PySide6.QtWidgets import (QGraphicsItem, QGraphicsPathItem,
                                QGraphicsPixmapItem, QGraphicsSimpleTextItem)
 
-from ogr_core.annotations import Annotation, AnnotationKind
+from ogr_core.annotations import DEFAULT_COLOUR, Annotation, AnnotationKind
 from ogr_core.annotations import drawing as d
 from ogr_core.annotations.drawing import (ARC_PX, ARROW_PX,  # noqa: F401
                                           CROSS_PX, TICK_PX)
@@ -42,12 +42,16 @@ _LINE_STYLES = {"solid": Qt.SolidLine, "dash": Qt.DashLine,
                 "dot": Qt.DotLine, "dashdot": Qt.DashDotLine}
 
 
-def annotation_items(annotation: Annotation) -> list:
+def annotation_items(annotation: Annotation, on_paper: bool = False) -> list:
     """The graphics items that draw ``annotation``, in model coordinates;
-    none when it is hidden or has too few points to draw."""
+    none when it is hidden or has too few points to draw.
+
+    ``on_paper`` — for a figure on white paper (Export Image, Print): the
+    stored colours, whatever the canvas's theme (v0.1.413, D350).
+    """
     items = []
     for prim in d.primitives(annotation):
-        items += _ITEMS[type(prim)](prim, annotation)
+        items += _ITEMS[type(prim)](prim, annotation, on_paper)
     z = Z_IMAGE if annotation.kind == AnnotationKind.IMAGE else Z_ANNOTATION
     for item in items:
         # z_order keeps the layer's own stacking among annotations
@@ -56,9 +60,27 @@ def annotation_items(annotation: Annotation) -> list:
 
 
 # ----------------------------------------------------------------------
-def _pen(annotation: Annotation) -> QPen:
+def _ink(colour: str, on_paper: bool) -> QColor:
+    """The colour an annotation is drawn with.
+
+    v0.1.413 (D350) — the DEFAULT colour is the light theme's ink, and the
+    dark canvas drew it as stored: about 1.1:1 on its paper, and only the
+    letters over the grey grid could be read. On the screen it is the
+    theme's ink (the same ``#202020`` in the light theme); a colour chosen
+    by hand, and anything on white paper, is drawn as stored. What is saved
+    in the .ogr does not change.
+    """
+    colour = QColor(colour)
+    if not on_paper and colour == QColor(DEFAULT_COLOUR):
+        from ogr_gui.themes import theme_color
+        return QColor(theme_color("ink"))
+    return colour
+
+
+def _pen(annotation: Annotation, on_paper: bool) -> QPen:
     style = annotation.style
-    pen = QPen(QColor(style.colour), max(float(style.line_width), 0.0))
+    pen = QPen(_ink(style.colour, on_paper),
+               max(float(style.line_width), 0.0))
     pen.setStyle(_LINE_STYLES.get(style.line_style, Qt.SolidLine))
     pen.setCosmetic(True)
     return pen
@@ -77,7 +99,7 @@ def _screen_item(item, at) -> QGraphicsItem:
     return item
 
 
-def _stroke(s: d.Stroke, annotation: Annotation) -> list:
+def _stroke(s: d.Stroke, annotation: Annotation, on_paper: bool) -> list:
     path = QPainterPath()
     path.moveTo(*s.points[0])
     for p in s.points[1:]:
@@ -85,7 +107,7 @@ def _stroke(s: d.Stroke, annotation: Annotation) -> list:
     if s.closed:
         path.closeSubpath()
     item = QGraphicsPathItem(path)
-    pen = _pen(annotation)
+    pen = _pen(annotation, on_paper)
     if s.dashed:
         pen.setStyle(Qt.DashLine)
     item.setPen(pen)
@@ -99,9 +121,9 @@ def _stroke(s: d.Stroke, annotation: Annotation) -> list:
     return [item]
 
 
-def _mark(m: d.Mark, annotation: Annotation) -> list:
+def _mark(m: d.Mark, annotation: Annotation, on_paper: bool) -> list:
     path = QPainterPath()
-    pen = _pen(annotation)
+    pen = _pen(annotation, on_paper)
     pen.setStyle(Qt.SolidLine)
     brush = Qt.NoBrush
     rotation = 0.0
@@ -110,7 +132,7 @@ def _mark(m: d.Mark, annotation: Annotation) -> list:
         path.lineTo(-ARROW_PX, -ARROW_PX / 2.5)
         path.lineTo(-ARROW_PX, ARROW_PX / 2.5)
         path.closeSubpath()
-        brush = QBrush(QColor(annotation.style.colour))
+        brush = QBrush(_ink(annotation.style.colour, on_paper))
         rotation = _screen(m.angle)
     elif m.kind == "tick":
         path.moveTo(0.0, -TICK_PX)
@@ -127,7 +149,7 @@ def _mark(m: d.Mark, annotation: Annotation) -> list:
         path.lineTo(CROSS_PX, 0.0)
         path.moveTo(0.0, -CROSS_PX)
         path.lineTo(0.0, CROSS_PX)
-        pen = _pen(annotation)
+        pen = _pen(annotation, on_paper)
     else:
         return []
     item = QGraphicsPathItem(path)
@@ -137,12 +159,12 @@ def _mark(m: d.Mark, annotation: Annotation) -> list:
     return [_screen_item(item, m.at)]
 
 
-def _label(lab: d.Label, annotation: Annotation) -> list:
+def _label(lab: d.Label, annotation: Annotation, on_paper: bool) -> list:
     item = QGraphicsSimpleTextItem(lab.text)
     font = QFont()
     font.setPointSizeF(max(float(annotation.style.font_size), 1.0))
     item.setFont(font)
-    item.setBrush(QBrush(QColor(annotation.style.colour)))
+    item.setBrush(QBrush(_ink(annotation.style.colour, on_paper)))
     r = item.boundingRect()
     w, h = r.width(), r.height()
     offsets = {"at": None,
@@ -156,7 +178,7 @@ def _label(lab: d.Label, annotation: Annotation) -> list:
     return [_screen_item(item, lab.at)]
 
 
-def _picture(pic: d.Picture, annotation: Annotation) -> list:
+def _picture(pic: d.Picture, annotation: Annotation, on_paper: bool) -> list:
     """The picture stretched over its rectangle; one Qt cannot load is the
     fallback frame with the file's name."""
     x0, y0, x1, y1 = pic.corners
@@ -164,7 +186,7 @@ def _picture(pic: d.Picture, annotation: Annotation) -> list:
     if pix.isNull():
         items = []
         for prim in d.picture_fallback(pic):
-            items += _ITEMS[type(prim)](prim, annotation)
+            items += _ITEMS[type(prim)](prim, annotation, on_paper)
         return items
     item = QGraphicsPixmapItem(pix)
     # the picture's own y runs down; the model's runs up, and the view

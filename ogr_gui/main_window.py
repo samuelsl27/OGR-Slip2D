@@ -278,7 +278,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.412"
+    VERSION = "0.1.413"
 
     def __init__(self) -> None:
         super().__init__()
@@ -3339,7 +3339,10 @@ class MainWindow(QMainWindow):
         image.fill(0xFFFFFFFF)
         painter = QPainter(image)
         painter.setRenderHint(QPainter.Antialiasing, True)
-        scene.render(painter, QRectF(0, 0, width, height), rect)
+        # v0.1.413 (D350) — white paper: the annotations' stored colours,
+        # not the ink the dark theme gives the default one on the screen
+        with self.canvas.on_paper():
+            scene.render(painter, QRectF(0, 0, width, height), rect)
         painter.end()
         if not image.save(path):
             self._info(tr("Could not write the image."))
@@ -3373,7 +3376,9 @@ class MainWindow(QMainWindow):
         painter = QPainter(printer)
         painter.setRenderHint(QPainter.Antialiasing, True)
         target = QRectF(printer.pageRect(printer.DevicePixel))
-        scene.render(painter, target, rect)
+        # v0.1.413 (D350) — on paper, as Export Image
+        with self.canvas.on_paper():
+            scene.render(painter, target, rect)
         painter.end()
 
     @undo_step("Set load")
