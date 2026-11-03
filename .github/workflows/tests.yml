@@ -9,14 +9,14 @@ on:
   workflow_dispatch:
 
 jobs:
-  # dev/d370-shutdown — diagnosis of D370 only; this file never goes to main.
-  # Every job is Python 3.11 (the fastest), ends through the interpreter's
-  # normal shutdown and prints its exit code instead of failing the step,
-  # so the later steps and the log always say what happened.
+  # dev/d370-shutdown, second round. test_slice_store_parallel_v1409 now
+  # starts its process in a session of its own: its Job.cancel killed the
+  # whole process group of the suite on Linux (and gdb's inferior, and the
+  # CI step with its log). Python 3.11 only; every step prints its exit code.
   reproduce:
-    name: "D370 reproduce + census"
+    name: "D370 whole suite, normal ending"
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -26,12 +26,12 @@ jobs:
       - name: Install system libraries for Qt
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends             libegl1 libgl1 libxkbcommon-x11-0 libdbus-1-3             libxcb-icccm4 libxcb-image0 libxcb-keysyms1             libxcb-randr0 libxcb-render-util0 libxcb-shape0             libxcb-xinerama0 libxcb-cursor0 gdb
+          sudo apt-get install -y --no-install-recommends libegl1 libgl1 libxkbcommon-x11-0 libdbus-1-3 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-cursor0 gdb
       - name: Install the project
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[mcp]"
-      - name: Whole suite, normal ending, probe in census mode
+      - name: Whole suite, census at the end
         env:
           QT_QPA_PLATFORM: offscreen
           PYTHONUNBUFFERED: "1"
@@ -42,9 +42,13 @@ jobs:
           echo "D370 EXIT=$?"
 
   gdb:
-    name: "D370 native stack (gdb)"
+    name: "D370 gdb on slice ${{ matrix.s }} of 8"
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        s: [0, 3]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -54,24 +58,26 @@ jobs:
       - name: Install system libraries for Qt
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends             libegl1 libgl1 libxkbcommon-x11-0 libdbus-1-3             libxcb-icccm4 libxcb-image0 libxcb-keysyms1             libxcb-randr0 libxcb-render-util0 libxcb-shape0             libxcb-xinerama0 libxcb-cursor0 gdb
+          sudo apt-get install -y --no-install-recommends libegl1 libgl1 libxkbcommon-x11-0 libdbus-1-3 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-cursor0 gdb
       - name: Install the project
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[mcp]"
-      - name: Whole suite under gdb, no probe
+      - name: The slice under gdb, no probe
         env:
           QT_QPA_PLATFORM: offscreen
           PYTHONUNBUFFERED: "1"
+          S: ${{ matrix.s }}
         run: |
           set +e
-          gdb -batch -ex "set pagination off" -ex "set confirm off"             -ex "handle SIGPIPE nostop noprint pass"             -ex run -ex "info threads" -ex "thread apply all bt 40"             --args python tests/_runner.py
+          FILES=$(python tests/_d370_slices.py $S 8)
+          gdb -batch -ex "set pagination off" -ex "set confirm off" -ex "handle SIGPIPE nostop noprint pass" -ex run -ex "info threads" -ex "thread apply all bt 50" --args python tests/_runner.py $FILES
           echo "D370 EXIT=$?"
 
   byhand:
-    name: "D370 delete top-level widgets by hand"
+    name: "D370 by hand, slice 0 of 8"
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -81,58 +87,29 @@ jobs:
       - name: Install system libraries for Qt
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends             libegl1 libgl1 libxkbcommon-x11-0 libdbus-1-3             libxcb-icccm4 libxcb-image0 libxcb-keysyms1             libxcb-randr0 libxcb-render-util0 libxcb-shape0             libxcb-xinerama0 libxcb-cursor0 gdb
+          sudo apt-get install -y --no-install-recommends libegl1 libgl1 libxkbcommon-x11-0 libdbus-1-3 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-cursor0 gdb
       - name: Install the project
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[mcp]"
-      - name: Whole suite, then each top-level widget deleted with Python alive
+      - name: Slice 0, then each window without a parent deleted with Python alive
         env:
           QT_QPA_PLATFORM: offscreen
           PYTHONUNBUFFERED: "1"
           OGR_D370: byhand
         run: |
           set +e
-          python tests/_runner.py
+          python tests/_runner.py $(python tests/_d370_slices.py 0 8)
           echo "D370 EXIT=$?"
 
-  app:
-    name: "D370 the program itself"
+  sub:
+    name: "D370 slice ${{ matrix.s }}/8, part ${{ matrix.k }}/8"
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.11"
-          cache: pip
-      - name: Install system libraries for Qt
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends             libegl1 libgl1 libxkbcommon-x11-0 libdbus-1-3             libxcb-icccm4 libxcb-image0 libxcb-keysyms1             libxcb-randr0 libxcb-render-util0 libxcb-shape0             libxcb-xinerama0 libxcb-cursor0 gdb
-      - name: Install the project
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[mcp]"
-      - name: OGR Slip2D, demo, compute, interpret, close, normal exit
-        env:
-          QT_QPA_PLATFORM: offscreen
-          PYTHONUNBUFFERED: "1"
-          OGR_D370: census
-        run: |
-          set +e
-          python tests/_d370_app.py --no-agent-bridge
-          echo "D370 EXIT (no bridge)=$?"
-          python tests/_d370_app.py
-          echo "D370 EXIT (with bridge)=$?"
-
-  slices:
-    name: "D370 slice ${{ matrix.k }} of 8"
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
+        s: [0, 7]
         k: [0, 1, 2, 3, 4, 5, 6, 7]
     steps:
       - uses: actions/checkout@v7
@@ -143,28 +120,22 @@ jobs:
       - name: Install system libraries for Qt
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends             libegl1 libgl1 libxkbcommon-x11-0 libdbus-1-3             libxcb-icccm4 libxcb-image0 libxcb-keysyms1             libxcb-randr0 libxcb-render-util0 libxcb-shape0             libxcb-xinerama0 libxcb-cursor0 gdb
+          sudo apt-get install -y --no-install-recommends libegl1 libgl1 libxkbcommon-x11-0 libdbus-1-3 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-cursor0 gdb
       - name: Install the project
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[mcp]"
-      - name: One alphabetical eighth of the suite, normal ending
+      - name: One eighth of the slice, normal ending
         env:
           QT_QPA_PLATFORM: offscreen
           PYTHONUNBUFFERED: "1"
           OGR_D370: census
+          S: ${{ matrix.s }}
           K: ${{ matrix.k }}
         run: |
           set +e
-          FILES=$(python - <<'PY'
-          import glob, os
-          fs = sorted(os.path.basename(p) for p in glob.glob("tests/test_*.py"))
-          k, n = int(os.environ["K"]), 8
-          size = -(-len(fs) // n)
-          print(" ".join(fs[k * size:(k + 1) * size]))
-          PY
-          )
-          echo "D370 slice $K: $(echo $FILES | wc -w) files, $(echo $FILES | cut -d' ' -f1) .. $(echo $FILES | awk '{print $NF}')"
+          FILES=$(python tests/_d370_slices.py $S 8 $K 8)
+          echo "D370 part $S/$K: $FILES"
           python tests/_runner.py $FILES
           echo "D370 EXIT=$?"
 
