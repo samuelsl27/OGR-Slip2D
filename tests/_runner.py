@@ -1391,16 +1391,10 @@ if __name__ == "__main__":
     # remain, and they are emptied here so that no ending can lose them.
     sys.stdout.flush()
     sys.stderr.flush()
-    if sys.platform != "win32":
-        # The verdict is the tests', and the process ends here, without the
-        # interpreter's own shutdown. Since v0.1.276 that shutdown
-        # segfaulted on Linux after the totals ("QObject: shared QObject was
-        # deleted directly", exit 139, <no Python frame>), so every CI run
-        # was red with every test green, and a real red could not be told
-        # from it. On POSIX os._exit is _exit(2): no library destructor
-        # runs. The price, chosen by the owner: a crash at shutdown is no
-        # longer seen here. It is D370, open.
-        os._exit(code)
+    # dev/d370-shutdown — the ending of v0.1.376 on every platform, so the
+    # Linux crash at shutdown shows again, and the probe first (D370).
+    import _d370
+    _d370.before_exit()
     # Not on Windows, measured: there os._exit goes through ExitProcess,
     # which still unloads every DLL, and Qt's destructors met what the
     # suite left alive. Two chunks of four died with 0xC0000005 after their
