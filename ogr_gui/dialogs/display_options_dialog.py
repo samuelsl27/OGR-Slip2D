@@ -88,7 +88,8 @@ class DisplayOptionsDialog(QDialog):
 
     def __init__(self, options: DisplayOptions, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle(tr("Display Options..."))
+        # v0.1.421 (D363) -- the window's name, not the menu entry's «...»
+        self.setWindowTitle(tr("Display Options"))
         self.resize(560, 480)
         self._opts = replace(options)  # shallow copy
 

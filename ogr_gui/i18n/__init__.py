@@ -1520,6 +1520,8 @@ _DICTS: dict[str, dict[str, str]] = {
         "Page Setup...": "Configurar página...",
         "Print Scale...": "Escala de impresión...",
         "Preferences...": "Preferencias...",
+        # v0.1.421 (D363) -- los títulos de las ventanas, sin los «...» del menú
+        "Preferences": "Preferencias",
         "Recent Projects": "Proyectos recientes",
         "Exit": "Salir",
         # --- Edit -----------------------------------------------------
@@ -1536,9 +1538,11 @@ _DICTS: dict[str, dict[str, str]] = {
         "Grid": "Rejilla",
         "Snap": "Snap",
         "Display Options...": "Opciones de visualización...",
+        "Display Options": "Opciones de visualización",
         "Grayscale": "Escala de grises",
         # --- Analysis -------------------------------------------------
         "Project Settings...": "Ajustes de proyecto...",
+        "Project Settings": "Ajustes de proyecto",
         "Compute": "Calcular",
         "Interpret": "Interpretar",
         "Info Viewer": "Visor de información",
@@ -1727,6 +1731,7 @@ _DICTS: dict[str, dict[str, str]] = {
         "Define Limits...": "Definir límites...",
         # --- Properties -----------------------------------------------
         "Define Materials...": "Definir materiales...",
+        "Define Materials": "Definir materiales",
         "Define Support...": "Definir soporte...",
         "Assign Materials": "Asignar materiales",
         # v0.1.418 (D355) -- las dos entradas de Propiedades: el modo solo y

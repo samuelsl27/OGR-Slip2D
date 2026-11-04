@@ -54,13 +54,14 @@ def _extra_fields(cls) -> dict:
             if k not in ("model_id", "params")}
 
 
-def strength_from_spec(spec) -> object:
+def strength_from_spec(spec, name=None) -> object:
     """A ``StrengthModel`` from ``{"model": id, "params": {...}, ...}``.
 
     ``model`` (or ``model_id``) names the registry entry; ``params`` holds
     the numeric parameters, checked by the model's own constructor; any
     other key must be one of the model's extra fields (``points``,
-    ``rules``, ``cutoff_enabled``).
+    ``rules``, ``cutoff_enabled``). ``name`` is the material's, for the
+    sentence of a refusal (v0.1.421, D363: it said «Material '?'»).
     """
     from ogr_core.materials import REGISTRY
     from ogr_core.materials.strength_model import StrengthModel
@@ -105,7 +106,7 @@ def strength_from_spec(spec) -> object:
     # v0.1.218 (D209) — the one rule for what a model may hold; the dialog
     # and the analysis ask the same function.
     from ogr_core.project.rules import strength_model_refusal
-    why = strength_model_refusal(model, None)
+    why = strength_model_refusal(model, name)
     if why is not None:
         raise InvalidArgument(f"{mid}: {why.message}")
     return model

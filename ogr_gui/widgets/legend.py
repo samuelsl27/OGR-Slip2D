@@ -22,7 +22,7 @@ Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 
-from PySide6.QtCore import QRectF, Qt, Signal
+from PySide6.QtCore import QRect, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPen
 from PySide6.QtWidgets import QLabel, QSizePolicy, QWidget
 
@@ -88,6 +88,19 @@ class ColourScaleLegend(QWidget):
         self._mark = mark
         self.update()
 
+    def title_font(self) -> QFont:
+        """The font the title is painted in: the widget's, 1 pt smaller."""
+        font = QFont(self.font())
+        font.setPointSizeF(max(7.0, font.pointSizeF() - 1.0))
+        return font
+
+    def title_rect(self, width: int) -> QRect:
+        """The room the title takes at ``width``, wrapped by words."""
+        from PySide6.QtGui import QFontMetrics
+        return QFontMetrics(self.title_font()).boundingRect(
+            QRect(0, 0, width, 10000),
+            int(Qt.AlignLeft | Qt.AlignTop | Qt.TextWordWrap), self._title)
+
     def value_range(self):
         return self._vmin, self._vmax
 
@@ -107,10 +120,12 @@ class ColourScaleLegend(QWidget):
         p.setFont(font)
         fm = p.fontMetrics()
 
-        title_h = fm.height() + 4
+        # v0.1.421 (D363) -- the title on as many lines as the width asks:
+        # on one it was cut at 96 px («Factor de segu» of 153 px in Spanish)
+        title_h = self.title_rect(w).height() + 4
         p.setPen(QPen(self.palette().windowText().color()))
-        p.drawText(QRectF(0, 0, w, title_h), Qt.AlignLeft | Qt.AlignVCenter,
-                   self._title)
+        p.drawText(QRectF(0, 0, w, title_h),
+                   Qt.AlignLeft | Qt.AlignTop | Qt.TextWordWrap, self._title)
 
         bar_w = 20
         top = title_h + 4

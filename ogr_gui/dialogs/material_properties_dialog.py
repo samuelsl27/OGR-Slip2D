@@ -1396,7 +1396,8 @@ class MaterialPropertiesDialog(QDialog):
         # v0.1.60 — a saturated unit weight can only mean something if a
         # water table exists to separate the saturated zone from the rest.
         self._has_water_table = bool(has_water_table)
-        self.setWindowTitle(tr("Define Materials..."))
+        # v0.1.421 (D363) -- the window's name, not the menu entry's «...»
+        self.setWindowTitle(tr("Define Materials"))
         # v0.1.60 — work on deep copies, so the user can move freely
         # between materials and still have Cancel discard everything. A
         # shallow ``list(materials)`` shared the Material instances with

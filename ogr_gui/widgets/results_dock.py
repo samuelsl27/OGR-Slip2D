@@ -89,8 +89,11 @@ class ResultsDock(QDockWidget):
             ["#", tr("FoS"), tr("Method"), tr("Centre X"), tr("Centre Y"),
              tr("Radius"), tr("Note")]
         )
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        # v0.1.421 (D363) -- each column as wide as its contents, heading
+        # included, scrolling sideways when they do not fit, as Interpret's
+        # Surfaces table: stretched, the headings were cut
+        self.table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeToContents)
         self.table.verticalHeader().setVisible(False)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)

@@ -714,7 +714,8 @@ class ProjectSettingsDialog(QDialog):
     def __init__(self, settings: ProjectSettings, parent=None,
                  project=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle(tr("Project Settings..."))
+        # v0.1.421 (D363) -- the window's name, not the menu entry's «...»
+        self.setWindowTitle(tr("Project Settings"))
         self.settings = settings
         # v0.1.127 — optional, and only the Seismic page reads it: the
         # seismic records are project data and not settings, so the page

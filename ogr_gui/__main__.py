@@ -88,7 +88,9 @@ def main(argv=None) -> int:
     app = QApplication([argv[0] if argv else "ogr-slip2d", *rest])
     app.setApplicationName("OGR Slip2D")
     app.setOrganizationName("OpenGeoRock Suite")
-    app.setApplicationDisplayName("OGR Slip2D")
+    # v0.1.421 (D363) -- no display name: Qt appends it to every window
+    # title, and the main window's already starts with it («OGR Slip2D
+    # v… — talud.ogr - OGR Slip2D»); a dialog is named by its own title
     apply_saved_preferences(app)
 
     win = start_window(agent_bridge=not opts.no_agent_bridge)  # noqa: F841

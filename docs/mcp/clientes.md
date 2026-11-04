@@ -145,6 +145,13 @@ el programa y lo vuelves a abrir, el servidor lo encuentra solo.
     se redibuja;
   - un `analysis_run` del agente sale en el panel de resultados y en el
     lienzo, como un *Compute*;
+  - **al revés no:** un *Compute* (o una optimización) que lanzas tú desde
+    la ventana no tiene `result_id`. `results_get` no lo encuentra,
+    `project_summary` lo cuenta como `results: []` y `report_generate` no
+    puede usarlo. Para leer resultados, el agente lanza su propio
+    `analysis_run`, que sí sale en la ventana (desde v0.1.421, D363, por
+    decisión de la propietaria: se documenta en vez de dar identificador al
+    *Compute* de la ventana);
   - `model_render(source="window")` es una captura del lienzo tal como lo
     ves.
 - **`project_new` y `project_open` abren en la ventana**, y se niegan

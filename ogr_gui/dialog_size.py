@@ -52,6 +52,44 @@ def open_at_content_size(dialog: QWidget, at_least: QSize) -> None:
     dialog.resize(size)
 
 
+def place_on_screen_of(window: QWidget, anchor: QWidget,
+                       wanted: QSize) -> None:
+    """Open ``window`` on the screen ``anchor`` is on: at ``wanted`` size,
+    never larger than that screen's available area, centred on ``anchor``
+    and moved so that its whole frame -- the title bar above all -- is
+    inside it (v0.1.421, D363).
+
+    Interpret only did ``resize(1200, 800)``. With two screens at 100 % and
+    125 % and the main window on the second, it opened on the first with
+    its title bar above the top edge, at [480, -83, 1500, 1031]: 1200 x 800
+    at 1.25, unreachable with the mouse. The window manager adds the frame
+    only once a window is shown, so the frame is taken as the anchor's.
+    """
+    screen = anchor.screen() if anchor is not None else window.screen()
+    if screen is None:
+        window.resize(wanted)
+        return
+    avail = screen.availableGeometry()
+    frame, inner = anchor.frameGeometry(), anchor.geometry()
+    left = max(0, inner.left() - frame.left())
+    top = max(0, inner.top() - frame.top())
+    right = max(0, frame.right() - inner.right())
+    bottom = max(0, frame.bottom() - inner.bottom())
+    size = wanted.boundedTo(QSize(avail.width() - left - right,
+                                  avail.height() - top - bottom))
+    window.setScreen(screen)
+    window.resize(size)
+    width = size.width() + left + right
+    height = size.height() + top + bottom
+    centre = frame.center() if anchor.isVisible() else avail.center()
+    x = min(max(centre.x() - width // 2, avail.left()),
+            avail.left() + avail.width() - width)
+    y = min(max(centre.y() - height // 2, avail.top()),
+            avail.top() + avail.height() - height)
+    # for a window, ``move`` places its frame
+    window.move(x, y)
+
+
 class _WrappedHeight(QObject):
     """The filter behind :func:`hold_wrapped_height`.
 

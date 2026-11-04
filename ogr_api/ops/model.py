@@ -751,7 +751,7 @@ def _new_material(project, name, strength, fields):
         raise Conflict(f"The model already has the maximum of "
                        f"{project.settings.max_materials} materials.")
     m = Material(name=name.strip(), strength=strength_from_spec(
-        _link_rules_by_name(project, strength)))
+        _link_rules_by_name(project, strength), name.strip()))
     # v0.1.299 (D297) — a colour no material of the model uses yet; a
     # ``color`` in ``fields`` still wins below
     from ogr_core.materials.palette import next_material_color
@@ -788,8 +788,10 @@ def material_set(ws, project_id: Optional[str] = None,
                 fields["name"] = name
             cleared = []
             if strength is not None:
+                # v0.1.421 (D363) -- the name it will have, for a refusal
                 m.strength = strength_from_spec(
-                    _link_rules_by_name(project, strength))
+                    _link_rules_by_name(project, strength),
+                    fields.get("name", m.name))
                 _check_links(project, m)
                 # v0.1.225 (D218) — what the dialog does when a material
                 # leaves a model that reads a surface: the link goes, since

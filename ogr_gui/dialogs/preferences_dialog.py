@@ -32,7 +32,8 @@ class PreferencesDialog(QDialog):
 
     def __init__(self, parent=None, active_theme: str = "light") -> None:
         super().__init__(parent)
-        self.setWindowTitle(tr("Preferences..."))
+        # v0.1.421 (D363) -- the window's name, not the menu entry's «...»
+        self.setWindowTitle(tr("Preferences"))
         self.setMinimumWidth(380)
         root = QVBoxLayout(self)
 

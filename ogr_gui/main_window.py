@@ -25,7 +25,7 @@ import math
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import QEvent, QObject, Qt, QThread, QTimer, Signal
+from PySide6.QtCore import QEvent, QObject, QSize, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
@@ -278,7 +278,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.420"
+    VERSION = "0.1.421"
 
     def __init__(self) -> None:
         super().__init__()
@@ -4335,6 +4335,9 @@ class MainWindow(QMainWindow):
         win.setAttribute(Qt.WA_DeleteOnClose)
         win.closed.connect(lambda: self._forget_interpret(win))
         self.interpret_windows.append(win)
+        # v0.1.421 (D363) -- on this window's screen, within it
+        from .dialog_size import place_on_screen_of
+        place_on_screen_of(win, self, QSize(1200, 800))
         win.show()
 
     def _forget_interpret(self, win) -> None:

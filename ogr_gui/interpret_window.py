@@ -566,8 +566,12 @@ class _ResultsTableDock(QDockWidget):
             ["#", tr("FoS"), tr("Method"), tr("Centre X"), tr("Centre Y"),
              tr("Radius"), tr("Note")]
         )
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        # v0.1.421 (D363) -- each column as wide as its contents, heading
+        # included, and the table scrolls sideways when they do not fit:
+        # stretched, seven columns shared 331 px and every heading was cut
+        # («létod», «entro»)
+        self.table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeToContents)
         self.table.verticalHeader().setVisible(False)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -753,6 +757,19 @@ class InterpretWindow(QMainWindow):
         # they are this window's own drawing, which nothing else puts there
         if self._seepage_field() is not None:
             self._refresh_overlays()
+        self._fit_dock_titles()
+
+    def _fit_dock_titles(self) -> None:
+        """Every dock at least as wide as its title (v0.1.421, D363): the
+        legend's, 96 px wide, read «Leye…» in Spanish at any window size."""
+        from PySide6.QtWidgets import QDockWidget, QStyle
+        st = self.style()
+        room = (2 * (16 + 2 * st.pixelMetric(
+            QStyle.PM_DockWidgetTitleBarButtonMargin))
+                + 2 * st.pixelMetric(QStyle.PM_DockWidgetTitleMargin) + 8)
+        for dock in self.findChildren(QDockWidget):
+            need = dock.fontMetrics().horizontalAdvance(dock.windowTitle())
+            dock.setMinimumWidth(max(dock.minimumWidth(), need + room))
 
     # ==================================================================
     # Result context (phase I1)
