@@ -100,6 +100,7 @@ from typing import Optional
 from ogr_core.project import Project
 
 from .search import (BaseSearch, PathSearch, SearchResult, SlopeSearch,
+                     _bits_key,
                      slope_frame)
 from .surface import SlipCircle
 
@@ -243,7 +244,7 @@ class ParticleSwarmSearch(BaseSearch):
         self.rng = random.Random(seed)
 
     # ------------------------------------------------------------------
-    def _evaluate(self, project, frame, result, u):
+    def _evaluate(self, project, frame, result, u, count=True):
         """Factor of safety of the circle at ``u``, and its result.
 
         Returns ``(score, LEMResult or None)`` where the score is the
@@ -251,22 +252,54 @@ class ParticleSwarmSearch(BaseSearch):
         coefficient when a seismic mode is on. Everything generated is
         appended to ``result.evaluations``, valid or not, so the counts
         the user is shown are the counts the search really made.
+
+        v0.1.426 (D377) — two things:
+
+        * a position this run already evaluated is not evaluated again
+          (``_REUSE_DUPLICATES``): the particle sitting on the global best
+          has a velocity of exactly zero in the one-minimum mode and is
+          evaluated where it already was, and the final report asks again
+          for every particle's best. The recorded result is kept again and
+          what the evaluation did to the run state is done again, so the
+          population and the notes are those of evaluating it twice. No
+          draw of the generator depends on an evaluation;
+        * ``count`` False is the final report: the result is listed again,
+          as before, and NOT counted. Counting it is what broke
+          ``attempts - total_count == focus_rejected`` (2500 - 2535 on
+          bank problem 104): the report is not a particle's attempt.
         """
+        memo = getattr(self, "_pso_memo", None)
+        key = _bits_key(u)
+        seen = memo.get(key) if memo is not None else None
+        if seen is None:
+            seen = self._recorded(lambda: self._outcome(project, frame, u))
+            if memo is not None:
+                memo[key] = seen
+        else:
+            self._replayed(seen[1])
+        counter, score, res, kept = seen[0]
+        if kept is not None:
+            self._keep(result, kept)
+        if count:
+            setattr(result, counter, getattr(result, counter) + 1)
+        return score, res
+
+    def _outcome(self, project, frame, u):
+        """``(counter, score, result returned, result kept)`` of the circle
+        at ``u``, touching no counter of the run's result: the body
+        ``_evaluate`` had until v0.1.426, the counting moved out (D377)."""
         xt, xc, theta = frame.circle_params(*u)
         yt = PathSearch._interpolate_top_y(frame.top, xt)
         yc = PathSearch._interpolate_top_y(frame.top, xc)
         if yt is None or yc is None or abs(xc - xt) < 0.5:
-            result.invalid_count += 1
-            return _INVALID, None
+            return "invalid_count", _INVALID, None, None
         circle = SlopeSearch._circle_from_point_tangent_point(
             xt, yt, theta, xc, yc, frame.to_right)
         if circle is None:
-            result.invalid_count += 1
-            return _INVALID, None
+            return "invalid_count", _INVALID, None, None
         cx, cy, radius = circle
         if radius <= 0 or radius > 50.0 * max(frame.height, 1.0):
-            result.invalid_count += 1
-            return _INVALID, None
+            return "invalid_count", _INVALID, None, None
 
         if self._focus_rejects_circle(cx, cy, radius):
             # v0.1.129 — the particles ARE circles, so the focus is the
@@ -278,28 +311,22 @@ class ParticleSwarmSearch(BaseSearch):
             # a focused run and an unfocused one. Defect D33.
             # v0.1.187 — counted in its own field, which is what lets the
             # populations stay comparable AND the effort be visible. D160.
-            result.focus_rejected += 1
-            return _INVALID, None
+            return "focus_rejected", _INVALID, None, None
 
         res = self.evaluate_circle(
             project, SlipCircle(centre_x=cx, centre_y=cy, radius=radius))
         if res is None:
-            result.invalid_count += 1
-            return _INVALID, None
+            return "invalid_count", _INVALID, None, None
         # The same absurd-factor guard the Slope Search applies. A circle
         # whose driving moment is almost zero reports an enormous factor
         # and would otherwise sit in the swarm as a perfectly ordinary
         # bad particle, dragging neighbours towards a region that is not
         # a mechanism at all.
         if res.is_valid and not (0.2 <= res.fos <= 100.0):
-            result.invalid_count += 1
-            return _INVALID, None
-        self._keep(result, res)
+            return "invalid_count", _INVALID, None, None
         if not res.is_valid:
-            result.invalid_count += 1
-            return _INVALID, None
-        result.valid_count += 1
-        return self.score(res), res
+            return "invalid_count", _INVALID, None, res
+        return "valid_count", self.score(res), res, res
 
     # ------------------------------------------------------------------
     def _neighbours(self, swarm, i):
@@ -351,6 +378,15 @@ class ParticleSwarmSearch(BaseSearch):
 
     # ------------------------------------------------------------------
     def _run(self, project: Project) -> SearchResult:
+        # v0.1.426 (D377) — the positions this run has evaluated, for this
+        # run only: see ``_evaluate``.
+        self._pso_memo = self._new_memo()
+        try:
+            return self._run_swarm(project)
+        finally:
+            self._pso_memo = None
+
+    def _run_swarm(self, project: Project) -> SearchResult:
         result = SearchResult(method_id=self.method.METHOD_ID,
                               objective=self.objective)
         frame = slope_frame(project, self.initial_angle_lower_deg,
@@ -432,7 +468,12 @@ class ParticleSwarmSearch(BaseSearch):
                 # the surface has to be rebuilt. Re-evaluating rather than
                 # remembering every result keeps the swarm's memory to
                 # three numbers per particle.
-                _sc, res = self._evaluate(project, frame, result, p.best_u)
+                #
+                # v0.1.426 (D377) — taken from the run's memo (the position
+                # was evaluated when it became the best), and NOT counted:
+                # a report is not an attempt.
+                _sc, res = self._evaluate(project, frame, result, p.best_u,
+                                          count=False)
                 if res is None:
                     continue
             finals.append((tuple(p.best_u), p.best_score, res))

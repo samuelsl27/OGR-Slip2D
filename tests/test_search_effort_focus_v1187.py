@@ -27,9 +27,16 @@ satisfied by recording whatever the code happens to print today:
 
     Grid      attempts == (nx+1)(ny+1)(rinc+1)     the documented population
     Block     attempts == num_surfaces             a fixed generation budget
+    Swarm     attempts == particles x iterations   one per particle and step
+    Annealing attempts == every candidate          bootstrap, VFSA and walk
     any       attempts - total_count == focus_rejected  where nothing else
                                                         skips silently
     no focus  focus_rejected == 0
+
+The swarm and the annealing joined the identity in v0.1.426 (D377): the
+swarm counted its final report as evaluations (2500 - 2535 on bank problem
+104), and the annealing counted its VFSA inner steps alone and no refusal
+at all. Their cases live in ``test_duplicate_evaluations_v1426``.
 
 THE ONE THAT IS NOT ARITHMETIC is ``TestAWalkIsNotPopulation``. The
 obvious place to increment the counter is inside ``_focus_rejects``
@@ -215,7 +222,13 @@ class TestAWalkIsNotPopulation:
         assert sin.focus_rejected > 0, "no focus rejections: no measure"
         assert con.focus_rejected == sin.focus_rejected, (
             con.focus_rejected, sin.focus_rejected)
-        assert con.attempts == sin.attempts, (con.attempts, sin.attempts)
+        # v0.1.426 (D377, owner's decision) — the walk's own candidates and
+        # rejections still count for nothing; each surface Optimize ADDS to
+        # the population counts as an attempt, as it counts as valid, so
+        # the identity holds with Optimize on.
+        assert con.attempts == sin.attempts + len(con.steered), (
+            con.attempts, sin.attempts, len(con.steered))
+        assert con.attempts - con.total_count == con.focus_rejected
 
     def test_the_test_would_notice(self):
         """Guard on the guard.

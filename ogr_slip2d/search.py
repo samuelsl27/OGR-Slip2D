@@ -66,6 +66,18 @@ _RUN_COUNTERS = ("_unsliceable", "_outside_model", "_orphan_material",
                  "_base_above_ground", "_outside_slope_limits",
                  "_misses_ground")
 
+#: v0.1.426 (D377) — ``_last_refusal`` not written by an evaluation.
+_UNTOUCHED = object()
+
+
+def _bits_key(values) -> tuple:
+    """A memo key for a candidate: the exact bits of its coordinates, and
+    their types. Bits and not ``==``: 0.0 and -0.0 are equal and are not
+    the same candidate (v0.1.426, D377)."""
+    values = list(values)
+    return (struct.pack("<%dd" % len(values), *values),
+            tuple(map(type, values)))
+
 
 # ----------------------------------------------------------------------
 def _normalise_slope_limits(value) -> Optional[tuple]:
@@ -1206,6 +1218,51 @@ class BaseSearch(ABC):
         if store is not None:
             store.spill(res)
 
+    #: v0.1.426 (D377) — reuse a candidate the same run already evaluated
+    #: (Simulated Annealing, Particle Swarm). The A/B switch of the tests:
+    #: off, every candidate is evaluated again, as before this version.
+    _REUSE_DUPLICATES = True
+
+    def _new_memo(self) -> Optional[dict]:
+        """A memo for one run, or None with the reuse switched off."""
+        return {} if self._REUSE_DUPLICATES else None
+
+    def _recorded(self, evaluate) -> tuple:
+        """``(value, state)``: what ``evaluate()`` returns, and what it did
+        to the search's own run state, so a duplicate can do it again.
+
+        v0.1.426 (D377). An evaluation leaves two traces on the SEARCH
+        besides its result: the refusal counters of ``_RUN_COUNTERS`` (one
+        per surface refused for a reason the notes count) and
+        ``_last_refusal``. The notes of ``_note`` need nothing: they are
+        de-duplicated by line, so the same evaluation would not add one
+        again. ``state`` is the increment of each counter and the refusal
+        the evaluation wrote, or ``_UNTOUCHED``.
+        """
+        before = {c: getattr(self, c, 0) or 0 for c in _RUN_COUNTERS}
+        last = getattr(self, "_last_refusal", None)
+        self._last_refusal = _UNTOUCHED
+        try:
+            value = evaluate()
+        finally:
+            refusal = self._last_refusal
+            if refusal is _UNTOUCHED:
+                self._last_refusal = last
+        moved = {}
+        for c in _RUN_COUNTERS:
+            now = getattr(self, c, 0) or 0
+            if now != before[c]:
+                moved[c] = now - before[c]
+        return value, (moved, refusal)
+
+    def _replayed(self, state) -> None:
+        """Do again to the run state what the recorded evaluation did."""
+        moved, refusal = state
+        for c, n in moved.items():
+            setattr(self, c, (getattr(self, c, 0) or 0) + n)
+        if refusal is not _UNTOUCHED:
+            self._last_refusal = refusal
+
     def _count_misses_ground(self) -> None:
         """One circle that does not cut the ground twice (v0.1.261, D263)."""
         self._misses_ground = getattr(self, "_misses_ground", 0) + 1
@@ -2336,6 +2393,12 @@ class BaseSearch(ABC):
         result.evaluations.append(best)
         result.steered.append(best)          # v0.1.237 (D87)
         result.valid_count += 1
+        # v0.1.426 (D377, owner's decision) — and an ATTEMPT: a surface the
+        # run generated and analysed. Counted as valid and not as tried, it
+        # put every search with Optimize one below ``attempts - total_count
+        # == focus_rejected`` per surface it added (validation case 002 and
+        # Tutorial 20: -1; bank problem 104: -4, the swarm's minima).
+        result.attempts += 1
 
     def _optimize_each_minimum(self, project: Project, result) -> None:
         """Walk every reported minimum, and keep every walk.
@@ -2391,6 +2454,7 @@ class BaseSearch(ABC):
                     result.evaluations.append(res)
                     result.steered.append(res)          # v0.1.237 (D87)
                     result.valid_count += 1
+                    result.attempts += 1      # v0.1.426 (D377): as above
                     keep = res
                     if improved is None or self.score(res) < self.score(improved):
                         improved = res
@@ -6411,6 +6475,15 @@ class SimulatedAnnealingSearch(BaseSearch):
     # Top-level: HSA = VFSA + LMC
     # ==================================================================
     def _run(self, project) -> SearchResult:
+        # v0.1.426 (D377) — the candidates this run has evaluated, for this
+        # run only: see ``_candidate``.
+        self._sa_memo = self._new_memo()
+        try:
+            return self._run_annealing(project)
+        finally:
+            self._sa_memo = None
+
+    def _run_annealing(self, project) -> SearchResult:
         result = SearchResult(method_id=self.method.METHOD_ID,
                               objective=self.objective)
         # v0.1.119 — a generator of its OWN, not ``random.seed()`` on the
@@ -6676,12 +6749,15 @@ class SimulatedAnnealingSearch(BaseSearch):
             # where it landed. Rejected like any other inadmissible
             # candidate: the step is simply not taken. Defect D33.
             #
-            # v0.1.187 — NOT counted in ``focus_rejected``: this is a
-            # PROPOSAL of the annealing walk, not a member of the
-            # population. The population of this search is K x Ngen and is
-            # fixed before the first evaluation, which is exactly why
-            # D160 does not apply to it — the factor steers WHERE it
-            # looks, never HOW MUCH.
+            # v0.1.426 (D377, owner's decision) — and COUNTED, in
+            # ``focus_rejected``, by ``_candidate``. v0.1.187 left it out
+            # because "the population of this search is K x Ngen"; measured
+            # on validation case 002 (seed 1234, 300 steps) those K x Ngen
+            # were 117 inner steps, while the run kept 540 surfaces (the
+            # bootstrap, the VFSA walk and the local walk) and 661
+            # candidates reached this method. The population is what the
+            # run evaluates, and a rejection is part of its effort.
+            self._sa_focus_refused = True
             return None, None
         res = self.evaluate_surface(project, surface)
         if res is None or not res.is_valid:
@@ -6732,14 +6808,65 @@ class SimulatedAnnealingSearch(BaseSearch):
 
         Returns ``(result, fos)`` when the candidate may guide the search,
         ``(None, None)`` otherwise.
+
+        v0.1.426 (D377) — evaluated, counted and kept by ``_candidate``.
         """
-        res, fos = self._evaluate_polyline(project, verts)
+        res, fos = self._candidate(project, result, verts)
         if res is None:
+            return None, None
+        if not getattr(res, "admissible", True):
+            return None, None
+        return res, fos
+
+    def _candidate(self, project, result, verts):
+        """One candidate of the annealing: evaluated, counted and kept.
+
+        v0.1.426 (D377). The one door of the bootstrap, the VFSA walk and
+        the local walk, so the three count alike:
+
+        * every candidate is an ATTEMPT; one the method refuses is
+          INVALID, one the focus refuses is FOCUS_REJECTED, and one it
+          analyses is VALID and is kept -- so ``attempts - total_count ==
+          focus_rejected``, the identity of the other searches
+          (``test_search_effort_focus_v1187``). Until this version
+          ``attempts`` counted the VFSA inner steps alone (117 on case
+          002, where 661 candidates were evaluated) and nothing counted a
+          refusal (owner's decision, 2026-11-04);
+        * a candidate this run already evaluated is NOT evaluated again
+          (``_REUSE_DUPLICATES``): its recorded result is kept again and
+          what the evaluation did to the run state is done again, so the
+          population, the counters and the notes are those of evaluating
+          it twice. At the ends of the surface ``_lmc`` moves x alone, so
+          three of its eight directions give the same candidate and two
+          give the current surface: measured on case 002, 102 of the 540
+          kept surfaces were exact repeats. No draw of the generator
+          depends on an evaluation, so the walk is the same.
+
+        Returns ``(result, fos)``, or ``(None, None)`` when refused.
+        """
+        result.attempts += 1
+        memo = getattr(self, "_sa_memo", None)
+        key = _bits_key(c for v in verts for c in (v.x, v.y))
+        seen = memo.get(key) if memo is not None else None
+        if seen is None:
+            def evaluate():
+                self._sa_focus_refused = False
+                res, fos = self._evaluate_polyline(project, verts)
+                return res, fos, self._sa_focus_refused
+            seen = self._recorded(evaluate)
+            if memo is not None:
+                memo[key] = seen
+        else:
+            self._replayed(seen[1])
+        res, fos, focus = seen[0]
+        if res is None:
+            if focus:
+                result.focus_rejected += 1
+            else:
+                result.invalid_count += 1
             return None, None
         self._keep(result, res)
         result.valid_count += 1
-        if not getattr(res, "admissible", True):
-            return None, None
         return res, fos
 
     # ==================================================================
@@ -6890,11 +7017,10 @@ class SimulatedAnnealingSearch(BaseSearch):
 
         def _bootstrap_try(verts):
             nonlocal best_verts, best_fos, fallback
-            res, fos = self._evaluate_polyline(project, verts)
+            # v0.1.426 (D377) — counted and kept by the one door
+            res, fos = self._candidate(project, result, verts)
             if res is None:
                 return False
-            self._keep(result, res)
-            result.valid_count += 1
             if not getattr(res, "admissible", True):
                 if fallback is None or fos < fallback[1]:
                     fallback = (verts, fos)
@@ -6941,11 +7067,9 @@ class SimulatedAnnealingSearch(BaseSearch):
             Ngen = max(10, Ngen0 // (2 ** (k - 1)))
 
             for _ in range(Ngen):
-                # v0.1.187 — one candidate per inner step. K and Ngen are
-                # both fixed before the first evaluation, so this total
-                # does not depend on a single verdict: the Metropolis rule
-                # below steers the walk, it does not buy or spend effort.
-                result.attempts += 1
+                # v0.1.426 (D377) — the attempt is counted by ``_candidate``,
+                # with the bootstrap's and the local walk's: v0.1.187
+                # counted this inner step alone.
                 # Cauchy random walk for ALL control variables
                 cand_X = list(P_X)
                 cand_Y = list(P_Y)
