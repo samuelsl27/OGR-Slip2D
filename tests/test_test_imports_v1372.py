@@ -41,6 +41,9 @@ _ALLOWED = {
               "only when mcp is importable",
     "starlette": "a requirement of mcp, installed by the [mcp] extra",
     "cryptography": "optional: the test returns on ImportError",
+    "shiboken6": "the runtime of PySide6's bindings, a requirement of "
+                 "PySide6 installed with it; the runner deletes the windows "
+                 "the tests left alive with it (v0.1.422, D370)",
 }
 
 

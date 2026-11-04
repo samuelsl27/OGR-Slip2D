@@ -5,6 +5,15 @@ v0.1.377 — off Windows, the runner's exit code is the tests' verdict,
 whatever the interpreter's own shutdown would do after it; on Windows the
 shutdown runs as it always did, and a crash in it still shows.
 
+v0.1.422 (D370) — superseded on every platform: the cause of the Linux
+crash is gone (the runner deletes the windows the tests left alive before
+the end, ``_release_windows``), and by the owner's decision (2026-11-04)
+the runner ends through the interpreter's own shutdown everywhere, so that
+a crash in it shows again. The invariants below read accordingly: a crash
+at shutdown is seen on every platform, the totals are still written out in
+full before it, and the injected crash is still real. The rest of this
+docstring is the history of v0.1.377.
+
 Why. From v0.1.276 every CI run on Linux ended with exit 139: all tests
 passed, the totals were printed, and then the interpreter, tearing down
 what the suite left alive, segfaulted inside Qt ("QObject: shared QObject
@@ -51,8 +60,9 @@ from pathlib import Path
 
 _TESTS = Path(__file__).resolve().parent
 _RUNNER = _TESTS / "_runner.py"
-#: Whether the runner ends the process itself (see its ``__main__``).
-_ENDS_ITSELF = sys.platform != "win32"
+#: Whether the runner ends the process itself (see its ``__main__``): it
+#: did off Windows from v0.1.377 to v0.1.421 (D370).
+_ENDS_ITSELF = False
 
 #: What the interpreter's shutdown does in the CI since v0.1.276, as far as
 #: the exit code goes: atexit handlers run at shutdown, so this one ends the
