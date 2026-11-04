@@ -19,7 +19,7 @@ import math
 from typing import Optional
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtGui import QAction, QColor, QKeySequence
 from PySide6.QtWidgets import (
     QDockWidget,
     QHeaderView,
@@ -41,7 +41,7 @@ from .disabled_reasons import gate
 from .file_folders import get_save_file_name
 from .disabled_reasons import install as install_disabled_reasons
 from .i18n import tr
-from .labels import method_name
+from .labels import circle_cells, method_name
 from .reported_quantity import reported_quantity
 from .resources import icon
 from ogr_gui.themes import theme_color
@@ -538,8 +538,13 @@ class _SummaryDock(QDockWidget):
                            "focus object)") % (intentos, foco)) + "<br>"
         else:
             esfuerzo = (tr("Generation attempts: %d") % intentos) + "<br>"
+        # v0.1.419 (D361) -- «—» for a surface that is not a circle: the
+        # summary wrote a centre and a radius of 0.00 for it
+        cx, cy, radius = circle_cells(sd)
+        if radius != "—":
+            radius += " m"
         self.label.setText(
-            tr("Method: <b>{0}</b><br>Valid surfaces: <b>{1}</b> / {2}<br>{3}<br><b>{4}</b><br>{5} = <span style='color:{6}; font-size:14pt;'><b>{7}</b></span>{8}<br>Iterations: {9}<br>Centre: ({10:.2f}, {11:.2f})<br>Radius: {12:.2f} m").format(method_name(result.method_id), n_ok, getattr(result, 'total_count', len(result.evaluations)), esfuerzo, tr('Critical surface'), label, theme_color('accent'), value, extra, c.iterations, sd.get('centre_x', 0), sd.get('centre_y', 0), sd.get('radius', 0))
+            tr("Method: <b>{0}</b><br>Valid surfaces: <b>{1}</b> / {2}<br>{3}<br><b>{4}</b><br>{5} = <span style='color:{6}; font-size:14pt;'><b>{7}</b></span>{8}<br>Iterations: {9}<br>Centre: ({10}, {11})<br>Radius: {12}").format(method_name(result.method_id), n_ok, getattr(result, 'total_count', len(result.evaluations)), esfuerzo, tr('Critical surface'), label, theme_color('accent'), value, extra, c.iterations, cx, cy, radius)
         )
 
 
@@ -554,9 +559,10 @@ class _ResultsTableDock(QDockWidget):
         self.setObjectName("ResultsTableDock")
         container = QWidget()
         vbox = QVBoxLayout(container)
-        self.table = QTableWidget(0, 6)
+        self.table = QTableWidget(0, 7)
         self.table.setHorizontalHeaderLabels(
-            ["#", tr("FoS"), tr("Method"), tr("Centre X"), tr("Centre Y"), tr("Radius")]
+            ["#", tr("FoS"), tr("Method"), tr("Centre X"), tr("Centre Y"),
+             tr("Radius"), tr("Note")]
         )
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
@@ -578,6 +584,10 @@ class _ResultsTableDock(QDockWidget):
         from ogr_gui.reported_quantity import column_caption, column_value
         self.table.setHorizontalHeaderItem(1, QTableWidgetItem(
             column_caption(result, factor_report)))
+        from ogr_gui.core_messages import invalid_label, invalid_text
+        # v0.1.419 (D361) -- in the order ``critical`` chooses (``top_n``):
+        # the admissible surfaces first, then the rejected ones, greyed and
+        # with their reason; the row a click picks is the same list
         for i, res in enumerate(result.top_n(100)):
             sd = res.surface.to_dict()
             self.table.insertRow(i)
@@ -585,9 +595,16 @@ class _ResultsTableDock(QDockWidget):
             self.table.setItem(i, 1, QTableWidgetItem(
                 column_value(result, res, factor_report)))
             self.table.setItem(i, 2, QTableWidgetItem(method_name(res.method_id)))
-            self.table.setItem(i, 3, QTableWidgetItem(f"{sd.get('centre_x', 0):.2f}"))
-            self.table.setItem(i, 4, QTableWidgetItem(f"{sd.get('centre_y', 0):.2f}"))
-            self.table.setItem(i, 5, QTableWidgetItem(f"{sd.get('radius', 0):.2f}"))
+            for col, text in zip((3, 4, 5), circle_cells(sd)):
+                self.table.setItem(i, col, QTableWidgetItem(text))
+            note = QTableWidgetItem("")
+            self.table.setItem(i, 6, note)
+            if not getattr(res, "admissible", True):
+                note.setText(invalid_label(res))
+                note.setToolTip(invalid_text(res))
+                for c in range(self.table.columnCount()):
+                    self.table.item(i, c).setForeground(
+                        QColor(theme_color("muted")))
 
     def _on_sel(self) -> None:
         rows = self.table.selectionModel().selectedRows()

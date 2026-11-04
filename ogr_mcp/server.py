@@ -647,7 +647,9 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
             view: Annotated[Literal["summary", "critical", "top", "minima",
                                     "warnings"], Field(
                 description="summary; critical (surface with its slice "
-                            "table); top (n best surfaces); minima; "
+                            "table); top (the n most critical surfaces: "
+                            "the admissible ones first, as the critical is "
+                            "chosen, each with its 'admissible'); minima; "
                             "warnings.")] = "summary",
             method_id: Annotated[Optional[str], Field(
                 description="One method only.")] = None,
@@ -1757,8 +1759,9 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
             bins: Annotated[Optional[int], Field(
                 description="sf_along_slope / histogram: bins.")] = None,
             rank: Annotated[Optional[int], Field(
-                description="slices: the n-th lowest surface (default "
-                            "the critical).")] = None,
+                description="slices: the n-th surface in the order of "
+                            "results_get's 'top' (1 is the critical, also "
+                            "the default).")] = None,
             fos_min: Annotated[Optional[float], Field(
                 description="filter: lowest factor.")] = None,
             fos_max: Annotated[Optional[float], Field(

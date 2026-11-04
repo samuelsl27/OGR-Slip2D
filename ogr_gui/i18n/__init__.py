@@ -2523,12 +2523,12 @@ _DICTS: dict[str, dict[str, str]] = {
             "búsqueda las lleva al factor de seguridad objetivo.</i>",
         "Method: <b>{0}</b><br>Valid surfaces: <b>{1}</b> / {2}<br>{3}<br>"
         "<b>{4}</b><br>{5} = <span style='color:{6}; font-size:14pt;'><b>{7}"
-        "</b></span>{8}<br>Iterations: {9}<br>Centre: ({10:.2f}, {11:.2f})"
-        "<br>Radius: {12:.2f} m":
+        "</b></span>{8}<br>Iterations: {9}<br>Centre: ({10}, {11})"
+        "<br>Radius: {12}":
             "Método: <b>{0}</b><br>Superficies válidas: <b>{1}</b> / {2}<br>"
             "{3}<br><b>{4}</b><br>{5} = <span style='color:{6}; "
             "font-size:14pt;'><b>{7}</b></span>{8}<br>Iteraciones: {9}<br>"
-            "Centro: ({10:.2f}, {11:.2f})<br>Radio: {12:.2f} m",
+            "Centro: ({10}, {11})<br>Radio: {12}",
         "No (x, y, value) rows could be parsed from the file.":
             "No se pudo leer ninguna fila (x, y, valor) del archivo.",
         "No results.": "Sin resultados.",

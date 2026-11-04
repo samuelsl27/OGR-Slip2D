@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from ogr_gui.i18n import tr  # noqa: E402
-from ogr_gui.labels import method_name  # noqa: E402
+from ogr_gui.labels import circle_cells, method_name  # noqa: E402
 
 #: The critical row: a fixed pair that reads in both themes (D319).
 CRITICAL_ROW_BACKGROUND = "#fff1c2"
@@ -82,9 +82,12 @@ class ResultsDock(QDockWidget):
         layout.addWidget(self.stale_label)
         self._stale = False
 
-        self.table = QTableWidget(0, 6)
+        # v0.1.419 (D361) -- a last column says why a surface the checks
+        # rejected cannot be the critical one, listed after the admissible
+        self.table = QTableWidget(0, 7)
         self.table.setHorizontalHeaderLabels(
-            ["#", tr("FoS"), tr("Method"), tr("Centre X"), tr("Centre Y"), tr("Radius")]
+            ["#", tr("FoS"), tr("Method"), tr("Centre X"), tr("Centre Y"),
+             tr("Radius"), tr("Note")]
         )
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
@@ -144,6 +147,11 @@ class ResultsDock(QDockWidget):
         from ogr_gui.reported_quantity import column_caption, column_value
         self.table.setHorizontalHeaderItem(1, QTableWidgetItem(
             column_caption(search_result, factor_report)))
+        from ogr_gui.core_messages import invalid_label, invalid_text
+        from ogr_gui.themes import theme_color
+        # v0.1.419 (D361) -- ``top_n`` lists the admissible surfaces first,
+        # in the order ``critical`` chooses, so the highlighted row is the
+        # critical one: it was the lowest factor, admissible or not
         for i, res in enumerate(search_result.top_n(50)):
             sd = res.surface.to_dict()
             self.table.insertRow(i)
@@ -152,11 +160,18 @@ class ResultsDock(QDockWidget):
                 column_value(search_result, res, factor_report)))
             # v0.1.324 (D315) — the method's name, not its identifier
             self.table.setItem(i, 2, QTableWidgetItem(method_name(res.method_id)))
-            self.table.setItem(i, 3, QTableWidgetItem(f"{sd.get('centre_x', float('nan')):.2f}"))
-            self.table.setItem(i, 4, QTableWidgetItem(f"{sd.get('centre_y', float('nan')):.2f}"))
-            self.table.setItem(i, 5, QTableWidgetItem(f"{sd.get('radius', float('nan')):.2f}"))
+            for col, text in zip((3, 4, 5), circle_cells(sd)):
+                self.table.setItem(i, col, QTableWidgetItem(text))
+            note = QTableWidgetItem("")
+            self.table.setItem(i, 6, note)
+            if not getattr(res, "admissible", True):
+                note.setText(invalid_label(res))
+                note.setToolTip(invalid_text(res))
+                for c in range(self.table.columnCount()):
+                    self.table.item(i, c).setForeground(
+                        QColor(theme_color("muted")))
 
-            if i == 0:
+            if res is crit:
                 # Highlight critical row. v0.1.326 (D319) — a fixed ink on
                 # a fixed background, legible in both themes: a yellow
                 # background with the theme's text was white on yellow in

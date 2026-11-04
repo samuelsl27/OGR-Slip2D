@@ -393,11 +393,14 @@ class TestTheMainWindowSpeaksSpanish:
         from ogr_gui.i18n import current_language, set_language
         before = current_language()
         try:
+            # v0.1.419 (D361) -- and a last column, the reason a surface
+            # the checks rejected cannot be the critical one
             assert self._headers("es") == [
-                "#", "FS", "Método", "Centro X", "Centro Y", "Radio"]
-            # control: the English is what it was
+                "#", "FS", "Método", "Centro X", "Centro Y", "Radio", "Nota"]
+            # control: the English is what it was, with the same column
             assert self._headers("en") == [
-                "#", "FoS", "Method", "Centre X", "Centre Y", "Radius"]
+                "#", "FoS", "Method", "Centre X", "Centre Y", "Radius",
+                "Note"]
         finally:
             set_language(before)
 

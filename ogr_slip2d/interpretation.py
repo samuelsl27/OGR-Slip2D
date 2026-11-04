@@ -389,6 +389,20 @@ def slip_centre(surface_dict) -> Optional[tuple]:
     return cx, cy
 
 
+def slip_circle(surface_dict) -> Optional[tuple]:
+    """``(x, y, radius)`` of the circle a serialised surface was drawn
+    about, by :func:`slip_centre`'s rule, or None for a surface that has
+    none (v0.1.419, D361: the tables printed «nan» or «0.00» for it)."""
+    sd = surface_dict or {}
+    if sd.get("type") == "weak_layer":
+        sd = sd.get("base") or {}
+    centre = slip_centre(sd)
+    radius = sd.get("radius")
+    if centre is None or radius is None:
+        return None
+    return centre[0], centre[1], radius
+
+
 def minimum_per_centre(search_result) -> list:
     """The lowest-factor surface at each slip-centre grid point, plus every
     surface that has no centre (a non-circular search has no grid of

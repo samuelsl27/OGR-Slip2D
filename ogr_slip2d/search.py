@@ -480,7 +480,21 @@ class SearchResult:
         return [r for r in self.all_evaluations() if r.is_valid]
 
     def top_n(self, n: int = 10) -> list[LEMResult]:
-        return sorted(self.valid(), key=self.score)[:n]
+        """The ``n`` most critical surfaces, in the order ``critical``
+        chooses: the admissible ones first, by score, then the ones the
+        checks rejected, by score. So ``top_n(1)[0] is critical`` whenever
+        there is a critical surface, also when every surface is
+        inadmissible (``critical`` then falls back to all of them).
+
+        v0.1.419 (D361) — by score alone, a lower surface the m-alpha check
+        had rejected came first: the results panel highlighted it as the
+        critical one under a heading that gave another number, and
+        ``results_query(rank=1)`` answered it. ``sorted`` is stable and
+        ``min`` returns the first of equals, so a tie is broken the same way
+        in both."""
+        def key(r):
+            return (not getattr(r, "admissible", True), self.score(r))
+        return sorted(self.valid(), key=key)[:n]
 
 
 # ======================================================================

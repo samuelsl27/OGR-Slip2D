@@ -257,3 +257,15 @@ def measurement_text(x0: float, y0: float, x1: float, y1: float) -> str:
     return tr("Distance: {0}   Δx: {1}   Δy: {2}").format(
         "%.3f" % math.dist((x0, y0), (x1, y1)), "%.3f" % (x1 - x0),
         "%.3f" % (y1 - y0))
+
+
+def circle_cells(surface_dict) -> tuple:
+    """``(centre x, centre y, radius)`` of a surface as a table writes them,
+    to 2 decimals, or «—» for each when the surface is not a circle
+    (v0.1.419, D361): the results panel wrote «nan» and Interpret «0.00»
+    for a non-circular surface, a number that is not one."""
+    from ogr_slip2d.interpretation import slip_circle
+    circle = slip_circle(surface_dict)
+    if circle is None:
+        return ("—", "—", "—")
+    return tuple(f"{v:.2f}" for v in circle)
