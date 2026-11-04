@@ -261,6 +261,10 @@ class CanvasView(QGraphicsView):
     # SELECT mode and Interpret has connected to them.
     scene_clicked = Signal(float, float)
     scene_hovered = Signal(float, float)
+    #: v0.1.420 (D360) -- an Esc that had nothing of the canvas's own to
+    #: cancel. The canvas takes Esc whenever it has the focus, so a window
+    #: whose own pick modes Esc should leave hears of it here.
+    escape_pressed = Signal()
 
     # v0.1.3 — snap / drawing signals
     snap_changed = Signal(object)           # emits SnapResult
@@ -2815,6 +2819,7 @@ class CanvasView(QGraphicsView):
                 event.accept()
                 return
             self.set_tool_mode(ToolMode.SELECT)
+            self.escape_pressed.emit()
             event.accept()
             return
         super().keyPressEvent(event)

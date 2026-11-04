@@ -93,7 +93,9 @@ class _SliceDataDock(QDockWidget):
     FIELDS = [
         # --- Geometry --------------------------------------------------
         ("─ Geometry ─", lambda s, r: ""),
-        ("Slice Number",     lambda s, r: s.index),
+        # v0.1.420 (D360) -- from 1, as the PDF's table and the graph along
+        # the surface number them; ``s.index`` stays the engine's, from 0
+        ("Slice Number",     lambda s, r: s.index + 1),
         ("X centre (m)",     lambda s, r: round(s.x_centre, 3)),
         ("Width b (m)",      lambda s, r: round(s.width, 3)),
         ("Base length l (m)", lambda s, r: round(s.base_length, 3)),
@@ -699,6 +701,9 @@ class InterpretWindow(QMainWindow):
         self._selected_result = None
         self._slices_visible = False
         self._query_slice_target = None
+        #: v0.1.420 (D360) -- Query Slice Data is a mode, entered from its
+        #: menu and left with Esc, the same menu or another query
+        self._slice_query_active = False
         self._hover_grid_idx = None  # index of last hovered (cx, cy) cell
         self._hover_throttle_ms = 50
         # Connect canvas hover signal for grid-cell preview
@@ -706,9 +711,16 @@ class InterpretWindow(QMainWindow):
             self.canvas.scene_hovered.connect(self._on_canvas_hover)
         except AttributeError:
             pass
-        # Default click handler: pick the surface at the clicked grid cell
+        # v0.1.420 (D360) -- ONE owner of the clicks, which hands each one
+        # to the mode it was made in (the pattern of the main window's
+        # ``_on_segment_picked``, D308). The default handler and the slice
+        # query's were both connected, and with the query on a click near
+        # the grid also picked another surface and put its slice 0 in the
+        # panel.
         try:
-            self.canvas.scene_clicked.connect(self._on_canvas_click_default)
+            self.canvas.scene_clicked.connect(self._on_scene_clicked)
+            self.canvas.escape_pressed.connect(self._leave_query_modes)
+            self.canvas.tool_mode_changed.connect(self._on_tool_mode)
             # v0.1.331 (D329a) — Measure and Dimension Length
             self.canvas.segment_picked.connect(self._on_segment_picked)
         except AttributeError:
@@ -1026,8 +1038,11 @@ class InterpretWindow(QMainWindow):
                                         checkable=True)
         self._act_show_slices.toggled.connect(self._toggle_slices)
         m_query.addAction(self._act_show_slices)
-        m_query.addAction(QAction(tr("Query Slice Data..."), self,
-                                  triggered=self._query_slice))
+        # v0.1.420 (D360) -- a mode, so it is ticked while it is on
+        self._act_query_slice = QAction(tr("Query Slice Data"), self,
+                                        checkable=True)
+        self._act_query_slice.toggled.connect(self._on_query_slice_toggled)
+        m_query.addAction(self._act_query_slice)
         # v0.1.22 — line of thrust overlay (interslice resultants)
         self._act_thrust = QAction(tr("Show Line of Thrust"), self,
                                    checkable=True)
@@ -1995,6 +2010,8 @@ class InterpretWindow(QMainWindow):
     # ------------------------------------------------------------------
     def _add_query(self) -> None:
         """Enter pick mode: hover to inspect, click to keep."""
+        # v0.1.420 (D360) -- another query ends the slice query
+        self._leave_slice_query()
         if self.search_result is None:
             return
         self._query_pick_mode = True
@@ -2127,6 +2144,8 @@ class InterpretWindow(QMainWindow):
     # ------------------------------------------------------------------
     def _graph_query(self) -> None:
         """Plot a slice quantity along each queried surface."""
+        # v0.1.420 (D360) -- another query ends the slice query
+        self._leave_slice_query()
         if self._ensure_a_query() is None:
             self.statusBar().showMessage(tr("No results to query."), 4000)
             return
@@ -2223,6 +2242,8 @@ class InterpretWindow(QMainWindow):
         return 0.0
 
     def _delete_query(self) -> None:
+        # v0.1.420 (D360) -- another query ends the slice query
+        self._leave_slice_query()
         qs = self._queries()
         if not qs:
             self._info(tr("No queries to delete."))
@@ -3274,9 +3295,10 @@ class InterpretWindow(QMainWindow):
     def _query_slice(self) -> None:
         """Activate click-to-pick mode for slice interrogation.
 
-        v0.1.12 — opens the slice data dock and connects a canvas
-        click handler. Clicking on any slice of the selected surface
-        shows that slice's full property set in the dock.
+        v0.1.12 — opens the slice data dock; clicking on any slice of the
+        selected surface shows that slice's full property set in it.
+        v0.1.420 (D360) — a mode: ``_on_scene_clicked`` hands it the clicks
+        while it is on, and Esc, its menu entry or another query end it.
         """
         if not self.search_result:
             self._info(tr("No results to query."))
@@ -3298,24 +3320,66 @@ class InterpretWindow(QMainWindow):
         self._query_slice_target = target
         self.slice_dock.show()
         self.slice_dock.raise_()
+        self._slice_query_active = True
+        self._tick_slice_query(True)
         self.statusBar().showMessage(
             tr("Click on any slice to view its properties (Esc to exit)."),
             8000,
         )
-        # v0.1.87 — connect ONCE. The old code disconnected first and let
-        # the failure pass, which printed a libpyside "Failed to
-        # disconnect" warning on every first use because there was nothing
-        # connected yet. A flag says what the try/except was trying to ask.
-        if not getattr(self, "_slice_pick_connected", False):
-            try:
-                self.canvas.scene_clicked.connect(
-                    self._on_canvas_click_for_query)
-                self._slice_pick_connected = True
-            except AttributeError:
-                # No signal (a stub canvas in a test): show a slice anyway
-                # rather than leaving the panel empty.
-                mid = len(target.slices) // 2
-                self.slice_dock.show_slice(target.slices[mid], target)
+        if not hasattr(self.canvas, "scene_clicked"):
+            # No signal (a stub canvas in a test): show a slice anyway
+            # rather than leaving the panel empty.
+            mid = len(target.slices) // 2
+            self.slice_dock.show_slice(target.slices[mid], target)
+
+    # ------------------------------------------------------------------
+    # v0.1.420 (D360) -- the slice query as a mode
+    def _tick_slice_query(self, on: bool) -> None:
+        act = getattr(self, "_act_query_slice", None)
+        if act is not None and act.isChecked() != on:
+            act.blockSignals(True)
+            act.setChecked(on)
+            act.blockSignals(False)
+
+    def _on_query_slice_toggled(self, on: bool) -> None:
+        if on:
+            self._query_slice()
+            # with nothing to query it says why and stays off
+            self._tick_slice_query(self._slice_query_active)
+        else:
+            self._leave_slice_query()
+
+    def _leave_slice_query(self) -> None:
+        """Leave Query Slice Data, saying so; nothing when it is off."""
+        if not self._slice_query_active:
+            return
+        self._slice_query_active = False
+        self._tick_slice_query(False)
+        self.statusBar().showMessage(tr("Slice query ended."), 3000)
+
+    def _leave_query_modes(self) -> None:
+        """Esc: leave Add Query or Query Slice Data, whichever is on, from
+        the window or from the canvas (which takes Esc when focused)."""
+        if getattr(self, "_query_pick_mode", False):
+            self._query_pick_mode = False
+            self._clear_query_label()
+            self._refresh_canvas_with_highlights()
+            self.statusBar().showMessage(tr("Add Query cancelled"), 3000)
+        else:
+            self._leave_slice_query()
+
+    def _on_tool_mode(self, mode) -> None:
+        """Measure and Dimension are other queries: they end this one."""
+        from .canvas import ToolMode
+        if mode != ToolMode.SELECT:
+            self._leave_slice_query()
+
+    def _on_scene_clicked(self, x: float, y: float) -> None:
+        if (self._slice_query_active
+                and not getattr(self, "_query_pick_mode", False)):
+            self._on_canvas_click_for_query(x, y)
+        else:
+            self._on_canvas_click_default(x, y)
 
     def _on_canvas_click_for_query(self, x: float, y: float) -> None:
         """Pick the slice containing the clicked x and show its data.
@@ -3353,13 +3417,15 @@ class InterpretWindow(QMainWindow):
         self._highlight_slice(s, res)
         self.statusBar().showMessage(
             tr("Slice %d of %d — x from %.2f to %.2f")
-            % (s.index, len(res.slices), s.base_x_left, s.base_x_right),
+            % (s.index + 1, len(res.slices), s.base_x_left, s.base_x_right),
             4000,
         )
 
     def _show_values_along(self) -> None:
         """Show slice-base quantities (σn, τ, u, α) along the critical
         surface as a chart. v0.1.15 — real implementation."""
+        # v0.1.420 (D360) -- another query ends the slice query
+        self._leave_slice_query()
         target = getattr(self, "_selected_result", None)
         if target is None and self.search_result and self.search_result.critical:
             target = self.search_result.critical
@@ -3545,20 +3611,24 @@ class InterpretWindow(QMainWindow):
         (``ogr_slip2d.postprocess``), not from single-slice statics, so
         the diagram is consistent with the selected method's FoS.
         """
+        # v0.1.420 (D360) -- another query ends the slice query
+        self._leave_slice_query()
         target = getattr(self, "_selected_result", None)
         if target is None and self.search_result and self.search_result.critical:
             target = self.search_result.critical
         if target is None or not target.slices:
             self._info(tr("No slices available."))
             return
-        idx = len(target.slices) // 2
         from PySide6.QtWidgets import QInputDialog
-        idx, ok = QInputDialog.getInt(
-            self, tr("Free Body Diagram"), tr("Slice index:"),
-            idx, 0, len(target.slices) - 1,
+        # v0.1.420 (D360) -- asked and shown from 1, as every slice number
+        # the reader sees; ``idx`` is the engine's, from 0
+        number, ok = QInputDialog.getInt(
+            self, tr("Free Body Diagram"), tr("Slice number:"),
+            len(target.slices) // 2 + 1, 1, len(target.slices),
         )
         if not ok:
             return
+        idx = number - 1
         try:
             import matplotlib
             matplotlib.use("QtAgg", force=False)
@@ -3598,7 +3668,7 @@ class InterpretWindow(QMainWindow):
 
         dlg = QDialog(self)
         dlg.setWindowTitle(
-            tr('Free Body Diagram — slice {0} ({1})').format(idx, method_name(target.method_id)))
+            tr('Free Body Diagram — slice {0} ({1})').format(idx + 1, method_name(target.method_id)))
         dlg.resize(640, 560)
         v = QVBoxLayout(dlg)
         fig = Figure(figsize=(6.6, 5.4), tight_layout=True)
@@ -3678,7 +3748,7 @@ class InterpretWindow(QMainWindow):
         ax.set_aspect("equal", adjustable="box")
         ax.grid(True, alpha=0.3)
         ax.set_title(
-            tr('Slice {0}: α={1:.1f}°, b={2:.2f} m, FoS={3:.4f}{4}').format(idx, math.degrees(s.base_angle), b, target.fos, note), fontsize=9)
+            tr('Slice {0}: α={1:.1f}°, b={2:.2f} m, FoS={3:.4f}{4}').format(idx + 1, math.degrees(s.base_angle), b, target.fos, note), fontsize=9)
         ax.set_xlabel("x (m)")
         ax.set_ylabel("y (m)")
         canvas = FigureCanvasQTAgg(fig)
@@ -3693,6 +3763,8 @@ class InterpretWindow(QMainWindow):
         (``interpretation.surfaces_through_point``), not to the whole
         circle; and the prompt no longer promises a highlight it never
         drew."""
+        # v0.1.420 (D360) -- another query ends the slice query
+        self._leave_slice_query()
         if not self.search_result:
             return
         from PySide6.QtWidgets import (
@@ -3744,6 +3816,8 @@ class InterpretWindow(QMainWindow):
     def _add_result_table(self) -> None:
         """Open a sortable table with the full results: FoS, surface type,
         area of the sliding mass and slices, for every valid surface."""
+        # v0.1.420 (D360) -- another query ends the slice query
+        self._leave_slice_query()
         if not self.search_result:
             return
         valid = [r for r in self.search_result.evaluations if r.is_valid]
@@ -3936,11 +4010,9 @@ class InterpretWindow(QMainWindow):
         """
         from PySide6.QtCore import Qt as _Qt
         if (event.key() == _Qt.Key_Escape
-                and getattr(self, "_query_pick_mode", False)):
-            self._query_pick_mode = False
-            self._clear_query_label()
-            self._refresh_canvas_with_highlights()
-            self.statusBar().showMessage(tr("Add Query cancelled"), 3000)
+                and (getattr(self, "_query_pick_mode", False)
+                     or self._slice_query_active)):
+            self._leave_query_modes()
             event.accept()
             return
         super().keyPressEvent(event)

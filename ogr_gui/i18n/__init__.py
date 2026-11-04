@@ -86,7 +86,9 @@ _DICTS: dict[str, dict[str, str]] = {
         'Query': 'Consulta',
         'Query %d': 'Consulta %d',
         'Query Invalid Surfaces': 'Consultar superficies no válidas',
-        'Query Slice Data...': 'Consultar datos de dovela...',
+        # v0.1.420 (D360) -- un modo, marcado mientras dura
+        'Query Slice Data': 'Consultar datos de dovela',
+        'Slice query ended.': 'Consulta de dovelas terminada.',
         'Query added — %s': 'Consulta añadida — %s',
         'Restore the default factor-of-safety range: 0 to 6 in 24 intervals of 0.25.': 'Restaurar el rango por defecto del factor de seguridad: 0 a 6 en 24 intervalos de 0,25.',
         'Save...': 'Guardar...',
@@ -2588,7 +2590,8 @@ _DICTS: dict[str, dict[str, str]] = {
         "{0} points": "{0} puntos",
         "Free Body Diagram": "Diagrama de sólido libre",
         "Section as x0,y0,x1,y1:": "Sección como x0,y0,x1,y1:",
-        "Slice index:": "Índice de la dovela:",
+        # v0.1.420 (D360) -- se pide desde 1, como se numeran en pantalla
+        "Slice number:": "Número de dovela:",
         # v0.1.319 (D300, family b) — the canvas, its tool tips and context
         # menus, the data tips, the results panel and the status bar
         # v0.1.418 (D355) -- the canvas tip of a region: the data tip's head
