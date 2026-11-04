@@ -249,9 +249,10 @@ class TestAKilledJobLeavesNoFolder:
         from ogr_slip2d.slice_store import FOLDER
         root = Path(tempfile.gettempdir()) / FOLDER
         root.mkdir(exist_ok=True)
-        # dev/d370-shutdown -- in a session of its own, as JobManager starts
-        # a worker: Job.cancel kills the process GROUP on POSIX, and in the
-        # suite's group it took the whole run (and the CI step) with it
+        # v0.1.422 (D394) -- in a session of its own, as JobManager starts a
+        # worker: Job.cancel kills the process GROUP on POSIX, and in the
+        # suite's group it took the whole run with it -- the CI step and its
+        # log since v0.1.409, and gdb's inferior
         proc = subprocess.Popen([sys.executable, "-c",
                                  "import time; time.sleep(60)"],
                                 start_new_session=sys.platform != "win32")

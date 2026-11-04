@@ -9,70 +9,69 @@ on:
   workflow_dispatch:
 
 jobs:
-  # dev/d370-shutdown, fourth round: each test of the two files that die with
-  # «shared QObject was deleted directly» when run alone, by itself.
   test:
-    name: "D370 ${{ matrix.t }}"
+    name: Test suite (Python ${{ matrix.python }})
     runs-on: ubuntu-latest
-    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - {f: "test_assign_water_surface_v195.py", t: "test_before_the_assignment_the_material_is_dry"}
-          - {f: "test_assign_water_surface_v195.py", t: "test_assigning_makes_u_the_documented_closed_form"}
-          - {f: "test_assign_water_surface_v195.py", t: "test_writing_only_the_id_would_have_changed_nothing"}
-          - {f: "test_assign_water_surface_v195.py", t: "test_an_untouched_material_stays_dry"}
-          - {f: "test_assign_water_surface_v195.py", t: "test_unticking_puts_the_material_back_to_dry"}
-          - {f: "test_assign_water_surface_v195.py", t: "test_a_material_on_ru_keeps_its_own_model_when_cleared"}
-          - {f: "test_assign_water_surface_v195.py", t: "test_a_water_table_gets_the_water_table_model"}
-          - {f: "test_assign_water_surface_v195.py", t: "test_current_column_reports_none_when_unassigned"}
-          - {f: "test_assign_water_surface_v195.py", t: "test_boxes_open_pre_ticked_to_the_current_state"}
-          - {f: "test_assign_water_surface_v195.py", t: "test_select_all_and_clear_all"}
-          - {f: "test_assign_water_surface_v195.py", t: "test_only_materials_pointing_here_are_reported_as_cleared"}
-          - {f: "test_assign_water_surface_v195.py", t: "test_preselect_picks_the_boundary_just_drawn"}
-          - {f: "test_assign_water_surface_v195.py", t: "test_the_title_names_the_surface"}
-          - {f: "test_assign_water_surface_v195.py", t: "test_the_switch_is_on_by_default"}
-          - {f: "test_assign_water_surface_v195.py", t: "test_nothing_opens_when_the_switch_is_off"}
-          - {f: "test_assign_water_surface_v195.py", t: "test_a_water_surface_triggers_the_prompt"}
-          - {f: "test_assign_water_surface_v195.py", t: "test_a_material_boundary_does_not"}
-          - {f: "test_assign_water_surface_v195.py", t: "test_no_materials_means_no_prompt"}
-          - {f: "test_transient_no_stages_v1306.py", t: "test_it_accepts_no_stages_and_keeps_the_capture"}
-          - {f: "test_transient_no_stages_v1306.py", t: "test_clear_is_written_on_ok_and_cancel_writes_nothing"}
-          - {f: "test_transient_no_stages_v1306.py", t: "test_it_says_which_initial_state_and_that_there_is_no_stage"}
-          - {f: "test_transient_no_stages_v1306.py", t: "test_without_a_mesh_there_is_nothing_to_capture"}
-          - {f: "test_transient_no_stages_v1306.py", t: "test_initial_state_first_then_the_stage"}
-          - {f: "test_transient_no_stages_v1306.py", t: "test_nothing_is_computed_and_it_says_why"}
-          - {f: "test_transient_no_stages_v1306.py", t: "test_switched_on_in_project_settings"}
-          - {f: "test_transient_no_stages_v1306.py", t: "test_control_with_one_stage_it_computes"}
-          - {f: "test_transient_no_stages_v1306.py", t: "test_the_engine"}
-          - {f: "test_transient_no_stages_v1306.py", t: "test_transient_set_accepts_it_and_groundwater_run_refuses"}
-          - {f: "test_transient_no_stages_v1306.py", t: "test_switched_on_by_settings_set"}
-          - {f: "test_transient_no_stages_v1306.py", t: "test_control_with_one_stage_they_compute"}
+        # 3.11 is the floor `pyproject.toml` declares, and it is the job
+        # that matters: from v0.1.70 to v0.1.75 it was the only one
+        # failing, on a PEP 701 f-string that 3.12 accepts and 3.11 does
+        # not. Dropping it would have hidden the bug, not fixed it.
+        # 3.13 was added in v0.1.76 so the ceiling is tested too.
+        python: ["3.11", "3.12", "3.13"]
+
     steps:
+      # v7 in both, and the major matters more than it looks: a JavaScript
+      # action declares its own Node runtime in its `action.yml`, and the
+      # workflow cannot override it. checkout@v4 and setup-python@v5
+      # declare `node20`, which left the runners in the autumn of 2026 —
+      # from June 2026 they were already being forced onto Node 24, which
+      # is what the deprecation annotation was saying. v5/v6 were the
+      # first majors on `node24`; v7 is chosen so the jump is not due
+      # again within the year.
       - uses: actions/checkout@v7
+
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python }}
           cache: pip
+
       - name: Install system libraries for Qt
+        # PySide6 needs these even in offscreen mode: the GUI tests build
+        # real widgets, they just never reach a display.
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libegl1 libgl1 libxkbcommon-x11-0 libdbus-1-3 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-cursor0
+          sudo apt-get install -y --no-install-recommends \
+            libegl1 libgl1 libxkbcommon-x11-0 libdbus-1-3 \
+            libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+            libxcb-randr0 libxcb-render-util0 libxcb-shape0 \
+            libxcb-xinerama0 libxcb-cursor0
+
       - name: Install the project
         run: |
           python -m pip install --upgrade pip
+          # v0.1.195 — with the [mcp] extra: the MCP server tests FAIL in
+          # CI without the SDK (they only return early on a machine without
+          # it), so the extra cannot be forgotten here unnoticed.
           pip install -e ".[mcp]"
-      - name: One test, normal ending
+
+      - name: Run the test suite
+        # QT_QPA_PLATFORM=offscreen is what lets the widget tests run on a
+        # headless runner; the runner exits non-zero when anything fails.
+        # v0.1.231 -- PYTHONFAULTHANDLER prints the Python stack of every
+        # thread if the process dies on a signal: the 3.12 job of v0.1.230
+        # died with a bare "Segmentation fault" in the middle of a file, and
+        # nothing said which test or which Qt object it was.
+        # v0.1.377 -- PYTHONUNBUFFERED: a redirected stdout is block
+        # buffered, so the log gained text in bursts and its timestamps could
+        # not say how long each file took; unbuffered, they do.
         env:
           QT_QPA_PLATFORM: offscreen
+          PYTHONFAULTHANDLER: "1"
           PYTHONUNBUFFERED: "1"
-          OGR_D370: census
-        run: |
-          set +e
-          echo "D370 test: ${{ matrix.f }} :: ${{ matrix.t }}"
-          python tests/_runner.py ${{ matrix.f }} -k ${{ matrix.t }}
-          echo "D370 EXIT=$?"
+        run: python tests/_runner.py
 
   licence:
     name: Licence consistency

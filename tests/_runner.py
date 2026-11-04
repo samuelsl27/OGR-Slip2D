@@ -1336,6 +1336,34 @@ def main(tests_dir: Path, patterns=(), k: str | None = None,
     return code
 
 
+def _release_windows() -> int:
+    """Delete the windows with no parent the tests left alive, with Python
+    alive, before the interpreter's shutdown; returns how many (v0.1.422,
+    D370).
+
+    At shutdown PySide's atexit hook deletes every wrapped object one by
+    one, in no order a window's children can rely on. On Linux, a dialog a
+    test kept alive through a cycle of its own (a lambda connected to it)
+    ended there next to an object held by a QSharedPointer of Qt's: «shared
+    QObject was deleted directly», then a segfault. Deleted here, each one
+    takes its children with it in Qt's own order. Only windows without a
+    parent: a popup menu is a top-level widget too, but its window owns it.
+    Nothing to do in a run that never imported Qt."""
+    if "PySide6.QtWidgets" not in sys.modules:
+        return 0
+    import shiboken6
+    from PySide6.QtWidgets import QApplication
+    app = QApplication.instance()
+    if app is None:
+        return 0
+    released = 0
+    for window in [w for w in app.topLevelWidgets() if w.parent() is None]:
+        if shiboken6.isValid(window):
+            shiboken6.delete(window)
+            released += 1
+    return released
+
+
 def _parse_args(argv):
     p = argparse.ArgumentParser(
         prog="python tests/_runner.py",
@@ -1391,13 +1419,17 @@ if __name__ == "__main__":
     # remain, and they are emptied here so that no ending can lose them.
     sys.stdout.flush()
     sys.stderr.flush()
-    # dev/d370-shutdown — the ending of v0.1.376 on every platform, so the
-    # Linux crash at shutdown shows again, and the probe first (D370).
-    import _d370
-    _d370.before_exit()
-    # Not on Windows, measured: there os._exit goes through ExitProcess,
-    # which still unloads every DLL, and Qt's destructors met what the
-    # suite left alive. Two chunks of four died with 0xC0000005 after their
-    # last file; the same chunk alone, A/B, died with os._exit and exited 0
-    # with this ending, the one Windows has always had.
+    # v0.1.422 (D370) — the windows the tests left alive go first, with
+    # Python alive, and the process then ends through the interpreter's own
+    # shutdown on every platform, so a crash in it shows again. From
+    # v0.1.276 that shutdown segfaulted on Linux after the totals
+    # ("QObject: shared QObject was deleted directly", exit 139): PySide's
+    # atexit hook (destroyQCoreApplication) deletes every wrapped object one
+    # by one, and a dialog with no parent that a test kept alive through a
+    # cycle met one held by a QSharedPointer of Qt's. v0.1.377 hid it with
+    # os._exit off Windows; by the owner's decision (2026-11-04) that goes,
+    # now that the cause is gone. Windows always ended this way: there
+    # os._exit goes through ExitProcess, which still unloads every DLL, and
+    # two chunks of four died with 0xC0000005 (A/B of v0.1.377).
+    _release_windows()
     sys.exit(code)
