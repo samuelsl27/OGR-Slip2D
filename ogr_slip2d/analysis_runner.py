@@ -2539,7 +2539,24 @@ def run_configured_drawdown_sweep(project, method_ids=None, *,
     if missing:
         raise AnalysisNotConfigured(
             [run_note(SEARCH_NOT_BUILT, methods=", ".join(missing))])
-    result = run_drawdown_sweep(factored, searches.__getitem__, method_ids,
+
+    # v0.1.424 (D373) — a NEW search for every level. The ones built above
+    # only answer, before the first level, whether each method's search can
+    # be built at all (and a drawdown wrapper's refusal is raised there, not
+    # lost as a failed level). Until this version they were also the
+    # factory, so every level re-ran the same object: the Slope Search and
+    # the Particle Swarm draw their generator in ``__init__`` and ``run``
+    # does not reset it, so each level started from the random state the
+    # previous one left. Measured with the compute audit's probe S2
+    # (0.1.377), the Morgenstern slope with a seeded Slope Search: the total
+    # drawdown answered 1.20381 in a sweep of 2 levels and 1.20561 in one of
+    # 4 -- the same water, another factor depending on what was swept
+    # before. Overall Slope builds one per sample for the same reason.
+    def fresh(mid):
+        return build_search(factored, mid,
+                            progress_cb=lambda _d, _t: checkpoint())
+
+    result = run_drawdown_sweep(factored, fresh, method_ids,
                                 n_levels=int(n_levels),
                                 include_total=bool(include_total),
                                 progress_cb=progress_cb)
