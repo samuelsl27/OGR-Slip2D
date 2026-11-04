@@ -624,6 +624,35 @@ _LATER = [
      'english': 'hydraulic, and the seepage is not solved again for each '
                 'point, so it was not swept: hydraulic:m1:ks',
      'args': {'key': 'hydraulic:m1:ks'}},
+    # v0.1.425 (D376) — samples and sweep points that break a rule of the
+    # run; the rule's own sentence is nested as it came (a raw stand-in
+    # here: its catalogue is not this file's)
+    {'cat': 'stat',
+     'code': 'stat.samples_break_rules',
+     'english': '99 of the 200 samples break a rule for which the analysis is '
+                'refused, and were evaluated anyway: 99 times, the first: kh '
+                'must not be negative, got -0.29.',
+     'args': {'n': 99, 'total': 200, 'rules': [
+         {'$code': 'stat.rule_counted', '$cat': 'stat',
+          '$args': {'n': 99, 'rule': {
+              '$raw': 'kh must not be negative, got -0.29.'}}}]}},
+    {'cat': 'stat',
+     'code': 'stat.points_break_rules',
+     'english': '5 of the 11 points of the sweep break a rule for which the '
+                'analysis is refused, and were evaluated anyway: 5 times, the '
+                'first: kh must not be negative, got -0.3.; 2 times, the '
+                'first: The Drawdown Line lies ABOVE the Water Table.',
+     'args': {'n': 5, 'total': 11, 'rules': [
+         {'$code': 'stat.rule_counted', '$cat': 'stat',
+          '$args': {'n': 5, 'rule': {
+              '$raw': 'kh must not be negative, got -0.3.'}}},
+         {'$code': 'stat.rule_counted', '$cat': 'stat',
+          '$args': {'n': 2, 'rule': {
+              '$raw': 'The Drawdown Line lies ABOVE the Water Table.'}}}]}},
+    {'cat': 'stat',
+     'code': 'stat.rule_counted',
+     'english': '3 times, the first: kh must not be negative, got -0.1.',
+     'args': {'n': 3, 'rule': {'$raw': 'kh must not be negative, got -0.1.'}}},
 ]
 
 
@@ -764,6 +793,7 @@ _CODED = {
     "ogr_slip2d/probabilistic.py": (
         "_cannot_reevaluate", "_type_refusal", "_publish_note",
         "_stale_variables_stop", "_hydraulic_variables_stop",
+        "_SampleRules.see", "_SampleRules.publish",
         "_MassSwitches.where",
         "_MassSwitches.sentence", "_case_text", "_spans", "_case",
         "_CaseSwitches.where", "_CaseSwitches.sentence",

@@ -49,6 +49,11 @@ VAR_ORPHAN = S + "var_orphan"
 VARS_HYDRAULIC_ONLY = S + "vars_hydraulic_only"
 VARS_HYDRAULIC = S + "vars_hydraulic"
 VAR_HYDRAULIC = S + "var_hydraulic"
+#: v0.1.425 (D376) -- samples and sweep points that break a rule the run
+#: itself refuses, counted per rule (said, never refused: option C).
+SAMPLES_BREAK_RULES = S + "samples_break_rules"
+POINTS_BREAK_RULES = S + "points_break_rules"
+RULE_COUNTED = S + "rule_counted"
 
 # --- why one method was not sampled -------------------------------------------
 NO_METHOD = S + "no_method"
@@ -158,6 +163,16 @@ STAT_NOTES = {s.code: s for s in (
     MessageSpec(VAR_HYDRAULIC,
                 "hydraulic, and the seepage is not solved again for each "
                 "point, so it was not swept: {key}"),
+    MessageSpec(SAMPLES_BREAK_RULES,
+                "{n} of the {total} samples break a rule for which the "
+                "analysis is refused, and were evaluated anyway: {rules}",
+                seps=(("rules", "; "),)),
+    MessageSpec(POINTS_BREAK_RULES,
+                "{n} of the {total} points of the sweep break a rule for "
+                "which the analysis is refused, and were evaluated anyway: "
+                "{rules}",
+                seps=(("rules", "; "),)),
+    MessageSpec(RULE_COUNTED, "{n} times, the first: {rule}"),
     MessageSpec(NO_METHOD,
                 "not a registered analysis method, so it was not computed."),
     MessageSpec(NO_DETERMINISTIC,

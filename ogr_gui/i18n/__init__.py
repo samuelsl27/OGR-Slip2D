@@ -6360,6 +6360,18 @@ _DICTS: dict[str, dict[str, str]] = {
         'it was not swept: {key}':
             'hidráulica, y la filtración no se vuelve a resolver en cada '
             'punto, así que no se ha barrido: {key}',
+        # v0.1.425 (D376) -- samples that break a rule the run refuses
+        '{n} of the {total} samples break a rule for which the analysis is '
+        'refused, and were evaluated anyway: {rules}':
+            '{n} de las {total} muestras incumplen una regla por la que el '
+            'análisis se rechaza, y se han evaluado igualmente: {rules}',
+        '{n} of the {total} points of the sweep break a rule for which the '
+        'analysis is refused, and were evaluated anyway: {rules}':
+            '{n} de los {total} puntos del barrido incumplen una regla por la '
+            'que el análisis se rechaza, y se han evaluado igualmente: '
+            '{rules}',
+        '{n} times, the first: {rule}':
+            '{n} veces; la primera: {rule}',
         'The deterministic critical surface runs along a weak layer from a '
         'composite one, and Composite Surfaces is off in the project the '
         'samples run on, so that surface cannot be formed again; this method '

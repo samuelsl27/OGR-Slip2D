@@ -242,6 +242,7 @@ def run_sensitivity(
         _NO_METHOD,
         _CaseSwitches,
         _MassSwitches,
+        _SampleRules,
         _analysis_copy,
         _cannot_reevaluate,
         _does_not_reevaluate_to_itself,
@@ -279,6 +280,7 @@ def run_sensitivity(
     if _hydraulic_variables_stop(res, usable):
         return res
     hydraulic = set(_hydraulic_keys(usable))
+    rules = _SampleRules(project)               # v0.1.425 (D376)
     if not critical_surfaces:
         _publish_note(res, "error", SM.stat_note(SM.NO_DETERMINISTIC_RESULT))
         return res
@@ -399,6 +401,7 @@ def run_sensitivity(
                     # a bar that jumps at the end is a small lie.
                     done += n_points - i
                     break
+                rules.see((rv.key, i), clone)   # v0.1.425 (D376)
                 try:
                     clone = prepare(clone)
                     r = _evaluate_on(clone, search, surface)
@@ -474,6 +477,7 @@ def run_sensitivity(
     # "the D91 sentence; the lost method" -- the same order the
     # probabilistic path produces, where ``_stale_variables_stop`` runs
     # before the method loop.
+    rules.publish(res, SM.POINTS_BREAK_RULES)   # v0.1.425 (D376)
     _publish_method_losses(res, lost)
 
     if progress_cb:

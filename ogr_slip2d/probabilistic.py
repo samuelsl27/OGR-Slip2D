@@ -562,6 +562,88 @@ def _hydraulic_variables_stop(result, variables) -> bool:
     return False
 
 
+def _rule_code(why) -> str:
+    """The code of a refusal of ``check_analysis_settings``, or its text
+    when it carries none."""
+    return getattr(why, "code", None) or str(why)
+
+
+class _SampleRules:
+    """The run's own refusals, asked of every sample or sweep point.
+
+    v0.1.425 (D376) — ``check_analysis_settings`` refuses what a run cannot
+    compute as configured: a negative kh, a kh or kv that the design
+    standard's seismic factor takes out of range, a strength model that
+    cannot be computed with, a drawdown line above the water table. A
+    statistical run asks it ONCE, of the model before sampling
+    (``run_configured_statistics``); every sample then writes its own values
+    on a clone, and nobody asked again. Measured with the compute audit's
+    probe S7 (0.1.377): the 028 model with a kh of mean zero and the default
+    dispersion (0.1 and +-0.3 absolute, ``default_dispersion``), 200 Monte
+    Carlo samples, 99 with kh < 0, every one evaluated, no note -- while a
+    deterministic run with a negative kh is refused. A water-table variable
+    reaches the drawdown line the same way: ``wrap_for_drawdown`` checks it
+    when the method is BUILT, and the methods are built once, from the
+    project before sampling.
+
+    The owner's decision (option C): say how many, per rule, and change
+    nothing -- every sample is still evaluated, and this only reads the
+    clone. Rejecting them (A) or bounding the variable (B) would move the
+    statistics, and is decided apart.
+
+    The SAME function is asked, so no rule is copied here. What the model
+    before sampling already breaks is left out: the door refuses it, and a
+    caller that skipped the door would see it counted in every sample.
+    Asked once per sample index, because the samples are the same for every
+    method; the sentence of each rule is the one its FIRST offending sample
+    produced, values included.
+    """
+
+    def __init__(self, project):
+        from ogr_slip2d.analysis_runner import check_analysis_settings
+        self._check = check_analysis_settings
+        self._before = {_rule_code(w) for w in check_analysis_settings(project)}
+        self._seen: set = set()
+        self._first: dict = {}
+        self._counts: dict = {}
+        self.broken = 0
+
+    def see(self, index, clone) -> None:
+        """Ask ``clone``, sample ``index`` written on it and not yet
+        prepared, unless that index was already asked."""
+        if index in self._seen:
+            return
+        self._seen.add(index)
+        new: dict = {}
+        try:
+            found = self._check(clone)
+        except Exception as exc:  # noqa: BLE001
+            # what a deterministic run on this sample would have done
+            found = [SM.stat_note(SM.RAISED, exc=type(exc).__name__)]
+        for why in found:
+            code = _rule_code(why)
+            if code not in self._before and code not in new:
+                new[code] = why
+        if new:
+            self.broken += 1
+        for code, why in new.items():
+            self._first.setdefault(code, why)
+            self._counts[code] = self._counts.get(code, 0) + 1
+
+    def publish(self, result, head: str) -> None:
+        """One warning for the run, under ``head``, when any sample broke
+        a rule; ordered by count and then by code, never by arrival."""
+        if not self.broken:
+            return
+        rules = [as_nested(SM.stat_note(SM.RULE_COUNTED, n=n,
+                                        rule=as_nested(self._first[code])))
+                 for code, n in sorted(self._counts.items(),
+                                       key=lambda kv: (-kv[1], kv[0]))]
+        _publish_note(result, "warning",
+                      SM.stat_note(head, n=self.broken,
+                                   total=len(self._seen), rules=rules))
+
+
 # ======================================================================
 #: How a method lost its samples, one stem per analysis type. Constants and
 #: not a boolean flag, because the two sentences differ in what they say
@@ -1338,6 +1420,7 @@ def run_global_minimum(
     applied = apply_sample(probe, active, first)
     if _stale_variables_stop(result, project, active, first, applied):
         return result
+    rules = _SampleRules(project)               # v0.1.425 (D376)
 
     def _make_method(mid):
         """The method as the PROJECT configures it, not as the registry
@@ -1438,6 +1521,7 @@ def run_global_minimum(
             clone = clone_project(project)
             one = {k: v[i] for k, v in samples.items()}
             apply_sample(clone, active, one)
+            rules.see(i, clone)                 # v0.1.425 (D376)
             exc = None
             try:
                 clone = prepare(clone)
@@ -1520,6 +1604,7 @@ def run_global_minimum(
     # v0.1.169 (D127) — and if SOME method survived, the ones that did not
     # stop being silent: the partial case used to leave its reason under
     # ``notes[mid]``, a key no consumer reads.
+    rules.publish(result, SM.SAMPLES_BREAK_RULES)   # v0.1.425 (D376)
     _publish_method_losses(result, lost)
     _publish_method_warnings(result)
 
@@ -1796,6 +1881,7 @@ def run_overall_slope(
     applied = apply_sample(probe, active, first)
     if _stale_variables_stop(result, project, active, first, applied):
         return result
+    rules = _SampleRules(project)               # v0.1.425 (D376)
 
     total = num_samples * len(method_ids)
     done = 0
@@ -1825,6 +1911,7 @@ def run_overall_slope(
             clone = clone_project(project)
             apply_sample(clone, active, {k: v[i] for k, v in
                                          samples.items()})
+            rules.see(i, clone)                 # v0.1.425 (D376)
             exc = None
             try:
                 clone = prepare(clone)
@@ -1924,6 +2011,7 @@ def run_overall_slope(
     # v0.1.169 (D127) — the roll-up this function never had. Until now a
     # run in which every search of every method failed came back ``ok``
     # with ``pf`` nan and an empty ``notes``.
+    rules.publish(result, SM.SAMPLES_BREAK_RULES)   # v0.1.425 (D376)
     _publish_method_losses(result, lost)
     _publish_method_warnings(result)
 
