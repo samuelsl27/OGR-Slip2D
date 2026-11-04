@@ -422,9 +422,20 @@ class StatisticsWindow(QMainWindow):
         delta = tr("Δ over-design factor") if self.factored else "ΔFoS"
         txt = "   |   ".join(f"{lab}: {delta} {span:.4f}"
                              for _k, lab, span in rows[:5])
-        if refused:
+        # v0.1.423 (D372) — a hydraulic variable is refused too, and "no
+        # longer in the model" would be false for it: each says its reason.
+        from ogr_slip2d.stat_messages import VAR_HYDRAULIC
+        hydraulic = [vs for vs in refused
+                     if getattr(vs.note, "code", None) == VAR_HYDRAULIC]
+        orphans = [vs for vs in refused if vs not in hydraulic]
+        if orphans:
             txt += ("   |   " + tr("not swept, no longer in the model: ")
-                    + ", ".join(vs.label for vs in refused))
+                    + ", ".join(vs.label for vs in orphans))
+        if hydraulic:
+            txt += ("   |   "
+                    + tr("not swept, hydraulic (the seepage is not solved "
+                         "again): ")
+                    + ", ".join(vs.label for vs in hydraulic))
         self.status.setText(tr("Most influential first — ") + txt)
 
     # ==================================================================

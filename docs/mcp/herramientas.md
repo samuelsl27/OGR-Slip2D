@@ -111,7 +111,7 @@ Unidades: cargas hidráulicas en m y presión intersticial en kPa; permeabilidad
 
 | Herramienta | C | Para qué |
 |---|---|---|
-| `random_variable_list` | | Las entradas del modelo que pueden ser variables aleatorias, con su clave y su valor, y las ya definidas. |
+| `random_variable_list` | | Las entradas del modelo que pueden ser variables aleatorias, con su clave y su valor, y las ya definidas. Una variable hidráulica (`hydraulic:…`) no llega a ningún factor de seguridad, porque ningún análisis estadístico vuelve a resolver la filtración en cada muestra: si todas lo son, `statistics_run` se niega (`stat.vars_hydraulic_only`); mezclada con otras, avisa (`stat.vars_hydraulic`) y muestrea las demás (desde v0.1.423, D372). |
 | `random_variable_set` | | Hacer aleatoria una entrada o cambiarla: distribución, desviación, rango, correlación. La media es siempre el valor del modelo. |
 | `random_variable_delete` | | Quitar una variable; las correlaciones que apuntaban a ella se limpian. |
 | `statistics_run` | | *Compute Statistics* en segundo plano: el determinista y luego el probabilístico (PF, índice de fiabilidad) o el de sensibilidad, con los coeficientes de diseño y la semilla del modelo. Cada método trae `surface_key`, la identidad de la superficie sobre la que se muestreó (tipo y geometría al último dígito; `null` en Overall Slope, donde cada muestra busca de nuevo). `switch_lines` dice cuáles de `note_lines` cuentan muestras que contestaron por otra masa o por otro caso de capa débil. |

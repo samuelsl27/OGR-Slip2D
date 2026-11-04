@@ -1222,6 +1222,10 @@ _DICTS: dict[str, dict[str, str]] = {
         'No sensitivity result for this method.': 'Sin resultado de sensibilidad para este método.',
         'No sensitivity result.': 'Sin resultado de sensibilidad.',
         'not swept, no longer in the model: ': 'sin barrer, ya no está en el modelo: ',
+        # v0.1.423 (D372)
+        'not swept, hydraulic (the seepage is not solved again): ':
+            'sin barrer, hidráulica (la filtración no se vuelve a '
+            'resolver): ',
         'What this run could not do:': 'Lo que este cálculo no pudo hacer:',
         'Node Numbers': 'Números de nodo',
         'Not yet implemented in OGR Slip2D': 'Todavía no implementado en OGR Slip2D',
@@ -6337,6 +6341,25 @@ _DICTS: dict[str, dict[str, str]] = {
         'were not swept: {keys}':
             '{n} de las {total} variables aleatorias ya no corresponden al '
             'modelo y no se han barrido: {keys}',
+        # v0.1.423 (D372) -- a hydraulic variable reaches no factor
+        'Every random variable is hydraulic ({keys}), and no statistical run '
+        'solves the seepage again for each sample, so none of them can move '
+        'a factor of safety and nothing was computed.':
+            'Todas las variables aleatorias son hidráulicas ({keys}), y '
+            'ningún análisis estadístico vuelve a resolver la filtración en '
+            'cada muestra, así que ninguna puede mover un factor de '
+            'seguridad y no se ha calculado nada.',
+        '{n} of the {total} random variables are hydraulic and reach no '
+        'factor of safety, because no statistical run solves the seepage '
+        'again for each sample: {keys}':
+            '{n} de las {total} variables aleatorias son hidráulicas y no '
+            'llegan a ningún factor de seguridad, porque ningún análisis '
+            'estadístico vuelve a resolver la filtración en cada muestra: '
+            '{keys}',
+        'hydraulic, and the seepage is not solved again for each point, so '
+        'it was not swept: {key}':
+            'hidráulica, y la filtración no se vuelve a resolver en cada '
+            'punto, así que no se ha barrido: {key}',
         'The deterministic critical surface runs along a weak layer from a '
         'composite one, and Composite Surfaces is off in the project the '
         'samples run on, so that surface cannot be formed again; this method '

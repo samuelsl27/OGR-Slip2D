@@ -249,6 +249,8 @@ def run_sensitivity(
         _type_refusal,
         counts_as_sample,
         _evaluate_on,
+        _hydraulic_keys,
+        _hydraulic_variables_stop,
         _publish_method_losses,
         _publish_note,
         _rebuild_surface,
@@ -272,6 +274,11 @@ def run_sensitivity(
     if not usable:
         _publish_note(res, "error", SM.stat_note(SM.NO_RANGE))
         return res
+    # v0.1.423 (D372) — as in ``run_global_minimum``: all hydraulic stops
+    # here, some hydraulic are named and not swept (below).
+    if _hydraulic_variables_stop(res, usable):
+        return res
+    hydraulic = set(_hydraulic_keys(usable))
     if not critical_surfaces:
         _publish_note(res, "error", SM.stat_note(SM.NO_DETERMINISTIC_RESULT))
         return res
@@ -365,6 +372,14 @@ def run_sensitivity(
                 deterministic_fos=getattr(det, "fos", math.nan))
             switches = _MassSwitches(sd)        # v0.1.238 (D89)
             cases = _CaseSwitches(sd)           # v0.1.251 (D85)
+            if rv.key in hydraulic:
+                # v0.1.423 (D372) — every point would answer the
+                # deterministic factor again, the flat line of D91 by
+                # another route: named, with no points, and counted.
+                vs.note = SM.stat_note(SM.VAR_HYDRAULIC, key=rv.key)
+                sweeps[rv.key] = vs
+                done += n_points
+                continue
             for i in range(n_points):
                 x = lo + (hi - lo) * i / (n_points - 1)
                 # Every other variable stays at its mean: the clone is

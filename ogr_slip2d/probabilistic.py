@@ -40,6 +40,7 @@ from typing import Callable, Optional
 from ogr_core.messages import as_nested, method_note
 from ogr_core.statistics.distributions import SampleStatistics, SamplingMethod
 from ogr_core.statistics.random_variables import (
+    VariableKind,
     apply_sample,
     clone_project,
     sample_project_variables,
@@ -512,6 +513,52 @@ def _stale_variables_stop(result, project, active, first, applied) -> bool:
         result, "warning",
         SM.stat_note(SM.VARS_NOT_SAMPLED, n=len(orphans), total=len(active),
                      keys=", ".join(orphans)))
+    return False
+
+
+def _hydraulic_keys(variables) -> list:
+    """The keys of the hydraulic variables among ``variables``.
+
+    v0.1.423 (D372) — a HYDRAULIC variable writes ``material.hydraulic``,
+    and the only reader of that is the seepage solver. The limit-equilibrium
+    methods take their pore pressure from the field the project STORES
+    (``ogr_core.hydraulic.pore_pressure``), and no statistical run — Global
+    Minimum, Overall Slope or the sensitivity sweep — solves the seepage
+    again for each sample. Measured with the compute audit's probe S1
+    (0.1.377): Ej_1 with Gardner and the steady finite-element field,
+    Global Minimum with N = 20 on the reference circle; ``ks`` random gave
+    ONE factor in all 20 samples, 0.836185679621466, with no note, while
+    the cohesion as a control gave 20. A setting that does nothing (rule 7)
+    and reads as "the water does not matter".
+
+    A run that does solve the seepage per sample is a feature of its own
+    (D372's option B); when it exists, this is where it is exempted.
+    """
+    return [rv.key for rv in variables if rv.kind == VariableKind.HYDRAULIC]
+
+
+def _hydraulic_variables_stop(result, variables) -> bool:
+    """Say which of ``variables`` cannot reach a factor of safety, and
+    whether the run has to stop before sampling.
+
+    v0.1.423 (D372) — all of them hydraulic: an error and no result,
+    because a run over them would publish a spread of zero as if it were a
+    measurement. Only some: a warning naming them, and the run goes on as
+    before. They are still DRAWN, on purpose: ``sample_variables`` shares
+    one generator between all the columns, so dropping one would redraw
+    the others and move numbers this version promised not to move.
+    """
+    keys = _hydraulic_keys(variables)
+    if not keys:
+        return False
+    if len(keys) == len(variables):
+        _publish_note(result, "error",
+                      SM.stat_note(SM.VARS_HYDRAULIC_ONLY,
+                                   keys=", ".join(keys)))
+        return True
+    _publish_note(result, "warning",
+                  SM.stat_note(SM.VARS_HYDRAULIC, n=len(keys),
+                               total=len(variables), keys=", ".join(keys)))
     return False
 
 
@@ -1261,6 +1308,9 @@ def run_global_minimum(
     if not active:
         _publish_note(result, "error", SM.stat_note(SM.NO_VARIABLES))
         return result
+    # v0.1.423 (D372) — before anything is drawn, as the line above.
+    if _hydraulic_variables_stop(result, active):
+        return result
     if not critical_surfaces:
         _publish_note(result, "error",
                       SM.stat_note(SM.NO_DETERMINISTIC_RESULT))
@@ -1717,6 +1767,9 @@ def run_overall_slope(
     active = [rv for rv in variables if rv.distribution.is_random]
     if not active:
         _publish_note(result, "error", SM.stat_note(SM.NO_VARIABLES))
+        return result
+    # v0.1.423 (D372) — as in ``run_global_minimum``.
+    if _hydraulic_variables_stop(result, active):
         return result
     if not method_ids:
         _publish_note(result, "error", SM.stat_note(SM.NO_METHOD_SELECTED))

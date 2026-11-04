@@ -44,6 +44,11 @@ VARS_NONE = S + "vars_none"
 VARS_NOT_SAMPLED = S + "vars_not_sampled"
 VARS_NOT_SWEPT = S + "vars_not_swept"
 VAR_ORPHAN = S + "var_orphan"
+#: v0.1.423 (D372) -- a hydraulic variable writes what only the seepage
+#: solver reads, and no statistical run solves the seepage again per sample.
+VARS_HYDRAULIC_ONLY = S + "vars_hydraulic_only"
+VARS_HYDRAULIC = S + "vars_hydraulic"
+VAR_HYDRAULIC = S + "var_hydraulic"
 
 # --- why one method was not sampled -------------------------------------------
 NO_METHOD = S + "no_method"
@@ -141,6 +146,18 @@ STAT_NOTES = {s.code: s for s in (
                 "{n} of the {total} random variables no longer match the "
                 "model and were not swept: {keys}"),
     MessageSpec(VAR_ORPHAN, "no longer matches the model: {key}"),
+    MessageSpec(VARS_HYDRAULIC_ONLY,
+                "Every random variable is hydraulic ({keys}), and no "
+                "statistical run solves the seepage again for each sample, "
+                "so none of them can move a factor of safety and nothing was "
+                "computed."),
+    MessageSpec(VARS_HYDRAULIC,
+                "{n} of the {total} random variables are hydraulic and reach "
+                "no factor of safety, because no statistical run solves the "
+                "seepage again for each sample: {keys}"),
+    MessageSpec(VAR_HYDRAULIC,
+                "hydraulic, and the seepage is not solved again for each "
+                "point, so it was not swept: {key}"),
     MessageSpec(NO_METHOD,
                 "not a registered analysis method, so it was not computed."),
     MessageSpec(NO_DETERMINISTIC,

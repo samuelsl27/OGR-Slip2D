@@ -602,6 +602,31 @@ _V1352 = [{'cat': 'stat',
   'args': {}}]
 
 
+#: v0.1.423 (D372) — codes added after D335, with the English they were
+#: written with (not 0.1.352's: they did not exist): a hydraulic random
+#: variable, which no statistical run can make reach a factor of safety.
+_LATER = [
+    {'cat': 'stat',
+     'code': 'stat.vars_hydraulic_only',
+     'english': 'Every random variable is hydraulic (hydraulic:m1:ks), and no '
+                'statistical run solves the seepage again for each sample, so '
+                'none of them can move a factor of safety and nothing was '
+                'computed.',
+     'args': {'keys': 'hydraulic:m1:ks'}},
+    {'cat': 'stat',
+     'code': 'stat.vars_hydraulic',
+     'english': '1 of the 2 random variables are hydraulic and reach no '
+                'factor of safety, because no statistical run solves the '
+                'seepage again for each sample: hydraulic:m1:ks',
+     'args': {'n': 1, 'total': 2, 'keys': 'hydraulic:m1:ks'}},
+    {'cat': 'stat',
+     'code': 'stat.var_hydraulic',
+     'english': 'hydraulic, and the seepage is not solved again for each '
+                'point, so it was not swept: hydraulic:m1:ks',
+     'args': {'key': 'hydraulic:m1:ks'}},
+]
+
+
 def _cat(name):
     if name == "stat":
         from ogr_slip2d.stat_messages import STAT_NOTES
@@ -691,12 +716,12 @@ class _Spanish:
 class TestTheEnglishIsTheOldOne:
 
     def test_every_code_with_its_sample(self):
-        for case in _V1352:
+        for case in _V1352 + _LATER:
             assert _message(case) == case["english"], case["code"]
 
     def test_the_samples_cover_every_code(self):
         seen = set()
-        for case in _V1352:
+        for case in _V1352 + _LATER:
             seen.add(case["code"])
             seen.update(_nested_codes(case["args"]))
         every = set()
@@ -726,7 +751,7 @@ class TestEveryCodeSaysItselfInSpanish:
     def test_each_sample_renders_in_spanish(self):
         from ogr_gui.core_messages import note_text
         with _Spanish():
-            for case in _V1352:
+            for case in _V1352 + _LATER:
                 said = note_text(_message(case))
                 spec = _cat(case["cat"])[case["code"]]
                 if not (_wordless(spec.english) and _has_raw(case["args"])):
@@ -738,7 +763,8 @@ class TestEveryCodeSaysItselfInSpanish:
 _CODED = {
     "ogr_slip2d/probabilistic.py": (
         "_cannot_reevaluate", "_type_refusal", "_publish_note",
-        "_stale_variables_stop", "_MassSwitches.where",
+        "_stale_variables_stop", "_hydraulic_variables_stop",
+        "_MassSwitches.where",
         "_MassSwitches.sentence", "_case_text", "_spans", "_case",
         "_CaseSwitches.where", "_CaseSwitches.sentence",
         "_does_not_reevaluate_to_itself", "_sample_failure",

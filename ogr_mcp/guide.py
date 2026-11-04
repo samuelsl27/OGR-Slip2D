@@ -121,6 +121,10 @@ stability analysis read the field.
   settings_set statistics.probabilistic_analysis (or sensitivity_analysis)
   and statistics.num_samples, then statistics_run. results_query reads the
   histogram, the convergence and the samples.
+* A hydraulic variable (ks and the other hydraulic_set parameters) reaches
+  no factor of safety: no statistical run solves the seepage again for each
+  sample. With only hydraulic variables the run refuses; mixed with others
+  it warns and samples the rest.
 * back_analysis_run: the horizontal support force for a target factor of
   safety; optimize_run refines a NON-CIRCULAR critical surface into a new
   result, with the model's technique (search.optimize_technique:
