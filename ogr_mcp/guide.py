@@ -126,7 +126,8 @@ stability analysis read the field.
   sample. With only hydraulic variables the run refuses; mixed with others
   it warns and samples the rest.
 * back_analysis_run: the horizontal support force for a target factor of
-  safety; optimize_run refines a NON-CIRCULAR critical surface into a new
+  safety, over every admissible surface the run analyses, the ones you
+  defined by hand included; optimize_run refines a NON-CIRCULAR critical surface into a new
   result, with the model's technique (search.optimize_technique:
   monte_carlo, the default random walk, or surface_altering, which moves
   the ends along the ground and keeps the surface convex). All three use

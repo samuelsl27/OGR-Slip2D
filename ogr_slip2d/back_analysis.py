@@ -23,8 +23,13 @@ How it works (following the reference specification):
   acts.
 * Only **Bishop, Janbu and Janbu Corrected** are supported; the method is
   not defined for the others.
-* Every surface is evaluated and the one needing the **largest** force is
-  reported.
+* Every surface the run analyses is back-analysed, the ones the user drew
+  by hand included (v0.1.428, D396), and the one needing the **largest**
+  force is reported. Under the rule of the run's critical surface: an
+  admissible one when there is any (a surface the post-analysis checks
+  reject cannot be the critical surface, and so cannot govern the support
+  either), and the one needing the most among them all, said, when the
+  checks reject every surface, as ``SearchResult.critical`` falls back too.
 * The force is computed under **both** the active and the passive
   assumption, and both are always reported.
 
@@ -67,6 +72,9 @@ class BackAnalysisSurfaceResult:
     active_force: float = math.nan
     passive_force: float = math.nan
     target_fos: float = 1.3
+    # v0.1.428 (D396) -- whether it is a surface the user drew by hand; set
+    # by the driver, read by the API and the window.
+    user_defined: bool = False
     # Converged factor of safety WITHOUT the back-analysed force, filled in
     # by the driver from the real evaluation (see required_force). The name
     # is kept for the API. It has always carried the model's own supports,
@@ -518,12 +526,25 @@ def required_force(slices, surface, target_fos, method_id="bishop_simplified",
 def run_back_analysis(project, search, target_fos=1.3, elevation=0.0,
                       method_id="bishop_simplified",
                       progress_cb=None) -> BackAnalysisResult:
-    """Back-analyse every surface of a search and report the one needing
+    """Back-analyse every surface a run analyses and report the one needing
     the largest support force.
 
     ``search`` is a configured search object; its surfaces are
     regenerated and each is back-analysed. The main stability results are
     neither used nor modified. The slicing is the search's own.
+
+    v0.1.428 (D396) -- "every surface a run analyses": the user's surfaces
+    too, which the run analyses after the search and may report as its
+    critical one. Until this version only the search population was read,
+    so with a hand-drawn polyline critical the force of ANOTHER surface was
+    published, on the unsafe side (190.99 against 259.02 kN/m on the demo
+    slope, Janbu). And with the same rule as the run's critical surface:
+    an inadmissible surface cannot govern while an admissible one is there
+    (one rule for every surface, the owner's decision), said only when it
+    would have; when the checks reject every surface, the one needing the
+    most among them governs and that is said, as ``SearchResult.critical``
+    falls back to all of them. A surface Bishop cannot back-analyse (not a
+    circle) is left out and said, not counted as analysed.
 
     v0.1.263 (with D248) — the ``num_slices=25`` parameter is gone. It was
     never read: the slices come from ``search``, and a setting that does not
@@ -541,7 +562,8 @@ def run_back_analysis(project, search, target_fos=1.3, elevation=0.0,
         out.notes["error"] = RM.run_note(RM.BACK_TARGET_POSITIVE)
         return out
 
-    from .surface import CompositeSurface
+    from .search import all_evaluations_of, is_user_surface_of
+    from .surface import CompositeSurface, SlipCircle
 
     kh = project.seismic.kh if project.seismic.enabled else 0.0
     kv = project.seismic.kv if project.seismic.enabled else 0.0
@@ -565,7 +587,8 @@ def run_back_analysis(project, search, target_fos=1.3, elevation=0.0,
             search.slice_store = None
 
     best = None
-    total = len(run.evaluations)
+    population = all_evaluations_of(run)
+    total = len(population)
     # v0.1.111 — composite surfaces are COUNTED and reported, not passed
     # over. ``required_force`` writes Bishop in its circular form, which
     # assumes every base normal points at the centre and every moment arm
@@ -576,11 +599,26 @@ def run_back_analysis(project, search, target_fos=1.3, elevation=0.0,
     # a governing force drawn from a population it never says it shrank.
     n_composite = 0
     n_unsettled = 0
-    for i, ev in enumerate(run.evaluations):
+    # v0.1.428 (D396) -- Bishop is written about a circle's centre, and a
+    # polyline or a surface a weak layer clipped has none: priced None,
+    # these were counted as analysed and the result said "no surface could
+    # be back-analysed" without the reason. Counted apart now, like the
+    # composite ones above.
+    n_not_circle = 0
+    is_bishop = method_id == "bishop_simplified"
+    # The inadmissible surfaces, with their forces: to say whether one of
+    # them would have governed (a screen that changed the answer is said;
+    # one that did not is not noise worth a note on every run), and to fall
+    # back on them when they are all there is, as ``critical`` does.
+    rejected = []
+    for i, ev in enumerate(population):
         if not ev.is_valid or not ev.slices:
             continue
         if isinstance(ev.surface, CompositeSurface):
             n_composite += 1
+            continue
+        if is_bishop and not isinstance(ev.surface, SlipCircle):
+            n_not_circle += 1
             continue
         slices = ev.slices
         if type(slices) is SpilledSlices:
@@ -609,11 +647,28 @@ def run_back_analysis(project, search, target_fos=1.3, elevation=0.0,
         # same way: a candidate with no number is not a candidate.
         if not math.isfinite(r.governing_force):
             continue
+        if not getattr(ev, "admissible", True):
+            rejected.append((r, ev))
+            continue
+        r.user_defined = is_user_surface_of(run, ev)
         if best is None or r.governing_force > best.governing_force:
             best = r
         if progress_cb and i % 20 == 0:
             progress_cb(i, total)
 
+    if best is None and rejected:
+        # Every candidate is inadmissible: the run's critical surface is then
+        # one of them (``SearchResult.critical``: "the checks are ignored
+        # rather than returning nothing"), and so is the back analysis'.
+        best, ev_best = max(rejected, key=lambda t: t[0].governing_force)
+        best.user_defined = is_user_surface_of(run, ev_best)
+        out.notes["all_inadmissible"] = RM.run_note(RM.BACK_ALL_INADMISSIBLE)
+    elif best is not None:
+        above = [r for r, _ev in rejected
+                 if r.governing_force > best.governing_force]
+        if above:
+            out.notes["inadmissible_governed"] = RM.run_note(
+                RM.BACK_INADMISSIBLE_GOVERNED, n=len(above))
     out.critical = best
     if n_composite:
         out.notes["composite_skipped"] = RM.run_note(
@@ -621,8 +676,19 @@ def run_back_analysis(project, search, target_fos=1.3, elevation=0.0,
     if n_unsettled:
         out.notes["envelope_not_settled"] = RM.run_note(
             RM.BACK_ENVELOPE_LEFT_OUT, n=n_unsettled)
+    if n_not_circle:
+        out.notes["not_circular_skipped"] = RM.run_note(
+            RM.BACK_NOT_CIRCULAR_LEFT_OUT, n=n_not_circle)
+    if best is not None and best.user_defined:
+        out.notes["user_governs"] = RM.run_note(RM.BACK_USER_GOVERNS)
     if best is None:
-        out.notes["error"] = RM.run_note(RM.BACK_NONE)
+        # The reason when it is known: Bishop with nothing but surfaces that
+        # are not circles (a non-circular run) is not a matter of "the
+        # target factor and the search settings" that BACK_NONE points at.
+        out.notes["error"] = (
+            out.notes["not_circular_skipped"]
+            if n_not_circle and not out.surfaces_analysed
+            else RM.run_note(RM.BACK_NONE))
     if progress_cb:
         progress_cb(total, total)
     return out

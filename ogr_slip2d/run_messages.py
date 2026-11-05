@@ -30,6 +30,12 @@ BACK_NONE = "run.back_none"
 BACK_ENVELOPE = "run.back_envelope"
 BACK_ENVELOPE_LEFT_OUT = "run.back_envelope_left_out"
 BACK_COMPOSITE_LEFT_OUT = "run.back_composite_left_out"
+# v0.1.428 (D396) -- the user's surfaces join the back analysis, and with
+# them three things it did not say
+BACK_NOT_CIRCULAR_LEFT_OUT = "run.back_not_circular_left_out"
+BACK_INADMISSIBLE_GOVERNED = "run.back_inadmissible_governed"
+BACK_USER_GOVERNS = "run.back_user_governs"
+BACK_ALL_INADMISSIBLE = "run.back_all_inadmissible"
 BACK_SUPPORTS = "run.back_supports"
 SWEEP_ENABLE_DRAWDOWN = "run.sweep_enable_drawdown"
 SEARCH_NOT_BUILT = "run.search_not_built"
@@ -75,6 +81,24 @@ RUN_NOTES = {s.code: s for s in (
                 "hold on the straight stretches of a composite. Turn "
                 "Composite Surfaces off to back-analyse this model, and read "
                 "the result as being about circular surfaces only."),
+    MessageSpec(BACK_NOT_CIRCULAR_LEFT_OUT,
+                "{n} surface(s) were left out: Bishop's back analysis takes "
+                "moments about the centre of a circle, and these are not "
+                "circles. Choose Janbu or Janbu Corrected to back-analyse "
+                "them."),
+    MessageSpec(BACK_INADMISSIBLE_GOVERNED,
+                "{n} surface(s) that the post-analysis checks reject (m-alpha, "
+                "tension) needed more force than any admissible one, and were "
+                "left out: a surface that cannot be the critical one cannot "
+                "govern the support either."),
+    MessageSpec(BACK_USER_GOVERNS,
+                "The surface that needs the most force is one the user "
+                "defined by hand, not one the search generated."),
+    MessageSpec(BACK_ALL_INADMISSIBLE,
+                "The post-analysis checks (m-alpha, tension) reject every "
+                "surface the run analysed; as for the critical surface, the "
+                "back analysis then reports the one that needs the most "
+                "force among them all."),
     MessageSpec(SEARCH_NOT_BUILT, "Could not build the search for: {methods}",
                 kinds=(("methods", "method_list"),)),
     MessageSpec(BACK_SUPPORTS,

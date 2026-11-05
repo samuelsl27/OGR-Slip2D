@@ -1715,7 +1715,8 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
                                 wait_seconds: WaitSeconds = 30.0
                                 ) -> dict[str, Any]:
         """The horizontal support force needed to reach a target factor of
-        safety, over every surface of the configured search (a job)."""
+        safety, over every admissible surface the configured run analyses,
+        the user's included (a job)."""
         return await run_job(ctx, "back_analysis_run", "back analysis",
                              wait_seconds, project_id=project_id,
                              target_fos=target_fos, elevation=elevation,

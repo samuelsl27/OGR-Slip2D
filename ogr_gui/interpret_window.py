@@ -1844,6 +1844,19 @@ class InterpretWindow(QMainWindow):
         r = required_force(crit.slices, crit.surface, target, mid,
                            elevation, kh, kv, project=factored)
         if r is None:
+            # v0.1.428 (D396) -- Bishop with a critical surface that is not a
+            # circle (a polyline, the user's or the search's, or a surface a
+            # weak layer clipped) was told "only available for Bishop": the
+            # reason the run's back analysis gives for the same surface
+            from ogr_slip2d import run_messages as RM
+            from ogr_slip2d.surface import SlipCircle
+
+            from .core_messages import note_text
+            if (mid == "bishop_simplified"
+                    and not isinstance(crit.surface, SlipCircle)):
+                self._info(note_text(RM.run_note(
+                    RM.BACK_NOT_CIRCULAR_LEFT_OUT, n=1)))
+                return
             self._info(tr(
                 "Back analysis is only available for Bishop, Janbu and "
                 "Janbu Corrected, and the force must have a moment arm."))

@@ -278,7 +278,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.427"
+    VERSION = "0.1.428"
 
     def __init__(self) -> None:
         super().__init__()
@@ -1988,8 +1988,14 @@ class MainWindow(QMainWindow):
         # v0.1.363 (D340) — the run's warnings, and the two notes of its own
         # (surfaces left out as composite, envelopes that did not settle):
         # the window read ``notes["error"]`` and nothing else
+        # v0.1.428 (D396) — and the three the user's surfaces brought: a
+        # surface Bishop cannot price, an inadmissible one that needed more,
+        # and a governing surface the user drew
         own = [res.notes[key] for key in ("composite_skipped",
-                                          "envelope_not_settled")
+                                          "envelope_not_settled",
+                                          "not_circular_skipped",
+                                          "inadmissible_governed",
+                                          "user_governs")
                if res.notes.get(key)]
         n_notes = self._set_task_notes(
             "back_analysis", [(None, list(warnings or []) + own)])
@@ -1997,8 +2003,13 @@ class MainWindow(QMainWindow):
             # v0.1.352 (D335) -- the reason through its code, and the
             # fallback through tr()
             from .core_messages import note_text
-            self._info(note_text(res.notes.get("error")
-                                 or tr("Back analysis failed.")))
+            error = res.notes.get("error")
+            # v0.1.428 (D396) -- and the notes that say why, which the panel
+            # had and this box did not (Bishop with no circle to price)
+            why = [note_text(res.notes.get("error")
+                             or tr("Back analysis failed."))]
+            why += [note_text(n) for n in own if n is not error]
+            self._info("\n\n".join(why))
             return
         c = res.critical
         # v0.1.369 (D343) — the method by its name, and the three forces in

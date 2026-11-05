@@ -3015,11 +3015,13 @@ class CanvasView(QGraphicsView):
         # v0.1.427 (D357) -- the polylines, dashed in the same colour, as they
         # were given: their ends are put on the External Boundary when they
         # are analysed, not here, for the reason the circles are drawn whole.
-        # One path item per surface, not one line item per segment: one item
-        # and one ``setPen`` however many vertices it has. D395 counts one
-        # reference to None lost per ``setPen`` of a line or rect item on
-        # Python 3.11 with PySide6 6.12; whether a path item loses one too
-        # was not measured, so this only keeps the count of calls down.
+        # One path item per surface, not one line item per segment. D395
+        # measured, on Python 3.11 with PySide6 6.12.0, one reference to None
+        # lost per ``setPen`` of a line or rect item and none for a path
+        # item (the bench's ficha; the probe is ``tests/_d370_none.py`` at
+        # commit 739885e of branch dev/d370-shutdown, deleted there by
+        # 7d88eb1). v0.1.427 wrote here that the path item had not been
+        # measured, which was false; corrected in v0.1.428.
         # A stored polyline that is not a surface (a hand-edited file) is
         # drawn as given, so the user sees what the run refuses; one with
         # fewer than two points, or a coordinate that is not a finite

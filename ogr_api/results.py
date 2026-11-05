@@ -465,9 +465,18 @@ def statistics_summary(outcome) -> dict:
 def back_analysis_summary(result, factor_report=None, warnings=()) -> dict:
     """The support force a back analysis found, for ``summary.json``."""
     c = result.critical
+    # v0.1.428 (D396) -- the back analysis keeps the surface as the dict its
+    # ``to_dict`` wrote, which ``surface_summary`` (objects only) turned into
+    # ``{"type": "dict"}``: the geometry of the governing surface never
+    # reached the API. And whose it is, when it is the user's.
+    surface = None
+    if c is not None:
+        surface = (_summary_of(c.surface) if isinstance(c.surface, dict)
+                   else surface_summary(c.surface))
+        if surface is not None and getattr(c, "user_defined", False):
+            surface = {**surface, "user_defined": True}
     return json_safe({**result.summary(),
-                      "critical_surface": (surface_summary(c.surface)
-                                           if c is not None else None),
+                      "critical_surface": surface,
                       "notes": result.notes,
                       "factor_report": factor_report_summary(factor_report),
                       "warnings": list(warnings)})

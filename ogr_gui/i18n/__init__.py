@@ -6122,6 +6122,34 @@ _DICTS: dict[str, dict[str, str]] = {
             'Desactiva Superficies compuestas para retroanalizar este '
             'modelo, y lee el resultado como referido solo a superficies '
             'circulares.',
+        # v0.1.428 (D396) — las superficies del usuario entran en el
+        # retroanálisis, y con ellas tres cosas que no se decían
+        "{n} surface(s) were left out: Bishop's back analysis takes moments "
+        "about the centre of a circle, and these are not circles. Choose "
+        "Janbu or Janbu Corrected to back-analyse them.":
+            'Se dejaron fuera {n} superficie(s): el retroanálisis de Bishop '
+            'toma momentos respecto al centro de un círculo, y estas no son '
+            'círculos. Elige Janbu o Janbu corregido para retroanalizarlas.',
+        '{n} surface(s) that the post-analysis checks reject (m-alpha, '
+        'tension) needed more force than any admissible one, and were left '
+        'out: a surface that cannot be the critical one cannot govern the '
+        'support either.':
+            '{n} superficie(s) que rechazan las comprobaciones posteriores al '
+            'cálculo (m-alfa, tracción) necesitaban más fuerza que cualquier '
+            'superficie admisible, y se dejaron fuera: una superficie que no '
+            'puede ser la crítica tampoco puede gobernar la fuerza de '
+            'soporte.',
+        'The post-analysis checks (m-alpha, tension) reject every surface '
+        'the run analysed; as for the critical surface, the back analysis '
+        'then reports the one that needs the most force among them all.':
+            'Las comprobaciones posteriores al cálculo (m-alfa, tracción) '
+            'rechazan todas las superficies que analizó el cálculo; como con '
+            'la superficie crítica, el retroanálisis da entonces la que más '
+            'fuerza necesita de todas ellas.',
+        'The surface that needs the most force is one the user defined by '
+        'hand, not one the search generated.':
+            'La superficie que más fuerza necesita es una que el usuario '
+            'definió a mano, no una que generase la búsqueda.',
         'The strength envelope depends on the normal stress, and on at least '
         'one slice the stress it is read at did not settle on the stress the '
         'method resolves at the target factor of safety; the surface was '

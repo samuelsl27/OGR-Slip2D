@@ -509,6 +509,40 @@ class SearchResult:
         return sorted(self.valid(), key=key)[:n]
 
 
+def all_evaluations_of(result) -> list:
+    """Every surface a run analysed, the user's included, read from anything
+    that looks like a ``SearchResult`` (v0.1.428, D396).
+
+    The door through which a consumer that must see the user's surfaces
+    reads them. Read ``result.evaluations`` instead and the surfaces the
+    user drew are silently left out, though the run analyses them and may
+    report one as its critical surface (v0.1.157 the circles, v0.1.427 the
+    polylines). The back analysis reads through it since this version;
+    Newmark, the API's listings and the windows are the next fichas of the
+    same tanda (D397, D400, D401).
+
+    ``result.all_evaluations()`` when there is one, so a run without user
+    surfaces hands back its very ``evaluations`` list, bit for bit
+    (``tests/test_user_surfaces_v1157.py``). Otherwise, for the
+    ``SimpleNamespace`` doubles that tests and the verification bench build
+    with only ``evaluations``, that list and ``user_evaluations`` if any.
+    Read it, never append to it: it may be the run's own list.
+    """
+    every = getattr(result, "all_evaluations", None)
+    if callable(every):
+        return every()
+    own = getattr(result, "evaluations", None) or []
+    user = getattr(result, "user_evaluations", None) or []
+    return own + list(user) if user else own
+
+
+def is_user_surface_of(result, evaluation) -> bool:
+    """Whether ``evaluation`` is one of the surfaces the user drew, by
+    identity, for anything that looks like a ``SearchResult`` (v0.1.428)."""
+    user = getattr(result, "user_evaluations", None) or ()
+    return any(r is evaluation for r in user)
+
+
 # ======================================================================
 @contextlib.contextmanager
 def frozen_evaluation(search, project, *, fallback: bool = True):

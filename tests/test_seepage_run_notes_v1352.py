@@ -273,7 +273,33 @@ _LATER = [
              'solutions turns back; the road that follows the path across '
              'such turns works only when every material has a User Defined '
              'permeability curve, and this model has others.',
-  'args': {'steps': 200, 'change': 0.0123456, 'rescue_change': 0.00035}}]
+  'args': {'steps': 200, 'change': 0.0123456, 'rescue_change': 0.00035}},
+ # v0.1.428 (D396): the user's surfaces join the back analysis
+ {'cat': 'run',
+  'code': 'run.back_not_circular_left_out',
+  'english': "7 surface(s) were left out: Bishop's back analysis takes "
+             'moments about the centre of a circle, and these are not '
+             'circles. Choose Janbu or Janbu Corrected to back-analyse them.',
+  'args': {'n': 7}},
+ {'cat': 'run',
+  'code': 'run.back_inadmissible_governed',
+  'english': '1 surface(s) that the post-analysis checks reject (m-alpha, '
+             'tension) needed more force than any admissible one, and were '
+             'left out: a surface that cannot be the critical one cannot '
+             'govern the support either.',
+  'args': {'n': 1}},
+ {'cat': 'run',
+  'code': 'run.back_user_governs',
+  'english': 'The surface that needs the most force is one the user defined '
+             'by hand, not one the search generated.',
+  'args': {}},
+ {'cat': 'run',
+  'code': 'run.back_all_inadmissible',
+  'english': 'The post-analysis checks (m-alpha, tension) reject every '
+             'surface the run analysed; as for the critical surface, the '
+             'back analysis then reports the one that needs the most force '
+             'among them all.',
+  'args': {}}]
 
 
 def _cat(name):
