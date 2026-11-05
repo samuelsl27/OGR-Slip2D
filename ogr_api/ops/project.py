@@ -354,6 +354,12 @@ def project_validate(ws, project_id: Optional[str] = None) -> dict:
         return {"project_id": handle.id, **status_of(project)}
 
 
+#: Model data ``Project.to_dict`` writes only when there is some, and the
+#: value that means "none". ``transient_initial_result`` is not here: it is
+#: a computed result, with its own reader (``groundwater_results``).
+_WRITTEN_ONLY_WHEN_USED = {"user_polylines": []}
+
+
 @operation("project_get", toolset="core")
 def project_get(ws, project_id: Optional[str] = None,
                 section: str = "materials") -> dict:
@@ -363,6 +369,13 @@ def project_get(ws, project_id: Optional[str] = None,
     handle = ws.get(project_id)
     with ws.reading(handle.id, "project_get") as project:
         data = project.to_dict()
+    # v0.1.427 (D357) -- the sections of the model the file writes only
+    # when they hold something, so that a model without them keeps its
+    # fingerprint: absent, they are empty, not unknown. Without this a model
+    # with no hand-drawn polylines answered "Unknown section" for a section
+    # the program knows, and left it out of the list of known ones.
+    for key, empty in _WRITTEN_ONLY_WHEN_USED.items():
+        data.setdefault(key, empty)
     if section not in data:
         raise unknown("section", section, sorted(data))
     return {"project_id": handle.id, "section": section,

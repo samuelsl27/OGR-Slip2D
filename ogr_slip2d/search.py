@@ -2194,7 +2194,11 @@ class BaseSearch(ABC):
         surface the user drew on purpose is not the same act.
         """
         surfaces = list(getattr(project, "user_surfaces", None) or ())
-        if not surfaces:
+        # v0.1.427 (D357) — and the polylines the user drew, the other half
+        # of the same rule: each kind is analysed by the run of its own
+        # Surface Type and skipped, with a note, by the other.
+        polylines = list(getattr(project, "user_polylines", None) or ())
+        if not surfaces and not polylines:
             return
 
         # Only one Surface Type per analysis, which the reference states
@@ -2203,8 +2207,26 @@ class BaseSearch(ABC):
         # them in silence, which is the failure this whole defect was.
         stype = getattr(project.settings.search, "surface_type", None)
         if stype == SurfaceType.NON_CIRCULAR.value:
-            self._note(_snote(SN.USER_CIRCULAR_SKIPPED, n=len(surfaces)))
+            if surfaces:
+                self._note(_snote(SN.USER_CIRCULAR_SKIPPED, n=len(surfaces)))
+            # Numbered from 1 in the order of the list, as the window's
+            # manager lists them: two polylines with the same ends would
+            # otherwise get the same sentence, and the notes are kept once
+            # per sentence.
+            sources = []
+            for k, up in enumerate(polylines, 1):
+                res = self._evaluate_user_polyline(project, result, up, k)
+                if res is not None:
+                    sources.append((res, up, k))
+            crit = result.critical
+            if crit is not None and result.is_user_surface(crit):
+                hit = next(((u, k) for r, u, k in sources if r is crit), None)
+                if hit is not None:
+                    self._note(_snote(SN.USER_PL_REPORTED,
+                                      **self._polyline_at(*hit)))
             return
+        if polylines:
+            self._note(_snote(SN.USER_PL_SKIPPED, n=len(polylines)))
 
         for circle in surfaces:
             # v0.1.367 (D346) — the reason of THIS circle: the value left by
@@ -2250,6 +2272,94 @@ class BaseSearch(ABC):
                 SN.USER_REPORTED, x=getattr(sd, "centre_x", float("nan")),
                 y=getattr(sd, "centre_y", float("nan")),
                 r=getattr(sd, "radius", float("nan"))))
+
+    @staticmethod
+    def _polyline_at(up, k: int) -> dict:
+        """What a note names a hand-drawn polyline by: its number ``k`` in
+        the list, its number of vertices and its two ends.
+
+        NaN for an end that is not a pair of numbers (a surface a script
+        stored badly): the note still goes out, and the run is not stopped
+        by the surface it is about to refuse.
+        """
+        (x0, y0), (x1, y1) = up.ends()
+        return dict(k=k, nv=up.vertex_count(), x0=x0, y0=y0, x1=x1, y1=y1)
+
+    def _evaluate_user_polyline(self, project: Project, result, up,
+                                k: int = 1):
+        """Analyse ONE polyline the user drew (v0.1.427, D357), or say why
+        not; the result, or None.
+
+        The counterpart of the circle loop above, and through the same door
+        as ``analysis_runner.evaluate_surfaces`` (:meth:`evaluate_surface`),
+        so a stored polyline and the same polyline given to
+        ``surface_evaluate`` come out with the same factor of safety.
+
+        On a fresh engine surface (``slip_surface_of``), so the user's own
+        polyline comes out of the analysis as it went in, and with its ends
+        put on the External Boundary first (``snap_polyline_ends``), the
+        rule ``surface_evaluate`` applies, for the same reason.
+
+        And only through the points the rule every door asks returns
+        (``checked_points``, inside ``slip_surface_of``): a stored polyline
+        is not re-checked when the file is read, and ``SlipSurface`` sorts
+        its vertices by x when it is built, so one that steps back in x
+        would otherwise be analysed as ANOTHER surface without a word.
+
+        ``k`` is its number in ``project.user_polylines``, from 1, which the
+        notes carry (:meth:`_polyline_at`).
+        """
+        from ogr_core.messages import as_nested
+
+        from .surface import slip_surface_of, snap_polyline_ends
+
+        at = self._polyline_at(up, k)
+        try:
+            surf = slip_surface_of(up)
+        except ValueError:
+            # ``NotASurface``: a step back in x, a vertical segment, fewer
+            # than two points, a coordinate that is not finite (a hand-edited
+            # file can hold any of these), or a point that is not a pair of
+            # numbers (only a script can store one: a file holding it does
+            # not load).
+            self._note(_snote(SN.USER_PL_NOT_A_SURFACE, **at))
+            return None
+        try:
+            moves = snap_polyline_ends(project, surf)
+        except ValueError:
+            self._note(_snote(SN.USER_PL_SNAP_REFUSED, **at))
+            return None
+        for m in moves:
+            if m.worth_saying:
+                self._note(_snote(SN.USER_PL_END_MOVED, **at, ox=m.old[0],
+                                  oy=m.old[1], nx=m.new[0], ny=m.new[1],
+                                  d=m.distance))
+        # The reason of THIS polyline, as for the circles (D346).
+        self._last_refusal = None
+        res = self.evaluate_surface(project, surf)
+        if res is None:
+            why = self._last_refusal
+            if why is not None:
+                self._note(_snote(SN.USER_PL_REFUSED, **at,
+                                  reason=as_nested(SN.refusal(why))))
+                return None
+            filters = self._user_surface_filters(project)
+            self._note(
+                _snote(SN.USER_PL_NO_RESULT_FILTERED, filters=filters, **at)
+                if filters else _snote(SN.USER_PL_NO_RESULT, **at))
+            return None
+        result.user_evaluations.append(res)
+        if not res.is_valid:
+            self._note(_snote(SN.USER_PL_NO_FACTOR, **at,
+                              reason=SN.reason_of(res, SN.NO_REASON_STOP)))
+        elif not getattr(res, "admissible", True):
+            # A factor the post-analysis checks (m-alpha, tension) rejected:
+            # it is in the population and can never be the critical surface,
+            # so a polyline worth 0.22 next to a published 1.38 would sit
+            # there without a word, while ``surface_evaluate`` says it.
+            self._note(_snote(SN.USER_PL_INADMISSIBLE, **at, factor=res.fos,
+                              reason=SN.reason_of(res, SN.NO_REASON_STOP)))
+        return res
 
     # ------------------------------------------------------------------
     def _optimisation_note(self, walked: int, sin_resultado: int,

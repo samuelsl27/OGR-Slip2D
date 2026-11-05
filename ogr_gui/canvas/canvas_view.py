@@ -141,6 +141,28 @@ def _bg(grayscale: bool) -> str:
     from ogr_gui.themes import theme_color
     return theme_color("canvas_bg_gray" if grayscale else "canvas_bg")
 
+
+def user_surface_refusal_text(exc) -> str:
+    """Why a hand-drawn polyline is not a slip surface, in the user's
+    language (v0.1.427, D357).
+
+    ``exc`` is the ``NotASurface`` of the model's rule (``checked_points``);
+    its ``kind`` says which rule failed, so the sentence is the true one and
+    is translated, not the engine's English. The canvas says it before it
+    lets a drawing go, and the window again for one that reaches it another
+    way.
+    """
+    kind = getattr(exc, "kind", "not_advancing")
+    if kind in ("not_points", "not_finite"):
+        return tr("Every vertex of a non-circular slip surface needs two "
+                  "finite coordinates.")
+    if kind == "too_few":
+        return tr("A non-circular slip surface needs at least two vertices.")
+    return tr("A non-circular slip surface has to advance in x from one end "
+              "to the other, always in the same direction: no step back and "
+              "no vertical segment.")
+
+
 @dataclass
 class DisplayOptions:
     """Per-layer visibility and styling flags, bound to the Display
@@ -238,6 +260,9 @@ class CanvasView(QGraphicsView):
     # a Boundary, because it is not one (``boundary_drawn`` carried it only
     # when a reroute was in place, and none ever reached it)
     expand_shrink_drawn = Signal(object)
+    # v0.1.427 (D357) -- a non-circular slip surface drawn by hand: a
+    # Polyline, for the reason above; the window makes it a user surface
+    user_surface_drawn = Signal(object)
     # v0.1.416 (D354) — an annotation drawn with clicks: its kind and its
     # points; the window stores it (an annotation is not a boundary)
     annotation_drawn = Signal(object, object)
@@ -1638,6 +1663,33 @@ class CanvasView(QGraphicsView):
             self.set_tool_mode(ToolMode.SELECT)
             self.expand_shrink_drawn.emit(drawn)
             return
+        # v0.1.427 (D357) -- the user's non-circular slip surface, the same
+        # way: not a boundary, so on a signal of its own, and the mode is
+        # left. But only once it IS a surface, by the model's one rule
+        # (``checked_points``): refused, the reason is said and the drawing
+        # stays, for Undo last vertex, as an annotation with too few points
+        # stays above.
+        if mode == ToolMode.DRAW_USER_SURFACE:
+            from ogr_core.geometry import Polyline, Vertex
+            from ogr_core.geometry.user_polyline import checked_points
+            try:
+                checked_points(self._draw_points)
+            except ValueError as exc:
+                self.status_message.emit(
+                    user_surface_refusal_text(exc) + " " + tr(
+                        "Use Undo last vertex (right-click) or press Esc "
+                        "to cancel."))
+                return
+            drawn = Polyline(vertices=[Vertex(x, y)
+                                       for (x, y) in self._draw_points],
+                             closed=False)
+            self._draw_points = []
+            self._clear_draw_preview()
+            self._last_snap = None
+            self.set_tool_mode(ToolMode.SELECT)
+            self.viewport().update()
+            self.user_surface_drawn.emit(drawn)
+            return
         if btype is None:
             self._cancel_drawing()
             return
@@ -2953,12 +3005,47 @@ class CanvasView(QGraphicsView):
         circle without endpoints yields an EMPTY path — it would draw
         nothing at all, which is how this action spent its whole life.
         """
-        from PySide6.QtWidgets import QGraphicsEllipseItem, QGraphicsLineItem
+        from PySide6.QtGui import QPainterPath
+        from PySide6.QtWidgets import (QGraphicsEllipseItem, QGraphicsLineItem,
+                                       QGraphicsPathItem)
 
         surfaces = getattr(self.project, "user_surfaces", None) or ()
+        polylines = getattr(self.project, "user_polylines", None) or ()
+        colour = QColor("#7b2cbf")
+        # v0.1.427 (D357) -- the polylines, dashed in the same colour, as they
+        # were given: their ends are put on the External Boundary when they
+        # are analysed, not here, for the reason the circles are drawn whole.
+        # One path item per surface, not one line item per segment: one item
+        # and one ``setPen`` however many vertices it has. D395 counts one
+        # reference to None lost per ``setPen`` of a line or rect item on
+        # Python 3.11 with PySide6 6.12; whether a path item loses one too
+        # was not measured, so this only keeps the count of calls down.
+        # A stored polyline that is not a surface (a hand-edited file) is
+        # drawn as given, so the user sees what the run refuses; one with
+        # fewer than two points, or a coordinate that is not a finite
+        # number, has nothing to draw.
+        for up in polylines:
+            try:
+                drawable = len(up.points) >= 2 and all(
+                    math.isfinite(float(c)) for pt in up.points
+                    for c in (pt[0], pt[1]))
+            except (TypeError, ValueError, IndexError):
+                drawable = False
+            if not drawable:
+                continue
+            path = QPainterPath()
+            path.moveTo(*up.points[0])
+            for x, y in up.points[1:]:
+                path.lineTo(x, y)
+            pen = QPen(colour, self.display_options.line_width)
+            pen.setCosmetic(True)
+            pen.setStyle(Qt.DashLine)
+            item = QGraphicsPathItem(path)
+            item.setPen(pen)
+            item.setZValue(8.0)
+            scene.addItem(item)
         if not surfaces:
             return
-        colour = QColor("#7b2cbf")
         for c in surfaces:
             pen = QPen(colour, self.display_options.line_width)
             pen.setCosmetic(True)

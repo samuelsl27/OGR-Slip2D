@@ -71,6 +71,18 @@ F_MIN_DEPTH = "search.filter.min_depth"
 F_MIN_ELEVATION = "search.filter.min_elevation"
 USER_NO_FACTOR = "search.user_no_factor"
 USER_REPORTED = "search.user_reported"
+# v0.1.427 (D357) -- the hand-drawn NON-circular surfaces, named by their two
+# ends: a polyline has no centre and no radius to be told apart by
+USER_PL_SKIPPED = "search.user_polyline_skipped"
+USER_PL_NO_RESULT = "search.user_polyline_no_result"
+USER_PL_NO_RESULT_FILTERED = "search.user_polyline_no_result_filtered"
+USER_PL_REFUSED = "search.user_polyline_refused"
+USER_PL_NO_FACTOR = "search.user_polyline_no_factor"
+USER_PL_REPORTED = "search.user_polyline_reported"
+USER_PL_END_MOVED = "search.user_polyline_end_moved"
+USER_PL_SNAP_REFUSED = "search.user_polyline_snap_refused"
+USER_PL_NOT_A_SURFACE = "search.user_polyline_not_a_surface"
+USER_PL_INADMISSIBLE = "search.user_polyline_inadmissible"
 NO_REASON = "search.no_reason"
 NO_REASON_STOP = "search.no_reason_stop"
 
@@ -129,6 +141,15 @@ _SKIPPED_A = (" not analysed: the Surface Type of this analysis is "
 _USER_AT = ("The user-defined surface at centre ({x:.4g}, {y:.4g}) with radius "
             "{r:.4g} ")
 _NO_RESULT = ("produced no result, so it is not in the reported population. ")
+_SKIPPED_PL = (" not analysed: the Surface Type of this analysis is Circular, "
+               "and one analysis carries one Surface Type. Set Surface "
+               "Options -> Surface Type = Non-Circular to include ")
+#: A hand-drawn polyline is named by its number in the list (as the window's
+#: manager numbers them), its vertices and its two ends: the ends alone give
+#: two surfaces drawn from the same crest to the same toe the same sentence,
+#: and a run keeps each sentence once.
+_PL_AT = ("The user-defined non-circular surface {k} ({nv} vertices, from "
+          "({x0:.4g}, {y0:.4g}) to ({x1:.4g}, {y1:.4g})) ")
 _REFUSAL = "the surface was not analysed: "
 
 #: ``(refusal, text)``: the English of ``BaseSearch._REFUSAL_TEXT`` until
@@ -255,6 +276,49 @@ SEARCH_NOTES = {s.code: s for s in (
                 "The surface reported for this method is one the user defined "
                 "by hand (centre ({x:.4g}, {y:.4g}), radius {r:.4g}), not one "
                 "the search generated."),
+    MessageSpec(USER_PL_SKIPPED,
+                "{n} user-defined non-circular surfaces were" + _SKIPPED_PL
+                + "them.",
+                one="{n} user-defined non-circular surface was" + _SKIPPED_PL
+                    + "it.",
+                count="n"),
+    MessageSpec(USER_PL_NO_RESULT,
+                _PL_AT + _NO_RESULT + "No surface filter is active on this "
+                "run, and the search recorded no reason."),
+    MessageSpec(USER_PL_NO_RESULT_FILTERED,
+                _PL_AT + _NO_RESULT + "Filters active on this run that can "
+                "remove it: {filters}."),
+    MessageSpec(USER_PL_REFUSED,
+                _PL_AT + _NO_RESULT + "The search says why: {reason}"),
+    MessageSpec(USER_PL_NO_FACTOR,
+                _PL_AT + "has no factor of safety: {reason}"),
+    MessageSpec(USER_PL_REPORTED,
+                "The surface reported for this method is one the user defined "
+                "by hand (non-circular surface {k}: {nv} vertices, from "
+                "({x0:.4g}, {y0:.4g}) to ({x1:.4g}, {y1:.4g})), not one the "
+                "search generated."),
+    MessageSpec(USER_PL_END_MOVED,
+                _PL_AT + "has an end off the External Boundary: ({ox:g}, "
+                "{oy:g}) was moved to the nearest point of it, ({nx:g}, "
+                "{ny:g}), {d:g} away, before it was analysed."),
+    MessageSpec(USER_PL_SNAP_REFUSED,
+                _PL_AT + "was not analysed: moving its ends onto the External "
+                "Boundary would make x stop increasing. Give ends on the "
+                "ground surface."),
+    # A stored polyline that fails the rule every door asks
+    # (``checked_points``): only a hand-edited file or a script can store one.
+    MessageSpec(USER_PL_NOT_A_SURFACE,
+                _PL_AT + "was not analysed: it is not a slip surface the "
+                "engine can slice, because it does not advance in x from one "
+                "end to the other (a step back in x, a vertical segment, "
+                "fewer than two points or a coordinate that is not a "
+                "number). Delete it and draw it again."),
+    # A factor the post-analysis checks rejected (m-alpha, tension): in the
+    # population, never the critical surface, and said so.
+    MessageSpec(USER_PL_INADMISSIBLE,
+                _PL_AT + "has a factor of safety of {factor:.4g}, but the "
+                "post-analysis checks reject it, so it cannot be the critical "
+                "surface: {reason}"),
     MessageSpec(NO_REASON, "no reason declared"),
     MessageSpec(NO_REASON_STOP, "no reason declared."),
     MessageSpec(OPTIMISATION_LOST,

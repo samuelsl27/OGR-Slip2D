@@ -281,6 +281,8 @@ LIGHT_ATTRS: tuple[str, ...] = (
     "seismic_records", "region_assignments", "tension_crack_properties",
     "water_pressure_grid", "seepage_bcs", "random_variables", "annotations",
     "focus_objects", "user_surfaces",
+    # v0.1.427 (D357) — the hand-drawn non-circular surfaces
+    "user_polylines",
 )
 
 #: Computed or generated state that can weigh megabytes. A snapshot only

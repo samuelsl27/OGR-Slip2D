@@ -665,7 +665,8 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
             description="{'type': 'circle', 'centre_x', 'centre_y', "
                         "'radius'} or {'type': 'three_points', 'points': "
                         "[[x,y]x3]} or {'type': 'polyline', 'points': "
-                        "[[x,y],...]}.")],
+                        "[[x,y],...]}, x advancing from one end to the "
+                        "other.")],
             project_id: ProjectId = None,
             methods: Methods = None) -> dict[str, Any]:
         """The factor of safety of ONE given slip surface, per method,
@@ -1153,10 +1154,12 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
     def user_surface_add(surface: Annotated[dict[str, Any], Field(
             description="{'type': 'circle', 'centre_x', 'centre_y', "
                         "'radius'} or {'type': 'three_points', 'points': "
-                        "[[x,y]x3]}.")],
+                        "[[x,y]x3]}; or {'type': 'polyline', 'points': "
+                        "[[x,y], ...]}, x advancing from one end to the "
+                        "other.")],
             project_id: ProjectId = None) -> dict[str, Any]:
-        """Add a slip circle analysed alongside every search (circular
-        surface type only)."""
+        """Add a slip surface analysed alongside every search: a circle with
+        the circular surface type, a polyline with the non-circular one."""
         return run("user_surface_add", surface=surface,
                    project_id=project_id)
 
@@ -1164,7 +1167,8 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
     def user_surface_delete(surface: Annotated[str, Field(
             description="Id, or 'all'.")],
             project_id: ProjectId = None) -> dict[str, Any]:
-        """Delete a user slip surface by id, or all of them."""
+        """Delete a user slip surface (circle or polyline) by id, or all of
+        them."""
         return run("user_surface_delete", surface=surface,
                    project_id=project_id)
 

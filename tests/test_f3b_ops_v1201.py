@@ -471,7 +471,10 @@ class TestNothingIsPending:
         assert PENDING == {} and PENDING_CEILING == 0
         # v0.1.232 (D109): 113 -> 116, the Line, Point and Polyline of the
         # Block Search, all three mapped to boundary_add (`block_object`).
-        assert coverage()["mapped"] == 116
+        # v0.1.427 (D357): 116 -> 118, Add Non-Circular Surface and Manage
+        # Non-Circular Surfaces..., mapped to user_surface_add and
+        # user_surface_delete.
+        assert coverage()["mapped"] == 118
 
 
 def _qt():

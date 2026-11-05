@@ -427,6 +427,134 @@ _LATER = [
      'args': {'x': 31.234567, 'y': 48.5, 'r': 22.0001,
               'filters': [{'$code': 'search.filter.min_area_default',
                            '$args': {'value': 1.0}}]}},
+    # v0.1.427 (D357) — the hand-drawn non-circular surfaces, named by their
+    # number in the list, their vertices and their two ends where the circles
+    # are named by centre and radius.
+    {'code': 'search.user_polyline_skipped',
+     'english': '1 user-defined non-circular surface was not analysed: the '
+                'Surface Type of this analysis is Circular, and one analysis '
+                'carries one Surface Type. Set Surface Options -> Surface '
+                'Type = Non-Circular to include it.',
+     'args': {'n': 1}},
+    {'code': 'search.user_polyline_skipped',
+     'english': '2 user-defined non-circular surfaces were not analysed: the '
+                'Surface Type of this analysis is Circular, and one analysis '
+                'carries one Surface Type. Set Surface Options -> Surface '
+                'Type = Non-Circular to include them.',
+     'args': {'n': 2}},
+    {'code': 'search.user_polyline_no_result',
+     'english': 'The user-defined non-circular surface 2 (4 vertices, from '
+                '(18, 25) to (40.12, 15)) produced no result, so it is not '
+                'in the reported population. No surface filter is active on '
+                'this run, and the search recorded no reason.',
+     'args': {'k': 2,
+              'nv': 4,
+              'x0': 18.0,
+              'y0': 25.0,
+              'x1': 40.123456,
+              'y1': 15.0}},
+    {'code': 'search.user_polyline_no_result_filtered',
+     'english': 'The user-defined non-circular surface 2 (4 vertices, from '
+                '(18, 25) to (40.12, 15)) produced no result, so it is not '
+                'in the reported population. Filters active on this run that '
+                "can remove it: Minimum Area 1 (the search's default, not a "
+                'setting of this model).',
+     'args': {'k': 2,
+              'nv': 4,
+              'x0': 18.0,
+              'y0': 25.0,
+              'x1': 40.123456,
+              'y1': 15.0,
+              'filters': [{'$code': 'search.filter.min_area_default',
+                           '$args': {'value': 1.0}}]}},
+    {'code': 'search.user_polyline_refused',
+     'english': 'The user-defined non-circular surface 2 (4 vertices, from '
+                '(18, 25) to (40.12, 15)) produced no result, so it is not '
+                'in the reported population. The search says why: the '
+                'surface was not analysed: a slice base fell outside the '
+                'External Boundary, where there is no soil.',
+     'args': {'k': 2,
+              'nv': 4,
+              'x0': 18.0,
+              'y0': 25.0,
+              'x1': 40.123456,
+              'y1': 15.0,
+              'reason': {'$code': 'search.refused_surface.outside_model',
+                         '$args': {}}}},
+    {'code': 'search.user_polyline_no_factor',
+     'english': 'The user-defined non-circular surface 2 (4 vertices, from '
+                '(18, 25) to (40.12, 15)) has no factor of safety: no reason '
+                'declared.',
+     'args': {'k': 2,
+              'nv': 4,
+              'x0': 18.0,
+              'y0': 25.0,
+              'x1': 40.123456,
+              'y1': 15.0,
+              'reason': {'$code': 'search.no_reason_stop', '$args': {}}}},
+    {'code': 'search.user_polyline_reported',
+     'english': 'The surface reported for this method is one the user '
+                'defined by hand (non-circular surface 2: 4 vertices, from '
+                '(18, 25) to (40.12, 15)), not one the search generated.',
+     'args': {'k': 2,
+              'nv': 4,
+              'x0': 18.0,
+              'y0': 25.0,
+              'x1': 40.123456,
+              'y1': 15.0}},
+    {'code': 'search.user_polyline_end_moved',
+     'english': 'The user-defined non-circular surface 2 (4 vertices, from '
+                '(18, 25) to (40.12, 15)) has an end off the External '
+                'Boundary: (18, 25.5) was moved to the nearest point of it, '
+                '(18, 25), 0.5 away, before it was analysed.',
+     'args': {'k': 2,
+              'nv': 4,
+              'x0': 18.0,
+              'y0': 25.0,
+              'x1': 40.123456,
+              'y1': 15.0,
+              'ox': 18.0,
+              'oy': 25.5,
+              'nx': 18.0,
+              'ny': 25.0,
+              'd': 0.5}},
+    {'code': 'search.user_polyline_snap_refused',
+     'english': 'The user-defined non-circular surface 2 (4 vertices, from '
+                '(18, 25) to (40.12, 15)) was not analysed: moving its ends '
+                'onto the External Boundary would make x stop increasing. '
+                'Give ends on the ground surface.',
+     'args': {'k': 2,
+              'nv': 4,
+              'x0': 18.0,
+              'y0': 25.0,
+              'x1': 40.123456,
+              'y1': 15.0}},
+    {'code': 'search.user_polyline_not_a_surface',
+     'english': 'The user-defined non-circular surface 2 (4 vertices, from '
+                '(18, 25) to (40.12, 15)) was not analysed: it is not a slip '
+                'surface the engine can slice, because it does not advance '
+                'in x from one end to the other (a step back in x, a '
+                'vertical segment, fewer than two points or a coordinate '
+                'that is not a number). Delete it and draw it again.',
+     'args': {'k': 2,
+              'nv': 4,
+              'x0': 18.0,
+              'y0': 25.0,
+              'x1': 40.123456,
+              'y1': 15.0}},
+    {'code': 'search.user_polyline_inadmissible',
+     'english': 'The user-defined non-circular surface 2 (4 vertices, from '
+                '(18, 25) to (40.12, 15)) has a factor of safety of 0.223, '
+                'but the post-analysis checks reject it, so it cannot be the '
+                'critical surface: no reason declared.',
+     'args': {'k': 2,
+              'nv': 4,
+              'x0': 18.0,
+              'y0': 25.0,
+              'x1': 40.123456,
+              'y1': 15.0,
+              'factor': 0.222976,
+              'reason': {'$code': 'search.no_reason_stop', '$args': {}}}},
 ]
 
 
@@ -556,7 +684,8 @@ _CODED = {
         "_orphan_material_note", "_end_off_ground_note",
         "_base_above_ground_note", "_no_valid_surface_note",
         "_on_model_edge_note", "_base_angle_ok", "_user_surface_filters",
-        "_evaluate_user_surfaces", "_optimisation_note", "_optimize_result",
+        "_evaluate_user_surfaces", "_evaluate_user_polyline",
+        "_optimisation_note", "_optimize_result",
         "_optimize_each_minimum", "_parallel_grid_run",
         "AutoRefineNonCircularSearch._unsliceable_note",
         "BaseSearch.refusal_text"),

@@ -72,6 +72,10 @@ class ToolMode(Enum):
     STRETCH_SUPPORT = "stretch_support"           # v0.1.14
     ADD_SURFACE_3PT = "add_surface_3pt"
     ADD_SURFACE_CR = "add_surface_cr"
+    # v0.1.427 (D357) -- a non-circular slip surface, clicked vertex by
+    # vertex with the boundaries' machinery and delivered on a signal of its
+    # own, as the Expand / Shrink polyline is: it is not a boundary
+    DRAW_USER_SURFACE = "draw_user_surface"
 
     # ----- Annotations (v0.1.416, D354): clicked, like a boundary -----
     # Tools -> Draw, Dimensions and Add Axes asked for their points in a
@@ -109,6 +113,7 @@ class ToolMode(Enum):
             ToolMode.DRAW_BLOCK_POINT,
             ToolMode.DRAW_BLOCK_POLYLINE,
             ToolMode.DRAW_EXPAND_SHRINK,
+            ToolMode.DRAW_USER_SURFACE,
         }
 
     @property
@@ -261,6 +266,7 @@ class ToolMode(Enum):
             ToolMode.STRETCH_SUPPORT: "PointingHandCursor",
             ToolMode.ADD_SURFACE_3PT: "CrossCursor",
             ToolMode.ADD_SURFACE_CR: "CrossCursor",
+            ToolMode.DRAW_USER_SURFACE: "CrossCursor",
         }.get(self, "CrossCursor" if self.is_drawing_annotation
               else "ArrowCursor")
 
@@ -314,6 +320,7 @@ class ToolMode(Enum):
             ),
             ToolMode.ADD_SURFACE_3PT: "Click three points to define a circular surface",
             ToolMode.ADD_SURFACE_CR: "Click the centre, then a point on the circle",
+            ToolMode.DRAW_USER_SURFACE: "Add Non-Circular Surface: click its vertices from one end on the ground to the other, Enter or right-click to finish, Esc to cancel",
             # v0.1.416 (D354) — the annotations, by clicks
             ToolMode.DRAW_ANN_LINE: "Draw Line: click its two ends, Esc to cancel",
             ToolMode.DRAW_ANN_ARROW: "Draw Arrow: click the tail, then the head, Esc to cancel",

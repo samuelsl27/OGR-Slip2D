@@ -109,7 +109,9 @@ _NEVER_ENTERED = set({
 # VARIABLE. El techo de abajo es lo único que los mide.
 # v0.1.331 (D329a) — 34 -> 35: PICK_DIMENSION, Dimension Length in Interpret,
 # with its Spanish.
-_HINTS_TOTAL = 46
+_HINTS_TOTAL = 47
+# v0.1.427 (D357) — 46 -> 47: DRAW_USER_SURFACE, Add Non-Circular Surface,
+# with its Spanish.
 # v0.1.416 (D354) — 34 -> 46: the twelve annotation tools, drawn with clicks
 # in modes of their own, each with its hint and its Spanish.
 # v0.1.336 (D142b) — 35 -> 34: EXPAND_SHRINK retired with its hint.

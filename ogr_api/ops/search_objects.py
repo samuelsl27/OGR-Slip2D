@@ -13,8 +13,9 @@ would otherwise move nothing (rule 7):
   not stored;
 * a focus tolerance is read only by POINT and TANGENT focus objects;
 * user surfaces are circles, analysed only when the surface type is
-  circular — the interface greys the actions otherwise, and the engine
-  skips them with a note.
+  circular, or polylines (v0.1.427, D357), analysed only when it is
+  non-circular — the interface greys the actions of the other type, and the
+  engine skips them with a note.
 
 Author: Samuel Sáez López (UPCT)
 """
@@ -203,20 +204,25 @@ def focus_delete(ws, focus: Any, project_id: Optional[str] = None) -> dict:
 @operation("user_surface_add", toolset="search", mutates=True)
 def user_surface_add(ws, surface: dict,
                      project_id: Optional[str] = None) -> dict:
-    """Add a slip circle of your own, analysed alongside the search."""
+    """Add a slip surface of your own, analysed alongside the search: a
+    circle with surface_type='circular', or a polyline (v0.1.427) with
+    surface_type='non_circular'."""
     from .analysis import surface_from_spec
 
-    if not isinstance(surface, dict) or surface.get("type") not in (
-            "circle", "three_points"):
+    kind = surface.get("type") if isinstance(surface, dict) else None
+    if kind not in ("circle", "three_points", "polyline"):
         raise InvalidArgument("A user surface is a circle: {'type': "
                               "'circle', ...} or {'type': 'three_points', "
-                              "...}.")
+                              "...}; or a polyline: {'type': 'polyline', "
+                              "'points': [[x, y], ...]}.")
+    if kind == "polyline":
+        return _user_polyline_add(ws, surface, project_id)
     circ = surface_from_spec(surface)
 
     def edit(project):
         if project.settings.search.surface_type != "circular":
-            raise Conflict("User surfaces are circles and are only "
-                           "analysed with surface_type='circular'.",
+            raise Conflict("User circles are only analysed with "
+                           "surface_type='circular'.",
                            hint="Or evaluate it once with "
                                 "surface_evaluate.")
         project.user_surfaces.append(circ)
@@ -227,21 +233,59 @@ def user_surface_add(ws, surface: dict,
     return ws.mutate(project_id, "Add user surface", edit)
 
 
+def _user_polyline_add(ws, surface: dict, project_id) -> dict:
+    """``user_surface_add`` for a polyline (v0.1.427, D357).
+
+    Stored as given (left to right); its ends are put on the External
+    Boundary when it is ANALYSED, as ``surface_evaluate`` does, so a ground
+    edited afterwards does not leave a stored surface that the run refuses
+    and ``surface_evaluate`` prices.
+    """
+    from ogr_core.geometry.user_polyline import UserPolylineSurface
+    from ogr_slip2d.surface import slip_surface_of
+
+    pts = points(surface.get("points"), "points", minimum=2)
+    try:
+        up = UserPolylineSurface.from_points(pts)
+    except ValueError as exc:
+        raise InvalidArgument(str(exc)) from None
+
+    def edit(project):
+        if project.settings.search.surface_type != "non_circular":
+            raise Conflict("User polylines are only analysed with "
+                           "surface_type='non_circular'.",
+                           hint="Or evaluate it once with "
+                                "surface_evaluate.")
+        project.user_polylines.append(up)
+        project._notify("user_surfaces_changed")
+        return {"surface": {"id": up.id,
+                            **surface_summary(slip_surface_of(up))},
+                "count": len(project.user_polylines)}
+
+    return ws.mutate(project_id, "Add user surface", edit)
+
+
 @operation("user_surface_delete", toolset="search", mutates=True)
 def user_surface_delete(ws, surface: Any,
                         project_id: Optional[str] = None) -> dict:
-    """Delete a user surface (by id), or 'all'."""
+    """Delete a user surface (by id, circle or polyline), or 'all' of both
+    kinds."""
     def edit(project):
+        circles = list(project.user_surfaces)
+        polylines = list(getattr(project, "user_polylines", None) or [])
         if surface == "all":
-            n = len(project.user_surfaces)
+            n = len(circles) + len(polylines)
             project.user_surfaces = []
+            project.user_polylines = []
         else:
-            keep = [s for s in project.user_surfaces if s.id != surface]
-            if len(keep) == len(project.user_surfaces):
+            keep_c = [s for s in circles if s.id != surface]
+            keep_p = [s for s in polylines if s.id != surface]
+            n = (len(circles) - len(keep_c)) + (len(polylines) - len(keep_p))
+            if not n:
                 raise unknown("user surface", surface,
-                              [s.id for s in project.user_surfaces])
-            n = len(project.user_surfaces) - len(keep)
-            project.user_surfaces = keep
+                              [s.id for s in circles + polylines])
+            project.user_surfaces = keep_c
+            project.user_polylines = keep_p
         project._notify("user_surfaces_changed")
         return {"deleted": n}
 

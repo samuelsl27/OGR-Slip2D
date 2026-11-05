@@ -113,6 +113,13 @@ class Project:
         # not survive a save — while ``is_dirty`` still asked the user to
         # save for it.
         self.user_surfaces = []
+        # v0.1.427 (D357) — and the NON-circular ones, ``UserPolylineSurface``
+        # (``ogr_core.geometry.user_polyline``). A list of their own rather
+        # than a second kind inside ``user_surfaces``: the loader of every
+        # earlier version builds each entry there as a circle and would stop
+        # opening the file at the first polyline, while an unknown top-level
+        # key is simply not read.
+        self.user_polylines = []
 
         # v0.1.236 (D93) — True only on the copy ``apply_design_factors``
         # returns, never on a model the user edits. Not saved (``to_dict``
@@ -768,6 +775,10 @@ class Project:
         if self.transient_initial_result is not None:
             out["transient_initial_result"] = (
                 self.transient_initial_result.to_dict())
+        # v0.1.427 (D357) — likewise only when there is one, for the same
+        # reason: a model without hand-drawn polylines keeps its fingerprint.
+        if self.user_polylines:
+            out["user_polylines"] = [s.to_dict() for s in self.user_polylines]
         return out
 
     def save(self, path: Optional[Path] = None) -> Path:
@@ -943,6 +954,12 @@ class Project:
         if uss:
             from ..geometry.slip_circle import SlipCircle as _SC
             proj.user_surfaces = [_SC.from_dict(d) for d in uss]
+        # v0.1.427 (D357) — absent from every earlier file, which opens with
+        # the empty list the constructor made.
+        ups = data.get("user_polylines")
+        if ups:
+            from ..geometry.user_polyline import UserPolylineSurface as _UP
+            proj.user_polylines = [_UP.from_dict(d) for d in ups]
 
         ann = data.get("annotations")
         if ann:

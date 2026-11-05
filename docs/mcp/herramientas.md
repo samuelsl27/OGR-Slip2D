@@ -67,8 +67,8 @@ Una carga lineal «normal al contorno» o «con ángulo respecto al contorno» t
 | `tension_crack_set` | | Agua en la grieta de tracción. |
 | `focus_set` | | Objetos de foco (ventana, línea, punto, tangente) que acotan la búsqueda. |
 | `focus_delete` | | Borrar objetos de foco. |
-| `user_surface_add` | | Un círculo propio que se analiza junto a la búsqueda. |
-| `user_surface_delete` | | Borrarlos. |
+| `user_surface_add` | | Una superficie propia que se analiza junto a la búsqueda: un círculo con el tipo de superficie circular o, desde v0.1.427, una polilínea (`{'type': 'polyline', 'points': ...}`, con la x avanzando de un extremo al otro en cualquier sentido; se guarda de izquierda a derecha) con el no circular. Los extremos de la polilínea se llevan al contorno exterior al analizarla, como en `surface_evaluate`. |
+| `user_surface_delete` | | Borrar una por id (círculo o polilínea), o todas. |
 
 ## Anotaciones (`annotations`)
 
@@ -138,7 +138,7 @@ Los tres cálculos pasan por la misma puerta que `analysis_run`: sin norma de di
 | `job_list` | | Los trabajos de la sesión. |
 | `results_get` | C | Leer un resultado: resumen, superficie crítica con dovelas, mejores superficies, mínimos, avisos. |
 | `results_query` | | Lo que pregunta la ventana de interpretación (desde v0.1.201): códigos de error (−120 tracción, −112 m-alfa, −111 sin convergencia, −101 otros) y censo de superficies rechazadas, datos brutos, superficies que pasan por un punto (medido sobre la superficie que se calculó, no sobre el círculo entero), mínimo por centro, factor a lo largo del talud, dovelas con los números del método, filtros; y de un resultado de estadística, histograma, convergencia, muestras con su índice y sensibilidad. |
-| `surface_evaluate` | | El factor de seguridad de UNA superficie dada (círculo, tres puntos o polilínea), sin búsqueda. Desde v0.1.258, el primer y el último vértice de una polilínea que no estén sobre el contorno exterior se llevan al punto más próximo de él, como hace la referencia con una superficie introducida a mano, y `notes` lo dice (punto pedido, punto usado y distancia). Un método sin resultado dice en `notes` por qué: por ejemplo, un extremo bajo el terreno (el −101 de la referencia) o un extremo en el aire, en vez de «does not cut the model». |
+| `surface_evaluate` | | El factor de seguridad de UNA superficie dada (círculo, tres puntos o polilínea), sin búsqueda. Desde v0.1.258, el primer y el último vértice de una polilínea que no estén sobre el contorno exterior se llevan al punto más próximo de él, como hace la referencia con una superficie introducida a mano, y `notes` lo dice (punto pedido, punto usado y distancia). Un método sin resultado dice en `notes` por qué: por ejemplo, un extremo bajo el terreno (el −101 de la referencia) o un extremo en el aire, en vez de «does not cut the model». Desde v0.1.427 la polilínea tiene que avanzar en x de un extremo al otro, en cualquier sentido, con la misma regla que `user_surface_add`: una que retrocede en x o tiene un tramo vertical se rechaza (`E_INVALID_ARGUMENT`), cuando antes se tasaba ordenada por x, que es otra superficie. |
 
 ## Vista, historia y Python
 

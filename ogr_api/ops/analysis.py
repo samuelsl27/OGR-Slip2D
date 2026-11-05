@@ -278,6 +278,18 @@ def surface_from_spec(spec):
                                   f"{exc}") from None
     if kind == "polyline":
         pts = points(spec.get("points"), "points", minimum=2)
+        # v0.1.427 (D357) — the rule of every door that takes a hand-made
+        # polyline. Until this version a polyline that stepped back in x was
+        # accepted here and priced SORTED, as another surface, without a
+        # word (``SlipSurface`` sorts its vertices by x): [[19, 25],
+        # [31, 14.5], [25, 18], [37, 15]] gave 1.178925 on the demo slope,
+        # the factor of the sorted one. A polyline given from right to left
+        # is the same surface and is still accepted.
+        from ogr_core.geometry.user_polyline import checked_points
+        try:
+            pts = checked_points(pts)
+        except ValueError as exc:
+            raise InvalidArgument(str(exc)) from None
         return SlipSurface(polyline=Polyline(
             vertices=[Vertex(x, y) for x, y in pts], closed=False))
     raise unknown("surface type", kind, ["circle", "three_points",
@@ -327,82 +339,29 @@ def surface_evaluate(ws, surface: dict, project_id: Optional[str] = None,
     return {"result_id": res.id, **summary}
 
 
-#: v0.1.259 — an end this close to the External Boundary, as a fraction of
-#: the surface's width, is ON it: what is left is the round-off of whoever
-#: computed it.
-_ON_RING_REL = 1e-9
-
-
 def _snap_polyline_ends(project, surf) -> list:
     """Put a polyline's two ends on the External Boundary, and say so.
 
-    v0.1.258 (D244). The reference moves the start and end of a slip
-    surface entered by hand that are "not entered exactly on the External
-    Boundary" to "the nearest point on the External Boundary"; this is the
-    API's door for such a surface. An end already on it, to round-off
-    (``_ON_RING_REL`` of the surface's width), is left exactly as given, so
-    a surface already on the ground is evaluated bit for bit as before. A
-    snap that would make x stop increasing is refused rather than
-    performed: it would be another surface. Returns the notes, one per end
-    moved farther than the slicer's own tolerance.
-
-    v0.1.259 — until then an end within 1e-6 of the model's DIAGONAL was
-    left alone, measured perpendicular to the boundary. The slicer judges
-    the VERTICAL offset against 1e-6 of the surface's width, and on a
-    steep face the vertical is many times the perpendicular (about 7 on
-    the 82 degree gabion face of verification problem 109). So an end
-    could pass here and be refused there: the optimised Bishop polyline of
-    the 109, archived to four decimals, came back "not analysed: its first
-    or last vertex is above the ground". Now every end that is not on the
-    boundary is put on it, where the slicer cannot refuse it, and the note
-    is kept for the moves that are not round-off.
+    v0.1.258 (D244); see :func:`ogr_slip2d.surface.snap_polyline_ends`, where
+    the rule lives since v0.1.427 (D357) so that the run, which analyses the
+    user's stored polylines, applies the same one. This door keeps its own
+    words: one note per end moved farther than the slicer's own tolerance,
+    and ``InvalidArgument`` when the move would make x stop increasing.
     """
-    import math as _m
+    from ogr_slip2d.surface import snap_polyline_ends
 
-    from ogr_core.geometry import Vertex
-
-    pl = getattr(surf, "polyline", None)
-    ext = project.external_boundary()
-    if pl is None or ext is None or len(pl.vertices) < 2:
-        return []
-    ring = list(ext.polyline.vertices)
-    ring = ring + ring[:1]
-    from ogr_slip2d.slicer import ABOVE_GROUND_REL
-    width = abs(pl.vertices[-1].x - pl.vertices[0].x)
-    on_ring = _ON_RING_REL * width
-    worth_saying = ABOVE_GROUND_REL * width
-
-    def nearest(x, y):
-        best = None
-        for a, b in zip(ring[:-1], ring[1:]):
-            dx, dy = b.x - a.x, b.y - a.y
-            span = dx * dx + dy * dy
-            t = 0.0 if span <= 0.0 else max(0.0, min(1.0, (
-                (x - a.x) * dx + (y - a.y) * dy) / span))
-            px, py = a.x + t * dx, a.y + t * dy
-            d = _m.hypot(x - px, y - py)
-            if best is None or d < best[0]:
-                best = (d, px, py)
-        return best
-
+    try:
+        moves = snap_polyline_ends(project, surf)
+    except ValueError as exc:
+        raise InvalidArgument(str(exc)) from None
     notes = []
-    verts = pl.vertices
-    for k, name in ((0, "first"), (len(verts) - 1, "last")):
-        v = verts[k]
-        d, px, py = nearest(v.x, v.y)
-        if d <= on_ring:
+    for m in moves:
+        if not m.worth_saying:
             continue
-        verts[k] = Vertex(px, py)
-        if d <= worth_saying:
-            continue
+        name = "first" if m.index == 0 else "last"
         notes.append(
-            f"The {name} vertex ({v.x:g}, {v.y:g}) is not on the External "
-            f"Boundary; it was moved to the nearest point of it, "
-            f"({px:g}, {py:g}), {d:g} away, as the reference does with a "
-            f"slip surface entered by hand.")
-    xs = [v.x for v in verts]
-    if any(b <= a for a, b in zip(xs, xs[1:])):
-        raise InvalidArgument(
-            "Moving the ends of the polyline onto the External Boundary "
-            "would make x stop increasing; give ends on the ground surface.")
+            f"The {name} vertex ({m.old[0]:g}, {m.old[1]:g}) is not on the "
+            f"External Boundary; it was moved to the nearest point of it, "
+            f"({m.new[0]:g}, {m.new[1]:g}), {m.distance:g} away, as the "
+            f"reference does with a slip surface entered by hand.")
     return notes

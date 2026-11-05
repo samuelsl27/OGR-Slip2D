@@ -28,6 +28,8 @@ from ogr_core.geometry.slip_circle import (  # noqa: F401
     SlipCircle,
     ground_y_at,
 )
+# v0.1.427 (D357) -- and the hand-drawn polyline, likewise the core's.
+from ogr_core.geometry.user_polyline import UserPolylineSurface  # noqa: F401
 
 
 # ----------------------------------------------------------------------
@@ -1378,3 +1380,120 @@ def lowest_elevation(surface) -> Optional[float]:
     if verts:
         return min(v.y for v in verts)
     return None
+
+
+# ======================================================================
+# v0.1.427 (D357) -- the polyline the user draws by hand, as the engine
+# evaluates it.
+
+def slip_surface_of(user: "UserPolylineSurface") -> "SlipSurface":
+    """A FRESH engine surface through the points of a hand-drawn polyline.
+
+    Fresh on every call because the engine writes on the surface it is
+    handed (the tension-crack truncation moves its last vertex), and the
+    user's stored surface must come out of an analysis as it went in -- the
+    rule the circles have kept since v0.1.131.
+
+    Built from what ``checked_points`` returns, never from the stored points
+    themselves: ``SlipSurface`` sorts its vertices by x, so a stored polyline
+    that steps back in x would otherwise become ANOTHER surface without a
+    word. Raises ``NotASurface`` (a ValueError) for a stored polyline that is
+    not a surface (a hand-edited file, a script).
+    """
+    from ogr_core.geometry.user_polyline import checked_points
+    return SlipSurface(polyline=Polyline(
+        vertices=[Vertex(x, y) for x, y in checked_points(user.points)],
+        closed=False))
+
+
+#: An end this close to the External Boundary, as a fraction of the
+#: surface's width, is ON it: what is left is the round-off of whoever
+#: computed it. v0.1.259; moved here from ``ogr_api.ops.analysis`` in
+#: v0.1.427 with :func:`snap_polyline_ends`.
+ON_RING_REL = 1e-9
+
+
+@dataclass(frozen=True)
+class EndMove:
+    """One end of a polyline moved onto the External Boundary."""
+
+    #: 0 for the first vertex, -1 for the last.
+    index: int
+    old: tuple
+    new: tuple
+    distance: float
+    #: Moved farther than the slicer's own tolerance
+    #: (``slicer.ABOVE_GROUND_REL`` of the width): worth telling the user.
+    #: A move below it is round-off and is made without a word.
+    worth_saying: bool
+
+
+def snap_polyline_ends(project, surface) -> list:
+    """Put a polyline's two ends on the External Boundary, in place, and
+    return what moved, as :class:`EndMove`.
+
+    v0.1.258 (D244). The reference moves an end of a slip surface entered
+    by hand that is off the External Boundary to the point of the boundary
+    nearest to it. An end already on it, to round-off (``ON_RING_REL`` of
+    the surface's width), is left exactly as given, so a surface already on
+    the ground is evaluated bit for bit as before.
+
+    v0.1.259 -- every end that is not on the boundary is put on it, where
+    the slicer cannot refuse it: the slicer judges the VERTICAL offset
+    against 1e-6 of the surface's width, and on a steep face the vertical is
+    many times the perpendicular (about 7 on the 82 degree gabion face of
+    verification problem 109), so an end could pass a perpendicular test
+    and be refused by the slicer.
+
+    v0.1.427 (D357) -- moved here, word for word, from the operations
+    layer (``ogr_api.ops.analysis._snap_polyline_ends``), because a rule
+    only one door applies is how two doors give two answers: the user's
+    stored polylines are now analysed by the run as well, and the run
+    cannot import the API. Each door says the move in its own words.
+
+    Raises ValueError when the move would make x stop increasing: that
+    would be another surface, so it is refused rather than performed.
+    """
+    import math as _m
+
+    pl = getattr(surface, "polyline", None)
+    ext = project.external_boundary()
+    if pl is None or ext is None or len(pl.vertices) < 2:
+        return []
+    ring = list(ext.polyline.vertices)
+    ring = ring + ring[:1]
+    from .slicer import ABOVE_GROUND_REL
+    width = abs(pl.vertices[-1].x - pl.vertices[0].x)
+    on_ring = ON_RING_REL * width
+    worth_saying = ABOVE_GROUND_REL * width
+
+    def nearest(x, y):
+        best = None
+        for a, b in zip(ring[:-1], ring[1:]):
+            dx, dy = b.x - a.x, b.y - a.y
+            span = dx * dx + dy * dy
+            t = 0.0 if span <= 0.0 else max(0.0, min(1.0, (
+                (x - a.x) * dx + (y - a.y) * dy) / span))
+            px, py = a.x + t * dx, a.y + t * dy
+            d = _m.hypot(x - px, y - py)
+            if best is None or d < best[0]:
+                best = (d, px, py)
+        return best
+
+    moves = []
+    verts = pl.vertices
+    for k in (0, len(verts) - 1):
+        v = verts[k]
+        d, px, py = nearest(v.x, v.y)
+        if d <= on_ring:
+            continue
+        verts[k] = Vertex(px, py)
+        moves.append(EndMove(index=0 if k == 0 else -1, old=(v.x, v.y),
+                             new=(px, py), distance=d,
+                             worth_saying=d > worth_saying))
+    xs = [v.x for v in verts]
+    if any(b <= a for a, b in zip(xs, xs[1:])):
+        raise ValueError(
+            "Moving the ends of the polyline onto the External Boundary "
+            "would make x stop increasing; give ends on the ground surface.")
+    return moves

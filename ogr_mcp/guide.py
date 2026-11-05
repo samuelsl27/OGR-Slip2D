@@ -194,7 +194,8 @@ water surface when use_sat_unit_weight is true.
   'summary', 'critical' (with slices), 'top', 'minima' or 'warnings';
   model_render(result_id=...) draws the critical surfaces.
 * surface_evaluate prices ONE surface you give (circle by centre and
-  radius, three points, or a polyline) without a search.
+  radius, three points, or a polyline whose x advances from one end to the
+  other) without a search.
 * Warnings are the program speaking: read them. A result is 'stale' when
   the model changed after it was computed.
 

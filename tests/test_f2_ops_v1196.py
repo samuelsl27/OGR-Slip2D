@@ -626,6 +626,16 @@ class TestFocusAndUserSurfaces:
             ws.shutdown()
 
     def test_user_surfaces_need_circular_surfaces(self):
+        """A user CIRCLE needs a circular run, and nothing else gets in.
+
+        Until v0.1.427 the polyline here was refused with InvalidArgument
+        because a user surface could only be a circle. D357 gives the
+        polylines their own list, analysed by a non-circular run, so under
+        ``non_circular`` the same polyline is now ACCEPTED; what stays
+        refused is a polyline that steps back in x (it is not a surface)
+        and, the other way round, a polyline under a circular run (the
+        polyline test of tests/test_user_polylines_v1427.py).
+        """
         from ogr_api import Conflict, InvalidArgument, call
         ws = _ws()
         try:
@@ -636,9 +646,15 @@ class TestFocusAndUserSurfaces:
                 ws, "user_surface_add", project_id=pid, surface=_CIRCLE))
             _raised(InvalidArgument, lambda: call(
                 ws, "user_surface_add", project_id=pid,
-                surface={"type": "polyline", "points": [[30, 25],
-                                                        [50, 35]]}))
+                surface={"type": "polyline", "points": [[30, 25], [50, 35],
+                                                        [40, 20]]}))
             assert _state(ws, pid) == before
+            out = call(ws, "user_surface_add", project_id=pid,
+                       surface={"type": "polyline", "points": [[30, 25],
+                                                               [50, 35]]})
+            assert out["count"] == 1
+            assert len(ws.get(pid).project.user_polylines) == 1
+            assert ws.get(pid).project.user_surfaces == []
         finally:
             ws.shutdown()
 

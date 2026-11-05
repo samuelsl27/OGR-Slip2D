@@ -278,7 +278,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.426"
+    VERSION = "0.1.427"
 
     def __init__(self) -> None:
         super().__init__()
@@ -386,6 +386,8 @@ class MainWindow(QMainWindow):
         self.canvas.annotation_drawn.connect(self._on_annotation_drawn)
         self.canvas.expand_shrink_drawn.connect(
             self._on_expand_shrink_polyline_drawn)
+        # v0.1.427 (D357) — a non-circular user surface, drawn on the canvas
+        self.canvas.user_surface_drawn.connect(self._on_user_surface_drawn)
         # v0.1.335 (D142a) — Add Surface (centre and radius) on the canvas
         self.canvas.centre_radius_picked.connect(self._on_surface_cr_picked)
         self.canvas.centre_radius_typed.connect(
@@ -722,6 +724,15 @@ class MainWindow(QMainWindow):
         # v0.1.157 (D58) — adding without removing would be a one-way door.
         self._mk("surf_manage", "Manage Surfaces...",
                  self._manage_user_surfaces, None)
+        # v0.1.427 (D357) — the non-circular surfaces drawn by hand, with
+        # actions of their own: the circle actions stay as they were, tied
+        # to a circular run, and these are tied to a non-circular one. No
+        # ellipsis on the first: it enters a draw mode (the convention of
+        # D102).
+        self._mk("surf_polyline_add", "Add Non-Circular Surface",
+                 self._add_user_polyline, None)
+        self._mk("surf_polyline_manage", "Manage Non-Circular Surfaces...",
+                 self._manage_user_polylines, None)
         self._mk("slope_limits_move", "Move Slope Limits...",
                  self._move_slope_limits, None)
         self._mk("slope_limits_reset", "Reset Slope Limits",
@@ -970,6 +981,8 @@ class MainWindow(QMainWindow):
         m_surf.addAction(self._actions["surf_centre_radius"])
         m_surf.addAction(self._actions["surf_three_points"])
         m_surf.addAction(self._actions["surf_manage"])
+        m_surf.addAction(self._actions["surf_polyline_add"])
+        m_surf.addAction(self._actions["surf_polyline_manage"])
         m_surf.addSeparator()
         m_focus = m_surf.addMenu(tr("Focus Search"))
         for k in ["focus_window", "focus_line", "focus_point",
@@ -2736,6 +2749,47 @@ class MainWindow(QMainWindow):
             tr("%d focus object(s) defined.") % len(objs), 5000)
 
     @undo_step("Delete user surfaces")
+    def _manage_user_polylines(self) -> None:
+        """List and delete the non-circular slip surfaces drawn by hand.
+
+        v0.1.427 (D357) — the circles' manager below, for the polylines:
+        deleting is the only edit offered, for the reason given there, and
+        each is named by its ends and its number of vertices, which is what
+        tells two of them apart on the canvas.
+        """
+        from PySide6.QtWidgets import QInputDialog
+
+        polylines = self.project.user_polylines
+        if not polylines:
+            self._info(tr("No user-defined non-circular surfaces are "
+                          "defined."))
+            return
+        # ``ends`` and ``vertex_count``: a surface a script stored badly is
+        # still listed (with NaN ends), so it can be deleted, which is what
+        # the run's note about it asks.
+        items = []
+        for i, p in enumerate(polylines):
+            (x0, y0), (x1, y1) = p.ends()
+            items.append(
+                tr("%d: %d vertices, from (%.3f, %.3f) to (%.3f, %.3f)")
+                % (i + 1, p.vertex_count(), x0, y0, x1, y1))
+        items.append(tr("(delete all)"))
+        choice, ok = QInputDialog.getItem(
+            self, tr("Manage Non-Circular Surfaces"), tr("Delete:"), items,
+            0, False)
+        if not ok:
+            return
+        if choice == tr("(delete all)"):
+            polylines.clear()
+        else:
+            polylines.pop(items.index(choice))
+        self.project.is_dirty = True
+        self.canvas.refresh_scene()
+        self.statusBar().showMessage(
+            tr("%d user-defined non-circular surface(s) defined.")
+            % len(polylines), 5000)
+
+    @undo_step("Delete user surfaces")
     def _manage_user_surfaces(self) -> None:
         """List and delete the slip surfaces the user defined by hand.
 
@@ -2960,6 +3014,49 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(
             tr("Circle added: centre (%.3f, %.3f), radius %.3f")
             % (circle.centre_x, circle.centre_y, circle.radius), 8000)
+
+    # v0.1.427 (D357) — a non-circular slip surface, clicked vertex by vertex
+    # with the boundaries' machinery. The canvas delivers what was clicked;
+    # whether it is a surface (x advancing) is the model's rule, asked here,
+    # and its ends are put on the External Boundary by the engine when it is
+    # analysed, as for one given through the operations layer.
+    def _add_user_polyline(self) -> None:
+        """Enter the non-circular user-surface drawing mode."""
+        self._set_tool(ToolMode.DRAW_USER_SURFACE)
+
+    @undo_step("Add user surface")
+    def _on_user_surface_drawn(self, polyline) -> None:
+        """Keep the drawn polyline as a user surface, or say why not."""
+        from ogr_core.project.settings import SurfaceType
+        from ogr_slip2d.surface import UserPolylineSurface
+
+        from .canvas.canvas_view import user_surface_refusal_text
+        not_added = tr("The surface was not added.")
+        # The type may have changed while the mode was on (Surface Options,
+        # an agent): the rule ``user_surface_add`` applies, with its words.
+        if (self.project.settings.search.surface_type
+                == SurfaceType.CIRCULAR.value):
+            self.ogr_status.showMessage(
+                tr("Only available with Surface Options -> Surface Type = "
+                   "Non-Circular.") + " " + not_added, 8000)
+            return
+        try:
+            surface = UserPolylineSurface.from_points(
+                [(v.x, v.y) for v in polyline.vertices])
+        except ValueError as exc:
+            # The canvas asks the same rule before it lets a drawing go; this
+            # is for a polyline that reaches the window another way.
+            self.ogr_status.showMessage(
+                user_surface_refusal_text(exc) + " " + not_added, 8000)
+            return
+        self.project.user_polylines.append(surface)
+        self.project.is_dirty = True
+        self.canvas.refresh_scene()
+        (x0, y0), (x1, y1) = surface.first, surface.last
+        self.statusBar().showMessage(
+            tr("Non-circular surface added: %d vertices, from (%.3f, %.3f) "
+               "to (%.3f, %.3f)") % (len(surface.points), x0, y0, x1, y1),
+            8000)
 
     # v0.1.168 (D101) — the other way round from the action above: that one
     # types coordinates into a dialog, this one picks them on the canvas.
@@ -5060,6 +5157,24 @@ class MainWindow(QMainWindow):
                     if is_circular else
                     tr("Only available with Surface Options -> Surface "
                        "Type = Circular."))
+        # v0.1.427 (D357) — the polylines, the other way round: a polyline is
+        # analysed only by a non-circular run, so its actions are greyed
+        # under a circular one, as the circles' are under a non-circular one.
+        # ``gate`` and not ``setEnabled``: a greyed menu entry says why on
+        # the status bar, through its status tip (D289b), and no menu shows
+        # a tooltip.
+        from ogr_gui.disabled_reasons import gate
+        for key in ("surf_polyline_add", "surf_polyline_manage"):
+            if key in actions:
+                gate(actions[key], not is_circular,
+                     tr("Only available with Surface Options -> Surface "
+                        "Type = Non-Circular."))
+                actions[key].setToolTip(
+                    tr("Only available with Surface Options -> Surface "
+                       "Type = Non-Circular.")
+                    if is_circular else
+                    tr("Non-circular slip surfaces drawn by hand, analysed "
+                       "in addition to the search"))
         # v0.1.232 (D109) - the four Block Search objects, one precondition.
         block_tips = {
             "block_object": tr(

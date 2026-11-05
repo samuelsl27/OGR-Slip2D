@@ -133,6 +133,9 @@ MAPPED: dict[str, str] = {
     "surf_centre_radius": "user_surface_add",
     "surf_three_points": "user_surface_add",
     "surf_manage": "user_surface_delete",
+    # v0.1.427 (D357) -- the hand-drawn non-circular surfaces
+    "surf_polyline_add": "user_surface_add",
+    "surf_polyline_manage": "user_surface_delete",
     "add_text": "annotation_set",
     "measure": "annotation_set",
     "dim_len": "annotation_set",

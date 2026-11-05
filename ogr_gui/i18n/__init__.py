@@ -298,6 +298,47 @@ _DICTS: dict[str, dict[str, str]] = {
             '%d: centro (%.3f, %.3f), radio %.3f',
         '%d user-defined surface(s) defined.':
             '%d superficie(s) definida(s) por el usuario.',
+        # v0.1.427 (D357) — las superficies no circulares dibujadas a mano.
+        'Add Non-Circular Surface': 'Añadir superficie no circular',
+        'Manage Non-Circular Surfaces...':
+            'Gestionar superficies no circulares...',
+        'Manage Non-Circular Surfaces': 'Gestionar superficies no circulares',
+        'Only available with Surface Options -> Surface Type = Non-Circular.':
+            'Solo disponible con Opciones de superficie -> Tipo de '
+            'superficie = No circular.',
+        'Non-circular slip surfaces drawn by hand, analysed in addition to '
+        'the search':
+            'Superficies de rotura no circulares dibujadas a mano, '
+            'analizadas además de la búsqueda',
+        'No user-defined non-circular surfaces are defined.':
+            'No hay ninguna superficie no circular definida por el usuario.',
+        '%d: %d vertices, from (%.3f, %.3f) to (%.3f, %.3f)':
+            '%d: %d vértices, de (%.3f, %.3f) a (%.3f, %.3f)',
+        '%d user-defined non-circular surface(s) defined.':
+            '%d superficie(s) no circular(es) definida(s) por el usuario.',
+        # The reason a drawn polyline is not a surface, by the rule that
+        # failed (NotASurface.kind), and what to do about it where it is said.
+        'A non-circular slip surface has to advance in x from one end to the '
+        'other, always in the same direction: no step back and no vertical '
+        'segment.':
+            'Una superficie de rotura no circular tiene que avanzar en x de '
+            'un extremo al otro, siempre en el mismo sentido: sin '
+            'retrocesos y sin tramos verticales.',
+        'Every vertex of a non-circular slip surface needs two finite '
+        'coordinates.':
+            'Cada vértice de una superficie de rotura no circular '
+            'necesita dos coordenadas finitas.',
+        'A non-circular slip surface needs at least two vertices.':
+            'Una superficie de rotura no circular necesita al menos '
+            'dos vértices.',
+        'Use Undo last vertex (right-click) or press Esc to cancel.':
+            'Usa «Deshacer el último vértice» (botón derecho) o pulsa Esc '
+            'para cancelar.',
+        'The surface was not added.': 'No se ha añadido la superficie.',
+        'Non-circular surface added: %d vertices, from (%.3f, %.3f) to '
+        '(%.3f, %.3f)':
+            'Superficie no circular añadida: %d vértices, de (%.3f, %.3f) a '
+            '(%.3f, %.3f)',
         'Slip surfaces defined by hand, analysed in addition to the search':
             'Superficies de deslizamiento definidas a mano, analizadas además de la búsqueda',
         'Only available with Surface Options -> Surface Type = Circular.':
@@ -3626,6 +3667,12 @@ _DICTS: dict[str, dict[str, str]] = {
             'Pulsa cerca de la cabeza o de la cola de un soporte para agarrarla y después pulsa la posición nueva. Esc para cancelar.',
         'Click the centre, then a point on the circle':
             'Pulsa el centro y después un punto de la circunferencia',
+        # v0.1.427 (D357) — the hand-drawn non-circular slip surface
+        "Add Non-Circular Surface: click its vertices from one end on the "
+        "ground to the other, Enter or right-click to finish, Esc to cancel":
+            "Añadir superficie no circular: pulsa sus vértices de un extremo "
+            "en el terreno al otro, Intro o botón derecho para terminar, Esc "
+            "para cancelar",
         # v0.1.416 (D354) — the annotation tools, by clicks
         "Draw Line: click its two ends, Esc to cancel":
             "Dibujar línea: pulsa sus dos extremos, Esc para cancelar",
@@ -5482,6 +5529,105 @@ _DICTS: dict[str, dict[str, str]] = {
             'La superficie informada para este método es una que el usuario '
             'definió a mano (centro en ({x:.4g}, {y:.4g}), radio {r:.4g}), '
             'no una que generase la búsqueda.',
+        # v0.1.427 (D357) — las superficies no circulares dibujadas a mano
+        '{n} user-defined non-circular surfaces were not analysed: the '
+        'Surface Type of this analysis is Circular, and one analysis '
+        'carries one Surface Type. Set Surface Options -> Surface Type = '
+        'Non-Circular to include them.':
+            'No se analizaron {n} superficies no circulares definidas por'
+            ' el usuario porque el tipo de superficie de este análisis es'
+            ' circular, y un análisis lleva un solo tipo de superficie. '
+            'Pon Opciones de superficie -> Tipo de superficie = No '
+            'circular para incluirlas.',
+        '{n} user-defined non-circular surface was not analysed: the '
+        'Surface Type of this analysis is Circular, and one analysis '
+        'carries one Surface Type. Set Surface Options -> Surface Type = '
+        'Non-Circular to include it.':
+            'No se analizó {n} superficie no circular definida por el '
+            'usuario porque el tipo de superficie de este análisis es '
+            'circular, y un análisis lleva un solo tipo de superficie. '
+            'Pon Opciones de superficie -> Tipo de superficie = No '
+            'circular para incluirla.',
+        'The user-defined non-circular surface {k} ({nv} vertices, from '
+        '({x0:.4g}, {y0:.4g}) to ({x1:.4g}, {y1:.4g})) produced no '
+        'result, so it is not in the reported population. No surface '
+        'filter is active on this run, and the search recorded no reason.':
+            'La superficie no circular {k} definida por el usuario ({nv} '
+            'vértices, de ({x0:.4g}, {y0:.4g}) a ({x1:.4g}, {y1:.4g})) no'
+            ' dio ningún resultado, así que no está en la población '
+            'informada. No hay ningún filtro de superficies activo en '
+            'este cálculo, y la búsqueda no anotó ningún motivo.',
+        'The user-defined non-circular surface {k} ({nv} vertices, from '
+        '({x0:.4g}, {y0:.4g}) to ({x1:.4g}, {y1:.4g})) produced no '
+        'result, so it is not in the reported population. Filters active '
+        'on this run that can remove it: {filters}.':
+            'La superficie no circular {k} definida por el usuario ({nv} '
+            'vértices, de ({x0:.4g}, {y0:.4g}) a ({x1:.4g}, {y1:.4g})) no'
+            ' dio ningún resultado, así que no está en la población '
+            'informada. Filtros activos en este cálculo que pueden '
+            'quitarla: {filters}.',
+        'The user-defined non-circular surface {k} ({nv} vertices, from '
+        '({x0:.4g}, {y0:.4g}) to ({x1:.4g}, {y1:.4g})) produced no '
+        'result, so it is not in the reported population. The search says'
+        ' why: {reason}':
+            'La superficie no circular {k} definida por el usuario ({nv} '
+            'vértices, de ({x0:.4g}, {y0:.4g}) a ({x1:.4g}, {y1:.4g})) no'
+            ' dio ningún resultado, así que no está en la población '
+            'informada. La búsqueda dice por qué: {reason}',
+        'The user-defined non-circular surface {k} ({nv} vertices, from '
+        '({x0:.4g}, {y0:.4g}) to ({x1:.4g}, {y1:.4g})) has no factor of '
+        'safety: {reason}':
+            'La superficie no circular {k} definida por el usuario ({nv} '
+            'vértices, de ({x0:.4g}, {y0:.4g}) a ({x1:.4g}, {y1:.4g})) no'
+            ' tiene factor de seguridad: {reason}',
+        'The surface reported for this method is one the user defined by '
+        'hand (non-circular surface {k}: {nv} vertices, from ({x0:.4g}, '
+        '{y0:.4g}) to ({x1:.4g}, {y1:.4g})), not one the search '
+        'generated.':
+            'La superficie informada para este método es una que el '
+            'usuario definió a mano (la superficie no circular {k}: {nv} '
+            'vértices, de ({x0:.4g}, {y0:.4g}) a ({x1:.4g}, {y1:.4g})), '
+            'no una que generase la búsqueda.',
+        'The user-defined non-circular surface {k} ({nv} vertices, from '
+        '({x0:.4g}, {y0:.4g}) to ({x1:.4g}, {y1:.4g})) has an end off the'
+        ' External Boundary: ({ox:g}, {oy:g}) was moved to the nearest '
+        'point of it, ({nx:g}, {ny:g}), {d:g} away, before it was '
+        'analysed.':
+            'La superficie no circular {k} definida por el usuario ({nv} '
+            'vértices, de ({x0:.4g}, {y0:.4g}) a ({x1:.4g}, {y1:.4g})) '
+            'tiene un extremo fuera del contorno exterior: ({ox:g}, '
+            '{oy:g}) se llevó a su punto más cercano, ({nx:g}, {ny:g}), a'
+            ' {d:g}, antes de analizarla.',
+        'The user-defined non-circular surface {k} ({nv} vertices, from '
+        '({x0:.4g}, {y0:.4g}) to ({x1:.4g}, {y1:.4g})) was not analysed: '
+        'moving its ends onto the External Boundary would make x stop '
+        'increasing. Give ends on the ground surface.':
+            'La superficie no circular {k} definida por el usuario ({nv} '
+            'vértices, de ({x0:.4g}, {y0:.4g}) a ({x1:.4g}, {y1:.4g})) no'
+            ' se analizó: llevar sus extremos al contorno exterior haría '
+            'que x dejase de crecer. Da extremos sobre el terreno.',
+        'The user-defined non-circular surface {k} ({nv} vertices, from '
+        '({x0:.4g}, {y0:.4g}) to ({x1:.4g}, {y1:.4g})) was not analysed: '
+        'it is not a slip surface the engine can slice, because it does '
+        'not advance in x from one end to the other (a step back in x, a '
+        'vertical segment, fewer than two points or a coordinate that is '
+        'not a number). Delete it and draw it again.':
+            'La superficie no circular {k} definida por el usuario ({nv} '
+            'vértices, de ({x0:.4g}, {y0:.4g}) a ({x1:.4g}, {y1:.4g})) no'
+            ' se analizó: no es una superficie de rotura que el motor '
+            'pueda dividir en dovelas, porque no avanza en x de un '
+            'extremo al otro (un retroceso en x, un tramo vertical, menos'
+            ' de dos puntos o una coordenada que no es un número). '
+            'Bórrala y dibújala de nuevo.',
+        'The user-defined non-circular surface {k} ({nv} vertices, from '
+        '({x0:.4g}, {y0:.4g}) to ({x1:.4g}, {y1:.4g})) has a factor of '
+        'safety of {factor:.4g}, but the post-analysis checks reject it, '
+        'so it cannot be the critical surface: {reason}':
+            'La superficie no circular {k} definida por el usuario ({nv} '
+            'vértices, de ({x0:.4g}, {y0:.4g}) a ({x1:.4g}, {y1:.4g})) '
+            'tiene un factor de seguridad de {factor:.4g}, pero las '
+            'comprobaciones posteriores al cálculo la rechazan, así que '
+            'no puede ser la superficie crítica: {reason}',
         'A surface clipped by a weak layer was discarded: its steepest slice '
         'base is {angle:.1f} deg, past the {limit:.0f} deg ceiling in '
         'Project Settings > Advanced.':
