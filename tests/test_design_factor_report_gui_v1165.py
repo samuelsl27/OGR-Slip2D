@@ -266,10 +266,13 @@ class TestTheCaptionFollowsTheValue:
 
     def test_a_seismic_run_keeps_its_own_caption_even_when_factored(self):
         """Partial factors on the soil do not turn a seismic coefficient
-        into an over-design factor. The command line resolves this the
-        other way round and prints a Ky under an "Over-design factor"
-        heading; that is reported as a defect of the command line, and the
-        divergence is deliberate. Do not "unify" them without reading it.
+        into an over-design factor. The command line resolved this the
+        other way round until v0.1.430 and printed a Ky, and later a
+        Newmark displacement, under an "Over-design factor" heading. That
+        was reported as a defect of the command line, and the divergence was
+        kept on purpose until the owner decided to fix the command line
+        (D405): both ask ``ogr_slip2d.reported`` since, and
+        ``tests/test_cli_reported_caption_v1430.py`` holds them together.
         """
         from ogr_gui.i18n import set_language
         from ogr_gui.reported_quantity import reported_quantity
@@ -536,9 +539,11 @@ class TestTheTranslation:
             set_language("es")
             assert tr("Over-design factor") == \
                 "Factor de sobredimensionamiento"
+            # v0.1.430 (D405) -- the sentence has a code since, and its
+            # template a named field (``ogr_slip2d.reported``)
             sentence = tr(
-                "Design standard applied: %s — the reported value is an "
-                "over-design factor, not a factor of safety, and must "
+                "Design standard applied: {summary} — the reported value is "
+                "an over-design factor, not a factor of safety, and must "
                 "exceed 1.")
             assert "sobredimensionamiento" in sentence
             assert "factor de seguridad" in sentence

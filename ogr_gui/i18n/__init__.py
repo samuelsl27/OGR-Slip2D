@@ -2132,9 +2132,22 @@ _DICTS: dict[str, dict[str, str]] = {
         # parciales se aplican a los DATOS, así que lo que sale no es
         # un factor de seguridad.
         "Over-design factor": "Factor de sobredimensionamiento",
-        # v0.1.418 (D355) -- con su punto final, en los dos idiomas
-        "Design standard applied: %s — the reported value is an over-design factor, not a factor of safety, and must exceed 1.":
-            "Norma de diseño aplicada: %s — el valor indicado es un factor de sobredimensionamiento, no un factor de seguridad, y debe ser mayor que 1.",
+        # v0.1.418 (D355) -- con su punto final, en los dos idiomas.
+        # v0.1.430 (D405) -- con código (``reported.*``), y una frase por lo
+        # que se da: con Ky o Newmark el valor no es un factor de
+        # sobredimensionamiento ni tiene que ser mayor que 1.
+        "Design standard applied: {summary} — the reported value is an over-design factor, not a factor of safety, and must exceed 1.":
+            "Norma de diseño aplicada: {summary} — el valor indicado es un factor de sobredimensionamiento, no un factor de seguridad, y debe ser mayor que 1.",
+        "Design standard applied: {summary} — the reported value is the critical seismic coefficient with the partial factors applied, not an over-design factor.":
+            "Norma de diseño aplicada: {summary} — el valor indicado es el coeficiente sísmico crítico con los coeficientes parciales aplicados, no un factor de sobredimensionamiento.",
+        "Design standard applied: {summary} — the reported value is the Newmark displacement with the partial factors applied, not an over-design factor.":
+            "Norma de diseño aplicada: {summary} — el valor indicado es el desplazamiento de Newmark con los coeficientes parciales aplicados, no un factor de sobredimensionamiento.",
+        # la ventana enseña además el factor de la crítica (la barra y el
+        # panel de resultados), y su frase dice las dos cosas
+        "Design standard applied: {summary} — the critical seismic coefficient is computed with the partial factors applied, and the factor shown for the critical surface is an over-design factor, not a factor of safety, and must exceed 1.":
+            "Norma de diseño aplicada: {summary} — el coeficiente sísmico crítico se calcula con los coeficientes parciales aplicados, y el factor que se indica de la superficie crítica es un factor de sobredimensionamiento, no un factor de seguridad, y debe ser mayor que 1.",
+        "Design standard applied: {summary} — the critical seismic coefficient and the Newmark displacement are computed with the partial factors applied, and the factor shown for the critical surface is an over-design factor, not a factor of safety, and must exceed 1.":
+            "Norma de diseño aplicada: {summary} — el coeficiente sísmico crítico y el desplazamiento de Newmark se calculan con los coeficientes parciales aplicados, y el factor que se indica de la superficie crítica es un factor de sobredimensionamiento, no un factor de seguridad, y debe ser mayor que 1.",
         # v0.1.236 (D93) — la estadística dice lo mismo: con una norma
         # activa cada muestra se factoriza, y lo que se cuenta es el factor
         # de sobredimensionamiento.

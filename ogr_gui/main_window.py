@@ -278,7 +278,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.429"
+    VERSION = "0.1.430"
 
     def __init__(self) -> None:
         super().__init__()
@@ -4193,8 +4193,12 @@ class MainWindow(QMainWindow):
         # v0.1.165 (D96) — FIRST, because it does not report what the run
         # decided but what the reported number IS. Every other note qualifies
         # a factor of safety; this one says it is not a factor of safety.
+        # v0.1.430 (D405) -- with the results, because what the note says
+        # the value IS depends on what was computed (a factor, a Ky, a
+        # displacement), not on the report alone
         self.last_compute_warnings = (
-            self._factor_report_notes(self.last_factor_report)
+            self._factor_report_notes(self.last_factor_report,
+                                      list((results or {}).values()))
             + list(getattr(worker, "warnings", []) or []))
         if self.last_compute_warnings:
             # v0.1.155 — still the first note, because the status bar has
@@ -4317,7 +4321,7 @@ class MainWindow(QMainWindow):
         )
 
     @staticmethod
-    def _factor_report_notes(report) -> list:
+    def _factor_report_notes(report, results=()) -> list:
         """What a design standard did, as note lines. Empty when off.
 
         v0.1.165 (D96) — the command line has said this since v0.1.127 and
@@ -4331,19 +4335,31 @@ class MainWindow(QMainWindow):
         over-design factor, and the number is an ordinary factor of safety.
         The caption follows the command line so the two never disagree; this
         note is what stops that caption standing alone.
+
+        v0.1.430 (D405) -- the first line says what the numbers ARE, by the
+        rule the command line asks too (``ogr_slip2d.reported``), from the
+        ``results`` of the run. On a Ky or a Newmark run it says both things
+        the window shows: the coefficient (and the displacement), computed
+        with the partial factors, which Interpret prints; and the factor of
+        the critical surface, which the status bar and the results panel
+        print, an over-design factor that must exceed 1. Until this version
+        it was the over-design sentence alone, on every run. With no results
+        (a caller that only has the report), the over-design one.
+
+        The first line is kept with its code, as the other notes are, so the
+        panel says it in the language of the moment, not of the calculation.
         """
         if not bool(getattr(report, "applied", False)):
             return []
-        # The frame is translated here. The summary and the core's own
-        # notes are built in ``ogr_core``, which cannot import
-        # ``ogr_gui.i18n``: since v0.1.353 (D335) they carry their codes, so
-        # the summary is said here and the notes go to the panel as they
-        # are, which says them (``str()`` would drop the code).
-        from .core_messages import note_text
-        # v0.1.418 (D355) -- with its full stop, in both languages
-        lines = [tr("Design standard applied: %s — the reported value is an "
-                    "over-design factor, not a factor of safety, and must "
-                    "exceed 1.") % note_text(report.summary())]
+        # Every line goes to the panel with its code, which says it in the
+        # language of the moment: the frame since v0.1.430 (D405), the
+        # summary nested in it, and the core's own notes since v0.1.353
+        # (D335); ``str()`` would drop the code. The frame ends with its
+        # full stop in both languages (v0.1.418, D355).
+        from ogr_slip2d.reported import run_caption, standard_note
+
+        lines = [standard_note(run_caption(results, report), report,
+                               shows_factor=True)]
         lines += [n if isinstance(n, str) else str(n)
                   for n in (getattr(report, "notes", None) or [])]
         return lines

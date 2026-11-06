@@ -32,12 +32,21 @@ from typing import Optional
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 from ogr_core.materials import REGISTRY
 from ogr_core.project import Project, save_results
 from ogr_slip2d import method_registry
 from ogr_slip2d.analysis_runner import check_analysis_settings, run_analysis
+from ogr_slip2d.reported import (FOS, KY, NEWMARK, OVERDESIGN, run_caption,
+                                 standard_note)
+
+#: v0.1.430 (D405) -- the heading of the critical column, by what is printed
+#: in it (``ogr_slip2d.reported.run_caption``). The window says the same
+#: four things in the reader's language (``ogr_gui.reported_quantity``).
+_COLUMN_CAPTION = {FOS: "Critical FoS", OVERDESIGN: "Over-design factor",
+                   KY: "Critical Ky", NEWMARK: "Newmark disp. (cm)"}
 
 app = typer.Typer(
     help="OGR Slip2D — limit-equilibrium slope stability analysis. "
@@ -100,16 +109,16 @@ def info(
 ):
     """Show a summary of the project."""
     if not project.exists():
-        console.print(f"[red]File not found:[/red] {project}")
+        console.print(f"[red]File not found:[/red] {escape(str(project))}")
         raise typer.Exit(1)
     p = Project.load(project)
 
-    tbl = Table(title=f"OGR Project — {p.name}")
+    tbl = Table(title=f"OGR Project — {escape(p.name)}")
     tbl.add_column("Field", style="cyan", no_wrap=True)
     tbl.add_column("Value", style="white")
-    tbl.add_row("Path", str(project))
-    tbl.add_row("Author", p.settings.summary.author)
-    tbl.add_row("Company", p.settings.summary.company)
+    tbl.add_row("Path", escape(str(project)))
+    tbl.add_row("Author", escape(p.settings.summary.author))
+    tbl.add_row("Company", escape(p.settings.summary.company))
     tbl.add_row("Boundaries", str(len(p.boundaries)))
     tbl.add_row("Materials", str(len(p.materials)))
     tbl.add_row("Supports", str(len(p.supports)))
@@ -128,7 +137,7 @@ def info(
         mtbl.add_column("Color")
         for m in p.materials:
             mtbl.add_row(
-                m.name,
+                escape(m.name),
                 type(m.strength).DISPLAY_NAME,
                 f"{m.unit_weight:g}",
                 # v0.1.60 — γsat only applies if the material opts into it
@@ -169,7 +178,7 @@ def compute(
     Passing an option overrides that one setting and nothing else.
     """
     if not project.exists():
-        console.print(f"[red]File not found:[/red] {project}")
+        console.print(f"[red]File not found:[/red] {escape(str(project))}")
         raise typer.Exit(1)
     p = Project.load(project)
 
@@ -195,7 +204,7 @@ def compute(
     if method is not None:
         mid = _resolve_method(method)
         if mid is None:
-            console.print(f"[red]Unknown method:[/red] {method}. "
+            console.print(f"[red]Unknown method:[/red] {escape(method)}. "
                           f"Available: {sorted(method_registry())}")
             raise typer.Exit(2)
         method_ids = [mid]
@@ -208,7 +217,7 @@ def compute(
     problems = check_analysis_settings(p)
     if problems:
         for why in problems:
-            console.print(f"[red]Cannot compute:[/red] {why}")
+            console.print(f"[red]Cannot compute:[/red] {escape(str(why))}")
         raise typer.Exit(3)
 
     gw = s.groundwater
@@ -218,14 +227,19 @@ def compute(
     with console.status(f"[bold green]Running {banner}..."):
         outcome = run_analysis(p, method_ids)
 
+    # v0.1.430 (D405) -- escaped, as everything this command prints that
+    # comes from the model: rich reads square brackets as its markup, so a
+    # seismic record called "El Centro [/NS]" aborted the command with a
+    # MarkupError, no table and no result saved, and "Clay [weathered]"
+    # lost its brackets without a word.
     for note in outcome.warnings:
-        console.print(f"[yellow]Note:[/yellow] {note}")
+        console.print(f"[yellow]Note:[/yellow] {escape(str(note))}")
 
     # With a design standard active the result is not a factor of safety:
     # the partial factors are applied to the INPUTS, so what comes out is
-    # an over-design factor, and it must be greater than 1.
+    # an over-design factor, and it must be greater than 1 -- when what is
+    # printed is a factor (v0.1.430, D405: a Ky or a displacement is not).
     factored = bool(getattr(outcome.factor_report, "applied", False))
-    label = "Over-design factor" if factored else "Critical FoS"
     # v0.1.127 - and with a seismic mode on it is neither. The reference
     # says of its own Ky analysis that "the output will be in terms of Ky
     # values rather than Factor of Safety", and the surface reported is
@@ -235,29 +249,28 @@ def compute(
     # the Interpret window had, fixed in the same version.
     first = next(iter(outcome.results.values()), None)
     seismic_objective = getattr(first, "objective", "fos") == "ky"
-    # v0.1.429 (D397) -- whether ANY method's critical surface carries a
-    # displacement, not only the first's. A first method left without a
-    # critical surface (no surface reached a Ky under it: Spencer and GLE on
-    # a plane with kh, D143) turned the whole column into "Critical Ky" and
-    # hid the displacements of every other method.
-    newmark_on = any(
-        r.critical is not None
-        and "newmark_displacement" in (r.critical.details or {})
-        for r in outcome.results.values())
-    if seismic_objective and not factored:
-        label = "Newmark disp. (cm)" if newmark_on else "Critical Ky"
+    # v0.1.430 (D405) -- the heading, and what the standard's note says the
+    # value is, follow the value printed, by the rule the window and the API
+    # ask (``ogr_slip2d.reported``). Resolved here the other way round until
+    # this version ("seismic_objective and not factored", reported in
+    # v0.1.165): with a standard and Newmark the column said "Over-design
+    # factor" over a displacement in centimetres, under a note saying the
+    # value must exceed 1. Whether ANY method's critical surface carries a
+    # displacement is the column's (v0.1.429, D397): see ``run_caption``.
+    caption = run_caption(outcome.results.values(), outcome.factor_report)
+    newmark_on = caption == NEWMARK
+    label = _COLUMN_CAPTION[caption]
     if factored:
-        console.print(f"[cyan]Design standard applied:[/cyan] "
-                      f"{outcome.factor_report.summary()} — the reported "
-                      f"value is an over-design factor, not a factor of "
-                      f"safety, and must exceed 1.")
+        sentence = str(standard_note(caption, outcome.factor_report))
+        head, colon, rest = sentence.partition(":")
+        console.print(f"[cyan]{escape(head + colon)}[/cyan]{escape(rest)}")
         # v0.1.225 (D224) — the report's notes too: what the standard asks
         # for and was not applied. The interface and the API showed them;
         # this printed the summary alone.
         for note in getattr(outcome.factor_report, "notes", None) or []:
-            console.print(f"[yellow]  {note}[/yellow]")
+            console.print(f"[yellow]  {escape(str(note))}[/yellow]")
 
-    tbl = Table(title=f"{banner} — {len(outcome.results)} method(s)")
+    tbl = Table(title=f"{escape(banner)} — {len(outcome.results)} method(s)")
     tbl.add_column("Method", style="cyan")
     tbl.add_column(label)
     tbl.add_column("Valid")
@@ -312,7 +325,7 @@ def compute(
         out = (base.with_name(f"{base.stem}_{mid}{base.suffix}")
                if multi else base)
         save_results(out, result, project_id=p.id)
-        console.print(f"[green]Results saved:[/green] {out}")
+        console.print(f"[green]Results saved:[/green] {escape(str(out))}")
 
 
 # ======================================================================
@@ -359,7 +372,7 @@ def new_demo(output: Path = typer.Argument(..., help="Destination .ogr file")):
     if not str(output).endswith(".ogr"):
         output = output.with_suffix(".ogr")
     p.save(output)
-    console.print(f"[green]Demo project saved:[/green] {output}")
+    console.print(f"[green]Demo project saved:[/green] {escape(str(output))}")
 
 
 if __name__ == "__main__":

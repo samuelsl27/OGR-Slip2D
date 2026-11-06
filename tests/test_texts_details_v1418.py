@@ -116,8 +116,14 @@ def _spanish_values():
 # ======================================================================
 class TestTheNotesEndAsSentences:
 
-    _NOTE = ("Design standard applied: %s — the reported value is an "
-             "over-design factor, not a factor of safety, and must exceed 1.")
+    # v0.1.430 (D405) -- the window's note has a code since, one sentence
+    # for each thing the reported value can be, read from the engine so
+    # that this list cannot fall behind it
+    @staticmethod
+    def _notes():
+        from ogr_slip2d.reported import REPORTED_NOTES
+        return tuple(spec.english for spec in REPORTED_NOTES.values())
+
     _SAMPLES = ("Design standard applied to every sample: %s — the "
                 "statistics describe the over-design factor, not the factor "
                 "of safety.")
@@ -125,7 +131,7 @@ class TestTheNotesEndAsSentences:
     def test_the_design_standard_note_has_its_full_stop(self):
         from ogr_gui.i18n import tr
         with _language("es"):
-            for key in (self._NOTE, self._SAMPLES):
+            for key in self._notes() + (self._SAMPLES,):
                 said = tr(key)
                 assert said != key and said.endswith("."), said
 

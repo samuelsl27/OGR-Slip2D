@@ -124,7 +124,14 @@ class WindowHost:
         w.last_search_results = dict(results)
         w.last_search_result = first
         w.last_factor_report = factor_report
-        w.last_compute_warnings = list(warnings)
+        # v0.1.430 (D405) -- the notes a Compute in the window has, first
+        # what the standard did and what the numbers are, and the open
+        # Analysis Notes panel refreshed: it kept the previous run's notes
+        w.last_compute_warnings = (
+            w._factor_report_notes(
+                factor_report, [r for r in results.values() if r is not None])
+            + list(warnings))
+        w._refresh_notes_panel()
         w.results_dock.show_result(first, factor_report)
         # v0.1.327 (D330) — the model this result is of, as a Compute in the
         # window remembers it: without it an edit after an agent's analysis

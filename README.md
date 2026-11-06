@@ -11,7 +11,7 @@
 Slope stability, groundwater flow and rock mechanics — in Python, readable,
 tested and free.
 
-[![tests](https://img.shields.io/badge/tests-7208%20passing-brightgreen)](#tests)
+[![tests](https://img.shields.io/badge/tests-7224%20passing-brightgreen)](#tests)
 [![licence](https://img.shields.io/badge/licence-AGPL--3.0--or--later-blue)](LICENSE)
 [![python](https://img.shields.io/badge/python-3.11%2B-blue)](#installation)
 [![status](https://img.shields.io/badge/status-active%20development-orange)](#roadmap)
@@ -225,22 +225,24 @@ time, and runs each in a process of its own with the same checks; the files
 that compare with the clock run after them, alone. A piece that dies fails
 the run, named with its exit code and the file it died in.
 `--list --jobs N` shows the pieces without running anything. On the
-development laptop (4 cores, 16 GB) `--jobs 4` takes about 35 minutes
-against 70 in series. A release runs the whole suite with `--jobs 4`, and
+development laptop (4 cores, 16 GB) `--jobs 4` took 20.1 minutes against
+39.7 in series at v0.1.397 (6926 tests). A release runs the whole suite with `--jobs 4`, and
 in series (no arguments, what CI runs) once every 100 commits: each whole
 run in chunks ends saying how many commits ago the last green serial run
 was, or `SERIAL RUN DUE`.
 
-For development, `--fast --jobs 4` leaves out the 42 slowest files listed
-in `tests/_slow.txt` (737 of the tests) and takes about 13 minutes; it is a
-filtered run like the others. The list is written on purpose with
+For development, `--fast --jobs 4` leaves out the slowest files, listed in
+`tests/_slow.txt` (37 since v0.1.382; 664 of the 6926 tests at v0.1.397),
+and took 9.8 minutes then; it is a filtered run like the others. The list is written on purpose with
 `--write-slow-list`, never by a run, and each whole run names the slow
 files it leaves in.
 
-About **84,600 lines** of implementation and **90,700 of tests**, **7208 of
-them passing**, with no known failures. The full suite takes 50 to 90 minutes
-on the same machine (50 to 72 from v0.1.278 to v0.1.300; 74, 83.5 and 92 for
-v0.1.356 to v0.1.358, each partly alongside other runs); the clock
+About **84,600 lines** of implementation and **90,700 of tests**, **7224 of
+them passing**, with no known failures. On the same machine the full suite
+took 39.7 minutes in series and 20.1 with `--jobs 4` at v0.1.397. It had
+taken 50 to 72 in series from v0.1.278 to v0.1.300, and 134 at v0.1.372,
+87.6 of them once a process of the machine stuck on one core was stopped;
+the audit of v0.1.373 to v0.1.397 brought it down without moving a number. The clock
 moves by tens of seconds between identical runs, so it is a check that the
 suite finishes, not a measurement.
 

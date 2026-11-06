@@ -184,8 +184,10 @@ water surface when use_sat_unit_weight is true.
 * methods: bishop_simplified, janbu_simplified, janbu_corrected, spencer,
   gle_morgenstern_price, ordinary_fellenius, lowe_karafiath,
   corps_engineers_1, corps_engineers_2.
-* With a design standard on, the number is an OVER-DESIGN factor (must be
-  above 1), not a factor of safety; results say which in 'caption'.
+* With a design standard on, a factor is an OVER-DESIGN factor (must be
+  above 1), not a factor of safety; a Ky or a Newmark displacement stays
+  what it is, computed with the partial factors applied, and need not be
+  above 1. Results say which in 'caption'.
 
 ## Running and reading results
 * analysis_run runs every enabled method as a background job and waits up

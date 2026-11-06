@@ -386,7 +386,7 @@ class _SliceDataDock(QDockWidget):
 _reported_quantity = reported_quantity
 
 
-def _reported_value(result, item, project=None):
+def _reported_value(result, item, project=None, factor_report=None):
     """The number to print for ``item``, under this run's objective.
 
     Returns ``(text, tooltip)``. The displacement is stored in metres, as
@@ -422,6 +422,10 @@ def _reported_value(result, item, project=None):
         ky = details.get("ky")
         if ky is None:
             return "", ""
+        if bool(getattr(factor_report, "applied", False)):
+            # v0.1.430 (D405) -- with a design standard the factor of that
+            # surface is an over-design factor, as the status bar calls it
+            return "%.4f" % ky, tr("ODF") + "(0) = %.3f" % item.fos
         return "%.4f" % ky, "FS(0) = %.3f" % item.fos
     return "%.3f" % item.fos, ""
 
@@ -524,7 +528,8 @@ class _SummaryDock(QDockWidget):
         # Printing "FoS" over a Ky run would be the panel contradicting
         # the analysis, which is the fault v0.1.84 fixed one line above.
         kind, label = _reported_quantity(result, self.factor_report)
-        value, note = _reported_value(result, c, getattr(self, "project", None))
+        value, note = _reported_value(result, c, getattr(self, "project", None),
+                                      self.factor_report)
         extra = f"<br><i>{note}</i>" if note else ""
         # v0.1.187 (D160) — the EFFORT, under the population. "Valid / N"
         # says what was analysed; it does not say what it cost, and the
@@ -904,7 +909,8 @@ class InterpretWindow(QMainWindow):
         if res is None or res.critical is None:
             return ""
         text, _tip = _reported_value(res, res.critical,
-                                     getattr(self, "project", None))
+                                     getattr(self, "project", None),
+                                     getattr(self, "factor_report", None))
         return text
 
     def active_algorithm(self) -> str:
@@ -1288,7 +1294,8 @@ class InterpretWindow(QMainWindow):
                 # for every Ky run since v0.1.127, and would have done the
                 # same for an over-design factor.
                 _kind, _name = _reported_quantity(result, self.factor_report)
-                _shown, _tip = _reported_value(result, crit, self.project)
+                _shown, _tip = _reported_value(result, crit, self.project,
+                                               self.factor_report)
                 self.cb_method.addItem(
                     f"{label}  —  {_name} = {_shown}", mid,
                 )

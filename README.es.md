@@ -11,7 +11,7 @@
 Estabilidad de taludes, flujo subterráneo y mecánica de rocas — en Python,
 legible, testeado y libre.
 
-[![tests](https://img.shields.io/badge/tests-7208%20passing-brightgreen)](#tests)
+[![tests](https://img.shields.io/badge/tests-7224%20passing-brightgreen)](#tests)
 [![licence](https://img.shields.io/badge/licencia-AGPL--3.0--or--later-blue)](LICENSE)
 [![python](https://img.shields.io/badge/python-3.11%2B-blue)](#instalación)
 [![estado](https://img.shields.io/badge/estado-en%20desarrollo%20activo-orange)](#hoja-de-ruta)
@@ -229,24 +229,27 @@ la última vez, y corre cada uno en su propio proceso con las mismas
 comprobaciones; los archivos que se comparan con el reloj corren después,
 solos. Un trozo que muere hace fallar la corrida, con su código de salida y
 el archivo donde murió. `--list --jobs N` enseña los trozos sin ejecutar
-nada. En el portátil de desarrollo (4 núcleos, 16 GB), `--jobs 4` tarda unos
-35 minutos frente a 70 en serie. Publicar una versión pide la suite entera
+nada. En el portátil de desarrollo (4 núcleos, 16 GB), `--jobs 4` tardó 20,1
+minutos frente a 39,7 en serie en v0.1.397 (6926 tests). Publicar una versión pide la suite entera
 con `--jobs 4`, y en serie (sin argumentos, lo que corre la CI) una vez
 cada 100 commits: cada corrida entera en trozos termina diciendo cuántos
 commits hace de la última serie en verde, o `SERIAL RUN DUE`.
 
-Para el desarrollo, `--fast --jobs 4` deja fuera los 42 archivos más lentos,
-listados en `tests/_slow.txt` (737 de los tests), y tarda unos 13 minutos; es
-una corrida filtrada como las demás. La lista se escribe a propósito con
+Para el desarrollo, `--fast --jobs 4` deja fuera los archivos más lentos,
+listados en `tests/_slow.txt` (37 desde v0.1.382; 664 de los 6926 tests en
+v0.1.397), y tardó entonces 9,8 minutos; es una corrida filtrada como las
+demás. La lista se escribe a propósito con
 `--write-slow-list`, nunca en una corrida, y cada corrida entera nombra los
 archivos lentos que deja dentro.
 
-Unas **84 600 líneas** de implementación y **90 700 de tests**, **7208 de
-ellos en verde**, sin fallos conocidos. La suite completa tarda de 50 a 90
-minutos en la misma máquina (de 50 a 72 entre v0.1.278 y v0.1.300; 74, 83,5 y 92
-en v0.1.356 a v0.1.358, cada una en parte junto a otras corridas); el
-reloj se mueve decenas de segundos entre corridas idénticas, así que es una
-comprobación de que la suite termina, no una medida.
+Unas **84 600 líneas** de implementación y **90 700 de tests**, **7224 de
+ellos en verde**, sin fallos conocidos. En la misma máquina la suite
+completa tardó 39,7 minutos en serie y 20,1 con `--jobs 4` en v0.1.397. Había
+tardado de 50 a 72 en serie entre v0.1.278 y v0.1.300, y 134 en v0.1.372, que
+eran 87,6 sin un proceso de la máquina colgado en un núcleo; la auditoría de
+v0.1.373 a v0.1.397 la bajó sin mover un número. El reloj se mueve decenas de
+segundos entre corridas idénticas, así que es una comprobación de que la
+suite termina, no una medida.
 
 ---
 

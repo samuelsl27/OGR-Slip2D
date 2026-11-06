@@ -40,10 +40,11 @@ def reported_quantity(result, factor_report=None):
     "Compute Ky" on, the number shown is a seismic coefficient, and a
     seismic coefficient does not become an over-design factor because
     partial factors were applied to the soil — so the seismic caption
-    wins. The command line resolves this the other way round
-    (``ogr_cli/__main__.py``: ``if seismic_objective and not factored``),
-    which prints a Ky value under an "Over-design factor" heading; that is
-    reported as a defect of the command line, not copied here.
+    wins. The command line resolved this the other way round until
+    v0.1.430 (``if seismic_objective and not factored``), which printed a
+    Ky value, and later a Newmark displacement, under an "Over-design
+    factor" heading; reported in v0.1.165 as a defect of the command line
+    and not copied here, it asks ``ogr_slip2d.reported`` since (D405).
 
     v0.1.194 (spec 008) — WHICH caption is decided by
     ``ogr_slip2d.reported.reported_caption``, which the operations layer
@@ -105,8 +106,9 @@ def fos_label(factor_report=None) -> str:
     and would be a defect. The status bar and the results dock print
     ``critical.fos`` and nothing else — including on a Ky run, where
     ``.fos`` is a real and correctly labelled factor of safety (the
-    Interpret tooltip shows it as ``FS(0)``), just not the quantity the
-    search minimised. Handing those two widgets the seismic caption would
+    Interpret tooltip shows it as ``FS(0)``, and as ``ODF(0)`` under a
+    design standard since v0.1.430), just not the quantity the search
+    minimised. Handing those two widgets the seismic caption would
     put "Critical seismic coefficient" over a factor of safety: the exact
     fault this module exists to prevent, with the sign reversed.
 

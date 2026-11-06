@@ -51,6 +51,8 @@ def _catalogue() -> dict:
         from ogr_slip2d.messages import MESSAGES as LEM
         from ogr_slip2d.method_note_messages import METHOD_NOTES
         from ogr_slip2d.note_messages import NOTES
+        # v0.1.430 (D405) -- what the reported value is under a standard
+        from ogr_slip2d.reported import REPORTED_NOTES
         from ogr_slip2d.run_messages import RUN_NOTES
         from ogr_slip2d.stat_messages import STAT_NOTES
         from ogr_slip2d.search_note_messages import SEARCH_NOTES
@@ -60,7 +62,7 @@ def _catalogue() -> dict:
                       SETTING_NOTES, STRENGTH_REFUSALS, SEEPAGE_NOTES,
                       RUN_NOTES, SWEEP_NOTES, CALCULATOR_NOTES,
                       STAT_NOTES, DESIGN_NOTES, FACTORING_NOTES,
-                      EXPORT_MESSAGES):
+                      EXPORT_MESSAGES, REPORTED_NOTES):
             _CATALOGUE.update(table)
     return _CATALOGUE
 
