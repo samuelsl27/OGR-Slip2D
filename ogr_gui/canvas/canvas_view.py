@@ -266,6 +266,11 @@ class CanvasView(QGraphicsView):
     # v0.1.416 (D354) — an annotation drawn with clicks: its kind and its
     # points; the window stores it (an annotation is not a boundary)
     annotation_drawn = Signal(object, object)
+    # v0.1.431 (D398) — the scene was cleared and drawn again
+    # (``refresh_scene``). Every item kept outside the scene's own lists is
+    # gone with it; whoever keeps one (Interpret's thrust line) draws it again
+    # here instead of touching a dead wrapper later.
+    scene_rebuilt = Signal()
     # v0.1.8 — load right-click action (action, kind, index)
     load_action_requested = Signal(str, str, int)
     # v0.1.9 — emitted on Move Boundary drag release (boundary_idx, dx, dy)
@@ -367,6 +372,9 @@ class CanvasView(QGraphicsView):
         # v0.1.336 (D142b) — Scale / Rotate: the boundary clicked first and
         # its dashed ghost, until the pivot is clicked
         self._transform_target: Optional[int] = None
+        # v0.1.431 (D398) — and the id of the boundary it pointed at: the
+        # index alone is a guess once the model changed
+        self._transform_target_id = None
         self._transform_ghost = None
         self._draw_preview_items: list = []
         # Vertex dragging
@@ -489,11 +497,19 @@ class CanvasView(QGraphicsView):
         # to every project it was ever given, and the same one twice
         # refreshed it twice
         self._stop_listening()
+        replaced = project is not self.project
         self.project = project
         # v0.1.327 (D323) — nothing of the previous project is drawn again:
         # not its result, and not the snap marker, which outlived File > New
         self._shown_result = None
         self._last_snap = None
+        # v0.1.431 (D398) — nor what was half done on it: since this version
+        # a drawing survives a redraw, and File > New, Open or an agent's
+        # project_new would have carried it into the new project. The same
+        # project handed again (a DXF import, Convert to Boundary) keeps it,
+        # as a redraw does.
+        if replaced:
+            self._forget_interaction()
         self._project_listener = lambda evt: self.refresh_scene()
         project.add_listener(self._project_listener)
         self.refresh_scene()
@@ -603,6 +619,22 @@ class CanvasView(QGraphicsView):
         if shown is not None and current is not None and current():
             result, options = shown
             self.display_search_result(result, **options)
+        # v0.1.431 (D398) — a drawing in progress survives the redraw: its
+        # points were never touched, and its preview is drawn again
+        if self._draw_points:
+            self._update_draw_preview()
+        # and so does the boundary Scale / Rotate picked, with its ghost,
+        # while it is still the boundary that was picked
+        if self._transform_target is not None:
+            if self._transform_target_holds():
+                self._transform_ghost = self._make_drag_ghost(
+                    self.project.boundaries[self._transform_target])
+            else:
+                self._clear_transform_target()
+                self.status_message.emit(tr(
+                    "The boundaries changed after the boundary was picked; "
+                    "click it again, then the pivot."))
+        self.scene_rebuilt.emit()
 
     def _draw_model(self) -> None:
         scene = self.scene()
@@ -613,6 +645,22 @@ class CanvasView(QGraphicsView):
         # v0.1.312 (D307) — cleared with the scene; a drag in progress
         # draws it again on its next move
         self._drag_ghost = None
+        # v0.1.431 (D398) — and so are the preview of a drawing in progress
+        # and the rubber band of a Zoom Window. Their Python wrappers outlived
+        # the items, and the next move, click or change of tool touched one
+        # and raised RuntimeError ("Internal C++ object already deleted"):
+        # the list was never emptied, because emptying it raised first, so
+        # every drawing tool raised for the rest of the session and the
+        # drawing was lost. Any project event redraws (an agent's edit, an
+        # undo), and so does Display Options. The drawing's points stay and
+        # ``refresh_scene`` draws its preview again; a Zoom Window drag is
+        # cancelled, as a change of tool cancels it.
+        self._draw_preview_items.clear()
+        self._zw_rubber = None
+        self._zw_start_scene = None
+        # the ghost of Scale / Rotate died too; ``refresh_scene`` draws it
+        # again while its boundary is the one picked
+        self._transform_ghost = None
         if self.project is None:
             return
 
@@ -1761,8 +1809,22 @@ class CanvasView(QGraphicsView):
         if self.project is None or not (0 <= idx < len(self.project.boundaries)):
             return
         self._transform_target = idx
+        self._transform_target_id = getattr(self.project.boundaries[idx],
+                                            "id", None)
         self._transform_ghost = self._make_drag_ghost(
             self.project.boundaries[idx])
+
+    def _transform_target_holds(self) -> bool:
+        """Whether the boundary Scale / Rotate picked is still at its index
+        (v0.1.431, D398): an undo or an agent's edit between the boundary
+        click and the pivot click can renumber the boundaries, and the old
+        index then scaled or rotated another one."""
+        idx = self._transform_target
+        if idx is None or self.project is None:
+            return False
+        bs = self.project.boundaries
+        return (0 <= idx < len(bs)
+                and getattr(bs[idx], "id", None) == self._transform_target_id)
 
     def _clear_transform_target(self) -> None:
         """Forget the boundary of a Scale / Rotate in progress, and its
@@ -1779,6 +1841,7 @@ class CanvasView(QGraphicsView):
         ghost = self._transform_ghost
         self._transform_ghost = None
         self._transform_target = None
+        self._transform_target_id = None
         if ghost is None:
             return
         try:
@@ -1797,6 +1860,26 @@ class CanvasView(QGraphicsView):
         if ghost is not None and ghost.scene() is self.scene():
             self.scene().removeItem(ghost)
 
+    def _forget_interaction(self) -> None:
+        """Drop whatever was half done on the canvas, without a word: a
+        drawing and its preview, the toe of Change Slope Angle, the boundary
+        of Scale / Rotate, a boundary drag and a Zoom Window drag
+        (v0.1.431, D398). For a project that is replaced, not for a redraw:
+        a redraw keeps a drawing on purpose."""
+        self._draw_points = []
+        self._clear_draw_preview()
+        self._slope_toe_idx = None
+        self._clear_transform_target()
+        self._cancel_boundary_drag()
+        if self._zw_rubber is not None:
+            try:
+                if self._zw_rubber.scene() is self.scene():
+                    self.scene().removeItem(self._zw_rubber)
+            except RuntimeError:     # the scene was rebuilt: the item is gone
+                pass
+        self._zw_rubber = None
+        self._zw_start_scene = None
+
     def _cancel_drawing(self) -> None:
         self._draw_points = []
         self._clear_draw_preview()
@@ -1810,8 +1893,11 @@ class CanvasView(QGraphicsView):
     def _clear_draw_preview(self) -> None:
         scene = self.scene()
         for it in self._draw_preview_items:
-            if it.scene() is scene:
-                scene.removeItem(it)
+            try:
+                if it.scene() is scene:
+                    scene.removeItem(it)
+            except RuntimeError:     # the scene was rebuilt: the item is gone
+                pass
         self._draw_preview_items.clear()
 
     def _update_draw_preview(self, live_cursor: Optional[tuple[float, float]] = None) -> None:
@@ -2395,6 +2481,30 @@ class CanvasView(QGraphicsView):
                     event.accept()
                     return
                 toe = self._slope_toe_idx
+                # v0.1.431 (D398) — the toe is an INDEX into the External
+                # boundary, and since this version the pick survives a
+                # redraw. An edit, an undo or an agent between the two clicks
+                # can renumber or shorten the ring: the old index then edited
+                # another face, or raised IndexError. Only a toe still where
+                # it was clicked is trusted; otherwise it is asked again.
+                # Checked before the repeat of the toe below: an edit that
+                # put the crest at the toe's old index had the click ignored
+                # without a word.
+                ring = self.project.external_boundary().polyline.vertices
+                tx, ty = self._draw_points[0]
+                tol = 1e-9 * max(self.sceneRect().width(),
+                                 self.sceneRect().height(), 1.0)
+                if not (0 <= toe < len(ring)) \
+                        or abs(ring[toe].x - tx) > tol \
+                        or abs(ring[toe].y - ty) > tol:
+                    self._slope_toe_idx = None
+                    self._draw_points = []
+                    self._update_draw_preview()
+                    self.status_message.emit(tr(
+                        "The External boundary changed after the toe was "
+                        "picked; click the toe vertex again."))
+                    event.accept()
+                    return
                 if vi == toe:
                     event.accept()
                     return
@@ -2424,6 +2534,15 @@ class CanvasView(QGraphicsView):
                         self.status_message.emit(tr(
                             "Now click the pivot, Esc to choose another "
                             "boundary."))
+                    event.accept()
+                    return
+                # v0.1.431 (D398) — only the boundary that was picked, at
+                # its index; an edit without a redraw is caught here too
+                if not self._transform_target_holds():
+                    self._clear_transform_target()
+                    self.status_message.emit(tr(
+                        "The boundaries changed after the boundary was "
+                        "picked; click it again, then the pivot."))
                     event.accept()
                     return
                 snapped = self._snap_xy(scene_pt)

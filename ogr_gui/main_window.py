@@ -278,7 +278,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.430"
+    VERSION = "0.1.431"
 
     def __init__(self) -> None:
         super().__init__()
@@ -5774,7 +5774,24 @@ class MainWindow(QMainWindow):
         Invariant: at most **one** External boundary in the project. If
         the user draws a new External while one exists, the old one is
         replaced atomically (Macro command = remove + add).
+
+        v0.1.431 (D398) — the rule of the boundary's kind
+        (``ogr_core.project.rules.boundary_refusal``) is asked again here,
+        not only when its menu entry was enabled. A drawing now survives a
+        redraw, and an undo or an agent's edit while it was drawn can have
+        added the one boundary of its kind the model may hold: a second
+        water table, which the engine would read without a word. It was
+        reachable before too, with the edit before the first click. The
+        External keeps its own rule, the replacement below.
         """
+        if boundary.btype != BoundaryType.EXTERNAL:
+            from ogr_core.project.rules import boundary_refusal
+            refusal = boundary_refusal(self.project, boundary.btype)
+            if refusal is not None:
+                self.ogr_status.showMessage(
+                    self._boundary_refusal_text(refusal) + " "
+                    + tr("The boundary was not added."), 8000)
+                return
         # Single-External enforcement
         if boundary.btype == BoundaryType.EXTERNAL:
             existing_ext_idx = next(
@@ -5826,6 +5843,31 @@ class MainWindow(QMainWindow):
         # is drawn, NOT modal, with the reference's default (anywhere along
         # the polyline) already chosen.
         self._maybe_open_block_polyline_options(boundary)
+
+    @staticmethod
+    def _boundary_refusal_text(refusal) -> str:
+        """Why a boundary of its kind cannot be added, in the reader's
+        language: the reason its greyed menu entry gives
+        (``refresh_action_availability``), by the rule's code (v0.1.431)."""
+        code = getattr(refusal, "code", "")
+        if code == "requires_rapid_drawdown":
+            return tr("Drawdown Line is only available when Project "
+                      "Settings > Groundwater > Advanced > Rapid "
+                      "Drawdown is enabled.")
+        if code == "requires_block_search":
+            return tr("Block Search objects are only available with the "
+                      "Block Search method. Set Surface Options -> Surface "
+                      "Type = Non-Circular, Search Method = Block Search.")
+        message = getattr(refusal, "message", "") or ""
+        if "Water Table" in message:
+            return tr("Only one Water Table is allowed.")
+        if "Tension Crack" in message:
+            return tr("Only one Tension Crack boundary is allowed.\n"
+                      "Delete the existing one to add a new one.").replace(
+                          "\n", " ")
+        if "Drawdown Line" in message:
+            return tr("Only one Drawdown Line is allowed.")
+        return tr(message)
 
     def _maybe_open_block_polyline_options(self, boundary) -> None:
         """Open the Block Search Object dialog for a just-drawn object.

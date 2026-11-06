@@ -661,6 +661,9 @@ class InterpretWindow(QMainWindow):
         # Central read-only canvas
         self.canvas = CanvasView(project, self)
         self.setCentralWidget(self.canvas)
+        # v0.1.431 (D398) — a rebuilt scene takes the thrust line and the
+        # query label with it
+        self.canvas.scene_rebuilt.connect(self._on_scene_rebuilt)
         # v0.1.332 (D329b) — the dimensions this window leaves (D329a), kept
         # apart from the water layers that are drawn with them
         self._dimension_overlays: list = []
@@ -1467,6 +1470,22 @@ class InterpretWindow(QMainWindow):
         self._show_query_label(x, y, self._query_label_text(res))
         self.statusBar().showMessage(self._query_label_text(res), 2000)
 
+    def _draw_overlays_again(self) -> None:
+        """After a rebuild, once, with the result (v0.1.431, D398): the
+        thrust line and the slice lines of Show Slices, while their entries
+        are on. They vanished with the scene, the entries still checked.
+        Not while the geometry is hidden: that view shows the slice alone
+        (``_set_geometry_hidden``), and putting it back draws them again."""
+        if not getattr(self, "_overlays_lost", False):
+            return
+        if getattr(self, "_geometry_hidden", False):
+            return
+        self._overlays_lost = False
+        if getattr(self, "_thrust_visible", False):
+            self._redraw_thrust_line()
+        if getattr(self, "_slices_visible", False):
+            self._redraw_slices_for_selected()
+
     def _refresh_canvas_with_highlights(self, hover_id=None,
                                         hover_surface_dict=None) -> None:
         """Re-render the canvas from the window's current state.
@@ -1510,6 +1529,9 @@ class InterpretWindow(QMainWindow):
             s, res = dock.current()
             if s is not None:
                 self._highlight_slice(s, res)
+        # v0.1.431 (D398) — and the thrust line and the slice lines, which a
+        # rebuild took
+        self._draw_overlays_again()
 
     # ------------------------------------------------------------------
     # v0.1.332 (D329b) — what this window draws over the model and does not
@@ -2057,9 +2079,26 @@ class InterpretWindow(QMainWindow):
 
     def _clear_query_label(self) -> None:
         item = getattr(self, "_query_label_item", None)
-        if item is not None and item.scene() is not None:
-            item.scene().removeItem(item)
+        try:
+            if item is not None and item.scene() is not None:
+                item.scene().removeItem(item)
+        except RuntimeError:     # the scene was rebuilt: the item is gone
+            pass
         self._query_label_item = None
+
+    def _on_scene_rebuilt(self) -> None:
+        """The canvas cleared its scene (v0.1.431, D398): the thrust line and
+        the query label went with it, and the next toggle raised RuntimeError
+        on the dead items. Their wrappers are forgotten here, and the thrust
+        line is drawn again with the result, by
+        ``_refresh_canvas_with_highlights``: Contour Options, the water layers
+        and Hide Geometry rebuild the scene and then call it. An edit of the
+        model rebuilds the scene WITHOUT the result (the canvas draws a
+        result only while it is of the model, D323), and the thrust line of
+        that result stays off with it."""
+        self._thrust_items = []
+        self._query_label_item = None
+        self._overlays_lost = True
 
     def _show_query_label(self, x: float, y: float, text: str) -> None:
         """The floating read-out shown while picking.
@@ -3002,8 +3041,11 @@ class InterpretWindow(QMainWindow):
 
         scene = self.canvas.scene()
         for it in getattr(self, "_thrust_items", []):
-            if it.scene() is scene:
-                scene.removeItem(it)
+            try:
+                if it.scene() is scene:
+                    scene.removeItem(it)
+            except RuntimeError:     # the scene was rebuilt: the item is gone
+                pass
         self._thrust_items = []
         if not getattr(self, "_thrust_visible", False):
             return

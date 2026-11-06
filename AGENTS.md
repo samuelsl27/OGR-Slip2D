@@ -279,7 +279,7 @@ lógicos, 15,9 GB):
 Era «entre 5 y 7½» en v0.1.80, unos 25 min en v0.1.175–0.1.193, 50–72
 en v0.1.278–0.1.300 y 134 en v0.1.372. Cada cifra siguió escrita aquí
 muchas versiones después de dejar de ser cierta, y en v0.1.191 se leyó
-como anomalía un tiempo normal. De los 134 min, la mitad era la máquina:
+como anomalía un tiempo normal. De los 134 min, 46 eran la máquina:
 `TextInputHost.exe` llevaba días colgado girando en un núcleo, y sin él
 eran 87,6. Unos 20 de esos 87,6 eran estado acumulado en el proceso, que
 v0.1.373 cortó (`docs/audits/AUDITORIA_SUITE_v0.1.372.md`). Después

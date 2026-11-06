@@ -103,6 +103,26 @@ def _state(project):
     return json.dumps(project.to_dict(), sort_keys=True, default=str)
 
 
+def _admitting(project):
+    """The demo made to admit every kind these tests draw.
+
+    v0.1.431 (D398) — the window asks the rule of each kind when its drawing
+    ends (``ogr_core.project.rules.boundary_refusal``), as its menu entries
+    always did. On the demo as it comes, three of these drawings are
+    refused: a second water table, a drawdown line without rapid drawdown,
+    and a Block Search object without the Block Search. This file drew them
+    by setting the tool mode, past the greyed entries, and the window used
+    to add them all. The model is made to admit each, as a user would before
+    drawing it."""
+    from ogr_core.geometry import BoundaryType
+    project.boundaries = [b for b in project.boundaries
+                          if b.btype != BoundaryType.WATER_TABLE]
+    project.settings.groundwater.rapid_drawdown = True
+    project.settings.search.surface_type = "non_circular"
+    project.settings.search.search_method = "block"
+    return project
+
+
 def _draw(w, c, mode, points):
     """Draw with the mouse in ``mode``; Enter when the mode does not end by
     itself. Returns the project before."""
@@ -152,7 +172,7 @@ class TestEachDrawnTypeNamesItsStep:
 
     def test_every_drawing_mode_on_the_demo(self):
         from ogr_core.project.demo import build_demo_project
-        w, c = _window(build_demo_project())
+        w, c = _window(_admitting(build_demo_project()))
         try:
             for mode, btype, pts in _modes():
                 w.command_stack.clear()
@@ -192,7 +212,7 @@ class TestEachDrawnTypeNamesItsStep:
     def test_the_edit_menu_says_it_in_spanish(self):
         from ogr_core.project.demo import build_demo_project
         from ogr_gui.canvas.tool_mode import ToolMode
-        w, c = _window(build_demo_project())
+        w, c = _window(_admitting(build_demo_project()))
         try:
             said = {}
             for mode, pts in ((ToolMode.DRAW_BLOCK_POINT, [(15.0, 6.0)]),

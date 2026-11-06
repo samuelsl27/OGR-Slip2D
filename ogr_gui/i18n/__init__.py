@@ -1144,6 +1144,20 @@ _DICTS: dict[str, dict[str, str]] = {
             'Pulsa un vértice del contorno exterior.',
         'Toe picked; now click the crest vertex.':
             'Pie elegido; ahora pulsa el vértice de coronación.',
+        # v0.1.431 (D398) — el pie se guarda como índice del contorno, y una
+        # edición entre los dos clics puede renumerarlo
+        'The External boundary changed after the toe was picked; click the '
+        'toe vertex again.':
+            'El contorno exterior cambió después de elegir el pie; pulsa otra '
+            'vez el vértice del pie.',
+        # v0.1.431 (D398) — Escalar y Rotar guardan el contorno por índice
+        'The boundaries changed after the boundary was picked; click it '
+        'again, then the pivot.':
+            'Los contornos cambiaron después de elegir el contorno; vuelve a '
+            'pulsarlo y después el pivote.',
+        # v0.1.431 (D398) — la regla del contorno, al terminar el dibujo
+        'The boundary was not added.':
+            'El contorno no se ha añadido.',
         'The project has no External boundary.':
             'El proyecto no tiene contorno exterior.',
         'Slope angle changed from %.2f° to %.2f°.':
