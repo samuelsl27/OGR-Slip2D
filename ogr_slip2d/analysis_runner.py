@@ -2422,6 +2422,16 @@ def _seismic_notes(project, method_id: str, result) -> list:
       the ceiling brought their factor down to the target. Those surfaces
       are not "strong with a large Ky", they are unanswered, and a count
       of them belongs in the report.
+
+    v0.1.429 (D397) -- every surface the run analysed, the user's included
+    (``all_evaluations_of``). Until this version only the search population
+    got a displacement, so a hand-drawn surface reported as the critical one
+    (the lowest Ky) had none: the headline fell back to Ky without a word,
+    and the surfaces of the run showed 8.95 cm as the largest movement while
+    the critical one would move 34.8 cm (the demo slope, Bishop, a 0.3 g
+    sinusoid of 2 Hz for 4 s: the bench's d397). The count of surfaces
+    without a Ky reads the same list, so a user's surface left without one
+    is counted, and said.
     """
     cfg = getattr(project.settings, "seismic", None)
     if cfg is None or not cfg.needs_ky or result is None:
@@ -2439,7 +2449,8 @@ def _seismic_notes(project, method_id: str, result) -> list:
             and float(getattr(seismic_load, "kh", 0.0) or 0.0) != 0.0):
         lines.append(method_note(method_id, _mnote(
             MN.SEISMIC_KH_REPLACED, kh=seismic_load.kh)))
-    valid = [r for r in result.evaluations if r.is_valid]
+    from .search import all_evaluations_of
+    valid = [r for r in all_evaluations_of(result) if r.is_valid]
 
     def _has_ky(res) -> bool:
         value = (res.details or {}).get("ky")

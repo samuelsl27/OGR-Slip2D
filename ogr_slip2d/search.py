@@ -517,9 +517,9 @@ def all_evaluations_of(result) -> list:
     reads them. Read ``result.evaluations`` instead and the surfaces the
     user drew are silently left out, though the run analyses them and may
     report one as its critical surface (v0.1.157 the circles, v0.1.427 the
-    polylines). The back analysis reads through it since this version;
-    Newmark, the API's listings and the windows are the next fichas of the
-    same tanda (D397, D400, D401).
+    polylines). The back analysis reads through it since this version, and
+    the Newmark displacements since v0.1.429 (D397); the API's listings and
+    the windows are the next fichas of the same tanda (D400, D401).
 
     ``result.all_evaluations()`` when there is one, so a run without user
     surfaces hands back its very ``evaluations`` list, bit for bit

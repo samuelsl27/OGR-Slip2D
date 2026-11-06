@@ -235,9 +235,15 @@ def compute(
     # the Interpret window had, fixed in the same version.
     first = next(iter(outcome.results.values()), None)
     seismic_objective = getattr(first, "objective", "fos") == "ky"
-    newmark_on = bool(
-        first is not None and first.critical is not None
-        and "newmark_displacement" in (first.critical.details or {}))
+    # v0.1.429 (D397) -- whether ANY method's critical surface carries a
+    # displacement, not only the first's. A first method left without a
+    # critical surface (no surface reached a Ky under it: Spencer and GLE on
+    # a plane with kh, D143) turned the whole column into "Critical Ky" and
+    # hid the displacements of every other method.
+    newmark_on = any(
+        r.critical is not None
+        and "newmark_displacement" in (r.critical.details or {})
+        for r in outcome.results.values())
     if seismic_objective and not factored:
         label = "Newmark disp. (cm)" if newmark_on else "Critical Ky"
     if factored:
@@ -272,8 +278,15 @@ def compute(
         if critical is None:
             shown = "[red]no valid surface[/red]"
         elif newmark_on:
-            shown = ("[bold yellow]%.4f[/bold yellow]"
-                     % (detail["newmark_displacement"] * 100.0))
+            # v0.1.429 (D397) -- a dash, not a KeyError. Before this version
+            # a critical surface drawn by the user had no displacement, and
+            # indexing it aborted the command before it printed the table or
+            # saved any result. Since then a run with a usable record gives
+            # every critical surface its displacement; a row that still has
+            # none says so.
+            moved = detail.get("newmark_displacement")
+            shown = ("—" if moved is None
+                     else "[bold yellow]%.4f[/bold yellow]" % (moved * 100.0))
         elif seismic_objective:
             shown = "[bold yellow]%.4f[/bold yellow]" % detail.get(
                 "ky", float("nan"))

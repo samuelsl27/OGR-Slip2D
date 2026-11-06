@@ -6,21 +6,22 @@ y los riesgos.
 
 ## Enfoque
 
-Son ocho versiones, una por commit, y cada una se publica con la suite entera en verde. **Desde el 2026-11-05 las
-siete del método van de 0.1.437 a 0.1.443:** la propietaria decidió arreglar antes los once defectos que encontró
-la revisión de 0.1.427 (tanda P10, D396–D404, en 0.1.428–0.1.436), y esta spec se renumeró +9 en el commit de
-0.1.428.
+Son ocho versiones, una por commit, y cada una se publica con la suite entera en verde. **Desde el 2026-11-06 las
+siete del método van de 0.1.439 a 0.1.445:** la propietaria decidió arreglar antes los once defectos que encontró
+la revisión de 0.1.427 (tanda P10, D396–D404), y esta spec se renumeró +9 en el commit de 0.1.428. La revisión de
+0.1.429 añadió a la tanda dos fichas más, D405 en 0.1.430 y D406 en 0.1.438, y la spec se renumeró +2 en el commit
+de 0.1.429: la tanda P10 va de 0.1.428 a 0.1.438.
 
 | Versión | Qué |
 |---|---|
 | 0.1.427 | Superficies no circulares del usuario. No depende del método |
-| 0.1.437 | El solver, puro y sin registrar |
-| 0.1.438 | Las cuñas: rebanado no vertical y cargas |
-| 0.1.439 | El método registrado, con sus ajustes y una ventana que no engaña |
-| 0.1.440 | Los datos por vértice, de punta a punta |
-| 0.1.441 | Interpret con cuñas |
-| 0.1.442 | La herramienta de ángulos con el ratón |
-| 0.1.443 | Los ángulos optimizados |
+| 0.1.439 | El solver, puro y sin registrar |
+| 0.1.440 | Las cuñas: rebanado no vertical y cargas |
+| 0.1.441 | El método registrado, con sus ajustes y una ventana que no engaña |
+| 0.1.442 | Los datos por vértice, de punta a punta |
+| 0.1.443 | Interpret con cuñas |
+| 0.1.444 | La herramienta de ángulos con el ratón |
+| 0.1.445 | Los ángulos optimizados |
 
 Después, el banco cierra D357.
 
@@ -84,15 +85,15 @@ Sᵢ    = c̄′ᵢ dᵢ − PWᵢ tan φ̄′ᵢ
 | 0.1.427 | `ogr_slip2d/search.py`, `surface.py` | evaluación en corridas no circulares; el ajuste de extremos baja del API |
 | 0.1.427 | `ogr_api/ops/search_objects.py`, `ops/analysis.py`, `ogr_mcp/server.py`, `docs/mcp/herramientas.md` | `user_surface_add/delete` con polilíneas |
 | 0.1.427 | `ogr_gui/main_window.py`, `canvas/canvas_view.py`, `canvas/tool_mode.py`, `i18n/__init__.py` | acciones, modo de dibujo, gestor y español |
-| 0.1.437 | `ogr_slip2d/sarma/solver.py` | nuevo: recurrencia, raíz, sentido cinemático y motivos |
-| 0.1.438 | `ogr_slip2d/sarma/wedges.py`, `angles.py` | nuevos: cuñas, cargas, factores de acción y resistencias de cara |
-| 0.1.439 | `ogr_slip2d/methods/sarma.py`, `analysis_runner.py`, `search.py`, `checks.py`, `rapid_drawdown.py`, `slice_store.py`, `yield_acceleration.py` | registro y puertas del motor |
-| 0.1.439 | `ogr_core/project/settings.py`, `ogr_api/settings_schema.py`, `ogr_api/results.py`, `ogr_cli/__main__.py` | `settings.sarma`, esquema, resultados y CLI |
-| 0.1.439 | `ogr_gui/dialogs/project_settings_dialog.py`, `labels.py`, `ogr_api/render.py`, `report_generator.py` | casilla, grupo, tooltips y guardas |
-| 0.1.440 | `user_polyline.py`, `ogr_api/ops/*`, `ogr_mcp`, `ogr_gui/dialogs/` | datos por vértice, `user_surface_edit` y tabla |
-| 0.1.441 | `ogr_gui/interpret_window.py`, `report_generator.py` | cuñas en Interpret y en el informe |
-| 0.1.442 | `ogr_gui/canvas/*`, `main_window.py` | herramienta de ángulos |
-| 0.1.443 | `ogr_slip2d/sarma/optimize_angles.py` | nuevo: optimizador de ángulos |
+| 0.1.439 | `ogr_slip2d/sarma/solver.py` | nuevo: recurrencia, raíz, sentido cinemático y motivos |
+| 0.1.440 | `ogr_slip2d/sarma/wedges.py`, `angles.py` | nuevos: cuñas, cargas, factores de acción y resistencias de cara |
+| 0.1.441 | `ogr_slip2d/methods/sarma.py`, `analysis_runner.py`, `search.py`, `checks.py`, `rapid_drawdown.py`, `slice_store.py`, `yield_acceleration.py` | registro y puertas del motor |
+| 0.1.441 | `ogr_core/project/settings.py`, `ogr_api/settings_schema.py`, `ogr_api/results.py`, `ogr_cli/__main__.py` | `settings.sarma`, esquema, resultados y CLI |
+| 0.1.441 | `ogr_gui/dialogs/project_settings_dialog.py`, `labels.py`, `ogr_api/render.py`, `report_generator.py` | casilla, grupo, tooltips y guardas |
+| 0.1.442 | `user_polyline.py`, `ogr_api/ops/*`, `ogr_mcp`, `ogr_gui/dialogs/` | datos por vértice, `user_surface_edit` y tabla |
+| 0.1.443 | `ogr_gui/interpret_window.py`, `report_generator.py` | cuñas en Interpret y en el informe |
+| 0.1.444 | `ogr_gui/canvas/*`, `main_window.py` | herramienta de ángulos |
+| 0.1.445 | `ogr_slip2d/sarma/optimize_angles.py` | nuevo: optimizador de ángulos |
 
 ## Decisiones de diseño
 
