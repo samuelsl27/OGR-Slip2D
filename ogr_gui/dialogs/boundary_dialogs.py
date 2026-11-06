@@ -69,7 +69,10 @@ class EditCoordinatesDialog(QDialog):
 
     def __init__(self, boundary: Boundary, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle(tr('Edit Coordinates — {0}').format(boundary.name))
+        # v0.1.432 (D399) -- by the label rule, not the stored English name
+        from ogr_gui.labels import boundary_label
+        self.setWindowTitle(
+            tr('Edit Coordinates — {0}').format(boundary_label(boundary)))
         self.resize(360, 460)
         self._result_boundary: Optional[Boundary] = None
         self._source_boundary = boundary

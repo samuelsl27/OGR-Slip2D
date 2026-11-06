@@ -151,8 +151,10 @@ def _gui_sources():
         yield f, open(f, encoding="utf-8").read()
 
 
-def _wrapped_keys():
-    """Every key passed to ``tr()``, extracted with the AST.
+def _wrapped_keys(sources=None):
+    """Every key passed to ``tr()``, extracted with the AST, from the
+    interface or from ``sources`` (``[(name, source)]``, how
+    test_spanish_texts_v1432 checks this census on a source of its own).
 
     A regex cannot do this correctly: Python's implicit string
     concatenation means
@@ -168,7 +170,7 @@ def _wrapped_keys():
     import ast as _ast
 
     keys = set()
-    for _f, src in _gui_sources():
+    for _f, src in (_gui_sources() if sources is None else sources):
         try:
             tree = _ast.parse(src)
         except SyntaxError:
@@ -180,10 +182,16 @@ def _wrapped_keys():
             name = getattr(fn, "id", None) or getattr(fn, "attr", None)
             if name != "tr" or not node.args:
                 continue
-            arg = node.args[0]
-            if isinstance(arg, _ast.Constant) and isinstance(arg.value,
-                                                             str):
-                keys.add(arg.value)
+            # v0.1.432 (D399) -- ``tr(a if c else b)`` hands tr() one of
+            # two literals, and either can be the one on screen
+            todo = [node.args[0]]
+            while todo:
+                arg = todo.pop()
+                if isinstance(arg, _ast.IfExp):
+                    todo += [arg.body, arg.orelse]
+                elif isinstance(arg, _ast.Constant) and isinstance(arg.value,
+                                                                   str):
+                    keys.add(arg.value)
     return keys
 
 

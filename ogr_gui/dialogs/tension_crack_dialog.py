@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 from ogr_core.geometry import BoundaryType
 from ogr_core.geometry.tension_crack import TensionCrackProperties, WaterLevelMode
 from ogr_gui.i18n import tr  # noqa: E402
+from ogr_gui.labels import WATER_LEVEL_MODE, water_surface_label
 from ogr_gui.themes import theme_color
 
 
@@ -37,15 +38,9 @@ class DefineTensionCrackDialog(QDialog):
 
     # User-facing labels for each WaterLevelMode (in display order).
     # v0.1.321 (D300) — English here, through tr() where shown.
-    _MODES = [
-        (WaterLevelMode.DRY, "Dry — no water"),
-        (WaterLevelMode.FILLED, "Filled — 100% saturated"),
-        (WaterLevelMode.PERCENT_FILLED, "Percent Filled"),
-        (WaterLevelMode.FILLED_BELOW_ELEVATION, "Filled below Elevation (absolute Y)"),
-        (WaterLevelMode.FILLED_TO_DEPTH, "Filled to Depth (relative to crack top)"),
-        (WaterLevelMode.USE_WATER_TABLE, "Use Water Table"),
-        (WaterLevelMode.USE_PIEZOMETRIC, "Use Piezometric Line"),
-    ]
+    #: v0.1.432 (D399) -- the names live in ``ogr_gui.labels``, where the
+    #: window's status bar reads them too (it printed the identifier)
+    _MODES = list(WATER_LEVEL_MODE.items())
 
     def __init__(self, project, parent=None) -> None:
         super().__init__(parent)
@@ -82,14 +77,17 @@ class DefineTensionCrackDialog(QDialog):
         for i, (mode, _) in enumerate(self._MODES):
             if mode == WaterLevelMode.USE_WATER_TABLE and not self._has_wt:
                 self.cb_mode.model().item(i).setEnabled(False)
+                # v0.1.432 (D399) -- a disabled entry's tool tip, through
+                # tr(): the census did not read setItemData
                 self.cb_mode.setItemData(
-                    i, "No Water Table defined in this model. Add one first.",
+                    i, tr("No Water Table defined in this model. Add one "
+                          "first."),
                     Qt.ToolTipRole,
                 )
             elif mode == WaterLevelMode.USE_PIEZOMETRIC and not self._piezos:
                 self.cb_mode.model().item(i).setEnabled(False)
                 self.cb_mode.setItemData(
-                    i, "No Piezometric Lines defined. Add one first.",
+                    i, tr("No Piezometric Lines defined. Add one first."),
                     Qt.ToolTipRole,
                 )
         # Pre-select current mode
@@ -126,8 +124,10 @@ class DefineTensionCrackDialog(QDialog):
 
         # 5. Piezometric line selector
         self.cb_piezo = QComboBox()
+        # v0.1.432 (D399) -- named as the material dialog names it («Línea
+        # piezométrica 2»): the stored name is the type's English name
         for p in self._piezos:
-            self.cb_piezo.addItem(p.name or f"Piezo {p.id[:8]}", p.id)
+            self.cb_piezo.addItem(water_surface_label(project, p), p.id)
         if not self._piezos:
             self.cb_piezo.addItem(tr("(no piezometric line in model)"), None)
         # Pre-select

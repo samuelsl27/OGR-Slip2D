@@ -20,6 +20,8 @@ from __future__ import annotations
 
 from ogr_core.annotations.annotation import AnnotationKind
 from ogr_core.geometry import BoundaryType
+from ogr_core.geometry.focus import FocusKind
+from ogr_core.geometry.tension_crack import WaterLevelMode
 from ogr_core.loads.loads import LoadDistribution, LoadOrientation
 from ogr_core.materials.material import PorePressureType
 from ogr_core.project.settings import GroundwaterMethod, LEMMethod
@@ -192,6 +194,101 @@ def support_type_label(stype) -> str:
 
 def boundary_type_label(btype: BoundaryType) -> str:
     return tr(btype.display_name)
+
+
+#: The English name of every boundary type: the name a boundary is born with.
+_DEFAULT_BOUNDARY_NAMES = frozenset(t.display_name for t in BoundaryType)
+
+
+def boundary_has_given_name(boundary) -> bool:
+    """Whether the user named ``boundary``. A boundary is born with its
+    type's ENGLISH name as its name (``Boundary.__post_init__``): that name
+    is data the ``.ogr`` keeps, and on screen it is the type's name in the
+    interface's language.
+
+    Any type's English name counts as the default, not only its own: Convert
+    Boundary from the canvas's context menu keeps the old type's name, and so
+    did the v0.1.69 migration that swapped the water table and the drawdown
+    line. Found by the review of v0.1.432: a water table converted from a
+    material boundary said «Contorno eliminado: Material Boundary»."""
+    name = getattr(boundary, "name", "")
+    return bool(name) and name not in _DEFAULT_BOUNDARY_NAMES
+
+
+def boundary_label(boundary) -> str:
+    """A boundary's name as the user reads it: the name the user gave it,
+    else its type's name in the interface's language.
+
+    v0.1.432 (D399) -- the rule ``MainWindow._boundary_label`` held for
+    Scale and Rotate, moved here so every place asks it: the status bar's
+    messages, a dialog's title and the list of Select Boundary printed the
+    stored name instead, in English with the interface in Spanish."""
+    if boundary_has_given_name(boundary):
+        return boundary.name
+    return boundary_type_label(boundary.btype)
+
+
+def boundary_heading(boundary) -> str:
+    """The type's name, then the name the user gave the boundary, if any
+    (``Contorno de material — Arcilla``): where both are shown, the default
+    name would only repeat the type, in English."""
+    label = boundary_type_label(boundary.btype)
+    if boundary_has_given_name(boundary):
+        return "%s — %s" % (label, boundary.name)
+    return label
+
+
+#: v0.1.432 (D399) -- the kind of a focus object, as its menu entry names it;
+#: Manage Focus Objects listed the stored identifier («1: point (…)»)
+FOCUS_KIND = {
+    FocusKind.WINDOW: "Focus Window",
+    FocusKind.LINE: "Focus Line",
+    FocusKind.POINT: "Focus Point",
+    FocusKind.TANGENT: "Focus Tangent",
+}
+
+
+def focus_kind_label(kind) -> str:
+    return _of(FOCUS_KIND, kind)
+
+
+def water_surface_label(project, boundary) -> str:
+    """The name of a water surface as the interface shows it: «Nivel
+    freático» (numbered when the model has more than one) and «Línea
+    piezométrica N», by its number among the lines of its type
+    (``water_surface_index``, from project order). The translated
+    counterpart of ``ogr_core.hydraulic.water_surface_label``, which is
+    English for the CLI, logs and DXF.
+
+    v0.1.432 (D399) -- moved from ``MainWindow._water_surface_choices`` so
+    the tension crack's dialog names its lines as the material dialog does:
+    it showed the stored name, «Piezometric Line» in every language."""
+    from ogr_core.hydraulic import water_surface_index
+    n = water_surface_index(project, boundary)
+    if boundary.btype == BoundaryType.WATER_TABLE:
+        total = len(project.boundaries_of(BoundaryType.WATER_TABLE))
+        return (tr("Water Table") if total <= 1
+                else "%s %d" % (tr("Water Table"), n))
+    return "%s %d" % (tr("Piezometric Line"), n)
+
+
+#: v0.1.432 (D399) -- the water level of a tension crack, in the order its
+#: dialog offers them; the window's status bar printed the identifier
+#: («Grieta de tracción: percent_filled»)
+WATER_LEVEL_MODE = {
+    WaterLevelMode.DRY: "Dry — no water",
+    WaterLevelMode.FILLED: "Filled — 100% saturated",
+    WaterLevelMode.PERCENT_FILLED: "Percent Filled",
+    WaterLevelMode.FILLED_BELOW_ELEVATION:
+        "Filled below Elevation (absolute Y)",
+    WaterLevelMode.FILLED_TO_DEPTH: "Filled to Depth (relative to crack top)",
+    WaterLevelMode.USE_WATER_TABLE: "Use Water Table",
+    WaterLevelMode.USE_PIEZOMETRIC: "Use Piezometric Line",
+}
+
+
+def water_level_mode_label(mode) -> str:
+    return _of(WATER_LEVEL_MODE, mode)
 
 
 def time_unit_label(unit) -> str:

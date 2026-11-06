@@ -278,7 +278,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.431"
+    VERSION = "0.1.432"
 
     def __init__(self) -> None:
         super().__init__()
@@ -2720,10 +2720,19 @@ class MainWindow(QMainWindow):
         if not objs:
             self._info(tr("No focus objects are defined."))
             return
-        items = [tr("%d: %s (%d points, tolerance %.4g)%s")
-                 % (i + 1, o.kind.value, len(o.points), o.tolerance,
-                    "" if o.enabled else tr("  [disabled]"))
-                 for i, o in enumerate(objs)]
+        # v0.1.432 (D399) -- the kind by its label: the stored identifier
+        # showed («1: point (…)») in every language; and the singular for a
+        # Focus Point, which has one point
+        from .labels import focus_kind_label
+        items = []
+        for i, o in enumerate(objs):
+            kind = focus_kind_label(o.kind)
+            off = "" if o.enabled else tr("  [disabled]")
+            items.append(
+                tr("%d: %s (1 point, tolerance %.4g)%s")
+                % (i + 1, kind, o.tolerance, off) if len(o.points) == 1 else
+                tr("%d: %s (%d points, tolerance %.4g)%s")
+                % (i + 1, kind, len(o.points), o.tolerance, off))
         items.append(tr("(delete all)"))
         choice, ok = QInputDialog.getItem(
             self, tr("Manage Focus Objects"),
@@ -4536,20 +4545,13 @@ class MainWindow(QMainWindow):
         project order — so the label is built here, where ``tr()`` lives,
         rather than in ``ogr_core``.
         """
-        from ogr_core.hydraulic import water_surface_index, water_surfaces
+        from ogr_core.hydraulic import water_surfaces
 
-        out: list[tuple[str, str]] = []
-        for b in water_surfaces(self.project):
-            n = water_surface_index(self.project, b)
-            if b.btype == BoundaryType.WATER_TABLE:
-                total = len(self.project.boundaries_of(
-                    BoundaryType.WATER_TABLE))
-                label = (tr("Water Table") if total <= 1
-                         else "%s %d" % (tr("Water Table"), n))
-            else:
-                label = "%s %d" % (tr("Piezometric Line"), n)
-            out.append((b.id, label))
-        return out
+        # v0.1.432 (D399) -- the label rule lives in ogr_gui.labels, where
+        # the tension crack's dialog reads it too
+        from .labels import water_surface_label
+        return [(b.id, water_surface_label(self.project, b))
+                for b in water_surfaces(self.project)]
 
     #: Whether finishing a water-surface boundary pops the Assign dialog.
     #: The reference does this, and it is how a user ever finds the panel.
@@ -5140,7 +5142,9 @@ class MainWindow(QMainWindow):
                     actions[key].setToolTip(
                         tr("Auto-generate the slip-circle search grid")
                         if key == "auto_grid"
-                        else "Define a slip-circle search grid manually"
+                        # v0.1.432 (D399) -- the other branch skipped tr():
+                        # the census read only a literal, not an IfExp
+                        else tr("Define a slip-circle search grid manually")
                     )
                 else:
                     actions[key].setToolTip(
@@ -5589,9 +5593,12 @@ class MainWindow(QMainWindow):
             self.project.tension_crack_properties = dlg.result_properties()
             self.project.is_dirty = True
             self.project._notify("tension_crack_changed")
+            # v0.1.432 (D399) -- the mode as the dialog names it: the stored
+            # identifier showed («Grieta de tracción: percent_filled»)
+            from .labels import water_level_mode_label
             self.ogr_status.showMessage(
-                tr('Tension Crack: {0}').format(
-                    self.project.tension_crack_properties.mode.value),
+                tr('Tension Crack: {0}').format(water_level_mode_label(
+                    self.project.tension_crack_properties.mode)),
                 3000,
             )
 
@@ -5826,9 +5833,14 @@ class MainWindow(QMainWindow):
 
         # Default: just add
         self.command_stack.do(self.project, AddBoundaryCommand(boundary=boundary))
+        # v0.1.432 (D399) -- by the label rule: the type's ENGLISH name,
+        # «Añadido External Boundary con 6 vértices», after every drawing;
+        # and the singular for a Block Search point, a boundary of one vertex
+        from .labels import boundary_label
+        label, n = boundary_label(boundary), len(boundary.vertices)
         self.ogr_status.showMessage(
-            tr('Added {0} with {1} vertices').format(
-                boundary.btype.display_name, len(boundary.vertices)),
+            tr('Added {0} with 1 vertex').format(label) if n == 1 else
+            tr('Added {0} with {1} vertices').format(label, n),
             3000,
         )
         # v0.1.97 — a water surface that is not assigned to any material
@@ -5993,7 +6005,9 @@ class MainWindow(QMainWindow):
             self.command_stack.do(
                 self.project, RemoveBoundaryCommand(boundary=b)
             )
-            self.ogr_status.showMessage(tr('Deleted {0}').format(b.name), 2000)
+            # v0.1.432 (D399) -- the label, not the stored English name
+            self.ogr_status.showMessage(
+                tr('Deleted {0}').format(self._boundary_label(b)), 2000)
 
     def _do_copy_boundary(self, index: int) -> None:
         if 0 <= index < len(self.project.boundaries):
@@ -6007,7 +6021,8 @@ class MainWindow(QMainWindow):
                 Vertex(v.x + 2.0, v.y + 2.0) for v in orig.polyline.vertices
             ]
             self.command_stack.do(self.project, AddBoundaryCommand(boundary=new_b))
-            self.ogr_status.showMessage(tr('Copied {0}').format(orig.name), 2000)
+            self.ogr_status.showMessage(
+                tr('Copied {0}').format(self._boundary_label(orig)), 2000)
 
     def _do_move_boundary(self, index: int, dx: float, dy: float) -> None:
         if 0 <= index < len(self.project.boundaries):
@@ -6017,7 +6032,8 @@ class MainWindow(QMainWindow):
             new_b.id = orig.id
             self.command_stack.do(self.project, ReplaceBoundaryCommand(index=index, new_boundary=new_b))
             self.ogr_status.showMessage(
-                tr('Moved {0} by ({1:.2f}, {2:.2f})').format(orig.name, dx, dy), 2000
+                tr('Moved {0} by ({1:.2f}, {2:.2f})').format(
+                    self._boundary_label(orig), dx, dy), 2000
             )
 
     def _do_convert_boundary(self, index: int) -> None:
@@ -6030,8 +6046,12 @@ class MainWindow(QMainWindow):
             new_b = convert_boundary(orig, new_type)
             new_b.id = orig.id
             self.command_stack.do(self.project, ReplaceBoundaryCommand(index=index, new_boundary=new_b))
+            # v0.1.432 (D399) -- the type through tr(): «Convertido en Water
+            # Table» with the interface in Spanish
+            from .labels import boundary_type_label
             self.ogr_status.showMessage(
-                tr('Converted to {0}').format(new_type.display_name), 2000
+                tr('Converted to {0}').format(
+                    boundary_type_label(new_type)), 2000
             )
 
     def _do_assign_material(self, index: int) -> None:
@@ -6104,7 +6124,8 @@ class MainWindow(QMainWindow):
             self.command_stack.do(
                 self.project, RemoveBoundaryCommand(boundary=b),
             )
-            self.ogr_status.showMessage(tr('Deleted {0}').format(b.name), 3000)
+            self.ogr_status.showMessage(
+                tr('Deleted {0}').format(self._boundary_label(b)), 3000)
         elif action == "move_boundary":
             self._set_tool(ToolMode.MOVE_BOUNDARY)
             self.ogr_status.showMessage(
@@ -6256,7 +6277,8 @@ class MainWindow(QMainWindow):
             ReplaceBoundaryCommand(index=bi, new_boundary=new_b),
         )
         self.ogr_status.showMessage(
-            tr('Moved {0} by ({1:+.2f}, {2:+.2f})').format(orig.name, dx, dy), 3000,
+            tr('Moved {0} by ({1:+.2f}, {2:+.2f})').format(
+                self._boundary_label(orig), dx, dy), 3000,
         )
 
     def _on_vertex_deleted(self, bi: int, vi: int) -> None:
@@ -6361,11 +6383,11 @@ class MainWindow(QMainWindow):
     def _boundary_label(boundary) -> str:
         """A boundary's name as the user reads it: its type's name in the
         interface's language when it keeps the default name (the stored name
-        is the English type name), the name given otherwise."""
-        from .labels import boundary_type_label
-        if boundary.name == boundary.btype.display_name:
-            return boundary_type_label(boundary.btype)
-        return boundary.name
+        is the English type name), the name given otherwise. v0.1.432 (D399):
+        the rule lives in :func:`ogr_gui.labels.boundary_label`, which the
+        canvas and the dialogs ask too."""
+        from .labels import boundary_label
+        return boundary_label(boundary)
 
     def _transform_done(self, message: str) -> None:
         """The status line after a Scale or a Rotate.
@@ -6725,11 +6747,22 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, tr("Select Boundary"), tr("No boundaries defined."))
             return None
         from PySide6.QtWidgets import QInputDialog
-        labels = [
-            tr("[{0}] {1} '{2}' ({3} verts)").format(
-                i, tr(b.btype.display_name), b.name, len(b.vertices))
-            for i, b in enumerate(self.project.boundaries)
-        ]
+        # v0.1.432 (D399) -- the name between quotes only when the user gave
+        # one: the default is the type's English name, after the type itself;
+        # and the singular for a Block Search point, a boundary of one vertex
+        from .labels import boundary_has_given_name, boundary_type_label
+
+        def entry(i, b):
+            kind, n = boundary_type_label(b.btype), len(b.vertices)
+            if boundary_has_given_name(b):
+                return (tr("[{0}] {1} '{2}' (1 vert)").format(i, kind, b.name)
+                        if n == 1 else
+                        tr("[{0}] {1} '{2}' ({3} verts)").format(
+                            i, kind, b.name, n))
+            return (tr("[{0}] {1} (1 vert)").format(i, kind) if n == 1 else
+                    tr("[{0}] {1} ({2} verts)").format(i, kind, n))
+
+        labels = [entry(i, b) for i, b in enumerate(self.project.boundaries)]
         choice, ok = QInputDialog.getItem(
             self, tr("Select Boundary"), tr("Boundary:"), labels, 0, False
         )

@@ -1317,9 +1317,10 @@ class CanvasView(QGraphicsView):
         b = self.project.boundaries[bidx]
 
         menu = QMenu(self)
-        from ogr_gui.labels import boundary_type_label
-        info = QAction("%s — %s" % (boundary_type_label(b.btype), b.name),
-                       self)
+        # v0.1.432 (D399) -- the name after the type only when the user gave
+        # one: the default is the type's English name
+        from ogr_gui.labels import boundary_heading
+        info = QAction(boundary_heading(b), self)
         info.setEnabled(False)
         menu.addAction(info)
         menu.addSeparator()
@@ -1756,8 +1757,10 @@ class CanvasView(QGraphicsView):
                 pts = pts[:-1]
 
         if closed and len(pts) < 3:
+            # v0.1.432 (D399) -- through tr(), like every other text of the
+            # status bar: it showed in English with the interface in Spanish
             self.status_message.emit(
-                "Need at least 3 distinct points to close a boundary."
+                tr("Need at least 3 distinct points to close a boundary.")
             )
             # Don't clear — let the user keep drawing
             return
@@ -1888,7 +1891,7 @@ class CanvasView(QGraphicsView):
         if self._last_snap is not None:
             self._last_snap = None
             self.viewport().update()
-        self.status_message.emit("Drawing cancelled.")
+        self.status_message.emit(tr("Drawing cancelled."))  # v0.1.432 (D399)
 
     def _clear_draw_preview(self) -> None:
         scene = self.scene()

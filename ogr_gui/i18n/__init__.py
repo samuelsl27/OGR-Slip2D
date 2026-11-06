@@ -176,10 +176,14 @@ _DICTS: dict[str, dict[str, str]] = {
         'Width in pixels:': 'Anchura en píxeles:',
 
         # --- v0.1.55: foco, optimización y límites ------------------
-        '  [disabled]': '  [desactivado]',
+        # v0.1.432 (D399) -- after the kind of the object, «Ventana de foco»
+        # and «Línea de foco» among them: the noun carries the gender
+        '  [disabled]': '  [objeto desactivado]',
         '%d focus object(s) defined.': '%d objeto(s) de foco definidos.',
         '%d focus object(s) defined. They narrow the search: a circle must satisfy every one of them.': '%d objeto(s) de foco definidos. Acotan la búsqueda: un círculo debe satisfacerlos todos.',
         '%d: %s (%d points, tolerance %.4g)%s': '%d: %s (%d puntos, tolerancia %.4g)%s',
+        # v0.1.432 (D399) -- the singular, for a Focus Point
+        '%d: %s (1 point, tolerance %.4g)%s': '%d: %s (1 punto, tolerancia %.4g)%s',
         '(delete all)': '(eliminar todos)',
         'Action:': 'Acción:',
         'Add Focus Line...': 'Añadir línea de foco...',
@@ -334,13 +338,17 @@ _DICTS: dict[str, dict[str, str]] = {
         'Use Undo last vertex (right-click) or press Esc to cancel.':
             'Usa «Deshacer el último vértice» (botón derecho) o pulsa Esc '
             'para cancelar.',
+        # v0.1.432 (D399) -- two messages of the canvas that skipped tr()
+        'Need at least 3 distinct points to close a boundary.':
+            'Hacen falta al menos 3 puntos distintos para cerrar un contorno.',
+        'Drawing cancelled.': 'Dibujo cancelado.',
         'The surface was not added.': 'No se ha añadido la superficie.',
         'Non-circular surface added: %d vertices, from (%.3f, %.3f) to '
         '(%.3f, %.3f)':
             'Superficie no circular añadida: %d vértices, de (%.3f, %.3f) a '
             '(%.3f, %.3f)',
         'Slip surfaces defined by hand, analysed in addition to the search':
-            'Superficies de deslizamiento definidas a mano, analizadas además de la búsqueda',
+            'Superficies de rotura definidas a mano, analizadas además de la búsqueda',
         'Only available with Surface Options -> Surface Type = Circular.':
             'Solo disponible con Opciones de superficie -> Tipo de superficie = Circular.',
         'Circle added: centre (%.3f, %.3f), radius %.3f': 'Círculo añadido: centro (%.3f, %.3f), radio %.3f',
@@ -993,6 +1001,9 @@ _DICTS: dict[str, dict[str, str]] = {
         'Auto Hu (compute from water-surface slope)': 'Hu automático (calculado de la pendiente de la superficie de agua)',
         'Auto Refine Search Options': 'Opciones de búsqueda de refinado automático',
         'Auto-generate the slip-circle search grid': 'Generar automáticamente la rejilla de búsqueda de círculos',
+        # v0.1.432 (D399) -- the other branch of the same tool tip
+        'Define a slip-circle search grid manually':
+            'Definir a mano la rejilla de búsqueda de círculos',
         'Available parameters': 'Parámetros disponibles',
         'B:': 'B:',
         'Back Analysis of Support Force': 'Retroanálisis de la fuerza de soporte',
@@ -3300,9 +3311,9 @@ _DICTS: dict[str, dict[str, str]] = {
         'Sensitivity — Tornado':
             'Sensibilidad — tornado',
         'Slip surface — FoS = %.3f':
-            'Superficie de deslizamiento — FS = %.3f',
+            'Superficie de rotura — FS = %.3f',
         'Slip surface — no factor of safety':
-            'Superficie de deslizamiento — sin factor de seguridad',
+            'Superficie de rotura — sin factor de seguridad',
         'closed':
             'cerrado',
         'closed polygon':
@@ -6851,6 +6862,23 @@ _DICTS: dict[str, dict[str, str]] = {
             "Elige cómo modificar el contorno exterior:",
         "[{0}] {1} '{2}' ({3} verts)":
             "[{0}] {1} «{2}» ({3} vértices)",
+        # v0.1.432 (D399) -- a boundary that keeps its default name, by its
+        # type alone; the kinds of focus object, as their menu entries; the
+        # tool tips of the two disabled water levels of the tension crack
+        "[{0}] {1} ({2} verts)":
+            "[{0}] {1} ({2} vértices)",
+        "[{0}] {1} (1 vert)":
+            "[{0}] {1} (1 vértice)",
+        "[{0}] {1} '{2}' (1 vert)":
+            "[{0}] {1} «{2}» (1 vértice)",
+        'Focus Window': 'Ventana de foco',
+        'Focus Line': 'Línea de foco',
+        'Focus Point': 'Punto de foco',
+        'Focus Tangent': 'Tangente de foco',
+        "No Water Table defined in this model. Add one first.":
+            "Este modelo no tiene nivel freático. Añade uno primero.",
+        "No Piezometric Lines defined. Add one first.":
+            "No hay líneas piezométricas. Añade una primero.",
         "Boundary:":
             "Contorno:",
         "The Water Pressure Grid is read only with a grid groundwater method (Project Settings > Groundwater > Method), which also says what its values are.":
@@ -6954,12 +6982,17 @@ _DICTS: dict[str, dict[str, str]] = {
             "Elige un material y pulsa una región del lienzo para pintarla.",
         "Painted region with '{0}'.":
             "Región pintada con «{0}».",
+        # v0.1.432 (D399) -- «contorno» carries the gender, so the five
+        # feminine types agree too («Añadido Línea de desembalse» did not)
         "Added {0} with {1} vertices":
-            "Añadido {0} con {1} vértices",
+            "Contorno añadido: {0}, con {1} vértices",
+        # v0.1.432 (D399) -- the singular, for a Block Search point
+        "Added {0} with 1 vertex":
+            "Contorno añadido: {0}, con 1 vértice",
         "Vertex inserted":
             "Vértice insertado",
         "Moved {0} by ({1:+.2f}, {2:+.2f})":
-            "{0} movido ({1:+.2f}, {2:+.2f})",
+            "Contorno movido: {0} ({1:+.2f}, {2:+.2f})",
         "Vertex deleted":
             "Vértice eliminado",
         "Vertex moved":
@@ -7035,11 +7068,11 @@ _DICTS: dict[str, dict[str, str]] = {
         "Activate a boundary drawing tool first (Ctrl+1 … Ctrl+6).":
             "Activa primero una herramienta de dibujo de contornos (Ctrl+1 … Ctrl+6).",
         "Deleted {0}":
-            "Eliminado {0}",
+            "Contorno eliminado: {0}",
         "Copied {0}":
-            "Copiado {0}",
+            "Contorno copiado: {0}",
         "Moved {0} by ({1:.2f}, {2:.2f})":
-            "{0} movido ({1:.2f}, {2:.2f})",
+            "Contorno movido: {0} ({1:.2f}, {2:.2f})",
         "Converted to {0}":
             "Convertido en {0}",
         "Assign Material by Clicking applies to Material and Weak Layer boundaries only. Use Properties → Assign Materials Panel to paint regions.":

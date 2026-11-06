@@ -475,9 +475,15 @@ def _label_tables():
     from ogr_core.project.units import PermeabilityUnit, TimeUnit
     from ogr_core.support import ForceApplication, ForceOrientation
     from ogr_core.annotations.annotation import AnnotationKind
+    from ogr_core.geometry.focus import FocusKind
+    from ogr_core.geometry.tension_crack import WaterLevelMode
     from ogr_gui import labels as L
-    # v0.1.370 (D344): and the annotation kinds
+    # v0.1.370 (D344): and the annotation kinds; v0.1.432 (D399): the kinds
+    # of focus object and the water levels of a tension crack, which the
+    # window printed by their identifiers
     return ((L.ANNOTATION_KIND, AnnotationKind),
+            (L.FOCUS_KIND, FocusKind),
+            (L.WATER_LEVEL_MODE, WaterLevelMode),
             (L.FORCE_APPLICATION, ForceApplication),
             (L.FORCE_ORIENTATION, ForceOrientation),
             (L.PORE_PRESSURE, PorePressureType),

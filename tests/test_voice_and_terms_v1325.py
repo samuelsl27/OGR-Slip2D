@@ -55,10 +55,13 @@ def _spanish():
     return _DICTS["es"]
 
 
-#: The forms that left, and the one that replaces each.
+#: The forms that left, and the one that replaces each. v0.1.432 (D399):
+#: searched without regard to case, because «Superficie de deslizamiento» at
+#: the start of three values went unseen while the lower case was retired;
+#: FEA keeps its case, or the Spanish «fea» would count.
 RETIRED = {
     r"\bB-bar\b": "B-barra",
-    r"\bFEA\b": "elementos finitos",
+    r"(?-i:\bFEA\b)": "elementos finitos",
     r"\bsuperficies? de deslizamiento\b": "superficie de rotura",
     r"\b[Ss]ólo\b|\bSÓLO\b": "solo",
     r"\béste\b": "este",
@@ -79,11 +82,19 @@ USTED = (r"\b(Use|Elija|Seleccione|Introduzca|Vuelva|Pulse|Asigne|Pruebe|"
          r"Prolónguelo)\b")
 
 
+def holds_retired(pattern, text):
+    """Whether ``text`` holds the retired form ``pattern`` of
+    :data:`RETIRED`, with any case (test_spanish_texts_v1432 checks this
+    rule on texts of its own)."""
+    return re.search(pattern, text, re.IGNORECASE) is not None
+
+
 class TestOneFormForEachTerm:
     def test_no_retired_form_is_left(self):
         es = _spanish()
         for pattern in RETIRED:
-            left = sorted(k for k, v in es.items() if re.search(pattern, v))
+            left = sorted(k for k, v in es.items()
+                          if holds_retired(pattern, v))
             assert not left, (pattern, left)
 
     def test_one_voice_tu(self):

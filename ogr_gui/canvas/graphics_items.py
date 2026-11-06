@@ -113,9 +113,15 @@ class BoundaryItem(DomainItem):
         super().__init__(parent)
         self.boundary = boundary
         self._pick = 0.0
-        from ogr_gui.labels import boundary_type_label
-        self.setToolTip("<b>%s</b><br>%s" % (
-            boundary.name, boundary_type_label(boundary.btype)))
+        # v0.1.432 (D399) -- a boundary that keeps its default name (the
+        # type's English name) is shown by its type alone, in the interface's
+        # language: «<b>Material Boundary</b><br>Contorno de material» read in
+        # two languages at once
+        from ogr_gui.labels import boundary_has_given_name, boundary_type_label
+        kind = boundary_type_label(boundary.btype)
+        self.setToolTip("<b>%s</b><br>%s" % (boundary.name, kind)
+                        if boundary_has_given_name(boundary)
+                        else "<b>%s</b>" % kind)
         self.setZValue(self._z_for_type(boundary.btype))
         self.refresh()
 

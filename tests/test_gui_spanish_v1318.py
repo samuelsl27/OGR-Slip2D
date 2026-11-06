@@ -22,6 +22,13 @@ This test joins them, over every module of ``ogr_gui`` but the dictionary:
   the data of a combo item, a name the ``.ogr`` keeps, an undo step's name
   (the agent reads those in English) — each with its reason below.
 
+v0.1.432 (D399) — four places a text reached the screen from, unseen: the
+canvas's ``status_message.emit``, either branch of a conditional
+(``tr(a) if c else "b"``), an item's data in a role the user reads
+(``setItemData(i, text, Qt.ToolTipRole)``), and, in a census of its own, a
+field of a translated text filled with English (``.format(b.btype.
+display_name)``, the ``value`` of an enum).
+
 What is left and is not to be translated (a proper name, a symbol, a unit)
 goes in ``EXCEPTIONS`` with its reason; every one of them must still be in
 the code. Everything else counts against ``BUDGET``, which only goes down:
@@ -56,6 +63,10 @@ _SECOND = {"addTab", "setTabText", "insertTab", "insertItem"}
 _HEADERS = {"setHorizontalHeaderLabels", "setVerticalHeaderLabels",
             "setHeaderLabels"}
 _BOXES = ("information", "warning", "critical", "question")
+#: v0.1.432 (D399) -- the roles of an item's data that reach the screen
+#: (``setItemData(i, text, Qt.ToolTipRole)``); any other role is data.
+_TEXT_ROLES = {"DisplayRole", "ToolTipRole", "StatusTipRole",
+               "WhatsThisRole"}
 
 #: Calls whose arguments are not interface text, whatever they hold.
 _NOT_TEXT = {
@@ -136,8 +147,8 @@ EXCEPTIONS: dict = {
     ("dialogs/define_support_dialog.py", "Type {}"):
         "the default name of a new support type, which the model keeps "
         "(like a project's 'Untitled')",
-    ("dialogs/tension_crack_dialog.py", "Piezo {}"):
-        "an abbreviation that reads the same in Spanish, before an id",
+    # v0.1.432 (D399): "Piezo {}" left, the lines are named as the material
+    # dialog names them (ogr_gui.labels.water_surface_label)
     ("dialogs/grid_dialogs.py", "Circular"):
         "the same word in Spanish",
     ("dialogs/project_settings_dialog.py", "%s %s %.3f g, %.1f s"):
@@ -152,6 +163,9 @@ EXCEPTIONS: dict = {
 #: 0.1.319, the canvas, the data tips, the results panel and the status bar;
 #: 0 at 0.1.320, the groundwater and search dialogs and the rest (the rules
 #: also read combo items and skip %-style fields from this version on).
+#: v0.1.432 (D399): still 0, with two rules more -- the canvas's
+#: ``status_message.emit`` and both branches of a conditional -- that found
+#: three texts in English, put through tr() in the same version.
 BUDGET = 0
 
 
@@ -193,6 +207,13 @@ def loose_nodes(tree):
     found = {}
 
     def flag(node):
+        # v0.1.432 (D399) -- a conditional puts one of its two branches on
+        # screen: in ``tr(a) if c else "b"`` the census saw an IfExp, not a
+        # text, and "b" reached the tool tip in English
+        if isinstance(node, ast.IfExp):
+            flag(node.body)
+            flag(node.orelse)
+            return
         text = _text(node)
         if text is not None and _letters(text) and text.strip() not in _AXES:
             found[id(node)] = node
@@ -214,6 +235,17 @@ def loose_nodes(tree):
         elif name == "_info":
             for a in args[:2]:
                 flag(a)
+        elif name == "emit" and args and isinstance(node.func, ast.Attribute) \
+                and getattr(node.func.value, "attr", None) == "status_message":
+            # v0.1.432 (D399) -- the canvas speaks through this signal, which
+            # the window shows on its status bar; two of its messages were
+            # in English, unseen, because ``emit`` was not a call read here
+            flag(args[0])
+        elif name == "setItemData" and len(args) >= 3 \
+                and getattr(args[2], "attr", None) in _TEXT_ROLES:
+            # v0.1.432 (D399) -- an item's data in a role the user reads: two
+            # tool tips of the tension crack's combo were in English
+            flag(args[1])
         elif name in _INPUTS and isinstance(node.func, ast.Attribute) \
                 and getattr(node.func.value, "id", None) == "QInputDialog":
             for a in args[1:3]:
@@ -295,6 +327,71 @@ def _counted():
             if (rel, text) not in EXCEPTIONS:
                 out.append((rel, lineno, text))
     return out
+
+
+#: v0.1.432 (D399) -- attributes that hold English whatever the language: a
+#: type's ``display_name`` (a support type's ``DISPLAY_NAME``) and the
+#: ``value`` of an enum, the identifier the ``.ogr`` keeps. Each has its
+#: label in ``ogr_gui/labels.py``, or in the dialog that names it.
+_ENGLISH_ATTRS = {"display_name", "DISPLAY_NAME", "value"}
+
+
+def _is_tr(node):
+    return isinstance(node, ast.Call) and _call_name(node) == "tr"
+
+
+def english_fields(src):
+    """``[(lineno, expression)]`` of the fields of a translated text that are
+    filled with one of :data:`_ENGLISH_ATTRS`.
+
+    v0.1.432 (D399): ``tr("Added {0} with {1} vertices").format(
+    b.btype.display_name, n)`` passes every rule above — the text goes
+    through tr() — and put «Añadido External Boundary con 6 vértices» on the
+    status bar after every boundary drawn in Spanish. A boundary's stored
+    name is English too while the user keeps the default, but it is data
+    this census cannot tell from a material's name: test_spanish_texts_v1432
+    reads those messages through the window."""
+    out = []
+    for node in ast.walk(ast.parse(src)):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) \
+                and node.func.attr == "format" and _is_tr(node.func.value):
+            fields = list(node.args) + [k.value for k in node.keywords]
+        elif isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mod) \
+                and _is_tr(node.left):
+            right = node.right
+            fields = (list(right.elts) if isinstance(right, ast.Tuple)
+                      else list(right.values) if isinstance(right, ast.Dict)
+                      else [right])
+        else:
+            continue
+        for f in fields:
+            if isinstance(f, ast.Attribute) and f.attr in _ENGLISH_ATTRS:
+                out.append((f.lineno, ast.unparse(f)))
+    return sorted(out)
+
+
+def field_census():
+    """``{file: [(lineno, expression)]}`` of :func:`english_fields` over
+    every module of ``ogr_gui`` but the dictionary."""
+    out = {}
+    for path in sorted(_ROOT.rglob("*.py")):
+        rel = path.relative_to(_ROOT).as_posix()
+        if rel.startswith("i18n/"):
+            continue
+        hits = english_fields(path.read_text(encoding="utf-8"))
+        if hits:
+            out[rel] = hits
+    return out
+
+
+class TestNoFieldIsFilledWithEnglish:
+    """v0.1.432 (D399): four of these on the screen at 0.1.431 -- the type
+    of a boundary added and converted, the mode of the tension crack, the
+    kind of a focus object -- and none left."""
+
+    def test_none_is_left(self):
+        found = field_census()
+        assert not found, found
 
 
 class TestNoInterfaceTextSkipsTr:
