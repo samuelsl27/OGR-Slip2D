@@ -68,12 +68,13 @@ class TestEveryChartDialogConstructs:
         assert CumulativeDialog([1.0, 1.2, 1.4, 1.1]) is not None
 
     def test_sf_along_slope(self):
-        """It takes a result object, so the empty case is the cheap one
-        to pin — and it is the one the Interpret window hits before any
-        analysis has run."""
+        """v0.1.433 (D411) — it takes the series Interpret's Graph SF Along
+        Slope computes (it took the critical result and drew its global
+        factor at every slice); the empty series and a short one."""
         _app()
         from ogr_gui.dialogs.chart_dialogs import SFAlongSlopeDialog
-        assert SFAlongSlopeDialog(None) is not None
+        assert SFAlongSlopeDialog([], []) is not None
+        assert SFAlongSlopeDialog([1.0, 2.0], [1.4, 1.2], binned=False)
 
     def test_sensitivity(self):
         _app()

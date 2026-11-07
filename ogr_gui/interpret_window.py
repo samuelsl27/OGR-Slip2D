@@ -640,7 +640,10 @@ class InterpretWindow(QMainWindow):
         from .widgets.status_bar import ElidingStatusBar
         self.setStatusBar(ElidingStatusBar(self))
         self.factor_report = factor_report
-        self.setWindowTitle(tr('OGR Slip2D — Interpret — {0}').format(project.name))
+        # v0.1.433 (D411) -- a default project name translated
+        from ogr_gui.labels import project_label
+        self.setWindowTitle(tr('OGR Slip2D — Interpret — {0}').format(
+            project_label(project)))
         self.resize(1200, 800)
         self.project = project
 
@@ -1172,6 +1175,10 @@ class InterpretWindow(QMainWindow):
         m_stat.addSeparator()
         self._act_sens_plot = QAction(tr("Sensitivity Plot..."), self,
                                       triggered=self._sensitivity_plot)
+        # v0.1.433 (D411) -- the tornado, by the owner's decision: the dialog
+        # existed and no menu opened it
+        self._act_sens_tornado = QAction(tr("Sensitivity Tornado..."), self,
+                                         triggered=self._sensitivity_tornado)
         self._act_conv_plot = QAction(tr("Convergence Plot..."), self,
                                       triggered=self._convergence_plot)
         self._act_export_stats = QAction(
@@ -1185,14 +1192,23 @@ class InterpretWindow(QMainWindow):
         self._act_crit_prob = QAction(
             tr("Critical Probabilistic Surface"), self, checkable=True)
         self._act_crit_prob.toggled.connect(self._toggle_critical_prob)
-        stats_acts = [self._act_sens_plot, self._act_conv_plot,
-                      self._act_export_stats, self._act_crit_prob]
+        stats_acts = [self._act_sens_plot, self._act_sens_tornado,
+                      self._act_conv_plot, self._act_export_stats,
+                      self._act_crit_prob]
         reason = tr("Requires a probabilistic or sensitivity analysis: run "
                     "Statistics → Compute Statistics in the modeller.")
         for act in stats_acts:
             gate(act, self._has_statistics(), reason)
             act.setToolTip(reason)
             m_stat.addAction(act)
+        # v0.1.433 (D411) -- the tornado draws a sensitivity run only: with
+        # a probabilistic run alone it was enabled and answered with a
+        # message box (review of 0.1.433)
+        sens_reason = tr("Requires a sensitivity analysis: run Statistics → "
+                         "Compute Statistics in the modeller.")
+        gate(self._act_sens_tornado,
+             bool(getattr(self.parent(), "_sens_result", None)), sens_reason)
+        self._act_sens_tornado.setToolTip(sens_reason)
 
         # v0.1.126 — the two "several minima" actions have a SECOND source
         # since this version: a multimodal search fills
@@ -1799,9 +1815,9 @@ class InterpretWindow(QMainWindow):
             # never existed, so every row read "capacity not defined".
             stype = (getattr(sup, "support_type", None)
                      or resolve_support_type(self.project, sup) or sup)
-            from ogr_gui.labels import support_type_label
-            label = (getattr(sup, "name", "")
-                     or support_type_label(stype)
+            # v0.1.433 (D411) -- a default name in the interface's language
+            from ogr_gui.labels import support_name
+            label = (support_name(sup, stype)
                      or tr('support {0}').format(i))
             cap = None
             for attr in ("anchor_capacity", "tensile_capacity",
@@ -2648,7 +2664,11 @@ class InterpretWindow(QMainWindow):
         # looks at second, which is the same silence this version removed
         # from the engine. An all-refused run falls to the empty-series
         # branch below and says so.
-        series = [(vs.label, vs.percent_of_range(), vs.fos)
+        # v0.1.433 (D411) -- each variable as Define Random Variables
+        # names it, not its stored label («Mat1 — friction_angle»)
+        from ogr_gui.labels import variable_label
+        series = [(variable_label(self.project, vs.key, vs.label),
+                   vs.percent_of_range(), vs.fos)
                   for vs in sweeps.values() if vs.values]
         if not series:
             self._info(tr("No sensitivity result."))
@@ -2657,6 +2677,33 @@ class InterpretWindow(QMainWindow):
                       tr("Percent of variable range (%)"),
                       tr("Over-design factor") if self._stat_factored()
                       else tr("Factor of safety"), marker="")
+
+    def _sensitivity_tornado(self) -> None:
+        """The tornado of the sensitivity run: each variable's change of the
+        factor over its range, with its sign — the ranking's numbers. Non
+        modal, as every chart of this window (v0.1.433, D411)."""
+        _prob, sens = self._stat_results()
+        if sens is None or not sens.ok:
+            self._info(tr("No sensitivity result."))
+            return
+        from ogr_gui.labels import variable_label
+        from .dialogs.chart_dialogs import (SensitivityDialog,
+                                            sensitivity_effects)
+        mid = next(iter(sens.by_method), None)
+        effects = sensitivity_effects(
+            sens.by_method.get(mid, {}),
+            lambda key, stored: variable_label(self.project, key, stored))
+        if not effects:
+            self._info(tr("No sensitivity result."))
+            return
+        xlabel = (tr("Range of the over-design factor over the variable's "
+                     "sweep (positive: larger at the variable's maximum)")
+                  if self._stat_factored() else None)
+        dlg = SensitivityDialog(effects, xlabel=xlabel, parent=self)
+        dlg.show()
+        if not hasattr(self, "_chart_windows"):
+            self._chart_windows = []
+        self._chart_windows.append(dlg)
 
     def _convergence_plot(self) -> None:
         prob, _sens = self._stat_results()
@@ -2989,7 +3036,7 @@ class InterpretWindow(QMainWindow):
         v.addWidget(QLabel(
             tr("%d surfaces for method %s. A negative value in place of "
                "the factor of safety is an error code.")
-            % (len(rows), self.active_algorithm())))
+            % (len(rows), method_name(self.active_algorithm()))))
         bb = QDialogButtonBox()
         b_copy = bb.addButton(tr("Copy"), QDialogButtonBox.ActionRole)
         b_save = bb.addButton(tr("Save..."), QDialogButtonBox.ActionRole)
@@ -3546,7 +3593,8 @@ class InterpretWindow(QMainWindow):
             # instead of falling back. The fallback is the point: the
             # numbers are what the user asked for, the chart is how they
             # are shown.
-            html = "<b>Values along critical surface</b><br><pre>"
+            # v0.1.433 (D411) -- through tr(): the heading was English
+            html = "<b>%s</b><br><pre>" % tr("Values along critical surface")
             html += f"{'x':>8} {'σnef':>10} {'τavail':>10} {'u':>10} {'α°':>8}<br>"
             for i in range(len(xs)):
                 html += (f"{xs[i]:8.2f} {sn[i]:10.2f} {tau[i]:10.2f} "
@@ -3922,8 +3970,11 @@ class InterpretWindow(QMainWindow):
             it_fos = QTableWidgetItem(f"{r.fos:.4f}")
             it_fos.setData(Qt.UserRole, r.fos)
             tbl.setItem(i, 1, it_fos)
-            tbl.setItem(i, 2, QTableWidgetItem(
-                str(r.surface.to_dict().get("type", "?"))))
+            # v0.1.433 (D411) -- the serialised type by its label: the
+            # column read «circle» (the owner's decision on the review)
+            from ogr_gui.labels import surface_kind_label
+            tbl.setItem(i, 2, QTableWidgetItem(surface_kind_label(
+                str(r.surface.to_dict().get("type", "?")))))
             # v0.1.201 — the area of the sliding mass. This divided each
             # weight by a ``unit_weight`` the slice does not have, so the
             # exception made every row 0.0.
@@ -4015,10 +4066,16 @@ class InterpretWindow(QMainWindow):
         if not xs:
             self._info(tr("No valid surfaces."))
             return
-        self._plot_xy(tr("Factor of Safety Along Slope"),
-                      [("", xs, ys)], tr("X coordinate"),
-                      tr("Factor of safety"),
-                      marker="o" if rb_bin.isChecked() else ".")
+        # v0.1.433 (D411) -- drawn by SFAlongSlopeDialog, by the owner's
+        # decision: the same numbers, one chart; non modal, as before
+        from .dialogs.chart_dialogs import SFAlongSlopeDialog
+        dlg = SFAlongSlopeDialog(xs, ys, binned=rb_bin.isChecked(),
+                                 parent=self)
+        dlg.show()
+        if not hasattr(self, "_chart_windows"):
+            self._chart_windows = []
+        self._chart_windows.append(dlg)
+        return dlg
 
     def _scatter(self) -> None:
         """FoS vs Radius scatter over the full search population."""

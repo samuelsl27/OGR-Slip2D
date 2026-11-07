@@ -191,12 +191,15 @@ STAT_NOTES = {s.code: s for s in (
                 "Composite Surfaces is off in the project the samples run on, "
                 "so that surface cannot be formed again; this method was "
                 "skipped."),
+    # v0.1.433 (D411) -- a serialised surface type is an identifier: the
+    # window names it
     MessageSpec(TYPE_WEAK,
                 "The deterministic critical surface is of type '{stype}' on a "
-                "base of type '{btype}', " + _WHY_SKIPPED),
+                "base of type '{btype}', " + _WHY_SKIPPED,
+                kinds=(("stype", "surface_kind"), ("btype", "surface_kind"))),
     MessageSpec(TYPE,
                 "The deterministic critical surface is of type '{stype}', "
-                + _WHY_SKIPPED),
+                + _WHY_SKIPPED, kinds=(("stype", "surface_kind"),)),
     MessageSpec(NOT_ITSELF,
                 "The deterministic critical surface does not re-evaluate to "
                 "itself on the project the samples run on (it answers for x "
@@ -204,7 +207,9 @@ STAT_NOTES = {s.code: s for s in (
                 "{hx0:.2f} to {hx1:.2f}, {home_type}); a setting that decides "
                 "the sliding mass, such as Composite Surfaces or a surface "
                 "filter, differs between the two runs, so this method was "
-                "skipped."),
+                "skipped.",
+                kinds=(("there_type", "surface_kind"),
+                       ("home_type", "surface_kind"))),   # v0.1.433
     MessageSpec(NOT_ITSELF_CASE,
                 "The deterministic critical surface does not re-evaluate to "
                 "itself on the project the samples run on (it answers for the "
@@ -247,8 +252,13 @@ STAT_NOTES = {s.code: s for s in (
     MessageSpec(CASE_NONE, "on no weak layer"),
     MessageSpec(CASE_LAYERS, "along weak layers over {spans}"),
     MessageSpec(CASE_IN, "{case} in {n}"),
-    MessageSpec(CASE_TEXT_NONE, "a {stype} on no weak layer"),
-    MessageSpec(CASE_TEXT_LAYERS, "a {stype} along weak layers over {spans}"),
+    # v0.1.433 (D411) -- «surface_noun» and not «surface_kind»: the field is
+    # the noun of «a … surface», and the Spanish read «una superficie
+    # superficie de capa débil» (review of 0.1.433)
+    MessageSpec(CASE_TEXT_NONE, "a {stype} on no weak layer",
+                kinds=(("stype", "surface_noun"),)),
+    MessageSpec(CASE_TEXT_LAYERS, "a {stype} along weak layers over {spans}",
+                kinds=(("stype", "surface_noun"),)),
     MessageSpec(SWITCH_MASS,
                 "{head} ({where}), not for its own (x from {x0:.2f} to "
                 "{x1:.2f}).",),

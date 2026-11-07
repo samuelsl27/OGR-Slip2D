@@ -176,8 +176,16 @@ class SupportForceDiagramWindow(QDialog):
         self._supports = list(getattr(project, "supports", None) or ())
         for i, sup in enumerate(self._supports, 1):
             stype = _resolve_type(project, sup)
-            name = getattr(sup, "name", "") or f"{i}"
-            label = tr(getattr(stype, "DISPLAY_NAME", "")) if stype else ""
+            # v0.1.433 (D411) -- the name and the class as Define Support
+            # names them: a default name by the class alone, in the
+            # interface's language (it read «End Anchored  [Anclado en el
+            # extremo]»; the owner's decision on the review of 0.1.433)
+            from ogr_gui.labels import (_support_class_label,
+                                        default_support_name, support_name)
+            raw = getattr(sup, "name", "") or ""
+            name = support_name(sup, stype) or f"{i}"
+            label = (_support_class_label(getattr(stype, "DISPLAY_NAME", ""))
+                     if stype and default_support_name(raw) is None else "")
             self.cbo.addItem(f"{name}  [{label}]" if label else name, i - 1)
         top.addWidget(self.cbo, 1)
         lay.addLayout(top)

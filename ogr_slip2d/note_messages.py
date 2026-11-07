@@ -316,7 +316,10 @@ NOTES = {s.code: s for s in (
                 "Method to '{search_method}', which does not search for that "
                 "kind of surface. The method is what runs, so the surfaces "
                 "this analysis returns are the ones it generates, whatever "
-                "the Surface Type says."),
+                "the Surface Type says.",
+                # v0.1.433 (D411) -- identifiers: the window names them
+                kinds=(("surface_type", "surface_type"),
+                       ("search_method", "search_method"))),
     MessageSpec(AUTO_REFINE_VERTICES,
                 "The search converts each circle into {n_vert:d} vertices, "
                 "which is {segments:d} straight segments, and the analysis "
@@ -333,7 +336,8 @@ NOTES = {s.code: s for s in (
     MessageSpec(OPTIMIZE_NOT_APPLICABLE,
                 "Optimize Surfaces applies to non-circular surfaces, which "
                 "are the ones with vertices to move; this project searches "
-                "with '{search_method}'. The setting was ignored."),
+                "with '{search_method}'. The setting was ignored.",
+                kinds=(("search_method", "search_method"),)),   # v0.1.433
     MessageSpec(OPTIMIZE_ALL_WALK,
                 _OPTIMIZE_ALL.replace("{walk}", "the random walk")),
     MessageSpec(OPTIMIZE_ALL_ALTERATION,

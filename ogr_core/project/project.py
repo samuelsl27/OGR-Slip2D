@@ -34,10 +34,16 @@ from .settings import ProjectSettings
 FILE_FORMAT_VERSION = "0.1"
 
 
+#: The name a new project is born with. Data the ``.ogr`` keeps, in English;
+#: the interface shows it translated (``ogr_gui.labels.project_label``,
+#: v0.1.433, D411).
+DEFAULT_PROJECT_NAME = "Untitled"
+
+
 class Project:
     """Container for all geotechnical data belonging to a single analysis."""
 
-    def __init__(self, name: str = "Untitled") -> None:
+    def __init__(self, name: str = DEFAULT_PROJECT_NAME) -> None:
         self.id: str = str(uuid4())
         self.name: str = name
         self.file_path: Optional[Path] = None
@@ -803,7 +809,7 @@ class Project:
 
     @classmethod
     def from_dict(cls, data: dict, path: Optional[Path] = None) -> "Project":
-        proj = cls(name=data.get("name", "Untitled"))
+        proj = cls(name=data.get("name", DEFAULT_PROJECT_NAME))
         proj.id = data.get("id", proj.id)
         proj.settings = ProjectSettings.from_dict(data.get("settings", {}))
         proj.boundaries = [Boundary.from_dict(b) for b in data.get("boundaries", [])]

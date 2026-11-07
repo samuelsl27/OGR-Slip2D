@@ -46,6 +46,28 @@ _FIELDS = [
 _INITIAL = -1
 
 
+def stage_entry(i: int, notes: dict) -> str:
+    """The stage selector's entry for stage ``i``: its number, its time, its
+    label and its flags in the window's language.
+
+    v0.1.370 (D344) -- «[FS]» as the window says it, like every factor of
+    safety of the program. v0.1.433 (D411) -- and «[CC]» for a stage with
+    its own boundary conditions, from the solver's ``own_bcs``; a result of
+    0.1.432 or before has « [BC]» in the label instead, which loses it. As in
+    the stages dialog (``stage_label``), the label loses it only when the
+    stage has its conditions: on a stage without them it was not the
+    program's flag."""
+    import re
+    t = notes.get("time", 0.0)
+    lbl = notes.get("label") or ""
+    old = bool(re.search(r"\[BC\]\s*$", lbl))
+    own = bool(notes.get("own_bcs", old))
+    lbl = re.sub(r"\s*\[BC\]\s*$", "", lbl) if (old and own) else lbl
+    bc = ("  [%s]" % tr("BC")) if own else ""
+    sf = ("  [%s]" % tr("SF")) if notes.get("calculate_sf") else ""
+    return f"{i + 1}: t = {t:g}{(' ' + lbl) if lbl else ''}{bc}{sf}"
+
+
 class InterpretGroundwaterWindow(QMainWindow):
     """Read-only viewer for a seepage result."""
 
@@ -76,13 +98,9 @@ class InterpretGroundwaterWindow(QMainWindow):
                 self.cbo_stage.addItem(tr("0: t = 0 (initial state)"),
                                        _INITIAL)
             for i, r in enumerate(self.stages):
-                t = r.notes.get("time", 0.0)
-                lbl = r.notes.get("label") or ""
-                # v0.1.370 (D344) -- the flag as the window says it: "[FS]"
-                # in Spanish, like every factor of safety of the program
-                sf = ("  [%s]" % tr("SF")) if r.notes.get("calculate_sf") else ""
-                self.cbo_stage.addItem(
-                    f"{i + 1}: t = {t:g}{(' ' + lbl) if lbl else ''}{sf}", i)
+                # v0.1.433 (D411) -- the entry's text in a function of its
+                # own (``stage_entry``), which a test can read
+                self.cbo_stage.addItem(stage_entry(i, r.notes), i)
             self.cbo_stage.setCurrentIndex(self.cbo_stage.count() - 1)
             # Each entry carries what it shows: with the initial state in
             # front, entry k is no longer stage k.

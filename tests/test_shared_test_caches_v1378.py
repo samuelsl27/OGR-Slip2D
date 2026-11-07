@@ -128,6 +128,10 @@ ALLOWED = {
     ("test_add_surface_centre_radius_v1335", "test_add_surface_three_points_v1168",
      "_canvas_ready"):
         "the same window, through the canvas helper; the same reason",
+    ("test_spanish_paths_v1433", "test_labels_spanish_v1321", "_reads_english"):
+        "the runtime census's vocabulary, the words of the dictionary's English keys "
+        "minus those of its Spanish values: a set computed from the dictionary, which "
+        "no test changes, and only read (v0.1.433, D411)",
 }
 
 

@@ -66,7 +66,8 @@ from ogr_core.support import (
 from ogr_gui.i18n import tr  # noqa: E402
 from ogr_gui.dialog_size import hold_wrapped_height, list_width
 from ogr_gui.labels import (force_application_label,
-                            force_orientation_label)  # noqa: E402
+                            force_orientation_label,
+                            support_type_label)  # noqa: E402
 from ogr_gui.themes import theme_color
 
 
@@ -79,51 +80,9 @@ from ogr_gui.themes import theme_color
 # v0.1.116 — ``pullout_mode`` used to be the only one, hard-coded inline
 # and NOT wrapped in ``tr()``, so its three labels were the only part of
 # this dialog a Spanish user still read in English.
-_CHOICES: dict[str, list[tuple[str, str]]] = {
-    "pullout_mode": [
-        ("Adhesion and friction angle", "mohr_coulomb"),
-        ("Coefficient of interaction (Ci)", "coefficient"),
-        ("Friction factor (F*)", "friction_factor"),
-    ],
-    "shear_strength_model": [
-        ("Linear (Mohr-Coulomb)", "linear"),
-        ("Hyperbolic", "hyperbolic"),
-    ],
-    "anchorage": [
-        ("None", "none"),
-        ("Slope face", "slope_face"),
-        ("Embedded end", "embedded_end"),
-        ("Both ends", "both_ends"),
-    ],
-    "friction_factor_mode": [
-        ("Constant", "constant"),
-        ("Function of depth", "function"),
-    ],
-    # v0.1.122 — the equivalent-fluid retaining wall.
-    "profile_type": [
-        ("Uniform", "uniform"),
-        ("Triangular", "triangular"),
-        ("Trapezoidal", "trapezoidal"),
-        ("Custom", "custom"),
-    ],
-    "force_location": [
-        ("At the slip surface", "intersection"),
-        ("At the centroid of the pressure diagram", "centroid"),
-    ],
-    # v0.1.123 — the pile failure mode. The two entries are not two ways
-    # of writing the same thing: Shear is how much load the pile can take,
-    # Ito & Matsui is how much the ground can hand it.
-    "failure_mode": [
-        ("Shear", "shear"),
-        ("Ito & Matsui", "ito_matsui"),
-    ],
-    # v0.1.124 - the helical anchor. Only the AREA of the shaft matters,
-    # which is what the plate loses to it.
-    "shaft_type": [
-        ("Round", "round"),
-        ("Square", "square"),
-    ],
-}
+# v0.1.433 (D411) -- the lists live in ogr_gui.labels (SUPPORT_CHOICES),
+# where the Support Properties Table reads them too
+from ogr_gui.labels import SUPPORT_CHOICES as _CHOICES  # noqa: E402
 
 
 # ----------------------------------------------------------------------
@@ -313,7 +272,9 @@ class _SupportParamPanel(QWidget):
         spin.setRange(-1e9, 1e9)
         spin.setDecimals(4)
         if unit and unit != "-":
-            spin.setSuffix(f" {unit}")
+            # v0.1.433 (D411) -- «°» where the core writes «deg»
+            from ogr_gui.labels import unit_symbol
+            spin.setSuffix(f" {unit_symbol(unit)}")
         spin.setValue(float(value))
         spin.setToolTip(tr(desc))
         self._editors[name] = spin
@@ -497,7 +458,8 @@ class DefineSupportDialog(QDialog):
         # Support type combobox
         self.cbo_type = QComboBox()
         for tid, cls in support_registry().items():
-            self.cbo_type.addItem(tr(cls.DISPLAY_NAME), tid)
+            # v0.1.433 (D411) -- the class's name as the list shows it
+            self.cbo_type.addItem(support_type_label(cls), tid)
         self.cbo_type.currentIndexChanged.connect(self._on_type_changed)
         nrow.addRow(tr("Support Type:"), self.cbo_type)
         # Force application
@@ -569,8 +531,16 @@ class DefineSupportDialog(QDialog):
             max(220, self._left.minimumSizeHint().width()))
 
     def _row_label(self, row: _SupportRow) -> str:
-        # the set's name is data; the class name is shown translated
-        return "%s  [%s]" % (row.name, tr(row.support.DISPLAY_NAME))
+        # the set's name is data; the class name is shown translated.
+        # v0.1.433 (D411) -- a set that keeps the name it was born with (its
+        # class's English name) is shown by the class's name alone: it read
+        # «End Anchored  [Anclado en el extremo]»
+        from ogr_gui.labels import (default_support_name, support_name,
+                                    support_type_label)
+        if default_support_name(row.name) is not None:
+            # by the row's current class: the type combo keeps the name
+            return support_name(row, type(row.support))
+        return "%s  [%s]" % (row.name, support_type_label(type(row.support)))
 
     def _make_default_row(self) -> _SupportRow:
         cls = list(support_registry().values())[0]  # End Anchored

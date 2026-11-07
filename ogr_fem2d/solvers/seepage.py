@@ -2304,6 +2304,16 @@ class TransientStage:
     calculate_sf: bool = False
     label: str = ""
     bcs: Optional[SeepageBoundaryConditions] = None
+    # v0.1.433 (D411) -- whether the stage brings conditions of its own.
+    # ``bcs`` alone cannot say it: the project's door fills the stages
+    # without their own with the current conditions, so every stage it
+    # builds has some. None: read it from ``bcs``.
+    own_bcs: Optional[bool] = None
+
+    @property
+    def has_own_bcs(self) -> bool:
+        return (self.bcs is not None) if self.own_bcs is None \
+            else bool(self.own_bcs)
 
     def to_dict(self) -> dict:
         return {"time": self.time, "calculate_sf": self.calculate_sf,
@@ -2807,7 +2817,12 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
                 res.notes.update({"stage": k, "time": stage.time,
                                   "time_steps": 0,
                                   "calculate_sf": stage.calculate_sf,
-                                  "label": stage.label})
+                                  "label": stage.label,
+                                  # v0.1.433 (D411) -- whether the stage
+                                  # brings its own boundary conditions, which
+                                  # the window shows as a flag, as it shows
+                                  # ``calculate_sf``
+                                  "own_bcs": stage.has_own_bcs})
                 res.notes.update(initial_notes)
                 results.append(res)
                 continue
@@ -2848,6 +2863,7 @@ class TransientSeepageSolver(UnsaturatedSeepageSolver):
                 # agent read the label here, and it was never written: a
                 # stage's name reached nobody.
                 "label": stage.label,
+                "own_bcs": stage.has_own_bcs,     # v0.1.433 (D411)
             })
             last.notes.update(initial_notes)
             if not all_ok:

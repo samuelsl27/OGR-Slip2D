@@ -254,11 +254,24 @@ def drawing_points(res) -> Optional[list]:
     return None
 
 
+def _surface_kind(surf) -> str:
+    """The serialised type of ``surf`` (``"circle"``, ``"composite"``...),
+    which the export note names in the reader's language, else its class
+    name. v0.1.433 (D411) -- the class name alone made the note's declared
+    kind translate nothing (review of 0.1.433)."""
+    try:
+        kind = surf.to_dict().get("type")
+    except Exception:  # noqa: BLE001 -- a class without a serial form
+        kind = None
+    return str(kind) if kind else type(surf).__name__
+
+
 def critical_drawings(results) -> list:
     """The critical surface of each method in ``results`` (a mapping
     ``method_id -> SearchResult``) as the DXF export takes it:
-    ``(method_id, points, fos)``, or ``(method_id, None, fos, class name)``
-    for one :func:`drawing_points` cannot draw. A method without a critical
+    ``(method_id, points, fos)``, or ``(method_id, None, fos, kind)`` for
+    one :func:`drawing_points` cannot draw (its serialised type, else its
+    class name). A method without a critical
     surface is left out (v0.1.341, D337)."""
     out = []
     for mid, sr in (results or {}).items():
@@ -267,7 +280,7 @@ def critical_drawings(results) -> list:
             continue
         pts = drawing_points(crit)
         if pts is None:
-            out.append((mid, None, crit.fos, type(crit.surface).__name__))
+            out.append((mid, None, crit.fos, _surface_kind(crit.surface)))
         else:
             out.append((mid, pts, crit.fos))
     return out

@@ -20,7 +20,12 @@ Author: Samuel Sáez López (UPCT)
 from __future__ import annotations
 
 
-def build_demo_project(name: str = "Demo slope"):
+#: The demo's name: data, in English, shown translated by the interface
+#: (``ogr_gui.labels.project_label``, v0.1.433, D411).
+DEMO_PROJECT_NAME = "Demo slope"
+
+
+def build_demo_project(name: str = DEMO_PROJECT_NAME):
     """A homogeneous 1V:1H slope, 10 m high, with an active water table.
 
     External boundary (0,0)-(50,0)-(50,15)-(35,15)-(25,25)-(0,25), CCW;

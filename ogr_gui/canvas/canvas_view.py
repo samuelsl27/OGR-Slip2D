@@ -1391,7 +1391,10 @@ class CanvasView(QGraphicsView):
         from ogr_gui.labels import support_type_label
         type_name = support_type_label(st) if st is not None else s.type_id
 
-        info = QAction(tr('Support — {0}').format(s.name or type_name), self)
+        # v0.1.433 (D411) -- a default name in the interface's language
+        from ogr_gui.labels import support_name
+        info = QAction(tr('Support — {0}').format(
+            support_name(s, st) or type_name), self)
         info.setEnabled(False)
         menu.addAction(info)
         menu.addSeparator()

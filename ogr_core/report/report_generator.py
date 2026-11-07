@@ -216,8 +216,21 @@ def generate_report(
     summary = project.settings.summary
     author = author or summary.author or ""
     company = company or summary.company or ""
-    title = (title or summary.title
-             or T("OGR Slip2D — Slope Stability Analysis"))
+    # v0.1.433 (D411) -- a default title is the program's, not the user's:
+    # in the reader's language (it printed «Untitled Project» in Spanish);
+    # a title the user wrote is data. Asked of the title that is PRINTED,
+    # whoever passes it: the window passes ``title=summary.title``, and a
+    # project's summary is born with the project's name («Untitled», «Demo
+    # slope»), so the summary's alone never reached the window's report
+    # (review of 0.1.433).
+    from ogr_core.project.demo import DEMO_PROJECT_NAME
+    from ogr_core.project.project import DEFAULT_PROJECT_NAME
+    from ogr_core.project.settings import DEFAULT_SUMMARY_TITLE
+    title = title or summary.title
+    if title in (DEFAULT_SUMMARY_TITLE, DEFAULT_PROJECT_NAME,
+                 DEMO_PROJECT_NAME):
+        title = T(title)
+    title = title or T("OGR Slip2D — Slope Stability Analysis")
 
     doc = SimpleDocTemplate(
         output_path, pagesize=A4,
@@ -356,8 +369,12 @@ def generate_report(
     story.append(Spacer(1, 6))
     story.append(Paragraph("<b>%s</b>" % T("Surface Options"), body))
     story.append(kv_table([
+        # v0.1.433 (D411) -- «Non-Circular» by its key: the title-case of
+        # the identifier printed «Non_Circular», in English
         (T("Surface Type"),
          T("Circular") if s.surface_type in ("circular", "Circular")
+         else T("Non-Circular") if s.surface_type in ("non_circular",
+                                                      "Non-Circular")
          else T(str(s.surface_type).title())),
         (T("Search Method"),
          T(_search_method_name(s.search_method))),
@@ -558,6 +575,8 @@ def _search_method_name(mid: str) -> str:
         "block": "Block Search",
         "path": "Path Search",
         "simulated_annealing": "Simulated Annealing",
+        # v0.1.433 (D411) -- it was missing: «Particle Swarm»
+        "particle_swarm": "Particle Swarm Search",
     }
     return names.get(mid, str(mid).replace("_", " ").title())
 

@@ -231,10 +231,17 @@ class BoundaryConditionsDialog(QDialog):
         self._refresh_summary()
 
     def _refresh_summary(self) -> None:
-        counts: dict[str, int] = {}
+        # v0.1.433 (D411) -- each kind by its name, as the combo shows it, in
+        # the combo's order: the summary printed the stored values
+        # («nodal_flow: 21  |  unknown: 11») and «no conditions»
+        counts: dict = {}
         for b in self.bcs.nodes:
-            counts[b.bc_type.value] = counts.get(b.bc_type.value, 0) + 1
-        parts = [f"{k}: {v}" for k, v in sorted(counts.items())]
+            counts[b.bc_type] = counts.get(b.bc_type, 0) + 1
+        parts = ["%s: %d" % (tr(label), counts[t])
+                 for t, label in _BC_LABELS if counts.get(t)]
+        parts += ["%s: %d" % (getattr(t, "value", t), n)
+                  for t, n in counts.items()
+                  if t not in dict(_BC_LABELS)]
         if self.bcs.segments:
             parts.append(tr('infiltration segments: {0}').format(len(self.bcs.segments)))
-        self.lbl_summary.setText("  |  ".join(parts) or "no conditions")
+        self.lbl_summary.setText("  |  ".join(parts) or tr("no conditions"))

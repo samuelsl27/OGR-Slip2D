@@ -86,15 +86,11 @@ from ogr_gui.dialog_size import VerticalScrollArea, open_at_content_size
 from ogr_gui.i18n import tr  # noqa: E402
 from ogr_gui.themes import theme_color
 
-_MODEL_LABELS = [
-    (PermeabilityModel.CONSTANT, "Constant"),
-    (PermeabilityModel.SIMPLE, "Simple"),
-    (PermeabilityModel.BROOKS_COREY, "Brooks-Corey"),
-    (PermeabilityModel.FREDLUND_XING, "Fredlund-Xing"),
-    (PermeabilityModel.GARDNER, "Gardner"),
-    (PermeabilityModel.VAN_GENUCHTEN, "van Genuchten"),
-    (PermeabilityModel.USER_DEFINED, "User Defined"),
-]
+# v0.1.433 (D411) -- the names live in ogr_gui.labels (PERMEABILITY_MODEL),
+# where the Hydraulic Properties Table reads them too
+from ogr_gui.labels import PERMEABILITY_MODEL  # noqa: E402
+
+_MODEL_LABELS = list(PERMEABILITY_MODEL.items())
 
 _SOIL_LABELS = [
     (SimpleSoilType.GENERAL, "General"),

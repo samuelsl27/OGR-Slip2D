@@ -333,7 +333,8 @@ SEARCH_NOTES = {s.code: s for s in (
     MessageSpec(O_INADMISSIBLE, "{n} ended on an inadmissible surface"),
     MessageSpec(OPT_UNKNOWN_TECHNIQUE,
                 "Unknown optimisation technique {technique!r}: it has to be one "
-                "of {choices}."),
+                "of {choices}.",
+                kinds=(("choices", "technique_list"),)),   # v0.1.433
     MessageSpec(OPT_THREE_VERTICES,
                 "Optimisation needs at least three vertices: there is nothing "
                 "to move on a two-point surface."),

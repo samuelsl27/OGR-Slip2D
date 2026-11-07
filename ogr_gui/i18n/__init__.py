@@ -27,9 +27,9 @@ _DICTS: dict[str, dict[str, str]] = {
         # (query), «línea de empujes» (line of thrust).
         '%d more were discarded before slicing, so they carry no error code and cannot be displayed.': '%d más se descartaron antes del dovelado, así que no llevan código de error y no se pueden mostrar.',
         '%d surface(s) rejected of %d generated:': '%d superficie(s) rechazada(s) de %d generadas:',
-        'A focus object also removed %d candidate(s) before they were analysed. They are in neither count above: the population stays comparable to an unfocused run.': 'Un objeto de enfoque retiró además %d candidata(s) antes de analizarlas. No están en ninguno de los recuentos anteriores: así la población sigue siendo comparable a la de un cálculo sin enfoque.',
+        'A focus object also removed %d candidate(s) before they were analysed. They are in neither count above: the population stays comparable to an unfocused run.': 'Un objeto de foco retiró además %d candidata(s) antes de analizarlas. No están en ninguno de los recuentos anteriores: así la población sigue siendo comparable a la de un cálculo sin foco.',
         'Generation attempts: %d': 'Intentos de generación: %d',
-        'Generation attempts: %d (%d rejected by the focus object)': 'Intentos de generación: %d (%d rechazados por el objeto de enfoque)',
+        'Generation attempts: %d (%d rejected by the focus object)': 'Intentos de generación: %d (%d rechazados por el objeto de foco)',
         'All data': 'Todos los datos',
         'Data to plot:': 'Datos a representar:',
         'Error code:': 'Código de error:',
@@ -867,7 +867,60 @@ _DICTS: dict[str, dict[str, str]] = {
         'Import': 'Importar',
         'Import DXF': 'Importar DXF',
         'Import as': 'Importar como',
-        'Imported %s': 'Importado %s',
+        # v0.1.433 (D411) -- the kinds by their names now, «Contorno
+        # exterior: 1»: a dash, not a second colon
+        'Imported %s': 'Importado — %s',
+        # v0.1.433 (D411) -- the Spanish of the paths no census read: the
+        # startup message, the Selection Filter, the boundary conditions'
+        # summary, the cleanup report, the random variable's plot, the
+        # sensitivity's delta, the default names the program gives, and the
+        # support class that is masculine here («User Defined» is feminine as
+        # a permeability model)
+        "Ready — {0} → {1} to start with a sample model.":
+            "Listo — {0} → {1} para empezar con un modelo de muestra.",
+        'boundaries': 'contornos',
+        'vertices': 'vértices',
+        'materials': 'materiales',
+        'supports': 'soportes',
+        'loads': 'cargas',
+        'slip surfaces': 'superficies de rotura',
+        'nothing selectable': 'nada seleccionable',
+        'no conditions': 'sin condiciones',
+        'no problems': 'sin problemas',
+        "  [{0}] {1}: {2} vertices — {3}": "  [{0}] {1}: {2} vértices — {3}",
+        "  [{0}] {1}: 1 vertex — {2}": "  [{0}] {1}: 1 vértice — {2}",
+        "  [{0}] {1} '{2}': 1 vertex — {3}": "  [{0}] {1} «{2}»: 1 vértice — {3}",
+        'mean': 'media',
+        'Probability density': 'Densidad de probabilidad',
+        'ΔFoS': 'ΔFS',
+        'Demo slope': 'Talud de ejemplo',
+        'Original ground (from Expand/Shrink)':
+            'Terreno original (de Expandir / contraer)',
+        'User-defined': 'Definido por el usuario',
+        # the stages that bring their own boundary conditions
+        'Conditions': 'Condiciones',
+        'captured': 'capturadas',
+        'BC': 'CC',
+        # the sensitivity tornado and the chart of Graph SF Along Slope
+        'Sensitivity Tornado...': 'Tornado de sensibilidad...',
+        # the report: a summary's default title
+        'Untitled Project': 'Proyecto sin título',
+        # the serialised surface types the notes name (F1)
+        'circle': 'círculo',
+        'polyline': 'polilínea',
+        'composite surface': 'superficie compuesta',
+        'weak-layer surface': 'superficie de capa débil',
+        'Values along critical surface': 'Valores a lo largo de la superficie crítica',
+        # the same, as the noun of «a … surface» (stat.case_text_*)
+        'circular surface': 'superficie circular',
+        'polyline surface': 'superficie poligonal',
+        "Range of the factor of safety over the variable's sweep (positive: larger at the variable's maximum)":
+            'Rango del factor de seguridad en el barrido de la variable (positivo: mayor en el máximo de la variable)',
+        "Range of the over-design factor over the variable's sweep (positive: larger at the variable's maximum)":
+            'Rango del factor de sobredimensionamiento en el barrido de la variable (positivo: mayor en el máximo de '
+            'la variable)',
+        'Requires a sensitivity analysis: run Statistics → Compute Statistics in the modeller.':
+            'Requiere un análisis de sensibilidad: ejecuta Estadística → Calcular estadística en el modelador.',
         'Layer': 'Capa',
         'Layers found in the drawing:': 'Capas encontradas en el dibujo:',
         'No problems found.': 'No se han encontrado problemas.',
@@ -6388,9 +6441,9 @@ _DICTS: dict[str, dict[str, str]] = {
         'on no weak layer':
             'sin ninguna capa débil',
         'a {stype} along weak layers over {spans}':
-            'una superficie {stype} por capas débiles en {spans}',
+            'una {stype} por capas débiles en {spans}',
         'a {stype} on no weak layer':
-            'una superficie {stype} sin ninguna capa débil',
+            'una {stype} sin ninguna capa débil',
         'inadmissible (-101)':
             'inadmisible (-101)',
         '-112 m-alpha':
@@ -6820,8 +6873,11 @@ _DICTS: dict[str, dict[str, str]] = {
             "Informe de limpieza de la geometría",
         "Total boundaries: {0}":
             "Contornos en total: {0}",
+        # without gender: since 0.1.433 it follows the type's name, and five
+        # of the nine are feminine («Línea piezométrica: … — SE CORTA A SÍ
+        # MISMO», review of 0.1.433)
         "SELF-INTERSECTS":
-            "SE CORTA A SÍ MISMO",
+            "SE AUTOINTERSECA",
         "NOT CLOSED (external)":
             "SIN CERRAR (exterior)",
         "{0} duplicate vertices":

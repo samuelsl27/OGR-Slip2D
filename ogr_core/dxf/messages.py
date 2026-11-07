@@ -93,7 +93,8 @@ EXPORT_MESSAGES = {s.code: s for s in (
     MessageSpec(EXPORT_SKIPPED_MESH, "mesh ({error})"),
     MessageSpec(EXPORT_SKIPPED_SURFACE, "{method_id} critical surface "
                                         "({kind})",
-                kinds=(("method_id", "method_id"),)),
+                kinds=(("method_id", "method_id"),
+                       ("kind", "surface_kind"))),
     MessageSpec(EXPORT_SKIPPED_PICTURE,
                 "image {path} (file not found or not readable): drawn as its "
                 "frame"),

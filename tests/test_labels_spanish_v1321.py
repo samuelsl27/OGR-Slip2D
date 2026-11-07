@@ -314,17 +314,82 @@ SHOWN_EXCEPTIONS = {
         "a unit symbol (inch, minute), the same in Spanish",
     # v0.1.322 — the supports' exceptions of 0.1.321 are gone: the family
     # is translated (test_supports_spanish_v1322).
+    # v0.1.433 (D411) — what the wider reading of the screen sees that is
+    # English on purpose
+    r"^Disponibles: project, canvas, mainwindow, ogr_\*, np$":
+        "the Python names the terminal offers: code, not words",
+    r"^Escribe 'help_ogr\(\)' para ver consejos\.$":
+        "the name of a Python function of the terminal: code, not a word",
+    r"^AGPL-3\.0-or-later$":
+        "the licence's identifier (SPDX), the same in every language",
+    # anchored to their Spanish frame, so the frame turning English is
+    # still seen (review of 0.1.433)
+    r"^La geometría del modelo se escribe en las capas que reconoce el "
+    r"importador \(OGR_":
+        "the names of the DXF layers, which the file and the importer keep",
+    r"^No se pudo leer el archivo \S+: \[Errno \d+\]":
+        "the operating system's own text, inside a translated frame (the "
+        "census builds Import DXF with a project for a path); the frame is "
+        "matched without naming the file type, which test_dxf_messages_v1334 "
+        "keeps out of these patterns",
+    r"^Beta$":
+        "the name of a distribution, the same in Spanish",
 }
 
 
 def _shown_texts(widget):
+    from PySide6.QtCore import Qt
     from PySide6.QtWidgets import (QAbstractButton, QComboBox,
-                                   QDialogButtonBox, QDockWidget, QGroupBox,
-                                   QLabel, QTableWidget, QTabWidget, QWidget)
+                                   QDialogButtonBox, QDockWidget,
+                                   QDoubleSpinBox, QGroupBox, QLabel,
+                                   QLineEdit, QListWidget, QPlainTextEdit,
+                                   QSpinBox, QTableWidget, QTabWidget,
+                                   QTextEdit, QTreeWidget, QWidget)
     out = [widget.windowTitle()]
+    # v0.1.433 (D411) -- matplotlib's navigation bar stays English by the
+    # owner's decision (the library's text): it is not read
+    bars = [t for t in widget.findChildren(QWidget)
+            if "NavigationToolbar" in type(t).__name__]
     for w in [widget] + widget.findChildren(QWidget):
+        if any(b is w or b.isAncestorOf(w) for b in bars):
+            continue
         if w.toolTip():
             out.append(w.toolTip())
+        # v0.1.433 (D411) -- and what else reaches the screen: a status tip,
+        # a spin box's suffix, a placeholder, an edit's text, a list or a
+        # tree, a combo item's tool tip, a table's row headers and a figure
+        if w.statusTip():
+            out.append(w.statusTip())
+        if isinstance(w, (QSpinBox, QDoubleSpinBox)):
+            out += [w.suffix(), w.prefix(), w.specialValueText()]
+        elif isinstance(w, QLineEdit):
+            out.append(w.placeholderText())
+        elif isinstance(w, (QTextEdit, QPlainTextEdit)):
+            out += w.toPlainText().splitlines()
+        elif isinstance(w, QListWidget):
+            out += [w.item(i).text() for i in range(min(w.count(), 50))]
+        elif isinstance(w, QTreeWidget):
+            # and their children: the analysis notes and the DXF problems
+            # are put one per child (review of 0.1.433)
+            stack = [w.topLevelItem(i)
+                     for i in range(min(w.topLevelItemCount(), 50))]
+            seen = 0
+            while stack and seen < 200:
+                item = stack.pop()
+                seen += 1
+                out += [item.text(c) for c in range(item.columnCount())]
+                stack += [item.child(j)
+                          for j in range(min(item.childCount(), 50))]
+        figure = getattr(w, "figure", None)
+        for ax in getattr(figure, "axes", None) or []:
+            out += [ax.get_title(), ax.get_xlabel(), ax.get_ylabel()]
+            # the tick labels: where the tornado names its variables
+            out += [t.get_text() for t in ax.get_xticklabels()
+                    + ax.get_yticklabels()]
+            out += [t.get_text() for t in ax.texts]
+            legend = ax.get_legend()
+            if legend is not None:
+                out += [t.get_text() for t in legend.get_texts()]
         if isinstance(w, QDockWidget):
             # v0.1.324 (D315) — five dock titles were English
             out.append(w.windowTitle())
@@ -337,11 +402,17 @@ def _shown_texts(widget):
             out.append(w.title())
         elif isinstance(w, QComboBox):
             out += [w.itemText(i) for i in range(w.count())]
+            out += [str(w.itemData(i, Qt.ToolTipRole) or "")
+                    for i in range(w.count())]
         elif isinstance(w, QTabWidget):
             out += [w.tabText(i) for i in range(w.count())]
         elif isinstance(w, QTableWidget):
             for i in range(w.columnCount()):
                 h = w.horizontalHeaderItem(i)
+                if h is not None:
+                    out.append(h.text())
+            for i in range(min(w.rowCount(), 20)):
+                h = w.verticalHeaderItem(i)
                 if h is not None:
                     out.append(h.text())
             # v0.1.324 (D315) — and the cells: the Method column showed the
@@ -357,12 +428,58 @@ def _shown_texts(widget):
 def _stored_identifiers():
     """The identifiers the .ogr keeps that have a label in ogr_gui.labels:
     one on screen means a label was not used (D315)."""
+    from ogr_core.fem.seepage_data import BCType
     from ogr_gui import labels as L
     ids = set(L.METHOD_NAMES)
     for table in (L.PORE_PRESSURE, L.GROUNDWATER_METHOD, L.LOAD_ORIENTATION,
-                  L.FORCE_ORIENTATION):
+                  L.FORCE_ORIENTATION,
+                  # v0.1.433 (D411): and every table D411 added or moved
+                  L.SEARCH_METHOD, L.PERMEABILITY_MODEL, L.FOCUS_KIND,
+                  L.WATER_LEVEL_MODE, L.SURFACE_TYPE, L.SURFACE_KIND,
+                  L.DRAWDOWN_PROCEDURE, L.OPTIMIZE_TECHNIQUE, BCType):
         ids |= {getattr(k, "value", k) for k in table}
-    return {i for i in ids if "_" in i}
+    for choices in L.SUPPORT_CHOICES.values():
+        ids |= {data for _label, data in choices}
+    return {i for i in ids if isinstance(i, str) and "_" in i}
+
+
+_VOCABULARY: list = []
+
+
+def _vocabulary():
+    """v0.1.433 (D411) -- the English words of the interface that no Spanish
+    text of the program uses: the words (three letters or more) of the
+    dictionary's ENGLISH keys, minus every word of its Spanish values and the
+    Spanish function words. One of them on a Spanish screen is English
+    («nodal_flow», «cohesion», «End Anchored» measured at 0.1.432); the fixed
+    list ``_ENGLISH`` alone did not know them, and a text with one accent
+    passed whatever English it carried."""
+    if not _VOCABULARY:
+        import re
+
+        def words(text):
+            text = re.sub(r"[{][^}]*[}]|%[-+ #0]*\d*(?:\.\d+)?[sdifgeEx]",
+                          " ", text)
+            text = re.sub(r"<[^>]+>", " ", text)
+            return {w.lower() for w in re.findall(r"[A-Za-z]{3,}", text)}
+
+        def spanish_words(text):
+            # what a Spanish value quotes is not Spanish: identifiers and
+            # code («shear | ito_matsui», «build_method(project,
+            # method_id)», «'angle' o 'surface'»). Left in, «surface»,
+            # «method», «shear», «constant» left the vocabulary, and the
+            # census missed them (review of 0.1.433)
+            text = re.sub(r"'[^']*'|`[^`]*`|\w+\([^)]*\)", " ", text)
+            text = re.sub(r"\w+(?:\s*\|\s*\w+)+", " ", text)
+            text = re.sub(r"\w*_\w*", " ", text)
+            return words(text)
+        es = _spanish()
+        english, spanish = set(), set()
+        for key, value in es.items():
+            english |= words(key)
+            spanish |= spanish_words(value)
+        _VOCABULARY.append(english - spanish - _SPANISH_WORDS)
+    return _VOCABULARY[0]
 
 
 def _reads_english(text, spanish, data_names, identifiers=()):
@@ -376,12 +493,41 @@ def _reads_english(text, spanish, data_names, identifiers=()):
     # surrounds it («Método: bishop_simplified  Válidas: …»)
     if any(re.search(r"(?<![A-Za-z0-9_])%s(?![A-Za-z0-9_])" % re.escape(i), plain) for i in identifiers):
         return True
+    words = [w.lower() for w in re.findall(r"[A-Za-z]+", plain)]
+    # v0.1.433 (D411) -- a word no Spanish text uses is English, accents
+    # around it or not («Contorno añadido: Material Boundary» passed)
+    vocabulary = _vocabulary()
+    if any(len(w) >= 3 and w in vocabulary for w in words):
+        return True
     if re.search(r"[áéíóúüñÁÉÍÓÚÑ¿¡]", plain):
         return False
-    words = [w.lower() for w in re.findall(r"[A-Za-z]+", plain)]
     if any(w in _SPANISH_WORDS for w in words):
         return False
     return any(w in _ENGLISH for w in words)
+
+
+def _data_names(p):
+    """The names the user gave, which are data and read as they are typed:
+    the project's, the materials', the boundaries' and the support sets'.
+    v0.1.433 (D411) -- a DEFAULT name is not data on screen: the program
+    shows it translated (``ogr_gui.labels``), so a default left in English
+    is what the census is for. All boundary and support names were stripped
+    before, and «End Anchored» passed for a name."""
+    from ogr_core.project.demo import DEMO_PROJECT_NAME
+    from ogr_core.project.project import DEFAULT_PROJECT_NAME
+    from ogr_gui.labels import (boundary_has_given_name, boundary_name,
+                                default_support_name)
+    # by the names, not by the label: in English a default's label is the
+    # name itself, and it would pass for data
+    names = [p.name if p.name not in (DEFAULT_PROJECT_NAME, DEMO_PROJECT_NAME)
+             else ""]
+    names += [m.name for m in p.materials]
+    names += [boundary_name(b) for b in p.boundaries
+              if boundary_has_given_name(b)]
+    names += [getattr(s, "_display_name", "") for s in p.support_types
+              if default_support_name(getattr(s, "_display_name", ""))
+              is None]
+    return sorted({n for n in names if n}, key=len, reverse=True)
 
 
 @_requires_qt
@@ -412,12 +558,7 @@ class TestNothingOnScreenReadsEnglish:
             w.project.is_dirty = False
             ids = _stored_identifiers()
             p = w.project
-            data_names = sorted(
-                {n for n in [p.name] + [m.name for m in p.materials]
-                 + [getattr(b, "name", "") for b in p.boundaries]
-                 + [getattr(s, "_display_name", "")
-                    for s in p.support_types] if n},
-                key=len, reverse=True)
+            data_names = _data_names(p)
             for t in _shown_texts(w) + [w.ogr_status.currentMessage()]:
                 if t and _reads_english(t, spanish, data_names, ids):
                     found.setdefault(t, set()).add("MainWindow")
@@ -455,6 +596,96 @@ class TestNothingOnScreenReadsEnglish:
                   if not any(re.search(p, t) for t in found)]
         assert not ghosts, ghosts
 
+    def test_the_dialogs_the_census_could_not_build(self):
+        """v0.1.433 (D411) -- the dialogs ``test_dialogs_fit_v1315._census``
+        builds empty or not at all, built with data, in Spanish: the
+        Properties Table in its three modes, the boundary conditions on a
+        coarse mesh, the sensitivity tornado and the factor along the slope,
+        Define Support with a set an agent named, the cleanup report and the
+        transient stages with a captured stage of an old file."""
+        import re
+        from ogr_core.geometry.cleanup import inspect_boundaries
+        from ogr_core.hydraulic import HydraulicProperties, PermeabilityModel
+        from ogr_core.project.demo import build_demo_project
+        from ogr_core.project.settings import GroundwaterSettings
+        from ogr_core.support import EndAnchored, SupportInstance
+        from ogr_core.geometry import Vertex
+        from ogr_fem2d.mesh import generate_mesh_for_project
+        from ogr_fem2d.solvers import BCType, SeepageBoundaryConditions
+        from ogr_gui.dialogs.boundary_conditions_dialog import (
+            BoundaryConditionsDialog)
+        from ogr_gui.dialogs.boundary_dialogs import GeometryCleanupDialog
+        from ogr_gui.dialogs.chart_dialogs import (SFAlongSlopeDialog,
+                                                   SensitivityDialog)
+        from ogr_gui.dialogs.define_support_dialog import DefineSupportDialog
+        from ogr_gui.dialogs.properties_table_dialog import (
+            PropertiesTableDialog)
+        from ogr_gui.dialogs.transient_stages_dialog import (
+            TransientStagesDialog)
+        from ogr_gui.i18n import current_language, set_language
+        from ogr_gui.main_window import MainWindow
+        QApplication.instance() or QApplication([])
+        before = current_language()
+        es = _spanish()
+        spanish = set(es.values())
+        ids = _stored_identifiers()
+        p = build_demo_project()
+        st = EndAnchored(anchor_capacity=120.0, out_of_plane_spacing=1.0)
+        st._display_name = "End Anchored"        # as an agent names it
+        p.support_types = [st]
+        p.supports = [SupportInstance(head=Vertex(30.0, 18.0),
+                                      tail=Vertex(24.0, 12.0),
+                                      type_id=st.TYPE_ID, name="End Anchored",
+                                      type_ref=getattr(st, "id", None))]
+        p.materials[0].hydraulic = HydraulicProperties(
+            ks=1e-6, model=PermeabilityModel.VAN_GENUCHTEN)
+        mesh = generate_mesh_for_project(p, target_elements=40)
+        bcs = SeepageBoundaryConditions()
+        for n in range(4):
+            bcs.add_node(n, BCType.NODAL_FLOW, 0.0)
+        bcs.add_node(4, BCType.UNKNOWN, 0.0)
+        gw = GroundwaterSettings()
+        gw.transient_stages = [{"time": 10.0, "calculate_sf": True,
+                                "label": "Etapa 2 [BC]",
+                                "bcs": bcs.to_dict()}]
+        rep = inspect_boundaries(p.boundaries)
+        from ogr_core.statistics import available_variables
+        from ogr_gui.labels import random_variable_label
+        strength = [v for v in available_variables(p)
+                    if v.param in ("cohesion", "friction_angle")]
+        found = {}
+        set_language("es")
+        try:
+            built = {
+                "materials table": PropertiesTableDialog(p, "materials"),
+                "supports table": PropertiesTableDialog(p, "supports"),
+                "hydraulic table": PropertiesTableDialog(p, "hydraulic"),
+                "boundary conditions": BoundaryConditionsDialog(mesh, bcs),
+                # named as the window names them (``variable_label``):
+                # with its tick labels read, a hand-written English label is
+                # what the census sees
+                "tornado": SensitivityDialog(
+                    [(random_variable_label(v), 0.2 - 0.3 * i)
+                     for i, v in enumerate(strength[:2])]),
+                "sf along slope": SFAlongSlopeDialog([10.0, 20.0],
+                                                     [1.3, 1.1]),
+                "define support": DefineSupportDialog(p),
+                "cleanup report": GeometryCleanupDialog("\n".join(
+                    MainWindow._geometry_cleanup_lines(rep, p.boundaries))),
+                "transient stages": TransientStagesDialog(gw),
+            }
+            names = _data_names(p)
+            for name, d in built.items():
+                _WINDOWS.append(d)
+                for t in _shown_texts(d):
+                    if _reads_english(t, spanish, names, ids):
+                        found.setdefault(t, set()).add(name)
+        finally:
+            set_language(before)
+        left = {t: sorted(v) for t, v in found.items()
+                if not any(re.search(p_, t) for p_ in SHOWN_EXCEPTIONS)}
+        assert not left, left
+
 
 # ---------------------------------------------------------------------------
 # ogr_gui.labels: one name per stored identifier.
@@ -477,6 +708,8 @@ def _label_tables():
     from ogr_core.annotations.annotation import AnnotationKind
     from ogr_core.geometry.focus import FocusKind
     from ogr_core.geometry.tension_crack import WaterLevelMode
+    from ogr_core.hydraulic import PermeabilityModel
+    from ogr_core.project.settings import SearchMethod
     from ogr_gui import labels as L
     # v0.1.370 (D344): and the annotation kinds; v0.1.432 (D399): the kinds
     # of focus object and the water levels of a tension crack, which the
@@ -484,6 +717,11 @@ def _label_tables():
     return ((L.ANNOTATION_KIND, AnnotationKind),
             (L.FOCUS_KIND, FocusKind),
             (L.WATER_LEVEL_MODE, WaterLevelMode),
+            # v0.1.433 (D411): the search methods and the permeability
+            # models, which the status bar and the property tables printed
+            # by their identifiers
+            (L.SEARCH_METHOD, SearchMethod),
+            (L.PERMEABILITY_MODEL, PermeabilityModel),
             (L.FORCE_APPLICATION, ForceApplication),
             (L.FORCE_ORIENTATION, ForceOrientation),
             (L.PORE_PRESSURE, PorePressureType),

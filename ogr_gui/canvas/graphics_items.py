@@ -119,7 +119,8 @@ class BoundaryItem(DomainItem):
         # two languages at once
         from ogr_gui.labels import boundary_has_given_name, boundary_type_label
         kind = boundary_type_label(boundary.btype)
-        self.setToolTip("<b>%s</b><br>%s" % (boundary.name, kind)
+        from ogr_gui.labels import boundary_name
+        self.setToolTip("<b>%s</b><br>%s" % (boundary_name(boundary), kind)
                         if boundary_has_given_name(boundary)
                         else "<b>%s</b>" % kind)
         self.setZValue(self._z_for_type(boundary.btype))
@@ -453,9 +454,12 @@ class SupportItem(DomainItem):
             color = self._TYPE_COLORS.get(support.type_id, "#4b0082")
         self._draw_color = color
 
-        # Rich tooltip
+        # Rich tooltip. v0.1.433 (D411) -- a support that keeps its set's
+        # default name (the class's English name) is named in the interface's
+        # language
+        from ogr_gui.labels import support_name
         tooltip = (
-            tr('<b>{0}</b><br><i>Type:</i> {1}<br><i>Length:</i> {2:.2f} m<br><i>Axis:</i> {3:.1f}°<br><i>Application:</i> {4}<br><i>Orientation:</i> {5}').format(support.name or support_type_display, support_type_display, support.length(), support.axis_angle_deg(), force_application_label(support.force_application), force_orientation_label(support.orientation))
+            tr('<b>{0}</b><br><i>Type:</i> {1}<br><i>Length:</i> {2:.2f} m<br><i>Axis:</i> {3:.1f}°<br><i>Application:</i> {4}<br><i>Orientation:</i> {5}').format(support_name(support, support_type_obj) or support_type_display, support_type_display, support.length(), support.axis_angle_deg(), force_application_label(support.force_application), force_orientation_label(support.orientation))
         )
         if support_type_obj is not None:
             # v0.1.116 — the two stress-dependent pullout laws need

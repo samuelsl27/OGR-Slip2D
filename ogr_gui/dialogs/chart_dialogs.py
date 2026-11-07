@@ -7,7 +7,8 @@ Provides four reusable chart dialogs:
     - HistogramDialog — FoS frequency distribution
     - CumulativeDialog — CDF with P(FoS<1) highlighted
     - ScatterDialog — generic X vs Y scatter
-    - SFAlongSlopeDialog — Factor of Safety along the critical surface
+    - SFAlongSlopeDialog — Factor of Safety along the slope, from every
+      valid surface (Interpret's Graph SF Along Slope, v0.1.433)
 
 All dialogs embed a matplotlib FigureCanvas, so the Interpret window
 shows real interactive plots rather than text summaries.
@@ -199,84 +200,101 @@ class ScatterDialog(_ChartDialogBase):
 
 # ======================================================================
 class SFAlongSlopeDialog(_ChartDialogBase):
-    """FoS along the critical failure surface.
+    """Factor of safety along the slope, from EVERY valid surface: the
+    series ``interpretation.sf_along_slope`` computes — each surface's
+    factor at its slope intercepts, or the minimum in each bin.
 
-    Projects each slice centroid onto the toe-to-crest direction and
-    plots FoS of that slice as a function of the projected distance.
+    v0.1.433 (D411) — the chart of Interpret's *Graph SF Along Slope...*, by
+    the owner's decision: no menu opened this dialog, and it drew the
+    critical surface's global factor at every slice, the reading v0.1.82
+    retired from Interpret («one number, repeated»). The numbers are the
+    ones that entry plotted before; the line of factor 1 is added.
     """
 
-    def __init__(self, critical_result, parent=None) -> None:
+    def __init__(self, xs, ys, binned: bool = True, ylabel=None,
+                 parent=None) -> None:
         super().__init__(tr("Factor of Safety Along Slope"), parent)
         if self.canvas is None:
             return
         ax = self.ax()
-        if critical_result is None or not critical_result.slices:
-            ax.text(0.5, 0.5, "No critical surface available",
+        if not xs:
+            ax.text(0.5, 0.5, tr("No valid surfaces."),
                     ha="center", va="center", transform=ax.transAxes)
             self.canvas.draw_idle()
             return
-
-        slices = critical_result.slices.slices
-        xs = [s.x_centre for s in slices]
-        if not xs:
-            return
-        x_min, x_max = min(xs), max(xs)
-        span = (x_max - x_min) or 1.0
-        fos_global = critical_result.fos
-        # Per-slice mobilised strength vs available (approximate local FoS)
-        import math
-        local_fos: list[float] = []
-        dists: list[float] = []
-        for s in slices:
-            alpha = s.base_angle
-            W = s.weight
-            drive = abs(W * math.sin(alpha))
-            if drive < 1e-9:
-                continue
-            # Very coarse: treat every slice with the global FoS —
-            # realistic per-slice FoS requires the chosen method to
-            # expose its strength ratio.
-            local_fos.append(fos_global)
-            dists.append((s.x_centre - x_min) / span)
-
-        ax.plot(dists, local_fos, color="#3a87c8", linewidth=1.8,
-                marker="o", markersize=4)
+        ax.plot(list(xs), list(ys), marker="o" if binned else ".")
         ax.axhline(1.0, color="#c0392b", linestyle="--", linewidth=1.0)
-        ax.set_xlabel(tr("Normalised distance along slope (toe → crest)"))
-        ax.set_ylabel(tr("Factor of Safety"))
-        ax.set_title(tr('Critical surface — {0} slices — global FoS = {1:.3f}').format(len(slices), fos_global))
+        ax.set_xlabel(tr("X coordinate"))
+        ax.set_ylabel(ylabel or tr("Factor of safety"))
         ax.grid(True, alpha=0.3)
         self.canvas.draw_idle()
 
 
 # ======================================================================
 class SensitivityDialog(_ChartDialogBase):
-    """Tornado-style sensitivity plot from a dict of parameter → effect."""
+    """Tornado of a sensitivity run: one bar per variable, the change of the
+    factor from the variable's minimum to its maximum, with its sign — the
+    numbers the ranking prints (``SensitivityResult.ranking``,
+    ``VariableSweep.fos_range`` and ``is_increasing``).
 
-    def __init__(self, effects: dict[str, float], parent=None) -> None:
-        super().__init__(tr("Sensitivity — FoS vs input parameters"), parent)
+    v0.1.433 (D411) — by the owner's decision it opens from Interpret's
+    Statistics menu: no menu opened it, and its axis said «per standard
+    deviation» of numbers it never was given. ``effects`` is a list of
+    ``(label, signed range)`` pairs (or a ``{label: value}`` dict);
+    :func:`sensitivity_effects` builds it. A list, and bars at numeric
+    positions, because two variables can be shown with the same label (two
+    loads of the same magnitude): keyed by the label, or placed by it on a
+    categorical axis, they shared one bar (review of 0.1.433).
+    """
+
+    def __init__(self, effects, xlabel=None, parent=None) -> None:
+        super().__init__(tr("Sensitivity — Tornado"), parent)
         if self.canvas is None:
             return
         ax = self.ax()
         if not effects:
-            ax.text(0.5, 0.5, "No sensitivity data available. "
-                             "Run probabilistic analysis first.",
+            ax.text(0.5, 0.5, tr("No sensitivity result."),
                     ha="center", va="center", transform=ax.transAxes)
             self.canvas.draw_idle()
             return
 
-        names = list(effects.keys())
-        vals = [effects[n] for n in names]
-        order = sorted(range(len(names)), key=lambda i: abs(vals[i]))
-        names = [names[i] for i in order]
-        vals = [vals[i] for i in order]
+        pairs = list(effects.items() if isinstance(effects, dict)
+                     else effects)
+        pairs.sort(key=lambda kv: abs(kv[1]))
+        names = [str(k) for k, _ in pairs]
+        vals = [v for _, v in pairs]
         colors = ["#c0392b" if v < 0 else "#27ae60" for v in vals]
-        ax.barh(names, vals, color=colors, alpha=0.85)
+        ax.barh(range(len(vals)), vals, color=colors, alpha=0.85)
+        ax.set_yticks(range(len(vals)), names)
         ax.axvline(0, color="#333", linewidth=0.8)
-        ax.set_xlabel(tr("Effect on FoS (Δ per standard deviation)"))
+        # the bar is the factor's range over the sweep (``fos_range``), the
+        # ranking's number, signed by ``is_increasing``: on a sweep that is
+        # not monotonic it is not FS(max) - FS(min) of the variable, so the
+        # axis says what it is (review of 0.1.433)
+        ax.set_xlabel(xlabel or tr(
+            "Range of the factor of safety over the variable's sweep "
+            "(positive: larger at the variable's maximum)"))
         ax.set_title(tr("Sensitivity — Tornado"))
         ax.grid(True, alpha=0.3, axis="x")
         self.canvas.draw_idle()
+
+
+def sensitivity_effects(sweeps: dict, name=None) -> list:
+    """``[(label, signed range)]`` of a sensitivity run's sweeps for the
+    tornado, one pair per swept variable: its ``fos_range``, positive when
+    the factor at the variable's maximum is not below the one at its minimum
+    (``is_increasing``). A variable with a note was never swept and is left
+    out, as the ranking leaves it (D91). ``name(key, stored)`` gives the
+    shown label. A list and not a dict keyed by the label: two variables
+    shown alike would share one entry."""
+    out = []
+    for vs in sweeps.values():
+        if getattr(vs, "note", None) or not getattr(vs, "values", None):
+            continue
+        label = name(vs.key, vs.label) if name else vs.label
+        out.append((label, vs.fos_range if vs.is_increasing
+                    else -vs.fos_range))
+    return out
 
 
 # ======================================================================

@@ -97,8 +97,10 @@ class WindowHost:
     def after_save(self) -> None:
         w = self.window
         path = w.project.file_path
+        # v0.1.433 (D411) -- a default project name translated
+        from .labels import project_label
         w.setWindowTitle(f"OGR Slip2D v{w.VERSION} — "
-                         f"{path.name if path else w.project.name}")
+                         f"{path.name if path else project_label(w.project)}")
 
     def replace_project(self, project) -> None:
         """Open ``project`` in the window, as File > Open would, but never

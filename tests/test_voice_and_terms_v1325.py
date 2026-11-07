@@ -72,6 +72,9 @@ RETIRED = {
     # v0.1.418 (D355) -- a «run» is a «cálculo», as the Compute button says
     # it; «corrida» stood beside «cálculo» and «análisis» for the same thing
     r"\bcorridas?\b": "cálculo",
+    # v0.1.433 (D411) -- a focus object is an «objeto de foco» in every menu
+    # and message; two notes of the search said «objeto de enfoque»
+    r"\benfoque\b": "foco",
 }
 
 #: Usted imperatives the dictionary used; tú is the program's voice.

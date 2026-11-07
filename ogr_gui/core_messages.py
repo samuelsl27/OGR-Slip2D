@@ -102,6 +102,28 @@ def _show(kind: str, value):
     if kind == "strength_model":
         from ogr_core.materials import REGISTRY
         return tr(REGISTRY.get(value).DISPLAY_NAME)
+    # v0.1.433 (D411) -- identifiers the Spanish printed as they are stored
+    # («'non_circular'», «'grid'», «'circle'», «b_bar, corps_2»)
+    from . import labels as L
+    if kind == "search_method":
+        return L.search_method_label(value)
+    if kind == "surface_type":
+        return L.surface_type_label(value)
+    if kind == "surface_kind":
+        return L.surface_kind_label(value)
+    if kind == "surface_noun":
+        return L.surface_noun_label(value)
+    if kind == "drawdown_method":
+        return L.drawdown_procedure_label(value)
+    # the names are joined by «; »: one of them («Duncan, Wright, Wong 3
+    # Stage (1990)») has commas, and the list of four read as six (review
+    # of 0.1.433). The engine joins the identifiers by «, »
+    if kind == "drawdown_method_list":
+        return "; ".join(L.drawdown_procedure_label(m)
+                         for m in str(value).split(", ") if m)
+    if kind == "technique_list":
+        return "; ".join(L.optimize_technique_label(m)
+                         for m in str(value).split(", ") if m)
     return value
 
 

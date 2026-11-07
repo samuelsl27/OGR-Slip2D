@@ -64,11 +64,15 @@ SETTING_NOTES = {s.code: s for s in (
                 "ignore the value and report a plausible number."),
     MessageSpec(DRAWDOWN_UNKNOWN,
                 "'{method}' is not a rapid-drawdown procedure, so the analysis "
-                "would ignore the drawdown entirely. Available: {available}."),
+                "would ignore the drawdown entirely. Available: {available}.",
+                # v0.1.433 (D411) -- the procedures by their names; the one
+                # that is not one is shown as it is
+                kinds=(("available", "drawdown_method_list"),)),
     MessageSpec(DRAWDOWN_NEEDS_SURFACES,
                 "Rapid drawdown defines both reservoir levels with water "
                 "surfaces, so it cannot run with groundwater method "
-                "'{method}'. Choose Water Surfaces."),
+                "'{method}'. Choose Water Surfaces.",
+                kinds=_GW),                                    # v0.1.433
     MessageSpec(DRAWDOWN_NO_UNDRAINED,
                 "No material is marked as having undrained behaviour, so the "
                 "drawdown would not change any strength. Tick Undrained "
@@ -83,7 +87,9 @@ SETTING_NOTES = {s.code: s for s in (
                 "safety would be the ordinary DRAINED one at the lowered water "
                 "level. Build the method with "
                 "ogr_slip2d.analysis_runner.build_method(project, method_id), "
-                "which is the one place that applies the drawdown wrapper."),
+                "which is the one place that applies the drawdown wrapper.",
+                kinds=(("drawdown", "drawdown_method"),        # v0.1.433
+                       ("method", "method_id"))),
 ) + tuple(MessageSpec(GRID_TYPE_MISMATCH + t,
                       "The water pressure grid was built as "
                       + t.replace("_", " ") + " values, but the groundwater "

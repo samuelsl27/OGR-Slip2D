@@ -67,6 +67,27 @@ _BOXES = ("information", "warning", "critical", "question")
 #: (``setItemData(i, text, Qt.ToolTipRole)``); any other role is data.
 _TEXT_ROLES = {"DisplayRole", "ToolTipRole", "StatusTipRole",
                "WhatsThisRole"}
+#: v0.1.433 (D411) -- item constructors whose first argument is the text of
+#: the cell or the row (the tree item's is a list): « [BC]» reached a cell
+#: of the transient stages this way.
+_ITEMS = {"QTableWidgetItem", "QListWidgetItem", "QStandardItem"}
+#: v0.1.433 (D411) -- matplotlib calls whose first argument is text on the
+#: figure; ``text(x, y, s)`` has it third. The axes of the random variable's
+#: plot and two charts' empty-state messages were English this way.
+_MPL_FIRST = {"set_title", "set_xlabel", "set_ylabel", "set_zlabel",
+              "suptitle", "annotate"}
+#: ... and the plotting calls whose ``label=`` (a legend entry) or
+#: ``title=`` is text.
+_MPL_LABELLED = {"plot", "axvline", "axhline", "bar", "barh", "scatter",
+                 "fill_between", "hist", "step", "errorbar", "axvspan",
+                 "axhspan", "stairs", "semilogx", "semilogy", "loglog",
+                 "stem", "legend"}
+#: String methods that hand back the same text: the census reads through
+#: them (``QTableWidgetItem((label + " [BC]").strip())``).
+_SAME_TEXT = {"strip", "rstrip", "lstrip", "upper", "lower", "capitalize",
+              "title"}
+#: A colour's hex code is notation, not text.
+_COLOUR = re.compile(r"#[0-9A-Fa-f]{3,8}")
 
 #: Calls whose arguments are not interface text, whatever they hold.
 _NOT_TEXT = {
@@ -86,16 +107,21 @@ _AXES = {"X", "Y", "Z", "x", "y", "z"}
 #: What is left that is not to be translated, with the reason.
 #: (file relative to ogr_gui, the text with {} for each field): reason
 EXCEPTIONS: dict = {
-    # the product's name and the PROJECT's name (data: a new project is
-    # named "Untitled", the demo "Demo slope"), as test_window_english_left
+    # the product's name and the PROJECT's name, as test_window_english_left.
+    # v0.1.433 (D411): "— Untitled" and "— Demo slope" left, by the owner's
+    # decision: a default project name is shown translated
+    # (ogr_gui.labels.project_label), so the two titles are the third.
     ("main_window.py", "OGR Slip2D v{} — OpenGeoRock Suite"):
         "the product's name and version",
-    ("main_window.py", "OGR Slip2D v{} — Untitled"):
-        "the product's name and the name of a new project",
     ("main_window.py", "OGR Slip2D v{} — {}"):
         "the product's name and the project's name",
-    ("main_window.py", "OGR Slip2D v{} — Demo slope"):
-        "the product's name and the name of the demo project",
+    # v0.1.433 (D411) -- notation on a figure, the same in Spanish
+    ("interpret_window.py", "x (m)"):
+        "notation: a coordinate and its unit, on a plot's axis",
+    ("interpret_window.py", "y (m)"):
+        "notation: a coordinate and its unit, on a plot's axis",
+    ("statistics_window.py", "FS = 1"):
+        "notation: the line of factor 1, FS in Spanish too",
     # v0.1.370 (D344): "{}_report.pdf" left, the name goes through tr()
     # notation that reads the same in Spanish: a translation would be the
     # English again, which test_i18n_coverage_v141 counts as untranslated
@@ -109,8 +135,10 @@ EXCEPTIONS: dict = {
         "notation: the range of the pore pressure",
     ("interpret_groundwater_window.py", "t = {}"):
         "notation: the time of a stage",
-    ("interpret_groundwater_window.py", "{}: t = {}{}{}"):
-        "notation: the number and the time of a stage",
+    # v0.1.433 (D411): one field more, the flag of a stage with its own
+    # conditions («[CC]»), which goes through tr() as «[FS]» does
+    ("interpret_groundwater_window.py", "{}: t = {}{}{}{}"):
+        "notation: the number and the time of a stage, and its flags",
     # v0.1.319 — units and coordinates, the same in every language
     ("canvas/graphics_items.py", "{} kN/m²"):
         "a load's magnitude and its unit",
@@ -145,8 +173,10 @@ EXCEPTIONS: dict = {
     ("main_window.py", "ΔY (m):"):
         "notation: a displacement and its unit",
     ("dialogs/define_support_dialog.py", "Type {}"):
-        "the default name of a new support type, which the model keeps "
-        "(like a project's 'Untitled')",
+        "the default name of a new support type, which the model keeps and "
+        "the screen shows as it is; unlike a project's 'Untitled', which "
+        "0.1.433 shows translated, it is not (yet) a name the program "
+        "recognises as its own -- left for the owner (review of 0.1.433)",
     # v0.1.432 (D399): "Piezo {}" left, the lines are named as the material
     # dialog names them (ogr_gui.labels.water_surface_label)
     ("dialogs/grid_dialogs.py", "Circular"):
@@ -214,8 +244,41 @@ def loose_nodes(tree):
             flag(node.body)
             flag(node.orelse)
             return
+        # v0.1.433 (D411) -- an ``or`` puts one of its operands on screen:
+        # ``"  |  ".join(parts) or "no conditions"``
+        if isinstance(node, ast.BoolOp):
+            for value in node.values:
+                flag(value)
+            return
+        # v0.1.433 (D411) -- every literal of a concatenation reaches the
+        # screen, not only the first: «Listo — File → Load Demo Slope…» was
+        # ``tr("Ready") + " — File → …"``
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+            flag(node.left)
+            flag(node.right)
+            return
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            # v0.1.433 (D411) -- a literal in a field of a translated text
+            # is on screen too: ``tr("…: {0}").format(… or "nothing
+            # selectable")``
+            if node.func.attr == "format" and _is_tr(node.func.value):
+                for value in list(node.args) + [k.value
+                                                for k in node.keywords]:
+                    flag(value)
+                return
+            if node.func.attr in _SAME_TEXT:
+                flag(node.func.value)
+                return
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mod) \
+                and _is_tr(node.left):
+            right = node.right
+            for value in (right.elts if isinstance(right, ast.Tuple)
+                          else [right]):
+                flag(value)
+            return
         text = _text(node)
-        if text is not None and _letters(text) and text.strip() not in _AXES:
+        if text is not None and _letters(text) and text.strip() not in _AXES \
+                and not _COLOUR.fullmatch(text.strip()):
             found[id(node)] = node
 
     # 1 and 2 — the arguments read on screen
@@ -255,6 +318,40 @@ def loose_nodes(tree):
                 and len(args) >= 3:
             flag(args[1])
             flag(args[2])
+        # v0.1.433 (D411) -- the text of an item, and the text on a figure
+        elif name in _ITEMS and args:
+            flag(args[0])
+        elif name == "QTreeWidgetItem" and args \
+                and isinstance(args[0], (ast.List, ast.Tuple)):
+            for el in args[0].elts:
+                flag(el)
+        elif name in _MPL_FIRST and args:
+            flag(args[0])
+        elif name == "text" and len(args) >= 3:
+            flag(args[2])
+        elif name == "legend" and args \
+                and isinstance(args[0], (ast.List, ast.Tuple)):
+            for el in args[0].elts:
+                flag(el)
+        if name in _MPL_LABELLED:
+            for kw in node.keywords:
+                if kw.arg in ("label", "title"):
+                    flag(kw.value)
+
+    # v0.1.433 (D411) -- a conditional half through tr(), anywhere: its
+    # other branch goes where the translated one goes («ΔFoS» beside
+    # ``tr("Δ over-design factor")``, carried by a variable)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.IfExp):
+            branches = (node.body, node.orelse)
+        elif isinstance(node, ast.BoolOp):
+            branches = tuple(node.values)
+        else:
+            continue
+        if any(_is_tr(b) for b in branches):
+            for b in branches:
+                if not _is_tr(b):
+                    flag(b)
 
     # v0.1.324 (D315) — a subclass of one of those constructors passes its
     # text up with ``super().__init__("Results", parent)``: five dock titles

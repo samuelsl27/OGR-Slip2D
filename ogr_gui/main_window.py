@@ -278,7 +278,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.432"
+    VERSION = "0.1.433"
 
     def __init__(self) -> None:
         super().__init__()
@@ -482,10 +482,7 @@ class MainWindow(QMainWindow):
 
         # v0.1.5: start with an EMPTY project. User can load demo via
         # File → Load Demo Slope.
-        self.ogr_status.showMessage(
-            tr("Ready") + " — File → Load Demo Slope to start with a sample model.",
-            6000,
-        )
+        self.ogr_status.showMessage(self._startup_message(), 6000)
         # v0.1.7 — first availability refresh
         self.refresh_action_availability()
 
@@ -1211,7 +1208,38 @@ class MainWindow(QMainWindow):
         self._attach_project(Project("Untitled"))
         self.terminal_dock.attach_context(self.project, self.canvas, self)
         self.command_stack.clear()
-        self.setWindowTitle(f"OGR Slip2D v{self.VERSION} — Untitled")
+        # v0.1.433 (D411) -- the default name in the interface's language
+        from .labels import project_label
+        self.setWindowTitle(
+            f"OGR Slip2D v{self.VERSION} — {project_label(self.project)}")
+
+    @staticmethod
+    def _dxf_counts(created: dict) -> str:
+        """What a DXF import created, kind by kind, in the interface's
+        language and in the order of the kinds. v0.1.433 (D411): the keys
+        are the stored ones («EXTERNAL», «WATER_TABLE»), which the agent
+        keeps reading; the status bar printed them."""
+        from ogr_core.geometry import BoundaryType
+        from .labels import boundary_type_label
+        order = {t.name: i for i, t in enumerate(BoundaryType)}
+
+        def kind(key):
+            try:
+                return boundary_type_label(BoundaryType[key])
+            except KeyError:
+                return key
+        return ", ".join(
+            "%s: %d" % (kind(k), v) for k, v in
+            sorted(created.items(), key=lambda kv: (order.get(kv[0], 99),
+                                                    kv[0])))
+
+    @staticmethod
+    def _startup_message() -> str:
+        """What the status bar says when the window opens. v0.1.433 (D411):
+        the menu path by its own entries' names; «File → Load Demo Slope»
+        was English after «Listo»."""
+        return tr("Ready — {0} → {1} to start with a sample model.").format(
+            tr("File"), tr("Load Demo Slope"))
 
     def _may_replace_project(self, title: str) -> bool:
         """Whether the project may be replaced: yes when it has nothing
@@ -1300,15 +1328,18 @@ class MainWindow(QMainWindow):
             return
         pv = dlg.result_preview
         if pv is None or not pv.ok:
-            self._info(pv.error if pv is not None
-                       else tr("The drawing could not be read."))
+            # v0.1.433 (D411) -- the preview's error as the dialog says it,
+            # in the reader's language: the core's English came out here
+            from .core_messages import preview_error_text
+            self._info((preview_error_text(pv) if pv is not None else "")
+                       or tr("The drawing could not be read."))
             return
         created = apply_to_project(self.project, pv, dlg.options)
         self.canvas.set_project(self.project)
         self.canvas.refresh_scene()
         self.canvas.zoom_all() if hasattr(self.canvas, "zoom_all") else None
 
-        counts = ", ".join(f"{k}: {v}" for k, v in sorted(created.items()))
+        counts = self._dxf_counts(created)
         msg = tr("Imported %s") % (counts or tr("nothing"))
         if pv.report is not None:
             msg += "   |   " + tr("%d region(s)") % pv.regions
@@ -1394,11 +1425,14 @@ class MainWindow(QMainWindow):
         options = dlg.options
         # v0.1.370 (D344) -- the proposed name and the filters in the
         # interface's language ("Demo slope_report.pdf" in Spanish).
+        # v0.1.433 (D411) -- and a default project name translated
+        from .labels import project_label
         # v0.1.418 (D355) -- inside the dialogs' folder: a bare name was
         # resolved against the program's working folder
         path, _ = get_save_file_name(
             self, tr("Generate Report"), tr("PDF Files (*.pdf)"),
-            tr("{0}_report.pdf").format(self.project.name or tr("analysis")))
+            tr("{0}_report.pdf").format(project_label(self.project)
+                                        or tr("analysis")))
         if not path:
             return
         if not path.lower().endswith(".pdf"):
@@ -1620,9 +1654,11 @@ class MainWindow(QMainWindow):
         dlg.apply()
         self.project.is_dirty = True
         self.project._notify("settings_changed")
+        # v0.1.433 (D411) -- the method by its name, not its identifier
+        from .labels import search_method_label
         self.ogr_status.showMessage(
-            tr('Surface search configured: {0}').format(
-                self.project.settings.search.search_method), 3000,
+            tr('Surface search configured: {0}').format(search_method_label(
+                self.project.settings.search.search_method)), 3000,
         )
         return None
 
@@ -2072,7 +2108,12 @@ class MainWindow(QMainWindow):
             return
         why = check_drawdown_settings(self.project)
         if why:
-            QMessageBox.warning(self, tr("Drawdown Level Sweep"), why)
+            # v0.1.433 (D411) -- a coded note: its Spanish, not its English.
+            # Imported here: the function imports note_text further down,
+            # which makes the name local to all of it
+            from .core_messages import note_text
+            QMessageBox.warning(self, tr("Drawdown Level Sweep"),
+                                note_text(why))
             return
 
         dlg = QDialog(self)
@@ -2330,8 +2371,11 @@ class MainWindow(QMainWindow):
                 self._sens_result = res
                 rows = res.ranking()
                 if rows:
-                    messages.append(
-                        tr("most sensitive: {0}").format(rows[0][1]))
+                    # v0.1.433 (D411) -- the variable as Define Random
+                    # Variables names it, not its stored label
+                    from .labels import variable_label
+                    messages.append(tr("most sensitive: {0}").format(
+                        variable_label(self.project, rows[0][0], rows[0][1])))
                 warning = res.notes.get("warning")
                 if warning:
                     messages.append(note_text(warning))
@@ -3249,7 +3293,9 @@ class MainWindow(QMainWindow):
         window — the two things a user needs from such a list, and the
         reason a static menu was useless.
         """
-        name = getattr(self.project, "name", None) or tr("Untitled")
+        # v0.1.433 (D411) -- a default name in the interface's language
+        from .labels import project_label
+        name = project_label(self.project) or tr("Untitled")
         dirty = "*" if getattr(self.project, "is_dirty", False) else ""
         active = "• " if self.isActiveWindow() else "   "
         return f"{active}{name}{dirty}"
@@ -3591,12 +3637,16 @@ class MainWindow(QMainWindow):
         return support_type_label(stype) or tr("support")
 
     def _support_label(self, support) -> str:
+        """A placed support's name as the user reads it (Modify Support, Move
+        Support): ``labels.support_name``, so a default name is in the
+        interface's language. v0.1.433 (D411) -- by the owner's decision on
+        the review of 0.1.433: these lists read «1: End Anchored»."""
         from ogr_core.support import resolve_support_type
-        name = getattr(support, "name", "")
+        from ogr_gui.labels import support_name
         stype = resolve_support_type(self.project, support)
         if stype is None:
-            return str(name or tr("support"))
-        return str(name or self._type_label(stype))
+            return str(support_name(support) or tr("support"))
+        return str(support_name(support, stype) or self._type_label(stype))
 
     @undo_step("Move support")
     def _move_support(self) -> None:
@@ -4069,6 +4119,9 @@ class MainWindow(QMainWindow):
                 tr('Water pressure grid: {0} points').format(n), 4000)
 
     def act_info_viewer(self) -> None:
+        # v0.1.433 (D411) -- the project's default name and the search
+        # method by their names in the interface's language
+        from .labels import project_label, search_method_label
         p = self.project
         # v0.1.293 (D291b) — a template
         info = tr(
@@ -4081,9 +4134,10 @@ class MainWindow(QMainWindow):
             "<b>Bounding box:</b> {6}<br>"
             "<b>Search:</b> {7}<br>"
             "<b>Author:</b> {8}"
-        ).format(p.name, len(p.boundaries), len(p.materials), len(p.supports),
-                 len(p.distributed_loads), len(p.line_loads),
-                 p.bounding_box(), p.settings.search.search_method,
+        ).format(project_label(p), len(p.boundaries), len(p.materials),
+                 len(p.supports), len(p.distributed_loads), len(p.line_loads),
+                 p.bounding_box(),
+                 search_method_label(p.settings.search.search_method),
                  p.settings.summary.author)
         QMessageBox.information(self, tr("Info Viewer"), info)
 
@@ -6648,6 +6702,53 @@ class MainWindow(QMainWindow):
                     len(orig.polyline.vertices), len(new_b.polyline.vertices)), 3000
             )
 
+    @staticmethod
+    def _geometry_cleanup_lines(rep, boundaries) -> list:
+        """The first lines of the Geometry Cleanup report: its title and one
+        line per boundary (``inspect_boundaries``).
+
+        v0.1.293 (D291b) — through tr(), line by line. v0.1.433 (D411) —
+        each boundary by the label rule (its type in the interface's
+        language, the name between quotes only when it was given), the
+        singular for a boundary of one vertex, and «no problems» where the
+        line said «OK», which ``tr()`` would turn into the button's word: it
+        printed «[0] EXTERNAL «External Boundary»: 6 vértices — OK»."""
+        from .labels import (boundary_has_given_name, boundary_name,
+                             boundary_type_label)
+        by_id = {getattr(b, "id", None): b for b in boundaries}
+        lines = [tr("Geometry Cleanup Report"), "=" * 40, ""]
+        lines.append(tr("Total boundaries: {0}").format(len(boundaries)))
+        for i, row in enumerate(rep["boundaries"]):
+            flags = []
+            if row["self_intersects"]:
+                flags.append(tr("SELF-INTERSECTS"))
+            if row["open_external"]:
+                flags.append(tr("NOT CLOSED (external)"))
+            if row["duplicate_vertices"]:
+                flags.append(tr("{0} duplicate vertices").format(
+                    row['duplicate_vertices']))
+            status = ", ".join(flags) if flags else tr("no problems")
+            b = by_id.get(row.get("id"))
+            if b is None and i < len(boundaries):
+                b = boundaries[i]
+            n = row['n_vertices']
+            kind = (boundary_type_label(b.btype) if b is not None
+                    else row['type'])
+            if b is not None and boundary_has_given_name(b):
+                name = boundary_name(b)
+                lines.append(
+                    tr("  [{0}] {1} '{2}': 1 vertex — {3}").format(
+                        i, kind, name, status) if n == 1 else
+                    tr("  [{0}] {1} '{2}': {3} vertices — {4}").format(
+                        i, kind, name, n, status))
+            else:
+                lines.append(
+                    tr("  [{0}] {1}: 1 vertex — {2}").format(
+                        i, kind, status) if n == 1 else
+                    tr("  [{0}] {1}: {2} vertices — {3}").format(
+                        i, kind, n, status))
+        return lines
+
     def act_geometry_cleanup(self) -> None:
         """Report the geometry's problems and remove duplicate vertices.
 
@@ -6670,24 +6771,8 @@ class MainWindow(QMainWindow):
         from ogr_core.project.commands import SnapshotCommand
 
         rep = inspect_boundaries(self.project.boundaries)
-        # v0.1.293 (D291b) — the report through tr(), line by line
-        report_lines = [tr("Geometry Cleanup Report"), "=" * 40, ""]
-        report_lines.append(tr("Total boundaries: {0}").format(
-            len(self.project.boundaries)))
-        for i, row in enumerate(rep["boundaries"]):
-            flags = []
-            if row["self_intersects"]:
-                flags.append(tr("SELF-INTERSECTS"))
-            if row["open_external"]:
-                flags.append(tr("NOT CLOSED (external)"))
-            if row["duplicate_vertices"]:
-                flags.append(tr("{0} duplicate vertices").format(
-                    row['duplicate_vertices']))
-            status = ", ".join(flags) if flags else "OK"
-            report_lines.append(
-                tr("  [{0}] {1} '{2}': {3} vertices — {4}").format(
-                    i, row['type'].upper(), row['name'],
-                    row['n_vertices'], status))
+        report_lines = self._geometry_cleanup_lines(
+            rep, self.project.boundaries)
         if rep["cross_intersections"]:
             report_lines.append("")
             report_lines.append(
@@ -6732,12 +6817,14 @@ class MainWindow(QMainWindow):
             self.selection_filter = dlg.state()
             self.canvas.selection_filter = self.selection_filter
             # Give feedback on what's now selectable
-            active = [n for n in ("boundaries", "vertices", "materials",
-                                   "supports", "loads", "surfaces")
-                       if getattr(self.selection_filter, n)]
+            # v0.1.433 (D411) -- each by its word in the interface's
+            # language: the status bar printed the fields' names
+            from .labels import SELECTABLE
+            active = [tr(SELECTABLE[n]) for n in SELECTABLE
+                      if getattr(self.selection_filter, n)]
             self.ogr_status.showMessage(
                 tr('Selection filter: {0}').format(
-                    ', '.join(active) or 'nothing selectable'),
+                    ', '.join(active) or tr('nothing selectable')),
                 3000,
             )
 
@@ -6750,15 +6837,18 @@ class MainWindow(QMainWindow):
         # v0.1.432 (D399) -- the name between quotes only when the user gave
         # one: the default is the type's English name, after the type itself;
         # and the singular for a Block Search point, a boundary of one vertex
-        from .labels import boundary_has_given_name, boundary_type_label
+        from .labels import (boundary_has_given_name, boundary_name,
+                             boundary_type_label)
 
         def entry(i, b):
             kind, n = boundary_type_label(b.btype), len(b.vertices)
             if boundary_has_given_name(b):
-                return (tr("[{0}] {1} '{2}' (1 vert)").format(i, kind, b.name)
+                # v0.1.433 (D411) -- a name the program gave, translated
+                name = boundary_name(b)
+                return (tr("[{0}] {1} '{2}' (1 vert)").format(i, kind, name)
                         if n == 1 else
                         tr("[{0}] {1} '{2}' ({3} verts)").format(
-                            i, kind, b.name, n))
+                            i, kind, name, n))
             return (tr("[{0}] {1} (1 vert)").format(i, kind) if n == 1 else
                     tr("[{0}] {1} ({2} verts)").format(i, kind, n))
 
@@ -6787,7 +6877,9 @@ class MainWindow(QMainWindow):
         self.terminal_dock.attach_context(self.project, self.canvas, self)
         self.command_stack.clear()
         self._install_demo_project()
-        self.setWindowTitle(f"OGR Slip2D v{self.VERSION} — Demo slope")
+        from .labels import project_label
+        self.setWindowTitle(
+            f"OGR Slip2D v{self.VERSION} — {project_label(self.project)}")
         self.ogr_status.showMessage(tr("Demo slope loaded."), 3000)
 
     # ==================================================================

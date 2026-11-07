@@ -29,7 +29,9 @@ from PySide6.QtWidgets import (
 )
 
 from ogr_gui.i18n import tr
-from ogr_gui.labels import support_type_label
+from ogr_gui.labels import (param_label, permeability_model_label,
+                            pore_pressure_label, support_choice_label,
+                            support_type_label)
 
 
 def _fmt(value) -> str:
@@ -119,9 +121,11 @@ class PropertiesTableDialog(QDialog):
             for k in (getattr(m.strength, "params", {}) or {}):
                 if k not in params:
                     params.append(k)
+        # v0.1.433 (D411) -- the parameters by their names, as Define
+        # Materials says them («friction angle», «ángulo de rozamiento»)
         headers = [tr("Name"), tr("Strength model"), tr("Unit weight"),
                    tr("Saturated"), tr("Pore pressure")] + \
-            [p.replace("_", " ") for p in params]
+            [param_label(p) for p in params]
         rows = []
         for m in mats:
             st = m.strength
@@ -132,8 +136,11 @@ class PropertiesTableDialog(QDialog):
             # as if it were in force.
             sat = (getattr(m, "sat_unit_weight", None)
                    if getattr(m, "use_sat_unit_weight", False) else None)
+            pp = getattr(m, "pore_pressure", None)
+            # v0.1.433 (D411) -- the pore pressure by its label, not the
+            # stored identifier («water_table»)
             row = [m.name, model, getattr(m, "unit_weight", None), sat,
-                   getattr(m, "pore_pressure", None)]
+                   pore_pressure_label(pp) if pp is not None else None]
             row += [(getattr(st, "params", {}) or {}).get(p)
                     for p in params]
             rows.append(row)
@@ -156,7 +163,7 @@ class PropertiesTableDialog(QDialog):
                 if k not in params:
                     params.append(k)
         headers = [tr("#"), tr("Type"), tr("Head"), tr("Tail")] + \
-            [p.replace("_", " ") for p in params]
+            [param_label(p) for p in params]
         rows = []
         for i, (s, stype) in enumerate(typed, 1):
             head = getattr(s, "head", None)
@@ -165,7 +172,12 @@ class PropertiesTableDialog(QDialog):
                    support_type_label(stype),
                    f"({head.x:.3f}, {head.y:.3f})" if head else "—",
                    f"({tail.x:.3f}, {tail.y:.3f})" if tail else "—"]
-            row += [getattr(stype, p, None) for p in params]
+            # v0.1.433 (D411) -- a choice by its label, as Define Support
+            # offers it («Cortante», not «shear»)
+            for p in params:
+                value = getattr(stype, p, None)
+                row.append(support_choice_label(p, value)
+                           if isinstance(value, str) else value)
             rows.append(row)
         return headers, rows
 
@@ -182,7 +194,7 @@ class PropertiesTableDialog(QDialog):
             h = m.hydraulic
             # v0.1.275 (D271): with a user curve, Ks is its first point
             rows.append([m.name, h.saturated_k(), h.k2_k1, h.k1_angle_deg,
-                         getattr(h.model, "value", h.model),
+                         permeability_model_label(h.model),
                          h.wc_sat, h.specific_storage])
         return headers, rows
 

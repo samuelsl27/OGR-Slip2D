@@ -112,12 +112,11 @@ def _letters(text):
 
 
 #: The f-strings that stay, each with its reason: the window title carries
-#: the product's name and the PROJECT's name (data: a new project is named
-#: "Untitled", the demo "Demo slope"), and the report's file name.
+#: the product's name and the PROJECT's name, and the report's file name.
+#: v0.1.433 (D411): the titles of a new project and of the demo use the
+#: project's label (a default name translated), so they are the third.
 _DATA = {
     "OGR Slip2D v{} — OpenGeoRock Suite",
-    "OGR Slip2D v{} — Untitled",
-    "OGR Slip2D v{} — Demo slope",
     "OGR Slip2D v{} — {}",
     # v0.1.370 (D344): the report's file name goes through tr() now
 }

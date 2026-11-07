@@ -37,7 +37,7 @@ Pequeñas y verificables. Cada versión se cierra con `/release`:
   - menú y gris.
 - [x] 8. Español de todo texto nuevo, y menú alcanzable.
 
-## 0.1.442 — Solver
+## 0.1.444 — Solver
 
 - [ ] 9. `ogr_slip2d/sarma/solver.py`: recurrencia, H(F), raíz mayor (barrido y Brent), sentido fijo y
       cinemático, Kc(1), normales y fuerzas de cara, y motivos con código.
@@ -53,7 +53,7 @@ Pequeñas y verificables. Cada versión se cierra con `/release`:
   - la raíz junto a un polo;
   - tolerancia e iteraciones mueven el número.
 
-## 0.1.443 — Cuñas
+## 0.1.445 — Cuñas
 
 - [ ] 12. `ogr_slip2d/sarma/wedges.py` y `angles.py`, con:
   - fronteras y políticas de ángulo;
@@ -76,7 +76,7 @@ Pequeñas y verificables. Cada versión se cierra con `/release`:
   - «solo bases» se aparta;
   - cada rechazo.
 
-## 0.1.444 — Método registrado
+## 0.1.446 — Método registrado
 
 - [ ] 15. `SarmaNonVertical`. Funciona con `cls()` a pelo.
 - [ ] 16. Puertas del motor:
@@ -99,7 +99,7 @@ Pequeñas y verificables. Cada versión se cierra con `/release`:
 - [ ] 21. Documentación: `architecture.md`, `plugins.md`, `guide.py`, README y AGENTS.md.
 - [ ] 22. Test `tests/test_sarma_method_v1439.py`. Cubre los criterios de «Integración» de `spec.md`.
 
-## 0.1.445 — Datos por vértice
+## 0.1.447 — Datos por vértice
 
 - [ ] 23. Ángulo, c y φ por vértice en `UserPolylineSurface` y en la superficie del motor, por coordenadas.
 - [ ] 24. API (`sarma` en `user_surface_add` y `surface_evaluate`, y `user_surface_edit`), MCP y
@@ -112,16 +112,16 @@ Pequeñas y verificables. Cada versión se cierra con `/release`:
   - las precedencias;
   - F/γ.
 
-## 0.1.446 — Interpret
+## 0.1.448 — Interpret
 
 - [ ] 28. Cuñas como polígonos, selección, diagrama de cuerpo libre, filas de cara y tabla del informe.
 
-## 0.1.447 — Herramienta de ángulos
+## 0.1.449 — Herramienta de ángulos
 
 - [ ] 29. Definir y quitar ángulos con el ratón o tecleando, atajos en el vértice y deshacer, con sus tests en
       el lienzo mostrado.
 
-## 0.1.448 — Ángulos optimizados
+## 0.1.450 — Ángulos optimizados
 
 - [ ] 30. Digitalizar las figuras 1.2 y 1.3 del problema 1, con la lectura declarada.
 - [ ] 31. Optimizador determinista; `optimized_global` y `optimized_all`; Block y Path con la crítica

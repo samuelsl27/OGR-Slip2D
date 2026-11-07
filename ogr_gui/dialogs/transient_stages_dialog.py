@@ -46,6 +46,17 @@ from ogr_gui.dialog_size import open_at_content_size
 from ogr_gui.i18n import tr  # noqa: E402
 
 
+def stage_label(label: str, own_bcs: bool) -> str:
+    """A stage's label without the « [BC]» that versions up to 0.1.432
+    wrote into it on a capture (v0.1.433, D411): the flag is shown from the
+    stage's own conditions now, so an old file's label loses it on screen and
+    on the next OK. Only a stage that has its conditions is touched."""
+    import re
+    if not own_bcs:
+        return label
+    return re.sub(r"\s*\[BC\]\s*$", "", label)
+
+
 class TransientStagesDialog(QDialog):
     """Edit the transient stages and FEA options."""
 
@@ -87,16 +98,21 @@ class TransientStagesDialog(QDialog):
         v.addWidget(self.lbl_excl)
 
         v.addWidget(QLabel(tr("Stages:")))
-        self.table = QTableWidget(0, 3)
+        # v0.1.433 (D411) -- a column says which stages bring their own
+        # conditions: the capture wrote « [BC]» into the stage's LABEL, which
+        # the .ogr keeps and the agent reads, in English
+        self.table = QTableWidget(0, 4)
         self.table.setHorizontalHeaderLabels(
-            [tr("Time"), tr("Calculate SF"), tr("Label")])
+            [tr("Time"), tr("Calculate SF"), tr("Label"), tr("Conditions")])
         self.table.horizontalHeader().setStretchLastSection(True)
         for i, st in enumerate(settings.transient_stages):
+            own = bool(st.get("bcs"))
             self._add_row(st.get("time", 0.0),
                           bool(st.get("calculate_sf", False)),
-                          str(st.get("label", "")))
-            if st.get("bcs"):
+                          stage_label(str(st.get("label", "")), own))
+            if own:
                 self._stage_bcs[i] = st["bcs"]
+                self._mark_own_bcs(i)
         v.addWidget(self.table, 1)
 
         # v0.1.315 (D293) — two rows: in Spanish the four buttons of one
@@ -222,7 +238,16 @@ class TransientStagesDialog(QDialog):
         chk.setCheckState(Qt.Checked if calc_sf else Qt.Unchecked)
         self.table.setItem(r, 1, chk)
         self.table.setItem(r, 2, QTableWidgetItem(label))
+        own = QTableWidgetItem("")
+        own.setFlags(Qt.ItemIsEnabled)
+        self.table.setItem(r, 3, own)
         self._refresh_notes()
+
+    def _mark_own_bcs(self, r: int) -> None:
+        """Say in the stage's own column that it brings its conditions."""
+        item = QTableWidgetItem(tr("captured"))
+        item.setFlags(Qt.ItemIsEnabled)
+        self.table.setItem(r, 3, item)
 
     def _capture(self) -> None:
         """Snapshot the current boundary conditions into the selected
@@ -235,11 +260,7 @@ class TransientStagesDialog(QDialog):
                                     tr("Select a stage first."))
             return
         self._stage_bcs[r] = self._current_bcs.to_dict()
-        item = self.table.item(r, 2)
-        label = item.text() if item else ""
-        if "[BC]" not in label:
-            self.table.setItem(r, 2,
-                               QTableWidgetItem((label + " [BC]").strip()))
+        self._mark_own_bcs(r)
 
     def _capture_initial(self) -> None:
         """Keep the current boundary conditions as the initial state."""

@@ -318,6 +318,9 @@ def _solve_transient(project, mesh, props, gamma_w, *, progress_cb=None):
             calculate_sf=bool(st.get("calculate_sf")),
             label=str(st.get("label", "")),
             bcs=stage_boundary_conditions(project, st, current),
+            # v0.1.433 (D411) -- the stage's own conditions, as the stages
+            # dialog reads them: ``bcs`` is never None here
+            own_bcs=bool(st.get("bcs")),
         ))
     results = solver.solve_transient(stages, initial_bcs=initial)
     if not _has_field(results):

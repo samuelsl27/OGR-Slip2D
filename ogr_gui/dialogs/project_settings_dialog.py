@@ -597,13 +597,11 @@ class _GroundwaterPage(QWidget):
         # tr() entirely (rule 2). The wording follows the usual naming of
         # each procedure so it stays searchable against the literature.
         self.cbo_drawdown = QComboBox()
-        for label, val in [
-            (tr("Effective Stress using B-bar"), "b_bar"),
-            (tr("Duncan, Wright, Wong 3 Stage (1990)"), "duncan_wright"),
-            (tr("Army Corp. Eng. 2 Stage (1970)"), "corps_2"),
-            (tr("Lowe and Karafiath (1960)"), "lowe_karafiath"),
-        ]:
-            self.cbo_drawdown.addItem(label, val)
+        # v0.1.433 (D411) -- the names live in ogr_gui.labels, where the
+        # coded notes read them too (they printed the identifiers)
+        from ogr_gui.labels import DRAWDOWN_PROCEDURE, drawdown_procedure_label
+        for val in DRAWDOWN_PROCEDURE:
+            self.cbo_drawdown.addItem(drawdown_procedure_label(val), val)
         # v0.1.69 — B-bar used to be exempt from both requirements and
         # from the convention, which is what let it return the factor of
         # safety from before the drawdown. All four now share them.

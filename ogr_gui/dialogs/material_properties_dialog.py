@@ -417,8 +417,12 @@ class _StrengthParamPanel(QWidget):
             si_value = float(current_params.get(name, default))
             # Convert to display
             user_value = self._si_to_user(si_value, quantity_id, sys_obj)
+            # v0.1.433 (D411) -- «°» where the core writes «deg», as Define
+            # Support: the wider census of the review read « deg» here
+            from ogr_gui.labels import unit_symbol
             user_label = self._unit_label(quantity_id,
-                                          unit if unit != "-" else "")
+                                          unit_symbol(unit) if unit != "-"
+                                          else "")
 
             # v0.1.192 (D181) — was a QDoubleSpinBox with 4 decimals, which
             # rounded every value it was given; see ``_PreciseSpinBox``.

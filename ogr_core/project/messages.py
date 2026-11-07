@@ -205,7 +205,8 @@ _OVERLAP_DETAIL = (
 REFUSALS = {s.code: s for s in (
     MessageSpec(OPTIMIZE_TECHNIQUE_UNKNOWN,
                 "Unknown optimisation technique {value!r}: it has to be one of "
-                "{allowed}."),
+                "{allowed}.",
+                kinds=(("allowed", "technique_list"),)),       # v0.1.433
     MessageSpec(SLOPE_LIMIT_WINDOWS_OVERLAP,
                 "The two sets of Slope Limits overlap ([{a0:g}, {a1:g}] and "
                 "[{b0:g}, {b1:g}]). " + _OVERLAP_DETAIL),

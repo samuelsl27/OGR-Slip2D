@@ -405,11 +405,18 @@ class StatisticsWindow(QMainWindow):
         # not matter": the one thing the run cannot claim about a parameter
         # it never applied. It is named in the status line instead.
         refused = [vs for vs in sweeps.values() if vs.note]
+        # v0.1.433 (D411) -- each variable as Define Random Variables names
+        # it: the legend, the ranking and the lists printed the stored label
+        # («Mat1 — friction_angle»)
+        from ogr_gui.labels import variable_label
+
+        def name(key, stored):
+            return variable_label(self.project, key, stored)
         for vs in sweeps.values():
             if vs.note:
                 continue
             ax.plot(vs.percent_of_range(), vs.fos, marker="",
-                    label=vs.label)
+                    label=name(vs.key, vs.label))
         ax.axhline(1.0, color="crimson", lw=1.6, ls="-",
                    label=(tr("over-design factor = 1") if self.factored
                           else "FS = 1"))
@@ -419,9 +426,9 @@ class StatisticsWindow(QMainWindow):
         ax.legend(fontsize=8)
         self._show(fig)
         rows = self.sens.ranking(mid)
-        delta = tr("Δ over-design factor") if self.factored else "ΔFoS"
-        txt = "   |   ".join(f"{lab}: {delta} {span:.4f}"
-                             for _k, lab, span in rows[:5])
+        delta = tr("Δ over-design factor") if self.factored else tr("ΔFoS")
+        txt = "   |   ".join(f"{name(key, lab)}: {delta} {span:.4f}"
+                             for key, lab, span in rows[:5])
         # v0.1.423 (D372) — a hydraulic variable is refused too, and "no
         # longer in the model" would be false for it: each says its reason.
         from ogr_slip2d.stat_messages import VAR_HYDRAULIC
@@ -430,12 +437,12 @@ class StatisticsWindow(QMainWindow):
         orphans = [vs for vs in refused if vs not in hydraulic]
         if orphans:
             txt += ("   |   " + tr("not swept, no longer in the model: ")
-                    + ", ".join(vs.label for vs in orphans))
+                    + ", ".join(name(vs.key, vs.label) for vs in orphans))
         if hydraulic:
             txt += ("   |   "
                     + tr("not swept, hydraulic (the seepage is not solved "
                          "again): ")
-                    + ", ".join(vs.label for vs in hydraulic))
+                    + ", ".join(name(vs.key, vs.label) for vs in hydraulic))
         self.status.setText(tr("Most influential first — ") + txt)
 
     # ==================================================================

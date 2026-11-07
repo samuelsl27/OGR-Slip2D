@@ -320,15 +320,12 @@ class SurfaceOptionsDialog(QDialog):
         # v0.1.320 (D300) — through tr(): handed to addItem by subscript,
         # these were the one table of the dialog the AST census cannot see,
         # and they showed in English with the interface in Spanish.
-        self._method_labels = {
-            SearchMethod.GRID_SEARCH: tr("Grid Search"),
-            SearchMethod.SLOPE_SEARCH: tr("Slope Search"),
-            SearchMethod.AUTO_REFINE: tr("Auto Refine Search"),
-            SearchMethod.BLOCK_SEARCH: tr("Block Search"),
-            SearchMethod.PATH_SEARCH: tr("Path Search"),
-            SearchMethod.SIMULATED_ANNEALING: tr("Simulated Annealing"),
-            SearchMethod.PARTICLE_SWARM: tr("Particle Swarm Search"),
-        }
+        # v0.1.433 (D411) -- the names live in ogr_gui.labels, where the
+        # status bar and the Information Viewer read them too (they printed
+        # the identifier)
+        from ogr_gui.labels import SEARCH_METHOD, search_method_label
+        self._method_labels = {m: search_method_label(m)
+                               for m in SEARCH_METHOD}
 
         root.addWidget(header)
 

@@ -167,9 +167,18 @@ def support_tip(support, mode: DataTipMode = DataTipMode.MAXIMUM,
         lines.append(tr('from ({0:.3f}, {1:.3f}) to ({2:.3f}, {3:.3f})').format(tail.x, tail.y, head.x, head.y))
         lines.append(_line("length", math.dist((tail.x, tail.y),
                                                (head.x, head.y))))
+    # v0.1.433 (D411) -- a choice by its label, as Define Support and the
+    # Support Properties Table name it: the tip read «modo de rotura: shear»
+    # (the owner's decision on the review of 0.1.433)
+    from ogr_gui.labels import SUPPORT_CHOICES, support_choice_label
     for key in (getattr(stype, "PARAMETERS", {}) or {}):
         v = getattr(stype, key, None)
-        if v is not None:
+        if v is None:
+            continue
+        if key in SUPPORT_CHOICES:
+            lines.append("  %s: %s" % (param_label(key),
+                                       support_choice_label(key, v)))
+        else:
             lines.append("  " + _line(key, v))
     # v0.1.322 (D300) — the enum's value (``active``) was the text.
     for attr, template, name_of in (

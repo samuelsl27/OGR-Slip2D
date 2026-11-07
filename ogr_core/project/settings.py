@@ -1359,9 +1359,14 @@ class AdvancedSettings:
         return cls(**{k: v for k, v in data.items() if k in known})
 
 
+#: The title a project's summary is born with: data, in English, shown
+#: translated by the report when it is still this one (v0.1.433, D411).
+DEFAULT_SUMMARY_TITLE = "Untitled Project"
+
+
 @dataclass
 class ProjectSummary:
-    title: str = "Untitled Project"
+    title: str = DEFAULT_SUMMARY_TITLE
     analysis: str = ""
     author: str = "Samuel Sáez López"
     company: str = "UPCT"

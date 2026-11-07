@@ -265,8 +265,18 @@ def _explicit(w):
             lambda: EditCoordinatesDialog(p.boundaries[0], w),
         "ChangeSlopeAngleDialog": lambda: ChangeSlopeAngleDialog(45.0, w),
         "GeometryCleanupDialog":
-            lambda: GeometryCleanupDialog("Geometry cleanup report", w),
+            # v0.1.433 (D411) -- the report the window writes, not an
+            # English fixture: the screen census reads it in Spanish
+            lambda: GeometryCleanupDialog(_cleanup_report(w), w),
     }
+
+
+def _cleanup_report(w):
+    """The Geometry Cleanup report of ``w``'s model, as the window writes it
+    (v0.1.433, D411: an English fixture stood in for it)."""
+    from ogr_core.geometry.cleanup import inspect_boundaries
+    rep = inspect_boundaries(w.project.boundaries)
+    return "\n".join(w._geometry_cleanup_lines(rep, w.project.boundaries))
 
 
 def _census(w):

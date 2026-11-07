@@ -93,8 +93,10 @@ class OptimizeSettingsDialog(QDialog):
         # the whole surface in bounded sub-problems, and does not read the
         # two controls it greys out below.
         self.cb_technique = QComboBox()
-        self.cb_technique.addItem(tr("Monte Carlo"), "monte_carlo")
-        self.cb_technique.addItem(tr("Surface Altering"), "surface_altering")
+        # v0.1.433 (D411) -- the names live in ogr_gui.labels
+        from ogr_gui.labels import OPTIMIZE_TECHNIQUE, optimize_technique_label
+        for value in OPTIMIZE_TECHNIQUE:
+            self.cb_technique.addItem(optimize_technique_label(value), value)
         self.cb_technique.setToolTip(tr(
             "Monte Carlo moves one vertex at a time at random. Surface "
             "Altering moves the ends along the ground and reshapes the whole "
