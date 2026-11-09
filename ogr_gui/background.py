@@ -230,7 +230,9 @@ def write_results_file(path, result, project_id: str) -> str:
             tmp.unlink(missing_ok=True)
         except OSError:
             pass
-        return f"{type(exc).__name__}: {exc}"
+        # v0.1.434 (D412) -- its type kept (D74), its text through its code
+        from ogr_gui.core_messages import error_text
+        return f"{type(exc).__name__}: {error_text(exc)}"
 
 
 class ResultsWriter(QThread):

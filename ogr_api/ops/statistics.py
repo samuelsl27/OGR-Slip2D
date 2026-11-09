@@ -145,7 +145,9 @@ def random_variable_set(ws, key: str, project_id: Optional[str] = None,
         return {"variable": _rv_info(rv), "defined": len(new),
                 "notes": notes}
 
-    return ws.mutate(project_id, f"Random variable {key}", edit)
+    # v0.1.434 (D412) -- with its code: the window names the variable
+    from ogr_core.project.step_names import RANDOM_VARIABLE, step_name
+    return ws.mutate(project_id, step_name(RANDOM_VARIABLE, key=key), edit)
 
 
 @operation("random_variable_delete", toolset="statistics", mutates=True)
@@ -165,7 +167,9 @@ def random_variable_delete(ws, key: str,
             list(project.random_variables), key)
         return {"removed": [key]}
 
-    return ws.mutate(project_id, f"Delete random variable {key}", edit)
+    from ogr_core.project.step_names import (
+        delete_random_variable_step_name)
+    return ws.mutate(project_id, delete_random_variable_step_name(key), edit)
 
 
 # ----------------------------------------------------------------------

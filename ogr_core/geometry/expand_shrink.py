@@ -52,6 +52,7 @@ import math
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
+from . import messages as M
 from .primitives import Polyline, Vertex
 
 
@@ -79,20 +80,22 @@ def expand_shrink_external(
 ) -> ExpandShrinkResult:
     """Main entry point. See module docstring for the algorithm."""
     if not external.closed:
-        raise ExpandShrinkError("External must be a closed polyline.")
+        # v0.1.434 (D412) -- each refusal carries its code: ``str(exc)`` is
+        # the English it was, the window says it in the reader's language
+        raise ExpandShrinkError(M.geometry_message(M.EXTERNAL_NOT_CLOSED))
     ext_verts = list(external.vertices)
     # Normalise: drop a duplicated last = first vertex if present
     if ext_verts and ext_verts[0] == ext_verts[-1]:
         ext_verts = ext_verts[:-1]
     if len(ext_verts) < 3:
-        raise ExpandShrinkError("External has too few vertices.")
+        raise ExpandShrinkError(M.geometry_message(M.EXTERNAL_TOO_FEW))
     # Ensure CCW for predictable arc walking
     if _signed_area(ext_verts) < 0:
         ext_verts = list(reversed(ext_verts))
 
     pl_verts = list(polyline.vertices)
     if len(pl_verts) < 2:
-        raise ExpandShrinkError("Polyline needs at least 2 vertices.")
+        raise ExpandShrinkError(M.geometry_message(M.POLYLINE_TOO_FEW))
 
     # Locate where first and last points of the polyline lie on the External
     first = pl_verts[0]
@@ -101,9 +104,7 @@ def expand_shrink_external(
     cut2 = _locate_on_perimeter(ext_verts, last, tolerance)
     if cut1 is None or cut2 is None:
         raise ExpandShrinkError(
-            "Both endpoints of the polyline must lie on the External "
-            "Boundary (use snap — green cross)."
-        )
+            M.geometry_message(M.ENDPOINTS_OFF_EXTERNAL))
 
     # Replace the literal first/last points with the exact snap locations
     pl_verts[0] = Vertex(cut1.x, cut1.y)
@@ -162,11 +163,7 @@ def expand_shrink_external(
             removed_verts = [cut1_v] + arc_fwd + [cut2_v]
         # Sanity: result must be strictly larger than original
         if abs(_signed_area(new_verts)) < orig_area * 0.99:
-            raise ExpandShrinkError(
-                "Expand produced a smaller polygon — intermediate "
-                "points are probably INSIDE the External. Use Shrink, "
-                "or redraw with points outside."
-            )
+            raise ExpandShrinkError(M.geometry_message(M.EXPAND_SMALLER))
     else:
         # Shrink: discard the SHORTER arc (the reference's rule).
         len_fwd = _arc_length([cut1_v] + arc_fwd + [cut2_v])
@@ -441,7 +438,7 @@ def apply_expand_shrink(project, polyline: Polyline, *,
 
     ext = project.external_boundary()
     if ext is None:
-        raise ExpandShrinkError("The model has no External boundary.")
+        raise ExpandShrinkError(M.geometry_message(M.NO_EXTERNAL))
     result = expand_shrink_external(ext.polyline, polyline, tolerance)
     idx = project.boundaries.index(ext)
     project.boundaries[idx] = dataclasses.replace(
@@ -469,7 +466,7 @@ def apply_external_offset(project, distance: float) -> Polyline:
 
     ext = project.external_boundary()
     if ext is None:
-        raise ExpandShrinkError("The model has no External boundary.")
+        raise ExpandShrinkError(M.geometry_message(M.NO_EXTERNAL))
     new_poly = offset_polygon(ext.polyline, distance)
     new_poly = dataclasses.replace(new_poly, id=ext.polyline.id)
     idx = project.boundaries.index(ext)

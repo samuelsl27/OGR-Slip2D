@@ -183,28 +183,32 @@ def parse_record_text(text: str, unit: AccelerationUnit,
             continue
         if nums:
             rows.append(nums)
+    # v0.1.434 (D412) -- each note carries its code: the English is the one
+    # it was, and the dialog says it in the reader's language
+    from .messages import (NEEDS_INTERVAL, NO_NUMERIC_DATA, STEP_NOT_CONSTANT,
+                           TIME_NOT_INCREASING, TOO_FEW_SAMPLES, seismic_note)
     if not rows:
-        return [], (dt or 0.0), "no numeric data"
+        return [], (dt or 0.0), seismic_note(NO_NUMERIC_DATA)
 
     note = ""
     if len(rows[0]) >= 2:
         pairs = [r for r in rows if len(r) >= 2]
         if len(pairs) < 2:
-            return [], (dt or 0.0), "fewer than two samples"
+            return [], (dt or 0.0), seismic_note(TOO_FEW_SAMPLES)
         times = [r[0] for r in pairs]
         accel = [r[1] for r in pairs]
         step = times[1] - times[0]
         if step <= 0:
-            return [], (dt or 0.0), "non-increasing time column"
+            return [], (dt or 0.0), seismic_note(TIME_NOT_INCREASING)
         spread = max(abs((times[i + 1] - times[i]) - step)
                      for i in range(len(times) - 1))
         if spread > 1e-6 * step:
-            note = "time step is not constant"
+            note = seismic_note(STEP_NOT_CONSTANT)
     else:
         # One number per line: the interval has to come from outside.
         accel = [r[0] for r in rows]
         if dt is None or dt <= 0:
-            return [], 0.0, "single-column file needs a time interval"
+            return [], 0.0, seismic_note(NEEDS_INTERVAL)
         step = dt
 
     div = unit.per_g

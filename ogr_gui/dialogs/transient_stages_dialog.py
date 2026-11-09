@@ -325,8 +325,11 @@ class TransientStagesDialog(QDialog):
                 max_iterations=self.sp_iter.value(),
                 time_steps=self.sp_steps.value())
         except ValueError as exc:
+            # v0.1.434 (D412) -- through the one reader of an exception
+            # (the same: these sentences have their entries)
+            from ogr_gui.core_messages import error_text
             QMessageBox.warning(self, tr("Transient Groundwater"),
-                                tr(str(exc)))
+                                error_text(exc))
             return
         # Always written: clearing the initial state is a change too.
         self.settings.transient_initial_bcs = self._initial_bcs

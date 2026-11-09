@@ -142,27 +142,36 @@ STAT_NOTES = {s.code: s for s in (
     MessageSpec(NO_RANGE,
                 "No variable has a range: enter a relative minimum and "
                 "maximum for at least one parameter."),
+    # v0.1.434 (D412) -- a variable is named by its key («hydraulic:<uuid>:ks»),
+    # which the agent uses; the window names it by its label (``variable_*``)
     MessageSpec(VARS_NONE,
-                "none of the {n} random variables matches the model: {keys}"),
+                "none of the {n} random variables matches the model: {keys}",
+                kinds=(("keys", "variable_keys"),)),
     MessageSpec(VARS_NOT_SAMPLED,
                 "{n} of the {total} random variables no longer match the "
-                "model and were not sampled: {keys}"),
+                "model and were not sampled: {keys}",
+                kinds=(("keys", "variable_keys"),)),
     MessageSpec(VARS_NOT_SWEPT,
                 "{n} of the {total} random variables no longer match the "
-                "model and were not swept: {keys}"),
-    MessageSpec(VAR_ORPHAN, "no longer matches the model: {key}"),
+                "model and were not swept: {keys}",
+                kinds=(("keys", "variable_keys"),)),
+    MessageSpec(VAR_ORPHAN, "no longer matches the model: {key}",
+                kinds=(("key", "variable_key"),)),
     MessageSpec(VARS_HYDRAULIC_ONLY,
                 "Every random variable is hydraulic ({keys}), and no "
                 "statistical run solves the seepage again for each sample, "
                 "so none of them can move a factor of safety and nothing was "
-                "computed."),
+                "computed.",
+                kinds=(("keys", "variable_keys"),)),
     MessageSpec(VARS_HYDRAULIC,
                 "{n} of the {total} random variables are hydraulic and reach "
                 "no factor of safety, because no statistical run solves the "
-                "seepage again for each sample: {keys}"),
+                "seepage again for each sample: {keys}",
+                kinds=(("keys", "variable_keys"),)),
     MessageSpec(VAR_HYDRAULIC,
                 "hydraulic, and the seepage is not solved again for each "
-                "point, so it was not swept: {key}"),
+                "point, so it was not swept: {key}",
+                kinds=(("key", "variable_key"),)),
     MessageSpec(SAMPLES_BREAK_RULES,
                 "{n} of the {total} samples break a rule for which the "
                 "analysis is refused, and were evaluated anyway: {rules}",
@@ -280,11 +289,13 @@ STAT_NOTES = {s.code: s for s in (
     MessageSpec(HEAD_SENS_MASS,
                 "The sweep of {label} answered for another sliding mass of the "
                 "deterministic circle at {n} of {total} points, from {lo:g} "
-                "to {hi:g}"),
+                "to {hi:g}",
+                kinds=(("label", "variable_label"),)),
     MessageSpec(HEAD_SENS_CASE,
                 "The sweep of {label} answered for another weak-layer case of "
                 "the deterministic surface at {n} of {total} points, from "
-                "{lo:g} to {hi:g}"),
+                "{lo:g} to {hi:g}",
+                kinds=(("label", "variable_label"),)),
     MessageSpec(RAISED, "raised {exc}"),
     MessageSpec(NO_RESULT, "no result"),
     MessageSpec(CODE_120, "-120 tensile stress"),

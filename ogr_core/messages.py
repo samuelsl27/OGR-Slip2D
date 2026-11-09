@@ -126,6 +126,26 @@ class Coded(str):
         return (Coded, (str(self), self.code, self.args))
 
 
+class Joined(str):
+    """Several names in one field, joined by ``sep`` as the engine always
+    wrote them, keeping each one and what it refers to (v0.1.434, D412).
+
+    It IS the joined text, so the English and the agent's JSON do not
+    change. A reader that names them one by one (a support by the class of
+    its set) reads ``items`` and ``refs`` instead of splitting the text: a
+    name the user gave may hold the separator (review of 0.1.434).
+    """
+
+    def __new__(cls, items, sep: str = ", ", refs=()):
+        items = tuple(str(i) for i in items)
+        self = str.__new__(cls, sep.join(items))
+        self.items, self.sep, self.refs = items, sep, tuple(refs)
+        return self
+
+    def __reduce__(self):
+        return (Joined, (self.items, self.sep, self.refs))
+
+
 def coded(catalogue: dict, code: str, **args) -> Coded:
     """The message ``code`` with ``args``: its English sentence, carrying the
     code and the values (v0.1.347, D335)."""

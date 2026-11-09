@@ -1253,16 +1253,15 @@ class _DesignStandardPage(QWidget):
         form.addRow("", self.chk_enabled)
 
         self.cbo_std = QComboBox()
-        for value, label in (
-            # v0.1.325 (D318) — its own key: «Norma de diseño: Ninguna»,
-            # where the generic «None» read «Ninguno»
-            ("none", tr("No standard")),
-            ("eurocode7_da1c1", tr("Eurocode 7 — DA1 Combination 1")),
-            ("eurocode7_da1c2", tr("Eurocode 7 — DA1 Combination 2")),
-            ("eurocode7_da2", tr("Eurocode 7 — DA2")),
-            ("eurocode7_da3", tr("Eurocode 7 — DA3")),
-            ("custom", tr("Custom")),
-        ):
+        # v0.1.434 (D412) -- the names of ``labels.DESIGN_STANDARD``, the
+        # table the notes and the report name a standard by («Custom
+        # standard» / «Norma personalizada», the owner's decision). «none»
+        # keeps its own key: v0.1.325 (D318) -- «Norma de diseño: Ninguna»,
+        # where the generic «None» read «Ninguno»
+        from ogr_gui.labels import DESIGN_STANDARD
+        for value in DESIGN_STANDARD:
+            label = (tr("No standard") if value == "none"
+                     else tr(DESIGN_STANDARD[value]))
             self.cbo_std.addItem(label, value)
         i = self.cbo_std.findData(self.s.standard)
         self.cbo_std.setCurrentIndex(max(0, i))
@@ -1351,11 +1350,15 @@ class _DesignStandardPage(QWidget):
             "loads never."))
         form.addRow("", self.chk_anchor)
 
+        # v0.1.434 (review) -- the entry by the name the combo gives it,
+        # which the owner's decision changed («Custom standard»)
+        from ogr_gui.labels import DESIGN_STANDARD
         note = QLabel(tr(
             "Off by default: applying partial factors silently would "
             "change every factor of safety previously compared against, "
             "so it has to be an explicit choice. Selecting a standard "
-            "loads its factors; choose Custom to enter your own."))
+            "loads its factors; choose {0} to enter your own.").format(
+                tr(DESIGN_STANDARD["custom"])))
         note.setWordWrap(True)
         form.addRow("", note)
         self._on_enabled(self.chk_enabled.isChecked())

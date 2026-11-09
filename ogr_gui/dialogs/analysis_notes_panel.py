@@ -50,7 +50,7 @@ from ogr_gui.dialog_size import hold_wrapped_height
 _MODEL_GROUP = "Model"
 
 
-def _split(note) -> tuple:
+def _split(note, project=None) -> tuple:
     """``(group, sentence)`` for one note, in the reader's language.
 
     v0.1.347 (D335) -- the rule lives in ``core_messages.note_group``, which
@@ -58,7 +58,7 @@ def _split(note) -> tuple:
     through, so a test of ``_split`` is a test of what the panel shows.
     """
     from ogr_gui.core_messages import note_group
-    group, sentence = note_group(note)
+    group, sentence = note_group(note, project=project)
     return group or _MODEL_GROUP, sentence
 
 
@@ -134,9 +134,13 @@ class AnalysisNotesPanel(QDialog):
             "decided or could not do; none of them changes a factor of "
             "safety.") % total)
 
+        # v0.1.434 (D412) -- the project names what only it knows (a random
+        # variable by its key); asked of the window at each fill, so it is
+        # the project the window has now
+        project = self._naming_scope()
         groups: dict = {}
         for note in self.notes:
-            group, sentence = _split(note)
+            group, sentence = _split(note, project)
             groups.setdefault(group, []).append(sentence)
 
         # The model-wide notes first: they are about the problem as posed,
@@ -167,7 +171,17 @@ class AnalysisNotesPanel(QDialog):
                     top.addChild(holder)
                     holder.setExpanded(True)
                 for n in ns:
-                    holder.addChild(QTreeWidgetItem([note_line(n)]))
+                    holder.addChild(QTreeWidgetItem([note_line(
+                        n, project=project)]))
+
+    def _naming_scope(self):
+        """What the notes are said against: the window's ``notes_scope()``
+        -- its project, and the random variables of its last statistical
+        run, which a note names after the user deleted one (review of
+        0.1.434) -- else its project."""
+        parent = self.parent()
+        scope = getattr(parent, "notes_scope", None)
+        return scope() if callable(scope) else getattr(parent, "project", None)
 
     # ==================================================================
     def _copy_all(self) -> None:
@@ -184,10 +198,12 @@ class AnalysisNotesPanel(QDialog):
         clip = QApplication.clipboard()
         if clip is not None:
             # v0.1.347 (D335) -- what the panel shows, in its language
-            lines = [note_line(n) for n in self.notes]
+            project = self._naming_scope()
+            lines = [note_line(n, project=project) for n in self.notes]
             # v0.1.363 (D340) -- and each other calculation's, with its name
             for title, parts in getattr(self, "sections", ()):
                 for sub, ns in parts:
                     head = title if sub is None else "%s, %s" % (title, sub)
-                    lines += ["%s: %s" % (head, note_line(n)) for n in ns]
+                    lines += ["%s: %s" % (head, note_line(
+                        n, project=project)) for n in ns]
             clip.setText("\n".join(lines))

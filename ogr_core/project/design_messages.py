@@ -34,9 +34,12 @@ IDENTITY = D + "identity"
 
 DESIGN_NOTES = {s.code: s for s in (
     MessageSpec(NONE, "no partial factors applied"),
+    # v0.1.434 (D412) -- the standard is its stored id («eurocode7_da1c2»):
+    # the window names it (``design_standard``), the agent reads the id
     MessageSpec(SUMMARY,
                 "{standard}: {materials} material(s) and {loads} load(s) "
-                "factored"),
+                "factored",
+                kinds=(("standard", "design_standard"),)),
     MessageSpec(MATERIAL, "Material {name!r}: {note}."),
     MessageSpec(SEISMIC_NOT_APPLIED,
                 "Seismic: the factor {factor:g} is not applied — the run "

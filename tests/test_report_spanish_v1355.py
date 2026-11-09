@@ -324,8 +324,10 @@ class TestWithTheWindowsTranslateItIsSpanish:
             assert expected in texts, (expected, texts[:30])
         assert any(t.startswith("Método: %s — FSD = " % bishop)
                    for t in texts), texts
-        assert ("eurocode7_da1c1: 0 material(es) y 0 carga(s) afectados por "
-                "los coeficientes") in texts
+        # v0.1.434 (D412) -- the summary names the standard: it printed the
+        # id («eurocode7_da1c1: …»)
+        assert ("Eurocódigo 7 — DA1 Combinación 1: 0 material(es) y 0 "
+                "carga(s) afectados por los coeficientes") in texts
         assert any("Peso del terreno: el coeficiente de las acciones "
                    "permanentes 1.35" in t for t in texts)
 
@@ -363,8 +365,10 @@ class TestWhoPassesIt:
     def test_the_window_does_and_the_api_does_not(self):
         flat = " ".join((_ROOT / "ogr_gui" / "main_window.py").read_text(
             encoding="utf-8").split())
+        # v0.1.434 (D412) -- and the standard's name
         assert ("factor_report=factor_report, figures=figures, "
-                "translate=note_text, method_name=method_name)") in flat
+                "translate=note_text, method_name=method_name, ") in flat
+        assert "standard_name=design_standard_label)" in flat
         api = (_ROOT / "ogr_api" / "ops" / "files.py").read_text(
             encoding="utf-8")
         assert "translate" not in api

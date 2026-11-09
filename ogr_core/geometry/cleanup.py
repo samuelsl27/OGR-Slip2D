@@ -291,14 +291,19 @@ def simplify_boundary(b: Boundary, epsilon: float) -> Boundary:
     """
     import dataclasses
 
+    # v0.1.434 (D412) -- the refusals carry their codes; ``str(exc)`` is the
+    # English it was
+    from .messages import (TOLERANCE_NOT_POSITIVE, TOLERANCE_TOO_COARSE,
+                           geometry_message)
+
     if not epsilon > 0:
-        raise ValueError("the simplification tolerance must be positive")
+        raise ValueError(geometry_message(TOLERANCE_NOT_POSITIVE))
     simplified = simplify_rdp(b.polyline, epsilon)
     need = 3 if b.polyline.closed else 2
     if len(simplified.vertices) < need:
-        raise ValueError(
-            f"a tolerance of {epsilon:g} leaves {len(simplified.vertices)} "
-            f"vertices; this boundary needs at least {need}")
+        raise ValueError(geometry_message(
+            TOLERANCE_TOO_COARSE, epsilon=epsilon,
+            n=len(simplified.vertices), need=need))
     poly = dataclasses.replace(b.polyline,
                                vertices=list(simplified.vertices))
     return dataclasses.replace(b, polyline=poly)

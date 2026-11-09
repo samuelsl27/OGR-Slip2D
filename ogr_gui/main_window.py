@@ -174,7 +174,8 @@ class _ComputeWorker(QThread):
             # bad model, so a broken call signature reads as "analysis
             # failed". The type name is included for that reason — it is
             # the only thing that distinguishes the two on screen.
-            self.failed.emit(f"{type(e).__name__}: {e}")
+            from .core_messages import error_text
+            self.failed.emit(f"{type(e).__name__}: {error_text(e)}")
 
 
 # ======================================================================
@@ -233,7 +234,8 @@ class _DrawdownSweepWorker(QThread):
                 return
             self.finished_result.emit(self.result)
         except Exception as e:  # noqa: BLE001
-            self.failed.emit(f"{type(e).__name__}: {e}")
+            from .core_messages import error_text
+            self.failed.emit(f"{type(e).__name__}: {error_text(e)}")
 
 
 # ======================================================================
@@ -278,7 +280,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.433"
+    VERSION = "0.1.434"
 
     def __init__(self) -> None:
         super().__init__()
@@ -311,6 +313,10 @@ class MainWindow(QMainWindow):
         # to get its critical surfaces, so merging would have the run erase
         # its own note.
         self.last_statistics_notes: list[str] = []
+        # v0.1.434 (D412, review) -- the random variables of the run that
+        # wrote those notes: a note names a variable by its key, and the
+        # one it names may be deleted since (``notes_scope``)
+        self.last_statistics_variables: list = []
         # v0.1.363 (D340) — the notes of the calculations that are not
         # Compute (back analysis, optimisation, drawdown sweep, transient),
         # one entry each, ``[(subtitle or None, notes)]``. Every one of them
@@ -1282,7 +1288,9 @@ class MainWindow(QMainWindow):
                 self.statusBar().showMessage(orphan.replace("\n", "  "),
                                              20000)
         except Exception as e:  # noqa: BLE001
-            QMessageBox.critical(self, tr("Error"), tr('Could not open project:\n{0}').format(e))
+            from .core_messages import error_text
+            QMessageBox.critical(self, tr("Error"), tr(
+                'Could not open project:\n{0}').format(error_text(e)))
 
     def act_save(self) -> None:
         if self.project.file_path is None:
@@ -1292,7 +1300,11 @@ class MainWindow(QMainWindow):
             self.project.save()
             self.ogr_status.showMessage(tr('Saved {0}').format(self.project.file_path.name), 2000)
         except Exception as e:  # noqa: BLE001
-            QMessageBox.critical(self, tr("Error"), str(e))
+            # v0.1.434 (D412) -- the system's text inside a translated frame,
+            # as Open says it: it was shown alone
+            from .core_messages import error_text
+            QMessageBox.critical(self, tr("Error"), tr(
+                "Could not save project:\n{0}").format(error_text(e)))
 
     def act_save_as(self) -> None:
         path, _ = get_save_file_name(
@@ -1308,7 +1320,9 @@ class MainWindow(QMainWindow):
             self.setWindowTitle(f"OGR Slip2D v{self.VERSION} — {Path(path).name}")
             self.ogr_status.showMessage(tr('Saved {0}').format(path), 2000)
         except Exception as e:  # noqa: BLE001
-            QMessageBox.critical(self, tr("Error"), str(e))
+            from .core_messages import error_text
+            QMessageBox.critical(self, tr("Error"), tr(
+                "Could not save project:\n{0}").format(error_text(e)))
 
     @undo_step("Import DXF")
     def act_import_dxf(self) -> None:
@@ -1441,8 +1455,8 @@ class MainWindow(QMainWindow):
         # v0.1.355 (D335) -- the report in the interface's language: its
         # fixed texts and its coded messages through ``note_text``, the
         # methods by their names; the API writes it in English
-        from .core_messages import note_text
-        from .labels import method_name
+        from .core_messages import error_text, note_text
+        from .labels import design_standard_label, method_name
         try:
             from ogr_core.report import generate_report
             figures = None
@@ -1460,7 +1474,9 @@ class MainWindow(QMainWindow):
                 company=summary.company or None,
                 title=summary.title or None,
                 factor_report=factor_report, figures=figures,
-                translate=note_text, method_name=method_name)
+                translate=note_text, method_name=method_name,
+                # v0.1.434 (D412) -- the standard by its name
+                standard_name=design_standard_label)
         except ImportError:
             QMessageBox.critical(
                 self, tr("Generate Report"),
@@ -1470,7 +1486,8 @@ class MainWindow(QMainWindow):
         except Exception as exc:  # noqa: BLE001
             QMessageBox.critical(
                 self, tr("Generate Report"),
-                tr('Failed to generate report:\n{0}').format(exc))
+                tr('Failed to generate report:\n{0}').format(
+                    error_text(exc)))
             return
         self.ogr_status.showMessage(tr('Report saved to {0}').format(path), 6000)
         QMessageBox.information(
@@ -1522,21 +1539,33 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _step_name(cmd) -> str:
-        """The name of a step as the agent reads it in project_history
-        (``PaintRegionCommand.description`` is a method)."""
-        d = cmd.description
-        return d() if callable(d) else str(d)
+        """The name of a step as the agent reads it in project_history, with
+        its code when it has one (v0.1.434, D412: the core's one rule)."""
+        from ogr_core.project.commands import step_description
+        return step_description(cmd)
+
+    def _step_label(self, cmd) -> str:
+        """A step's name as the user reads it (v0.1.434, D412): through its
+        code when it has one (a name built from values), through its key
+        otherwise, and against the random variables the step captured, so a
+        variable deleted since is still named by its label."""
+        from ogr_gui.labels import step_scope
+        from .core_messages import note_text
+        return note_text(self._step_name(cmd),
+                         project=step_scope(self.project, cmd))
 
     def _report_history_step(self, cmd, template: str) -> None:
         if cmd is None:
             return
-        msg = template.format(tr(self._step_name(cmd)))
+        msg = template.format(self._step_label(cmd))
         # SnapshotCommand._restore_where: what another hand changed after
-        # this step is left as it is, and said
+        # this step is left as it is, and said. v0.1.434 (D412) -- by the
+        # parts' names, not the attributes' («materials, settings»)
         kept = getattr(cmd, "kept", None)
         if kept:
+            from ogr_gui.labels import project_part_label
             msg += "  " + tr("(kept, changed since: {0})").format(
-                ", ".join(kept))
+                ", ".join(project_part_label(a) for a in kept))
         self.ogr_status.showMessage(msg, 5000)
 
     def _refresh_undo_actions(self) -> None:
@@ -1545,13 +1574,14 @@ class MainWindow(QMainWindow):
         acts = getattr(self, "_actions", None)
         if not acts or "undo" not in acts:
             return
-        undo, redo = self.command_stack.history()
-        for act, names, empty in (
-                (acts["undo"], undo, tr("Nothing to undo.")),
-                (acts["redo"], redo, tr("Nothing to redo."))):
-            if names:
-                # D288 — a "&" in a name would become a mnemonic
-                name = tr(names[-1]).replace("&", "&&")
+        stack = self.command_stack
+        for act, cmd, empty in (
+                (acts["undo"], stack.peek_undo(), tr("Nothing to undo.")),
+                (acts["redo"], stack.peek_redo(), tr("Nothing to redo."))):
+            if cmd is not None:
+                # D288 — a "&" in a name would become a mnemonic.
+                # v0.1.434 (D412) -- the name through its code
+                name = self._step_label(cmd).replace("&", "&&")
                 act.setText(tr("Undo {0}").format(name) if act is acts["undo"]
                             else tr("Redo {0}").format(name))
                 act.setEnabled(True)
@@ -1889,7 +1919,9 @@ class MainWindow(QMainWindow):
             mesh = generate_mesh_for_project(self.project,
                                              target_elements=n)
         except Exception as exc:  # noqa: BLE001
-            self._info(tr('Mesh generation failed: {0}').format(exc))
+            from .core_messages import error_text
+            self._info(tr('Mesh generation failed: {0}').format(
+                error_text(exc)))
             return
         if mesh.element_count == 0:
             self._info(tr("No mesh generated. An External boundary with a "
@@ -2165,7 +2197,11 @@ class MainWindow(QMainWindow):
                 note_text(p) for p in exc.problems))
             return
         except Exception as e:  # noqa: BLE001 - the worker said it the same way
-            QMessageBox.critical(self, tr("Error"), f"{type(e).__name__}: {e}")
+            # v0.1.434 (D412) -- inside a translated frame, its type kept
+            from .core_messages import error_text
+            QMessageBox.critical(self, tr("Error"), tr(
+                "Unexpected failure: {0}").format(
+                    f"{type(e).__name__}: {error_text(e)}"))
             return
         self._on_drawdown_sweep_done(self.sweep_worker.result)
 
@@ -2295,6 +2331,7 @@ class MainWindow(QMainWindow):
                                                 run_configured_statistics)
 
         from .background import TaskCancelled, run_task
+        variables = list(getattr(self.project, "random_variables", None) or [])
         try:
             # v0.1.365 (D348) — off the window's thread, with its progress:
             # the deterministic run and every sample are searches, and
@@ -2330,6 +2367,7 @@ class MainWindow(QMainWindow):
         # channel carries what the statistics say (v0.1.170, D129) -- and,
         # first, what the standard made of every sample (v0.1.236).
         self.last_statistics_notes = []
+        self.last_statistics_variables = variables
         self.last_statistics_notes += statistics_factor_lines(report)
         messages = []
         # Nothing is prefixed without a standard: the status bar of such a
@@ -2355,10 +2393,10 @@ class MainWindow(QMainWindow):
                 # codes; the status bar showed them as they came
                 warning = res.notes.get("warning")
                 if warning:
-                    messages.append(note_text(warning))
+                    messages.append(note_text(warning, project=self.project))
             else:
                 error = res.notes.get("error")
-                messages.append(note_text(error) if error
+                messages.append(note_text(error, project=self.project) if error
                                 else tr("probabilistic run failed"))
             # v0.1.170 (D129) — the panel is fed from ``note_lines`` alone;
             # ``notes`` goes only to the status bar.
@@ -2378,10 +2416,10 @@ class MainWindow(QMainWindow):
                         variable_label(self.project, rows[0][0], rows[0][1])))
                 warning = res.notes.get("warning")
                 if warning:
-                    messages.append(note_text(warning))
+                    messages.append(note_text(warning, project=self.project))
             else:
                 error = res.notes.get("error")
-                messages.append(note_text(error) if error
+                messages.append(note_text(error, project=self.project) if error
                                 else tr("sensitivity run failed"))
             self.last_statistics_notes.extend(
                 getattr(res, "note_lines", None) or [])
@@ -3365,9 +3403,11 @@ class MainWindow(QMainWindow):
             bridge = AgentBridge(self)
             port = bridge.start()
         except Exception as exc:  # noqa: BLE001 - said, not raised
+            from .core_messages import error_text
             self._actions["agent_bridge"].setChecked(False)
             self.statusBar().showMessage(
-                tr("Agent bridge could not start: %s") % exc, 10000)
+                tr("Agent bridge could not start: %s") % error_text(exc),
+                10000)
             return
         self._agent_bridge = bridge
         import os
@@ -3445,7 +3485,8 @@ class MainWindow(QMainWindow):
         try:
             other = Project.load(path)
         except Exception as exc:  # noqa: BLE001
-            self._info(tr("Could not read the project: %s") % exc)
+            from .core_messages import error_text
+            self._info(tr("Could not read the project: %s") % error_text(exc))
             return
 
         what, ok = QInputDialog.getItem(
@@ -4227,7 +4268,10 @@ class MainWindow(QMainWindow):
             self._said_cancelled(tr("Compute"))
             return
         except Exception as e:  # noqa: BLE001 - as the worker's failed signal
-            QMessageBox.critical(self, tr("Error"), f"{type(e).__name__}: {e}")
+            from .core_messages import error_text
+            QMessageBox.critical(self, tr("Error"), tr(
+                "Unexpected failure: {0}").format(
+                    f"{type(e).__name__}: {error_text(e)}"))
             return
         self._on_compute_done(results, fingerprint)
 
@@ -4426,6 +4470,17 @@ class MainWindow(QMainWindow):
         lines += [n if isinstance(n, str) else str(n)
                   for n in (getattr(report, "notes", None) or [])]
         return lines
+
+    def notes_scope(self):
+        """What the notes are said against: the project, and the random
+        variables of the last statistical run, so a note names a variable
+        deleted since by its label, as an undo step does (v0.1.434, D412,
+        review). The notes panel and the statistics window ask it."""
+        from .labels import with_variables
+        return with_variables(self.project, [
+            rv for rv in getattr(self, "last_statistics_variables", ()) or ()
+            if rv not in (getattr(self.project, "random_variables", None)
+                          or [])])
 
     def _analysis_notes(self) -> list:
         """Every note of the last run, deterministic and statistical.
@@ -5040,6 +5095,7 @@ class MainWindow(QMainWindow):
         self.last_search_results = {}
         self.last_compute_warnings = []
         self.last_statistics_notes = []
+        self.last_statistics_variables = []
         self.last_task_notes = {}
         self.last_factor_report = None
         self.last_statistics_factor_report = None
@@ -6516,13 +6572,18 @@ class MainWindow(QMainWindow):
         # (``apply_external_offset``), as one undo step.
         from ogr_core.geometry.expand_shrink import apply_external_offset
         from ogr_core.project.commands import SnapshotCommand
+        # v0.1.434 (D412) -- the step name with its code: the f-string
+        # reached the Spanish Edit menu as «Offset External (+1.50 m)»
+        from ogr_core.project.step_names import OFFSET_EXTERNAL, step_name
         try:
             self.command_stack.do(self.project, SnapshotCommand(
-                f"Offset External ({d:+.2f} m)",
+                step_name(OFFSET_EXTERNAL, distance=d),
                 lambda project, _d=d: apply_external_offset(project, _d),
                 attrs=("boundaries",)))
         except Exception as e:  # noqa: BLE001
-            QMessageBox.critical(self, tr("Expand / Shrink"), tr('Failed: {0}').format(e))
+            from .core_messages import error_text
+            QMessageBox.critical(self, tr("Expand / Shrink"),
+                                 tr('Failed: {0}').format(error_text(e)))
             return
         self.ogr_status.showMessage(tr('External offset by {0:+.2f} m').format(d), 2000)
 
@@ -6565,12 +6626,15 @@ class MainWindow(QMainWindow):
             )
             result = expand_shrink_external(old_ext.polyline, polyline)
         except ExpandShrinkError as e:
-            QMessageBox.warning(self, tr("Expand / Shrink"), str(e))
+            # v0.1.434 (D412) -- the core's refusal through its code
+            from .core_messages import error_text
+            QMessageBox.warning(self, tr("Expand / Shrink"), error_text(e))
             return
         except Exception as e:  # noqa: BLE001
+            from .core_messages import error_text
             QMessageBox.critical(
                 self, tr("Expand / Shrink"),
-                tr('Unexpected failure: {0}').format(e),
+                tr('Unexpected failure: {0}').format(error_text(e)),
             )
             return
 
@@ -6606,8 +6670,10 @@ class MainWindow(QMainWindow):
         def _apply(project, _drawn=polyline, _keep=convert_arc):
             return apply_expand_shrink(project, _drawn,
                                        keep_removed_as_material=_keep)
+        # v0.1.434 (D412) -- one name per word, with its code
+        from ogr_core.project.step_names import expand_shrink_step_name
         self.command_stack.do(self.project, SnapshotCommand(
-            f"Expand/Shrink ({result.mode})", _apply,
+            expand_shrink_step_name(result.mode), _apply,
             attrs=("boundaries",)))
         # v0.1.293 (D291b) — the participle per language, as in the
         # question above (D291): "{mode}ed" also made "shrinked"
@@ -6649,10 +6715,13 @@ class MainWindow(QMainWindow):
         ext = self.project.external_boundary()
         if ext is None:
             return
+        # v0.1.434 (D412) -- the core's refusals and notes through their
+        # codes: they reached the Spanish status bar as the core wrote them
+        from .core_messages import error_text, note_text
         try:
             slope_face(ext, toe, crest)
         except ValueError as exc:
-            self.ogr_status.showMessage(str(exc), 8000)
+            self.ogr_status.showMessage(error_text(exc), 8000)
             return
         dlg = ChangeSlopeAngleDialog(overall_angle(ext, toe, crest), self)
         if not dlg.exec():
@@ -6668,12 +6737,13 @@ class MainWindow(QMainWindow):
                                   attrs=("boundaries",))
             self.command_stack.do(self.project, cmd)
         except ValueError as exc:
-            self.ogr_status.showMessage(str(exc), 8000)
+            self.ogr_status.showMessage(error_text(exc), 8000)
             return
         out = cmd.result or {}
         msg = tr("Slope angle changed from %.2f° to %.2f°.") % (
             out.get("old_angle_deg", 0.0), out.get("new_angle_deg", 0.0))
-        notes = out.get("notes") or []
+        notes = [note_text(n, project=self.project)
+                 for n in out.get("notes") or []]
         self.ogr_status.showMessage(" ".join([msg] + notes), 10000)
         self.canvas.refresh()
 
@@ -6693,7 +6763,9 @@ class MainWindow(QMainWindow):
             try:
                 new_b = simplify_boundary(orig, tol)
             except ValueError as exc:
-                self.ogr_status.showMessage(str(exc), 5000)
+                # v0.1.434 (D412) -- through its code
+                from .core_messages import error_text
+                self.ogr_status.showMessage(error_text(exc), 5000)
                 return
             self.command_stack.do(self.project, ReplaceBoundaryCommand(
                 index=idx, new_boundary=new_b))

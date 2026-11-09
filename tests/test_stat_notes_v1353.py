@@ -981,7 +981,9 @@ class TestTheWindowSaysThemInSpanish:
         with _Spanish():
             lines = MainWindow._factor_report_notes(rep)
             said = [note_line(n) for n in lines]
-        assert "eurocode7_da1c1: 0 material(es) y 0 carga(s)" in said[0], said
+        # v0.1.434 (D412) -- by its name: it printed the id
+        assert ("Eurocódigo 7 — DA1 Combinación 1: 0 material(es) y 0 "
+                "carga(s)") in said[0], said
         assert said[1].startswith("Peso del terreno: el coeficiente de las "
                                   "acciones permanentes 1.35"), said
 
@@ -991,7 +993,9 @@ class TestTheWindowSaysThemInSpanish:
         rep = self._report()
         with _Spanish():
             said = [note_line(n) for n in statistics_factor_lines(rep)]
-        assert "eurocode7_da1c1: 0 material(es)" in said[0], said
+        # v0.1.434 (D412) -- by its name: it printed the id
+        assert "Eurocódigo 7 — DA1 Combinación 1: 0 material(es)" in said[0], \
+            said
         assert said[1].startswith("Peso del terreno"), said
 
 

@@ -50,6 +50,9 @@ import dataclasses
 import math
 from typing import Optional, Sequence
 
+from ogr_core.messages import Joined
+
+from . import messages as M
 from .primitives import Vertex
 
 MODES = ("horizontal", "vertical", "rotate")
@@ -68,24 +71,24 @@ def vertex_index(external, ref, rel_tol: float = 1e-5) -> int:
     (a coordinate read back from a rounded summary still names it).
     """
     verts = external.polyline.vertices
+    # v0.1.434 (D412) -- every refusal carries its code: ``str(exc)`` is the
+    # English it always was, and the window says it in the reader's language
     if isinstance(ref, bool):
-        raise ValueError("A vertex is an index or an [x, y] point.")
+        raise ValueError(M.geometry_message(M.VERTEX_REF))
     if isinstance(ref, int):
         if not 0 <= ref < len(verts):
-            raise ValueError(f"Vertex index {ref} is outside "
-                             f"0..{len(verts) - 1}.")
+            raise ValueError(M.geometry_message(
+                M.VERTEX_OUT_OF_RANGE, ref=ref, last=len(verts) - 1))
         return ref
     try:
         x, y = float(ref[0]), float(ref[1])
     except (TypeError, ValueError, IndexError):
-        raise ValueError("A vertex is an index or an [x, y] point.") \
-            from None
+        raise ValueError(M.geometry_message(M.VERTEX_REF)) from None
     tol = rel_tol * _diag(verts)
     best = min(range(len(verts)),
                key=lambda i: math.hypot(verts[i].x - x, verts[i].y - y))
     if math.hypot(verts[best].x - x, verts[best].y - y) > tol:
-        raise ValueError(f"({x:g}, {y:g}) is not a vertex of the External "
-                         f"boundary.")
+        raise ValueError(M.geometry_message(M.NOT_A_VERTEX, x=x, y=y))
     return best
 
 
@@ -102,9 +105,9 @@ def slope_face(external, toe: int, crest: int) -> list[int]:
     verts = external.polyline.vertices
     n = len(verts)
     if toe == crest:
-        raise ValueError("The toe and the crest are the same vertex.")
+        raise ValueError(M.geometry_message(M.TOE_IS_CREST))
     if not verts[toe].y < verts[crest].y:
-        raise ValueError("The toe must be lower than the crest.")
+        raise ValueError(M.geometry_message(M.TOE_NOT_LOWER))
     profile = ground_surface(external)
     tol = 1e-6 * _diag(verts)
 
@@ -121,8 +124,7 @@ def slope_face(external, toe: int, crest: int) -> list[int]:
 
     candidates = [p for p in (walk(1), walk(-1)) if on_ground(p)]
     if not candidates:
-        raise ValueError("The toe and the crest are not joined by the "
-                         "ground surface.")
+        raise ValueError(M.geometry_message(M.FACE_NOT_ON_GROUND))
     return min(candidates, key=len)
 
 
@@ -160,10 +162,10 @@ def new_face(verts: Sequence[Vertex], face: list[int], new_angle_deg: float,
     Pure geometry: the formulas of the module docstring.
     """
     if mode not in MODES:
-        raise ValueError(f"mode is one of {MODES}.")
+        raise ValueError(M.geometry_message(M.SLOPE_MODE_UNKNOWN,
+                                            modes=str(MODES)))
     if not 0.0 < new_angle_deg < 90.0:
-        raise ValueError("The new overall angle must be between 0° and "
-                         "90°.")
+        raise ValueError(M.geometry_message(M.ANGLE_OUT_OF_RANGE))
     toe, crest = verts[face[0]], verts[face[-1]]
     s = _facing(verts, face)
     H = crest.y - toe.y
@@ -187,8 +189,7 @@ def new_face(verts: Sequence[Vertex], face: list[int], new_angle_deg: float,
         for v in old[1:]:
             r = _rotate(v, toe, delta)
             if abs(r.y - toe.y) < 1e-12 * _diag(verts):
-                raise ValueError("A face vertex at the toe's elevation "
-                                 "cannot be projected horizontally.")
+                raise ValueError(M.geometry_message(M.AT_TOE_ELEVATION))
             out.append(Vertex(toe.x + (r.x - toe.x) * (v.y - toe.y)
                               / (r.y - toe.y), v.y))
         return out
@@ -196,7 +197,7 @@ def new_face(verts: Sequence[Vertex], face: list[int], new_angle_deg: float,
     # vertical
     run = crest.x - toe.x
     if abs(run) < 1e-12 * _diag(verts):
-        raise ValueError("A vertical face cannot be projected vertically.")
+        raise ValueError(M.geometry_message(M.VERTICAL_FACE))
     yc_new = toe.y + abs(run) * math.tan(beta)
     if keep_benches:
         dyc = yc_new - crest.y
@@ -207,8 +208,7 @@ def new_face(verts: Sequence[Vertex], face: list[int], new_angle_deg: float,
     for v in old[1:]:
         r = _rotate(v, toe, delta)
         if abs(r.x - toe.x) < 1e-12 * _diag(verts):
-            raise ValueError("A face vertex above the toe cannot be "
-                             "projected vertically.")
+            raise ValueError(M.geometry_message(M.ABOVE_TOE))
         out.append(Vertex(v.x, toe.y + (r.y - toe.y) * (v.x - toe.x)
                           / (r.x - toe.x)))
     return out
@@ -247,14 +247,14 @@ def change_slope_angle(project, toe, crest, *,
 
     ext = project.external_boundary()
     if ext is None:
-        raise ValueError("The model has no External boundary.")
+        raise ValueError(M.geometry_message(M.NO_EXTERNAL))
     if mode not in MODES:
-        raise ValueError(f"mode is one of {MODES}.")
+        raise ValueError(M.geometry_message(M.SLOPE_MODE_UNKNOWN,
+                                            modes=str(MODES)))
     if keep_benches is not None and mode == "rotate":
-        raise ValueError("keep_benches is only read by the horizontal and "
-                         "vertical projections, not by 'rotate'.")
+        raise ValueError(M.geometry_message(M.KEEP_BENCHES_ROTATE))
     if (change_deg is None) == (target_deg is None):
-        raise ValueError("Give exactly one of change_deg or target_deg.")
+        raise ValueError(M.geometry_message(M.CHANGE_OR_TARGET))
     keep = True if keep_benches is None else bool(keep_benches)
 
     verts = list(ext.polyline.vertices)
@@ -271,9 +271,7 @@ def change_slope_angle(project, toe, crest, *,
         new_verts[i] = v
     poly = Polygon([(v.x, v.y) for v in new_verts])
     if not poly.is_valid or poly.area <= 0.0:
-        raise ValueError("At that angle the face runs into the rest of the "
-                         "External boundary (past the next vertex of the "
-                         "crest or the toe).")
+        raise ValueError(M.geometry_message(M.FACE_RUNS_INTO))
 
     tol = 1e-6 * _diag(verts)
     segments = list(zip(face[:-1], face[1:]))
@@ -309,11 +307,15 @@ def change_slope_angle(project, toe, crest, *,
     on_face = []
     for s in getattr(project, "supports", []) or []:
         if carried(s.head) is not None:
-            on_face.append(s.name or s.id)
+            on_face.append(s)
     if on_face:
-        notes.append(f"{len(on_face)} support(s) had their head on the "
-                     f"old face and were not moved: "
-                     f"{', '.join(on_face[:10])}.")
+        # each name with its support: the window names a default one by the
+        # class its set has now, and never splits a name the user gave
+        # (review of 0.1.434); the English is the same ", "-joined text
+        notes.append(M.geometry_message(
+            M.SUPPORTS_NOT_MOVED, n=len(on_face),
+            names=Joined([s.name or s.id for s in on_face[:10]],
+                         refs=[s.id for s in on_face[:10]])))
     loads = []
     for ld in getattr(project, "distributed_loads", []) or []:
         if carried(ld.start) is not None or carried(ld.end) is not None:
@@ -322,8 +324,8 @@ def change_slope_angle(project, toe, crest, *,
         if carried(ld.point) is not None:
             loads.append(ld.name or ld.id)
     if loads:
-        notes.append(f"{len(loads)} load(s) were on the old face and were "
-                     f"not moved: {', '.join(loads[:10])}.")
+        notes.append(M.geometry_message(M.LOADS_NOT_MOVED, n=len(loads),
+                                        names=", ".join(loads[:10])))
 
     project.boundaries[ext_idx] = dataclasses.replace(
         ext, polyline=dataclasses.replace(ext.polyline,

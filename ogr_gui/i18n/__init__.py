@@ -710,7 +710,7 @@ _DICTS: dict[str, dict[str, str]] = {
             'búsqueda elegido. Con 0 no se descarta ninguna superficie.',
         'Monte Carlo': 'Monte Carlo',
         'Number of samples:': 'Número de muestras:',
-        'Off by default: applying partial factors silently would change every factor of safety previously compared against, so it has to be an explicit choice. Selecting a standard loads its factors; choose Custom to enter your own.': 'Desactivado por defecto: aplicar coeficientes parciales en silencio cambiaría todos los factores de seguridad con los que se haya comparado antes, así que debe ser una elección explícita. Elegir una norma carga sus coeficientes; elige Personalizado para introducir los tuyos.',
+        'Off by default: applying partial factors silently would change every factor of safety previously compared against, so it has to be an explicit choice. Selecting a standard loads its factors; choose {0} to enter your own.': 'Desactivado por defecto: aplicar coeficientes parciales en silencio cambiaría todos los factores de seguridad con los que se haya comparado antes, así que debe ser una elección explícita. Elegir una norma carga sus coeficientes; elige {0} para introducir los tuyos.',
         'Overall Slope': 'Talud completo',
         # v0.1.242 (D226a): el peso de la dovela, favorable o desfavorable
         'Permanent actions, unfavourable:':
@@ -911,6 +911,125 @@ _DICTS: dict[str, dict[str, str]] = {
         'composite surface': 'superficie compuesta',
         'weak-layer surface': 'superficie de capa débil',
         'Values along critical surface': 'Valores a lo largo de la superficie crítica',
+        # v0.1.434 (D412) -- the geometry editions' refusals and notes
+        # (ogr_core/geometry/messages.py); «The new overall angle …» had its
+        # entry already
+        'A vertex is an index or an [x, y] point.':
+            'Un vértice es un índice o un punto [x, y].',
+        'Vertex index {ref} is outside 0..{last}.':
+            'El índice de vértice {ref} está fuera de 0..{last}.',
+        '({x:g}, {y:g}) is not a vertex of the External boundary.':
+            '({x:g}, {y:g}) no es un vértice del contorno exterior.',
+        'The toe and the crest are the same vertex.':
+            'El pie y la coronación son el mismo vértice.',
+        'The toe must be lower than the crest.':
+            'El pie tiene que estar más bajo que la coronación.',
+        'The toe and the crest are not joined by the ground surface.':
+            'El pie y la coronación no están unidos por la superficie del terreno.',
+        'mode is one of {modes}.':
+            'mode es uno de {modes}.',
+        "A face vertex at the toe's elevation cannot be projected horizontally.":
+            'Un vértice de la cara a la cota del pie no se puede proyectar en horizontal.',
+        'A vertical face cannot be projected vertically.':
+            'Una cara vertical no se puede proyectar en vertical.',
+        'A face vertex above the toe cannot be projected vertically.':
+            'Un vértice de la cara justo encima del pie no se puede proyectar en vertical.',
+        'The model has no External boundary.':
+            'El modelo no tiene contorno exterior.',
+        "keep_benches is only read by the horizontal and vertical projections, not by 'rotate'.":
+            "keep_benches solo lo leen las proyecciones horizontal y vertical, no 'rotate'.",
+        'Give exactly one of change_deg or target_deg.':
+            'Indica solo uno de change_deg y target_deg.',
+        'At that angle the face runs into the rest of the External boundary (past the next vertex of the crest or the toe).':
+            'Con ese ángulo la cara choca con el resto del contorno exterior (pasa del vértice siguiente a la '
+            'coronación o al pie).',
+        # the count in brackets: «(s)» cannot agree in Spanish, and a singular
+        # variant would change the English for one support or one load
+        '{n} support(s) had their head on the old face and were not moved: {names}.':
+            'Soportes con la cabeza en la cara anterior que no se han movido ({n}): {names}.',
+        '{n} load(s) were on the old face and were not moved: {names}.':
+            'Cargas sobre la cara anterior que no se han movido ({n}): {names}.',
+        'the simplification tolerance must be positive':
+            'la tolerancia de simplificación tiene que ser positiva',
+        'a tolerance of {epsilon:g} leaves {n} vertices; this boundary needs at least {need}':
+            'una tolerancia de {epsilon:g} deja {n} vértices; este contorno necesita al menos {need}',
+        'External must be a closed polyline.':
+            'El contorno exterior tiene que ser una polilínea cerrada.',
+        'External has too few vertices.':
+            'El contorno exterior tiene muy pocos vértices.',
+        'Polyline needs at least 2 vertices.':
+            'La polilínea necesita al menos 2 vértices.',
+        'Both endpoints of the polyline must lie on the External Boundary (use snap — green cross).':
+            'Los dos extremos de la polilínea tienen que estar sobre el contorno exterior (usa el forzado: cruz '
+            'verde).',
+        'Expand produced a smaller polygon — intermediate points are probably INSIDE the External. Use Shrink, or redraw with points outside.':
+            'Expandir ha dado un polígono más pequeño: los puntos intermedios están probablemente DENTRO del '
+            'contorno exterior. Usa Contraer, o vuelve a dibujar con los puntos fuera.',
+        'offset_polygon requires a closed polygon with ≥3 vertices':
+            'offset_polygon necesita un polígono cerrado con ≥3 vértices',
+        # the strong-motion reader's notes (ogr_core/loads/messages.py)
+        'no numeric data': 'no hay datos numéricos',
+        'fewer than two samples': 'menos de dos muestras',
+        'non-increasing time column': 'la columna de tiempo no es creciente',
+        'time step is not constant': 'el paso de tiempo no es constante',
+        'single-column file needs a time interval':
+            'un archivo de una sola columna necesita un intervalo de tiempo',
+        # the undo step names built from values (ogr_core/project/step_names.py)
+        'Paint material at ({x:.2f}, {y:.2f})': 'Pintar material en ({x:.2f}, {y:.2f})',
+        'Offset External ({distance:+.2f} m)': 'Desplazar contorno exterior ({distance:+.2f} m)',
+        'Expand/Shrink (expand)': 'Expandir contorno exterior',
+        'Expand/Shrink (shrink)': 'Contraer contorno exterior',
+        'Edit boundary ({op})': 'Editar contorno ({op})',
+        'Hydraulic properties of {material}': 'Propiedades hidráulicas de {material}',
+        'Random variable {key}': 'Variable aleatoria {key}',
+        'Delete random variable {key}': 'Eliminar variable aleatoria {key}',
+        'Delete random variable all': 'Eliminar todas las variables aleatorias',
+        # the operations of boundary_edit (labels.BOUNDARY_EDIT_OP)
+        'set vertices': 'fijar vértices',
+        'translate': 'trasladar',
+        'move vertex': 'mover vértice',
+        'insert vertex': 'insertar vértice',
+        'delete vertex': 'eliminar vértice',
+        'rename': 'renombrar',
+        'change type': 'cambiar tipo',
+        'delete': 'eliminar',
+        'copy': 'copiar',
+        'scale': 'escalar',
+        'rotate': 'girar',
+        'simplify': 'simplificar',
+        'block search object': 'objeto de búsqueda por bloques',
+        # the parts of a project «(kept, changed since: …)» names
+        # (labels.PROJECT_PART); materials, boundaries, supports, boundary
+        # conditions, seepage field and the transient's had their entries
+        'project name': 'nombre del proyecto',
+        'settings': 'ajustes',
+        'support types': 'tipos de soporte',
+        'distributed loads': 'cargas repartidas',
+        'line loads': 'cargas lineales',
+        'seismic load': 'carga sísmica',
+        'seismic records': 'registros sísmicos',
+        'material assignments': 'asignaciones de material',
+        'tension crack': 'grieta de tracción',
+        # «rejilla», not «malla»: a mesh is the finite elements' (v0.1.324)
+        'water pressure grid': 'rejilla de presiones de agua',
+        'random variables': 'variables aleatorias',
+        'annotations': 'anotaciones',
+        'focus objects': 'objetos de foco',
+        'user surfaces': 'superficies de usuario',
+        'user polylines': 'polilíneas de usuario',
+        'finite element mesh': 'malla de elementos finitos',
+        # the design standard's names of their own (the owner's decision,
+        # 2026-11-09): feminine, as «norma»
+        'No design standard': 'Ninguna norma',
+        'Custom standard': 'Norma personalizada',
+        # the report's units: every member of the enums
+        'minutes': 'minutos',
+        'months': 'meses',
+        'years': 'años',
+        'meters/day': 'metros/día',
+        'meters/year': 'metros/año',
+        # Save and Save As, as Open says it
+        'Could not save project:\n{0}': 'No se pudo guardar el proyecto:\n{0}',
         # the same, as the noun of «a … surface» (stat.case_text_*)
         'circular surface': 'superficie circular',
         'polyline surface': 'superficie poligonal',

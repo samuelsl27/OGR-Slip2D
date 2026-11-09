@@ -29,7 +29,7 @@ La propietaria decidió desarrollarlo con lo que hay en `referencias/Documentaci
 
 ## Criterios de aceptación
 
-### Identidades (0.1.444)
+### Identidades (0.1.445)
 
 - [ ] Una sola cuña sobre un plano da F = (c L + (W cos α − U) tan φ)/(W sen α) a 1e-8 relativo, con y sin
       agua.
@@ -41,7 +41,7 @@ La propietaria decidió desarrollarlo con lo que hay en `referencias/Documentaci
 - [ ] Con el sentido de cortante fijo y el cinemático: iguales donde la compatibilidad da el sentido por
       defecto, distintos donde no.
 
-### Casos publicados (0.1.445, la referencia externa)
+### Casos publicados (0.1.446, la referencia externa)
 
 - [ ] Problema 4 del manual 03, con la interfaz de (108; 6,4) a (82,85; 56,89):
   - seco: 1,198 ± 1 %;
@@ -61,7 +61,7 @@ La propietaria decidió desarrollarlo con lo que hay en `referencias/Documentaci
 - [ ] **Regla de raíz:** F es la raíz MAYOR de Kc(F) = kh. El 4 saturado da 0,4347 y no la otra raíz, 0,1467,
       aunque la primera esté a ~1,4 % de un polo.
 
-### Integración (0.1.446–0.1.447)
+### Integración (0.1.447–0.1.448)
 
 - [ ] No se activa por defecto, y ninguno de los nueve métodos mueve un número:
   - la suite entera en verde;
@@ -92,7 +92,7 @@ La propietaria decidió desarrollarlo con lo que hay en `referencias/Documentaci
   - en gris con tipo circular;
   - se deshacen.
 
-### Ventana (0.1.446–0.1.449)
+### Ventana (0.1.447–0.1.450)
 
 - [ ] La casilla de Sarma y su grupo de ajustes en Métodos, en gris cuando no aplican.
 - [ ] La tabla de ángulo, c y φ por vértice, desde el menú Superficies y desde el menú contextual del vértice.
@@ -100,7 +100,7 @@ La propietaria decidió desarrollarlo con lo que hay en `referencias/Documentaci
 - [ ] Interpret dibuja las cuñas: polígonos, caras inclinadas y filas de cara.
 - [ ] Todo texto nuevo pasa por `tr()` con su español, y toda acción está en un menú.
 
-### Ángulos optimizados (0.1.450)
+### Ángulos optimizados (0.1.451)
 
 - [ ] F optimizado ≤ el de cada política (vertical, bisectriz, normal media) en la misma superficie, y se
       repite igual dos veces.

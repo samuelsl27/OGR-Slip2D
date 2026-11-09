@@ -504,7 +504,10 @@ def boundary_edit(ws, boundary: str, op: str,
         return {"boundary": boundary_info(new, with_vertices=True),
                 "regions": len(project.resolve_regions()), "notes": notes}
 
-    return ws.mutate(project_id, f"Edit boundary ({op})", edit)
+    # v0.1.434 (D412) -- the name with its code: the same English, and the
+    # window says it in the reader's language
+    from ogr_core.project.step_names import EDIT_BOUNDARY, step_name
+    return ws.mutate(project_id, step_name(EDIT_BOUNDARY, op=op), edit)
 
 
 # ----------------------------------------------------------------------

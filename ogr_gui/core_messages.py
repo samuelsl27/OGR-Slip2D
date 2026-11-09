@@ -19,6 +19,8 @@ Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 
+import functools
+
 from ogr_core.messages import METHOD_NOTE, parts, render
 
 from .i18n import tr
@@ -34,9 +36,10 @@ def _catalogue() -> dict:
     (v0.1.350) and of the strength models (v0.1.351), the seepage solver's,
     the transient's, the back analysis', the sweep's and the Hoek-Brown
     calculator's (v0.1.352), the statistical runs', the design standard's
-    and the strength models' factoring (v0.1.353), and the DXF export's
-    (v0.1.354), in one table: the codes do not collide, each family having
-    its own prefix."""
+    and the strength models' factoring (v0.1.353), the DXF export's
+    (v0.1.354), and the geometry editions', the strong-motion reader's and
+    the undo step names (v0.1.434), in one table: the codes do not collide,
+    each family having its own prefix."""
     if not _CATALOGUE:
         from ogr_core.dxf.messages import EXPORT_MESSAGES
         from ogr_core.dxf.messages import MESSAGES as DXF
@@ -57,19 +60,30 @@ def _catalogue() -> dict:
         from ogr_slip2d.stat_messages import STAT_NOTES
         from ogr_slip2d.search_note_messages import SEARCH_NOTES
         from ogr_slip2d.setting_messages import SETTING_NOTES
+        # v0.1.434 (D412)
+        from ogr_core.geometry.messages import GEOMETRY_MESSAGES
+        from ogr_core.loads.messages import SEISMIC_NOTES
+        from ogr_core.project.step_names import STEP_NAMES
         for table in (CORE_MESSAGES, NOTE_FRAMES, LEM, DXF, NOTES,
                       RULES, METHOD_NOTES, SEARCH_NOTES, REFUSALS,
                       SETTING_NOTES, STRENGTH_REFUSALS, SEEPAGE_NOTES,
                       RUN_NOTES, SWEEP_NOTES, CALCULATOR_NOTES,
                       STAT_NOTES, DESIGN_NOTES, FACTORING_NOTES,
-                      EXPORT_MESSAGES, REPORTED_NOTES):
+                      EXPORT_MESSAGES, REPORTED_NOTES, GEOMETRY_MESSAGES,
+                      SEISMIC_NOTES, STEP_NAMES):
             _CATALOGUE.update(table)
     return _CATALOGUE
 
 
-def _show(kind: str, value):
+def _show(kind: str, value, project=None):
     """How a value of a declared kind reads: a method by its name, a name the
-    program shows through its translation, a strength model by its name."""
+    program shows through its translation, a strength model by its name.
+
+    v0.1.434 (D412) -- ``project`` names what only the project knows: a
+    random variable by its key or its stored label, a material the agent
+    named by its id. Without it those values read as they are. It is passed,
+    never kept: a module that remembered the window's project would be state
+    a test leaks, and with two windows the last one would win."""
     if kind == "method_id":
         from .labels import method_name
         return method_name(value)
@@ -124,14 +138,30 @@ def _show(kind: str, value):
     if kind == "technique_list":
         return "; ".join(L.optimize_technique_label(m)
                          for m in str(value).split(", ") if m)
+    # v0.1.434 (D412)
+    if kind == "design_standard":
+        return L.design_standard_label(value)
+    if kind == "boundary_edit_op":
+        return L.boundary_edit_op_label(value)
+    if kind == "support_names":
+        return L.support_names_label(project, value)
+    if kind == "variable_key":
+        return L.variable_key_label(project, value)
+    if kind == "variable_keys":
+        return L.variable_keys_label(project, value)
+    if kind == "variable_label":
+        return L.variable_label_by_stored(project, value)
+    if kind == "material_ref":
+        return L.material_ref_label(project, value)
     return value
 
 
-def text(code: str, args, english: str) -> str:
+def text(code: str, args, english: str, *, project=None) -> str:
     """The message ``code`` with ``args`` in the reader's language, or
-    ``english`` (the sentence the engine wrote) when there is no code."""
+    ``english`` (the sentence the engine wrote) when there is no code.
+    ``project`` names what only it knows (``_show``, v0.1.434)."""
     return render(_catalogue(), code, args, english, translate=tr,
-                  show=_show)
+                  show=functools.partial(_show, project=project))
 
 
 def label(code: str, args, english: str) -> str:
@@ -190,41 +220,61 @@ def invalid_label(res) -> str:
 # ----------------------------------------------------------------------
 # The analysis notes (v0.1.347, D335)
 # ----------------------------------------------------------------------
-def note_text(note) -> str:
+def note_text(note, *, project=None) -> str:
     """A note -- a message the engine or the core wrote, with its code or
     without one -- in the reader's language: through its code when it has
     one, through its translation when it is a fixed sentence with an entry,
-    and as it was written otherwise."""
+    and as it was written otherwise. ``project`` as in :func:`text`."""
     code, args, english = parts(note)
     if code:
-        return text(code, args, english)
+        return text(code, args, english, project=project)
     return tr(english)
 
 
-def note_group(note) -> tuple:
+def error_text(exc, *, project=None) -> str:
+    """What an exception says, in the reader's language (v0.1.434, D412).
+
+    The core raises with a :class:`~ogr_core.messages.Coded` as the argument
+    (``str(exc)`` is its English, what the agent reads); an exception class
+    may carry ``code`` and ``values`` instead (``DxfReadError``); anything
+    else -- the operating system's text, Python's -- is shown through its
+    translation when it has one, and as it is otherwise. A caller that
+    catches more than the core's own refusals puts this inside a translated
+    frame (``tr("Could not save project:\n{0}")``)."""
+    said = exc.args[0] if getattr(exc, "args", None) else ""
+    if getattr(said, "code", ""):
+        return note_text(said, project=project)
+    code = getattr(exc, "code", "")
+    values = getattr(exc, "values", None)
+    if isinstance(code, str) and code and isinstance(values, dict):
+        return text(code, values, str(exc), project=project)
+    return tr(str(exc))
+
+
+def note_group(note, *, project=None) -> tuple:
     """``(group, sentence)`` of a note for the Analysis Notes panel.
 
     A note about one method's reported surface is grouped under the method,
     shown by its name; a note about the model has no group (None). A note
     without a code keeps the rule the panel always had: an identifier
-    before ``": "`` is the method's."""
+    before ``": "`` is the method's. ``project`` as in :func:`text`."""
     code, args, english = parts(note)
     if code == METHOD_NOTE:
         inner = args.get("note") or {}
         sentence = (text(inner.get("code", ""), inner.get("args"),
-                         inner.get("text", ""))
+                         inner.get("text", ""), project=project)
                     if inner.get("code") else tr(inner.get("text", "")))
         return _show("method_id", args.get("method_id", "")), sentence
     if code:
-        return None, text(code, args, english)
+        return None, text(code, args, english, project=project)
     head, sep, tail = english.partition(": ")
     if sep and head and " " not in head:
         return head, tr(tail)
     return None, tr(english)
 
 
-def note_line(note) -> str:
+def note_line(note, *, project=None) -> str:
     """A note on one line, its method first when it has one: what the status
     bar shows and what *Copy all* copies."""
-    group, sentence = note_group(note)
+    group, sentence = note_group(note, project=project)
     return sentence if group is None else "%s: %s" % (group, sentence)

@@ -55,6 +55,20 @@ def add_boundary_step_name(btype) -> str:
     return f"Add {btype.display_name}"
 
 
+def step_description(cmd) -> str:
+    """The name of the step ``cmd``, as the Edit menu, the status bar and the
+    agent's ``project_history`` read it.
+
+    v0.1.434 (D412) -- the one rule for it, with the step's code when it has
+    one: a name built from values (``ogr_core.project.step_names``) is a
+    :class:`~ogr_core.messages.Coded`, which ``str()`` would turn back into a
+    plain string. The three places that read a name each did ``str(d)``.
+    """
+    d = cmd.description
+    d = d() if callable(d) else d
+    return d if isinstance(d, str) else str(d)
+
+
 @dataclass
 class AddBoundaryCommand(Command):
     boundary: Boundary
@@ -195,8 +209,13 @@ class PaintRegionCommand(Command):
     # Filled during execute: (previous_material_id, new_entry_index)
     _prev_state: object = None
 
+    @property
     def description(self) -> str:
-        return f"Paint material at ({self.x:.2f}, {self.y:.2f})"
+        """v0.1.434 (D412) -- a property with its code: it was a METHOD since
+        v0.1.6, reported in v0.1.194 and read by calling it; its f-string
+        reached the Spanish window as «Paint material at (12.34, 5.67)»."""
+        from .step_names import PAINT_MATERIAL, step_name
+        return step_name(PAINT_MATERIAL, x=self.x, y=self.y)
 
     def execute(self, project) -> None:
         # If there is already an entry at this exact point, store its
@@ -331,14 +350,15 @@ class SnapshotCommand(Command):
     exception propagates, so ``CommandStack.do`` — which only records a
     command whose ``execute`` returned — leaves no trace of a failed edit.
 
-    ``description`` is a plain string, set on the instance; the attribute
-    is read as a string by ``CommandStack.next_undo_description`` (see
-    :class:`PaintRegionCommand`, where it is a method by mistake).
+    ``description`` is a string, set on the instance. v0.1.434 (D412) -- a
+    :class:`~ogr_core.messages.Coded` (a step name built from values) is kept
+    as it is, code and all; anything else is made a string.
     """
 
     def __init__(self, description: str, mutate: Callable[[Project], object],
                  attrs: tuple[str, ...] = LIGHT_ATTRS) -> None:
-        self.description = str(description)
+        self.description = (description if isinstance(description, str)
+                            else str(description))
         self.attrs = tuple(attrs)
         self._mutate = mutate
         self._before: Optional[dict] = None
@@ -367,6 +387,14 @@ class SnapshotCommand(Command):
         if self._before is not None:
             self.kept = self._restore_where(project, self._after,
                                             self._before)
+
+    def captured(self, attr: str) -> list:
+        """The values of ``attr`` this step captured, before and after (an
+        empty list when it captured none). v0.1.434 (D412) -- the window
+        names a step's random variable from here when the project no longer
+        has it (the owner's decision: never the key with its UUID)."""
+        return [snap[attr] for snap in (self._before, self._after)
+                if snap and attr in snap]
 
     def _restore_where(self, project: Project, expect: dict,
                        target: dict) -> list:
@@ -504,24 +532,29 @@ class CommandStack:
 
     @property
     def next_undo_description(self) -> str:
-        return self._undo[-1].description if self._undo else ""
+        return step_description(self._undo[-1]) if self._undo else ""
 
     @property
     def next_redo_description(self) -> str:
-        return self._redo[-1].description if self._redo else ""
+        return step_description(self._redo[-1]) if self._redo else ""
+
+    def peek_undo(self) -> Optional[Command]:
+        """The step an undo would undo, or None (v0.1.434, D412: the window
+        names it against what the step captured)."""
+        return self._undo[-1] if self._undo else None
+
+    def peek_redo(self) -> Optional[Command]:
+        """The step a redo would redo, or None."""
+        return self._redo[-1] if self._redo else None
 
     def history(self) -> tuple[list[str], list[str]]:
         """``(undo, redo)`` descriptions, most recent LAST in each list.
 
-        v0.1.194. A description that is not a string — the method
-        ``PaintRegionCommand.description``, reported and not changed — is
-        called, so the listing reads the same text the user would.
+        v0.1.194. v0.1.434 (D412) -- through :func:`step_description`, so a
+        name keeps its code (the agent reads the same English).
         """
-        def text(c):
-            d = c.description
-            return d() if callable(d) else str(d)
-
-        return [text(c) for c in self._undo], [text(c) for c in self._redo]
+        return ([step_description(c) for c in self._undo],
+                [step_description(c) for c in self._redo])
 
     # ------------------------------------------------------------------
     def on_changed(self, cb: Callable[[], None]) -> None:

@@ -771,6 +771,10 @@ class TestInterpretSaysItInSpanish:
         assert cells and set(cells) == {"círculo"}, cells
         assert said and said[0].startswith(
             "<b>Valores a lo largo de la superficie crítica</b>"), said[:1]
+        # v0.1.434 (review) -- its columns by the chart's names: it wrote
+        # «σnef» and «τavail» of its own
+        assert "τ disp. (kPa)" in said[0] and "σ'ₙ (kPa)" in said[0], said[0]
+        assert "τavail" not in said[0] and "σnef" not in said[0]
 
     def test_the_tornado_needs_a_sensitivity_run(self):
         """From Interpret's Statistics menu (rule 3), and grey with its
@@ -925,18 +929,35 @@ class TestTheCodedNotesNameTheirIdentifiers:
                 if isinstance(v, type) and issubclass(v, enum.Enum):
                     ids |= {m.value for m in v if isinstance(m.value, str)
                             and len(m.value) > 2}
+        # v0.1.434 (D412) -- and the identifiers that are no enum's values:
+        # the design standards (``PRESETS`` keys, «custom») and the
+        # operations of ``boundary_edit``. «eurocode7_da1c2» passed this
+        # census because a standard is a dict key
+        from ogr_api.ops.model import _EDIT_OPS
+        from ogr_core.project.settings import DesignStandardSettings
+        from ogr_core.statistics import VariableKind
+        ids |= set(DesignStandardSettings.PRESETS) | {"custom"}
+        ids |= set(_EDIT_OPS)
+        # a random variable's key, «kind:target:param»: an identifier with a
+        # UUID inside, which no enum holds
+        rv_key = re.compile(r"(?:%s):[^:,; ]*:\w+" % "|".join(
+            re.escape(k.value) for k in VariableKind))
         cat = _catalogue()
         here = Path(__file__).parent
         found = []
         for name in ("test_model_notes_v1347", "test_method_notes_v1348",
                      "test_search_notes_v1349", "test_setting_refusals_v1350",
                      "test_seepage_run_notes_v1352", "test_stat_notes_v1353",
-                     "test_dxf_export_census_v1354"):
+                     "test_dxf_export_census_v1354",
+                     "test_edit_messages_v1434"):
             tree = ast.parse((here / (name + ".py")).read_text(
                 encoding="utf-8"))
             for node in tree.body:
+                # v0.1.434 (D412) -- and the later samples (``_LATER`` held
+                # the hydraulic variables' notes) and 0.1.434's
                 if not (isinstance(node, ast.Assign) and getattr(
-                        node.targets[0], "id", "").startswith("_V13")):
+                        node.targets[0], "id", "").startswith(
+                            ("_V13", "_V14", "_LATER"))):
                     continue
                 for row in ast.literal_eval(node.value):
                     code, args = ((row[0], row[1]) if isinstance(row, tuple)
@@ -950,7 +971,8 @@ class TestTheCodedNotesNameTheirIdentifiers:
                             continue
                         parts = re.split(r"[,;] ?| ", value)
                         if value in ids or any(p in ids and "_" in p
-                                               for p in parts):
+                                               for p in parts) \
+                                or any(rv_key.fullmatch(p) for p in parts):
                             found.append((code, field, value))
         assert not found, found
 

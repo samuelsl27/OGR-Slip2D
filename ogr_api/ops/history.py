@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from typing import Optional
 
+from ogr_core.project.commands import step_description
+
 from ..coerce import coerce_value
 from ..errors import Busy, InvalidArgument, unknown
 from . import operation
@@ -41,8 +43,7 @@ def project_history(ws, project_id: Optional[str] = None,
                    else handle.stack.redo(project))
             if cmd is None:
                 break
-            d = cmd.description
-            done.append(d() if callable(d) else str(d))
+            done.append(step_description(cmd))      # v0.1.434 (D412)
         undo, redo = handle.stack.history()
     return {"project_id": handle.id, "action": action, "done": done,
             "undo": undo[-10:], "redo": redo[-10:]}

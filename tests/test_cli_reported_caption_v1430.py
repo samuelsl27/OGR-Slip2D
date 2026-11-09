@@ -475,7 +475,10 @@ class TestTheSentences:
         finally:
             set_language(before)
         for code, text in said.items():
-            assert text.startswith("Norma de diseño aplicada: custom: "), \
+            # v0.1.434 (D412) -- the window names the standard («custom»
+            # by its own key, the owner's decision): it printed the id
+            assert text.startswith(
+                "Norma de diseño aplicada: Norma personalizada: "), \
                 (code, text)
             assert text.endswith("."), (code, text)    # D355
             assert re.search(r"[A-Za-z]+ applied|reported value|factor "

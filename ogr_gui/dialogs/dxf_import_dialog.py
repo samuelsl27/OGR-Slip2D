@@ -57,7 +57,6 @@ from ogr_core.dxf import (
     read_dxf,
 )
 from ogr_gui.core_messages import preview_error_text, problem_text
-from ogr_gui.core_messages import text as core_text
 from ogr_gui.dialog_size import hold_wrapped_height
 from ogr_gui.dialogs.dxf_problems_panel import problem_title
 from ogr_gui.i18n import tr
@@ -199,10 +198,10 @@ class DxfImportDialog(QDialog):
             cat = read_dxf(self.path, unit="m",
                            segments_per_circle=self.sp_segments.value())
         except RuntimeError as exc:
-            # v0.1.334 (D314) -- by its code, in the reader's language
-            self.lbl_preview.setText(core_text(
-                getattr(exc, "code", "") or "",
-                getattr(exc, "values", None), str(exc)))
+            # v0.1.334 (D314) -- by its code, in the reader's language.
+            # v0.1.434 (D412) -- through the one reader of an exception
+            from ogr_gui.core_messages import error_text
+            self.lbl_preview.setText(error_text(exc))
             return
         self.catalogue = cat
         suggested = cat.suggested_unit()

@@ -664,3 +664,161 @@ OPTIMIZE_TECHNIQUE = {"monte_carlo": "Monte Carlo",
 
 def optimize_technique_label(value) -> str:
     return _of(OPTIMIZE_TECHNIQUE, getattr(value, "value", value))
+
+
+# ----------------------------------------------------------------------
+# v0.1.434 (D412) -- the identifiers the core's messages and the undo step
+# names carry, as the user reads them
+# ----------------------------------------------------------------------
+#: The design standards, by the id the project stores (``PRESETS`` and
+#: ``"custom"``), as the notes and the report name them. «custom» and «none»
+#: have keys of their own, feminine like «norma» (the owner's decision,
+#: 2026-11-09): «Personalizado: 2 material(es)…» did not agree with
+#: «Norma de diseño aplicada». The combo of Project Settings shows these
+#: names too, except «none», which keeps «No standard» («Ninguna» after
+#: «Norma de diseño:», v0.1.325).
+DESIGN_STANDARD = {
+    "none": "No design standard",
+    "eurocode7_da1c1": "Eurocode 7 — DA1 Combination 1",
+    "eurocode7_da1c2": "Eurocode 7 — DA1 Combination 2",
+    "eurocode7_da2": "Eurocode 7 — DA2",
+    "eurocode7_da3": "Eurocode 7 — DA3",
+    "custom": "Custom standard",
+}
+
+
+def design_standard_label(value) -> str:
+    return _of(DESIGN_STANDARD, getattr(value, "value", value))
+
+
+#: The operations of ``boundary_edit`` (``ogr_api.ops.model._EDIT_OPS``),
+#: as the agent's undo step «Edit boundary ({op})» names them.
+BOUNDARY_EDIT_OP = {
+    "set_vertices": "set vertices", "translate": "translate",
+    "move_vertex": "move vertex", "insert_vertex": "insert vertex",
+    "delete_vertex": "delete vertex", "rename": "rename",
+    "change_type": "change type", "delete": "delete", "copy": "copy",
+    "scale": "scale", "rotate": "rotate", "simplify": "simplify",
+    "block_object": "block search object",
+}
+
+
+def boundary_edit_op_label(value) -> str:
+    return _of(BOUNDARY_EDIT_OP, value)
+
+
+def support_names_label(project, value) -> str:
+    """Support names as the core joined them (``ogr_core.messages.Joined``):
+    each one as :func:`support_name` shows it, a default name by the class
+    its set has NOW when ``project`` still has that support. The text is
+    never split: a name the user gave may hold «, » (review of 0.1.434), so
+    a plain string is one name."""
+    from types import SimpleNamespace
+    items = getattr(value, "items", None)
+    if items is None:
+        return support_name(SimpleNamespace(name=str(value)))
+    refs = getattr(value, "refs", ()) or ()
+    by_id = {getattr(s, "id", None): s
+             for s in getattr(project, "supports", None) or []}
+    shown = []
+    for k, name in enumerate(items):
+        s = by_id.get(refs[k]) if k < len(refs) else None
+        if s is not None and getattr(s, "name", "") == name:
+            from ogr_core.support import resolve_support_type
+            shown.append(support_name(s, resolve_support_type(project, s)))
+        else:
+            shown.append(support_name(SimpleNamespace(name=name)))
+    return getattr(value, "sep", ", ").join(shown)
+
+
+def variable_key_label(project, key) -> str:
+    """A random variable named by its key (``kind:target:param``), as Define
+    Random Variables names it; the key when ``project`` does not have it."""
+    return variable_label(project, key, key)
+
+
+def variable_keys_label(project, keys) -> str:
+    """Keys ", "-joined, each by its label, joined with «; »: a material's
+    name may hold a comma (the rule of 0.1.433)."""
+    return "; ".join(variable_key_label(project, k)
+                     for k in str(keys).split(", ") if k)
+
+
+def variable_label_by_stored(project, stored) -> str:
+    """A random variable named by the label it was stored with («Mat1 —
+    friction_angle»), as Define Random Variables names it; the stored label
+    when no variable of ``project`` has it."""
+    for rv in getattr(project, "random_variables", None) or []:
+        if (getattr(rv, "label", None) or getattr(rv, "key", None)) == stored:
+            return random_variable_label(rv)
+    return str(stored)
+
+
+def material_ref_label(project, ref) -> str:
+    """A material the agent named by its id or by its name: its name. The rule
+    is the operations layer's (``find_material``), asked and not copied."""
+    if project is None:
+        return str(ref)
+    try:
+        from ogr_api.ops.model import find_material
+        return find_material(project, ref).name
+    except Exception:  # noqa: BLE001 -- gone since: as it was written
+        return str(ref)
+
+
+#: The parts of a project an undo step captures (``commands.LIGHT_ATTRS``
+#: and ``HEAVY_ATTRS``), as «(kept, changed since: …)» names them: it listed
+#: the attribute names, «materials, settings».
+PROJECT_PART = {
+    "name": "project name", "settings": "settings",
+    "boundaries": "boundaries", "materials": "materials",
+    "supports": "supports", "support_types": "support types",
+    "distributed_loads": "distributed loads", "line_loads": "line loads",
+    "seismic": "seismic load", "seismic_records": "seismic records",
+    "region_assignments": "material assignments",
+    "tension_crack_properties": "tension crack",
+    "water_pressure_grid": "water pressure grid",
+    "seepage_bcs": "boundary conditions",
+    "random_variables": "random variables", "annotations": "annotations",
+    "focus_objects": "focus objects", "user_surfaces": "user surfaces",
+    "user_polylines": "user polylines", "fem_mesh": "finite element mesh",
+    "seepage_result": "seepage field",
+    "transient_results": "transient results",
+    "transient_initial_result": "initial state of the transient",
+}
+
+
+def project_part_label(attr) -> str:
+    return _of(PROJECT_PART, attr)
+
+
+class _WithVariables:
+    """``project`` with more random variables to name from: those an undo
+    step captured. Everything else is the project's."""
+
+    def __init__(self, project, extra) -> None:
+        self._project = project
+        self.random_variables = (
+            list(getattr(project, "random_variables", None) or [])
+            + list(extra))
+
+    def __getattr__(self, name):
+        return getattr(self._project, name)
+
+
+def with_variables(project, variables):
+    """``project``, and more random variables to name from (those of a
+    step, or of the run that wrote a note); ``project`` itself when there
+    are none."""
+    extra = list(variables or ())
+    return _WithVariables(project, extra) if extra else project
+
+
+def step_scope(project, cmd):
+    """What a step's name is said against: ``project``, and the random
+    variables the step captured, so a variable the project no longer has is
+    still named by its label (the owner's decision, 2026-11-09)."""
+    captured = getattr(cmd, "captured", None)
+    return with_variables(project, [
+        rv for values in (captured("random_variables") if captured else [])
+        for rv in (values or [])])

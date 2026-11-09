@@ -210,7 +210,9 @@ def hydraulic_set(ws, material: str, project_id: Optional[str] = None,
                 "read_by_this_model": sorted(read - {"model"}),
                 "notes": notes}
 
-    return ws.mutate(project_id, f"Hydraulic properties of {material}",
+    # v0.1.434 (D412) -- with its code; ``material`` as the agent gave it
+    from ogr_core.project.step_names import HYDRAULIC, step_name
+    return ws.mutate(project_id, step_name(HYDRAULIC, material=material),
                      edit)
 
 

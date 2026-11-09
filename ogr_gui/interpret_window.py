@@ -2526,8 +2526,9 @@ class InterpretWindow(QMainWindow):
                 values.append(float(eval(expr, {"__builtins__": {}},
                                          {"H": H, "P": P, "u": u})))
         except Exception as exc:  # noqa: BLE001
+            from .core_messages import error_text
             self._info(tr("The expression could not be evaluated: %s")
-                       % exc)
+                       % error_text(exc))
             return
         self._user_data = values
         self._info(tr("User data computed for %d nodes: range %.4f to "
@@ -2645,7 +2646,8 @@ class InterpretWindow(QMainWindow):
                                 f"{seepage.pressure_head[i]:.6f}",
                                 f"{seepage.pore_pressure[i]:.6f}"])
         except Exception as exc:  # noqa: BLE001
-            self._info(tr("Could not write the file: %s") % exc)
+            from .core_messages import error_text
+            self._info(tr("Could not write the file: %s") % error_text(exc))
             return
         self.statusBar().showMessage(
             tr("Exported %d nodes to %s") % (mesh.node_count, path), 8000)
@@ -2765,7 +2767,8 @@ class InterpretWindow(QMainWindow):
                     row.append(f"{fos:.6f}")
                     w.writerow(row)
         except Exception as exc:  # noqa: BLE001
-            self._info(tr("Could not write the file: %s") % exc)
+            from .core_messages import error_text
+            self._info(tr("Could not write the file: %s") % error_text(exc))
             return
         self.statusBar().showMessage(tr("Statistics exported to %s")
                                     % path, 8000)
@@ -2970,7 +2973,11 @@ class InterpretWindow(QMainWindow):
             self.statusBar().showMessage(tr("Slice data exported to %s")
                                          % path, 3000)
         except Exception as e:  # noqa: BLE001
-            QMessageBox.critical(self, tr("Error"), str(e))
+            # v0.1.434 (D412) -- the system's text inside a translated frame:
+            # it was shown alone
+            from .core_messages import error_text
+            QMessageBox.critical(self, tr("Error"), tr(
+                "Could not write the file: %s") % error_text(e))
 
     def _export_data_csv(self) -> None:
         if self.search_result is None:
@@ -2998,7 +3005,9 @@ class InterpretWindow(QMainWindow):
                     )
             self.statusBar().showMessage(tr('Saved {0}').format(path), 3000)
         except Exception as e:  # noqa: BLE001
-            QMessageBox.critical(self, tr("Error"), str(e))
+            from .core_messages import error_text
+            QMessageBox.critical(self, tr("Error"), tr(
+                "Could not write the file: %s") % error_text(e))
 
     # ------------------------------------------------------------------
     def _raw_data_rows(self) -> list:
@@ -3061,7 +3070,9 @@ class InterpretWindow(QMainWindow):
                 with open(path, "w", encoding="utf-8") as f:
                     f.write(body + "\n")
             except OSError as e:
-                QMessageBox.critical(dlg, tr("Error"), str(e))
+                from .core_messages import error_text
+                QMessageBox.critical(dlg, tr("Error"), tr(
+                    "Could not write the file: %s") % error_text(e))
                 return
             self.statusBar().showMessage(tr('Saved {0}').format(path), 3000)
             dlg.accept()
@@ -3572,17 +3583,20 @@ class InterpretWindow(QMainWindow):
                for r in rows]
         u = [r["pore_pressure"] for r in rows]
         alpha = [r["base_angle_deg"] for r in rows]
+        # v0.1.434 (review) -- one list of names for the chart and for the
+        # table it falls back on, which wrote its own («σnef», «τavail»)
+        series = [
+            ("σ'ₙ (kPa)", sn),
+            (tr("τ avail. (kPa)"), tau),
+            ("u (kPa)", u),
+            ("α (°)", alpha),
+        ]
         # Chart in a dialog
         try:
             from .dialogs.chart_dialogs import MultiLineDialog
             MultiLineDialog(
                 xs,
-                series=[
-                    ("σ'ₙ (kPa)", sn),
-                    (tr("τ avail. (kPa)"), tau),
-                    ("u (kPa)", u),
-                    ("α (°)", alpha),
-                ],
+                series=series,
                 xlabel=tr("x along surface (m)"),
                 title=tr('Values along surface (FoS={0:.3f})').format(target.fos),
                 parent=self,
@@ -3595,10 +3609,13 @@ class InterpretWindow(QMainWindow):
             # are shown.
             # v0.1.433 (D411) -- through tr(): the heading was English
             html = "<b>%s</b><br><pre>" % tr("Values along critical surface")
-            html += f"{'x':>8} {'σnef':>10} {'τavail':>10} {'u':>10} {'α°':>8}<br>"
+            columns = [("x (m)", xs, ".2f")] + [
+                (name, values, ".1f" if values is alpha else ".2f")
+                for name, values in series]
+            html += " ".join("%14s" % name for name, _v, _f in columns) + "<br>"
             for i in range(len(xs)):
-                html += (f"{xs[i]:8.2f} {sn[i]:10.2f} {tau[i]:10.2f} "
-                         f"{u[i]:10.2f} {alpha[i]:8.1f}<br>")
+                html += " ".join(format(values[i], "14" + spec)
+                                 for _n, values, spec in columns) + "<br>"
             html += "</pre>"
             self._info(html)
 

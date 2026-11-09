@@ -106,6 +106,11 @@ class StatisticsWindow(QMainWindow):
                  parent=None, *, factor_report=None):
         super().__init__(parent)
         self.project = project
+        # v0.1.434 (D412, review) -- what the notes are said against: the
+        # window's ``notes_scope()``, which keeps the random variables of
+        # the run, so a variable deleted since is named by its label
+        scope = getattr(parent, "notes_scope", None)
+        self._names = scope() if callable(scope) else project
         self.prob = prob_result
         self.sens = sens_result
         # v0.1.236 (D93) — the design-standard report of the run these
@@ -153,8 +158,11 @@ class StatisticsWindow(QMainWindow):
         # Its own label, apart from the run notes underneath: those say what
         # the run could NOT do, this says what the values ARE. Hidden without
         # a standard, so such a window is the one it has always been.
-        self.lbl_factor_report = QLabel(
-            "\n".join(statistics_factor_lines(factor_report)))
+        # v0.1.434 (review) -- each line through its code: the first one
+        # came translated and the report's own notes in English
+        self.lbl_factor_report = QLabel("\n".join(
+            note_line(n, project=self._names)
+            for n in statistics_factor_lines(factor_report)))
         self.lbl_factor_report.setWordWrap(True)
         self.lbl_factor_report.setVisible(self.factored)
         v.addWidget(self.lbl_factor_report)
@@ -173,7 +181,8 @@ class StatisticsWindow(QMainWindow):
             # v0.1.353 (D335) -- each line through its code
             self.lbl_run_notes.setText(
                 tr("What this run could not do:") + "\n"
-                + "\n".join(note_line(n) for n in _lines))
+                + "\n".join(note_line(n, project=self._names)
+                            for n in _lines))
         # Regla 7 in interface form: with nothing to say, the window of a
         # sound run is pixel for pixel the one it has always been.
         self.lbl_run_notes.setVisible(bool(_lines))
@@ -191,7 +200,8 @@ class StatisticsWindow(QMainWindow):
         if _switches:
             self.lbl_switch_notes.setText(
                 tr("Samples that answered for another mechanism:") + "\n"
-                + "\n".join(note_line(n) for n in _switches))
+                + "\n".join(note_line(n, project=self._names)
+                            for n in _switches))
         self.lbl_switch_notes.setVisible(bool(_switches))
         v.addWidget(self.lbl_switch_notes)
 
@@ -247,8 +257,9 @@ class StatisticsWindow(QMainWindow):
         for res in (self.prob, self.sens):
             note = (getattr(res, "notes", None) or {}).get(mid)
             if note:
-                # v0.1.353 (D335) -- in the reader's language
-                return note_text(note)
+                # v0.1.353 (D335) -- in the reader's language; v0.1.434
+                # (D412) -- a variable by its label, from the project
+                return note_text(note, project=self._names)
         return ""
 
     def _with_reason(self, text: str, mid) -> str:
@@ -411,7 +422,7 @@ class StatisticsWindow(QMainWindow):
         from ogr_gui.labels import variable_label
 
         def name(key, stored):
-            return variable_label(self.project, key, stored)
+            return variable_label(self._names, key, stored)
         for vs in sweeps.values():
             if vs.note:
                 continue

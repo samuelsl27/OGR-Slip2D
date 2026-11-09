@@ -164,6 +164,7 @@ def generate_report(
     figures=None,
     translate=None,
     method_name=None,
+    standard_name=None,
 ) -> str:
     """Generate a PDF analysis report.
 
@@ -213,6 +214,10 @@ def generate_report(
 
     T = translate or _same
     name_of = method_name or _method_name
+    # v0.1.434 (D412) -- the design standard by its name in the reader's
+    # language, when the caller knows it (the window); the API's report
+    # keeps the stored id it always printed
+    standard_of = standard_name or str
     summary = project.settings.summary
     author = author or summary.author or ""
     company = company or summary.company or ""
@@ -340,12 +345,9 @@ def generate_report(
             getattr(units, "system", None),
             {"metric": "Metric Units", "imperial": "Imperial Units"}))),
         (T("Time Units"), T(_unit_label(
-            getattr(units, "time", None),
-            {"d": "days", "s": "seconds", "h": "hours"}))),
+            getattr(units, "time", None), TIME_UNIT_WORDS))),
         (T("Permeability Units"), T(_unit_label(
-            getattr(units, "permeability", None),
-            {"m/s": "meters/second", "cm/s": "cm/second",
-             "ft/s": "feet/second"}))),
+            getattr(units, "permeability", None), PERMEABILITY_UNIT_WORDS))),
         (T("Failure Direction"), T(_unit_label(
             getattr(units, "failure_direction", None),
             {"R2L": "Right to Left", "L2R": "Left to Right"}))),
@@ -393,7 +395,8 @@ def generate_report(
         story.append(Spacer(1, 6))
         story.append(Paragraph("<b>%s</b>" % T("Design Standard"), body))
         story.append(kv_table([
-            (T("Standard"), str(getattr(factor_report, "standard", "—"))),
+            (T("Standard"), standard_of(getattr(factor_report, "standard",
+                                                "—"))),
             # v0.1.355 (D335) -- the summary and the notes carry their codes
             (T("Factored"), T(factor_report.summary())),
         ]))
@@ -554,6 +557,17 @@ def _figure_flowables(figures, results, fs_short, width, caption_style,
     return out
 
 
+#: v0.1.434 (D412) -- the report's words for every time and permeability
+#: unit the enums have (``ogr_core.project.units``): the others printed the
+#: member's name title-cased, «Minutes», «M Day», «Mm Hour», in either
+#: language. «ft/s» is no member, and went.
+TIME_UNIT_WORDS = {"s": "seconds", "min": "minutes", "h": "hours",
+                   "d": "days", "mo": "months", "yr": "years"}
+PERMEABILITY_UNIT_WORDS = {"m/s": "meters/second", "m/day": "meters/day",
+                           "m/year": "meters/year", "cm/s": "cm/second",
+                           "mm/hour": "mm/hour"}
+
+
 def _unit_label(enum_val, mapping):
     """Map an enum (by .value) to a friendly label, with fallbacks."""
     if enum_val is None:
@@ -561,9 +575,8 @@ def _unit_label(enum_val, mapping):
     val = getattr(enum_val, "value", enum_val)
     if val in mapping:
         return mapping[val]
-    name = getattr(enum_val, "name", None)
-    if name:
-        return name.replace("_", " ").title()
+    # v0.1.434 (D412) -- a value with no label prints as it is stored («mo»,
+    # «m/day»); the member's name title-cased read «M Day»
     return str(val)
 
 

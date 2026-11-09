@@ -190,13 +190,19 @@ class SeismicRecordsDialog(QDialog):
             with open(path, "r", encoding="utf-8", errors="replace") as fh:
                 text = fh.read()
         except OSError as exc:
-            self.lbl_note.setText(tr("Could not read the file:") + f" {exc}")
+            from ogr_gui.core_messages import error_text
+            self.lbl_note.setText(tr("Could not read the file:") + " "
+                                  + error_text(exc))
             return
         unit = _UNIT_CHOICES[max(0, self.cmb_unit.currentIndex())][0]
         accel, dt, note = parse_record_text(text, unit,
                                             dt=self.sb_dt.value())
+        # v0.1.434 (D412) -- the reader's note through its code: it came
+        # out in English after the translated frame
+        from ogr_gui.core_messages import note_text
         if not accel:
-            self.lbl_note.setText(tr("Nothing was imported:") + f" {note}")
+            self.lbl_note.setText(tr("Nothing was imported:") + " "
+                                  + note_text(note))
             return
         import os
         rec = SeismicRecord(
@@ -204,7 +210,7 @@ class SeismicRecordsDialog(QDialog):
             dt=dt, accelerations=accel, source_unit=unit,
             source_file=os.path.basename(path))
         self.records.append(rec)
-        self.lbl_note.setText(note or "")
+        self.lbl_note.setText(note_text(note) if note else "")
         self._reload(len(self.records) - 1)
 
     def _delete(self) -> None:

@@ -20,9 +20,10 @@ What these tests protect:
 * generating a mesh through the window, with Spanish active, says so in
   Spanish;
 * no f-string with letters is left in ``main_window.py`` outside the
-  places that are data, not interface: the names of undo steps (which the
-  agent reads in ``project_history``) and the default names of loads
-  (which the ``.ogr`` keeps).
+  places that are data, not interface: the default names of loads (which
+  the ``.ogr`` keeps). The names of undo steps were exempt until v0.1.434
+  (D412), and two of them reached the Spanish Edit menu in English: a step
+  built from values has its code now (``ogr_core.project.step_names``).
 
 The language and the replaced dialog are restored in ``finally`` (rule 5).
 """
@@ -132,15 +133,11 @@ class TestNoEnglishLeft:
                 allowed.add(id(node.format_spec))
             if not isinstance(node, ast.Call):
                 continue
-            fn = node.func
-            name = getattr(fn, "id", None) or getattr(fn, "attr", None)
-            # undo steps: the agent reads their names in project_history
-            # (v0.1.301, D292: and the window's own steps, _model_step and
-            # the undo_step decorator; the Edit menu translates them)
-            if name and (name.endswith("Command")
-                         or name in ("_model_step", "undo_step")) \
-                    and node.args:
-                allowed.add(id(node.args[0]))
+            # v0.1.434 (D412) -- the undo steps are no longer exempt: the
+            # exemption (v0.1.301) let «Offset External ({d:+.2f} m)» and
+            # «Expand/Shrink ({mode})» reach the Spanish Edit menu in English
+            # for 133 versions. A step built from values has its code
+            # (``ogr_core.project.step_names``), and a literal its key.
             # the default name of a load is data the .ogr keeps
             for kw in node.keywords:
                 if kw.arg == "name":

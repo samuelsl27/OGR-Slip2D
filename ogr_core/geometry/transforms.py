@@ -81,7 +81,9 @@ def offset_polygon(polyline: Polyline, distance: float) -> Polyline:
     be filtered by Geometry Cleanup afterwards.
     """
     if not polyline.closed or len(polyline) < 3:
-        raise ValueError("offset_polygon requires a closed polygon with ≥3 vertices")
+        # v0.1.434 (D412) -- with its code; ``str(exc)`` is the English
+        from .messages import OFFSET_NEEDS_POLYGON, geometry_message
+        raise ValueError(geometry_message(OFFSET_NEEDS_POLYGON))
 
     verts = list(polyline.vertices)
     # Enforce CCW so that "outward" (positive distance) means expanding
