@@ -516,7 +516,6 @@ _DICTS: dict[str, dict[str, str]] = {
         'Remove:': 'Quitar:',
         'Required support force for FS = %g': 'Fuerza de soporte requerida para FS = %g',
         'Requires a computed groundwater analysis.': 'Requiere un análisis de agua subterránea calculado.',
-        'Requires a probabilistic or sensitivity analysis: run Statistics → Compute Statistics in the modeller.': 'Requiere un análisis probabilístico o de sensibilidad: ejecuta Estadística → Calcular estadística en el modelador.',
         'Requires a transient groundwater analysis with per-stage factors of safety.': 'Requiere un análisis de agua subterránea transitorio con factores de seguridad por etapa.',
         'Sensitivity': 'Sensibilidad',
         'Statistics exported to %s': 'Estadística exportada a %s',
@@ -1030,6 +1029,74 @@ _DICTS: dict[str, dict[str, str]] = {
         'meters/year': 'metros/año',
         # Save and Save As, as Open says it
         'Could not save project:\n{0}': 'No se pudo guardar el proyecto:\n{0}',
+        # v0.1.435 (D413) -- the random-variable plot's reasons, the button's
+        # status tip (the core's ``Distribution.not_random_reason``)
+        'No distribution': 'Sin distribución',
+        'Select a random variable first.': 'Selecciona antes una variable aleatoria.',
+        'This variable has no distribution: it is not random.':
+            'Esta variable no tiene distribución: no es aleatoria.',
+        'The range is empty: enter a relative minimum or a relative maximum.':
+            'El rango está vacío: introduce un mínimo relativo o un máximo relativo.',
+        'A normal or lognormal distribution needs a standard deviation greater than zero.':
+            'Una distribución normal o lognormal necesita una desviación típica mayor que cero.',
+        # the sensitivity charts name the method they draw
+        'Sensitivity — {0}': 'Sensibilidad — {0}',
+        'Sensitivity Tornado — {0}': 'Tornado de sensibilidad — {0}',
+        'most sensitive ({0}): {1}': 'la más influyente ({0}): {1}',
+        # with a design standard, Interpret's charts name the over-design
+        # factor («FSD», as the Surfaces table and the summary)
+        'Histogram — Over-design factor distribution':
+            'Histograma — distribución del factor de sobredimensionamiento',
+        'Mark ODF = 1.0': 'Marcar FSD = 1.0',
+        'ODF = 1.0': 'FSD = 1.0',
+        'Cumulative — ODF CDF': 'Acumulada — función de distribución del FSD',
+        'P(ODF<1) = {0:.2%}': 'P(FSD<1) = {0:.2%}',
+        'Over-design Factor Along Slope': 'Factor de sobredimensionamiento a lo largo del talud',
+        'Centre ({0:.2f}, {1:.2f}) — best ODF at this centre = {2:.3f}':
+            'Centro ({0:.2f}, {1:.2f}) — FSD mínimo en este centro = {2:.3f}',
+        'Selected surface at ({0:.2f}, {1:.2f}) — ODF = {2:.3f}':
+            'Superficie elegida en ({0:.2f}, {1:.2f}) — FSD = {2:.3f}',
+        'Supports on the critical surface (ODF = %.4f):':
+            'Soportes en la superficie crítica (FSD = %.4f):',
+        'Target over-design factor:': 'Factor de sobredimensionamiento objetivo:',
+        'Required support force for ODF = %g': 'Fuerza de soporte requerida para FSD = %g',
+        '   |   ODF = %s': '   |   FSD = %s',
+        'Values along surface (ODF={0:.3f})': 'Valores a lo largo de la superficie (FSD={0:.3f})',
+        'Slice {0}: α={1:.1f}°, b={2:.2f} m, ODF={3:.4f}{4}':
+            'Dovela {0}: α={1:.1f}°, b={2:.2f} m, FSD={3:.4f}{4}',
+        'ODF = {0:.4f}{1}': 'FSD = {0:.4f}{1}',
+        'Lowest over-design factor among them: ': 'Menor factor de sobredimensionamiento entre ellas: ',
+        'ODF vs Radius — {0} surfaces': 'FSD frente al radio — {0} superficies',
+        '<b>Cumulative distribution (text fallback)</b><br>Surfaces with ODF &lt; 1.0 : {0} / {1}<br>P(ODF &lt; 1) ≈ {2:.3%}<br><i>Install matplotlib for an interactive CDF plot.</i>':
+            '<b>Distribución acumulada (en texto)</b><br>Superficies con FSD &lt; 1,0: {0} / {1}<br>P(FSD &lt; 1) ≈ {2:.3%}<br><i>Instala matplotlib para un gráfico interactivo de la distribución.</i>',
+        # the Statistics entries, each by the result it needs
+        'Requires a probabilistic analysis: run Statistics → Compute Statistics in the modeller.':
+            'Requiere un análisis probabilístico: ejecuta Estadística → Calcular estadística en el modelador.',
+        'Requires a probabilistic analysis, or a search that reports several minima (a multimodal search or an Overall Slope run).':
+            'Requiere un análisis probabilístico, o una búsqueda que informe de varios mínimos (una búsqueda multimodal o un análisis de Talud completo).',
+        # ... with the analysis switched off in Project Settings (review of 0.1.435)
+        'Requires a sensitivity analysis: switch it on in Project Settings > Statistics and run Statistics → Compute Statistics in the modeller.':
+            'Requiere un análisis de sensibilidad: actívalo en Ajustes de proyecto > Estadística y ejecuta Estadística → Calcular estadística en el modelador.',
+        'Requires a probabilistic analysis: switch it on in Project Settings > Statistics and run Statistics → Compute Statistics in the modeller.':
+            'Requiere un análisis probabilístico: actívalo en Ajustes de proyecto > Estadística y ejecuta Estadística → Calcular estadística en el modelador.',
+        # the back analysis and the crossing-point form under a standard
+        'The strength envelope depends on the normal stress, and on at least one slice the stress it is read at did not settle on the stress the method resolves at the target over-design factor. No support force is reported for this surface.':
+            'La envolvente de resistencia depende de la tensión normal, y en al menos una dovela la tensión a la que se lee no converge a la que resuelve el método con el factor de sobredimensionamiento objetivo. No se da fuerza de soporte para esta superficie.',
+        'Enter the coordinates of a point. The surfaces whose slip surface passes within the tolerance are counted, and the one with the lowest over-design factor is reported.':
+            'Introduce las coordenadas de un punto. Se cuentan las superficies cuya superficie de rotura pasa a menos de la tolerancia, y se indica la de menor factor de sobredimensionamiento.',
+        # the drawdown sweep under a standard
+        'Over-design factor vs drawdown level':
+            'Factor de sobredimensionamiento frente al nivel de desembalse',
+        'Critical drawdown level ({0}): {1}, ODF = {2:.4f}':
+            'Nivel de desembalse crítico ({0}): {1}, FSD = {2:.4f}',
+        # Stretch Support, one text per end (it was filled with head / tail)
+        'Support {0} head stretched.': 'Soporte {0} estirado por la cabeza.',
+        'Support {0} tail stretched.': 'Soporte {0} estirado por la cola.',
+        # Paint region: an id whose material was deleted, a click outside
+        'The material picked in the Assign panel no longer exists: pick another.':
+            'El material elegido en el panel Asignar ya no existe: elige otro.',
+        'The click is outside every region: nothing was painted.':
+            'El clic cae fuera de toda región: no se ha pintado nada.',
         # the same, as the noun of «a … surface» (stat.case_text_*)
         'circular surface': 'superficie circular',
         'polyline surface': 'superficie poligonal',
@@ -2759,8 +2826,6 @@ _DICTS: dict[str, dict[str, str]] = {
         "Discharge section": "Sección de descarga",
         "Distribution over {0} valid surfaces":
             "Distribución de {0} superficies válidas",
-        "Enter a relative minimum and maximum first.":
-            "Introduce antes un mínimo y un máximo relativos.",
         "Enter four numbers: x0,y0,x1,y1":
             "Introduce cuatro números: x0,y0,x1,y1",
         "Flow Vectors": "Vectores de flujo",
@@ -3943,12 +4008,6 @@ _DICTS: dict[str, dict[str, str]] = {
             'k_h',
         'kv':
             'k_v',
-        # v0.1.328 (D324) — why the GM surface entries of Interpret are grey
-        "Requires a probabilistic or sensitivity analysis, or a search that "
-        "reports several minima (a multimodal search or an Overall Slope run).":
-            "Requiere un análisis probabilístico o de sensibilidad, o una búsqueda "
-            "que informe de varios mínimos (una búsqueda multimodal o un análisis "
-            "de Talud completo).",
         # v0.1.331 (D329a) — Measure and Dimension Length on the canvas
         "Dimension Length: click two points, Esc to finish":
             "Acotar longitud: pulsa dos puntos, Esc para terminar",
@@ -7141,8 +7200,6 @@ _DICTS: dict[str, dict[str, str]] = {
             "Pulsa dos puntos sobre el contorno del talud; el patrón se generará solo.",
         "Pattern generated: {0} supports added ({1} total).":
             "Patrón generado: {0} soportes añadidos ({1} en total).",
-        "Support {0} {1} stretched.":
-            "Soporte {0} {1} estirado.",
         "Click the start point of the load on a boundary, then the end point. Esc to cancel.":
             "Pulsa el punto inicial de la carga sobre un contorno y después el final. Esc para cancelar.",
         "Distributed Load added: {0:.1f} kN/m² between ({1:.2f},{2:.2f}) and ({3:.2f},{4:.2f})":

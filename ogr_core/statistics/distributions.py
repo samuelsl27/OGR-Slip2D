@@ -110,15 +110,23 @@ class Distribution:
     @property
     def is_random(self) -> bool:
         """False when the variable is effectively deterministic."""
+        return not self.not_random_reason()
+
+    def not_random_reason(self) -> str:
+        """Why the variable is not random: ``"none"`` (no distribution),
+        ``"no_range"`` (minimum and maximum at the mean) or ``"no_std_dev"``
+        (a normal or lognormal without a standard deviation); ``""`` when it
+        is random. The one rule :attr:`is_random` reads, in the same order
+        (v0.1.435, D413: the window named one reason for all three)."""
         if self.dist_type == DistributionType.NONE:
-            return False
+            return "none"
         if self.high - self.low <= 1e-15:
-            return False
+            return "no_range"
         if (self.dist_type in (DistributionType.NORMAL,
                               DistributionType.LOGNORMAL)
                 and self.std_dev <= 0):
-            return False
-        return True
+            return "no_std_dev"
+        return ""
 
     # ------------------------------------------------------------------
     def _frozen(self):

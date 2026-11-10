@@ -387,6 +387,16 @@ class TestTheInterfaceDelegates:
             def exec(self):
                 return 0
 
+            # v0.1.435 (D413) -- the report opens non-modal (keep_chart)
+            def show(self):
+                pass
+
+            def isHidden(self):
+                return True
+
+            def setParent(self, _parent):
+                pass
+
         with _swap(mw, "GeometryCleanupDialog", _Report):
             w.act_geometry_cleanup()
         assert "Duplicate vertices removed: 1" in shown[0]

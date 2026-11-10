@@ -37,7 +37,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QListWidget,
     QListWidgetItem,
-    QMessageBox,
     QPushButton,
     QVBoxLayout,
 )
@@ -51,6 +50,7 @@ from ogr_core.statistics import (
 )
 from ogr_gui.i18n import tr  # noqa: E402
 from ogr_gui.dialog_size import list_width
+from ogr_gui.disabled_reasons import gate
 from ogr_gui.labels import random_variable_label  # noqa: E402
 
 _DIST_LABELS = [
@@ -61,6 +61,10 @@ _DIST_LABELS = [
     (DistributionType.EXPONENTIAL, "Exponential"),
     (DistributionType.LOGNORMAL, "Lognormal"),
     (DistributionType.GAMMA, "Gamma"),
+    # v0.1.435 (D413) -- the choice an agent can make (``distribution="none"``):
+    # missing here, selecting such a variable put the combo on Normal and
+    # stored it, so OK switched the variable back on
+    (DistributionType.NONE, "No distribution"),
 ]
 
 # Distributions that take a standard deviation
@@ -169,14 +173,26 @@ class RandomVariablesDialog(QDialog):
             "for cohesion and friction angle."))
         f.addRow(tr("Correlation coefficient:"), self.sp_corr)
 
-        for w in (self.sp_std, self.sp_rmin, self.sp_rmax, self.sp_corr):
-            w.valueChanged.connect(self._store_current)
-        self.cbo_corr_with.currentIndexChanged.connect(self._store_current)
+        # v0.1.435 (D413) -- each control stores its own field, and only
+        # when the user changes it: one handler wrote back every field the
+        # controls show, so selecting a variable (and OK) rounded what an
+        # agent stored (3 decimals of correlation, 6 of standard deviation;
+        # 4e-7 became 0 and switched the variable off). Bound methods, not
+        # lambdas: a lambda that names ``self`` is held from C++ and kept
+        # the closed dialog alive, with its plots and its project
+        self.sp_std.valueChanged.connect(self._on_std_changed)
+        self.sp_rmin.valueChanged.connect(self._on_rmin_changed)
+        self.sp_rmax.valueChanged.connect(self._on_rmax_changed)
+        self.sp_corr.valueChanged.connect(self._on_corr_changed)
+        self.cbo_corr_with.currentIndexChanged.connect(
+            self._on_corr_with_changed)
 
         right.addWidget(gb)
-        b_plot = QPushButton(tr("Plot distribution…"))
-        b_plot.clicked.connect(self._plot)
-        right.addWidget(b_plot)
+        # v0.1.435 (D413) -- grey with the reason when there is nothing to
+        # plot: it opened a modal box that named one reason for three
+        self.btn_plot = QPushButton(tr("Plot distribution…"))
+        self.btn_plot.clicked.connect(self._plot)
+        right.addWidget(self.btn_plot)
         right.addStretch(1)
 
         bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -187,6 +203,7 @@ class RandomVariablesDialog(QDialog):
 
         self._current_key = None
         self._refresh_defined()
+        self._update_plot_gate()
 
     # ==================================================================
     def _by_key(self, key):
@@ -209,7 +226,9 @@ class RandomVariablesDialog(QDialog):
 
     def _refresh_correlation_choices(self):
         current = self.cbo_corr_with.currentData()
-        self.cbo_corr_with.blockSignals(True)
+        # the state it found, not False: _on_selected calls it with the
+        # signals already blocked (v0.1.435)
+        was = self.cbo_corr_with.blockSignals(True)
         self.cbo_corr_with.clear()
         self.cbo_corr_with.addItem(tr("(none)"), None)
         for key, rv in self.defined.items():
@@ -217,7 +236,7 @@ class RandomVariablesDialog(QDialog):
                 self.cbo_corr_with.addItem(random_variable_label(rv), key)
         i = self.cbo_corr_with.findData(current)
         self.cbo_corr_with.setCurrentIndex(max(0, i))
-        self.cbo_corr_with.blockSignals(False)
+        self.cbo_corr_with.blockSignals(was)
 
     # ------------------------------------------------------------------
     def _add(self):
@@ -251,74 +270,127 @@ class RandomVariablesDialog(QDialog):
 
     # ------------------------------------------------------------------
     def _on_selected(self, row: int):
+        """Show the selected variable. It stores nothing (v0.1.435, D413):
+        the controls round what they show, and writing that back changed a
+        variable nobody had touched."""
         self._current_key = None
         it = self.list_defined.item(row)
-        if it is None:
-            return
-        key = it.data(Qt.UserRole)
-        rv = self.defined.get(key)
+        key = it.data(Qt.UserRole) if it is not None else None
+        rv = self.defined.get(key) if key is not None else None
         if rv is None:
+            # the last variable removed: nothing to plot (this is the only
+            # call that greys the button then)
+            self._update_plot_gate()
             return
         d = rv.distribution
-        for w in (self.cbo_dist, self.sp_std, self.sp_rmin, self.sp_rmax,
-                  self.sp_corr, self.cbo_corr_with):
+        controls = (self.cbo_dist, self.sp_std, self.sp_rmin, self.sp_rmax,
+                    self.sp_corr, self.cbo_corr_with)
+        for w in controls:
             w.blockSignals(True)
-        i = self.cbo_dist.findData(d.dist_type)
-        self.cbo_dist.setCurrentIndex(max(0, i))
-        self.sp_mean.setValue(d.mean)
-        self.sp_std.setValue(d.std_dev)
-        self.sp_rmin.setValue(d.rel_min)
-        self.sp_rmax.setValue(d.rel_max)
-        self.sp_corr.setValue(rv.correlation)
-        for w in (self.cbo_dist, self.sp_std, self.sp_rmin, self.sp_rmax,
-                  self.sp_corr, self.cbo_corr_with):
-            w.blockSignals(False)
-        self._current_key = key
-        self._refresh_correlation_choices()
-        j = self.cbo_corr_with.findData(rv.correlated_with)
-        if j >= 0:
-            self.cbo_corr_with.setCurrentIndex(j)
-        self._on_dist_changed(0)
+        try:
+            i = self.cbo_dist.findData(d.dist_type)
+            self.cbo_dist.setCurrentIndex(max(0, i))
+            self.sp_mean.setValue(d.mean)
+            self.sp_std.setValue(d.std_dev)
+            self.sp_rmin.setValue(d.rel_min)
+            self.sp_rmax.setValue(d.rel_max)
+            self.sp_corr.setValue(rv.correlation)
+            self._current_key = key
+            self._refresh_correlation_choices()
+            # blocked too: it stored the previous variable's partner when
+            # this one's was not in the list
+            j = self.cbo_corr_with.findData(rv.correlated_with)
+            self.cbo_corr_with.setCurrentIndex(max(0, j))
+        finally:
+            for w in controls:
+                w.blockSignals(False)
+        self.sp_std.setEnabled(d.dist_type in _USES_STD)
+        self._after_edit()
+
+    def _current(self):
+        key = self._current_key
+        return self.defined.get(key) if key is not None else None
+
+    def _after_edit(self) -> None:
+        rv = self._current()
+        if rv is not None:
+            d = rv.distribution
+            self.lbl_actual.setText(f"{d.low:g}  …  {d.high:g}")
+        self._update_plot_gate()
+
+    def _store(self, owner: str, field: str, value) -> None:
+        rv = self._current()
+        if rv is not None:
+            setattr(rv.distribution if owner == "dist" else rv, field, value)
+        self._after_edit()
 
     def _on_dist_changed(self, _idx):
         t = self.cbo_dist.currentData()
         self.sp_std.setEnabled(t in _USES_STD)
-        self._store_current()
+        self._store("dist", "dist_type", t)
 
-    def _store_current(self):
+    def _on_std_changed(self, value):
+        self._store("dist", "std_dev", value)
+
+    def _on_rmin_changed(self, value):
+        self._store("dist", "rel_min", value)
+
+    def _on_rmax_changed(self, value):
+        self._store("dist", "rel_max", value)
+
+    def _on_corr_changed(self, value):
+        self._store("rv", "correlation", value)
+
+    def _on_corr_with_changed(self, _idx):
+        self._store("rv", "correlated_with", self.cbo_corr_with.currentData())
+
+    def _plot_reason(self) -> str:
+        """Why there is nothing to plot, or "" (v0.1.435, D413): the core's
+        reason (``Distribution.not_random_reason``), the same rule the run
+        reads, and no matplotlib."""
         key = self._current_key
         if key is None or key not in self.defined:
+            return tr("Select a random variable first.")
+        why = self.defined[key].distribution.not_random_reason()
+        reasons = {
+            "none": tr("This variable has no distribution: it is not "
+                       "random."),
+            "no_range": tr("The range is empty: enter a relative minimum or "
+                           "a relative maximum."),
+            "no_std_dev": tr("A normal or lognormal distribution needs a "
+                             "standard deviation greater than zero."),
+        }
+        if why:
+            return reasons.get(why, why)
+        import importlib.util
+        if importlib.util.find_spec("matplotlib") is None:
+            return tr("matplotlib is not installed.")
+        return ""
+
+    def _update_plot_gate(self) -> None:
+        btn = getattr(self, "btn_plot", None)
+        if btn is None:                 # signals while the dialog is built
             return
-        rv = self.defined[key]
-        rv.distribution.dist_type = self.cbo_dist.currentData()
-        rv.distribution.std_dev = self.sp_std.value()
-        rv.distribution.rel_min = self.sp_rmin.value()
-        rv.distribution.rel_max = self.sp_rmax.value()
-        rv.correlated_with = self.cbo_corr_with.currentData()
-        rv.correlation = self.sp_corr.value()
-        d = rv.distribution
-        self.lbl_actual.setText(f"{d.low:g}  …  {d.high:g}")
+        why = self._plot_reason()
+        gate(btn, not why, why)
+        btn.setToolTip(why)
 
     # ------------------------------------------------------------------
     def _plot(self):
-        key = self._current_key
-        if key is None:
-            return
-        rv = self.defined[key]
-        if not rv.distribution.is_random:
-            QMessageBox.information(
-                self, tr("Plot"),
-                tr("Enter a relative minimum and maximum first."))
-            return
+        """The density of the selected variable, in a window of its own:
+        non-modal since v0.1.435 (D413), as every informative chart, and
+        kept on the dialog. Returns it, or None when the button's reason
+        says there is nothing to plot."""
+        if self._plot_reason():
+            return None
         try:
             import matplotlib
             matplotlib.use("QtAgg", force=False)
             from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
             from matplotlib.figure import Figure
         except ImportError:
-            QMessageBox.information(self, tr("Plot"),
-                                    tr("matplotlib is not installed."))
-            return
+            return None
+        rv = self.defined[self._current_key]
         curve = rv.distribution.curve(120)
         dlg = QDialog(self)
         dlg.setWindowTitle(random_variable_label(rv))
@@ -335,11 +407,24 @@ class RandomVariablesDialog(QDialog):
         ax.grid(True, alpha=0.3)
         ax.legend(fontsize=8)
         v.addWidget(FigureCanvasQTAgg(fig))
-        dlg.exec()
+        from ogr_gui.xy_chart import keep_chart
+        return keep_chart(self, dlg)
 
     # ------------------------------------------------------------------
     def _accept(self):
-        self._store_current()
+        # v0.1.435 (D413) -- nothing re-stored from the controls here: each
+        # edit is already in the working copy, and only the edits
         self.project.random_variables = list(self.defined.values())
         self.project.is_dirty = True
         self.accept()
+
+    def done(self, result):
+        """OK or Cancel also close the plots it opened (v0.1.435, D413): a
+        non-modal plot outlived the editor and kept showing a distribution
+        that Cancel had thrown away."""
+        for win in list(getattr(self, "_chart_windows", ()) or ()):
+            try:
+                win.close()
+            except RuntimeError:        # already deleted on the C++ side
+                pass
+        super().done(result)

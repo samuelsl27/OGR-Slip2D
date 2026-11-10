@@ -93,10 +93,18 @@ class _ChartDialogBase(QDialog):
 
 # ======================================================================
 class HistogramDialog(_ChartDialogBase):
-    """FoS histogram for the full population."""
+    """FoS histogram for the full population.
 
-    def __init__(self, fos_values: Sequence[float], parent=None) -> None:
-        super().__init__(tr("Histogram — Factor of Safety distribution"), parent)
+    v0.1.435 (D413) -- ``factored``: the values are over-design factors (a
+    design standard was applied), and every text says so; without it, the
+    texts it always had."""
+
+    def __init__(self, fos_values: Sequence[float], parent=None,
+                 factored: bool = False) -> None:
+        self._factored = bool(factored)
+        super().__init__(
+            tr("Histogram — Over-design factor distribution") if factored
+            else tr("Histogram — Factor of Safety distribution"), parent)
         self._values = [v for v in fos_values if v is not None]
         if self.canvas is None or not self._values:
             return
@@ -105,7 +113,8 @@ class HistogramDialog(_ChartDialogBase):
         self.spn_bins.setRange(5, 200)
         self.spn_bins.setValue(25)
         self.spn_bins.valueChanged.connect(self._redraw)
-        self.chk_mark_one = QCheckBox(tr("Mark FoS = 1.0"))
+        self.chk_mark_one = QCheckBox(
+            tr("Mark ODF = 1.0") if factored else tr("Mark FoS = 1.0"))
         self.chk_mark_one.setChecked(True)
         self.chk_mark_one.toggled.connect(self._redraw)
 
@@ -126,9 +135,12 @@ class HistogramDialog(_ChartDialogBase):
                 edgecolor="#10305a", alpha=0.85)
         if self.chk_mark_one.isChecked():
             ax.axvline(1.0, color="#c0392b", linestyle="--",
-                       linewidth=1.2, label=tr("FoS = 1.0"))
+                       linewidth=1.2,
+                       label=(tr("ODF = 1.0") if self._factored
+                              else tr("FoS = 1.0")))
             ax.legend(loc="upper right")
-        ax.set_xlabel(tr("Factor of Safety"))
+        ax.set_xlabel(tr("Over-design factor") if self._factored
+                      else tr("Factor of Safety"))
         ax.set_ylabel(tr("Number of surfaces"))
         ax.set_title(tr('Distribution over {0} valid surfaces').format(len(self._values)))
         ax.grid(True, alpha=0.3)
@@ -137,10 +149,14 @@ class HistogramDialog(_ChartDialogBase):
 
 # ======================================================================
 class CumulativeDialog(_ChartDialogBase):
-    """CDF of FoS values with P(FoS<1) annotation."""
+    """CDF of FoS values with P(FoS<1) annotation; ``factored`` as in
+    :class:`HistogramDialog` (v0.1.435, D413)."""
 
-    def __init__(self, fos_values: Sequence[float], parent=None) -> None:
-        super().__init__(tr("Cumulative — FoS CDF"), parent)
+    def __init__(self, fos_values: Sequence[float], parent=None,
+                 factored: bool = False) -> None:
+        self._factored = bool(factored)
+        super().__init__(tr("Cumulative — ODF CDF") if factored
+                         else tr("Cumulative — FoS CDF"), parent)
         self._values = sorted(v for v in fos_values if v is not None)
         if self.canvas is None or not self._values:
             return
@@ -161,11 +177,13 @@ class CumulativeDialog(_ChartDialogBase):
         pf = (values < 1.0).sum() / len(values) if len(values) else 0.0
         ax.text(
             1.02, 0.05,
-            tr('P(FoS<1) = {0:.2%}').format(pf),
+            (tr('P(ODF<1) = {0:.2%}') if self._factored
+             else tr('P(FoS<1) = {0:.2%}')).format(pf),
             color="#c0392b", fontsize=11, fontweight="bold",
             transform=ax.transData,
         )
-        ax.set_xlabel(tr("Factor of Safety"))
+        ax.set_xlabel(tr("Over-design factor") if self._factored
+                      else tr("Factor of Safety"))
         ax.set_ylabel(tr("Cumulative probability"))
         ax.set_title(tr('CDF over {0} surfaces').format(len(values)))
         ax.set_ylim(0, 1.02)
@@ -212,8 +230,12 @@ class SFAlongSlopeDialog(_ChartDialogBase):
     """
 
     def __init__(self, xs, ys, binned: bool = True, ylabel=None,
-                 parent=None) -> None:
-        super().__init__(tr("Factor of Safety Along Slope"), parent)
+                 parent=None, factored: bool = False) -> None:
+        # v0.1.435 (D413) -- ``factored`` as in :class:`HistogramDialog`
+        super().__init__(tr("Over-design Factor Along Slope") if factored
+                         else tr("Factor of Safety Along Slope"), parent)
+        if ylabel is None and factored:
+            ylabel = tr("Over-design factor")
         if self.canvas is None:
             return
         ax = self.ax()
@@ -247,8 +269,16 @@ class SensitivityDialog(_ChartDialogBase):
     categorical axis, they shared one bar (review of 0.1.433).
     """
 
-    def __init__(self, effects, xlabel=None, parent=None) -> None:
-        super().__init__(tr("Sensitivity — Tornado"), parent)
+    def __init__(self, effects, xlabel=None, method=None,
+                 parent=None) -> None:
+        # v0.1.435 (D413) -- the method it draws, named when given: Interpret
+        # drew the run's first and said nothing
+        if method:
+            from ogr_gui.labels import method_name
+            title = tr("Sensitivity Tornado — {0}").format(method_name(method))
+        else:
+            title = tr("Sensitivity — Tornado")
+        super().__init__(title, parent)
         if self.canvas is None:
             return
         ax = self.ax()
@@ -274,7 +304,7 @@ class SensitivityDialog(_ChartDialogBase):
         ax.set_xlabel(xlabel or tr(
             "Range of the factor of safety over the variable's sweep "
             "(positive: larger at the variable's maximum)"))
-        ax.set_title(tr("Sensitivity — Tornado"))
+        ax.set_title(title)
         ax.grid(True, alpha=0.3, axis="x")
         self.canvas.draw_idle()
 
@@ -310,7 +340,7 @@ class MultiLineDialog(_ChartDialogBase):
     def __init__(
         self,
         xs,
-        series,            # list of (label, y_values)
+        series,            # list of (label, y_values) or (label, xs, ys)
         xlabel: str = "x",
         title: str = "Values",
         parent=None,
@@ -326,8 +356,14 @@ class MultiLineDialog(_ChartDialogBase):
             return
         ax.set_title(title)
         ax.set_xlabel(xlabel)
-        for label, ys in series:
-            ax.plot(xs, ys, marker="o", linewidth=1.2, label=label)
+        for item in series:
+            # v0.1.435 (D413) -- a series may carry its own x, (label, xs,
+            # ys): the drawdown sweep's methods are valid at different
+            # levels, and one shared x put a factor at a level it was not
+            # computed at
+            label, sx, ys = (item if len(item) == 3
+                             else (item[0], xs, item[1]))
+            ax.plot(sx, ys, marker="o", linewidth=1.2, label=label)
         ax.grid(True, alpha=0.3)
         ax.legend(loc="best", fontsize=9)
         self.canvas.draw()

@@ -566,19 +566,26 @@ class TestTheDialogsSayItInSpanish:
         dist.dist_type = DistributionType.NORMAL
         dist.std_dev = max(abs(dist.mean) * 0.1, 0.1)
         dist.rel_min, dist.rel_max = 2.0 * dist.std_dev, 2.0 * dist.std_dev
-        assert dist.is_random, dist          # or _plot opens a modal box
+        assert dist.is_random, dist          # or there is nothing to plot
         p.random_variables = [rv]
-        seen = []
         with _language("es"):
             d = RandomVariablesDialog(p)
             _KEPT.append(d)
             d._current_key = rv.key
             d.defined[rv.key] = rv
-            with _swapped(QDialog, "exec",
-                          lambda dlg: seen.extend(_texts_of_figure(dlg))):
-                d._plot()
-        assert {"media", "Valor", "Densidad de probabilidad"} <= set(seen), \
-            seen
+            # v0.1.435 (D413) -- non-modal: the window comes back, and an
+            # exec() would be a modal chart
+            with _swapped(QDialog, "exec", lambda dlg: (_ for _ in ()).throw(
+                    AssertionError("modal"))):
+                dlg = d._plot()
+            seen = _texts_of_figure(dlg)
+        try:
+            assert dlg is not None and dlg.isVisible() and not dlg.isModal()
+            assert {"media", "Valor", "Densidad de probabilidad"} <= set(
+                seen), seen
+        finally:
+            if dlg is not None:
+                dlg.close()             # not left on screen for the process
 
     def test_the_transient_stages(self):
         from ogr_core.project.settings import GroundwaterSettings
@@ -743,7 +750,8 @@ class TestInterpretSaysItInSpanish:
                        ("Carga", round(-ranking["x2"], 12))])
         assert got == want, (got, want)
         texts = _texts_of_figure(dlg)
-        assert "Sensibilidad — tornado" in texts, texts
+        # v0.1.435 (D413) -- the title names the method it draws
+        assert "Tornado de sensibilidad — Bishop simplificado" in texts, texts
 
     def test_the_result_table_and_the_values_fallback(self):
         """Two more the review found, put in by the owner's decision: the
@@ -755,16 +763,16 @@ class TestInterpretSaysItInSpanish:
         _p, iw = self._interpret()
         cells, said = [], []
 
-        def read(dlg):
-            for t in dlg.findChildren(QTableWidget):
-                cells.extend(t.item(r, 2).text()
-                             for r in range(min(t.rowCount(), 5)))
-            return 0
-
         def broken(*a, **k):
             raise RuntimeError("the chart cannot be drawn")
-        with _language("es"), _swapped(QDialog, "exec", read):
-            iw._add_result_table()
+        # v0.1.435 (D413) -- the table is non-modal: it comes back
+        with _language("es"), _swapped(QDialog, "exec", lambda dlg: (
+                _ for _ in ()).throw(AssertionError("modal"))):
+            table = iw._add_result_table()
+            for t in table.findChildren(QTableWidget):
+                cells.extend(t.item(r, 2).text()
+                             for r in range(min(t.rowCount(), 5)))
+        table.close()
         with _language("es"), _swapped(CD, "MultiLineDialog", broken), \
                 _swapped(iw, "_info", lambda m, *a, **k: said.append(m)):
             iw._show_values_along()
@@ -796,10 +804,21 @@ class TestInterpretSaysItInSpanish:
                     by_text = {a.text(): (a.isEnabled(), a.statusTip())
                                for a in act.menu().actions()}
             assert by_text, [a.text() for a in w.menuBar().actions()]
-        assert by_text.get("Tornado de sensibilidad...") == (
-            False, "Requiere un análisis de sensibilidad: ejecuta "
-            "Estadística → Calcular estadística en el modelador."), by_text
-        assert by_text["Gráfico de sensibilidad..."][0]
+        # v0.1.435 (review) -- this project has the sensitivity analysis
+        # switched off, so the reason sends the user where it is switched
+        # on: Compute Statistics alone could not help
+        assert not p.settings.statistics.sensitivity_analysis
+        sens = (False, "Requiere un análisis de sensibilidad: actívalo en "
+                "Ajustes de proyecto > Estadística y ejecuta Estadística → "
+                "Calcular estadística en el modelador.")
+        assert by_text.get("Tornado de sensibilidad...") == sens, by_text
+        # v0.1.435 (D413) -- and the Sensitivity Plot with it: it was
+        # enabled and answered with a message box; the probabilistic
+        # entries are enabled
+        assert by_text["Gráfico de sensibilidad..."] == sens, by_text
+        for entry in ("Gráfico de convergencia...",
+                      "Exportar datos estadísticos..."):
+            assert by_text.get(entry) == (True, ""), (entry, by_text)
 
 
 class TestTheReportSaysItInSpanish:

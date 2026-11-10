@@ -184,6 +184,22 @@ EXCEPTIONS: dict = {
     ("dialogs/project_settings_dialog.py", "%s %s %.3f g, %.1f s"):
         "a seismic record: its name, its peak acceleration in g and its "
         "duration in s",
+    # v0.1.435 (D413) -- what the carried-name rule reads through ``+=``
+    # once its review widened it: a unit and the extensions of the paths a
+    # message names (the one text in English it found, a support's end, went
+    # through tr() in the same version)
+    ("interpret_window.py", " m"):
+        "the unit of a radius in the summary",
+    ("interpret_window.py", ".csv"):
+        "the extension of the file a message names",
+    ("main_window.py", ".ogr"):
+        "the extension of the file a message names",
+    ("main_window.py", ".dxf"):
+        "the extension of the file a message names",
+    ("main_window.py", ".pdf"):
+        "the extension of the file a message names",
+    ("main_window.py", ".png"):
+        "the extension of the file a message names",
 }
 
 #: How many may be left. Lowering it is the point; raising it needs a
@@ -353,6 +369,15 @@ def loose_nodes(tree):
                 if not _is_tr(b):
                     flag(b)
 
+    # v0.1.435 (D413) -- a name carried into a field of a translated text:
+    # every value assigned to it in its function reaches the screen as that
+    # field. «Región pintada con «(none)».» came from
+    # ``name = mat.name if mat else "(none)"`` and ``tr("…'{0}'.").format(name)``
+    for fn in ast.walk(tree):
+        if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for value in carried_into_fields(fn):
+                flag(value)
+
     # v0.1.324 (D315) — a subclass of one of those constructors passes its
     # text up with ``super().__init__("Results", parent)``: five dock titles
     # reached the screen in English that way, unseen by the rule above.
@@ -401,6 +426,127 @@ def loose_nodes(tree):
                 and not exempt(node):
             flag(node)
     return list(found.values())
+
+
+#: Methods of a string that keep its text: ``name.strip()`` in a field is
+#: ``name`` on screen (v0.1.435).
+_SAME_NAME = {"strip", "lstrip", "rstrip", "lower", "upper", "title",
+              "capitalize"}
+
+
+def _own_nodes(fn):
+    """The nodes of ``fn``'s body, not those of a function or class nested in
+    it: each nested function is read on its own (review of 0.1.435: an
+    assignment of a nested one was charged to the outer one). A lambda is
+    part of the function that writes it."""
+    nested = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+    stack = [n for n in fn.body if not isinstance(n, nested)]
+    while stack:
+        node = stack.pop()
+        yield node
+        stack.extend(c for c in ast.iter_child_nodes(node)
+                     if not isinstance(c, nested))
+
+
+def _key(target):
+    """What a value is bound to: a name, or ``self.<attr>`` in the function
+    that sets it."""
+    if isinstance(target, ast.Name):
+        return target.id
+    if isinstance(target, ast.Attribute) and isinstance(target.value,
+                                                        ast.Name) \
+            and target.value.id == "self":
+        return "self." + target.attr
+    return None
+
+
+def _bind(target, value, assigned):
+    key = _key(target)
+    if key is not None:
+        assigned.setdefault(key, []).append(value)
+    elif isinstance(target, (ast.Tuple, ast.List)) \
+            and isinstance(value, (ast.Tuple, ast.List)) \
+            and len(value.elts) == len(target.elts):
+        for t, v in zip(target.elts, value.elts):
+            _bind(t, v, assigned)
+
+
+def carried_into_fields(fn):
+    """The values that reach a field of a translated text through a name
+    ``fn`` sets (v0.1.435, D413).
+
+    Set by ``=`` (every target, every assignment, a tuple target paired with
+    a tuple), an annotation, ``+=``, ``:=`` or a ``for`` over literals;
+    carried by another name, ``str(name)`` or a method that keeps the text;
+    filled by ``.format(...)`` (also by keyword and ``*args``) or ``%`` (a
+    tuple, a dict or a name holding one), on a ``tr()`` or on a name that
+    holds one. A literal the function translates in place (``name =
+    tr(name)``) is not English on screen. Those other ways were holes the
+    review of 0.1.435 measured."""
+    assigned, fills = {}, []
+    for node in _own_nodes(fn):
+        if isinstance(node, ast.Assign):
+            for t in node.targets:
+                _bind(t, node.value, assigned)
+        elif isinstance(node, (ast.AnnAssign, ast.AugAssign)):
+            if node.value is not None:
+                _bind(node.target, node.value, assigned)
+        elif isinstance(node, ast.NamedExpr):
+            _bind(node.target, node.value, assigned)
+        elif isinstance(node, (ast.For, ast.AsyncFor, ast.comprehension)):
+            if isinstance(node.iter, (ast.Tuple, ast.List, ast.Set)):
+                for elt in node.iter.elts:
+                    _bind(node.target, elt, assigned)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) \
+                and node.func.attr == "format":
+            fills.append((node.func.value, list(node.args)
+                          + [k.value for k in node.keywords]))
+        elif isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mod):
+            fills.append((node.left, [node.right]))
+    translated = {k for k, values in assigned.items()
+                  if any(_is_tr(v) and v.args and _key(v.args[0]) == k
+                         for v in values)}
+
+    def template(node, seen=()):
+        if _is_tr(node):
+            return True
+        k = _key(node)
+        return k is not None and k not in seen and any(
+            template(v, seen + (k,)) for v in assigned.get(k, ()))
+
+    out = []
+
+    def follow(f, seen, via_name):
+        if isinstance(f, (ast.Tuple, ast.List)):
+            for elt in f.elts:
+                follow(elt, seen, via_name)
+        elif isinstance(f, ast.Dict):
+            for v in f.values:
+                follow(v, seen, via_name)
+        elif isinstance(f, ast.Starred):
+            follow(f.value, seen, via_name)
+        elif isinstance(f, ast.Call) and getattr(f.func, "id", None) == "str" \
+                and len(f.args) == 1:
+            follow(f.args[0], seen, via_name)
+        elif isinstance(f, ast.Call) and isinstance(f.func, ast.Attribute) \
+                and f.func.attr in _SAME_NAME and not f.args:
+            follow(f.func.value, seen, via_name)
+        elif _key(f) is not None:
+            k = _key(f)
+            if k in seen:
+                return
+            for v in assigned.get(k, ()):
+                if k in translated and isinstance(v, ast.Constant):
+                    continue
+                follow(v, seen + (k,), True)
+        elif via_name:
+            out.append(f)
+
+    for receiver, fields in fills:
+        if template(receiver):
+            for f in fields:
+                follow(f, (), False)
+    return out
 
 
 def census():

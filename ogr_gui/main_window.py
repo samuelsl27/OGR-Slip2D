@@ -206,6 +206,10 @@ class _DrawdownSweepWorker(QThread):
         # v0.1.363 (D340) — kept, as ``_ComputeWorker`` keeps its own: the
         # window reads them when the sweep is done
         self.warnings: list = []
+        # v0.1.435 (D413) -- and the design factors it ran with, which it
+        # dropped: under a standard each factor it charts is an over-design
+        # factor, and the chart and the status bar said FS
+        self.factor_report = None
 
     def compute(self, progress_cb=None):
         """The sweep, on whichever thread calls it (v0.1.366, D362: apart
@@ -216,9 +220,10 @@ class _DrawdownSweepWorker(QThread):
         # checks and warnings. This searched the raw project, so with a
         # design standard on it answered a different model from Compute.
         from ogr_slip2d.analysis_runner import run_configured_drawdown_sweep
-        self.result, _report, self.warnings = run_configured_drawdown_sweep(
-            self.project, self.method_ids, n_levels=self.n_levels,
-            include_total=self.include_total, progress_cb=progress_cb)
+        self.result, self.factor_report, self.warnings = (
+            run_configured_drawdown_sweep(
+                self.project, self.method_ids, n_levels=self.n_levels,
+                include_total=self.include_total, progress_cb=progress_cb))
         return self.result
 
     def run(self) -> None:                       # noqa: D102
@@ -280,7 +285,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.434"
+    VERSION = "0.1.435"
 
     def __init__(self) -> None:
         super().__init__()
@@ -2230,11 +2235,16 @@ class MainWindow(QMainWindow):
         margin = sweep.unsafe_margin()
         where = (tr("total drawdown") if level is None
                  else "y = {0:.2f}".format(level))
+        # v0.1.435 (D413, the owner's decision in its review) -- the factor
+        # by its name under a standard, as Interpret's charts
+        odf = bool(getattr(getattr(worker, "factor_report", None),
+                           "applied", False))
         # v0.1.293 (D291b) — a template
         # v0.1.369 (D343) -- the method by its name, as the rest of the
         # window says it since D315
-        msg = tr("Critical drawdown level ({0}): {1}, FS = {2:.4f}").format(
-            method_name(mid), where, fos)
+        msg = (tr("Critical drawdown level ({0}): {1}, ODF = {2:.4f}") if odf
+               else tr("Critical drawdown level ({0}): {1}, FS = {2:.4f}")
+               ).format(method_name(mid), where, fos)
         if margin is not None and margin > 0.005:
             # v0.1.76 — the lookup stays OUTSIDE the f-string. Splitting an
             # implicitly concatenated literal across lines inside a
@@ -2246,29 +2256,41 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(self._with_notes_hint(msg, n_notes),
                                      20000)
 
-        xs, series = [], []
+        # Total drawdown has no elevation; it plots at the lowest level
+        # swept so the curve stays a curve -- the lowest of every method, so
+        # the point is one place for all of them.
+        # v0.1.435 (D413, the owner's decision in its review) -- each method
+        # against ITS levels: one x was kept, the last method's, so a level
+        # one method lost moved every other factor of the other methods to
+        # a level it was not computed at (and a count that differed sent the
+        # chart to the text fallback)
+        lows = [lv for sw in result.by_method.values()
+                for lv, _f, _s in sw.valid if lv is not None]
+        floor = min(lows) if lows else 0.0
+        series = []
         for m_id, sw in result.by_method.items():
             valid = sw.valid
             if not valid:
                 continue
-            # Total drawdown has no elevation; it plots at the lowest
-            # level swept so the curve stays a curve.
-            lows = [lv for lv, _f, _s in valid if lv is not None]
-            floor = min(lows) if lows else 0.0
-            xs = [floor if lv is None else lv for lv, _f, _s in valid]
-            series.append((method_name(m_id), [f for _lv, f, _s in valid]))
+            series.append((method_name(m_id),
+                           [floor if lv is None else lv for lv, _f, _s in valid],
+                           [f for _lv, f, _s in valid]))
         if not series:
             return
+        title = (tr("Over-design factor vs drawdown level") if odf
+                 else tr("Factor of safety vs drawdown level"))
         try:
             from .dialogs.chart_dialogs import MultiLineDialog
-            MultiLineDialog(
-                xs, series=series,
+            from .xy_chart import keep_chart
+            # v0.1.435 (D413) -- non-modal, as every chart
+            keep_chart(self, MultiLineDialog(
+                None, series=series,
                 xlabel=tr("Drawdown level (y)"),
-                title=tr("Factor of safety vs drawdown level"),
+                title=title,
                 parent=self,
-            ).exec()
+            ))
         except Exception:  # noqa: BLE001
-            html = f"<b>{tr('Factor of safety vs drawdown level')}</b><pre>"
+            html = f"<b>{title}</b><pre>"
             for m_id, sw in result.by_method.items():
                 html += f"<br>{method_name(m_id)}<br>"
                 for lv, f, _s in sw.valid:
@@ -2307,15 +2329,30 @@ class MainWindow(QMainWindow):
             if act is not None:
                 act.setEnabled(bool(enabled))
                 act.setStatusTip("" if enabled else reason)
+        # v0.1.435 (D413) -- an open Interpret gates its Statistics entries
+        # on the results these were computed from: it did once, when its
+        # menus were built
+        for win in list(getattr(self, "interpret_windows", []) or []):
+            try:
+                win.refresh_statistics_gates()
+            except RuntimeError:            # closed, its C++ side gone
+                pass
 
     @undo_step("Random variables")
     def _edit_random_variables(self) -> None:
         from .dialogs.random_variables_dialog import RandomVariablesDialog
-        if RandomVariablesDialog(self.project, self).exec():
-            n = len(self.project.random_variables)
-            self._update_statistics_actions()
-            self.statusBar().showMessage(
-                tr('{0} random variable(s) defined').format(n), 5000)
+        dlg = RandomVariablesDialog(self.project, self)
+        try:
+            if dlg.exec():
+                n = len(self.project.random_variables)
+                self._update_statistics_actions()
+                self.statusBar().showMessage(
+                    tr('{0} random variable(s) defined').format(n), 5000)
+        finally:
+            # v0.1.435 (D413) -- freed with its plot windows, as Hydraulic
+            # Properties (v0.1.276/277): every opening left one more child
+            # of this window alive
+            dlg.setParent(None)
 
     def _compute_statistics(self) -> None:
         """Run the probabilistic and/or sensitivity analysis.
@@ -2411,9 +2448,15 @@ class MainWindow(QMainWindow):
                 if rows:
                     # v0.1.433 (D411) -- the variable as Define Random
                     # Variables names it, not its stored label
-                    from .labels import variable_label
-                    messages.append(tr("most sensitive: {0}").format(
-                        variable_label(self.project, rows[0][0], rows[0][1])))
+                    from .labels import method_name, variable_label
+                    name = variable_label(self.project, rows[0][0], rows[0][1])
+                    # v0.1.435 (D413) -- the ranking is the run's first
+                    # method's: named when the run has more than one
+                    if len(res.by_method) > 1:
+                        messages.append(tr("most sensitive ({0}): {1}").format(
+                            method_name(next(iter(res.by_method))), name))
+                    else:
+                        messages.append(tr("most sensitive: {0}").format(name))
                 warning = res.notes.get("warning")
                 if warning:
                     messages.append(note_text(warning, project=self.project))
@@ -2735,7 +2778,11 @@ class MainWindow(QMainWindow):
         if dlg.is_empty:
             self._info(dlg.empty_message)
             return
-        dlg.exec()
+        # v0.1.435 (D413, the owner's decision in its review) -- non-modal,
+        # as the Result Table: a table that only shows blocked the model it
+        # is read beside
+        from .xy_chart import keep_chart
+        return keep_chart(self, dlg)
 
 
     # ==================================================================
@@ -4967,8 +5014,13 @@ class MainWindow(QMainWindow):
         self.project._notify("supports_changed")
         self.canvas.set_tool_mode(ToolMode.SELECT)
         self.canvas.refresh()
+        # v0.1.435 (D413, the owner's decision in its review) -- one text per
+        # end: the field was filled with "head" or "tail", English inside
+        # the Spanish sentence («Soporte 1 head estirado.»); found by the
+        # census rule of this version, widened in its review
         self.ogr_status.showMessage(
-            tr('Support {0} {1} stretched.').format(idx + 1, end_name), 3000,
+            (tr('Support {0} head stretched.') if end_name == "head"
+             else tr('Support {0} tail stretched.')).format(idx + 1), 3000,
         )
 
     # v0.1.15 — support right-click context menu actions
@@ -5772,13 +5824,29 @@ class MainWindow(QMainWindow):
             )
             return
         mid = self._assign_active_material_id
-        self.command_stack.do(
-            self.project,
-            PaintRegionCommand(x=x, y=y, material_id=mid),
-        )
         mat = self.project.material_by_id(mid)
-        name = mat.name if mat else "(none)"
-        self.ogr_status.showMessage(tr("Painted region with '{0}'.").format(name), 2000)
+        # v0.1.435 (D413, the owner's decision in its review) -- an id the
+        # Assign panel kept after the material was deleted is refused: the
+        # click painted the region with a material that does not exist (a
+        # surface through it cannot be analysed) and announced it, as
+        # «(none)», which was English inside a translated sentence
+        if mat is None:
+            self.ogr_status.showMessage(
+                tr("The material picked in the Assign panel no longer "
+                   "exists: pick another."), 3000)
+            return
+        cmd = PaintRegionCommand(x=x, y=y, material_id=mid)
+        cmd.execute(self.project)
+        # announced, and an undo step, only when it painted: a click outside
+        # every region did nothing and said «Painted region»
+        if cmd._prev_state is None:
+            self.ogr_status.showMessage(
+                tr("The click is outside every region: nothing was "
+                   "painted."), 3000)
+            return
+        self.command_stack.record(cmd)
+        self.ogr_status.showMessage(
+            tr("Painted region with '{0}'.").format(mat.name), 2000)
 
     # ==================================================================
     # Window
@@ -6867,7 +6935,10 @@ class MainWindow(QMainWindow):
             dups, rep['tolerance']))
 
         dlg = GeometryCleanupDialog("\n".join(report_lines), self)
-        dlg.exec()
+        # v0.1.435 (D413, the owner's decision in its review) -- a report
+        # that only shows, non-modal as the charts
+        from .xy_chart import keep_chart
+        return keep_chart(self, dlg)
 
     def act_edit_coordinates(self) -> None:
         idx = self._ask_boundary_index()

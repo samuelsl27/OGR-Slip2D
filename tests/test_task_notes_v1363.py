@@ -276,8 +276,15 @@ class TestDrawdownSweep:
                 w.sweep_worker.failed.connect(errors.append)
                 w.sweep_worker.run()
                 assert not errors, errors
-                with _swap(charts.MultiLineDialog, "exec", lambda self: 0):
+                # v0.1.435 (D413) -- the chart opens non-modal: an exec()
+                # here would be a modal chart, and it is closed after
+                def _modal(_self):
+                    raise AssertionError("a modal chart")
+                with _swap(charts.MultiLineDialog, "exec", _modal):
                     w._on_drawdown_sweep_done(w.sweep_worker.result)
+                chart = w._chart_windows[-1]
+                assert chart.isVisible() and not chart.isModal()
+                chart.close()
                 top = _section(w, "Barrido de niveles de desembalse")
                 assert top is not None, _tops(w)
                 assert expected in _texts(top), _texts(top)

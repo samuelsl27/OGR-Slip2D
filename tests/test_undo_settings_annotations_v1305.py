@@ -356,6 +356,10 @@ class TestSettingsAndSearch:
                         target_id=mid, param="cohesion")]
                 return self.result
 
+            def setParent(self, parent):
+                # v0.1.435 (D413) -- the window frees the editor after exec
+                self.parent = parent
+
         class _No(_Fake):
             result = 0
 

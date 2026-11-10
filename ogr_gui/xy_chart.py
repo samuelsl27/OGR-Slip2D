@@ -52,8 +52,35 @@ def show_xy_chart(parent, title, series, xlabel, ylabel, marker="o",
     # NON-modal on purpose: a chart that blocks the application cannot be
     # compared against the model beside it, and two charts cannot be held
     # open at once.
+    return keep_chart(parent, dlg)
+
+
+def keep_chart(owner, dlg):
+    """Show ``dlg`` non-modal and keep it on ``owner._chart_windows``, so Qt
+    does not collect it as soon as the caller returns; returns it.
+
+    v0.1.435 (D413) -- the one way every informative chart is opened: seven
+    were modal (``exec()``), against AGENTS.md, and a path a test reaches
+    blocked without a screen. The charts the user closed are let go first
+    (``setParent(None)``, the rule of v0.1.277, not ``deleteLater``): the main
+    window lives for the whole session, and each chart holds its figure.
+    """
+    import shiboken6
+    kept = getattr(owner, "_chart_windows", None)
+    if kept is None:
+        kept = owner._chart_windows = []
+    for old in list(kept):
+        try:
+            closed = not shiboken6.isValid(old) or old.isHidden()
+        except RuntimeError:
+            closed = True
+        if closed:
+            kept.remove(old)
+            try:
+                if shiboken6.isValid(old):
+                    old.setParent(None)
+            except RuntimeError:
+                pass
     dlg.show()
-    if not hasattr(parent, "_chart_windows"):
-        parent._chart_windows = []
-    parent._chart_windows.append(dlg)
+    kept.append(dlg)
     return dlg

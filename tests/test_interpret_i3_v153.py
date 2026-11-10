@@ -405,7 +405,6 @@ class TestStatisticsEntries:
         # The window reads the results off its parent; there is none in
         # the test, so they are attached directly.
         w._stat_results = lambda: (prob, None)
-        w._has_statistics = lambda: True
         return p, prob, w
 
     def test_convergence_plot_runs(self):
@@ -415,8 +414,12 @@ class TestStatisticsEntries:
     def test_export_statistics_needs_a_path(self):
         _p, _prob, w = self._window_with_stats()
         # No dialog interaction in a headless test: just confirm the
-        # guard for a missing result is not what stops it
-        assert w._has_statistics() is True
+        # guard for a missing result is not what stops it. v0.1.435 (D413):
+        # the entry's own gate, which a probabilistic result opens; this
+        # asserted a stub of _has_statistics, which nothing calls any more
+        w.refresh_statistics_gates()
+        assert w._act_export_stats.isEnabled()
+        assert not w._act_export_stats.statusTip()
 
     def test_gm_surfaces_toggle_is_safe(self):
         _p, prob, w = self._window_with_stats()

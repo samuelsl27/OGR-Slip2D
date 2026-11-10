@@ -845,8 +845,11 @@ class InterpretWindow(QMainWindow):
         legend.configure(
             self.contours.vmin, self.contours.vmax,
             self.contours.colour_for,
-            title=tr(SCALAR_FIELDS.get(self.contours.field,
-                                       self.contours.field)),
+            # v0.1.435 (D413) -- the factor by its name under a standard
+            title=(tr("Over-design factor")
+                   if self.contours.field == "fos" and self._factored_view()
+                   else tr(SCALAR_FIELDS.get(self.contours.field,
+                                             self.contours.field))),
             steps=self.contours.intervals,
             decimals=self.contours.decimals,
             scientific=self.contours.scientific, mark=crit,
@@ -1192,23 +1195,10 @@ class InterpretWindow(QMainWindow):
         self._act_crit_prob = QAction(
             tr("Critical Probabilistic Surface"), self, checkable=True)
         self._act_crit_prob.toggled.connect(self._toggle_critical_prob)
-        stats_acts = [self._act_sens_plot, self._act_sens_tornado,
-                      self._act_conv_plot, self._act_export_stats,
-                      self._act_crit_prob]
-        reason = tr("Requires a probabilistic or sensitivity analysis: run "
-                    "Statistics → Compute Statistics in the modeller.")
-        for act in stats_acts:
-            gate(act, self._has_statistics(), reason)
-            act.setToolTip(reason)
+        for act in (self._act_sens_plot, self._act_sens_tornado,
+                    self._act_conv_plot, self._act_export_stats,
+                    self._act_crit_prob):
             m_stat.addAction(act)
-        # v0.1.433 (D411) -- the tornado draws a sensitivity run only: with
-        # a probabilistic run alone it was enabled and answered with a
-        # message box (review of 0.1.433)
-        sens_reason = tr("Requires a sensitivity analysis: run Statistics → "
-                         "Compute Statistics in the modeller.")
-        gate(self._act_sens_tornado,
-             bool(getattr(self.parent(), "_sens_result", None)), sens_reason)
-        self._act_sens_tornado.setToolTip(sens_reason)
 
         # v0.1.126 — the two "several minima" actions have a SECOND source
         # since this version: a multimodal search fills
@@ -1217,19 +1207,15 @@ class InterpretWindow(QMainWindow):
         # Particle Swarm search unreachable from any menu, which is the
         # defect rule 3 exists to catch — and it would be a new one, not
         # an inherited one.
-        has_minima = bool(getattr(self.search_result, "minima", None))
         # v0.1.328 (D324) — their tooltip says what they do; the status tip
-        # says what they need, which is two things
-        reason = tr("Requires a probabilistic or sensitivity analysis, or a "
-                    "search that reports several minima (a multimodal "
-                    "search or an Overall Slope run).")
+        # says what they need (``refresh_statistics_gates``)
         for act in (self._act_show_gm, self._act_pick_gm):
-            gate(act, self._has_statistics() or has_minima, reason)
             act.setToolTip(tr(
                 "Draws every minimum the result reports: the regions a "
                 "multimodal search told apart, or the per-sample global "
                 "minima of an Overall Slope run."))
             m_stat.addAction(act)
+        self.refresh_statistics_gates()
 
         # -- Tools ----------------------------------------------------
         m_tools = mb.addMenu(tr("Tools"))
@@ -1396,6 +1382,8 @@ class InterpretWindow(QMainWindow):
         # v0.1.22 — the thrust line depends on the active method
         if getattr(self, "_thrust_visible", False):
             self._redraw_thrust_line()
+        # v0.1.435 (D413) -- the GM entries depend on the method's minima
+        self.refresh_statistics_gates()
 
     # ==================================================================
     # Toolbar
@@ -1460,7 +1448,9 @@ class InterpretWindow(QMainWindow):
         self._refresh_canvas_with_highlights(hover_id=sd.get("id"),
                                              hover_surface_dict=sd)
         self.statusBar().showMessage(
-            tr('Centre ({0:.2f}, {1:.2f}) — best FoS at this centre = {2:.3f}').format(cell[0], cell[1], best.fos),
+            (tr('Centre ({0:.2f}, {1:.2f}) — best ODF at this centre = {2:.3f}')
+             if self._factored_view() else
+             tr('Centre ({0:.2f}, {1:.2f}) — best FoS at this centre = {2:.3f}')).format(cell[0], cell[1], best.fos),
             2000,
         )
         self._refresh_legend()
@@ -1695,7 +1685,9 @@ class InterpretWindow(QMainWindow):
         if self._slices_visible:
             self._redraw_slices_for_selected()
         self.statusBar().showMessage(
-            tr('Selected surface at ({0:.2f}, {1:.2f}) — FoS = {2:.3f}').format(cx, cy, best.fos),
+            (tr('Selected surface at ({0:.2f}, {1:.2f}) — ODF = {2:.3f}')
+             if self._factored_view() else
+             tr('Selected surface at ({0:.2f}, {1:.2f}) — FoS = {2:.3f}')).format(cx, cy, best.fos),
             3000,
         )
 
@@ -1739,15 +1731,78 @@ class InterpretWindow(QMainWindow):
     # ==================================================================
     # Phase I3 — the remaining menu entries
     # ==================================================================
-    def _has_statistics(self) -> bool:
-        parent = self.parent()
-        return bool(getattr(parent, "_prob_result", None)
-                    or getattr(parent, "_sens_result", None))
+    def refresh_statistics_gates(self) -> None:
+        """Each Statistics entry enabled when the result it draws is there,
+        and grey with its reason otherwise (v0.1.435, D413).
+
+        The sensitivity charts need a sensitivity run, the convergence, the
+        export and the critical probabilistic surface a probabilistic one,
+        and the GM surfaces a probabilistic run or a search that reports
+        several minima. All five were gated on «either run», so each
+        answered the other with a message box, and the gates were computed
+        once, when the menus were built: the main window calls this when the
+        statistics change (``_update_statistics_actions``)."""
+        if getattr(self, "_act_sens_plot", None) is None:
+            return                              # the menus are not built
+        prob, sens = self._stat_results()
+        # what is missing, by the project's statistics settings: Compute
+        # Statistics runs only the analyses switched on there, so with one
+        # of them off the reason that sent the user to it pointed at an
+        # action that could not help (review of 0.1.435)
+        st = getattr(getattr(self.project, "settings", None), "statistics",
+                     None)
+        if getattr(st, "sensitivity_analysis", True):
+            sens_reason = tr("Requires a sensitivity analysis: run "
+                             "Statistics → Compute Statistics in the "
+                             "modeller.")
+        else:
+            sens_reason = tr("Requires a sensitivity analysis: switch it on "
+                             "in Project Settings > Statistics and run "
+                             "Statistics → Compute Statistics in the "
+                             "modeller.")
+        if getattr(st, "probabilistic_analysis", True):
+            prob_reason = tr("Requires a probabilistic analysis: run "
+                             "Statistics → Compute Statistics in the "
+                             "modeller.")
+        else:
+            prob_reason = tr("Requires a probabilistic analysis: switch it "
+                             "on in Project Settings > Statistics and run "
+                             "Statistics → Compute Statistics in the "
+                             "modeller.")
+        for act, have, reason in (
+                (self._act_sens_plot, sens is not None, sens_reason),
+                (self._act_sens_tornado, sens is not None, sens_reason),
+                (self._act_conv_plot, prob is not None, prob_reason),
+                (self._act_export_stats, prob is not None, prob_reason),
+                (self._act_crit_prob, prob is not None, prob_reason)):
+            gate(act, have, reason)
+            act.setToolTip(reason)
+        has_minima = bool(getattr(self.search_result, "minima", None))
+        gm_reason = tr("Requires a probabilistic analysis, or a search that "
+                       "reports several minima (a multimodal search or an "
+                       "Overall Slope run).")
+        for act in (self._act_show_gm, self._act_pick_gm):
+            gate(act, prob is not None or has_minima, gm_reason)
+        # a checked entry that goes grey is unchecked, as the line of thrust
+        # (_on_method_changed): Show GM stayed ticked over the minima of a
+        # result that was gone, and the only entry that clears them was grey
+        for act in (self._act_show_gm, self._act_crit_prob):
+            if not act.isEnabled() and act.isChecked():
+                act.setChecked(False)
 
     def _stat_results(self):
         parent = self.parent()
         return (getattr(parent, "_prob_result", None),
                 getattr(parent, "_sens_result", None))
+
+    def _factored_view(self) -> bool:
+        """Whether the deterministic run on screen was factored by a design
+        standard, so each surface's ``.fos`` is an over-design factor
+        (v0.1.435, D413): asked of the window's own report, as the summary
+        and the Surfaces table ask it (``reported_quantity``). Its charts
+        named the factor of safety under a standard."""
+        return bool(getattr(getattr(self, "factor_report", None), "applied",
+                            False))
 
     def _stat_factored(self) -> bool:
         """Whether the statistics shown were factored by a design standard.
@@ -1828,7 +1883,9 @@ class InterpretWindow(QMainWindow):
             rows.append(f"{i}. {label}: "
                         + (tr("capacity %.2f kN") % cap if cap
                            else tr("capacity not defined")))
-        self._info(tr("Supports on the critical surface (FS = %.4f):")
+        self._info((tr("Supports on the critical surface (ODF = %.4f):")
+                    if self._factored_view() else
+                    tr("Supports on the critical surface (FS = %.4f):"))
                    % crit.fos + "\n\n" + "\n".join(rows))
 
     def _support_force_diagram(self) -> None:
@@ -1845,11 +1902,9 @@ class InterpretWindow(QMainWindow):
         )
         res = self.search_result
         crit = res.critical if res else None
-        win = SupportForceDiagramWindow(self.project, crit, self)
-        win.show()
-        if not hasattr(self, "_chart_windows"):
-            self._chart_windows = []
-        self._chart_windows.append(win)
+        from .xy_chart import keep_chart
+        return keep_chart(self, SupportForceDiagramWindow(
+            self.project, crit, self))
 
     def _back_analysis_report(self) -> None:
         """Support force required to reach a target factor of safety."""
@@ -1866,8 +1921,22 @@ class InterpretWindow(QMainWindow):
         # coefficients the model declares, which ``required_force`` takes
         # and this never passed.
         cfg = self.project.settings.back_analysis
+        # v0.1.220 (D210) -- the model's own supports enter the sums, as the
+        # method applied them, so the project goes too: the FACTORED copy,
+        # which is the one the analysis ran on (the original when no design
+        # standard is on). v0.1.435 (D413) -- with a standard the target is
+        # an over-design factor, and the prompt and the report say so (the
+        # owner's decision). Named by the RUN's report, as every other text
+        # of this window (``_factored_view``): the force is read off the
+        # run's slices, so the project's standard of now does not say what
+        # the target is (review of 0.1.435)
+        from ogr_core.project import prepare_analysis_project
+        factored, _report = prepare_analysis_project(self.project)
+        odf = self._factored_view()
         target, ok = QInputDialog.getDouble(
-            self, tr("Back Analysis"), tr("Target factor of safety:"),
+            self, tr("Back Analysis"),
+            tr("Target over-design factor:") if odf
+            else tr("Target factor of safety:"),
             float(cfg.target_fos), 0.01, 100.0, 3)
         if not ok:
             return
@@ -1880,12 +1949,6 @@ class InterpretWindow(QMainWindow):
         seis = self.project.seismic
         kh = float(seis.kh) if seis.enabled else 0.0
         kv = float(seis.kv) if seis.enabled else 0.0
-        # v0.1.220 (D210) -- the model's own supports enter the sums, as the
-        # method applied them, so the project goes too: the FACTORED copy,
-        # which is the one the analysis ran on (the original when no design
-        # standard is on).
-        from ogr_core.project import prepare_analysis_project
-        factored, _report = prepare_analysis_project(self.project)
         r = required_force(crit.slices, crit.surface, target, mid,
                            elevation, kh, kv, project=factored)
         if r is None:
@@ -1912,11 +1975,18 @@ class InterpretWindow(QMainWindow):
             self._info(tr(
                 "The strength envelope depends on the normal stress, and on "
                 "at least one slice the stress it is read at did not settle "
+                "on the stress the method resolves at the target over-design "
+                "factor. No support force is reported for this surface.")
+                if odf else tr(
+                "The strength envelope depends on the normal stress, and on "
+                "at least one slice the stress it is read at did not settle "
                 "on the stress the method resolves at the target factor of "
                 "safety. No support force is reported for this surface."))
             return
         self._info(
-            tr("Required support force for FS = %g") % target + "\n\n"
+            (tr("Required support force for ODF = %g") if odf
+             else tr("Required support force for FS = %g")) % target
+            + "\n\n"
             + tr("active: %.2f") % r.active_force + "\n"
             + tr("passive: %.2f") % r.passive_force + "\n\n"
             + tr("The passive value is the larger and therefore the "
@@ -2301,10 +2371,15 @@ class InterpretWindow(QMainWindow):
                 tr("The queried surface has no slice data."), 4000)
             return
         label = (labels or {}).get(key, key)
-        self._plot_xy(label, series,
-                      {"distance": tr("Distance along surface"),
-                       "index": tr("Slice number"),
-                       "x": tr("X coordinate")}[xkey], label)
+        # v0.1.435 (D413, the owner's decision in its review) -- under a
+        # standard the factor plotted is an over-design factor, and the
+        # window and its axis say so; the dialog's combo keeps its entry
+        if key == "fos" and self._factored_view():
+            label = tr("Over-design factor")
+        return self._plot_xy(label, series,
+                             {"distance": tr("Distance along surface"),
+                              "index": tr("Slice number"),
+                              "x": tr("X coordinate")}[xkey], label)
 
     @staticmethod
     def _slice_value(result, s, i, key: str) -> float:
@@ -2658,7 +2733,7 @@ class InterpretWindow(QMainWindow):
         if sens is None or not sens.ok:
             self._info(tr("No sensitivity result."))
             return
-        mid = next(iter(sens.by_method), None)
+        mid = self._sensitivity_method(sens)
         sweeps = sens.by_method.get(mid, {})
         # v0.1.164 (D91) — a variable whose target no longer matches
         # the model now comes back with a note and NO points. Left in, it
@@ -2675,10 +2750,19 @@ class InterpretWindow(QMainWindow):
         if not series:
             self._info(tr("No sensitivity result."))
             return
-        self._plot_xy(tr("Sensitivity"), series,
-                      tr("Percent of variable range (%)"),
-                      tr("Over-design factor") if self._stat_factored()
-                      else tr("Factor of safety"), marker="")
+        return self._plot_xy(tr("Sensitivity — {0}").format(method_name(mid)),
+                             series, tr("Percent of variable range (%)"),
+                             tr("Over-design factor") if self._stat_factored()
+                             else tr("Factor of safety"), marker="")
+
+    def _sensitivity_method(self, sens):
+        """The method the sensitivity charts draw: the one Interpret shows,
+        when the run swept it, else the run's first (v0.1.435, D413). They
+        drew the first always, and named none."""
+        mid = self.active_algorithm()
+        if mid in sens.by_method:
+            return mid
+        return next(iter(sens.by_method), None)
 
     def _sensitivity_tornado(self) -> None:
         """The tornado of the sensitivity run: each variable's change of the
@@ -2691,7 +2775,7 @@ class InterpretWindow(QMainWindow):
         from ogr_gui.labels import variable_label
         from .dialogs.chart_dialogs import (SensitivityDialog,
                                             sensitivity_effects)
-        mid = next(iter(sens.by_method), None)
+        mid = self._sensitivity_method(sens)
         effects = sensitivity_effects(
             sens.by_method.get(mid, {}),
             lambda key, stored: variable_label(self.project, key, stored))
@@ -2701,11 +2785,9 @@ class InterpretWindow(QMainWindow):
         xlabel = (tr("Range of the over-design factor over the variable's "
                      "sweep (positive: larger at the variable's maximum)")
                   if self._stat_factored() else None)
-        dlg = SensitivityDialog(effects, xlabel=xlabel, parent=self)
-        dlg.show()
-        if not hasattr(self, "_chart_windows"):
-            self._chart_windows = []
-        self._chart_windows.append(dlg)
+        from .xy_chart import keep_chart
+        return keep_chart(self, SensitivityDialog(
+            effects, xlabel=xlabel, method=mid, parent=self))
 
     def _convergence_plot(self) -> None:
         prob, _sens = self._stat_results()
@@ -2835,6 +2917,11 @@ class InterpretWindow(QMainWindow):
         from PySide6.QtWidgets import QDialog, QListWidget, QVBoxLayout
 
         minima = self.reported_minima()
+        # v0.1.435 (D413) -- a search's minima carry the window's factor, a
+        # probabilistic run's the statistics' (``reported_minima``)
+        odf = (self._factored_view()
+               if getattr(self.search_result, "minima", None)
+               else self._stat_factored())
         if not minima:
             self._info(tr(
                 "This search reported no separate minima. They come from "
@@ -2849,7 +2936,8 @@ class InterpretWindow(QMainWindow):
         for i, sd in enumerate(minima, 1):
             fos = sd.get("_fos")
             tail = ("" if fos is None
-                    else tr("   |   FS = %s") % ("%.3f" % fos))
+                    else (tr("   |   ODF = %s") if odf
+                          else tr("   |   FS = %s")) % ("%.3f" % fos))
             lst.addItem(minimum_row_text(i, sd) + tail)
         lay.addWidget(lst)
 
@@ -3594,13 +3682,16 @@ class InterpretWindow(QMainWindow):
         # Chart in a dialog
         try:
             from .dialogs.chart_dialogs import MultiLineDialog
-            MultiLineDialog(
+            from .xy_chart import keep_chart
+            keep_chart(self, MultiLineDialog(
                 xs,
                 series=series,
                 xlabel=tr("x along surface (m)"),
-                title=tr('Values along surface (FoS={0:.3f})').format(target.fos),
+                title=(tr('Values along surface (ODF={0:.3f})')
+                       if self._factored_view() else
+                       tr('Values along surface (FoS={0:.3f})')).format(target.fos),
                 parent=self,
-            ).exec()
+            ))
         except Exception:  # noqa: BLE001
             # v0.1.70 — this caught only ImportError, so when the chart
             # itself was broken the option raised out of the window
@@ -3892,12 +3983,17 @@ class InterpretWindow(QMainWindow):
         ax.set_aspect("equal", adjustable="box")
         ax.grid(True, alpha=0.3)
         ax.set_title(
-            tr('Slice {0}: α={1:.1f}°, b={2:.2f} m, FoS={3:.4f}{4}').format(idx + 1, math.degrees(s.base_angle), b, target.fos, note), fontsize=9)
+            (tr('Slice {0}: α={1:.1f}°, b={2:.2f} m, ODF={3:.4f}{4}')
+             if self._factored_view() else
+             tr('Slice {0}: α={1:.1f}°, b={2:.2f} m, FoS={3:.4f}{4}')).format(idx + 1, math.degrees(s.base_angle), b, target.fos, note), fontsize=9)
         ax.set_xlabel("x (m)")
         ax.set_ylabel("y (m)")
         canvas = FigureCanvasQTAgg(fig)
         v.addWidget(canvas)
-        dlg.exec()
+        # v0.1.435 (D413) -- non-modal, as every chart (the slice is asked
+        # first, by ``getInt``, which is an input and stays modal)
+        from .xy_chart import keep_chart
+        return keep_chart(self, dlg)
 
     def _surfaces_through_point(self) -> None:
         """Count the surfaces that pass within a tolerance of a point, and
@@ -3918,7 +4014,13 @@ class InterpretWindow(QMainWindow):
         dlg = QDialog(self)
         dlg.setWindowTitle(tr("Surfaces Crossing Point"))
         v = QVBoxLayout(dlg)
+        # v0.1.435 (D413) -- the form promises what the answer gives: under
+        # a standard the lowest over-design factor (review of 0.1.435)
         v.addWidget(QLabel(tr(
+            "Enter the coordinates of a point. The surfaces whose slip "
+            "surface passes within the tolerance are counted, and the one "
+            "with the lowest over-design factor is reported.")
+            if self._factored_view() else tr(
             "Enter the coordinates of a point. The surfaces whose slip "
             "surface passes within the tolerance are counted, and the one "
             "with the lowest factor of safety is reported.")))
@@ -3951,10 +4053,13 @@ class InterpretWindow(QMainWindow):
                 where = tr(' (x {0:.2f} to {1:.2f})').format(xl, xr)
             except Exception:  # noqa: BLE001
                 where = ""
-            best = tr('FoS = {0:.4f}{1}').format(r.fos, where)
+            best = (tr('ODF = {0:.4f}{1}') if self._factored_view()
+                    else tr('FoS = {0:.4f}{1}')).format(r.fos, where)
         self._info(
             tr('<b>{0}</b> surfaces pass within {1} m of ({2:.2f}, {3:.2f}).<br>').format(len(hits), tol, px, py)
-            + tr("Lowest factor of safety among them: ")
+            + (tr("Lowest over-design factor among them: ")
+               if self._factored_view()
+               else tr("Lowest factor of safety among them: "))
             + (best or tr("(none)")))
 
     def _add_result_table(self) -> None:
@@ -3977,7 +4082,8 @@ class InterpretWindow(QMainWindow):
         v = QVBoxLayout(dlg)
         tbl = QTableWidget(len(valid), 5)
         tbl.setHorizontalHeaderLabels(
-            ["#", tr("FoS"), tr("Type"), tr("Area (m²)"), tr("Slices")])
+            ["#", tr("ODF") if self._factored_view() else tr("FoS"),
+             tr("Type"), tr("Area (m²)"), tr("Slices")])
         # v0.1.201 — sorting switched on AFTER the rows are in: with it on,
         # each inserted row re-sorts and the next ``setItem`` lands in a
         # row that has moved.
@@ -4002,7 +4108,9 @@ class InterpretWindow(QMainWindow):
             tbl.setItem(i, 4, QTableWidgetItem(str(len(r.slices))))
         tbl.setSortingEnabled(True)
         v.addWidget(tbl)
-        dlg.exec()
+        # v0.1.435 (D413) -- non-modal, as every chart
+        from .xy_chart import keep_chart
+        return keep_chart(self, dlg)
 
     # ------------------------------------------------------------------
     # Graph SF Along Slope — v0.1.82
@@ -4050,7 +4158,9 @@ class InterpretWindow(QMainWindow):
             QSpinBox,
         )
         dlg = QDialog(self)
-        dlg.setWindowTitle(tr("Factor of Safety Along Slope"))
+        dlg.setWindowTitle(tr("Over-design Factor Along Slope")
+                           if self._factored_view()
+                           else tr("Factor of Safety Along Slope"))
         form = QFormLayout(dlg)
         chk_l = QCheckBox(tr("Left slope intercept"))
         chk_r = QCheckBox(tr("Right slope intercept"))
@@ -4086,13 +4196,10 @@ class InterpretWindow(QMainWindow):
         # v0.1.433 (D411) -- drawn by SFAlongSlopeDialog, by the owner's
         # decision: the same numbers, one chart; non modal, as before
         from .dialogs.chart_dialogs import SFAlongSlopeDialog
-        dlg = SFAlongSlopeDialog(xs, ys, binned=rb_bin.isChecked(),
-                                 parent=self)
-        dlg.show()
-        if not hasattr(self, "_chart_windows"):
-            self._chart_windows = []
-        self._chart_windows.append(dlg)
-        return dlg
+        from .xy_chart import keep_chart
+        return keep_chart(self, SFAlongSlopeDialog(
+            xs, ys, binned=rb_bin.isChecked(), parent=self,
+            factored=self._factored_view()))
 
     def _scatter(self) -> None:
         """FoS vs Radius scatter over the full search population."""
@@ -4106,13 +4213,17 @@ class InterpretWindow(QMainWindow):
         ys = [r.fos for r in valid]
         try:
             from .dialogs.chart_dialogs import ScatterDialog
-            ScatterDialog(
+            from .xy_chart import keep_chart
+            odf = self._factored_view()
+            return keep_chart(self, ScatterDialog(
                 xs, ys,
                 xlabel=tr("Radius (m)"),
-                ylabel=tr("Factor of Safety"),
-                title=tr('FoS vs Radius — {0} surfaces').format(len(valid)),
+                ylabel=(tr("Over-design factor") if odf
+                        else tr("Factor of Safety")),
+                title=(tr('ODF vs Radius — {0} surfaces') if odf
+                       else tr('FoS vs Radius — {0} surfaces')).format(len(valid)),
                 parent=self,
-            ).exec()
+            ))
         except ImportError:
             self._info(tr("matplotlib not installed."))
 
@@ -4126,7 +4237,9 @@ class InterpretWindow(QMainWindow):
             return
         try:
             from .dialogs.chart_dialogs import HistogramDialog
-            HistogramDialog(valid, self).exec()
+            from .xy_chart import keep_chart
+            return keep_chart(self, HistogramDialog(
+                valid, self, factored=self._factored_view()))
         except ImportError:
             self._info(
                 tr("matplotlib not installed. Run <code>pip install matplotlib</code> "
@@ -4141,12 +4254,16 @@ class InterpretWindow(QMainWindow):
             return
         try:
             from .dialogs.chart_dialogs import CumulativeDialog
-            CumulativeDialog(valid, self).exec()
+            from .xy_chart import keep_chart
+            return keep_chart(self, CumulativeDialog(
+                valid, self, factored=self._factored_view()))
         except ImportError:
             n_fail = sum(1 for f in valid if f < 1.0)
             pf = n_fail / len(valid) if valid else 0.0
             self._info(
-                tr('<b>Cumulative distribution (text fallback)</b><br>Surfaces with FoS &lt; 1.0 : {0} / {1}<br>P(FoS &lt; 1) ≈ {2:.3%}<br><i>Install matplotlib for an interactive CDF plot.</i>').format(n_fail, len(valid), pf)
+                (tr('<b>Cumulative distribution (text fallback)</b><br>Surfaces with ODF &lt; 1.0 : {0} / {1}<br>P(ODF &lt; 1) ≈ {2:.3%}<br><i>Install matplotlib for an interactive CDF plot.</i>')
+                 if self._factored_view() else
+                 tr('<b>Cumulative distribution (text fallback)</b><br>Surfaces with FoS &lt; 1.0 : {0} / {1}<br>P(FoS &lt; 1) ≈ {2:.3%}<br><i>Install matplotlib for an interactive CDF plot.</i>')).format(n_fail, len(valid), pf)
             )
 
     # ------------------------------------------------------------------
