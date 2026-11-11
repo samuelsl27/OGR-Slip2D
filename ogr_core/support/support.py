@@ -42,6 +42,8 @@ Force orientation at slip-surface intersection (the reference's convention):
 Author: Samuel Sáez López — UPCT
 """
 from __future__ import annotations
+# v0.1.437 (D414) -- a value this build does not know is said by its code
+from ..file_messages import read_enum
 
 import math
 from abc import ABC, abstractmethod
@@ -383,7 +385,12 @@ def support_registry() -> dict[str, type[SupportType]]:
 def support_from_dict(data: dict) -> SupportType:
     tid = data["type_id"]
     if tid not in _SUPPORT_REGISTRY:
-        raise KeyError(f"Unknown support type: {tid}")
+        # v0.1.437 (D414) -- with its code: the window says it in the
+        # reader's language; the KeyError and its text are the agent's
+        from ..file_messages import SUPPORT_TYPE_UNKNOWN, file_refusal
+        raise KeyError(file_refusal(SUPPORT_TYPE_UNKNOWN,
+                                    f"Unknown support type: {tid}",
+                                    type_id=tid))
     return _SUPPORT_REGISTRY[tid].from_dict(data)
 
 
@@ -1803,9 +1810,10 @@ class SupportInstance:
             # support type decides; a key that is PRESENT is honoured.
             # Reading it as ``get(..., "active")`` invented a value the
             # file did not contain.
-            force_application=(ForceApplication(data["force_application"])
+            force_application=(read_enum(ForceApplication,
+                                         data["force_application"])
                                if data.get("force_application") else None),
-            orientation=(ForceOrientation(data["orientation"])
+            orientation=(read_enum(ForceOrientation, data["orientation"])
                          if data.get("orientation") else None),
             user_angle_deg=data.get("user_angle_deg", 0.0),
             name=data.get("name", ""),
@@ -1962,9 +1970,10 @@ class SupportPattern:
             orientation_mode=data.get("orientation_mode", "angle"),
             angle_deg=data.get("angle_deg", -15.0),
             flip_180=data.get("flip_180", False),
-            force_application=(ForceApplication(data["force_application"])
+            force_application=(read_enum(ForceApplication,
+                                         data["force_application"])
                                if data.get("force_application") else None),
-            orientation=(ForceOrientation(data["orientation"])
+            orientation=(read_enum(ForceOrientation, data["orientation"])
                          if data.get("orientation") else None),
             user_angle_deg=data.get("user_angle_deg", 0.0),
             type_ref=data.get("type_ref") or None,

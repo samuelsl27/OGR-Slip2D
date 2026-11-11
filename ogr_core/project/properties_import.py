@@ -33,6 +33,11 @@ Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 
+# v0.1.437 (D414) -- the notes with their codes: the window says them
+from .messages import (IMPORT_ANISOTROPIC_DROPPED, IMPORT_LINK_DROPPED,
+                       IMPORT_LINK_RENAMED, IMPORT_MAX_MATERIALS,
+                       IMPORT_WATER_DROPPED, import_child, import_note)
+
 import copy
 from uuid import uuid4
 
@@ -66,8 +71,8 @@ def _relink_generalized(project, source, imported: dict, notes: list):
         # joints.
         new_children = {}
         for key, rule in clone.strength.children_items():
-            who = ("range %d" % (key[1] + 1) if key[0] == "rules"
-                   else clone.strength.child_label(key))
+            # v0.1.437 (D414) -- with its code: «range 2», «the base»
+            who = import_child(key)
             link = rule.get("material_id") if isinstance(rule, dict) else None
             if not link:
                 continue
@@ -81,16 +86,14 @@ def _relink_generalized(project, source, imported: dict, notes: list):
             if here is None or here is clone or isinstance(
                     here.strength, GeneralizedAnisotropic):
                 rule.pop("material_id", None)
-                notes.append(
-                    f"{clone.name!r}: {who} linked a material this model "
-                    f"cannot link; it keeps the strength it had, unlinked.")
+                notes.append(import_note(IMPORT_LINK_DROPPED,
+                                         name=clone.name, who=who))
                 continue
             rule["material_id"] = here.id
             if by_name_here:
-                notes.append(
-                    f"{clone.name!r}: {who} now takes the strength of "
-                    f"{here.name!r}, the material of that name in this "
-                    f"model.")
+                notes.append(import_note(IMPORT_LINK_RENAMED,
+                                         name=clone.name, who=who,
+                                         here=here.name))
         clone.strength = clone.strength.with_children(new_children)
     resolve_generalized_links(project.materials)
 
@@ -126,14 +129,12 @@ def import_properties(project, source, *, materials: bool = True,
                 if clone.pore_pressure in (PorePressureType.WATER_TABLE,
                                            PorePressureType.PIEZO_LINE):
                     clone.pore_pressure = PorePressureType.NONE
-                out["notes"].append(
-                    f"{clone.name!r} used a water surface of the other "
-                    f"project; assign one of this model to it.")
+                out["notes"].append(import_note(IMPORT_WATER_DROPPED,
+                                                name=clone.name))
             if clone.anisotropic_surface_id:
                 clone.anisotropic_surface_id = None
-                out["notes"].append(
-                    f"{clone.name!r} lost its anisotropic surface, which "
-                    f"belonged to the other project.")
+                out["notes"].append(import_note(IMPORT_ANISOTROPIC_DROPPED,
+                                                name=clone.name))
             project.materials.append(clone)
             out["materials"].append(clone.name)
             imported[m.id] = clone
@@ -143,10 +144,9 @@ def import_properties(project, source, *, materials: bool = True,
         # the strength it had and loses the link, and a note says so.
         _relink_generalized(project, source, imported, out["notes"])
         if out["skipped"]:
-            out["notes"].append(
-                f"{len(out['skipped'])} material(s) not imported: the model "
-                f"already has the maximum of "
-                f"{project.settings.max_materials}.")
+            out["notes"].append(import_note(
+                IMPORT_MAX_MATERIALS, n=len(out["skipped"]),
+                limit=project.settings.max_materials))
         if out["materials"]:
             project._notify("material_added")
 

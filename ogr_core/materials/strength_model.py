@@ -89,10 +89,14 @@ class StrengthModel(ABC):
         }
         for key, value in params.items():
             if key not in self.PARAMETERS:
-                raise ValueError(
+                # v0.1.437 (D414) -- with its code, the same ValueError
+                from ..file_messages import PARAMETER_UNKNOWN, file_refusal
+                raise ValueError(file_refusal(
+                    PARAMETER_UNKNOWN,
                     f"{self.MODEL_ID}: unknown parameter '{key}'. "
-                    f"Valid: {list(self.PARAMETERS)}"
-                )
+                    f"Valid: {list(self.PARAMETERS)}",
+                    model_id=self.MODEL_ID, key=key,
+                    valid=list(self.PARAMETERS)))
             self.params[key] = float(value)
 
     # ------------------------------------------------------------------

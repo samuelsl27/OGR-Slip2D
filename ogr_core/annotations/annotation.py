@@ -199,8 +199,11 @@ class Annotation:
 
     @classmethod
     def from_dict(cls, d: dict) -> "Annotation":
+        # v0.1.437 (D414) -- a value this build does not know is said by
+        # its code (``ogr_core.file_messages``)
+        from ..file_messages import read_enum
         return cls(
-            kind=AnnotationKind(d.get("kind", "line")),
+            kind=read_enum(AnnotationKind, d.get("kind", "line")),
             points=[tuple(p) for p in d.get("points", [])],
             text=str(d.get("text", "")),
             style=AnnotationStyle.from_dict(d.get("style", {})),

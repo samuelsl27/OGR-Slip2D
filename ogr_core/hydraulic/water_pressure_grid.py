@@ -144,12 +144,18 @@ class WaterPressureGrid:
 
     @classmethod
     def from_dict(cls, d: dict) -> "WaterPressureGrid":
+        # v0.1.437 (D414) -- the grid's type read here, by the common
+        # reader: a value this build does not know is said by its code
+        from ..file_messages import read_enum
+        value_type = d.get("value_type")
+        if value_type is not None:
+            value_type = read_enum(GridValueType, value_type)
         return cls(
             points=[tuple(p) for p in d.get("points", [])],
             # A file written before v0.1.202 carries the grid's type; it is
             # the type the grid WAS read with, which the project loader
             # uses to keep the file's meaning (``Project.from_dict``).
-            value_type=d.get("value_type"),
+            value_type=value_type,
             interpolation=d.get("interpolation", "tps"),
             idw_neighbours=int(d.get("idw_neighbours", 8)),
             allow_suction=bool(d.get("allow_suction", False)),

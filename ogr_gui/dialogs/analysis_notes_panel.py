@@ -129,10 +129,22 @@ class AnalysisNotesPanel(QDialog):
             return
 
         self.btn_copy.setEnabled(True)
-        self.lbl_head.setText(tr(
-            "%d note(s) from the last analysis. They report what the run "
-            "decided or could not do; none of them changes a factor of "
-            "safety.") % total)
+        # v0.1.437 (D414) -- the notes of Import Properties say what it
+        # changed in the MODEL (a material that arrived without its water
+        # table), which does move a factor of safety: the line that says
+        # none does would be false (review of 0.1.437)
+        if any(title == tr("Import Properties")
+               for title, _parts in self.sections):
+            self.lbl_head.setText(tr(
+                "%d note(s). Those of the last analysis report what the run "
+                "decided or could not do; those of Import Properties say "
+                "what it changed in what it copied, which can change a "
+                "factor of safety.") % total)
+        else:
+            self.lbl_head.setText(tr(
+                "%d note(s) from the last analysis. They report what the run "
+                "decided or could not do; none of them changes a factor of "
+                "safety.") % total)
 
         # v0.1.434 (D412) -- the project names what only it knows (a random
         # variable by its key); asked of the window at each fill, so it is

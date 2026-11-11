@@ -30,6 +30,8 @@ probabilistic engine never mutates the user's model.
 Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
+# v0.1.437 (D414) -- a value this build does not know is said by its code
+from ..file_messages import read_enum
 
 from dataclasses import dataclass, field
 from enum import Enum
@@ -93,7 +95,7 @@ class RandomVariable:
     @classmethod
     def from_dict(cls, d: dict) -> "RandomVariable":
         return cls(
-            kind=VariableKind(d.get("kind", "material_strength")),
+            kind=read_enum(VariableKind, d.get("kind", "material_strength")),
             target_id=str(d.get("target_id", "")),
             param=str(d.get("param", "")),
             label=str(d.get("label", "")),

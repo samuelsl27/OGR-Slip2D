@@ -104,10 +104,15 @@ class BlockObjectSpec:
 
     @classmethod
     def from_dict(cls, data: dict) -> "BlockObjectSpec":
+        # v0.1.437 (D414) -- a value this build does not know is said by
+        # its code (``ogr_core.file_messages``)
+        from ..file_messages import read_enum
         return cls(
-            kind=BlockObjectKind(data["kind"]),
-            left_point=PolylinePointMode(data.get("left_point", "any")),
-            right_point=PolylinePointMode(data.get("right_point", "any")),
+            kind=read_enum(BlockObjectKind, data["kind"]),
+            left_point=read_enum(PolylinePointMode,
+                                 data.get("left_point", "any")),
+            right_point=read_enum(PolylinePointMode,
+                                  data.get("right_point", "any")),
             group_id=int(data.get("group_id", 0) or 0),
         )
 

@@ -611,6 +611,86 @@ def param_label(key: str) -> str:
     return tr(str(key).replace("_", " "))
 
 
+#: v0.1.437 (D414) -- what a value of each enumeration of a ``.ogr`` is, as a
+#: refusal of the readers names it: «'future_value' is not a valid
+#: PorePressureType» printed the class's name. By the class's name, which is
+#: what the core's code carries, with its article («…no es un valor válido
+#: para el método de presión intersticial», review of 0.1.437); one this table
+#: does not have shows as it is.
+ENUM_NAMES = {
+    "UnitSystem": "the unit system", "TimeUnit": "the time unit",
+    "PermeabilityUnit": "the permeability unit",
+    "FailureDirection": "the failure direction",
+    "PorePressureType": "the pore water pressure method",
+    "ForceApplication": "the force application of a support",
+    "ForceOrientation": "the force orientation of a support",
+    "WaterLevelMode": "the water level of the tension crack",
+    "LoadOrientation": "the load orientation",
+    "LoadAction": "the load action",
+    "LoadDistribution": "the load distribution",
+    "VariableKind": "the kind of random variable",
+    "DistributionType": "the statistical distribution",
+    "FocusKind": "the kind of focus object",
+    # the six the review of 0.1.437 found, which no model of the census held
+    "SimpleSoilType": "the soil type of the Simple permeability model",
+    "BCType": "the type of a seepage boundary condition",
+    "GridValueType": "the value type of the pore pressure grid",
+    "AnnotationKind": "the kind of annotation",
+    "BlockObjectKind": "the kind of block search object",
+    "PolylinePointMode": "an end of a block search polyline",
+}
+
+
+def enum_name_label(name) -> str:
+    """What a value of the enumeration ``name`` (its class's name) is, in
+    the interface's language (:data:`ENUM_NAMES`)."""
+    return tr(ENUM_NAMES.get(str(name), str(name)))
+
+
+def file_value_label(value) -> str:
+    """A value a ``.ogr`` holds, as the file writes it: a null as «null»,
+    not as Python's «None» (review of 0.1.437)."""
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
+
+
+def _items(value) -> list:
+    items = getattr(value, "items", None)
+    if items is not None and not callable(items):
+        return list(items)
+    return list(value) if isinstance(value, (list, tuple)) else [value]
+
+
+def strength_model_list_label(ids) -> str:
+    """Strength models by their identifiers (a ``Joined``, as the registry
+    gives them), each by its name in the interface's language, joined by
+    «; »: three names hold a comma («Undrained, c(depth below layer top)»).
+    An identifier this build does not have shows as it is."""
+    from ogr_core.materials import REGISTRY
+    out = []
+    for mid in _items(ids):
+        try:
+            out.append(tr(REGISTRY.get(mid).DISPLAY_NAME))
+        except KeyError:
+            out.append(str(mid))
+    return "; ".join(out)
+
+
+def parameter_list_label(keys) -> str:
+    """The parameters a strength model takes (a ``Joined`` of their keys),
+    each by its name and, when that is not the key, the key the file has to
+    hold between brackets: a file is mended by the key (review of 0.1.437).
+    None at all says so."""
+    out = []
+    for key in _items(keys):
+        name = param_label(key)
+        out.append(name if name == str(key) else "%s (%s)" % (name, key))
+    return ", ".join(out) if out else tr("no parameters")
+
+
 def random_variable_label(rv, project=None) -> str:
     """The label a random variable is SHOWN with.
 

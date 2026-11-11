@@ -11,6 +11,8 @@ Implements three load classes:
 Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
+# v0.1.437 (D414) -- a value this build does not know is said by its code
+from ..file_messages import read_enum
 
 import math
 from dataclasses import dataclass, field
@@ -139,16 +141,17 @@ class DistributedLoad:
             end=Vertex(*data["end"]),
             magnitude_1=data["magnitude_1"],
             magnitude_2=data.get("magnitude_2"),
-            orientation=LoadOrientation(data["orientation"]),
+            orientation=read_enum(LoadOrientation, data["orientation"]),
             angle_deg=data.get("angle_deg", 0.0),
-            distribution=LoadDistribution(data.get("distribution", "constant")),
+            distribution=read_enum(LoadDistribution,
+                                   data.get("distribution", "constant")),
             id=data.get("id", str(uuid4())),
             name=data.get("name", ""),
             creates_excess_pore_pressure=bool(
                 data.get("creates_excess_pore_pressure", False)),
             # A file from before v0.1.243 has no action: every load was
             # factored as a variable one, and still is.
-            action=LoadAction(data.get("action", "variable")),
+            action=read_enum(LoadAction, data.get("action", "variable")),
         )
 
     def tooltip_html(self) -> str:
@@ -265,13 +268,13 @@ class LineLoad:
         return cls(
             point=Vertex(*data["point"]),
             magnitude=data["magnitude"],
-            orientation=LoadOrientation(data["orientation"]),
+            orientation=read_enum(LoadOrientation, data["orientation"]),
             angle_deg=data.get("angle_deg", 0.0),
             id=data.get("id", str(uuid4())),
             name=data.get("name", ""),
             creates_excess_pore_pressure=bool(
                 data.get("creates_excess_pore_pressure", False)),
-            action=LoadAction(data.get("action", "variable")),
+            action=read_enum(LoadAction, data.get("action", "variable")),
         )
 
     def tooltip_html(self) -> str:

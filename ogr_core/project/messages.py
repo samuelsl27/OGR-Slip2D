@@ -573,3 +573,58 @@ def child_label(key, capital: bool = False) -> dict:
     code = (S_CHILD_CAP if capital else S_CHILD) + kind
     return (nested_strength(code) if kind == "base"
             else nested_strength(code, n=i + 1))
+
+
+# ----------------------------------------------------------------------
+# Import Properties (v0.1.437, D414)
+# ----------------------------------------------------------------------
+#: What ``import_properties`` says about what it changed in what it copied.
+#: The window threw them away, so a material that used the other project's
+#: water table arrived dry -- which moves the factor of safety -- and the
+#: status bar said only how many were imported. The English is the one the
+#: agent read since v0.1.196, byte for byte: a name between the quotes of its
+#: repr (``"O'Neil"`` with an apostrophe).
+IMPORT_WATER_DROPPED = "import.water_dropped"
+IMPORT_ANISOTROPIC_DROPPED = "import.anisotropic_dropped"
+IMPORT_LINK_RENAMED = "import.link_renamed"
+IMPORT_LINK_DROPPED = "import.link_dropped"
+IMPORT_MAX_MATERIALS = "import.max_materials"
+#: «range 2»: the importer's word for a range (``child_label`` says «rule»)
+IMPORT_RANGE = "import.range"
+
+IMPORT_NOTES = {s.code: s for s in (
+    MessageSpec(IMPORT_WATER_DROPPED,
+                "{name!r} used a water surface of the other project; assign "
+                "one of this model to it."),
+    MessageSpec(IMPORT_ANISOTROPIC_DROPPED,
+                "{name!r} lost its anisotropic surface, which belonged to the "
+                "other project."),
+    MessageSpec(IMPORT_LINK_RENAMED,
+                "{name!r}: {who} now takes the strength of {here!r}, the "
+                "material of that name in this model."),
+    MessageSpec(IMPORT_LINK_DROPPED,
+                "{name!r}: {who} linked a material this model cannot link; it "
+                "keeps the strength it had, unlinked."),
+    # no singular variant: it would change the English for one material;
+    # the Spanish puts the count between brackets (the rule of D412)
+    MessageSpec(IMPORT_MAX_MATERIALS,
+                "{n} material(s) not imported: the model already has the "
+                "maximum of {limit}."),
+    MessageSpec(IMPORT_RANGE, "range {n}"),
+)}
+
+
+def import_note(code: str, **args) -> Coded:
+    """A note of Import Properties, ``code`` with ``args``."""
+    return coded(IMPORT_NOTES, code, **args)
+
+
+def import_child(key) -> dict:
+    """A child of a Generalized Anisotropic material as the importer names
+    it, nested: «range 2» for a range, else ``child_label``'s words («the
+    base», «joint 1»)."""
+    from ..messages import as_nested
+    kind, i = key
+    if kind == "rules":
+        return as_nested(import_note(IMPORT_RANGE, n=i + 1))
+    return child_label(key)

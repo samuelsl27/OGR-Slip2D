@@ -321,7 +321,11 @@ class FocusObject:
 
     @classmethod
     def from_dict(cls, d: dict) -> "FocusObject":
-        return cls(kind=FocusKind(d.get("kind", "point")),
+        # v0.1.437 (D414) -- a value this build does not know is said by
+        # its code; imported here so the module adds no name of its own that
+        # ``ogr_slip2d.focus`` would have to re-export
+        from ..file_messages import read_enum
+        return cls(kind=read_enum(FocusKind, d.get("kind", "point")),
                    points=[tuple(p) for p in d.get("points", [])],
                    tolerance=float(d.get("tolerance", 0.5)),
                    enabled=bool(d.get("enabled", True)),

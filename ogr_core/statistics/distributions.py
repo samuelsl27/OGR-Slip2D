@@ -45,6 +45,8 @@ and therefore work with no dependency at all.
 Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
+# v0.1.437 (D414) -- a value this build does not know is said by its code
+from ..file_messages import read_enum
 
 import math
 import random
@@ -309,7 +311,7 @@ class Distribution:
     @classmethod
     def from_dict(cls, d: dict) -> "Distribution":
         return cls(
-            dist_type=DistributionType(d.get("dist_type", "normal")),
+            dist_type=read_enum(DistributionType, d.get("dist_type", "normal")),
             mean=float(d.get("mean", 0.0)),
             std_dev=float(d.get("std_dev", 0.0)),
             rel_min=float(d.get("rel_min", 0.0)),

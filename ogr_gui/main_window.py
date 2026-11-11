@@ -289,7 +289,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.436"
+    VERSION = "0.1.437"
 
     def __init__(self) -> None:
         super().__init__()
@@ -331,6 +331,8 @@ class MainWindow(QMainWindow):
         # one entry each, ``[(subtitle or None, notes)]``. Every one of them
         # returned its warnings to this window, which threw them away.
         self.last_task_notes: dict = {}
+        # v0.1.437 (D414) -- the notes of each import, with its undo step
+        self._import_entries: list = []
         # v0.1.165 (D96) — the design-standard report of the last run, kept
         # here for the same reason and cleared in the same three places: it
         # describes THAT run. Read from the settings instead and the caption
@@ -481,6 +483,8 @@ class MainWindow(QMainWindow):
         # stack is never replaced (New and Open clear it), so once is enough.
         self.command_stack.on_changed(self._refresh_undo_actions)
         self._refresh_undo_actions()
+        # v0.1.437 (D414) -- the notes of an import follow its step
+        self.command_stack.on_changed(self._refresh_import_notes)
         # v0.1.29 — apply the Groundwater dependency rules from the start
         self._update_groundwater_actions()
         self._update_statistics_actions()
@@ -3527,8 +3531,60 @@ class MainWindow(QMainWindow):
             tr("Copy Image will use vector data, which stays sharp when "
                "the figure is enlarged."), 6000)
 
-    @undo_step("Import properties")
     def _import_properties(self) -> None:
+        """Import Properties, and what it said about what it copied.
+
+        v0.1.437 (D414) -- the notes of the core go to Analysis Notes, kept
+        with the undo step the import left: they ADD UP over the imports of
+        a project, and undoing an import takes its own away (the owner's
+        decision in the review of 0.1.437). One import replacing the notes of
+        the one before dropped the note of a material still dry, and an
+        undone import left notes naming materials no longer there. The step
+        itself is :meth:`_import_properties_step`; this half writes nothing
+        to the model."""
+        before = self.command_stack.peek_undo()
+        rep = self._import_properties_step()
+        if rep is None:
+            return
+        after = self.command_stack.peek_undo()
+        # an import that changed nothing (none came, at the limit) leaves no
+        # step: its notes stay until the project changes
+        self._import_entries.append({
+            "cmd": after if after is not before else None,
+            "notes": list(rep["notes"]), "undone": False})
+        self._refresh_import_notes()
+        self.statusBar().showMessage(self._with_notes_hint(
+            tr("Imported %d material(s) and %d support type(s). "
+               "Duplicated names were numbered rather than overwritten.")
+            % (len(rep["materials"]), len(rep["support_types"])),
+            len(rep["notes"])), 12000)
+
+    def _refresh_import_notes(self) -> int:
+        """The notes of the imports whose step is done, as the Import
+        Properties section of Analysis Notes (v0.1.437, D414). Called by the
+        stack on every change: an undone import hides its notes, a redone
+        one shows them again, and one undone and then discarded by a new
+        step forgets them."""
+        stack = self.command_stack
+        kept, shown = [], []
+        for entry in getattr(self, "_import_entries", None) or []:
+            # an import that left no step changed nothing: its notes stay
+            where = ("undo" if entry["cmd"] is None
+                     else stack.holds(entry["cmd"]))
+            if where == "redo":
+                entry["undone"] = True
+                kept.append(entry)
+                continue
+            if where == "" and entry["undone"]:
+                continue
+            entry["undone"] = False
+            kept.append(entry)
+            shown.extend(entry["notes"])
+        self._import_entries = kept
+        return self._set_task_notes("import_properties", [(None, shown)])
+
+    @undo_step("Import properties")
+    def _import_properties_step(self):
         """Bring materials and supports across from another project.
 
         Names are made unique rather than overwriting: silently replacing
@@ -3560,15 +3616,14 @@ class MainWindow(QMainWindow):
         # and fixed there: fresh material ids, water surfaces of the other
         # project cleared instead of silently dry, the material limit kept.
         from ogr_core.project.properties_import import import_properties
-        rep = import_properties(
+        # v0.1.437 (D414) -- what the core says it changed in what it copied
+        # is kept and shown by :meth:`_import_properties` (a material that
+        # used the other project's water table arrives dry, which moves the
+        # factor of safety; at the limit of materials, why none came)
+        return import_properties(
             self.project, other,
             materials=what in (tr("Materials"), tr("Both")),
             support_types=what in (tr("Supports"), tr("Both")))
-        n_mat, n_sup = len(rep["materials"]), len(rep["support_types"])
-        self.statusBar().showMessage(
-            tr("Imported %d material(s) and %d support type(s). "
-               "Duplicated names were numbered rather than overwritten.")
-            % (n_mat, n_sup), 12000)
 
     def _export_image(self) -> None:
         """The model view as a PNG."""
@@ -4569,7 +4624,9 @@ class MainWindow(QMainWindow):
         titles = {"back_analysis": tr("Back Analysis of Support Force"),
                   "optimize": tr("Optimize Surfaces"),
                   "drawdown_sweep": tr("Drawdown Level Sweep"),
-                  "transient": tr("Transient Groundwater")}
+                  "transient": tr("Transient Groundwater"),
+                  # v0.1.437 (D414)
+                  "import_properties": tr("Import Properties")}
         kept = getattr(self, "last_task_notes", None) or {}
         return [(titles[key], kept[key]) for key in titles if kept.get(key)]
 
@@ -5170,6 +5227,7 @@ class MainWindow(QMainWindow):
         self.last_statistics_notes = []
         self.last_statistics_variables = []
         self.last_task_notes = {}
+        self._import_entries = []
         self.last_factor_report = None
         self.last_statistics_factor_report = None
         self._prob_result = None

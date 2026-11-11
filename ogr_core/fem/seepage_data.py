@@ -48,7 +48,10 @@ class NodeBC:
 
     @classmethod
     def from_dict(cls, d: dict) -> "NodeBC":
-        return cls(int(d["node_id"]), BCType(d["bc_type"]),
+        # v0.1.437 (D414) -- a value this build does not know is said by
+        # its code (``ogr_core.file_messages``)
+        from ..file_messages import read_enum
+        return cls(int(d["node_id"]), read_enum(BCType, d["bc_type"]),
                    float(d.get("value", 0.0)),
                    bool(d.get("seepage_face", False)))
 

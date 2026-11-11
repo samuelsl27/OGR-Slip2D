@@ -10,6 +10,8 @@ Tension Crack documentation.
 Author: Samuel Sáez López (UPCT).
 """
 from __future__ import annotations
+# v0.1.437 (D414) -- a value this build does not know is said by its code
+from ..file_messages import read_enum
 
 from dataclasses import dataclass
 from enum import Enum
@@ -123,7 +125,7 @@ class TensionCrackProperties:
     @classmethod
     def from_dict(cls, data: dict) -> "TensionCrackProperties":
         return cls(
-            mode=WaterLevelMode(data.get("mode", "filled")),
+            mode=read_enum(WaterLevelMode, data.get("mode", "filled")),
             percent_filled=float(data.get("percent_filled", 100.0)),
             elevation=float(data.get("elevation", 0.0)),
             depth=float(data.get("depth", 0.0)),

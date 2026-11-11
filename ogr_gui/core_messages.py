@@ -64,13 +64,17 @@ def _catalogue() -> dict:
         from ogr_core.geometry.messages import GEOMETRY_MESSAGES
         from ogr_core.loads.messages import SEISMIC_NOTES
         from ogr_core.project.step_names import STEP_NAMES
+        # v0.1.437 (D414) -- the readers of a .ogr and Import Properties
+        from ogr_core.file_messages import FILE_MESSAGES
+        from ogr_core.project.messages import IMPORT_NOTES
         for table in (CORE_MESSAGES, NOTE_FRAMES, LEM, DXF, NOTES,
                       RULES, METHOD_NOTES, SEARCH_NOTES, REFUSALS,
                       SETTING_NOTES, STRENGTH_REFUSALS, SEEPAGE_NOTES,
                       RUN_NOTES, SWEEP_NOTES, CALCULATOR_NOTES,
                       STAT_NOTES, DESIGN_NOTES, FACTORING_NOTES,
                       EXPORT_MESSAGES, REPORTED_NOTES, GEOMETRY_MESSAGES,
-                      SEISMIC_NOTES, STEP_NAMES):
+                      SEISMIC_NOTES, STEP_NAMES, FILE_MESSAGES,
+                      IMPORT_NOTES):
             _CATALOGUE.update(table)
     return _CATALOGUE
 
@@ -159,6 +163,16 @@ def _show(kind: str, value, project=None):
         return L.line_load_name_label(project, value)
     if kind == "support_failures":
         return L.support_failures_label(project, value)
+    # v0.1.437 (D414) -- what a reader refused: the models this build has,
+    # the parameters a model takes, and what an enumeration's value is of
+    if kind == "strength_model_list":
+        return L.strength_model_list_label(value)
+    if kind == "parameter_list":
+        return L.parameter_list_label(value)
+    if kind == "enum_name":
+        return L.enum_name_label(value)
+    if kind == "file_value":
+        return L.file_value_label(value)
     if kind == "variable_key":
         return L.variable_key_label(project, value)
     if kind == "variable_keys":

@@ -47,8 +47,14 @@ class _Registry:
 
     def get(self, model_id: str) -> Type[StrengthModel]:
         if model_id not in self._models:
-            raise KeyError(f"Unknown strength model: '{model_id}'. "
-                           f"Available: {list(self._models)}")
+            # v0.1.437 (D414) -- with its code; the KeyError and its text
+            # are what the agent and test_strength_refusals_v1351 read
+            from ..file_messages import STRENGTH_MODEL_UNKNOWN, file_refusal
+            raise KeyError(file_refusal(
+                STRENGTH_MODEL_UNKNOWN,
+                f"Unknown strength model: '{model_id}'. "
+                f"Available: {list(self._models)}",
+                model_id=model_id, available=list(self._models)))
         return self._models[model_id]
 
     def all(self) -> dict[str, Type[StrengthModel]]:

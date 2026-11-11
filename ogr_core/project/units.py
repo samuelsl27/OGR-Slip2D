@@ -11,6 +11,8 @@ calculations.
 Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
+# v0.1.437 (D414) -- a value this build does not know is said by its code
+from ..file_messages import read_enum
 
 from dataclasses import dataclass
 from enum import Enum
@@ -89,12 +91,12 @@ class Units:
             legacy = data.get("system", "metric")
             sid = "metric_kpa" if legacy == "metric" else "imperial_psf"
         return cls(
-            system=UnitSystem(data.get("system", "metric")),
-            time=TimeUnit(data.get("time", "d")),
-            permeability=PermeabilityUnit(data.get("permeability", "m/s")),
-            failure_direction=FailureDirection(
-                data.get("failure_direction", "R2L")
-            ),
+            system=read_enum(UnitSystem, data.get("system", "metric")),
+            time=read_enum(TimeUnit, data.get("time", "d")),
+            permeability=read_enum(PermeabilityUnit,
+                                   data.get("permeability", "m/s")),
+            failure_direction=read_enum(
+                FailureDirection, data.get("failure_direction", "R2L")),
             system_id=sid,
         )
 

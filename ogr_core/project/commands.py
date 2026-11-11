@@ -547,6 +547,18 @@ class CommandStack:
         """The step a redo would redo, or None."""
         return self._redo[-1] if self._redo else None
 
+    def holds(self, command) -> str:
+        """Where ``command`` is: ``"undo"`` among the steps an undo would
+        undo (done), ``"redo"`` among those a redo would redo (undone), ``""``
+        in neither (gone past the depth, or undone and then discarded by a
+        new step). By identity (v0.1.437, D414: the window keeps the notes of
+        an import while its step is done)."""
+        if any(c is command for c in self._undo):
+            return "undo"
+        if any(c is command for c in self._redo):
+            return "redo"
+        return ""
+
     def history(self) -> tuple[list[str], list[str]]:
         """``(undo, redo)`` descriptions, most recent LAST in each list.
 

@@ -80,7 +80,15 @@ class Boundary:
 
     @classmethod
     def from_dict(cls, data: dict) -> "Boundary":
-        btype = BoundaryType[data["type"]]
+        # v0.1.437 (D414) -- a type this build does not know raises the
+        # KeyError it always raised, carrying the code the window says it by
+        # (a missing key is still Python's: the rule of D412)
+        name = data["type"]
+        try:
+            btype = BoundaryType[name]
+        except KeyError as exc:
+            from ..file_messages import BOUNDARY_TYPE_UNKNOWN, said_as
+            raise said_as(exc, BOUNDARY_TYPE_UNKNOWN, value=name)
         raw = data.get("block_object")
         b = cls(
             polyline=Polyline.from_dict(data["polyline"]),

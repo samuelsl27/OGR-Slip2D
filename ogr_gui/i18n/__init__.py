@@ -901,6 +901,77 @@ _DICTS: dict[str, dict[str, str]] = {
         'Type {0}': 'Tipo {0}',
         '(copy)': '(copia)',
         'Record': 'Registro',
+        # v0.1.437 (D414) -- what the readers of a .ogr refuse, and what
+        # Import Properties changes in what it copies
+        'Unknown support type: {type_id}':
+            'Tipo de soporte desconocido: «{type_id}»',
+        "Unknown strength model: '{model_id}'. Available: {available}":
+            'Modelo de resistencia desconocido: «{model_id}». Los que hay: '
+            '{available}',
+        "{model_id}: unknown parameter '{key}'. Valid: {valid}":
+            '{model_id}: parámetro desconocido «{key}». Los que admite: '
+            '{valid}',
+        'no parameters': 'ninguno',
+        '%d note(s). Those of the last analysis report what the run decided '
+        'or could not do; those of Import Properties say what it changed in '
+        'what it copied, which can change a factor of safety.':
+            '%d nota(s). Las del último análisis informan de lo que el cálculo '
+            'decidió o no pudo hacer; las de Importar propiedades dicen qué '
+            'cambió en lo que copió, y eso sí puede cambiar un factor de '
+            'seguridad.',
+        "Unknown boundary type: '{value}'":
+            'Tipo de contorno desconocido: «{value}»',
+        "'{value}' is not a valid value for {enum}":
+            '«{value}» no es un valor válido para {enum}',
+        'the unit system': 'el sistema de unidades',
+        'the time unit': 'la unidad de tiempo',
+        'the permeability unit': 'la unidad de permeabilidad',
+        'the failure direction': 'la dirección de rotura',
+        'the pore water pressure method': 'el método de presión intersticial',
+        'the force application of a support':
+            'la aplicación de la fuerza de un soporte',
+        'the force orientation of a support':
+            'la orientación de la fuerza de un soporte',
+        'the water level of the tension crack':
+            'el nivel de agua de la grieta de tracción',
+        'the load orientation': 'la orientación de la carga',
+        'the load action': 'la acción de la carga',
+        'the load distribution': 'la distribución de la carga',
+        'the kind of random variable': 'el tipo de variable aleatoria',
+        'the statistical distribution': 'la distribución estadística',
+        'the kind of focus object': 'el tipo de objeto de foco',
+        'the soil type of the Simple permeability model':
+            'el tipo de suelo del modelo de permeabilidad Simple',
+        'the type of a seepage boundary condition':
+            'el tipo de una condición de contorno de la filtración',
+        'the value type of the pore pressure grid':
+            'el tipo de valor de la rejilla de presiones',
+        'the kind of annotation': 'el tipo de anotación',
+        'the kind of block search object':
+            'el tipo de objeto de búsqueda por bloques',
+        'an end of a block search polyline':
+            'un extremo de la polilínea de búsqueda por bloques',
+        "{name!r} used a water surface of the other project; assign one of "
+        "this model to it.":
+            '«{name}» usaba una superficie de agua del otro proyecto; '
+            'asígnale una de este modelo.',
+        "{name!r} lost its anisotropic surface, which belonged to the other "
+        "project.":
+            '«{name}» ha perdido su superficie anisótropa, que era del otro '
+            'proyecto.',
+        "{name!r}: {who} now takes the strength of {here!r}, the material of "
+        "that name in this model.":
+            '«{name}»: {who} toma ahora la resistencia de «{here}», el '
+            'material de ese nombre en este modelo.',
+        "{name!r}: {who} linked a material this model cannot link; it keeps "
+        "the strength it had, unlinked.":
+            '«{name}»: {who} enlazaba un material que este modelo no puede '
+            'enlazar; conserva la resistencia que tenía, sin enlace.',
+        '{n} material(s) not imported: the model already has the maximum of '
+        '{limit}.':
+            'Materiales no importados ({n}): el modelo ya tiene el máximo de '
+            '{limit}.',
+        'range {n}': 'el rango {n}',
         # the review of 0.1.436: the quotes of a name in a note, an unnamed
         # support by its class and its head, a varying load by its two ends,
         # and a line load by its magnitude inside a sentence about it

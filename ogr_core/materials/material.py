@@ -10,6 +10,8 @@ configuration, and visual rendering attributes. This is what the user
 Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
+# v0.1.437 (D414) -- a value this build does not know is said by its code
+from ..file_messages import read_enum
 
 from dataclasses import dataclass, field
 from enum import Enum
@@ -265,7 +267,8 @@ class Material:
             # back to the new (opt-in) default.
             use_sat_unit_weight=bool(data.get(
                 "use_sat_unit_weight", "sat_unit_weight" in data)),
-            pore_pressure=PorePressureType(data.get("pore_pressure", "none")),
+            pore_pressure=read_enum(PorePressureType,
+                                    data.get("pore_pressure", "none")),
             ru=data.get("ru", 0.0),
             constant_u=data.get("constant_u", 0.0),
             water_surface_id=data.get("water_surface_id"),
