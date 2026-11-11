@@ -804,11 +804,20 @@ class Project:
     @classmethod
     def load(cls, path: Path | str) -> "Project":
         path = Path(path)
-        data = json.loads(path.read_text(encoding="utf-8"))
+        # v0.1.438 (D422) -- a BOM is accepted: the file is valid UTF-8 JSON
+        # with one, as an editor on Windows writes it, and a file without
+        # one reads the same (none of the bank's has one)
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
         return cls.from_dict(data, path)
 
     @classmethod
     def from_dict(cls, data: dict, path: Optional[Path] = None) -> "Project":
+        # v0.1.438 (D422) -- the shape to_dict writes, checked before it is
+        # taken for granted: a root or a section of another JSON type is
+        # refused by a code, not left to an AttributeError or to a file
+        # that opens empty
+        from .file_shape import check_shape
+        check_shape(data)
         proj = cls(name=data.get("name", DEFAULT_PROJECT_NAME))
         proj.id = data.get("id", proj.id)
         proj.settings = ProjectSettings.from_dict(data.get("settings", {}))

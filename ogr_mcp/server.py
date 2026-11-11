@@ -15,7 +15,8 @@ exception that is not a ``ToolError``, and logs the rest. A model cannot
 recover from "an error happened", so every tool body runs inside
 :func:`_errors`, which turns an ``OgrApiError`` into its coded message
 (``[E_INVALID_ARGUMENT] ... Did you mean ...? Hint: ...``) and anything
-else into its type and message.
+else into ``[E_INTERNAL]`` with its type and message, as the bridge to a
+window says it (``ogr_api.errors.internal_error``, v0.1.438).
 
 This module imports the SDK; ``ogr_mcp/__init__.py`` does not, so the
 package stays importable without it.
@@ -35,6 +36,7 @@ from mcp.types import ToolAnnotations
 from pydantic import Field
 
 from ogr_api import OgrApiError, call
+from ogr_api.errors import internal_error
 from ogr_api.inventory import coverage
 
 from . import __version__
@@ -82,7 +84,9 @@ def _errors():
         raise ToolError(str(exc)) from None
     except Exception as exc:  # noqa: BLE001 - reported, with its type
         log.exception("tool failed")
-        raise ToolError(f"{type(exc).__name__}: {exc}") from None
+        # v0.1.438 (D422) -- coded as the bridge to a window codes it: the
+        # same failure said the same way with a window open and without one
+        raise ToolError(str(internal_error(exc))) from None
 
 
 def _strip(kwargs: dict) -> dict:

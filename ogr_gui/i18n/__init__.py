@@ -972,6 +972,28 @@ _DICTS: dict[str, dict[str, str]] = {
             'Materiales no importados ({n}): el modelo ya tiene el máximo de '
             '{limit}.',
         'range {n}': 'el rango {n}',
+        # v0.1.438 (D422) -- the shape of a .ogr: a section by its key, as
+        # the file names it
+        'The file does not hold a project: it is {found}, not an object.':
+            'El archivo no contiene un proyecto: es {found}, no un objeto.',
+        'The file does not hold a project: it has none of the keys of one.':
+            'El archivo no contiene un proyecto: no tiene ninguna de las '
+            'claves de un proyecto.',
+        "The section '{section}' of the file must be {expected}, not "
+        "{found}.":
+            'La sección «{section}» del archivo tiene que ser {expected}, no '
+            '{found}.',
+        "Item {n} of the section '{section}' of the file must be an object, "
+        "not {found}.":
+            'El elemento {n} de la sección «{section}» del archivo tiene que '
+            'ser un objeto, no {found}.',
+        'a list': 'una lista',
+        'an object': 'un objeto',
+        'a list or null': 'una lista o null',
+        'an object or null': 'un objeto o null',
+        'a string': 'un texto',
+        'a number': 'un número',
+        'a boolean': 'un valor lógico',
         # the review of 0.1.436: the quotes of a name in a note, an unnamed
         # support by its class and its head, a varying load by its two ends,
         # and a line load by its magnitude inside a sentence about it

@@ -241,18 +241,16 @@ def properties_import(ws, path: str, project_id: Optional[str] = None,
                       what: str = "both",
                       names: Optional[list] = None) -> dict:
     """Copy materials and/or support types from another .ogr file."""
-    from ogr_core.project import Project
     from ogr_core.project.properties_import import import_properties
+
+    from .project import load_ogr
 
     kinds = ("materials", "support_types", "both")
     if what not in kinds:
         raise unknown("what", what, kinds)
     p = ws.resolve_path(path, suffix=".ogr")
-    try:
-        source = Project.load(p)
-    except (ValueError, KeyError, TypeError) as exc:
-        raise InvalidArgument(f"{p} is not a readable .ogr file: {exc}") \
-            from None
+    # v0.1.438 (D422) -- the reader of project_open, so the two say the same
+    source = load_ogr(p)
 
     def edit(project):
         return import_properties(

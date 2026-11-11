@@ -20,6 +20,11 @@ keep their own exception and their own text, and carry the code as
 attributes (``code`` and ``values``, as ``DxfReadError`` does), which the
 interface reads (``ogr_gui.core_messages.error_text``).
 
+v0.1.438 (D422) -- and the shape of the file: a root that is not an object,
+an object with none of the keys of a project, a section or an item of
+another JSON type (``ogr_core.project.file_shape``). Those were an
+``AttributeError`` the agent received loose, or a file that opened empty.
+
 No dependency on the rest of the core, so every reader can import it.
 
 Author: Samuel Sáez López (UPCT)
@@ -34,6 +39,26 @@ STRENGTH_MODEL_UNKNOWN = F + "strength_model_unknown"
 PARAMETER_UNKNOWN = F + "parameter_unknown"
 BOUNDARY_TYPE_UNKNOWN = F + "boundary_type_unknown"
 ENUM_UNKNOWN = F + "enum_unknown"
+# v0.1.438 (D422) -- the shape of the file (``ogr_core.project.file_shape``)
+NOT_A_PROJECT = F + "not_a_project"
+NO_PROJECT_KEY = F + "no_project_key"
+SECTION_SHAPE = F + "section_shape"
+ITEM_SHAPE = F + "item_shape"
+
+#: The JSON shapes a file can hold where a section goes, and the English
+#: words the sentence says them by (the window says them by the same words,
+#: translated: ``ogr_gui.labels.json_shape_label``).
+SHAPE_WORDS = {
+    "list": "a list",
+    "object": "an object",
+    "list_or_null": "a list or null",
+    "object_or_null": "an object or null",
+    "string": "a string",
+    "number": "a number",
+    "bool": "a boolean",
+    "null": "null",
+}
+_SHAPE = "json_shape"
 
 #: The value a file holds, as the window quotes it: «null», not Python's
 #: «None» (review of 0.1.437).
@@ -57,7 +82,39 @@ FILE_MESSAGES = {s.code: s for s in (
                 kinds=(("value", _VALUE),)),
     MessageSpec(ENUM_UNKNOWN, "'{value}' is not a valid value for {enum}",
                 kinds=(("value", _VALUE), ("enum", "enum_name"))),
+    # v0.1.438 (D422) -- a section is named by its key: it is what the
+    # person mending the file looks for
+    MessageSpec(NOT_A_PROJECT,
+                "The file does not hold a project: it is {found}, not an "
+                "object.", kinds=(("found", _SHAPE),)),
+    MessageSpec(NO_PROJECT_KEY,
+                "The file does not hold a project: it has none of the keys "
+                "of one."),
+    MessageSpec(SECTION_SHAPE,
+                "The section '{section}' of the file must be {expected}, not "
+                "{found}.", kinds=(("expected", _SHAPE), ("found", _SHAPE))),
+    MessageSpec(ITEM_SHAPE,
+                "Item {n} of the section '{section}' of the file must be an "
+                "object, not {found}.", kinds=(("found", _SHAPE),)),
 )}
+
+
+def json_shape(value) -> str:
+    """The JSON shape of ``value``, as a key of :data:`SHAPE_WORDS` (a
+    boolean before a number: ``True`` is an ``int`` to Python)."""
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "bool"
+    if isinstance(value, (int, float)):
+        return "number"
+    if isinstance(value, str):
+        return "string"
+    if isinstance(value, list):
+        return "list"
+    if isinstance(value, dict):
+        return "object"
+    return type(value).__name__
 
 
 def file_refusal(code: str, text: str, **args) -> Coded:

@@ -173,6 +173,8 @@ def _show(kind: str, value, project=None):
         return L.enum_name_label(value)
     if kind == "file_value":
         return L.file_value_label(value)
+    if kind == "json_shape":
+        return L.json_shape_label(value)
     if kind == "variable_key":
         return L.variable_key_label(project, value)
     if kind == "variable_keys":

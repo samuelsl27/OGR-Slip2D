@@ -252,17 +252,46 @@ def project_new(ws, name: Optional[str] = None,
             "template": template}
 
 
+def load_ogr(p):
+    """The project of the ``.ogr`` at ``p`` (a resolved path), or the
+    refusal the agent reads (v0.1.438, D422).
+
+    The one reader of ``project_open`` and ``properties_import``, which
+    said the same thing two ways (the second without the exception's type).
+    A folder named ``x.ogr`` and a file the system will not hand over are
+    said as such; they were a ``PermissionError`` received loose. What
+    ``Project.load`` refuses -- the shape of the file, its JSON, its
+    encoding, a value its readers do not know -- carries its type and its
+    text. So does an ``AttributeError`` or an ``IndexError``: the shape is
+    checked down to the items of each section, not inside them, and a null
+    where an item holds an object (``random_variables/0/distribution``) or
+    a vertex of one coordinate in a footprint still ends in one (the census
+    of D414, run on this version: 9 of 5210 copies); and an
+    ``ArithmeticError`` (a ``1e999`` where an integer goes: ``int(inf)``) or
+    a ``RecursionError`` (a JSON nested too deep to decode). The owner's
+    decisions in the review of 0.1.438: the agent receives nothing of these
+    loose, and a fault of a reader, said the same way, loses its trace. The
+    list stays explicit: what is not on it is not a file's fault."""
+    from ogr_core.project import Project
+
+    if not p.is_file():
+        raise InvalidArgument(f"{p} is not a file.")
+    try:
+        return Project.load(p)
+    except OSError as exc:
+        raise InvalidArgument(f"{p} cannot be read: "
+                              f"{type(exc).__name__}: {exc}") from None
+    except (ValueError, KeyError, TypeError, AttributeError, IndexError,
+            ArithmeticError, RecursionError) as exc:
+        raise InvalidArgument(f"{p} is not a readable .ogr file: "
+                              f"{type(exc).__name__}: {exc}") from None
+
+
 @operation("project_open", toolset="core")
 def project_open(ws, path: str) -> dict:
     """Open a .ogr file and return its project_id and a summary."""
-    from ogr_core.project import Project
-
     p = ws.resolve_path(path, suffix=".ogr")
-    try:
-        project = Project.load(p)
-    except (ValueError, KeyError, TypeError) as exc:
-        raise InvalidArgument(f"{p} is not a readable .ogr file: "
-                              f"{type(exc).__name__}: {exc}") from None
+    project = load_ogr(p)
     if ws.host is not None:
         # v0.1.203 — attached to a window: the file opens THERE.
         ws.host.replace_project(project)

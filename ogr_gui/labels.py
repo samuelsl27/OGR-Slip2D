@@ -657,6 +657,18 @@ def file_value_label(value) -> str:
     return str(value)
 
 
+def json_shape_label(value) -> str:
+    """A JSON shape a section of a ``.ogr`` has or must have (a key of
+    ``ogr_core.file_messages.SHAPE_WORDS``), by the words of the sentence in
+    the interface's language; ``null`` is said as the file writes it
+    (v0.1.438, D422). One this build has no words for shows as it is."""
+    from ogr_core.file_messages import SHAPE_WORDS
+    words = SHAPE_WORDS.get(str(value))
+    if words is None:
+        return str(value)
+    return words if words == "null" else tr(words)
+
+
 def _items(value) -> list:
     items = getattr(value, "items", None)
     if items is not None and not callable(items):

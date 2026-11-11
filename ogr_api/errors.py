@@ -86,6 +86,18 @@ class JobFailed(OgrApiError):
     code = "E_JOB_FAILED"
 
 
+def internal_error(exc: BaseException) -> OgrApiError:
+    """An exception no operation turned into an ``OgrApiError``, as the
+    ``[E_INTERNAL]`` the agent reads, with its type and its text.
+
+    v0.1.438 (D422) -- the one wording of the bridge to a window
+    (``bridge.error_to_dict``) and of the MCP server without one
+    (``ogr_mcp.server._errors``): the same file gave «[E_INTERNAL]
+    PermissionError: …» through the first and «PermissionError: …» through
+    the second."""
+    return OgrApiError(f"{type(exc).__name__}: {exc}")
+
+
 def did_you_mean(word: str, options: Iterable[str], n: int = 3) -> str:
     """``"Did you mean 'a' or 'b'?"``, or an empty string.
 

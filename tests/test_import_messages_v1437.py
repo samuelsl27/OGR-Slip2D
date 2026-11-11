@@ -16,7 +16,9 @@ Invariants protected here:
   enumerations a ``.ogr`` holds, unknown, a number or null), the notes of
   Import Properties (a name with an apostrophe among them), and
   ``project_open`` / ``properties_import`` as the agent reads them. For a
-  change of text the reference is what the old program said. The
+  change of text the reference is what the old program said. Since 0.1.438
+  (D422) the two operations have one reader, and a refusal of
+  ``properties_import`` is the one ``project_open`` gave. The
   temporary folder is masked as ``<tmp>/`` whatever the system's separator:
   the CI runs on Linux.
 * **Each code says it in Spanish**, with the fields of its English, and a
@@ -663,6 +665,13 @@ class TestTheEnglishIsThatOf0436:
         assert sorted(now) == sorted(_V1436), sorted(set(now) ^ set(_V1436))
         assert len(_V1436) == 95
         for key, want in _V1436.items():
+            if (key.startswith("agent properties_import ")
+                    and key != "agent properties_import"):
+                # v0.1.438 (D422): one reader for the two operations, so a
+                # refusal of properties_import says what project_open says,
+                # with the exception's type (0.1.436 left it out)
+                want = _V1436[key.replace("properties_import",
+                                          "project_open")]
             assert now[key] == want, (key, now[key], want)
 
     def test_the_exceptions_carry_the_codes(self):

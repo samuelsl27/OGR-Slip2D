@@ -47,7 +47,7 @@ from pathlib import Path
 from typing import Optional
 
 from .errors import (Busy, Conflict, InvalidArgument, JobFailed,
-                     NotConfigured, NotFound, OgrApiError)
+                     NotConfigured, NotFound, OgrApiError, internal_error)
 
 PROTOCOL = "ogr-slip2d-bridge/1"
 #: Longest line either side accepts (a large PNG, base64, fits well).
@@ -97,8 +97,8 @@ def error_to_dict(exc: BaseException) -> dict:
     """An exception as the wire's error object."""
     if isinstance(exc, OgrApiError):
         return exc.to_dict()
-    return {"code": "E_INTERNAL",
-            "message": f"{type(exc).__name__}: {exc}"}
+    # v0.1.438 (D422) -- the wording the MCP server gives without a window
+    return internal_error(exc).to_dict()
 
 
 def error_from_dict(d: dict) -> OgrApiError:
