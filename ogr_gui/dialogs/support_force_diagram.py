@@ -180,12 +180,19 @@ class SupportForceDiagramWindow(QDialog):
             # names them: a default name by the class alone, in the
             # interface's language (it read «End Anchored  [Anclado en el
             # extremo]»; the owner's decision on the review of 0.1.433)
+            # v0.1.436 (D415) -- also with the suffixes the program appends:
+            # «End Anchored (copy)» names its class too
             from ogr_gui.labels import (_support_class_label,
-                                        default_support_name, support_name)
-            raw = getattr(sup, "name", "") or ""
+                                        set_name_names_its_class,
+                                        support_name)
+            # by the name SHOWN: an unnamed support (a pattern's) is shown by
+            # its set, whose name may say the class (review of 0.1.436)
+            raw = (getattr(sup, "name", "")
+                   or getattr(stype, "_display_name", "")
+                   or getattr(stype, "DISPLAY_NAME", "") or "")
             name = support_name(sup, stype) or f"{i}"
             label = (_support_class_label(getattr(stype, "DISPLAY_NAME", ""))
-                     if stype and default_support_name(raw) is None else "")
+                     if stype and not set_name_names_its_class(raw) else "")
             self.cbo.addItem(f"{name}  [{label}]" if label else name, i - 1)
         top.addWidget(self.cbo, 1)
         lay.addLayout(top)

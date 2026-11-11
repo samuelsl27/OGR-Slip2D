@@ -1427,7 +1427,14 @@ class CanvasView(QGraphicsView):
         menu = QMenu(self)
         if kind == "distributed":
             load = self.project.distributed_loads[idx]
-            label = tr('Distributed Load — {0:.1f} kN/m²').format(load.magnitude_1)
+            # v0.1.436 (D415, the owner's decision in its review) -- a load
+            # that varies along it by its two ends
+            from ogr_core.naming import load_end_magnitude
+            end = load_end_magnitude(load)
+            label = (tr('Distributed Load — {0:.1f} kN/m²').format(
+                load.magnitude_1) if end is None else
+                tr('Distributed Load — {0:.1f}–{1:.1f} kN/m²').format(
+                    load.magnitude_1, end))
         else:
             load = self.project.line_loads[idx]
             label = tr('Line Load — {0:.1f} kN/m').format(load.magnitude)

@@ -18,8 +18,33 @@ Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 
+from ogr_core.messages import Joined, joined_name
+
 from . import note_messages as N
 from .note_messages import note as _note
+
+
+def _set_name(st) -> str:
+    """The name a note gives a property set: the one it was given, else its
+    class's."""
+    return (getattr(st, "_display_name", "")
+            or getattr(st, "DISPLAY_NAME", "")
+            or getattr(st, "TYPE_ID", ""))
+
+
+def _set(st):
+    """A property set named in a note: its name, kept with its id, so the
+    window can name it as Define Support does (v0.1.436, D415)."""
+    return joined_name(_set_name(st), getattr(st, "id", None))
+
+
+def _support(sup):
+    """A placed support named in a note: its name, or its id when it has
+    none (the English the notes always wrote), kept with its id, so the
+    window names an unnamed one by its class and its head, never by the
+    id."""
+    return joined_name(getattr(sup, "name", "") or getattr(sup, "id", ""),
+                       getattr(sup, "id", None))
 
 #: The methods that write a moment equation, and therefore the only ones a
 #: pure couple can reach. Moving a force leaves a couple; a method that
@@ -84,11 +109,6 @@ def support_identity_notes(project, method_ids=()) -> list[str]:
     """
     from ogr_core.support import unresolved_support_refs
 
-    def _name(st):
-        return (getattr(st, "_display_name", "")
-                or getattr(st, "DISPLAY_NAME", "")
-                or getattr(st, "TYPE_ID", ""))
-
     refs = unresolved_support_refs(project)
     notes: list[str] = []
     by_class: dict = {}
@@ -96,15 +116,21 @@ def support_identity_notes(project, method_ids=()) -> list[str]:
         by_class.setdefault(getattr(sup, "type_id", ""),
                             (same, []))[1].append(sup)
     for tid, (same, sups) in by_class.items():
+        # v0.1.436 (D415) -- each set with its id, and each support with
+        # its own: the window names a set the program named («Type 3»,
+        # «User Defined (2)») in the reader's language, by the class it has
+        # now. The English is the same text («'A', 'B'»).
         notes.append(_note(
             N.SUPPORT_AMBIGUOUS_SET, n=len(sups),
             cls=getattr(same[0], "DISPLAY_NAME", tid), n_sets=len(same),
-            sets=", ".join("'%s'" % _name(st) for st in same),
-            first=_name(same[0])))
+            sets=Joined([_set_name(st) for st in same],
+                        refs=[getattr(st, "id", None) for st in same],
+                        quote="'"),
+            first=_set(same[0])))
     for sup, used in refs["orphan"]:
-        name = getattr(sup, "name", "") or sup.id
+        name = _support(sup)
         notes.append(
-            _note(N.SUPPORT_ORPHAN_REPLACED, name=name, used=_name(used))
+            _note(N.SUPPORT_ORPHAN_REPLACED, name=name, used=_set(used))
             if used is not None else
             _note(N.SUPPORT_ORPHAN_DROPPED, name=name))
     return notes
@@ -120,11 +146,6 @@ def infinite_strength_notes(project, method_ids=()) -> list[str]:
     mid-points of its segments) and, for a type with plates, each plate.
     """
     from ogr_core.support.bond import DEFAULT_SEGMENTS, infinite_soil_at
-
-    def _name(st):
-        return (getattr(st, "_display_name", "")
-                or getattr(st, "DISPLAY_NAME", "")
-                or getattr(st, "TYPE_ID", ""))
 
     notes: list[str] = []
     for stype, sups in supports_by_type(project):
@@ -167,8 +188,7 @@ def infinite_strength_notes(project, method_ids=()) -> list[str]:
                     else N.SUPPORT_INFINITE_LENGTH if hits
                     else N.SUPPORT_INFINITE_PLATES)
             notes.append(_note(
-                code, name=getattr(sup, "name", "") or sup.id,
-                type_name=_name(stype),
+                code, name=_support(sup), type_name=_set(stype),
                 percent=100.0 * hits / DEFAULT_SEGMENTS,
                 hit_plates=plate_hits, n_plates=len(plates),
                 materials=", ".join("'%s'" % n for n in sorted(names))))

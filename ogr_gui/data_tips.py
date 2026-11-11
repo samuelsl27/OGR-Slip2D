@@ -198,19 +198,28 @@ def load_tip(load, mode: DataTipMode = DataTipMode.MAXIMUM) -> str:
         return ""
     # v0.1.321 (D300) — a load is unnamed by default, and the class name
     # (``DistributedLoad``) was what the tip showed.
-    name = getattr(load, "name", None) or (
-        tr("Line Load") if type(load).__name__ == "LineLoad"
-        else tr("Distributed Load"))
+    # v0.1.436 (D415) — and a load the program named («Dist 20.0 kN/m²»,
+    # the magnitude it had when it was created) by its magnitude NOW
+    # (``labels.load_label``), which already says it; a line load in kN/m,
+    # not kPa: a force per metre of slope, not a pressure.
+    from ogr_core.naming import load_has_given_name, load_kind
+    from .labels import load_label
+    name = load_label(load)
+    line = load_kind(load) == "line"
+    unit = "kN/m" if line else "kPa"
     mag = getattr(load, "magnitude", None)
     if mag is None:
         mag = getattr(load, "magnitude_1", None)
     if mode == DataTipMode.MINIMUM:
-        return f"{name}: {_fmt(mag)} kPa" if mag is not None else str(name)
+        if mag is None or not load_has_given_name(load):
+            return str(name)
+        return f"{name}: {_fmt(mag)} {unit}"
     lines = [str(name)]
     for key in ("magnitude", "magnitude_1", "magnitude_2", "angle_deg"):
         v = getattr(load, key, None)
         if v is not None:
-            lines.append(_line(key, v))
+            lines.append(_line(key, v) if key == "angle_deg" or not line
+                         else f"{param_label(key)}: {_fmt(v)} {unit}")
     v = getattr(load, "orientation", None)
     if v is not None:
         lines.append(tr("orientation: {0}").format(load_orientation_label(v)))

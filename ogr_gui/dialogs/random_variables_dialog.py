@@ -95,7 +95,7 @@ class RandomVariablesDialog(QDialog):
         self.list_available = QListWidget()
         for rv in self.catalogue:
             # v0.1.321 (D300) — shown translated; the stored label stays.
-            it = QListWidgetItem(random_variable_label(rv))
+            it = QListWidgetItem(random_variable_label(rv, self.project))
             it.setData(Qt.UserRole, rv.key)
             self.list_available.addItem(it)
         left.addWidget(self.list_available, 1)
@@ -215,7 +215,7 @@ class RandomVariablesDialog(QDialog):
     def _refresh_defined(self):
         self.list_defined.clear()
         for key, rv in self.defined.items():
-            it = QListWidgetItem(random_variable_label(rv))
+            it = QListWidgetItem(random_variable_label(rv, self.project))
             it.setData(Qt.UserRole, key)
             self.list_defined.addItem(it)
         self._refresh_correlation_choices()
@@ -233,7 +233,8 @@ class RandomVariablesDialog(QDialog):
         self.cbo_corr_with.addItem(tr("(none)"), None)
         for key, rv in self.defined.items():
             if key != self._current_key:
-                self.cbo_corr_with.addItem(random_variable_label(rv), key)
+                self.cbo_corr_with.addItem(
+                    random_variable_label(rv, self.project), key)
         i = self.cbo_corr_with.findData(current)
         self.cbo_corr_with.setCurrentIndex(max(0, i))
         self.cbo_corr_with.blockSignals(was)
@@ -393,7 +394,7 @@ class RandomVariablesDialog(QDialog):
         rv = self.defined[self._current_key]
         curve = rv.distribution.curve(120)
         dlg = QDialog(self)
-        dlg.setWindowTitle(random_variable_label(rv))
+        dlg.setWindowTitle(random_variable_label(rv, self.project))
         dlg.resize(560, 400)
         v = QVBoxLayout(dlg)
         fig = Figure(figsize=(5.4, 3.8), tight_layout=True)

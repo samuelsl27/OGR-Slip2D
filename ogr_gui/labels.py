@@ -193,21 +193,12 @@ def _support_class_label(name: str) -> str:
     return tr(_SUPPORT_CLASS_KEYS.get(name, name))
 
 
-def default_support_name(name):
-    """``(class name, " (n)")`` when ``name`` is the name a support set is
-    born with -- the ENGLISH ``DISPLAY_NAME`` of any registered class, as
-    the window and the agent write it, with « (n)» for a second one
-    (``ogr_api/ops/supports.py``) -- else None. Read from the registry on
-    each call, so a class registered later counts."""
-    import re
-    from ogr_core.support import support_registry
-    m = re.fullmatch(r"(.+?)( \(\d+\))?", str(name or ""))
-    if not m:
-        return None
-    names = {cls.DISPLAY_NAME for cls in support_registry().values()}
-    if m.group(1) in names:
-        return m.group(1), m.group(2) or ""
-    return None
+def support_class_label(name) -> str:
+    """A support class named by its English ``DISPLAY_NAME``, in the
+    interface's language: «User Defined» in the masculine of a support type,
+    not the feminine of the permeability model of that name (v0.1.436, D415:
+    the note on an ambiguous set read «Definida por el usuario»)."""
+    return _support_class_label(str(name or ""))
 
 
 def support_type_label(stype) -> str:
@@ -229,10 +220,9 @@ def support_type_label(stype) -> str:
     given = getattr(stype, "_display_name", None)
     name = getattr(stype, "DISPLAY_NAME", None)
     if given:
-        default = default_support_name(given)
-        if default is None:
-            return str(given)
-        return _support_class_label(name or default[0]) + default[1]
+        # v0.1.436 (D415) -- every name the program gives a set, not only the
+        # class's: «Type 3», «X (copy)» (support_set_name)
+        return support_set_name(given, name)
     return (_support_class_label(name) if name
             else str(getattr(stype, "TYPE_ID", "")))
 
@@ -241,17 +231,252 @@ def support_name(support, stype=None) -> str:
     """A placed support's name as the user reads it: the name it was given,
     or, when it carries its set's default name (copied from the class's
     English name), that name in the interface's language; the set's label
-    when it has none (v0.1.433, D411)."""
+    when it has none (v0.1.433, D411). v0.1.436 (D415): every name the
+    program gives a set, as :func:`support_set_name` reads it."""
     name = getattr(support, "name", "") or ""
     if name:
-        default = default_support_name(name)
-        if default is None:
-            return name
         # with the set, by its current class, as support_type_label
         current = (getattr(stype, "DISPLAY_NAME", None)
                    if stype is not None else None)
-        return _support_class_label(current or default[0]) + default[1]
+        return support_set_name(name, current)
     return support_type_label(stype) if stype is not None else ""
+
+
+# ----------------------------------------------------------------------
+# v0.1.436 (D415) -- the names the program gives (``ogr_core.naming``)
+# ----------------------------------------------------------------------
+def _set_name_parts(name) -> tuple:
+    """``(base, suffixes)`` of a set's name: the « (copy)» and « (n)» the
+    program appended, in the order they were appended. «X (copy) (2)» is
+    ``("X", [" (copy)", " (2)"])``."""
+    import re
+    from ogr_core.naming import COPY_SUFFIX
+    text = str(name or "")
+    suffixes: list = []
+    while True:
+        if text.endswith(COPY_SUFFIX) and len(text) > len(COPY_SUFFIX):
+            suffixes.append(COPY_SUFFIX)
+            text = text[:-len(COPY_SUFFIX)]
+            continue
+        m = re.fullmatch(r"(.+?)( \(\d+\))", text)
+        if m:
+            suffixes.append(m.group(2))
+            text = m.group(1)
+            continue
+        return text, suffixes[::-1]
+
+
+def _class_names() -> set:
+    from ogr_core.support import support_registry
+    return {cls.DISPLAY_NAME for cls in support_registry().values()}
+
+
+def _program_base(base, current=None):
+    """How a base the program wrote reads, or None when the user wrote it: a
+    class's English name by the class the set has NOW (``current``), and
+    «Type N» as «Tipo N»."""
+    import re
+    from ogr_core.naming import NEW_SET_NAME
+    if base in _class_names():
+        return _support_class_label(current or base)
+    # exactly what NEW_SET_NAME writes (first_free_set_name starts at 1, and
+    # never writes «Type 01»): a name the user typed stays the user's, and
+    # the number is shown as written (review of 0.1.436)
+    m = re.fullmatch(
+        re.escape(NEW_SET_NAME).replace(r"\{0\}", r"([1-9][0-9]*)"), base,
+        re.ASCII)
+    if m:
+        return tr("Type {0}").format(m.group(1))
+    return None
+
+
+def support_set_name(name, current=None) -> str:
+    """A support set's name (or a support's, which is its set's) as the user
+    reads it (v0.1.436, D415).
+
+    The names the program gives -- a class's English name, «Type N» from
+    Define Support, « (copy)» from Duplicate, « (n)» from the agent and the
+    importer -- are shown in the interface's language: «Tipo 3», «Anclado en
+    el extremo (copia) (2)». A class's name reads as the class ``current``
+    the set has now, as ``boundary_label`` reads a boundary's type. A name
+    the user gave is data and shows as it is, except for a « (copy)» the
+    program appended to it («Norte (copia)»). The stored name never
+    changes; the edit fields show it."""
+    from ogr_core.naming import COPY_SUFFIX
+    text = str(name or "")
+    base, suffixes = _set_name_parts(text)
+    head = _program_base(base, current)
+    if head is None:
+        if COPY_SUFFIX not in suffixes:
+            return text
+        head = base
+    return head + "".join(" " + tr("(copy)") if s == COPY_SUFFIX else s
+                          for s in suffixes)
+
+
+def set_name_names_its_class(name) -> bool:
+    """Whether a set's name says its class (a class's English name, with any
+    suffix the program appended), so a list need not add the class."""
+    return _set_name_parts(name)[0] in _class_names()
+
+
+def is_program_set_name(name) -> bool:
+    """Whether the PROGRAM wrote a set's name entirely: a class's name or
+    «Type N», with the suffixes it appends. «Norte (copy)» is not: «Norte»
+    is the user's."""
+    return bool(name) and _program_base(_set_name_parts(name)[0]) is not None
+
+
+def _set_label_of(project, name, ref) -> str:
+    """One property set named in a note: by the set ``ref`` when ``project``
+    still has it under that name, else by the name alone."""
+    for st in getattr(project, "support_types", None) or []:
+        if getattr(st, "id", None) == ref and ref is not None:
+            stored = (getattr(st, "_display_name", "")
+                      or getattr(st, "DISPLAY_NAME", ""))
+            if stored == name:
+                return support_type_label(st)
+            break
+    return support_set_name(name)
+
+
+def set_names_label(project, value) -> str:
+    """Property sets as the engine named them in a note
+    (``ogr_core.messages.Joined``): each by :func:`support_type_label`, the
+    ones the program named in the reader's language and by the class they
+    have now; between «» when the engine quoted them. A plain string is one
+    name: a name the user gave may hold «, »."""
+    items = getattr(value, "items", None)
+    if items is None:
+        return support_set_name(value)
+    refs = getattr(value, "refs", ()) or ()
+    quote = getattr(value, "quote", "")
+    shown = [_set_label_of(project, name, refs[k] if k < len(refs) else None)
+             for k, name in enumerate(items)]
+    if quote:
+        # the quotes of the reader's language: «» in Spanish, the engine's
+        # straight ones in English, as the rest of the English sentence
+        # (review of 0.1.436)
+        shown = [tr("'{0}'").format(s) if quote == "'" else quote + s + quote
+                 for s in shown]
+    return getattr(value, "sep", ", ").join(shown)
+
+
+def record_label(name) -> str:
+    """A strong-motion record's name as the user reads it: «Record», the
+    name the program gives one read from text or values, in the
+    interface's language; any other name, a file's or the user's, as it is
+    (v0.1.436, D415)."""
+    from ogr_core.naming import DEFAULT_RECORD_NAME
+    text = str(name or "")
+    return tr("Record") if text == DEFAULT_RECORD_NAME else text
+
+
+def record_name_label(project, value) -> str:
+    """A record named in a note (a ``Joined`` of one, or a plain name)."""
+    items = getattr(value, "items", None)
+    return record_label(items[0] if items else value)
+
+
+def _load_heading(kind, magnitude, end=None) -> str:
+    """An unnamed load by its kind and its magnitude: the context menu's
+    words, «Carga distribuida — 35.0 kN/m²»; a distributed load that varies
+    along it by its two ends, «Carga distribuida — 10.0–30.0 kN/m²» (the
+    owner's decision in the review of 0.1.436: by the first alone, its
+    variable of the second magnitude read the first)."""
+    if kind == "line":
+        return tr("Line Load — {0:.1f} kN/m").format(magnitude)
+    if end is not None:
+        return tr("Distributed Load — {0:.1f}–{1:.1f} kN/m²").format(
+            magnitude, end)
+    return tr("Distributed Load — {0:.1f} kN/m²").format(magnitude)
+
+
+def load_label(load) -> str:
+    """A load as the user reads it (v0.1.436, D415): the name the user gave
+    it, as it is; else -- no name, or the one it was born with («Dist 20.0
+    kN/m²», which kept the magnitude it had then) -- its kind and its
+    magnitude NOW, in the interface's language. In both languages: the
+    English window said «Dist 20.0 kN/m²» of a load of 35."""
+    from ogr_core.naming import (load_end_magnitude, load_has_given_name,
+                                 load_kind, load_magnitude)
+    if load_has_given_name(load):
+        return str(load.name)
+    magnitude = load_magnitude(load)
+    if magnitude is None:
+        return (tr("Line Load") if load_kind(load) == "line"
+                else tr("Distributed Load"))
+    return _load_heading(load_kind(load), magnitude, load_end_magnitude(load))
+
+
+def load_name_label(value) -> str:
+    """A load named by what a run kept (``ogr_core.naming.LoadName``): an
+    unnamed one by the magnitude it had IN THE RUN (the owner's decision,
+    2026-11-11); a name the user gave as it is. A plain string the program
+    wrote («Dist 20.0 kN/m²») reads by the magnitude it names."""
+    from ogr_core.naming import parse_default_load_name
+    kind = getattr(value, "kind", "")
+    magnitude = getattr(value, "magnitude", None)
+    if kind and not getattr(value, "given", True) and magnitude is not None:
+        return _load_heading(kind, magnitude,
+                             getattr(value, "end_magnitude", None))
+    parsed = parse_default_load_name(value)
+    if parsed is not None:
+        return _load_heading(*parsed)
+    return str(value)
+
+
+def _load_of(project, name, ref):
+    """The load ``ref`` of ``project`` when a note's name still names it:
+    its name, or its id (an unnamed one, or one named since)."""
+    for ld in (list(getattr(project, "distributed_loads", None) or [])
+               + list(getattr(project, "line_loads", None) or [])):
+        if ref is not None and getattr(ld, "id", None) == ref:
+            if name in ((getattr(ld, "name", "") or ref), ref):
+                return ld
+            return None
+    return None
+
+
+def load_names_label(project, value) -> str:
+    """Loads as the core named them in a note (``ogr_core.messages.Joined``,
+    their name or their id): each by :func:`load_label` when ``project``
+    still has it under that name, so an unnamed one reads by its magnitude
+    now and never by its id; the text is never split. Joined by «; » on
+    screen: each name holds «—» and may hold «, » (review of 0.1.436)."""
+    items = getattr(value, "items", None)
+    if items is None:
+        return load_name_label(value)
+    refs = getattr(value, "refs", ()) or ()
+    shown = []
+    for k, name in enumerate(items):
+        ld = _load_of(project, name, refs[k] if k < len(refs) else None)
+        shown.append(load_label(ld) if ld is not None
+                     else load_name_label(name))
+    return "; ".join(shown)
+
+
+def line_load_name_label(project, value) -> str:
+    """The line load a refusal names, inside a sentence that already says
+    «line load»: the name the user gave it, else its magnitude alone
+    («Carga lineal «50.0 kN/m»: …»), which «Carga lineal «Carga lineal —
+    50.0 kN/m»» said twice (review of 0.1.436)."""
+    from ogr_core.naming import (load_has_given_name, load_magnitude,
+                                 parse_default_load_name)
+    items = getattr(value, "items", None)
+    name = items[0] if items else value
+    refs = getattr(value, "refs", ()) or ()
+    ld = _load_of(project, name, refs[0] if refs else None)
+    if ld is not None:
+        if load_has_given_name(ld):
+            return str(ld.name)
+        magnitude = load_magnitude(ld)
+    else:
+        parsed = parse_default_load_name(name)
+        if parsed is None:
+            return str(name)
+        magnitude = parsed[1]
+    return tr("{0:.1f} kN/m").format(magnitude)
 
 
 def boundary_type_label(btype: BoundaryType) -> str:
@@ -386,7 +611,7 @@ def param_label(key: str) -> str:
     return tr(str(key).replace("_", " "))
 
 
-def random_variable_label(rv) -> str:
+def random_variable_label(rv, project=None) -> str:
     """The label a random variable is SHOWN with.
 
     The ``.ogr`` keeps the label ``ogr_core.statistics.available_variables``
@@ -395,6 +620,12 @@ def random_variable_label(rv) -> str:
     it, keeping the name part as stored and translating the parameter. A
     label that does not have the form the core writes (edited in a file or
     by a script) is shown as it is.
+
+    v0.1.436 (D415) -- a load's variable is headed by the LOAD, found by the
+    id in its key in ``project``, as :func:`load_label` names it: the label
+    froze the name the load had when the variable was made («Dist 20.0
+    kN/m² — magnitude_1» of a load of 35). Without ``project``, or with the
+    load gone, by the stored head.
     """
     label = rv.label or rv.key
     kind = getattr(rv.kind, "value", rv.kind)
@@ -416,6 +647,12 @@ def random_variable_label(rv) -> str:
         return label
     if not sep:
         return label
+    if kind in ("line_load", "distributed_load") and tail == param:
+        load = _load_of_key(project, rv.key)
+        if load is not None:
+            head = load_label(load)
+        elif head:
+            head = load_name_label(head)
     if not head:
         # a load without a name: the core writes " — magnitude"
         head = (tr("Line Load") if kind == "line_load"
@@ -426,6 +663,19 @@ def random_variable_label(rv) -> str:
     if tail == param:
         return "%s — %s" % (head, param_label(param))
     return label
+
+
+def _load_of_key(project, key):
+    """The load a random variable's key (``kind:load id:param``) names, in
+    ``project``; None without it."""
+    parts = str(key or "").split(":")
+    if project is None or len(parts) < 3:
+        return None
+    for ld in (list(getattr(project, "distributed_loads", None) or [])
+               + list(getattr(project, "line_loads", None) or [])):
+        if getattr(ld, "id", None) == parts[1]:
+            return ld
+    return None
 
 
 def measurement_text(x0: float, y0: float, x1: float, y1: float) -> str:
@@ -510,7 +760,7 @@ def variable_label(project, key, stored) -> str:
     friction_angle»."""
     for rv in getattr(project, "random_variables", None) or []:
         if getattr(rv, "key", None) == key:
-            return random_variable_label(rv)
+            return random_variable_label(rv, project)
     return stored
 
 
@@ -723,12 +973,57 @@ def support_names_label(project, value) -> str:
     shown = []
     for k, name in enumerate(items):
         s = by_id.get(refs[k]) if k < len(refs) else None
-        if s is not None and getattr(s, "name", "") == name:
-            from ogr_core.support import resolve_support_type
-            shown.append(support_name(s, resolve_support_type(project, s)))
-        else:
-            shown.append(support_name(SimpleNamespace(name=name)))
+        shown.append(_support_of_note(project, s, name) if s is not None
+                     else support_name(SimpleNamespace(name=name)))
     return getattr(value, "sep", ", ").join(shown)
+
+
+def _support_of_note(project, s, name) -> str:
+    """A support of ``project`` that a note named ``name`` (v0.1.436, D415).
+
+    By its name when it has one -- the one it had, or the one it was given
+    since the note was written, when the core wrote its id or its class's
+    identifier for want of one --, the program's names in the reader's
+    language. An unnamed one by its CLASS and its head, «Bulón de suelo en
+    (54.00, 8.00)»: by its set, the note of an orphan read «the support
+    «Bulón de suelo» … «Bulón de suelo» is used instead», and the supports
+    of a pattern, which are born unnamed, all read alike (the owner's
+    decision in the review of 0.1.436). Never by its id."""
+    own = getattr(s, "name", "") or ""
+    written_for_want = name in (getattr(s, "id", None),
+                                getattr(s, "type_id", None))
+    if own and (own == name or written_for_want):
+        from ogr_core.support import resolve_support_type
+        return support_name(s, resolve_support_type(project, s))
+    if own:
+        # it had another name when the note was written: that one
+        from types import SimpleNamespace
+        return support_name(SimpleNamespace(name=name))
+    from ogr_core.support import support_registry
+    cls = support_registry().get(getattr(s, "type_id", None))
+    kind = (_support_class_label(cls.DISPLAY_NAME) if cls is not None
+            else str(getattr(s, "type_id", "") or name))
+    head = getattr(s, "head", None)
+    if head is None:
+        return kind
+    return tr("{0} at ({1:.2f}, {2:.2f})").format(kind, head.x, head.y)
+
+
+def support_failures_label(project, value) -> str:
+    """The supports a run could not price, each with its reason, as the
+    engine joined them («<id> (reason); …»): each support as
+    :func:`support_names_label` names it, the reason as it is (data, D335).
+    ``refs`` pairs each support with its reason (v0.1.436, D415)."""
+    refs = getattr(value, "refs", ()) or ()
+    items = getattr(value, "items", None)
+    if not items or len(refs) != len(items):
+        return str(value)
+    from ogr_core.messages import Joined
+    out = []
+    for (sid, why) in refs:
+        out.append("%s (%s)" % (support_names_label(
+            project, Joined([sid or "?"], refs=[sid])), why))
+    return getattr(value, "sep", "; ").join(out)
 
 
 def variable_key_label(project, key) -> str:
@@ -750,7 +1045,7 @@ def variable_label_by_stored(project, stored) -> str:
     when no variable of ``project`` has it."""
     for rv in getattr(project, "random_variables", None) or []:
         if (getattr(rv, "label", None) or getattr(rv, "key", None)) == stored:
-            return random_variable_label(rv)
+            return random_variable_label(rv, project)
     return str(stored)
 
 

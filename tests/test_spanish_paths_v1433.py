@@ -151,7 +151,9 @@ class TestTheLabelTablesMatchWhatTheyName:
     def test_default_names_and_given_ones(self):
         from ogr_core.geometry import BoundaryType
         from ogr_core.geometry.expand_shrink import REMOVED_ARC_NAME
-        from ogr_gui.labels import (boundary_name, default_support_name,
+        # v0.1.436 (D415) -- default_support_name gave way to
+        # is_program_set_name, which also reads «Type N» and « (copy)»
+        from ogr_gui.labels import (boundary_name, is_program_set_name,
                                     project_label, support_type_label)
         from test_spanish_texts_v1432 import _line
         with _language("es"):
@@ -173,7 +175,7 @@ class TestTheLabelTablesMatchWhatTheyName:
                                  ("Norte", "Norte")):
                 s._display_name = given
                 assert support_type_label(s) == shown, given
-            assert default_support_name("Norte") is None
+            assert is_program_set_name("Norte") is False
         with _language("en"):
             assert project_label("Untitled") == "Untitled"
             assert boundary_name(arc) == REMOVED_ARC_NAME

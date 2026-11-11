@@ -37,7 +37,7 @@ Pequeñas y verificables. Cada versión se cierra con `/release`:
   - menú y gris.
 - [x] 8. Español de todo texto nuevo, y menú alcanzable.
 
-## 0.1.447 — Solver
+## 0.1.461 — Solver
 
 - [ ] 9. `ogr_slip2d/sarma/solver.py`: recurrencia, H(F), raíz mayor (barrido y Brent), sentido fijo y
       cinemático, Kc(1), normales y fuerzas de cara, y motivos con código.
@@ -45,7 +45,7 @@ Pequeñas y verificables. Cada versión se cierra con `/release`:
   - Sarma (1973), consultado;
   - Sarma (1979), no consultado;
   - la derivación propia.
-- [ ] 11. Test `tests/test_sarma_solver_v1437.py`:
+- [ ] 11. Test `tests/test_sarma_solver_v1461.py`:
   - la cuña cerrada;
   - Janbu a 1e-10;
   - el reflejo;
@@ -53,7 +53,7 @@ Pequeñas y verificables. Cada versión se cierra con `/release`:
   - la raíz junto a un polo;
   - tolerancia e iteraciones mueven el número.
 
-## 0.1.448 — Cuñas
+## 0.1.462 — Cuñas
 
 - [ ] 12. `ogr_slip2d/sarma/wedges.py` y `angles.py`, con:
   - fronteras y políticas de ángulo;
@@ -67,7 +67,7 @@ Pequeñas y verificables. Cada versión se cierra con `/release`:
   - resistencia de cara;
   - rechazos con código.
 - [ ] 13. B0 en el banco: `cunas_sarma.py --sentido fijo|cinematico`, con el cinemático por defecto.
-- [ ] 14. Test `tests/test_sarma_wedges_v1438.py`:
+- [ ] 14. Test `tests/test_sarma_wedges_v1462.py`:
   - área y peso en forma cerrada;
   - δ = 0 frente al rebanador vertical donde este es exacto;
   - c/φ de base igual a la de Bishop con SHANSEP y VSR;
@@ -76,7 +76,7 @@ Pequeñas y verificables. Cada versión se cierra con `/release`:
   - «solo bases» se aparta;
   - cada rechazo.
 
-## 0.1.449 — Método registrado
+## 0.1.463 — Método registrado
 
 - [ ] 15. `SarmaNonVertical`. Funciona con `cls()` a pelo.
 - [ ] 16. Puertas del motor:
@@ -97,31 +97,31 @@ Pequeñas y verificables. Cada versión se cierra con `/release`:
   - guardas en el PNG, en Interpret y en el informe.
 - [ ] 20. La suite archivo a archivo, con las exenciones justificadas (soportes), y el A/B de coste.
 - [ ] 21. Documentación: `architecture.md`, `plugins.md`, `guide.py`, README y AGENTS.md.
-- [ ] 22. Test `tests/test_sarma_method_v1439.py`. Cubre los criterios de «Integración» de `spec.md`.
+- [ ] 22. Test `tests/test_sarma_method_v1463.py`. Cubre los criterios de «Integración» de `spec.md`.
 
-## 0.1.450 — Datos por vértice
+## 0.1.464 — Datos por vértice
 
 - [ ] 23. Ángulo, c y φ por vértice en `UserPolylineSurface` y en la superficie del motor, por coordenadas.
 - [ ] 24. API (`sarma` en `user_surface_add` y `surface_evaluate`, y `user_surface_edit`), MCP y
       `herramientas.md`.
 - [ ] 25. Factores de diseño y avisos de combinaciones inactivas.
 - [ ] 26. Tabla de ángulo, c y φ en la ventana, desde el menú y desde el menú contextual; rayos punteados.
-- [ ] 27. Test `tests/test_sarma_vertices_v1440.py`:
+- [ ] 27. Test `tests/test_sarma_vertices_v1464.py`:
   - el 4 y el 5 guardados y por `surface_evaluate`;
   - cada dato mueve el número;
   - las precedencias;
   - F/γ.
 
-## 0.1.451 — Interpret
+## 0.1.465 — Interpret
 
 - [ ] 28. Cuñas como polígonos, selección, diagrama de cuerpo libre, filas de cara y tabla del informe.
 
-## 0.1.452 — Herramienta de ángulos
+## 0.1.466 — Herramienta de ángulos
 
 - [ ] 29. Definir y quitar ángulos con el ratón o tecleando, atajos en el vértice y deshacer, con sus tests en
       el lienzo mostrado.
 
-## 0.1.453 — Ángulos optimizados
+## 0.1.467 — Ángulos optimizados
 
 - [ ] 30. Digitalizar las figuras 1.2 y 1.3 del problema 1, con la lectura declarada.
 - [ ] 31. Optimizador determinista; `optimized_global` y `optimized_all`; Block y Path con la crítica

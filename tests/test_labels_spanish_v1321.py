@@ -512,11 +512,16 @@ def _data_names(p):
     v0.1.433 (D411) -- a DEFAULT name is not data on screen: the program
     shows it translated (``ogr_gui.labels``), so a default left in English
     is what the census is for. All boundary and support names were stripped
-    before, and «End Anchored» passed for a name."""
+    before, and «End Anchored» passed for a name.
+    v0.1.436 (D415) -- nor is any other name the PROGRAM gives a set («Type
+    3», «End Anchored (copy)»), a record («Record») or a load («Dist 20.0
+    kN/m²»): the census strips only what the user typed, and «Type 3» passed
+    for a name."""
+    from ogr_core.naming import DEFAULT_RECORD_NAME, load_has_given_name
     from ogr_core.project.demo import DEMO_PROJECT_NAME
     from ogr_core.project.project import DEFAULT_PROJECT_NAME
     from ogr_gui.labels import (boundary_has_given_name, boundary_name,
-                                default_support_name)
+                                is_program_set_name)
     # by the names, not by the label: in English a default's label is the
     # name itself, and it would pass for data
     names = [p.name if p.name not in (DEFAULT_PROJECT_NAME, DEMO_PROJECT_NAME)
@@ -525,8 +530,12 @@ def _data_names(p):
     names += [boundary_name(b) for b in p.boundaries
               if boundary_has_given_name(b)]
     names += [getattr(s, "_display_name", "") for s in p.support_types
-              if default_support_name(getattr(s, "_display_name", ""))
-              is None]
+              if not is_program_set_name(getattr(s, "_display_name", ""))]
+    names += [ld.name for ld in (list(p.distributed_loads)
+                                 + list(p.line_loads))
+              if load_has_given_name(ld)]
+    names += [r.name for r in p.seismic_records
+              if r.name != DEFAULT_RECORD_NAME]
     return sorted({n for n in names if n}, key=len, reverse=True)
 
 
@@ -548,8 +557,27 @@ class TestNothingOnScreenReadsEnglish:
         w = MainWindow()
         try:
             w.act_load_demo()
+            # v0.1.436 (D415) -- and the names the program gives, so that a
+            # screen that shows one in English is caught: two sets named by
+            # Define Support, a record read from text and a load named when
+            # it was created
+            from ogr_core.geometry import Vertex
+            from ogr_core.loads import DistributedLoad
+            from ogr_core.loads.seismic_record import SeismicRecord
+            named = []
+            for given in ("Type 3", "End Anchored (copy)"):
+                st = EndAnchored(anchor_capacity=120.0,
+                                 out_of_plane_spacing=1.0)
+                st._display_name = given
+                named.append(st)
             w.project.support_types = [
-                EndAnchored(anchor_capacity=120.0, out_of_plane_spacing=1.0)]
+                EndAnchored(anchor_capacity=120.0, out_of_plane_spacing=1.0)
+            ] + named
+            w.project.seismic_records = [SeismicRecord(
+                name="Record", dt=0.02, accelerations=[0.0, 0.1, 0.0])]
+            w.project.distributed_loads.append(DistributedLoad(
+                start=Vertex(1.0, 25.0), end=Vertex(4.0, 25.0),
+                magnitude_1=35.0, name="Dist 20.0 kN/m²"))
             w.project.is_dirty = False
             # v0.1.324 (D315) — computed, so that the results panel, its
             # table and the status bar have something to say
@@ -1015,7 +1043,9 @@ class TestTheDataTipsSpeakSpanish:
             assert "peso específico" in material_tip(p.materials[0])
             assert boundary_tip(ext).startswith("EXTERNO")
             tip = load_tip(load, DataTipMode.MAXIMUM)
-            assert tip.splitlines()[0] == "Carga distribuida", tip
+            # v0.1.436 (D415) -- an unnamed load by its kind and its
+            # magnitude now, the context menu's words (the owner's decision)
+            assert tip.splitlines()[0] == "Carga distribuida — 10.0 kN/m²", tip
             assert "orientación: Normal al contorno" in tip, tip
             # control: the English the tips have always shown
             set_language("en")

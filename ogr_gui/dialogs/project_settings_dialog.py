@@ -1068,10 +1068,12 @@ class _SeismicPage(QWidget):
         self.cmb_record.clear()
         self._record_ids = [""]
         self.cmb_record.addItem(tr("(none)"))
+        # v0.1.436 (D415) -- «Record» in the reader's language
+        from ogr_gui.labels import record_label
         for rec in getattr(self.project, "seismic_records", None) or []:
             self.cmb_record.addItem(
-                "%s %s %.3f g, %.1f s" % (rec.name, DASH, rec.pga,
-                                          rec.duration))
+                "%s %s %.3f g, %.1f s" % (record_label(rec.name), DASH,
+                                          rec.pga, rec.duration))
             self._record_ids.append(rec.id)
         if self.s.record_id in self._record_ids:
             self.cmb_record.setCurrentIndex(

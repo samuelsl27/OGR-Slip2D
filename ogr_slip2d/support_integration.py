@@ -394,12 +394,20 @@ def _failure_text(failures) -> str:
         return ""
     # v0.1.348 (D335) -- with its code; ``why`` is the exception's own
     # message, which is data and is shown as it is
+    # v0.1.436 (D415) -- each support with its id kept, so the window names
+    # it by its name (or by its class and its head) and never by the id; the
+    # English is the same text. ``refs`` of the entries pairs each support
+    # with its reason, which the window shows as it is.
+    from ogr_core.messages import Joined, joined_name
     if len(failures) == 1:
         sid, why = failures[0]
-        return _mnote(MN.SUPPORT_FAILURE_ONE, sid=sid or "?", why=str(why))
+        return _mnote(MN.SUPPORT_FAILURE_ONE,
+                      sid=joined_name(sid or "?", sid), why=str(why))
     return _mnote(MN.SUPPORT_FAILURE_MANY, n=len(failures),
-                  entries="; ".join("%s (%s)" % (sid or "?", why)
-                                    for sid, why in failures))
+                  entries=Joined(["%s (%s)" % (sid or "?", why)
+                                  for sid, why in failures], sep="; ",
+                                 refs=[(sid, str(why))
+                                       for sid, why in failures]))
 
 
 def resolve_support_terms(
@@ -1065,7 +1073,12 @@ def reversed_support_notes(project, result) -> list[str]:
                                   ix, iy, slope)
         if not (head_side < -tol and tail_side > tol):
             continue
-        name = getattr(support, "name", "") or getattr(support, "type_id", "")
+        # v0.1.436 (D415) -- with its id kept: the window names an unnamed
+        # support by its set, and the English is the same text
+        from ogr_core.messages import joined_name
+        name = joined_name(getattr(support, "name", "")
+                           or getattr(support, "type_id", ""),
+                           getattr(support, "id", None))
         # A support whose type is not in the registry keeps ``None`` here,
         # and naming the orientation is the one part of the sentence that
         # can be missing without costing the reader anything.

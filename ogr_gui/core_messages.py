@@ -145,6 +145,20 @@ def _show(kind: str, value, project=None):
         return L.boundary_edit_op_label(value)
     if kind == "support_names":
         return L.support_names_label(project, value)
+    # v0.1.436 (D415) -- the names the program gives: a support class, a
+    # property set, a strong-motion record, a load
+    if kind == "support_class":
+        return L.support_class_label(value)
+    if kind == "set_names":
+        return L.set_names_label(project, value)
+    if kind == "record_name":
+        return L.record_name_label(project, value)
+    if kind == "load_names":
+        return L.load_names_label(project, value)
+    if kind == "line_load_name":
+        return L.line_load_name_label(project, value)
+    if kind == "support_failures":
+        return L.support_failures_label(project, value)
     if kind == "variable_key":
         return L.variable_key_label(project, value)
     if kind == "variable_keys":

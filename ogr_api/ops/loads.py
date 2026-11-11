@@ -31,6 +31,9 @@ from __future__ import annotations
 import math
 from typing import Any, Optional
 
+# v0.1.436 (D415) -- the names the program gives, from the core's one rule
+from ogr_core.naming import DEFAULT_RECORD_NAME, default_load_name
+
 from ..coerce import coerce_enum, coerce_value, point
 from ..errors import Conflict, InvalidArgument, unknown
 from ..results import json_safe
@@ -183,7 +186,7 @@ def load_set(ws, project_id: Optional[str] = None,
                     distribution=distr,
                     creates_excess_pore_pressure=bool(
                         creates_excess_pore_pressure),
-                    name=name or f"Dist {m1:.1f} kN/m²",
+                    name=name or default_load_name("distributed", m1),
                     action=act or LoadAction.VARIABLE)
                 project.add_distributed_load(obj)
                 notes += _ground_note(project, [(sx, sy), (ex, ey)])
@@ -200,7 +203,7 @@ def load_set(ws, project_id: Optional[str] = None,
                                if angle_deg is not None else 0.0),
                     creates_excess_pore_pressure=bool(
                         creates_excess_pore_pressure),
-                    name=name or f"Line {m:.1f} kN/m",
+                    name=name or default_load_name("line", m),
                     action=act or LoadAction.VARIABLE)
                 project.add_line_load(obj)
                 notes += _ground_note(project, [(px, py)])
@@ -389,13 +392,13 @@ def seismic_record_set(ws, project_id: Optional[str] = None,
         default_name = p.stem
     elif text is not None:
         body = str(text)
-        default_name = "Record"
+        default_name = DEFAULT_RECORD_NAME
     elif accelerations is not None:
         vals = coerce_value(accelerations, list[float], "accelerations")
         if dt is None:
             raise InvalidArgument("accelerations need dt (seconds).")
         body = "\n".join(repr(v) for v in vals)
-        default_name = "Record"
+        default_name = DEFAULT_RECORD_NAME
 
     def edit(project):
         from ogr_core.project.rules import set_seismic_records

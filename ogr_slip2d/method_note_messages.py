@@ -354,14 +354,19 @@ METHOD_NOTES = {s.code: s for s in (
     MessageSpec(NEWMARK_UNUSABLE,
                 "the seismic record '{name}' cannot be integrated (it needs at "
                 "least two samples and a positive time interval), so no "
-                "displacement was computed."),
+                "displacement was computed.",
+                # v0.1.436 (D415) -- «Record» is a name the program gave
+                kinds=(("name", "record_name"),)),
     MessageSpec(NEWMARK_POLARITY,
                 "'{polarity}' is not a polarity this program knows, so the "
                 "maximum of the two was used."),
+    # v0.1.436 (D415) -- the support with its id, as the model notes name it
     MessageSpec(SUPPORT_REVERSED, _REVERSED,
-                kinds=(("orientation", "force_orientation"),)),
+                kinds=(("orientation", "force_orientation"),
+                       ("name", "support_names"))),
     MessageSpec(SUPPORT_REVERSED_ANY,
-                _REVERSED.replace("'{orientation}'", "'the chosen orientation'")),
+                _REVERSED.replace("'{orientation}'", "'the chosen orientation'"),
+                kinds=(("name", "support_names"),)),
     MessageSpec(SUPPORT_UNPRICED,
                 "The analysis could not price the reinforcement on the "
                 "reported surface: {said}." + _LEFT_OUT + "this factor of "
@@ -396,9 +401,12 @@ METHOD_NOTES = {s.code: s for s in (
                     "building its bond profile raised {errors}, so it carries "
                     "less reinforcement than the model declares. " + _BOND,
                 count="n"),
-    MessageSpec(SUPPORT_FAILURE_ONE, "support {sid} could not be priced: {why}"),
+    # v0.1.436 (D415) -- the support with its id, as the model notes name it
+    MessageSpec(SUPPORT_FAILURE_ONE, "support {sid} could not be priced: {why}",
+                kinds=(("sid", "support_names"),)),
     MessageSpec(SUPPORT_FAILURE_MANY,
-                "{n} supports could not be priced: {entries}"),
+                "{n} supports could not be priced: {entries}",
+                kinds=(("entries", "support_failures"),)),
 ) + _parts()}
 
 

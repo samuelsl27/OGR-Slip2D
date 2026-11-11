@@ -58,6 +58,32 @@ def sliding_sense(slices) -> float:
     return slide_sense(slices, 0.0)
 
 
+def _load_names(project) -> dict:
+    """``{load id: LoadName}`` of ``project``'s loads, the same objects for
+    every surface of a run (v0.1.436, D415).
+
+    Each slicing calls :func:`apply_action_factors`, and every evaluation
+    keeps its ``load_factors``: a new ``LoadName`` per surface cost about 160
+    bytes per load and per stored evaluation (measured in the review of
+    0.1.436). They are kept on the analysis copy -- the only project that
+    carries ``action_factors`` -- keyed by what they say, so a load the run
+    changes (the back analysis moves one) gets a name of its own."""
+    from ogr_core.naming import LoadName, load_end_magnitude, load_magnitude
+    memo = project.__dict__.setdefault("_load_names", {})
+    names = {}
+    for ld in (list(getattr(project, "distributed_loads", None) or [])
+               + list(getattr(project, "line_loads", None) or [])):
+        # by its text: a value read from a hand-edited file may be anything,
+        # hashable or not
+        key = repr((ld.id, ld.name, load_magnitude(ld),
+                    load_end_magnitude(ld)))
+        name = memo.get(key)
+        if name is None:
+            name = memo[key] = LoadName.of(ld)
+        names[ld.id] = name
+    return names
+
+
 def apply_action_factors(project, slices) -> None:
     """Multiply the soil weight of each slice by its permanent-action factor,
     and each load by the factor of its action.
@@ -97,9 +123,11 @@ def apply_action_factors(project, slices) -> None:
                     s.add_water_force(f_h=(xi - 1.0) * f_h, y=y)
         # With the load's name, so whatever shows the result can say which
         # load it was without the project in hand.
-        names = {ld.id: (ld.name or ld.id) for ld in (
-            list(getattr(project, "distributed_loads", None) or [])
-            + list(getattr(project, "line_loads", None) or []))}
+        # v0.1.436 (D415) -- and what the load was in this run: the text is
+        # the same (the agent's JSON reads it), and the window names an
+        # unnamed load by the magnitude the run used (the owner's decision,
+        # 2026-11-11), not by the one it was created with
+        names = _load_names(project)
         slices.load_factors = {
             load_id: (action, drives, xi, names.get(load_id, load_id))
             for load_id, (action, drives, xi) in factors.items()} or None

@@ -723,8 +723,9 @@ _CODED = {
 }
 #: The formats left, all of them DATA and the same in every language: a
 #: name in quotes, and the name of an attribute.
+#: v0.1.436 (D415): the sets of an ambiguous class are a ``Joined`` with
+#: their quote, no longer «"'%s'" % _name(st)».
 _DATA = {
-    ("support_identity_notes", '"\'%s\'" % _name(st)'),
     ("infinite_strength_notes", '"\'%s\'" % n'),
     ("block_angle_notes", 'f"block_{side}_start_angle_deg"'),
     ("block_angle_notes", 'f"block_{side}_end_angle_deg"'),

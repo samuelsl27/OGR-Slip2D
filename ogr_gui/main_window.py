@@ -51,6 +51,7 @@ from ogr_core.geometry import (
     convert_boundary,
 )
 from ogr_core.materials import Material, MohrCoulomb
+from ogr_core.naming import default_load_name
 from ogr_core.project import Project
 from ogr_core.project.commands import (
     AddBoundaryCommand,
@@ -234,8 +235,11 @@ class _DrawdownSweepWorker(QThread):
             except AnalysisNotConfigured as exc:
                 # v0.1.350 (D335) -- each refusal in the reader's language
                 from .core_messages import note_text
-                self.failed.emit("  ".join(note_text(p)
-                                           for p in exc.problems))
+                # v0.1.436 (D415) -- against the project, which names a
+                # load or a support the program named (review of 0.1.436)
+                self.failed.emit("  ".join(
+                    note_text(p, project=self.project)
+                    for p in exc.problems))
                 return
             self.finished_result.emit(self.result)
         except Exception as e:  # noqa: BLE001
@@ -285,7 +289,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.435"
+    VERSION = "0.1.436"
 
     def __init__(self) -> None:
         super().__init__()
@@ -1461,7 +1465,8 @@ class MainWindow(QMainWindow):
         # fixed texts and its coded messages through ``note_text``, the
         # methods by their names; the API writes it in English
         from .core_messages import error_text, note_text
-        from .labels import design_standard_label, method_name
+        from .labels import (design_standard_label, load_name_label,
+                             method_name)
         try:
             from ogr_core.report import generate_report
             figures = None
@@ -1481,7 +1486,9 @@ class MainWindow(QMainWindow):
                 factor_report=factor_report, figures=figures,
                 translate=note_text, method_name=method_name,
                 # v0.1.434 (D412) -- the standard by its name
-                standard_name=design_standard_label)
+                standard_name=design_standard_label,
+                # v0.1.436 (D415) -- an unnamed load by the run's magnitude
+                load_name=load_name_label)
         except ImportError:
             QMessageBox.critical(
                 self, tr("Generate Report"),
@@ -2055,7 +2062,8 @@ class MainWindow(QMainWindow):
             # v0.1.350 (D335) -- through the codes: tr() of a sentence
             # with its values in it found nothing
             from .core_messages import note_text
-            self._info("\n".join(note_text(p) for p in exc.problems))
+            self._info("\n".join(note_text(p, project=self.project)
+                                 for p in exc.problems))
             return
         self._back_analysis_result = res
         # v0.1.363 (D340) — the run's warnings, and the two notes of its own
@@ -2079,9 +2087,12 @@ class MainWindow(QMainWindow):
             error = res.notes.get("error")
             # v0.1.428 (D396) -- and the notes that say why, which the panel
             # had and this box did not (Bishop with no circle to price)
+            # v0.1.436 (D415) -- against the project, as the notes panel
             why = [note_text(res.notes.get("error")
-                             or tr("Back analysis failed."))]
-            why += [note_text(n) for n in own if n is not error]
+                             or tr("Back analysis failed."),
+                             project=self.notes_scope())]
+            why += [note_text(n, project=self.notes_scope())
+                    for n in own if n is not error]
             self._info("\n\n".join(why))
             return
         c = res.critical
@@ -2199,7 +2210,7 @@ class MainWindow(QMainWindow):
             # v0.1.350 (D335) -- each refusal in the reader's language
             from .core_messages import note_text
             QMessageBox.critical(self, tr("Error"), "  ".join(
-                note_text(p) for p in exc.problems))
+                note_text(p, project=self.project) for p in exc.problems))
             return
         except Exception as e:  # noqa: BLE001 - the worker said it the same way
             # v0.1.434 (D412) -- inside a translated frame, its type kept
@@ -2383,12 +2394,14 @@ class MainWindow(QMainWindow):
             # v0.1.350 (D335) -- through the codes: tr() of a sentence
             # with its values in it found nothing
             from .core_messages import note_text
-            self._info("\n".join(note_text(p) for p in exc.problems))
+            self._info("\n".join(note_text(p, project=self.project)
+                                 for p in exc.problems))
             return
         from .core_messages import note_text
         if not out.deterministic:
             # v0.1.353 (D335) -- through the code it carries
-            self._info(note_text(out.warnings[-1]))
+            self._info(note_text(out.warnings[-1],
+                                 project=self.notes_scope()))
             return
 
         self._prob_result = None
@@ -3056,7 +3069,8 @@ class MainWindow(QMainWindow):
             # v0.1.350 (D335) -- through the codes: tr() of a sentence
             # with its values in it found nothing
             from .core_messages import note_text
-            self._info("\n".join(note_text(p) for p in exc.problems))
+            self._info("\n".join(note_text(p, project=self.project)
+                                 for p in exc.problems))
             return
         # v0.1.363 (D340) — the run's warnings, and the report's note that
         # the snap to the ground failed, neither of which was shown
@@ -3996,7 +4010,7 @@ class MainWindow(QMainWindow):
             self._set_task_notes("transient", [])
             self.statusBar().showMessage(
                 tr("Cannot compute: %s") % "  ".join(
-                    note_text(p) for p in exc.problems), 15000)
+                    note_text(p, project=self.project) for p in exc.problems), 15000)
             self._gw_solver = getattr(self.project, "_gw_solver", None)
             self._update_groundwater_actions()
             return list(self.project.transient_results or [])
@@ -4023,7 +4037,8 @@ class MainWindow(QMainWindow):
             # interface and must not. v0.1.352 (D335): through the code
             # each warning carries.
             from .core_messages import note_line
-            first = note_line(notes[0])
+            # v0.1.436 (D415) -- against the project, as the notes panel
+            first = note_line(notes[0], project=self.notes_scope())
             if len(notes) > 1:
                 first = tr("%s  [+%d more — Analysis > Analysis Notes]") % (
                     first, len(notes) - 1)
@@ -4279,8 +4294,11 @@ class MainWindow(QMainWindow):
         _why = check_analysis_settings(self.project)
         if _why:
             # v0.1.350 (D335) -- in the reader's language, through the codes
+            # v0.1.436 (D415) -- against the project: a line load the program
+            # named reads by its magnitude now, never by its id
             QMessageBox.warning(self, tr("Compute"),
-                                "\n\n".join(note_text(p) for p in _why))
+                                "\n\n".join(note_text(p, project=self.project)
+                                            for p in _why))
             return
         if "no_materials" in _blockers:
             QMessageBox.warning(self, tr("Compute"),
@@ -4361,7 +4379,10 @@ class MainWindow(QMainWindow):
             # them. Analysis > Analysis Notes shows all of them.
             # v0.1.347 (D335) -- in the reader's language, through its code
             from .core_messages import note_line
-            first = note_line(self.last_compute_warnings[0])
+            # v0.1.436 (D415) -- against the project, as the notes panel:
+            # a support or a load the program named reads as it does there
+            first = note_line(self.last_compute_warnings[0],
+                              project=self.notes_scope())
             rest = len(self.last_compute_warnings) - 1
             if rest:
                 first = tr("%s  [+%d more — Analysis > Analysis Notes]") % (
@@ -5464,7 +5485,9 @@ class MainWindow(QMainWindow):
             # only Modify ever wrote it (spec 008, F2).
             creates_excess_pore_pressure=bool(
                 params.get("creates_excess_pore_pressure", False)),
-            name=f"Dist {params['magnitude_1']:.1f} kN/m²",
+            # v0.1.436 (D415) -- the core's rule (the agent's too); the
+            # window shows it by the load's magnitude now (labels.load_label)
+            name=default_load_name("distributed", params["magnitude_1"]),
             action=params.get("action", LoadAction.VARIABLE),
         )
         self.project.distributed_loads.append(load)
@@ -5702,7 +5725,7 @@ class MainWindow(QMainWindow):
             # v0.1.196 — same drop as the distributed load above.
             creates_excess_pore_pressure=bool(
                 params.get("creates_excess_pore_pressure", False)),
-            name=f"Line {params['magnitude']:.1f} kN/m",
+            name=default_load_name("line", params["magnitude"]),
             action=params.get("action", LoadAction.VARIABLE),
         )
         # v0.1.199 — normal (or at an angle) to the boundary means to the

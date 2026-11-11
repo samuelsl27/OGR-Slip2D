@@ -297,6 +297,10 @@ class TestTranslationCompleteness:
                    # v0.1.369 (D345) - and the column heading of the
                    # Surfaces tables on a Ky search: the same symbol
                    "Ky",
+                   # v0.1.436 (D415) - a line load by its magnitude and its
+                   # unit, inside a refusal that already says «carga
+                   # lineal»: notation, the same in both languages
+                   "{0:.1f} kN/m",
                    # v0.1.200 - "A:" and "a:" above with their units, now
                    # that each hydraulic parameter says which one.
                    "A (kPa):", "a (1/m^n):",

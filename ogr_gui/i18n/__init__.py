@@ -896,6 +896,19 @@ _DICTS: dict[str, dict[str, str]] = {
         'Original ground (from Expand/Shrink)':
             'Terreno original (de Expandir / contraer)',
         'User-defined': 'Definido por el usuario',
+        # v0.1.436 (D415) -- the names the program gives (ogr_core.naming),
+        # shown in Spanish and stored in English
+        'Type {0}': 'Tipo {0}',
+        '(copy)': '(copia)',
+        'Record': 'Registro',
+        # the review of 0.1.436: the quotes of a name in a note, an unnamed
+        # support by its class and its head, a varying load by its two ends,
+        # and a line load by its magnitude inside a sentence about it
+        "'{0}'": '«{0}»',
+        '{0} at ({1:.2f}, {2:.2f})': '{0} en ({1:.2f}, {2:.2f})',
+        'Distributed Load — {0:.1f}–{1:.1f} kN/m²':
+            'Carga distribuida — {0:.1f}–{1:.1f} kN/m²',
+        '{0:.1f} kN/m': '{0:.1f} kN/m',
         # the stages that bring their own boundary conditions
         'Conditions': 'Condiciones',
         'captured': 'capturadas',
@@ -5982,11 +5995,11 @@ _DICTS: dict[str, dict[str, str]] = {
             'favorable.',
         'Line load {name}: an orientation relative to the boundary needs the '
         'ground surface.':
-            'Carga lineal {name}: una orientación relativa al contorno '
+            'Carga lineal «{name}»: una orientación relativa al contorno '
             'necesita la superficie del terreno.',
         'Line load {name} at ({x:g}, {y:g}) is not on the ground surface, so '
         'it has no boundary to be normal to.':
-            'La carga lineal {name} en ({x:g}, {y:g}) no está sobre la '
+            'La carga lineal «{name}» en ({x:g}, {y:g}) no está sobre la '
             'superficie del terreno, así que no tiene contorno al que ser '
             'normal.',
         'Unknown optimisation technique {value!r}: it has to be one of '

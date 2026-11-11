@@ -165,6 +165,7 @@ def generate_report(
     translate=None,
     method_name=None,
     standard_name=None,
+    load_name=None,
 ) -> str:
     """Generate a PDF analysis report.
 
@@ -200,6 +201,13 @@ def generate_report(
         A method's name from its identifier, in the reader's language (the
         window's ``ogr_gui.labels.method_name``). Without it, the report's
         own English names.
+    standard_name : callable, optional
+        v0.1.434 (D412) -- a design standard's name from its identifier.
+    load_name : callable, optional
+        v0.1.436 (D415) -- a load's name from what the run kept for it
+        (``ogr_core.naming.LoadName``): the window names an unnamed load by
+        the magnitude of the run (``ogr_gui.labels.load_name_label``).
+        Without it, the text the run kept, as the API's report prints it.
 
     Returns
     -------
@@ -218,6 +226,7 @@ def generate_report(
     # language, when the caller knows it (the window); the API's report
     # keeps the stored id it always printed
     standard_of = standard_name or str
+    load_of = load_name or str
     summary = project.settings.summary
     author = author or summary.author or ""
     company = company or summary.company or ""
@@ -456,7 +465,13 @@ def generate_report(
         # this surface: whether a load drives depends on the surface, so it
         # is said here and not in the run's section.
         for name, text in _load_factor_rows(crit, T):
-            rows.append((T("Load '{0}'").format(name), text))
+            # v0.1.436 (D415) -- a load the program named reads by its kind
+            # and magnitude, which already say «load»: «Carga 'Carga
+            # distribuida — 25.0 kN/m²'» said it twice (review of 0.1.436)
+            if load_name is not None and not getattr(name, "given", True):
+                rows.append((load_of(name), text))
+            else:
+                rows.append((T("Load '{0}'").format(load_of(name)), text))
         story.append(kv_table(rows))
         story.append(Spacer(1, 4))
 

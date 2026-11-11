@@ -88,8 +88,11 @@ GEOMETRY_MESSAGES = {s.code: s for s in (
                 "{n} support(s) had their head on the old face and were not "
                 "moved: {names}.",
                 kinds=(("names", "support_names"),)),
+    # v0.1.436 (D415) -- and a load's: an unnamed one by its kind and its
+    # magnitude now
     MessageSpec(LOADS_NOT_MOVED,
-                "{n} load(s) were on the old face and were not moved: {names}."),
+                "{n} load(s) were on the old face and were not moved: {names}.",
+                kinds=(("names", "load_names"),)),
     MessageSpec(TOLERANCE_NOT_POSITIVE,
                 "the simplification tolerance must be positive"),
     MessageSpec(TOLERANCE_TOO_COARSE,

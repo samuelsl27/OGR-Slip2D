@@ -319,13 +319,18 @@ def change_slope_angle(project, toe, crest, *,
     loads = []
     for ld in getattr(project, "distributed_loads", []) or []:
         if carried(ld.start) is not None or carried(ld.end) is not None:
-            loads.append(ld.name or ld.id)
+            loads.append(ld)
     for ld in getattr(project, "line_loads", []) or []:
         if carried(ld.point) is not None:
-            loads.append(ld.name or ld.id)
+            loads.append(ld)
     if loads:
-        notes.append(M.geometry_message(M.LOADS_NOT_MOVED, n=len(loads),
-                                        names=", ".join(loads[:10])))
+        # v0.1.436 (D415) -- each name with its load, as the supports above:
+        # the window names one the program named («Dist 20.0 kN/m²») by its
+        # kind and its magnitude now, and never splits a name the user gave
+        notes.append(M.geometry_message(
+            M.LOADS_NOT_MOVED, n=len(loads),
+            names=Joined([ld.name or ld.id for ld in loads[:10]],
+                         refs=[ld.id for ld in loads[:10]])))
 
     project.boundaries[ext_idx] = dataclasses.replace(
         ext, polyline=dataclasses.replace(ext.polyline,

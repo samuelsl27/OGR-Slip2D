@@ -212,6 +212,14 @@ class LineLoad:
                     tx * math.sin(a) + ty * math.cos(a))
         return (0.0, -1.0)
 
+    def _named(self):
+        """This load as a refusal names it: its name, or its id when it has
+        none (the English the refusals always wrote), kept with its id, so
+        the window names a load the program named by its kind and its
+        magnitude (v0.1.436, D415)."""
+        from ..messages import joined_name
+        return joined_name(self.name or self.id, self.id)
+
     def ground_frame(self, ground):
         """(tx, ty, nx, ny) of the ground surface under the load point.
 
@@ -227,14 +235,14 @@ class LineLoad:
                                         refusal_message)
         if ground is None or len(ground.vertices) < 2:
             raise ValueError(refusal_message(
-                LINE_LOAD_NEEDS_GROUND, name=self.name or self.id))
+                LINE_LOAD_NEEDS_GROUND, name=self._named()))
         xs = [v.x for v in ground.vertices]
         ys = [v.y for v in ground.vertices]
         tol = 1e-3 * math.hypot(max(xs) - min(xs), max(ys) - min(ys))
         frame = ground_frame(ground, self.point.x, self.point.y, tol)
         if frame is None:
             raise ValueError(refusal_message(
-                LINE_LOAD_OFF_GROUND, name=self.name or self.id,
+                LINE_LOAD_OFF_GROUND, name=self._named(),
                 x=self.point.x, y=self.point.y))
         return frame
 

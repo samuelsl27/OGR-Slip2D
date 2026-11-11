@@ -56,6 +56,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ogr_core.naming import copy_name, first_free_set_name
 from ogr_core.support import (
     ForceApplication,
     ForceOrientation,
@@ -535,17 +536,22 @@ class DefineSupportDialog(QDialog):
         # v0.1.433 (D411) -- a set that keeps the name it was born with (its
         # class's English name) is shown by the class's name alone: it read
         # «End Anchored  [Anclado en el extremo]»
-        from ogr_gui.labels import (default_support_name, support_name,
-                                    support_type_label)
-        if default_support_name(row.name) is not None:
+        # v0.1.436 (D415) -- every name the program gives («Type 3», «X
+        # (copy)») in the reader's language; the class in brackets when the
+        # name does not say it. The edit field shows the stored name.
+        from ogr_gui.labels import (set_name_names_its_class, support_name,
+                                    support_set_name, support_type_label)
+        cls = type(row.support)
+        if set_name_names_its_class(row.name):
             # by the row's current class: the type combo keeps the name
-            return support_name(row, type(row.support))
-        return "%s  [%s]" % (row.name, support_type_label(type(row.support)))
+            return support_name(row, cls)
+        return "%s  [%s]" % (support_set_name(row.name, cls.DISPLAY_NAME),
+                             support_type_label(cls))
 
-    def _make_default_row(self) -> _SupportRow:
+    def _make_default_row(self, name=None) -> _SupportRow:
         cls = list(support_registry().values())[0]  # End Anchored
         return _SupportRow(
-            name="Type 1", support=cls(),
+            name=name or first_free_set_name(()), support=cls(),
             force_application=cls.DEFAULT_APPLICATION,
             orientation=cls.DEFAULT_ORIENTATION,
         )
@@ -659,8 +665,10 @@ class DefineSupportDialog(QDialog):
         cur = self.list_widget.currentRow()
         if cur >= 0:
             self._commit_row(cur)
-        row = self._make_default_row()
-        row.name = f"Type {len(self._rows) + 1}"
+        # v0.1.436 (D415) -- the first «Type N» no row has: it counted the
+        # rows, and deleting the second of three and adding gave two «Type 3»
+        row = self._make_default_row(first_free_set_name(
+            r.name for r in self._rows))
         self._rows.append(row)
         self.list_widget.addItem(self._row_label(row))
         self._fit_list()
@@ -685,7 +693,9 @@ class DefineSupportDialog(QDialog):
                                  for k, v in src.support.__dict__.items()
                                  if not k.startswith("_")})
         new_row = _SupportRow(
-            name=src.name + " (copy)",
+            # v0.1.436 (D415) -- numbered when taken: twice gave two «X
+            # (copy)», which the agent could not tell apart by name
+            name=copy_name(src.name, (r.name for r in self._rows)),
             support=new_support,
             force_application=src.force_application,
             orientation=src.orientation,

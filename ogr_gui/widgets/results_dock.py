@@ -41,13 +41,17 @@ def load_factor_lines(result) -> str:
     if not factors:
         return ""
     from html import escape
+    # v0.1.436 (D415) -- an unnamed load by the magnitude of the run that
+    # factored it (the owner's decision, 2026-11-11), never by its id
+    from ogr_gui.labels import load_name_label
     lines = []
     for _load_id, (action, drives, factor, name) in factors.items():
         role = (tr("drives the sliding") if drives
                 else tr("resists the sliding"))
         kind = (tr("permanent load") if action == "permanent"
                 else tr("variable load"))
-        lines.append(f"{escape(str(name))}: {kind}, {role}: × {factor:g}")
+        lines.append(f"{escape(load_name_label(name))}: {kind}, {role}: "
+                     f"× {factor:g}")
     return "<br>" + tr("Loads on this surface:") + "<br>" + "<br>".join(lines)
 
 

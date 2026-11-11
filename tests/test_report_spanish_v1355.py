@@ -368,7 +368,9 @@ class TestWhoPassesIt:
         # v0.1.434 (D412) -- and the standard's name
         assert ("factor_report=factor_report, figures=figures, "
                 "translate=note_text, method_name=method_name, ") in flat
-        assert "standard_name=design_standard_label)" in flat
+        assert "standard_name=design_standard_label," in flat
+        # v0.1.436 (D415) -- and a load's name, by the run's magnitude
+        assert "load_name=load_name_label)" in flat
         api = (_ROOT / "ogr_api" / "ops" / "files.py").read_text(
             encoding="utf-8")
         assert "translate" not in api

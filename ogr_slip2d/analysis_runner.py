@@ -2476,8 +2476,11 @@ def _seismic_notes(project, method_id: str, result) -> list:
         lines.append(method_note(method_id, _mnote(MN.NEWMARK_NO_RECORD)))
         return lines
     if not record.is_usable():
+        # v0.1.436 (D415) -- with its id: «Record» is a name the program
+        # gave, which the window shows in the reader's language
+        from ogr_core.messages import joined_name
         lines.append(method_note(method_id, _mnote(
-            MN.NEWMARK_UNUSABLE, name=record.name)))
+            MN.NEWMARK_UNUSABLE, name=joined_name(record.name, record.id))))
         return lines
 
     from .newmark import Polarity, displacement_for_record

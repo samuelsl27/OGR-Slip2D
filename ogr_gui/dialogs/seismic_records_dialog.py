@@ -128,8 +128,11 @@ class SeismicRecordsDialog(QDialog):
     def _reload(self, row: int = 0) -> None:
         self.list.blockSignals(True)
         self.list.clear()
+        # v0.1.436 (D415) -- «Record», the name the program gives one read
+        # from text, in the reader's language; the edit field shows it stored
+        from ogr_gui.labels import record_label
         for rec in self.records:
-            self.list.addItem(rec.name)
+            self.list.addItem(record_label(rec.name))
         self.list.blockSignals(False)
         if self.records:
             self.list.setCurrentRow(max(0, min(row, len(self.records) - 1)))
@@ -164,7 +167,8 @@ class SeismicRecordsDialog(QDialog):
         row = self.list.currentRow()
         item = self.list.item(row)
         if item is not None:
-            item.setText(text)
+            from ogr_gui.labels import record_label
+            item.setText(record_label(text))
 
     def _retime(self, value: float) -> None:
         """The interval is editable because a single-column file has none.

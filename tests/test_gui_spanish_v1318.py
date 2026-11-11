@@ -146,8 +146,8 @@ EXCEPTIONS: dict = {
         "a varying load's two magnitudes and their unit",
     ("canvas/graphics_items.py", "{} kN/m"):
         "a line load's magnitude and its unit",
-    ("data_tips.py", "{}: {} kPa"):
-        "a quantity named by the model, its value and its unit",
+    # v0.1.436 (D415): "{}: {} kPa" left, the unit is a value (kN/m for a
+    # line load), so the format has no letters of its own
     ("widgets/legend.py", "X: 0.000   Y: 0.000"):
         "notation: the coordinates of the pointer",
     ("widgets/legend.py", "X: {}   Y: {}"):
@@ -172,11 +172,9 @@ EXCEPTIONS: dict = {
         "notation: a displacement and its unit",
     ("main_window.py", "ΔY (m):"):
         "notation: a displacement and its unit",
-    ("dialogs/define_support_dialog.py", "Type {}"):
-        "the default name of a new support type, which the model keeps and "
-        "the screen shows as it is; unlike a project's 'Untitled', which "
-        "0.1.433 shows translated, it is not (yet) a name the program "
-        "recognises as its own -- left for the owner (review of 0.1.433)",
+    # v0.1.436 (D415): "Type {}" left, a new set is named by the core's
+    # rule (ogr_core.naming.first_free_set_name) and shown in the reader's
+    # language (ogr_gui.labels.support_set_name), by the owner's decision
     # v0.1.432 (D399): "Piezo {}" left, the lines are named as the material
     # dialog names them (ogr_gui.labels.water_surface_label)
     ("dialogs/grid_dialogs.py", "Circular"):

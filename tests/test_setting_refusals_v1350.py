@@ -450,8 +450,11 @@ class TestNoSentenceWithoutItsCode:
         # v0.1.366 (D362): six — the drawdown sweep's refusal is said by the
         # window, which runs it through ``run_task``, and its worker's own
         # ``run`` keeps the one it had
-        assert flat.count("note_text(p) for p in exc.problems") == 6
-        assert "note_text(p) for p in _why" in flat
+        # v0.1.436 (D415) -- each against the project, which names a load
+        # or a support the program named by its magnitude now, never its id
+        assert flat.count("note_text(p, project=self.project) for p in "
+                          "exc.problems") == 6
+        assert "note_text(p, project=self.project) for p in _why" in flat
 
 
 # ======================================================================

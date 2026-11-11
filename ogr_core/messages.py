@@ -134,16 +134,30 @@ class Joined(str):
     change. A reader that names them one by one (a support by the class of
     its set) reads ``items`` and ``refs`` instead of splitting the text: a
     name the user gave may hold the separator (review of 0.1.434).
+
+    v0.1.436 (D415) -- ``quote`` wraps each name in the text and not in
+    ``items``: the engine wrote the sets of a class as «'A', 'B'», and a
+    reader that quotes them its own way («A», «B») reads the bare names.
     """
 
-    def __new__(cls, items, sep: str = ", ", refs=()):
+    def __new__(cls, items, sep: str = ", ", refs=(), quote: str = ""):
         items = tuple(str(i) for i in items)
-        self = str.__new__(cls, sep.join(items))
+        self = str.__new__(cls, sep.join(quote + i + quote for i in items))
         self.items, self.sep, self.refs = items, sep, tuple(refs)
+        self.quote = quote
         return self
 
     def __reduce__(self):
-        return (Joined, (self.items, self.sep, self.refs))
+        return (Joined, (self.items, self.sep, self.refs, self.quote))
+
+
+def joined_name(name, ref):
+    """One name as a note keeps it, with what it refers to (v0.1.436,
+    D415): a :class:`Joined` of one when it is text, else the value as it
+    came. A name that is not text (``"name": 5`` in a hand-edited file)
+    reached the agent's JSON as that value, and wrapping it would turn it
+    into the string ``"5"`` (review of 0.1.436)."""
+    return Joined([name], refs=[ref]) if isinstance(name, str) else name
 
 
 def coded(catalogue: dict, code: str, **args) -> Coded:

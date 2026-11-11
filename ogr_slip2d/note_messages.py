@@ -166,6 +166,12 @@ _PLATES = "{hit_plates} of its {n_plates} plates"
 #: The kind of a value the interface shows in the reader's language: a list
 #: of method ids written ", "-joined, as the engine always wrote it.
 METHODS = (("methods", "method_list"),)
+#: v0.1.436 (D415) -- a placed support and its property set, each named with
+#: its id (``ogr_core.messages.Joined``): the window shows a name the program
+#: gave («Type 3», «End Anchored (2)») in the reader's language, and an
+#: unnamed support by its set, never by its id. The English is unchanged.
+_SUPPORT = (("name", "support_names"),)
+_SUPPORT_AND_SET = _SUPPORT + (("type_name", "set_names"),)
 
 NOTES = {s.code: s for s in (
     MessageSpec(SEISMIC_STATISTICS,
@@ -395,33 +401,39 @@ NOTES = {s.code: s for s in (
     MessageSpec(HELICAL_NO_PLATE,
                 "The shaft of support '{name}' is not narrower than its "
                 "helices, so the plates have no bearing area and the anchor "
-                "carries nothing in pullout."),
+                "carries nothing in pullout.",
+                kinds=_SUPPORT),
     MessageSpec(HELICAL_RESPACED,
                 "The {n:d} helices of support '{name}' do not fit at "
                 "{spacing:.2f} m: the spacing used is {used:.2f} m, the "
-                "anchor length divided by the number of gaps."),
+                "anchor length divided by the number of gaps.",
+                kinds=_SUPPORT),
     MessageSpec(HELICAL_SPACING_RATIO,
                 "The helix spacing of support '{name}' is {ratio:.2f} times "
                 "the average helix diameter. Design guides recommend 5 to "
-                "12."),
+                "12.",
+                kinds=_SUPPORT),
     MessageSpec(SUPPORT_AMBIGUOUS_SET, "{n} supports" + _AMBIGUOUS,
                 one="1 support" + _AMBIGUOUS, count="n",
-                kinds=(("cls", "label"),)),
+                kinds=(("cls", "support_class"), ("sets", "set_names"),
+                       ("first", "set_names"))),
     MessageSpec(SUPPORT_ORPHAN_REPLACED,
                 "Support '{name}' refers to a property set that is no longer "
-                "in the project; '{used}' is used instead, chosen by class."),
+                "in the project; '{used}' is used instead, chosen by class.",
+                kinds=_SUPPORT + (("used", "set_names"),)),
     MessageSpec(SUPPORT_ORPHAN_DROPPED,
                 "Support '{name}' refers to a property set that is no longer "
-                "in the project; it is left out of the analysis."),
+                "in the project; it is left out of the analysis.",
+                kinds=_SUPPORT),
     MessageSpec(SUPPORT_INFINITE_LENGTH,
                 _INFINITE.replace("{where}", _ALONG),
-                kinds=(("type_name", "label"),)),
+                kinds=_SUPPORT_AND_SET),
     MessageSpec(SUPPORT_INFINITE_PLATES,
                 _INFINITE.replace("{where}", _PLATES),
-                kinds=(("type_name", "label"),)),
+                kinds=_SUPPORT_AND_SET),
     MessageSpec(SUPPORT_INFINITE_BOTH,
                 _INFINITE.replace("{where}", _ALONG + " and " + _PLATES),
-                kinds=(("type_name", "label"),)),
+                kinds=_SUPPORT_AND_SET),
     MessageSpec(FORCE_AT_CENTROID_BLIND,
                 "The support force is set to act at the centroid of its "
                 "pressure diagram, and {methods} cannot tell that from acting "

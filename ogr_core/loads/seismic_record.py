@@ -33,6 +33,10 @@ from enum import Enum
 from typing import Optional
 from uuid import uuid4
 
+# v0.1.436 (D415) -- the name a record is born with, imported and not
+# copied: the interface tells it from a name the user gave by this constant
+from ..naming import DEFAULT_RECORD_NAME
+
 __all__ = [
     "AccelerationUnit",
     "SeismicRecord",
@@ -78,7 +82,7 @@ class SeismicRecord:
     from.
     """
 
-    name: str = "Record"
+    name: str = DEFAULT_RECORD_NAME
     dt: float = 0.02
     accelerations: list[float] = field(default_factory=list)
     source_unit: AccelerationUnit = AccelerationUnit.G
@@ -130,7 +134,7 @@ class SeismicRecord:
         except ValueError:
             unit = AccelerationUnit.G
         rec = cls(
-            name=data.get("name", "Record"),
+            name=data.get("name", DEFAULT_RECORD_NAME),
             dt=float(data.get("dt", 0.02)),
             accelerations=[float(a)
                            for a in data.get("accelerations_g", [])],

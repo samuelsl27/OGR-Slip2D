@@ -18,7 +18,8 @@ from __future__ import annotations
 from . import note_messages as N
 from .note_messages import note as _note
 
-from .support_notes import supports_by_type
+# v0.1.436 (D415) -- a support named with its id kept
+from .support_notes import _support, supports_by_type
 
 #: The spacing-to-diameter band the reference recommends. Outside it the
 #: three failure types stop describing what they were derived for: too
@@ -51,7 +52,7 @@ def helical_anchor_notes(project, method_ids=()) -> list[str]:
         if width >= diameter > 0.0:
             for sup in sups:
                 notes.append(_note(N.HELICAL_NO_PLATE,
-                                   name=getattr(sup, "name", "") or sup.id))
+                                   name=_support(sup)))
             continue
 
         if diameter > 0.0 and n >= 2:
@@ -66,11 +67,11 @@ def helical_anchor_notes(project, method_ids=()) -> list[str]:
                 if abs(used - spacing) > 1e-9:
                     notes.append(_note(
                         N.HELICAL_RESPACED, n=n,
-                        name=getattr(sup, "name", "") or sup.id,
+                        name=_support(sup),
                         spacing=spacing, used=used))
                 ratio = used / diameter
                 if not (SPACING_RATIO_MIN <= ratio <= SPACING_RATIO_MAX):
                     notes.append(_note(
                         N.HELICAL_SPACING_RATIO,
-                        name=getattr(sup, "name", "") or sup.id, ratio=ratio))
+                        name=_support(sup), ratio=ratio))
     return notes

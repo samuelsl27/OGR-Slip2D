@@ -257,12 +257,17 @@ REFUSALS = {s.code: s for s in (
                 "The partial factor on favourable variable actions must not be "
                 "negative, got {value}: at 0 the load is left out, which is the "
                 "most a favourable variable action can be discounted."),
+    # v0.1.436 (D415) -- the load with its id (``LineLoad._named``): one the
+    # program named («Line 50.0 kN/m») by its magnitude now, alone (the
+    # sentence already says «line load»), and between «» in Spanish
     MessageSpec(LINE_LOAD_NEEDS_GROUND,
                 "Line load {name}: an orientation relative to the boundary "
-                "needs the ground surface."),
+                "needs the ground surface.",
+                kinds=(("name", "line_load_name"),)),
     MessageSpec(LINE_LOAD_OFF_GROUND,
                 "Line load {name} at ({x:g}, {y:g}) is not on the ground "
-                "surface, so it has no boundary to be normal to."),
+                "surface, so it has no boundary to be normal to.",
+                kinds=(("name", "line_load_name"),)),
 ) + tuple(MessageSpec(DESIGN_NOT_A_NUMBER + attr,
                       "The partial factor on " + phrase + " must be a finite "
                       "number, got {raw!r}.")

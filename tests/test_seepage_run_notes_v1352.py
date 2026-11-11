@@ -421,8 +421,9 @@ class TestEveryCodeSaysItselfInSpanish:
             'tr("Back analysis failed.")', "")
         assert 'tr("sensitivity run failed")' in flat
         assert '"warning", "did not converge")' not in flat
+        # v0.1.436 (D415) -- said against the project, as the notes panel
         assert 'note_text(res.notes.get("error") or tr("Back analysis ' \
-            'failed."))' in flat
+            'failed."), project=self.notes_scope())' in flat
 
 
 # ======================================================================
