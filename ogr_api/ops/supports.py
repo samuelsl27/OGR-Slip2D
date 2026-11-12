@@ -33,6 +33,8 @@ import math
 from typing import Any, Optional
 from uuid import uuid4
 
+from ogr_core.naming import name_key, numbered_name
+
 from ..coerce import coerce_enum, coerce_value, point, type_hints
 from ..errors import Conflict, InvalidArgument, did_you_mean, unknown
 from ..results import json_safe
@@ -88,10 +90,18 @@ def find_type(project, ref):
     for st in sets:
         if st.id == ref:
             return st
-    named = [st for st in sets
-             if _label(st).strip().lower() == str(ref).strip().lower()]
+    named = [st for st in sets if name_key(_label(st)) == name_key(ref)]
     if len(named) == 1:
         return named[0]
+    if named:
+        # v0.1.439 (D421) -- two sets of one name are ambiguous, not
+        # unknown: «Unknown» listed the name twice among the known ones. A
+        # model saved before this version can hold them (the bank's 049);
+        # neither Import nor this API makes them any more
+        raise Conflict(f"{len(named)} support types are named {ref!r}.",
+                       hint="Pass one of their ids: " + ", ".join(
+                           f"{st.id!r} ({_label(st)})" for st in named)
+                       + ".")
     raise unknown("support type", ref,
                   [f"{st.id} ({_label(st)})" for st in sets])
 
@@ -188,12 +198,11 @@ def support_type_set(ws, project_id: Optional[str] = None,
             values = _params(cls, params)
             st = cls(**values)
             st.id = str(uuid4())
-            taken = {_label(x).strip().lower()
-                     for x in project.support_types}
+            # v0.1.439 (D421) -- the rule Import numbers by, imported and
+            # not copied (ogr_core.naming)
             base = name or cls.DISPLAY_NAME
-            label, i = base, 2
-            while label.strip().lower() in taken:
-                label, i = f"{base} ({i})", i + 1
+            label = numbered_name(base, [_label(x)
+                                         for x in project.support_types])
             if name and label != name:
                 raise Conflict(f"A support type named {name!r} exists.",
                                hint=f"Pass support_type={name!r} to change "
@@ -205,9 +214,25 @@ def support_type_set(ws, project_id: Optional[str] = None,
             project.support_types.append(st)
         else:
             old = find_type(project, support_type)
-            cls = reg[type_class] if type_class is not None else type(old)
+            # v0.1.439 (D421) -- renaming to a name another set has is
+            # refused as creating one is: the agent could make two sets of
+            # one name and then find neither. Its own name, in another case
+            # or restated, is still a rename, also in a model saved before
+            # this version with two sets of that name (the bank's 049; the
+            # review of 0.1.439)
+            if (name and name_key(name) != name_key(_label(old))
+                    and any(name_key(_label(x)) == name_key(name)
+                            for x in project.support_types
+                            if x is not old)):
+                raise Conflict(f"A support type named {name!r} exists.",
+                               hint=f"Pass support_type={name!r} to change "
+                                    f"it.")
+            # the class checked before it is looked up: an unknown one was a
+            # KeyError here, where creating says it with its code (the
+            # owner's decision in the review of 0.1.439)
             if type_class is not None and type_class not in reg:
                 raise unknown("support class", type_class, list(reg))
+            cls = reg[type_class] if type_class is not None else type(old)
             same = cls is type(old)
             base = ({f.name: getattr(old, f.name)
                      for f in dataclasses.fields(old) if f.name != "id"}
@@ -225,7 +250,13 @@ def support_type_set(ws, project_id: Optional[str] = None,
             # defaults, as the editor does.
             _apply_behaviour(st, cls, force_application, orientation,
                              user_angle_deg, reset=not same)
-            project.support_types[project.support_types.index(old)] = st
+            # v0.1.439 (D421) -- by identity: list.index compares sets as
+            # dataclasses, whose id is out of the comparison, so of two sets
+            # of one class with the same parameters it replaced the FIRST
+            # (renaming «Malla» renamed «Soil Nail» and left two of one id)
+            at = next(i for i, x in enumerate(project.support_types)
+                      if x is old)
+            project.support_types[at] = st
         rec = reconcile_support_refs(project)
         project._notify("support_types_changed")
         return {"support_type": type_info(st), "created": creating,

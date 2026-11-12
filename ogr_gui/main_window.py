@@ -289,7 +289,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.438"
+    VERSION = "0.1.439"
 
     def __init__(self) -> None:
         super().__init__()
@@ -3553,11 +3553,19 @@ class MainWindow(QMainWindow):
             "cmd": after if after is not before else None,
             "notes": list(rep["notes"]), "undone": False})
         self._refresh_import_notes()
+        message = tr("Imported %d material(s) and %d support type(s).") % (
+            len(rep["materials"]), len(rep["support_types"]))
+        # v0.1.439 (D421) -- said only when it happened, and how many: the
+        # bar said it always, also while a support type kept the name the
+        # model already had. Not «names the model already had»: two sets of
+        # one name in the same file are numbered too (the review of 0.1.439)
+        numbered = len(rep.get("renamed") or [])
+        if numbered:
+            message += " " + tr(
+                "%d name(s) were numbered so that no two are the same.") % (
+                numbered)
         self.statusBar().showMessage(self._with_notes_hint(
-            tr("Imported %d material(s) and %d support type(s). "
-               "Duplicated names were numbered rather than overwritten.")
-            % (len(rep["materials"]), len(rep["support_types"])),
-            len(rep["notes"])), 12000)
+            message, len(rep["notes"])), 12000)
 
     def _refresh_import_notes(self) -> int:
         """The notes of the imports whose step is done, as the Import
@@ -3620,10 +3628,15 @@ class MainWindow(QMainWindow):
         # is kept and shown by :meth:`_import_properties` (a material that
         # used the other project's water table arrives dry, which moves the
         # factor of safety; at the limit of materials, why none came)
-        return import_properties(
+        renamed = []
+        rep = import_properties(
             self.project, other,
             materials=what in (tr("Materials"), tr("Both")),
-            support_types=what in (tr("Supports"), tr("Both")))
+            support_types=what in (tr("Supports"), tr("Both")),
+            renamed=renamed)
+        # v0.1.439 (D421) -- the names numbered, for the bar to count
+        rep["renamed"] = renamed
+        return rep
 
     def _export_image(self) -> None:
         """The model view as a PNG."""

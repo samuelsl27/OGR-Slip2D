@@ -147,7 +147,10 @@ _DICTS: dict[str, dict[str, str]] = {
         'Image exported: %d × %d px to %s': 'Imagen exportada: %d × %d px a %s',
         'Import Properties': 'Importar propiedades',
         'Import:': 'Importar:',
-        'Imported %d material(s) and %d support type(s). Duplicated names were numbered rather than overwritten.': 'Importados %d material(es) y %d tipo(s) de soporte. Los nombres duplicados se han numerado en lugar de sobrescribirse.',
+        # v0.1.439 (D421) -- the numbering said only when it happened
+        'Imported %d material(s) and %d support type(s).': 'Importados %d material(es) y %d tipo(s) de soporte.',
+        '%d name(s) were numbered so that no two are the same.':
+            '%d nombre(s) se han numerado para que no se repitan.',
         'Line %d: %.3g kN/m': 'Lineal %d: %.3g kN/m',
         'Load modified.': 'Carga modificada.',
         'Load:': 'Carga:',

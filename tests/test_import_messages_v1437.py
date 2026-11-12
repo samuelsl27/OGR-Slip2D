@@ -1069,10 +1069,10 @@ class TestTheWindowSaysIt:
 
 
 # ======================================================================
-#: the one function of ``properties_import.py`` that builds a text in
-#: place: a name numbered «X (2)», which is a name and not a note (D421
-#: moves it to ``ogr_core.naming``)
-_NOT_A_NOTE = ("_unique",)
+#: the functions of ``properties_import.py`` that may build a text in place
+#: because it is a name and not a note: none since 0.1.439, when D421 moved
+#: the numbering «X (2)» (``_unique``) to ``ogr_core.naming``
+_NOT_A_NOTE = ()
 #: the packages whose readers the enumeration census reads
 _PACKAGES = ("ogr_core", "ogr_fem2d", "ogr_slip2d")
 #: readers that put a default in place of a value they do not know, said
@@ -1216,9 +1216,8 @@ class TestTheCensuses:
         src = (_ROOT / "ogr_core" / "project" / "properties_import.py"
                ).read_text(encoding="utf-8")
         assert _sentences(src, _NOT_A_NOTE) == []
-        # and the one skipped is still there to be skipped
-        assert any(isinstance(n, ast.FunctionDef) and n.name == "_unique"
-                   for n in ast.walk(ast.parse(src)))
+        # the numbering is the core's rule, imported (D421)
+        assert "numbered_name" in src and "def _unique" not in src
 
     def test_every_enumeration_a_reader_calls_says_its_code(self):
         from ogr_gui.labels import ENUM_NAMES
@@ -1258,7 +1257,7 @@ class TestTheCensuses:
                '    notes.append(f"{p} too")\n'
                'def _unique(p):\n'
                '    return f"{p} (2)"\n')
-        assert _sentences(bad, _NOT_A_NOTE) == [
+        assert _sentences(bad, ("_unique",)) == [
             ("import_properties", 2, "f-string"),
             ("import_properties", 3, "% format"),
             ("import_properties", 4, "+ text"),

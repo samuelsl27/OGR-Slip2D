@@ -17,9 +17,9 @@ What this module adds is the rule each one is made by, so that the interface
 can tell a name the program made from one the user gave, and show the former
 in the reader's language (``ogr_gui.labels``). Define Support, the window's
 loads, the agent's loads and records and the record reader take their names
-from here; the agent's second set of a class and the importer's numbering
-still keep their own copy of :func:`numbered_name`, the same today, until
-D421 (0.1.439) makes them import it. No dependency on the rest of the core,
+from here; so, since 0.1.439 (D421), do the agent's second set of a class and
+Import Properties, materials and support types alike, which each kept their
+own copy of :func:`numbered_name`. No dependency on the rest of the core,
 so the loads and the supports can import it without a cycle.
 
 Author: Samuel Sáez López (UPCT)
@@ -58,9 +58,8 @@ def name_key(name) -> str:
 def numbered_name(base: str, taken: Iterable) -> str:
     """``base``, or «base (2)», «base (3)», ... -- the first that no name in
     ``taken`` has under :func:`name_key`. The rule the importer gives a
-    material whose name the model already has, and the agent a second set
-    of a class -- each with its own copy of this loop today; D421 (0.1.439)
-    makes them import it."""
+    material or a support type whose name the model already has, and the
+    agent a second set of a class (one copy since 0.1.439, D421)."""
     keys = {name_key(t) for t in taken}
     label, i = base, 2
     while name_key(label) in keys:
