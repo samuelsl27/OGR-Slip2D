@@ -468,6 +468,17 @@ def minimum_row_text(i: int, sd: dict) -> str:
     return tr("%d: non-circular surface, x from %.2f to %.2f") % (i, xl, xr)
 
 
+def _fingerprint_of(project) -> Optional[str]:
+    """``model_hash`` of ``project``, or None for one that cannot be
+    serialised (a test's stand-in): a window without a fingerprint cannot
+    tell, and treats its results as current (v0.1.440, D419)."""
+    from ogr_api.snapshot import model_hash
+    try:
+        return model_hash(project)
+    except Exception:  # noqa: BLE001 - whatever a stand-in lacks
+        return None
+
+
 # ======================================================================
 class _SummaryDock(QDockWidget):
     """Header summary: method, number of valid surfaces, critical FoS."""
@@ -477,12 +488,26 @@ class _SummaryDock(QDockWidget):
         self.setObjectName("SummaryDock")
         container = QWidget()
         vbox = QVBoxLayout(container)
+        # v0.1.440 (D419) — said when the model is no longer the one these
+        # results were computed on, as the main window's results panel says
+        # it (D304), with its sentence and its colours; hidden otherwise
+        self.stale_label = QLabel(tr(
+            "Results of an earlier model: compute again."))
+        self.stale_label.setWordWrap(True)
+        self.stale_label.setStyleSheet(
+            "color: #5a3b00; background: #fff1c2; padding: 3px; "
+            "border-radius: 2px;")
+        self.stale_label.setVisible(False)
+        vbox.addWidget(self.stale_label)
         self.label = QLabel(tr("<i>No results to display.</i>"))
         self.label.setWordWrap(True)
         self.label.setStyleSheet("padding: 8px; font-size: 10.5pt;")
         vbox.addWidget(self.label)
         vbox.addStretch(1)
         self.setWidget(container)
+
+    def set_stale(self, stale: bool) -> None:
+        self.stale_label.setVisible(bool(stale))
 
     def show_result(self, result, project=None, factor_report=None) -> None:
         self.project = project if project is not None else getattr(
@@ -630,11 +655,22 @@ class InterpretWindow(QMainWindow):
     closed = Signal()
 
     def __init__(self, project: Project, search_result, parent=None, *,
-                 factor_report=None) -> None:
+                 factor_report=None, model_fingerprint=None) -> None:
         # v0.1.165 (D96) — keyword-only and defaulted: ten tests build this
         # window positionally, and a run with no design standard has nothing
         # to say here.
         super().__init__(parent)
+        # v0.1.440 (D419) — the fingerprint of the model these results were
+        # computed on (``ogr_api.snapshot.model_hash``, the one of D304):
+        # the main window's, taken as the run started. Without one, the
+        # model's as this window is built -- whoever builds it by hand says
+        # so that the results are of the model as it is. What the window
+        # computes anew on the run's slices (the back analysis) reads the
+        # project too, so it has to know whether that is still the model.
+        opened_on = _fingerprint_of(project)
+        self._model_fingerprint = (model_fingerprint
+                                   if model_fingerprint is not None
+                                   else opened_on)
         # v0.1.328 (D325) — set before anything writes to it: a long message
         # ends in «…» where the indicators begin, whole in its tooltip
         from .widgets.status_bar import ElidingStatusBar
@@ -769,6 +805,9 @@ class InterpretWindow(QMainWindow):
         if self._seepage_field() is not None:
             self._refresh_overlays()
         self._fit_dock_titles()
+        # v0.1.440 (D419) — as it opens: Interpret can be opened on a result
+        # the main window already marks as of an earlier model
+        self.refresh_stale(opened_on)
 
     def _fit_dock_titles(self) -> None:
         """Every dock at least as wide as its title (v0.1.421, D363): the
@@ -1044,8 +1083,13 @@ class InterpretWindow(QMainWindow):
         self._act_support_diagram.setToolTip(reason)
         m_data.addAction(self._act_support_diagram)
 
-        m_data.addAction(QAction(tr("Back Analysis..."), self,
-                                 triggered=self._back_analysis_report))
+        # v0.1.440 (D419) — kept, to gate it: it prices the run's critical
+        # surface against the project, so it needs the run's model
+        # (``refresh_stale``)
+        self._act_back_analysis = QAction(
+            tr("Back Analysis..."), self,
+            triggered=self._back_analysis_report)
+        m_data.addAction(self._act_back_analysis)
         self._act_supp_contours = QAction(tr("Supplemental Contours"), self,
                                           checkable=True)
         self._act_supp_contours.setToolTip(tr(
@@ -1795,6 +1839,36 @@ class InterpretWindow(QMainWindow):
         return (getattr(parent, "_prob_result", None),
                 getattr(parent, "_sens_result", None))
 
+    def results_are_current(self, model_now=None) -> bool:
+        """Whether the model is still the one these results were computed on
+        (v0.1.440, D419): the fingerprint of D304, compared now.
+        ``model_now`` is the model's hash when the caller already has it
+        (the main window computes it once for its panel and every open
+        Interpret). A window with no fingerprint cannot tell, and says
+        yes; so does one whose model cannot be read now: "an earlier
+        model" is said of a model that was compared, not of one that could
+        not be."""
+        if self._model_fingerprint is None:
+            return True
+        if model_now is None:
+            model_now = _fingerprint_of(self.project)
+        if model_now is None:
+            return True
+        return model_now == self._model_fingerprint
+
+    def refresh_stale(self, model_now=None) -> None:
+        """Show, or take away, the notice that the results are of an
+        earlier model, and gate what computes anew against the project
+        (v0.1.440, D419): the main window calls it once the edits pause,
+        as it marks its own results panel; undoing the edit takes both
+        away. The other entries read the run and stay as they are."""
+        stale = not self.results_are_current(model_now)
+        self.summary_dock.set_stale(stale)
+        # The sentence of D304 as the reason, on the status bar while the
+        # entry is disabled (``disabled_reasons.gate``, D324)
+        gate(self._act_back_analysis, not stale,
+             tr("Results of an earlier model: compute again."))
+
     def _factored_view(self) -> bool:
         """Whether the deterministic run on screen was factored by a design
         standard, so each surface's ``.fos`` is an over-design factor
@@ -1910,16 +1984,24 @@ class InterpretWindow(QMainWindow):
         """Support force required to reach a target factor of safety."""
         from PySide6.QtWidgets import QInputDialog
 
-        from ogr_slip2d.back_analysis import required_force
+        from ogr_slip2d.back_analysis import required_force_of_result
         res = self.search_result
         crit = res.critical if res else None
         if crit is None or not getattr(crit, "slices", None):
             self._info(tr("No critical surface with slice data."))
             return
+        # v0.1.440 (D419) — before asking anything: the force is found on
+        # the run's slices WITH the model's supports, and the result does
+        # not carry the supports it was computed with. So the model has to
+        # be the run's, and it is asked now, not read off the notice (the
+        # main window refreshes that once the edits pause). With the model
+        # changed this priced the run's slices against the supports and the
+        # earthquake of now: 36.42 kN/m for 145.99 after adding a nail.
+        if not self.results_are_current():
+            self._info(tr("Results of an earlier model: compute again."))
+            return
         # v0.1.201 — prefilled from the project's back-analysis settings
-        # (1.3 and 0.0 were typed in here), and with the seismic
-        # coefficients the model declares, which ``required_force`` takes
-        # and this never passed.
+        # (1.3 and 0.0 were typed in here).
         cfg = self.project.settings.back_analysis
         # v0.1.220 (D210) -- the model's own supports enter the sums, as the
         # method applied them, so the project goes too: the FACTORED copy,
@@ -1931,7 +2013,6 @@ class InterpretWindow(QMainWindow):
         # run's slices, so the project's standard of now does not say what
         # the target is (review of 0.1.435)
         from ogr_core.project import prepare_analysis_project
-        factored, _report = prepare_analysis_project(self.project)
         odf = self._factored_view()
         target, ok = QInputDialog.getDouble(
             self, tr("Back Analysis"),
@@ -1945,12 +2026,24 @@ class InterpretWindow(QMainWindow):
             float(cfg.elevation), -1e6, 1e6, 3)
         if not ok:
             return
-        mid = self._current_method_id
-        seis = self.project.seismic
-        kh = float(seis.kh) if seis.enabled else 0.0
-        kv = float(seis.kv) if seis.enabled else 0.0
-        r = required_force(crit.slices, crit.surface, target, mid,
-                           elevation, kh, kv, project=factored)
+        # v0.1.440 (D419) — and asked again, with the answers in hand: the
+        # two inputs are modal, an agent's edit is delivered through the
+        # event loop they keep running, and this window opens no undo step
+        # that would make the agent wait (review of 0.1.440). The model the
+        # run was computed on is rebuilt only now, from a model known to be
+        # the run's.
+        if not self.results_are_current():
+            self._info(tr("Results of an earlier model: compute again."))
+            return
+        factored, _report = prepare_analysis_project(self.project)
+        # v0.1.440 (D419) — the coefficients the method APPLIED, read off
+        # the result with its slices (``required_force_of_result``), and the
+        # result's own method. This read the project's earthquake of now,
+        # without the seismic factor of the standard the run had applied:
+        # 258.49 kN/m for the run's 314.73 with nothing changed (factor 1.5).
+        mid = getattr(crit, "method_id", None) or self._current_method_id
+        r = required_force_of_result(crit, target, elevation,
+                                     project=factored, method_id=mid)
         if r is None:
             # v0.1.428 (D396) -- Bishop with a critical surface that is not a
             # circle (a polyline, the user's or the search's, or a surface a

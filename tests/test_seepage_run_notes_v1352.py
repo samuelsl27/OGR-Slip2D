@@ -431,7 +431,9 @@ _CODED = {
     "ogr_fem2d/solvers/seepage.py": ("_note_degenerate", "solve",
                                      "solve_unsaturated", "solve_transient"),
     "ogr_slip2d/transient_stability.py": ("run_transient_stability",),
-    "ogr_slip2d/back_analysis.py": ("run_back_analysis", "required_force"),
+    # v0.1.440 (D419) -- and the count on one computed result
+    "ogr_slip2d/back_analysis.py": ("run_back_analysis", "required_force",
+                                    "required_force_of_result"),
     "ogr_core/statistics/drawdown_sweep.py": ("run_drawdown_sweep",),
     "ogr_core/materials/parameter_calculator.py": ("calculate_hoek_brown",),
     "ogr_slip2d/analysis_runner.py": ("run_configured_drawdown_sweep",

@@ -89,6 +89,11 @@ class WindowHost:
         w.project.is_dirty = True
         w.canvas.refresh_scene()
         w.refresh_action_availability()
+        # v0.1.440 (D419, its review) — and the results it has on screen may
+        # no longer be of this model: an operation that notifies nothing
+        # (``settings_set``) left the results panel, and every open
+        # Interpret, unmarked until the next event of the project
+        w._schedule_stale_check()
         # v0.1.299 (D297) — an edit can rename the project (model_define's
         # "name", by the owner's decision the project's name): the title
         # says it, as after project_new

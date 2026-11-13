@@ -185,8 +185,15 @@ class AnalysisOutcome:
         self.results = results
         self.factor_report = factor_report
         self.warnings = warnings
-        #: The FACTORED copy actually analysed — never the caller's
-        #: project, which must come out of an analysis untouched.
+        #: The project actually analysed (``prepare_analysis_project``): the
+        #: FACTORED copy when a design standard is on, a copy with its own
+        #: materials when a Generalized Anisotropic rule links one, and
+        #: otherwise THE CALLER'S OWN PROJECT, unmodified -- nothing is
+        #: copied when nothing has to change. So it is not a snapshot: an
+        #: edit made to the caller's project after the run shows in it.
+        #: v0.1.440 (D419) — this said "never the caller's project", which
+        #: holds only with a standard; a reader that took it for the model
+        #: of the run would have read the model of now.
         self.project = project
 
     def __iter__(self):

@@ -735,14 +735,22 @@ class TestTheFactorUnderAStandard:
         decision), named by the RUN's report, as the rest of the window
         (review of 0.1.435): the force is read off the run's slices, so the
         project's standard of now does not say what the target is. Each run
-        is asked with the project's standard the other way round."""
+        is asked with the project's standard the other way round.
+
+        v0.1.440 (D419) -- the preparation changed on purpose, the
+        assertions did not. The window without a standard was built first
+        and the standard set on its project afterwards: that is a model
+        changed since the run, which the back analysis now refuses before
+        asking anything. So that window is built AFTER the standard is set
+        (a hand-built window takes the model as it is), with the run's
+        report still saying there was none -- which is what this reads."""
         from PySide6.QtWidgets import QInputDialog
         import ogr_slip2d.back_analysis as BA
+        from ogr_gui.interpret_window import InterpretWindow
         settings = _iw().project.settings
         kept = copy.deepcopy(settings.design_standard)
         seen = {}
         for factored in (True, False):
-            iw = _iw(factored)
             for envelope in (False, True):
                 asked, said = [], []
 
@@ -750,11 +758,17 @@ class TestTheFactorUnderAStandard:
                     asked.append(label)
                     return value, True
                 unsettled = NS(notes={"envelope_not_settled": True})
+                fresh = None
                 try:
-                    if not factored:          # the project has one now
+                    if factored:
+                        iw = _iw(True)
+                    else:                     # the project has one now
                         settings.design_standard.enabled = True
                         settings.design_standard.apply_preset(
                             "eurocode7_da1c1")
+                        p, res = _results()
+                        iw = fresh = InterpretWindow(p, res, None,
+                                                     factor_report=None)
                     with ExitStack() as stack:
                         stack.enter_context(_language("es"))
                         stack.enter_context(_swapped(
@@ -769,6 +783,9 @@ class TestTheFactorUnderAStandard:
                         iw._back_analysis_report()
                 finally:
                     settings.design_standard = copy.deepcopy(kept)
+                    if fresh is not None:
+                        fresh.close()
+                        fresh.deleteLater()
                 seen[factored, envelope] = (asked[0],
                                             said[0].split("\n")[0])
         assert seen[True, False][0] == \

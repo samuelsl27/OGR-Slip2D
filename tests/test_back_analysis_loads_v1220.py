@@ -359,16 +359,22 @@ class TestTheCallersPassTheModel:
             out.critical.passive_force)
 
     def test_the_interpretation_window_passes_the_factored_model(self):
-        """The window calls ``required_force`` itself, on the critical
-        surface of a run that used the FACTORED copy of the project. Read
-        by AST: the call is inside a slot that opens two modal inputs."""
+        """The window prices the critical surface of a run that used the
+        FACTORED copy of the project, and hands that copy over. Read by
+        AST: the call is inside a slot that opens two modal inputs.
+
+        v0.1.440 (D419) — changed on purpose: the count is the core's
+        ``required_force_of_result``, which reads the slices and the
+        seismic coefficients off the result; the window called
+        ``required_force`` itself, with the earthquake of the project as it
+        was by then. The model still goes by keyword."""
         tree = ast.parse((_ROOT / "ogr_gui" / "interpret_window.py")
                          .read_text(encoding="utf-8"))
         fn = next(n for n in ast.walk(tree)
                   if isinstance(n, ast.FunctionDef)
                   and n.name == "_back_analysis_report")
         calls = [n for n in ast.walk(fn) if isinstance(n, ast.Call)
-                 and getattr(n.func, "id", "") == "required_force"]
+                 and getattr(n.func, "id", "") == "required_force_of_result"]
         assert len(calls) == 1, len(calls)
         assert any(k.arg == "project" for k in calls[0].keywords)
         names = {getattr(n.func, "id", "") for n in ast.walk(fn)

@@ -289,7 +289,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.439"
+    VERSION = "0.1.440"
 
     def __init__(self) -> None:
         super().__init__()
@@ -3007,6 +3007,18 @@ class MainWindow(QMainWindow):
                 "Run an analysis first: optimisation refines an existing "
                 "surface, so it needs one to start from."))
             return
+        # v0.1.440 (D419, its review; the owner's decision) — not on the
+        # result of an earlier model, and said before asking anything. The
+        # walk starts from the critical surface of a run, and what it finds
+        # joins that run's result: over a model edited since, the surface it
+        # starts from and the rest of the population are another model's.
+        # And it stamped the whole result with the model of now
+        # (``_remember_results_model`` below), every other method's too: the
+        # results panel lost its notice, and Interpret took a run made
+        # before a nail was added for a run of the model with it.
+        if not self._results_model_is_the_runs():
+            self._info(tr("Results of an earlier model: compute again."))
+            return
         mid = next(iter(candidates))
         if len(candidates) > 1:
             # v0.1.369 (D343) -- the methods by their names; the choice is
@@ -4707,8 +4719,13 @@ class MainWindow(QMainWindow):
             return
         # v0.1.9: pass the full dict so the InterpretWindow can offer
         # a method selector
+        # v0.1.440 (D419) — with the fingerprint of the model these results
+        # are of (D304), so the window knows when the model has moved on:
+        # it marked nothing, and its back analysis priced the run's slices
+        # against the model of now
         win = InterpretWindow(self.project, results, self,
-                              factor_report=self.last_factor_report)
+                              factor_report=self.last_factor_report,
+                              model_fingerprint=self._results_model_hash)
         # v0.1.404 (D389) — deleted when closed. As a child of this window it
         # was only hidden, and kept alive with its result until the program
         # closed; its own charts, its children, go with it.
@@ -5164,12 +5181,33 @@ class MainWindow(QMainWindow):
     def _on_project_event(self, event: str) -> None:
         """Project notified a state change — refresh conditional UI."""
         self.refresh_action_availability()
-        # v0.1.297 (D304) — and, once the edits pause, whether the result
-        # in the results panel is still of this model
-        if getattr(self, "_results_model_hash", None) is not None:
+        self._schedule_stale_check()
+
+    def _schedule_stale_check(self) -> None:
+        """Once the edits pause, check whether the result in the results
+        panel is still of this model (v0.1.297, D304), and the one of each
+        open Interpret, which keeps the fingerprint of its own run
+        (v0.1.440, D419).
+
+        Apart from :meth:`_on_project_event` since v0.1.440: an agent's edit
+        that notifies nothing (a setting) reaches the window through
+        ``agent_bridge.after_edit`` alone, and marked nothing until the
+        next event of the project."""
+        if (getattr(self, "_results_model_hash", None) is not None
+                or getattr(self, "interpret_windows", None)):
             timer = getattr(self, "_stale_timer", None)
             if timer is not None:
                 timer.start()
+
+    def _results_model_is_the_runs(self) -> bool:
+        """Whether the model is still the one the stored results were
+        computed on -- or nothing says it is not: results put there without
+        a fingerprint (by hand, in a test) cannot be told from current
+        ones. What a door that computes anew on those results asks before
+        it opens (v0.1.440: Optimize Surfaces)."""
+        if getattr(self, "_results_model_hash", None) is None:
+            return True
+        return self._results_are_current()
 
     def _remember_results_model(self, fingerprint=None) -> None:
         """The results panel was just filled: remember the model it is of
@@ -5197,12 +5235,26 @@ class MainWindow(QMainWindow):
         """Mark the results panel stale when the model is no longer the one
         its result was computed on (v0.1.297, D304). The same fingerprint
         as the API's: undoing the edit gives it back, and the mark goes;
-        an annotation is left out of it, and marks nothing."""
-        if self._results_model_hash is None:
+        an annotation is left out of it, and marks nothing.
+
+        v0.1.440 (D419) — and every open Interpret, each against the
+        fingerprint of ITS run (one opened before the last Compute keeps
+        the earlier one): the hash is computed once for all of them."""
+        windows = list(getattr(self, "interpret_windows", []) or [])
+        if self._results_model_hash is None and not windows:
             return
         from ogr_api.snapshot import model_hash
-        self.results_dock.set_stale(
-            model_hash(self.project) != self._results_model_hash)
+        now = model_hash(self.project)
+        if self._results_model_hash is not None:
+            self.results_dock.set_stale(now != self._results_model_hash)
+        for win in windows:
+            # a window of an earlier project keeps that project: it is
+            # asked about its own, not handed this one's hash
+            try:
+                win.refresh_stale(now if win.project is self.project
+                                  else None)
+            except RuntimeError:            # closed, its C++ side gone
+                pass
 
     def _attach_project(self, project: "Project") -> None:
         """Bind a (new or loaded) project to all UI that depends on it.

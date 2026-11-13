@@ -522,6 +522,56 @@ def required_force(slices, surface, target_fos, method_id="bishop_simplified",
     return res
 
 
+def required_force_of_result(result, target_fos, elevation, project,
+                             method_id=None
+                             ) -> Optional[BackAnalysisSurfaceResult]:
+    """Support force needed to bring the surface of ONE computed result to
+    ``target_fos`` (v0.1.440, D419).
+
+    A count made on a result reads the result. The slices and the surface
+    are the run's, and so are the seismic coefficients: ``details["kh"]``
+    and ``details["kv"]``, what the method APPLIED (0 with the earthquake
+    off, and with the seismic factor of a design standard already in them),
+    as the free body reads them since v0.1.214 (D173). The method is the
+    result's own unless ``method_id`` names another.
+
+    ``project`` is the model the result was computed on -- the factored
+    copy when a design standard is on (``prepare_analysis_project``). Its
+    supports are what is read (see :func:`required_force`), and through a
+    support whatever that support reads of the model: a sheet whose
+    pull-out is a fraction of the soil's strength reads the materials, the
+    water and the loads around it, which is why the factored copy and the
+    project as drawn do not price it alike. The caller answers for it
+    being that model: a result does not carry the supports it was computed
+    with, only their forces slice by slice at the method's own factor,
+    which cannot be read at another one.
+
+    Until this version the interpretation window passed the run's slices
+    with the coefficients and the supports of the project AS IT IS NOW:
+    258.49 kN/m where the run's data give 145.99 after raising kh to 0.1,
+    36.42 after adding a nail, and 258.49 against 314.73 with nothing
+    changed at all under a standard whose seismic factor is 1.5.
+
+    What checks it is an identity (Bishop 1955; Janbu 1954): at the
+    result's own factor of safety, with the data it was computed with, the
+    force is zero.
+    """
+    # The slices as the result holds them: the ones a large run left in its
+    # store (``SpilledSlices``) read back as they are walked.
+    slices = getattr(result, "slices", None)
+    if not slices:
+        return None
+    details = getattr(result, "details", None) or {}
+    # Read as ``postprocess.compute_interslice_state`` reads them: a result
+    # built by hand, without them, had no earthquake.
+    kh = float(details.get("kh", 0.0) or 0.0)
+    kv = float(details.get("kv", 0.0) or 0.0)
+    if method_id is None:
+        method_id = getattr(result, "method_id", None)
+    return required_force(slices, result.surface, target_fos, method_id,
+                          elevation, kh, kv, project=project)
+
+
 # ======================================================================
 def run_back_analysis(project, search, target_fos=1.3, elevation=0.0,
                       method_id="bishop_simplified",
