@@ -247,6 +247,31 @@ def invalid_label(res) -> str:
     return label(*parts)
 
 
+def surface_note(search_result, res) -> tuple:
+    """``(text, tooltip)`` of the Note column of a table of surfaces, for
+    the surface ``res`` of ``search_result`` (v0.1.443, D401).
+
+    Whose the surface is when the user drew it, and why it cannot be the
+    critical one when a check rejected it, the first in front of the second.
+    Empty for a surface of the search that passed, which is every row of a
+    run without surfaces of the user: the column reads as it always did.
+    The one place the tables ask it (the results panel, Interpret's
+    Surfaces and, when it has the column, its Result Table), so they cannot
+    say different things of one surface.
+    """
+    from ogr_slip2d.search import is_user_surface_of
+
+    rejected = not getattr(res, "admissible", True)
+    if is_user_surface_of(search_result, res):
+        if rejected:
+            return (tr("Defined by the user: {0}").format(invalid_label(res)),
+                    invalid_text(res))
+        return tr("Defined by the user"), ""
+    if rejected:
+        return invalid_label(res), invalid_text(res)
+    return "", ""
+
+
 # ----------------------------------------------------------------------
 # The analysis notes (v0.1.347, D335)
 # ----------------------------------------------------------------------

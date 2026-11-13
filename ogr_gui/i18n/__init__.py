@@ -2428,6 +2428,25 @@ _DICTS: dict[str, dict[str, str]] = {
         # simples, que es justo la forma que un rastreador ingenuo no ve;
         # lo cazó el test de cobertura, que sí la ve.
         "Critical surface": "Superficie crítica",
+        # v0.1.443 (D401) — la crítica que dibujó el usuario dice de quién
+        # es: los contadores de al lado son los de la búsqueda. Y el
+        # retroanálisis de Interpretar dice qué superficie tasó: «del
+        # cálculo», que es la forma del término desde v0.1.325 («corrida»
+        # está retirada; el texto que se decidió la llevaba).
+        "Critical surface, defined by the user":
+            "Superficie crítica, definida por el usuario",
+        "Method: <b>{0}</b>   Valid: {1}   {2}: <b>{3:.3f}</b> (surface "
+        "defined by the user)":
+            "Método: <b>{0}</b>   Válidas: {1}   {2}: <b>{3:.3f}</b> "
+            "(superficie definida por el usuario)",
+        "Defined by the user": "Definida por el usuario",
+        "Defined by the user: {0}": "Definida por el usuario: {0}",
+        "Back-analysed on the critical surface of the run ({0}).":
+            "Retroanálisis sobre la superficie crítica del cálculo ({0}).",
+        "Back-analysed on the critical surface of the run ({0}), defined by "
+        "the user.":
+            "Retroanálisis sobre la superficie crítica del cálculo ({0}), "
+            "definida por el usuario.",
         "Critical drawdown level": "Nivel de desembalse crítico",
         "total drawdown": "desembalse total",
         "the total drawdown alone would overstate it by":

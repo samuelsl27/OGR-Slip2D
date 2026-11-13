@@ -608,9 +608,13 @@ class TestTheDoors:
                 "The force at elevation 28 does not touch the sliding mass "
                 "of this surface, which meets the ground between elevations "
                 "15.74 and 25.00: no support force is reported."), said
-            # below the target, with the force on its face: as in 0.1.440
+            # below the target, with the force on its face: as in 0.1.440.
+            # v0.1.443 (D401) -- changed on purpose: a line more, after the
+            # first, says which surface was priced (the owner's decision)
             said, _c = self._interpret(1.5, 20.0)
-            assert said == [_MESSAGE_1440]
+            first, rest = _MESSAGE_1440.split("\n", 1)
+            assert said == [first + "\nBack-analysed on the critical surface "
+                            "of the run (Janbu Simplified).\n" + rest]
         with _language("es"):
             said, crit = self._interpret(1.0, 20.0)
             assert said == ["Esta superficie ya alcanza el factor objetivo "

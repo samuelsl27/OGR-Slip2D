@@ -292,8 +292,9 @@ class TestTheWindowSaysBothThings:
         # the bar prints the factor of that surface: the note says what it
         # is, the first version of this fix said it was not one. (The
         # results panel says the same through the same ``fos_label``, but
-        # not here: with the search's population empty it says "No results
-        # yet.", which is D401, a later ficha of the same tanda.)
+        # not here: with the search's population empty it said "No results
+        # yet." until v0.1.443, D401, which made it show the user's
+        # surface; this test was written before and reads the bar.)
         assert bar.startswith("Over-design factor ("), bar
         assert "over-design factor, not a factor of safety, and must " \
             "exceed 1" in said, said
@@ -337,8 +338,9 @@ class TestTheWindowSaysBothThings:
         """Through Interpret's summary, which says the Ky and, beside it,
         the factor of the same surface. On the circular slope of
         ``test_design_factor_report_gui_v1165``: on the plane, whose search
-        the focus empties, the summary says "No results to display." (D401,
-        a later ficha of the same tanda). The label is what is under test;
+        the focus empties, the summary said "No results to display." until
+        v0.1.443 (D401), so this test reads the circular slope. The label
+        is what is under test;
         the number beside it is the critical surface's own factor."""
         from test_design_factor_report_gui_v1165 import _slope, _with_standard
 
@@ -365,7 +367,8 @@ class TestTheWindowSaysBothThings:
         assert "FS(0) = %.3f" % crit.fos in said[1] \
             and "ODF(0)" not in said[1], said[1]
         # and the numbers Interpret prints, on the plane, against their
-        # closed forms (the summary itself cannot show the plane: D401)
+        # closed forms (the summary itself could not show the plane when
+        # this was written: D401, fixed in v0.1.443)
         from ogr_gui.interpret_window import _reported_value
         _n, _s, _b, res, report = _window_run("ky")
         with _English():

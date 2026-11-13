@@ -281,6 +281,10 @@ def available_fields(project, search_result=None) -> list:
     Offering a field with no data behind it is worse than not offering
     it, so the list is built from what exists: factors of safety come
     from the search, the hydraulic fields from a seepage result.
+
+    The factor is offered when the SEARCH left a population (v0.1.443,
+    D401, reported and left as it was): with a search that left none it is
+    not, though the run may have a critical surface the user drew.
     """
     out = []
     if search_result is not None and getattr(

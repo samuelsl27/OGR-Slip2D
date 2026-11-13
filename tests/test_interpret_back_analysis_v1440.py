@@ -634,7 +634,12 @@ class TestTheRunsNumbers:
 
     def test_nothing_changed_nothing_moves(self):
         """No change after computing, no earthquake, no supports: the
-        message of 0.1.439, byte for byte (145.99 and 136.95 kN/m)."""
+        message of 0.1.439, byte for byte (145.99 and 136.95 kN/m).
+
+        v0.1.443 (D401) -- changed on purpose: the message has a line more,
+        after its first, that says which surface was priced (the owner's
+        decision). Everything else is the measured text."""
+        from ogr_gui.labels import method_name
         for mid, shown in (("janbu_simplified", "145.99"),
                            ("bishop_simplified", "136.95")):
             w = _window("plain", mid)
@@ -643,7 +648,11 @@ class TestTheRunsNumbers:
                     got = _ask(w, _TARGET)
             finally:
                 w.close()
-            assert got.said == [_V1439[f"plain.{mid}.message"]], got.said
+            first, rest = _V1439[f"plain.{mid}.message"].split("\n", 1)
+            with _language("en"):
+                priced = ("Back-analysed on the critical surface of the run "
+                          "(%s)." % method_name(mid))
+            assert got.said == [first + "\n" + priced + "\n" + rest], got.said
             assert "passive: " + shown in got.said[0].split("\n")
             call, = got.calls
             active, passive, text, kh = _V1439[f"plain.{mid}.run"]

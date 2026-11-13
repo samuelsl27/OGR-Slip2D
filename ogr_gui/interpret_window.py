@@ -516,7 +516,12 @@ class _SummaryDock(QDockWidget):
         # back from the settings: see ``ogr_gui.reported_quantity``.
         self.factor_report = (factor_report if factor_report is not None
                               else getattr(self, "factor_report", None))
-        if result is None or not result.evaluations:
+        # v0.1.443 (D401) -- every surface the run analysed, the user's
+        # included: a search that leaves no population and a valid surface
+        # drawn by hand is a run with a critical surface, and this said
+        # «No results to display.»
+        from ogr_slip2d.search import all_evaluations_of, is_user_surface_of
+        if result is None or not all_evaluations_of(result):
             self.label.setText(tr("<i>No results to display.</i>"))
             return
         c = result.critical
@@ -575,8 +580,13 @@ class _SummaryDock(QDockWidget):
         cx, cy, radius = circle_cells(sd)
         if radius != "—":
             radius += " m"
+        # v0.1.443 (D401) -- the counts above are the search's (D58), so a
+        # critical surface the user drew says whose it is
+        heading = (tr('Critical surface, defined by the user')
+                   if is_user_surface_of(result, c)
+                   else tr('Critical surface'))
         self.label.setText(
-            tr("Method: <b>{0}</b><br>Valid surfaces: <b>{1}</b> / {2}<br>{3}<br><b>{4}</b><br>{5} = <span style='color:{6}; font-size:14pt;'><b>{7}</b></span>{8}<br>Iterations: {9}<br>Centre: ({10}, {11})<br>Radius: {12}").format(method_name(result.method_id), n_ok, getattr(result, 'total_count', len(result.evaluations)), esfuerzo, tr('Critical surface'), label, theme_color('accent'), value, extra, c.iterations, cx, cy, radius)
+            tr("Method: <b>{0}</b><br>Valid surfaces: <b>{1}</b> / {2}<br>{3}<br><b>{4}</b><br>{5} = <span style='color:{6}; font-size:14pt;'><b>{7}</b></span>{8}<br>Iterations: {9}<br>Centre: ({10}, {11})<br>Radius: {12}").format(method_name(result.method_id), n_ok, getattr(result, 'total_count', len(result.evaluations)), esfuerzo, heading, label, theme_color('accent'), value, extra, c.iterations, cx, cy, radius)
         )
 
 
@@ -620,7 +630,7 @@ class _ResultsTableDock(QDockWidget):
         from ogr_gui.reported_quantity import column_caption, column_value
         self.table.setHorizontalHeaderItem(1, QTableWidgetItem(
             column_caption(result, factor_report)))
-        from ogr_gui.core_messages import invalid_label, invalid_text
+        from ogr_gui.core_messages import surface_note
         # v0.1.419 (D361) -- in the order ``critical`` chooses (``top_n``):
         # the admissible surfaces first, then the rejected ones, greyed and
         # with their reason; the row a click picks is the same list
@@ -633,11 +643,13 @@ class _ResultsTableDock(QDockWidget):
             self.table.setItem(i, 2, QTableWidgetItem(method_name(res.method_id)))
             for col, text in zip((3, 4, 5), circle_cells(sd)):
                 self.table.setItem(i, col, QTableWidgetItem(text))
-            note = QTableWidgetItem("")
+            # v0.1.443 (D401) -- and whose the surface is, when the user
+            # drew it (``surface_note``, the results panel's too)
+            text, tip = surface_note(result, res)
+            note = QTableWidgetItem(text)
+            note.setToolTip(tip)
             self.table.setItem(i, 6, note)
             if not getattr(res, "admissible", True):
-                note.setText(invalid_label(res))
-                note.setToolTip(invalid_text(res))
                 for c in range(self.table.columnCount()):
                     self.table.item(i, c).setForeground(
                         QColor(theme_color("muted")))
@@ -844,7 +856,16 @@ class InterpretWindow(QMainWindow):
         self.legend_dock = dock
 
     def current_field_values(self) -> list:
-        """The scalar values behind the active contour field."""
+        """The scalar values behind the active contour field.
+
+        For the factor, the SEARCH's population alone (v0.1.443, D401:
+        reported and left as it was). The scale and the legend are fitted to
+        these values, so with the automatic range the mark of a critical
+        surface the user drew can fall below the scale, and with a search
+        that left no population there is no legend at all. The canvas's
+        heat map does not read this list: it paints the minimum per centre
+        of ``valid()``, which has the user's circles.
+        """
         from ogr_gui.contours import ContourMode  # noqa: F401
         field = self.contours.field
         if field == "fos":
@@ -2085,9 +2106,22 @@ class InterpretWindow(QMainWindow):
                 "on the stress the method resolves at the target factor of "
                 "safety. No support force is reported for this surface."))
             return
+        # v0.1.443 (D401) -- which surface was priced, on a line of its
+        # own (the owner's decision): the run's critical one, by its method.
+        # The back analysis of the modeller prices the surface that needs
+        # the MOST force, which can be another (145.99 kN/m here for the
+        # run's 166.33, with a circle of the user that is not critical), and
+        # the message did not say which one this was.
+        from ogr_slip2d.search import is_user_surface_of
+        priced = (tr("Back-analysed on the critical surface of the run "
+                     "({0}), defined by the user.")
+                  if is_user_surface_of(res, crit) else
+                  tr("Back-analysed on the critical surface of the run "
+                     "({0}).")).format(method_name(mid))
         self._info(
             (tr("Required support force for ODF = %g") if odf
              else tr("Required support force for FS = %g")) % target
+            + "\n" + priced
             + "\n\n"
             + tr("active: %.2f") % r.active_force + "\n"
             + tr("passive: %.2f") % r.passive_force + "\n\n"
@@ -3169,6 +3203,27 @@ class InterpretWindow(QMainWindow):
             QMessageBox.critical(self, tr("Error"), tr(
                 "Could not write the file: %s") % error_text(e))
 
+    def _valid_surfaces(self) -> list:
+        """Every valid surface of the result on screen, the user's included,
+        the search's first and in their order (v0.1.443, D401).
+
+        What the CSV, the filter and the result table list. They read
+        ``evaluations``, the search's population alone, while the canvas
+        draws from ``valid()``: a surface the user drew was on the drawing
+        and in none of the three, and the filter's «Showing N of M» counted
+        its M without a surface the canvas can draw.
+        A run without surfaces of the user gives the list of always.
+        """
+        from ogr_slip2d.search import all_evaluations_of
+        res = self.search_result
+        if not res:
+            return []
+        return [r for r in all_evaluations_of(res) if r.is_valid]
+
+    def _is_users(self, evaluation) -> bool:
+        from ogr_slip2d.search import is_user_surface_of
+        return is_user_surface_of(self.search_result, evaluation)
+
     def _export_data_csv(self) -> None:
         if self.search_result is None:
             self._info(tr("No results to export."))
@@ -3178,20 +3233,30 @@ class InterpretWindow(QMainWindow):
         )
         if not path:
             return
+        # v0.1.443 (D401) -- the valid surfaces of the run, the user's
+        # included (``_valid_surfaces``), and whose each is in a last
+        # column that is there only when the run analysed one of the user's,
+        # as the raw data since v0.1.442: without any, the file of always.
+        from ogr_slip2d.interpretation import RAW_DATA_USER_COLUMN
+        marked = bool(getattr(self.search_result, "user_evaluations", None))
         try:
             with open(path, "w", encoding="utf-8") as f:
                 f.write("rank,fos,method,centre_x,centre_y,radius,"
-                        "x_left,x_right,iterations,converged\n")
+                        "x_left,x_right,iterations,converged"
+                        + (f",{RAW_DATA_USER_COLUMN}" if marked else "")
+                        + "\n")
                 for i, r in enumerate(
-                    sorted((r for r in self.search_result.evaluations if r.is_valid),
-                           key=lambda x: x.fos)
+                    sorted(self._valid_surfaces(), key=lambda x: x.fos)
                 ):
                     sd = r.surface.to_dict()
+                    whose = (("," + ("1" if self._is_users(r) else "0"))
+                             if marked else "")
                     f.write(
                         f"{i+1},{r.fos:.6f},{r.method_id},"
                         f"{sd.get('centre_x', '')},{sd.get('centre_y', '')},"
                         f"{sd.get('radius', '')},{sd.get('x_left', '')},"
-                        f"{sd.get('x_right', '')},{r.iterations},{r.converged}\n"
+                        f"{sd.get('x_right', '')},{r.iterations},"
+                        f"{r.converged}{whose}\n"
                     )
             self.statusBar().showMessage(tr('Saved {0}').format(path), 3000)
         except Exception as e:  # noqa: BLE001
@@ -3827,7 +3892,8 @@ class InterpretWindow(QMainWindow):
         """
         if not self.search_result:
             return
-        valid = [r for r in self.search_result.evaluations if r.is_valid]
+        # v0.1.443 (D401) -- what the canvas draws (``_valid_surfaces``)
+        valid = self._valid_surfaces()
         if not valid:
             self._info(tr("No valid surfaces."))
             return
@@ -4173,10 +4239,16 @@ class InterpretWindow(QMainWindow):
         self._leave_slice_query()
         if not self.search_result:
             return
-        valid = [r for r in self.search_result.evaluations if r.is_valid]
+        # v0.1.443 (D401) -- the user's surfaces too (``_valid_surfaces``),
+        # and a last column with the Note of the other two tables
+        # (``surface_note``: whose a surface is, and why a check rejected
+        # it), only in a run that has surfaces of the user: without them,
+        # the five columns of always
+        valid = self._valid_surfaces()
         if not valid:
             self._info(tr("No valid surfaces."))
             return
+        marked = bool(getattr(self.search_result, "user_evaluations", None))
         from PySide6.QtWidgets import (
             QDialog, QVBoxLayout, QTableWidget, QTableWidgetItem,
         )
@@ -4184,10 +4256,11 @@ class InterpretWindow(QMainWindow):
         dlg.setWindowTitle(tr('Result Table — {0} surfaces').format(len(valid)))
         dlg.resize(640, 480)
         v = QVBoxLayout(dlg)
-        tbl = QTableWidget(len(valid), 5)
+        tbl = QTableWidget(len(valid), 6 if marked else 5)
         tbl.setHorizontalHeaderLabels(
             ["#", tr("ODF") if self._factored_view() else tr("FoS"),
-             tr("Type"), tr("Area (m²)"), tr("Slices")])
+             tr("Type"), tr("Area (m²)"), tr("Slices")]
+            + ([tr("Note")] if marked else []))
         # v0.1.201 — sorting switched on AFTER the rows are in: with it on,
         # each inserted row re-sorts and the next ``setItem`` lands in a
         # row that has moved.
@@ -4210,6 +4283,12 @@ class InterpretWindow(QMainWindow):
             it_area.setData(Qt.UserRole, area)
             tbl.setItem(i, 3, it_area)
             tbl.setItem(i, 4, QTableWidgetItem(str(len(r.slices))))
+            if marked:
+                from .core_messages import surface_note
+                text, tip = surface_note(self.search_result, r)
+                note = QTableWidgetItem(text)
+                note.setToolTip(tip)
+                tbl.setItem(i, 5, note)
         tbl.setSortingEnabled(True)
         v.addWidget(tbl)
         # v0.1.435 (D413) -- non-modal, as every chart
@@ -4306,7 +4385,10 @@ class InterpretWindow(QMainWindow):
             factored=self._factored_view()))
 
     def _scatter(self) -> None:
-        """FoS vs Radius scatter over the full search population."""
+        """FoS vs Radius scatter over the full search population: the
+        search's, without the surfaces the user drew (v0.1.443, D401: this
+        chart, the histogram and the cumulative curve describe how the
+        factors of a SEARCH are distributed, and stay so)."""
         if not self.search_result:
             return
         valid = [r for r in self.search_result.evaluations if r.is_valid]
@@ -4332,6 +4414,7 @@ class InterpretWindow(QMainWindow):
             self._info(tr("matplotlib not installed."))
 
     def _histogram(self) -> None:
+        """The factors of the search's population; see ``_scatter``."""
         if not self.search_result:
             self._info(tr("No results."))
             return
@@ -4351,6 +4434,7 @@ class InterpretWindow(QMainWindow):
             )
 
     def _cumulative(self) -> None:
+        """The factors of the search's population; see ``_scatter``."""
         if not self.search_result:
             return
         valid = sorted([r.fos for r in self.search_result.evaluations if r.is_valid])

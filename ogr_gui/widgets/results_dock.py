@@ -121,7 +121,12 @@ class ResultsDock(QDockWidget):
         # a result just shown is of the model it was computed on
         self.set_stale(False)
         self.table.setRowCount(0)
-        if search_result is None or not search_result.evaluations:
+        # v0.1.443 (D401) -- every surface the run analysed, the user's
+        # included: with a search that leaves no population (a focus that
+        # rejects every surface) and a valid surface drawn by hand, the run
+        # has a critical surface and this said «No results yet.»
+        from ogr_slip2d.search import all_evaluations_of, is_user_surface_of
+        if search_result is None or not all_evaluations_of(search_result):
             self.header_label.setText(tr("No results yet."))
             return
 
@@ -138,8 +143,16 @@ class ResultsDock(QDockWidget):
             # bar three pixels below said "FS crítico", and both said it
             # over an over-design factor. One decider, and through tr().
             label = fos_label(factor_report)
+            # v0.1.443 (D401) -- «Valid» stays the search's count (D58: 0
+            # with a focus that rejects every surface), so a critical
+            # surface the user drew says whose it is: the number beside the
+            # count is not one of the counted
+            line = (tr('Method: <b>{0}</b>   Valid: {1}   {2}: <b>{3:.3f}</b>'
+                       ' (surface defined by the user)')
+                    if is_user_surface_of(search_result, crit) else
+                    tr('Method: <b>{0}</b>   Valid: {1}   {2}: <b>{3:.3f}</b>'))
             self.header_label.setText(
-                tr('Method: <b>{0}</b>   Valid: {1}   {2}: <b>{3:.3f}</b>').format(method_name(search_result.method_id), n_ok, label, crit.fos)
+                line.format(method_name(search_result.method_id), n_ok, label, crit.fos)
                 + load_factor_lines(crit)
             )
         else:
@@ -154,7 +167,7 @@ class ResultsDock(QDockWidget):
         from ogr_gui.reported_quantity import column_caption, column_value
         self.table.setHorizontalHeaderItem(1, QTableWidgetItem(
             column_caption(search_result, factor_report)))
-        from ogr_gui.core_messages import invalid_label, invalid_text
+        from ogr_gui.core_messages import surface_note
         from ogr_gui.themes import theme_color
         # v0.1.419 (D361) -- ``top_n`` lists the admissible surfaces first,
         # in the order ``critical`` chooses, so the highlighted row is the
@@ -169,11 +182,13 @@ class ResultsDock(QDockWidget):
             self.table.setItem(i, 2, QTableWidgetItem(method_name(res.method_id)))
             for col, text in zip((3, 4, 5), circle_cells(sd)):
                 self.table.setItem(i, col, QTableWidgetItem(text))
-            note = QTableWidgetItem("")
+            # v0.1.443 (D401) -- and whose the surface is, when the user
+            # drew it (``surface_note``)
+            text, tip = surface_note(search_result, res)
+            note = QTableWidgetItem(text)
+            note.setToolTip(tip)
             self.table.setItem(i, 6, note)
             if not getattr(res, "admissible", True):
-                note.setText(invalid_label(res))
-                note.setToolTip(invalid_text(res))
                 for c in range(self.table.columnCount()):
                     self.table.item(i, c).setForeground(
                         QColor(theme_color("muted")))
