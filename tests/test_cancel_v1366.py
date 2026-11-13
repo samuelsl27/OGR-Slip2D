@@ -563,8 +563,12 @@ class TestNoNumberMoves:
         assert stats(lambda d, t: None) == stats(None)
 
         def back(cb):
+            # v0.1.441 (D418) -- with the force on the slope face: at the
+            # default elevation, 0, it touches no mass, and the two runs
+            # would agree on having analysed nothing
             res, _r, _w = run_configured_back_analysis(
-                build_demo_project(), progress_cb=cb)
+                build_demo_project(), elevation=20.0, progress_cb=cb)
+            assert res.critical is not None and res.surfaces_analysed > 5
             return (repr(res.required_force), res.surfaces_analysed)
         assert back(lambda d, t: None) == back(None)
 

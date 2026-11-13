@@ -301,6 +301,11 @@ class TestBackAnalysis:
 
     def _run(self, w):
         from PySide6.QtWidgets import QDialog
+        # v0.1.441 (D418) -- the force on the slope face (the demo's runs
+        # from elevation 15 to 25): at the default, 0, it touches no sliding
+        # mass and there is no force to compare through the thread.
+        w._back_analysis_last = {"target_fos": 1.3, "elevation": 20.0,
+                                 "method_id": "bishop_simplified"}
         with _swap(QDialog, "exec",
                    lambda self: QDialog.DialogCode.Accepted), \
                 _swap(w, "_info", lambda *a: None):

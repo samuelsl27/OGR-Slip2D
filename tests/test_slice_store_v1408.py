@@ -351,8 +351,12 @@ class TestTheBackAnalysisSpilledOrNot:
         try:
             for spill in (False, True):
                 with _threshold(0 if spill else 10 ** 9):
+                    # v0.1.441 (D418) -- the force on the slope face (30;
+                    # it runs from 25 to 35): at the default elevation, 0,
+                    # it touches no mass and there is no answer to compare
                     ba, _rep, _w = run_configured_back_analysis(
-                        _project(), target_fos=1.3, method_id="bishop_simplified")
+                        _project(), target_fos=1.3, elevation=30.0,
+                        method_id="bishop_simplified")
                 c = ba.critical
                 answers.append((ba.surfaces_analysed, c.governing_force.hex(),
                                 c.active_force.hex(), c.passive_force.hex(),

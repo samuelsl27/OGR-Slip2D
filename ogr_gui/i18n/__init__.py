@@ -3136,8 +3136,10 @@ _DICTS: dict[str, dict[str, str]] = {
             'Definir materiales…',
         'Edit Coordinates — {0}':
             'Editar coordenadas — {0}',
-        'Elevation of the horizontal force. Only affects Bishop: Janbu uses force equilibrium, where the position of a horizontal force is irrelevant.':
-            'Cota de la fuerza horizontal. Solo afecta a Bishop: Janbu usa el equilibrio de fuerzas, en el que la posición de una fuerza horizontal no importa.',
+        # v0.1.441 (D418) — it said "Only affects Bishop": the elevation
+        # decides which surfaces are analysed with either method
+        'Elevation of the horizontal force, on the slope face. A surface whose sliding mass does not reach the ground at this elevation is left out. With Bishop it also sets the moment arm; with Janbu, which uses force equilibrium, the force a surface needs does not depend on it.':
+            'Cota de la fuerza horizontal, sobre la cara del talud. Una superficie cuya masa deslizante no llega al terreno a esta cota se deja fuera. Con Bishop fija además el brazo del momento; con Janbu, que usa el equilibrio de fuerzas, la fuerza que necesita una superficie no depende de ella.',
         'Horizontal seismic coefficient. Typical values:\n  0.05 — light shaking\n  0.10 — moderate (Eurocode 8 zone 2-3)\n  0.15-0.20 — strong (zone 4)\n  0.25+ — severe (Japan, California rural)':
             'Coeficiente sísmico horizontal. Valores típicos:\n  0,05 — sacudida leve\n  0,10 — moderada (Eurocódigo 8, zona 2-3)\n  0,15-0,20 — fuerte (zona 4)\n  0,25+ — severa (Japón, California rural)',
         'Hu = cos²(α), where α is the inclination of the water surface above the slice. For a horizontal water table α=0 and Hu=1.':
@@ -6553,6 +6555,37 @@ _DICTS: dict[str, dict[str, str]] = {
         'safety and the search settings.':
             'No se pudo retroanalizar ninguna superficie. Revisa el factor '
             'de seguridad objetivo y los ajustes de la búsqueda.',
+        # v0.1.441 (D418) -- the two surfaces a back analysis leaves out
+        '{n} surface(s) below the target factor were left out: the force at '
+        'elevation {y:.7g} does not touch their sliding mass, so it cannot '
+        'raise their factor. Check them separately, or move the force.':
+            'Se dejaron fuera {n} superficie(s) que están por debajo del '
+            'factor objetivo: la fuerza a la cota {y:.7g} no toca su masa '
+            'deslizante, así que no puede subir su factor. Compruébalas '
+            'aparte, o mueve la fuerza.',
+        'Every surface that could be back-analysed already reaches the '
+        'target factor: no support force is needed.':
+            'Todas las superficies que se podían retroanalizar alcanzan ya '
+            'el factor objetivo: no hace falta fuerza de soporte.',
+        'The force at elevation {y:.7g} does not touch the sliding mass of '
+        'any of the {n} surface(s) below the target factor, so no support '
+        'force is reported: each of those masses meets the ground over part '
+        'of the range of elevations {lo:.2f} to {hi:.2f}.':
+            'La fuerza a la cota {y:.7g} no toca la masa deslizante de '
+            'ninguna de las {n} superficie(s) que están por debajo del '
+            'factor objetivo, así que no se da fuerza de soporte: cada una '
+            'de esas masas llega al terreno en una parte del tramo de cotas '
+            '{lo:.2f} a {hi:.2f}.',
+        'This surface already reaches the target factor ({factor:.4g}): it '
+        'needs no support force.':
+            'Esta superficie ya alcanza el factor objetivo ({factor:.4g}): '
+            'no necesita fuerza de soporte.',
+        'The force at elevation {y:.7g} does not touch the sliding mass of '
+        'this surface, which meets the ground between elevations {lo:.2f} '
+        'and {hi:.2f}: no support force is reported.':
+            'La fuerza a la cota {y:.7g} no toca la masa deslizante de esta '
+            'superficie, que llega al terreno entre las cotas {lo:.2f} y '
+            '{hi:.2f}: no se da fuerza de soporte.',
         'Back analysis is only available for {methods}.':
             'El retroanálisis solo está disponible para {methods}.',
         'search failed: {error}':

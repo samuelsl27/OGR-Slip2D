@@ -299,7 +299,38 @@ _LATER = [
              'surface the run analysed; as for the critical surface, the '
              'back analysis then reports the one that needs the most force '
              'among them all.',
-  'args': {}}]
+  'args': {}},
+ # v0.1.441 (D418): the two surfaces a back analysis does not analyse
+ {'cat': 'run',
+  'code': 'run.back_untouched_left_out',
+  'english': '8 surface(s) below the target factor were left out: the force '
+             'at elevation 1234.567 does not touch their sliding mass, so it '
+             'cannot raise their factor. Check them separately, or move the '
+             'force.',
+  'args': {'n': 8, 'y': 1234.567}},
+ {'cat': 'run',
+  'code': 'run.back_none_above_target',
+  'english': 'Every surface that could be back-analysed already reaches the '
+             'target factor: no support force is needed.',
+  'args': {}},
+ {'cat': 'run',
+  'code': 'run.back_none_untouched',
+  'english': 'The force at elevation 28 does not touch the sliding mass of '
+             'any of the 11 surface(s) below the target factor, so no support '
+             'force is reported: each of those masses meets the ground over '
+             'part of the range of elevations 15.00 to 25.00.',
+  'args': {'y': 28.0, 'n': 11, 'lo': 15.0, 'hi': 25.0}},
+ {'cat': 'run',
+  'code': 'run.back_surface_above_target',
+  'english': 'This surface already reaches the target factor (1.523): it '
+             'needs no support force.',
+  'args': {'factor': 1.52345}},
+ {'cat': 'run',
+  'code': 'run.back_surface_untouched',
+  'english': 'The force at elevation 12.5 does not touch the sliding mass of '
+             'this surface, which meets the ground between elevations 15.74 '
+             'and 25.00: no support force is reported.',
+  'args': {'y': 12.5, 'lo': 15.7446, 'hi': 25.0}}]
 
 
 def _cat(name):

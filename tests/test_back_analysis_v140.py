@@ -23,6 +23,12 @@ than stored numbers:
   same way wherever it acts;
 * the method is refused for anything other than Bishop, Janbu and Janbu
   Corrected.
+
+v0.1.441 (D418) -- "leaves Janbu untouched" is about the force ONE surface
+needs (``required_force``, which these identities are asked of). Which
+surfaces a RUN analyses depends on the elevation with either method: the
+ones below the target whose mass the force touches. The runs of
+``TestFullRun`` have the force on the slope face for that reason.
 """
 from __future__ import annotations
 
@@ -182,20 +188,46 @@ class TestFullRun:
 
     def test_critical_really_is_the_maximum(self):
         """Re-derive the forces surface by surface and confirm none
-        exceeds the reported critical."""
+        exceeds the reported critical.
+
+        v0.1.441 (D418) -- changed on purpose: the maximum is over the
+        surfaces a back analysis analyses, the ones BELOW the target whose
+        mass the force TOUCHES, and both are re-derived here by hand, from
+        the slope of the reference itself (crest at elevation 50 up to
+        x = 50, toe at 25 from x = 75) and not through the engine's own
+        functions. The force is at elevation 30, on the face: at 25, the
+        toe, the surface that used to govern (877.97 kN/m) leaves the
+        ground 8 cm above it and is not touched."""
+        target, elevation = 1.3, 30.0
         p = _ej1_project()
         search = self._search()
-        res = run_back_analysis(p, search, target_fos=1.3, elevation=25.0)
+        res = run_back_analysis(p, search, target_fos=target,
+                                elevation=elevation)
         run = search.run(p)
-        best = 0.0
+        best, analysed, above, untouched = 0.0, 0, 0, 0
         for ev in run.evaluations:
             if not ev.is_valid or not ev.slices:
                 continue
-            r = required_force(ev.slices, ev.surface, 1.3,
-                               "bishop_simplified", 25.0)
+            if ev.fos >= target:
+                above += 1
+                continue
+            sl = list(ev.slices)
+            x_l, x_r = sl[0].base_x_left, sl[-1].base_x_right
+            top = [s.top_y_left for s in sl] + [s.top_y_right for s in sl]
+            top += [y for x, y in ((50.0, 50.0), (75.0, 25.0))
+                    if x_l < x < x_r]
+            if not min(top) - 1e-9 <= elevation <= max(top) + 1e-9:
+                untouched += 1
+                continue
+            analysed += 1
+            r = required_force(ev.slices, ev.surface, target,
+                               "bishop_simplified", elevation)
             if r is not None:
                 best = max(best, r.governing_force)
-        assert abs(best - res.required_force) < 1e-6
+        assert best > 0.0 and abs(best - res.required_force) < 1e-6
+        assert above and untouched, (above, untouched)
+        assert (res.surfaces_analysed, res.surfaces_above_target,
+                res.surfaces_untouched) == (analysed, above, untouched)
 
     def test_unsupported_fos_comes_from_the_evaluation(self):
         p = _ej1_project()
@@ -231,16 +263,22 @@ class TestFullRun:
 
     def test_does_not_modify_the_project(self):
         """The back analysis is independent of the main analysis."""
+        # v0.1.441 (D418) -- with the force on the face (30): at the default
+        # elevation, 0, it touches no mass, and nothing would be analysed
         p = _ej1_project()
         before = p.to_dict()
-        run_back_analysis(p, self._search(), target_fos=1.3)
+        res = run_back_analysis(p, self._search(), target_fos=1.3,
+                                elevation=30.0)
+        assert res.critical is not None
         assert p.to_dict() == before
 
     def test_progress_callback(self):
         p = _ej1_project()
         seen = []
-        run_back_analysis(p, self._search(), target_fos=1.3,
-                          progress_cb=lambda d, t: seen.append((d, t)))
+        res = run_back_analysis(p, self._search(), target_fos=1.3,
+                                elevation=30.0,
+                                progress_cb=lambda d, t: seen.append((d, t)))
+        assert res.critical is not None
         assert seen and seen[-1][0] == seen[-1][1]
 
     def test_higher_target_needs_more_force(self):

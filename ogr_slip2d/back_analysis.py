@@ -16,16 +16,27 @@ How it works (following the reference specification):
   no iteration at all.
 * The force is assumed **horizontal**, applied at a user-specified
   **elevation**.
-* The elevation only affects **Bishop**, because that method works from
-  moment equilibrium and the elevation sets the moment arm. It has no
-  effect on **Janbu**, which considers only force equilibrium: a
-  horizontal force enters the horizontal balance identically wherever it
-  acts.
+* The force a surface needs depends on the elevation only with
+  **Bishop**, because that method works from moment equilibrium and the
+  elevation sets the moment arm. With **Janbu**, which considers only
+  force equilibrium, a horizontal force enters the horizontal balance
+  identically wherever it acts.
+* **Two kinds of surface are not analysed** (v0.1.441, D418; both are the
+  reference specification's, paraphrased). The ones whose factor of
+  safety already reaches the target: they need no force. And the ones
+  the force does not touch -- it acts where the slope is at its
+  elevation, and a sliding mass whose top does not reach that elevation
+  is not helped by it. So the elevation decides WHICH surfaces are
+  analysed with either method, and a more local surface below the target
+  may be left out: that is said, since the force found does nothing for
+  it. With no surface left there is no force to report, and the reason
+  is given instead of a force of zero.
 * Only **Bishop, Janbu and Janbu Corrected** are supported; the method is
   not defined for the others.
-* Every surface the run analyses is back-analysed, the ones the user drew
-  by hand included (v0.1.428, D396), and the one needing the **largest**
-  force is reported. Under the rule of the run's critical surface: an
+* Of the surfaces the run analyses, the ones the user drew by hand
+  included (v0.1.428, D396), every one that is neither of those two
+  kinds is back-analysed, and the one needing the **largest** force is
+  reported. Under the rule of the run's critical surface: an
   admissible one when there is any (a surface the post-analysis checks
   reject cannot be the critical surface, and so cannot govern the support
   either), and the one needing the most among them all, said, when the
@@ -100,6 +111,11 @@ class BackAnalysisResult:
     elevation: float = 0.0
     critical: Optional[BackAnalysisSurfaceResult] = None
     surfaces_analysed: int = 0
+    # v0.1.441 (D418) -- the two kinds of surface the back analysis leaves
+    # out, counted: the ones already at the target, and the ones below it
+    # that the force does not touch. Not in ``surfaces_analysed``.
+    surfaces_above_target: int = 0
+    surfaces_untouched: int = 0
     notes: dict = field(default_factory=dict)
 
     @property
@@ -114,6 +130,8 @@ class BackAnalysisResult:
             "target_fos": self.target_fos,
             "elevation": self.elevation,
             "surfaces": self.surfaces_analysed,
+            "surfaces_above_target": self.surfaces_above_target,
+            "surfaces_untouched": self.surfaces_untouched,
             "active_force": c.active_force if c else math.nan,
             "passive_force": c.passive_force if c else math.nan,
             "required_force": self.required_force,
@@ -522,6 +540,92 @@ def required_force(slices, surface, target_fos, method_id="bishop_simplified",
     return res
 
 
+# v0.1.441 (D418) -- the two surfaces a back analysis does not analyse (see
+# the module docstring). A module switch, read at call time like
+# ``LOADS_FROM_METHOD``, so an A/B can rebuild the back analysis that
+# analysed every surface (until v0.1.440) and a test can demand that the
+# screens move the answer.
+REFERENCE_SCREENS = True
+
+
+def ground_of(project):
+    """The ground profile the tops of the slices lie on, or None for a
+    model without an external boundary. Found once per run and handed to
+    :func:`mass_top_range`."""
+    from ogr_core.geometry.ground import ground_surface
+    external = project.external_boundary() if project is not None else None
+    return ground_surface(external) if external is not None else None
+
+
+def mass_top_range(slices, ground=None) -> Optional[tuple]:
+    """``(lowest, highest)`` elevation of the TOP of a sliding mass: of the
+    ground between its two ends (v0.1.441, D418).
+
+    The top of every slice lies on the ground, so its range is that of the
+    ground profile between the first and the last slice: the elevations at
+    the slice edges and, with ``ground``, those of the profile's vertices
+    that fall between the two ends. The vertices are not optional: the
+    slicer cuts where the slip surface changes layer or direction, not at
+    the ground's vertices, so a berm or a crest inside one slice is in no
+    slice edge. A mass clipped by a tension crack ends at the crack, and
+    its top is the ground up to there.
+
+    And the mass's own VERTICAL face, where it has one. A surface that
+    leaves the ground through the face of a wall or a vertical cut ends at
+    the wall's abscissa with its base part-way up: the stretch of the face
+    from there to the crest is the free surface of that mass, and a force
+    on it touches it. The two vertices of the step share the end's
+    abscissa and are not "between the ends", so the end of the BASE is
+    taken too when it lies on the ground (the review of 0.1.441: read
+    without it, a force on the face of a vertical cut touched no mass, and
+    a face one millimetre off the vertical all of them). The bottom of a
+    tension crack is not on the ground, and is not taken.
+    """
+    sl = list(slices)
+    if not sl:
+        return None
+    first = min(sl, key=lambda s: s.base_x_left)
+    last = max(sl, key=lambda s: s.base_x_right)
+    x_l, x_r = first.base_x_left, last.base_x_right
+    heights = [s.top_y_left for s in sl] + [s.top_y_right for s in sl]
+    if ground is not None:
+        from ogr_core.geometry.ground import envelope_y_at
+        heights += [v.y for v in ground.vertices if x_l < v.x < x_r]
+        for x, base_y in ((x_l, getattr(first, "base_y_left", None)),
+                          (x_r, getattr(last, "base_y_right", None))):
+            if base_y is None:
+                continue
+            here = [h for h in (envelope_y_at(ground, x),
+                                envelope_y_at(ground, x, side=-1),
+                                envelope_y_at(ground, x, side=1),
+                                envelope_y_at(ground, x, upper=False))
+                    if h is not None]
+            if here:
+                tol = 1e-9 * max(abs(min(here)), abs(max(here)), 1.0)
+                if min(here) - tol <= base_y <= max(here) + tol:
+                    heights.append(base_y)
+    return min(heights), max(heights)
+
+
+def force_touches(top_range, elevation) -> bool:
+    """Whether a horizontal force at ``elevation`` is applied ON the sliding
+    mass: the point of the slope at that elevation lies on the top of the
+    mass, i.e. the elevation is within the range of that top (the owner's
+    decision of 2026-11-12, of the two readings of "in contact with the
+    mass"). The ends are in; the tolerance is relative to the elevations,
+    for the last bits of an interpolated ground height.
+
+    The other reading -- the line of action crosses the mass anywhere, down
+    to its base -- also takes a mass the force would only reach below the
+    ground. The two were measured side by side on the reference slope, the
+    demo and the bench's problem 37 before this was written and never
+    differed there: a circle leaves the ground where its base does.
+    """
+    lo, hi = top_range
+    tol = 1e-9 * max(abs(lo), abs(hi), hi - lo)
+    return lo - tol <= elevation <= hi + tol
+
+
 def required_force_of_result(result, target_fos, elevation, project,
                              method_id=None
                              ) -> Optional[BackAnalysisSurfaceResult]:
@@ -568,20 +672,54 @@ def required_force_of_result(result, target_fos, elevation, project,
     kv = float(details.get("kv", 0.0) or 0.0)
     if method_id is None:
         method_id = getattr(result, "method_id", None)
-    return required_force(slices, result.surface, target_fos, method_id,
-                          elevation, kh, kv, project=project)
+    r = required_force(slices, result.surface, target_fos, method_id,
+                       elevation, kh, kv, project=project)
+    if r is None or r.notes or not REFERENCE_SCREENS:
+        # What the method cannot price is said first, as the run says it
+        # (Bishop and a surface that is not a circle, an envelope that did
+        # not settle); the two screens are for a surface it can price.
+        return r
+    # v0.1.441 (D418) -- the run's two screens, for the one surface a window
+    # prices (the owner's decision: one rule for both). It printed "active:
+    # 0.00, passive: 0.00" for a surface already above the target, and a
+    # force for one the force does not touch.
+    fos = getattr(result, "fos", None)
+    if fos is not None and fos >= target_fos:
+        return BackAnalysisSurfaceResult(
+            surface=r.surface, target_fos=target_fos,
+            notes={"above_target": RM.run_note(
+                RM.BACK_SURFACE_ABOVE_TARGET, factor=fos)})
+    top = mass_top_range(slices, ground_of(project))
+    if top is not None and not force_touches(top, elevation):
+        return BackAnalysisSurfaceResult(
+            surface=r.surface, target_fos=target_fos,
+            notes={"untouched": RM.run_note(
+                RM.BACK_SURFACE_UNTOUCHED, y=elevation, lo=top[0],
+                hi=top[1])})
+    return r
 
 
 # ======================================================================
 def run_back_analysis(project, search, target_fos=1.3, elevation=0.0,
                       method_id="bishop_simplified",
                       progress_cb=None) -> BackAnalysisResult:
-    """Back-analyse every surface a run analyses and report the one needing
-    the largest support force.
+    """Back-analyse the surfaces of a run that are below the target and
+    that the force touches, and report the one needing the largest support
+    force.
 
     ``search`` is a configured search object; its surfaces are
-    regenerated and each is back-analysed. The main stability results are
-    neither used nor modified. The slicing is the search's own.
+    regenerated and each of those is back-analysed. The main stability
+    results are neither used nor modified. The slicing is the search's own.
+
+    v0.1.441 (D418) -- "below the target and that the force touches": until
+    this version every valid surface was priced. One whose factor already
+    reaches the target needs no force (``surfaces_above_target``), and one
+    whose sliding mass the force does not touch is not helped by it
+    (``surfaces_untouched``, :func:`force_touches`); neither counts in
+    ``surfaces_analysed``. The second kind is always said: those surfaces
+    stay below the target. With none left there is no force, and
+    ``notes["error"]`` is the reason instead of a force of zero on the
+    first surface of the list.
 
     v0.1.428 (D396) -- "every surface a run analyses": the user's surfaces
     too, which the run analyses after the search and may report as its
@@ -656,12 +794,30 @@ def run_back_analysis(project, search, target_fos=1.3, elevation=0.0,
     # composite ones above.
     n_not_circle = 0
     is_bishop = method_id == "bishop_simplified"
+    # v0.1.441 (D418) -- the two surfaces a back analysis does not analyse,
+    # counted apart like the ones above and said. One that already reaches
+    # the target needs no force: it was priced, clipped to zero, and with
+    # every surface above the target a force of 0 kN/m was published on the
+    # first of the list as the governing one. One the force does not touch
+    # cannot be helped by it: with the force above the crest Bishop
+    # published 228 and 548 kN/m on the demo slope, growing with the arm.
+    screens = REFERENCE_SCREENS
+    ground = ground_of(project) if screens else None
+    n_above = 0
+    untouched = []          # the top range of each one left out
     # The inadmissible surfaces, with their forces: to say whether one of
     # them would have governed (a screen that changed the answer is said;
     # one that did not is not noise worth a note on every run), and to fall
     # back on them when they are all there is, as ``critical`` does.
     rejected = []
     for i, ev in enumerate(population):
+        # v0.1.441 (D418, its review) -- first, for every surface: this was
+        # the last line of the loop, which the surfaces left out never
+        # reach. With the two screens most of a population is left out,
+        # and with the force touching none the bar stood still and Cancel,
+        # which comes in through this call, could not.
+        if progress_cb and i % 20 == 0:
+            progress_cb(i, total)
         if not ev.is_valid or not ev.slices:
             continue
         if isinstance(ev.surface, CompositeSurface):
@@ -670,9 +826,20 @@ def run_back_analysis(project, search, target_fos=1.3, elevation=0.0,
         if is_bishop and not isinstance(ev.surface, SlipCircle):
             n_not_circle += 1
             continue
+        # At or above the target: "below" is the reference's word, and a
+        # surface exactly at the target needs nothing either. Asked before
+        # its slices are read back from the store.
+        if screens and ev.fos >= target_fos:
+            n_above += 1
+            continue
         slices = ev.slices
         if type(slices) is SpilledSlices:
             slices = slices.materialize()
+        if screens:
+            top = mass_top_range(slices, ground)
+            if top is not None and not force_touches(top, elevation):
+                untouched.append(top)
+                continue
         r = required_force(slices, ev.surface, target_fos, method_id,
                            elevation, kh, kv, project=project)
         out.surfaces_analysed += 1
@@ -703,8 +870,6 @@ def run_back_analysis(project, search, target_fos=1.3, elevation=0.0,
         r.user_defined = is_user_surface_of(run, ev)
         if best is None or r.governing_force > best.governing_force:
             best = r
-        if progress_cb and i % 20 == 0:
-            progress_cb(i, total)
 
     if best is None and rejected:
         # Every candidate is inadmissible: the run's critical surface is then
@@ -731,14 +896,50 @@ def run_back_analysis(project, search, target_fos=1.3, elevation=0.0,
             RM.BACK_NOT_CIRCULAR_LEFT_OUT, n=n_not_circle)
     if best is not None and best.user_defined:
         out.notes["user_governs"] = RM.run_note(RM.BACK_USER_GOVERNS)
+    # v0.1.441 (D418) -- the two screens. When they leave nothing to price,
+    # the count IS the reason (one note, the same object under both keys:
+    # the window says the error and then every other note). The surfaces
+    # the force does not touch come first: they are below the target and
+    # stay there, which is what the user has to know.
+    #
+    # The ones already at the target are counted and NOT said while there is
+    # a force to publish: leaving them out does not change it (they needed
+    # none), nearly every run has some, and a run with nothing to warn of
+    # leaves no note (D340). They are said when they are the reason there
+    # is no force.
+    out.surfaces_above_target = n_above
+    out.surfaces_untouched = len(untouched)
+    nothing_priced = best is None and not out.surfaces_analysed
+    if untouched:
+        if nothing_priced:
+            out.notes["untouched_skipped"] = RM.run_note(
+                RM.BACK_NONE_UNTOUCHED, y=elevation, n=len(untouched),
+                lo=min(t[0] for t in untouched),
+                hi=max(t[1] for t in untouched))
+        else:
+            out.notes["untouched_skipped"] = RM.run_note(
+                RM.BACK_UNTOUCHED_LEFT_OUT, n=len(untouched), y=elevation)
     if best is None:
         # The reason when it is known: Bishop with nothing but surfaces that
         # are not circles (a non-circular run) is not a matter of "the
         # target factor and the search settings" that BACK_NONE points at.
-        out.notes["error"] = (
-            out.notes["not_circular_skipped"]
-            if n_not_circle and not out.surfaces_analysed
-            else RM.run_note(RM.BACK_NONE))
+        # Nor is a force that touches no mass, or a run already at the
+        # target (v0.1.441): each is said by its own note.
+        # The surfaces at the target come before the ones Bishop cannot
+        # price (the review of 0.1.441): with every circle at the target and
+        # one polyline of the user's, the reason was said to be the
+        # polyline, and nothing said that the circles needed no force. The
+        # note of the surfaces that are not circles is still given beside
+        # it.
+        if nothing_priced and untouched:
+            out.notes["error"] = out.notes["untouched_skipped"]
+        elif nothing_priced and n_above:
+            out.notes["error"] = out.notes["above_target"] = RM.run_note(
+                RM.BACK_NONE_ABOVE_TARGET)
+        elif n_not_circle and not out.surfaces_analysed:
+            out.notes["error"] = out.notes["not_circular_skipped"]
+        else:
+            out.notes["error"] = RM.run_note(RM.BACK_NONE)
     if progress_cb:
         progress_cb(total, total)
     return out

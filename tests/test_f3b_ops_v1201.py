@@ -284,32 +284,52 @@ class TestBackAnalysisThroughTheDoor:
     def test_active_equals_passive_at_unity(self):
         """At a target of 1.0 the two forces are the same number: the
         identity test_back_analysis_v140 checks on the engine, here
-        through the agent's job."""
+        through the agent's job.
+
+        v0.1.441 (D418) -- changed on purpose, the identity is the same.
+        The slope's critical factor is 1.31 and the force was at elevation
+        5, below its toe (10): the back analysis no longer analyses a
+        surface already at the target, nor one the force does not touch.
+        So the soil is weakened until surfaces fall below 1.0 and the force
+        is put on the face (15); the summary says how many it left out."""
         from ogr_api import call
         ws = _ws()
         pid = _slope(ws)
+        ws.get(pid).project.materials[0].strength.params["cohesion"] = 1.0
         out = call(ws, "back_analysis_run", project_id=pid, target_fos=1.0,
-                   elevation=5.0, wait_seconds=300)
+                   elevation=15.0, wait_seconds=300)
         s = out["summary"]
-        assert s["surfaces"] > 0
+        assert s["surfaces"] > 0, s
+        assert s["required_force"] > 0.0, s
         assert abs(s["active_force"] - s["passive_force"]) < 1e-6, s
+        # the three counts are of the population: the ones it analysed and
+        # the two kinds it left out
+        counts = [s["surfaces"], s["surfaces_above_target"],
+                  s["surfaces_untouched"]]
+        assert all(isinstance(n, int) for n in counts), counts
+        assert sum(counts) > s["surfaces"], counts
 
     def test_off_is_the_old_path_and_on_moves_it(self):
         from ogr_slip2d.analysis_runner import (build_search,
                                                 run_configured_back_analysis)
         from ogr_slip2d.back_analysis import run_back_analysis
+        # v0.1.441 (D418) -- changed on purpose: target 1.5 and the force on
+        # the face (15). It asked 1.3, below the slope's critical factor
+        # (1.31), with the force at 5, below the toe: nothing a back
+        # analysis analyses any more, and "new == old" would have compared
+        # two runs without a force.
         forces = {}
         for standard in ("off", "eurocode7_da1c2"):
             ws = _ws()
             p = ws.get(_slope(ws, standard=standard)).project
             new, rep, _w = run_configured_back_analysis(
-                p, target_fos=1.3, elevation=5.0)
+                p, target_fos=1.5, elevation=15.0)
             old = run_back_analysis(p, build_search(p, "bishop_simplified"),
-                                    1.3, 5.0, "bishop_simplified")
+                                    1.5, 15.0, "bishop_simplified")
             forces[standard] = (new.required_force, old.required_force,
                                 rep.applied)
         new, old, applied = forces["off"]
-        assert new == old and not applied
+        assert new == old > 0.0 and not applied
         new, old, applied = forces["eurocode7_da1c2"]
         assert applied and new > old, forces
 

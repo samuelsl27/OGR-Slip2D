@@ -1711,7 +1711,11 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
                                 ] = None,
                                 elevation: Annotated[Optional[float], Field(
                                     description="y of the horizontal force "
-                                                "(m).")] = None,
+                                                "(m), on the slope face: a "
+                                                "surface whose mass does not "
+                                                "reach the ground at this y "
+                                                "is left out (default: "
+                                                "settings, 0).")] = None,
                                 method_id: Annotated[Optional[Literal[
                                     "bishop_simplified", "janbu_simplified",
                                     "janbu_corrected"]], Field(
@@ -1719,8 +1723,10 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
                                 wait_seconds: WaitSeconds = 30.0
                                 ) -> dict[str, Any]:
         """The horizontal support force needed to reach a target factor of
-        safety, over every admissible surface the configured run analyses,
-        the user's included (a job)."""
+        safety, over the admissible surfaces of the configured run, the
+        user's included, that are below the target and that the force
+        touches (a job). With none left there is no force: required_force is
+        null and notes.error says why."""
         return await run_job(ctx, "back_analysis_run", "back analysis",
                              wait_seconds, project_id=project_id,
                              target_fos=target_fos, elevation=elevation,

@@ -289,7 +289,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.440"
+    VERSION = "0.1.441"
 
     def __init__(self) -> None:
         super().__init__()
@@ -2022,10 +2022,16 @@ class MainWindow(QMainWindow):
         sp_el.setDecimals(3)
         sp_el.setRange(-1e6, 1e6)
         sp_el.setValue(last["elevation"])
+        # v0.1.441 (D418) — this said the elevation "only affects Bishop".
+        # It decides which surfaces are analysed with either method: the
+        # force acts where the slope is at this elevation, and a mass it
+        # does not touch is left out.
         sp_el.setToolTip(
-            tr("Elevation of the horizontal force. Only affects Bishop: "
-            "Janbu uses force equilibrium, where the position of a "
-            "horizontal force is irrelevant."))
+            tr("Elevation of the horizontal force, on the slope face. A "
+               "surface whose sliding mass does not reach the ground at this "
+               "elevation is left out. With Bishop it also sets the moment "
+               "arm; with Janbu, which uses force equilibrium, the force a "
+               "surface needs does not depend on it."))
         form.addRow(tr("Elevation (y):"), sp_el)
         cbo = QComboBox()
         from ogr_gui.labels import method_name
@@ -2076,7 +2082,12 @@ class MainWindow(QMainWindow):
         # v0.1.428 (D396) — and the three the user's surfaces brought: a
         # surface Bishop cannot price, an inadmissible one that needed more,
         # and a governing surface the user drew
-        own = [res.notes[key] for key in ("composite_skipped",
+        # v0.1.441 (D418) — and the surfaces below the target that the force
+        # does not touch, first: they stay below it. (The ones already at
+        # the target are a note only when they are why there is no force:
+        # ``notes["error"]``, below.)
+        own = [res.notes[key] for key in ("untouched_skipped",
+                                          "composite_skipped",
                                           "envelope_not_settled",
                                           "not_circular_skipped",
                                           "inadmissible_governed",

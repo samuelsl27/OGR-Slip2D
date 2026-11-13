@@ -340,23 +340,41 @@ class TestTheCallersPassTheModel:
 
     def test_run_back_analysis_hands_over_its_project(self):
         """The driver, with a search that returns the one nailed surface:
-        at that surface's own factor the governing force is zero."""
+        the force it publishes is ``required_force`` WITH its project, to
+        the last bit, and not the one found without the nail.
+
+        v0.1.441 (D418) -- changed on purpose. It asked at the surface's
+        own factor, with the force at elevation 0 below the model: a
+        surface at the target and one the force does not touch are the two
+        the back analysis no longer analyses. The invariant is the same
+        (the driver hands its project over), asked 10 % above the surface's
+        factor with the force on the slope face; the identity at its own
+        factor is the test above, on the function that carries it."""
         from types import SimpleNamespace
 
-        from ogr_slip2d.back_analysis import run_back_analysis
+        from ogr_slip2d.back_analysis import (mass_top_range,
+                                              required_force,
+                                              run_back_analysis)
         p, c, sl = _nail(False)
         res = _solve(p, c, sl, "bishop_simplified")
+        lo, hi = mass_top_range(sl.slices)
+        target, elevation = 1.1 * res.fos, 0.5 * (lo + hi)
 
         class _One:
             def run(self, project):
                 return SimpleNamespace(evaluations=[res])
 
-        out = run_back_analysis(p, _One(), target_fos=res.fos,
-                                elevation=0.0,
+        out = run_back_analysis(p, _One(), target_fos=target,
+                                elevation=elevation,
                                 method_id="bishop_simplified")
         assert out.critical is not None, out.notes
-        assert out.critical.passive_force < TOL_W * _weight(sl.slices), (
-            out.critical.passive_force)
+        with_model = required_force(sl.slices, c, target, "bishop_simplified",
+                                    elevation, project=p)
+        bare = required_force(sl.slices, c, target, "bishop_simplified",
+                              elevation)
+        assert out.critical.passive_force == with_model.passive_force > 0.0
+        assert abs(bare.passive_force - with_model.passive_force) > 1.0, (
+            bare.passive_force, with_model.passive_force)
 
     def test_the_interpretation_window_passes_the_factored_model(self):
         """The window prices the critical surface of a run that used the

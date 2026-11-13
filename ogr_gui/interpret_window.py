@@ -2062,6 +2062,15 @@ class InterpretWindow(QMainWindow):
                 "Back analysis is only available for Bishop, Janbu and "
                 "Janbu Corrected, and the force must have a moment arm."))
             return
+        # v0.1.441 (D418) -- the two surfaces a back analysis does not
+        # analyse, by the rule the run uses (the owner's decision): one
+        # already at the target printed "active: 0.00, passive: 0.00", and
+        # one the force does not touch printed a force.
+        for key in ("above_target", "untouched"):
+            if r.notes.get(key):
+                from .core_messages import note_text
+                self._info(note_text(r.notes[key]))
+                return
         # v0.1.215 (D204) -- a curved envelope whose point did not settle:
         # no force at all, and it says why instead of printing "nan".
         if r.notes.get("envelope_not_settled"):

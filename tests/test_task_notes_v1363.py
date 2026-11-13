@@ -145,6 +145,12 @@ class TestBackAnalysis:
 
     def _run(self, w):
         from PySide6.QtWidgets import QDialog
+        # v0.1.441 (D418) -- the force on the slope face, typed as the user
+        # types it (the demo's face runs from elevation 15 to 25). At the
+        # default elevation, 0, it is below the model: it touches no sliding
+        # mass, and the back analysis no longer publishes a force there.
+        w._back_analysis_last = {"target_fos": 1.3, "elevation": 20.0,
+                                 "method_id": "bishop_simplified"}
         with _swap(QDialog, "exec",
                    lambda self: QDialog.DialogCode.Accepted), \
                 _swap(w, "_info", lambda *a: None):

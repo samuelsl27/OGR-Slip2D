@@ -756,7 +756,11 @@ class TestTheFactorUnderAStandard:
 
                 def get_double(_parent, _title, label, value, *a, **k):
                     asked.append(label)
-                    return value, True
+                    # v0.1.441 (D418) -- the elevation, the second input,
+                    # typed on the slope face (35; it runs from 25 to 50):
+                    # at the prefilled default, 0, the force touches no
+                    # mass, and the window says so instead of a force
+                    return (35.0 if len(asked) == 2 else value), True
                 unsettled = NS(notes={"envelope_not_settled": True})
                 fresh = None
                 try:

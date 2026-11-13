@@ -36,6 +36,13 @@ BACK_NOT_CIRCULAR_LEFT_OUT = "run.back_not_circular_left_out"
 BACK_INADMISSIBLE_GOVERNED = "run.back_inadmissible_governed"
 BACK_USER_GOVERNS = "run.back_user_governs"
 BACK_ALL_INADMISSIBLE = "run.back_all_inadmissible"
+# v0.1.441 (D418) -- the two surfaces a back analysis does not analyse: the
+# one that already reaches the target, and the one the force does not touch
+BACK_UNTOUCHED_LEFT_OUT = "run.back_untouched_left_out"
+BACK_NONE_ABOVE_TARGET = "run.back_none_above_target"
+BACK_NONE_UNTOUCHED = "run.back_none_untouched"
+BACK_SURFACE_ABOVE_TARGET = "run.back_surface_above_target"
+BACK_SURFACE_UNTOUCHED = "run.back_surface_untouched"
 BACK_SUPPORTS = "run.back_supports"
 SWEEP_ENABLE_DRAWDOWN = "run.sweep_enable_drawdown"
 SEARCH_NOT_BUILT = "run.search_not_built"
@@ -99,6 +106,30 @@ RUN_NOTES = {s.code: s for s in (
                 "surface the run analysed; as for the critical surface, the "
                 "back analysis then reports the one that needs the most "
                 "force among them all."),
+    # "target factor", not "of safety": under a design standard the target
+    # is an over-design factor, and these are said in both cases.
+    MessageSpec(BACK_UNTOUCHED_LEFT_OUT,
+                "{n} surface(s) below the target factor were left out: the "
+                "force at elevation {y:.7g} does not touch their sliding mass, "
+                "so it cannot raise their factor. Check them separately, or "
+                "move the force."),
+    MessageSpec(BACK_NONE_ABOVE_TARGET,
+                "Every surface that could be back-analysed already reaches "
+                "the target factor: no support force is needed."),
+    MessageSpec(BACK_NONE_UNTOUCHED,
+                "The force at elevation {y:.7g} does not touch the sliding "
+                "mass of any of the {n} surface(s) below the target factor, "
+                "so no support force is reported: each of those masses "
+                "meets the ground over part of the range of elevations "
+                "{lo:.2f} to {hi:.2f}."),
+    MessageSpec(BACK_SURFACE_ABOVE_TARGET,
+                "This surface already reaches the target factor "
+                "({factor:.4g}): it needs no support force."),
+    MessageSpec(BACK_SURFACE_UNTOUCHED,
+                "The force at elevation {y:.7g} does not touch the sliding "
+                "mass of this surface, which meets the ground between "
+                "elevations {lo:.2f} and {hi:.2f}: no support force is "
+                "reported."),
     MessageSpec(SEARCH_NOT_BUILT, "Could not build the search for: {methods}",
                 kinds=(("methods", "method_list"),)),
     MessageSpec(BACK_SUPPORTS,

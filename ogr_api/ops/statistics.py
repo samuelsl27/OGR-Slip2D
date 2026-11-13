@@ -208,8 +208,9 @@ def back_analysis_run(ws, project_id: Optional[str] = None,
                       method_id: Optional[str] = None,
                       wait_seconds: float = 30.0) -> dict:
     """The horizontal support force needed to reach a target factor of
-    safety, over every admissible surface the configured run analyses, the
-    user's included (v0.1.428, D396), as a job."""
+    safety, as a job: over the admissible surfaces of the configured run,
+    the user's included (v0.1.428, D396), that are below the target and
+    that the force touches (v0.1.441, D418)."""
     from ogr_slip2d.back_analysis import SUPPORTED_METHODS
 
     wait = _wait(wait_seconds)
