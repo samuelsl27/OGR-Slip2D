@@ -70,6 +70,8 @@ F_MIN_AREA_DEFAULT = "search.filter.min_area_default"
 F_MIN_DEPTH = "search.filter.min_depth"
 F_MIN_ELEVATION = "search.filter.min_elevation"
 USER_NO_FACTOR = "search.user_no_factor"
+# v0.1.444 (D402) -- what the polylines have had since v0.1.427
+USER_INADMISSIBLE = "search.user_inadmissible"
 USER_REPORTED = "search.user_reported"
 # v0.1.427 (D357) -- the hand-drawn NON-circular surfaces, named by their two
 # ends: a polyline has no centre and no radius to be told apart by
@@ -272,6 +274,14 @@ SEARCH_NOTES = {s.code: s for s in (
     MessageSpec(F_MIN_DEPTH, "Minimum Depth {value:g}"),
     MessageSpec(F_MIN_ELEVATION, "Minimum Elevation {value:g}"),
     MessageSpec(USER_NO_FACTOR, _USER_AT + "has no factor of safety: {reason}"),
+    # A factor the post-analysis checks rejected (m-alpha, tension): in the
+    # population, never the critical surface, and said so. The words of the
+    # polyline's note; ``{factor}``, never ``{fos}`` (the Spanish terms test
+    # reads «FoS» whatever its case).
+    MessageSpec(USER_INADMISSIBLE,
+                _USER_AT + "has a factor of safety of {factor:.4g}, but the "
+                "post-analysis checks reject it, so it cannot be the critical "
+                "surface: {reason}"),
     MessageSpec(USER_REPORTED,
                 "The surface reported for this method is one the user defined "
                 "by hand (centre ({x:.4g}, {y:.4g}), radius {r:.4g}), not one "

@@ -289,7 +289,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.443"
+    VERSION = "0.1.444"
 
     def __init__(self) -> None:
         super().__init__()
@@ -3169,6 +3169,28 @@ class MainWindow(QMainWindow):
         self._add_user_circle(SlipCircle(
             centre_x=cx, centre_y=cy, radius=math.hypot(px - cx, py - cy)))
 
+    def _circles_refused(self) -> bool:
+        """Whether a hand-drawn CIRCLE cannot be added now; if so it has
+        left the mode and said why (v0.1.444, D402).
+
+        The Surface Type may have changed while a circle mode was on
+        (Surface Options, an agent), and the three ways in added the circle
+        all the same: a circle stored under a non-circular type, which
+        ``user_surface_add`` refuses and no run analyses. The polylines have
+        asked since v0.1.427 (``_on_user_surface_drawn``); this is the one
+        check of the circles' three ways in, with the two sentences that
+        already existed.
+        """
+        from ogr_core.project.settings import SurfaceType
+        if (self.project.settings.search.surface_type
+                == SurfaceType.CIRCULAR.value):
+            return False
+        self.canvas.set_tool_mode(ToolMode.SELECT)
+        self.ogr_status.showMessage(
+            tr("Only available with Surface Options -> Surface Type = "
+               "Circular.") + " " + tr("The surface was not added."), 8000)
+        return True
+
     @undo_step("Add user surface")
     def _type_surface_centre_radius(self, centre=None) -> None:
         """Enter in the mode: type the radius of a clicked centre, or the
@@ -3176,6 +3198,9 @@ class MainWindow(QMainWindow):
         from PySide6.QtWidgets import QInputDialog
 
         from ogr_slip2d.surface import SlipCircle
+        # v0.1.444 (D402) -- before asking anything
+        if self._circles_refused():
+            return
         if centre is None:
             pts = self._read_points(tr("Add Surface"), 1)
             if pts is None:
@@ -3191,6 +3216,10 @@ class MainWindow(QMainWindow):
     def _add_user_circle(self, circle) -> None:
         """Add a user circle, leave the mode and say so: what the clicked and
         the typed paths share."""
+        # v0.1.444 (D402) -- the check of the clicked way in. The typed one
+        # has asked already, before its boxes, and passes here again.
+        if self._circles_refused():
+            return
         # v0.1.157 (D58) — ``Project`` declares the list now, so the
         # ``hasattr``/``= []`` that used to stand here is gone. It was the
         # whole defect: an attribute invented on the instance, saved by
@@ -3267,6 +3296,8 @@ class MainWindow(QMainWindow):
         """Add the circle through three canvas-picked points. v0.1.168."""
         from ogr_core.geometry import Vertex
         from ogr_slip2d.surface import SlipCircle
+        if self._circles_refused():      # v0.1.444 (D402)
+            return
         try:
             circle = SlipCircle.from_three_points(
                 Vertex(ax, ay), Vertex(bx, by), Vertex(cx, cy))
@@ -5365,16 +5396,23 @@ class MainWindow(QMainWindow):
 
         # Tension Crack: max one
         has_tc = has_btype(BoundaryType.TENSION_CRACK)
+        # v0.1.444 (D402) -- ``gate`` for the entries that were greyed with
+        # ``setEnabled`` and a tooltip: no menu shows a tooltip, so the entry
+        # was grey without a word on the status bar (D289b). The tooltip's
+        # own sentence, on one line: the bar shows one. These two came out
+        # in the review: a model with a tension crack or a water table.
+        from ogr_gui.disabled_reasons import gate
+        one_crack = tr("Only one Tension Crack boundary is allowed.\n"
+                       "Delete the existing one to add a new one.")
         if "add_crack" in actions:
-            actions["add_crack"].setEnabled(
-                boundary_refusal(self.project,
-                                 BoundaryType.TENSION_CRACK) is None)
+            gate(actions["add_crack"],
+                 boundary_refusal(self.project,
+                                  BoundaryType.TENSION_CRACK) is None,
+                 " ".join(one_crack.split()))
             # v0.1.321 (D300) — both branches through tr(); the conditional
             # hid them from the AST census.
             actions["add_crack"].setToolTip(
-                tr("Only one Tension Crack boundary is allowed.\n"
-                   "Delete the existing one to add a new one.")
-                if has_tc else tr("Add Tension Crack")
+                one_crack if has_tc else tr("Add Tension Crack")
             )
         if "def_tension_crack" in actions:
             # v0.1.10: Define Tension Crack action stays always enabled.
@@ -5395,10 +5433,10 @@ class MainWindow(QMainWindow):
         if "add_wt" in actions:
             has_wt = boundary_refusal(
                 self.project, BoundaryType.WATER_TABLE) is not None
-            actions["add_wt"].setEnabled(not has_wt)
+            one_wt = tr("Only one Water Table is allowed.")
+            gate(actions["add_wt"], not has_wt, one_wt)    # v0.1.444
             actions["add_wt"].setToolTip(
-                tr("Only one Water Table is allowed.")
-                if has_wt else tr("Add Water Table")
+                one_wt if has_wt else tr("Add Water Table")
             )
 
         # Drawdown Line: requires Rapid Drawdown enabled
@@ -5452,9 +5490,15 @@ class MainWindow(QMainWindow):
             uses_grid = self.project.settings.search.uses_grid()
         except Exception:  # noqa: BLE001
             uses_grid = True
+        # v0.1.444 (D402, N1) -- greyed with ``gate``, as the polylines' two
+        # since v0.1.427 and for the same reason as the two above.
+        no_grid = tr("The current Search Method does not use a\n"
+                     "slip-circle centre grid.\n"
+                     "Switch to Surface Options → Grid Search to\n"
+                     "use this action.")
         for key in ("auto_grid", "add_grid"):
             if key in actions:
-                actions[key].setEnabled(uses_grid)
+                gate(actions[key], uses_grid, " ".join(no_grid.split()))
                 if uses_grid:
                     actions[key].setToolTip(
                         tr("Auto-generate the slip-circle search grid")
@@ -5464,12 +5508,7 @@ class MainWindow(QMainWindow):
                         else tr("Define a slip-circle search grid manually")
                     )
                 else:
-                    actions[key].setToolTip(
-                        tr("The current Search Method does not use a\n"
-                        "slip-circle centre grid.\n"
-                        "Switch to Surface Options → Grid Search to\n"
-                        "use this action.")
-                    )
+                    actions[key].setToolTip(no_grid)
 
         # v0.1.17 — the Block Search object action is only meaningful
         # for the Block Search method. Enable it when Block Search is
@@ -5496,22 +5535,22 @@ class MainWindow(QMainWindow):
         # inherits both tooltip branches: it adds the same kind of object
         # to the same list, so a second sentence for the same precondition
         # is how a tooltip ends up contradicting the one beside it.
+        # v0.1.444 (D402) -- and ``gate``: the reason on the status bar too
+        circles_only = tr("Only available with Surface Options -> Surface "
+                          "Type = Circular.")
         for key in ("surf_centre_radius", "surf_three_points", "surf_manage"):
             if key in actions:
-                actions[key].setEnabled(is_circular)
+                gate(actions[key], is_circular, circles_only)
                 actions[key].setToolTip(
                     tr("Slip surfaces defined by hand, analysed in addition "
                        "to the search")
-                    if is_circular else
-                    tr("Only available with Surface Options -> Surface "
-                       "Type = Circular."))
+                    if is_circular else circles_only)
         # v0.1.427 (D357) — the polylines, the other way round: a polyline is
         # analysed only by a non-circular run, so its actions are greyed
         # under a circular one, as the circles' are under a non-circular one.
         # ``gate`` and not ``setEnabled``: a greyed menu entry says why on
         # the status bar, through its status tip (D289b), and no menu shows
         # a tooltip.
-        from ogr_gui.disabled_reasons import gate
         for key in ("surf_polyline_add", "surf_polyline_manage"):
             if key in actions:
                 gate(actions[key], not is_circular,

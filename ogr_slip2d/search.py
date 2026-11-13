@@ -2265,6 +2265,7 @@ class BaseSearch(ABC):
         if polylines:
             self._note(_snote(SN.USER_PL_SKIPPED, n=len(polylines)))
 
+        rejected = []
         for circle in surfaces:
             # v0.1.367 (D346) — the reason of THIS circle: the value left by
             # the search loop before it would otherwise be read as its own
@@ -2298,11 +2299,30 @@ class BaseSearch(ABC):
                     SN.USER_NO_FACTOR, x=circle.centre_x, y=circle.centre_y,
                     r=circle.radius,
                     reason=SN.reason_of(res, SN.NO_REASON_STOP)))
+            elif not getattr(res, "admissible", True):
+                rejected.append((circle, res))
+
+        crit = result.critical
+        # v0.1.444 (D402) -- a factor the post-analysis checks rejected, as a
+        # polyline says since v0.1.427: the circle is in the population and
+        # cannot be the critical surface, and the run said nothing of it
+        # (3.0019 beside a critical 1.1355, on the demo slope with a 3x3x3
+        # grid, under Bishop). Said once every circle is in, and NOT of the
+        # circle the run reports: with no admissible surface ``critical``
+        # falls back on the rejected ones, and «it cannot be the critical
+        # surface» beside «the surface reported is the user's» would be two
+        # notes of one run that contradict each other (review of 0.1.444).
+        for circle, res in rejected:
+            if res is crit:
+                continue
+            self._note(_snote(
+                SN.USER_INADMISSIBLE, x=circle.centre_x,
+                y=circle.centre_y, r=circle.radius, factor=res.fos,
+                reason=SN.reason_of(res, SN.NO_REASON_STOP)))
 
         # Said only when it happened, and it is the point of the note: a
         # minimum that came from a surface the user typed reads exactly like
         # a find of the search unless it is said out loud.
-        crit = result.critical
         if crit is not None and result.is_user_surface(crit):
             sd = crit.surface
             self._note(_snote(

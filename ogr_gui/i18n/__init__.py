@@ -5915,6 +5915,17 @@ _DICTS: dict[str, dict[str, str]] = {
             'está en la población informada. No corta dos veces el terreno '
             'dentro del contorno exterior, así que no hay ninguna masa '
             'deslizante que analizar.',
+        # v0.1.444 (D402) — el círculo que una comprobación rechaza, con las
+        # palabras de la polilínea (v0.1.427)
+        'The user-defined surface at centre ({x:.4g}, {y:.4g}) with radius '
+        '{r:.4g} has a factor of safety of {factor:.4g}, but the '
+        'post-analysis checks reject it, so it cannot be the critical '
+        'surface: {reason}':
+            'La superficie definida por el usuario con centro en ({x:.4g}, '
+            '{y:.4g}) y radio {r:.4g} tiene un factor de seguridad de '
+            '{factor:.4g}, pero las comprobaciones posteriores al cálculo '
+            'la rechazan, así que no puede ser la superficie crítica: '
+            '{reason}',
         'The user-defined surface at centre ({x:.4g}, {y:.4g}) with radius '
         '{r:.4g} produced no result, so it is not in the reported '
         'population. The search says why: {reason}':

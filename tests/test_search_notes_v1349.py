@@ -555,6 +555,19 @@ _LATER = [
               'y1': 15.0,
               'factor': 0.222976,
               'reason': {'$code': 'search.no_reason_stop', '$args': {}}}},
+    # v0.1.444 (D402) -- the circle a post-analysis check rejects, with the
+    # English it was written with: the polyline's sentence, named by its
+    # centre and its radius
+    {'code': 'search.user_inadmissible',
+     'english': 'The user-defined surface at centre (32, 16) with radius 5 '
+                'has a factor of safety of 3.002, but the post-analysis '
+                'checks reject it, so it cannot be the critical surface: '
+                'm_alpha < 0.2 on 1 slice(s)',
+     'args': {'x': 32.0,
+              'y': 16.0,
+              'r': 5.0,
+              'factor': 3.001898542106169,
+              'reason': {'$raw': 'm_alpha < 0.2 on 1 slice(s)'}}},
 ]
 
 
