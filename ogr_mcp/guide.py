@@ -139,9 +139,11 @@ stability analysis read the field.
   the ends along the ground and keeps the surface convex). All three use
   the design factors and the seed of the model.
 * results_query also asks an analysis result what the Interpret window
-  asks: error codes (-120 tensile, -112 m-alpha, -111 not converged, -101
-  other), rejected surfaces, surfaces through a point, slices with the
-  method's numbers. A listed surface the user drew has
+  asks: error codes (-120 tensile, -112 m-alpha, -111 not converged, -103
+  circle leaving the External Boundary, -101 other), rejected surfaces,
+  surfaces through a point, slices with the method's numbers. -103 and
+  part of -101 are counted before slicing: filter with that code lists
+  none of them. A listed surface the user drew has
   surface.user_defined true (also the critical one of analysis_run and
   of results_get). raw_data has every surface of the user, in its last
   rows; filter by factor has the ones no check rejected; the census of

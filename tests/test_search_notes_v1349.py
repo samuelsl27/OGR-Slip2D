@@ -568,6 +568,57 @@ _LATER = [
               'r': 5.0,
               'factor': 3.001898542106169,
               'reason': {'$raw': 'm_alpha < 0.2 on 1 slice(s)'}}},
+    # v0.1.445 (D420) -- what ``_candidate_surfaces`` dropped without a word:
+    # the two halves of the reference's -103 and three reasons that are not
+    # it, and the -103 among the reasons of a run that found nothing
+    {'code': 'search.refused_surface.leaves_external',
+     'english': 'the surface was not analysed: between its two crossings with '
+                'the ground the circle runs outside the External Boundary, so '
+                "part of the mass would not be soil (the reference's error "
+                '-103). Composite Surfaces makes a circle follow the base of '
+                'the External Boundary instead.',
+     'args': {}},
+    {'code': 'search.refused_surface.reverse_curvature_side',
+     'english': 'the surface was not analysed: the circle turns back above '
+                'its centre (reverse curvature), and the vertical tension '
+                'crack that would end it falls outside the model: the arc '
+                'leaves through a side of the External Boundary (the '
+                "reference's error -103).",
+     'args': {}},
+    {'code': 'search.refused_surface.reverse_curvature_discarded',
+     'english': 'the surface was not analysed: the circle turns back above '
+                'its centre (reverse curvature), and "Create tension crack '
+                'for reverse curvature" is off in Surface Options (the Grid '
+                'Search and Slope Search panels), so such a circle is '
+                'discarded.',
+     'args': {}},
+    {'code': 'search.refused_surface.reverse_curvature_no_crack',
+     'english': 'the surface was not analysed: the circle turns back above '
+                'its centre (reverse curvature), and there is no place for '
+                'the vertical tension crack that would end it.',
+     'args': {}},
+    {'code': 'search.refused_surface.tension_crack_zone',
+     'english': 'the surface was not analysed: the sliding mass lies entirely '
+                'within the zone of the Tension Crack boundary, where the '
+                'soil has no strength, so there is no slip surface to '
+                'analyse.',
+     'args': {}},
+    {'code': 'search.refused.leaves_external',
+     'english': '1 circle that leaves the External Boundary between its '
+                'crossings with the ground',
+     'args': {'n': 1}},
+    {'code': 'search.no_valid',
+     'english': 'No trial surface gave a valid factor of safety (539 '
+                'generated). Refused before pricing: 12 circles that leave '
+                'the External Boundary between their crossings with the '
+                'ground. Anything else was refused before it could be '
+                'priced, for reasons this search does not record.',
+     'args': {'total': 539,
+              'priced': {'$nothing': True},
+              'refused': {'$code': 'search.no_valid_refused',
+                          '$args': {'parts': [
+                              {'$code': 'search.refused.leaves_external',
+                               '$args': {'n': 12}}]}}}},
 ]
 
 
@@ -663,11 +714,18 @@ class TestOneSentenceForEachRefusal:
         import ogr_slip2d.slicer as SL
         from ogr_slip2d.search_note_messages import (REFUSED, REFUSED_DEFAULT,
                                                      SEARCH_NOTES, refusal)
+        import ogr_core.geometry.slip_circle as SC
         recorded = {SL.REFUSED_OUTSIDE_MODEL, SL.REFUSED_ORPHAN_MATERIAL,
                     SL.REFUSED_END_BELOW_GROUND, SL.REFUSED_END_ABOVE_GROUND,
                     SL.REFUSED_BASE_ABOVE_GROUND,
                     S.REFUSED_OUTSIDE_SLOPE_LIMITS, S.REFUSED_MISSES_GROUND,
-                    "leaves_soil", "unsliceable"}
+                    "leaves_soil", "unsliceable",
+                    # v0.1.445 (D420) -- changed on purpose: the drops of
+                    # ``_candidate_surfaces``, recorded since this version
+                    S.REFUSED_LEAVES_EXTERNAL, S.REFUSED_TENSION_CRACK_ZONE,
+                    SC.REVERSE_CURVATURE_SIDE,
+                    SC.REVERSE_CURVATURE_DISCARDED,
+                    SC.REVERSE_CURVATURE_NO_CRACK}
         coded = {c[len(REFUSED):] for c in SEARCH_NOTES
                  if c.startswith(REFUSED) and c != REFUSED_DEFAULT}
         assert coded == recorded, coded ^ recorded

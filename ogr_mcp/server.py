@@ -1758,8 +1758,11 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
                 "sf_along_slope", "slices", "filter", "histogram",
                 "convergence", "samples", "sensitivity"], Field(
                 description="Analysis results: error_codes (-120 tensile, "
-                            "-112 m-alpha, -111 not converged, -101 "
-                            "other), invalid_summary, raw_data, "
+                            "-112 m-alpha, -111 not converged, -103 "
+                            "circle leaving the External Boundary, -101 "
+                            "other; -103 and part of -101 are counted "
+                            "before slicing, so filter by code lists none "
+                            "of them), invalid_summary, raw_data, "
                             "surfaces_through_point, minimum_per_centre, "
                             "sf_along_slope, slices (method's numbers), "
                             "filter. A listed surface the user drew has "

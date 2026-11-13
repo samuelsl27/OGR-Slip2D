@@ -132,6 +132,10 @@ ALLOWED = {
         "the runtime census's vocabulary, the words of the dictionary's English keys "
         "minus those of its Spanish values: a set computed from the dictionary, which "
         "no test changes, and only read (v0.1.433, D411)",
+    ("test_left_soil_refusal_v1445", "test_slide_validation_ej2_v184", "_grid_search"):
+        "the reference grid's SearchResult, only read: the owner's readers walk its "
+        "evaluations and read total_count and the critical surface, and this one reads "
+        "leaves_external and invalid_summary, which does not write (v0.1.445, D420)",
 }
 
 

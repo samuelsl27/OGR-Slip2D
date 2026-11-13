@@ -56,6 +56,11 @@ def leaves_soil_region(circle: "SlipCircle", external_vertices: list,
     Disabled by the caller when Composite Surfaces is on, which is exactly
     what that option means — the surface then follows the boundary instead
     of being rejected by it.
+
+    v0.1.445 (D420) — OGR's census counts it under −103 as well
+    (``interpretation.ERROR_LEAVES_EXTERNAL``), and the search says it of a
+    circle all of whose masses this rule drops; until then it was dropped
+    without a word.
     """
     from ogr_core.geometry.ground import upper_y_at
 

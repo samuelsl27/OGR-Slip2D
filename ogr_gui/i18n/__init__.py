@@ -26,6 +26,10 @@ _DICTS: dict[str, dict[str, str]] = {
         # surface), «grieta de tracción» (tension crack), «consulta»
         # (query), «línea de empujes» (line of thrust).
         '%d more were discarded before slicing, so they carry no error code and cannot be displayed.': '%d más se descartaron antes del dovelado, así que no llevan código de error y no se pueden mostrar.',
+        # v0.1.445 (D420) -- the summary with nothing listed, and the
+        # filter's "Error code:" when every rejection left no evaluation
+        '%d were discarded before slicing, so they carry no error code and cannot be displayed.': '%d se descartaron antes del dovelado, así que no llevan código de error y no se pueden mostrar.',
+        'No rejected surface can be displayed: they were discarded before slicing.': 'No se puede mostrar ninguna superficie rechazada: se descartaron antes del dovelado.',
         '%d surface(s) rejected of %d generated:': '%d superficie(s) rechazada(s) de %d generadas:',
         'A focus object also removed %d candidate(s) before they were analysed. They are in neither count above: the population stays comparable to an unfocused run.': 'Un objeto de foco retiró además %d candidata(s) antes de analizarlas. No están en ninguno de los recuentos anteriores: así la población sigue siendo comparable a la de un cálculo sin foco.',
         'Generation attempts: %d': 'Intentos de generación: %d',
@@ -5771,6 +5775,15 @@ _DICTS: dict[str, dict[str, str]] = {
             '{n} círculos que no cortan dos veces el terreno',
         '{n} circle that do not cut the ground twice':
             '{n} círculo que no corta dos veces el terreno',
+        # v0.1.445 (D420)
+        '{n} circles that leave the External Boundary between their '
+        'crossings with the ground':
+            '{n} círculos que salen del contorno exterior entre sus cortes '
+            'con el terreno',
+        '{n} circle that leaves the External Boundary between its crossings '
+        'with the ground':
+            '{n} círculo que sale del contorno exterior entre sus cortes con '
+            'el terreno',
         '{n} that crossed a region with no material':
             '{n} que cruzaron una región sin material',
         '{n} with an end outside the Slope Limits':
@@ -5815,6 +5828,64 @@ _DICTS: dict[str, dict[str, str]] = {
         "surface twice (the reference's error -101).":
             'la superficie no se analizó: el círculo no corta dos veces la '
             'superficie del terreno (el error -101 de la referencia).',
+        # v0.1.445 (D420) -- what the circle's chords fell for
+        'the surface was not analysed: between its two crossings with the '
+        'ground the circle runs outside the External Boundary, so part of '
+        "the mass would not be soil (the reference's error -103). Composite "
+        'Surfaces makes a circle follow the base of the External Boundary '
+        'instead.':
+            'la superficie no se analizó: entre sus dos cortes con el terreno '
+            'el círculo pasa por fuera del contorno exterior, así que parte '
+            'de la masa no sería terreno (el error -103 de la referencia). '
+            'Con la opción «Superficies compuestas», el círculo sigue la '
+            'base del contorno exterior.',
+        'the surface was not analysed: the circle turns back above its centre '
+        '(reverse curvature), and the vertical tension crack that would end '
+        'it falls outside the model: the arc leaves through a side of the '
+        "External Boundary (the reference's error -103).":
+            'la superficie no se analizó: el círculo vuelve sobre sí mismo '
+            'por encima de su centro (curvatura inversa), y la grieta de '
+            'tracción vertical que lo cerraría cae fuera del modelo: el arco '
+            'sale por un lado del contorno exterior (el error -103 de la '
+            'referencia).',
+        'the surface was not analysed: the circle turns back above its centre '
+        '(reverse curvature), and "Create tension crack for reverse '
+        'curvature" is off in Surface Options (the Grid Search and Slope '
+        'Search panels), so such a circle is discarded.':
+            'la superficie no se analizó: el círculo vuelve sobre sí mismo '
+            'por encima de su centro (curvatura inversa), y «Crear grieta de '
+            'tracción por curvatura inversa» está desactivada en Opciones de '
+            'superficie (paneles Búsqueda por rejilla y Búsqueda de talud), '
+            'así que un círculo así se descarta.',
+        'the surface was not analysed: the circle turns back above its centre '
+        '(reverse curvature), and there is no place for the vertical tension '
+        'crack that would end it.':
+            'la superficie no se analizó: el círculo vuelve sobre sí mismo '
+            'por encima de su centro (curvatura inversa), y no hay sitio para '
+            'la grieta de tracción vertical que lo cerraría.',
+        'the surface was not analysed: the sliding mass lies entirely within '
+        'the zone of the Tension Crack boundary, where the soil has no '
+        'strength, so there is no slip surface to analyse.':
+            'la superficie no se analizó: la masa deslizante queda entera '
+            'dentro de la zona del contorno de grieta de tracción, donde el '
+            'terreno no tiene resistencia, así que no hay superficie de '
+            'rotura que analizar.',
+        # v0.1.445 (D420) -- the reasons of the census that leave no
+        # evaluation, which the interpretation window now lists
+        'an end of the polyline is not on the ground surface':
+            'un extremo de la polilínea no está sobre la superficie del '
+            'terreno',
+        'the base rises above the ground surface between the ends':
+            'la base sube por encima de la superficie del terreno entre los '
+            'extremos',
+        'an end daylights outside the Slope Limits':
+            'un extremo aflora fuera de los límites del talud',
+        'the circle does not cut the ground surface twice':
+            'el círculo no corta dos veces la superficie del terreno',
+        'the circle leaves the External Boundary between its crossings with '
+        'the ground':
+            'el círculo sale del contorno exterior entre sus cortes con el '
+            'terreno',
         'the surface was not analysed: a slice base fell in a region whose '
         'material no longer exists.':
             'la superficie no se analizó: la base de una dovela cayó en una '

@@ -2593,6 +2593,28 @@ class InterpretWindow(QMainWindow):
         from .core_messages import invalid_text
         return invalid_text(ev)
 
+    @staticmethod
+    def _unevaluated_rejections(res) -> tuple:
+        """``(counted, not_sliced)``: the rejections of ``res`` that left no
+        evaluation, so no "Error code" can show them — those the census
+        codes (``counted_rejections``: the -103, the -101 of D263) and the
+        rest. One reading for the summary and the filter (v0.1.445, D420).
+        """
+        from ogr_slip2d.interpretation import (counted_rejections,
+                                               invalid_summary)
+        return counted_rejections(res), invalid_summary(res)["not_sliced"]
+
+    def _no_reason_text(self) -> str:
+        """What "Error code:" of the filter offers when no evaluation has a
+        reason to filter by. v0.1.445 (D420) — it was "Every surface
+        evaluated successfully." whatever the census said, also of a run
+        whose rejections all left no evaluation."""
+        counted, silent = self._unevaluated_rejections(self.search_result)
+        if not counted and silent <= 0:
+            return tr("Every surface evaluated successfully.")
+        return tr("No rejected surface can be displayed: they were "
+                  "discarded before slicing.")
+
     def _invalid_reasons(self) -> list:
         """``[(reason, count)]``, commonest first."""
         res = self.search_result
@@ -2612,29 +2634,43 @@ class InterpretWindow(QMainWindow):
         if res is None:
             return
         reasons = self._invalid_reasons()
-        if not reasons:
+        # v0.1.445 (D420) — the rejections the search counted without an
+        # evaluation, from the census itself: this window kept a census of
+        # its own and called them "discarded before slicing, so they carry
+        # no error code", of surfaces the census codes (-103, and the -101
+        # of D263). And the census decides there is nothing to say: a run
+        # whose rejections all left no evaluation (27 circles that miss the
+        # ground, say) was "Every surface evaluated successfully".
+        counted, silent = self._unevaluated_rejections(res)
+        if not reasons and not counted and silent <= 0:
             self._info(tr("Every surface evaluated successfully."))
             return
-        with_reason = sum(n for _why, n in reasons)
         generated = getattr(res, "total_count", len(res.evaluations))
         # v0.1.84 — rejected against the count that can actually be the
         # answer, so this total and the summary panel agree.
         n_ok = getattr(res, "analysed_count", res.valid_count)
         lines = [tr("%d surface(s) rejected of %d generated:")
                  % (generated - n_ok, generated), ""]
-        lines += [f"  {n} × {why}" for why, n in reasons]
+        listed = [f"  {n} × {why}" for why, n in reasons]
+        listed += [f"  {n} × {tr(why)}" for _code, why, n in counted]
+        lines += listed
         # v0.1.83 — the two numbers rarely agree, and saying so is the
-        # point. A circle rejected BEFORE it was sliced — no two ground
-        # intersections, or reverse curvature with the option off — is
-        # counted in the total but has no LEMResult, hence no reason to
-        # group it under and no geometry to draw in "Surfaces with error
-        # code". Reporting only the ones with a reason would understate
-        # the rejections by two thirds on a typical grid.
-        silent = (generated - n_ok) - with_reason
-        if silent > 0:
+        # point. A circle rejected BEFORE it was sliced and not counted
+        # under a code — reverse curvature with the option off, say — is
+        # in the total but has no LEMResult, hence no reason to group it
+        # under and no geometry to draw in "Surfaces with error code".
+        # Reporting only the ones with a reason would understate the
+        # rejections by two thirds on a typical grid.
+        if silent > 0 and listed:
             lines += ["", tr("%d more were discarded before slicing, so "
                              "they carry no error code and cannot be "
                              "displayed.") % silent]
+        elif silent > 0:
+            # v0.1.445 (D420) — nothing above to be "more" than (reverse
+            # curvature with the option off, every evaluation valid), and
+            # no second blank line.
+            lines += [tr("%d were discarded before slicing, so they carry "
+                         "no error code and cannot be displayed.") % silent]
         # v0.1.187 (D160) — and the ones a FOCUS object removed,
         # which are in neither of the numbers above: a focus
         # rejection skips without counting as valid or as invalid,
@@ -3938,7 +3974,7 @@ class InterpretWindow(QMainWindow):
             cbo_err.addItem(f"{why} ({n})", why)
         cbo_err.setEnabled(bool(reasons))
         if not reasons:
-            cbo_err.addItem(tr("Every surface evaluated successfully."))
+            cbo_err.addItem(self._no_reason_text())
         form.addRow(tr("Error code:"), cbo_err)
         v.addLayout(form)
         info = QLabel()

@@ -38,6 +38,26 @@ def ground_y_at(ground: Polyline, x: float,
     return envelope_y_at(ground, x, upper)
 
 
+#: v0.1.445 (D420) -- why :meth:`SlipCircle.apply_reverse_curvature`
+#: discarded a circle, appended to the ``reasons`` list a caller passes
+#: (the pattern of ``slice_surface(reasons=)``). Until this version the
+#: three cases returned the same ``False`` and the search said nothing of
+#: them, so a hand-drawn circle discarded here was blamed on a filter.
+#:
+#: * the crack point ``x = cx ∓ R`` falls outside the ground profile: the
+#:   arc above the centre runs out through a SIDE of the External Boundary.
+#:   The reference counts such a circle as its error -103 (measured: these
+#:   and the containment drops add up to the published -103 of both worked
+#:   examples, 172 + 11 = 183 and 207 + 80 = 287);
+#: * the project discards reverse-curvature circles (the option of the
+#:   search dialogs is off);
+#: * there is no place for the crack: the ground at ``x = cx ∓ R`` is not
+#:   above the centre, or the cracks leave the mass no width.
+REVERSE_CURVATURE_SIDE = "reverse_curvature_side"
+REVERSE_CURVATURE_DISCARDED = "reverse_curvature_discarded"
+REVERSE_CURVATURE_NO_CRACK = "reverse_curvature_no_crack"
+
+
 # ----------------------------------------------------------------------
 
 
@@ -236,7 +256,8 @@ class SlipCircle:
 
     # ------------------------------------------------------------------
     def apply_reverse_curvature(
-        self, ground: Polyline, mode: str = "tension_crack"
+        self, ground: Polyline, mode: str = "tension_crack",
+        reasons: Optional[list] = None,
     ) -> bool:
         """Resolve a *reverse curvature* circle. Returns False to discard.
 
@@ -270,7 +291,16 @@ class SlipCircle:
         Both ends are tested independently, so the treatment does not
         depend on the declared failure direction: whichever end of the
         chord daylights above ``centre_y`` is the one that reverses.
+
+        v0.1.445 (D420) -- ``reasons``, when given, receives WHY a circle is
+        discarded (one of the ``REVERSE_CURVATURE_*`` constants); what this
+        returns does not change.
         """
+        def _discard(why: str) -> bool:
+            if reasons is not None:
+                reasons.append(why)
+            return False
+
         self.tension_cracks = []
         if self.x_left is None or self.x_right is None:
             return True
@@ -291,15 +321,19 @@ class SlipCircle:
                 continue
             reversed_any = True
             if mode != "tension_crack":
-                return False
+                return _discard(REVERSE_CURVATURE_DISCARDED)
             x_crack = (self.centre_x - self.radius if end == "left"
                        else self.centre_x + self.radius)
             top = ground_y_at(ground, x_crack)
-            if top is None or top <= self.centre_y + 1e-9:
+            if top is None:
                 # The vertical-tangency point is outside the ground
-                # profile (or below it): there is nowhere to put the
-                # crack, so the surface is not usable either way.
-                return False
+                # profile: the arc above the centre leaves the model
+                # through a side, and there is nowhere to put the crack.
+                return _discard(REVERSE_CURVATURE_SIDE)
+            if top <= self.centre_y + 1e-9:
+                # Inside the profile but not above the centre: still no
+                # place for the crack, so the surface is not usable.
+                return _discard(REVERSE_CURVATURE_NO_CRACK)
             if end == "left":
                 self.x_left = x_crack
             else:
@@ -307,7 +341,7 @@ class SlipCircle:
             self.tension_cracks.append((x_crack, self.centre_y, top))
 
         if reversed_any and self.x_right - self.x_left < 1e-6:
-            return False
+            return _discard(REVERSE_CURVATURE_NO_CRACK)
         return True
 
     @property

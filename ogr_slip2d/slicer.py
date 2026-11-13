@@ -1970,6 +1970,13 @@ def slice_surface(
         #
         # This is deliberately placed BEFORE ``_column_weight``: a slice
         # with no soil at its base must never get as far as being weighed.
+        #
+        # v0.1.445 (D420) — OGR's own −103 is counted earlier, by the
+        # search, of the circles it drops before slicing
+        # (``SearchResult.leaves_external``); a refusal here is a piece that
+        # reached the slicer past those guards, and keeps its own note
+        # (``search.outside_model``). On the reference's two worked examples
+        # it never fires, and the census then matches the published −103.
         if mat is None:
             if reasons is not None:
                 # v0.1.298 (D298) — a region whose material was deleted is

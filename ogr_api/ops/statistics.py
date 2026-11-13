@@ -514,8 +514,9 @@ def _search_view(ws, sr, view, point_xy, tolerance, bins, rank, fos_min,
     # and the user's are among them: one may be the critical surface, and
     # ``fos_max`` did not find it. By code it is the census again, which is
     # of the search alone, so ``filter(code).count`` stays the census's
-    # ``by_code[code]`` (less, at -101, the rejections that leave no
-    # evaluation and the census counts there).
+    # ``by_code[code]`` less the rejections that leave no evaluation and the
+    # census counts there (``interpretation.counted_rejections``): part of
+    # -101, and since v0.1.445 (D420) the whole of -103, which lists none.
     from ogr_slip2d.search import all_evaluations_of
     picked = []
     for r in (sr.evaluations if want is not None

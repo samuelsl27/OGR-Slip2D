@@ -457,15 +457,25 @@ class TestInterpretation:
         _h, res = ws.find_result(rid)
         sr = res.payload()["results"]["bishop_simplified"]
         codes = [error_code(r) for r in sr.evaluations]
+        # v0.1.445 (D420) -- changed on purpose: the census also counts the
+        # rejections that leave no evaluation (``counted_rejections``), and
+        # this slope has three, the circles that leave its floor (-103):
+        # «filter(code).count == by_code[code]» held here only because it had
+        # none of them. Plus what was counted, it still holds for every code.
+        from ogr_slip2d.interpretation import counted_rejections
+        counted: dict = {}
+        for c, _why, n in counted_rejections(sr):
+            counted[c] = counted.get(c, 0) + n
+        assert counted.get(-103) == 3, counted
         assert sum(census["by_code"].values()) == sum(
-            c is not None for c in codes)
+            c is not None for c in codes) + sum(counted.values())
         raw = call(ws, "results_query", result_id=rid, view="raw_data",
                    n=5)
         assert raw["rows"] == len(sr.evaluations)
         for code, count in census["by_code"].items():
             got = call(ws, "results_query", result_id=rid, view="filter",
                        code=int(code), n=1000)
-            assert got["count"] == count
+            assert got["count"] + counted.get(int(code), 0) == count
             assert all(s["error_code"] == int(code)
                        for s in got["surfaces"])
 

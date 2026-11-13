@@ -39,11 +39,19 @@ from .slice_store import SpilledSlices
 ERROR_TENSILE = -120
 ERROR_M_ALPHA = -112
 ERROR_NOT_CONVERGED = -111
+#: v0.1.445 (D420) — a circle that runs outside the External Boundary
+#: between its crossings with the ground: the reference's -103. Counted on
+#: the result (``SearchResult.leaves_external``), never on an evaluation:
+#: such a circle is not sliced, so ``error_code`` never returns it.
+ERROR_LEAVES_EXTERNAL = -103
 ERROR_OTHER = -101
 ERROR_CODES = {
     ERROR_TENSILE: "tensile stress at a slice base (Tensile Stress Check)",
     ERROR_M_ALPHA: "m-alpha below its limit (the m-alpha screen)",
     ERROR_NOT_CONVERGED: "no converged factor of safety",
+    ERROR_LEAVES_EXTERNAL: "the circle leaves the External Boundary between "
+                           "its crossings with the ground (counted before "
+                           "slicing, so no surface carries it)",
     ERROR_OTHER: "any other rejection",
 }
 
@@ -176,6 +184,54 @@ def raw_data_rows(search_result) -> list:
     return rows
 
 
+#: v0.1.445 (D420) — the rejections a search counts on its RESULT because
+#: they leave no evaluation: ``(attribute, code, reason)``, in the order the
+#: census lists them. One list, read by :func:`invalid_summary` and by the
+#: interpretation window's summary of rejected surfaces, which until this
+#: version kept a census of its own and called all of these "discarded
+#: before slicing, so they carry no error code".
+#:
+#: * v0.1.258 (D244) — polylines refused at an end: a surface with an end
+#:   off the ground meets the slope once or not at all, which is the
+#:   reference's −101 («Only one (or none) slip surface / slope
+#:   intersections»). OGR also uses −101 for "any other rejection"
+#:   (``ERROR_OTHER``): the two meanings share the code, and the reason
+#:   tells them apart;
+#: * v0.1.259 (D256) — surfaces whose base rose above the ground between
+#:   the ends, under OGR's "any other rejection" −101 with a reason of
+#:   their own;
+#: * v0.1.261 (D263) — surfaces refused because an end daylights outside
+#:   the Slope Limits, which the reference does not code, and circles that
+#:   do not cut the ground twice, which ARE its −101 in its own words;
+#: * v0.1.445 (D420) — circles that leave the External Boundary between
+#:   their crossings with the ground, its −103.
+COUNTED_REJECTIONS = (
+    (("ends_below_ground", "ends_above_ground"), ERROR_OTHER,
+     "an end of the polyline is not on the ground surface"),
+    (("bases_above_ground",), ERROR_OTHER,
+     "the base rises above the ground surface between the ends"),
+    (("outside_slope_limits",), ERROR_OTHER,
+     "an end daylights outside the Slope Limits"),
+    (("misses_ground",), ERROR_OTHER,
+     "the circle does not cut the ground surface twice"),
+    (("leaves_external",), ERROR_LEAVES_EXTERNAL,
+     "the circle leaves the External Boundary between its crossings with "
+     "the ground"),
+)
+
+
+def counted_rejections(search_result) -> list:
+    """``[(code, reason, n)]``: the rejections ``search_result`` counted
+    without an evaluation, those with ``n > 0``, in the census's order
+    (:data:`COUNTED_REJECTIONS`)."""
+    out = []
+    for attrs, code, why in COUNTED_REJECTIONS:
+        n = sum(int(getattr(search_result, a, 0) or 0) for a in attrs)
+        if n:
+            out.append((code, why, n))
+    return out
+
+
 def invalid_summary(search_result) -> dict:
     """The census of rejected surfaces: by code, by reason, by group, and
     the ones that were never sliced or a focus object removed.
@@ -205,44 +261,14 @@ def invalid_summary(search_result) -> dict:
         by_reason[why] = by_reason.get(why, 0) + 1
         group = invalid_group(ev)
         by_group[group] = by_group.get(group, 0) + 1
-    # v0.1.258 (D244) — polylines refused at an end leave no evaluation,
-    # so they arrive as a count on the result. A surface with an end off
-    # the ground meets the slope once or not at all, which is the
-    # reference's −101 («Only one (or none) slip surface / slope
-    # intersections»). OGR also uses −101 for "any other rejection"
-    # (``ERROR_OTHER``): the two meanings share the code, and the reason
-    # below tells them apart.
-    off = (int(getattr(search_result, "ends_below_ground", 0) or 0)
-           + int(getattr(search_result, "ends_above_ground", 0) or 0))
-    if off:
-        by_code[ERROR_OTHER] = by_code.get(ERROR_OTHER, 0) + off
-        why = "an end of the polyline is not on the ground surface"
-        by_reason[why] = by_reason.get(why, 0) + off
-        by_group[why] = by_group.get(why, 0) + off
-    # v0.1.259 (D256) — and the surfaces whose base rose above the ground
-    # between the ends. Under OGR's "any other rejection" −101, with a
-    # reason of their own.
-    air = int(getattr(search_result, "bases_above_ground", 0) or 0)
-    if air:
-        by_code[ERROR_OTHER] = by_code.get(ERROR_OTHER, 0) + air
-        why = "the base rises above the ground surface between the ends"
-        by_reason[why] = by_reason.get(why, 0) + air
-        by_group[why] = by_group.get(why, 0) + air
-    # v0.1.261 (D263) — the surfaces refused because an end daylights
-    # outside the Slope Limits, which the reference does not code, and the
-    # circles that do not cut the ground twice, which ARE its −101 in its
-    # own words. Both under −101 with a reason of their own, like the two
-    # above; until now both were counted as "not sliced" with no reason.
-    for attr, why in (
-            ("outside_slope_limits",
-             "an end daylights outside the Slope Limits"),
-            ("misses_ground",
-             "the circle does not cut the ground surface twice")):
-        n = int(getattr(search_result, attr, 0) or 0)
-        if n:
-            by_code[ERROR_OTHER] = by_code.get(ERROR_OTHER, 0) + n
-            by_reason[why] = by_reason.get(why, 0) + n
-            by_group[why] = by_group.get(why, 0) + n
+    # The rejections that leave no evaluation arrive as counts on the
+    # result, each under its code with a reason of its own
+    # (:data:`COUNTED_REJECTIONS`); until each was counted, it sat in "not
+    # sliced" with no reason.
+    for code, why, n in counted_rejections(search_result):
+        by_code[code] = by_code.get(code, 0) + n
+        by_reason[why] = by_reason.get(why, 0) + n
+        by_group[why] = by_group.get(why, 0) + n
     generated = getattr(search_result, "total_count",
                         len(getattr(search_result, "evaluations", [])))
     analysed = getattr(search_result, "analysed_count",

@@ -25,6 +25,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from typing import Callable, Optional
 
+from ogr_core.geometry.slip_circle import REVERSE_CURVATURE_SIDE
 from ogr_core.project import Project
 from ogr_core.project.settings import SurfaceType, WeakLayerHandling
 
@@ -51,6 +52,16 @@ from .surface import SlipCircle, WeakLayerSurface, lowest_elevation
 REFUSED_OUTSIDE_SLOPE_LIMITS = "outside_slope_limits"
 REFUSED_MISSES_GROUND = "misses_ground"
 
+#: v0.1.445 (D420) — a circle all of whose masses leave the External
+#: Boundary between their two crossings with the ground, and one all of
+#: whose masses lie inside the zone of the user's Tension Crack boundary.
+#: The first is the reference's -103 (the other half of that code is
+#: ``REVERSE_CURVATURE_SIDE``); both were dropped in ``_candidate_surfaces``
+#: with no reason recorded, and the note of a hand-drawn circle then
+#: blamed a filter or said it "does not meet the ground twice".
+REFUSED_LEAVES_EXTERNAL = "leaves_external"
+REFUSED_TENSION_CRACK_ZONE = "tension_crack_zone"
+
 #: v0.1.349 (D335) -- a note of the search, with its code
 _snote = SN.search_note
 
@@ -64,7 +75,19 @@ _RUN_COUNTERS = ("_unsliceable", "_outside_model", "_orphan_material",
                  "_on_model_edge",
                  "_end_below_ground", "_end_above_ground",
                  "_base_above_ground", "_outside_slope_limits",
-                 "_misses_ground")
+                 "_misses_ground", "_leaves_external")
+
+#: v0.1.445 (D420) — the counters the census reads (``run`` copies them onto
+#: the result at the D263 point): rejections of the SEARCH's population that
+#: leave no evaluation. A step that is not a member of that population — the
+#: Slope Search's refinement walk, which counts in neither ``valid_count`` nor
+#: ``invalid_count`` when it fails — must leave them as it found them, or the
+#: census codes circles the population does not have (measured: every -101
+#: of a Slope Search on Ej_1, Ej_2 and the demo slope came from the walk).
+#: The slicer's counters are NOT here: their notes speak of every surface the
+#: run sliced, the walk's included.
+_CENSUS_COUNTERS = ("_outside_slope_limits", "_misses_ground",
+                    "_leaves_external")
 
 #: v0.1.426 (D377) — ``_last_refusal`` not written by an evaluation.
 _UNTOUCHED = object()
@@ -389,6 +412,12 @@ class SearchResult:
     # search generated.
     outside_slope_limits: int = 0
     misses_ground: int = 0
+    # v0.1.445 (D420) — circles that left the External Boundary between
+    # their crossings with the ground, through its floor or (reverse
+    # curvature with the crack outside the model) a side: the reference's
+    # -103. Counted with the two above, once per circle and only when no
+    # mass of it was left to analyse.
+    leaves_external: int = 0
 
     def score(self, result) -> float:
         """This run's objective, evaluated on one of its surfaces."""
@@ -1305,6 +1334,26 @@ class BaseSearch(ABC):
         self._misses_ground = getattr(self, "_misses_ground", 0) + 1
         self._last_refusal = REFUSED_MISSES_GROUND
 
+    def _count_leaves_external(self, why: str) -> None:
+        """One circle that left the External Boundary between its crossings
+        with the ground, the reference's -103 (v0.1.445, D420); ``why`` says
+        through what: ``REFUSED_LEAVES_EXTERNAL`` or
+        ``REVERSE_CURVATURE_SIDE``."""
+        self._leaves_external = getattr(self, "_leaves_external", 0) + 1
+        self._last_refusal = why
+
+    @contextlib.contextmanager
+    def _off_the_census(self):
+        """Evaluate surfaces that are not members of the search's
+        population: the census counters (:data:`_CENSUS_COUNTERS`) are put
+        back as they were on the way out (v0.1.445, D420)."""
+        kept = {name: getattr(self, name, 0) for name in _CENSUS_COUNTERS}
+        try:
+            yield
+        finally:
+            for name, n in kept.items():
+                setattr(self, name, n)
+
     def _unsliceable_note(self, result) -> list[str]:
         """What to say when the slicer refused surfaces whole.
 
@@ -1382,8 +1431,8 @@ class BaseSearch(ABC):
         Path Search are still anonymous, and a note that implied it had
         accounted for everything would be the silence again in other
         words. The counts are of surfaces for the Slope Limits and for the
-        circles that miss the ground, and of pieces (masses, weak-layer
-        cases) for the slicer's reasons.
+        circles that miss the ground or leave the External Boundary, and of
+        pieces (masses, weak-layer cases) for the slicer's reasons.
         """
         # v0.1.349 (D335) -- every reason a fragment with its code, in the
         # list the sentence joins with "; "; the windows of the Slope Limits
@@ -1411,6 +1460,12 @@ class BaseSearch(ABC):
         n = int(getattr(result, "misses_ground", 0) or 0)
         if n:
             parts.append(SN.nested_search_note(SN.R_MISSES_GROUND, n=n))
+        # v0.1.445 (D420) — and those that left the External Boundary
+        # between their crossings with the ground, until now "for reasons
+        # this search does not record"
+        n = int(getattr(result, "leaves_external", 0) or 0)
+        if n:
+            parts.append(SN.nested_search_note(SN.R_LEAVES_EXTERNAL, n=n))
         for attr, code in (("_outside_model", SN.R_LEFT_MODEL),
                            ("_orphan_material", SN.R_ORPHAN),
                            ("_unsliceable", SN.R_UNSLICEABLE)):
@@ -1860,6 +1915,19 @@ class BaseSearch(ABC):
         reverse-curvature tension crack has moved an endpoint — because
         that is the surface the factor of safety belongs to.
 
+        v0.1.445 (D420) — and OGR counts it too, and says why. When NO mass
+        is left to yield, the circle records the reason its chords fell
+        (``_last_refusal``), and if one fell for leaving the External
+        Boundary — through the floor here, or through a side as a
+        reverse-curvature circle whose crack would lie outside the model —
+        it is counted once as the -103 (``_count_leaves_external``). Only
+        then, so the note and the census say the same thing and nothing is
+        counted twice: a circle with a mass left is answered by that mass.
+        Until this version these drops left no reason, and a hand-drawn
+        circle through the floor was said to be removed by Minimum Area 1,
+        or not to meet the ground twice. Measured against the reference's
+        two worked reports: 172 + 11 = 183 and 207 + 80 = 287, its -103.
+
         With Composite Surfaces enabled the mass is CLIPPED to the floor of
         the model instead of being dropped, which is what that option
         means and what it is for: a bedrock horizon is modelled by shaping
@@ -1925,6 +1993,9 @@ class BaseSearch(ABC):
                 named = compose_with_bedrock(named, external)
             elif leaves_soil_region(named, ext_verts,
                                     named.x_left, named.x_right):
+                # v0.1.445 (D420) — the only mass of this circle, so it is
+                # the circle that is refused: said, and counted as -103
+                self._count_leaves_external(REFUSED_LEAVES_EXTERNAL)
                 return
             yield named
             return
@@ -1940,12 +2011,26 @@ class BaseSearch(ABC):
             return
         mode = _reverse_curvature_mode(project)
 
+        # v0.1.445 (D420) — why the chords fell, said only if none is left:
+        # ``left`` for the first that left the External Boundary (the -103),
+        # ``dropped`` for the first that fell for anything else
+        left = dropped = None
+        delivered = False
         for x_l, x_r in chords:
             trial = SlipCircle(centre_x=circle.centre_x,
                                centre_y=circle.centre_y,
                                radius=circle.radius)
             trial.x_left, trial.x_right = x_l, x_r
-            if not trial.apply_reverse_curvature(ground, mode=mode):
+            why: list = []
+            if not trial.apply_reverse_curvature(ground, mode=mode,
+                                                 reasons=why):
+                # The crack outside the model is a side exit, the other half
+                # of the -103; the option off and no place for the crack are
+                # reasons of their own and not counted
+                if why and why[0] == REVERSE_CURVATURE_SIDE:
+                    left = left or why[0]
+                elif why:
+                    dropped = dropped or why[0]
                 continue
             # v0.1.109 — the user's Tension Crack boundary, applied
             # BEFORE containment is judged. ``slice_surface`` would
@@ -1957,7 +2042,9 @@ class BaseSearch(ABC):
             lim = apply_tension_crack_truncation(
                 project, trial, ground, trial.x_left, trial.x_right)
             if lim is None:
-                continue        # entirely within the tension crack zone
+                # entirely within the tension crack zone: no slip surface
+                dropped = dropped or REFUSED_TENSION_CRACK_ZONE
+                continue
             trial.x_left, trial.x_right = lim
             if composite:
                 # Clipping REPLACES the containment rule rather than
@@ -1970,8 +2057,19 @@ class BaseSearch(ABC):
                 trial = compose_with_bedrock(trial, external)
             elif leaves_soil_region(
                     trial, ext_verts, trial.x_left, trial.x_right):
+                # through the floor of the model: the reference's -103
+                left = left or REFUSED_LEAVES_EXTERNAL
                 continue
+            delivered = True
             yield trial
+        # Reached because every caller walks this generator to the end
+        # (``_best_of_masses`` and ``_evaluate_trial``, with ``continue``
+        # only). A circle with a mass delivered is answered by it.
+        if not delivered:
+            if left is not None:
+                self._count_leaves_external(left)
+            elif dropped is not None:
+                self._last_refusal = dropped
 
     # ------------------------------------------------------------------
     def evaluate_surface(
@@ -2098,6 +2196,8 @@ class BaseSearch(ABC):
             # census.
             result.outside_slope_limits = self._outside_slope_limits
             result.misses_ground = self._misses_ground
+            # v0.1.445 (D420) — the -103, by the same rule
+            result.leaves_external = self._leaves_external
             if self.optimize is not None and self.optimize.enabled:
                 # v0.1.366 (D362) — said, so a watcher can name the phase:
                 # its bar starts again here, over the optimisation
@@ -4149,48 +4249,53 @@ class SlopeSearch(BaseSearch):
         # is what lets the Slope Search converge onto the same critical
         # circle the Grid Search finds, instead of stopping at the best
         # random sample.
-        if best:
-            from .surface import SlipCircle
-            best.sort(key=lambda t: t[0])
-            for k in range(min(8, len(best))):
-                f0, cx, cy, r = best[k]
-                cur_f, cur = f0, (cx, cy, r)
-                span = max(0.15 * r, 1.0)
-                for _it in range(120):
-                    step = span * (1.0 - _it / 120.0)
-                    tcx = cur[0] + self.rng.uniform(-step, step)
-                    tcy = cur[1] + self.rng.uniform(-step, step)
-                    tr = cur[2] + self.rng.uniform(-step, step)
-                    if tr <= 0:
-                        continue
-                    if self._focus_rejects_circle(tcx, tcy, tr):
-                        # The refinement walk has to respect the focus too,
-                        # or the search would step off it after finding a
-                        # focused minimum and report the escape.
-                        #
-                        # v0.1.187 — NOT counted in ``focus_rejected``, and
-                        # this walk is not counted in ``attempts`` either.
-                        # A step of a walk is not a member of the
-                        # population: counting it would make the effort of
-                        # a run depend on how many minima happened to be
-                        # worth refining, and the excess this loop already
-                        # produces is what ``test_acads_validation_v178``
-                        # fixes as its own thing.
-                        continue
-                    sc = SlipCircle(centre_x=tcx, centre_y=tcy, radius=tr)
-                    res = self.evaluate_circle(project, sc)
-                    if res is None or not res.is_valid:
-                        continue
-                    if not (0.2 <= res.fos <= 100.0):
-                        continue
-                    self._keep(result, res)
-                    # v0.1.237 (D87) — where the walk goes depends on the
-                    # factors, so another sample walks elsewhere.
-                    result.steered.append(res)
-                    result.valid_count += 1
-                    if self.score(res) < cur_f:
-                        cur_f = self.score(res)
-                        cur = (tcx, tcy, tr)
+        # v0.1.445 (D420) — the walk's steps are not members of the
+        # population (a failed step counts in neither ``valid_count``
+        # nor ``invalid_count``), so what they add to the census goes
+        # back out: ``_off_the_census``.
+        with self._off_the_census():
+            if best:
+                from .surface import SlipCircle
+                best.sort(key=lambda t: t[0])
+                for k in range(min(8, len(best))):
+                    f0, cx, cy, r = best[k]
+                    cur_f, cur = f0, (cx, cy, r)
+                    span = max(0.15 * r, 1.0)
+                    for _it in range(120):
+                        step = span * (1.0 - _it / 120.0)
+                        tcx = cur[0] + self.rng.uniform(-step, step)
+                        tcy = cur[1] + self.rng.uniform(-step, step)
+                        tr = cur[2] + self.rng.uniform(-step, step)
+                        if tr <= 0:
+                            continue
+                        if self._focus_rejects_circle(tcx, tcy, tr):
+                            # The refinement walk has to respect the focus too,
+                            # or the search would step off it after finding a
+                            # focused minimum and report the escape.
+                            #
+                            # v0.1.187 — NOT counted in ``focus_rejected``, and
+                            # this walk is not counted in ``attempts`` either.
+                            # A step of a walk is not a member of the
+                            # population: counting it would make the effort of
+                            # a run depend on how many minima happened to be
+                            # worth refining, and the excess this loop already
+                            # produces is what ``test_acads_validation_v178``
+                            # fixes as its own thing.
+                            continue
+                        sc = SlipCircle(centre_x=tcx, centre_y=tcy, radius=tr)
+                        res = self.evaluate_circle(project, sc)
+                        if res is None or not res.is_valid:
+                            continue
+                        if not (0.2 <= res.fos <= 100.0):
+                            continue
+                        self._keep(result, res)
+                        # v0.1.237 (D87) — where the walk goes depends on the
+                        # factors, so another sample walks elsewhere.
+                        result.steered.append(res)
+                        result.valid_count += 1
+                        if self.score(res) < cur_f:
+                            cur_f = self.score(res)
+                            cur = (tcx, tcy, tr)
 
         if self.progress_cb:
             self.progress_cb(self.num_surfaces, self.num_surfaces)

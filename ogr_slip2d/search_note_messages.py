@@ -50,6 +50,8 @@ R_SLOPE_LIMITS_ONE = "search.refused.slope_limits_one"
 R_SLOPE_LIMITS_TWO = "search.refused.slope_limits_two"
 R_SLOPE_LIMITS_MANY = "search.refused.slope_limits_many"
 R_MISSES_GROUND = "search.refused.misses_ground"
+# v0.1.445 (D420) -- the circles that left the External Boundary (the -103)
+R_LEAVES_EXTERNAL = "search.refused.leaves_external"
 R_LEFT_MODEL = "search.refused.left_model"
 R_ORPHAN = "search.refused.orphan"
 R_UNSLICEABLE = "search.refused.unsliceable"
@@ -184,6 +186,36 @@ _REFUSALS = (
     ("misses_ground",
      _REFUSAL + "the circle does not cut the ground surface twice (the "
      "reference's error -101)."),
+    # v0.1.445 (D420) -- what ``_candidate_surfaces`` dropped without a word:
+    # the two halves of the reference's -103 (the floor, the side), and three
+    # that are not it. A circle has its own words for the floor: "it dips
+    # below the External Boundary" is the polyline's, and names no remedy.
+    ("leaves_external",
+     _REFUSAL + "between its two crossings with the ground the circle runs "
+     "outside the External Boundary, so part of the mass would not be soil "
+     "(the reference's error -103). Composite Surfaces makes a circle follow "
+     "the base of the External Boundary instead."),
+    ("reverse_curvature_side",
+     _REFUSAL + "the circle turns back above its centre (reverse curvature), "
+     "and the vertical tension crack that would end it falls outside the "
+     "model: the arc leaves through a side of the External Boundary (the "
+     "reference's error -103)."),
+    # The box is on two panels of Surface Options only, though every circle
+    # obeys it (Auto Refine, the user's circles, one surface's door): the
+    # sentence names where it can be found.
+    ("reverse_curvature_discarded",
+     _REFUSAL + "the circle turns back above its centre (reverse curvature), "
+     "and \"Create tension crack for reverse curvature\" is off in Surface "
+     "Options (the Grid Search and Slope Search panels), so such a circle "
+     "is discarded."),
+    ("reverse_curvature_no_crack",
+     _REFUSAL + "the circle turns back above its centre (reverse curvature), "
+     "and there is no place for the vertical tension crack that would end "
+     "it."),
+    ("tension_crack_zone",
+     _REFUSAL + "the sliding mass lies entirely within the zone of the "
+     "Tension Crack boundary, where the soil has no strength, so there is no "
+     "slip surface to analyse."),
 )
 
 SEARCH_NOTES = {s.code: s for s in (
@@ -242,6 +274,11 @@ SEARCH_NOTES = {s.code: s for s in (
     MessageSpec(R_MISSES_GROUND,
                 "{n} circles that do not cut the ground twice",
                 one="{n} circle that do not cut the ground twice", count="n"),
+    MessageSpec(R_LEAVES_EXTERNAL,
+                "{n} circles that leave the External Boundary between their "
+                "crossings with the ground",
+                one="{n} circle that leaves the External Boundary between its "
+                    "crossings with the ground", count="n"),
     MessageSpec(R_LEFT_MODEL, "{n} that left the model"),
     MessageSpec(R_ORPHAN, "{n} that crossed a region with no material"),
     MessageSpec(R_UNSLICEABLE, "{n} that the slicer refused"),

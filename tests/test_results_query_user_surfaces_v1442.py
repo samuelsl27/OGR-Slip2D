@@ -188,12 +188,18 @@ def _admissible(evaluations) -> list:
     return [r for r in evaluations if error_code(r) is None]
 
 
-def _no_evaluation(sr) -> int:
-    """The rejections the census files under -101 that left no evaluation
-    (``invalid_summary``), which a filter over evaluations cannot count."""
-    return sum(int(getattr(sr, a, 0) or 0) for a in (
-        "ends_below_ground", "ends_above_ground", "bases_above_ground",
-        "outside_slope_limits", "misses_ground"))
+def _no_evaluation(sr, code: int = -101) -> int:
+    """The rejections the census files under ``code`` that left no
+    evaluation (``invalid_summary``), which a filter over evaluations cannot
+    count.
+
+    v0.1.445 (D420) -- changed on purpose: -103 too, the circles that leave
+    the External Boundary, counted on the result since that version."""
+    attrs = {-101: ("ends_below_ground", "ends_above_ground",
+                    "bases_above_ground", "outside_slope_limits",
+                    "misses_ground"),
+             -103: ("leaves_external",)}.get(code, ())
+    return sum(int(getattr(sr, a, 0) or 0) for a in attrs)
 
 
 # ----------------------------------------------------------------------
@@ -627,9 +633,7 @@ class TestTheCensusStaysTheSearchs:
             r = _run(name)
             census = _q(name, view="error_codes")["by_code"]
             for code in ERROR_CODES:
-                want = census.get(str(code), 0)
-                if code == -101:
-                    want -= _no_evaluation(r.sr)
+                want = census.get(str(code), 0) - _no_evaluation(r.sr, code)
                 got = _q(name, view="filter", code=code, n=1000)
                 assert got["count"] == want, (name, code, got["count"], want)
                 assert not any(map(_is_users, got["surfaces"])), (name, code)
