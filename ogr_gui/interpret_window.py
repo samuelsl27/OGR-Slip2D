@@ -3223,8 +3223,10 @@ class InterpretWindow(QMainWindow):
         if not rows:
             self._info(tr("No results to export."))
             return
-        header = ["centre_x", "centre_y", "radius",
-                  "x_left", "x_right", "fos_or_error_code"]
+        # v0.1.442 (D400) -- the header of these rows, from where the rows
+        # come: with a surface of the user in the run it has a seventh name.
+        from ogr_slip2d.interpretation import raw_data_columns
+        header = raw_data_columns(self.search_result)
         text = "\n".join(["\t".join(header)]
                          + ["\t".join(r) for r in rows])
         from PySide6.QtWidgets import QDialog, QDialogButtonBox, QVBoxLayout

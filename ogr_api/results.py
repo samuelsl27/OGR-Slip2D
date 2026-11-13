@@ -177,6 +177,30 @@ def lem_summary(res, *, with_slices: bool = False) -> Optional[dict]:
     return out
 
 
+def summary_in_search(search_result, res, *,
+                      with_slices: bool = False) -> Optional[dict]:
+    """``lem_summary`` of a surface OF A SEARCH, saying whose it is.
+
+    v0.1.442 (D400) — a run analyses the surfaces the user drew along with
+    the ones it generates, and one of them may be its critical surface, yet
+    no listing said which were which: the ``critical`` of ``analysis_run``
+    was a polyline nobody could tell from the search's. A surface of the
+    user carries ``"user_defined": true`` in its ``surface``, where
+    ``back_analysis_summary`` has put it since v0.1.428, so the summary of a
+    surface reads the same wherever it comes from. One of the search carries
+    nothing, so a run without user surfaces reads as it always did.
+
+    The one place the listings ask it: ``search_summary`` (critical and
+    top), ``results_get`` and every row of ``results_query``.
+    """
+    from ogr_slip2d.search import is_user_surface_of
+
+    out = lem_summary(res, with_slices=with_slices)
+    if out is not None and is_user_surface_of(search_result, res):
+        out["surface"] = {**(out.get("surface") or {}), "user_defined": True}
+    return out
+
+
 def load_factor_rows(res) -> list[dict]:
     """``[{load, name, action, drives, factor}]`` for the loads a design
     standard factored on the surface of ``res``; empty without one."""
@@ -260,7 +284,7 @@ def search_summary(method_id: str, search_result, factor_report=None,
     out = {
         "method_id": method_id,
         **headline(search_result, factor_report),
-        "critical": lem_summary(crit),
+        "critical": summary_in_search(search_result, crit),
         "counts": counts(search_result),
         "optimized": getattr(search_result, "optimized", None) is not None,
     }
@@ -271,7 +295,8 @@ def search_summary(method_id: str, search_result, factor_report=None,
     if notes:
         out["notes"] = notes
     if top:
-        out["top"] = [lem_summary(r) for r in search_result.top_n(top)]
+        out["top"] = [summary_in_search(search_result, r)
+                      for r in search_result.top_n(top)]
     return out
 
 

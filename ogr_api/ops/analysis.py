@@ -26,7 +26,8 @@ from typing import Optional
 
 from ..coerce import coerce_value, points
 from ..errors import InvalidArgument, JobFailed, NotConfigured, unknown
-from ..results import factor_report_summary, json_safe, lem_summary
+from ..results import (factor_report_summary, json_safe, lem_summary,
+                       summary_in_search)
 from ..snapshot import detached_copy, model_hash
 from . import operation
 
@@ -234,10 +235,13 @@ def results_get(ws, result_id: str, method_id: Optional[str] = None,
         r = payload[mid]
         is_search = hasattr(r, "evaluations")
         crit = r.critical if is_search else r
+        # v0.1.442 (D400) -- the surfaces of a search say whose they are,
+        # as in the summary of the run; one evaluated surface is nobody's.
         if view == "critical":
-            per[mid] = lem_summary(crit, with_slices=True)
+            per[mid] = summary_in_search(r, crit, with_slices=True) \
+                if is_search else lem_summary(crit, with_slices=True)
         elif view == "top":
-            per[mid] = [lem_summary(x) for x in r.top_n(n)] \
+            per[mid] = [summary_in_search(r, x) for x in r.top_n(n)] \
                 if is_search else [lem_summary(r)]
         elif view == "minima":
             per[mid] = [lem_summary(x) for x in

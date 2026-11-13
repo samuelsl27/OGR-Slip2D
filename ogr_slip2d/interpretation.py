@@ -11,7 +11,10 @@ here, and the interface asks here:
 * :func:`error_code` — the negative code the reference writes in place of
   a factor of safety (-120, -112, -111, -101); one mapping for the raw-data
   export, the census and the agent;
-* :func:`raw_data_rows`, :func:`invalid_summary`;
+* :func:`raw_data_rows` and its header :func:`raw_data_columns`, which list
+  every surface the run analysed, the user's included and marked
+  (v0.1.442), and :func:`invalid_summary`, the census, which stays the
+  search's: it describes the population ``total_count`` counts;
 * :func:`surfaces_through_point` — measured to the surface the engine
   PRICED (the base of its slices), not to the whole circle: a point below
   the ground on the far side of a circle is not on its slip surface;
@@ -117,21 +120,59 @@ def invalid_group(res) -> Optional[str]:
     return "did not converge"
 
 
+#: The header of :func:`raw_data_rows` in a run without surfaces of the user.
+RAW_DATA_COLUMNS = ("centre_x", "centre_y", "radius", "x_left", "x_right",
+                    "fos_or_error_code")
+#: Its seventh column, only in a run that analysed a surface the user drew.
+RAW_DATA_USER_COLUMN = "user_defined"
+
+
+def raw_data_columns(search_result) -> list:
+    """The header of :func:`raw_data_rows` for THIS run (v0.1.442, D400).
+
+    Six columns, as always, for a run without surfaces of the user; a
+    seventh, ``user_defined``, when the run analysed any, valid or not. The
+    one place the header is written: the API and the interpretation window
+    each spelled the six names out by hand.
+    """
+    cols = list(RAW_DATA_COLUMNS)
+    if getattr(search_result, "user_evaluations", None):
+        cols.append(RAW_DATA_USER_COLUMN)
+    return cols
+
+
 def raw_data_rows(search_result) -> list:
     """One row per surface analysed, valid or not: ``[centre_x, centre_y,
     radius, x_left, x_right, fos or error code]`` as strings — the
     reference's *Export Raw Data*. A surface rejected before it was sliced
-    has no result and no row."""
+    has no result and no row.
+
+    v0.1.442 (D400) — the surfaces the user drew are surfaces the run
+    analysed, and one of them may be its critical surface: they were not
+    here. They follow the search's rows, which keep their order, and a run
+    that has any gives EVERY row a seventh cell, ``"1"`` for a surface of
+    the user and ``"0"`` for one of the search
+    (:func:`raw_data_columns`). Without any, the six cells of always.
+    """
+    from .search import all_evaluations_of
+
+    # By identity, as ``is_user_surface_of``. The ids are of objects the
+    # result holds while this runs, so none can be reused meanwhile.
+    theirs = {id(r) for r in
+              getattr(search_result, "user_evaluations", None) or ()}
     rows = []
-    for r in getattr(search_result, "evaluations", []) or []:
+    for r in all_evaluations_of(search_result):
         sd = r.surface.to_dict()
         code = error_code(r)
-        rows.append([
+        row = [
             f"{sd.get('centre_x', '')}", f"{sd.get('centre_y', '')}",
             f"{sd.get('radius', '')}",
             f"{sd.get('x_left', '')}", f"{sd.get('x_right', '')}",
             f"{r.fos:.6f}" if code is None else f"{code}",
-        ])
+        ]
+        if theirs:
+            row.append("1" if id(r) in theirs else "0")
+        rows.append(row)
     return rows
 
 
@@ -146,6 +187,11 @@ def invalid_summary(search_result) -> dict:
     values that vary from surface to surface left out ("…"). A reason
     without a code is its own group. ``by_code`` is the reference's error
     code (-112, -101 ...), as it always was.
+
+    It reads ``evaluations`` alone, on purpose (v0.1.442, D400): the census
+    is of what the SEARCH generated, the population ``total_count`` and the
+    counters describe. A surface the user drew and a check rejected is in
+    the listings, marked, and not here.
     """
     by_code: dict = {}
     by_reason: dict = {}

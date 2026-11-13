@@ -27,7 +27,7 @@ from typing import Optional
 
 from ..coerce import coerce_enum, coerce_value, point
 from ..errors import Conflict, InvalidArgument, NotConfigured, unknown
-from ..results import json_safe, lem_summary
+from ..results import json_safe, summary_in_search
 from ..snapshot import detached_copy, model_hash
 from . import operation
 from .analysis import (JOB_FINISHERS, JOB_WORDS, _check_runnable,
@@ -365,7 +365,15 @@ def results_query(ws, result_id: str, view: str,
     """Ask a stored result what the Interpret window asks: error codes,
     rejected surfaces, raw data, surfaces through a point, minima per
     centre, factor along the slope, slices, filters; or a statistics
-    result's histogram, convergence, samples and sensitivity."""
+    result's histogram, convergence, samples and sensitivity.
+
+    v0.1.442 (D400) -- the views that LIST surfaces (``raw_data``, the
+    ``filter`` by factor, ``surfaces_through_point``,
+    ``minimum_per_centre``, ``slices``) include the ones the user drew and
+    mark them: ``surface.user_defined`` is true, and ``raw_data`` has a
+    seventh column. The CENSUS (``error_codes``, ``invalid_summary``, the
+    ``filter`` by code) is of the search alone: it describes the population
+    the counters count."""
     views = _SEARCH_VIEWS + _STAT_VIEWS
     if view not in views:
         raise unknown("view", view, views)
@@ -405,10 +413,12 @@ def results_query(ws, result_id: str, view: str,
                                   code, n, save_path, overwrite)}
 
 
-def _row(r) -> dict:
+def _row(sr, r) -> dict:
+    """One surface of the search ``sr`` in a listing: its summary, marked
+    when the user drew it (v0.1.442, D400), its code and its range."""
     from ogr_slip2d.interpretation import error_code, slope_intercepts
 
-    d = lem_summary(r) or {}
+    d = summary_in_search(sr, r) or {}
     d["error_code"] = error_code(r)
     d["admissible"] = bool(getattr(r, "admissible", True))
     try:
@@ -437,9 +447,18 @@ def _search_view(ws, sr, view, point_xy, tolerance, bins, rank, fos_min,
         return {"census": census}
     if view == "raw_data":
         rows = it.raw_data_rows(sr)
-        text = _csv(rows, ["centre_x", "centre_y", "radius", "x_left",
-                           "x_right", "fos_or_error_code"])
-        return _write_or_head(ws, text, len(rows), save_path, overwrite)
+        text = _csv(rows, it.raw_data_columns(sr))
+        out = _write_or_head(ws, text, len(rows), save_path, overwrite)
+        # v0.1.442 (D400) -- the user's rows are the last ones and the head
+        # stops at 20: in any real search it showed a seventh column of
+        # zeros and not one of the rows the column is there for.
+        mine = len(getattr(sr, "user_evaluations", None) or ())
+        if mine and "csv_head" in out and len(rows) > 20:
+            out["notes"] = list(out["notes"]) + [
+                f"The surfaces the user drew (user_defined = 1) are the "
+                f"last {mine} row(s) of the {len(rows)}: pass save_path to "
+                f"read them all."]
+        return out
     if view == "surfaces_through_point":
         if point_xy is None:
             raise InvalidArgument("surfaces_through_point needs point_xy.")
@@ -450,11 +469,12 @@ def _search_view(ws, sr, view, point_xy, tolerance, bins, rank, fos_min,
             raise InvalidArgument("tolerance must be positive.")
         hits = it.surfaces_through_point(sr, x, y, tol)
         return {"count": len(hits),
-                "surfaces": [{**_row(r), "distance": round(d, 6)}
+                "surfaces": [{**_row(sr, r), "distance": round(d, 6)}
                              for d, r in hits[:n]]}
     if view == "minimum_per_centre":
         rows = sorted(it.minimum_per_centre(sr), key=lambda r: r.fos)
-        return {"count": len(rows), "surfaces": [_row(r) for r in rows[:n]]}
+        return {"count": len(rows),
+                "surfaces": [_row(sr, r) for r in rows[:n]]}
     if view == "sf_along_slope":
         b = None if bins is None else coerce_value(bins, int, "bins")
         xs, fs = it.sf_along_slope(sr, bins=b)
@@ -472,7 +492,7 @@ def _search_view(ws, sr, view, point_xy, tolerance, bins, rank, fos_min,
         if target is None:
             raise Conflict("No surface to read slices from.")
         rows = it.slice_rows(target)
-        out = {"surface": _row(target)}
+        out = {"surface": _row(sr, target)}
         keys = list(rows[0]) if rows else []
         text = _csv([["" if r[k] is None else r[k] for k in keys]
                      for r in rows], keys)
@@ -490,8 +510,16 @@ def _search_view(ws, sr, view, point_xy, tolerance, bins, rank, fos_min,
     want = None if code is None else coerce_value(code, int, "code")
     if want is not None and want not in it.ERROR_CODES:
         raise unknown("error code", want, [str(c) for c in it.ERROR_CODES])
+    # v0.1.442 (D400) -- by factor this lists the surfaces the run analysed,
+    # and the user's are among them: one may be the critical surface, and
+    # ``fos_max`` did not find it. By code it is the census again, which is
+    # of the search alone, so ``filter(code).count`` stays the census's
+    # ``by_code[code]`` (less, at -101, the rejections that leave no
+    # evaluation and the census counts there).
+    from ogr_slip2d.search import all_evaluations_of
     picked = []
-    for r in sr.evaluations:
+    for r in (sr.evaluations if want is not None
+              else all_evaluations_of(sr)):
         c = it.error_code(r)
         if want is not None:
             if c != want:
@@ -504,7 +532,8 @@ def _search_view(ws, sr, view, point_xy, tolerance, bins, rank, fos_min,
             continue
         picked.append(r)
     picked.sort(key=lambda r: (r.fos is None, r.fos or 0.0))
-    return {"count": len(picked), "surfaces": [_row(r) for r in picked[:n]]}
+    return {"count": len(picked),
+            "surfaces": [_row(sr, r) for r in picked[:n]]}
 
 
 def _stat_view(ws, payload, view, method_id, bins, n, save_path,

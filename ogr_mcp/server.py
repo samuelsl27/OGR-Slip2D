@@ -1762,8 +1762,12 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
                             "other), invalid_summary, raw_data, "
                             "surfaces_through_point, minimum_per_centre, "
                             "sf_along_slope, slices (method's numbers), "
-                            "filter. Statistics results: histogram, "
-                            "convergence, samples, sensitivity.")],
+                            "filter. A listed surface the user drew has "
+                            "surface.user_defined true, and raw_data then "
+                            "has a 7th column user_defined (1/0); the "
+                            "census is of the search alone. Statistics "
+                            "results: histogram, convergence, samples, "
+                            "sensitivity.")],
             method_id: Annotated[Optional[str], Field(
                 description="Which method.")] = None,
             point_xy: Annotated[Optional[list[float]], Field(
@@ -1782,7 +1786,8 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
             fos_max: Annotated[Optional[float], Field(
                 description="filter: highest factor.")] = None,
             code: Annotated[Optional[int], Field(
-                description="filter: only surfaces with this error code.")
+                description="filter: only surfaces of the search with "
+                            "this error code.")
             ] = None,
             n: Annotated[int, Field(
                 description="How many rows at most.")] = 20,
