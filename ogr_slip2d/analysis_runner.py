@@ -2362,8 +2362,9 @@ def evaluate_surfaces(project, surface, method_ids=None, *,
     A second door with its own defaults would be a second answer to the
     same question, which is precisely what v0.1.101 found this door had
     been. ``results`` maps each method id to a :class:`LEMResult`, or to
-    None when the surface does not cut the model. The surface is copied
-    per method, because the evaluation writes its ground crossings on it.
+    None when the surface gives no result, and then ``warnings`` says why
+    (:func:`_given_refusal`). The surface is copied per method, because the
+    evaluation writes its ground crossings on it.
     """
     import copy
 
@@ -2397,20 +2398,52 @@ def evaluate_surfaces(project, surface, method_ids=None, *,
         # without its fallback: a model where freezing raises let that error
         # out of here before, and still does.
         from .search import frozen_evaluation
+        noted = list(getattr(search, "_pending_notes", None) or ())
         with frozen_evaluation(search, project, fallback=False):
             results[mid] = search.evaluate_surface(project,
                                                    copy.deepcopy(surface))
+        # v0.1.446 (D403) — what the search noted while evaluating it, as
+        # a run carries it: the ceiling of a weak-layer clip with its
+        # angles, the cap on the weak-layer cases. With "automatic cases"
+        # the ceiling can drop the clipped case and leave the unclipped
+        # one, and this door gave that factor (4.005 for 1.598 on the joint
+        # of test_weak_layer_v1121) without a word.
+        for line in getattr(search, "_pending_notes", None) or ():
+            if line not in noted:
+                warnings.append(method_note(mid, line))
         if results[mid] is None:
             # v0.1.258 (D244) — WHY there is no result, from the search
             # itself. Every refusal used to come out as "the surface does
             # not cut the model", which is the wrong thing to tell someone
             # whose polyline ends a metre under the ground.
-            warnings.append(method_note(mid, search.refusal_text()))
+            warnings.append(method_note(mid, _given_refusal(search, project)))
     # v0.1.387 (D381) — as a search's run does: the results hold the
     # materials they were solved with, not the project's own objects.
     from .search import detach_materials
     detach_materials(project, [r for r in results.values() if r is not None])
     return AnalysisOutcome(results, factor_report, warnings, project)
+
+
+def _given_refusal(search, project):
+    """Why ``search`` gave no result for the one surface it was handed.
+
+    The reason it recorded, when it recorded one. Otherwise, with filters
+    active that can remove a surface, those filters, named as the run names
+    them for a hand-drawn one (v0.1.446, D403): this door said "the surface
+    does not cut the model" of a circle that a Minimum Area 1 the model
+    never declared had removed, while the run named that Minimum Area.
+    With no reason and no filter, the default; and with no External
+    Boundary too, whatever the filters (no surface cuts a model that has
+    none, and the search leaves without a reason).
+    """
+    if (getattr(search, "_last_refusal", None) is None
+            and project.external_boundary() is not None):
+        filters = search._user_surface_filters(project)
+        if filters:
+            from . import search_note_messages as SN
+            return SN.search_note(SN.GIVEN_NO_RESULT_FILTERED,
+                                  filters=filters)
+    return search.refusal_text()
 
 
 # ----------------------------------------------------------------------

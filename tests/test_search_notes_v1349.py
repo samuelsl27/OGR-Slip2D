@@ -619,6 +619,20 @@ _LATER = [
                           '$args': {'parts': [
                               {'$code': 'search.refused.leaves_external',
                                '$args': {'n': 12}}]}}}},
+    # v0.1.446 (D403) -- the ceiling of a weak-layer clip, and the door of
+    # one surface with no reason and a filter active, with the English they
+    # were written with
+    {'code': 'search.refused_surface.weak_layer_steep',
+     'english': 'the surface was not analysed: a weak layer clips it, and the '
+                'base of one of its slices is steeper than the "Maximum base '
+                'angle on weak-layer clips" of Project Settings > Advanced.',
+     'args': {}},
+    {'code': 'search.given_no_result_filtered',
+     'english': 'the surface was not analysed, and no reason was recorded; '
+                "filters active that can remove it: Minimum Area 1 (the "
+                "search's default, not a setting of this model).",
+     'args': {'filters': [{'$code': 'search.filter.min_area_default',
+                           '$args': {'value': 1.0}}]}},
 ]
 
 
@@ -725,7 +739,10 @@ class TestOneSentenceForEachRefusal:
                     S.REFUSED_LEAVES_EXTERNAL, S.REFUSED_TENSION_CRACK_ZONE,
                     SC.REVERSE_CURVATURE_SIDE,
                     SC.REVERSE_CURVATURE_DISCARDED,
-                    SC.REVERSE_CURVATURE_NO_CRACK}
+                    SC.REVERSE_CURVATURE_NO_CRACK,
+                    # v0.1.446 (D403) -- changed on purpose: the ceiling of
+                    # a weak-layer clip, recorded since this version
+                    S.REFUSED_WEAK_LAYER_STEEP}
         coded = {c[len(REFUSED):] for c in SEARCH_NOTES
                  if c.startswith(REFUSED) and c != REFUSED_DEFAULT}
         assert coded == recorded, coded ^ recorded
@@ -765,10 +782,11 @@ _CODED = {
         # _walk, and the census goes with it.
         "optimize_surface", "_walk", "_finish", "OptimizeReport.summary"),
 }
-#: Two formats left, both DATA: a window of the Slope Limits, "[a, b]".
+#: The format left, DATA: a window of the Slope Limits, "[a, b]".
+#: v0.1.446 (D403) -- changed on purpose: ``_user_surface_filters`` no
+#: longer names the Slope Limits, so its window went with them.
 _DATA = {
     ("_no_valid_surface_note", '"[%g, %g]" % (lo, hi)'),
-    ("_user_surface_filters", '"[%g, %g]" % (min(a, b), max(a, b))'),
 }
 
 

@@ -110,6 +110,10 @@ PARALLEL_FALLBACK = "search.parallel_fallback"
 #: is the one with no refusal recorded.
 REFUSED = "search.refused_surface."
 REFUSED_DEFAULT = "search.refused_surface.default"
+#: v0.1.446 (D403) -- no refusal recorded, and filters active on the run that
+#: can remove the surface: named, as the run names them for a hand-drawn one,
+#: instead of "the surface does not cut the model" of a surface that does
+GIVEN_NO_RESULT_FILTERED = "search.given_no_result_filtered"
 
 _DISCARDED_OUTSIDE = (
     " discarded because a slice base fell outside the External Boundary, "
@@ -216,6 +220,13 @@ _REFUSALS = (
      _REFUSAL + "the sliding mass lies entirely within the zone of the "
      "Tension Crack boundary, where the soil has no strength, so there is no "
      "slip surface to analyse."),
+    # v0.1.446 (D403) -- the ceiling on the base of a weak-layer clip, said
+    # until now only by the run's own note, so the door of one surface said
+    # it "does not cut the model" and a hand-drawn one blamed a filter
+    ("weak_layer_steep",
+     _REFUSAL + "a weak layer clips it, and the base of one of its slices is "
+     "steeper than the \"Maximum base angle on weak-layer clips\" of Project "
+     "Settings > Advanced."),
 )
 
 SEARCH_NOTES = {s.code: s for s in (
@@ -408,6 +419,9 @@ SEARCH_NOTES = {s.code: s for s in (
     MessageSpec(REFUSED_DEFAULT,
                 "the surface does not cut the model, so there is nothing to "
                 "price."),
+    MessageSpec(GIVEN_NO_RESULT_FILTERED,
+                "the surface was not analysed, and no reason was recorded; "
+                "filters active that can remove it: {filters}."),
 ) + tuple(MessageSpec(REFUSED + key, text) for key, text in _REFUSALS)}
 
 

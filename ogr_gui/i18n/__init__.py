@@ -5870,6 +5870,19 @@ _DICTS: dict[str, dict[str, str]] = {
             'dentro de la zona del contorno de grieta de tracción, donde el '
             'terreno no tiene resistencia, así que no hay superficie de '
             'rotura que analizar.',
+        # v0.1.446 (D403) -- the ceiling of a weak-layer clip, and the door
+        # of one surface with no reason and filters active
+        'the surface was not analysed: a weak layer clips it, and the base '
+        'of one of its slices is steeper than the "Maximum base angle on '
+        'weak-layer clips" of Project Settings > Advanced.':
+            'la superficie no se analizó: una capa débil la recorta, y la '
+            'base de una de sus dovelas es más empinada que el «Ángulo máximo '
+            'de base en recortes de capa débil» de Ajustes de proyecto > '
+            'Avanzado.',
+        'the surface was not analysed, and no reason was recorded; filters '
+        'active that can remove it: {filters}.':
+            'la superficie no se analizó y no se registró ningún motivo; '
+            'filtros activos que pueden quitarla: {filters}.',
         # v0.1.445 (D420) -- the reasons of the census that leave no
         # evaluation, which the interpretation window now lists
         'an end of the polyline is not on the ground surface':

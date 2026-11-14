@@ -62,6 +62,18 @@ REFUSED_MISSES_GROUND = "misses_ground"
 REFUSED_LEAVES_EXTERNAL = "leaves_external"
 REFUSED_TENSION_CRACK_ZONE = "tension_crack_zone"
 
+#: v0.1.446 (D403) — a surface left with no piece, one of them at least
+#: refused by the ceiling on a weak-layer clip's base angle
+#: (``_base_angle_ok``), which said so only in the run's note.
+REFUSED_WEAK_LAYER_STEEP = "weak_layer_steep"
+
+#: v0.1.446 (D403) — the slicer's counts the note "no valid surface" names,
+#: with their fragments. The note is of the SEARCH: ``run`` takes these
+#: before the user's surfaces, which have a note of their own each.
+_SLICER_COUNTS = (("_outside_model", SN.R_LEFT_MODEL),
+                  ("_orphan_material", SN.R_ORPHAN),
+                  ("_unsliceable", SN.R_UNSLICEABLE))
+
 #: v0.1.349 (D335) -- a note of the search, with its code
 _snote = SN.search_note
 
@@ -1416,8 +1428,14 @@ class BaseSearch(ABC):
         return _snote(SN.BASE_ABOVE_GROUND,
                       n=getattr(self, "_base_above_ground", 0))
 
-    def _no_valid_surface_note(self, result) -> str:
+    def _no_valid_surface_note(self, result, slicer_counts=None) -> str:
         """What to say when the run ends with no valid surface at all.
+
+        ``slicer_counts`` maps the attributes of :data:`_SLICER_COUNTS` to
+        what the SEARCH counted; ``run`` takes them before the user's
+        surfaces (v0.1.446, D403), whose refusals were added here although
+        each already had its own note. None reads them live, for a caller
+        with no user's surfaces.
 
         v0.1.261 (D263). Until now a search that found nothing said
         nothing: on the 109 of the verification bank, with its Slope
@@ -1466,10 +1484,9 @@ class BaseSearch(ABC):
         n = int(getattr(result, "leaves_external", 0) or 0)
         if n:
             parts.append(SN.nested_search_note(SN.R_LEAVES_EXTERNAL, n=n))
-        for attr, code in (("_outside_model", SN.R_LEFT_MODEL),
-                           ("_orphan_material", SN.R_ORPHAN),
-                           ("_unsliceable", SN.R_UNSLICEABLE)):
-            n = getattr(self, attr, 0)
+        for attr, code in _SLICER_COUNTS:
+            n = (getattr(self, attr, 0) if slicer_counts is None
+                 else slicer_counts.get(attr, 0))
             if n:
                 parts.append(SN.nested_search_note(code, n=n))
         n = (int(getattr(result, "ends_below_ground", 0) or 0)
@@ -1638,6 +1655,8 @@ class BaseSearch(ABC):
         # v0.1.261 (D263) — whether a piece of this surface fell to the
         # Slope Limits, for the count below.
         limits_refused = False
+        # v0.1.446 (D403) — and to the ceiling on a weak-layer clip's base
+        steep_refused = False
         for mass in candidates:
             # v0.1.121 — one mass becomes one surface per weak-layer case, and
             # the worst of them is the answer. It goes HERE, wrapped around the
@@ -1763,6 +1782,7 @@ class BaseSearch(ABC):
                 # v0.1.121 — the base-angle ceiling, asked after slicing
                 # because a base angle is a property of a slice.
                 if not self._base_angle_ok(project, trial, slices):
+                    steep_refused = True
                     continue
                 res = self._analyse(project, trial, slices)
                 if res is None:
@@ -1772,6 +1792,12 @@ class BaseSearch(ABC):
                 elif res.is_valid and (not best.is_valid
                                        or self.score(res) < self.score(best)):
                     best = res
+        if best is None and steep_refused:
+            # v0.1.446 (D403) — said until now only in the run's note, so
+            # the door of one surface said it "does not cut the model" and a
+            # hand-drawn one blamed a filter. Before the Slope Limits below,
+            # which keep the last word: they are what the census counts.
+            self._last_refusal = REFUSED_WEAK_LAYER_STEEP
         if best is None and limits_refused:
             # v0.1.261 (D263) — once per SURFACE, not per mass or weak-layer
             # case: the census counts surfaces. Until now this rejection
@@ -2243,12 +2269,17 @@ class BaseSearch(ABC):
             # interface goes through is a door the other callers behave
             # differently at. AFTER the optimisation on purpose — see the
             # method's docstring.
+            # v0.1.446 (D403) — the slicer's counts of the search (with the
+            # optimisation's walk, as before), taken before the user's
+            # surfaces add theirs: each of those has its own note already.
+            searched = {attr: getattr(self, attr, 0)
+                        for attr, _code in _SLICER_COUNTS}
             self._evaluate_user_surfaces(project, result)
             # v0.1.261 (D263) — and a run that ends with nothing says why.
             # After the user's surfaces, because a valid one of those is a
             # valid surface of the run.
             if not any(r.is_valid for r in result.all_evaluations()):
-                self._note(self._no_valid_surface_note(result))
+                self._note(self._no_valid_surface_note(result, searched))
             # v0.1.121 — anything the run decided it had to say. Attached
             # after the optimisation so a note raised while optimising is
             # carried too.
@@ -2276,15 +2307,17 @@ class BaseSearch(ABC):
         (``_evaluate_user_surfaces`` asks it first), and a Minimum Area the
         model does not declare is said to be the search's default: "Minimum
         Area 1" read as a setting of the model, and no dialog shows it.
+
+        v0.1.446 (D403) — the Slope Limits are no longer named: when they
+        remove a surface they always record why (``_best_of_masses``,
+        ``outside_slope_limits``), so with no reason recorded they did not
+        remove it. Named since v0.1.367, they made "Slope Limits [0, 60]"
+        a suspect of a circle they contain. The fragment stays in the
+        catalogue (``SN.F_SLOPE_LIMITS``), for the notes already written.
         """
         # v0.1.349 (D335) -- each filter a fragment with its code, the name
-        # of the setting being a word of the sentence; the windows are data
+        # of the setting being a word of the sentence
         bits = []
-        if self.slope_limit_sets is not None:
-            bits.append(SN.nested_search_note(
-                SN.F_SLOPE_LIMITS, windows=", ".join(
-                    "[%g, %g]" % (min(a, b), max(a, b))
-                    for a, b in self.slope_limit_sets)))
         # v0.1.412 (D369) -- 0 or less filters nothing, so it is no reason;
         # and only null is the search's fallback: a declared 0 used to be
         # replaced by the analysis door, and this read it the same way
@@ -2320,11 +2353,17 @@ class BaseSearch(ABC):
           user's own model is not modified by its own analysis;
         * a circle that cuts the ground more than twice defines several
           disjoint masses, and the lowest of them is the answer (v0.1.84);
-        * Slope Limits, Minimum Area and Minimum Depth are applied inside
-          ``_best_of_masses``, the shared path, so a hand-drawn circle is
-          filtered exactly like a generated one — which is what the
-          reference does, down to having an error code for a surface that
-          daylights outside the Slope Limits.
+        * Slope Limits, Minimum Area, Minimum Depth and Minimum Elevation
+          are applied inside ``_best_of_masses``, the shared path, so a
+          hand-drawn circle is filtered exactly like a generated one. The
+          reference has an error code of its own for a surface that
+          daylights outside the Slope Limits (-113). The other three are
+          OGR's decision (the owner's, D403): the reference's help says its
+          surface filters do not apply to user-defined surfaces. When the
+          search records no reason, the note of a hand-drawn surface names
+          the filters that can have removed it (v0.1.446 corrects this
+          paragraph, which called the three the reference's behaviour and
+          left Minimum Elevation out).
 
         Focus objects deliberately do NOT apply. They are asked in the
         generation loops, and they exist to narrow a SEARCH; vetoing a
