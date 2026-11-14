@@ -34,7 +34,6 @@ from PySide6.QtWidgets import (
 )
 
 from ogr_core.project import Project
-from ogr_core.units.quantities import Quantity
 
 from .canvas import CanvasView
 from .disabled_reasons import gate
@@ -403,19 +402,11 @@ def _reported_value(result, item, project=None, factor_report=None):
         metres = details.get("newmark_displacement")
         if metres is None:
             return "", ""
-        value, unit = metres * 100.0, "cm"
-        # v0.1.227 (D225) — ``get_system()``: this called ``unit_system()``,
-        # which ``Units`` has never had, and a bare ``except`` swallowed the
-        # AttributeError, so an imperial project read centimetres too. Only
-        # a conversion error falls back now; a misspelt name raises.
-        units = getattr(getattr(project, "settings", None), "units", None)
-        if units is not None:
-            try:
-                system = units.get_system()
-                value = system.to_user(metres, Quantity.SMALL_LENGTH)
-                unit = system.label_for(Quantity.SMALL_LENGTH)
-            except (ValueError, KeyError):
-                value, unit = metres * 100.0, "cm"
+        # v0.1.449 (D408) — the conversion moved to the core, word for word
+        # (D225's ``get_system()`` included), because the PDF report prints
+        # the same displacement and cannot import this window
+        from ogr_slip2d.reported import displacement_in_units
+        value, unit = displacement_in_units(project, metres)
         return ("%.3f %s" % (value, unit),
                 tr("Ky:") + " %.4f" % details.get("ky", float("nan")))
     if kind == "ky":

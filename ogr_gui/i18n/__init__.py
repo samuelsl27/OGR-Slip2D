@@ -7136,6 +7136,15 @@ _DICTS: dict[str, dict[str, str]] = {
             'Posición del eje de momentos',
         'Global Minimum Coordinates':
             'Coordenadas de los mínimos globales',
+        # v0.1.449 (D408) -- a Ky or a Newmark run: why the surface is the
+        # critical one (the lowest Ky of the method whose block it is), and
+        # its factor as a datum of it, never as a minimum
+        'the one with the lowest Ky of this method':
+            'la de menor Ky de este método',
+        '{0} of this surface':
+            '{0} de esta superficie',
+        '{0} of this surface, kh = {1:g}':
+            '{0} de esta superficie, kh = {1:g}',
         'Vertex':
             'Vértice',
         'Imperial Units':

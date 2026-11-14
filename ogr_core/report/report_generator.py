@@ -29,6 +29,9 @@ from typing import Optional
 from xml.sax.saxutils import escape
 
 from ogr_core.geometry.surface_ends import polyline_points, surface_ends
+from ogr_core.project.reported import (KY, NEWMARK, displacement_in_units,
+                                       factor_kh, reported_caption,
+                                       run_caption, standard_note)
 from ogr_core.project.user_surfaces import is_user_surface_of
 
 try:
@@ -440,6 +443,24 @@ def generate_report(
         for note in getattr(factor_report, "notes", None) or []:
             story.append(Paragraph(
                 f"&nbsp;&nbsp;&nbsp;• {escape(str(T(note)))}", body))
+        # v0.1.449 (D408) — on a Ky or a Newmark run, what the reported
+        # values are under the standard: the coefficient and the
+        # displacement are those of the factored model, and the factor
+        # printed beside them is an over-design factor. The sentence the
+        # window's notes panel prints (``MainWindow._factor_report_notes``;
+        # ``shows_factor``: this report gives the factor of the critical
+        # surface too), for the run (``run_caption``: a Newmark displacement
+        # of any method makes it a Newmark run, D397). Only when some method
+        # has a critical surface: with none there is no coefficient and no
+        # factor to qualify (review of 0.1.449). On any other run nothing is
+        # added, and the report is the one it was.
+        seismic = run_caption(list(results.values()), factor_report)
+        if seismic in (KY, NEWMARK) and any(
+                getattr(r, "critical", None) is not None
+                for r in results.values()):
+            note = standard_note(seismic, factor_report, shows_factor=True)
+            story.append(Paragraph(
+                f"&nbsp;&nbsp;&nbsp;• {escape(str(T(note)))}", body))
     # The caption follows the value printed: with partial factors on the
     # inputs the number is an over-design factor, which must exceed 1.
     fs_label = (T("Over-design Factor") if factored
@@ -462,7 +483,17 @@ def generate_report(
             continue
         crit = res.critical
         surf = crit.surface
-        rows = [(fs_label, _fmt(crit.fos, 4))]
+        # v0.1.449 (D408) — the number at the head is the one the run
+        # minimised (``reported_caption``, asked of the result): on a Ky run
+        # the critical surface is the one with the lowest Ky, and on a
+        # Newmark run the one that moves the most, and its factor need not be
+        # the lowest. The block wrote that factor under «Over-design Factor»
+        # as if it were the minimum (1.5463 on the demo slope with c = 20 kPa
+        # and a standard of 1.05, where the lowest admissible factor is
+        # 1.4559), and neither the Ky nor the displacement anywhere.
+        caption = reported_caption(res, factor_report)
+        seismic_head = _seismic_rows(crit, caption, project, T)
+        rows = seismic_head or [(fs_label, _fmt(crit.fos, 4))]
         # v0.1.448 (D404) — whose the surface is, when the user drew it: the
         # critical surface competes over every surface the run analysed
         # (D58), so a hand-drawn one can be the global minimum, and the block
@@ -473,6 +504,17 @@ def generate_report(
         # (``surface_note``), one name for one thing.
         if is_user_surface_of(res, crit):
             rows.append((T("Surface"), T("Defined by the user")))
+        if seismic_head:
+            # v0.1.449 (D408) — the factor as a datum of THIS surface, under
+            # the caption of the standard, never as a minimum; and, when the
+            # project applies a kh of its own, at that kh, which is said:
+            # the Ky beside it is solved over kh from zero (the rule is
+            # ``factor_kh``, in the core; Interpret's «FS(0)» is D409)
+            kh = factor_kh(crit)
+            label = (T("{0} of this surface").format(fs_label) if kh == 0.0
+                     else T("{0} of this surface, kh = {1:g}").format(
+                         fs_label, kh))
+            rows.append((label, _fmt(crit.fos, 4)))
         if hasattr(surf, "centre_x") and surf.centre_x is not None:
             rows += [
                 (T("Centre"), f"({_fmt(surf.centre_x)}, "
@@ -567,7 +609,9 @@ def generate_report(
     if figures:
         section(T("Critical Surface by Method"))
         story.extend(_figure_flowables(figures, results, fs_short,
-                                       width, h_method, T, name_of))
+                                       width, h_method, T, name_of,
+                                       factor_report=factor_report,
+                                       project=project))
 
     # ---- 6. Valid / Invalid Surfaces ------------------------------
     section(T("Valid / Invalid Surfaces"))
@@ -603,9 +647,11 @@ def generate_report(
         if res is None or res.critical is None:
             continue
         # v0.1.447 (D424) — not kept with its table: see ``h_table_method``
+        # v0.1.449 (D408) — with the number the run minimised
         table_heading(
-            T("Method: {0}").format(name_of(mid)) + " — %s = %s" % (
-                fs_short, _fmt(res.critical.fos, 4)), first=(sliced == 0))
+            T("Method: {0}").format(name_of(mid)) + " — " + _headline(
+                res, factor_report, fs_short, project, T),
+            first=(sliced == 0))
         sliced += 1
         story.append(_slice_table(res.critical, project, T))
         story.append(Spacer(1, 8))
@@ -640,10 +686,61 @@ def _same(text):
     return text
 
 
+def _seismic_rows(crit, caption, project, T=_same) -> list:
+    """The head rows of a method's «Global Minimums» block on a Ky or a
+    Newmark run (v0.1.449, D408), empty on any other run.
+
+    In the words the window uses for the same numbers
+    (``ogr_gui.reported_quantity``): the Newmark displacement first when the
+    run integrated one, in the project's unit (``displacement_in_units``, as
+    Interpret prints it); the critical seismic coefficient; and a row that
+    says why this surface is the critical one: of this method's surfaces,
+    it has the lowest Ky, which is what the search minimises under both
+    modes (``surface_score``). It does not say that the surface moves the
+    most: with upslope sliding allowed the displacement is a net one and
+    does not decrease with the Ky (the review of 0.1.449 measured surfaces
+    of a higher Ky that move more). The factor of the surface follows, as a
+    datum of it."""
+    if caption not in (KY, NEWMARK):
+        return []
+    details = getattr(crit, "details", None) or {}
+    rows = []
+    if caption == NEWMARK:
+        value, unit = displacement_in_units(
+            project, details["newmark_displacement"])
+        rows.append((T("Newmark displacement"), "%.3f %s" % (value, unit)))
+    rows.append((T("Critical seismic coefficient"),
+                 _fmt(details.get("ky"), 4)))
+    rows.append((T("Critical surface"),
+                 T("the one with the lowest Ky of this method")))
+    return rows
+
+
+def _headline(res, factor_report, fs_short, project, T=_same) -> str:
+    """``«FS = 1.1081»`` -- the number a method's critical surface is
+    reported by, as the headings of Slice Data and the captions of the
+    figures write it after the method's name. The run's own
+    (``reported_caption``, v0.1.449, D408): its Ky on a Ky run, its
+    displacement on a Newmark run, and its factor otherwise, the text of
+    always."""
+    crit = res.critical
+    caption = reported_caption(res, factor_report)
+    details = getattr(crit, "details", None) or {}
+    if caption == NEWMARK:
+        value, unit = displacement_in_units(
+            project, details["newmark_displacement"])
+        return "%s = %.3f %s" % (T("Newmark displacement"), value, unit)
+    if caption == KY:
+        return "%s = %s" % (T("Ky"), _fmt(details.get("ky"), 4))
+    return "%s = %s" % (fs_short, _fmt(crit.fos, 4))
+
+
 def _figure_flowables(figures, results, fs_short, width, caption_style,
-                      T=_same, name_of=None):
+                      T=_same, name_of=None, *, factor_report=None,
+                      project=None):
     """One figure per method at the page's width, each under its caption:
-    the method and the number it found, called what the run calls it."""
+    the method and the number it found, called what the run calls it
+    (``_headline``)."""
     import io
 
     from reportlab.lib.utils import ImageReader
@@ -654,7 +751,8 @@ def _figure_flowables(figures, results, fs_short, width, caption_style,
         crit = getattr(res, "critical", None)
         caption = T("Method: {0}").format((name_of or _method_name)(mid))
         if crit is not None:
-            caption += f" — {fs_short} = {_fmt(crit.fos, 4)}"
+            caption += " — " + _headline(res, factor_report, fs_short,
+                                         project, T)
         w, h = ImageReader(io.BytesIO(png)).getSize()
         out.append(KeepTogether([
             Paragraph(caption, caption_style),
