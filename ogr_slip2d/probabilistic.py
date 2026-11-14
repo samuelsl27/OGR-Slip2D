@@ -744,6 +744,30 @@ _CPS_TOO_FEW = SM.stat_note(SM.CPS_TOO_FEW)
 _CPS_NOT_IN_EVERY_SAMPLE = SM.stat_note(SM.CPS_NOT_IN_EVERY_SAMPLE)
 
 
+def _draws_from_the_clock(search) -> bool:
+    """Whether ``search`` draws its surfaces at random with no seed: Random
+    Numbers set to "random", so ``analysis_seed()`` is None and every sample
+    draws other surfaces (``random.Random(None)``).
+
+    v0.1.454 (D417, the owner's decision in its review). Such a search does
+    not regenerate its surfaces, though it says it does
+    (``SAME_SURFACES_EVERY_SAMPLE``), so it names no critical probabilistic
+    surface, as a search that steers on its factors names none. Until
+    v0.1.453 that followed by itself: no surface of the search had a factor
+    in every sample. Once the user's surfaces are candidates it no longer
+    does: measured by the review on the demo slope (Path Search of 5,
+    Janbu, a normal cohesion of 30 %, 15 samples, one polyline of the
+    user), the polyline was the only candidate and was published as the
+    critical probabilistic surface with PF 0, beta 15.4 and a mean factor of
+    2.26, never the global minimum of a sample, while the deterministic
+    factor was 1.14. Asked when the surface is chosen and not before the
+    bookkeeping, so a run without user surfaces keeps its
+    ``surfaces_tracked`` and its note. A search with no seed at all (the
+    grid, deterministic) is not one of them: only ``seed`` set to None.
+    """
+    return hasattr(search, "seed") and getattr(search, "seed") is None
+
+
 def _critical_probabilistic_excluded(search, run) -> Optional[str]:
     """Why this run's search can name no critical probabilistic surface.
 
@@ -1109,13 +1133,35 @@ def _accumulate_surfaces(run, per_surface: dict) -> None:
 
     v0.1.202 — admissible ones only: an inadmissible surface has no factor
     of safety to accumulate.
+
+    v0.1.454 (D417) — the surfaces the user defined too
+    (``all_evaluations_of``, the run's own list when there are none), by
+    the owner's decision (option a). The reference names as the critical
+    probabilistic surface the one of lowest reliability index among all the
+    slip surfaces analysed, on one condition: that it exists in every
+    sample, which is why it leaves the optimised ones out (its help speaks
+    of the surfaces of the search and says nothing of the user's). A
+    surface the user defined keeps its geometry from sample to sample, so
+    it CAN meet that condition, and whether it does is decided as for any
+    other, by a factor in every counted sample: a circle that answers by
+    another of its masses in some sample has another key there, and one
+    screened out in some sample has no factor there. Until v0.1.453 only
+    ``run.evaluations`` was read: measured on the demo slope
+    with Path Search of 5, Janbu, a normal cohesion of 20 % deviation and
+    40 Latin Hypercube samples, the user's polyline was the global minimum
+    of every sample and the run's PF 2.5 %, while the critical probabilistic
+    surface published was one of the search, with PF 0 and 0 times the
+    global minimum. A surface of the user that is also one of the search
+    is counted once (``seen``).
     """
+    from .search import all_evaluations_of
+
     left_out = {id(r) for r in (getattr(run, "steered", None) or ())}
     optimized = getattr(run, "optimized", None)
     if optimized is not None:
         left_out.add(id(optimized))
     seen: set = set()
-    for ev in run.evaluations:
+    for ev in all_evaluations_of(run):
         if id(ev) in left_out or not counts_as_sample(ev):
             continue
         sd = ev.surface.to_dict() if hasattr(ev.surface, "to_dict") else None
@@ -1685,10 +1731,11 @@ class SurfaceProbability:
     """Probability statistics accumulated for ONE slip surface across the
     samples of an Overall Slope run.
 
-    v0.1.237 (D87) — one factor per sample in which the search analysed it
-    with an admissible factor, under its exact identity (``_surface_key``).
-    Only one with a factor in every counted sample can be the critical
-    probabilistic surface.
+    v0.1.237 (D87) — one factor per sample in which the run analysed it
+    with an admissible factor, under its exact identity (``_surface_key``):
+    a surface of the search's population or, since v0.1.454 (D417), one
+    the user defined. Only one with a factor in every counted sample can be
+    the critical probabilistic surface.
     """
 
     surface: Optional[dict] = None
@@ -2030,6 +2077,9 @@ def run_overall_slope(
         if values and why_not is None:
             if len(values) < min_evaluations:
                 why_not = _CPS_TOO_FEW
+            elif _draws_from_the_clock(search):
+                # v0.1.454 (D417, the owner's decision in its review)
+                why_not = _CPS_NOT_IN_EVERY_SAMPLE
             else:
                 eligible = [sp for sp in per_surface.values()
                             if sp.statistics.n == len(values)]

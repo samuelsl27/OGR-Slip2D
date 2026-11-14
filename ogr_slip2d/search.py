@@ -561,9 +561,10 @@ def all_evaluations_of(result) -> list:
     polylines). The back analysis reads through it since this version, and
     the Newmark displacements since v0.1.429 (D397), and the API's listings
     since v0.1.442 (D400: ``raw_data_rows`` and the ``filter`` by factor of
-    ``results_query``); the windows are the next ficha of the same tanda
-    (D401). The census of rejected surfaces reads ``evaluations`` alone, on
-    purpose.
+    ``results_query``), the windows since v0.1.443 (D401), and the critical
+    probabilistic surface of an Overall Slope run since v0.1.454 (D417,
+    ``probabilistic._accumulate_surfaces``). The census of rejected surfaces
+    reads ``evaluations`` alone, on purpose.
 
     ``result.all_evaluations()`` when there is one, so a run without user
     surfaces hands back its very ``evaluations`` list, bit for bit
@@ -4196,6 +4197,11 @@ class SlopeSearch(BaseSearch):
         self.num_surfaces = num_surfaces
         self.initial_angle_lower_deg = initial_angle_lower_deg
         self.initial_angle_upper_deg = initial_angle_upper_deg
+        # v0.1.454 (D417) -- kept, as the Block and Path searches keep it:
+        # with None (Random Numbers set to "random") every sample draws other
+        # surfaces, and the Overall Slope run asks it
+        # (``probabilistic._draws_from_the_clock``)
+        self.seed = seed
         self.rng = random.Random(seed)
 
     def nominal_surfaces(self) -> int:
