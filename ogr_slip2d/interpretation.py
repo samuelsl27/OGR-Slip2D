@@ -512,14 +512,13 @@ def slope_intercepts(res) -> tuple:
 
     v0.1.201 — ``to_dict().get("x_left") or x_range()`` treated an
     intercept at x = 0.0 as missing and fell back to the circle's centre
-    minus its radius."""
-    xl, xr = res.surface.x_range()
-    sd = res.surface.to_dict()
-    if sd.get("x_left") is not None:
-        xl = sd["x_left"]
-    if sd.get("x_right") is not None:
-        xr = sd["x_right"]
-    return xl, xr
+    minus its radius.
+
+    v0.1.447 (D424) — the rule moved to the core word for word
+    (``ogr_core.geometry.surface_ends.surface_x_ends``), so the report's
+    «Global Minimums» block asks the same one."""
+    from ogr_core.geometry.surface_ends import surface_x_ends
+    return surface_x_ends(res.surface)
 
 
 def sf_along_slope(search_result, use_left: bool = True,

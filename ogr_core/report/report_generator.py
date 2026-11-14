@@ -28,6 +28,8 @@ from datetime import datetime, timezone
 from typing import Optional
 from xml.sax.saxutils import escape
 
+from ogr_core.geometry.surface_ends import polyline_points, surface_ends
+
 try:
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4, landscape
@@ -35,7 +37,7 @@ try:
     from reportlab.lib.units import mm
     from reportlab.platypus import (
         SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak,
-        HRFlowable,
+        HRFlowable, CondPageBreak,
     )
     _HAS_REPORTLAB = True
 except ImportError:  # pragma: no cover
@@ -283,12 +285,37 @@ def generate_report(
         textColor=colors.HexColor("#2a5a8c"), spaceBefore=8, spaceAfter=3,
         keepWithNext=1,
     )
+    # v0.1.447 (D424) — the heading of a table that may run over a page.
+    # It does NOT keep with what follows: reportlab gathers a flowable that
+    # keeps with the next one INTO one KeepTogether with it, the whole table
+    # included, and a table that did not fit went to the next page whole
+    # and left the rest of the page empty. Measured: a page with nothing but
+    # its foot before the vertices of a long polyline, and, since D351,
+    # 450 to 640 pt empty under Slice Data's first method from about 48
+    # slices on. A ``CondPageBreak`` of ``table_room`` before it keeps it
+    # off a page's foot instead (``table_heading``). Same name as
+    # ``h_method``: it is a method's heading, and the page tests look for
+    # it by that name.
+    h_table_method = ParagraphStyle("OGRMethod", parent=h_method,
+                                    keepWithNext=0)
+    # a heading and the header and first rows of its table
+    table_room = 35 * mm
     body = ParagraphStyle(
         "OGRBody", parent=styles["Normal"], fontSize=9, leading=12,
         fontName=font["regular"],
     )
 
     story = []
+
+    def table_heading(text, first=False):
+        """A method's heading over a table that may run over a page. The
+        first one under its section's heading asks no room of its own: the
+        section asked it before its heading, because the section's heading
+        and rule keep with this one, and a ``CondPageBreak`` between them
+        would sit inside their KeepTogether."""
+        if not first:
+            story.append(CondPageBreak(table_room))
+        story.append(Paragraph(text, h_table_method))
 
     def section(txt):
         story.append(Paragraph(txt, h_sec))
@@ -441,11 +468,32 @@ def generate_report(
                               f"{_fmt(surf.centre_y)})"),
                 (T("Radius"), _fmt(surf.radius)),
             ]
-        x_l = getattr(surf, "x_left", None)
-        x_r = getattr(surf, "x_right", None)
-        if x_l is not None and x_r is not None:
-            y_l = surf.base_y_at(x_l) if hasattr(surf, "base_y_at") else None
-            y_r = surf.base_y_at(x_r) if hasattr(surf, "base_y_at") else None
+        # v0.1.447 (D424) — a polyline (a non-circular search's, or one the
+        # user drew) wrote its factor and its area alone. It is identified
+        # as the reference's report does: the axis its moments were taken
+        # about, kept only by the methods that took one (Bishop and the
+        # Ordinary; Janbu has no axis, and Spencer and GLE do not keep
+        # theirs), its two ends, and its vertices further down. A circle, a
+        # composite and a weak-layer clip carry no polyline and go through
+        # the rows below, unchanged.
+        if polyline_points(surf) is not None:
+            axis = (getattr(crit, "details", None) or {}).get("moment_axis")
+            if axis is not None:
+                rows.append((T("Axis Location"),
+                             f"({_fmt(axis[0])}, {_fmt(axis[1])})"))
+            (pxl, pyl), (pxr, pyr) = surface_ends(surf)
+            rows += [
+                (T("Left Slip Surface Endpoint"),
+                 f"({_fmt(pxl)}, {_fmt(pyl)})"),
+                (T("Right Slip Surface Endpoint"),
+                 f"({_fmt(pxr)}, {_fmt(pyr)})"),
+            ]
+        if (getattr(surf, "x_left", None) is not None
+                and getattr(surf, "x_right", None) is not None):
+            # v0.1.447 (D424) — from the core's rule, the one the engine's
+            # ``slope_intercepts`` asks: bit for bit what this block wrote
+            # (its own ``x_left`` and ``base_y_at`` there)
+            (x_l, y_l), (x_r, y_r) = surface_ends(surf)
             rows += [
                 (T("Left Slip Surface Endpoint"),
                  f"({_fmt(x_l)}, {_fmt(y_l)})"),
@@ -474,6 +522,35 @@ def generate_report(
                 rows.append((T("Load '{0}'").format(load_of(name)), text))
         story.append(kv_table(rows))
         story.append(Spacer(1, 4))
+
+    # ---- 5a. Global Minimum Coordinates ---------------------------
+    # v0.1.447 (D424) — the vertices of each method's critical polyline,
+    # as the reference's report lists them after the block; a report with
+    # no polyline has no such section. The page rules of D351: no heading
+    # at a page's foot (the room of ``table_heading``), the table repeats
+    # its header row over a page break and fits the frame, and it is not
+    # kept together whole (see ``h_table_method``).
+    polylines = []
+    for mid in method_ids:
+        res = results.get(mid)
+        crit = None if res is None else res.critical
+        pts = None if crit is None else polyline_points(crit.surface)
+        if pts:
+            polylines.append((mid, pts))
+    if polylines:
+        story.append(CondPageBreak(table_room + 15 * mm))
+        section(T("Global Minimum Coordinates"))
+        for k, (mid, pts) in enumerate(polylines):
+            table_heading(T("Method: {0}").format(name_of(mid)),
+                          first=(k == 0))
+            vrows = [[T("Vertex"), "X", "Y"]] + [
+                [str(k), _fmt(x), _fmt(y)] for k, (x, y) in enumerate(pts, 1)]
+            cw = [20, 40, 40]
+            t = Table(vrows, colWidths=[c * width / sum(cw) for c in cw],
+                      repeatRows=1)
+            t.setStyle(_grid_style())
+            story.append(t)
+            story.append(Spacer(1, 4))
 
     # ---- 5b. Critical surface by method ---------------------------
     if figures:
@@ -509,13 +586,16 @@ def generate_report(
     # ---- 7. Slice Data --------------------------------------------
     story.append(PageBreak())
     section(T("Slice Data (Global Minimum Query)"))
+    sliced = 0
     for mid in method_ids:
         res = results.get(mid)
         if res is None or res.critical is None:
             continue
-        story.append(Paragraph(
+        # v0.1.447 (D424) — not kept with its table: see ``h_table_method``
+        table_heading(
             T("Method: {0}").format(name_of(mid)) + " — %s = %s" % (
-                fs_short, _fmt(res.critical.fos, 4)), h_method))
+                fs_short, _fmt(res.critical.fos, 4)), first=(sliced == 0))
+        sliced += 1
         story.append(_slice_table(res.critical, project, T))
         story.append(Spacer(1, 8))
 

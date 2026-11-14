@@ -7131,6 +7131,13 @@ _DICTS: dict[str, dict[str, str]] = {
             'Ajustes generales',
         'Global Minimums':
             'Mínimos globales',
+        # v0.1.447 (D424) -- a critical polyline, identified
+        'Axis Location':
+            'Posición del eje de momentos',
+        'Global Minimum Coordinates':
+            'Coordenadas de los mínimos globales',
+        'Vertex':
+            'Vértice',
         'Imperial Units':
             'Unidades imperiales',
         'Invalid':
