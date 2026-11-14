@@ -288,11 +288,16 @@ class TestTheReferencePolyline:
             pts = [(v.x, v.y) for v in c.surface.polyline.vertices]
             assert len(pts) == 6, (mid, pts)
 
+    #: v0.1.448 (D404) -- the row that says whose the surface is, right after
+    #: the factor: this polyline is the user's (the premise above), so every
+    #: block of this class carries it, and what follows moved two cells on.
+    _USERS = ["Surface", "Defined by the user"]
+
     def test_bishop_names_its_axis_and_its_ends(self):
         p, results = _ej1()
         block = _block(_capture(p, results), "Method: Bishop Simplified")
         assert block[1:3] == ["Factor of Safety (FS)", "0.9239"], block
-        assert block[3:] == [
+        assert block[3:] == self._USERS + [
             "Axis Location", _REFERENCE["axis"],
             "Left Slip Surface Endpoint", _REFERENCE["left"],
             "Right Slip Surface Endpoint", _REFERENCE["right"],
@@ -302,7 +307,8 @@ class TestTheReferencePolyline:
         """It keeps one, as Bishop does, and the reference gives it."""
         p, results = _ej1()
         block = _block(_capture(p, results), "Method: Ordinary / Fellenius")
-        assert block[3:5] == ["Axis Location", _REFERENCE["axis"]], block
+        assert block[3:7] == self._USERS + [
+            "Axis Location", _REFERENCE["axis"]], block
 
     def test_janbu_and_spencer_name_their_ends_and_no_axis(self):
         """The owner's decision: the row comes with the axis the method
@@ -312,7 +318,7 @@ class TestTheReferencePolyline:
         for heading in ("Method: Janbu Simplified", "Method: Spencer"):
             block = _block(part, heading)
             assert "Axis Location" not in block, (heading, block)
-            assert block[3:] == [
+            assert block[3:] == self._USERS + [
                 "Left Slip Surface Endpoint", _REFERENCE["left"],
                 "Right Slip Surface Endpoint", _REFERENCE["right"],
                 "Total Slice Area", _REFERENCE["area"]], (heading, block)

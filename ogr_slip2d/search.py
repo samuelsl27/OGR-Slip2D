@@ -580,11 +580,11 @@ def all_evaluations_of(result) -> list:
     return own + list(user) if user else own
 
 
-def is_user_surface_of(result, evaluation) -> bool:
-    """Whether ``evaluation`` is one of the surfaces the user drew, by
-    identity, for anything that looks like a ``SearchResult`` (v0.1.428)."""
-    user = getattr(result, "user_evaluations", None) or ()
-    return any(r is evaluation for r in user)
+# v0.1.448 (D404) -- ``is_user_surface_of`` lives in the core since this
+# version, so that the PDF report asks the same rule as the windows, the API
+# and the back analysis; it is re-exported here under its name, and every
+# caller keeps importing it from this module.
+from ogr_core.project.user_surfaces import is_user_surface_of  # noqa: E402,F401
 
 
 # ======================================================================

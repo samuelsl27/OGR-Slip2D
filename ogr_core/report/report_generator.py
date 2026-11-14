@@ -29,6 +29,7 @@ from typing import Optional
 from xml.sax.saxutils import escape
 
 from ogr_core.geometry.surface_ends import polyline_points, surface_ends
+from ogr_core.project.user_surfaces import is_user_surface_of
 
 try:
     from reportlab.lib import colors
@@ -462,6 +463,16 @@ def generate_report(
         crit = res.critical
         surf = crit.surface
         rows = [(fs_label, _fmt(crit.fos, 4))]
+        # v0.1.448 (D404) — whose the surface is, when the user drew it: the
+        # critical surface competes over every surface the run analysed
+        # (D58), so a hand-drawn one can be the global minimum, and the block
+        # read exactly as one of the search's. Asked by the rule the windows,
+        # the API and the back analysis ask, which moved to the core for this
+        # (the core does not import the engine): a result without the user's
+        # list writes no row. The words are the windows' since D401
+        # (``surface_note``), one name for one thing.
+        if is_user_surface_of(res, crit):
+            rows.append((T("Surface"), T("Defined by the user")))
         if hasattr(surf, "centre_x") and surf.centre_x is not None:
             rows += [
                 (T("Centre"), f"({_fmt(surf.centre_x)}, "
