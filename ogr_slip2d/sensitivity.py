@@ -270,8 +270,10 @@ def run_sensitivity(
     if prepare is None:
         prepare = _analysis_copy
 
-    usable = [rv for rv in variables
-              if abs(rv.distribution.high - rv.distribution.low) > 1e-15]
+    # v0.1.453 (D416) -- the run's rule of an empty range, not a copy of
+    # its threshold (``high - low`` is never negative: both ends are taken
+    # with ``abs``, so the ``abs`` this replaced changed nothing)
+    usable = [rv for rv in variables if rv.distribution.has_range]
     if not usable:
         _publish_note(res, "error", SM.stat_note(SM.NO_RANGE))
         return res

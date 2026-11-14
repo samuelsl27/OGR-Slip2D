@@ -49,6 +49,17 @@ VAR_ORPHAN = S + "var_orphan"
 VARS_HYDRAULIC_ONLY = S + "vars_hydraulic_only"
 VARS_HYDRAULIC = S + "vars_hydraulic"
 VAR_HYDRAULIC = S + "var_hydraulic"
+#: v0.1.453 (the review of D416) -- the variables a probabilistic run does
+#: not sample, grouped by the reason the core gives
+#: (``Distribution.not_random_reason``), and the correlations it cannot
+#: apply. Until then they were left out without a word.
+VARS_NOT_RANDOM_ONLY = S + "vars_not_random_only"
+VARS_NOT_RANDOM = S + "vars_not_random"
+NOT_RANDOM_NONE = S + "not_random_none"
+NOT_RANDOM_RANGE = S + "not_random_range"
+NOT_RANDOM_STD = S + "not_random_std"
+NOT_RANDOM_MEAN = S + "not_random_mean"
+CORRELATION_NOT_APPLIED = S + "correlation_not_applied"
 #: v0.1.425 (D376) -- samples and sweep points that break a rule the run
 #: itself refuses, counted per rule (said, never refused: option C).
 SAMPLES_BREAK_RULES = S + "samples_break_rules"
@@ -172,6 +183,31 @@ STAT_NOTES = {s.code: s for s in (
                 "hydraulic, and the seepage is not solved again for each "
                 "point, so it was not swept: {key}",
                 kinds=(("key", "variable_key"),)),
+    # each group in parentheses and the groups apart by ", ": the window
+    # joins the labels of a group with "; " and the notes with "; " too
+    # (the second review of 0.1.453)
+    MessageSpec(VARS_NOT_RANDOM_ONLY,
+                "No random variable can be sampled, so nothing was "
+                "computed: {reasons}",
+                seps=(("reasons", ", "),)),
+    MessageSpec(VARS_NOT_RANDOM,
+                "{n} of the {total} random variables cannot be sampled and "
+                "were left out: {reasons}",
+                seps=(("reasons", ", "),)),
+    MessageSpec(NOT_RANDOM_NONE, "no distribution ({keys})",
+                kinds=(("keys", "variable_keys"),)),
+    MessageSpec(NOT_RANDOM_RANGE, "an empty range ({keys})",
+                kinds=(("keys", "variable_keys"),)),
+    MessageSpec(NOT_RANDOM_STD, "no standard deviation ({keys})",
+                kinds=(("keys", "variable_keys"),)),
+    MessageSpec(NOT_RANDOM_MEAN,
+                "a mean that is not positive in a distribution of positive "
+                "values only ({keys})",
+                kinds=(("keys", "variable_keys"),)),
+    MessageSpec(CORRELATION_NOT_APPLIED,
+                "The correlation of {key} with {other} was not applied: "
+                "{other} is not sampled.",
+                kinds=(("key", "variable_key"), ("other", "variable_key"))),
     MessageSpec(SAMPLES_BREAK_RULES,
                 "{n} of the {total} samples break a rule for which the "
                 "analysis is refused, and were evaluated anyway: {rules}",

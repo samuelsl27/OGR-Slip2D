@@ -653,6 +653,40 @@ _LATER = [
      'code': 'stat.rule_counted',
      'english': '3 times, the first: kh must not be negative, got -0.1.',
      'args': {'n': 3, 'rule': {'$raw': 'kh must not be negative, got -0.1.'}}},
+    # v0.1.453 (the review of D416) — the variables a probabilistic run does
+    # not sample, by the core's reason, and the correlations it cannot apply
+    {'cat': 'stat',
+     'code': 'stat.vars_not_random_only',
+     'english': 'No random variable can be sampled, so nothing was computed: '
+                'no distribution (seismic::kv), no standard deviation '
+                '(material_strength:m1:cohesion)',
+     'args': {'reasons': [
+         {'$code': 'stat.not_random_none', '$cat': 'stat',
+          '$args': {'keys': 'seismic::kv'}},
+         {'$code': 'stat.not_random_std', '$cat': 'stat',
+          '$args': {'keys': 'material_strength:m1:cohesion'}}]}},
+    {'cat': 'stat',
+     'code': 'stat.vars_not_random',
+     'english': '4 of the 5 random variables cannot be sampled and were left '
+                'out: an empty range (material:m1:unit_weight), no standard '
+                'deviation (material_strength:m1:cohesion, '
+                'material:m1:sat_unit_weight), a mean that is not positive '
+                'in a distribution of positive values only (seismic::kh)',
+     'args': {'n': 4, 'total': 5, 'reasons': [
+         {'$code': 'stat.not_random_range', '$cat': 'stat',
+          '$args': {'keys': 'material:m1:unit_weight'}},
+         {'$code': 'stat.not_random_std', '$cat': 'stat',
+          '$args': {'keys': 'material_strength:m1:cohesion, '
+                            'material:m1:sat_unit_weight'}},
+         {'$code': 'stat.not_random_mean', '$cat': 'stat',
+          '$args': {'keys': 'seismic::kh'}}]}},
+    {'cat': 'stat',
+     'code': 'stat.correlation_not_applied',
+     'english': 'The correlation of material_strength:m1:friction_angle with '
+                'material_strength:m1:cohesion was not applied: '
+                'material_strength:m1:cohesion is not sampled.',
+     'args': {'key': 'material_strength:m1:friction_angle',
+              'other': 'material_strength:m1:cohesion'}},
 ]
 
 
@@ -793,6 +827,8 @@ _CODED = {
     "ogr_slip2d/probabilistic.py": (
         "_cannot_reevaluate", "_type_refusal", "_publish_note",
         "_stale_variables_stop", "_hydraulic_variables_stop",
+        # v0.1.453 (the review of D416)
+        "_sampled_variables",
         "_SampleRules.see", "_SampleRules.publish",
         "_MassSwitches.where",
         "_MassSwitches.sentence", "_case_text", "_spans", "_case",

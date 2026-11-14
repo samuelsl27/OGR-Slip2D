@@ -48,6 +48,7 @@ from ogr_core.statistics import (
     VariableKind,
     available_variables,
 )
+from ogr_core.statistics.distributions import USES_STD_DEV
 from ogr_gui.i18n import tr  # noqa: E402
 from ogr_gui.dialog_size import list_width
 from ogr_gui.disabled_reasons import gate
@@ -67,9 +68,32 @@ _DIST_LABELS = [
     (DistributionType.NONE, "No distribution"),
 ]
 
-# Distributions that take a standard deviation
-_USES_STD = {DistributionType.NORMAL, DistributionType.LOGNORMAL,
-             DistributionType.BETA, DistributionType.GAMMA}
+# Distributions that take a standard deviation: the core's list, which the
+# run reads too (v0.1.453, D416)
+_USES_STD = USES_STD_DEV
+
+
+def not_random_text(why: str) -> str:
+    """The reader's sentence for a reason of the core's
+    ``Distribution.not_random_reason`` (the dialog's greyed Plot button).
+    A module function since v0.1.453, so a test can ask it for every reason
+    the core gives without building the dialog; an unknown reason is shown
+    as it came."""
+    reasons = {
+        "none": tr("This variable has no distribution: it is not random."),
+        "no_range": tr("The range is empty: enter a relative minimum or a "
+                       "relative maximum."),
+        # v0.1.453 (D416) -- the beta and the gamma too, so the reason no
+        # longer names two of the four
+        "no_std_dev": tr("This distribution needs a standard deviation "
+                         "greater than zero."),
+        # the review of 0.1.453 -- the mean is the model's value, so what
+        # can be changed here is the distribution
+        "no_positive_mean": tr("This distribution takes only positive "
+                               "values, and the mean is not positive: "
+                               "choose another distribution."),
+    }
+    return reasons.get(why, why)
 
 
 class RandomVariablesDialog(QDialog):
@@ -353,16 +377,8 @@ class RandomVariablesDialog(QDialog):
         if key is None or key not in self.defined:
             return tr("Select a random variable first.")
         why = self.defined[key].distribution.not_random_reason()
-        reasons = {
-            "none": tr("This variable has no distribution: it is not "
-                       "random."),
-            "no_range": tr("The range is empty: enter a relative minimum or "
-                           "a relative maximum."),
-            "no_std_dev": tr("A normal or lognormal distribution needs a "
-                             "standard deviation greater than zero."),
-        }
         if why:
-            return reasons.get(why, why)
+            return not_random_text(why)
         import importlib.util
         if importlib.util.find_spec("matplotlib") is None:
             return tr("matplotlib is not installed.")

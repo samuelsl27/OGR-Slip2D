@@ -341,7 +341,11 @@ def _variable(project, dist_type=None):
 class TestTheRandomVariablesPlot:
 
     def test_the_reason_is_the_rule_of_is_random(self):
-        """The three conditions written out here, in the core's order."""
+        """The conditions written out here, in the core's order, with a
+        positive mean. v0.1.453 (D416): the beta and the gamma need a
+        deviation too; the fourth condition, a positive mean for the
+        distributions of positive values only, is the table of
+        ``test_random_variable_rule_v1453``."""
         from ogr_core.statistics.distributions import (Distribution,
                                                        DistributionType as T)
         for t in T:
@@ -351,7 +355,8 @@ class TestTheRandomVariablesPlot:
                                      rel_min=lo, rel_max=hi)
                     want = ("none" if t is T.NONE
                             else "no_range" if lo == hi == 0.0
-                            else "no_std_dev" if t in (T.NORMAL, T.LOGNORMAL)
+                            else "no_std_dev" if t in (T.NORMAL, T.LOGNORMAL,
+                                                       T.BETA, T.GAMMA)
                             and std <= 0 else "")
                     assert d.not_random_reason() == want, (t, std, lo, hi)
                     assert d.is_random == (not want)
@@ -391,8 +396,10 @@ class TestTheRandomVariablesPlot:
         assert states == [
             (False, "Selecciona antes una variable aleatoria."),
             (True, ""),
-            (False, "Una distribución normal o lognormal necesita una "
-                    "desviación típica mayor que cero."),
+            # v0.1.453 (D416): the reason names no distribution, since four
+            # need a deviation
+            (False, "Esta distribución necesita una desviación típica "
+                    "mayor que cero."),
             (False, "El rango está vacío: introduce un mínimo relativo o un "
                     "máximo relativo."),
             (False, "Esta variable no tiene distribución: no es aleatoria."),

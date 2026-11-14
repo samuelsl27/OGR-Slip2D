@@ -1150,8 +1150,13 @@ _DICTS: dict[str, dict[str, str]] = {
             'Esta variable no tiene distribución: no es aleatoria.',
         'The range is empty: enter a relative minimum or a relative maximum.':
             'El rango está vacío: introduce un mínimo relativo o un máximo relativo.',
-        'A normal or lognormal distribution needs a standard deviation greater than zero.':
-            'Una distribución normal o lognormal necesita una desviación típica mayor que cero.',
+        # v0.1.453 (D416) -- the beta and the gamma need one too
+        'This distribution needs a standard deviation greater than zero.':
+            'Esta distribución necesita una desviación típica mayor que cero.',
+        'This distribution takes only positive values, and the mean is not '
+        'positive: choose another distribution.':
+            'Esta distribución solo toma valores positivos, y la media no es '
+            'positiva: elige otra distribución.',
         # the sensitivity charts name the method they draw
         'Sensitivity — {0}': 'Sensibilidad — {0}',
         'Sensitivity Tornado — {0}': 'Tornado de sensibilidad — {0}',
@@ -7066,6 +7071,26 @@ _DICTS: dict[str, dict[str, str]] = {
         'it was not swept: {key}':
             'hidráulica, y la filtración no se vuelve a resolver en cada '
             'punto, así que no se ha barrido: {key}',
+        # v0.1.453 (the review of D416) -- what a run does not sample, and why
+        'No random variable can be sampled, so nothing was computed: '
+        '{reasons}':
+            'No se puede muestrear ninguna variable aleatoria, así que no se '
+            'ha calculado nada: {reasons}',
+        '{n} of the {total} random variables cannot be sampled and were left '
+        'out: {reasons}':
+            '{n} de las {total} variables aleatorias no se pueden muestrear y '
+            'se han dejado fuera: {reasons}',
+        'no distribution ({keys})': 'sin distribución ({keys})',
+        'an empty range ({keys})': 'con el rango vacío ({keys})',
+        'no standard deviation ({keys})': 'sin desviación típica ({keys})',
+        'a mean that is not positive in a distribution of positive values '
+        'only ({keys})':
+            'con una media que no es positiva en una distribución solo de '
+            'valores positivos ({keys})',
+        'The correlation of {key} with {other} was not applied: {other} is '
+        'not sampled.':
+            'La correlación de {key} con {other} no se ha aplicado: {other} '
+            'no se muestrea.',
         # v0.1.425 (D376) -- samples that break a rule the run refuses
         '{n} of the {total} samples break a rule for which the analysis is '
         'refused, and were evaluated anyway: {rules}':

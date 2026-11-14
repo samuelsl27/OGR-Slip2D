@@ -81,6 +81,32 @@ class SamplingMethod(Enum):
     LATIN_HYPERCUBE = "latin_hypercube"
 
 
+#: The distributions parameterised by a standard deviation, which without
+#: one are not random (v0.1.453, D416). The one list the run, the agent's
+#: rule, the dialog's field and the agent's "std_dev is not read" note ask:
+#: until v0.1.452 each of the four had its own copy, and the run's lacked
+#: the beta and the gamma.
+USES_STD_DEV = frozenset({DistributionType.NORMAL, DistributionType.LOGNORMAL,
+                          DistributionType.BETA, DistributionType.GAMMA})
+
+#: The distributions of positive values only, which with a mean that is not
+#: positive are not random (v0.1.453, the review of D416): their mean is
+#: clamped to 1e-12 (the lognormal's and the gamma's in ``_frozen``, the
+#: exponential's in ``cdf``, ``ppf`` and ``pdf``), so a mean of 0 draws
+#: values of 1e-33 to 6e-12, and a range wholly below zero leaves the
+#: truncation nothing and every sample at the mean.
+POSITIVE_ONLY = frozenset({DistributionType.LOGNORMAL, DistributionType.GAMMA,
+                           DistributionType.EXPONENTIAL})
+
+#: At or below this ``high - low`` the range is empty (v0.1.453, D416: the
+#: run's threshold, which the agent's rule and the sensitivity analysis now
+#: ask instead of their own copies). So is one that is not a number (a NaN
+#: mean or end, which only a hand-edited file carries): ``has_range`` asks
+#: ``> EMPTY_RANGE``, as the sensitivity did, where the run asked
+#: ``<= 1e-15`` and so sampled NaN (the second review of 0.1.453).
+EMPTY_RANGE = 1e-15
+
+
 # ======================================================================
 @dataclass
 class Distribution:
@@ -114,20 +140,73 @@ class Distribution:
         """False when the variable is effectively deterministic."""
         return not self.not_random_reason()
 
+    @property
+    def has_range(self) -> bool:
+        """Whether the minimum and the maximum are apart (``EMPTY_RANGE``).
+        Asked by :meth:`not_random_reason`, by the agent's rule
+        (``random_variables.variable_problems``) and by the sensitivity
+        analysis, which sweeps exactly that range (v0.1.453, D416)."""
+        return self.high - self.low > EMPTY_RANGE
+
+    @property
+    def lacks_std_dev(self) -> bool:
+        """Whether this distribution reads a standard deviation
+        (``USES_STD_DEV``) and has none (v0.1.453, D416): none is also a
+        deviation that is not a finite number, which a project file can
+        carry (the review of 0.1.453). Measured with v0.1.452, mean 15,
+        range ±3, 20 Latin Hypercube samples: a NaN one sampled NaN in the
+        four; an infinite one drew the mean every time with the normal and
+        the gamma, NaN with the lognormal and only the two ends, 12 and 18,
+        with the beta."""
+        return (self.dist_type in USES_STD_DEV
+                and not 0.0 < self.std_dev < math.inf)
+
+    @property
+    def lacks_positive_mean(self) -> bool:
+        """Whether this distribution takes only positive values
+        (``POSITIVE_ONLY``) and its mean is not positive (v0.1.453, the
+        review of D416). Measured with v0.1.452, 200 Latin Hypercube samples
+        with seed 1: an exponential of mean 0 and range ±0.1 drew 6.7e-16 to
+        6.0e-12, a lognormal of mean 0 3.4e-33 to 7.2e-15, and a lognormal,
+        a gamma or an exponential of mean −5 drew −5 every time. A kh, a kv
+        or a water-table offset has a mean of 0 by design."""
+        return self.dist_type in POSITIVE_ONLY and not self.mean > 0.0
+
     def not_random_reason(self) -> str:
         """Why the variable is not random: ``"none"`` (no distribution),
-        ``"no_range"`` (minimum and maximum at the mean) or ``"no_std_dev"``
-        (a normal or lognormal without a standard deviation); ``""`` when it
-        is random. The one rule :attr:`is_random` reads, in the same order
-        (v0.1.435, D413: the window named one reason for all three)."""
+        ``"no_range"`` (minimum and maximum at the mean), ``"no_std_dev"``
+        (a distribution of ``USES_STD_DEV`` without a standard deviation)
+        or ``"no_positive_mean"`` (a distribution of ``POSITIVE_ONLY`` whose
+        mean is not positive); ``""`` when it is random. The one rule
+        :attr:`is_random` reads, in this order (v0.1.435, D413: the window
+        named one reason for all three; the fourth since the review of
+        0.1.453).
+
+        v0.1.453 (D416) — the beta and the gamma too. Until v0.1.452 only
+        the normal and the lognormal needed a deviation here, while the
+        agent's rule refused all four. Without one, a beta or a gamma is a
+        point mass at its mean (its variance is the square of the
+        deviation), and the core only drew it as one because of its guards
+        (:meth:`_frozen`): the beta's deviation clamped to 1e-12, the
+        gamma's scale to 1e-12, which leaves it a deviation of 3.9e-6 at a
+        mean of 15. Measured with v0.1.452, mean 15, range ±3, 200 Latin
+        Hypercube samples with seed 1: the beta from 15.000000 to 15.000000,
+        the gamma from 14.999988 to 15.000011, and both curves 0 over the
+        whole range. They were random for the run, which spent a stream of
+        the generator on each, and the dialog plotted them flat. Leaving
+        one out now changes, with the same seed, the samples of the
+        variables after it (:func:`sample_variables`), and the order of a
+        variable correlated with it, which is no longer rank-reordered
+        against a constant (``sample_project_variables``).
+        """
         if self.dist_type == DistributionType.NONE:
             return "none"
-        if self.high - self.low <= 1e-15:
+        if not self.has_range:
             return "no_range"
-        if (self.dist_type in (DistributionType.NORMAL,
-                              DistributionType.LOGNORMAL)
-                and self.std_dev <= 0):
+        if self.lacks_std_dev:
             return "no_std_dev"
+        if self.lacks_positive_mean:
+            return "no_positive_mean"
         return ""
 
     # ------------------------------------------------------------------

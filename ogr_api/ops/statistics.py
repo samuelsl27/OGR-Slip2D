@@ -129,8 +129,10 @@ def random_variable_set(ws, key: str, project_id: Optional[str] = None,
         bad = variable_problems(rv, others)
         if bad:
             raise InvalidArgument(" ".join(bad), details={"problems": bad})
-        if std_dev is not None and d.dist_type.value in (
-                "uniform", "triangular", "exponential", "none"):
+        # v0.1.453 (D416) -- the core's list of what reads a deviation; the
+        # four written out here were its complement, by hand
+        from ogr_core.statistics.distributions import USES_STD_DEV
+        if std_dev is not None and d.dist_type not in USES_STD_DEV:
             notes.append(f"std_dev is not read by a {d.dist_type.value} "
                          f"distribution.")
         new = [rv if r.key == key else r for r in project.random_variables]

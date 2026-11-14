@@ -537,6 +537,72 @@ def _hydraulic_keys(variables) -> list:
     return [rv.key for rv in variables if rv.kind == VariableKind.HYDRAULIC]
 
 
+#: The core's reasons a variable is not random (``not_random_reason``), each
+#: with its code, in the core's order (v0.1.453, the review of D416).
+_NOT_RANDOM = {"none": SM.NOT_RANDOM_NONE, "no_range": SM.NOT_RANDOM_RANGE,
+               "no_std_dev": SM.NOT_RANDOM_STD,
+               "no_positive_mean": SM.NOT_RANDOM_MEAN}
+
+
+def _sampled_variables(result, variables):
+    """The variables of ``variables`` this run samples, saying which it
+    leaves out and why, or None when it has to stop before sampling.
+
+    v0.1.453 (the review of D416). Both analyses sample only what
+    ``is_random`` calls random, and until then they left the rest out
+    without a word. Measured with v0.1.452 on the demo slope: a normal
+    cohesion without a deviation next to a normal friction angle left no
+    note at all, and alone it stopped the run with ``stat.no_variables``,
+    which says no parameter was given "a statistical distribution" -- false
+    for a normal that has one. Now:
+
+    * no variable at all: ``stat.no_variables``, as always;
+    * none of them random: an error naming each by the core's reason;
+    * some of them: a warning naming them, grouped by reason in the core's
+      order, and the run goes on with the others. A variable with no
+      distribution is left out without one: that is how a variable is
+      switched off (D413), and the Statistics window shows the warnings as
+      what the run could not do (the owner's decision, the second review
+      of 0.1.453);
+    * a correlation whose partner is not sampled
+      (``unapplied_correlations``, the sampler's own conditions): a warning
+      each, since the sampler skips it in silence.
+    """
+    from ogr_core.statistics.random_variables import unapplied_correlations
+
+    if not variables:
+        _publish_note(result, "error", SM.stat_note(SM.NO_VARIABLES))
+        return None
+    active = [rv for rv in variables if rv.distribution.is_random]
+    grouped: dict = {}
+    for rv in variables:
+        why = rv.distribution.not_random_reason()
+        if why:
+            grouped.setdefault(why, []).append(rv.key)
+
+    def reasons(whys) -> list:
+        return [as_nested(SM.stat_note(code, keys=", ".join(grouped[why])))
+                for why, code in _NOT_RANDOM.items() if why in whys]
+
+    if not active:
+        _publish_note(result, "error",
+                      SM.stat_note(SM.VARS_NOT_RANDOM_ONLY,
+                                   reasons=reasons(grouped)))
+        return None
+    said = [why for why in grouped if why != "none"]
+    if said:
+        _publish_note(result, "warning",
+                      SM.stat_note(SM.VARS_NOT_RANDOM,
+                                   n=sum(len(grouped[why]) for why in said),
+                                   total=len(variables),
+                                   reasons=reasons(said)))
+    for key, other in unapplied_correlations(variables):
+        _publish_note(result, "warning",
+                      SM.stat_note(SM.CORRELATION_NOT_APPLIED, key=key,
+                                   other=other))
+    return active
+
+
 def _hydraulic_variables_stop(result, variables) -> bool:
     """Say which of ``variables`` cannot reach a factor of safety, and
     whether the run has to stop before sampling.
@@ -1386,9 +1452,9 @@ def run_global_minimum(
     if prepare is None:
         prepare = _analysis_copy
 
-    active = [rv for rv in variables if rv.distribution.is_random]
-    if not active:
-        _publish_note(result, "error", SM.stat_note(SM.NO_VARIABLES))
+    # v0.1.453 (the review of D416) -- and say what is left out, and why
+    active = _sampled_variables(result, variables)
+    if active is None:
         return result
     # v0.1.423 (D372) — before anything is drawn, as the line above.
     if _hydraulic_variables_stop(result, active):
@@ -1849,9 +1915,9 @@ def run_overall_slope(
     if prepare is None:
         prepare = _analysis_copy
 
-    active = [rv for rv in variables if rv.distribution.is_random]
-    if not active:
-        _publish_note(result, "error", SM.stat_note(SM.NO_VARIABLES))
+    # v0.1.453 (the review of D416) -- and say what is left out, and why
+    active = _sampled_variables(result, variables)
+    if active is None:
         return result
     # v0.1.423 (D372) — as in ``run_global_minimum``.
     if _hydraulic_variables_stop(result, active):

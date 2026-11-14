@@ -387,14 +387,40 @@ def sample_project_variables(variables: list, n: int, method, seed=None,
 
     by_key = {rv.key: rv for rv in active}
     for rv in active:
-        if not rv.correlated_with or abs(rv.correlation) < 1e-12:
+        if not _declares_correlation(rv):
             continue
         other = by_key.get(rv.correlated_with)
         if other is None or other.key not in samples:
+            # said by the run: ``unapplied_correlations``
             continue
         samples[rv.key] = correlate_pair(
             samples[other.key], samples[rv.key], rv.correlation)
     return samples
+
+
+def _declares_correlation(rv) -> bool:
+    # the sampler's old test to the letter, «not < 1e-12» and not «>= 1e-12»:
+    # they part on NaN, which a hand-edited file can carry and which 0.1.452
+    # applied (``correlate_pair`` clamps it to 1); the second review of
+    # 0.1.453 measured that ">=" reordered it differently, in silence
+    return bool(rv.correlated_with) and not abs(rv.correlation) < 1e-12
+
+
+def unapplied_correlations(variables: list) -> list:
+    """``(key, partner key)`` of each correlation that
+    :func:`sample_project_variables` declares and does not apply: the
+    variable is sampled and the one it is correlated with is not, because
+    it is not random or is not defined at all.
+
+    v0.1.453 (the review of D416). The sampler skips such a pair without a
+    word, and the run published nothing either, so a correlation the user
+    entered did nothing (rule 7). The same conditions as the sampler, which
+    asks ``_declares_correlation`` and ``is_random`` too.
+    """
+    sampled = {rv.key for rv in variables if rv.distribution.is_random}
+    return [(rv.key, rv.correlated_with) for rv in variables
+            if rv.key in sampled and _declares_correlation(rv)
+            and rv.correlated_with not in sampled]
 
 
 # ======================================================================
@@ -427,21 +453,40 @@ def forget_variable(variables: list, key: str) -> list:
 
 def variable_problems(rv: RandomVariable, keys) -> list:
     """What makes ``rv`` unusable next to the variables keyed ``keys``;
-    empty when nothing does."""
+    empty when nothing does.
+
+    v0.1.453 (D416) — whether the variable is random is not decided here:
+    the conditions are the run's (``Distribution.lacks_std_dev``,
+    ``Distribution.has_range`` and ``Distribution.lacks_positive_mean``, the
+    ones ``not_random_reason`` composes), so the agent refuses exactly what
+    the run would not sample. They are asked one by one, the first two in
+    their old order, because a variable can fail several and the agent's
+    ``details.problems`` has always listed each. Until v0.1.452 the two
+    rules disagreed twice: the run sampled a beta or a gamma without a
+    deviation, and this accepted a range below the run's threshold, 1e-15.
+    And both called random a lognormal, a gamma or an exponential whose mean
+    is not positive, which drew (almost) its mean every time (the review of
+    0.1.453). A variable with no distribution is accepted on purpose: it is
+    how an agent switches one off (D413).
+    """
     from .distributions import DistributionType
 
     d = rv.distribution
     out = []
     if d.std_dev < 0 or d.rel_min < 0 or d.rel_max < 0:
         out.append("std_dev, rel_min and rel_max cannot be negative.")
-    if d.dist_type in (DistributionType.NORMAL, DistributionType.LOGNORMAL,
-                       DistributionType.BETA, DistributionType.GAMMA) \
-            and d.std_dev <= 0:
+    if d.lacks_std_dev:
         out.append(f"A {d.dist_type.value} distribution needs a positive "
                    f"std_dev; with none the variable is not random.")
-    if d.dist_type != DistributionType.NONE and d.high - d.low <= 0:
+    if d.dist_type != DistributionType.NONE and not d.has_range:
         out.append("rel_min + rel_max must be positive: a zero range is "
                    "not random.")
+    # the review of 0.1.453 -- the fourth reason of the core, last so the
+    # messages above keep their order
+    if d.lacks_positive_mean:
+        out.append(f"A {d.dist_type.value} distribution takes only positive "
+                   f"values; with a mean of {d.mean:g} the variable is not "
+                   f"random.")
     if rv.correlated_with is not None:
         if rv.correlated_with == rv.key:
             out.append("A variable cannot be correlated with itself.")
