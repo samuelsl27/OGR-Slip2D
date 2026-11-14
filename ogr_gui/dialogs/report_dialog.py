@@ -43,10 +43,14 @@ class ReportDialog(QDialog):
 
         self.chk_figures = QCheckBox(tr("Critical surface of each method"))
         self.chk_figures.setChecked(True)
+        # v0.1.450 (D423) -- on a seismic run the contours are of its own
+        # number, and the tooltip said "factor of safety" of them
         self.chk_figures.setToolTip(tr(
             "One figure per method: the model, that method's critical "
-            "surface and, with a grid of slip centres, the contours of the "
-            "minimum factor of safety at each centre."))
+            "surface and, with a grid of slip centres, the contours at each "
+            "centre of the number the run reports: the minimum factor of "
+            "safety or, on a Ky or a Newmark run, the minimum Ky or the "
+            "maximum Newmark displacement."))
         v.addWidget(self.chk_figures)
 
         self.gb_framing = QGroupBox(tr("Framing"))

@@ -6,13 +6,15 @@ The figures of the PDF report: one per method (v0.1.339, D336).
 The report (``ogr_core.report.report_generator``) was tables and text, with
 no drawing of the model at all. By decision of the owner it carries one
 figure per method: the model, that method's critical surface, the annotation
-layer and, when the search had a grid of slip centres, the contours of the
-minimum factor of safety at each centre with the critical centre marked —
-framed on the model alone or on the model and the whole area the grid
-searched, the same frame for every figure so that they compare.
+layer and, when the search had a grid of slip centres, the contours at each
+centre of the number the run reports (the minimum factor of safety; since
+v0.1.450, D423, the minimum Ky or the maximum Newmark displacement on a
+seismic run) with the critical centre marked — framed on the model alone or
+on the model and the whole area the grid searched, the same frame for every
+figure so that they compare.
 
 They are built here, above the core, because they need the engine's reading
-of a search (``ogr_slip2d.interpretation.minimum_per_centre``) and the
+of a search (``ogr_slip2d.interpretation.critical_per_centre``) and the
 picture ``render.render_png`` draws; the core embeds the bytes it is given.
 The window and the ``report_generate`` operation both call
 :func:`method_figures`.
@@ -29,27 +31,75 @@ FRAMINGS = ("model", "search_area")
 MARGIN = 0.05
 
 
-def grid_data(search_result) -> Optional[dict]:
-    """The minimum factor of safety at each slip centre of a search, as the
-    interpretation window contours it (``minimum_per_centre`` over the valid
-    surfaces), with the critical surface's centre: ``{"x", "y", "fos",
-    "critical"}``. None when fewer than three centres have a factor — a
-    non-circular search has none."""
-    from ogr_slip2d.interpretation import minimum_per_centre, slip_centre
+def grid_data(search_result, project=None) -> Optional[dict]:
+    """The number the run reports at each slip centre of a search, with the
+    critical surface's centre. On a run of factors, the minimum factor of
+    safety, as the interpretation window contours it (``minimum_per_centre``
+    over the valid surfaces): ``{"x", "y", "fos", "critical"}``. None when
+    fewer than three centres have a factor, or (seismic run) when the search
+    evaluated fewer than three — a non-circular search has none.
+
+    v0.1.450 (D423) — on a Ky or a Newmark run, what that run minimises:
+    the lowest Ky of each centre, or its largest Newmark displacement in the
+    project's unit (``displacement_in_units``), from
+    ``interpretation.critical_per_centre``. The figure drew the lowest
+    factor of each centre and put the star on the centre of the lowest Ky,
+    so the star stood on no minimum of what it drew ((40, 45) against
+    (34, 29) on the demo slope with c = 20 kPa). Those values travel as
+    ``values``, never under ``fos``, with ``quantity`` («ky» or «newmark»),
+    and with ``unit`` and the reversed colour map for a displacement, whose
+    critical end is the largest; a run of factors gets the dictionary it
+    always got."""
+    from ogr_slip2d.interpretation import (critical_per_centre,
+                                           minimum_per_centre,
+                                           reported_value, slip_centre)
+    from ogr_slip2d.reported import KY, NEWMARK, displacement_in_units, \
+        reported_caption
+    # asked once: it reads ``critical``, which walks every surface
+    caption = reported_caption(search_result)
+    seismic = caption in (KY, NEWMARK)
     xs, ys, fos = [], [], []
-    for r in minimum_per_centre(search_result):
+    for r in critical_per_centre(search_result, caption):
         centre = slip_centre(r.surface.to_dict())
         if centre is None or r.fos is None:
             continue
+        value = (reported_value(search_result, r, caption) if seismic
+                 else float(r.fos))
+        if value is None:
+            continue
+        if caption == NEWMARK:
+            value = displacement_in_units(project, value)[0]
         xs.append(float(centre[0]))
         ys.append(float(centre[1]))
-        fos.append(float(r.fos))
-    if len(xs) < 3:
-        return None
+        fos.append(float(value))
     crit = getattr(search_result, "critical", None)
     critical = (slip_centre(crit.surface.to_dict())
                 if crit is not None else None)
-    return {"x": xs, "y": ys, "fos": fos, "critical": critical}
+    if not seismic:
+        if len(xs) < 3:
+            return None
+        return {"x": xs, "y": ys, "fos": fos, "critical": critical}
+    # Every centre the search evaluated, valid, with the run's number or
+    # without: whether the search has a grid at all (three centres, as for
+    # a run of factors) does not depend on how many of them have a Ky, and
+    # the dots say where it searched. The review of 0.1.450 found a Ky run
+    # with two centres of Ky losing its whole grid, star included, and the
+    # report's dialog greying out «Model and search area» with a false
+    # reason (``has_centres``).
+    centres = []
+    for r in minimum_per_centre(search_result):
+        centre = slip_centre(r.surface.to_dict())
+        if centre is not None:
+            centres.append((float(centre[0]), float(centre[1])))
+    if len(centres) < 3:
+        return None
+    out = {"x": xs, "y": ys, "values": fos, "critical": critical,
+           "quantity": caption,
+           "centres": ([c[0] for c in centres], [c[1] for c in centres])}
+    if caption == NEWMARK:
+        out["unit"] = displacement_in_units(project, 0.0)[1]
+        out["cmap"] = "RdYlBu_r"
+    return out
 
 
 def has_centres(results) -> bool:
@@ -116,9 +166,18 @@ def method_figures(project, results, *, framing: str = "model",
         crit = getattr(sr, "critical", None)
         if crit is None or crit.fos is None:
             continue
-        grid = grid_data(sr)
+        grid = grid_data(sr, project)
         if grid is not None:
-            grid["label"] = label
+            # v0.1.450 (D423) — the scale names what is drawn, the run's
+            # own number (``grid_data``); ``factored`` only qualifies a
+            # factor, which a Ky or a displacement is not
+            if grid.get("quantity") == "ky":
+                grid["label"] = T("minimum Ky")
+            elif grid.get("quantity") == "newmark":
+                grid["label"] = "%s [%s]" % (
+                    T("maximum Newmark displacement"), grid["unit"])
+            else:
+                grid["label"] = label
             grid["critical_label"] = T("critical centre")
         png = render_png(project, surfaces=[(T("critical surface"), crit)],
                          width=width, height=height, labels=True,

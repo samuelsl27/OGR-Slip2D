@@ -7247,6 +7247,12 @@ _DICTS: dict[str, dict[str, str]] = {
             'factor de seguridad mínimo',
         'minimum over-design factor':
             'factor de sobredimensionamiento mínimo',
+        # v0.1.450 (D423) -- the scale of a Ky or a Newmark run's figure:
+        # what the run minimises, at each slip centre
+        'minimum Ky':
+            'Ky mínimo',
+        'maximum Newmark displacement':
+            'desplazamiento de Newmark máximo',
         # v0.1.352 (D335) -- the runner's refusals
         'The back analysis supports {methods}, not {method}.':
             'El retroanálisis admite {methods}, no {method}.',
@@ -7255,12 +7261,17 @@ _DICTS: dict[str, dict[str, str]] = {
         # v0.1.339 (D336) — the options of the PDF report
         "Critical surface of each method":
             "Superficie crítica de cada método",
+        # v0.1.450 (D423) -- the contours of a seismic run are of its number
         "One figure per method: the model, that method's critical surface "
-        "and, with a grid of slip centres, the contours of the minimum "
-        "factor of safety at each centre.":
+        "and, with a grid of slip centres, the contours at each centre of "
+        "the number the run reports: the minimum factor of safety or, on a "
+        "Ky or a Newmark run, the minimum Ky or the maximum Newmark "
+        "displacement.":
             "Una figura por método: el modelo, la superficie crítica de ese "
-            "método y, con una rejilla de centros, las isolíneas del factor "
-            "de seguridad mínimo en cada centro.",
+            "método y, con una rejilla de centros, las isolíneas en cada "
+            "centro del número que da el cálculo: el factor de seguridad "
+            "mínimo o, en un cálculo de Ky o de Newmark, el Ky mínimo o el "
+            "desplazamiento de Newmark máximo.",
         "Framing":
             "Encuadre",
         "Model and search area":

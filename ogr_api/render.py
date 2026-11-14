@@ -88,21 +88,48 @@ def _hold_limits(ax, xlim, ylim) -> None:
     ax.set_autoscale_on(True)
 
 
+def _default_scale(grid) -> str:
+    """The scale of a grid drawn without a ``label`` (a caller other than
+    the report's ``method_figures``, which names it in the reader's
+    language): what the grid carries, in English (v0.1.450, D423)."""
+    if grid.get("quantity") == "ky":
+        return "minimum Ky"
+    if grid.get("quantity") == "newmark":
+        return "maximum Newmark displacement [%s]" % grid.get("unit", "cm")
+    return "minimum factor of safety"
+
+
 def _draw_grid(fig, ax, grid) -> None:
     """The minimum factor of safety at each slip centre, as filled contours
     with their colour scale (low red, high blue), the centres as dots and
-    the critical centre as a star (v0.1.339, D336)."""
-    xs, ys, fos = grid["x"], grid["y"], grid["fos"]
-    try:
-        from matplotlib.tri import Triangulation
-        tri = Triangulation(xs, ys)
-        cs = ax.tricontourf(tri, fos, levels=12, cmap="RdYlBu", alpha=0.85,
-                            zorder=3)
-        fig.colorbar(cs, ax=ax, shrink=0.8,
-                     label=grid.get("label", "minimum factor of safety"))
-    except Exception:  # noqa: BLE001 - collinear centres: dots only
-        pass
-    ax.plot(xs, ys, ".", color="#333333", markersize=2, zorder=4)
+    the critical centre as a star (v0.1.339, D336).
+
+    v0.1.450 (D423) — or the run's own number, when the grid carries it as
+    ``values`` (the lowest Ky, the largest Newmark displacement), with the
+    colour map it names (``cmap``: reversed for a displacement, so that red
+    is still the critical end) and a dot at every centre the search
+    evaluated (``centres``), with the number or without. Such a grid is not
+    contoured when its number is the same everywhere: a slope the record
+    does not move has every displacement at 0, and contours of a constant
+    drew the whole grid in the critical half of the colours under a scale
+    from -2e-14 to 2e-14 cm (review of 0.1.450). A grid of factors draws as
+    it always drew."""
+    xs, ys = grid["x"], grid["y"]
+    fos = grid["values"] if "values" in grid else grid["fos"]
+    flat = "values" in grid and (not fos or max(fos) == min(fos))
+    if not flat:
+        try:
+            from matplotlib.tri import Triangulation
+            tri = Triangulation(xs, ys)
+            cs = ax.tricontourf(tri, fos, levels=12,
+                                cmap=grid.get("cmap", "RdYlBu"), alpha=0.85,
+                                zorder=3)
+            fig.colorbar(cs, ax=ax, shrink=0.8,
+                         label=grid.get("label", _default_scale(grid)))
+        except Exception:  # noqa: BLE001 - collinear centres: dots only
+            pass
+    dots = grid.get("centres", (xs, ys))
+    ax.plot(dots[0], dots[1], ".", color="#333333", markersize=2, zorder=4)
     crit = grid.get("critical")
     if crit is not None:
         ax.plot([crit[0]], [crit[1]], "*", color="#000000", markersize=11,
@@ -132,9 +159,11 @@ def render_png(project, *, surfaces: Iterable = (), width: int = 900,
 
     v0.1.339 (D336) -- for the report's figures: ``extent`` is the frame
     ``(xmin, xmax, ymin, ymax)`` instead of the model's own, and ``grid`` the
-    minimum factor of safety at each slip centre (``report_figures
-    .grid_data``), drawn as filled contours with their scale, the centres as
-    dots and the critical one marked.
+    number the run reports at each slip centre (``report_figures
+    .grid_data``: the minimum factor of safety; on a seismic run, since
+    v0.1.450, the minimum Ky or the maximum Newmark displacement), drawn as
+    filled contours with their scale, the centres as dots and the critical
+    one marked.
     """
     from matplotlib.backends.backend_agg import FigureCanvasAgg
     from matplotlib.figure import Figure

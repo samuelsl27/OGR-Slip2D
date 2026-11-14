@@ -507,6 +507,72 @@ def minimum_per_centre(search_result) -> list:
     return list(best.values()) + loose
 
 
+def reported_value(search_result, r, caption=None) -> Optional[float]:
+    """The number of surface ``r`` under what ``search_result`` reports
+    (``reported_caption``): its Ky on a Ky run, its Newmark displacement in
+    metres on a Newmark run, its factor otherwise; None when the surface has
+    no such number (no Ky below the ceiling, no displacement) (v0.1.450,
+    D423).
+
+    ``caption``, the run's, when the caller already has it: asking it reads
+    ``critical``, which walks every surface of the run, so a caller that asks
+    it per surface is quadratic (the review of 0.1.450 measured 8 s for a
+    grid of 4746 surfaces, 0.012 s asked once)."""
+    from .reported import KY, NEWMARK, reported_caption
+
+    if caption is None:
+        caption = reported_caption(search_result)
+    details = getattr(r, "details", None) or {}
+    value = (details.get("ky") if caption == KY
+             else details.get("newmark_displacement") if caption == NEWMARK
+             else r.fos)
+    if value is None or not math.isfinite(value):
+        return None
+    return float(value)
+
+
+def critical_per_centre(search_result, caption=None) -> list:
+    """The surface each slip centre of a grid is drawn by, under what the run
+    reports (v0.1.450, D423): the lowest factor of the centre
+    (:func:`minimum_per_centre`, bit for bit) on a run of factors; the lowest
+    Ky on a Ky run; and the largest Newmark displacement on a Newmark run.
+    Over the valid surfaces, the ones without the run's number left out, plus
+    every surface that has no centre and has the number.
+
+    The report's figure contoured the lowest factor of each centre on every
+    run, and marked as the critical centre the one of the lowest Ky. On a
+    Newmark run the displacement is taken as it is, and not as the one of
+    the centre's lowest Ky: the two are the same surface for a rigid block
+    (its displacement does not grow with its Ky; Newmark 1965), but not with
+    upslope sliding allowed, where the displacement is a net one (D437).
+    ``minimum_per_centre`` itself does not change: Minimum Surfaces and the
+    API's view read it (D438). ``caption`` as in :func:`reported_value`:
+    asked once here, never per surface."""
+    from .reported import KY, NEWMARK, reported_caption
+
+    if caption is None:
+        caption = reported_caption(search_result)
+    if caption not in (KY, NEWMARK):
+        return minimum_per_centre(search_result)
+    larger = caption == NEWMARK
+    best: dict = {}
+    value_of: dict = {}
+    loose: list = []
+    for r in search_result.valid():
+        value = reported_value(search_result, r, caption)
+        if value is None:
+            continue
+        centre = slip_centre(r.surface.to_dict())
+        if centre is None:
+            loose.append(r)
+            continue
+        key = (round(centre[0], 6), round(centre[1], 6))
+        if key not in best or (value > value_of[key] if larger
+                               else value < value_of[key]):
+            best[key], value_of[key] = r, value
+    return list(best.values()) + loose
+
+
 def slope_intercepts(res) -> tuple:
     """``(x_left, x_right)`` where the surface meets the ground.
 
