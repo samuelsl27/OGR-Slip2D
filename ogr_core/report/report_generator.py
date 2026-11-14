@@ -509,7 +509,8 @@ def generate_report(
             # the caption of the standard, never as a minimum; and, when the
             # project applies a kh of its own, at that kh, which is said:
             # the Ky beside it is solved over kh from zero (the rule is
-            # ``factor_kh``, in the core; Interpret's «FS(0)» is D409)
+            # ``factor_kh``, in the core, which Interpret asks too since
+            # v0.1.452, D409; the two write the kh with «%g»)
             kh = factor_kh(crit)
             label = (T("{0} of this surface").format(fs_label) if kh == 0.0
                      else T("{0} of this surface, kh = {1:g}").format(

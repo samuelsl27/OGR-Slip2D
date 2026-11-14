@@ -413,11 +413,21 @@ def _reported_value(result, item, project=None, factor_report=None):
         ky = details.get("ky")
         if ky is None:
             return "", ""
+        # v0.1.452 (D409) -- the factor of the surface is the one at the kh
+        # it was computed at, the project's (``factor_kh``, read of the
+        # result, never of the open project): «(0)», «without earthquake»,
+        # only when that is zero. With kh = 0.10 this wrote «FS(0) = 1.454»
+        # of the wedge at 0.10, whose factor at 0 is 2.021. The Ky beside it
+        # is solved over kh from zero, with the project's kv kept, so «(0)»
+        # means kh = 0, as the solver means it.
+        from ogr_slip2d.reported import factor_kh
+        kh = factor_kh(item)
+        at = "(0)" if kh == 0.0 else "(kh = %g)" % kh
         if bool(getattr(factor_report, "applied", False)):
             # v0.1.430 (D405) -- with a design standard the factor of that
             # surface is an over-design factor, as the status bar calls it
-            return "%.4f" % ky, tr("ODF") + "(0) = %.3f" % item.fos
-        return "%.4f" % ky, "FS(0) = %.3f" % item.fos
+            return "%.4f" % ky, tr("ODF") + at + " = %.3f" % item.fos
+        return "%.4f" % ky, "FS" + at + " = %.3f" % item.fos
     return "%.3f" % item.fos, ""
 
 

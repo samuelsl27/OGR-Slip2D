@@ -105,12 +105,15 @@ def fos_label(factor_report=None) -> str:
     worth stating because merging them looks like an obvious simplification
     and would be a defect. The status bar and the results dock print
     ``critical.fos`` and nothing else — including on a Ky run, where
-    ``.fos`` is a real and correctly labelled factor of safety (the
-    Interpret tooltip shows it as ``FS(0)``, and as ``ODF(0)`` under a
-    design standard since v0.1.430), just not the quantity the search
-    minimised. Handing those two widgets the seismic caption would
-    put "Critical seismic coefficient" over a factor of safety: the exact
-    fault this module exists to prevent, with the sign reversed.
+    ``.fos`` is a real and correctly labelled factor of safety, just not
+    the quantity the search minimised. Interpret writes it beside the Ky
+    as ``FS(0)`` (``ODF(0)`` under a design standard since v0.1.430) when
+    the project applies no horizontal coefficient, and as ``FS(kh = 0.1)``
+    when it applies one (v0.1.452, D409): the factor is the one at the kh it
+    was computed at, the result's own (``ogr_slip2d.reported.factor_kh``).
+    Handing those two widgets the seismic caption would put "Critical
+    seismic coefficient" over a factor of safety: the exact fault this
+    module exists to prevent, with the sign reversed.
 
     So the seismic question is asked only where the VALUE also changes, and
     here the only question is which of the two things a ``.fos`` can be.
