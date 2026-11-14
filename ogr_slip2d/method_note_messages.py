@@ -64,6 +64,9 @@ GRID_EDGE = "method.grid_edge"
 # --- the seismic modes ------------------------------------------------------
 SEISMIC_KH_REPLACED = "method.seismic_kh_replaced"
 SEISMIC_NO_KY = "method.seismic_no_ky"
+#: v0.1.451 (D406) -- the same fact about the one surface a door was given
+#: (``evaluate_surfaces``): there is no ranking there to be excluded from
+SEISMIC_NO_KY_GIVEN = "method.seismic_no_ky_given"
 NEWMARK_NO_RECORD = "method.newmark_no_record"
 NEWMARK_UNUSABLE = "method.newmark_unusable"
 NEWMARK_POLARITY = "method.newmark_polarity"
@@ -348,6 +351,10 @@ METHOD_NOTES = {s.code: s for s in (
                 "{unanswered} of {valid} surfaces have no critical seismic "
                 "coefficient below {k_max:g}; they are excluded from the "
                 "ranking rather than treated as strong."),
+    MessageSpec(SEISMIC_NO_KY_GIVEN,
+                "the surface has no critical seismic coefficient below "
+                "{k_max:g}: no coefficient up to it brings its factor of "
+                "safety down to the target, so it has no Ky."),
     MessageSpec(NEWMARK_NO_RECORD,
                 "Newmark displacements were requested but no seismic record "
                 "is selected, so no displacement was computed."),

@@ -267,6 +267,14 @@ _V1347 = [{'code': 'method.unregistered',
              'than treated as strong.',
   'args': {'unanswered': 3, 'valid': 40, 'k_max': 1.0},
   'prefix': 'bishop_simplified'},
+ # v0.1.451 (D406), on purpose: the sentence of «Evaluate surface» about its
+ # one surface (written with this version, not measured on an older one)
+ {'code': 'method.seismic_no_ky_given',
+  'english': 'bishop_simplified: the surface has no critical seismic '
+             'coefficient below 1: no coefficient up to it brings its factor '
+             'of safety down to the target, so it has no Ky.',
+  'args': {'k_max': 1.0},
+  'prefix': 'bishop_simplified'},
  {'code': 'method.newmark_no_record',
   'english': 'bishop_simplified: Newmark displacements were requested but no '
              'seismic record is selected, so no displacement was computed.',
@@ -591,7 +599,10 @@ _CODED = {
     "ogr_slip2d/analysis_runner.py": (
         "lambda_fallback_notes", "daylight_tangent_note",
         "m_alpha_margin_note", "zero_strength_note", "grid_edge_note",
-        "_seismic_notes", "run_analysis", "evaluate_surfaces"),
+        # v0.1.451 (D406): ``_seismic_lines``, the body of
+        # ``_seismic_notes`` that ``evaluate_surfaces`` asks too
+        "_seismic_notes", "_seismic_lines", "run_analysis",
+        "evaluate_surfaces"),
     "ogr_slip2d/support_integration.py": (
         "reversed_support_notes", "uncontributing_support_notes",
         "_failure_text"),

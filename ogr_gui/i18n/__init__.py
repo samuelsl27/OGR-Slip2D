@@ -5377,6 +5377,13 @@ _DICTS: dict[str, dict[str, str]] = {
             '{unanswered} de {valid} superficies no tienen coeficiente '
             'sísmico crítico por debajo de {k_max:g}; quedan fuera de la '
             'clasificación en vez de tratarse como resistentes.',
+        # v0.1.451 (D406) -- the one surface of «Evaluate surface»
+        'the surface has no critical seismic coefficient below {k_max:g}: '
+        'no coefficient up to it brings its factor of safety down to the '
+        'target, so it has no Ky.':
+            'la superficie no tiene coeficiente sísmico crítico por debajo de '
+            '{k_max:g}: ningún coeficiente hasta él lleva su factor de '
+            'seguridad al objetivo, así que no tiene Ky.',
         'it could not be given a bond profile, and its type prices nothing '
         'without one':
             'no se le pudo dar un perfil de adherencia, y su tipo no calcula '

@@ -2357,7 +2357,11 @@ def evaluate_surfaces(project, surface, method_ids=None, *,
       seismic objective are the project's own;
     - ``BaseSearch.evaluate_surface``, which hands a circle to
       ``evaluate_circle`` and so walks the sliding masses — the door that
-      fixed the factor-of-24 lens of v0.1.101.
+      fixed the factor-of-24 lens of v0.1.101;
+    - the seismic modes' rule (``_seismic_lines``, since v0.1.451, D406):
+      the Newmark displacement and the notes of a missing or unusable
+      record, an unknown polarity, a kh the Ky replaces and a surface with
+      no Ky. Until then this door gave the Ky alone.
 
     A second door with its own defaults would be a second answer to the
     same question, which is precisely what v0.1.101 found this door had
@@ -2417,6 +2421,18 @@ def evaluate_surfaces(project, surface, method_ids=None, *,
             # not cut the model", which is the wrong thing to tell someone
             # whose polyline ends a metre under the ground.
             warnings.append(method_note(mid, _given_refusal(search, project)))
+        else:
+            # v0.1.451 (D406) — the Newmark displacement and the seismic
+            # notes, by the run's own rule (``_seismic_lines``): this door
+            # gave the Ky alone. Not for a method without a result: the
+            # run's population is never None, but here None is a refusal,
+            # and ``surface_evaluate`` takes every note of a refused method
+            # as the reason it was refused (``notes``), which a seismic note
+            # is not. An invalid result is a result, and gets them.
+            for line in _seismic_lines(project, mid, [results[mid]],
+                                       one_surface=True):
+                if line not in warnings:
+                    warnings.append(line)
     # v0.1.387 (D381) — as a search's run does: the results hold the
     # materials they were solved with, not the project's own objects.
     from .search import detach_materials
@@ -2472,9 +2488,41 @@ def _seismic_notes(project, method_id: str, result) -> list:
     sinusoid of 2 Hz for 4 s: the bench's d397). The count of surfaces
     without a Ky reads the same list, so a user's surface left without one
     is counted, and said.
+
+    v0.1.451 (D406) -- the body is :func:`_seismic_lines`, which
+    :func:`evaluate_surfaces` asks too for its one surface: the rule is one
+    for the two doors.
     """
     cfg = getattr(project.settings, "seismic", None)
     if cfg is None or not cfg.needs_ky or result is None:
+        # before the list: a run without the modes pays nothing for them
+        return []
+    from .search import all_evaluations_of
+    return _seismic_lines(project, method_id, all_evaluations_of(result))
+
+
+def _seismic_lines(project, method_id: str, evaluations, *,
+                   one_surface: bool = False) -> list:
+    """The Newmark displacements of ``evaluations`` and the lines the run has
+    to say about them -- :func:`_seismic_notes`'s rule, for any list of
+    evaluated surfaces (v0.1.451, D406).
+
+    A run hands it every surface it analysed; :func:`evaluate_surfaces`
+    hands it the one surface it was given, per method. That door computed
+    the Ky (``_solve_ky``) and stopped there: no displacement, and none of
+    the five notes, so a surface asked by hand on a model that asks for
+    Newmark came back with a Ky and nothing else (measured with 0.1.450 on
+    the demo slope with a user's polyline and a 0.3 g sinusoid: the run gave
+    0.3475 m, the door nothing), and a project with kh = 0.10 and no record
+    said neither that the Ky replaces the kh nor that no record is chosen.
+
+    ``one_surface`` for that door: a surface without a Ky is said as what it
+    is (``SEISMIC_NO_KY_GIVEN``), since there is no ranking for it to be
+    excluded from, and «1 of 1 surfaces have» is the run's sentence about a
+    population (review of 0.1.451).
+    """
+    cfg = getattr(project.settings, "seismic", None)
+    if cfg is None or not cfg.needs_ky:
         return []
 
     lines: list = []
@@ -2489,8 +2537,7 @@ def _seismic_notes(project, method_id: str, result) -> list:
             and float(getattr(seismic_load, "kh", 0.0) or 0.0) != 0.0):
         lines.append(method_note(method_id, _mnote(
             MN.SEISMIC_KH_REPLACED, kh=seismic_load.kh)))
-    from .search import all_evaluations_of
-    valid = [r for r in all_evaluations_of(result) if r.is_valid]
+    valid = [r for r in evaluations if r.is_valid]
 
     def _has_ky(res) -> bool:
         value = (res.details or {}).get("ky")
@@ -2500,7 +2547,10 @@ def _seismic_notes(project, method_id: str, result) -> list:
         return value is not None and math.isfinite(value)
 
     unanswered = sum(1 for r in valid if not _has_ky(r))
-    if unanswered:
+    if unanswered and one_surface:
+        lines.append(method_note(method_id, _mnote(
+            MN.SEISMIC_NO_KY_GIVEN, k_max=DEFAULT_K_MAX)))
+    elif unanswered:
         lines.append(method_note(method_id, _mnote(
             MN.SEISMIC_NO_KY, unanswered=unanswered, valid=len(valid),
             k_max=DEFAULT_K_MAX)))
