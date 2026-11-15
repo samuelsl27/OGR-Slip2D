@@ -169,9 +169,14 @@ class TestTheThrustIsHalfGammaHSquaredAtEveryDepth:
     def test_the_line_of_action_is_a_third_of_the_way_up(self):
         """Terzaghi (1943): the centroid of a triangular distribution.
 
-        The arm is measured from the crack line — the BASE of the water
-        column — and not from the toe of the slope, which is why it is
-        asserted against the wall's own bottom.
+        The field is an ELEVATION: the crack line, the BASE of the water
+        column, plus a third of the water height, which is why it is
+        asserted against the wall's own bottom plus h/3 and not against
+        h/3 alone. v0.1.460 (D428): this docstring said "the arm is
+        measured from the crack line", which read as a distance; what the
+        assertion compares, and what the field holds, is the elevation.
+        ``tests/test_tension_crack_moment_v1460.py`` pins the line of
+        action the methods actually use, through the moment.
         """
         for pct in self._FRACTIONS:
             _, _, arm, _ = _thrust(WaterLevelMode.PERCENT_FILLED,

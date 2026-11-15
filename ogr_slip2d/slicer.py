@@ -275,14 +275,26 @@ class Slices:
 
     slices: list[Slice] = field(default_factory=list)
     # v0.1.7 — hydrostatic force from water in the Tension Crack zone,
-    # applied as a horizontal force on the vertical face of the
-    # uppermost slice (acting in the failure-direction sense).
-    # Computed by ``slice_surface`` when the slip surface intersects
-    # a Tension Crack boundary.
+    # ½·γw·h_w², a magnitude in kN/m. v0.1.460 (D428): this comment said
+    # it was applied on "the uppermost slice" and computed "when the slip
+    # surface intersects a Tension Crack boundary"; since v0.1.109 it is
+    # computed only for a crack wall the truncation actually left
+    # (``tension_crack_wall``) and only with water in it, and applied, as a
+    # horizontal force pushing out of the slope, on the slice whose face
+    # that wall is (``_apply_tension_crack``).
     tension_crack_force: float = 0.0   # kN/m, horizontal
-    tension_crack_arm: float = 0.0     # vertical distance from the
-                                        # crack base to the centroid of
-                                        # the water column (for moment)
+    # v0.1.460 (D428) -- the ELEVATION (m) of the line of action of that
+    # thrust, ``crack_bottom_y + h_w / 3``: the centroid of the triangular
+    # pressure diagram of the water in the crack (Terzaghi 1943), and the
+    # same ``y`` that ``_apply_tension_crack`` hands to ``add_water_force``.
+    # This comment said "vertical distance from the crack base to the
+    # centroid of the water column", wrong twice: it is an elevation, not
+    # a distance from the crack base, and the centroid of the column is at
+    # h/2, not h/3. No method reads the field: the methods that take
+    # moments read the moment ``add_water_force`` leaves on the wall slice,
+    # and the force-equilibrium ones only its force. Without water it stays
+    # 0.0, an elevation like any other, harmless because the thrust is 0.
+    tension_crack_arm: float = 0.0
     # v0.1.224 (D223) -- the wall a tension crack left at the crest end of
     # this mass, ``(x, y_bottom, y_top)`` from the crack boundary up to the
     # ground, wet or dry; None without one. The failure surface of a
