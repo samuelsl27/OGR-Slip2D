@@ -19,6 +19,32 @@ from .boundary_type import BoundaryType
 from .primitives import Polyline, Vertex
 
 
+#: The English name of every boundary type: the name a boundary is born with
+#: (``Boundary.__post_init__``).
+DEFAULT_BOUNDARY_NAMES = frozenset(t.display_name for t in BoundaryType)
+
+
+def boundary_has_given_name(boundary) -> bool:
+    """Whether ``boundary`` was given a name: one, and not the English name
+    of ANY type, which is the one a boundary is born with. Given by the
+    user, mostly; the few names the program writes count too (Expand /
+    Shrink's original ground), which the interface shows translated.
+
+    Any type's, not only its own: a conversion from the context menu kept
+    the old type's name until v0.1.455, and so did the v0.1.69 migration
+    that swapped the water table and the drawdown line. The interface's rule
+    since v0.1.432 (D399, ``ogr_gui.labels``), moved here in v0.1.455 (D410)
+    so the conversion (``transforms.convert_boundary``) asks it too and
+    keeps such a name. A name that is not text (only a hand-edited file
+    carries one) is not a default: it is kept, never compared with the
+    names, which a list or a dictionary could not be.
+    """
+    name = getattr(boundary, "name", "")
+    if not isinstance(name, str):
+        return bool(name)
+    return bool(name) and name not in DEFAULT_BOUNDARY_NAMES
+
+
 @dataclass
 class Boundary:
     polyline: Polyline

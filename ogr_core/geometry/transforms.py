@@ -21,7 +21,7 @@ import math
 from copy import deepcopy
 from typing import Iterable
 
-from .boundary import Boundary
+from .boundary import Boundary, boundary_has_given_name
 from .boundary_type import BoundaryType
 from .primitives import Polyline, Vertex
 
@@ -162,7 +162,8 @@ def convert_boundary(boundary: Boundary, new_type: BoundaryType) -> Boundary:
 
     Resets the type-dependent colour to the new type's default if the
     current colour matched the old default (so user-picked colours are
-    preserved).
+    preserved), and the name likewise: the new type's name replaces a
+    default one, and a name the user gave is kept (v0.1.455).
     """
     new = deepcopy(boundary)
     old_default = boundary.btype.default_color
@@ -202,7 +203,15 @@ def convert_boundary(boundary: Boundary, new_type: BoundaryType) -> Boundary:
     if (new_type != BoundaryType.BLOCK_SEARCH_OBJECT
             or boundary.btype != BoundaryType.BLOCK_SEARCH_OBJECT):
         new.block_object = None
-    new.name = new_type.display_name
+    # v0.1.455 (D410, the owner's decision in its review) -- only a default
+    # name (a type's English one, the name a boundary is born with) becomes
+    # the new type's; any other is kept: the user's, and the few the
+    # program writes (Expand/Shrink's original ground). Until then this
+    # overwrote every name: a water table named «Phreatic 2024» converted
+    # into a water table came back «Water Table», through the Edit menu and
+    # the agent (the context menu did not come through here).
+    if not boundary_has_given_name(boundary):
+        new.name = new_type.display_name
     return new
 
 

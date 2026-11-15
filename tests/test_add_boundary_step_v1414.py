@@ -239,15 +239,22 @@ class TestEachDrawnTypeNamesItsStep:
 class TestTheOtherWaysOfAdding:
 
     def test_a_copy_names_its_type(self):
-        from ogr_core.geometry import BoundaryType
+        """v0.1.455 (D410): a piezometric line, which the rule lets copy;
+        the demo's water table, which this copied until then, is the one
+        the model may hold and is refused."""
+        from ogr_core.geometry import Boundary, BoundaryType, Polyline, Vertex
         from ogr_core.project.demo import build_demo_project
-        w, _c = _window(build_demo_project())
+        p = build_demo_project()
+        p.add_boundary(Boundary(btype=BoundaryType.PIEZOMETRIC,
+                                polyline=Polyline([Vertex(0.0, 10.0),
+                                                   Vertex(50.0, 9.0)])))
+        w, _c = _window(p)
         try:
             idx = next(i for i, b in enumerate(w.project.boundaries)
-                       if b.btype == BoundaryType.WATER_TABLE)
+                       if b.btype == BoundaryType.PIEZOMETRIC)
             w.command_stack.clear()
             w._do_copy_boundary(idx)
-            assert w.command_stack.history() == (["Add Water Table"], [])
+            assert w.command_stack.history() == (["Add Piezometric Line"], [])
         finally:
             _done(w)
 

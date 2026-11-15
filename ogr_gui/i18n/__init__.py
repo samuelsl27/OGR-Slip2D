@@ -1526,6 +1526,16 @@ _DICTS: dict[str, dict[str, str]] = {
         # v0.1.431 (D398) — la regla del contorno, al terminar el dibujo
         'The boundary was not added.':
             'El contorno no se ha añadido.',
+        # v0.1.455 (D410) -- Copy and Convert Boundary ask the rule of the type
+        'The boundary was not converted.':
+            'El contorno no se ha convertido.',
+        'The boundary is no longer in the model: nothing was converted.':
+            'El contorno ya no está en el modelo: no se ha convertido nada.',
+        'Only one External boundary is allowed.':
+            'Solo se permite un contorno exterior.',
+        'Only a closed polyline can become the External boundary.':
+            'Solo una polilínea cerrada puede convertirse en el contorno '
+            'exterior.',
         'The project has no External boundary.':
             'El proyecto no tiene contorno exterior.',
         'Slope angle changed from %.2f° to %.2f°.':

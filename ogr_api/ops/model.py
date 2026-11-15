@@ -470,15 +470,14 @@ def boundary_edit(ws, boundary: str, op: str,
                          f"{len(new.polyline.vertices)} vertices.")
         elif op == "change_type":
             from ogr_core.geometry.transforms import convert_boundary
+            from ogr_core.project.rules import conversion_refusal
             target = boundary_type(new_type)
-            project.boundaries.pop(idx)
-            try:
-                _check_allowed(project, target)
-            finally:
-                project.boundaries.insert(idx, b)
-            if target.name == "EXTERNAL" and not b.polyline.closed:
-                raise Conflict("Only a closed polyline can become the "
-                               "External boundary.")
+            # v0.1.455 (D410) -- the rule the window asks too, with the same
+            # sentences, instead of taking the boundary out of the model to
+            # ask it
+            why = conversion_refusal(project, b, target)
+            if why is not None:
+                raise Conflict(why.message)
             new = convert_boundary(b, target)
         elif op == "block_object":
             new.block_object = (_block_object_spec(block_object, b.btype)

@@ -483,10 +483,6 @@ def boundary_type_label(btype: BoundaryType) -> str:
     return tr(btype.display_name)
 
 
-#: The English name of every boundary type: the name a boundary is born with.
-_DEFAULT_BOUNDARY_NAMES = frozenset(t.display_name for t in BoundaryType)
-
-
 def boundary_has_given_name(boundary) -> bool:
     """Whether the user named ``boundary``. A boundary is born with its
     type's ENGLISH name as its name (``Boundary.__post_init__``): that name
@@ -494,12 +490,14 @@ def boundary_has_given_name(boundary) -> bool:
     interface's language.
 
     Any type's English name counts as the default, not only its own: Convert
-    Boundary from the canvas's context menu keeps the old type's name, and so
-    did the v0.1.69 migration that swapped the water table and the drawdown
-    line. Found by the review of v0.1.432: a water table converted from a
-    material boundary said «Contorno eliminado: Material Boundary»."""
-    name = getattr(boundary, "name", "")
-    return bool(name) and name not in _DEFAULT_BOUNDARY_NAMES
+    Boundary from the canvas's context menu kept the old type's name until
+    v0.1.455, and so did the v0.1.69 migration that swapped the water table
+    and the drawdown line. Found by the review of v0.1.432: a water table
+    converted from a material boundary said «Contorno eliminado: Material
+    Boundary». The rule is the core's since v0.1.455 (D410), which the
+    conversion asks too."""
+    from ogr_core.geometry.boundary import boundary_has_given_name as given
+    return given(boundary)
 
 
 def boundary_label(boundary) -> str:

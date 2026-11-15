@@ -69,11 +69,15 @@ _SINGLE_INSTANCE = {
 }
 
 
-def boundary_refusal(project, btype: BoundaryType) -> Optional[Refusal]:
+def boundary_refusal(project, btype: BoundaryType, *,
+                     ignoring=None) -> Optional[Refusal]:
     """Why a new boundary of type ``btype`` cannot be added, or None.
 
     The same answer the interface gives by greying its drawing actions
-    (``MainWindow.refresh_action_availability``). Two kinds of refusal:
+    (``MainWindow.refresh_action_availability``). ``ignoring`` is a
+    boundary of the model not to count, by identity: the one a conversion
+    turns into ``btype`` (``conversion_refusal``, v0.1.455). Two kinds of
+    refusal:
 
     * ``single_instance`` — the model already holds the one it may hold;
     * ``requires_rapid_drawdown`` / ``requires_block_search`` — the
@@ -104,8 +108,37 @@ def boundary_refusal(project, btype: BoundaryType) -> Optional[Refusal]:
             "search.search_method='block' first.")
     message = _SINGLE_INSTANCE.get(btype)
     if message is not None and any(b.btype == btype
-                                   for b in project.boundaries):
+                                   for b in project.boundaries
+                                   if b is not ignoring):
         return Refusal("single_instance", message)
+    return None
+
+
+#: v0.1.455 (D410) -- the agent's sentence since v0.1.197, now the rule's
+EXTERNAL_NOT_CLOSED = "Only a closed polyline can become the External boundary."
+
+
+def conversion_refusal(project, boundary, new_type) -> Optional[Refusal]:
+    """Why ``boundary`` of ``project`` cannot become a ``new_type``, or None.
+
+    v0.1.455 (D410). The rule of the type (:func:`boundary_refusal`) without
+    counting the boundary being converted, so a water table turned into a
+    water table is no second one; and an External only from a closed
+    polyline, which is what the region builder reads. The agent wrote both
+    by hand in ``boundary_edit`` (``change_type``: it took the boundary out
+    of the model to ask, and put it back), and the window asked neither:
+    converting the water table of the demo into an External, or a lens into
+    a second water table, added it by both of its Convert paths. Asked in
+    this order, the agent's. A Block Search object's geometry has its own
+    rule (:func:`block_object_refusal`), asked of the converted boundary.
+    """
+    new_type = BoundaryType(new_type) if not isinstance(
+        new_type, BoundaryType) else new_type
+    why = boundary_refusal(project, new_type, ignoring=boundary)
+    if why is not None:
+        return why
+    if new_type == BoundaryType.EXTERNAL and not boundary.polyline.closed:
+        return Refusal("external_not_closed", EXTERNAL_NOT_CLOSED)
     return None
 
 

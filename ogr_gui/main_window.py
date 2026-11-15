@@ -289,7 +289,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.454"
+    VERSION = "0.1.455"
 
     def __init__(self) -> None:
         super().__init__()
@@ -6232,9 +6232,16 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _boundary_refusal_text(refusal) -> str:
-        """Why a boundary of its kind cannot be added, in the reader's
-        language: the reason its greyed menu entry gives
-        (``refresh_action_availability``), by the rule's code (v0.1.431)."""
+        """Why a boundary of its kind cannot be added, or converted, in the
+        reader's language: the reason its greyed menu entry gives
+        (``refresh_action_availability``), by the rule's code (v0.1.431).
+
+        v0.1.455 (D410) -- also a conversion's refusals
+        (``rules.conversion_refusal``) and a Block Search object's geometry
+        (``rules.block_object_refusal``), whose sentences carry values (the
+        vertices of a Line): the rest is said by ``note_text``, as
+        ``apply_block_object_spec`` says them, which looks a coded sentence
+        up by its template and any other by ``tr``."""
         code = getattr(refusal, "code", "")
         if code == "requires_rapid_drawdown":
             return tr("Drawdown Line is only available when Project "
@@ -6245,6 +6252,12 @@ class MainWindow(QMainWindow):
                       "Block Search method. Set Surface Options -> Surface "
                       "Type = Non-Circular, Search Method = Block Search.")
         message = getattr(refusal, "message", "") or ""
+        # v0.1.455 (D410) -- the External, which the window had never had to
+        # say: Copy and Convert ask the rule since this version. (Its other
+        # refusal, an open polyline, is said by its own sentence below:
+        # ``rules.EXTERNAL_NOT_CLOSED`` has its Spanish entry.)
+        if code == "single_instance" and "External boundary" in message:
+            return tr("Only one External boundary is allowed.")
         if "Water Table" in message:
             return tr("Only one Water Table is allowed.")
         if "Tension Crack" in message:
@@ -6253,7 +6266,8 @@ class MainWindow(QMainWindow):
                           "\n", " ")
         if "Drawdown Line" in message:
             return tr("Only one Drawdown Line is allowed.")
-        return tr(message)
+        from .core_messages import note_text
+        return note_text(message)
 
     def _maybe_open_block_polyline_options(self, boundary) -> None:
         """Open the Block Search Object dialog for a just-drawn object.
@@ -6387,7 +6401,19 @@ class MainWindow(QMainWindow):
         if 0 <= index < len(self.project.boundaries):
             from copy import deepcopy
             from uuid import uuid4
+
+            from ogr_core.project.rules import boundary_refusal
             orig = self.project.boundaries[index]
+            # v0.1.455 (D410) -- the rule of its type, as at the end of a
+            # drawing (D398) and as the agent's copy: copying the demo's water
+            # table left two, which the engine reads the higher of, and
+            # copying its External left two, the second read by nothing
+            refusal = boundary_refusal(self.project, orig.btype)
+            if refusal is not None:
+                self.ogr_status.showMessage(
+                    self._boundary_refusal_text(refusal) + " "
+                    + tr("The boundary was not added."), 8000)
+                return
             new_b = deepcopy(orig)
             new_b.id = str(uuid4())
             # Offset slightly so it's visible
@@ -6416,17 +6442,70 @@ class MainWindow(QMainWindow):
         orig = self.project.boundaries[index]
         dlg = ConvertBoundaryDialog(orig.btype, self)
         if dlg.exec():
-            new_type = dlg.new_type()
-            new_b = convert_boundary(orig, new_type)
-            new_b.id = orig.id
-            self.command_stack.do(self.project, ReplaceBoundaryCommand(index=index, new_boundary=new_b))
-            # v0.1.432 (D399) -- the type through tr(): «Convertido en Water
-            # Table» with the interface in Spanish
-            from .labels import boundary_type_label
+            self._apply_conversion(orig, dlg.new_type())
+
+    def _apply_conversion(self, orig, new_type) -> None:
+        """Convert ``orig`` to ``new_type``, or say why not (v0.1.455, D410).
+
+        The one step after the Convert Boundary dialog, from the Edit menu
+        and from the boundary's context menu: until this version the context
+        menu copied the boundary and changed its type alone, so a lens made
+        a water table kept its name, its closed ring, its material and its
+        colour, while the menu went through ``convert_boundary``. Neither
+        asked the rule of the new type. Now both ask
+        ``rules.conversion_refusal`` (the agent's ``change_type``) and, for
+        a Block Search object, ``rules.block_object_refusal`` of the
+        converted boundary, as the agent does after every edit.
+
+        ``orig`` is the boundary the dialog was opened for, found again when
+        the dialog closes, and the conversion is of what is in the model
+        THEN: an agent can edit the model while the modal dialog runs, and
+        its edits replace the boundary by another object with the same id
+        (the review of 0.1.455: the first draft looked it up by identity
+        alone, and after an agent's move pressing OK did nothing and said
+        nothing). By identity first, so of two boundaries sharing an id
+        (only a hand-edited file has them) the one picked is converted
+        (its second review), and by the id if that object is gone. If it is
+        no longer in the model, the bar says so.
+
+        A conversion that changes nothing (a water table into a water
+        table, its name and colour its own) records no undo step, as an
+        agent's edit records none (``SnapshotCommand.changed``) and as D292
+        took the empty steps out of a vertex drag.
+        """
+        from ogr_core.project.rules import (block_object_refusal,
+                                            conversion_refusal)
+        index = next((i for i, b in enumerate(self.project.boundaries)
+                      if b is orig), None)
+        if index is None:
+            index = next((i for i, b in enumerate(self.project.boundaries)
+                          if b.id == orig.id), None)
+        if index is None:
             self.ogr_status.showMessage(
-                tr('Converted to {0}').format(
-                    boundary_type_label(new_type)), 2000
-            )
+                tr("The boundary is no longer in the model: nothing was "
+                   "converted."), 8000)
+            return
+        current = self.project.boundaries[index]
+        refusal = conversion_refusal(self.project, current, new_type)
+        new_b = convert_boundary(current, new_type)
+        if refusal is None and new_b.btype == BoundaryType.BLOCK_SEARCH_OBJECT:
+            refusal = block_object_refusal(new_b)
+        if refusal is not None:
+            self.ogr_status.showMessage(
+                self._boundary_refusal_text(refusal) + " "
+                + tr("The boundary was not converted."), 8000)
+            return
+        new_b.id = current.id
+        if new_b.to_dict() != current.to_dict():
+            self.command_stack.do(self.project, ReplaceBoundaryCommand(
+                index=index, new_boundary=new_b))
+        # v0.1.432 (D399) -- the type through tr(): «Convertido en Water
+        # Table» with the interface in Spanish
+        from .labels import boundary_type_label
+        self.ogr_status.showMessage(
+            tr('Converted to {0}').format(
+                boundary_type_label(new_type)), 2000
+        )
 
     def _do_assign_material(self, index: int) -> None:
         """Deprecated fallback — kept for legacy menu entries.
@@ -6520,19 +6599,9 @@ class MainWindow(QMainWindow):
             from .dialogs import ConvertBoundaryDialog
             dlg = ConvertBoundaryDialog(b.btype, self)
             if dlg.exec():
-                from copy import deepcopy
-                new_b = deepcopy(b)
-                new_b.btype = dlg.new_type()
-                new_b.id = b.id
-                # v0.1.232 (D109) — the stored kind belongs to the Block
-                # Search object; the same rule as ``convert_boundary``.
-                if (new_b.btype != BoundaryType.BLOCK_SEARCH_OBJECT
-                        or b.btype != BoundaryType.BLOCK_SEARCH_OBJECT):
-                    new_b.block_object = None
-                self.command_stack.do(
-                    self.project,
-                    ReplaceBoundaryCommand(index=bidx, new_boundary=new_b),
-                )
+                # v0.1.455 (D410) -- the menu's step: ``convert_boundary``
+                # and the rule of the new type
+                self._apply_conversion(b, dlg.new_type())
         elif action == "define_tension_crack":
             self.act_define_tension_crack()
         elif action == "block_object_props":

@@ -46,9 +46,11 @@ By the owner's decisions in this version, too:
   desembalse» did not agree), and «[objeto desactivado]» that of the
   feminine kinds of focus object;
 * any type's English name is a default name, not only the boundary's own:
-  Convert Boundary from the canvas's context menu keeps the old type's
-  name, and a water table converted from a material boundary said
-  «Contorno eliminado: Material Boundary» (the review found it);
+  Convert Boundary from the canvas's context menu kept the old type's name
+  until v0.1.455 (D410), and a water table converted from a material
+  boundary said «Contorno eliminado: Material Boundary» (the review found
+  it; a name left so by an older version is the case of
+  ``test_copy_convert_boundary_rule_v1455``);
 * the singular, for the boundary of one vertex (a Block Search point) and
   the Focus Point («con 1 vértice», «1 punto»).
 
@@ -322,9 +324,10 @@ class TestABoundaryByItsLabel:
                         "en": "Converted to Water Table"}, seen
 
     def test_converted_from_the_context_menu_keeps_no_english(self):
-        """The context menu's Convert keeps the old type's English name
-        (D410 is the path itself); the rule counts any type's English name
-        as a default, so the water table is shown as one, not as «Material
+        """The context menu's Convert kept the old type's English name until
+        v0.1.455 (D410, the path itself: it is the menu's now, so the name
+        is the new type's); the rule counts any type's English name as a
+        default, so the water table is shown as one, not as «Material
         Boundary» (the review of v0.1.432)."""
         import ogr_gui.dialogs as dialogs
         from ogr_core.geometry import BoundaryType
@@ -338,8 +341,8 @@ class TestABoundaryByItsLabel:
                     w._on_boundary_action_requested("convert", i)
                     b = w.project.boundaries[i]
                     assert b.btype == BoundaryType.WATER_TABLE, b
-                    # the stored name is the old type's, as data (D410)
-                    assert b.name == "Material Boundary", b.name
+                    # the new type's since v0.1.455 (D410: the menu's step)
+                    assert b.name == "Water Table", b.name
                     w._do_delete_boundary(i)
                     seen[language] = w.ogr_status.currentMessage()
         assert seen == {"es": "Contorno eliminado: Nivel freático",
