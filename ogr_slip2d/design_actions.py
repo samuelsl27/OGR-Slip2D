@@ -150,13 +150,25 @@ def refresh_pore_pressures(project, slices) -> None:
     the reference has it. A slice whose material reads no weight, or whose
     factors are all 1, keeps what it had to the last bit.
     """
-    from .slicer import (_base_pore_pressure, negative_pore_pressure_cutoff,
+    import ogr_core.loads.overburden as _overburden
+    from .slicer import (_base_pore_pressure, _line_load_shares,
+                         _model_grid_tol, negative_pore_pressure_cutoff,
                          reads_the_weight, water_material_of)
     factors = getattr(slices, "load_factors", None) or {}
     by_load = {load_id: v[2] for load_id, v in factors.items()} or None
     loads_move = any(f != 1.0 for f in (by_load or {}).values())
     cutoff = negative_pore_pressure_cutoff(project)
-    for s in slices.slices:
+    # v0.1.459 (D427) -- the line loads each slice carries, asked again with
+    # the edges the slice stored (the doubles the slicer used), so the
+    # excess pore pressure of a factored load is on the slices its force is.
+    shares_on = _overburden.LOAD_SHARE_AT_EDGES
+    # the slicer's ``share_tol``: the model's, never over a quarter of the
+    # narrowest slice
+    tol = (min(_model_grid_tol(project),
+               0.25 * min(s.width for s in slices.slices))
+           if shares_on and slices.slices else None)
+    last = len(slices.slices) - 1
+    for k, s in enumerate(slices.slices):
         if s.weight_factor == 1.0 and not loads_move:
             continue
         # v0.1.247 (D230) -- with the material whose water the base read,
@@ -165,12 +177,18 @@ def refresh_pore_pressures(project, slices) -> None:
         if not reads_the_weight(project, wmat):
             continue
         # The point the slicer used: the same doubles it stored.
+        shares = (_line_load_shares(
+            project, s.base_x_left, s.base_x_right, s.base_y_left,
+            s.base_y_right, first=k == 0, last=k == last, tol=tol,
+            top_left=s.top_y_left, top_right=s.top_y_right)
+            if shares_on else None)
         u, u_raw, c_suction = _base_pore_pressure(
             project, wmat, s.x_centre,
             0.5 * (s.base_y_left + s.base_y_right),
             0.5 * (s.top_y_left + s.top_y_right), s.width, cutoff,
             weight_factor=s.weight_factor, load_factors=by_load,
-            weight_material=s.material if wmat is not s.material else None)
+            weight_material=s.material if wmat is not s.material else None,
+            line_shares=shares)
         s.pore_pressure = u
         s.raw_pore_pressure = u_raw
         s.suction_cohesion = c_suction

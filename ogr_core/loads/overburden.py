@@ -18,6 +18,7 @@ Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING, Optional
 
 from ..geometry import BoundaryType, Polyline
@@ -280,3 +281,99 @@ def _summed(parts) -> float:
 #: switch (rule 7). Before this version it lived in ``ogr_slip2d.slicer``. No model of the verification bank has a distributed
 #: load pointing up (230 models, 11 such loads, all straight down).
 SIGNED_SURFACE_PRESSURE = True
+
+
+#: v0.1.459 (D427) — a load that acts at a POINT on the edge of a slice is
+#: shared out by :func:`edge_share`: a line load, the pressure on a vertical
+#: face (which ``ogr_slip2d.slicer.distributed_loads_on`` integrates into one
+#: force) and the excess pore pressure a line load creates.
+#:
+#: Until v0.1.458 the three went by an abscissa test of their own, with an
+#: absolute 1e-12 that did not look at the elevation:
+#:
+#: * the force by the half-open ``[x_left − 1e-12, x_right − 1e-12)``: a load
+#:   on x_r was on no slice, one on x_l on the first, one on an interior cut
+#:   on the slice to its right, and one below the base at an end counted;
+#: * the excess pore pressure by ``|x − x_c| ≤ b/2 + 1e-12``: a load on an
+#:   interior cut loaded both slices (1000 kN/m of Δσv·b for a 500 kN/m load)
+#:   and one on x_r loaded the last, whose force it was not on.
+#:
+#: Measured on the wall of bank problem 048 without its nails, with 100 kN/m
+#: at the top of its face: the model and its mirror image differed, with
+#: Bishop, by 4.9 % on the 60° plane through the toe and by 21.8 % on a circle
+#: leaving through the face (4.7 % and 19.6 % with Janbu), and the shotcrete
+#: of problem 048 itself, at x_r of each of its six planes, was on none of
+#: them. Off, the v0.1.458 behaviour, in the force and in the excess pore
+#: pressure alike: both read this one switch, at call time, so they cannot
+#: disagree.
+LOAD_SHARE_AT_EDGES = True
+
+
+def edge_of(x: float, x_left: float, x_right: float,
+            tol: float) -> Optional[str]:
+    """Where the abscissa ``x`` is on the slice ``[x_left, x_right]``:
+    ``"left"`` or ``"right"`` within ``tol`` of that edge, ``"inside"``
+    strictly between them, None elsewhere (v0.1.459, D427). The left edge
+    is asked first, which decides only on a slice narrower than ``2·tol``:
+    the slicer keeps ``tol`` under a quarter of its narrowest slice."""
+    if abs(x - x_left) <= tol:
+        return "left"
+    if abs(x - x_right) <= tol:
+        return "right"
+    return "inside" if x_left < x < x_right else None
+
+
+def edge_share(x: float, y: Optional[float], x_left: float, x_right: float,
+               y_left: float, y_right: float, *, first: bool, last: bool,
+               tol: float, top_left: float = math.inf,
+               top_right: float = math.inf) -> float:
+    """The part of a load acting at the point ``(x, y)`` that the slice
+    ``[x_left, x_right]`` carries: 1, ½ or 0 (v0.1.459, D427; the owner's
+    decisions).
+
+    * **On an interior cut**, within ``tol`` of it: half, whose other half
+      the slice on the other side carries, wherever the load is in height.
+    * **On an end of the sliding mass** (the left edge of the ``first``
+      slice, the right edge of the ``last``), within ``tol`` of it: all of
+      it, if it is on the mass there, between the base (``y_left`` or
+      ``y_right``) and the top (``top_left`` or ``top_right``, the ground on
+      the mass's own side), each give or take ``tol``; none otherwise. Below
+      the end of a slip surface the ground is not the mass, and above a
+      mass at the foot of a wall neither is the crest: a circle leaving
+      through a face at (12, 3) does not carry a load at (12, 2), nor a mass
+      starting at the corner of the toe (12, 1) the load at the top of the
+      face, 7 m over its top.
+    * **Strictly inside**, all of it, wherever its point is, as on a cut: a
+      load placed inside the soil on purpose (a test standing for a support
+      with an equivalent pressure at the slip surface) keeps counting whole,
+      and a load counts the same on a cut and a hair beside it.
+    * Elsewhere, none.
+
+    So a load counts once wherever it sits, and the same on a model and on
+    its mirror image, where the right end of one is the left end of the
+    other.
+
+    ``tol`` is the model's own resolution (``_model_grid_tol`` of the
+    slicer, a millionth of the model's diagonal), relative to the model,
+    never absolute, and kept by the slicer under a quarter of its narrowest
+    slice so that the bands of two edges never overlap.
+
+    ``y`` None skips the test of the elevation: a pressure on a vertical
+    face asks so for its part, and its elevation is then decided by clipping
+    the face to the mass (``ogr_slip2d.slicer.distributed_loads_on``),
+    because a face has height and a point has not.
+    """
+    where = edge_of(x, x_left, x_right, tol)
+    if where == "left":
+        if not first:
+            return 0.5
+        if y is not None and not (y_left - tol <= y <= top_left + tol):
+            return 0.0
+        return 1.0
+    if where == "right":
+        if not last:
+            return 0.5
+        if y is not None and not (y_right - tol <= y <= top_right + tol):
+            return 0.0
+        return 1.0
+    return 1.0 if where == "inside" else 0.0

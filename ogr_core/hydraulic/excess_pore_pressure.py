@@ -150,7 +150,8 @@ def _loading_bands(project: "Project", x: float, y_bottom: float,
 # ----------------------------------------------------------------------
 def load_delta_sigma_v(project: "Project", x: float,
                        slice_width: Optional[float] = None,
-                       load_factors: Optional[dict] = None) -> float:
+                       load_factors: Optional[dict] = None,
+                       line_shares=None) -> float:
     """Vertical stress at abscissa ``x`` from the external loads that load.
 
     Distributed loads contribute their vertical pressure component
@@ -163,6 +164,18 @@ def load_delta_sigma_v(project: "Project", x: float,
     factors a design standard gave each whole load on the surface being
     analysed (``ogr_slip2d.design_actions.load_factors``): the stress a
     load adds is the factored load's. None, the loads as drawn.
+
+    v0.1.459 (D427) — ``line_shares`` (``[(load, share)]``) are the line
+    loads the slice centred on ``x`` carries and the part of each, from the
+    slicer (``_line_load_shares``, the rule of
+    ``ogr_core.loads.overburden.edge_share``): each loads it with that part
+    of its force. Until v0.1.458 this asked a test of its own,
+    ``|x − load.x| ≤ b/2 + 1e-12``, closed on both sides, so a load on an
+    interior cut loaded the two slices beside it with all of itself (twice
+    the load, measured: Σ Δσv·b = 1000 kN/m for 500) and one on x_r loaded
+    the last slice, whose force it was not on. None, that test: what a
+    caller asking at a point that is no slice gets, and the v0.1.458
+    behaviour with ``overburden.LOAD_SHARE_AT_EDGES`` off.
     """
     import ogr_core.loads.overburden as _ov
     from ogr_core.loads.overburden import _line_load_components
@@ -189,7 +202,15 @@ def load_delta_sigma_v(project: "Project", x: float,
             q *= load_factors.get(load.id, 1.0)
         total += q
 
-    if slice_width and slice_width > 0.0:
+    if slice_width and slice_width > 0.0 and line_shares is not None:
+        for load, share in line_shares:
+            if not getattr(load, "creates_excess_pore_pressure", False):
+                continue
+            q = _line_load_components(load, project)[0] * share / slice_width
+            if load_factors:
+                q *= load_factors.get(load.id, 1.0)
+            total += q
+    elif slice_width and slice_width > 0.0:
         half = 0.5 * slice_width
         for load in getattr(project, "line_loads", None) or []:
             if not getattr(load, "creates_excess_pore_pressure", False):
@@ -229,7 +250,8 @@ def delta_sigma_v_at(project: "Project", x: float, y: float,
                      ground_surface_y: float,
                      slice_width: Optional[float] = None,
                      weight_factor: float = 1.0,
-                     load_factors: Optional[dict] = None) -> float:
+                     load_factors: Optional[dict] = None,
+                     line_shares=None) -> float:
     """Total change in vertical stress at (x, y), in kPa.
 
     v0.1.244 (D226c) — in a design-standard analysis the weight of the
@@ -240,7 +262,8 @@ def delta_sigma_v_at(project: "Project", x: float, y: float,
     soil = soil_delta_sigma_v(project, x, y, ground_surface_y)
     if weight_factor != 1.0:
         soil *= weight_factor
-    loads = load_delta_sigma_v(project, x, slice_width, load_factors)
+    loads = load_delta_sigma_v(project, x, slice_width, load_factors,
+                               line_shares)
     return soil + loads + seismic_delta_sigma_v(project, soil)
 
 
@@ -248,7 +271,8 @@ def excess_at(project: "Project", material, x: float, y: float,
               ground_surface_y: float,
               slice_width: Optional[float] = None,
               weight_factor: float = 1.0,
-              load_factors: Optional[dict] = None) -> float:
+              load_factors: Optional[dict] = None,
+              line_shares=None) -> float:
     """Δu = B̄ · Δσv for one point, in kPa. Zero when B̄ = 0.
 
     The gate is ``b_bar > 0`` alone, as the reference states: a material
@@ -263,4 +287,5 @@ def excess_at(project: "Project", material, x: float, y: float,
     if b_bar <= 0.0:
         return 0.0
     return b_bar * delta_sigma_v_at(project, x, y, ground_surface_y,
-                                    slice_width, weight_factor, load_factors)
+                                    slice_width, weight_factor, load_factors,
+                                    line_shares)

@@ -335,8 +335,10 @@ class TestALineLoadLoads:
                    - _fos(_slope())) < 1e-9
 
     def test_it_is_counted_once_at_a_slice_boundary(self):
-        """Half-open intervals: a load exactly on a boundary belongs to
-        one slice, never to both and never to neither."""
+        """A load exactly on a boundary counts once, never twice and never
+        not at all. Until v0.1.458 by a half-open interval, which gave it
+        to the slice on the right; since v0.1.459 (D427) by halves, one to
+        each slice beside the cut, so a model and its mirror image agree."""
         from ogr_slip2d import slice_surface
         p = self._with_line(500.0, x=8.0)
         sl = slice_surface(p, _circle(), num_slices=25)

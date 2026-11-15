@@ -63,7 +63,13 @@ from ogr_core.loads.overburden import (  # noqa: F401
     _summed,
     _surface_pressure_at,
     _surface_pressures_at,
+    edge_of,
+    edge_share,
 )
+# v0.1.459 (D427) -- the module itself too, to read its switch
+# ``LOAD_SHARE_AT_EDGES`` at call time: a name imported here would be a copy
+# that setting the switch could not reach (rule 7).
+import ogr_core.loads.overburden as _overburden
 
 
 @dataclass
@@ -961,7 +967,10 @@ def _segment_y_pair(polyline: Polyline, a: float, b: float):
 
 
 def line_loads_on(project: Project, x_left: float, x_right: float):
-    """Line loads whose point of application falls in ``[x_left, x_right)``.
+    """Line loads whose point of application falls in
+    ``[x_left − 1e-12, x_right − 1e-12)``: the rule of v0.1.75 to v0.1.458,
+    which :func:`_line_load_shares` asks with
+    ``overburden.LOAD_SHARE_AT_EDGES`` off.
 
     v0.1.75 — until this version the limit-equilibrium engine contained
     **no reference at all** to line loads. They could be drawn, saved,
@@ -970,10 +979,12 @@ def line_loads_on(project: Project, x_left: float, x_right: float):
     by exactly zero, on the unsafe side, because the user believes the
     slope has been loaded.
 
-    The half-open interval matters. A load sitting exactly on a slice
-    boundary must be counted once, not twice or never, and the last
-    slice needs its right edge closed so a load at the very end of the
-    surface is not silently dropped.
+    v0.1.459 (D427) — this docstring said the last slice closed its right
+    edge "so a load at the very end of the surface is not silently
+    dropped". It never did: every slice asked the same half-open interval,
+    so a load on x_r was on no slice, and the band of 1e-12, absolute and
+    shifted left, counted a load 5e-13 outside x_l and lost one 5e-13 inside
+    x_r. :func:`_line_load_shares` holds the rule now.
     """
     out = []
     loads = getattr(project, "line_loads", None) or []
@@ -981,6 +992,37 @@ def line_loads_on(project: Project, x_left: float, x_right: float):
         x = load.point.x
         if x_left - 1e-12 <= x < x_right - 1e-12:
             out.append(load)
+    return out
+
+
+def _line_load_shares(project: Project, x_left: float, x_right: float,
+                      y_left: float, y_right: float, *, first: bool,
+                      last: bool, tol: float, top_left: float = math.inf,
+                      top_right: float = math.inf) -> list:
+    """``[(load, share)]`` for each line load the slice ``[x_left, x_right]``
+    carries, with the part of it the slice carries (v0.1.459, D427).
+
+    The share is :func:`ogr_core.loads.overburden.edge_share`'s: all of a
+    load strictly inside; half on an interior cut; on an end of the mass
+    (the left edge of the ``first`` slice, the right edge of the ``last``),
+    all of it if it is between the base (``y_left``, ``y_right``) and the
+    top there (``top_left``, ``top_right``, the ground on the slice's own
+    side) and none otherwise. The force of the load on the slice and the
+    excess pore pressure it creates there are both scaled by it, so the two
+    readers agree and the load counts once.
+
+    With ``overburden.LOAD_SHARE_AT_EDGES`` off, the loads of
+    :func:`line_loads_on`, each whole: the v0.1.458 behaviour.
+    """
+    if not _overburden.LOAD_SHARE_AT_EDGES:
+        return [(load, 1.0) for load in line_loads_on(project, x_left, x_right)]
+    out = []
+    for load in getattr(project, "line_loads", None) or []:
+        share = edge_share(load.point.x, load.point.y, x_left, x_right,
+                           y_left, y_right, first=first, last=last, tol=tol,
+                           top_left=top_left, top_right=top_right)
+        if share:
+            out.append((load, share))
     return out
 
 
@@ -1113,9 +1155,40 @@ def water_material_of(slice_):
     return getattr(slice_, "water_material", None) or slice_.material
 
 
+def _face_between(load, y_lo: float, y_hi: float):
+    """``(total, y_c)`` of the part of a vertical-segment load between the
+    elevations ``y_lo`` and ``y_hi``: the integral of its pressure over that
+    part and the elevation of its centroid, or None when no part of it is
+    there (v0.1.459, D427).
+
+    ``pressure_at`` is a linear ramp along the segment, p(t) = p1 +
+    (p2 − p1)·t, so the clipped part is a trapezium too and both numbers are
+    exact: total = ½·(pa + pb)·L′ and the centroid at (pa + 2·pb)/(3·(pa +
+    pb)) of the way from its ``ta`` end, the formula of the whole face below.
+    The segment may be drawn either way up.
+    """
+    y1, y2 = load.start.y, load.end.y
+    if y2 == y1:
+        return None
+    t_lo = (y_lo - y1) / (y2 - y1)
+    t_hi = (y_hi - y1) / (y2 - y1)
+    ta = max(0.0, min(t_lo, t_hi))
+    tb = min(1.0, max(t_lo, t_hi))
+    if tb <= ta:
+        return None
+    L = abs(y2 - y1) * (tb - ta)
+    pa, pb = load.pressure_at(ta), load.pressure_at(tb)
+    total = 0.5 * (pa + pb) * L
+    if not total:
+        return None
+    denom = pa + pb
+    t_c = ta + (tb - ta) * (((pa + 2.0 * pb) / (3.0 * denom)) if denom else 0.5)
+    return total, y1 + (y2 - y1) * t_c
+
+
 def distributed_loads_on(project: Project, x_left: float, x_right: float,
-                         span: float):
-    """Distributed-load forces on the slice ``[x_left, x_right)``.
+                         span: float, *, edges=None):
+    """Distributed-load forces on the slice ``[x_left, x_right]``.
 
     Yields ``(f_h, f_v_extra, y, load)``: the HORIZONTAL force in kN/m signed
     in +x, an EXTRA downward force for the vertical-segment case only, the
@@ -1147,14 +1220,76 @@ def distributed_loads_on(project: Project, x_left: float, x_right: float,
       what a pressure on a face of zero width is. Here the vertical part
       does come back, because ``_surface_pressure_at`` could not see it.
 
-    The half-open interval is the one :func:`line_loads_on` uses, and for
-    the same reason: a load sitting exactly on a slice boundary must be
-    counted once, not twice and not never.
+    Until v0.1.458 a vertical face went to a slice by the half-open interval
+    of :func:`line_loads_on`, ``[x_left − 1e-12, x_right − 1e-12)``, meant to
+    count a face on a boundary once; it lost a face at x_r, though, and put
+    one on an interior cut on the slice to its right, and that is still what
+    it does with ``overburden.LOAD_SHARE_AT_EDGES`` off or without ``edges``.
+
+    v0.1.459 (D427) — with ``edges`` (``(y_left, y_right, first, last, tol,
+    top_left, top_right)``: the slice's base at its two edges, whether it is
+    the first and the last, the tolerance, and the ground on the slice's
+    own side at its two edges), a vertical face goes by the rule of a line
+    load (:func:`ogr_core.loads.overburden.edge_share`): half on an interior
+    cut, all of it inside a slice and on an end of the mass. With one
+    difference, because a face has height: on an end, only the part of it
+    on the mass acts, between the base and the top there
+    (:func:`_face_between`), at the centroid of that part. A circle leaving
+    through a vertical face at (12, 3) is pushed by the 5 m of the face
+    above its exit, not by the 2 m below it, which hold up the ground in
+    front; a mass starting at the foot of the face carries none of it.
     """
+    share_at_edges = edges is not None and _overburden.LOAD_SHARE_AT_EDGES
     out = []
     for load in getattr(project, "distributed_loads", None) or []:
         dxu, dyu = load.direction_vector()
         x1, x2 = load.start.x, load.end.x
+        if _is_vertical_segment(load, span) and share_at_edges:
+            x = 0.5 * (x1 + x2)
+            y_left, y_right, first, last, tol, top_left, top_right = edges
+            # The rule of a line load (``edge_share``), asked without an
+            # elevation: its part. Its elevation is the clipping below, on
+            # an end of the mass (``edge_of``).
+            share = edge_share(x, None, x_left, x_right, y_left, y_right,
+                               first=first, last=last, tol=tol)
+            if not share:
+                continue
+            where = edge_of(x, x_left, x_right, tol)
+            if where == "left" and first:
+                y_lo, y_hi = y_left, top_left
+            elif where == "right" and last:
+                y_lo, y_hi = y_right, top_right
+            else:
+                y_lo = y_hi = None
+            # Clipped only past the mass by more than the tolerance, the
+            # rule of a point load: a face whose foot is the exit point
+            # (a plane through the toe) keeps every bit it had.
+            if y_lo is not None and (
+                    min(load.start.y, load.end.y) < y_lo - tol
+                    or max(load.start.y, load.end.y) > y_hi + tol):
+                part = _face_between(load, y_lo, y_hi)
+                if part is None:
+                    continue
+                total, y_c = part
+                out.append((share * total * dxu, -share * total * dyu, y_c,
+                            load))
+                continue
+            # The whole face: the formula below, unchanged, so a face that
+            # nothing clips gives the bits it gave, times its share.
+            y1, y2 = load.start.y, load.end.y
+            L = abs(y2 - y1)
+            if L <= 0.0:
+                continue
+            p1, p2 = load.pressure_at(0.0), load.pressure_at(1.0)
+            total = 0.5 * (p1 + p2) * L
+            if not total:
+                continue
+            denom = p1 + p2
+            t_c = ((p1 + 2.0 * p2) / (3.0 * denom)) if denom else 0.5
+            y_c = y1 + (y2 - y1) * t_c
+            out.append((share * total * dxu, -share * total * dyu, y_c,
+                        load))
+            continue
         if _is_vertical_segment(load, span):
             x = 0.5 * (x1 + x2)
             if not (x_left - 1e-12 <= x < x_right - 1e-12):
@@ -1199,7 +1334,7 @@ def _base_pore_pressure(project: Project, mat, xc: float, base_y_mid: float,
                         top_y_mid: float, dx: float, u_cutoff,
                         weight_factor: float = 1.0,
                         load_factors: Optional[dict] = None,
-                        weight_material=None):
+                        weight_material=None, line_shares=None):
     """``(u, u_raw, c_suction)`` at the midpoint of a slice base.
 
     The groundwater method's pore pressure, the unsaturated policy and the
@@ -1215,6 +1350,11 @@ def _base_pore_pressure(project: Project, mat, xc: float, base_y_mid: float,
     (:func:`water_material`), and ``weight_material`` the one whose unit
     weight Ru's overburden is computed with when that is another (None:
     ``mat``).
+
+    v0.1.459 (D427) — ``line_shares`` (``[(load, share)]``, from
+    :func:`_line_load_shares`) are the line loads this slice carries and the
+    part of each: the excess pore pressure they create here is the one
+    their force puts on the slice. None, the abscissa test of v0.1.458.
     """
     u = pore_pressure_at(
         project,
@@ -1240,7 +1380,7 @@ def _base_pore_pressure(project: Project, mat, xc: float, base_y_mid: float,
     if excess_is_enabled(project):
         du = excess_at(project, mat, xc, base_y_mid, top_y_mid,
                        slice_width=dx, weight_factor=weight_factor,
-                       load_factors=load_factors)
+                       load_factors=load_factors, line_shares=line_shares)
         if du:
             u += du
     return u, u_raw, c_suction
@@ -1802,6 +1942,15 @@ def slice_surface(
     # the two chord ENDS from the interior cuts.
     last_i = len(bounds) - 2
 
+    # v0.1.459 (D427) -- the tolerance a load on the edge of a slice is
+    # judged with (``edge_share``): the model's own, but never over a quarter
+    # of the narrowest slice, so the bands of a slice's two edges never
+    # overlap and a load counts once even on slices narrower than the
+    # model's resolution (a 4 m wedge in 500 slices of a 20 km model carried
+    # a load twice). On any ordinary slicing it is ``grid_tol``, bit for bit.
+    share_tol = min(grid_tol, 0.25 * min(b - a for a, b in
+                                         zip(bounds[:-1], bounds[1:])))
+
     # Overshoot tolerance, RELATIVE to the failure width, replacing an
     # absolute 1e-4 that meant something different in millimetres and in
     # metres. Sized to the same order that absolute value had on the models
@@ -2097,11 +2246,22 @@ def slice_surface(
         if not water_surface_defined_at(project, wmat, xc):
             return None
 
+        # v0.1.459 (D427) -- the line loads this slice carries, each with the
+        # part of it the slice carries (``_line_load_shares``): asked once,
+        # for the force below and for the excess pore pressure they create
+        # here, so the two readers cannot disagree.
+        _lines = _line_load_shares(project, xl, xr, y_base_l, y_base_r,
+                                   first=i == 0, last=i == last_i,
+                                   tol=share_tol, top_left=y_top_l,
+                                   top_right=y_top_r)
+
         # Pore pressure at the midpoint of the base (v0.1.244, D226c: in a
         # function of its own, which a design standard asks again).
         u, u_raw, c_suction = _base_pore_pressure(
             project, wmat, xc, base_y_mid, top_y_mid, dx, _u_cutoff,
-            weight_material=mat if wmat is not mat else None)
+            weight_material=mat if wmat is not mat else None,
+            line_shares=(_lines if _overburden.LOAD_SHARE_AT_EDGES
+                         else None))
 
         # v0.1.219 (D206) -- the soil alone, before any load joins it: what
         # the seismic coefficients act on. Kept exactly, not rebuilt later as
@@ -2122,10 +2282,16 @@ def slice_surface(
         # integral is P produce the same slice weight. The horizontal
         # component needs a moment arm and goes through the external
         # force channel below, once the slice exists.
-        _lines = line_loads_on(project, xl, xr)
-        _line_forces = [_line_load_components(_load, project)
-                        for _load in _lines]
-        for _load, (_fv, _fh) in zip(_lines, _line_forces):
+        #
+        # v0.1.459 (D427) -- each scaled by the part of it this slice carries
+        # (``_lines``, above): half on an interior cut, so the two
+        # neighbours add up to the load, and all of it on an end. A share
+        # of 1 multiplies by 1.0, so a load strictly inside a slice keeps
+        # every bit it had.
+        _line_forces = [tuple(_c * _share for _c in
+                              _line_load_components(_load, project))
+                        for _load, _share in _lines]
+        for (_load, _share), (_fv, _fh) in zip(_lines, _line_forces):
             weight += _fv
             _load_parts.append((_load.id, _action_of(_load), _fv, _fh,
                                 _load.point.y))
@@ -2134,7 +2300,13 @@ def slice_surface(
         # until this version was thrown away. Only the VERTICAL-segment case
         # brings a vertical part back with it: for every other segment the
         # weight above already carries it, through ``_surface_pressure_at``.
-        _dist = distributed_loads_on(project, xl, xr, x_r - x_l)
+        #
+        # v0.1.459 (D427) -- with this slice's edges, for a vertical face on
+        # one of them (``distributed_loads_on``).
+        _dist = distributed_loads_on(
+            project, xl, xr, x_r - x_l,
+            edges=(y_base_l, y_base_r, i == 0, i == last_i, share_tol,
+                   y_top_l, y_top_r))
         for _fh, _fv, _y, _load in _dist:
             weight += _fv
             _load_parts.append((_load.id, _action_of(_load), _fv, _fh, _y))
@@ -2180,7 +2352,7 @@ def slice_surface(
         # is precisely what this is; the accumulator stores the moment
         # about a fixed reference, so forces of opposite sign on the same
         # slice add up correctly.
-        for _load, (_fv, _fh) in zip(_lines, _line_forces):
+        for (_load, _share), (_fv, _fh) in zip(_lines, _line_forces):
             if _fh:
                 sl.add_water_force(f_h=_fh, y=_load.point.y)
         # v0.1.122 — and the same for the distributed loads, through the
