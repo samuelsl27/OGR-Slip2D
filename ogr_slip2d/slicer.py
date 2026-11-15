@@ -838,8 +838,33 @@ def _slice_boundaries(
                 cuts.add(x)
 
     if not cuts:
+        # v0.1.458 (D407) -- the last boundary IS x_r, as in the branch with
+        # cuts below (since v0.1.66). In floating point ``x_l + step * n`` is
+        # not ``x_r``, and a hair past it the slicer read the wrong thing:
+        #
+        # * a polyline's ``base_y_at`` answers None past its last vertex. The
+        #   plane (2, 2)-(30, 10) overshoots 30 by 3.6e-15 with 25, 41, 43, 50
+        #   and 51 slices, and was refused whole without a reason, the
+        #   default 25 included;
+        # * a circle leaving through a vertical face at x_r, the ground lower
+        #   in front (a cut toe failing left to right): read one-sided past
+        #   x_r, the envelope is the bench in front, not the crest of the
+        #   face, and the last corner's base was clamped down to it (the
+        #   ``ends_are_ground_crossings`` clamp below). The factor moved by
+        #   several percent, upwards: 4.7 % between such a model and its
+        #   mirror image, whose face is at x_l, which is always exact;
+        # * elsewhere a circle's arc answers a hair past x_r (at its vertical
+        #   tangent ``SlipCircle._ARC_EPS`` clamps the extreme), and its
+        #   factor moved in the last bits: 14 of 201 on a slope, the worst by
+        #   2.2e-15, and up to 3.4e-8 where it leaves at that tangent, where
+        #   an ulp of x is worth sqrt(2·R·ulp) of base elevation (bank
+        #   problem 078, case 3b).
+        #
+        # No critical surface of the 23 cases of the compute benchmark moved.
         step = width / num_slices
-        return [x_l + step * i for i in range(num_slices + 1)]
+        bounds = [x_l + step * i for i in range(num_slices)]
+        bounds.append(x_r)
+        return bounds
 
     marks = sorted(cuts)
     # Merge cuts closer together than a thousandth of the failure width:
@@ -1813,6 +1838,15 @@ def slice_surface(
         y_base_l = surface.base_y_at(xl)
         y_base_r = surface.base_y_at(xr)
         if y_base_l is None or y_base_r is None:
+            # v0.1.458 (D407) -- a guard. Every boundary lies in [x_l, x_r]
+            # since the last one is x_r, so this takes a surface that does not
+            # answer at its own ends: a circle carrying an ``x_left`` or
+            # ``x_right`` off its arc, which only a script or a hand-edited
+            # file gives it (``to_dict`` and ``from_dict`` keep the ends
+            # exact). A census of 122 357 slicings in the 64 test files of
+            # slicing, searches and surfaces found none (the same probe on
+            # v0.1.457 caught the 25-slice plane), so, by the owner's
+            # decision, it has no reason of its own.
             return None
 
         # v0.1.114 — one-sided, and it has to be. A slice corner landing

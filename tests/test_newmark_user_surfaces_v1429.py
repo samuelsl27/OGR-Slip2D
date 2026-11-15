@@ -120,8 +120,10 @@ def _plane_project(methods=("janbu_simplified",), focus=True, cohesion=0.0):
     s.path_num_surfaces = 5
     s.optimize_enabled = False
     p.settings.methods.enabled_methods = list(methods)
-    # 60 as in tests/test_yield_acceleration_v1127.py: with 25 this two-
-    # vertex plane is one the slicer refuses (reported in the changelog)
+    # 60 as in tests/test_yield_acceleration_v1127.py. Until v0.1.458 it had
+    # to be: with 25 the slicer refused this two-vertex plane without a reason
+    # (D407, test_slice_last_cut_v1458). Kept at 60 so that no number of this
+    # file moves (the owner's decision, 2026-11-15).
     p.settings.methods.num_slices = 60
     if focus:
         p.focus_objects = [FocusObject(kind=FocusKind.POINT,
