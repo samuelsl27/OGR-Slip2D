@@ -289,7 +289,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.455"
+    VERSION = "0.1.456"
 
     def __init__(self) -> None:
         super().__init__()
@@ -6399,9 +6399,7 @@ class MainWindow(QMainWindow):
 
     def _do_copy_boundary(self, index: int) -> None:
         if 0 <= index < len(self.project.boundaries):
-            from copy import deepcopy
-            from uuid import uuid4
-
+            from ogr_core.geometry.transforms import copy_boundary
             from ogr_core.project.rules import boundary_refusal
             orig = self.project.boundaries[index]
             # v0.1.455 (D410) -- the rule of its type, as at the end of a
@@ -6414,12 +6412,10 @@ class MainWindow(QMainWindow):
                     self._boundary_refusal_text(refusal) + " "
                     + tr("The boundary was not added."), 8000)
                 return
-            new_b = deepcopy(orig)
-            new_b.id = str(uuid4())
-            # Offset slightly so it's visible
-            new_b.polyline.vertices = [
-                Vertex(v.x + 2.0, v.y + 2.0) for v in orig.polyline.vertices
-            ]
+            # Offset slightly so it's visible. v0.1.456 (D425) -- the core's
+            # copy, as the agent's: until now only Boundary.id was renewed, and
+            # the copy kept the original's Polyline.id
+            new_b = copy_boundary(orig, 2.0, 2.0)
             self.command_stack.do(self.project, AddBoundaryCommand(boundary=new_b))
             self.ogr_status.showMessage(
                 tr('Copied {0}').format(self._boundary_label(orig)), 2000)

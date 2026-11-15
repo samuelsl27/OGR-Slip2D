@@ -28,6 +28,7 @@ from .regions import MaterialRegion, build_regions, region_at_point, regions_ava
 from .transforms import (
     apply_to_many,
     convert_boundary,
+    copy_boundary,
     offset_polygon,
     rotate,
     scale,
@@ -46,6 +47,7 @@ __all__ = [
     "remove_duplicate_vertices",
     "simplify_rdp",
     "translate",
+    "copy_boundary",
     "rotate",
     "scale",
     "offset_polygon",

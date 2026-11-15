@@ -5,6 +5,7 @@ Affine transformations & advanced geometric operations on boundaries.
 
 Adds the following to the geometry core:
     - translate(b, dx, dy)
+    - copy_boundary(b, dx, dy)             (a new boundary: new ids)
     - rotate(b, pivot, angle_deg)
     - scale(b, pivot, sx, sy)
     - offset_polygon(polyline, distance)   (expand/shrink)
@@ -20,6 +21,7 @@ from __future__ import annotations
 import math
 from copy import deepcopy
 from typing import Iterable
+from uuid import uuid4
 
 from .boundary import Boundary, boundary_has_given_name
 from .boundary_type import BoundaryType
@@ -30,9 +32,32 @@ from .primitives import Polyline, Vertex
 # Basic affine transformations
 # ----------------------------------------------------------------------
 def translate(b: Boundary, dx: float, dy: float) -> Boundary:
-    """Return a copy of ``b`` shifted by (dx, dy)."""
+    """Return a copy of ``b`` shifted by (dx, dy).
+
+    The copy keeps both ids, ``Boundary.id`` and ``Polyline.id``: it is the
+    same boundary moved, so what points at it still does. A copy that is a
+    second boundary is ``copy_boundary``.
+    """
     new = deepcopy(b)
     new.polyline.vertices = [Vertex(v.x + dx, v.y + dy) for v in b.polyline.vertices]
+    return new
+
+
+def copy_boundary(b: Boundary, dx: float, dy: float) -> Boundary:
+    """Return a NEW boundary: ``b`` shifted by (dx, dy), with an id of its
+    own and a polyline id of its own.
+
+    A boundary carries two ids, its own (``Boundary.id``, what materials,
+    undo and the agent resolve) and its polyline's (``Polyline.id``, written
+    to the ``.ogr``). Each must name one object of the model. v0.1.456
+    (D425) -- the window's Copy Boundary renewed only the first (since
+    v0.1.59), so the copy and the original shared a polyline id; the
+    agent's copy renewed both (since v0.1.196). The two ask this now; each
+    keeps its own offset (the window 2, 2; the agent its ``dx`` and ``dy``).
+    """
+    new = translate(b, dx, dy)
+    new.id = str(uuid4())
+    new.polyline.id = str(uuid4())
     return new
 
 

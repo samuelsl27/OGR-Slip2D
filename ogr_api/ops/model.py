@@ -362,14 +362,12 @@ def boundary_edit(ws, boundary: str, op: str,
         idx = project.boundaries.index(b)
         notes = []
         if op == "copy":
-            import uuid
-            from ogr_core.geometry.transforms import translate
+            from ogr_core.geometry.transforms import copy_boundary
             _check_allowed(project, b.btype)
-            new = translate(b, coerce_value(dx, float, "dx"),
-                            coerce_value(dy, float, "dy"))
-            new.id = str(uuid.uuid4())
-            new.polyline = dataclasses.replace(new.polyline,
-                                               id=str(uuid.uuid4()))
+            # v0.1.456 (D425) -- the core's copy, which the window asks too:
+            # a new Boundary.id and a new Polyline.id
+            new = copy_boundary(b, coerce_value(dx, float, "dx"),
+                                coerce_value(dy, float, "dy"))
             project.add_boundary(new)
             return {"boundary": boundary_info(new, with_vertices=True),
                     "regions": len(project.resolve_regions()),
