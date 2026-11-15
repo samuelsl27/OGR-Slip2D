@@ -49,6 +49,9 @@ Cita siempre la fuente original, nunca el programa que la implementa.
 | Richards en forma mixta | Celia, Bouloutas y Zarba (1990) |
 | Optimización por paseo aleatorio | Greco (1996) |
 | Comprobación m-alpha | Whitman y Bailey (1967) |
+| Aceleración crítica Kc, F por reducción hasta Kc = kh, aceptabilidad física | Sarma (1973), *Géotechnique* 23(3), 423–433 (consultado) |
+| Sarma con dovelas no verticales | Sarma (1979), *J. Geotech. Eng. Div.* ASCE 105(GT12), 1511–1524: **no consultado**. La recurrencia de Kc es una derivación propia del equilibrio de fuerzas de una cuña (`spec/features/009-sarma-dovelas-no-verticales/plan.md`); que F reduzca también las caras lo fijan los publicados del manual 03 (v0.1.461) |
+| Sentido cinemático del cortante en las caras | Derivación propia: compatibilidad de velocidades de cuñas rígidas (spec 009) |
 
 ## Trampas que ya nos costaron caro
 

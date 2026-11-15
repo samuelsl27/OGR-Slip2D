@@ -134,6 +134,20 @@ def _samples() -> dict:
             {"method": display},
             f"{display}: no F-bracket; reporting "
             f"the sampled F of smallest residual"),
+        # v0.1.461 (D357): new codes, so their sentences are the ones this
+        # version writes, not a 0.1.332 expression.
+        m.SARMA_NO_DRIVING: (
+            {"kh": 0.15, "f_top": 1e6},
+            f"Kc reaches kh = {0.15:.4g} only with the shear strength "
+            f"divided by more than {1e6:g}, or never: the surface does not "
+            f"slide"),
+        m.SARMA_NO_ROOT: (
+            {"kh": 0.0, "f_min": 0.01},
+            f"Kc stays below kh = {0.0:.4g} for every factor of safety "
+            f"down to {0.01:g}"),
+        m.SARMA_FACE_PARALLEL: (
+            {"face": 3, "wedge": 2},
+            f"Face {3} is parallel to the base of wedge {2}"),
         m.SCREEN_TENSILE_STRESS: (
             {"count": 3}, f"tensile stress on {3} slice base(s) "
                           f"(error -120)"),

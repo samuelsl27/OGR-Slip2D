@@ -31,14 +31,14 @@ La propietaria decidió desarrollarlo con lo que hay en `referencias/Documentaci
 
 ### Identidades (0.1.461)
 
-- [ ] Una sola cuña sobre un plano da F = (c L + (W cos α − U) tan φ)/(W sen α) a 1e-8 relativo, con y sin
+- [x] Una sola cuña sobre un plano da F = (c L + (W cos α − U) tan φ)/(W sen α) a 1e-8 relativo, con y sin
       agua.
-- [ ] Caras verticales y resistencia de cara nula, sobre las MISMAS dovelas de `slice_surface`, dan el F de
+- [x] Caras verticales y resistencia de cara nula, sobre las MISMAS dovelas de `slice_surface`, dan el F de
       `JanbuSimplified` del motor a 1e-10.
   - Se mide en seco, con agua libre y con kh = 0,1 y kv = ±0,05 (convenio de D170).
   - En la planificación ya se midió a ≤ 5·10⁻¹³ en el 4 seco y saturado y en el 5.
-- [ ] Reflejar el modelo en x da el mismo F.
-- [ ] Con el sentido de cortante fijo y el cinemático: iguales donde la compatibilidad da el sentido por
+- [x] Reflejar el modelo en x da el mismo F.
+- [x] Con el sentido de cortante fijo y el cinemático: iguales donde la compatibilidad da el sentido por
       defecto, distintos donde no.
 
 ### Casos publicados (0.1.462, la referencia externa)

@@ -80,7 +80,15 @@ Sᵢ    = c̄′ᵢ dᵢ − PWᵢ tan φ̄′ᵢ
   Kc(F) = Σ aᵢ ∏ⱼ₍ⱼ>ᵢ₎ eⱼ / Σ pᵢ ∏ⱼ₍ⱼ>ᵢ₎ eⱼ.
 - F es la raíz MAYOR de Kc(F) = kh.
   - Se busca con H(F) = (N − kh·D)·∏qᵢ, que no tiene polos: barrido descendente y Brent.
-  - Por encima de esa raíz Kc < kh, así que es la mínima reducción que lleva al equilibrio límite.
+  - **(v0.1.461) ∏qᵢ no es siempre el denominador mínimo de Kc.** Cuando qₖ y Ẽⱼ (J > K) son la misma función de F
+    (bases K y J con la misma α y tan φ, caras K+1 y J con la misma δ y σ·tan φ̄: un tramo recto partido por una
+    cara, o escalones que se repiten), qₖ se cancela en Kc y H tendría un cero que no es raíz. Medido: por encima del
+    factor en un pie (2,064 para 1,741 verdadero) y escondiendo la raíz mayor en unos escalones (1,084 para 1,506).
+    El solver quita esos factores de forma exacta, con tolerancia de redondeo 1e-9.
+  - Es la mínima reducción de la resistencia que lleva al equilibrio límite, y la regla que siguen los tres
+    publicados. Cerca de una coincidencia (una base doblada Δα) la ecuación tiene una raíz verdadera pegada a un polo,
+    con fuerzas que crecen como 1/Δα: se devuelve, con `max_force_ratio` para que el método avise (decisión de la
+    propietaria, 2026-11-15).
 - Kc(F = 1) es la aceleración crítica de Sarma (1973).
 
 **Comprobado en la planificación:**

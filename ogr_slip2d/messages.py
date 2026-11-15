@@ -53,6 +53,10 @@ LAMBDA_NOT_CLOSED = "lem.lambda_not_closed"
 # -- the prescribed-inclination family ---------------------------------
 FORCE_BALANCE_DIVERGED = "lem.force_balance_diverged"
 NO_FORCE_BRACKET = "lem.no_force_bracket"
+# -- Sarma's non-vertical slices (v0.1.461, D357; ``ogr_slip2d.sarma``) ---
+SARMA_NO_DRIVING = "lem.sarma_no_driving"
+SARMA_NO_ROOT = "lem.sarma_no_root"
+SARMA_FACE_PARALLEL = "lem.sarma_face_parallel"
 # -- the post-analysis screens (``checks.screen_verdict``) -------------
 SCREEN_TENSILE_STRESS = "screen.tensile_stress"
 SCREEN_M_ALPHA = "screen.m_alpha"
@@ -130,6 +134,15 @@ for _spec in (
     MessageSpec(NO_FORCE_BRACKET,
                 "{method}: no F-bracket; reporting the sampled F of smallest "
                 "residual", group_by=_LAMBDA, kinds=_NAME),
+    MessageSpec(SARMA_NO_DRIVING,
+                "Kc reaches kh = {kh:.4g} only with the shear strength "
+                "divided by more than {f_top:g}, or never: the surface does "
+                "not slide"),
+    MessageSpec(SARMA_NO_ROOT,
+                "Kc stays below kh = {kh:.4g} for every factor of safety "
+                "down to {f_min:g}"),
+    MessageSpec(SARMA_FACE_PARALLEL,
+                "Face {face} is parallel to the base of wedge {wedge}"),
     MessageSpec(SCREEN_TENSILE_STRESS,
                 "tensile stress on {count} slice base(s) (error -120)"),
     MessageSpec(SCREEN_M_ALPHA, "m_alpha < {limit} on {count} slice(s)",

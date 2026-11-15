@@ -4234,6 +4234,17 @@ _DICTS: dict[str, dict[str, str]] = {
         "residual":
             "{method}: ningún intervalo de F cambia de signo; se da el F "
             "muestreado de menor residuo",
+        # v0.1.461 (D357) — Sarma's non-vertical slices
+        "Kc reaches kh = {kh:.4g} only with the shear strength divided by "
+        "more than {f_top:g}, or never: the surface does not slide":
+            "Kc solo alcanza kh = {kh:.4g} con la resistencia al corte "
+            "dividida por más de {f_top:g}, o nunca: la superficie no desliza",
+        "Kc stays below kh = {kh:.4g} for every factor of safety down to "
+        "{f_min:g}":
+            "Kc queda por debajo de kh = {kh:.4g} para todo factor de "
+            "seguridad hasta {f_min:g}",
+        "Face {face} is parallel to the base of wedge {wedge}":
+            "La cara {face} es paralela a la base de la cuña {wedge}",
         "tensile stress on {count} slice base(s) (error -120)":
             "tracción en la base de {count} dovela(s) (error -120)",
         "m_alpha < {limit} on {count} slice(s)":

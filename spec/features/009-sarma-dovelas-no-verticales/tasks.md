@@ -39,13 +39,13 @@ Pequeñas y verificables. Cada versión se cierra con `/release`:
 
 ## 0.1.461 — Solver
 
-- [ ] 9. `ogr_slip2d/sarma/solver.py`: recurrencia, H(F), raíz mayor (barrido y Brent), sentido fijo y
+- [x] 9. `ogr_slip2d/sarma/solver.py`: recurrencia, H(F), raíz mayor (barrido y Brent), sentido fijo y
       cinemático, Kc(1), normales y fuerzas de cara, y motivos con código.
-- [ ] 10. La tabla de fuentes de `.claude/skills/geotecnia/SKILL.md`:
+- [x] 10. La tabla de fuentes de `.claude/skills/geotecnia/SKILL.md`:
   - Sarma (1973), consultado;
   - Sarma (1979), no consultado;
   - la derivación propia.
-- [ ] 11. Test `tests/test_sarma_solver_v1461.py`:
+- [x] 11. Test `tests/test_sarma_solver_v1461.py`:
   - la cuña cerrada;
   - Janbu a 1e-10;
   - el reflejo;
