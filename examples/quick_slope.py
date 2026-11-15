@@ -5,10 +5,10 @@ examples/quick_slope.py
 -----------------------
 End-to-end demo of OGR Slip2D:
 
-    1. Build a small homogeneous slope model (no GUI).
-    2. Add a Mohr-Coulomb material and a water table.
-    3. Run a grid search with Bishop Simplified.
-    4. Print the critical Factor of Safety.
+    1. Take the demo slope (homogeneous, one Mohr-Coulomb material, a water
+       table), no GUI.
+    2. Run a grid search with Bishop Simplified.
+    3. Print the critical Factor of Safety.
 
 Run from repository root:
 
@@ -20,67 +20,65 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ogr_core.geometry import Boundary, BoundaryType, Polyline, Vertex
-from ogr_core.materials import Material, MohrCoulomb, PorePressureType
 from ogr_core.project import Project, save_results
+from ogr_core.project.demo import build_demo_project
 from ogr_slip2d import BishopSimplified, GridSearch
 
 
 def build_demo_slope() -> Project:
-    """A simple 2D slope:
+    """The demo slope of ``ogr_core.project.demo``, under this example's
+    name: a homogeneous slope 10 m high with a 1V:1H face and a horizontal
+    water table at y = 8.
 
-           crest (25, 25) ─── (50, 25)
-                        \\
-                         \\  slope 1:2
-                          \\
-                           toe (35, 15)
-                                 |
-                                 └─── (50, 15)   ground in front
-        origin (0, 0)  ───  (25, 15)            ground behind
+        (0, 25) ────────── (25, 25)  crest
+           │                    \\
+           │                     \\  face 1V:1H
+           │                      \\
+           │              toe (35, 15) ────── (50, 15)
+           │                                      │
+        (0, 0) ──────────────────────────────── (50, 0)
 
-    External boundary is a closed CCW polygon.
+    External boundary (0,0)-(50,0)-(50,15)-(35,15)-(25,25)-(0,25), CCW; one
+    Mohr-Coulomb material, c' = 10 kPa, phi' = 25 deg, gamma = 19 kN/m3.
+
+    v0.1.457 (D426) -- until this version the example built a second copy of
+    the same slope by hand (since v0.1.59), with the default failure
+    direction, Right to Left, while its ground is higher on the left: every
+    run through ``run_analysis``, and ``project_validate``, warned that the
+    declaration contradicted the geometry. It is now ``build_demo_project``,
+    which declares Left to Right since v0.1.329 (D328): one demo slope. No
+    number moves, measured in one process: the declaration (the 18 critical
+    surfaces of nine searches with Bishop and Janbu, the same bit for bit
+    under both), and the new copy against the old one, whose vertices were
+    floats where the demo's are integers (every population the same bit for
+    bit). What changes is the material's colour, the demo's now; the project
+    starts with no unsaved changes; and the coordinates are integers, so
+    ``main()`` prints ``bbox = (0, 0, 50, 25)`` and the PDF report lists
+    ``0`` where it listed ``0.000``.
     """
-    project = Project(name="Demo homogeneous slope")
-
-    # External boundary (closed polygon, CCW)
-    ext_poly = Polyline(
-        vertices=[
-            Vertex(0.0, 0.0),     # BL corner
-            Vertex(50.0, 0.0),    # BR corner
-            Vertex(50.0, 15.0),   # front ground
-            Vertex(35.0, 15.0),   # toe
-            Vertex(25.0, 25.0),   # crest
-            Vertex(0.0, 25.0),    # back crest
-        ],
-        closed=True,
-    )
-    ext_poly.ensure_ccw()
-    project.add_boundary(Boundary(polyline=ext_poly, btype=BoundaryType.EXTERNAL))
-
-    # Material
-    mat = Material(
-        name="Silty clay",
-        strength=MohrCoulomb(cohesion=10.0, friction_angle=25.0),
-        unit_weight=19.0,
-        sat_unit_weight=20.5,
-        pore_pressure=PorePressureType.WATER_TABLE,
-        color="#a0522d",
-    )
-    project.add_material(mat)
-
-    # Water table (a low, horizontal line for pore pressure generation)
-    wt_poly = Polyline(
-        vertices=[Vertex(0.0, 8.0), Vertex(50.0, 8.0)],
-        closed=False,
-    )
-    wt = Boundary(polyline=wt_poly, btype=BoundaryType.WATER_TABLE)
-    project.add_boundary(wt)
-    mat.water_surface_id = wt.id
-
-    return project
+    return build_demo_project(name="Demo homogeneous slope")
 
 
-def main() -> None:
+def surface_counts(result) -> str:
+    """The line ``main`` prints about the population: every surface the
+    search generated (``total_count``), the valid ones (``analysed_count``,
+    converged and through the post-checks: the ones that can be critical)
+    and the rest, invalid, as the reference's report counts them.
+
+    v0.1.457 -- it said «Evaluated 118 surfaces (valid: 90, invalid: 57)»,
+    and the parts did not add up to the whole: 118 was ``len(evaluations)``,
+    the surfaces sliced, while the invalid count includes the 29 rejected
+    before slicing, which leave no evaluation. Of the 147 generated, 90 are
+    valid and 57 invalid.
+    """
+    generated = result.total_count
+    valid = result.analysed_count
+    return (f"Generated {generated} surfaces "
+            f"(valid: {valid}, invalid: {generated - valid})")
+
+
+def main():
+    """Run the example and print what it found; return the search result."""
     project = build_demo_slope()
     print(f"Project '{project.name}' — bbox = {project.bounding_box()}")
     print(f"Materials: {len(project.materials)}, boundaries: {len(project.boundaries)}")
@@ -97,13 +95,12 @@ def main() -> None:
     )
     print("\nRunning Bishop Simplified grid search...")
     result = search.run(project)
-    print(f"Evaluated {len(result.evaluations)} surfaces "
-          f"(valid: {result.valid_count}, invalid: {result.invalid_count})")
+    print(surface_counts(result))
 
     critical = result.critical
     if critical is None:
         print("No valid failure surface found.")
-        return
+        return result
 
     s = critical.surface.to_dict()
     print("\n── Critical surface ──")
@@ -118,6 +115,7 @@ def main() -> None:
     out_path = Path("quick_slope_results.h5")
     save_results(out_path, result, project_id=project.id)
     print(f"\nResults saved to {out_path.resolve()}")
+    return result
 
 
 if __name__ == "__main__":
