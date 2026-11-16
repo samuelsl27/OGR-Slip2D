@@ -414,19 +414,31 @@ def _refuse(reasons, code, **args):
 def _by_vertex(data, points, tol):
     """``{interior index: value}`` of the per-vertex ``data`` (a mapping
     ``{(x, y): value}``) matched to ``points`` (the interior boundary
-    points) within ``tol``, and the keys nobody took. Two keys on one
-    point are a ValueError: one of them would be dropped unseen."""
-    taken, unused = {}, []
-    for (x, y), value in (data or {}).items():
+    points) within ``tol``, and the keys nobody took.
+
+    Two keys within ``tol`` of one point: the NEARER one is taken and the
+    other goes with the unused, which the run says. The rule of the data
+    matches at a billionth of the width and this at the model's grid, so two
+    vertices a grid cell apart each carry a valid datum that lands here on
+    one point; a ValueError aborted the whole run (the review of v0.1.465).
+    Ties go to the first key in sorted order, so the answer does not hang on
+    the order of a dictionary."""
+    best, unused = {}, []
+    for (x, y), value in sorted((data or {}).items()):
         k = next((i for i, (px, py) in points.items()
                   if abs(px - x) <= tol and abs(py - y) <= tol), None)
         if k is None:
             unused.append((x, y))
-        elif k in taken:
-            raise ValueError("two data for the vertex at %r" % (points[k],))
-        else:
-            taken[k] = value
-    return taken, unused
+            continue
+        d = math.hypot(points[k][0] - x, points[k][1] - y)
+        if k in best:
+            if d < best[k][0]:
+                unused.append(best[k][1])
+            else:
+                unused.append((x, y))
+                continue
+        best[k] = (d, (x, y), value)
+    return {k: v[2] for k, v in best.items()}, unused
 
 
 def _strength(value) -> tuple:
@@ -662,8 +674,12 @@ def build_wedges(project, surface, vertical: Slices, num_wedges: int = 25, *,
                 + list(reversed(_path_between(gpts, pos[i], tops[i],
                                               pos[i + 1], tops[i + 1]))))
         ring = _clean(ring)
+        # the count first: Shapely raises on a ring of fewer than three
+        # points (one wedge, the review of v0.1.465)
+        if len(ring) < 3:
+            return _refuse(reasons, msg.SARMA_WEDGE_INVALID, wedge=i + 1)
         poly = Polygon(ring)
-        if len(ring) < 3 or not poly.is_valid or poly.area <= 0.0:
+        if not poly.is_valid or poly.area <= 0.0:
             return _refuse(reasons, msg.SARMA_WEDGE_INVALID, wedge=i + 1)
         if ring and Polygon(ring).exterior.is_ccw is False:
             ring = list(reversed(ring))

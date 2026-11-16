@@ -136,6 +136,8 @@ MAPPED: dict[str, str] = {
     # v0.1.427 (D357) -- the hand-drawn non-circular surfaces
     "surf_polyline_add": "user_surface_add",
     "surf_polyline_manage": "user_surface_delete",
+    # v0.1.465 (D357)
+    "surf_polyline_sarma": "user_surface_edit",
     "add_text": "annotation_set",
     "measure": "annotation_set",
     "dim_len": "annotation_set",

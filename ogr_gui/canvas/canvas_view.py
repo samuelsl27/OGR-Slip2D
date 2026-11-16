@@ -153,6 +153,8 @@ def user_surface_refusal_text(exc) -> str:
     way.
     """
     kind = getattr(exc, "kind", "not_advancing")
+    if kind == "bad_vertex_data":
+        return _vertex_data_refusal_text(exc)
     if kind in ("not_points", "not_finite"):
         return tr("Every vertex of a non-circular slip surface needs two "
                   "finite coordinates.")
@@ -161,6 +163,32 @@ def user_surface_refusal_text(exc) -> str:
     return tr("A non-circular slip surface has to advance in x from one end "
               "to the other, always in the same direction: no step back and "
               "no vertical segment.")
+
+
+def _vertex_data_refusal_text(exc) -> str:
+    """Why a datum of Sarma's method per vertex is refused, in the user's
+    language (v0.1.465, D357): the ``reason`` and ``where`` of the core's
+    ``NotASurface`` (``checked_vertex_data``), not its English sentence."""
+    reason = getattr(exc, "reason", None)
+    where = getattr(exc, "where", None)
+    x, y = where if where is not None else (float("nan"), float("nan"))
+    if reason == "not_a_vertex":
+        return tr("({x:.6g}, {y:.6g}) is not an interior vertex of the "
+                  "surface.").format(x=x, y=y)
+    if reason == "twice":
+        return tr("Two data for the vertex ({x:.6g}, {y:.6g}).").format(
+            x=x, y=y)
+    if reason == "angle":
+        return tr("The angle at ({x:.6g}, {y:.6g}) must be a finite number "
+                  "and not horizontal.").format(x=x, y=y)
+    if reason == "pair":
+        return tr("The face cohesion and friction angle at ({x:.6g}, "
+                  "{y:.6g}) go together.").format(x=x, y=y)
+    if reason == "strength":
+        return tr("The face strength at ({x:.6g}, {y:.6g}) needs numbers "
+                  "with c >= 0 and 0 <= φ < 90.").format(x=x, y=y)
+    return tr("The per-vertex data are not a list of rows with the x and y "
+              "of a vertex.")
 
 
 @dataclass
@@ -3118,6 +3146,42 @@ class CanvasView(QGraphicsView):
     # ==================================================================
     # v0.1.8 — Slip-circle search grid visualisation
     # ==================================================================
+    def _draw_sarma_rays(self, scene, polyline, length) -> None:
+        """v0.1.465 (D357) -- the face angles given at the vertices of a
+        user's polyline, as dotted rays of ``length`` from each vertex up
+        into the mass, all in ONE path item (one pen per surface, D395)."""
+        import math as _m
+        from PySide6.QtGui import QPainterPath
+        from ogr_core.geometry.user_polyline import (checked_points,
+                                                     split_vertex_data)
+        # only what the rule accepts: an angle "abc" in a hand-edited file
+        # broke the drawing of the whole scene (the review of v0.1.465)
+        try:
+            data, _bad = split_vertex_data(
+                checked_points(polyline.points),
+                getattr(polyline, "vertex_data", None))
+        except ValueError:
+            return
+        path = None
+        for (x, y), datum in data.items():
+            angle = datum.get("angle")
+            if angle is None:
+                continue
+            t = _m.radians(float(angle) % 180.0)
+            if path is None:
+                path = QPainterPath()
+            path.moveTo(x, y)
+            path.lineTo(x + length * _m.cos(t), y + length * _m.sin(t))
+        if path is None:
+            return
+        from PySide6.QtWidgets import QGraphicsPathItem
+        item = QGraphicsPathItem(path)
+        pen = QPen(QColor("#7b2cbf"), 1.0, Qt.PenStyle.DotLine)
+        pen.setCosmetic(True)
+        item.setPen(pen)
+        item.setZValue(8.0)
+        scene.addItem(item)
+
     def _draw_user_surfaces(self, scene) -> None:
         """Draw the slip surfaces the user defined by hand (D58).
 
@@ -3178,6 +3242,10 @@ class CanvasView(QGraphicsView):
             item.setPen(pen)
             item.setZValue(8.0)
             scene.addItem(item)
+            # v0.1.465 (D357) -- its given face angles, dotted, a fifth of
+            # its width long
+            xs = [float(pt[0]) for pt in up.points]
+            self._draw_sarma_rays(scene, up, 0.2 * (max(xs) - min(xs)))
         if not surfaces:
             return
         for c in surfaces:

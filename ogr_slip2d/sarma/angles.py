@@ -41,8 +41,10 @@ BISECTOR = "bisector"
 MEAN_NORMAL = "mean_normal"
 POLICIES = (VERTICAL, BISECTOR, MEAN_NORMAL)
 
-#: A line closer than this to horizontal [rad] is no face.
-_HORIZONTAL = 1e-12
+#: A line closer than this to horizontal [rad] is no face: the core's,
+#: which the rule of the per-vertex data asks too (v0.1.465).
+from ogr_core.geometry.user_polyline import \
+    HORIZONTAL_FACE_RAD as _HORIZONTAL  # noqa: E402
 
 
 def upward(theta_deg: float) -> Optional[float]:

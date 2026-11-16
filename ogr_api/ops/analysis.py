@@ -289,13 +289,19 @@ def surface_from_spec(spec):
         # [31, 14.5], [25, 18], [37, 15]] gave 1.178925 on the demo slope,
         # the factor of the sorted one. A polyline given from right to left
         # is the same surface and is still accepted.
-        from ogr_core.geometry.user_polyline import checked_points
+        from ogr_core.geometry.user_polyline import (checked_points,
+                                                     checked_vertex_data)
+        from ogr_slip2d.surface import attach_vertex_data
         try:
             pts = checked_points(pts)
+            # v0.1.465 (D357) -- Sarma's data per vertex, by the one rule
+            data = checked_vertex_data(pts, spec.get("sarma"))
         except ValueError as exc:
             raise InvalidArgument(str(exc)) from None
-        return SlipSurface(polyline=Polyline(
+        out = SlipSurface(polyline=Polyline(
             vertices=[Vertex(x, y) for x, y in pts], closed=False))
+        attach_vertex_data(out, data)
+        return out
     raise unknown("surface type", kind, ["circle", "three_points",
                                          "polyline"])
 

@@ -48,7 +48,10 @@ _ROOT = Path(__file__).resolve().parent.parent
 #: ``{code, args, english[, prefix]}``: the line v0.1.347 wrote with those
 #: values. A nested value is ``{"$code", "$args"}`` (``{"$nothing"}`` for a
 #: clause left out), and ``prefix`` the method in front of the line.
-_V1347 = [{'code': 'method.sarma_bad_setting',
+_V1347 = [{'code': 'method.sarma_vertex_data_unused',
+  'english': '2 datum (data) given at vertices of the reported surface did not reach it (a crack cut the vertex off, Optimize moved it, or a weak layer clipped the surface): its faces took the policy and the face strength of the settings.',
+  'args': {'count': 2}},
+ {'code': 'method.sarma_bad_setting',
   'english': "not computed: its setting 'num_slices' has a value it cannot take (0).",
   'args': {'field': 'num_slices', 'value': '0'}},
  {'code': 'method.sarma_own_settings',

@@ -32,7 +32,7 @@ TOOLSETS: dict[str, tuple[str, ...]] = {
     "supports": ("support_type_set", "support_type_delete", "support_set",
                  "support_pattern_add", "support_delete", "support_ungroup"),
     "search": ("tension_crack_set", "focus_set", "focus_delete",
-               "user_surface_add", "user_surface_delete"),
+               "user_surface_add", "user_surface_edit", "user_surface_delete"),
     "annotations": ("annotation_set", "annotation_delete",
                     "annotation_to_boundary", "properties_table"),
     "files": ("dxf_inspect", "dxf_import", "dxf_export", "report_generate",

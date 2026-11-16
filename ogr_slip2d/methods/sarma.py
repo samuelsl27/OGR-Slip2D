@@ -127,10 +127,35 @@ class SarmaNonVertical(LEMMethod):
                    vertical: Slices, reasons=None):
         """The wedges this method computes ``surface`` on, built on the
         slicer's ``vertical`` slices with the method's settings; None, with
-        the reason in ``reasons``, when the constructor refuses."""
+        the reason in ``reasons``, when the constructor refuses.
+
+        v0.1.465 (D357) -- with the per-vertex data the surface carries
+        (fields of ``SlipSurface``, set by ``surface.attach_vertex_data``
+        and carried by every copy and by Optimize's walk), or the surface a
+        weak layer clipped (``base``): a datum whose vertex is not on the
+        computed surface (cut off by a crack, moved by Optimize, clipped),
+        or the farther of two on one vertex, is left out and listed in
+        ``Wedges.unused_vertex_data``, which the run says
+        (``analysis_runner.sarma_notes``, and per stored polyline the
+        search's ``search.user_polyline_sarma_unused``)."""
+        holder = surface
+        if (getattr(surface, "vertex_angles", None) is None
+                and getattr(surface, "vertex_strength", None) is None):
+            holder = getattr(surface, "base", None) or surface
+        strengths = getattr(holder, "vertex_strength", None)
+        if strengths and getattr(project, "design_factored_copy", False):
+            # the design standard's material factors, on the copy only, in
+            # this one place (``design_factors.factored_face_strength``)
+            from ogr_core.project.design_factors import factored_face_strength
+            ds = project.settings.design_standard
+            strengths = {k: factored_face_strength(c, phi, ds)
+                         for k, (c, phi) in strengths.items()}
         return _wedges.build_wedges(
             project, surface, vertical, self.num_wedges,
-            angles=self.angle_policy, face_strength=self.face_strength,
+            angles=self.angle_policy,
+            vertex_angles=getattr(holder, "vertex_angles", None),
+            face_strength=self.face_strength,
+            vertex_strength=strengths,
             boundaries_at_materials=self.boundaries_at_materials,
             reasons=reasons)
 

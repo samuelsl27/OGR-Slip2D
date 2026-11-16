@@ -246,7 +246,9 @@ def _user_polyline_add(ws, surface: dict, project_id) -> dict:
 
     pts = points(surface.get("points"), "points", minimum=2)
     try:
-        up = UserPolylineSurface.from_points(pts)
+        # v0.1.465 (D357) -- with Sarma's data per vertex, by the one rule
+        up = UserPolylineSurface.from_points(
+            pts, vertex_data=surface.get("sarma"))
     except ValueError as exc:
         raise InvalidArgument(str(exc)) from None
 
@@ -263,6 +265,40 @@ def _user_polyline_add(ws, surface: dict, project_id) -> dict:
                 "count": len(project.user_polylines)}
 
     return ws.mutate(project_id, "Add user surface", edit)
+
+
+@operation("user_surface_edit", toolset="search", mutates=True)
+def user_surface_edit(ws, surface: str, sarma: Any,
+                      project_id: Optional[str] = None) -> dict:
+    """Replace the data of Sarma's method per vertex of a stored polyline
+    (v0.1.465, D357): ``sarma`` is a list of ``{"x", "y", "angle", "c",
+    "phi"}`` at interior vertices (the angle in degrees counter-clockwise
+    from +x; c in kPa and phi in degrees, together), or [] to clear them.
+    One undo step."""
+    from ogr_core.geometry.user_polyline import (checked_points,
+                                                 checked_vertex_data)
+    from ogr_slip2d.surface import slip_surface_of
+
+    def edit(project):
+        polylines = list(getattr(project, "user_polylines", None) or [])
+        up = next((s for s in polylines if s.id == surface), None)
+        if up is None:
+            raise unknown("user polyline", surface, [s.id for s in polylines])
+        try:
+            # the geometry first, by the rule every door asks: a stored
+            # polyline is not re-checked when a file is read, and its data
+            # are matched against the vertices the run will see (the review
+            # of v0.1.465)
+            up.vertex_data = checked_vertex_data(checked_points(up.points),
+                                                 sarma or [])
+        except ValueError as exc:
+            raise InvalidArgument(str(exc)) from None
+        project._notify("user_surfaces_changed")
+        return {"surface": {"id": up.id,
+                            **surface_summary(slip_surface_of(up))},
+                "vertices": len(up.vertex_data)}
+
+    return ws.mutate(project_id, "Edit user surface", edit)
 
 
 @operation("user_surface_delete", toolset="search", mutates=True)

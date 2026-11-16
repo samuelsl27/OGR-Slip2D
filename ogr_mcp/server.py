@@ -670,7 +670,10 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
                         "'radius'} or {'type': 'three_points', 'points': "
                         "[[x,y]x3]} or {'type': 'polyline', 'points': "
                         "[[x,y],...]}, x advancing from one end to the "
-                        "other.")],
+                        "other; a polyline may carry 'sarma': [{'x','y',"
+                        "'angle','c','phi'}] at interior vertices "
+                        "(Sarma's face angle in degrees CCW from +x; "
+                        "c kPa and phi together).")],
             project_id: ProjectId = None,
             methods: Methods = None) -> dict[str, Any]:
         """The factor of safety of ONE given slip surface, per method,
@@ -1160,11 +1163,28 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
                         "'radius'} or {'type': 'three_points', 'points': "
                         "[[x,y]x3]}; or {'type': 'polyline', 'points': "
                         "[[x,y], ...]}, x advancing from one end to the "
-                        "other.")],
+                        "other; a polyline may carry 'sarma': [{'x','y',"
+                        "'angle','c','phi'}] at interior vertices "
+                        "(Sarma's face angle in degrees CCW from +x; "
+                        "c kPa and phi together).")],
             project_id: ProjectId = None) -> dict[str, Any]:
         """Add a slip surface analysed alongside every search: a circle with
         the circular surface type, a polyline with the non-circular one."""
         return run("user_surface_add", surface=surface,
+                   project_id=project_id)
+
+    @tool("user_surface_edit", _EDIT)
+    def user_surface_edit(surface: Annotated[str, Field(
+            description="Id of a stored polyline.")],
+            sarma: Annotated[list[dict[str, Any]], Field(
+                description="[{'x','y','angle','c','phi'}] at interior "
+                            "vertices, or [] to clear: Sarma's face angle "
+                            "(degrees CCW from +x) and face c (kPa) and phi "
+                            "(degrees), these two together.")],
+            project_id: ProjectId = None) -> dict[str, Any]:
+        """Replace the data of Sarma's method per vertex of a stored user
+        polyline (one undo step)."""
+        return run("user_surface_edit", surface=surface, sarma=sarma,
                    project_id=project_id)
 
     @tool("user_surface_delete", _DESTRUCTIVE)

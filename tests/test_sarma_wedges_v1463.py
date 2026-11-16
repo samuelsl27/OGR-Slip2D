@@ -1062,7 +1062,7 @@ class TestEveryRefusalHasItsCode:
                             material="m") != code
 
     def test_a_malformed_call_is_an_error(self):
-        from ogr_slip2d.sarma.wedges import build_wedges
+        from ogr_slip2d.sarma.wedges import Wedges, build_wedges
         from ogr_slip2d.slicer import slice_surface
         p, s = _slope(load=False)
         v = slice_surface(p, s, num_slices=30)
@@ -1085,14 +1085,23 @@ class TestEveryRefusalHasItsCode:
         for kw in (dict(vertex_strength={(40.0, 4.0): (-5.0, 20.0)}),
                    dict(vertex_strength={(40.0, 4.0): (5.0, 95.0)}),
                    dict(vertex_strength={(40.0, 4.0): (math.nan, 20.0)}),
-                   dict(vertex_angles={(40.0, 4.0): math.nan}),
-                   dict(vertex_angles={(40.0, 4.0): 80.0,
-                                       (40.0 + 1e-9, 4.0): 85.0})):
+                   dict(vertex_angles={(40.0, 4.0): math.nan})):
             try:
                 build_wedges(p, s, v, 4, **kw)
             except ValueError:
                 continue
             raise AssertionError(kw)
+        # v0.1.465 (the review): two data on one vertex are no longer an
+        # error that aborts the run; the nearer one is taken and the other
+        # goes with the unused, either order (test_sarma_vertices_v1465)
+        for far in (40.0 + 1e-9, 40.0 - 1e-9):
+            w = build_wedges(p, s, v, 4, vertex_angles={(40.0, 4.0): 80.0,
+                                                        (far, 4.0): 85.0})
+            assert isinstance(w, Wedges)
+            assert w.unused_vertex_data == [("angle", (far, 4.0))]
+            one = build_wedges(p, s, v, 4,
+                               vertex_angles={(40.0, 4.0): 80.0})
+            assert [f.theta for f in w.faces] == [f.theta for f in one.faces]
         for cuts in ((10.0, 30.0), (10.0, 50.0, 40.0, 70.0), (70.0,)):
             try:
                 slice_surface(p, s, cuts=cuts)

@@ -633,6 +633,25 @@ _LATER = [
                 "search's default, not a setting of this model).",
      'args': {'filters': [{'$code': 'search.filter.min_area_default',
                            '$args': {'value': 1.0}}]}},
+    # v0.1.465 (D357) -- Sarma's data per vertex of a stored polyline
+    {'code': 'search.user_polyline_sarma_refused',
+     'english': 'The user-defined non-circular surface 2 (4 vertices, from '
+                '(18, 25) to (40.12, 15)) carries 1 datum (data) of Sarma\'s '
+                'method per vertex that the rule refuses (not an interior '
+                'vertex, an angle that is not a number or is horizontal, a '
+                'cohesion without its friction angle or out of range): its '
+                'faces took the policy and the face strength of the '
+                'settings.',
+     'args': {'k': 2, 'nv': 4, 'x0': 18.0, 'y0': 25.0, 'x1': 40.123456,
+              'y1': 15.0, 'count': 1}},
+    {'code': 'search.user_polyline_sarma_unused',
+     'english': 'The user-defined non-circular surface 2 (4 vertices, from '
+                '(18, 25) to (40.12, 15)) has 2 datum (data) of Sarma\'s '
+                'method given at vertices that did not reach the surface '
+                'analysed (a crack cut the vertex off): its faces took the '
+                'policy and the face strength of the settings.',
+     'args': {'k': 2, 'nv': 4, 'x0': 18.0, 'y0': 25.0, 'x1': 40.123456,
+              'y1': 15.0, 'count': 2}},
 ]
 
 

@@ -593,9 +593,18 @@ def _walk(project, search, surface, opts, rep, rng, pts, progress_cb):
 
     evaluator = _evaluator_for(search, opts)
 
+    # v0.1.465 (D357) -- Sarma's data per vertex go with every surface of
+    # the walk: a datum applies while its vertex has not moved, and one the
+    # walk moved away is said (``method.sarma_vertex_data_unused``). Built
+    # fresh, they were lost on the first step without a word (the review of
+    # v0.1.465).
+    carried = {"vertex_angles": getattr(surface, "vertex_angles", None),
+               "vertex_strength": getattr(surface, "vertex_strength", None)}
+
     def _make(points):
         return SlipSurface(polyline=Polyline(
-            vertices=[Vertex(x, y) for x, y in points], closed=False))
+            vertices=[Vertex(x, y) for x, y in points], closed=False),
+            **carried)
 
     from ogr_core.progress import checkpoint
 

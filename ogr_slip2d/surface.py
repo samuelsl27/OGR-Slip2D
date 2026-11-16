@@ -146,6 +146,16 @@ class SlipSurface:
     # (every other search, and a Block Search without groups). It only says
     # where the surface came from: no calculation reads it.
     block_group: Optional[int] = None
+    # v0.1.465 (D357) -- Sarma's data per vertex, by the vertex's exact
+    # coordinates: ``{(x, y): θ°}`` and ``{(x, y): (c, φ°)}``, or None
+    # (:func:`attach_vertex_data`). FIELDS, and not attributes hung on the
+    # object, so every door that rebuilds a surface carries them: the copy
+    # of a weak layer's cases (``dataclasses.replace``), the seed of the
+    # statistics (``to_dict``/``from_dict``) and Optimize's walk (its
+    # ``_make``). Hung as attributes they were lost in all three, and F
+    # moved 1.08827 -> 1.13722 without a word (the review of v0.1.465).
+    vertex_angles: Optional[dict] = None
+    vertex_strength: Optional[dict] = None
 
     def __post_init__(self) -> None:
         # Enforce left-to-right ordering
@@ -240,6 +250,14 @@ class SlipSurface:
             # polyline itself is already truncated, so without this the
             # drawing would stop in mid-air.
             "tension_cracks": [list(t) for t in self.tension_cracks],
+            # v0.1.465 (D357) -- only when there are any, so the dictionary
+            # of a surface without them does not move
+            **({"vertex_angles": [[x, y, a] for (x, y), a in
+                                  sorted(self.vertex_angles.items())]}
+               if self.vertex_angles else {}),
+            **({"vertex_strength": [[x, y, c, p] for (x, y), (c, p) in
+                                    sorted(self.vertex_strength.items())]}
+               if self.vertex_strength else {}),
         }
 
     @classmethod
@@ -248,6 +266,12 @@ class SlipSurface:
         if "id" in data:
             s.id = data["id"]
         s.tension_cracks = [tuple(t) for t in data.get("tension_cracks", [])]
+        angles = {(float(x), float(y)): float(a)
+                  for x, y, a in data.get("vertex_angles") or ()}
+        strength = {(float(x), float(y)): (float(c), float(p))
+                    for x, y, c, p in data.get("vertex_strength") or ()}
+        s.vertex_angles = angles or None
+        s.vertex_strength = strength or None
         return s
 
 
@@ -1391,7 +1415,8 @@ def lowest_elevation(surface) -> Optional[float]:
 # v0.1.427 (D357) -- the polyline the user draws by hand, as the engine
 # evaluates it.
 
-def slip_surface_of(user: "UserPolylineSurface") -> "SlipSurface":
+def slip_surface_of(user: "UserPolylineSurface",
+                    refused: list = None) -> "SlipSurface":
     """A FRESH engine surface through the points of a hand-drawn polyline.
 
     Fresh on every call because the engine writes on the surface it is
@@ -1404,11 +1429,44 @@ def slip_surface_of(user: "UserPolylineSurface") -> "SlipSurface":
     that steps back in x would otherwise become ANOTHER surface without a
     word. Raises ``NotASurface`` (a ValueError) for a stored polyline that is
     not a surface (a hand-edited file, a script).
+
+    ``refused``, a list, receives a ``NotASurface`` for each per-vertex datum
+    of Sarma's method the rule refuses (``split_vertex_data``): the surface
+    is built with the others, and the caller says them. One bad row of a
+    hand-edited file used to cost the polyline for every method, with the
+    note of a surface that does not advance in x (the review of v0.1.465).
     """
-    from ogr_core.geometry.user_polyline import checked_points
-    return SlipSurface(polyline=Polyline(
-        vertices=[Vertex(x, y) for x, y in checked_points(user.points)],
-        closed=False))
+    from ogr_core.geometry.user_polyline import (checked_points,
+                                                 split_vertex_data)
+    pts = checked_points(user.points)
+    surface = SlipSurface(polyline=Polyline(
+        vertices=[Vertex(x, y) for x, y in pts], closed=False))
+    # v0.1.465 (D357) -- Sarma's data per vertex, by the one rule, on the
+    # surface by coordinates, where the method reads them
+    # (``SarmaNonVertical.wedges_for``). They survive the copies of the
+    # surface and the crack's truncation, which keeps interior vertices.
+    good, bad = split_vertex_data(pts, getattr(user, "vertex_data", None))
+    if refused is not None:
+        refused.extend(bad)
+    attach_vertex_data(surface, good)
+    return surface
+
+
+def attach_vertex_data(surface, data: dict) -> None:
+    """Hang Sarma's per-vertex data (``{(x, y): {"angle", "c", "phi"}}``,
+    from ``checked_vertex_data``) on an engine surface as the two mappings
+    ``SarmaNonVertical.wedges_for`` reads, ``vertex_angles`` and
+    ``vertex_strength`` (v0.1.465, D357), fields of ``SlipSurface``.
+    Nothing is set without data, so a surface without any is the one it
+    always was."""
+    angles = {k: v["angle"] for k, v in (data or {}).items()
+              if v.get("angle") is not None}
+    strengths = {k: (v["c"], v["phi"]) for k, v in (data or {}).items()
+                 if v.get("c") is not None}
+    if angles:
+        surface.vertex_angles = angles
+    if strengths:
+        surface.vertex_strength = strengths
 
 
 #: An end this close to the External Boundary, as a fraction of the

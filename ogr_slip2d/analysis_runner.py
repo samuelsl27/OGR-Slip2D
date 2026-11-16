@@ -1622,6 +1622,12 @@ def sarma_notes(result, search=None) -> list:
             tension += 1
     if tension:
         out.append(_mnote(MN.SARMA_TENSION, count=tension))
+    # v0.1.465 (D357) -- per-vertex data that did not reach the surface
+    unused = getattr(getattr(result, "slices", None), "wedge_fields",
+                     None) or {}
+    unused = len(unused.get("unused_vertex_data") or ())
+    if unused:
+        out.append(_mnote(MN.SARMA_VERTEX_DATA_UNUSED, count=unused))
     refused = int(getattr(search, "_wedges_refused", 0) or 0)
     if refused:
         out.append(_mnote(MN.SARMA_WEDGES_REFUSED, count=refused))

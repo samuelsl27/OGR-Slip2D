@@ -2552,8 +2552,9 @@ class BaseSearch(ABC):
         from .surface import slip_surface_of, snap_polyline_ends
 
         at = self._polyline_at(up, k)
+        refused = []
         try:
-            surf = slip_surface_of(up)
+            surf = slip_surface_of(up, refused=refused)
         except ValueError:
             # ``NotASurface``: a step back in x, a vertical segment, fewer
             # than two points, a coordinate that is not finite (a hand-edited
@@ -2562,6 +2563,11 @@ class BaseSearch(ABC):
             # not load).
             self._note(_snote(SN.USER_PL_NOT_A_SURFACE, **at))
             return None
+        # v0.1.465 (D357) -- Sarma's data per vertex: only Sarma reads them
+        sarma = getattr(self.method, "METHOD_ID", None) == "sarma"
+        if refused and sarma:
+            self._note(_snote(SN.USER_PL_SARMA_REFUSED, **at,
+                              count=len(refused)))
         try:
             moves = snap_polyline_ends(project, surf)
         except ValueError:
@@ -2587,6 +2593,11 @@ class BaseSearch(ABC):
                 if filters else _snote(SN.USER_PL_NO_RESULT, **at))
             return None
         result.user_evaluations.append(res)
+        fields = getattr(getattr(res, "slices", None), "wedge_fields",
+                         None) or {}
+        unused = len(fields.get("unused_vertex_data") or ())
+        if unused:
+            self._note(_snote(SN.USER_PL_SARMA_UNUSED, **at, count=unused))
         if not res.is_valid:
             self._note(_snote(SN.USER_PL_NO_FACTOR, **at,
                               reason=SN.reason_of(res, SN.NO_REASON_STOP)))

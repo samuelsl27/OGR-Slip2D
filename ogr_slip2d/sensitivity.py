@@ -286,6 +286,10 @@ def run_sensitivity(
     if not critical_surfaces:
         _publish_note(res, "error", SM.stat_note(SM.NO_DETERMINISTIC_RESULT))
         return res
+    # v0.1.465 (D357) -- a face strength given by hand is not swept
+    from .probabilistic import _sarma_given_note
+    _sarma_given_note(res, project, list(critical_surfaces), [
+        getattr(r, "surface", None) for r in critical_surfaces.values()])
     # v0.1.236 (D93) — the method and the evaluator from the project as the
     # analysis prepares it, as in ``run_global_minimum``.
     configured = _analysis_copy(project)

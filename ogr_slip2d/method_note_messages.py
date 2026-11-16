@@ -43,6 +43,8 @@ SARMA_TENSION = "method.sarma_tension"
 SARMA_WEDGES_REFUSED = "method.sarma_wedges_refused"
 SARMA_OWN_SETTINGS = "method.sarma_own_settings"
 SARMA_BAD_SETTING = "method.sarma_bad_setting"
+# v0.1.465
+SARMA_VERTEX_DATA_UNUSED = "method.sarma_vertex_data_unused"
 
 # --- the inter-slice inclination (Spencer, GLE) ---------------------------
 LAMBDA_FALLBACK = "method.lambda_fallback"
@@ -267,6 +269,12 @@ METHOD_NOTES = {s.code: s for s in (
                 "on the reported surface {count} base(s) or face(s) carry an "
                 "effective normal force in tension; Sarma (1973) asks for the "
                 "solution to be physically acceptable."),
+    MessageSpec(SARMA_VERTEX_DATA_UNUSED,
+                "{count} datum (data) given at vertices of the reported "
+                "surface did not reach it (a crack cut the vertex off, "
+                "Optimize moved it, or a weak layer clipped the surface): its "
+                "faces took the policy and the face strength of the "
+                "settings."),
     MessageSpec(SARMA_BAD_SETTING,
                 "not computed: its setting '{field}' has a value it cannot "
                 "take ({value})."),

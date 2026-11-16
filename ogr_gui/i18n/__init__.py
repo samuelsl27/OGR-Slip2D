@@ -4332,7 +4332,52 @@ _DICTS: dict[str, dict[str, str]] = {
             'Fijo: la cuña de arriba baja',
         "Kinematic: the rigid wedges' own":
             'Cinemático: el de las cuñas rígidas',
+        # v0.1.465 (D357) — Sarma's data per vertex
+        'Sarma Data per Vertex...':
+            'Datos de Sarma por vértice...',
+        'Sarma Data per Vertex':
+            'Datos de Sarma por vértice',
+        'Surface:':
+            'Superficie:',
+        'Draw a non-circular surface first (Surfaces -> Add Non-Circular Surface).':
+            'Dibuja antes una superficie no circular (Superficies -> Añadir superficie no circular).',
+        'Leave a cell empty for no datum: the face then takes the angle policy and the face strength of Settings → Methods → Sarma. The angle is in degrees counter-clockwise from +x (90 is vertical); the cohesion and the friction angle go together.':
+            'Deja una celda vacía para no dar el dato: la cara toma entonces la política de ángulo y la resistencia de cara de Configuración → Métodos → Sarma. El ángulo va en grados antihorarios desde +x (90 es vertical); la cohesión y el ángulo de rozamiento van juntos.',
+        'Angle [°]':
+            'Ángulo [°]',
+        'Cohesion [%s]':
+            'Cohesión [%s]',
+        'Friction angle [°]':
+            'Ángulo de rozamiento [°]',
+        'Row {row}: «{text}» is not a number.':
+            'Fila {row}: «{text}» no es un número.',
+        '({x:.6g}, {y:.6g}) is not an interior vertex of the surface.':
+            '({x:.6g}, {y:.6g}) no es un vértice interior de la superficie.',
+        'Two data for the vertex ({x:.6g}, {y:.6g}).':
+            'Dos datos para el vértice ({x:.6g}, {y:.6g}).',
+        'The angle at ({x:.6g}, {y:.6g}) must be a finite number and not horizontal.':
+            'El ángulo en ({x:.6g}, {y:.6g}) ha de ser un número finito y no horizontal.',
+        'The face cohesion and friction angle at ({x:.6g}, {y:.6g}) go together.':
+            'La cohesión y el ángulo de rozamiento de la cara en ({x:.6g}, {y:.6g}) van juntos.',
+        'The face strength at ({x:.6g}, {y:.6g}) needs numbers with c >= 0 and 0 <= φ < 90.':
+            'La resistencia de la cara en ({x:.6g}, {y:.6g}) pide números con c >= 0 y 0 <= φ < 90.',
+        'The per-vertex data are not a list of rows with the x and y of a vertex.':
+            'Los datos por vértice no son una lista de filas con la x y la y de un vértice.',
+        # the names of the undo steps
+        'Edit Sarma data per vertex':
+            'Editar los datos de Sarma por vértice',
+        'Edit user surface':
+            'Editar una superficie del usuario',
         # v0.1.464 (D357) — Sarma's notes of a run
+        "{count} datum (data) given at vertices of the reported surface "
+        "did not reach it (a crack cut the vertex off, Optimize moved it, "
+        "or a weak layer clipped the surface): its faces took the policy "
+        "and the face strength of the settings.":
+            "{count} dato(s) dados en vértices de la superficie del "
+            "resultado no llegaron a ella (una grieta cortó el vértice, "
+            "Optimize lo movió o una capa débil recortó la superficie): "
+            "sus caras tomaron la política y la resistencia de cara de los "
+            "ajustes.",
         "not computed: its setting '{field}' has a value it cannot take "
         "({value}).":
             "no calculado: su ajuste «{field}» tiene un valor que no "
@@ -6284,6 +6329,31 @@ _DICTS: dict[str, dict[str, str]] = {
             'tiene un factor de seguridad de {factor:.4g}, pero las '
             'comprobaciones posteriores al cálculo la rechazan, así que '
             'no puede ser la superficie crítica: {reason}',
+        # v0.1.465 (D357)
+        'The user-defined non-circular surface {k} ({nv} vertices, from '
+        '({x0:.4g}, {y0:.4g}) to ({x1:.4g}, {y1:.4g})) carries {count} datum '
+        "(data) of Sarma's method per vertex that the rule refuses (not an "
+        'interior vertex, an angle that is not a number or is horizontal, a '
+        'cohesion without its friction angle or out of range): its faces '
+        'took the policy and the face strength of the settings.':
+            'La superficie no circular {k} definida por el usuario ({nv} '
+            'vértices, de ({x0:.4g}, {y0:.4g}) a ({x1:.4g}, {y1:.4g})) '
+            'lleva {count} dato(s) del método de Sarma por vértice que la '
+            'regla rechaza (no es un vértice interior, un ángulo que no es '
+            'un número o es horizontal, una cohesión sin su ángulo de '
+            'rozamiento o fuera de rango): sus caras tomaron la política y '
+            'la resistencia de cara de los ajustes.',
+        'The user-defined non-circular surface {k} ({nv} vertices, from '
+        '({x0:.4g}, {y0:.4g}) to ({x1:.4g}, {y1:.4g})) has {count} datum '
+        "(data) of Sarma's method given at vertices that did not reach the "
+        'surface analysed (a crack cut the vertex off): its faces took the '
+        'policy and the face strength of the settings.':
+            'La superficie no circular {k} definida por el usuario ({nv} '
+            'vértices, de ({x0:.4g}, {y0:.4g}) a ({x1:.4g}, {y1:.4g})) '
+            'tiene {count} dato(s) del método de Sarma dados en vértices que '
+            'no llegaron a la superficie analizada (una grieta cortó el '
+            'vértice): sus caras tomaron la política y la resistencia de '
+            'cara de los ajustes.',
         'A surface clipped by a weak layer was discarded: its steepest slice '
         'base is {angle:.1f} deg, past the {limit:.0f} deg ceiling in '
         'Project Settings > Advanced.':
@@ -7210,6 +7280,15 @@ _DICTS: dict[str, dict[str, str]] = {
             'ningún análisis estadístico vuelve a resolver la filtración en '
             'cada muestra, así que ninguna puede mover un factor de '
             'seguridad y no se ha calculado nada.',
+        # v0.1.465 (D357)
+        "Sarma's method takes the face strength given by hand (in its "
+        'settings or at vertices of a surface) as it is in every sample: no '
+        'random variable reaches it, so the spread of the result does not '
+        'include its own.':
+            'El método de Sarma toma la resistencia de cara dada a mano (en '
+            'sus ajustes o en vértices de una superficie) tal cual en cada '
+            'muestra: ninguna variable aleatoria llega a ella, así que la '
+            'dispersión del resultado no incluye la suya.',
         '{n} of the {total} random variables are hydraulic and reach no '
         'factor of safety, because no statistical run solves the seepage '
         'again for each sample: {keys}':

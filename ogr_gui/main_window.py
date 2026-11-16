@@ -289,7 +289,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.464"
+    VERSION = "0.1.465"
 
     def __init__(self) -> None:
         super().__init__()
@@ -749,6 +749,9 @@ class MainWindow(QMainWindow):
                  self._add_user_polyline, None)
         self._mk("surf_polyline_manage", "Manage Non-Circular Surfaces...",
                  self._manage_user_polylines, None)
+        # v0.1.465 (D357)
+        self._mk("surf_polyline_sarma", "Sarma Data per Vertex...",
+                 self._edit_user_polyline_sarma, None)
         self._mk("slope_limits_move", "Move Slope Limits...",
                  self._move_slope_limits, None)
         self._mk("slope_limits_reset", "Reset Slope Limits",
@@ -999,6 +1002,7 @@ class MainWindow(QMainWindow):
         m_surf.addAction(self._actions["surf_manage"])
         m_surf.addAction(self._actions["surf_polyline_add"])
         m_surf.addAction(self._actions["surf_polyline_manage"])
+        m_surf.addAction(self._actions["surf_polyline_sarma"])
         m_surf.addSeparator()
         m_focus = m_surf.addMenu(tr("Focus Search"))
         for k in ["focus_window", "focus_line", "focus_point",
@@ -2924,6 +2928,48 @@ class MainWindow(QMainWindow):
         self.canvas.refresh_scene()
         self.statusBar().showMessage(
             tr("%d focus object(s) defined.") % len(objs), 5000)
+
+    def _edit_user_polyline_sarma(self) -> None:
+        """The angle, c and φ of Sarma's method per vertex of a user's
+        non-circular surface, in a table (v0.1.465, D357), as ONE undo step.
+
+        With several surfaces, which one is chosen first, named as the
+        manager names them. The vertex's own context menu comes with the
+        angle tool (v0.1.467).
+        """
+        from PySide6.QtWidgets import QInputDialog
+        from ogr_gui.dialogs.sarma_vertex_dialog import SarmaVertexDialog
+        polylines = self.project.user_polylines
+        if not polylines:
+            self._info(tr("No user-defined non-circular surfaces are "
+                          "defined."))
+            return
+        index = 0
+        if len(polylines) > 1:
+            items = []
+            for i, p in enumerate(polylines):
+                (x0, y0), (x1, y1) = p.ends()
+                items.append(
+                    tr("%d: %d vertices, from (%.3f, %.3f) to (%.3f, %.3f)")
+                    % (i + 1, p.vertex_count(), x0, y0, x1, y1))
+            choice, ok = QInputDialog.getItem(
+                self, tr("Sarma Data per Vertex"), tr("Surface:"), items, 0,
+                False)
+            if not ok:
+                return
+            index = items.index(choice)
+        target = polylines[index]
+
+        def step():
+            dlg = SarmaVertexDialog(target, self.project.settings.units, self)
+            if dlg.exec() != dlg.DialogCode.Accepted:
+                return STEP_CANCELLED
+            target.vertex_data = dlg.result_data() or {}
+            self.project.is_dirty = True
+            self.canvas.refresh_scene()
+            return None
+
+        self._model_step("Edit Sarma data per vertex", step)
 
     @undo_step("Delete user surfaces")
     def _manage_user_polylines(self) -> None:
@@ -5562,6 +5608,17 @@ class MainWindow(QMainWindow):
                     if is_circular else
                     tr("Non-circular slip surfaces drawn by hand, analysed "
                        "in addition to the search"))
+        # v0.1.465 (D357) -- the data of Sarma's method per vertex: a
+        # non-circular run and a polyline to give them to
+        if "surf_polyline_sarma" in actions:
+            has_polyline = bool(getattr(self.project, "user_polylines",
+                                        None))
+            gate(actions["surf_polyline_sarma"],
+                 not is_circular and has_polyline,
+                 tr("Only available with Surface Options -> Surface "
+                    "Type = Non-Circular.") if is_circular else
+                 tr("Draw a non-circular surface first (Surfaces -> Add "
+                    "Non-Circular Surface)."))
         # v0.1.232 (D109) - the four Block Search objects, one precondition.
         block_tips = {
             "block_object": tr(

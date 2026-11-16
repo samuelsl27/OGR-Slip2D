@@ -138,6 +138,24 @@ def factor_friction_angle(phi_deg: float, factor: float) -> float:
     return tan_factored_angle(phi_deg, factor)
 
 
+def _plain_number(value) -> bool:
+    """Whether ``value`` is a finite number (a bool is not one)."""
+    import math
+    return (isinstance(value, (int, float)) and not isinstance(value, bool)
+            and math.isfinite(value))
+
+
+def factored_face_strength(c: float, phi: float, ds) -> tuple:
+    """``(c, φ)`` of a face of Sarma's method divided by the design
+    standard ``ds``'s material factors, as a Mohr-Coulomb material's
+    (v0.1.465, D357): the one function the copy's report and the method
+    divide a given face strength by."""
+    from ogr_core.materials.builtin_models import MohrCoulomb
+    done = MohrCoulomb(cohesion=float(c), friction_angle=float(phi)
+                       ).design_factored(material_factors(ds))
+    return done.model.params["cohesion"], done.model.params["friction_angle"]
+
+
 def material_factors(ds) -> MaterialFactors:
     """The four divisors of a design standard's settings, each times the
     resistance factor γR;e (which divides the whole resisting side)."""
@@ -243,26 +261,65 @@ def apply_design_factors(project, settings=None):
                                   "category": category})
 
     # v0.1.464 (D357) -- the strength given to the faces of Sarma's wedges
-    # (``settings.sarma``) is a strength like a material's, and takes the
-    # same factors by the same function: a Mohr-Coulomb with that c and φ,
-    # factored. Reported as a material named «Sarma», a proper name that
-    # reads the same in both languages.
-    sa = getattr(factored.settings, "sarma", None)
-    if (sa is not None and sa.interslice_strength == "given"
-            and "sarma" in factored.settings.methods.enabled_methods):
-        from ogr_core.materials.builtin_models import MohrCoulomb
-        done = MohrCoulomb(cohesion=sa.interslice_cohesion,
-                           friction_angle=sa.interslice_phi
+    # (``settings.sarma``, and v0.1.465, at a vertex of a user's polyline)
+    # is a strength like a material's, and takes the same factors by the
+    # same function: a Mohr-Coulomb with that c and φ, factored. ALWAYS on
+    # the copy: only Sarma's method reads it, and a door that runs Sarma on
+    # a project whose list of methods does not name it (``evaluate_surfaces``
+    # with ``["sarma"]``) must not compute on the unfactored strength, the
+    # unsafe side (found writing v0.1.465). The REPORT names it only with
+    # Sarma in the list, so a run without Sarma lists no «Sarma» (the review
+    # of v0.1.464). «Sarma» reads the same in both languages; a vertex's
+    # row says which vertex in ``vertex``, a datum and not a sentence.
+    from ogr_core.materials.builtin_models import MohrCoulomb
+    reported = "sarma" in factored.settings.methods.enabled_methods
+
+    def factor(c, phi, vertex=None):
+        done = MohrCoulomb(cohesion=float(c), friction_angle=float(phi)
                            ).design_factored(mf)
         c_d = done.model.params["cohesion"]
         phi_d = done.model.params["friction_angle"]
-        if (c_d, phi_d) != (sa.interslice_cohesion, sa.interslice_phi):
-            rep.materials.append({
-                "name": "Sarma",
-                "changes": {"cohesion": (sa.interslice_cohesion, c_d),
-                            "friction_angle": (sa.interslice_phi, phi_d)},
-                "category": done.category})
-        sa.interslice_cohesion, sa.interslice_phi = c_d, phi_d
+        if reported and (c_d, phi_d) != (c, phi):
+            row = {"name": "Sarma",
+                   "changes": {"cohesion": (c, c_d),
+                               "friction_angle": (phi, phi_d)},
+                   "category": done.category}
+            if vertex is not None:
+                row["vertex"] = vertex
+            rep.materials.append(row)
+        return c_d, phi_d
+
+    sa = getattr(factored.settings, "sarma", None)
+    if (sa is not None and sa.interslice_strength == "given"
+            and _plain_number(sa.interslice_cohesion)
+            and _plain_number(sa.interslice_phi)):
+        # only numbers: a value the method cannot take (None, a text) is
+        # Sarma's own refusal (``sarma_setting_problem``, a note, the other
+        # methods computed); dividing it here aborted EVERY method of a run
+        # with a norm, Sarma or not (the review of v0.1.465)
+        sa.interslice_cohesion, sa.interslice_phi = factor(
+            sa.interslice_cohesion, sa.interslice_phi)
+    # v0.1.465 (D357) -- the strength given at a vertex is divided where the
+    # method reads it (``SarmaNonVertical.wedges_for``, on a copy that says
+    # it is one), because it also arrives hung on a surface handed to a door
+    # (``evaluate_surfaces``, the API's ``surface_evaluate``) that this copy
+    # never sees; dividing here too would divide a stored one twice. Here,
+    # only the report, by the same function, of the data the rule accepts
+    # (``split_vertex_data``): a bad row of a hand-edited file is the run's
+    # to say, not a crash of the report.
+    from ogr_core.geometry.user_polyline import (checked_points,
+                                                 split_vertex_data)
+    for up in getattr(factored, "user_polylines", None) or ():
+        data = getattr(up, "vertex_data", None)
+        if not data:
+            continue
+        try:
+            good, _bad = split_vertex_data(checked_points(up.points), data)
+        except ValueError:
+            continue
+        for vertex, datum in sorted(good.items()):
+            if datum["c"] is not None:
+                factor(datum["c"], datum["phi"], vertex=vertex)
 
     loads = (list(getattr(factored, "distributed_loads", None) or [])
              + list(getattr(factored, "line_loads", None) or []))

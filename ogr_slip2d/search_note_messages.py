@@ -87,6 +87,9 @@ USER_PL_END_MOVED = "search.user_polyline_end_moved"
 USER_PL_SNAP_REFUSED = "search.user_polyline_snap_refused"
 USER_PL_NOT_A_SURFACE = "search.user_polyline_not_a_surface"
 USER_PL_INADMISSIBLE = "search.user_polyline_inadmissible"
+# v0.1.465 (D357) -- Sarma's data per vertex of a stored polyline
+USER_PL_SARMA_REFUSED = "search.user_polyline_sarma_refused"
+USER_PL_SARMA_UNUSED = "search.user_polyline_sarma_unused"
 NO_REASON = "search.no_reason"
 NO_REASON_STOP = "search.no_reason_stop"
 
@@ -377,6 +380,22 @@ SEARCH_NOTES = {s.code: s for s in (
                 _PL_AT + "has a factor of safety of {factor:.4g}, but the "
                 "post-analysis checks reject it, so it cannot be the critical "
                 "surface: {reason}"),
+    # v0.1.465 (D357) -- a datum of Sarma's method per vertex that the rule
+    # refuses (only a hand-edited file or a script can store one): the
+    # polyline is analysed with the others, and this says so.
+    MessageSpec(USER_PL_SARMA_REFUSED,
+                _PL_AT + "carries {count} datum (data) of Sarma's method per "
+                "vertex that the rule refuses (not an interior vertex, an "
+                "angle that is not a number or is horizontal, a cohesion "
+                "without its friction angle or out of range): its faces took "
+                "the policy and the face strength of the settings."),
+    # one per polyline, not only for the reported surface (the review of
+    # v0.1.465): a datum a crack cut off another polyline went unsaid.
+    MessageSpec(USER_PL_SARMA_UNUSED,
+                _PL_AT + "has {count} datum (data) of Sarma's method given at "
+                "vertices that did not reach the surface analysed (a crack "
+                "cut the vertex off): its faces took the policy and the face "
+                "strength of the settings."),
     MessageSpec(NO_REASON, "no reason declared"),
     MessageSpec(NO_REASON_STOP, "no reason declared."),
     MessageSpec(OPTIMISATION_LOST,

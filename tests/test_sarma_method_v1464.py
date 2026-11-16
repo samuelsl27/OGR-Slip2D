@@ -227,7 +227,8 @@ class TestTheDesignStandard:
 
         def model():
             p, _s = W63._slope(load=False)
-            # with Sarma in the run: only then is its face strength factored
+            # with Sarma in the run, so the report names it; the strength is
+            # factored on the copy with or without (test_sarma_vertices_v1465)
             p.settings.methods.enabled_methods.append("sarma")
             p.settings.sarma.interslice_strength = "given"
             p.settings.sarma.interslice_cohesion = 4.0

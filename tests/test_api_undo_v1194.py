@@ -117,6 +117,11 @@ EXAMPLES = {
                                                "centre_y": 45,
                                                "radius": 20}},
     "user_surface_delete": lambda p: {"surface": "all"},
+    # v0.1.465 (D357): Sarma's data per vertex of a stored polyline
+    "user_surface_edit": lambda p: {
+        "surface": p.user_polylines[0].id,
+        "sarma": [{"x": 40, "y": 23, "angle": 80},
+                  {"x": 55, "y": 27, "c": 5, "phi": 25}]},
     "annotation_set": lambda p: {"kind": "text", "points_xy": [[30, 40]],
                                  "text": "Note"},
     "annotation_delete": lambda p: {"annotations": "all"},
@@ -211,6 +216,14 @@ def _prep_surface(ws, pid, tmp):
                   "radius": 20})
 
 
+def _prep_polyline(ws, pid, tmp):
+    from ogr_api import call
+    ws.get(pid).project.settings.search.surface_type = "non_circular"
+    call(ws, "user_surface_add", project_id=pid,
+         surface={"type": "polyline",
+                  "points": [[26, 25], [40, 23], [55, 27], [62, 35]]})
+
+
 def _prep_annotation(ws, pid, tmp):
     from ogr_api import call
     call(ws, "annotation_set", project_id=pid, kind="line",
@@ -290,6 +303,7 @@ PREPARE = {
     "tension_crack_set": _prep_crack,
     "focus_delete": _prep_focus,
     "user_surface_delete": _prep_surface,
+    "user_surface_edit": _prep_polyline,
     "annotation_delete": _prep_annotation,
     "annotation_to_boundary": _prep_annotation,
     "geometry_cleanup": _prep_duplicate,

@@ -628,6 +628,35 @@ def _hydraulic_variables_stop(result, variables) -> bool:
     return False
 
 
+def _sarma_given_note(result, project, method_ids, surfaces=None) -> None:
+    """Say that Sarma's face strength given by hand is not sampled
+    (v0.1.465, D357), when Sarma is among ``method_ids``.
+
+    Given in its settings (``interslice_strength == "given"``), or at the
+    vertices of the surfaces the run re-evaluates: ``surfaces`` (the
+    deterministic ones of Global Minimum and the sensitivity), or, with
+    None (Overall Slope, whose surfaces each sample's search finds), any
+    stored polyline with a strength at a vertex. A random variable writes
+    a material, and the faces read a material only with the strength
+    "materials": the warning is what keeps a spread that leaves part of
+    the strength fixed from reading as the whole.
+    """
+    if "sarma" not in (method_ids or ()):
+        return
+    sa = getattr(project.settings, "sarma", None)
+    given = sa is not None and sa.interslice_strength == "given"
+    if not given and surfaces is not None:
+        given = any(getattr(s, "vertex_strength", None) for s in surfaces)
+    elif not given:
+        given = any((d or {}).get("c") is not None
+                    for up in getattr(project, "user_polylines", None) or ()
+                    for d in (getattr(up, "vertex_data", None)
+                              or {}).values())
+    if given:
+        _publish_note(result, "warning",
+                      SM.stat_note(SM.SARMA_GIVEN_FIXED))
+
+
 def _rule_code(why) -> str:
     """The code of a refusal of ``check_analysis_settings``, or its text
     when it carries none."""
@@ -1509,6 +1538,8 @@ def run_global_minimum(
         _publish_note(result, "error",
                       SM.stat_note(SM.NO_DETERMINISTIC_RESULT))
         return result
+    _sarma_given_note(result, project, list(critical_surfaces), [
+        getattr(r, "surface", None) for r in critical_surfaces.values()])
     configured = _analysis_copy(project)
 
     result.variables = [rv.key for rv in active]
@@ -1972,6 +2003,7 @@ def run_overall_slope(
     if not method_ids:
         _publish_note(result, "error", SM.stat_note(SM.NO_METHOD_SELECTED))
         return result
+    _sarma_given_note(result, project, method_ids)
 
     result.variables = [rv.key for rv in active]
     samples = sample_project_variables(

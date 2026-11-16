@@ -49,12 +49,20 @@ class NotASurface(ValueError):
     * ``"not_finite"``: a coordinate that is not a finite number;
     * ``"too_few"``: fewer than :data:`MIN_POINTS` points;
     * ``"not_advancing"``: run left to right, x steps back or a segment is
-      vertical.
+      vertical;
+    * ``"bad_vertex_data"`` (v0.1.465): a datum of Sarma's method per vertex
+      that :func:`checked_vertex_data` refuses. Its ``reason`` says which
+      rule (:data:`VERTEX_DATA_REASONS`) and ``where`` the vertex it names,
+      ``(x, y)`` or None, so a window says it in its own language (the
+      review of v0.1.465: the table showed this English sentence).
     """
 
-    def __init__(self, kind: str, message: str) -> None:
+    def __init__(self, kind: str, message: str, reason: str = None,
+                 where: tuple = None) -> None:
         super().__init__(message)
         self.kind = kind
+        self.reason = reason
+        self.where = where
 
 
 def _points_of(raw) -> list:
@@ -135,6 +143,153 @@ def checked_points(points) -> list:
     return pts
 
 
+#: v0.1.465 (D357) -- the keys of one vertex's data for Sarma's method.
+VERTEX_KEYS = ("angle", "c", "phi")
+
+#: v0.1.465 -- a face closer than this to horizontal [rad] is no face. THE
+#: threshold: ``ogr_slip2d.sarma.angles.upward`` reads it from here, so an
+#: angle this rule lets through is never one the method refuses (the review
+#: of v0.1.465: the rule refused only an exact 0 or 180).
+HORIZONTAL_FACE_RAD = 1e-12
+
+#: The reasons a per-vertex datum is refused (``NotASurface.reason``):
+#: ``not_rows``, the data are not a list of rows; ``no_vertex``, a row
+#: without the x and y of its vertex; ``not_a_vertex``, a point that is no
+#: interior vertex; ``twice``, two data for one vertex; ``angle``, an angle
+#: that is not a number, not finite or horizontal; ``pair``, a c without its
+#: φ or the reverse; ``strength``, a c or φ that is not a number or out of
+#: range.
+VERTEX_DATA_REASONS = ("not_rows", "no_vertex", "not_a_vertex", "twice",
+                       "angle", "pair", "strength")
+
+
+def _number(value) -> float:
+    """``value`` as a float, or ValueError: a bool is not a number here
+    (``True`` would be a face at 1°; the review of v0.1.465)."""
+    if isinstance(value, bool):
+        raise ValueError(value)
+    return float(value)
+
+
+def is_face_angle(angle_deg: float) -> bool:
+    """Whether ``angle_deg`` (degrees, any value) is a face: finite and
+    not within :data:`HORIZONTAL_FACE_RAD` of horizontal."""
+    if not math.isfinite(angle_deg):
+        return False
+    t = math.radians(angle_deg % 180.0)
+    return HORIZONTAL_FACE_RAD <= t <= math.pi - HORIZONTAL_FACE_RAD
+
+
+def checked_vertex_data(points, data) -> dict:
+    """``data`` as the per-vertex data of Sarma's method on the polyline
+    ``points`` (already :func:`checked_points`), or :class:`NotASurface`
+    with ``kind = "bad_vertex_data"`` and the reason (v0.1.465, D357): the
+    first datum :func:`split_vertex_data` refuses.
+
+    THE one rule, asked by the API, the window, the file's reader and the
+    run, so a datum is valid or not in the same words everywhere.
+
+    ``data`` is ``{(x, y): {"angle": θ, "c": c, "phi": φ}}`` or a list of
+    ``{"x", "y", "angle", "c", "phi"}``. Each point must be an INTERIOR
+    vertex of the polyline (an end has no face): matched within a
+    billionth of the polyline's width and stored at the vertex's own
+    coordinates. Then:
+
+    * ``angle`` [degrees, counter-clockwise from +x, any value: only the
+      line counts], finite and not horizontal, or None;
+    * ``c`` [kPa] >= 0 and ``phi`` [degrees] in [0, 90), finite, and the two
+      TOGETHER (the owner's decision, 2026-11-16: a face never mixes the c
+      of one source with the φ of another), or both None.
+
+    A vertex with no datum left is dropped. Returns
+    ``{(x, y): {"angle": θ | None, "c": c | None, "phi": φ | None}}``.
+    """
+    good, refused = split_vertex_data(points, data)
+    if refused:
+        raise refused[0]
+    return good
+
+
+def split_vertex_data(points, data) -> tuple:
+    """``(good, refused)``: the data of ``data`` the rule of
+    :func:`checked_vertex_data` accepts, as it returns them, and a
+    :class:`NotASurface` for each one it refuses, in order.
+
+    The lenient form, for what reads data nobody checked (a hand-edited
+    file): the run, the design report and the canvas take the good ones and
+    say the others, so one bad row no longer costs the polyline for every
+    method (the review of v0.1.465). A first refusal of two data for one
+    vertex keeps the first.
+    """
+    refused = []
+
+    def bad(reason, message, where=None):
+        refused.append(NotASurface("bad_vertex_data", message,
+                                   reason=reason, where=where))
+
+    if data is None or (hasattr(data, "__len__") and not isinstance(
+            data, (str, bytes)) and len(data) == 0):
+        return {}, refused
+    if isinstance(data, dict):
+        try:
+            rows = [dict(v, x=k[0], y=k[1]) for k, v in data.items()]
+        except (TypeError, ValueError, LookupError):
+            bad("not_rows", "The per-vertex data are not a list of rows.")
+            return {}, refused
+    elif isinstance(data, (list, tuple)):
+        rows = list(data)
+    else:
+        bad("not_rows", "The per-vertex data are not a list of rows.")
+        return {}, refused
+    interior = list(points[1:-1])
+    xs = [x for x, _y in points]
+    tol = 1e-9 * max(max(xs) - min(xs), 1e-300) if xs else 0.0
+    out = {}
+    for row in rows:
+        try:
+            x, y = _number(row["x"]), _number(row["y"])
+        except (TypeError, ValueError, KeyError, LookupError):
+            bad("no_vertex", "A vertex datum needs the x and y of its vertex.")
+            continue
+        vertex = next((v for v in interior
+                       if abs(v[0] - x) <= tol and abs(v[1] - y) <= tol), None)
+        if vertex is None:
+            bad("not_a_vertex", "(%g, %g) is not an interior vertex of the "
+                "surface." % (x, y), (x, y))
+            continue
+        if vertex in out:
+            bad("twice", "Two data for the vertex (%g, %g)." % vertex, vertex)
+            continue
+        angle, c, phi = (row.get(k) for k in VERTEX_KEYS)
+        if angle is not None:
+            try:
+                angle = _number(angle)
+            except (TypeError, ValueError):
+                angle = math.nan
+            if not is_face_angle(angle):
+                bad("angle", "The angle at (%g, %g) must be a finite number "
+                    "and not horizontal." % vertex, vertex)
+                continue
+        if (c is None) != (phi is None):
+            bad("pair", "The face cohesion and friction angle at (%g, %g) go "
+                "together." % vertex, vertex)
+            continue
+        if c is not None:
+            try:
+                c, phi = _number(c), _number(phi)
+            except (TypeError, ValueError):
+                c = phi = math.nan
+            if not (math.isfinite(c) and math.isfinite(phi)) or c < 0.0 \
+                    or not 0.0 <= phi < 90.0:
+                bad("strength", "The face strength at (%g, %g) needs numbers "
+                    "with c >= 0 and 0 <= phi < 90." % vertex, vertex)
+                continue
+        if angle is None and c is None:
+            continue
+        out[vertex] = {"angle": angle, "c": c, "phi": phi}
+    return out, refused
+
+
 def _end(p) -> tuple:
     try:
         return float(p[0]), float(p[1])
@@ -148,17 +303,34 @@ class UserPolylineSurface:
 
     points: list = field(default_factory=list)
     id: str = field(default_factory=lambda: str(uuid4()))
+    #: v0.1.465 (D357) -- Sarma's data per interior vertex, by its exact
+    #: coordinates: ``{(x, y): {"angle": θ°, "c": kPa, "phi": °}}``, each
+    #: None where not given (:func:`checked_vertex_data`). By coordinates
+    #: and not by index, so it survives the polyline being turned left to
+    #: right, its ends moved onto the ground and a crack cutting it.
+    vertex_data: dict = field(default_factory=dict)
 
     @classmethod
-    def from_points(cls, points, *, id: str = None) -> "UserPolylineSurface":
+    def from_points(cls, points, *, id: str = None,
+                    vertex_data=None) -> "UserPolylineSurface":
         """The surface through ``points``, checked by :func:`checked_points`
-        (:class:`NotASurface` with the reason when it is not a surface)."""
+        (:class:`NotASurface` with the reason when it is not a surface),
+        with the per-vertex data checked by :func:`checked_vertex_data`."""
         kw = {} if id is None else {"id": id}
-        return cls(points=checked_points(points), **kw)
+        pts = checked_points(points)
+        return cls(points=pts, vertex_data=checked_vertex_data(
+            pts, vertex_data), **kw)
 
     def to_dict(self) -> dict:
-        return {"type": "polyline", "id": self.id,
-                "points": [[x, y] for x, y in self.points]}
+        out = {"type": "polyline", "id": self.id,
+               "points": [[x, y] for x, y in self.points]}
+        # v0.1.465 (D357) -- only when there is a datum, so the file and the
+        # fingerprint of a polyline without any do not move
+        if self.vertex_data:
+            out["sarma"] = [dict({"x": x, "y": y}, **{
+                k: v.get(k) for k in VERTEX_KEYS})
+                for (x, y), v in sorted(self.vertex_data.items())]
+        return out
 
     @classmethod
     def from_dict(cls, data: dict) -> "UserPolylineSurface":
@@ -180,6 +352,19 @@ class UserPolylineSurface:
                               for x, y in data.get("points", [])])
         if "id" in data:
             surface.id = data["id"]
+        # v0.1.465 (D357) -- the per-vertex data, read as written; the run
+        # checks it with the geometry (``split_vertex_data``). Anything but
+        # a list of rows is no data (``"sarma": 5`` raised a TypeError that
+        # cost the whole file; the review of v0.1.465)
+        rows = data.get("sarma")
+        for row in rows if isinstance(rows, list) else ():
+            if not isinstance(row, dict):
+                continue
+            try:
+                key = (float(row["x"]), float(row["y"]))
+            except (TypeError, ValueError, KeyError, LookupError):
+                continue
+            surface.vertex_data[key] = {k: row.get(k) for k in VERTEX_KEYS}
         return surface
 
     def ends(self) -> tuple:

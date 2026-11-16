@@ -49,6 +49,10 @@ VAR_ORPHAN = S + "var_orphan"
 VARS_HYDRAULIC_ONLY = S + "vars_hydraulic_only"
 VARS_HYDRAULIC = S + "vars_hydraulic"
 VAR_HYDRAULIC = S + "var_hydraulic"
+#: v0.1.465 (D357) -- the face strength of Sarma's method given by hand
+#: (its settings, a vertex of a surface) is no material's: no variable
+#: reaches it, and every sample takes it as it is.
+SARMA_GIVEN_FIXED = S + "sarma_given_fixed"
 #: v0.1.453 (the review of D416) -- the variables a probabilistic run does
 #: not sample, grouped by the reason the core gives
 #: (``Distribution.not_random_reason``), and the correlations it cannot
@@ -179,6 +183,11 @@ STAT_NOTES = {s.code: s for s in (
                 "no factor of safety, because no statistical run solves the "
                 "seepage again for each sample: {keys}",
                 kinds=(("keys", "variable_keys"),)),
+    MessageSpec(SARMA_GIVEN_FIXED,
+                "Sarma's method takes the face strength given by hand (in its "
+                "settings or at vertices of a surface) as it is in every "
+                "sample: no random variable reaches it, so the spread of the "
+                "result does not include its own."),
     MessageSpec(VAR_HYDRAULIC,
                 "hydraulic, and the seepage is not solved again for each "
                 "point, so it was not swept: {key}",

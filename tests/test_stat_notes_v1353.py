@@ -687,6 +687,14 @@ _LATER = [
                 'material_strength:m1:cohesion is not sampled.',
      'args': {'key': 'material_strength:m1:friction_angle',
               'other': 'material_strength:m1:cohesion'}},
+    # v0.1.465 (D357)
+    {'cat': 'stat',
+     'code': 'stat.sarma_given_fixed',
+     'english': "Sarma's method takes the face strength given by hand (in "
+                'its settings or at vertices of a surface) as it is in every '
+                'sample: no random variable reaches it, so the spread of the '
+                'result does not include its own.',
+     'args': {}},
 ]
 
 

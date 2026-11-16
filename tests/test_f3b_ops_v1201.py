@@ -503,8 +503,9 @@ class TestNothingIsPending:
         # Block Search, all three mapped to boundary_add (`block_object`).
         # v0.1.427 (D357): 116 -> 118, Add Non-Circular Surface and Manage
         # Non-Circular Surfaces..., mapped to user_surface_add and
-        # user_surface_delete.
-        assert coverage()["mapped"] == 118
+        # user_surface_delete. v0.1.465 (D357): 118 -> 119, Sarma Data per
+        # Vertex..., mapped to user_surface_edit.
+        assert coverage()["mapped"] == 119
 
 
 def _qt():

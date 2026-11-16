@@ -68,6 +68,7 @@ Una carga lineal «normal al contorno» o «con ángulo respecto al contorno» t
 | `focus_set` | | Objetos de foco (ventana, línea, punto, tangente) que acotan la búsqueda. |
 | `focus_delete` | | Borrar objetos de foco. |
 | `user_surface_add` | | Una superficie propia que se analiza junto a la búsqueda: un círculo con el tipo de superficie circular o, desde v0.1.427, una polilínea (`{'type': 'polyline', 'points': ...}`, con la x avanzando de un extremo al otro en cualquier sentido; se guarda de izquierda a derecha) con el no circular. Los extremos de la polilínea se llevan al contorno exterior al analizarla, como en `surface_evaluate`. |
+| `user_surface_edit` | | Desde v0.1.465: los datos del método de Sarma en los vértices interiores de una polilínea guardada (`sarma`: `[{'x','y','angle','c','phi'}]`, el ángulo de la cara en grados antihorarios desde +x, y la c en kPa y la φ en grados, juntas), o `[]` para quitarlos. Un solo paso de deshacer. `user_surface_add` y `surface_evaluate` aceptan el mismo bloque en una polilínea. |
 | `user_surface_delete` | | Borrar una por id (círculo o polilínea), o todas. |
 
 ## Anotaciones (`annotations`)
